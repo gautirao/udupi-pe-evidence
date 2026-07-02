@@ -1,0 +1,10 @@
+{
+  "_note": "Run-2 (JP Nagar + Kengeri houses/plots). Actor unfenced-group/housing-scraper. The actor has NO locality or property-type input, and startUrls (saved-search permalink) did NOT resolve — see discovery-evidence.md. Authoritative run = the daysOld=365 bengaluru buy scrape below, post-filtered by discovered localityUuid + real OSM bbox + dwelling-type. A separate startUrls attempt (run O14rm1B0qhgG2derL) returned Mumbai apartments and was DISCARDED.",
+  "cities": ["bengaluru"],
+  "transaction": ["buy"],
+  "daysOld": 365,
+  "fetchDetails": false,
+  "maxItems": 3000,
+  "maxPagesPerCity": 100,
+  "pageSize": 30
+}

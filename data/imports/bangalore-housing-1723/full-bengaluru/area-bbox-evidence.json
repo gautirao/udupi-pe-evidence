@@ -1,0 +1,5934 @@
+{
+ "Whitefield": {
+  "query": "Whitefield, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883364,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Whitefield, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560066, India",
+  "bbox_SNWE": [
+   12.9515328,
+   12.9767407,
+   77.7309876,
+   77.7646485
+  ],
+  "centroid": [
+   12.9696365,
+   77.7497448
+  ],
+  "seedable": true
+ },
+ "Electronic City": {
+  "query": "Electronic City, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 287685707,
+  "class": "landuse",
+  "type": "residential",
+  "display_name": "Prime City Apartments, Electronic City, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560100, India",
+  "bbox_SNWE": [
+   12.8482126,
+   12.849377,
+   77.6471775,
+   77.6504105
+  ],
+  "centroid": [
+   12.8487599,
+   77.648253
+  ],
+  "seedable": true
+ },
+ "Varthur": {
+  "query": "Varthur, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883430,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Varthur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560087, India",
+  "bbox_SNWE": [
+   12.925181,
+   12.9589845,
+   77.7168734,
+   77.7664129
+  ],
+  "centroid": [
+   12.9406508,
+   77.746988
+  ],
+  "seedable": true
+ },
+ "K R Puram": {
+  "query": "K R Puram, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 135078007,
+  "class": "landuse",
+  "type": "commercial",
+  "display_name": "Government Hospital, K.R. Puram, ITI Colony, T.C Palya, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0083106,
+   13.0098421,
+   77.6918287,
+   77.6929841
+  ],
+  "centroid": [
+   13.0089645,
+   77.6925138
+  ],
+  "seedable": true
+ },
+ "Thanisandra": {
+  "query": "Thanisandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883250,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Thanisandra, Bengaluru North City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.040718,
+   13.0637276,
+   77.623988,
+   77.6384281
+  ],
+  "centroid": [
+   13.0522499,
+   77.6316152
+  ],
+  "seedable": true
+ },
+ "Yelahanka": {
+  "query": "Yelahanka, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 386182133,
+  "class": "landuse",
+  "type": "industrial",
+  "display_name": "Yelahanka, Atturu, Attur, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0981989,
+   13.0991195,
+   77.5698678,
+   77.5707656
+  ],
+  "centroid": [
+   13.0986677,
+   77.5703182
+  ],
+  "seedable": true
+ },
+ "Sarjapur": {
+  "query": "Sarjapur, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883285,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "HSR Layout, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9021994,
+   12.9246948,
+   77.6227426,
+   77.6501916
+  ],
+  "centroid": [
+   12.9116225,
+   77.6388622
+  ],
+  "seedable": true
+ },
+ "Begur": {
+  "query": "Begur, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 451551700,
+  "class": "boundary",
+  "type": "political",
+  "display_name": "Begur, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8340125,
+   12.8927678,
+   77.5829439,
+   77.66634
+  ],
+  "centroid": [
+   12.8633887,
+   77.6130112
+  ],
+  "seedable": true
+ },
+ "Horamavu": {
+  "query": "Horamavu, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884576,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Horamavu, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0249327,
+   13.0746131,
+   77.6413935,
+   77.6739484
+  ],
+  "centroid": [
+   13.0273312,
+   77.6601508
+  ],
+  "seedable": true
+ },
+ "JP Nagar": {
+  "query": "JP Nagar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17205864,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "JP Nagar, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8975486,
+   12.9175497,
+   77.5730508,
+   77.6018204
+  ],
+  "centroid": [
+   12.9096941,
+   77.5866067
+  ],
+  "seedable": true
+ },
+ "Balagere": {
+  "query": "Balagere, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 833667966,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Balagere, Panathur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560087, India",
+  "bbox_SNWE": [
+   12.9177243,
+   12.9577243,
+   77.7080705,
+   77.7480705
+  ],
+  "centroid": [
+   12.9377243,
+   77.7280705
+  ],
+  "seedable": false
+ },
+ "Gummanahalli": {
+  "query": "Gummanahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 3201207009,
+  "class": "place",
+  "type": "village",
+  "display_name": "Gummanahalli, Doddaballapura taluk, Bengaluru North, Karnataka, 561204, India",
+  "bbox_SNWE": [
+   13.3949455,
+   13.4349455,
+   77.366528,
+   77.406528
+  ],
+  "centroid": [
+   13.4149455,
+   77.386528
+  ],
+  "seedable": false
+ },
+ "RR Nagar": {
+  "query": "RR Nagar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1157397987,
+  "class": "landuse",
+  "type": "residential",
+  "display_name": "Sobha Valley View, Aditya Layout, RR Nagar, Bangarappa Nagara, Bengaluru West City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560039, India",
+  "bbox_SNWE": [
+   12.9307099,
+   12.932668,
+   77.528404,
+   77.530232
+  ],
+  "centroid": [
+   12.9314733,
+   77.5290964
+  ],
+  "seedable": true
+ },
+ "Hoskote": {
+  "query": "Hoskote, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 337769129,
+  "class": "landuse",
+  "type": "residential",
+  "display_name": "Sobha Amethyst & Adamus, Off Whitefiled Hoskote Main Road, Kannamangala, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560067, India",
+  "bbox_SNWE": [
+   13.0303616,
+   13.033107,
+   77.7609428,
+   77.7627163
+  ],
+  "centroid": [
+   13.0318443,
+   77.7618779
+  ],
+  "seedable": true
+ },
+ "Talaghattapura": {
+  "query": "Talaghattapura, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Koramangala": {
+  "query": "Koramangala, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 429918282,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Koramangala, Sri Lakshmi Devi Ward, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560095, India",
+  "bbox_SNWE": [
+   12.9157366,
+   12.9557366,
+   77.604081,
+   77.644081
+  ],
+  "centroid": [
+   12.9357366,
+   77.624081
+  ],
+  "seedable": false
+ },
+ "Bommenahalli": {
+  "query": "Bommenahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2126383124,
+  "class": "place",
+  "type": "village",
+  "display_name": "Bommenahalli, Bangalore East, Bengaluru Urban, Karnataka, 560049, India",
+  "bbox_SNWE": [
+   13.0542536,
+   13.0942536,
+   77.7265943,
+   77.7665943
+  ],
+  "centroid": [
+   13.0742536,
+   77.7465943
+  ],
+  "seedable": false
+ },
+ "Harlur": {
+  "query": "Harlur, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 511671038,
+  "class": "building",
+  "type": "school",
+  "display_name": "BRS Global Centre For Excellence, #15/3, Off Sarjapur Main Road, KPC Layout, Kasavanahalli, IAS Layout, Eastwood Twp, Harlur, Bengaluru, Karnataka 560035, Central Jail Road, Kasavanahalli, Kaikondrahalli, Kasavanahalli, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560035, India",
+  "bbox_SNWE": [
+   12.9056982,
+   12.9060067,
+   77.6752687,
+   77.6756453
+  ],
+  "centroid": [
+   12.9058923,
+   77.675465
+  ],
+  "seedable": true
+ },
+ "Bellandur": {
+  "query": "Bellandur, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884585,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Bellandur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9225853,
+   12.9414258,
+   77.6677817,
+   77.690475
+  ],
+  "centroid": [
+   12.9320495,
+   77.6842915
+  ],
+  "seedable": true
+ },
+ "Carmelaram": {
+  "query": "Carmelaram, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1070342525,
+  "class": "building",
+  "type": "retail",
+  "display_name": "Zera Male to Male Spa, Carmelaram, Gunjur Varthur Main Road, Carmelaram, Gunjur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560035, India",
+  "bbox_SNWE": [
+   12.9058198,
+   12.9060494,
+   77.7047381,
+   77.7049249
+  ],
+  "centroid": [
+   12.9059313,
+   77.7048319
+  ],
+  "seedable": true
+ },
+ "Jakkur": {
+  "query": "Jakkur, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883249,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Jakkur, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0519901,
+   13.0944525,
+   77.6012822,
+   77.6336318
+  ],
+  "centroid": [
+   13.0784743,
+   77.6068938
+  ],
+  "seedable": true
+ },
+ "Subramanyapura": {
+  "query": "Subramanyapura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884535,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Subramanyapura, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560061, India",
+  "bbox_SNWE": [
+   12.8791863,
+   12.9192493,
+   77.5157231,
+   77.5544383
+  ],
+  "centroid": [
+   12.8992578,
+   77.5321721
+  ],
+  "seedable": true
+ },
+ "Bommasandra": {
+  "query": "Bommasandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455842,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Bommasandra, Kittaganahalli, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8052582,
+   12.8269082,
+   77.6764541,
+   77.7036575
+  ],
+  "centroid": [
+   12.8160161,
+   77.6892217
+  ],
+  "seedable": true
+ },
+ "Akshayanagar": {
+  "query": "Akshayanagar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 349454755,
+  "class": "building",
+  "type": "yes",
+  "display_name": "Sparkx Auto Detailing, Car Wash, PPF, Ceramic Coating, Graphene coating, Sun film,[Akshayanagar, DLF Newtown] Yelenahalli Main Road DLF Newtown, Akshayanagar, 21, 1st Cross Road, Beguru, Yelenahalli, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560076, India",
+  "bbox_SNWE": [
+   12.8749694,
+   12.8751169,
+   77.6164138,
+   77.6165691
+  ],
+  "centroid": [
+   12.8750432,
+   77.6164914
+  ],
+  "seedable": true
+ },
+ "Chikkakannalli": {
+  "query": "Chikkakannalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 460961524,
+  "class": "landuse",
+  "type": "residential",
+  "display_name": "DS Max Sprinkles, Sarjapur Main Rd, Hadosiddapura, Chikkakannalli, Kodati, Kodathi, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560035, India",
+  "bbox_SNWE": [
+   12.8928561,
+   12.8945257,
+   77.7075867,
+   77.7086725
+  ],
+  "centroid": [
+   12.893703,
+   77.7081315
+  ],
+  "seedable": true
+ },
+ "Dommasandra": {
+  "query": "Dommasandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17421347,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Dommasandra, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0067139,
+   13.0173466,
+   77.7353503,
+   77.7479696
+  ],
+  "centroid": [
+   13.0118654,
+   77.7416785
+  ],
+  "seedable": true
+ },
+ "Choodasandra": {
+  "query": "Choodasandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455751,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Choodasandra, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.882385,
+   12.8942886,
+   77.6723281,
+   77.6890947
+  ],
+  "centroid": [
+   12.8883623,
+   77.6799727
+  ],
+  "seedable": true
+ },
+ "Sompura": {
+  "query": "Sompura, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 3983628633,
+  "class": "place",
+  "type": "village",
+  "display_name": "Sompura, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560062, India",
+  "bbox_SNWE": [
+   12.8578283,
+   12.8978283,
+   77.4772385,
+   77.5172385
+  ],
+  "centroid": [
+   12.8778283,
+   77.4972385
+  ],
+  "seedable": false
+ },
+ "R.K. Hegde Nagar": {
+  "query": "R.K. Hegde Nagar, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Singasandra": {
+  "query": "Singasandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883332,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Singasandra, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8689737,
+   12.8884738,
+   77.6369592,
+   77.6577015
+  ],
+  "centroid": [
+   12.8787382,
+   77.642089
+  ],
+  "seedable": true
+ },
+ "HSR Layout": {
+  "query": "HSR Layout, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883285,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "HSR Layout, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9021994,
+   12.9246948,
+   77.6227426,
+   77.6501916
+  ],
+  "centroid": [
+   12.9116225,
+   77.6388622
+  ],
+  "seedable": true
+ },
+ "Gottigere": {
+  "query": "Gottigere, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884572,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Gottigere, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8382785,
+   12.8594867,
+   77.573441,
+   77.588846
+  ],
+  "centroid": [
+   12.8491114,
+   77.5823746
+  ],
+  "seedable": true
+ },
+ "Thirumalashettyhally": {
+  "query": "Thirumalashettyhally, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Gunjur": {
+  "query": "Gunjur, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883358,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Gunjur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9020259,
+   12.9380144,
+   77.6863491,
+   77.7650583
+  ],
+  "centroid": [
+   12.9209772,
+   77.7361016
+  ],
+  "seedable": true
+ },
+ "Budigere Cross": {
+  "query": "Budigere Cross, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1298349232,
+  "class": "junction",
+  "type": "yes",
+  "display_name": "Budigere Cross, Budigere Road, Konadasanapura, Konadasapura, Bangalore East, Bengaluru Urban, Karnataka, 560049, India",
+  "bbox_SNWE": [
+   13.0459187,
+   13.0465085,
+   77.750148,
+   77.7506789
+  ],
+  "centroid": [
+   13.0462134,
+   77.7504125
+  ],
+  "seedable": true
+ },
+ "Devanahalli": {
+  "query": "Devanahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 282777706,
+  "class": "place",
+  "type": "town",
+  "display_name": "Devanahalli, Devanahalli taluku, Bengaluru North, Karnataka, 562110, India",
+  "bbox_SNWE": [
+   13.2083502,
+   13.2883502,
+   77.6734377,
+   77.7534377
+  ],
+  "centroid": [
+   13.2483502,
+   77.7134377
+  ],
+  "seedable": false
+ },
+ "Vidyaranyapura": {
+  "query": "Vidyaranyapura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883337,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Vidyaranyapura, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0619456,
+   13.0861859,
+   77.5508336,
+   77.5676374
+  ],
+  "centroid": [
+   13.0740417,
+   77.562108
+  ],
+  "seedable": true
+ },
+ "Kaggadasapura": {
+  "query": "Kaggadasapura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884517,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kaggadasapura, Bengaluru Central City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560093, India",
+  "bbox_SNWE": [
+   12.9760928,
+   12.9863888,
+   77.6635961,
+   77.6804387
+  ],
+  "centroid": [
+   12.9812262,
+   77.6745845
+  ],
+  "seedable": true
+ },
+ "Gunjur Village": {
+  "query": "Gunjur Village, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 3833226387,
+  "class": "place",
+  "type": "village",
+  "display_name": "Gunjuru, Doddaballapura taluk, Bengaluru North, Karnataka, 561205, India",
+  "bbox_SNWE": [
+   13.4079345,
+   13.4479345,
+   77.4931493,
+   77.5331493
+  ],
+  "centroid": [
+   13.4279345,
+   77.5131493
+  ],
+  "seedable": false
+ },
+ "Doddakannelli": {
+  "query": "Doddakannelli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17083906,
+  "class": "water",
+  "type": "lake",
+  "display_name": "Doddakannelli Lake, Doddakannalli, Gunjur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9102419,
+   12.9129485,
+   77.6913535,
+   77.695511
+  ],
+  "centroid": [
+   12.9115381,
+   77.6934164
+  ],
+  "seedable": true
+ },
+ "Indira Nagar": {
+  "query": "Indira Nagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 448991617,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Indiranagar, Jogpalya, Bengaluru Central City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560008, India",
+  "bbox_SNWE": [
+   12.9532913,
+   12.9932913,
+   77.6204672,
+   77.6604672
+  ],
+  "centroid": [
+   12.9732913,
+   77.6404672
+  ],
+  "seedable": false
+ },
+ "Panathur": {
+  "query": "Panathur, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883259,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Panathur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9144578,
+   12.9543357,
+   77.6860747,
+   77.7339938
+  ],
+  "centroid": [
+   12.9351457,
+   77.7047541
+  ],
+  "seedable": true
+ },
+ "Navarathna Agrahara": {
+  "query": "Navarathna Agrahara, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Kogilu": {
+  "query": "Kogilu, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884610,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kogilu, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0818892,
+   13.1316008,
+   77.6075251,
+   77.6503199
+  ],
+  "centroid": [
+   13.1067228,
+   77.6173956
+  ],
+  "seedable": true
+ },
+ "Electronic City Phase 2": {
+  "query": "Electronic City Phase 2, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 1860940083,
+  "class": "place",
+  "type": "quarter",
+  "display_name": "Electronics City Phase 2 (East), Electronic City, Bangalore South, Bengaluru Urban, Karnataka, 560100, India",
+  "bbox_SNWE": [
+   12.8368545,
+   12.8568545,
+   77.6669267,
+   77.6869267
+  ],
+  "centroid": [
+   12.8468545,
+   77.6769267
+  ],
+  "seedable": false
+ },
+ "Rayasandra": {
+  "query": "Rayasandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455750,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Rayasandra, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8690261,
+   12.8843701,
+   77.6710412,
+   77.6912852
+  ],
+  "centroid": [
+   12.8765714,
+   77.6821123
+  ],
+  "seedable": true
+ },
+ "Banaswadi": {
+  "query": "Banaswadi, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883482,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Banaswadi, Bengaluru North City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0058152,
+   13.0234719,
+   77.6448369,
+   77.6623278
+  ],
+  "centroid": [
+   13.0141618,
+   77.6518539
+  ],
+  "seedable": true
+ },
+ "Kadugodi": {
+  "query": "Kadugodi, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883441,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kadugodi, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9824718,
+   13.0152385,
+   77.7476436,
+   77.7758364
+  ],
+  "centroid": [
+   12.9985767,
+   77.7609716
+  ],
+  "seedable": true
+ },
+ "Kambipura": {
+  "query": "Kambipura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17416123,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kambipura, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8659715,
+   12.8987197,
+   77.4506853,
+   77.4732168
+  ],
+  "centroid": [
+   12.8822711,
+   77.4606466
+  ],
+  "seedable": true
+ },
+ "Kothanur": {
+  "query": "Kothanur, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883412,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kothanur, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8582792,
+   12.8819384,
+   77.5644047,
+   77.5906135
+  ],
+  "centroid": [
+   12.8701259,
+   77.5820178
+  ],
+  "seedable": true
+ },
+ "Rajajinagar": {
+  "query": "Rajajinagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 429857523,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Rajajinagar, Rajajinagara, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560010, India",
+  "bbox_SNWE": [
+   12.9682338,
+   13.0082338,
+   77.534883,
+   77.574883
+  ],
+  "centroid": [
+   12.9882338,
+   77.554883
+  ],
+  "seedable": false
+ },
+ "Sahakara Nagar": {
+  "query": "Sahakara Nagar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 552430276,
+  "class": "leisure",
+  "type": "park",
+  "display_name": "Sahakara Nagar CQAL Kids Park, Kodigehalli, Byatarayanapura, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, 560092, India",
+  "bbox_SNWE": [
+   13.061487,
+   13.0628952,
+   77.5797154,
+   77.5808768
+  ],
+  "centroid": [
+   13.0621474,
+   77.5800614
+  ],
+  "seedable": true
+ },
+ "Kadagrahara": {
+  "query": "Kadagrahara, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2577178001,
+  "class": "place",
+  "type": "village",
+  "display_name": "Kadagrahara, Anekal, Bengaluru Urban, Karnataka, 562125, India",
+  "bbox_SNWE": [
+   12.8429979,
+   12.8829979,
+   77.743056,
+   77.783056
+  ],
+  "centroid": [
+   12.8629979,
+   77.763056
+  ],
+  "seedable": false
+ },
+ "Visthar": {
+  "query": "Visthar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 56312276,
+  "class": "amenity",
+  "type": "college",
+  "display_name": "Visthar, Blossoms Road, Byrathi Bande, Byrathi, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560077, India",
+  "bbox_SNWE": [
+   13.0714504,
+   13.0731029,
+   77.6564573,
+   77.6584641
+  ],
+  "centroid": [
+   13.0719702,
+   77.6573707
+  ],
+  "seedable": true
+ },
+ "Medahalli": {
+  "query": "Medahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883498,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Medahalli, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0097268,
+   13.0286533,
+   77.6992618,
+   77.7301164
+  ],
+  "centroid": [
+   13.0192098,
+   77.7191531
+  ],
+  "seedable": true
+ },
+ "Chikkanayakanahalli, Choodasandra": {
+  "query": "Chikkanayakanahalli, Choodasandra, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Banashankari": {
+  "query": "Banashankari, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 12816045429,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Banashankari, Kathriguppe, Bengaluru West City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560085, India",
+  "bbox_SNWE": [
+   12.9078196,
+   12.9478196,
+   77.536621,
+   77.576621
+  ],
+  "centroid": [
+   12.9278196,
+   77.556621
+  ],
+  "seedable": false
+ },
+ "Chokkanahalli": {
+  "query": "Chokkanahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 43825194,
+  "class": "water",
+  "type": "lake",
+  "display_name": "Chokkanahalli Lake, Sampigehalli, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.083927,
+   13.085533,
+   77.6279229,
+   77.6302168
+  ],
+  "centroid": [
+   13.0847189,
+   77.6290547
+  ],
+  "seedable": true
+ },
+ "Kyalasanahalli": {
+  "query": "Kyalasanahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 420076871,
+  "class": "place",
+  "type": "village",
+  "display_name": "Kyalasanahalli, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560077, India",
+  "bbox_SNWE": [
+   13.0364575,
+   13.0764575,
+   77.6391321,
+   77.6791321
+  ],
+  "centroid": [
+   13.0564575,
+   77.6591321
+  ],
+  "seedable": false
+ },
+ "Parappana Agrahara": {
+  "query": "Parappana Agrahara, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 55338950,
+  "class": "amenity",
+  "type": "prison",
+  "display_name": "Bangalore Central Jail, Jail Road, Naganathapura, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560068, India",
+  "bbox_SNWE": [
+   12.8761322,
+   12.8841541,
+   77.6625183,
+   77.6686283
+  ],
+  "centroid": [
+   12.8802088,
+   77.6658442
+  ],
+  "seedable": true
+ },
+ "Kannuru": {
+  "query": "Kannuru, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17421370,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kannuru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0812362,
+   13.1123086,
+   77.6427525,
+   77.6635257
+  ],
+  "centroid": [
+   13.0967426,
+   77.6535003
+  ],
+  "seedable": true
+ },
+ "Sudhama Nagar": {
+  "query": "Sudhama Nagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 5339097995,
+  "class": "place",
+  "type": "neighbourhood",
+  "display_name": "Sudhama Nagar, Jeevan Bhima Nagar, Jeevan Bhimanagar, Bengaluru Central City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560075, India",
+  "bbox_SNWE": [
+   12.9527471,
+   12.9727471,
+   77.6510345,
+   77.6710345
+  ],
+  "centroid": [
+   12.9627471,
+   77.6610345
+  ],
+  "seedable": false
+ },
+ "Kodathi": {
+  "query": "Kodathi, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17421302,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kodathi, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.876791,
+   12.9045436,
+   77.6978763,
+   77.7240914
+  ],
+  "centroid": [
+   12.8905129,
+   77.7133427
+  ],
+  "seedable": true
+ },
+ "Bagalur": {
+  "query": "Bagalur, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 28085886,
+  "class": "highway",
+  "type": "secondary",
+  "display_name": "Bagalur Road, Dwaraka Nagar, Kogilu, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, 560063, India",
+  "bbox_SNWE": [
+   13.121259,
+   13.1221711,
+   77.6179651,
+   77.630476
+  ],
+  "centroid": [
+   13.1217053,
+   77.6242206
+  ],
+  "seedable": true
+ },
+ "Arakere": {
+  "query": "Arakere, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883377,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Arakere, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8804176,
+   12.8905742,
+   77.5960238,
+   77.6105054
+  ],
+  "centroid": [
+   12.8854515,
+   77.6034249
+  ],
+  "seedable": true
+ },
+ "Chikkagubbi Village": {
+  "query": "Chikkagubbi Village, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 548633836,
+  "class": "place",
+  "type": "village",
+  "display_name": "Chikkagubbi, Bangalore East, Bengaluru Urban, Karnataka, 562149, India",
+  "bbox_SNWE": [
+   13.0606067,
+   13.1006067,
+   77.6462218,
+   77.6862218
+  ],
+  "centroid": [
+   13.0806067,
+   77.6662218
+  ],
+  "seedable": false
+ },
+ "Vajarahalli": {
+  "query": "Vajarahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 791609921,
+  "class": "highway",
+  "type": "secondary",
+  "display_name": "Vajarahalli Main Road, Thalaghattapura, Vajrahalli, Talagattapura, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560062, India",
+  "bbox_SNWE": [
+   12.8740844,
+   12.8762842,
+   77.5282082,
+   77.5406219
+  ],
+  "centroid": [
+   12.875786,
+   77.5345106
+  ],
+  "seedable": true
+ },
+ "Hosakerehalli": {
+  "query": "Hosakerehalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883414,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Hosakerehalli, Bengaluru West City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9234025,
+   12.9365098,
+   77.5330958,
+   77.5414184
+  ],
+  "centroid": [
+   12.9299371,
+   77.5374237
+  ],
+  "seedable": true
+ },
+ "Aavalahalli": {
+  "query": "Aavalahalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "V. Kallahalli": {
+  "query": "V. Kallahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455765,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Valagere Kallahalli, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8750095,
+   12.8961302,
+   77.7681667,
+   77.7857193
+  ],
+  "centroid": [
+   12.8857015,
+   77.7767933
+  ],
+  "seedable": true
+ },
+ "Kudlu Gate": {
+  "query": "Kudlu Gate, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 5018250572,
+  "class": "railway",
+  "type": "stop",
+  "display_name": "Kudlu Gate, Hosur Road, GarvebhaviPalya, Garvebavi Palya, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560068, India",
+  "bbox_SNWE": [
+   12.8895114,
+   12.8896114,
+   77.63942,
+   77.63952
+  ],
+  "centroid": [
+   12.8895614,
+   77.63947
+  ],
+  "seedable": false
+ },
+ "Vijayanagar": {
+  "query": "Vijayanagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 5760197784,
+  "class": "railway",
+  "type": "stop",
+  "display_name": "Vijayanagar, Chord Road, M C Layout, Dr. Vishnuvardhan Ward, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560040, India",
+  "bbox_SNWE": [
+   12.9709037,
+   12.9710037,
+   77.5373351,
+   77.5374351
+  ],
+  "centroid": [
+   12.9709537,
+   77.5373851
+  ],
+  "seedable": false
+ },
+ "Narayanapura": {
+  "query": "Narayanapura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884566,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "K Narayanapura, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0412067,
+   13.0851515,
+   77.6370893,
+   77.6520105
+  ],
+  "centroid": [
+   13.063028,
+   77.6451795
+  ],
+  "seedable": true
+ },
+ "Tirumanahalli": {
+  "query": "Tirumanahalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Kadubeesanahalli": {
+  "query": "Kadubeesanahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 286531082,
+  "class": "highway",
+  "type": "tertiary",
+  "display_name": "Panathur Main Road, Kaverappa Layout, Kaadubeesanahalli, Panathur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560103, India",
+  "bbox_SNWE": [
+   12.9365162,
+   12.9382421,
+   77.6982309,
+   77.7037756
+  ],
+  "centroid": [
+   12.9375949,
+   77.7010704
+  ],
+  "seedable": true
+ },
+ "Kasavanahalli": {
+  "query": "Kasavanahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883435,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kasavanahalli, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.89314,
+   12.9206043,
+   77.6539103,
+   77.7028873
+  ],
+  "centroid": [
+   12.8977737,
+   77.6745075
+  ],
+  "seedable": true
+ },
+ "Gattahalli": {
+  "query": "Gattahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 10475787,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Gattahalli, Gettehalli, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8614535,
+   12.8837629,
+   77.6862579,
+   77.7056501
+  ],
+  "centroid": [
+   12.8727287,
+   77.6944567
+  ],
+  "seedable": true
+ },
+ "Hallehalli": {
+  "query": "Hallehalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Gunjur Palya": {
+  "query": "Gunjur Palya, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 1872804077,
+  "class": "place",
+  "type": "quarter",
+  "display_name": "Gunjur Palya, Gunjur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560087, India",
+  "bbox_SNWE": [
+   12.9128378,
+   12.9328378,
+   77.7088315,
+   77.7288315
+  ],
+  "centroid": [
+   12.9228378,
+   77.7188315
+  ],
+  "seedable": false
+ },
+ "Uttarahalli -Manavarthekaval": {
+  "query": "Uttarahalli -Manavarthekaval, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Yeswanthpur": {
+  "query": "Yeswanthpur, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 445363393,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Yeswanthpur, Yeshwanthpura, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560022, India",
+  "bbox_SNWE": [
+   13.0021838,
+   13.0421838,
+   77.5330824,
+   77.5730824
+  ],
+  "centroid": [
+   13.0221838,
+   77.5530824
+  ],
+  "seedable": false
+ },
+ "Kannamangala - Whitefield Hoskote Road": {
+  "query": "Kannamangala - Whitefield Hoskote Road, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 11290399369,
+  "class": "amenity",
+  "type": "bank",
+  "display_name": "State Bank of India, Whitefield - Hoskote Road, Kannamangala, Bangalore East, Bengaluru Urban, Karnataka, 560115, India",
+  "bbox_SNWE": [
+   13.0236124,
+   13.0237124,
+   77.7613329,
+   77.7614329
+  ],
+  "centroid": [
+   13.0236624,
+   77.7613829
+  ],
+  "seedable": false
+ },
+ "Cheemasandra": {
+  "query": "Cheemasandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17421327,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Cheemasandra, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0395184,
+   13.0620117,
+   77.732628,
+   77.7495277
+  ],
+  "centroid": [
+   13.0509021,
+   77.7405306
+  ],
+  "seedable": true
+ },
+ "Hosahalli": {
+  "query": "Hosahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883341,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Hosahalli, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9584432,
+   12.9736253,
+   77.5366675,
+   77.5442422
+  ],
+  "centroid": [
+   12.9660431,
+   77.5414979
+  ],
+  "seedable": true
+ },
+ "Mallasandra": {
+  "query": "Mallasandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883469,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Mallasandra, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0483805,
+   13.0612274,
+   77.5068379,
+   77.5210466
+  ],
+  "centroid": [
+   13.0548302,
+   77.5155741
+  ],
+  "seedable": true
+ },
+ "Brookefield": {
+  "query": "Brookefield, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 378717492,
+  "class": "place",
+  "type": "quarter",
+  "display_name": "Brookefield, Priyadarshini Ward, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560037, India",
+  "bbox_SNWE": [
+   12.9552094,
+   12.9752094,
+   77.707936,
+   77.727936
+  ],
+  "centroid": [
+   12.9652094,
+   77.717936
+  ],
+  "seedable": false
+ },
+ "Uttarahalli Hobli": {
+  "query": "Uttarahalli Hobli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "BTM Layout": {
+  "query": "BTM Layout, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 447032046,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "BTM Layout, Viswamanava Kuvempu Ward, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560076, India",
+  "bbox_SNWE": [
+   12.8940008,
+   12.9340008,
+   77.5902821,
+   77.6302821
+  ],
+  "centroid": [
+   12.9140008,
+   77.6102821
+  ],
+  "seedable": false
+ },
+ "RMV Extension Stage 2": {
+  "query": "RMV Extension Stage 2, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 1619884913,
+  "class": "place",
+  "type": "neighbourhood",
+  "display_name": "RMV 2nd Stage 1st Block, Sadashivanagar, Sadashiva Nagara, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560006, India",
+  "bbox_SNWE": [
+   13.0122132,
+   13.0322132,
+   77.5681101,
+   77.5881101
+  ],
+  "centroid": [
+   13.0222132,
+   77.5781101
+  ],
+  "seedable": false
+ },
+ "Cooke Town": {
+  "query": "Cooke Town, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 514409999,
+  "class": "place",
+  "type": "quarter",
+  "display_name": "Cooke Town, Maruthi Seva Nagara, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560084, India",
+  "bbox_SNWE": [
+   12.9921998,
+   13.0121998,
+   77.6151814,
+   77.6351814
+  ],
+  "centroid": [
+   13.0021998,
+   77.6251814
+  ],
+  "seedable": false
+ },
+ "Anchepalya": {
+  "query": "Anchepalya, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 5660111,
+  "class": "natural",
+  "type": "water",
+  "display_name": "Anchepalya Lake, Dodda Bidarakallu, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0460156,
+   13.0549723,
+   77.4769298,
+   77.4819514
+  ],
+  "centroid": [
+   13.050527,
+   77.47942
+  ],
+  "seedable": true
+ },
+ "Agrahara Layout": {
+  "query": "Agrahara Layout, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 43609761,
+  "class": "landuse",
+  "type": "residential",
+  "display_name": "Agrahara Layout, Sampigehalli, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0947465,
+   13.1006971,
+   77.6232629,
+   77.6298719
+  ],
+  "centroid": [
+   13.098032,
+   77.6263766
+  ],
+  "seedable": true
+ },
+ "Kengeri": {
+  "query": "Kengeri, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883453,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kengeri, Bengaluru West City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.913979,
+   12.9333808,
+   77.4786482,
+   77.4989021
+  ],
+  "centroid": [
+   12.9229728,
+   77.4842926
+  ],
+  "seedable": true
+ },
+ "KPC Layout": {
+  "query": "KPC Layout, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 13070773912,
+  "class": "place",
+  "type": "neighbourhood",
+  "display_name": "KPC Layout, Haralur, Kasavanahalli, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560035, India",
+  "bbox_SNWE": [
+   12.8941861,
+   12.9141861,
+   77.6678517,
+   77.6878517
+  ],
+  "centroid": [
+   12.9041861,
+   77.6778517
+  ],
+  "seedable": false
+ },
+ "Kalyan Nagar": {
+  "query": "Kalyan Nagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 567772575,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Kalyan Nagar, Kalyanagar, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560043, India",
+  "bbox_SNWE": [
+   13.0021416,
+   13.0421416,
+   77.6203368,
+   77.6603368
+  ],
+  "centroid": [
+   13.0221416,
+   77.6403368
+  ],
+  "seedable": false
+ },
+ "Byrathi": {
+  "query": "Byrathi, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884513,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Byrathi, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560077, India",
+  "bbox_SNWE": [
+   13.0219826,
+   13.0819932,
+   77.6469082,
+   77.6943795
+  ],
+  "centroid": [
+   13.0578901,
+   77.6721894
+  ],
+  "seedable": true
+ },
+ "Battarahalli": {
+  "query": "Battarahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1187070682,
+  "class": "highway",
+  "type": "secondary",
+  "display_name": "Ayyappa Nagar - Battarahalli Road, Medahalli, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560049, India",
+  "bbox_SNWE": [
+   13.0111245,
+   13.0190794,
+   77.7086931,
+   77.7100251
+  ],
+  "centroid": [
+   13.015119,
+   77.7094485
+  ],
+  "seedable": true
+ },
+ "HBR Layout": {
+  "query": "HBR Layout, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883455,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "HBR Layout, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0211652,
+   13.0395111,
+   77.6200556,
+   77.6449397
+  ],
+  "centroid": [
+   13.031992,
+   77.6280789
+  ],
+  "seedable": true
+ },
+ "NRI Layout": {
+  "query": "NRI Layout, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 778525761,
+  "class": "highway",
+  "type": "tertiary",
+  "display_name": "NRI Layout Main Road, Kalkere, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560016, India",
+  "bbox_SNWE": [
+   13.0237989,
+   13.0306009,
+   77.6791216,
+   77.6793011
+  ],
+  "centroid": [
+   13.0271999,
+   77.6792114
+  ],
+  "seedable": true
+ },
+ "Kalkere": {
+  "query": "Kalkere, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883257,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kalkere, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560016, India",
+  "bbox_SNWE": [
+   13.0163475,
+   13.0525491,
+   77.6638264,
+   77.681127
+  ],
+  "centroid": [
+   13.0344453,
+   77.6766779
+  ],
+  "seedable": true
+ },
+ "Kacharakanahalli,Bisnahalli": {
+  "query": "Kacharakanahalli,Bisnahalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Srinivaspura": {
+  "query": "Srinivaspura, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Bilekahalli": {
+  "query": "Bilekahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883271,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Bilekahalli, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8939201,
+   12.915319,
+   77.5949108,
+   77.6212828
+  ],
+  "centroid": [
+   12.9046331,
+   77.6070945
+  ],
+  "seedable": true
+ },
+ "Kodihalli": {
+  "query": "Kodihalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884581,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kodihalli, Bengaluru Central City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9568055,
+   12.9704473,
+   77.6412257,
+   77.6522658
+  ],
+  "centroid": [
+   12.9635497,
+   77.6460411
+  ],
+  "seedable": true
+ },
+ "Hoodi": {
+  "query": "Hoodi, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883493,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Hoodi, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9878259,
+   13.0109333,
+   77.7058743,
+   77.7362479
+  ],
+  "centroid": [
+   12.9997971,
+   77.7141611
+  ],
+  "seedable": true
+ },
+ "Jayanagar": {
+  "query": "Jayanagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 429853334,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Jayanagar, Tilak Nagara, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560011, India",
+  "bbox_SNWE": [
+   12.9092731,
+   12.9492731,
+   77.5624229,
+   77.6024229
+  ],
+  "centroid": [
+   12.9292731,
+   77.5824229
+  ],
+  "seedable": false
+ },
+ "Kengeri Satellite Town": {
+  "query": "Kengeri Satellite Town, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883453,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kengeri, Bengaluru West City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.913979,
+   12.9333808,
+   77.4786482,
+   77.4989021
+  ],
+  "centroid": [
+   12.9229728,
+   77.4842926
+  ],
+  "seedable": true
+ },
+ "Kachamaranahalli": {
+  "query": "Kachamaranahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17421298,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kachamaranahalli, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8942802,
+   12.9147217,
+   77.7262772,
+   77.7447336
+  ],
+  "centroid": [
+   12.9046015,
+   77.7337528
+  ],
+  "seedable": true
+ },
+ "Ittangur": {
+  "query": "Ittangur, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 11909184804,
+  "class": "place",
+  "type": "hamlet",
+  "display_name": "Ittangur, Ittanguru, Sarjapura, Anekal, Bengaluru Urban, Karnataka, 562125, India",
+  "bbox_SNWE": [
+   12.86154,
+   12.90154,
+   77.7692434,
+   77.8092434
+  ],
+  "centroid": [
+   12.88154,
+   77.7892434
+  ],
+  "seedable": false
+ },
+ "Hennur": {
+  "query": "Hennur, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883360,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Hennur, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0308457,
+   13.0455085,
+   77.6212086,
+   77.6414719
+  ],
+  "centroid": [
+   13.0381482,
+   77.6324299
+  ],
+  "seedable": true
+ },
+ "Bidaraguppe": {
+  "query": "Bidaraguppe, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 1678236137,
+  "class": "place",
+  "type": "village",
+  "display_name": "Bidaraguppe, Anekal, Bengaluru Urban, Karnataka, 562107, India",
+  "bbox_SNWE": [
+   12.7860574,
+   12.8260574,
+   77.7662873,
+   77.8062873
+  ],
+  "centroid": [
+   12.8060574,
+   77.7862873
+  ],
+  "seedable": false
+ },
+ "Kumbalgodu": {
+  "query": "Kumbalgodu, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Byatarayanapura": {
+  "query": "Byatarayanapura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883438,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Byatarayanapura, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, 560092, India",
+  "bbox_SNWE": [
+   13.0490669,
+   13.0873833,
+   77.5757838,
+   77.6043783
+  ],
+  "centroid": [
+   13.068322,
+   77.591006
+  ],
+  "seedable": true
+ },
+ "Devinagar": {
+  "query": "Devinagar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 674699444,
+  "class": "highway",
+  "type": "residential",
+  "display_name": "Devinagar Main Road, Tatanagar, Kodigehalli, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560094, India",
+  "bbox_SNWE": [
+   13.0478365,
+   13.0489177,
+   77.5674354,
+   77.5706412
+  ],
+  "centroid": [
+   13.0483368,
+   77.5690253
+  ],
+  "seedable": true
+ },
+ "Jyotipuram": {
+  "query": "Jyotipuram, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Bidare Agraha": {
+  "query": "Bidare Agraha, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Nehru Nagar": {
+  "query": "Nehru Nagar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883302,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Nehru Nagar, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9723546,
+   12.993911,
+   77.5705381,
+   77.5844508
+  ],
+  "centroid": [
+   12.9829907,
+   77.5744995
+  ],
+  "seedable": true
+ },
+ "Rajanukunte": {
+  "query": "Rajanukunte, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17417762,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Rajanukunte, Yelahanka taluku, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.1626376,
+   13.1756195,
+   77.5537621,
+   77.5677574
+  ],
+  "centroid": [
+   13.1691299,
+   77.5599986
+  ],
+  "seedable": true
+ },
+ "Hebbal": {
+  "query": "Hebbal, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883365,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Hebbal, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.028086,
+   13.0416335,
+   77.586182,
+   77.5982606
+  ],
+  "centroid": [
+   13.0382184,
+   77.5919
+  ],
+  "seedable": true
+ },
+ "K Channasandra": {
+  "query": "K Channasandra, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2474952651,
+  "class": "place",
+  "type": "quarter",
+  "display_name": "K. Channasandra, K Chennasandra, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560016, India",
+  "bbox_SNWE": [
+   13.030022,
+   13.050022,
+   77.6696248,
+   77.6896248
+  ],
+  "centroid": [
+   13.040022,
+   77.6796248
+  ],
+  "seedable": false
+ },
+ "Allalasandra": {
+  "query": "Allalasandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 41206188,
+  "class": "water",
+  "type": "lake",
+  "display_name": "Allalasandra Lake, Nyayanga Badavane, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0890792,
+   13.0929408,
+   77.5837882,
+   77.5911384
+  ],
+  "centroid": [
+   13.090997,
+   77.5868301
+  ],
+  "seedable": true
+ },
+ "Sanjaynagar": {
+  "query": "Sanjaynagar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 458682709,
+  "class": "highway",
+  "type": "tertiary",
+  "display_name": "Sanjaynagar Main Road, NGEF Layout, Sanjay Nagara, Nagashettyhalli, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560094, India",
+  "bbox_SNWE": [
+   13.0319657,
+   13.0425538,
+   77.5727228,
+   77.5768363
+  ],
+  "centroid": [
+   13.0373417,
+   77.5744325
+  ],
+  "seedable": true
+ },
+ "Kalena Agrahara": {
+  "query": "Kalena Agrahara, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 12555786567,
+  "class": "place",
+  "type": "neighbourhood",
+  "display_name": "Kalena Agrahara, Gottigere, Yelenahalli, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560076, India",
+  "bbox_SNWE": [
+   12.8558068,
+   12.8758068,
+   77.5811918,
+   77.6011918
+  ],
+  "centroid": [
+   12.8658068,
+   77.5911918
+  ],
+  "seedable": false
+ },
+ "Mahalakshmi Layout": {
+  "query": "Mahalakshmi Layout, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 7257126381,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Mahalakshmi Layout, Mahalakshmipuram, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560086, India",
+  "bbox_SNWE": [
+   12.9913153,
+   13.0313153,
+   77.5246972,
+   77.5646972
+  ],
+  "centroid": [
+   13.0113153,
+   77.5446972
+  ],
+  "seedable": false
+ },
+ "Frazer Town": {
+  "query": "Frazer Town, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 430051517,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Frazer Town, Pulakeshi Nagar, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560005, India",
+  "bbox_SNWE": [
+   12.9775851,
+   13.0175851,
+   77.5936744,
+   77.6336744
+  ],
+  "centroid": [
+   12.9975851,
+   77.6136744
+  ],
+  "seedable": false
+ },
+ "S.Medihalli": {
+  "query": "S.Medihalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455894,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Medihalli, Rachamanahalli., Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.7278964,
+   12.7398484,
+   77.7311907,
+   77.7430127
+  ],
+  "centroid": [
+   12.7338988,
+   77.737204
+  ],
+  "seedable": true
+ },
+ "Richmond Town": {
+  "query": "Richmond Town, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 5164714917,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Richmond Town, Shanthinagar, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560025, India",
+  "bbox_SNWE": [
+   12.943555,
+   12.983555,
+   77.5815856,
+   77.6215856
+  ],
+  "centroid": [
+   12.963555,
+   77.6015856
+  ],
+  "seedable": false
+ },
+ "Kothnur Narayanapura": {
+  "query": "Kothnur Narayanapura, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Ramanashree California Gardens Layout": {
+  "query": "Ramanashree California Gardens Layout, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "BEML Cooperative Society Layout": {
+  "query": "BEML Cooperative Society Layout, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Jigani": {
+  "query": "Jigani, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1120171606,
+  "class": "landuse",
+  "type": "industrial",
+  "display_name": "Rashi Granite Export India Pvt Ltd, 98-I, Jigani, Bengaluru, Anekal, Bengaluru Urban, Karnataka, 560105, India",
+  "bbox_SNWE": [
+   12.7751777,
+   12.776072,
+   77.631996,
+   77.6329903
+  ],
+  "centroid": [
+   12.7756195,
+   77.6324661
+  ],
+  "seedable": true
+ },
+ "Gulimangala": {
+  "query": "Gulimangala, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455823,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Gulimangala, Singena Agrahara, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.842708,
+   12.856141,
+   77.6858331,
+   77.708006
+  ],
+  "centroid": [
+   12.8492767,
+   77.7001531
+  ],
+  "seedable": true
+ },
+ "Attibele": {
+  "query": "Attibele, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455788,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Attibele, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.7651927,
+   12.7850272,
+   77.7567282,
+   77.7852901
+  ],
+  "centroid": [
+   12.7751249,
+   77.7709216
+  ],
+  "seedable": true
+ },
+ "Chambenahalli": {
+  "query": "Chambenahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455766,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Chambenahalli, Valagere Kallahalli, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8770859,
+   12.9001153,
+   77.7579704,
+   77.7710072
+  ],
+  "centroid": [
+   12.8886379,
+   77.7662379
+  ],
+  "seedable": true
+ },
+ "Kudlu": {
+  "query": "Kudlu, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883473,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kudlu, Bengaluru South City Corporation, Bengaluru, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8800951,
+   12.8947314,
+   77.6412172,
+   77.6737763
+  ],
+  "centroid": [
+   12.8889126,
+   77.6555716
+  ],
+  "seedable": true
+ },
+ "Essel Gardens": {
+  "query": "Essel Gardens, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Anagalapura": {
+  "query": "Anagalapura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17421361,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Anagalapura, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0616508,
+   13.0725622,
+   77.6771262,
+   77.6900622
+  ],
+  "centroid": [
+   13.067107,
+   77.6840813
+  ],
+  "seedable": true
+ },
+ "Yelahanka New Town": {
+  "query": "Yelahanka New Town, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1231838392,
+  "class": "amenity",
+  "type": "bus_station",
+  "display_name": "Yelahanka New Town, 16th B Cross Road, LIG 3rd Stage, Yelahanka New Town, Yelahanka Satellite Town, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, 560064, India",
+  "bbox_SNWE": [
+   13.0952726,
+   13.0960366,
+   77.5786577,
+   77.5794115
+  ],
+  "centroid": [
+   13.0956506,
+   77.5790395
+  ],
+  "seedable": true
+ },
+ "Hulimavu": {
+  "query": "Hulimavu, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883357,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Hulimavu, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560076, India",
+  "bbox_SNWE": [
+   12.8717695,
+   12.8826716,
+   77.5942769,
+   77.6100339
+  ],
+  "centroid": [
+   12.8770389,
+   77.6021118
+  ],
+  "seedable": true
+ },
+ "Basapura": {
+  "query": "Basapura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 111871728,
+  "class": "water",
+  "type": "lake",
+  "display_name": "Basapura Lake, Chikkathoguru, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8675917,
+   12.8696334,
+   77.6427203,
+   77.645153
+  ],
+  "centroid": [
+   12.8686664,
+   77.6441741
+  ],
+  "seedable": true
+ },
+ "Chansandra": {
+  "query": "Chansandra, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2473511283,
+  "class": "amenity",
+  "type": "place_of_worship",
+  "display_name": "Vallasiddi Vinayaka Temple, Chansandra, Channasandra Main Road, AKG Colony, Channasandra, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560067, India",
+  "bbox_SNWE": [
+   12.982472,
+   12.982572,
+   77.7604753,
+   77.7605753
+  ],
+  "centroid": [
+   12.982522,
+   77.7605253
+  ],
+  "seedable": false
+ },
+ "Kartik Nagar": {
+  "query": "Kartik Nagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 3370028967,
+  "class": "shop",
+  "type": "confectionery",
+  "display_name": "Kartik's Mithai Shoppe, Chinmaya Mission Hospital Road, Indiranagar 2nd Stage, Hoysala Nagara Central, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560038, India",
+  "bbox_SNWE": [
+   12.9783396,
+   12.9784396,
+   77.637253,
+   77.637353
+  ],
+  "centroid": [
+   12.9783896,
+   77.637303
+  ],
+  "seedable": false
+ },
+ "C V Raman Nagar": {
+  "query": "C V Raman Nagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 628634429,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "C V Raman Nagar, Nagavarapalya, Bengaluru Central City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560093, India",
+  "bbox_SNWE": [
+   12.9656478,
+   13.0056478,
+   77.6449767,
+   77.6849767
+  ],
+  "centroid": [
+   12.9856478,
+   77.6649767
+  ],
+  "seedable": false
+ },
+ "Margondanahalli": {
+  "query": "Margondanahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 13734303861,
+  "class": "place",
+  "type": "house",
+  "display_name": "17 Mathrushree Nivas, 2nd cross, Megacity layout, Margondanahalli road, Near Jeevitha Ashram, 2nd Cross Road, Megacity Layout, Maragondanahalli, Kittaganuru, Bangalore East, Bengaluru Urban, Karnataka, 560049, India",
+  "bbox_SNWE": [
+   13.0302092,
+   13.0303092,
+   77.6934752,
+   77.6935752
+  ],
+  "centroid": [
+   13.0302592,
+   77.6935252
+  ],
+  "seedable": false
+ },
+ "Kaggalipura": {
+  "query": "Kaggalipura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455828,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kaggalipura, Kommasandra, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8501451,
+   12.8611531,
+   77.718275,
+   77.7315962
+  ],
+  "centroid": [
+   12.855621,
+   77.7246606
+  ],
+  "seedable": true
+ },
+ "Boovanahalli": {
+  "query": "Boovanahalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Mullur": {
+  "query": "Mullur, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Bettahalsoor": {
+  "query": "Bettahalsoor, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Vakil Garden City": {
+  "query": "Vakil Garden City, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 124779981,
+  "class": "landuse",
+  "type": "residential",
+  "display_name": "Vakil Garden City, Talagattapura, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8592444,
+   12.8632004,
+   77.533383,
+   77.5383743
+  ],
+  "centroid": [
+   12.8612572,
+   77.5353297
+  ],
+  "seedable": true
+ },
+ "Junnasandra": {
+  "query": "Junnasandra, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 12432287594,
+  "class": "place",
+  "type": "neighbourhood",
+  "display_name": "Junnasandra, Doddakannalli, Kasavanahalli, Bengaluru South City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560035, India",
+  "bbox_SNWE": [
+   12.8964203,
+   12.9164203,
+   77.6735161,
+   77.6935161
+  ],
+  "centroid": [
+   12.9064203,
+   77.6835161
+  ],
+  "seedable": false
+ },
+ "Vittasandra": {
+  "query": "Vittasandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 38756136,
+  "class": "highway",
+  "type": "tertiary",
+  "display_name": "Vittasandra Main Road, Beguru, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560114, India",
+  "bbox_SNWE": [
+   12.8661453,
+   12.873542,
+   77.6251384,
+   77.6289693
+  ],
+  "centroid": [
+   12.8699226,
+   77.6272278
+  ],
+  "seedable": true
+ },
+ "Kasturi Nagar": {
+  "query": "Kasturi Nagar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883291,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kasturi Nagar, Bengaluru Central City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560033, India",
+  "bbox_SNWE": [
+   12.9907977,
+   13.0123891,
+   77.636339,
+   77.663592
+  ],
+  "centroid": [
+   13.0015277,
+   77.6512362
+  ],
+  "seedable": true
+ },
+ "BTM Layout 2nd Stage": {
+  "query": "BTM Layout 2nd Stage, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2941483808,
+  "class": "place",
+  "type": "quarter",
+  "display_name": "BTM Layout 2nd Stage, Viswamanava Kuvempu Ward, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560076, India",
+  "bbox_SNWE": [
+   12.9040082,
+   12.9240082,
+   77.597945,
+   77.617945
+  ],
+  "centroid": [
+   12.9140082,
+   77.607945
+  ],
+  "seedable": false
+ },
+ "Mahadevapura": {
+  "query": "Mahadevapura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883376,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Mahadevapura, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9785066,
+   12.9963293,
+   77.6744595,
+   77.6958493
+  ],
+  "centroid": [
+   12.9912395,
+   77.6897334
+  ],
+  "seedable": true
+ },
+ "Munnekollal": {
+  "query": "Munnekollal, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Gnana Bharathi": {
+  "query": "Gnana Bharathi, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1054241433,
+  "class": "amenity",
+  "type": "university",
+  "display_name": "National Law School of India University, Gandhi Marg, Teacher's Colony, Nagarbhavi, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560056, India",
+  "bbox_SNWE": [
+   12.9498508,
+   12.9560146,
+   77.5135338,
+   77.5184044
+  ],
+  "centroid": [
+   12.9529035,
+   77.5158003
+  ],
+  "seedable": true
+ },
+ "Doddanagamangala": {
+  "query": "Doddanagamangala, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1182428284,
+  "class": "highway",
+  "type": "tertiary",
+  "display_name": "Doddanagamangala Road, Chikkathoguru, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560100, India",
+  "bbox_SNWE": [
+   12.8641384,
+   12.8702952,
+   77.6585279,
+   77.670636
+  ],
+  "centroid": [
+   12.8668341,
+   77.6644155
+  ],
+  "seedable": true
+ },
+ "Kommasandra, Anekal": {
+  "query": "Kommasandra, Anekal, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455841,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kommasandra, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8235023,
+   12.8422808,
+   77.6832985,
+   77.7002708
+  ],
+  "centroid": [
+   12.8328533,
+   77.6917222
+  ],
+  "seedable": true
+ },
+ "Shettigere": {
+  "query": "Shettigere, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17417828,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Shettigere, Yelahanka taluku, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.1904002,
+   13.2005552,
+   77.6435408,
+   77.6572209
+  ],
+  "centroid": [
+   13.1954297,
+   77.649453
+  ],
+  "seedable": true
+ },
+ "Ramamurthy Nagar": {
+  "query": "Ramamurthy Nagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 442438417,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Ramamurthy Nagar, Ramamurthy Nagara, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560016, India",
+  "bbox_SNWE": [
+   12.9920218,
+   13.0320218,
+   77.6577817,
+   77.6977817
+  ],
+  "centroid": [
+   13.0120218,
+   77.6777817
+  ],
+  "seedable": false
+ },
+ "Hongasandra": {
+  "query": "Hongasandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883269,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Hongasandra, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8933715,
+   12.9044337,
+   77.6226692,
+   77.6325724
+  ],
+  "centroid": [
+   12.8986261,
+   77.6286732
+  ],
+  "seedable": true
+ },
+ "Dodda Gubbi": {
+  "query": "Dodda Gubbi, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1354211500,
+  "class": "amenity",
+  "type": "monastery",
+  "display_name": "India Campus Crusade for Christ, Blossoms Road, Byrathi Bande, Byrathi, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560077, India",
+  "bbox_SNWE": [
+   13.0693933,
+   13.0698401,
+   77.6575832,
+   77.6592261
+  ],
+  "centroid": [
+   13.0696109,
+   77.658369
+  ],
+  "seedable": true
+ },
+ "Marathahalli": {
+  "query": "Marathahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884550,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Marathahalli, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9456404,
+   12.9570756,
+   77.6896353,
+   77.7050279
+  ],
+  "centroid": [
+   12.9552572,
+   77.6984163
+  ],
+  "seedable": true
+ },
+ "Sathnur": {
+  "query": "Sathnur, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "S.Bingipura": {
+  "query": "S.Bingipura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455861,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Bingipura, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.7482381,
+   12.7640812,
+   77.6211573,
+   77.6287119
+  ],
+  "centroid": [
+   12.7561242,
+   77.6247388
+  ],
+  "seedable": true
+ },
+ "Bileshivale": {
+  "query": "Bileshivale, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 419795521,
+  "class": "place",
+  "type": "village",
+  "display_name": "Bileshivale, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560077, India",
+  "bbox_SNWE": [
+   13.0343306,
+   13.0743306,
+   77.6510224,
+   77.6910224
+  ],
+  "centroid": [
+   13.0543306,
+   77.6710224
+  ],
+  "seedable": false
+ },
+ "Konanakunte": {
+  "query": "Konanakunte, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884557,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Konanakunte, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8694399,
+   12.894263,
+   77.5560931,
+   77.5720969
+  ],
+  "centroid": [
+   12.8817231,
+   77.5668406
+  ],
+  "seedable": true
+ },
+ "Chandapura": {
+  "query": "Chandapura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455877,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Chandapura, Tirumagondahalli, Anekal, Bengaluru Urban, Karnataka, 560081, India",
+  "bbox_SNWE": [
+   12.7930606,
+   12.8087517,
+   77.6999575,
+   77.7209666
+  ],
+  "centroid": [
+   12.8009043,
+   77.7114908
+  ],
+  "seedable": true
+ },
+ "Gangasandra": {
+  "query": "Gangasandra, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 3079691485,
+  "class": "place",
+  "type": "neighbourhood",
+  "display_name": "Hosapalya, Agara, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560062, India",
+  "bbox_SNWE": [
+   12.8319732,
+   12.8519732,
+   77.472913,
+   77.492913
+  ],
+  "centroid": [
+   12.8419732,
+   77.482913
+  ],
+  "seedable": false
+ },
+ "Hebbagodi": {
+  "query": "Hebbagodi, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455840,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Hebbagodi, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8144486,
+   12.8449094,
+   77.6650335,
+   77.6873596
+  ],
+  "centroid": [
+   12.8295017,
+   77.6767979
+  ],
+  "seedable": true
+ },
+ "Yelachanayakanapura": {
+  "query": "Yelachanayakanapura, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Bendiganahalli": {
+  "query": "Bendiganahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455815,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Bendiganahalli, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8077404,
+   12.8179014,
+   77.7307017,
+   77.7456689
+  ],
+  "centroid": [
+   12.8125911,
+   77.7377299
+  ],
+  "seedable": true
+ },
+ "Anantapura": {
+  "query": "Anantapura, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2456873095,
+  "class": "place",
+  "type": "neighbourhood",
+  "display_name": "Anantapura, Doddabettahalli, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, 560064, India",
+  "bbox_SNWE": [
+   13.1050894,
+   13.1250894,
+   77.5579972,
+   77.5779972
+  ],
+  "centroid": [
+   13.1150894,
+   77.5679972
+  ],
+  "seedable": false
+ },
+ "Marsur": {
+  "query": "Marsur, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 326284773,
+  "class": "water",
+  "type": "lake",
+  "display_name": "Marsur Lake, Marasuru, Avadadenahalli, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.7509597,
+   12.7574644,
+   77.7111679,
+   77.7181791
+  ],
+  "centroid": [
+   12.7541941,
+   77.7146318
+  ],
+  "seedable": true
+ },
+ "Badamanavarathekaval": {
+  "query": "Badamanavarathekaval, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Gopasandra": {
+  "query": "Gopasandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455809,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Gopasandra, Kommasandra, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8385877,
+   12.8562337,
+   77.7277467,
+   77.7437152
+  ],
+  "centroid": [
+   12.8474202,
+   77.73726
+  ],
+  "seedable": true
+ },
+ "Anekal": {
+  "query": "Anekal, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1119938319,
+  "class": "landuse",
+  "type": "industrial",
+  "display_name": "Nova Granites (India) Ltd, 25A, Krishnasagara, Bengaluru, Anekal, Bengaluru Urban, Karnataka, 562107, India",
+  "bbox_SNWE": [
+   12.7832296,
+   12.7840733,
+   77.744852,
+   77.7474398
+  ],
+  "centroid": [
+   12.7836552,
+   77.7461411
+  ],
+  "seedable": true
+ },
+ "Boodihal": {
+  "query": "Boodihal, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Domlur Layout": {
+  "query": "Domlur Layout, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 3198681423,
+  "class": "place",
+  "type": "neighbourhood",
+  "display_name": "Domlur BDA Layout, Domlur, Domluru, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560071, India",
+  "bbox_SNWE": [
+   12.9544251,
+   12.9744251,
+   77.6249677,
+   77.6449677
+  ],
+  "centroid": [
+   12.9644251,
+   77.6349677
+  ],
+  "seedable": false
+ },
+ "Lingadheeranahalli": {
+  "query": "Lingadheeranahalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Vasanth Nagar": {
+  "query": "Vasanth Nagar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883309,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Vasanth Nagar, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560052, India",
+  "bbox_SNWE": [
+   12.9805775,
+   12.9994628,
+   77.5805805,
+   77.603578
+  ],
+  "centroid": [
+   12.9921738,
+   77.591459
+  ],
+  "seedable": true
+ },
+ "Konadasapura": {
+  "query": "Konadasapura, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 1872737385,
+  "class": "place",
+  "type": "village",
+  "display_name": "Konadasapura, Bangalore East, Bengaluru Urban, Karnataka, 560049, India",
+  "bbox_SNWE": [
+   13.0241926,
+   13.0641926,
+   77.7366409,
+   77.7766409
+  ],
+  "centroid": [
+   13.0441926,
+   77.7566409
+  ],
+  "seedable": false
+ },
+ "Jnana Ganga Nagar": {
+  "query": "Jnana Ganga Nagar, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Halasuru": {
+  "query": "Halasuru, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884505,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Halasuru, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9726683,
+   12.9818917,
+   77.6200385,
+   77.6284956
+  ],
+  "centroid": [
+   12.9778793,
+   77.6246697
+  ],
+  "seedable": true
+ },
+ "Madivala": {
+  "query": "Madivala, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 12328471498,
+  "class": "highway",
+  "type": "bus_stop",
+  "display_name": "Madivala, Madiwala Sarjapura Road, Koramangala 2nd Block, Kormangala West, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560034, India",
+  "bbox_SNWE": [
+   12.9214042,
+   12.9215042,
+   77.6210713,
+   77.6211713
+  ],
+  "centroid": [
+   12.9214542,
+   77.6211213
+  ],
+  "seedable": false
+ },
+ "Basavanagudi": {
+  "query": "Basavanagudi, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 429937956,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Basavanagudi, Sunkenahalli, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560004, India",
+  "bbox_SNWE": [
+   12.9217261,
+   12.9617261,
+   77.5555021,
+   77.5955021
+  ],
+  "centroid": [
+   12.9417261,
+   77.5755021
+  ],
+  "seedable": false
+ },
+ "Geddalahalli": {
+  "query": "Geddalahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883393,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Geddalahalli, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0265106,
+   13.0472391,
+   77.5621118,
+   77.5801045
+  ],
+  "centroid": [
+   13.0367681,
+   77.5675668
+  ],
+  "seedable": true
+ },
+ "Bennigana Halli": {
+  "query": "Bennigana Halli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Nagareshwara - Nagenahalli": {
+  "query": "Nagareshwara - Nagenahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 6535450006,
+  "class": "highway",
+  "type": "bus_stop",
+  "display_name": "Nagareshwara Nagenahalli, Nageshwara Nagenahalli Main Road, LBS Nagar, K Narayanapura, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560077, India",
+  "bbox_SNWE": [
+   13.0702317,
+   13.0703317,
+   77.6424672,
+   77.6425672
+  ],
+  "centroid": [
+   13.0702817,
+   77.6425172
+  ],
+  "seedable": false
+ },
+ "Sanjeevini Nagar": {
+  "query": "Sanjeevini Nagar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1217375998,
+  "class": "amenity",
+  "type": "hospital",
+  "display_name": "Jnana Sanjeevini, 1st A Cross Road, KSRTC Layout, JP Nagar 2nd Phase, JP Nagar, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560078, India",
+  "bbox_SNWE": [
+   12.9159946,
+   12.9164517,
+   77.5884968,
+   77.5895527
+  ],
+  "centroid": [
+   12.9162546,
+   77.5891812
+  ],
+  "seedable": true
+ },
+ "Benson Town": {
+  "query": "Benson Town, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 430043564,
+  "class": "place",
+  "type": "quarter",
+  "display_name": "Benson Town, Jayamahal, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560046, India",
+  "bbox_SNWE": [
+   12.987343,
+   13.007343,
+   77.5936815,
+   77.6136815
+  ],
+  "centroid": [
+   12.997343,
+   77.6036815
+  ],
+  "seedable": false
+ },
+ "Dodda Banaswadi": {
+  "query": "Dodda Banaswadi, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2473255696,
+  "class": "highway",
+  "type": "bus_stop",
+  "display_name": "Steel Factory Banaswadi, Banaswadi Main Road, Vijaya Bank Colony, HRBR Layout 1st Block, Banaswadi, Bengaluru North City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560043, India",
+  "bbox_SNWE": [
+   13.0133022,
+   13.0134022,
+   77.6496917,
+   77.6497917
+  ],
+  "centroid": [
+   13.0133522,
+   77.6497417
+  ],
+  "seedable": false
+ },
+ "Lavelle Road": {
+  "query": "Lavelle Road, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 112657835,
+  "class": "highway",
+  "type": "tertiary",
+  "display_name": "Lavelle Road, D'Souza Layout, Shanthala Nagar, Ashokanagar, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560001, India",
+  "bbox_SNWE": [
+   12.965145,
+   12.9712043,
+   77.5964192,
+   77.5977545
+  ],
+  "centroid": [
+   12.9683401,
+   77.5965067
+  ],
+  "seedable": true
+ },
+ "Yemalur": {
+  "query": "Yemalur, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1135052543,
+  "class": "highway",
+  "type": "tertiary",
+  "display_name": "Yemalur Main Road, Yemaluru, Yamalur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560037, India",
+  "bbox_SNWE": [
+   12.9490026,
+   12.9495963,
+   77.6877923,
+   77.6893975
+  ],
+  "centroid": [
+   12.9490103,
+   77.6887274
+  ],
+  "seedable": true
+ },
+ "Ejipura": {
+  "query": "Ejipura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883295,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Ejipura, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9416647,
+   12.9516637,
+   77.620302,
+   77.6305669
+  ],
+  "centroid": [
+   12.9466302,
+   77.6261902
+  ],
+  "seedable": true
+ },
+ "Samethanahalli": {
+  "query": "Samethanahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 1872737419,
+  "class": "place",
+  "type": "village",
+  "display_name": "Samethanahalli, Hosakote taluk, Bengaluru North, Karnataka, 560067, India",
+  "bbox_SNWE": [
+   12.959363,
+   12.999363,
+   77.7707328,
+   77.8107328
+  ],
+  "centroid": [
+   12.979363,
+   77.7907328
+  ],
+  "seedable": false
+ },
+ "Chinnapanna Halli": {
+  "query": "Chinnapanna Halli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Nelamangala": {
+  "query": "Nelamangala, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 16319340,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Nelamangala, Nelamangala taluk, Bengaluru North, Karnataka, India",
+  "bbox_SNWE": [
+   13.0846242,
+   13.112428,
+   77.3830089,
+   77.4061264
+  ],
+  "centroid": [
+   13.0979667,
+   77.3945591
+  ],
+  "seedable": true
+ },
+ "B.Hosahalli": {
+  "query": "B.Hosahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883341,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Hosahalli, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9584432,
+   12.9736253,
+   77.5366675,
+   77.5442422
+  ],
+  "centroid": [
+   12.9660431,
+   77.5414979
+  ],
+  "seedable": true
+ },
+ "Binnipete": {
+  "query": "Binnipete, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "T Dasarahalli": {
+  "query": "T Dasarahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2431142785,
+  "class": "highway",
+  "type": "bus_stop",
+  "display_name": "T Dasarahalli, Tumkur Road, Chokkasandra, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560057, India",
+  "bbox_SNWE": [
+   13.0427296,
+   13.0428296,
+   77.5129145,
+   77.5130145
+  ],
+  "centroid": [
+   13.0427796,
+   77.5129645
+  ],
+  "seedable": false
+ },
+ "Hunasamaranahalli": {
+  "query": "Hunasamaranahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17417776,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Hunasamaranahalli, Yelahanka taluku, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.1260392,
+   13.1535745,
+   77.6087779,
+   77.637591
+  ],
+  "centroid": [
+   13.1398615,
+   77.6230512
+  ],
+  "seedable": true
+ },
+ "Malleswaram": {
+  "query": "Malleswaram, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 9676004,
+  "class": "amenity",
+  "type": "university",
+  "display_name": "Indian Institute of Science, CV Raman Road, Malleswaram, Sadashiva Nagara, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560012, India",
+  "bbox_SNWE": [
+   13.0122928,
+   13.0294474,
+   77.558642,
+   77.5726673
+  ],
+  "centroid": [
+   13.0222347,
+   77.5671832
+  ],
+  "seedable": true
+ },
+ "Bhoganhalli": {
+  "query": "Bhoganhalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "SMV Layout": {
+  "query": "SMV Layout, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 12040963494,
+  "class": "place",
+  "type": "neighbourhood",
+  "display_name": "Sir M. Visvesvaraya Layout, Naganathapura, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560035, India",
+  "bbox_SNWE": [
+   12.8719431,
+   12.8919431,
+   77.6628073,
+   77.6828073
+  ],
+  "centroid": [
+   12.8819431,
+   77.6728073
+  ],
+  "seedable": false
+ },
+ "Tejaswini Nagar": {
+  "query": "Tejaswini Nagar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 730880262,
+  "class": "highway",
+  "type": "service",
+  "display_name": "Tejaswini Nagar Phase 2 Road, Doddakammanahalli, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560076, India",
+  "bbox_SNWE": [
+   12.8600763,
+   12.8602063,
+   77.6044271,
+   77.6061803
+  ],
+  "centroid": [
+   12.8601269,
+   77.6053051
+  ],
+  "seedable": true
+ },
+ "Chikkadunnasandra": {
+  "query": "Chikkadunnasandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455804,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Chikkadunnasandra, Sarjapura, Anekal, Bengaluru Urban, Karnataka, 562125, India",
+  "bbox_SNWE": [
+   12.8415798,
+   12.8587634,
+   77.765828,
+   77.7813147
+  ],
+  "centroid": [
+   12.8501962,
+   77.7742942
+  ],
+  "seedable": true
+ },
+ "Jalahalli West": {
+  "query": "Jalahalli West, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 308072821,
+  "class": "highway",
+  "type": "bus_stop",
+  "display_name": "Jalahalli West, Jalahalli Road, Shettihalli, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, 560015, India",
+  "bbox_SNWE": [
+   13.0532832,
+   13.0533832,
+   77.5305536,
+   77.5306536
+  ],
+  "centroid": [
+   13.0533332,
+   77.5306036
+  ],
+  "seedable": false
+ },
+ "Kumaraswamy Layout": {
+  "query": "Kumaraswamy Layout, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883326,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kumaraswamy Layout, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9112178,
+   12.9187964,
+   77.5648509,
+   77.570277
+  ],
+  "centroid": [
+   12.9150398,
+   77.5678879
+  ],
+  "seedable": true
+ },
+ "Chikkalasandra": {
+  "query": "Chikkalasandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883379,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Chikkalasandra, Bengaluru West City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9175188,
+   12.9260521,
+   77.5419287,
+   77.5497967
+  ],
+  "centroid": [
+   12.9216604,
+   77.5460424
+  ],
+  "seedable": true
+ },
+ "Mallathahalli": {
+  "query": "Mallathahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883503,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Mallathahalli, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9576111,
+   12.9817738,
+   77.4931963,
+   77.5095455
+  ],
+  "centroid": [
+   12.969649,
+   77.5023618
+  ],
+  "seedable": true
+ },
+ "Chokkasandra": {
+  "query": "Chokkasandra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883422,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Chokkasandra, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0351193,
+   13.0459165,
+   77.5045426,
+   77.5184413
+  ],
+  "centroid": [
+   13.0405342,
+   77.5112239
+  ],
+  "seedable": true
+ },
+ "Tunganagara": {
+  "query": "Tunganagara, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2428260878,
+  "class": "highway",
+  "type": "bus_stop",
+  "display_name": "Tunganagara Cross, Tunga Nagar Main Road, Tunga Nagar, Lingadeeranahalli, Herohalli, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560091, India",
+  "bbox_SNWE": [
+   12.985453,
+   12.985553,
+   77.485018,
+   77.485118
+  ],
+  "centroid": [
+   12.985503,
+   77.485068
+  ],
+  "seedable": false
+ },
+ "Adigara Kallahalli": {
+  "query": "Adigara Kallahalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Gonighattapura": {
+  "query": "Gonighattapura, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2575200552,
+  "class": "place",
+  "type": "hamlet",
+  "display_name": "Gonighattapura, Gonigattapura, Kamanahalli, Anekal, Bengaluru Urban, Karnataka, 562125, India",
+  "bbox_SNWE": [
+   12.8932925,
+   12.9332925,
+   77.7686655,
+   77.8086655
+  ],
+  "centroid": [
+   12.9132925,
+   77.7886655
+  ],
+  "seedable": false
+ },
+ "Lal Bahadur Shastri Nagar": {
+  "query": "Lal Bahadur Shastri Nagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 1773577354,
+  "class": "place",
+  "type": "neighbourhood",
+  "display_name": "Lal Bahadur Shastri Nagar, L.B Shastri Nagar, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560017, India",
+  "bbox_SNWE": [
+   12.9578103,
+   12.9778103,
+   77.6615478,
+   77.6815478
+  ],
+  "centroid": [
+   12.9678103,
+   77.6715478
+  ],
+  "seedable": false
+ },
+ "Challaghatta": {
+  "query": "Challaghatta, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 3772206673,
+  "class": "place",
+  "type": "neighbourhood",
+  "display_name": "Challaghatta, Yamalur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560017, India",
+  "bbox_SNWE": [
+   12.9351006,
+   12.9551006,
+   77.641534,
+   77.661534
+  ],
+  "centroid": [
+   12.9451006,
+   77.651534
+  ],
+  "seedable": false
+ },
+ "Kithiganur": {
+  "query": "Kithiganur, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Varanasi": {
+  "query": "Varanasi, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2477505097,
+  "class": "place",
+  "type": "neighbourhood",
+  "display_name": "Varanasi, Byrathi, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560036, India",
+  "bbox_SNWE": [
+   13.0204962,
+   13.0404962,
+   77.6760657,
+   77.6960657
+  ],
+  "centroid": [
+   13.0304962,
+   77.6860657
+  ],
+  "seedable": false
+ },
+ "Kannamangala - Ballari road": {
+  "query": "Kannamangala - Ballari road, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 1157255508,
+  "class": "highway",
+  "type": "bus_stop",
+  "display_name": "Kannamangala Gate Yalahanka Road, Ballari Road, Kannamangala, Devanahalli taluku, Bengaluru North, Karnataka, 562110, India",
+  "bbox_SNWE": [
+   13.2062646,
+   13.2063646,
+   77.6678906,
+   77.6679906
+  ],
+  "centroid": [
+   13.2063146,
+   77.6679406
+  ],
+  "seedable": false
+ },
+ "Srinivaspur": {
+  "query": "Srinivaspur, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Bommanahalli": {
+  "query": "Bommanahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883267,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Bommanahalli, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.896329,
+   12.9105698,
+   77.6195324,
+   77.6311381
+  ],
+  "centroid": [
+   12.9034581,
+   77.6230028
+  ],
+  "seedable": true
+ },
+ "Ullal Uppanagar": {
+  "query": "Ullal Uppanagar, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Chowdenahalli": {
+  "query": "Chowdenahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1092941882,
+  "class": "water",
+  "type": "lake",
+  "display_name": "Thiagalara Chowdenahalli Lake, Thigalachowdadenahalli, Dommasandra, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8838514,
+   12.8887146,
+   77.7606618,
+   77.7631992
+  ],
+  "centroid": [
+   12.8860844,
+   77.761841
+  ],
+  "seedable": true
+ },
+ "Doddakammanahalli": {
+  "query": "Doddakammanahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883338,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Doddakammanahalli, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8334905,
+   12.8682687,
+   77.5787959,
+   77.6095343
+  ],
+  "centroid": [
+   12.8509089,
+   77.5986785
+  ],
+  "seedable": true
+ },
+ "Chandra Layout Extension": {
+  "query": "Chandra Layout Extension, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "RS Gardens": {
+  "query": "RS Gardens, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Chikkanagamangala": {
+  "query": "Chikkanagamangala, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455831,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Chikkanagamangala, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8447995,
+   12.868114,
+   77.6818834,
+   77.701573
+  ],
+  "centroid": [
+   12.8565333,
+   77.6927891
+  ],
+  "seedable": true
+ },
+ "Yamare": {
+  "query": "Yamare, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455761,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Yamare, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8629268,
+   12.8808674,
+   77.7466056,
+   77.7729509
+  ],
+  "centroid": [
+   12.8716739,
+   77.7610456
+  ],
+  "seedable": true
+ },
+ "Soppahalli": {
+  "query": "Soppahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455864,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Soppahalli, Surajakkanahalli, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.7400861,
+   12.7558671,
+   77.6677086,
+   77.6834009
+  ],
+  "centroid": [
+   12.7483443,
+   77.6763175
+  ],
+  "seedable": true
+ },
+ "Kasuvanahalli": {
+  "query": "Kasuvanahalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Kaikondrahalli": {
+  "query": "Kaikondrahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 11554651483,
+  "class": "place",
+  "type": "quarter",
+  "display_name": "Kaikondrahalli, Kasavanahalli, Bengaluru South City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560035, India",
+  "bbox_SNWE": [
+   12.9038348,
+   12.9238348,
+   77.6675268,
+   77.6875268
+  ],
+  "centroid": [
+   12.9138348,
+   77.6775268
+  ],
+  "seedable": false
+ },
+ "Shanti Nagar": {
+  "query": "Shanti Nagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 428464054,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Shanti Nagar, Hombegowda Nagara, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560027, India",
+  "bbox_SNWE": [
+   12.9355367,
+   12.9755367,
+   77.5724278,
+   77.6124278
+  ],
+  "centroid": [
+   12.9555367,
+   77.5924278
+  ],
+  "seedable": false
+ },
+ "Sadenahalli": {
+  "query": "Sadenahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2458141359,
+  "class": "place",
+  "type": "village",
+  "display_name": "Sadenahalli, Yelahanka taluku, Bengaluru Urban, Karnataka, 560064, India",
+  "bbox_SNWE": [
+   13.1744923,
+   13.2144923,
+   77.5530909,
+   77.5930909
+  ],
+  "centroid": [
+   13.1944923,
+   77.5730909
+  ],
+  "seedable": false
+ },
+ "Upparahalli": {
+  "query": "Upparahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 1883718506,
+  "class": "place",
+  "type": "village",
+  "display_name": "Upparahalli, Hosakote taluk, Bengaluru North, Karnataka, 562114, India",
+  "bbox_SNWE": [
+   13.0694702,
+   13.1094702,
+   77.761011,
+   77.801011
+  ],
+  "centroid": [
+   13.0894702,
+   77.781011
+  ],
+  "seedable": false
+ },
+ "Banashankari Temple Ward": {
+  "query": "Banashankari Temple Ward, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884563,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Banashankari Temple Ward, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9064694,
+   12.9169787,
+   77.5681718,
+   77.5735409
+  ],
+  "centroid": [
+   12.9117233,
+   77.5707877
+  ],
+  "seedable": true
+ },
+ "Peenya": {
+  "query": "Peenya, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884579,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Peenya, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0210027,
+   13.0459013,
+   77.5178356,
+   77.5407489
+  ],
+  "centroid": [
+   13.0329419,
+   77.5273253
+  ],
+  "seedable": true
+ },
+ "Doddabele": {
+  "query": "Doddabele, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17416121,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Doddabele, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.878258,
+   12.8984026,
+   77.4683684,
+   77.4829677
+  ],
+  "centroid": [
+   12.8883946,
+   77.4753758
+  ],
+  "seedable": true
+ },
+ "Kempalingapura": {
+  "query": "Kempalingapura, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Shivaji Nagar": {
+  "query": "Shivaji Nagar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 224639757,
+  "class": "landuse",
+  "type": "construction",
+  "display_name": "Shivaji Nagar Police Quarters, Benson Town, Jayamahal, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9877076,
+   12.989143,
+   77.5995844,
+   77.601489
+  ],
+  "centroid": [
+   12.9883249,
+   77.6004488
+  ],
+  "seedable": true
+ },
+ "Kanakapura": {
+  "query": "Kanakapura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 47888627,
+  "class": "highway",
+  "type": "trunk",
+  "display_name": "Kanakapura Road, Ganigarapalya, Vajrahalli, Talagattapura, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560109, India",
+  "bbox_SNWE": [
+   12.8586272,
+   12.8794862,
+   77.5280289,
+   77.5455211
+  ],
+  "centroid": [
+   12.8693402,
+   77.5366473
+  ],
+  "seedable": true
+ },
+ "Agrahara": {
+  "query": "Agrahara, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 55338950,
+  "class": "amenity",
+  "type": "prison",
+  "display_name": "Bangalore Central Jail, Jail Road, Naganathapura, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560068, India",
+  "bbox_SNWE": [
+   12.8761322,
+   12.8841541,
+   77.6625183,
+   77.6686283
+  ],
+  "centroid": [
+   12.8802088,
+   77.6658442
+  ],
+  "seedable": true
+ },
+ "Huvinayakanahalli": {
+  "query": "Huvinayakanahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2461754533,
+  "class": "place",
+  "type": "village",
+  "display_name": "Huvinayakanahalli, Yelahanka taluku, Bengaluru Urban, Karnataka, 562149, India",
+  "bbox_SNWE": [
+   13.1278821,
+   13.1678821,
+   77.6696848,
+   77.7096848
+  ],
+  "centroid": [
+   13.1478821,
+   77.6896848
+  ],
+  "seedable": false
+ },
+ "Avalahalli": {
+  "query": "Avalahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884577,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Avalahalli, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9421531,
+   12.9499122,
+   77.5374219,
+   77.5502937
+  ],
+  "centroid": [
+   12.9459464,
+   77.5409354
+  ],
+  "seedable": true
+ },
+ "Hebbal Kempapura": {
+  "query": "Hebbal Kempapura, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 10253351087,
+  "class": "amenity",
+  "type": "post_office",
+  "display_name": "Hebbal Kempapura, 11th Cross Road, Coffee Board Layout, Kempapura, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560024, India",
+  "bbox_SNWE": [
+   13.050144,
+   13.050244,
+   77.6075451,
+   77.6076451
+  ],
+  "centroid": [
+   13.050194,
+   77.6075951
+  ],
+  "seedable": false
+ },
+ "Muddanahalli": {
+  "query": "Muddanahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2574541232,
+  "class": "place",
+  "type": "village",
+  "display_name": "Muddanahalli, Hosakote taluk, Bengaluru North, Karnataka, 562122, India",
+  "bbox_SNWE": [
+   13.1743024,
+   13.2143024,
+   77.8936431,
+   77.9336431
+  ],
+  "centroid": [
+   13.1943024,
+   77.9136431
+  ],
+  "seedable": false
+ },
+ "Mathikere": {
+  "query": "Mathikere, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884582,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Mathikere, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0286566,
+   13.0419756,
+   77.5572973,
+   77.5649765
+  ],
+  "centroid": [
+   13.0354318,
+   77.5604309
+  ],
+  "seedable": true
+ },
+ "Yerthiganahalli": {
+  "query": "Yerthiganahalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Katamnallur": {
+  "query": "Katamnallur, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Bikasipura": {
+  "query": "Bikasipura, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Choudadenahalli": {
+  "query": "Choudadenahalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Mallasandra, Hosakote": {
+  "query": "Mallasandra, Hosakote, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 1872737432,
+  "class": "place",
+  "type": "village",
+  "display_name": "Mallasandra, Hosakote taluk, Bengaluru North, Karnataka, 560067, India",
+  "bbox_SNWE": [
+   12.9881486,
+   13.0281486,
+   77.7637101,
+   77.8037101
+  ],
+  "centroid": [
+   13.0081486,
+   77.7837101
+  ],
+  "seedable": false
+ },
+ "Bagalakunte": {
+  "query": "Bagalakunte, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Nagavara": {
+  "query": "Nagavara, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883350,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Nagavara, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560045, India",
+  "bbox_SNWE": [
+   13.0320336,
+   13.0425271,
+   77.6102792,
+   77.623534
+  ],
+  "centroid": [
+   13.0372609,
+   77.6164172
+  ],
+  "seedable": true
+ },
+ "Halasahalli": {
+  "query": "Halasahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1349757525,
+  "class": "highway",
+  "type": "secondary",
+  "display_name": "Halasahalli Road, Gunjur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560087, India",
+  "bbox_SNWE": [
+   12.9291488,
+   12.9380232,
+   77.7466566,
+   77.7695064
+  ],
+  "centroid": [
+   12.9331044,
+   77.7578807
+  ],
+  "seedable": true
+ },
+ "Nekkundi Dommasandra": {
+  "query": "Nekkundi Dommasandra, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2575200582,
+  "class": "place",
+  "type": "village",
+  "display_name": "Nekkundi Dommasandra, Anekal, Bengaluru Urban, Karnataka, 562125, India",
+  "bbox_SNWE": [
+   12.907462,
+   12.947462,
+   77.7561449,
+   77.7961449
+  ],
+  "centroid": [
+   12.927462,
+   77.7761449
+  ],
+  "seedable": false
+ },
+ "Jigala": {
+  "query": "Jigala, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455883,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Jigala, Attibele, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.7868274,
+   12.812944,
+   77.7543872,
+   77.7713207
+  ],
+  "centroid": [
+   12.8003482,
+   77.7630096
+  ],
+  "seedable": true
+ },
+ "S.G. Palya": {
+  "query": "S.G. Palya, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883464,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "S.G Palya, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560029, India",
+  "bbox_SNWE": [
+   12.924784,
+   12.9405813,
+   77.6004345,
+   77.6100724
+  ],
+  "centroid": [
+   12.9324773,
+   77.6046399
+  ],
+  "seedable": true
+ },
+ "Amani Byrathikhane": {
+  "query": "Amani Byrathikhane, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Hullahalli": {
+  "query": "Hullahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17455742,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Hullahalli, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8097972,
+   12.8390743,
+   77.6035467,
+   77.6239925
+  ],
+  "centroid": [
+   12.8244922,
+   77.6175213
+  ],
+  "seedable": true
+ },
+ "Jeevan Bima Nagar": {
+  "query": "Jeevan Bima Nagar, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Thurahalli": {
+  "query": "Thurahalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Mailasandra": {
+  "query": "Mailasandra, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 1588150132,
+  "class": "place",
+  "type": "village",
+  "display_name": "Mailasandra, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560060, India",
+  "bbox_SNWE": [
+   12.895939,
+   12.935939,
+   77.4732278,
+   77.5132278
+  ],
+  "centroid": [
+   12.915939,
+   77.4932278
+  ],
+  "seedable": false
+ },
+ "Dooravani Nagar": {
+  "query": "Dooravani Nagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 11397298820,
+  "class": "highway",
+  "type": "bus_stop",
+  "display_name": "A Narayanapura, A Narayanapura Main Road, MEG Layout, Mahadevapura, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560016, India",
+  "bbox_SNWE": [
+   12.9947271,
+   12.9948271,
+   77.676879,
+   77.676979
+  ],
+  "centroid": [
+   12.9947771,
+   77.676929
+  ],
+  "seedable": false
+ },
+ "Jayamahal": {
+  "query": "Jayamahal, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883306,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Jayamahal, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560046, India",
+  "bbox_SNWE": [
+   12.9866476,
+   13.0056545,
+   77.5917343,
+   77.6087691
+  ],
+  "centroid": [
+   12.9959881,
+   77.6014036
+  ],
+  "seedable": true
+ },
+ "Virupakshapura": {
+  "query": "Virupakshapura, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2461383804,
+  "class": "highway",
+  "type": "bus_stop",
+  "display_name": "Virupakshapura, Kodigehalli Road, Thindlu, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, 560097, India",
+  "bbox_SNWE": [
+   13.0637609,
+   13.0638609,
+   77.5717081,
+   77.5718081
+  ],
+  "centroid": [
+   13.0638109,
+   77.5717581
+  ],
+  "seedable": false
+ },
+ "Bandaramanahalli": {
+  "query": "Bandaramanahalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Cox Town": {
+  "query": "Cox Town, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883402,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Cox Town, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560005, India",
+  "bbox_SNWE": [
+   12.9872026,
+   12.9999647,
+   77.6167804,
+   77.6317857
+  ],
+  "centroid": [
+   12.9934858,
+   77.6251081
+  ],
+  "seedable": true
+ },
+ "Ganganagar": {
+  "query": "Ganganagar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883353,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Ganganagar, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0225093,
+   13.0325872,
+   77.5847157,
+   77.5965136
+  ],
+  "centroid": [
+   13.0275463,
+   77.5905718
+  ],
+  "seedable": true
+ },
+ "Mukkidipeta": {
+  "query": "Mukkidipeta, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Chikkabellandur": {
+  "query": "Chikkabellandur, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Kattigenahalli": {
+  "query": "Kattigenahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 512072659,
+  "class": "place",
+  "type": "village",
+  "display_name": "Kattigenahalli, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, 560064, India",
+  "bbox_SNWE": [
+   13.0977735,
+   13.1377735,
+   77.6061222,
+   77.6461222
+  ],
+  "centroid": [
+   13.1177735,
+   77.6261222
+  ],
+  "seedable": false
+ },
+ "Hancharahalli Village": {
+  "query": "Hancharahalli Village, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2126355298,
+  "class": "place",
+  "type": "village",
+  "display_name": "Hancharahalli, Bangalore East, Bengaluru Urban, Karnataka, 560049, India",
+  "bbox_SNWE": [
+   13.0729065,
+   13.1129065,
+   77.7301562,
+   77.7701562
+  ],
+  "centroid": [
+   13.0929065,
+   77.7501562
+  ],
+  "seedable": false
+ },
+ "New Tippasandra": {
+  "query": "New Tippasandra, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 4173145025,
+  "class": "highway",
+  "type": "bus_stop",
+  "display_name": "New Tippasandra Main Road, 80 Feet Road, New Thippasandra, Bengaluru Central City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560075, India",
+  "bbox_SNWE": [
+   12.9743357,
+   12.9744357,
+   77.6469145,
+   77.6470145
+  ],
+  "centroid": [
+   12.9743857,
+   77.6469645
+  ],
+  "seedable": false
+ },
+ "Kadugodi Industrial Area": {
+  "query": "Kadugodi Industrial Area, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 144993349,
+  "class": "landuse",
+  "type": "industrial",
+  "display_name": "Kadugodi Industrial Area, Belathur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9856096,
+   12.9957693,
+   77.7448978,
+   77.748663
+  ],
+  "centroid": [
+   12.9907478,
+   77.7467309
+  ],
+  "seedable": true
+ },
+ "Lakeview Residency": {
+  "query": "Lakeview Residency, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1186050660,
+  "class": "building",
+  "type": "yes",
+  "display_name": "Manoj Lakeview Residency, Haralur Road, Ambalipura, Haralur, Kasavanahalli, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560103, India",
+  "bbox_SNWE": [
+   12.9124793,
+   12.9127093,
+   77.6638866,
+   77.6641056
+  ],
+  "centroid": [
+   12.9125976,
+   77.6639948
+  ],
+  "seedable": true
+ },
+ "D Group Employees Layout": {
+  "query": "D Group Employees Layout, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 44486881,
+  "class": "landuse",
+  "type": "residential",
+  "display_name": "D Group Employees Layout, Yarappanahalli, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0944412,
+   13.1022074,
+   77.6852272,
+   77.6999321
+  ],
+  "centroid": [
+   13.0987089,
+   77.6926314
+  ],
+  "seedable": true
+ },
+ "GB Palya": {
+  "query": "GB Palya, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883323,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "G.M Palya, Bengaluru Central City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9714463,
+   12.9800338,
+   77.6614771,
+   77.6793775
+  ],
+  "centroid": [
+   12.9757853,
+   77.6725875
+  ],
+  "seedable": true
+ },
+ "Nagarbhavi": {
+  "query": "Nagarbhavi, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883499,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Nagarbhavi, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9357882,
+   12.966693,
+   77.5110418,
+   77.5270371
+  ],
+  "centroid": [
+   12.9512353,
+   77.519054
+  ],
+  "seedable": true
+ },
+ "Bengaluru Hardware Park": {
+  "query": "Bengaluru Hardware Park, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1279894907,
+  "class": "landuse",
+  "type": "industrial",
+  "display_name": "KIADB Hardware Park, Hoovinayakanahalli, Huvinayakanahalli, Yelahanka taluku, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.1461382,
+   13.1603101,
+   77.6753434,
+   77.7082028
+  ],
+  "centroid": [
+   13.1531877,
+   77.693229
+  ],
+  "seedable": true
+ },
+ "Doddanekundi": {
+  "query": "Doddanekundi, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 442075234,
+  "class": "place",
+  "type": "quarter",
+  "display_name": "Doddanekundi, Dodda Nekkundi, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560037, India",
+  "bbox_SNWE": [
+   12.9613194,
+   12.9813194,
+   77.6864768,
+   77.7064768
+  ],
+  "centroid": [
+   12.9713194,
+   77.6964768
+  ],
+  "seedable": false
+ },
+ "Chikkabanavara": {
+  "query": "Chikkabanavara, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 383571792,
+  "class": "amenity",
+  "type": "school",
+  "display_name": "National Public School Chikkabanavara, Medarahalli Main Road, Geleyara Balaga Layout, Abbigere, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560090, India",
+  "bbox_SNWE": [
+   13.0708625,
+   13.0721501,
+   77.5093302,
+   77.5106502
+  ],
+  "centroid": [
+   13.0714159,
+   77.5099924
+  ],
+  "seedable": true
+ },
+ "Koppa Gate": {
+  "query": "Koppa Gate, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 11602264623,
+  "class": "highway",
+  "type": "bus_stop",
+  "display_name": "Koppa Gate, Bannerghatta Main Road, Koppa, Begihalli, Anekal, Bengaluru Urban, Karnataka, 560105, India",
+  "bbox_SNWE": [
+   12.7963054,
+   12.7964054,
+   77.6162694,
+   77.6163694
+  ],
+  "centroid": [
+   12.7963554,
+   77.6163194
+  ],
+  "seedable": false
+ },
+ "Annapurneshwari Nagar": {
+  "query": "Annapurneshwari Nagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 4286285300,
+  "class": "shop",
+  "type": "greengrocer",
+  "display_name": "Annapurneshwari rice corner, 22, 17th Cross Road, LBS Nagar, Hoysala Nagara Central, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560008, India",
+  "bbox_SNWE": [
+   12.9770085,
+   12.9771085,
+   77.6318447,
+   77.6319447
+  ],
+  "centroid": [
+   12.9770585,
+   77.6318947
+  ],
+  "seedable": false
+ },
+ "Sidedahalli": {
+  "query": "Sidedahalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 1681763531,
+  "class": "highway",
+  "type": "bus_stop",
+  "display_name": "Sidedahalli, Kuduregere Main Road, MEI Layout, Bagalagunte, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560073, India",
+  "bbox_SNWE": [
+   13.0624924,
+   13.0625924,
+   77.4953254,
+   77.4954254
+  ],
+  "centroid": [
+   13.0625424,
+   77.4953754
+  ],
+  "seedable": false
+ },
+ "Attibele Industrial Area": {
+  "query": "Attibele Industrial Area, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1119637972,
+  "class": "landuse",
+  "type": "industrial",
+  "display_name": "Attibele Industrial Area, Icchanguru, Ichchanguru, Anekal, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.776208,
+   12.7869902,
+   77.7371804,
+   77.7484632
+  ],
+  "centroid": [
+   12.7812983,
+   77.742266
+  ],
+  "seedable": true
+ },
+ "Kodigehalli": {
+  "query": "Kodigehalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884604,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kodigehalli, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.045593,
+   13.0628865,
+   77.5641453,
+   77.5839826
+  ],
+  "centroid": [
+   13.0542964,
+   77.5723983
+  ],
+  "seedable": true
+ },
+ "Vibhutipura": {
+  "query": "Vibhutipura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 8250847,
+  "class": "water",
+  "type": "lake",
+  "display_name": "Lal Bahadur Shastri Nagar Lake, Vignananagara, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9662225,
+   12.9695695,
+   77.6741552,
+   77.6822502
+  ],
+  "centroid": [
+   12.9676625,
+   77.6761038
+  ],
+  "seedable": true
+ },
+ "Doddakallasandra": {
+  "query": "Doddakallasandra, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 12852349203,
+  "class": "highway",
+  "type": "bus_stop",
+  "display_name": "Doddakallasandra, Kanakapura Road, Narayana Nagara, Vasanthapura, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560062, India",
+  "bbox_SNWE": [
+   12.8857147,
+   12.8858147,
+   77.5566547,
+   77.5567547
+  ],
+  "centroid": [
+   12.8857647,
+   77.5567047
+  ],
+  "seedable": false
+ },
+ "Langford Gardens": {
+  "query": "Langford Gardens, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 9482743546,
+  "class": "place",
+  "type": "neighbourhood",
+  "display_name": "Langford Gardens, Richmond Town, Shanthinagar, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560025, India",
+  "bbox_SNWE": [
+   12.9531709,
+   12.9731709,
+   77.588018,
+   77.608018
+  ],
+  "centroid": [
+   12.9631709,
+   77.598018
+  ],
+  "seedable": false
+ },
+ "Basaveshwara Nagar": {
+  "query": "Basaveshwara Nagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 2027517361,
+  "class": "amenity",
+  "type": "atm",
+  "display_name": "Karnataka Bank Money Plant, Siddhaiah Puranik Road, Sharada Colony, Basaveshwara Nagara, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560079, India",
+  "bbox_SNWE": [
+   12.991207,
+   12.991307,
+   77.5383596,
+   77.5384596
+  ],
+  "centroid": [
+   12.991257,
+   77.5384096
+  ],
+  "seedable": false
+ },
+ "Anjanapura": {
+  "query": "Anjanapura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884541,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Anjanapura, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560108, India",
+  "bbox_SNWE": [
+   12.8373387,
+   12.8954118,
+   77.5364549,
+   77.5808015
+  ],
+  "centroid": [
+   12.8601312,
+   77.5540587
+  ],
+  "seedable": true
+ },
+ "Kammanahalli": {
+  "query": "Kammanahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19884539,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Kammanahalli, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0039693,
+   13.012979,
+   77.6274915,
+   77.6361777
+  ],
+  "centroid": [
+   13.0084754,
+   77.6332163
+  ],
+  "seedable": true
+ },
+ "Ullalu": {
+  "query": "Ullalu, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 574606489,
+  "class": "place",
+  "type": "quarter",
+  "display_name": "Ullalu, Sir MV Layout, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560056, India",
+  "bbox_SNWE": [
+   12.9483897,
+   12.9683897,
+   77.4697902,
+   77.4897902
+  ],
+  "centroid": [
+   12.9583897,
+   77.4797902
+  ],
+  "seedable": false
+ },
+ "Deepanjali Nagar": {
+  "query": "Deepanjali Nagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 5760197782,
+  "class": "railway",
+  "type": "stop",
+  "display_name": "Deepanjali Nagar, Chord Road, Avalahalli, Deepanjali Nagara, Bengaluru West City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560026, India",
+  "bbox_SNWE": [
+   12.9519833,
+   12.9520833,
+   77.5369461,
+   77.5370461
+  ],
+  "centroid": [
+   12.9520333,
+   77.5369961
+  ],
+  "seedable": false
+ },
+ "Virupakshipura": {
+  "query": "Virupakshipura, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 3231113650,
+  "class": "place",
+  "type": "village",
+  "display_name": "Virupakshipura, Channapattana taluk, Bengaluru South, Karnataka, 562138, India",
+  "bbox_SNWE": [
+   12.5600842,
+   12.6000842,
+   77.2113012,
+   77.2513012
+  ],
+  "centroid": [
+   12.5800842,
+   77.2313012
+  ],
+  "seedable": false
+ },
+ "Haralur": {
+  "query": "Haralur, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 10220948588,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "Haralur, Kasavanahalli, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560103, India",
+  "bbox_SNWE": [
+   12.8844856,
+   12.9244856,
+   77.6454434,
+   77.6854434
+  ],
+  "centroid": [
+   12.9044856,
+   77.6654434
+  ],
+  "seedable": false
+ },
+ "Ramohalli": {
+  "query": "Ramohalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17416629,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Ramohalli, Bangalore South, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.8958636,
+   12.9177771,
+   77.4060676,
+   77.4330836
+  ],
+  "centroid": [
+   12.9068193,
+   77.4203949
+  ],
+  "seedable": true
+ },
+ "Chikkabana Halli": {
+  "query": "Chikkabana Halli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Harohalli": {
+  "query": "Harohalli, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 11936590925,
+  "class": "place",
+  "type": "hamlet",
+  "display_name": "Harohalli, Raja Kempegowda Ward, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, 560064, India",
+  "bbox_SNWE": [
+   13.1105028,
+   13.1505028,
+   77.5604603,
+   77.6004603
+  ],
+  "centroid": [
+   13.1305028,
+   77.5804603
+  ],
+  "seedable": false
+ },
+ "Sannatammanahalli": {
+  "query": "Sannatammanahalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Abbigere": {
+  "query": "Abbigere, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883325,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Abbigere, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0635686,
+   13.0930664,
+   77.4995979,
+   77.5407137
+  ],
+  "centroid": [
+   13.0784176,
+   77.5245316
+  ],
+  "seedable": true
+ },
+ "RT Nagar": {
+  "query": "RT Nagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 430043651,
+  "class": "place",
+  "type": "suburb",
+  "display_name": "RT Nagar, Dinnur, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560032, India",
+  "bbox_SNWE": [
+   13.0027204,
+   13.0427204,
+   77.575715,
+   77.615715
+  ],
+  "centroid": [
+   13.0227204,
+   77.595715
+  ],
+  "seedable": false
+ },
+ "Singapura": {
+  "query": "Singapura, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883342,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Singapura, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, 560097, India",
+  "bbox_SNWE": [
+   13.0739427,
+   13.0899733,
+   77.5294219,
+   77.5616694
+  ],
+  "centroid": [
+   13.0819544,
+   77.5550718
+  ],
+  "seedable": true
+ },
+ "Chikkabettahalli": {
+  "query": "Chikkabettahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 1181417682,
+  "class": "water",
+  "type": "lake",
+  "display_name": "Chikkabettahalli Lake, Attur, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0911982,
+   13.0925358,
+   77.5534666,
+   77.5561273
+  ],
+  "centroid": [
+   13.0918778,
+   77.5548275
+  ],
+  "seedable": true
+ },
+ "Judicial Layout": {
+  "query": "Judicial Layout, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 238031280,
+  "class": "landuse",
+  "type": "residential",
+  "display_name": "Nyayagrama, Bhoopasandra, Bengaluru North City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0368277,
+   13.0391569,
+   77.5860973,
+   77.5890243
+  ],
+  "centroid": [
+   13.0382868,
+   77.5871519
+  ],
+  "seedable": true
+ },
+ "Vignana Kendra": {
+  "query": "Vignana Kendra, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 737765251,
+  "class": "highway",
+  "type": "secondary",
+  "display_name": "Gandhi Vignana Kendra Road, Rajiv Gandhi Nagar, Thindlu, Bengaluru North City Corporation, Bengaluru, Yelahanka taluku, Bengaluru Urban, Karnataka, 560065, India",
+  "bbox_SNWE": [
+   13.0705745,
+   13.0706136,
+   77.5866143,
+   77.5868143
+  ],
+  "centroid": [
+   13.0705989,
+   77.5867134
+  ],
+  "seedable": true
+ },
+ "KSRTC Colony": {
+  "query": "KSRTC Colony, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 1581492472,
+  "class": "building",
+  "type": "yes",
+  "display_name": "KSRTC Bangalore Rural Divisional Offices, Mysore Road, KHR Colony, Avalahalli, Deepanjali Nagara, Bengaluru West City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560026, India",
+  "bbox_SNWE": [
+   12.9501289,
+   12.9502289,
+   77.5366588,
+   77.5367588
+  ],
+  "centroid": [
+   12.9501789,
+   77.5367088
+  ],
+  "seedable": false
+ },
+ "Venkatapura, Kambipura": {
+  "query": "Venkatapura, Kambipura, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Devarachikkana Halli": {
+  "query": "Devarachikkana Halli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 132357248,
+  "class": "highway",
+  "type": "tertiary",
+  "display_name": "Devarachikkana Halli Main Road, Beguru, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, 560076, India",
+  "bbox_SNWE": [
+   12.8809462,
+   12.8888902,
+   77.6199368,
+   77.6246246
+  ],
+  "centroid": [
+   12.8847643,
+   77.6218621
+  ],
+  "seedable": true
+ },
+ "Muneshwara Nagar": {
+  "query": "Muneshwara Nagar, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 13928697876,
+  "class": "place",
+  "type": "neighbourhood",
+  "display_name": "Muneshwara Nagar, Basavanapura, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560049, India",
+  "bbox_SNWE": [
+   12.9952451,
+   13.0152451,
+   77.7032511,
+   77.7232511
+  ],
+  "centroid": [
+   13.0052451,
+   77.7132511
+  ],
+  "seedable": false
+ },
+ "Malur": {
+  "query": "Malur, Bengaluru, Karnataka, India",
+  "status": "node-only",
+  "osm_type": "node",
+  "osm_id": 12434898254,
+  "class": "highway",
+  "type": "motorway_junction",
+  "display_name": "Malur Exit, Bengaluru - Chennai Expressway, Chikka Sabbenahalli, Maluru taluk, Kolar, Karnataka, 563130, India",
+  "bbox_SNWE": [
+   13.0368785,
+   13.0369785,
+   78.0014995,
+   78.0015995
+  ],
+  "centroid": [
+   13.0369285,
+   78.0015495
+  ],
+  "seedable": false
+ },
+ "Byagadadhenahalli": {
+  "query": "Byagadadhenahalli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Madhura Nagar": {
+  "query": "Madhura Nagar, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "way",
+  "osm_id": 749328324,
+  "class": "highway",
+  "type": "service",
+  "display_name": "Madhura Marg, Sadashivanagar, Sadashiva Nagara, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560012, India",
+  "bbox_SNWE": [
+   13.0201389,
+   13.0202587,
+   77.568111,
+   77.570241
+  ],
+  "centroid": [
+   13.0201988,
+   77.569176
+  ],
+  "seedable": true
+ },
+ "Vaderamanchana Halli": {
+  "query": "Vaderamanchana Halli, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Manganahalli": {
+  "query": "Manganahalli, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 17416111,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Manganahalli, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   12.9494313,
+   12.9641408,
+   77.4611056,
+   77.4750405
+  ],
+  "centroid": [
+   12.9568799,
+   77.4686083
+  ],
+  "seedable": true
+ },
+ "Bangalore City Municipal Corporation Layout": {
+  "query": "Bangalore City Municipal Corporation Layout, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Kaval Bairasandra": {
+  "query": "Kaval Bairasandra, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Nagasandra, Bengaluru North": {
+  "query": "Nagasandra, Bengaluru North, Bengaluru, Karnataka, India",
+  "status": "resolved-boundary",
+  "osm_type": "relation",
+  "osm_id": 19883347,
+  "class": "boundary",
+  "type": "administrative",
+  "display_name": "Nagasandra, Bengaluru West City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, India",
+  "bbox_SNWE": [
+   13.0282486,
+   13.0489855,
+   77.4956836,
+   77.5104444
+  ],
+  "centroid": [
+   13.0409678,
+   77.5004286
+  ],
+  "seedable": true
+ },
+ "Kodalagurki": {
+  "query": "Kodalagurki, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ },
+ "Rustam Bagh Layout": {
+  "query": "Rustam Bagh Layout, Bengaluru, Karnataka, India",
+  "status": "none",
+  "osm_type": null,
+  "osm_id": null,
+  "class": null,
+  "type": null,
+  "display_name": null,
+  "bbox_SNWE": null,
+  "centroid": null,
+  "seedable": false
+ }
+}

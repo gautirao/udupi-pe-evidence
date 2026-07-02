@@ -1,0 +1,8 @@
+{
+  "cities": ["bengaluru"],
+  "transaction": ["buy", "rent"],
+  "fetchDetails": false,
+  "maxItems": 1200,
+  "maxPagesPerCity": 30,
+  "pageSize": 40
+}
