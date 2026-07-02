@@ -22,6 +22,7 @@ function baseInput(overrides: Partial<ListingStrengthInput> = {}): ListingStreng
     locality: 'Manipal',
     imageCount: 3,
     addressConfirmed: true,
+    locationResolved: true,
     bedrooms: '2',
     builtArea: 1200,
     builtAreaUnit: 'sqft',
@@ -65,9 +66,10 @@ describe('computeListingStrength — shared gates', () => {
   });
 
   it('fails when address is not confirmed', () => {
-    const result = computeListingStrength(baseInput({ addressConfirmed: false }));
+    const result = computeListingStrength(baseInput({ addressConfirmed: false, locationResolved: false }));
     expect(result.isSubmittable).toBe(false);
-    expect(result.missingItems).toContain('Pin and confirm the location on the map');
+    expect(result.missingItems).toContain('Location entered');
+    expect(result.missingItems).toContain('Map pin confirmed');
   });
 
   it('fails when locality is blank', () => {
@@ -124,10 +126,39 @@ describe('computeListingStrength — residential_plot type-specific gate', () =>
   });
 });
 
+describe('computeListingStrength — issue #1722 correction #4: two location gates', () => {
+  it('locationEntered is met once resolved (search/browser pick) even before the pin is confirmed', () => {
+    const result = computeListingStrength(baseInput({ addressConfirmed: false, locationResolved: true }));
+    const locationEntered = result.gates.find((g) => g.key === 'locationEntered');
+    const pinConfirmed = result.gates.find((g) => g.key === 'pinConfirmed');
+    expect(locationEntered?.met).toBe(true);
+    expect(pinConfirmed?.met).toBe(false);
+    expect(result.isSubmittable).toBe(false);
+  });
+
+  it('locationEntered is also met once addressConfirmed is true, even if locationResolved was never locally re-derived (reload-safe)', () => {
+    const result = computeListingStrength(baseInput({ addressConfirmed: true, locationResolved: false }));
+    const locationEntered = result.gates.find((g) => g.key === 'locationEntered');
+    const pinConfirmed = result.gates.find((g) => g.key === 'pinConfirmed');
+    expect(locationEntered?.met).toBe(true);
+    expect(pinConfirmed?.met).toBe(true);
+  });
+
+  it('isSubmittable stays keyed on addressConfirmed alone — matches the backend gate exactly', () => {
+    // locationResolved true but pin never confirmed -> still not submittable.
+    const notYetPinned = computeListingStrength(baseInput({ addressConfirmed: false, locationResolved: true }));
+    expect(notYetPinned.isSubmittable).toBe(false);
+
+    // addressConfirmed true -> submittable regardless of locationResolved.
+    const pinned = computeListingStrength(baseInput({ addressConfirmed: true, locationResolved: false }));
+    expect(pinned.isSubmittable).toBe(true);
+  });
+});
+
 describe('computeListingStrength — percent', () => {
   it('is between 0 and 100 and increases as gates are satisfied', () => {
     const empty = computeListingStrength(
-      baseInput({ priceRupees: null, imageCount: 0, addressConfirmed: false, locality: '', bedrooms: '', builtArea: null, builtAreaUnit: '' }),
+      baseInput({ priceRupees: null, imageCount: 0, addressConfirmed: false, locationResolved: false, locality: '', bedrooms: '', builtArea: null, builtAreaUnit: '' }),
     );
     const full = computeListingStrength(baseInput());
     expect(empty.percent).toBeLessThan(full.percent);

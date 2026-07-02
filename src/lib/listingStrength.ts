@@ -14,7 +14,9 @@
  *   - submittable property type: apartment | house | villa | residential_plot
  *   - price > 0 (sale) OR monthlyRent > 0 AND securityDepositMonths present (rent)
  *   - >= 3 images
- *   - addressConfirmed === true
+ *   - addressConfirmed === true (issue #1722 correction #4: shown as TWO UI
+ *     rows — "Location entered" and "Map pin confirmed" — but isSubmittable
+ *     still keys off addressConfirmed alone; see computeListingStrength)
  *   - locality non-blank
  *   - apartment: bedrooms + builtArea + builtAreaUnit required
  *   - house / villa: no extra required fields
@@ -46,6 +48,14 @@ export interface ListingStrengthInput {
   locality: string;
   imageCount: number;
   addressConfirmed: boolean;
+  /**
+   * Issue #1722 correction #4 — true once useResidentialLocation has a
+   * `resolved` location (search-result pick or browser location), even
+   * before the map pin is confirmed. Local-only signal; NEVER a substitute
+   * for addressConfirmed in the backend submit gate (see `pinConfirmed`
+   * gate below, which still keys off addressConfirmed only).
+   */
+  locationResolved: boolean;
   bedrooms: string;
   builtArea: number | null;
   builtAreaUnit: string;
@@ -93,7 +103,10 @@ export function computeListingStrength(input: ListingStrengthInput): ListingStre
   const isSubmittableType = SUBMITTABLE_RESIDENTIAL_TYPES.has(input.propertyType);
   const priceOk = priceGateMet(input);
   const imagesOk = input.imageCount >= 3;
-  const addressOk = input.addressConfirmed;
+  // `|| addressConfirmed` keeps this reload-safe: a hydrated confirmed pin
+  // (locationResolved not yet re-derived locally) still counts as entered.
+  const locationEnteredOk = input.locationResolved || input.addressConfirmed;
+  const pinConfirmedOk = input.addressConfirmed;
   const localityOk = input.locality.trim() !== '';
   const typeSpecificOk = typeSpecificGateMet(input);
 
@@ -112,7 +125,13 @@ export function computeListingStrength(input: ListingStrengthInput): ListingStre
     { key: 'price', label: priceLabel, met: priceOk },
     { key: 'locality', label: 'Add the locality', met: localityOk },
     { key: 'images', label: `Add at least 3 photos (${Math.min(input.imageCount, 3)}/3)`, met: imagesOk },
-    { key: 'address', label: 'Pin and confirm the location on the map', met: addressOk },
+    // Issue #1722 correction #4 — two keyed gates instead of one. pinConfirmed
+    // is the ONLY one the backend actually requires (mirrors addressConfirmed
+    // exactly); locationEntered is satisfied automatically whenever
+    // pinConfirmed is, so isSubmittable below stays byte-for-byte aligned
+    // with the backend submit gate.
+    { key: 'locationEntered', label: 'Location entered', met: locationEnteredOk },
+    { key: 'pinConfirmed', label: 'Map pin confirmed', met: pinConfirmedOk },
   ];
   if (typeSpecificLabel) {
     gates.push({ key: 'typeSpecific', label: typeSpecificLabel, met: typeSpecificOk });

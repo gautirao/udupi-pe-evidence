@@ -17,6 +17,18 @@
  * fix that added villa/residential_plot to SUBMITTABLE_PROPERTY_TYPES
  * (see src/lib/listingStrength.ts).
  *
+ * Issue #1722 correction #4 update: the old InlineLocation component (a
+ * single embedded search+pin widget in Section 6) was replaced by a merged
+ * Section-2/Section-6 flow — AddressSearch.tsx ("Where is it?", the query
+ * input + "Find location" + per-result "Use") resolves a STARTING location,
+ * and MapPin.tsx ("Photos & location") gates a "Pin location on map" CTA on
+ * that resolve, opening a Dialog around the EXISTING, unmodified
+ * AddressPicker to confirm the actual draggable pin. Both views share ONE
+ * useResidentialLocation hook instance. This spec now resolves the location
+ * in Section 2 (before "Save draft") and confirms the pin via the Section 6
+ * modal (after photos, once listingId exists) instead of driving a single
+ * embedded InlineLocation widget.
+ *
  * Prerequisites:
  *   - BROKER_EMAIL / BROKER_PASSWORD must be set
  *   - ADMIN_EMAIL / ADMIN_PASSWORD must be set (teardown uses the admin
@@ -201,10 +213,56 @@ for (const subtype of SUBTYPES) {
     await page.getByRole('radio', { name: subtype.radioName, exact: true }).click();
 
     // -------------------------------------------------------------------------
-    // Sections 2-4 — core facts (locality, title, price) + type-required field
+    // Section 2 — "Where is it?" (correction #4: AddressSearch resolves a
+    // STARTING location; the #locality Field now wraps AddressSearch's own
+    // query input, so filling it directly only types a query — it does not
+    // itself commit `locality` until a result is confirmed via "Find" +
+    // "Use"). This mirrors #2's "Find location" button + real Nominatim
+    // proxy lookup, same diagnostic-logging discipline as before: a genuine
+    // Nominatim/network failure (zero results) must be distinguishable from
+    // a selector bug.
     // -------------------------------------------------------------------------
 
-    await page.locator('#locality').fill('Manipal');
+    const geocodeResponsePromise = page.waitForResponse(
+      (resp) => resp.url().includes('/api/geocode?') && resp.request().method() === 'GET',
+      { timeout: 15_000 },
+    ).catch(() => null);
+
+    await page
+      .locator('input[placeholder="Search for a location (e.g. Manipal, Udupi)"]')
+      .fill('Manipal, Udupi, Karnataka');
+    await page.getByRole('button', { name: 'Find location', exact: true }).click();
+
+    const geocodeResponse = await geocodeResponsePromise;
+    if (geocodeResponse) {
+      const body = await geocodeResponse.json().catch(() => '<unparseable>');
+      console.log(`[DL1:${subtype.key}] /api/geocode ${geocodeResponse.status()}:`, JSON.stringify(body).slice(0, 500));
+    } else {
+      console.log(`[DL1:${subtype.key}] /api/geocode response not captured.`);
+    }
+
+    // Real, clickable "Use" action on the first result row. AddressSearch
+    // renders a non-interactive alert row (role="alert", no "Use" button)
+    // instead of any result <li> when the search comes back empty, so
+    // waiting for a "Use" button (rather than any <li>) already excludes the
+    // not-found state.
+    const useButton = page.getByRole('button', { name: 'Use', exact: true }).first();
+    const hasRealResult = await useButton.isVisible({ timeout: 15_000 }).catch(() => false);
+    if (!hasRealResult) {
+      const notFoundText = await page.getByRole('alert').textContent().catch(() => null);
+      throw new Error(
+        `[DL1:${subtype.key}] Real geocode search for "Manipal, Udupi, Karnataka" returned no ` +
+        `selectable result (backend /api/geocode proxy to Nominatim) — cannot confirm a real ` +
+        `location in this environment. Recovery copy: ${notFoundText ?? '<unknown>'}`,
+      );
+    }
+    await useButton.click({ timeout: 15_000 });
+    await expect(page.getByText(/location confirmed —/i)).toBeVisible({ timeout: 10_000 });
+
+    // -------------------------------------------------------------------------
+    // Sections 2-4 — remaining core facts (title, price) + type-required field
+    // -------------------------------------------------------------------------
+
     await page.locator('#title').fill(`E2E Test ${subtype.radioName} — delete me`);
     await page.locator('#price').fill('50 lakh');
 
@@ -217,7 +275,9 @@ for (const subtype of SUBTYPES) {
     // -------------------------------------------------------------------------
     // Persist DRAFT inline via "Save draft" — no navigation. Intercept the
     // real POST /api/listings response to capture the listing id for the
-    // rest of the flow + teardown.
+    // rest of the flow + teardown. Section 6's <MapPin> (pin-confirm) is
+    // gated on listingId, so this must happen before the pin-confirm step
+    // below.
     // -------------------------------------------------------------------------
 
     const createResponsePromise = page.waitForResponse(
@@ -267,49 +327,24 @@ for (const subtype of SUBTYPES) {
     await expect(page.getByText('3/10 images')).toBeVisible({ timeout: 90_000 });
 
     // -------------------------------------------------------------------------
-    // Section 6 — Location (InlineLocation -> AddressPicker), same section,
-    // mounted alongside photos.
+    // Section 6 — Pin the exact location (MapPin.tsx). The starting location
+    // was already resolved in Section 2 above (shared useResidentialLocation
+    // state — correction #4's merge gate), so "Pin location on map" is
+    // already enabled here; this step opens the Dialog wrapping the
+    // EXISTING, unmodified AddressPicker and confirms the real draggable pin,
+    // which is the ONLY action that persists {latitude, longitude,
+    // addressConfirmed:true} via PUT /api/listings/{id}.
     // -------------------------------------------------------------------------
 
-    // Diagnostic: log the real backend geocode proxy response so a genuine
-    // Nominatim/network failure (zero results) is distinguishable from a
-    // selector bug — AddressPicker.tsx renders a real result <li> with class
-    // "cursor-pointer" + an onClick, vs. a plain non-interactive <li> with
-    // "No locations found for ..." when the search comes back empty. Clicking
-    // whichever <li> happens to render first (old approach) silently no-ops
-    // on the "no results" row and never fires handleSelectResult/onConfirm.
-    const geocodeResponsePromise = page.waitForResponse(
-      (resp) => resp.url().includes('/api/geocode?') && resp.request().method() === 'GET',
-      { timeout: 15_000 },
-    ).catch(() => null);
+    const pinButton = page.getByRole('button', { name: /pin location on map/i });
+    await expect(pinButton).toBeEnabled({ timeout: 10_000 });
+    await pinButton.click();
 
-    await page
-      .locator('input[placeholder="Search for a location (e.g. Manipal, Udupi)"]')
-      .fill('Manipal, Udupi, Karnataka');
+    const pinDialog = page.getByRole('dialog', { name: /pin the exact location/i });
+    await expect(pinDialog).toBeVisible({ timeout: 10_000 });
 
-    await expect(page.locator('ul li').first()).toBeVisible({ timeout: 15_000 });
-
-    const geocodeResponse = await geocodeResponsePromise;
-    if (geocodeResponse) {
-      const body = await geocodeResponse.json().catch(() => '<unparseable>');
-      console.log(`[DL1:${subtype.key}] /api/geocode ${geocodeResponse.status()}:`, JSON.stringify(body).slice(0, 500));
-    } else {
-      console.log(`[DL1:${subtype.key}] /api/geocode response not captured.`);
-    }
-
-    // Real, clickable geocode result — excludes the non-interactive
-    // "No locations found" row (see AddressPicker.tsx: only real results get
-    // the cursor-pointer class + onClick={handleSelectResult}).
-    const realResult = page.locator('ul li.cursor-pointer').first();
-    const hasRealResult = await realResult.isVisible().catch(() => false);
-    if (!hasRealResult) {
-      const noResultsText = await page.getByText(/no locations found/i).textContent().catch(() => null);
-      throw new Error(
-        `[DL1:${subtype.key}] Real geocode search for "Manipal, Udupi, Karnataka" returned no ` +
-        `selectable result (backend /api/geocode proxy to Nominatim) — cannot confirm a real ` +
-        `location in this environment. Dropdown text: ${noResultsText ?? '<unknown>'}`,
-      );
-    }
+    const confirmPinButton = pinDialog.getByRole('button', { name: /confirm location/i });
+    await expect(confirmPinButton).toBeVisible({ timeout: 15_000 });
 
     // Register the real PUT /api/listings/{id} (address confirm) response
     // BEFORE clicking, so the backend write is confirmed before we proceed —
@@ -320,9 +355,10 @@ for (const subtype of SUBTYPES) {
       { timeout: 15_000 },
     ).catch(() => null);
 
-    await realResult.click({ timeout: 15_000 });
+    await confirmPinButton.click({ timeout: 15_000 });
 
-    await expect(page.getByText('Location confirmed')).toBeVisible({ timeout: 10_000 });
+    await expect(pinDialog).toBeHidden({ timeout: 10_000 });
+    await expect(page.getByText(/pin confirmed —/i)).toBeVisible({ timeout: 10_000 });
     const confirmResponse = await confirmResponsePromise;
     if (confirmResponse) {
       console.log(`[DL1:${subtype.key}] Address confirm PUT status: ${confirmResponse.status()}`);

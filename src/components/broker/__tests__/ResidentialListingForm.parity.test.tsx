@@ -64,11 +64,38 @@ vi.mock('@/hooks/useListingImages', () => ({
 }));
 
 // Heavy children stubbed — their own wiring is covered elsewhere.
-vi.mock('@/components/broker/residential/InlineLocation', () => ({
-  InlineLocation: () => <div data-testid="mock-inline-location" />,
-}));
 vi.mock('@/components/broker/residential/InlineNearby', () => ({
   InlineNearby: () => <div data-testid="mock-inline-nearby" />,
+}));
+
+// Issue #1722 correction #4 — Section 2's <AddressSearch> now drives locality
+// via a real search-select (see useResidentialLocation.test.tsx for the
+// hook's own coverage); stub the geocode client so fillCoreFields can resolve
+// a location without hitting the network. AddressPicker's Leaflet map (used
+// inside Section 6's <MapPin> modal) is stubbed the same way AddressPicker's
+// own test suite and useResidentialLocation.test.tsx do.
+const MANIPAL_RESULT = vi.hoisted(() => ({
+  lat: 13.34,
+  lon: 74.74,
+  display_name: 'Manipal, Udupi District, Karnataka, India',
+  address: { suburb: 'Manipal', city: 'Udupi' },
+}));
+
+vi.mock('@/lib/geocode', () => ({
+  searchNominatim: vi.fn().mockResolvedValue([MANIPAL_RESULT]),
+  reverseGeocode: vi.fn(),
+}));
+
+vi.mock('@/components/broker/AddressPicker', () => ({
+  AddressPicker: ({ onConfirm }: { onConfirm: (v: { lat: number; lng: number; address_confirmed: boolean }) => void }) => (
+    <button
+      type="button"
+      data-testid="mock-address-picker-confirm"
+      onClick={() => onConfirm({ lat: 13.34, lng: 74.74, address_confirmed: true })}
+    >
+      Mock confirm pin
+    </button>
+  ),
 }));
 
 // Import after mocks
@@ -100,7 +127,12 @@ function mockCreateSucceedsWithAddressConfirmed() {
 }
 
 async function fillCoreFields(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText(/locality \/ area/i), 'Manipal');
+  // Issue #1722 correction #4 — locality is now set via AddressSearch's
+  // search-select flow (onPublicLoc), not free typing.
+  await user.type(screen.getByLabelText(/search for a location/i), 'Manipal');
+  await waitFor(() => expect(screen.getByText(/Manipal, Udupi District/i)).toBeInTheDocument());
+  await user.click(screen.getByRole('button', { name: /^use$/i }));
+
   await user.type(screen.getByLabelText(/listing title/i), '3 BHK Apartment in Manipal');
   await user.type(screen.getByLabelText(/price \(inr\)/i), '50 lakh');
 }
@@ -184,8 +216,12 @@ describe('ResidentialListingForm — review + submit gating', () => {
     // exist across the bedrooms/bathrooms/balconies groups).
     const bedroomsGroup = document.getElementById('bedrooms');
     expect(bedroomsGroup).not.toBeNull();
-    await user.click(within(bedroomsGroup as HTMLElement).getByRole('radio', { name: '3' }));
+    await user.click(within(bedroomsGroup as HTMLElement).getByRole('radio', { name: '3 BHK' }));
 
+    // Issue #1722 (AC8) — apartment's built-up area is a secondary/optional
+    // metric (carpet area is primary) and now lives under the collapsed
+    // "More details" section; open it before interacting with the field.
+    await user.click(screen.getByRole('button', { name: /more details.*ownership/i }));
     const builtAreaInput = document.getElementById('builtArea');
     expect(builtAreaInput).not.toBeNull();
     await user.type(builtAreaInput as HTMLElement, '1150');

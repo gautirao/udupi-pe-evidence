@@ -20,8 +20,11 @@ import { BuyerPreviewCard, type BuyerPreviewSpecChip } from '@/components/broker
 import { ListingStrengthMeter, type ListingStrengthChecklist, computeListingStrength as computeFormCompleteness } from '@/components/broker/ListingStrengthMeter';
 import { SingleChipGroup, MultiChipGroup, boolToTriState, triStateToBool, type ChipOption } from '@/components/broker/ChipGroup';
 import { InlinePhotos } from '@/components/broker/residential/InlinePhotos';
-import { InlineLocation } from '@/components/broker/residential/InlineLocation';
+import { AddressSearch } from '@/components/broker/residential/AddressSearch';
+import { MapPin } from '@/components/broker/residential/MapPin';
+import { useResidentialLocation } from '@/components/broker/residential/useResidentialLocation';
 import { InlineNearby } from '@/components/broker/residential/InlineNearby';
+import { FieldPairRow } from '@/components/broker/residential/FieldPairRow';
 import { DescriptionAssistant } from '@/components/broker/residential/DescriptionAssistant';
 import { StrengthMeter } from '@/components/broker/residential/StrengthMeter';
 import { ResidentialReviewPreview } from '@/components/broker/residential/ResidentialReviewPreview';
@@ -62,11 +65,11 @@ import {
 type ResidentialPropertyType = 'apartment' | 'house' | 'villa' | 'residential_plot';
 
 const BHK_CHIP_OPTIONS: readonly ChipOption[] = [
-  { value: '1', label: '1' },
-  { value: '2', label: '2' },
-  { value: '3', label: '3' },
-  { value: '4', label: '4' },
-  { value: '5', label: '5+' },
+  { value: '1', label: '1 BHK' },
+  { value: '2', label: '2 BHK' },
+  { value: '3', label: '3 BHK' },
+  { value: '4', label: '4 BHK' },
+  { value: '5', label: '5+ BHK' },
 ];
 
 const BATHROOM_CHIP_OPTIONS: readonly ChipOption[] = [
@@ -156,6 +159,63 @@ function BoolSwitch({ id, label, value, onChange }: { id: string; label: string;
   );
 }
 
+interface CarpetAreaInputProps {
+  initialArea: number | null;
+  initialUnit: string;
+  onChange: (area: number | null, unit: string) => void;
+}
+
+/**
+ * Carpet area — plain input + unit dropdown, no quick-pick preset chips
+ * (issue #1722 correction #3 — design parity with create-residential-listing.html
+ * §3 "Property details"). Deliberately NOT AreaField (which always renders
+ * preset chips) — AreaField is shared with other property types/flows
+ * (commercial, land) that are out of scope for this fix, so it stays untouched.
+ */
+function CarpetAreaInput({ initialArea, initialUnit, onChange }: CarpetAreaInputProps) {
+  const [text, setText] = useState(initialArea != null ? String(initialArea) : '');
+  const [unit, setUnit] = useState(initialUnit);
+
+  const handleTextChange = (raw: string) => {
+    setText(raw);
+    const num = raw.trim() !== '' ? parseFloat(raw) : null;
+    onChange(num != null && !isNaN(num) && num > 0 ? num : null, unit);
+  };
+
+  const handleUnitChange = (newUnit: string) => {
+    setUnit(newUnit);
+    const num = text.trim() !== '' ? parseFloat(text) : null;
+    onChange(num != null && !isNaN(num) && num > 0 ? num : null, newUnit);
+  };
+
+  return (
+    <Field id="carpetArea" label="Carpet area">
+      <div className="flex gap-2">
+        <Input
+          id="carpetArea"
+          type="number"
+          min="0"
+          step="any"
+          inputMode="decimal"
+          placeholder="e.g. 1150"
+          value={text}
+          onChange={(e) => handleTextChange(e.target.value)}
+          className="h-11 flex-1"
+        />
+        <Select value={unit} onValueChange={handleUnitChange}>
+          <SelectTrigger className="h-11 w-28" aria-label="Carpet area unit">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="sqft">Sq.ft</SelectItem>
+            <SelectItem value="sqm">Sq.m</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </Field>
+  );
+}
+
 interface ResidentialListingFormProps {
   initialPropertyType: ResidentialPropertyType;
   onSwitchToGenericFlow: () => void;
@@ -177,7 +237,8 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
 
   const updateListing = useUpdateListing(listingId ?? '');
   const submitListing = useSubmitListing(listingId ?? undefined);
-  const { imageCount } = useListingImages(listingId ?? undefined);
+  const { images, imageCount } = useListingImages(listingId ?? undefined);
+  const coverImageUrl = images[0]?.url ?? null;
   // Address confirmation/lat/lng are read back from the persisted listing (not local
   // state) so they survive the edit<->review mode switch, which unmounts AddressPicker —
   // matches EditListing.tsx's pattern (listing.addressConfirmed / .latitude / .longitude).
@@ -193,6 +254,20 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
   const [locality, setLocality] = useState('');
   const [projectName, setProjectName] = useState('');
   const [title, setTitle] = useState('');
+
+  // Issue #1722 correction #4 — SINGLE hook instance shared by Section 2's
+  // <AddressSearch> and Section 6's <MapPin> (contract §A). onPublicLoc is
+  // the ONLY way `locality` is ever set from the location flow — it only
+  // ever receives the coarse, buyer-facing publicLoc, never the private
+  // formatted/geocoded string.
+  const residentialLocation = useResidentialLocation({
+    listingId,
+    addressConfirmed,
+    initialLatitude: draftListing?.latitude ?? null,
+    initialLongitude: draftListing?.longitude ?? null,
+    initialLocality: draftListing?.locality ?? '',
+    onPublicLoc: setLocality,
+  });
 
   // Section 3 — Property details (primary area, per-type)
   const [carpetArea, setCarpetArea] = useState<number | null>(null);
@@ -375,8 +450,15 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
         toast({ title: 'Draft saved', description: 'Continue adding photos, location, and a description below.' });
         onDone?.(data.id);
       },
-      onError: () => {
+      onError: (error: Error) => {
         draftInFlightRef.current = false;
+        const apiErr = error as ApiError;
+        const body = apiErr.body as Record<string, unknown> | undefined;
+        const message =
+          (body?.message as string | undefined) ??
+          (body?.error as string | undefined) ??
+          error.message;
+        toast({ title: 'Could not save draft', description: message, variant: 'destructive' });
       },
     });
   };
@@ -432,6 +514,7 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
     locality,
     imageCount,
     addressConfirmed,
+    locationResolved: residentialLocation.state.resolved != null,
     bedrooms,
     builtArea,
     builtAreaUnit,
@@ -608,7 +691,7 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
           {/* Section 2 — Where is it? */}
           <Section number={2} title="Where is it?">
             <Field id="locality" label="Locality / area *">
-              <Input id="locality" placeholder="e.g. Manipal, Udupi" value={locality} onChange={(e) => setLocality(e.target.value)} className="h-11" />
+              <AddressSearch location={residentialLocation} />
               {hasAttempted && !locality.trim() && <p className="text-sm text-destructive">Locality is required.</p>}
             </Field>
 
@@ -627,13 +710,7 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
           {/* Section 3 — Property details */}
           <Section number={3} title={isPlot ? 'Plot details' : 'Property details'}>
             {isApartment && (
-              <AreaField id="carpetArea" label="Carpet area" propertyType="apartment" initialArea={carpetArea} initialUnit={carpetAreaUnit} onChange={(a, u) => { setCarpetArea(a); setCarpetAreaUnit(u); }} />
-            )}
-            {isApartment && (
-              <div>
-                <AreaField id="builtArea" label="Built-up area" propertyType="apartment" initialArea={builtArea} initialUnit={builtAreaUnit} onChange={(a, u) => { setBuiltArea(a); setBuiltAreaUnit(u); }} />
-                <p className="mt-1.5 text-xs text-muted-foreground">Required to submit this listing for review.</p>
-              </div>
+              <CarpetAreaInput initialArea={carpetArea} initialUnit={carpetAreaUnit} onChange={(a, u) => { setCarpetArea(a); setCarpetAreaUnit(u); }} />
             )}
             {isHouseOrVilla && (
               <AreaField id="builtArea" label="Built-up area" propertyType="house" initialArea={builtArea} initialUnit={builtAreaUnit} onChange={(a, u) => { setBuiltArea(a); setBuiltAreaUnit(u); }} />
@@ -643,44 +720,51 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
             )}
 
             {fieldVisible('bedrooms') && (
-              <SingleChipGroup id="bedrooms" label="Bedrooms (BHK)" options={BHK_CHIP_OPTIONS} value={bedrooms} onValueChange={setBedrooms} />
+              <SingleChipGroup id="bedrooms" label="Configuration (BHK)" options={BHK_CHIP_OPTIONS} value={bedrooms} onValueChange={setBedrooms} />
             )}
-            {fieldVisible('bathrooms') && (
-              <SingleChipGroup id="bathrooms" label="Bathrooms" options={BATHROOM_CHIP_OPTIONS} value={bathrooms} onValueChange={setBathrooms} />
+
+            <FieldPairRow>
+              {fieldVisible('bathrooms') && (
+                <SingleChipGroup id="bathrooms" label="Bathrooms" options={BATHROOM_CHIP_OPTIONS} value={bathrooms} onValueChange={setBathrooms} />
+              )}
+              {fieldVisible('balconies') && (
+                <SingleChipGroup id="balconies" label="Balconies" options={BALCONY_CHIP_OPTIONS} value={balconies} onValueChange={setBalconies} />
+              )}
+            </FieldPairRow>
+
+            {isApartment && (
+              <FieldPairRow>
+                {fieldVisible('floorNumber') && (
+                  <Field id="floorNumber" label="Floor number">
+                    <Input id="floorNumber" type="number" min="0" max="100" className="h-11 font-mono" value={floorNumber} onChange={(e) => setFloorNumber(e.target.value)} />
+                  </Field>
+                )}
+                {fieldVisible('totalFloors') && (
+                  <Field id="totalFloors" label="Total floors">
+                    <Input id="totalFloors" type="number" min="1" max="100" className="h-11 font-mono" value={totalFloors} onChange={(e) => setTotalFloors(e.target.value)} />
+                  </Field>
+                )}
+              </FieldPairRow>
             )}
-            {fieldVisible('balconies') && (
-              <SingleChipGroup id="balconies" label="Balconies" options={BALCONY_CHIP_OPTIONS} value={balconies} onValueChange={setBalconies} />
-            )}
-            {fieldVisible('furnishingStatus') && (
-              <SingleChipGroup id="furnishingStatus" label="Furnishing" variant="segmented" options={FURNISHING_OPTIONS} value={furnishingStatus} onValueChange={setFurnishingStatus} />
-            )}
-            {fieldVisible('facing') && (
-              <Field id="facing" label="Facing">
-                <Select value={facing} onValueChange={setFacing}>
-                  <SelectTrigger id="facing" className="h-11"><SelectValue placeholder="Select facing" /></SelectTrigger>
-                  <SelectContent>
-                    {FACING_OPTIONS.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
-            {isApartment && fieldVisible('floorNumber') && (
-              <Field id="floorNumber" label="Floor number">
-                <Input id="floorNumber" type="number" min="0" max="100" className="h-11 font-mono" value={floorNumber} onChange={(e) => setFloorNumber(e.target.value)} />
-              </Field>
-            )}
-            {isApartment && fieldVisible('totalFloors') && (
-              <Field id="totalFloors" label="Total floors">
-                <Input id="totalFloors" type="number" min="1" max="100" className="h-11 font-mono" value={totalFloors} onChange={(e) => setTotalFloors(e.target.value)} />
-              </Field>
-            )}
+
+            <FieldPairRow>
+              {fieldVisible('furnishingStatus') && (
+                <SingleChipGroup id="furnishingStatus" label="Furnishing" variant="segmented" options={FURNISHING_OPTIONS} value={furnishingStatus} onValueChange={setFurnishingStatus} />
+              )}
+              {fieldVisible('facing') && (
+                <Field id="facing" label="Facing">
+                  <Select value={facing} onValueChange={setFacing}>
+                    <SelectTrigger id="facing" className="h-11"><SelectValue placeholder="Select direction" /></SelectTrigger>
+                    <SelectContent>
+                      {FACING_OPTIONS.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
+            </FieldPairRow>
+
             {isHouseOrVilla && fieldVisible('totalFloors') && (
               <SingleChipGroup id="totalFloors" label="Number of floors" options={FLOORS_CHIP_OPTIONS} value={totalFloors} onValueChange={setTotalFloors} />
-            )}
-            {isApartment && fieldVisible('superBuiltArea') && (
-              <Field id="superBuiltArea" label="Super built-up area (sqft)">
-                <Input id="superBuiltArea" type="number" min="0" className="h-11 font-mono" value={superBuiltArea} onChange={(e) => setSuperBuiltArea(e.target.value)} />
-              </Field>
             )}
             {isHouseOrVilla && fieldVisible('propertyAge') && (
               <Field id="propertyAge" label="Property age">
@@ -702,38 +786,6 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
                 </Select>
               </Field>
             )}
-            {(fieldVisible('parking2wCount') || fieldVisible('parking4wCount')) && (
-              <div className="grid grid-cols-2 gap-4">
-                {fieldVisible('parking2wCount') && (
-                  <SingleChipGroup id="parking2wCount" label="2-wheeler parking" options={PARKING_CHIP_OPTIONS} value={parking2wCount} onValueChange={setParking2wCount} />
-                )}
-                {fieldVisible('parking4wCount') && (
-                  <SingleChipGroup id="parking4wCount" label="4-wheeler parking" options={PARKING_CHIP_OPTIONS} value={parking4wCount} onValueChange={setParking4wCount} />
-                )}
-              </div>
-            )}
-            {fieldVisible('isGated') && (
-              <BoolSwitch id="isGated" label="Gated community" value={isGated} onChange={setIsGated} />
-            )}
-            {fieldVisible('builderName') && (
-              <Field id="builderName" label="Builder name">
-                <Input id="builderName" value={builderName} onChange={(e) => setBuilderName(e.target.value)} className="h-11" />
-              </Field>
-            )}
-            {(fieldVisible('hasLift') || fieldVisible('hasPowerBackup')) && (
-              <div className="grid grid-cols-2 gap-3">
-                {fieldVisible('hasLift') && <BoolSwitch id="hasLift" label="Lift" value={hasLift} onChange={setHasLift} />}
-                {fieldVisible('hasPowerBackup') && <BoolSwitch id="hasPowerBackup" label="Power backup" value={hasPowerBackup} onChange={setHasPowerBackup} />}
-              </div>
-            )}
-            {(fieldVisible('hasGarden') || fieldVisible('hasTerrace') || fieldVisible('hasCompound') || fieldVisible('hasServantRoom')) && (
-              <div className="grid grid-cols-2 gap-3">
-                {fieldVisible('hasGarden') && <BoolSwitch id="hasGarden" label="Garden" value={hasGarden} onChange={setHasGarden} />}
-                {fieldVisible('hasTerrace') && <BoolSwitch id="hasTerrace" label="Terrace" value={hasTerrace} onChange={setHasTerrace} />}
-                {fieldVisible('hasCompound') && <BoolSwitch id="hasCompound" label="Compound wall" value={hasCompound} onChange={setHasCompound} />}
-                {fieldVisible('hasServantRoom') && <BoolSwitch id="hasServantRoom" label="Servant room" value={hasServantRoom} onChange={setHasServantRoom} />}
-              </div>
-            )}
             {isPlot && fieldVisible('plotDimensions') && (
               <Field id="plotDimensions" label="Plot dimensions">
                 <Input id="plotDimensions" placeholder="e.g. 30x40" value={plotDimensions} onChange={(e) => setPlotDimensions(e.target.value)} className="h-11" />
@@ -753,12 +805,6 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
                 {fieldVisible('hasElectricityConnection') && <BoolSwitch id="hasElectricityConnection" label="Electricity connection" value={hasElectricityConnection} onChange={setHasElectricityConnection} />}
                 {fieldVisible('hasDrainage') && <BoolSwitch id="hasDrainage" label="Drainage" value={hasDrainage} onChange={setHasDrainage} />}
               </div>
-            )}
-            {fieldVisible('amenities') && (
-              <MultiChipGroup testId="chip-group-amenities" label="Amenities" options={amenityOptions} value={amenities} onValueChange={setAmenities} />
-            )}
-            {fieldVisible('specialLocationViews') && (
-              <MultiChipGroup testId="chip-group-special-views" label="Special location / views" options={SPECIAL_LOCATION_VIEW_OPTIONS} value={specialLocationViews} onValueChange={setSpecialLocationViews} />
             )}
           </Section>
 
@@ -857,6 +903,58 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
                 </button>
               </CollapsibleTrigger>
               <CollapsibleContent className="space-y-4 pt-1">
+                {/* AC8 — optional/secondary Property Details fields regrouped here
+                    (JSX placement only; isListingFieldVisible still gates every
+                    field, so per-subtype visibility is unchanged). */}
+                {isApartment && fieldVisible('builtArea') && (
+                  <div>
+                    <AreaField id="builtArea" label="Built-up area" propertyType="apartment" initialArea={builtArea} initialUnit={builtAreaUnit} onChange={(a, u) => { setBuiltArea(a); setBuiltAreaUnit(u); }} />
+                    <p className="mt-1.5 text-xs text-muted-foreground">Required to submit this listing for review.</p>
+                  </div>
+                )}
+                {isApartment && fieldVisible('superBuiltArea') && (
+                  <Field id="superBuiltArea" label="Super built-up area (sqft)">
+                    <Input id="superBuiltArea" type="number" min="0" className="h-11 font-mono" value={superBuiltArea} onChange={(e) => setSuperBuiltArea(e.target.value)} />
+                  </Field>
+                )}
+                {(fieldVisible('parking2wCount') || fieldVisible('parking4wCount')) && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {fieldVisible('parking2wCount') && (
+                      <SingleChipGroup id="parking2wCount" label="2-wheeler parking" options={PARKING_CHIP_OPTIONS} value={parking2wCount} onValueChange={setParking2wCount} />
+                    )}
+                    {fieldVisible('parking4wCount') && (
+                      <SingleChipGroup id="parking4wCount" label="4-wheeler parking" options={PARKING_CHIP_OPTIONS} value={parking4wCount} onValueChange={setParking4wCount} />
+                    )}
+                  </div>
+                )}
+                {fieldVisible('isGated') && (
+                  <BoolSwitch id="isGated" label="Gated community" value={isGated} onChange={setIsGated} />
+                )}
+                {fieldVisible('builderName') && (
+                  <Field id="builderName" label="Builder name">
+                    <Input id="builderName" value={builderName} onChange={(e) => setBuilderName(e.target.value)} className="h-11" />
+                  </Field>
+                )}
+                {(fieldVisible('hasLift') || fieldVisible('hasPowerBackup')) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {fieldVisible('hasLift') && <BoolSwitch id="hasLift" label="Lift" value={hasLift} onChange={setHasLift} />}
+                    {fieldVisible('hasPowerBackup') && <BoolSwitch id="hasPowerBackup" label="Power backup" value={hasPowerBackup} onChange={setHasPowerBackup} />}
+                  </div>
+                )}
+                {(fieldVisible('hasGarden') || fieldVisible('hasTerrace') || fieldVisible('hasCompound') || fieldVisible('hasServantRoom')) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {fieldVisible('hasGarden') && <BoolSwitch id="hasGarden" label="Garden" value={hasGarden} onChange={setHasGarden} />}
+                    {fieldVisible('hasTerrace') && <BoolSwitch id="hasTerrace" label="Terrace" value={hasTerrace} onChange={setHasTerrace} />}
+                    {fieldVisible('hasCompound') && <BoolSwitch id="hasCompound" label="Compound wall" value={hasCompound} onChange={setHasCompound} />}
+                    {fieldVisible('hasServantRoom') && <BoolSwitch id="hasServantRoom" label="Servant room" value={hasServantRoom} onChange={setHasServantRoom} />}
+                  </div>
+                )}
+                {fieldVisible('amenities') && (
+                  <MultiChipGroup testId="chip-group-amenities" label="Amenities" options={amenityOptions} value={amenities} onValueChange={setAmenities} />
+                )}
+                {fieldVisible('specialLocationViews') && (
+                  <MultiChipGroup testId="chip-group-special-views" label="Special location / views" options={SPECIAL_LOCATION_VIEW_OPTIONS} value={specialLocationViews} onValueChange={setSpecialLocationViews} />
+                )}
                 {fieldVisible('ownershipType') && (
                   <Field id="ownershipType" label="Ownership type">
                     <Select value={ownershipType} onValueChange={setOwnershipType}>
@@ -907,14 +1005,7 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
               <>
                 <InlinePhotos listingId={listingId} />
                 <div className="h-px bg-border" />
-                <InlineLocation
-                  listingId={listingId}
-                  initialLatitude={draftListing?.latitude ?? null}
-                  initialLongitude={draftListing?.longitude ?? null}
-                  initialLocality={locality}
-                  initialConfirmed={addressConfirmed}
-                  onLocalityConfirmed={(loc) => setLocality(loc)}
-                />
+                <MapPin location={residentialLocation} />
               </>
             ) : (
               <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed p-8 text-center">
@@ -959,6 +1050,8 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
             areaSqft={primaryAreaSqft}
             specChips={specChips}
             photoCount={imageCount}
+            coverImageUrl={coverImageUrl}
+            locationConfirmed={addressConfirmed}
           />
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <ListingStrengthMeter checklist={checklist} />
