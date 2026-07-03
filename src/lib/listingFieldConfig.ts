@@ -99,7 +99,67 @@ export type ListingFieldKey =
   | 'petsAllowed'
   | 'availabilityTimeline'
   | 'preferredTenants'
-  | 'possessionStatus';
+  | 'possessionStatus'
+  // #1684 [M38-13B] — commercial typed-listing fields. Visibility mirrors the
+  // #1730 hard-enforcing validateCommercialFields gate EXACTLY (see
+  // isListingFieldVisible's commercialSubtype switch below) — a field must
+  // never render for a subtype/purpose the backend would 400 on.
+  | 'commercialSubtype'
+  | 'floorChoice'
+  | 'hubType'
+  | 'floorMode'
+  | 'powerLoadKva'
+  | 'occupancyStatus'
+  | 'officeSeats'
+  | 'officeCabins'
+  | 'officeMeetingRooms'
+  | 'warehouseClearHeightFt'
+  | 'warehouseLoadingBays'
+  | 'warehouseTruckAccess'
+  | 'warehouseFlooring'
+  | 'commercialZoning'
+  | 'commercialOwnership'
+  | 'commercialApprovals'
+  | 'washroomsPublic'
+  | 'washroomsPrivate'
+  | 'parkingPublicCount'
+  | 'parkingPrivateCount'
+  | 'commercialFurnishingStatus'
+  | 'utilities'
+  | 'suitableUses'
+  | 'commercialAvailability'
+  | 'commercialAreaUnit'
+  // Purpose-gated commercial financials
+  | 'expectedRentalYieldPct'
+  | 'currentMonthlyIncomePaise'
+  | 'leaseTermMonths'
+  | 'leaseEscalationPct';
+
+/**
+ * #1684 [M38-13B] — the four commercial subtype tokens enforced server-side by
+ * validateCommercialFields. SHOP/OFFICE are an explicit broker choice
+ * (propertyType 'commercial'); BUILDING/WAREHOUSE/LAND are DERIVED from
+ * propertyType and must never be sent as an explicit commercialSubtype.
+ */
+export type CommercialSubtype = 'SHOP' | 'OFFICE' | 'BUILDING' | 'WAREHOUSE' | 'LAND';
+
+/**
+ * Resolves the effective commercial subtype for field-visibility purposes.
+ * Mirrors the server derivation: commercial_building -> BUILDING,
+ * warehouse -> WAREHOUSE, commercial_land -> LAND. For propertyType
+ * 'commercial' the subtype is whatever the broker explicitly picked
+ * (SHOP/OFFICE), or undefined until they do.
+ */
+export function deriveCommercialSubtype(
+  propertyType: PropertyType,
+  explicitSubtype: CommercialSubtype | '',
+): CommercialSubtype | undefined {
+  if (propertyType === 'commercial_building') return 'BUILDING';
+  if (propertyType === 'warehouse') return 'WAREHOUSE';
+  if (propertyType === 'commercial_land') return 'LAND';
+  if (propertyType === 'commercial') return explicitSubtype || undefined;
+  return undefined;
+}
 
 /**
  * Field-visibility config for a single property type.
@@ -333,20 +393,26 @@ export function getListingFieldConfig(propertyType: PropertyType): ListingFieldC
  * Visibility rules:
  * - 'price'                                        → listingPurpose === 'sale'
  * - 'monthlyRent' | 'securityDepositMonths' | 'lockInMonths'
- *                                                  → listingPurpose === 'rent'
+ *                                                  → listingPurpose === 'rent' | 'lease'
  * - all other keys                                 → present in the type's visibleFields set
+ *
+ * `commercialSubtype` is required (4th param) to resolve any of the #1684
+ * commercial-only field keys — it is ignored for residential/agri/land keys.
  *
  * NOTE: Visibility governs rendering only. Validation logic, AreaField prop
  * construction, area unit defaults, and payload shaping remain unchanged
- * in NewListing.tsx / EditListing.tsx.
+ * in NewListing.tsx / EditListing.tsx / CommercialListingForm.tsx.
  */
 export function isListingFieldVisible(
   fieldKey: ListingFieldKey,
   propertyType: PropertyType,
-  listingPurpose: 'sale' | 'rent',
+  listingPurpose: 'sale' | 'rent' | 'lease',
+  commercialSubtype?: CommercialSubtype,
 ): boolean {
   const isResidenceType = propertyType === 'apartment' || propertyType === 'house' || propertyType === 'villa';
   const isResidentialFamily = isResidenceType || propertyType === 'residential_plot';
+  const isCommercialFamily = propertyType === 'commercial' || propertyType === 'commercial_building'
+    || propertyType === 'warehouse' || propertyType === 'commercial_land';
 
   switch (fieldKey) {
     case 'price':
@@ -354,7 +420,63 @@ export function isListingFieldVisible(
     case 'monthlyRent':
     case 'securityDepositMonths':
     case 'lockInMonths':
-      return listingPurpose === 'rent';
+      // #1684 — commercial RENT and LEASE purposes both use the recurring-rent fields.
+      return listingPurpose === 'rent' || listingPurpose === 'lease';
+
+    // ── #1684 [M38-13B] — commercial typed-listing fields. Gating mirrors
+    // ListingController.validateCommercialFields EXACTLY (see class doc above).
+    case 'commercialSubtype':
+      // Only 'commercial' takes an explicit subtype choice (SHOP/OFFICE);
+      // BUILDING/WAREHOUSE/LAND are derived from propertyType and never shown.
+      return propertyType === 'commercial';
+    case 'floorChoice':
+    case 'hubType':
+      return commercialSubtype === 'SHOP' || commercialSubtype === 'OFFICE';
+    case 'floorMode':
+    case 'powerLoadKva':
+      return commercialSubtype === 'BUILDING';
+    case 'occupancyStatus':
+      // Backend CommercialFieldOptions.VALID_OCCUPANCY_STATUSES / ListingController's
+      // isShopOrBuilding gate permit occupancyStatus for SHOP and BUILDING (not office/
+      // warehouse/land) — wider than floorMode/powerLoadKva, which stay BUILDING-only.
+      return commercialSubtype === 'SHOP' || commercialSubtype === 'BUILDING';
+    case 'officeSeats':
+    case 'officeCabins':
+    case 'officeMeetingRooms':
+      return commercialSubtype === 'OFFICE';
+    case 'warehouseClearHeightFt':
+    case 'warehouseLoadingBays':
+    case 'warehouseTruckAccess':
+    case 'warehouseFlooring':
+      return commercialSubtype === 'WAREHOUSE';
+    case 'commercialZoning':
+    case 'commercialOwnership':
+    case 'commercialApprovals':
+      return commercialSubtype === 'LAND';
+    // Built-space fields — every commercial subtype EXCEPT LAND (the backend
+    // rejects these for LAND).
+    case 'washroomsPublic':
+    case 'washroomsPrivate':
+    case 'parkingPublicCount':
+    case 'parkingPrivateCount':
+    case 'commercialFurnishingStatus':
+    case 'utilities':
+      return isCommercialFamily && commercialSubtype !== 'LAND' && commercialSubtype !== undefined;
+    // Shown for every commercial subtype once resolved (no LAND exclusion).
+    case 'suitableUses':
+    case 'commercialAvailability':
+    case 'commercialAreaUnit':
+      return isCommercialFamily && commercialSubtype !== undefined;
+    // Purpose-gated commercial financials (design mirrors #1730's
+    // validateCommercialFields purpose gate: SALE -> yield/income only;
+    // RENT/LEASE -> lease term/escalation only).
+    case 'expectedRentalYieldPct':
+    case 'currentMonthlyIncomePaise':
+      return isCommercialFamily && commercialSubtype !== undefined && listingPurpose === 'sale';
+    case 'leaseTermMonths':
+    case 'leaseEscalationPct':
+      return isCommercialFamily && commercialSubtype !== undefined
+        && (listingPurpose === 'rent' || listingPurpose === 'lease');
 
     // M38-13A (#1626) — sale vs rent conditional (design §4). All four gated on the
     // residential family (apartment/house/villa/residential_plot) — none of these

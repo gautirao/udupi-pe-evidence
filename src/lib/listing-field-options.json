@@ -114,17 +114,141 @@
       "RENT",
       "LEASE"
     ],
+    "commercialSubtype": [
+      "SHOP",
+      "OFFICE",
+      "BUILDING",
+      "WAREHOUSE",
+      "LAND"
+    ],
     "floorChoice": [
       "GROUND_FLOOR",
       "FIRST_FLOOR",
       "UPPER_FLOOR",
       "MULTIPLE_FLOORS"
     ],
+    "floorMode": [
+      "GF_ONLY",
+      "GF_PLUS_1",
+      "MULTIPLE_FLOORS",
+      "WHOLE_BUILDING",
+      "CUSTOM"
+    ],
+    "hubType": {
+      "shop": [
+        "MALL",
+        "HIGH_STREET",
+        "RETAIL_COMPLEX",
+        "STANDALONE_BUILDING"
+      ],
+      "office": [
+        "BUSINESS_PARK",
+        "IT_PARK",
+        "COMMERCIAL_COMPLEX",
+        "STANDALONE_BUILDING"
+      ]
+    },
+    "suitableUses": {
+      "shop": [
+        "RETAIL",
+        "SHOWROOM",
+        "GROCERY",
+        "PHARMACY",
+        "CLINIC",
+        "SALON",
+        "RESTAURANT_CAFE",
+        "FOOD_OUTLET",
+        "FOOTWEAR",
+        "ELECTRONICS",
+        "JEWELLERY",
+        "OTHER"
+      ],
+      "office": [
+        "OFFICE",
+        "CO_WORKING",
+        "COACHING_TRAINING",
+        "STUDIO",
+        "CLINIC",
+        "IT_TECH",
+        "BACK_OFFICE",
+        "OTHER"
+      ],
+      "building": [
+        "RETAIL",
+        "OFFICE",
+        "SHOWROOM",
+        "MIXED_USE",
+        "HOSPITALITY",
+        "INSTITUTIONAL",
+        "CLINIC_HEALTHCARE",
+        "OTHER"
+      ],
+      "warehouse": [
+        "STORAGE",
+        "LOGISTICS",
+        "DISTRIBUTION",
+        "LIGHT_INDUSTRIAL",
+        "COLD_STORAGE",
+        "ECOMMERCE_FULFILMENT",
+        "OTHER"
+      ],
+      "land": [
+        "RETAIL",
+        "OFFICE",
+        "SHOWROOM",
+        "WAREHOUSE",
+        "MIXED_USE_COMMERCIAL",
+        "HOSPITALITY",
+        "OTHER"
+      ]
+    },
+    "utilities": [
+      "POWER",
+      "DG",
+      "WATER_STORAGE",
+      "INTERNET",
+      "CCTV",
+      "SECURITY",
+      "CAFETERIA",
+      "RECEPTION",
+      "FIRE",
+      "AC"
+    ],
+    "occupancyStatus": [
+      "VACANT",
+      "PARTLY_OCCUPIED",
+      "FULLY_OCCUPIED"
+    ],
+    "commercialFurnishingStatus": [
+      "UNFURNISHED",
+      "SEMI_FURNISHED",
+      "FURNISHED",
+      "PLUG_AND_PLAY"
+    ],
+    "commercialOwnership": [
+      "FREEHOLD",
+      "LEASEHOLD",
+      "POWER_OF_ATTORNEY",
+      "OTHER"
+    ],
     "availability": [
       "IMMEDIATE",
       "WITHIN_15_DAYS",
       "WITHIN_30_DAYS",
       "AFTER_30_DAYS"
+    ],
+    "warehouseFlooring": [
+      "CONCRETE_RCC",
+      "TRIMIX",
+      "EPOXY_COATED",
+      "KOTA_TILED",
+      "OTHER"
+    ],
+    "commercialAreaUnit": [
+      "SQ_FT",
+      "SQ_M",
+      "SQ_YD",
+      "ACRE"
     ]
   }
 }

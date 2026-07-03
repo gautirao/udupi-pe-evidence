@@ -27,6 +27,7 @@ const TrendsAreaResolved = lazy(() => import("./pages/TrendsAreaResolved"));
 // Lazily loaded — Broker routes; not needed for public/admin users
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const NewListing = lazy(() => import("./pages/broker/NewListing"));
+const CommercialNewListingPage = lazy(() => import("./pages/broker/CommercialNewListingPage"));
 const EditListing = lazy(() => import("./pages/broker/EditListing"));
 const BrokerSetup = lazy(() => import("./pages/broker/BrokerSetup"));
 const BrokerDashboard = lazy(() => import("./pages/broker/BrokerDashboard"));
@@ -111,6 +112,15 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <NewListing />
+                  </ProtectedRoute>
+                }
+              />
+              {/* #1741 follow-up — direct deep link into the commercial single-page create flow */}
+              <Route
+                path="/broker/listings/new/commercial"
+                element={
+                  <ProtectedRoute>
+                    <CommercialNewListingPage />
                   </ProtectedRoute>
                 }
               />

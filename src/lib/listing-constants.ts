@@ -145,3 +145,181 @@ export const HOUSE_VILLA_AMENITY_OPTIONS = [
   { value: 'SERVANT_QUARTERS', label: 'Servant quarters' },
   { value: 'GARDEN_SPACE', label: 'Garden space' },
 ] as const;
+
+// ---------------------------------------------------------------------------
+// #1684 [M38-13B] — commercial typed-listing option vocabularies.
+// Machine VALUES are keyed 1:1 off the #1730 hard-enforcing (400 on unknown
+// code) validateCommercialFields vocabulary, exposed via
+// src/lib/listing-field-options.json's "commercial" section (source of
+// truth, verified server-side by ListingFieldOptionsContractTest). Labels are
+// FE display strings only. Kept in parity by
+// src/lib/__tests__/listing-field-options.parity.test.ts (asserts these
+// constants' value-sets exactly equal the JSON contract, mirroring the
+// residential.furnishingStatus pattern).
+// ---------------------------------------------------------------------------
+
+/** commercialSubtype — explicit choice for propertyType 'commercial' (SHOP/OFFICE); BUILDING/WAREHOUSE/LAND are server-derived from propertyType and never sent explicitly. */
+export const COMMERCIAL_SUBTYPE_OPTIONS = [
+  { value: 'SHOP', label: 'Shop' },
+  { value: 'OFFICE', label: 'Office' },
+  { value: 'BUILDING', label: 'Commercial building' },
+  { value: 'WAREHOUSE', label: 'Warehouse' },
+  { value: 'LAND', label: 'Commercial land' },
+] as const;
+
+/** floorChoice — SHOP/OFFICE only. */
+export const COMMERCIAL_FLOOR_CHOICE_OPTIONS = [
+  { value: 'GROUND_FLOOR', label: 'Ground floor' },
+  { value: 'FIRST_FLOOR', label: 'First floor' },
+  { value: 'UPPER_FLOOR', label: 'Upper floor' },
+  { value: 'MULTIPLE_FLOORS', label: 'Multiple floors' },
+] as const;
+
+/** floorMode — BUILDING only. */
+export const COMMERCIAL_FLOOR_MODE_OPTIONS = [
+  { value: 'GF_ONLY', label: 'Ground floor only' },
+  { value: 'GF_PLUS_1', label: 'Ground + 1' },
+  { value: 'MULTIPLE_FLOORS', label: 'Multiple floors' },
+  { value: 'WHOLE_BUILDING', label: 'Whole building' },
+  { value: 'CUSTOM', label: 'Custom' },
+] as const;
+
+/** hubType — shop-subtype vocabulary (SHOP only). */
+export const SHOP_HUB_TYPE_OPTIONS = [
+  { value: 'MALL', label: 'Mall' },
+  { value: 'HIGH_STREET', label: 'High street' },
+  { value: 'RETAIL_COMPLEX', label: 'Retail complex' },
+  { value: 'STANDALONE_BUILDING', label: 'Standalone building' },
+] as const;
+
+/** hubType — office-subtype vocabulary (OFFICE only). */
+export const OFFICE_HUB_TYPE_OPTIONS = [
+  { value: 'BUSINESS_PARK', label: 'Business park' },
+  { value: 'IT_PARK', label: 'IT park' },
+  { value: 'COMMERCIAL_COMPLEX', label: 'Commercial complex' },
+  { value: 'STANDALONE_BUILDING', label: 'Standalone building' },
+] as const;
+
+/** suitableUses — SHOP vocabulary. */
+export const SHOP_SUITABLE_USE_OPTIONS = [
+  { value: 'RETAIL', label: 'Retail' },
+  { value: 'SHOWROOM', label: 'Showroom' },
+  { value: 'GROCERY', label: 'Grocery' },
+  { value: 'PHARMACY', label: 'Pharmacy' },
+  { value: 'CLINIC', label: 'Clinic' },
+  { value: 'SALON', label: 'Salon' },
+  { value: 'RESTAURANT_CAFE', label: 'Restaurant / cafe' },
+  { value: 'FOOD_OUTLET', label: 'Food outlet' },
+  { value: 'FOOTWEAR', label: 'Footwear' },
+  { value: 'ELECTRONICS', label: 'Electronics' },
+  { value: 'JEWELLERY', label: 'Jewellery' },
+  { value: 'OTHER', label: 'Other' },
+] as const;
+
+/** suitableUses — OFFICE vocabulary. */
+export const OFFICE_SUITABLE_USE_OPTIONS = [
+  { value: 'OFFICE', label: 'Office' },
+  { value: 'CO_WORKING', label: 'Co-working' },
+  { value: 'COACHING_TRAINING', label: 'Coaching / training' },
+  { value: 'STUDIO', label: 'Studio' },
+  { value: 'CLINIC', label: 'Clinic' },
+  { value: 'IT_TECH', label: 'IT / tech' },
+  { value: 'BACK_OFFICE', label: 'Back office' },
+  { value: 'OTHER', label: 'Other' },
+] as const;
+
+/** suitableUses — BUILDING vocabulary. */
+export const BUILDING_SUITABLE_USE_OPTIONS = [
+  { value: 'RETAIL', label: 'Retail' },
+  { value: 'OFFICE', label: 'Office' },
+  { value: 'SHOWROOM', label: 'Showroom' },
+  { value: 'MIXED_USE', label: 'Mixed use' },
+  { value: 'HOSPITALITY', label: 'Hospitality' },
+  { value: 'INSTITUTIONAL', label: 'Institutional' },
+  { value: 'CLINIC_HEALTHCARE', label: 'Clinic / healthcare' },
+  { value: 'OTHER', label: 'Other' },
+] as const;
+
+/** suitableUses — WAREHOUSE vocabulary. */
+export const WAREHOUSE_SUITABLE_USE_OPTIONS = [
+  { value: 'STORAGE', label: 'Storage' },
+  { value: 'LOGISTICS', label: 'Logistics' },
+  { value: 'DISTRIBUTION', label: 'Distribution' },
+  { value: 'LIGHT_INDUSTRIAL', label: 'Light industrial' },
+  { value: 'COLD_STORAGE', label: 'Cold storage' },
+  { value: 'ECOMMERCE_FULFILMENT', label: 'E-commerce fulfilment' },
+  { value: 'OTHER', label: 'Other' },
+] as const;
+
+/** suitableUses — LAND vocabulary. */
+export const LAND_SUITABLE_USE_OPTIONS = [
+  { value: 'RETAIL', label: 'Retail' },
+  { value: 'OFFICE', label: 'Office' },
+  { value: 'SHOWROOM', label: 'Showroom' },
+  { value: 'WAREHOUSE', label: 'Warehouse' },
+  { value: 'MIXED_USE_COMMERCIAL', label: 'Mixed-use commercial' },
+  { value: 'HOSPITALITY', label: 'Hospitality' },
+  { value: 'OTHER', label: 'Other' },
+] as const;
+
+/** utilities — persisted to shared listing_amenities; commercial-only codes. Not shown for LAND. */
+export const COMMERCIAL_UTILITY_OPTIONS = [
+  { value: 'POWER', label: 'Power' },
+  { value: 'DG', label: 'DG backup' },
+  { value: 'WATER_STORAGE', label: 'Water storage' },
+  { value: 'INTERNET', label: 'Internet' },
+  { value: 'CCTV', label: 'CCTV' },
+  { value: 'SECURITY', label: 'Security' },
+  { value: 'CAFETERIA', label: 'Cafeteria' },
+  { value: 'RECEPTION', label: 'Reception' },
+  { value: 'FIRE', label: 'Fire safety' },
+  { value: 'AC', label: 'Air conditioning' },
+] as const;
+
+/** occupancyStatus — BUILDING only. */
+export const COMMERCIAL_OCCUPANCY_STATUS_OPTIONS = [
+  { value: 'VACANT', label: 'Vacant' },
+  { value: 'PARTLY_OCCUPIED', label: 'Partly occupied' },
+  { value: 'FULLY_OCCUPIED', label: 'Fully occupied' },
+] as const;
+
+/** commercialFurnishingStatus — not shown for LAND. */
+export const COMMERCIAL_FURNISHING_STATUS_OPTIONS = [
+  { value: 'UNFURNISHED', label: 'Unfurnished' },
+  { value: 'SEMI_FURNISHED', label: 'Semi furnished' },
+  { value: 'FURNISHED', label: 'Furnished' },
+  { value: 'PLUG_AND_PLAY', label: 'Plug and play' },
+] as const;
+
+/** commercialOwnership — LAND only. */
+export const COMMERCIAL_OWNERSHIP_OPTIONS = [
+  { value: 'FREEHOLD', label: 'Freehold' },
+  { value: 'LEASEHOLD', label: 'Leasehold' },
+  { value: 'POWER_OF_ATTORNEY', label: 'Power of attorney' },
+  { value: 'OTHER', label: 'Other' },
+] as const;
+
+/** availability (commercialAvailability) — all commercial types. */
+export const COMMERCIAL_AVAILABILITY_OPTIONS = [
+  { value: 'IMMEDIATE', label: 'Immediate' },
+  { value: 'WITHIN_15_DAYS', label: 'Within 15 days' },
+  { value: 'WITHIN_30_DAYS', label: 'Within 30 days' },
+  { value: 'AFTER_30_DAYS', label: 'After 30 days' },
+] as const;
+
+/** warehouseFlooring — WAREHOUSE only. */
+export const WAREHOUSE_FLOORING_OPTIONS = [
+  { value: 'CONCRETE_RCC', label: 'Concrete (RCC)' },
+  { value: 'TRIMIX', label: 'Trimix' },
+  { value: 'EPOXY_COATED', label: 'Epoxy coated' },
+  { value: 'KOTA_TILED', label: 'Kota tiled' },
+  { value: 'OTHER', label: 'Other' },
+] as const;
+
+/** commercialAreaUnit — all commercial types. */
+export const COMMERCIAL_AREA_UNIT_OPTIONS = [
+  { value: 'SQ_FT', label: 'Sq.ft' },
+  { value: 'SQ_M', label: 'Sq.m' },
+  { value: 'SQ_YD', label: 'Sq.yd' },
+  { value: 'ACRE', label: 'Acre' },
+] as const;

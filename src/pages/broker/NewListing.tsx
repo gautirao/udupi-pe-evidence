@@ -31,6 +31,7 @@ import { isListingFieldVisible } from '@/lib/listingFieldConfig';
 import type { ListingFieldKey } from '@/lib/listingFieldConfig';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { ResidentialListingForm } from '@/components/broker/ResidentialListingForm';
+import { CommercialListingForm } from '@/components/broker/CommercialListingForm';
 
 /**
  * M38-13A (#1626) — the four residential subtypes that mount the new
@@ -199,6 +200,23 @@ export default function NewListing() {
       <AppLayout>
         <ResidentialListingForm
           initialPropertyType={propertyType as 'apartment' | 'house' | 'villa' | 'residential_plot'}
+          onSwitchToGenericFlow={() => setPropertyType('')}
+          navigate={navigate}
+        />
+      </AppLayout>
+    );
+  }
+
+  // #1684 [M38-13B] — the commercial sibling of the M38-13A residential branch
+  // above: mounts the new single-page commercial composition (full parity with
+  // #1730's typed write path) instead of the generic body below. Inserted
+  // BEFORE the legacy generic fall-through, ALONGSIDE the residential branch —
+  // agricultural selections still fall through to the UNCHANGED generic body.
+  if (COMMERCIAL_TYPES.has(propertyType)) {
+    return (
+      <AppLayout>
+        <CommercialListingForm
+          initialPropertyType={propertyType as 'commercial' | 'commercial_building' | 'warehouse' | 'commercial_land'}
           onSwitchToGenericFlow={() => setPropertyType('')}
           navigate={navigate}
         />

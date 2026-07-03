@@ -59,7 +59,12 @@ export function canAccessRoute(route: string, role?: string | null): boolean {
     if (isAdminRoute(clean) || clean === '/notifications') {
       return true;
     }
-    if (clean === '/broker/listings/new' || (clean.startsWith('/broker/listings/') && clean.endsWith('/edit'))) {
+    if (
+      clean === '/broker/listings/new' ||
+      // #1741 follow-up — commercial deep-link sibling of /broker/listings/new
+      clean === '/broker/listings/new/commercial' ||
+      (clean.startsWith('/broker/listings/') && clean.endsWith('/edit'))
+    ) {
       return true;
     }
     return false;
@@ -85,7 +90,12 @@ export function canAccessRoute(route: string, role?: string | null): boolean {
       return true;
     }
     // Listing create / edit routes are allowed for normal consumers to list properties
-    if (clean === '/broker/listings/new' || (clean.startsWith('/broker/listings/') && clean.endsWith('/edit'))) {
+    if (
+      clean === '/broker/listings/new' ||
+      // #1741 follow-up — commercial deep-link sibling of /broker/listings/new
+      clean === '/broker/listings/new/commercial' ||
+      (clean.startsWith('/broker/listings/') && clean.endsWith('/edit'))
+    ) {
       return true;
     }
     return false;

@@ -81,6 +81,40 @@ interface CreateListingRequest {
   amenities?: string[];
   specialLocationViews?: string[];
   preferredTenants?: string[];
+  // #1684 [M38-13B] — commercial typed-listing fields (additive, all
+  // optional/nullable). Mirrors the #1730 frozen write contract exactly —
+  // see ListingController.validateCommercialFields for per-subtype/purpose
+  // gating (enforced server-side; FE visibility in listingFieldConfig.ts
+  // mirrors it to avoid a 400 on submit).
+  commercialSubtype?: string;
+  floorChoice?: string;
+  floorMode?: string;
+  hubType?: string;
+  washroomsPublic?: number;
+  washroomsPrivate?: number;
+  parkingPublicCount?: number;
+  parkingPrivateCount?: number;
+  officeSeats?: number;
+  officeCabins?: number;
+  officeMeetingRooms?: number;
+  occupancyStatus?: string;
+  powerLoadKva?: number;
+  warehouseClearHeightFt?: number;
+  warehouseLoadingBays?: number;
+  warehouseTruckAccess?: boolean | null;
+  warehouseFlooring?: string;
+  commercialZoning?: string;
+  commercialOwnership?: string;
+  commercialApprovals?: string;
+  expectedRentalYieldPct?: number;
+  currentMonthlyIncomePaise?: number;
+  leaseTermMonths?: number;
+  leaseEscalationPct?: number;
+  commercialFurnishingStatus?: string;
+  commercialAvailability?: string;
+  commercialAreaUnit?: string;
+  utilities?: string[];
+  suitableUses?: string[];
 }
 
 // Mirrors backend UpdateRequest DTO
@@ -170,6 +204,37 @@ export interface UpdateListingRequest {
   amenities?: string[];
   specialLocationViews?: string[];
   preferredTenants?: string[];
+  // #1684 [M38-13B] — commercial typed-listing fields (additive; see
+  // CreateListingRequest above for the field-by-field contract note).
+  commercialSubtype?: string;
+  floorChoice?: string;
+  floorMode?: string;
+  hubType?: string;
+  washroomsPublic?: number;
+  washroomsPrivate?: number;
+  parkingPublicCount?: number;
+  parkingPrivateCount?: number;
+  officeSeats?: number;
+  officeCabins?: number;
+  officeMeetingRooms?: number;
+  occupancyStatus?: string;
+  powerLoadKva?: number;
+  warehouseClearHeightFt?: number;
+  warehouseLoadingBays?: number;
+  warehouseTruckAccess?: boolean | null;
+  warehouseFlooring?: string;
+  commercialZoning?: string;
+  commercialOwnership?: string;
+  commercialApprovals?: string;
+  expectedRentalYieldPct?: number;
+  currentMonthlyIncomePaise?: number;
+  leaseTermMonths?: number;
+  leaseEscalationPct?: number;
+  commercialFurnishingStatus?: string;
+  commercialAvailability?: string;
+  commercialAreaUnit?: string;
+  utilities?: string[];
+  suitableUses?: string[];
 }
 
 // Mirrors backend ListingResponse DTO
@@ -279,6 +344,39 @@ export interface ListingResponse {
   amenities?: string[];
   specialLocationViews?: string[];
   preferredTenants?: string[];
+  // #1684 [M38-13B] — commercial typed-listing fields (additive, all
+  // nullable; null for non-commercial property types and legacy pre-#1730
+  // commercial rows with no typed detail saved yet — honest-null, never
+  // fabricated/defaulted). See CreateListingRequest above for field notes.
+  commercialSubtype?: string | null;
+  floorChoice?: string | null;
+  floorMode?: string | null;
+  hubType?: string | null;
+  washroomsPublic?: number | null;
+  washroomsPrivate?: number | null;
+  parkingPublicCount?: number | null;
+  parkingPrivateCount?: number | null;
+  officeSeats?: number | null;
+  officeCabins?: number | null;
+  officeMeetingRooms?: number | null;
+  occupancyStatus?: string | null;
+  powerLoadKva?: number | null;
+  warehouseClearHeightFt?: number | null;
+  warehouseLoadingBays?: number | null;
+  warehouseTruckAccess?: boolean | null;
+  warehouseFlooring?: string | null;
+  commercialZoning?: string | null;
+  commercialOwnership?: string | null;
+  commercialApprovals?: string | null;
+  expectedRentalYieldPct?: number | null;
+  currentMonthlyIncomePaise?: number | null;
+  leaseTermMonths?: number | null;
+  leaseEscalationPct?: number | null;
+  commercialFurnishingStatus?: string | null;
+  commercialAvailability?: string | null;
+  commercialAreaUnit?: string | null;
+  utilities?: string[];
+  suitableUses?: string[];
 }
 
 /**

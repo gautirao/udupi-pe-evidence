@@ -65,6 +65,31 @@ describe('routeAccess governance module (Issue #1633)', () => {
     expect(canAccessRoute('/my-bookings', 'admin')).toBe(false);
   });
 
+  it('11. /broker/listings/new/commercial deep link matches /broker/listings/new access for every role (#1741 follow-up)', () => {
+    // Allowed roles — same as /broker/listings/new
+    expect(canAccessRoute('/broker/listings/new/commercial', 'user')).toBe(true);
+    expect(canAccessRoute('/broker/listings/new/commercial', 'broker')).toBe(true);
+    expect(canAccessRoute('/broker/listings/new/commercial', 'dealer')).toBe(true);
+    expect(canAccessRoute('/broker/listings/new/commercial', 'admin')).toBe(true);
+
+    // Blocked — same as /broker/listings/new
+    expect(canAccessRoute('/broker/listings/new/commercial', 'anonymous')).toBe(false);
+    expect(canAccessRoute('/broker/listings/new/commercial', 'guest')).toBe(false);
+  });
+
+  it('12. regression — /broker/listings/new access is unchanged after the commercial deep-link fix', () => {
+    expect(canAccessRoute('/broker/listings/new', 'user')).toBe(true);
+    expect(canAccessRoute('/broker/listings/new', 'broker')).toBe(true);
+    expect(canAccessRoute('/broker/listings/new', 'dealer')).toBe(true);
+    expect(canAccessRoute('/broker/listings/new', 'admin')).toBe(true);
+    expect(canAccessRoute('/broker/listings/new', 'anonymous')).toBe(false);
+
+    // Sibling/subpaths must NOT be accidentally broadened by the exact-match fix
+    expect(canAccessRoute('/broker/listings/new/residential', 'user')).toBe(false);
+    expect(canAccessRoute('/broker/listings/new/commercial/extra', 'user')).toBe(false);
+    expect(canAccessRoute('/broker/listings/newcommercial', 'user')).toBe(false);
+  });
+
   it('10. navigation visibility and landing helpers align with role policy', () => {
     expect(getDefaultLandingForRole('anonymous')).toBe('/discover');
     expect(getDefaultLandingForRole('user')).toBe('/discover');

@@ -23,7 +23,26 @@ import {
   CULTIVATION_STATUS_LABELS,
   OWNERSHIP_TYPE_LABELS,
 } from '../agriFieldLabels';
-import { FURNISHING_OPTIONS } from '../listing-constants';
+import {
+  FURNISHING_OPTIONS,
+  COMMERCIAL_SUBTYPE_OPTIONS,
+  COMMERCIAL_FLOOR_CHOICE_OPTIONS,
+  COMMERCIAL_FLOOR_MODE_OPTIONS,
+  SHOP_HUB_TYPE_OPTIONS,
+  OFFICE_HUB_TYPE_OPTIONS,
+  SHOP_SUITABLE_USE_OPTIONS,
+  OFFICE_SUITABLE_USE_OPTIONS,
+  BUILDING_SUITABLE_USE_OPTIONS,
+  WAREHOUSE_SUITABLE_USE_OPTIONS,
+  LAND_SUITABLE_USE_OPTIONS,
+  COMMERCIAL_UTILITY_OPTIONS,
+  COMMERCIAL_OCCUPANCY_STATUS_OPTIONS,
+  COMMERCIAL_FURNISHING_STATUS_OPTIONS,
+  COMMERCIAL_OWNERSHIP_OPTIONS,
+  COMMERCIAL_AVAILABILITY_OPTIONS,
+  WAREHOUSE_FLOORING_OPTIONS,
+  COMMERCIAL_AREA_UNIT_OPTIONS,
+} from '../listing-constants';
 
 // ── Load backend contract (readFileSync avoids resolveJsonModule requirement) ──
 
@@ -47,8 +66,27 @@ interface ListingFieldOptionsContract {
   };
   commercial: {
     listingPurpose: string[];
+    commercialSubtype: string[];
     floorChoice: string[];
+    floorMode: string[];
+    hubType: {
+      shop: string[];
+      office: string[];
+    };
+    suitableUses: {
+      shop: string[];
+      office: string[];
+      building: string[];
+      warehouse: string[];
+      land: string[];
+    };
+    utilities: string[];
+    occupancyStatus: string[];
+    commercialFurnishingStatus: string[];
+    commercialOwnership: string[];
     availability: string[];
+    warehouseFlooring: string[];
+    commercialAreaUnit: string[];
   };
 }
 
@@ -122,5 +160,112 @@ describe('listing-field-options parity: residential.furnishingStatus', () => {
     for (const { value } of FURNISHING_OPTIONS) {
       expect(value).toBe((value as string).toLowerCase());
     }
+  });
+});
+
+// ── Commercial: FE-constant-keys-equal-contract drift guard (#1684) ───────────
+//
+// #1730 wired ~13 commercial vocabulary groups into ListingController's
+// hard-enforcing (400 on unknown code) validateCommercialFields. #1684 built
+// the real FE commercial constants module (listing-constants.ts) that
+// CommercialListingForm consumes for its dropdown/multi-select components.
+// These assertions now follow the SAME pattern as residential.furnishingStatus
+// above: FE-constant VALUE-set exactly equals the contract's code-set, in
+// EITHER direction — the FE can never silently drift from the #1730-enforced
+// backend vocabulary.
+
+function values(options: readonly { value: string }[]): string[] {
+  return options.map((o) => o.value);
+}
+
+describe('listing-field-options parity: commercial.commercialSubtype', () => {
+  it('COMMERCIAL_SUBTYPE_OPTIONS values exactly equal contract commercial.commercialSubtype', () => {
+    expect(sorted(values(COMMERCIAL_SUBTYPE_OPTIONS))).toEqual(sorted(contract.commercial.commercialSubtype));
+  });
+});
+
+describe('listing-field-options parity: commercial.floorChoice', () => {
+  it('COMMERCIAL_FLOOR_CHOICE_OPTIONS values exactly equal contract commercial.floorChoice', () => {
+    expect(sorted(values(COMMERCIAL_FLOOR_CHOICE_OPTIONS))).toEqual(sorted(contract.commercial.floorChoice));
+  });
+});
+
+describe('listing-field-options parity: commercial.floorMode', () => {
+  it('COMMERCIAL_FLOOR_MODE_OPTIONS values exactly equal contract commercial.floorMode', () => {
+    expect(sorted(values(COMMERCIAL_FLOOR_MODE_OPTIONS))).toEqual(sorted(contract.commercial.floorMode));
+  });
+});
+
+describe('listing-field-options parity: commercial.hubType', () => {
+  it('SHOP_HUB_TYPE_OPTIONS values exactly equal contract commercial.hubType.shop', () => {
+    expect(sorted(values(SHOP_HUB_TYPE_OPTIONS))).toEqual(sorted(contract.commercial.hubType.shop));
+  });
+
+  it('OFFICE_HUB_TYPE_OPTIONS values exactly equal contract commercial.hubType.office', () => {
+    expect(sorted(values(OFFICE_HUB_TYPE_OPTIONS))).toEqual(sorted(contract.commercial.hubType.office));
+  });
+});
+
+describe('listing-field-options parity: commercial.suitableUses', () => {
+  it('SHOP_SUITABLE_USE_OPTIONS values exactly equal contract commercial.suitableUses.shop', () => {
+    expect(sorted(values(SHOP_SUITABLE_USE_OPTIONS))).toEqual(sorted(contract.commercial.suitableUses.shop));
+  });
+
+  it('OFFICE_SUITABLE_USE_OPTIONS values exactly equal contract commercial.suitableUses.office', () => {
+    expect(sorted(values(OFFICE_SUITABLE_USE_OPTIONS))).toEqual(sorted(contract.commercial.suitableUses.office));
+  });
+
+  it('BUILDING_SUITABLE_USE_OPTIONS values exactly equal contract commercial.suitableUses.building', () => {
+    expect(sorted(values(BUILDING_SUITABLE_USE_OPTIONS))).toEqual(sorted(contract.commercial.suitableUses.building));
+  });
+
+  it('WAREHOUSE_SUITABLE_USE_OPTIONS values exactly equal contract commercial.suitableUses.warehouse', () => {
+    expect(sorted(values(WAREHOUSE_SUITABLE_USE_OPTIONS))).toEqual(sorted(contract.commercial.suitableUses.warehouse));
+  });
+
+  it('LAND_SUITABLE_USE_OPTIONS values exactly equal contract commercial.suitableUses.land', () => {
+    expect(sorted(values(LAND_SUITABLE_USE_OPTIONS))).toEqual(sorted(contract.commercial.suitableUses.land));
+  });
+});
+
+describe('listing-field-options parity: commercial.utilities', () => {
+  it('COMMERCIAL_UTILITY_OPTIONS values exactly equal contract commercial.utilities', () => {
+    expect(sorted(values(COMMERCIAL_UTILITY_OPTIONS))).toEqual(sorted(contract.commercial.utilities));
+  });
+});
+
+describe('listing-field-options parity: commercial.occupancyStatus', () => {
+  it('COMMERCIAL_OCCUPANCY_STATUS_OPTIONS values exactly equal contract commercial.occupancyStatus', () => {
+    expect(sorted(values(COMMERCIAL_OCCUPANCY_STATUS_OPTIONS))).toEqual(sorted(contract.commercial.occupancyStatus));
+  });
+});
+
+describe('listing-field-options parity: commercial.commercialFurnishingStatus', () => {
+  it('COMMERCIAL_FURNISHING_STATUS_OPTIONS values exactly equal contract commercial.commercialFurnishingStatus', () => {
+    expect(sorted(values(COMMERCIAL_FURNISHING_STATUS_OPTIONS))).toEqual(sorted(contract.commercial.commercialFurnishingStatus));
+  });
+});
+
+describe('listing-field-options parity: commercial.commercialOwnership', () => {
+  it('COMMERCIAL_OWNERSHIP_OPTIONS values exactly equal contract commercial.commercialOwnership', () => {
+    expect(sorted(values(COMMERCIAL_OWNERSHIP_OPTIONS))).toEqual(sorted(contract.commercial.commercialOwnership));
+  });
+});
+
+describe('listing-field-options parity: commercial.availability', () => {
+  it('COMMERCIAL_AVAILABILITY_OPTIONS values exactly equal contract commercial.availability', () => {
+    expect(sorted(values(COMMERCIAL_AVAILABILITY_OPTIONS))).toEqual(sorted(contract.commercial.availability));
+  });
+});
+
+describe('listing-field-options parity: commercial.warehouseFlooring', () => {
+  it('WAREHOUSE_FLOORING_OPTIONS values exactly equal contract commercial.warehouseFlooring', () => {
+    expect(sorted(values(WAREHOUSE_FLOORING_OPTIONS))).toEqual(sorted(contract.commercial.warehouseFlooring));
+  });
+});
+
+describe('listing-field-options parity: commercial.commercialAreaUnit', () => {
+  it('COMMERCIAL_AREA_UNIT_OPTIONS values exactly equal contract commercial.commercialAreaUnit', () => {
+    expect(sorted(values(COMMERCIAL_AREA_UNIT_OPTIONS))).toEqual(sorted(contract.commercial.commercialAreaUnit));
   });
 });

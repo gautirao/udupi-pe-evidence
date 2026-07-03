@@ -22,6 +22,9 @@ const PROPERTY_TYPE_ICONS: Record<PropertyType, LucideIcon> = {
 /** M38-13A (#1626) — the four residential subtypes shown by the residential-only variant. */
 const RESIDENTIAL_TYPE_VALUES: ReadonlySet<PropertyType> = new Set(['apartment', 'house', 'villa', 'residential_plot']);
 
+/** #1684 [M38-13B] — the four commercial subtypes shown by the commercial-only variant. */
+const COMMERCIAL_TYPE_VALUES: ReadonlySet<PropertyType> = new Set(['commercial', 'commercial_building', 'warehouse', 'commercial_land']);
+
 interface PropertyTypeCardSelectorProps {
   value: PropertyType | '';
   onChange: (value: PropertyType) => void;
@@ -33,6 +36,11 @@ interface PropertyTypeCardSelectorProps {
    * seeing all 10 property types exactly as before.
    */
   residentialOnly?: boolean;
+  /**
+   * #1684 [M38-13B] — when true, renders ONLY the 4 commercial subtypes
+   * (mirrors residentialOnly). Mutually exclusive with residentialOnly.
+   */
+  commercialOnly?: boolean;
 }
 
 /**
@@ -45,17 +53,19 @@ interface PropertyTypeCardSelectorProps {
  * Accessibility: a radiogroup of role="radio" buttons (aria-checked).
  * Responsive: 2 columns on mobile, 3 on small, 4 on large — extra types wrap.
  */
-export function PropertyTypeCardSelector({ value, onChange, id, residentialOnly = false }: PropertyTypeCardSelectorProps) {
+export function PropertyTypeCardSelector({ value, onChange, id, residentialOnly = false, commercialOnly = false }: PropertyTypeCardSelectorProps) {
   const types = residentialOnly
     ? PROPERTY_TYPES.filter((pt) => RESIDENTIAL_TYPE_VALUES.has(pt.value))
-    : PROPERTY_TYPES;
+    : commercialOnly
+      ? PROPERTY_TYPES.filter((pt) => COMMERCIAL_TYPE_VALUES.has(pt.value))
+      : PROPERTY_TYPES;
 
   return (
     <div
       id={id}
       role="radiogroup"
       aria-label="Property type"
-      className={residentialOnly ? 'grid grid-cols-2 gap-2.5 sm:grid-cols-4' : 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4'}
+      className={residentialOnly || commercialOnly ? 'grid grid-cols-2 gap-2.5 sm:grid-cols-4' : 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4'}
     >
       {types.map((pt) => {
         const Icon = PROPERTY_TYPE_ICONS[pt.value];

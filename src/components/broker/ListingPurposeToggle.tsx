@@ -15,6 +15,13 @@ const OPTIONS = [
  * Polished segmented control for the Sale / Rent listing purpose.
  * Presentational only — preserves the existing two-option behaviour
  * (each option is a real <button> labelled "For Sale" / "For Rent").
+ *
+ * #1684 [M38-13B] note: the commercial flow needs a third "Lease" purpose.
+ * Widening `value`/`onChange` here to a 3-way union would break every
+ * existing residential/legacy caller under strictFunctionTypes contravariance
+ * (their setState is typed to the narrower 'sale' | 'rent' union) — so
+ * CommercialListingForm renders its own local 3-way segmented control
+ * instead of reusing this component, rather than risk a tsc regression here.
  */
 export function ListingPurposeToggle({ value, onChange, className }: ListingPurposeToggleProps) {
   return (
