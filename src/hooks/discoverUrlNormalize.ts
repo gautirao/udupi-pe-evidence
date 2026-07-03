@@ -34,6 +34,23 @@
 // own copy, so the two can never drift.
 export const VALID_DIRECTIONS = new Set(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']);
 
+// Issue #1745 P2 — VALID_SCOPES is the single source of truth for the residential
+// "scope" axis. This is DISTINCT from the agri-first `region` corridor param above:
+// `region` is an agri-only cumulative-distance corridor direction (N/NE/E/...), while
+// `scope` is an orthogonal residential scoping axis. useDiscoverUrlState imports this
+// constant rather than declaring its own copy, so the two can never drift.
+export const VALID_SCOPES: Set<string> = new Set(
+  ['north', 'south', 'east', 'west', 'central'] as const,
+);
+
+/**
+ * Coerces a raw `scope` URL param value to a valid scope string, or null when
+ * absent/invalid. Pure — never throws.
+ */
+export function coerceScope(raw: string | null): string | null {
+  return raw != null && VALID_SCOPES.has(raw) ? raw : null;
+}
+
 const JOURNEY_READ_ALIASES: Record<string, string> = {
   area: 'area-first',
   school: 'school-first',

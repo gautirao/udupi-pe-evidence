@@ -1,13 +1,21 @@
 /**
  * discoverLayerRegistry
  *
- * Issue #1745 slice P1 — layer-registry FAÇADE.
+ * Issue #1745 slice P1 — layer-registry FAÇADE. Slice P2 wires this module in as
+ * the canonical entry point (see `MapDiscovery.tsx`, which now calls
+ * `computeDiscoverLayer(toLayerInput(urlState))` instead of calling
+ * `derivePanelContent` directly) and introduces the residential `scope` axis
+ * (`DiscoverUrlState.scope` → `DiscoverLayerScope.region`). `scope` is orthogonal
+ * to the agri-only `region`/`maxKm` corridor model and is not yet read by
+ * `derivePanelContent` — it flows through the façade unused, ready for a future
+ * slice to consult it.
  *
- * This module is an UN-WIRED foundation seam for slice P2 (the eventual 16→12
- * panel-state collapse / scope-aware routing work). As of P1 it is NOT imported
- * by any component, page, or hook — it exists purely so future slices have a
- * single, typed entry point to build against without having to touch
- * `discoverPanelState.ts` or `useDiscoverUrlState.ts` directly.
+ * P2 also RECONCILES `applyCityChangeReset` and `clearRegionScopeForAgri` (see
+ * their docstrings below) to mirror the real `useDiscoverUrlState.changeCity` /
+ * `clearRegionAndMaxKm` behaviour exactly, and adds `PANEL_DERIVATION_FIELDS` — a
+ * typed + runtime-enforced structural guard asserting this module's selection
+ * surface covers exactly the fields `derivePanelContent` reads (see the
+ * Proxy-based access-guard test in `discoverLayerRegistry.test.ts`).
  *
  * `computeDiscoverLayer` DELEGATES to `derivePanelContent` (discoverPanelState.ts)
  * rather than re-implementing its branch logic. Parity between the two is true
@@ -40,9 +48,11 @@ import type { DiscoverJourney, DiscoverUrlState } from '../hooks/useDiscoverUrlS
 export type DiscoverLayer = DiscoverPanelContent;
 
 /**
- * Cross-region scope. `region` is ALWAYS `null` in P1 (single-region app for
- * this phase) — the field exists so P2 can introduce multi-region scoping
- * without changing this module's public shape.
+ * Cross-region scope. `region` was ALWAYS `null` in P1 (no source existed yet).
+ * As of P2, `region` is populated from `DiscoverUrlState.scope` (Issue #1745 P2's
+ * new residential scope axis — "north"|"south"|"east"|"west"|"central"), NOT from
+ * the agri-only `region`/`maxKm` corridor param. `derivePanelContent` does not read
+ * this field (it has no scope concept), so it does not affect the derived layer.
  */
 export interface DiscoverLayerScope {
   region: string | null;
@@ -87,12 +97,14 @@ export interface DiscoverLayerValiditySets {
 // ─── Adapter ──────────────────────────────────────────────────────────────────
 
 /**
- * Pure adapter: DiscoverUrlState → DiscoverLayerInput. `scope.region` defaults
- * to `null` (P1 has no region-scoping source yet).
+ * Pure adapter: DiscoverUrlState → DiscoverLayerInput. `scope.region` is sourced
+ * from `urlState.scope` (Issue #1745 P2 residential scope axis); defaults to
+ * `null` when absent (matches `DiscoverUrlState.scope`'s optional-with-null
+ * convention).
  */
 export function toLayerInput(urlState: DiscoverUrlState): DiscoverLayerInput {
   return {
-    scope: { region: null },
+    scope: { region: urlState.scope ?? null },
     journey: urlState.journey,
     selection: {
       areaKey: urlState.areaKey,
@@ -124,10 +136,12 @@ export function toLayerInput(urlState: DiscoverUrlState): DiscoverLayerInput {
  * `derivePanelContent`, so fixed placeholder values are safe and do not affect
  * the returned layer.
  *
- * `input.scope.region` is unused here by construction — P1's only supported
- * scope value is `null`, which is exactly what `derivePanelContent` already
- * assumes (it has no region-scope concept at all). P2 will extend this
- * function when region scoping needs to influence the derived layer.
+ * `input.scope.region` is threaded into the reconstruction below (as
+ * `DiscoverUrlState.scope`) purely for structural completeness — it is still
+ * unused BY `derivePanelContent` (it has no scope concept at all; scope is not
+ * one of `PANEL_DERIVATION_FIELDS`), so it never affects the returned layer. A
+ * future slice will extend `derivePanelContent`/this function when scope needs
+ * to influence panel routing.
  */
 export function computeDiscoverLayer(input: DiscoverLayerInput): DiscoverLayer {
   const reconstructed: DiscoverUrlState = {
@@ -148,6 +162,7 @@ export function computeDiscoverLayer(input: DiscoverLayerInput): DiscoverLayer {
     selectedListing: input.selection.selectedListing,
     selectedLocality: input.selection.selectedLocality,
     intent: 'buy',
+    scope: input.scope.region,
   };
   return derivePanelContent(reconstructed);
 }
@@ -160,16 +175,21 @@ export function computeDiscoverLayer(input: DiscoverLayerInput): DiscoverLayer {
 // mutated.
 
 /**
- * Mirrors `useDiscoverUrlState.changeCity` (Issue #910 atomic city switch):
- * clears journey, groupId, the legacy/region-scoped agri selection fields
- * (selectedGroup/selectedRegion/selectedMaxKm/selectedListing/selectedLocality),
- * groupResults, schoolPicking, areaKey, and region scope.
+ * Mirrors `useDiscoverUrlState.changeCity` (Issue #910 atomic city switch) EXACTLY
+ * — reconciled in Issue #1745 P2 against the real implementation (which deletes:
+ * journey, groupId, groupResults, the legacy `group` param — which zeroes
+ * `selectedGroup` — region, maxKm, locality, and areaKey; it does NOT delete
+ * `schoolId`, `schoolPicking`, or `listing`/`selectedListing`).
  *
- * `schoolId` is intentionally PRESERVED here — the real `changeCity`
- * implementation (useDiscoverUrlState.ts) does not delete the `schoolId`/
- * `radiusKm` URL params on city switch, so this reducer mirrors that exact
- * (pre-existing, out-of-scope-to-fix) behaviour rather than the more
- * "complete-sounding" clear-everything reading of the ticket text.
+ * PRESERVED: `schoolId`, `schoolPicking`, AND `selectedListing` — the real
+ * `changeCity` deletes none of these three params on city switch. (P1's version
+ * of this reducer incorrectly cleared `schoolPicking` and `selectedListing`; P2
+ * fixes that divergence.)
+ *
+ * CLEARED: journey, areaKey, groupId, groupResults, selectedGroup (legacy `group`
+ * param is deleted, so the derived `selectedGroup` becomes null), selectedRegion,
+ * selectedMaxKm, selectedLocality, and scope (Issue #1745 P2 — new residential
+ * axis; real `changeCity` deletes `scope` on city switch, same as `region`/`maxKm`).
  *
  * intent and property filters live outside `DiscoverLayerInput`'s surface
  * entirely, so this module has nothing to do to "preserve" them — they are
@@ -183,12 +203,12 @@ export function applyCityChangeReset(state: DiscoverLayerInput): DiscoverLayerIn
       areaKey: null,
       schoolId: state.selection.schoolId,
       groupId: null,
-      schoolPicking: undefined,
+      schoolPicking: state.selection.schoolPicking,
       groupResults: undefined,
       selectedGroup: null,
       selectedRegion: null,
       selectedMaxKm: null,
-      selectedListing: null,
+      selectedListing: state.selection.selectedListing,
       selectedLocality: null,
     },
   };
@@ -196,11 +216,12 @@ export function applyCityChangeReset(state: DiscoverLayerInput): DiscoverLayerIn
 
 /**
  * Mirrors `useDiscoverUrlState.startOver`: full reset to the neutral landing
- * layer input (journey null, all selection fields cleared, region scope
- * cleared). Only `city` and `intent` survive `startOver` in the real hook —
- * neither is part of `DiscoverLayerInput`, so nothing needs to be threaded
- * through here; the returned shape is always the same fixed neutral value
- * regardless of `state`.
+ * layer input (journey null, all selection fields cleared, scope/region cleared —
+ * the real `startOver` builds a brand-new URLSearchParams so `scope`, Issue #1745
+ * P2's residential axis, is cleared by construction same as everything else).
+ * Only `city` and `intent` survive `startOver` in the real hook — neither is part
+ * of `DiscoverLayerInput`, so nothing needs to be threaded through here; the
+ * returned shape is always the same fixed neutral value regardless of `state`.
  */
 export function applyStartOverReset(state: DiscoverLayerInput): DiscoverLayerInput {
   void state; // intentionally unused — startOver ignores prior selection entirely
@@ -223,11 +244,17 @@ export function applyStartOverReset(state: DiscoverLayerInput): DiscoverLayerInp
 }
 
 /**
- * Mirrors `useDiscoverUrlState.clearRegionAndMaxKm` / the agri corridor-clear
- * semantics: clears `scope.region` plus the four agri selection fields
- * (selectedRegion, selectedMaxKm, selectedListing, selectedLocality).
+ * Mirrors `useDiscoverUrlState.clearRegionAndMaxKm` EXACTLY — reconciled in
+ * Issue #1745 P2 against the real implementation, which deletes only `region`,
+ * `maxKm`, and `listing`/`locality` (the four agri selection fields:
+ * selectedRegion, selectedMaxKm, selectedListing, selectedLocality). It does NOT
+ * touch `scope` — the real hook's `clearRegionAndMaxKm` never deletes the `scope`
+ * URL param, because `scope` (Issue #1745 P2's residential axis) is orthogonal to
+ * the agri-only region/maxKm corridor model. So `scope.region` is PRESERVED here
+ * (P1's version incorrectly cleared it; P2 fixes that divergence).
+ *
  * Everything else (journey, areaKey, groupId, schoolId, schoolPicking,
- * groupResults, legacy selectedGroup) is preserved unchanged.
+ * groupResults, legacy selectedGroup) is preserved unchanged, same as P1.
  *
  * A no-op when those fields are already null (returns an equivalent-value
  * object), and idempotent — calling it twice in a row yields the same result
@@ -235,7 +262,7 @@ export function applyStartOverReset(state: DiscoverLayerInput): DiscoverLayerInp
  */
 export function clearRegionScopeForAgri(state: DiscoverLayerInput): DiscoverLayerInput {
   return {
-    scope: { ...state.scope, region: null },
+    scope: state.scope,
     journey: state.journey,
     selection: {
       ...state.selection,
@@ -289,3 +316,32 @@ export function fallbackInvalidSelection(
     },
   };
 }
+
+// ─── Structural divergence guard ────────────────────────────────────────────
+//
+// PANEL_DERIVATION_FIELDS enumerates EXACTLY the fields `derivePanelContent`
+// reads off `DiscoverUrlState` (see discoverPanelState.ts:60's destructure).
+// `satisfies readonly (keyof DiscoverUrlState)[]` makes this a compile-time
+// assertion: if a field is renamed/removed from `DiscoverUrlState`, this line
+// fails to typecheck. It does NOT catch a *new* field being added to
+// `derivePanelContent`'s destructure without updating this list — that is
+// covered at runtime by the Proxy-based access-guard test in
+// `discoverLayerRegistry.test.ts`, which throws if `derivePanelContent` reads
+// any `DiscoverUrlState` property outside this list.
+export const PANEL_DERIVATION_FIELDS = [
+  'journey',
+  'areaKey',
+  'schoolId',
+  'groupId',
+  'schoolPicking',
+  'groupResults',
+  'selectedGroup',
+  'selectedRegion',
+  'selectedMaxKm',
+  'selectedListing',
+  'selectedLocality',
+] as const satisfies readonly (keyof DiscoverUrlState)[];
+
+export type PanelDerivationField = (typeof PANEL_DERIVATION_FIELDS)[number];
+
+export type PanelDerivationInput = Pick<DiscoverUrlState, PanelDerivationField>;

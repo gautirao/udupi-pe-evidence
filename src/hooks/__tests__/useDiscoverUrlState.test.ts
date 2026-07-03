@@ -2132,6 +2132,161 @@ describe('useDiscoverUrlState — AC10 Back removes region+maxKm (PUSH)', () => 
   });
 });
 
+// ─── Issue #1745 P2 — residential "scope" axis (distinct from agri region/maxKm) ──
+
+function wrapperWithLocationProbe(initialUrl: string, locations: string[]) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  function LocationProbe() {
+    const loc = useLocation();
+    locations.push(loc.search);
+    return null;
+  }
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      React.createElement(
+        MemoryRouter,
+        { initialEntries: [initialUrl] },
+        React.createElement(LocationProbe, null),
+        children,
+      ),
+    );
+  };
+}
+
+describe('useDiscoverUrlState — scope axis (Issue #1745 P2)', () => {
+  it('reads scope=north from URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&scope=north'),
+    });
+    expect(result.current[0].scope).toBe('north');
+  });
+
+  it('accepts all 5 valid scopes', () => {
+    for (const scope of ['north', 'south', 'east', 'west', 'central']) {
+      const { result } = renderHook(() => useDiscoverUrlState(), {
+        wrapper: wrapperWithQuery(`/discover?city=udupi&scope=${scope}`),
+      });
+      expect(result.current[0].scope).toBe(scope);
+    }
+  });
+
+  it('rejects an invalid scope value (e.g. "northeast") → null', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&scope=northeast'),
+    });
+    expect(result.current[0].scope).toBeNull();
+  });
+
+  it('returns null scope when the param is absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi'),
+    });
+    expect(result.current[0].scope).toBeNull();
+  });
+
+  it('scope-default-absent: an existing URL with no scope param produces a byte-identical query string (Issue #1745 P2 must not perturb pre-existing URLs)', () => {
+    const initialUrl =
+      '/discover?city=udupi&journey=area-first&areaKey=IN%7CKA%7CUdupi%7CManipal';
+    const locations: string[] = [];
+    renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithLocationProbe(initialUrl, locations),
+    });
+    // MemoryRouter re-encodes '|' but otherwise the query string is unchanged — in
+    // particular, no `scope` param is injected merely by reading state.
+    expect(locations[0]).not.toContain('scope');
+    expect(locations[0]).toBe('?city=udupi&journey=area-first&areaKey=IN%7CKA%7CUdupi%7CManipal');
+  });
+
+  it('setScope("south") writes scope=south to the URL (round-trip)', () => {
+    const locations: string[] = [];
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithLocationProbe('/discover?city=udupi', locations),
+    });
+
+    act(() => {
+      result.current[1].setScope('south');
+    });
+
+    expect(result.current[0].scope).toBe('south');
+    expect(locations[locations.length - 1]).toContain('scope=south');
+  });
+
+  it('setScope(null) removes the scope param from the URL (canonical omission)', () => {
+    const locations: string[] = [];
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithLocationProbe('/discover?city=udupi&scope=east', locations),
+    });
+
+    act(() => {
+      result.current[1].setScope(null);
+    });
+
+    expect(result.current[0].scope).toBeNull();
+    expect(locations[locations.length - 1]).not.toContain('scope');
+  });
+
+  it('setScope with an invalid value removes the scope param (graceful degrade, not corrupt state)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&scope=north'),
+    });
+
+    act(() => {
+      result.current[1].setScope('northeast');
+    });
+
+    expect(result.current[0].scope).toBeNull();
+  });
+
+  it('changeCity clears scope', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&scope=north'),
+    });
+
+    act(() => {
+      result.current[1].changeCity('kundapur');
+    });
+
+    expect(result.current[0].city).toBe('kundapur');
+    expect(result.current[0].scope).toBeNull();
+  });
+
+  it('startOver clears scope', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&scope=north&areaKey=IN%7CKA%7CUdupi%7CManipal'),
+    });
+
+    act(() => {
+      result.current[1].startOver();
+    });
+
+    expect(result.current[0].scope).toBeNull();
+  });
+
+  it('scope is orthogonal to region/maxKm — setRegion/setMaxKm do not affect scope, and setScope does not affect region/maxKm', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first&scope=west'),
+    });
+
+    act(() => {
+      result.current[1].setRegion('N');
+    });
+    expect(result.current[0].scope).toBe('west');
+
+    act(() => {
+      result.current[1].setMaxKm(25);
+    });
+    expect(result.current[0].scope).toBe('west');
+
+    act(() => {
+      result.current[1].setScope('central');
+    });
+    expect(result.current[0].selectedRegion).toBe('N');
+    expect(result.current[0].selectedMaxKm).toBe(25);
+  });
+});
+
 // ── OD-1 Option A: cold-load migration from group=DIR:BAND to region=DIR ─────────
 //
 // SPEC: ?group=NW:25_50 → history.replace → URL has region=NW (no maxKm, no group)

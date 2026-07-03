@@ -11,6 +11,9 @@
  *   zoom       – integer zoom level   (debounced replace)
  *   region     – agri-first corridor direction (e.g. "N", "NW"); absent when none selected
  *   maxKm      – selected cumulative distance tier (10|25|50|100); absent until user picks
+ *   scope      – residential scope axis (Issue #1745 P2), one of VALID_SCOPES
+ *                ("north"|"south"|"east"|"west"|"central"); absent when none selected.
+ *                Distinct from `region` (agri-only corridor direction) — orthogonal axis.
  *
  * DEPRECATED (OD-1 Option A):
  *   group      – legacy "DIRECTION:BAND" format; cold-loaded URLs are migrated to region=DIR
@@ -61,6 +64,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { DiscoverAreasResponse } from '@/hooks/useDiscoverAreas';
 import {
   VALID_DIRECTIONS,
+  VALID_SCOPES,
   extractLegacyGroupDirection,
   normalizeDiscoverSearchParams,
 } from '@/hooks/discoverUrlNormalize';
@@ -199,6 +203,15 @@ export interface DiscoverUrlState {
    * to the URL (shorter URLs, stable canonical form).
    */
   intent: DiscoverIntent;
+  /**
+   * Issue #1745 P2 — residential "scope" axis. One of VALID_SCOPES
+   * ("north"|"south"|"east"|"west"|"central"), parsed from URL `scope`. Null when
+   * absent or invalid. Distinct from `selectedRegion` (agri-only corridor direction) —
+   * an orthogonal residential scoping mechanism. Not yet wired to any UI in P2.
+   * Optional (like selectedRegion/selectedListing/etc.) to allow partial construction
+   * in tests/callers that predate this field.
+   */
+  scope?: string | null;
 }
 
 export interface DiscoverUrlActions {
@@ -278,7 +291,7 @@ export interface DiscoverUrlActions {
    * Returns user to filtered schools-in-area context after dismissing a school selection.
    */
   clearSchoolContext: () => void;
-  /** Start over — clears ALL URL state except city. Journey, groupId, areaKey, schoolId, radiusKm, board, category, q, viewport, and all property filters (type/beds/priceMin/priceMax/seller/bom/ntm/rera/rtm/from/to) are dropped. Single REPLACE navigation. */
+  /** Start over — clears ALL URL state except city. Journey, groupId, areaKey, schoolId, radiusKm, board, category, q, viewport, scope, and all property filters (type/beds/priceMin/priceMax/seller/bom/ntm/rera/rtm/from/to) are dropped. Single REPLACE navigation. */
   startOver: () => void;
   /**
    * Enter the area-first school-picking sub-step (Issue #1157).
@@ -327,6 +340,13 @@ export interface DiscoverUrlActions {
    * Does NOT set maxKm — the user must pick a distance tier separately.
    */
   setRegion: (dir: string) => void;
+  /**
+   * Set the residential "scope" axis (Issue #1745 P2). Writes `scope=<value>` to
+   * URL when valid (one of VALID_SCOPES); invalid values or null remove the param
+   * (canonical omission). PUSH — a scope change is a navigational choice, mirroring
+   * setRegion. Not yet wired to any UI in P2.
+   */
+  setScope: (scope: string | null) => void;
   /**
    * Set corridor direction AND default distance tier atomically (Issue #1445).
    * Writes `region=DIR&maxKm=km` in a SINGLE PUSH, skipping the intermediate
@@ -673,6 +693,11 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   const selectedRegion: DirectionCode | null =
     rawRegion && VALID_DIRECTIONS.has(rawRegion) ? (rawRegion as DirectionCode) : null;
 
+  // Issue #1745 P2 — residential scope axis. Distinct from `region` (agri-only
+  // corridor direction) above; validated against VALID_SCOPES.
+  const rawScope = urlParams.get('scope');
+  const scope: string | null = rawScope && VALID_SCOPES.has(rawScope) ? rawScope : null;
+
   const rawMaxKm = urlParams.get('maxKm');
   const parsedMaxKm = rawMaxKm ? parseInt(rawMaxKm, 10) : null;
   const selectedMaxKm: 10 | 25 | 50 | 100 | null =
@@ -731,6 +756,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     selectedListing,
     selectedLocality,
     intent,
+    scope,
   };
 
   // ─── OD-1 Option A: Legacy group=DIR:BAND cold-load migration ────────────────
@@ -1044,6 +1070,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
           next.delete('group'); // Issue #1409 — clear agri-first regional group on city switch
           next.delete('region'); // Issue #1429 — clear corridor on city switch
           next.delete('maxKm'); // Issue #1429 — clear distance tier on city switch
+          next.delete('scope'); // Issue #1745 P2 — clear residential scope axis on city switch
           next.delete(PARAM_LOCALITY); // Issue #1464 — clear locality on city switch (stale locality from old city would mismatch new city's listings)
           next.delete('areaKey');
           // Clear viewport — new city has its own default zoom/center
@@ -1283,8 +1310,11 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
         const intentVal = prev.get('intent');
         if (intentVal === 'rent') next.set('intent', 'rent');
         // Journey, groupId, group, areaKey, schoolId, radiusKm, board, category, q, viewport,
-        // and all property filters (type/beds/priceMin/priceMax/seller/bom/ntm/rera/
-        // rtm/from/to) are intentionally omitted — nothing survives Start Over except city.
+        // scope (Issue #1745 P2), and all property filters (type/beds/priceMin/priceMax/
+        // seller/bom/ntm/rera/rtm/from/to) are intentionally omitted — nothing survives
+        // Start Over except city. `scope` is already cleared here by construction (this
+        // builds a brand-new URLSearchParams containing only city/intent), so no explicit
+        // next.delete('scope') is needed.
         return next;
       },
       { replace: true }, // REPLACE — start over is not a navigation destination
@@ -1336,6 +1366,28 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
           return next;
         },
         { replace: false }, // PUSH — corridor selection is a navigational choice
+      );
+    },
+    [setUrlParams],
+  );
+
+  // Issue #1745 P2 — residential scope axis. Orthogonal to the agri-only region/maxKm
+  // corridor model above; mirrors setRegion's write shape (PUSH, canonical omission of
+  // invalid/null values) but does not touch region/maxKm.
+  const setScope = useCallback(
+    (newScope: string | null) => {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (newScope != null && VALID_SCOPES.has(newScope)) {
+            next.set('scope', newScope);
+          } else {
+            // Silently discard invalid/null scope values (canonical omission)
+            next.delete('scope');
+          }
+          return next;
+        },
+        { replace: false }, // PUSH — scope selection is a navigational choice
       );
     },
     [setUrlParams],
@@ -1581,6 +1633,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     enterGroupResults,
     clearGroupResults,
     setRegion,
+    setScope,
     setRegionWithMaxKm,
     setMaxKm,
     clearRegionAndMaxKm,

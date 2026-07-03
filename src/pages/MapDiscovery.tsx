@@ -24,8 +24,8 @@ import {
   areaKeyToLabel,
 } from '@/components/discover/SchoolRadiusMapOverlay';
 import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
-import { derivePanelContent } from '@/utils/discoverPanelState';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
+import { computeDiscoverLayer, toLayerInput } from '@/utils/discoverLayerRegistry';
 import { computeGroupBounds } from '@/utils/discoverGroupBounds';
 import { CitySelect } from '@/components/discover/CitySelect';
 import { CityNotSupported } from '@/components/discover/CityNotSupported';
@@ -402,7 +402,10 @@ export default function MapDiscovery() {
   // result synchronously inside handleSelectSchoolById. See that callback for details.
   const queryClient = useQueryClient();
 
-  const panelContent = derivePanelContent(urlState);
+  // Issue #1745 P2 — routed through the layer-registry façade (discoverLayerRegistry.ts)
+  // rather than calling derivePanelContent directly. computeDiscoverLayer delegates to
+  // derivePanelContent by construction, so this is behaviour-preserving.
+  const panelContent = computeDiscoverLayer(toLayerInput(urlState));
 
   // Issue #1597 — early derivation of PropertyFilters from URL state, available before
   // useDiscoverPageState is called. Used by the group-results listings query so it respects

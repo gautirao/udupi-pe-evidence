@@ -9,8 +9,30 @@ import {
   applyStartOverReset,
   clearRegionScopeForAgri,
   fallbackInvalidSelection,
+  PANEL_DERIVATION_FIELDS,
   type DiscoverLayerInput,
+  type DiscoverLayerSelection,
+  type PanelDerivationField,
 } from '../discoverLayerRegistry';
+
+// ─── Structural divergence guard: compile-time typed assertion ────────────────
+//
+// `journey` is hoisted out of `DiscoverLayerSelection` onto `DiscoverLayerInput.journey`
+// directly, so the selection-surface comparison excludes it from PANEL_DERIVATION_FIELDS.
+type SelectionDerivationFields = Exclude<PanelDerivationField, 'journey'>;
+type KeysEqual<A extends PropertyKey, B extends PropertyKey> = [A] extends [B]
+  ? [B] extends [A]
+    ? true
+    : false
+  : false;
+// If `DiscoverLayerSelection`'s keys ever diverge from PANEL_DERIVATION_FIELDS (minus
+// 'journey'), this line fails to typecheck — assigning `true` to a type that resolves
+// to `never`/`false`. A new read-field added to derivePanelContent (or removed from
+// DiscoverLayerSelection) without updating PANEL_DERIVATION_FIELDS is a compile error.
+type AssertSelectionFieldsMatchPanelDerivation =
+  KeysEqual<keyof DiscoverLayerSelection, SelectionDerivationFields> extends true ? true : never;
+const selectionFieldsMatchPanelDerivation: AssertSelectionFieldsMatchPanelDerivation = true;
+void selectionFieldsMatchPanelDerivation;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -27,6 +49,7 @@ function makeState(overrides: Partial<DiscoverUrlState> = {}): DiscoverUrlState 
     groupId: null,
     selectedGroup: null,
     intent: 'buy',
+    scope: null,
     ...overrides,
   };
 }
@@ -37,10 +60,11 @@ afterEach(() => {
 
 // ─── Parity matrix: computeDiscoverLayer(toLayerInput(state)) === derivePanelContent(state) ──
 
-describe('computeDiscoverLayer — parity with derivePanelContent', () => {
-  const group = { directionKey: 'N', distanceBandKey: '10_25' };
+// PARITY_CORPUS — module-scoped so it is shared by both the parity matrix below
+// and the runtime Proxy access-guard test (structural divergence guard section).
+const parityGroup = { directionKey: 'N', distanceBandKey: '10_25' };
 
-  const fixtures: Array<[string, Partial<DiscoverUrlState>]> = [
+const PARITY_CORPUS: Array<[string, Partial<DiscoverUrlState>]> = [
     // guided-entry
     ['guided-entry (no journey)', {}],
     ['guided-entry (no journey, q set)', { q: 'beach house' }],
@@ -70,10 +94,10 @@ describe('computeDiscoverLayer — parity with derivePanelContent', () => {
         selectedLocality: 'Manipal',
       },
     ],
-    ['agri-group-selected (legacy selectedGroup)', { journey: 'agri-first', selectedGroup: group }],
+    ['agri-group-selected (legacy selectedGroup)', { journey: 'agri-first', selectedGroup: parityGroup }],
     [
       'agri-selected wins over selectedGroup',
-      { journey: 'agri-first', areaKey: 'IN|KA|Udupi|Manipal', selectedGroup: group },
+      { journey: 'agri-first', areaKey: 'IN|KA|Udupi|Manipal', selectedGroup: parityGroup },
     ],
     [
       'agri stray schoolId does not fall through',
@@ -98,6 +122,14 @@ describe('computeDiscoverLayer — parity with derivePanelContent', () => {
     // area-first
     ['area-groups-landing', { journey: 'area-first' }],
     [
+      'area-groups-landing (groupId set, no groupResults)',
+      { journey: 'area-first', groupId: 'zone-a' },
+    ],
+    [
+      'area-groups-landing (whitespace groupId, no groupResults)',
+      { journey: 'area-first', groupId: '   ' },
+    ],
+    [
       'area-group-results (groupResults+groupId+!schoolId)',
       { journey: 'area-first', groupId: 'zone-a', groupResults: true },
     ],
@@ -115,6 +147,10 @@ describe('computeDiscoverLayer — parity with derivePanelContent', () => {
     ],
     ['area-selected', { journey: 'area-first', areaKey: 'IN|KA|Udupi|Manipal' }],
     [
+      'scope=north with area-selected -> same as scope=null (scope is inert on layer derivation)',
+      { journey: 'area-first', areaKey: 'IN|KA|Udupi|Manipal', scope: 'north' },
+    ],
+    [
       'area-first schoolPicking -> schools-in-area',
       { journey: 'area-first', areaKey: 'IN|KA|Udupi|Manipal', schoolPicking: true },
     ],
@@ -131,9 +167,10 @@ describe('computeDiscoverLayer — parity with derivePanelContent', () => {
       'cold-load area+school -> area-school-combined',
       { areaKey: 'IN|KA|Udupi|Manipal', schoolId: 'sch-1' },
     ],
-  ];
+];
 
-  it.each(fixtures)('%s', (_label, overrides) => {
+describe('computeDiscoverLayer — parity with derivePanelContent', () => {
+  it.each(PARITY_CORPUS)('%s', (_label, overrides) => {
     const state = makeState(overrides);
     expect(computeDiscoverLayer(toLayerInput(state))).toBe(derivePanelContent(state));
   });
@@ -150,6 +187,37 @@ describe('computeDiscoverLayer — delegation', () => {
 
     expect(spy).toHaveBeenCalledTimes(1);
     expect(result).toBe('area-selected');
+  });
+});
+
+// ─── Structural divergence guard: runtime Proxy access-guard ─────────────────
+//
+// Wraps every PARITY_CORPUS fixture in a Proxy whose get-trap THROWS on any
+// property access outside PANEL_DERIVATION_FIELDS, then runs derivePanelContent
+// against the guarded object. If derivePanelContent is ever changed to read a
+// zeroed/placeholder field (e.g. intent, filters, city, viewport, radiusKm, q) —
+// which `computeDiscoverLayer`'s reconstruction fills with fixed placeholder
+// values — this test fails loudly instead of silently returning a wrong layer.
+describe('Structural divergence guard — runtime Proxy access-guard', () => {
+  it('derivePanelContent never reads a DiscoverUrlState field outside PANEL_DERIVATION_FIELDS', () => {
+    const allowed = new Set<string>(PANEL_DERIVATION_FIELDS);
+
+    for (const [label, overrides] of PARITY_CORPUS) {
+      const state = makeState(overrides);
+      const guarded = new Proxy(state, {
+        get(target, prop, receiver) {
+          if (typeof prop === 'string' && !allowed.has(prop)) {
+            throw new Error(
+              `derivePanelContent read disallowed field "${prop}" for fixture "${label}" — ` +
+                `update PANEL_DERIVATION_FIELDS (discoverLayerRegistry.ts) if this is intentional.`,
+            );
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+
+      expect(() => derivePanelContent(guarded)).not.toThrow();
+    }
   });
 });
 
@@ -176,6 +244,10 @@ function makeInput(overrides: Partial<DiscoverLayerInput> = {}): DiscoverLayerIn
 }
 
 describe('applyCityChangeReset', () => {
+  // Issue #1745 P2 RECONCILE PROOF: applyCityChangeReset now mirrors the real
+  // useDiscoverUrlState.changeCity EXACTLY. changeCity does NOT delete schoolPicking
+  // or listing/selectedListing on city switch, so this reducer must PRESERVE them
+  // (P1's version incorrectly cleared both — that was the divergence this slice fixes).
   it('clears journey, groupId, region-scoped selection fields, and scope', () => {
     const input = makeInput();
     const result = applyCityChangeReset(input);
@@ -184,12 +256,10 @@ describe('applyCityChangeReset', () => {
     expect(result.scope.region).toBeNull();
     expect(result.selection.areaKey).toBeNull();
     expect(result.selection.groupId).toBeNull();
-    expect(result.selection.schoolPicking).toBeUndefined();
     expect(result.selection.groupResults).toBeUndefined();
     expect(result.selection.selectedGroup).toBeNull();
     expect(result.selection.selectedRegion).toBeNull();
     expect(result.selection.selectedMaxKm).toBeNull();
-    expect(result.selection.selectedListing).toBeNull();
     expect(result.selection.selectedLocality).toBeNull();
   });
 
@@ -197,6 +267,18 @@ describe('applyCityChangeReset', () => {
     const input = makeInput();
     const result = applyCityChangeReset(input);
     expect(result.selection.schoolId).toBe('sch-1');
+  });
+
+  it('preserves schoolPicking (Issue #1745 P2 reconcile — real changeCity does not delete schoolPicking; was incorrectly cleared in P1)', () => {
+    const input = makeInput();
+    const result = applyCityChangeReset(input);
+    expect(result.selection.schoolPicking).toBe(true);
+  });
+
+  it('preserves selectedListing (Issue #1745 P2 reconcile — real changeCity does not delete the `listing` param; was incorrectly cleared in P1)', () => {
+    const input = makeInput();
+    const result = applyCityChangeReset(input);
+    expect(result.selection.selectedListing).toBe('listing-1');
   });
 
   it('does not mutate the input object', () => {
@@ -246,11 +328,15 @@ describe('applyStartOverReset', () => {
 });
 
 describe('clearRegionScopeForAgri', () => {
-  it('clears scope.region and the four agri selection fields, preserving everything else', () => {
-    const input = makeInput();
+  // Issue #1745 P2 RECONCILE PROOF: the real useDiscoverUrlState.clearRegionAndMaxKm
+  // never deletes the `scope` URL param (scope is orthogonal to the agri-only
+  // region/maxKm corridor model), so scope.region must be PRESERVED here (P1's
+  // version incorrectly cleared it — that was the divergence this slice fixes).
+  it('clears the four agri selection fields, preserving scope.region and everything else', () => {
+    const input = makeInput({ scope: { region: 'north' } });
     const result = clearRegionScopeForAgri(input);
 
-    expect(result.scope.region).toBeNull();
+    expect(result.scope.region).toBe('north');
     expect(result.selection.selectedRegion).toBeNull();
     expect(result.selection.selectedMaxKm).toBeNull();
     expect(result.selection.selectedListing).toBeNull();

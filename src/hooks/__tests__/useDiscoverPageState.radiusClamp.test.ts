@@ -44,6 +44,8 @@ function makeUrlActions(): DiscoverUrlActions {
     selectRegionalGroup: vi.fn(),
     // Issue #1429 — corridor-first cumulative-distance actions (successors to selectRegionalGroup).
     setRegion: vi.fn(),
+    // Issue #1745 P2 — residential scope axis (orthogonal to region/maxKm above).
+    setScope: vi.fn(),
     setRegionWithMaxKm: vi.fn(),
     setMaxKm: vi.fn(),
     clearRegionAndMaxKm: vi.fn(),
