@@ -191,6 +191,17 @@ const AGRI_FIELDS: readonly ListingFieldKey[] = [
 ];
 
 /**
+ * Issue #1627 — 'facing' for agricultural_land. Confirmed against
+ * ListingController's validateFamilyFields/validateResidentialFieldSet: the
+ * AGRICULTURAL family does NOT reject 'facing' (unlike bedrooms/parkingCount/
+ * furnishingStatus, which ARE rejected for this family), so it has a real,
+ * non-throwing write path via the shared 'facing' column. Kept as its own
+ * array (not folded into AGRI_FIELDS) since it is additive to the #1458
+ * agri field set, not one of the original 9.
+ */
+const AGRI_FACING_FIELD: readonly ListingFieldKey[] = ['facing'];
+
+/**
  * Fields shown for commercial, commercial_building, warehouse
  * (i.e. isCommercialType && propertyType !== 'commercial_land').
  */
@@ -289,9 +300,9 @@ const CONFIG_MAP: Record<PropertyType, ListingFieldConfig> = {
   },
 
   agricultural_land: {
-    // landArea + all nine agri-specific fields
+    // landArea + all nine agri-specific fields + facing (#1627)
     // NOTE: EXACT equality on 'agricultural_land' — no substring/prefix match.
-    visibleFields: new Set<ListingFieldKey>(['landArea', ...AGRI_FIELDS]),
+    visibleFields: new Set<ListingFieldKey>(['landArea', ...AGRI_FIELDS, ...AGRI_FACING_FIELD]),
   },
 
   apartment: {

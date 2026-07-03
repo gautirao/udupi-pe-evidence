@@ -28,6 +28,7 @@ const TrendsAreaResolved = lazy(() => import("./pages/TrendsAreaResolved"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const NewListing = lazy(() => import("./pages/broker/NewListing"));
 const CommercialNewListingPage = lazy(() => import("./pages/broker/CommercialNewListingPage"));
+const AgriculturalNewListingPage = lazy(() => import("./pages/broker/AgriculturalNewListingPage"));
 const EditListing = lazy(() => import("./pages/broker/EditListing"));
 const BrokerSetup = lazy(() => import("./pages/broker/BrokerSetup"));
 const BrokerDashboard = lazy(() => import("./pages/broker/BrokerDashboard"));
@@ -121,6 +122,15 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <CommercialNewListingPage />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Issue #1627 — direct deep link into the agricultural single-page create flow */}
+              <Route
+                path="/broker/listings/new/agricultural"
+                element={
+                  <ProtectedRoute>
+                    <AgriculturalNewListingPage />
                   </ProtectedRoute>
                 }
               />

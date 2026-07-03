@@ -32,6 +32,7 @@ import type { ListingFieldKey } from '@/lib/listingFieldConfig';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { ResidentialListingForm } from '@/components/broker/ResidentialListingForm';
 import { CommercialListingForm } from '@/components/broker/CommercialListingForm';
+import { AgriculturalListingForm } from '@/components/broker/AgriculturalListingForm';
 
 /**
  * M38-13A (#1626) — the four residential subtypes that mount the new
@@ -224,6 +225,24 @@ export default function NewListing() {
     );
   }
 
+  // Issue #1627 — the agricultural sibling of the M38-13A/#1684 branches
+  // above: mounts the new single-page agricultural composition instead of
+  // the generic body below. Inserted BEFORE the legacy generic fall-through,
+  // ALONGSIDE the residential/commercial branches — no other selection
+  // reaches the generic body anymore (residential/commercial/agricultural
+  // are now all dedicated flows; only the empty '' state and any future
+  // types fall through).
+  if (propertyType === 'agricultural_land') {
+    return (
+      <AppLayout>
+        <AgriculturalListingForm
+          onSwitchToGenericFlow={() => setPropertyType('')}
+          navigate={navigate}
+        />
+      </AppLayout>
+    );
+  }
+
   const isCommercialType = COMMERCIAL_TYPES.has(propertyType);
   const isRent = listingPurpose === 'rent';
 
@@ -362,11 +381,14 @@ export default function NewListing() {
           <>
             {/* Property details — size, layout and type-specific fields */}
             <SectionCard title="Property details">
-            {/* Conditional: Land Area — land, commercial_land, commercial_building, warehouse, agricultural_land */}
+            {/* Conditional: Land Area — land, commercial_land, commercial_building, warehouse.
+                (agricultural_land is now handled entirely by the dedicated AgriculturalListingForm
+                branch above — issue #1627 — so it can never reach this generic body anymore;
+                the propertyType narrowing below reflects that.) */}
             {fieldVisible('landArea') && (
               <AreaField
                 id="landArea"
-                propertyType={propertyType === 'agricultural_land' ? 'agricultural_land' : 'land'}
+                propertyType="land"
                 initialArea={landArea}
                 initialUnit={landAreaUnit}
                 onChange={(area, unit) => {

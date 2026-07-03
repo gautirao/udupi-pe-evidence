@@ -63,6 +63,8 @@ export function canAccessRoute(route: string, role?: string | null): boolean {
       clean === '/broker/listings/new' ||
       // #1741 follow-up — commercial deep-link sibling of /broker/listings/new
       clean === '/broker/listings/new/commercial' ||
+      // #1627 — agricultural deep-link sibling of /broker/listings/new
+      clean === '/broker/listings/new/agricultural' ||
       (clean.startsWith('/broker/listings/') && clean.endsWith('/edit'))
     ) {
       return true;
@@ -94,6 +96,8 @@ export function canAccessRoute(route: string, role?: string | null): boolean {
       clean === '/broker/listings/new' ||
       // #1741 follow-up — commercial deep-link sibling of /broker/listings/new
       clean === '/broker/listings/new/commercial' ||
+      // #1627 — agricultural deep-link sibling of /broker/listings/new
+      clean === '/broker/listings/new/agricultural' ||
       (clean.startsWith('/broker/listings/') && clean.endsWith('/edit'))
     ) {
       return true;
