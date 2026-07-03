@@ -817,11 +817,18 @@ export default function MapDiscovery() {
       // come from three desynced tier sources and are intentionally NOT wired here.
       // derivePanelContent only routes on `listing` when an agri region+maxKm are set,
       // so writing it here does NOT change residential panel routing.
+      // Issue #1738 — area-first area+school combined state: derivePanelContent routes
+      // BOTH area-first and school-first area+school selections to the same
+      // 'area-school-combined' panelContent, so schoolId/panelContent alone can't
+      // distinguish them. We must check journey explicitly to keep writing `listing`
+      // (and thus populating selectedMarkerListing for the popover) once a school is
+      // also selected in area-first, while still excluding school-first (its own
+      // tiered/peek marker flows own that state).
       if (
         listing != null &&
         state.journey !== 'agri-first' &&
         state.areaKey != null &&
-        state.schoolId == null
+        (state.schoolId == null || state.journey === 'area-first')
       ) {
         actions.setSelectedListing(listing.id);
       }
@@ -830,16 +837,19 @@ export default function MapDiscovery() {
   );
 
   // a3 — callback for MarkerClusterLayer to report the pixel position of a marker click.
-  // Gated to area-first residential path: areaKey set, no school, journey !== agri-first.
-  // School-first and agri-first marker click positions are NOT captured (those have their
-  // own panel/peek flows and must not trigger the area-first popover).
+  // Gated to area-first residential path: areaKey set, journey !== agri-first, and either
+  // no school selected yet OR (Issue #1738) a school IS selected but the journey is
+  // area-first — derivePanelContent routes area-first area+school selections to the same
+  // 'area-school-combined' panel content as school-first, so we must check journey
+  // explicitly here rather than inferring from schoolId/panelContent alone. School-first
+  // marker click positions are still NOT captured (that flow owns its own tiered/peek UI).
   const handleMarkerClickWithPosition = useCallback(
     (pos: { x: number; y: number }) => {
       const { urlState: state } = markerListingCtxRef.current;
       if (
         state.journey !== 'agri-first' &&
         state.areaKey != null &&
-        state.schoolId == null
+        (state.schoolId == null || state.journey === 'area-first')
       ) {
         setMarkerPixelPos(pos);
       }
@@ -2297,6 +2307,21 @@ export default function MapDiscovery() {
     urlState.journey === 'area-first' &&
     !!selectedArea;
 
+  // Issue #1738 — marker popover eligibility. Extends isAreaFirstSelectedAreaState (which
+  // only covers the no-school 'area-selected' step) to ALSO cover the area-first
+  // area+school combined step. derivePanelContent routes BOTH area-first and school-first
+  // (and the no-journey default) area+school selections to the same 'area-school-combined'
+  // panel content, so journey === 'area-first' must be checked explicitly — gating on
+  // panelContent alone would wrongly surface this popover during the school-first journey,
+  // which owns its own tiered/peek marker flows. Scoped ONLY to the popover render below;
+  // isAreaFirstSelectedAreaState itself is left unchanged for its other (breadcrumb/legend/
+  // layout) consumers.
+  const isAreaFirstPopoverEligible =
+    urlState.journey === 'area-first' &&
+    !!selectedArea &&
+    (resolvedPanelContent === 'area-selected' ||
+      resolvedPanelContent === 'area-school-combined');
+
   // Issue #1606 — resolved group display name for the area-first breadcrumb. Prefers the
   // backend group name, falls back to a prettified slug so a deep-linked groupId that has
   // not yet hydrated still reads as a human label (e.g. "University Belt"). Null when no
@@ -2702,13 +2727,15 @@ export default function MapDiscovery() {
             areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
           />
 
-          {/* a3 — Marker popover mini card. Gated to area-first residential path:
-              areaKey set, no school, journey !== agri-first. School-first (3 desynced
-              marker tiers) and agri-first (own peek/panel) are intentionally excluded.
-              ONE popover at a time; clicking a new marker replaces it.
-              Dismiss: X button (inside card), Escape key, map-background click (onClick
+          {/* a3 — Marker popover mini card. Gated to area-first residential path via
+              isAreaFirstPopoverEligible: areaKey/selectedArea set, journey === area-first.
+              Issue #1738 — also renders in the area-first area+school combined step (not
+              just the no-school area-selected step), since journey is checked explicitly.
+              School-first (3 desynced marker tiers) and agri-first (own peek/panel) are
+              intentionally excluded. ONE popover at a time; clicking a new marker replaces
+              it. Dismiss: X button (inside card), Escape key, map-background click (onClick
               on this container div). */}
-          {isAreaFirstSelectedAreaState &&
+          {isAreaFirstPopoverEligible &&
             selectedMarkerListing != null &&
             markerPixelPos != null && (
               <MarkerPopoverCard
