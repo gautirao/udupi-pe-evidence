@@ -61,6 +61,8 @@ export function canAccessRoute(route: string, role?: string | null): boolean {
     }
     if (
       clean === '/broker/listings/new' ||
+      // #1719 — residential deep-link sibling of /broker/listings/new
+      clean === '/broker/listings/new/residential' ||
       // #1741 follow-up — commercial deep-link sibling of /broker/listings/new
       clean === '/broker/listings/new/commercial' ||
       // #1627 — agricultural deep-link sibling of /broker/listings/new
@@ -94,6 +96,8 @@ export function canAccessRoute(route: string, role?: string | null): boolean {
     // Listing create / edit routes are allowed for normal consumers to list properties
     if (
       clean === '/broker/listings/new' ||
+      // #1719 — residential deep-link sibling of /broker/listings/new
+      clean === '/broker/listings/new/residential' ||
       // #1741 follow-up — commercial deep-link sibling of /broker/listings/new
       clean === '/broker/listings/new/commercial' ||
       // #1627 — agricultural deep-link sibling of /broker/listings/new

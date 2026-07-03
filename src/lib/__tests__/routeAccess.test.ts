@@ -24,3 +24,29 @@ describe('routeAccess — agricultural deep-link route access (Issue #1627)', ()
     expect(canAccessRoute('/broker/listings/new/commercial', 'user')).toBe(true);
   });
 });
+
+describe('routeAccess — residential deep-link route access (Issue #1719)', () => {
+  const RESIDENTIAL_ROUTE = '/broker/listings/new/residential';
+
+  it('allows admin, user, broker, and dealer roles to access the residential create-listing route', () => {
+    expect(canAccessRoute(RESIDENTIAL_ROUTE, 'admin')).toBe(true);
+    expect(canAccessRoute(RESIDENTIAL_ROUTE, 'user')).toBe(true);
+    expect(canAccessRoute(RESIDENTIAL_ROUTE, 'broker')).toBe(true);
+    expect(canAccessRoute(RESIDENTIAL_ROUTE, 'dealer')).toBe(true);
+  });
+
+  it('denies anonymous and missing roles for the residential create-listing route', () => {
+    expect(canAccessRoute(RESIDENTIAL_ROUTE, 'anonymous')).toBe(false);
+    expect(canAccessRoute(RESIDENTIAL_ROUTE, undefined)).toBe(false);
+    expect(canAccessRoute(RESIDENTIAL_ROUTE, null)).toBe(false);
+  });
+
+  it('regression: sibling routes /broker/listings/new/commercial and /broker/listings/new/agricultural still resolve for admin and user unchanged', () => {
+    expect(canAccessRoute('/broker/listings/new', 'admin')).toBe(true);
+    expect(canAccessRoute('/broker/listings/new', 'user')).toBe(true);
+    expect(canAccessRoute('/broker/listings/new/commercial', 'admin')).toBe(true);
+    expect(canAccessRoute('/broker/listings/new/commercial', 'user')).toBe(true);
+    expect(canAccessRoute('/broker/listings/new/agricultural', 'admin')).toBe(true);
+    expect(canAccessRoute('/broker/listings/new/agricultural', 'user')).toBe(true);
+  });
+});

@@ -26,7 +26,13 @@ const TrendsAreaResolved = lazy(() => import("./pages/TrendsAreaResolved"));
 
 // Lazily loaded — Broker routes; not needed for public/admin users
 const Onboarding = lazy(() => import("./pages/Onboarding"));
-const NewListing = lazy(() => import("./pages/broker/NewListing"));
+// Issue #1719 — the journey selector is now the base /broker/listings/new
+// landing, replacing NewListing.tsx (which defaulted straight to the
+// residential form per #1626 Phase-7A FIX-A). NewListing.tsx itself is left
+// unmodified/unrouted (forbidden to touch per #1719 scope) — dedicated
+// deep-link pages for all three property families now cover its old role.
+const NewListingJourneySelector = lazy(() => import("./pages/broker/NewListingJourneySelector"));
+const ResidentialNewListingPage = lazy(() => import("./pages/broker/ResidentialNewListingPage"));
 const CommercialNewListingPage = lazy(() => import("./pages/broker/CommercialNewListingPage"));
 const AgriculturalNewListingPage = lazy(() => import("./pages/broker/AgriculturalNewListingPage"));
 const EditListing = lazy(() => import("./pages/broker/EditListing"));
@@ -108,11 +114,21 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+              {/* Issue #1719 — journey selector; picks residential/commercial/agricultural */}
               <Route
                 path="/broker/listings/new"
                 element={
                   <ProtectedRoute>
-                    <NewListing />
+                    <NewListingJourneySelector />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Issue #1719 — direct deep link into the residential single-page create flow */}
+              <Route
+                path="/broker/listings/new/residential"
+                element={
+                  <ProtectedRoute>
+                    <ResidentialNewListingPage />
                   </ProtectedRoute>
                 }
               />
