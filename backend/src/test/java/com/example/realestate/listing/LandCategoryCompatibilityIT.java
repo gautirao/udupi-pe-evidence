@@ -106,11 +106,12 @@ class LandCategoryCompatibilityIT {
         var amenityRepo = mock(com.example.realestate.listing.residential.ListingAmenityRepository.class);
         var locationFeatureRepo = mock(com.example.realestate.listing.residential.ListingLocationFeatureRepository.class);
         var preferredTenantRepo = mock(com.example.realestate.listing.residential.ListingPreferredTenantRepository.class);
+        var suitableUseRepo = mock(com.example.realestate.listing.commercial.ListingSuitableUseRepository.class);
 
         crudService = new ListingCrudService(
                 listingRepository, events, ownershipGuard, dedup,
                 priceChangeLogRepository, badge, outbox, validator,
-                qualityRecompute, amenityRepo, locationFeatureRepo, preferredTenantRepo);
+                qualityRecompute, amenityRepo, locationFeatureRepo, preferredTenantRepo, suitableUseRepo);
     }
 
     @Test

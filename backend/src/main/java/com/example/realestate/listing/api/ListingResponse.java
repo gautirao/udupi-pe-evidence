@@ -139,7 +139,43 @@ public record ListingResponse(
          */
         List<String> amenities,
         List<String> specialLocationViews,
-        List<String> preferredTenants
+        List<String> preferredTenants,
+        // Commercial typed listing fields (M38-FU2 / #1730) — nullable, honest-null.
+        // commercialSubtype is null for legacy commercial rows (V102 backfill) and for
+        // any-ambiguity 'commercial' listings never given a subtype on write.
+        String commercialSubtype,
+        String floorChoice,
+        String floorMode,
+        String hubType,
+        Integer washroomsPublic,
+        Integer washroomsPrivate,
+        Integer parkingPublicCount,
+        Integer parkingPrivateCount,
+        Integer officeSeats,
+        Integer officeCabins,
+        Integer officeMeetingRooms,
+        String occupancyStatus,
+        BigDecimal powerLoadKva,
+        BigDecimal warehouseClearHeightFt,
+        Integer warehouseLoadingBays,
+        Boolean warehouseTruckAccess,
+        String warehouseFlooring,
+        String commercialZoning,
+        String commercialOwnership,
+        String commercialApprovals,
+        BigDecimal expectedRentalYieldPct,
+        Long currentMonthlyIncomePaise,
+        Integer leaseTermMonths,
+        BigDecimal leaseEscalationPct,
+        String commercialFurnishingStatus,
+        String commercialAvailability,
+        String commercialAreaUnit,
+        /**
+         * Multi-select child sets. Populated ONLY on the single-listing detail path
+         * (mirrors {@link #amenities}); list/batch endpoints always set these to empty lists.
+         */
+        List<String> suitableUses,
+        List<String> utilities
 ) {
     /** Raw regex for Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
     public static final String RERA_REGEXP = "^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$";

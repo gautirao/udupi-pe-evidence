@@ -1,6 +1,7 @@
 package com.example.realestate.listing.api;
 
 import com.example.realestate.listing.area.AreaNormalizer;
+import com.example.realestate.listing.commercial.ListingSuitableUseRepository;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.image.ListingImage;
@@ -40,6 +41,7 @@ class ListingResponseMapperTest {
     private ListingAmenityRepository listingAmenityRepository;
     private ListingLocationFeatureRepository listingLocationFeatureRepository;
     private ListingPreferredTenantRepository listingPreferredTenantRepository;
+    private ListingSuitableUseRepository listingSuitableUseRepository;
     private ListingResponseMapper mapper;
 
     @BeforeEach
@@ -50,8 +52,10 @@ class ListingResponseMapperTest {
         listingAmenityRepository = mock(ListingAmenityRepository.class);
         listingLocationFeatureRepository = mock(ListingLocationFeatureRepository.class);
         listingPreferredTenantRepository = mock(ListingPreferredTenantRepository.class);
+        listingSuitableUseRepository = mock(ListingSuitableUseRepository.class);
         mapper = new ListingResponseMapper(listingImageRepository, dimensionRepository, listingRepository,
-                listingAmenityRepository, listingLocationFeatureRepository, listingPreferredTenantRepository);
+                listingAmenityRepository, listingLocationFeatureRepository, listingPreferredTenantRepository,
+                listingSuitableUseRepository);
 
         // Default: no images
         when(listingImageRepository.findByListingIdOrderByPositionAsc(any())).thenReturn(List.of());
@@ -67,6 +71,8 @@ class ListingResponseMapperTest {
         when(listingAmenityRepository.findByListingIdOrderByCodeAsc(any())).thenReturn(List.of());
         when(listingLocationFeatureRepository.findByListingIdOrderByCodeAsc(any())).thenReturn(List.of());
         when(listingPreferredTenantRepository.findByListingIdOrderByCodeAsc(any())).thenReturn(List.of());
+        // Default: no commercial child-set rows
+        when(listingSuitableUseRepository.findByListingIdOrderByCodeAsc(any())).thenReturn(List.of());
     }
 
     // ==================== toResponse includes rejectionReason ====================

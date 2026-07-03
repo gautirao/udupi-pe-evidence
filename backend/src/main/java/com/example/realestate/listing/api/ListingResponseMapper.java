@@ -1,6 +1,8 @@
 package com.example.realestate.listing.api;
 
 import com.example.realestate.listing.area.AreaNormalizer;
+import com.example.realestate.listing.commercial.ListingSuitableUse;
+import com.example.realestate.listing.commercial.ListingSuitableUseRepository;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.image.ListingImage;
@@ -44,25 +46,32 @@ public class ListingResponseMapper {
     private static final java.util.Set<String> RESIDENTIAL_PROPERTY_TYPES =
             java.util.Set.of("house", "apartment", "villa", "residential_plot");
 
+    /** Commercial-family property types whose child sets are worth a detail-path lookup. */
+    private static final java.util.Set<String> COMMERCIAL_PROPERTY_TYPES =
+            java.util.Set.of("commercial", "commercial_building", "warehouse", "commercial_land");
+
     private final ListingImageRepository listingImageRepository;
     private final ListingVerificationDimensionRepository dimensionRepository;
     private final ListingRepository listingRepository;
     private final ListingAmenityRepository listingAmenityRepository;
     private final ListingLocationFeatureRepository listingLocationFeatureRepository;
     private final ListingPreferredTenantRepository listingPreferredTenantRepository;
+    private final ListingSuitableUseRepository listingSuitableUseRepository;
 
     public ListingResponseMapper(ListingImageRepository listingImageRepository,
                                  ListingVerificationDimensionRepository dimensionRepository,
                                  ListingRepository listingRepository,
                                  ListingAmenityRepository listingAmenityRepository,
                                  ListingLocationFeatureRepository listingLocationFeatureRepository,
-                                 ListingPreferredTenantRepository listingPreferredTenantRepository) {
+                                 ListingPreferredTenantRepository listingPreferredTenantRepository,
+                                 ListingSuitableUseRepository listingSuitableUseRepository) {
         this.listingImageRepository = listingImageRepository;
         this.dimensionRepository = dimensionRepository;
         this.listingRepository = listingRepository;
         this.listingAmenityRepository = listingAmenityRepository;
         this.listingLocationFeatureRepository = listingLocationFeatureRepository;
         this.listingPreferredTenantRepository = listingPreferredTenantRepository;
+        this.listingSuitableUseRepository = listingSuitableUseRepository;
     }
 
     /**
@@ -250,24 +259,37 @@ public class ListingResponseMapper {
                 ? listingPreferredTenantRepository.findByListingIdOrderByCodeAsc(l.getId()).stream()
                         .map(ListingPreferredTenant::getCode).toList()
                 : List.of();
+        // Commercial child sets (utilities / suitable uses) — single-listing detail path only
+        // (mirrors the residential child-set gating above, #1730). Gated to commercial property
+        // types so non-commercial listings take no extra DB round trips.
+        boolean isCommercial = COMMERCIAL_PROPERTY_TYPES.contains(l.getPropertyType());
+        List<String> utilities = isCommercial
+                ? listingAmenityRepository.findByListingIdOrderByCodeAsc(l.getId()).stream()
+                        .map(ListingAmenity::getCode).toList()
+                : List.of();
+        List<String> suitableUses = isCommercial
+                ? listingSuitableUseRepository.findByListingIdOrderByCodeAsc(l.getId()).stream()
+                        .map(ListingSuitableUse::getCode).toList()
+                : List.of();
         return build(l, rejectionReason, images, earnedBadgeCount, gallery, boundary, computedAreaAcres,
-                amenities, specialLocationViews, preferredTenants);
+                amenities, specialLocationViews, preferredTenants, suitableUses, utilities);
     }
 
     private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images, int earnedBadgeCount) {
         // Batch/list path: keep payload unchanged — images[] stays empty so list endpoints do
         // not balloon in size. List views render from firstImageUrl + imageCount (#758).
-        // computedAreaAcres stays null and residential child sets stay empty so the hot list
-        // path takes NO extra DB calls (#1367, #1626).
+        // computedAreaAcres stays null and residential/commercial child sets stay empty so the
+        // hot list path takes NO extra DB calls (#1367, #1626, #1730).
         return build(l, rejectionReason, images, earnedBadgeCount, List.of(), null, null,
-                List.of(), List.of(), List.of());
+                List.of(), List.of(), List.of(), List.of(), List.of());
     }
 
     @SuppressWarnings("java:S107") // mirrors existing build() overload chain shape
     private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images,
                                   int earnedBadgeCount, List<ListingImageDTO> gallery, String boundary,
                                   BigDecimal computedAreaAcres, List<String> amenities,
-                                  List<String> specialLocationViews, List<String> preferredTenants) {
+                                  List<String> specialLocationViews, List<String> preferredTenants,
+                                  List<String> suitableUses, List<String> utilities) {
         int imageCount = images.size();
         String firstImageUrl = images.stream().findFirst()
                 .map(ListingImage::getUrl)
@@ -326,7 +348,19 @@ public class ListingResponseMapper {
                 l.getHasCompound(), l.getHasServantRoom(), l.getIsCornerPlot(), l.getHasBoundaryWall(),
                 l.getIsGatedLayout(), l.getHasWaterConnection(), l.getHasElectricityConnection(), l.getHasDrainage(),
                 l.getPriceNegotiable(), l.getRentNegotiable(), l.getPetsAllowed(), l.getMaintenanceIncluded(),
-                amenities, specialLocationViews, preferredTenants);
+                amenities, specialLocationViews, preferredTenants,
+                l.getCommercialSubtype(), l.getFloorChoice(), l.getFloorMode(), l.getHubType(),
+                l.getWashroomsPublic(), l.getWashroomsPrivate(),
+                l.getParkingPublicCount(), l.getParkingPrivateCount(),
+                l.getOfficeSeats(), l.getOfficeCabins(), l.getOfficeMeetingRooms(),
+                l.getOccupancyStatus(), l.getPowerLoadKva(),
+                l.getWarehouseClearHeightFt(), l.getWarehouseLoadingBays(),
+                l.getWarehouseTruckAccess(), l.getWarehouseFlooring(),
+                l.getCommercialZoning(), l.getCommercialOwnership(), l.getCommercialApprovals(),
+                l.getExpectedRentalYieldPct(), l.getCurrentMonthlyIncomePaise(),
+                l.getLeaseTermMonths(), l.getLeaseEscalationPct(),
+                l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
+                suitableUses, utilities);
     }
 
     /**

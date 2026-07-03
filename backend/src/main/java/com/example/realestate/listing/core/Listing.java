@@ -366,6 +366,93 @@ public class Listing {
     @Column(name = "maintenance_included")
     private Boolean maintenanceIncluded;
 
+    // --- Commercial typed listing fields (M38-FU2 / #1730) ---
+    // Nullable, honest-null: a null field means "not declared" — never defaulted.
+    // commercial_subtype is nullable because legacy commercial rows (V102 backfill)
+    // have no subtype; only newly-written typed listings get a non-null value.
+
+    @Column(name = "commercial_subtype")
+    private String commercialSubtype;
+
+    @Column(name = "floor_choice")
+    private String floorChoice;
+
+    @Column(name = "floor_mode")
+    private String floorMode;
+
+    @Column(name = "hub_type")
+    private String hubType;
+
+    @Column(name = "washrooms_public")
+    private Integer washroomsPublic;
+
+    @Column(name = "washrooms_private")
+    private Integer washroomsPrivate;
+
+    @Column(name = "parking_public_count")
+    private Integer parkingPublicCount;
+
+    @Column(name = "parking_private_count")
+    private Integer parkingPrivateCount;
+
+    @Column(name = "office_seats")
+    private Integer officeSeats;
+
+    @Column(name = "office_cabins")
+    private Integer officeCabins;
+
+    @Column(name = "office_meeting_rooms")
+    private Integer officeMeetingRooms;
+
+    @Column(name = "occupancy_status")
+    private String occupancyStatus;
+
+    @Column(name = "power_load_kva")
+    private BigDecimal powerLoadKva;
+
+    @Column(name = "warehouse_clear_height_ft")
+    private BigDecimal warehouseClearHeightFt;
+
+    @Column(name = "warehouse_loading_bays")
+    private Integer warehouseLoadingBays;
+
+    @Column(name = "warehouse_truck_access")
+    private Boolean warehouseTruckAccess;
+
+    @Column(name = "warehouse_flooring")
+    private String warehouseFlooring;
+
+    @Column(name = "commercial_zoning")
+    private String commercialZoning;
+
+    @Column(name = "commercial_ownership")
+    private String commercialOwnership;
+
+    @Column(name = "commercial_approvals")
+    private String commercialApprovals;
+
+    @Column(name = "expected_rental_yield_pct")
+    private BigDecimal expectedRentalYieldPct;
+
+    /** Current monthly income in paise (investment-yield context; sale listings only). */
+    @Column(name = "current_monthly_income_paise")
+    private Long currentMonthlyIncomePaise;
+
+    @Column(name = "lease_term_months")
+    private Integer leaseTermMonths;
+
+    @Column(name = "lease_escalation_pct")
+    private BigDecimal leaseEscalationPct;
+
+    @Column(name = "commercial_furnishing_status")
+    private String commercialFurnishingStatus;
+
+    @Column(name = "commercial_availability")
+    private String commercialAvailability;
+
+    @Column(name = "commercial_area_unit")
+    private String commercialAreaUnit;
+
     // --- Trust tier and ranking (RE-142 / Phase 3.1) ---
 
     /**
@@ -1359,6 +1446,89 @@ public class Listing {
 
     public Boolean getMaintenanceIncluded() { return maintenanceIncluded; }
     public void setMaintenanceIncluded(Boolean maintenanceIncluded) { this.maintenanceIncluded = maintenanceIncluded; }
+
+    // --- Commercial typed listing getters/setters (M38-FU2 / #1730) ---
+
+    public String getCommercialSubtype() { return commercialSubtype; }
+    public void setCommercialSubtype(String commercialSubtype) { this.commercialSubtype = commercialSubtype; }
+
+    public String getFloorChoice() { return floorChoice; }
+    public void setFloorChoice(String floorChoice) { this.floorChoice = floorChoice; }
+
+    public String getFloorMode() { return floorMode; }
+    public void setFloorMode(String floorMode) { this.floorMode = floorMode; }
+
+    public String getHubType() { return hubType; }
+    public void setHubType(String hubType) { this.hubType = hubType; }
+
+    public Integer getWashroomsPublic() { return washroomsPublic; }
+    public void setWashroomsPublic(Integer washroomsPublic) { this.washroomsPublic = washroomsPublic; }
+
+    public Integer getWashroomsPrivate() { return washroomsPrivate; }
+    public void setWashroomsPrivate(Integer washroomsPrivate) { this.washroomsPrivate = washroomsPrivate; }
+
+    public Integer getParkingPublicCount() { return parkingPublicCount; }
+    public void setParkingPublicCount(Integer parkingPublicCount) { this.parkingPublicCount = parkingPublicCount; }
+
+    public Integer getParkingPrivateCount() { return parkingPrivateCount; }
+    public void setParkingPrivateCount(Integer parkingPrivateCount) { this.parkingPrivateCount = parkingPrivateCount; }
+
+    public Integer getOfficeSeats() { return officeSeats; }
+    public void setOfficeSeats(Integer officeSeats) { this.officeSeats = officeSeats; }
+
+    public Integer getOfficeCabins() { return officeCabins; }
+    public void setOfficeCabins(Integer officeCabins) { this.officeCabins = officeCabins; }
+
+    public Integer getOfficeMeetingRooms() { return officeMeetingRooms; }
+    public void setOfficeMeetingRooms(Integer officeMeetingRooms) { this.officeMeetingRooms = officeMeetingRooms; }
+
+    public String getOccupancyStatus() { return occupancyStatus; }
+    public void setOccupancyStatus(String occupancyStatus) { this.occupancyStatus = occupancyStatus; }
+
+    public BigDecimal getPowerLoadKva() { return powerLoadKva; }
+    public void setPowerLoadKva(BigDecimal powerLoadKva) { this.powerLoadKva = powerLoadKva; }
+
+    public BigDecimal getWarehouseClearHeightFt() { return warehouseClearHeightFt; }
+    public void setWarehouseClearHeightFt(BigDecimal warehouseClearHeightFt) { this.warehouseClearHeightFt = warehouseClearHeightFt; }
+
+    public Integer getWarehouseLoadingBays() { return warehouseLoadingBays; }
+    public void setWarehouseLoadingBays(Integer warehouseLoadingBays) { this.warehouseLoadingBays = warehouseLoadingBays; }
+
+    public Boolean getWarehouseTruckAccess() { return warehouseTruckAccess; }
+    public void setWarehouseTruckAccess(Boolean warehouseTruckAccess) { this.warehouseTruckAccess = warehouseTruckAccess; }
+
+    public String getWarehouseFlooring() { return warehouseFlooring; }
+    public void setWarehouseFlooring(String warehouseFlooring) { this.warehouseFlooring = warehouseFlooring; }
+
+    public String getCommercialZoning() { return commercialZoning; }
+    public void setCommercialZoning(String commercialZoning) { this.commercialZoning = commercialZoning; }
+
+    public String getCommercialOwnership() { return commercialOwnership; }
+    public void setCommercialOwnership(String commercialOwnership) { this.commercialOwnership = commercialOwnership; }
+
+    public String getCommercialApprovals() { return commercialApprovals; }
+    public void setCommercialApprovals(String commercialApprovals) { this.commercialApprovals = commercialApprovals; }
+
+    public BigDecimal getExpectedRentalYieldPct() { return expectedRentalYieldPct; }
+    public void setExpectedRentalYieldPct(BigDecimal expectedRentalYieldPct) { this.expectedRentalYieldPct = expectedRentalYieldPct; }
+
+    public Long getCurrentMonthlyIncomePaise() { return currentMonthlyIncomePaise; }
+    public void setCurrentMonthlyIncomePaise(Long currentMonthlyIncomePaise) { this.currentMonthlyIncomePaise = currentMonthlyIncomePaise; }
+
+    public Integer getLeaseTermMonths() { return leaseTermMonths; }
+    public void setLeaseTermMonths(Integer leaseTermMonths) { this.leaseTermMonths = leaseTermMonths; }
+
+    public BigDecimal getLeaseEscalationPct() { return leaseEscalationPct; }
+    public void setLeaseEscalationPct(BigDecimal leaseEscalationPct) { this.leaseEscalationPct = leaseEscalationPct; }
+
+    public String getCommercialFurnishingStatus() { return commercialFurnishingStatus; }
+    public void setCommercialFurnishingStatus(String commercialFurnishingStatus) { this.commercialFurnishingStatus = commercialFurnishingStatus; }
+
+    public String getCommercialAvailability() { return commercialAvailability; }
+    public void setCommercialAvailability(String commercialAvailability) { this.commercialAvailability = commercialAvailability; }
+
+    public String getCommercialAreaUnit() { return commercialAreaUnit; }
+    public void setCommercialAreaUnit(String commercialAreaUnit) { this.commercialAreaUnit = commercialAreaUnit; }
 
     // --- Polygon boundary (transient — written/read via native SQL) ---
 

@@ -9,6 +9,7 @@ import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.listing.exception.ListingValidationException;
 import com.example.realestate.listing.exception.OwnerListingLimitException;
+import com.example.realestate.listing.commercial.CommercialListingFields;
 import com.example.realestate.listing.residential.ResidentialListingFields;
 import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfo;
@@ -125,6 +126,40 @@ public class ListingController {
                 req.isGatedLayout(), req.hasWaterConnection(), req.hasElectricityConnection(), req.hasDrainage(),
                 req.priceNegotiable(), req.rentNegotiable(), req.petsAllowed(), req.maintenanceIncluded(),
                 req.amenities(), req.specialLocationViews(), req.preferredTenants());
+        // Commercial typed listing fields (M38-FU2 / #1730)
+        String createCommercialSubtype = createFamily == PropertyFamily.COMMERCIAL
+                ? resolveCommercialSubtype(req.propertyType(), req.commercialSubtype(), true)
+                : null;
+        validateCommercialFields(createFamily, createCommercialSubtype,
+                req.floorChoice(), req.floorMode(), req.hubType(),
+                req.commercialFurnishingStatus(), req.commercialOwnership(), req.occupancyStatus(),
+                req.warehouseFlooring(), req.commercialAvailability(), req.commercialAreaUnit(),
+                req.suitableUses(), req.utilities());
+        validateCommercialFieldSet(createFamily, createCommercialSubtype, req.listingPurpose(),
+                req.floorChoice(), req.floorMode(), req.hubType(),
+                req.washroomsPublic(), req.washroomsPrivate(),
+                req.parkingPublicCount(), req.parkingPrivateCount(),
+                req.officeSeats(), req.officeCabins(), req.officeMeetingRooms(),
+                req.occupancyStatus(), req.powerLoadKva(),
+                req.warehouseClearHeightFt(), req.warehouseLoadingBays(),
+                req.warehouseTruckAccess(), req.warehouseFlooring(),
+                req.commercialZoning(), req.commercialOwnership(), req.commercialApprovals(),
+                req.expectedRentalYieldPct(), req.currentMonthlyIncomePaise(),
+                req.leaseTermMonths(), req.leaseEscalationPct(),
+                req.commercialFurnishingStatus(), req.commercialAvailability(), req.commercialAreaUnit(),
+                req.suitableUses(), req.utilities());
+        CommercialListingFields commercialFields = new CommercialListingFields(
+                createCommercialSubtype, req.floorChoice(), req.floorMode(), req.hubType(),
+                req.washroomsPublic(), req.washroomsPrivate(), req.parkingPublicCount(), req.parkingPrivateCount(),
+                req.officeSeats(), req.officeCabins(), req.officeMeetingRooms(),
+                req.occupancyStatus(), req.powerLoadKva(),
+                req.warehouseClearHeightFt(), req.warehouseLoadingBays(),
+                req.warehouseTruckAccess(), req.warehouseFlooring(),
+                req.commercialZoning(), req.commercialOwnership(), req.commercialApprovals(),
+                req.expectedRentalYieldPct(), req.currentMonthlyIncomePaise(),
+                req.leaseTermMonths(), req.leaseEscalationPct(),
+                req.commercialFurnishingStatus(), req.commercialAvailability(), req.commercialAreaUnit(),
+                req.suitableUses(), req.utilities());
         try {
             Listing saved = listingCrudService.createDraft(
                     caller.userId(), req.propertyType(), req.title(),
@@ -141,7 +176,7 @@ public class ListingController {
                     req.waterSource(), req.soilType(), req.roadAccess(),
                     req.cultivationStatus(), req.ownershipType(), req.surveyNumber(),
                     req.landCategory(), req.farmhouseAvailable(), req.fencingDone(),
-                    residentialFields);
+                    residentialFields, commercialFields);
 
             log.info("POST /api/listings -> 201 listingId={} createdBy={} sellerType={}",
                     saved.getId(), caller.userId(), sellerType);
@@ -218,11 +253,15 @@ public class ListingController {
             // effectivePropertyType resolution). Every other field on this PUT is optional, so a
             // request that omits propertyType must still run the full residential/PLOT validation
             // matrix against the listing's real (existing) type — never skip it (#1626).
+            // Cached lazily: also reused below to resolve the STORED commercialSubtype when the
+            // request omits it for the ambiguous 'commercial' propertyType (#1730 Finding 1) —
+            // avoids a second fetch when both fallbacks are needed on the same request.
+            Listing existingForValidation = null;
             String effectivePropertyType = req.propertyType();
             if (effectivePropertyType == null) {
-                Listing existing = listingWorkflowService.findListingForCaller(
+                existingForValidation = listingWorkflowService.findListingForCaller(
                         id, caller.userId(), caller.isAdmin());
-                effectivePropertyType = existing.getPropertyType();
+                effectivePropertyType = existingForValidation.getPropertyType();
             }
             PropertyFamily updateFamily = resolveFamily(effectivePropertyType);
             validateFamilyFields(updateFamily,
@@ -257,6 +296,59 @@ public class ListingController {
                     req.isGatedLayout(), req.hasWaterConnection(), req.hasElectricityConnection(), req.hasDrainage(),
                     req.priceNegotiable(), req.rentNegotiable(), req.petsAllowed(), req.maintenanceIncluded(),
                     req.amenities(), req.specialLocationViews(), req.preferredTenants());
+            // Commercial typed listing fields (M38-FU2 / #1730)
+            String updateCommercialSubtype = updateFamily == PropertyFamily.COMMERCIAL
+                    ? resolveCommercialSubtype(effectivePropertyType, req.commercialSubtype(), false)
+                    : null;
+            // Finding 1 (data-correctness AC3): when the ambiguous 'commercial' propertyType omits
+            // commercialSubtype on PUT, resolveCommercialSubtype returns null (nothing to derive/stamp)
+            // — but subtype-specific STRUCTURAL VALIDATION must still run against the EXISTING stored
+            // subtype, otherwise a subtype-mismatched field (e.g. warehouseClearHeightFt on a stored
+            // SHOP) would silently persist instead of being rejected. Fetch (lazily, reusing
+            // existingForValidation when already fetched above) and validate against the stored value;
+            // the DB write path itself still leaves the stored commercial_subtype column untouched
+            // (ListingCrudService only stamps when a non-null value is supplied).
+            String storedCommercialSubtypeForValidation = null;
+            if (updateFamily == PropertyFamily.COMMERCIAL && updateCommercialSubtype == null) {
+                if (existingForValidation == null) {
+                    existingForValidation = listingWorkflowService.findListingForCaller(
+                            id, caller.userId(), caller.isAdmin());
+                }
+                storedCommercialSubtypeForValidation = existingForValidation.getCommercialSubtype();
+            }
+            String resolvedSubtypeForValidation = updateCommercialSubtype != null
+                    ? updateCommercialSubtype
+                    : storedCommercialSubtypeForValidation;
+            validateCommercialFields(updateFamily, resolvedSubtypeForValidation,
+                    req.floorChoice(), req.floorMode(), req.hubType(),
+                    req.commercialFurnishingStatus(), req.commercialOwnership(), req.occupancyStatus(),
+                    req.warehouseFlooring(), req.commercialAvailability(), req.commercialAreaUnit(),
+                    req.suitableUses(), req.utilities());
+            validateCommercialFieldSet(updateFamily, resolvedSubtypeForValidation, req.listingPurpose(),
+                    req.floorChoice(), req.floorMode(), req.hubType(),
+                    req.washroomsPublic(), req.washroomsPrivate(),
+                    req.parkingPublicCount(), req.parkingPrivateCount(),
+                    req.officeSeats(), req.officeCabins(), req.officeMeetingRooms(),
+                    req.occupancyStatus(), req.powerLoadKva(),
+                    req.warehouseClearHeightFt(), req.warehouseLoadingBays(),
+                    req.warehouseTruckAccess(), req.warehouseFlooring(),
+                    req.commercialZoning(), req.commercialOwnership(), req.commercialApprovals(),
+                    req.expectedRentalYieldPct(), req.currentMonthlyIncomePaise(),
+                    req.leaseTermMonths(), req.leaseEscalationPct(),
+                    req.commercialFurnishingStatus(), req.commercialAvailability(), req.commercialAreaUnit(),
+                    req.suitableUses(), req.utilities());
+            CommercialListingFields commercialFields = new CommercialListingFields(
+                    updateCommercialSubtype, req.floorChoice(), req.floorMode(), req.hubType(),
+                    req.washroomsPublic(), req.washroomsPrivate(), req.parkingPublicCount(), req.parkingPrivateCount(),
+                    req.officeSeats(), req.officeCabins(), req.officeMeetingRooms(),
+                    req.occupancyStatus(), req.powerLoadKva(),
+                    req.warehouseClearHeightFt(), req.warehouseLoadingBays(),
+                    req.warehouseTruckAccess(), req.warehouseFlooring(),
+                    req.commercialZoning(), req.commercialOwnership(), req.commercialApprovals(),
+                    req.expectedRentalYieldPct(), req.currentMonthlyIncomePaise(),
+                    req.leaseTermMonths(), req.leaseEscalationPct(),
+                    req.commercialFurnishingStatus(), req.commercialAvailability(), req.commercialAreaUnit(),
+                    req.suitableUses(), req.utilities());
             boolean applyVideo = Boolean.TRUE.equals(req.applyVideoUrl());
             String updateVideoUrl = applyVideo
                     ? ((req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl())
@@ -279,7 +371,7 @@ public class ListingController {
                     req.waterSource(), req.soilType(), req.roadAccess(),
                     req.cultivationStatus(), req.ownershipType(), req.surveyNumber(),
                     req.landCategory(), req.farmhouseAvailable(), req.fencingDone(),
-                    req.boundary(), residentialFields);
+                    req.boundary(), residentialFields, commercialFields);
             return ResponseEntity.ok(listingResponseMapper.toResponse(updated));
         } catch (ListingNotFoundException e) {
             return notFound();
@@ -781,6 +873,260 @@ public class ListingController {
         }
     }
 
+    // ===== Commercial typed-listing validation (M38-FU2 / #1730) =====
+
+    /**
+     * Resolves the effective {@code commercial_subtype} DB stamp for a commercial-family request.
+     *
+     * <ul>
+     *   <li>{@code commercial_building}/{@code warehouse}/{@code commercial_land} unambiguously
+     *       derive BUILDING/WAREHOUSE/LAND — any client-supplied {@code commercialSubtype} for
+     *       these types is ignored (the propertyType is authoritative).</li>
+     *   <li>{@code commercial} is ambiguous between SHOP and OFFICE: the client MUST supply
+     *       {@code commercialSubtype} on POST (400 if absent); on PUT, an absent value means the
+     *       WRITE leaves the stored {@code commercial_subtype} column unchanged (returns
+     *       {@code null} — legacy rows stay NULL, matching the V102 commercial backfill).
+     *       <b>Validation is NOT skipped in this case</b> — the caller ({@link #update}) falls back
+     *       to the listing's EXISTING stored subtype for {@link #validateCommercialFields}/
+     *       {@link #validateCommercialFieldSet}, so subtype-mismatched fields are still rejected
+     *       with 400 rather than silently persisted (#1730 Finding 1).</li>
+     * </ul>
+     *
+     * @return the resolved subtype (BUILDING/WAREHOUSE/LAND/SHOP/OFFICE) to STAMP on write, or
+     *         {@code null} when PUT omits commercialSubtype for the ambiguous {@code commercial}
+     *         propertyType — {@code null} here means "don't touch the stored column on write",
+     *         not "skip validation" (see caller)
+     * @throws org.springframework.web.server.ResponseStatusException HTTP 400 when POST omits a
+     *         required subtype, or the supplied value is not SHOP/OFFICE for propertyType='commercial'
+     */
+    private static String resolveCommercialSubtype(String propertyType, String suppliedSubtype, boolean isCreate) {
+        String pt = propertyType == null ? "" : propertyType.trim().toLowerCase(java.util.Locale.ROOT);
+        return switch (pt) {
+            case "commercial_building" -> "BUILDING";
+            case "warehouse" -> "WAREHOUSE";
+            case "commercial_land" -> "LAND";
+            case "commercial" -> {
+                String normalized = (suppliedSubtype == null || suppliedSubtype.isBlank())
+                        ? null : suppliedSubtype.trim().toUpperCase(java.util.Locale.ROOT);
+                if (normalized == null) {
+                    if (isCreate) {
+                        throw new org.springframework.web.server.ResponseStatusException(
+                                HttpStatus.BAD_REQUEST,
+                                "commercialSubtype is required for propertyType 'commercial' "
+                                        + "(must be SHOP or OFFICE)");
+                    }
+                    yield null; // PUT omitted -> leave existing stored subtype unchanged
+                }
+                if (!"SHOP".equals(normalized) && !"OFFICE".equals(normalized)) {
+                    throw new org.springframework.web.server.ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Invalid commercialSubtype '" + normalized + "' for propertyType 'commercial'. "
+                                    + "Allowed values: OFFICE, SHOP");
+                }
+                yield normalized;
+            }
+            default -> null; // not a commercial-family propertyType — caller must not invoke this branch
+        };
+    }
+
+    private static Set<String> hubTypeOptionsFor(String resolvedSubtype) {
+        if ("SHOP".equals(resolvedSubtype)) return CommercialFieldOptions.VALID_SHOP_HUB_TYPES;
+        if ("OFFICE".equals(resolvedSubtype)) return CommercialFieldOptions.VALID_OFFICE_HUB_TYPES;
+        return Set.of();
+    }
+
+    private static Set<String> suitableUsesOptionsFor(String resolvedSubtype) {
+        if (resolvedSubtype == null) return Set.of();
+        return switch (resolvedSubtype) {
+            case "SHOP" -> CommercialFieldOptions.VALID_SHOP_SUITABLE_USES;
+            case "OFFICE" -> CommercialFieldOptions.VALID_OFFICE_SUITABLE_USES;
+            case "BUILDING" -> CommercialFieldOptions.VALID_BUILDING_SUITABLE_USES;
+            case "WAREHOUSE" -> CommercialFieldOptions.VALID_WAREHOUSE_SUITABLE_USES;
+            case "LAND" -> CommercialFieldOptions.VALID_COMMERCIAL_LAND_SUITABLE_USES;
+            default -> Set.of();
+        };
+    }
+
+    /**
+     * Commercial typed-listing ENUM AUTHORITY validation (M38-FU2 / #1730) — scoped to the
+     * COMMERCIAL family only (no-op for RESIDENTIAL/AGRICULTURAL/PLOT, mirroring how
+     * {@link #validateFamilyFields} already gates commercial-only fields structurally).
+     * Every {@code rejectIfUnknown} call here is a real wiring against {@link CommercialFieldOptions}
+     * (see {@link ListingFieldWiringGuardTest} — this class name is intentionally NOT in the
+     * guard's forward-only list, unlike {@code ResidentialFieldOptions}).
+     *
+     * <p>{@code listingPurpose} is deliberately NOT enum-validated here: {@link CommercialFieldOptions}
+     * documents (see class javadoc, {@code VALID_LISTING_PURPOSES}) that wiring this set requires a
+     * production distinct-value audit before enforcement — deferred to M38-FU7. It remains free-text,
+     * unchanged from pre-#1730 behavior; only the sale/rent PURPOSE GATE (which fields it's paired with)
+     * is enforced today, in {@link #validateCommercialFieldSet}.
+     *
+     * @throws org.springframework.web.server.ResponseStatusException HTTP 400 on first invalid field
+     */
+    @SuppressWarnings("java:S107") // mirrors validateAgriFields/validateResidentialFieldSet enum-check shape
+    private static void validateCommercialFields(PropertyFamily family, String resolvedSubtype,
+            String floorChoice, String floorMode, String hubType,
+            String commercialFurnishingStatus, String commercialOwnership, String occupancyStatus,
+            String warehouseFlooring, String commercialAvailability, String commercialAreaUnit,
+            List<String> suitableUses, List<String> utilities) {
+        if (family != PropertyFamily.COMMERCIAL) {
+            return;
+        }
+        rejectIfUnknown("commercialSubtype", resolvedSubtype, CommercialFieldOptions.VALID_COMMERCIAL_SUBTYPES);
+        rejectIfUnknown("floorChoice", floorChoice, CommercialFieldOptions.VALID_FLOOR_CHOICES);
+        rejectIfUnknown("floorMode", floorMode, CommercialFieldOptions.VALID_FLOOR_MODES);
+        rejectIfUnknown("hubType", hubType, hubTypeOptionsFor(resolvedSubtype));
+        rejectIfUnknown("commercialFurnishingStatus", commercialFurnishingStatus,
+                CommercialFieldOptions.VALID_COMMERCIAL_FURNISHING_STATUSES);
+        rejectIfUnknown("commercialOwnership", commercialOwnership, CommercialFieldOptions.VALID_COMMERCIAL_OWNERSHIP);
+        rejectIfUnknown("occupancyStatus", occupancyStatus, CommercialFieldOptions.VALID_OCCUPANCY_STATUSES);
+        rejectIfUnknown("warehouseFlooring", warehouseFlooring, CommercialFieldOptions.VALID_WAREHOUSE_FLOORING);
+        rejectIfUnknown("commercialAvailability", commercialAvailability,
+                CommercialFieldOptions.VALID_COMMERCIAL_AVAILABILITY);
+        rejectIfUnknown("commercialAreaUnit", commercialAreaUnit, CommercialFieldOptions.VALID_COMMERCIAL_AREA_UNITS);
+        if (suitableUses != null) {
+            Set<String> validSuitableUses = suitableUsesOptionsFor(resolvedSubtype);
+            for (String code : suitableUses) {
+                rejectIfUnknown("suitableUses", code, validSuitableUses);
+            }
+        }
+        if (utilities != null) {
+            for (String code : utilities) {
+                rejectIfUnknown("utilities", code, CommercialFieldOptions.VALID_AMENITIES_UTILITIES);
+            }
+        }
+    }
+
+    /**
+     * Commercial typed-listing STRUCTURAL validation (M38-FU2 / #1730) — the net-new field set
+     * only, purely structural (field presence, never value membership — consistent with the
+     * {@link ListingFieldWiringGuardTest} guard).
+     *
+     * <p>Two independent axes:
+     * <ul>
+     *   <li>Cross-family: every M38-FU2 commercial field is rejected for RESIDENTIAL/AGRICULTURAL/
+     *       PLOT (mirrors {@link #validateResidentialFieldSet}'s COMMERCIAL/AGRICULTURAL branch).</li>
+     *   <li>Per-subtype (within COMMERCIAL, only when {@code resolvedSubtype} is non-null — see
+     *       {@link #resolveCommercialSubtype}): warehouse-only fields rejected on non-WAREHOUSE,
+     *       office-only on non-OFFICE, land-only (zoning/ownership/approvals) on non-LAND, and the
+     *       built-space fields (washrooms/parking split, furnishing, utilities) rejected on LAND.</li>
+     * </ul>
+     *
+     * <p>The sale/rent purpose gate below is unconditional across subtypes (mirrors
+     * {@link #validateResidentialFieldSet}'s sale/rent gate): investment/yield fields are SALE-only,
+     * lease-term fields are RENT/LEASE-only.
+     */
+    @SuppressWarnings("java:S107") // structural per-field checks; mirrors validateResidentialFieldSet shape
+    private static void validateCommercialFieldSet(PropertyFamily family, String resolvedSubtype,
+            String listingPurpose,
+            String floorChoice, String floorMode, String hubType,
+            Integer washroomsPublic, Integer washroomsPrivate,
+            Integer parkingPublicCount, Integer parkingPrivateCount,
+            Integer officeSeats, Integer officeCabins, Integer officeMeetingRooms,
+            String occupancyStatus, BigDecimal powerLoadKva,
+            BigDecimal warehouseClearHeightFt, Integer warehouseLoadingBays,
+            Boolean warehouseTruckAccess, String warehouseFlooring,
+            String commercialZoning, String commercialOwnership, String commercialApprovals,
+            BigDecimal expectedRentalYieldPct, Long currentMonthlyIncomePaise,
+            Integer leaseTermMonths, BigDecimal leaseEscalationPct,
+            String commercialFurnishingStatus, String commercialAvailability, String commercialAreaUnit,
+            List<String> suitableUses, List<String> utilities) {
+
+        if (family != PropertyFamily.COMMERCIAL) {
+            // None of the M38-FU2 commercial fields belong to any other family.
+            rejectIfPresent("floorChoice", floorChoice);
+            rejectIfPresent("floorMode", floorMode);
+            rejectIfPresent("hubType", hubType);
+            rejectIfPresent("washroomsPublic", washroomsPublic);
+            rejectIfPresent("washroomsPrivate", washroomsPrivate);
+            rejectIfPresent("parkingPublicCount", parkingPublicCount);
+            rejectIfPresent("parkingPrivateCount", parkingPrivateCount);
+            rejectIfPresent("officeSeats", officeSeats);
+            rejectIfPresent("officeCabins", officeCabins);
+            rejectIfPresent("officeMeetingRooms", officeMeetingRooms);
+            rejectIfPresent("occupancyStatus", occupancyStatus);
+            rejectIfPresent("powerLoadKva", powerLoadKva);
+            rejectIfPresent("warehouseClearHeightFt", warehouseClearHeightFt);
+            rejectIfPresent("warehouseLoadingBays", warehouseLoadingBays);
+            rejectIfPresent("warehouseTruckAccess", warehouseTruckAccess);
+            rejectIfPresent("warehouseFlooring", warehouseFlooring);
+            rejectIfPresent("commercialZoning", commercialZoning);
+            rejectIfPresent("commercialOwnership", commercialOwnership);
+            rejectIfPresent("commercialApprovals", commercialApprovals);
+            rejectIfPresent("expectedRentalYieldPct", expectedRentalYieldPct);
+            rejectIfPresent("currentMonthlyIncomePaise", currentMonthlyIncomePaise);
+            rejectIfPresent("leaseTermMonths", leaseTermMonths);
+            rejectIfPresent("leaseEscalationPct", leaseEscalationPct);
+            rejectIfPresent("commercialFurnishingStatus", commercialFurnishingStatus);
+            rejectIfPresent("commercialAvailability", commercialAvailability);
+            rejectIfPresent("commercialAreaUnit", commercialAreaUnit);
+            rejectIfNonEmpty("suitableUses", suitableUses);
+            rejectIfNonEmpty("utilities", utilities);
+            return;
+        }
+
+        // COMMERCIAL family: per-subtype structural gates. `resolvedSubtype` here is the EFFECTIVE
+        // subtype used for validation — on PUT this is either the newly-resolved/derived value, or
+        // (when the ambiguous 'commercial' propertyType omits commercialSubtype) the listing's
+        // EXISTING stored subtype, fetched by the caller (#update) specifically so this gate still
+        // runs (#1730 Finding 1 — a subtype-mismatched field like warehouseClearHeightFt on a stored
+        // SHOP must be rejected with 400, not silently persisted). The gate is skipped only when
+        // resolvedSubtype is truly unknown (e.g. a legacy row whose stored commercial_subtype is
+        // itself still NULL, pre-#1730) — nothing structural can be validated against an unknown
+        // subtype, but the write path still leaves that NULL column untouched.
+        if (resolvedSubtype != null) {
+            boolean isShopOrOffice = "SHOP".equals(resolvedSubtype) || "OFFICE".equals(resolvedSubtype);
+            if (!isShopOrOffice) {
+                rejectIfPresent("floorChoice", floorChoice);
+                rejectIfPresent("hubType", hubType);
+            }
+            if (!"BUILDING".equals(resolvedSubtype)) {
+                rejectIfPresent("floorMode", floorMode);
+                rejectIfPresent("powerLoadKva", powerLoadKva);
+            }
+            if (!"OFFICE".equals(resolvedSubtype)) {
+                rejectIfPresent("officeSeats", officeSeats);
+                rejectIfPresent("officeCabins", officeCabins);
+                rejectIfPresent("officeMeetingRooms", officeMeetingRooms);
+            }
+            if (!"WAREHOUSE".equals(resolvedSubtype)) {
+                rejectIfPresent("warehouseClearHeightFt", warehouseClearHeightFt);
+                rejectIfPresent("warehouseLoadingBays", warehouseLoadingBays);
+                rejectIfPresent("warehouseTruckAccess", warehouseTruckAccess);
+                rejectIfPresent("warehouseFlooring", warehouseFlooring);
+            }
+            if (!"LAND".equals(resolvedSubtype)) {
+                rejectIfPresent("commercialZoning", commercialZoning);
+                rejectIfPresent("commercialOwnership", commercialOwnership);
+                rejectIfPresent("commercialApprovals", commercialApprovals);
+            } else {
+                // LAND: none of the built-space-only fields below apply.
+                rejectIfPresent("washroomsPublic", washroomsPublic);
+                rejectIfPresent("washroomsPrivate", washroomsPrivate);
+                rejectIfPresent("parkingPublicCount", parkingPublicCount);
+                rejectIfPresent("parkingPrivateCount", parkingPrivateCount);
+                rejectIfPresent("commercialFurnishingStatus", commercialFurnishingStatus);
+                rejectIfNonEmpty("utilities", utilities);
+            }
+            boolean isShopOrBuilding = "SHOP".equals(resolvedSubtype) || "BUILDING".equals(resolvedSubtype);
+            if (!isShopOrBuilding) {
+                rejectIfPresent("occupancyStatus", occupancyStatus);
+            }
+        }
+
+        // Sale vs rent/lease purpose gate — unconditional across subtypes (net-new fields only;
+        // mirrors validateResidentialFieldSet's sale/rent gate).
+        boolean isRentOrLease = listingPurpose != null && !listingPurpose.isBlank()
+                && RENTAL_PURPOSES.contains(listingPurpose.trim().toUpperCase(java.util.Locale.ROOT));
+        if (isRentOrLease) {
+            rejectIfPresent("expectedRentalYieldPct", expectedRentalYieldPct);
+            rejectIfPresent("currentMonthlyIncomePaise", currentMonthlyIncomePaise);
+        } else {
+            rejectIfPresent("leaseTermMonths", leaseTermMonths);
+            rejectIfPresent("leaseEscalationPct", leaseEscalationPct);
+        }
+    }
+
     // ===== Response helpers =====
 
     private static ResponseEntity<Map<String, String>> notFound() {
@@ -866,7 +1212,37 @@ public class ListingController {
             Boolean maintenanceIncluded,
             List<String> amenities,
             List<String> specialLocationViews,
-            List<String> preferredTenants
+            List<String> preferredTenants,
+            // Commercial typed listing fields (M38-FU2 / #1730)
+            String commercialSubtype,
+            String floorChoice,
+            String floorMode,
+            String hubType,
+            Integer washroomsPublic,
+            Integer washroomsPrivate,
+            Integer parkingPublicCount,
+            Integer parkingPrivateCount,
+            Integer officeSeats,
+            Integer officeCabins,
+            Integer officeMeetingRooms,
+            String occupancyStatus,
+            BigDecimal powerLoadKva,
+            BigDecimal warehouseClearHeightFt,
+            Integer warehouseLoadingBays,
+            Boolean warehouseTruckAccess,
+            String warehouseFlooring,
+            String commercialZoning,
+            String commercialOwnership,
+            String commercialApprovals,
+            BigDecimal expectedRentalYieldPct,
+            Long currentMonthlyIncomePaise,
+            Integer leaseTermMonths,
+            BigDecimal leaseEscalationPct,
+            String commercialFurnishingStatus,
+            String commercialAvailability,
+            String commercialAreaUnit,
+            List<String> suitableUses,
+            List<String> utilities
     ) {}
 
     public record UpdateRequest(
@@ -957,7 +1333,37 @@ public class ListingController {
             Boolean maintenanceIncluded,
             List<String> amenities,
             List<String> specialLocationViews,
-            List<String> preferredTenants
+            List<String> preferredTenants,
+            // Commercial typed listing fields (M38-FU2 / #1730)
+            String commercialSubtype,
+            String floorChoice,
+            String floorMode,
+            String hubType,
+            Integer washroomsPublic,
+            Integer washroomsPrivate,
+            Integer parkingPublicCount,
+            Integer parkingPrivateCount,
+            Integer officeSeats,
+            Integer officeCabins,
+            Integer officeMeetingRooms,
+            String occupancyStatus,
+            BigDecimal powerLoadKva,
+            BigDecimal warehouseClearHeightFt,
+            Integer warehouseLoadingBays,
+            Boolean warehouseTruckAccess,
+            String warehouseFlooring,
+            String commercialZoning,
+            String commercialOwnership,
+            String commercialApprovals,
+            BigDecimal expectedRentalYieldPct,
+            Long currentMonthlyIncomePaise,
+            Integer leaseTermMonths,
+            BigDecimal leaseEscalationPct,
+            String commercialFurnishingStatus,
+            String commercialAvailability,
+            String commercialAreaUnit,
+            List<String> suitableUses,
+            List<String> utilities
     ) {}
 
     public record BulkDeleteRequest(List<UUID> ids) {}

@@ -80,6 +80,9 @@ class ListingCrudServiceTest {
     @Mock
     private com.example.realestate.listing.residential.ListingPreferredTenantRepository listingPreferredTenantRepository;
 
+    @Mock
+    private com.example.realestate.listing.commercial.ListingSuitableUseRepository listingSuitableUseRepository;
+
     private ListingCrudService crudService;
 
     @BeforeEach
@@ -89,7 +92,7 @@ class ListingCrudServiceTest {
                 listingDeduplicationService, priceChangeLogRepository,
                 badgeInvalidationService, searchOutboxWriter, polygonBoundaryValidator,
                 qualityRecomputeService, listingAmenityRepository, listingLocationFeatureRepository,
-                listingPreferredTenantRepository);
+                listingPreferredTenantRepository, listingSuitableUseRepository);
     }
 
     // --- RE-83: createDraft sets dedupe hash and flags duplicates ---
@@ -1051,7 +1054,11 @@ class ListingCrudServiceTest {
     }
 
     @Test
-    void createDraft_commercial_doesNotStampListingFamily() {
+    void createDraft_commercial_stampsCommercialListingFamily() {
+        // M38-FU2 / #1730 (approved-plan.toml [design_decision].subtype_non_null_mechanism):
+        // the service stamps listing_family='COMMERCIAL' on create for every commercial-family
+        // propertyType, mirroring the M38-13A residential stamp. Superseded pre-#1730 expectation
+        // (no stamp at all) — this is the plan-mandated AC-2 behavior, not a regression.
         UUID userId = UUID.randomUUID();
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -1063,8 +1070,8 @@ class ListingCrudServiceTest {
                 ResidentialListingFieldsEmpty());
 
         assertThat(draft.getListingFamily())
-                .as("commercial listings must not be touched by the M38-13A residential family stamp")
-                .isNull();
+                .as("commercial listings must be stamped with listing_family='COMMERCIAL' (M38-FU2 / #1730)")
+                .isEqualTo("COMMERCIAL");
     }
 
     @Test

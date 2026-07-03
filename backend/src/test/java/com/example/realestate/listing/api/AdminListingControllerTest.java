@@ -135,7 +135,19 @@ class AdminListingControllerTest {
                     l.getHasCompound(), l.getHasServantRoom(), l.getIsCornerPlot(), l.getHasBoundaryWall(),
                     l.getIsGatedLayout(), l.getHasWaterConnection(), l.getHasElectricityConnection(), l.getHasDrainage(),
                     l.getPriceNegotiable(), l.getRentNegotiable(), l.getPetsAllowed(), l.getMaintenanceIncluded(),
-                    java.util.List.of(), java.util.List.of(), java.util.List.of());
+                    java.util.List.of(), java.util.List.of(), java.util.List.of(),
+                    l.getCommercialSubtype(), l.getFloorChoice(), l.getFloorMode(), l.getHubType(),
+                    l.getWashroomsPublic(), l.getWashroomsPrivate(),
+                    l.getParkingPublicCount(), l.getParkingPrivateCount(),
+                    l.getOfficeSeats(), l.getOfficeCabins(), l.getOfficeMeetingRooms(),
+                    l.getOccupancyStatus(), l.getPowerLoadKva(),
+                    l.getWarehouseClearHeightFt(), l.getWarehouseLoadingBays(),
+                    l.getWarehouseTruckAccess(), l.getWarehouseFlooring(),
+                    l.getCommercialZoning(), l.getCommercialOwnership(), l.getCommercialApprovals(),
+                    l.getExpectedRentalYieldPct(), l.getCurrentMonthlyIncomePaise(),
+                    l.getLeaseTermMonths(), l.getLeaseEscalationPct(),
+                    l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
+                    java.util.List.of(), java.util.List.of());
         });
     }
 

@@ -12,6 +12,9 @@ import com.example.realestate.listing.pricing.PriceChangeLogRepository;
 import com.example.realestate.listing.pricing.PriceParser;
 import com.example.realestate.listing.api.BulkDeleteResult;
 import com.example.realestate.listing.api.ListingStatsResponse;
+import com.example.realestate.listing.commercial.CommercialListingFields;
+import com.example.realestate.listing.commercial.ListingSuitableUse;
+import com.example.realestate.listing.commercial.ListingSuitableUseRepository;
 import com.example.realestate.listing.residential.ListingAmenity;
 import com.example.realestate.listing.residential.ListingAmenityRepository;
 import com.example.realestate.listing.residential.ListingLocationFeature;
@@ -75,10 +78,15 @@ public class ListingCrudService {
     private final ListingAmenityRepository listingAmenityRepository;
     private final ListingLocationFeatureRepository listingLocationFeatureRepository;
     private final ListingPreferredTenantRepository listingPreferredTenantRepository;
+    private final ListingSuitableUseRepository listingSuitableUseRepository;
 
     /** Residential-family property types (M38-13A / #1626) that get the DB listing_family stamp. */
     private static final Set<String> RESIDENTIAL_PROPERTY_TYPES =
             Set.of("house", "apartment", "villa", "residential_plot");
+
+    /** Commercial-family property types (M38-FU2 / #1730) that get the DB listing_family stamp. */
+    private static final Set<String> COMMERCIAL_PROPERTY_TYPES =
+            Set.of("commercial", "commercial_building", "warehouse", "commercial_land");
 
     public ListingCrudService(
             ListingRepository listingRepository,
@@ -92,7 +100,8 @@ public class ListingCrudService {
             QualityRecomputeService qualityRecomputeService,
             ListingAmenityRepository listingAmenityRepository,
             ListingLocationFeatureRepository listingLocationFeatureRepository,
-            ListingPreferredTenantRepository listingPreferredTenantRepository) {
+            ListingPreferredTenantRepository listingPreferredTenantRepository,
+            ListingSuitableUseRepository listingSuitableUseRepository) {
         this.listingRepository = listingRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingOwnershipGuard = listingOwnershipGuard;
@@ -105,6 +114,7 @@ public class ListingCrudService {
         this.listingAmenityRepository = listingAmenityRepository;
         this.listingLocationFeatureRepository = listingLocationFeatureRepository;
         this.listingPreferredTenantRepository = listingPreferredTenantRepository;
+        this.listingSuitableUseRepository = listingSuitableUseRepository;
     }
 
     /**
@@ -186,7 +196,6 @@ public class ListingCrudService {
      * @throws OwnerListingLimitException if sellerType is "owner" and the user already has 3 LIVE listings
      */
     @Transactional
-    @SuppressWarnings("java:S107") // mirrors existing flat-request telescoping pattern in this class
     public Listing createDraft(UUID createdBy, String propertyType, String title,
                                String locality, BigDecimal price, String description,
                                BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
@@ -202,6 +211,43 @@ public class ListingCrudService {
                                String cultivationStatus, String ownershipType, String surveyNumber,
                                String landCategory, Boolean farmhouseAvailable, Boolean fencingDone,
                                ResidentialListingFields residentialFields) {
+        return createDraft(createdBy, propertyType, title, locality, price, description,
+                landArea, bedrooms, builtArea, landAreaUnit, builtAreaUnit, videoUrl,
+                listingPurpose, carpetArea, carpetAreaUnit, floorNumber, totalFloors,
+                furnishingStatus, washrooms, parkingCount, roadFrontageFt, commercialUsage, numberOfUnits,
+                monthlyRent, securityDepositMonths, lockInMonths, sellerType,
+                waterSource, soilType, roadAccess, cultivationStatus, ownershipType, surveyNumber,
+                landCategory, farmhouseAvailable, fencingDone, residentialFields,
+                CommercialListingFields.EMPTY);
+    }
+
+    /**
+     * Create a new listing with status DRAFT, including commercial typed-listing fields
+     * (M38-FU2 / #1730). All parameters from the previous overload behave identically;
+     * {@code commercialFields} carries the net-new commercial design-spec fields as a single
+     * bounded value object (see {@link CommercialListingFields} for rationale).
+     *
+     * @param sellerType one of "owner", "dealer", "builder" — inferred by controller from caller's role
+     * @throws OwnerListingLimitException if sellerType is "owner" and the user already has 3 LIVE listings
+     */
+    @Transactional
+    @SuppressWarnings("java:S107") // mirrors existing flat-request telescoping pattern in this class
+    public Listing createDraft(UUID createdBy, String propertyType, String title,
+                               String locality, BigDecimal price, String description,
+                               BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
+                               String landAreaUnit, String builtAreaUnit, String videoUrl,
+                               String listingPurpose,
+                               BigDecimal carpetArea, String carpetAreaUnit,
+                               Integer floorNumber, Integer totalFloors,
+                               String furnishingStatus, Integer washrooms, Integer parkingCount,
+                               BigDecimal roadFrontageFt, String commercialUsage, Integer numberOfUnits,
+                               Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths,
+                               String sellerType,
+                               String waterSource, String soilType, String roadAccess,
+                               String cultivationStatus, String ownershipType, String surveyNumber,
+                               String landCategory, Boolean farmhouseAvailable, Boolean fencingDone,
+                               ResidentialListingFields residentialFields,
+                               CommercialListingFields commercialFields) {
         // Enforce owner listing limit: max 3 LIVE listings for owner accounts.
         // Archived listings must not count against this limit.
         if ("owner".equals(sellerType)) {
@@ -265,6 +311,13 @@ public class ListingCrudService {
             listing.setListingFamily("RESIDENTIAL");
         }
 
+        // Commercial typed listing fields (M38-FU2 / #1730)
+        applyCommercialFields(listing, commercialFields);
+        // DB axis: stamp listing_family='COMMERCIAL' for all 4 commercial subtypes.
+        if (COMMERCIAL_PROPERTY_TYPES.contains(listing.getPropertyType())) {
+            listing.setListingFamily("COMMERCIAL");
+        }
+
         // Compute derived area fields only when both area and unit are supplied
         if (landArea != null && landAreaUnit != null) {
             AreaNormalizer.normalize(listing);
@@ -282,6 +335,8 @@ public class ListingCrudService {
         // Child-set writes (amenities / special-location views / preferred tenants) — insert-only
         // on create (no prior rows can exist for a brand-new listing id).
         writeResidentialChildSets(saved.getId(), residentialFields);
+        // Commercial child-set writes (utilities / suitable uses) — insert-only on create.
+        writeCommercialChildSets(saved.getId(), commercialFields);
         log.info("Created draft listing listingId={} createdBy={} sellerType={} isDuplicate={}",
                 saved.getId(), createdBy, sellerType, saved.isDuplicate());
         searchOutboxWriter.writeEvent(
@@ -382,6 +437,76 @@ public class ListingCrudService {
                 row.setCode(code);
                 row.setCreatedAt(now);
                 listingPreferredTenantRepository.save(row);
+            }
+        }
+    }
+
+    /**
+     * Applies the net-new commercial scalar/boolean fields onto the entity. Null-safe:
+     * a null field means "not supplied" and is left untouched (honest-null — never
+     * defaulted to false/empty).
+     */
+    private void applyCommercialFields(Listing listing, CommercialListingFields f) {
+        if (f.commercialSubtype() != null) listing.setCommercialSubtype(f.commercialSubtype());
+        if (f.floorChoice() != null) listing.setFloorChoice(f.floorChoice());
+        if (f.floorMode() != null) listing.setFloorMode(f.floorMode());
+        if (f.hubType() != null) listing.setHubType(f.hubType());
+        if (f.washroomsPublic() != null) listing.setWashroomsPublic(f.washroomsPublic());
+        if (f.washroomsPrivate() != null) listing.setWashroomsPrivate(f.washroomsPrivate());
+        if (f.parkingPublicCount() != null) listing.setParkingPublicCount(f.parkingPublicCount());
+        if (f.parkingPrivateCount() != null) listing.setParkingPrivateCount(f.parkingPrivateCount());
+        if (f.officeSeats() != null) listing.setOfficeSeats(f.officeSeats());
+        if (f.officeCabins() != null) listing.setOfficeCabins(f.officeCabins());
+        if (f.officeMeetingRooms() != null) listing.setOfficeMeetingRooms(f.officeMeetingRooms());
+        if (f.occupancyStatus() != null) listing.setOccupancyStatus(f.occupancyStatus());
+        if (f.powerLoadKva() != null) listing.setPowerLoadKva(f.powerLoadKva());
+        if (f.warehouseClearHeightFt() != null) listing.setWarehouseClearHeightFt(f.warehouseClearHeightFt());
+        if (f.warehouseLoadingBays() != null) listing.setWarehouseLoadingBays(f.warehouseLoadingBays());
+        if (f.warehouseTruckAccess() != null) listing.setWarehouseTruckAccess(f.warehouseTruckAccess());
+        if (f.warehouseFlooring() != null) listing.setWarehouseFlooring(f.warehouseFlooring());
+        if (f.commercialZoning() != null) listing.setCommercialZoning(f.commercialZoning());
+        if (f.commercialOwnership() != null) listing.setCommercialOwnership(f.commercialOwnership());
+        if (f.commercialApprovals() != null) listing.setCommercialApprovals(f.commercialApprovals());
+        if (f.expectedRentalYieldPct() != null) listing.setExpectedRentalYieldPct(f.expectedRentalYieldPct());
+        if (f.currentMonthlyIncomePaise() != null) listing.setCurrentMonthlyIncomePaise(f.currentMonthlyIncomePaise());
+        if (f.leaseTermMonths() != null) listing.setLeaseTermMonths(f.leaseTermMonths());
+        if (f.leaseEscalationPct() != null) listing.setLeaseEscalationPct(f.leaseEscalationPct());
+        if (f.commercialFurnishingStatus() != null) listing.setCommercialFurnishingStatus(f.commercialFurnishingStatus());
+        if (f.commercialAvailability() != null) listing.setCommercialAvailability(f.commercialAvailability());
+        if (f.commercialAreaUnit() != null) listing.setCommercialAreaUnit(f.commercialAreaUnit());
+    }
+
+    /**
+     * Writes the two multi-select commercial child sets (utilities, suitable uses) for a listing.
+     * EDIT/REPLACE semantics — mirrors {@link #writeResidentialChildSets(UUID, ResidentialListingFields)}
+     * exactly: a non-null list is the FINAL desired set (existing rows deleted first, then the new
+     * set — deduplicated, order-preserving — is inserted); a null list leaves existing rows
+     * untouched; an empty (non-null) list clears all existing rows.
+     *
+     * <p>{@code utilities} reuses the {@code listing_amenities} table (same shape as the
+     * residential amenities multi-select) — see V104 migration note.
+     */
+    private void writeCommercialChildSets(UUID listingId, CommercialListingFields f) {
+        if (f.utilities() != null) {
+            listingAmenityRepository.deleteByListingId(listingId);
+            OffsetDateTime now = OffsetDateTime.now();
+            for (String code : new LinkedHashSet<>(f.utilities())) {
+                ListingAmenity row = new ListingAmenity();
+                row.setListingId(listingId);
+                row.setCode(code);
+                row.setCreatedAt(now);
+                listingAmenityRepository.save(row);
+            }
+        }
+        if (f.suitableUses() != null) {
+            listingSuitableUseRepository.deleteByListingId(listingId);
+            OffsetDateTime now = OffsetDateTime.now();
+            for (String code : new LinkedHashSet<>(f.suitableUses())) {
+                ListingSuitableUse row = new ListingSuitableUse();
+                row.setListingId(listingId);
+                row.setCode(code);
+                row.setCreatedAt(now);
+                listingSuitableUseRepository.save(row);
             }
         }
     }
@@ -551,7 +676,6 @@ public class ListingCrudService {
      * @throws ListingStatusException    if status does not allow updates
      */
     @Transactional
-    @SuppressWarnings("java:S107") // mirrors existing flat-request telescoping pattern in this class
     public Listing updateListing(UUID listingId, UUID userId, boolean isAdmin,
                                  String propertyType, String title, String locality,
                                  BigDecimal price, String description,
@@ -576,6 +700,57 @@ public class ListingCrudService {
                                  String landCategory, Boolean farmhouseAvailable, Boolean fencingDone,
                                  String boundaryGeoJson,
                                  ResidentialListingFields residentialFields) {
+        return updateListing(listingId, userId, isAdmin, propertyType, title, locality,
+                price, description, landArea, bedrooms, builtArea, addressConfirmed, latitude, longitude,
+                landAreaUnit, builtAreaUnit, videoUrl, applyVideoUrl, reraNumber,
+                listingPurpose, carpetArea, carpetAreaUnit, floorNumber, totalFloors,
+                furnishingStatus, washrooms, parkingCount, roadFrontageFt, commercialUsage, numberOfUnits,
+                monthlyRent, securityDepositMonths, lockInMonths,
+                possessionStatus, expectedPossessionDate, approvalsDeclared,
+                waterSource, soilType, roadAccess, cultivationStatus, ownershipType, surveyNumber,
+                landCategory, farmhouseAvailable, fencingDone, boundaryGeoJson,
+                residentialFields, CommercialListingFields.EMPTY);
+    }
+
+    /**
+     * Update a listing with extended fields including commercial typed-listing fields
+     * (M38-FU2 / #1730). All parameters from the previous overload behave identically;
+     * {@code commercialFields} carries the net-new commercial design-spec fields (nullable
+     * fields left unchanged; a non-null {@code List<String>} in the multi-selects REPLACES the
+     * existing child-set rows for this listing — see {@link CommercialListingFields}).
+     *
+     * @return the updated listing
+     * @throws ListingNotFoundException  if listing not found
+     * @throws ListingOwnershipException if listing is owned by a different user
+     * @throws ListingStatusException    if status does not allow updates
+     */
+    @Transactional
+    @SuppressWarnings("java:S107") // mirrors existing flat-request telescoping pattern in this class
+    public Listing updateListing(UUID listingId, UUID userId, boolean isAdmin,
+                                 String propertyType, String title, String locality,
+                                 BigDecimal price, String description,
+                                 BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
+                                 Boolean addressConfirmed, Double latitude, Double longitude,
+                                 String landAreaUnit, String builtAreaUnit,
+                                 String videoUrl, boolean applyVideoUrl,
+                                 String reraNumber,
+                                 String listingPurpose,
+                                 BigDecimal carpetArea, String carpetAreaUnit,
+                                 Integer floorNumber, Integer totalFloors,
+                                 String furnishingStatus, Integer washrooms, Integer parkingCount,
+                                 BigDecimal roadFrontageFt, String commercialUsage, Integer numberOfUnits,
+                                 Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths,
+                                 // RERA & possession fields (RE-99)
+                                 String possessionStatus,
+                                 LocalDate expectedPossessionDate,
+                                 String approvalsDeclared,
+                                 // Agricultural land fields
+                                 String waterSource, String soilType, String roadAccess,
+                                 String cultivationStatus, String ownershipType, String surveyNumber,
+                                 String landCategory, Boolean farmhouseAvailable, Boolean fencingDone,
+                                 String boundaryGeoJson,
+                                 ResidentialListingFields residentialFields,
+                                 CommercialListingFields commercialFields) {
         Listing listing = listingOwnershipGuard.findOwned(listingId, userId, isAdmin);
 
         // Admins may edit listings in any non-archived status (including LIVE).
@@ -669,6 +844,14 @@ public class ListingCrudService {
             listing.setListingFamily("RESIDENTIAL");
         }
 
+        // Commercial typed listing fields (M38-FU2 / #1730)
+        applyCommercialFields(listing, commercialFields);
+        // DB axis: stamp listing_family='COMMERCIAL' for all 4 commercial subtypes, using the
+        // effective (post-update) property type. Independent of Java-side validation family.
+        if (COMMERCIAL_PROPERTY_TYPES.contains(listing.getPropertyType())) {
+            listing.setListingFamily("COMMERCIAL");
+        }
+
         // Recompute dedupe hash if any hash-relevant field changed
         if (description != null || locality != null || price != null) {
             listingDeduplicationService.computeAndSetDedupeHash(
@@ -700,6 +883,7 @@ public class ListingCrudService {
         Listing saved = listingRepository.save(listing);
         // Child-set REPLACE (delete-then-insert) — the request's list is the FINAL desired set.
         writeResidentialChildSets(saved.getId(), residentialFields);
+        writeCommercialChildSets(saved.getId(), commercialFields);
 
         // Persist boundary via native SQL (after JPA save, within same @Transactional scope).
         // Mapper re-fetches boundary via findBoundaryGeoJson — no need to set @Transient field here.

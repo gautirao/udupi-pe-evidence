@@ -96,7 +96,8 @@ class ListingControllerAgriValidationTest {
         org.mockito.Mockito.lenient()
                 .when(listingWorkflowService.findListingForCaller(any(), any(), anyBoolean()))
                 .thenReturn(stub);
-        // createDraft: 36 params — UUID + 35 typed params (all Object-compatible except primitives)
+        // createDraft: 36 params — UUID + 35 typed params (all Object-compatible except primitives),
+        // + ResidentialListingFields + CommercialListingFields (M38-FU2 / #1730) = 38 total
         org.mockito.Mockito.lenient()
                 .when(listingCrudService.createDraft(
                         any(), any(), any(), any(), any(), any(),
@@ -105,9 +106,10 @@ class ListingControllerAgriValidationTest {
                         any(), any(), any(), any(), any(), any(),
                         any(), any(), any(), any(), any(), any(),
                         any(), any(), any(), any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenReturn(stub);
-        // updateListing: UUID, UUID, boolean (primitive), + 43 Object params = 46 total
+        // updateListing: UUID, UUID, boolean (primitive), + 43 Object params
+        // + ResidentialListingFields + CommercialListingFields (M38-FU2 / #1730) = 48 total
         org.mockito.Mockito.lenient()
                 .when(listingCrudService.updateListing(
                         any(), any(), anyBoolean(),
@@ -115,7 +117,7 @@ class ListingControllerAgriValidationTest {
                         any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                         any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                         any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenReturn(stub);
 
         // Minimal mapper stub — just return something that produces the status field
@@ -152,7 +154,19 @@ class ListingControllerAgriValidationTest {
                     l.getHasCompound(), l.getHasServantRoom(), l.getIsCornerPlot(), l.getHasBoundaryWall(),
                     l.getIsGatedLayout(), l.getHasWaterConnection(), l.getHasElectricityConnection(), l.getHasDrainage(),
                     l.getPriceNegotiable(), l.getRentNegotiable(), l.getPetsAllowed(), l.getMaintenanceIncluded(),
-                    List.of(), List.of(), List.of());
+                    List.of(), List.of(), List.of(),
+                    l.getCommercialSubtype(), l.getFloorChoice(), l.getFloorMode(), l.getHubType(),
+                    l.getWashroomsPublic(), l.getWashroomsPrivate(),
+                    l.getParkingPublicCount(), l.getParkingPrivateCount(),
+                    l.getOfficeSeats(), l.getOfficeCabins(), l.getOfficeMeetingRooms(),
+                    l.getOccupancyStatus(), l.getPowerLoadKva(),
+                    l.getWarehouseClearHeightFt(), l.getWarehouseLoadingBays(),
+                    l.getWarehouseTruckAccess(), l.getWarehouseFlooring(),
+                    l.getCommercialZoning(), l.getCommercialOwnership(), l.getCommercialApprovals(),
+                    l.getExpectedRentalYieldPct(), l.getCurrentMonthlyIncomePaise(),
+                    l.getLeaseTermMonths(), l.getLeaseEscalationPct(),
+                    l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
+                    List.of(), List.of());
         });
     }
 

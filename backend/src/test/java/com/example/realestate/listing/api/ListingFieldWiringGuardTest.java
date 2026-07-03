@@ -62,8 +62,9 @@ class ListingFieldWiringGuardTest {
             "VALID_CONVERSION_STATUSES",
             "VALID_AGRI_AREA_UNITS",
             "VALID_YN",
-            // CommercialFieldOptions (all author-only; guard by class name)
-            "CommercialFieldOptions",
+            // CommercialFieldOptions is now WIRED (M38-FU2 / #1730 — validateCommercialFields /
+            // validateCommercialFieldSet in ListingController) and intentionally removed from this
+            // forward-only list. Do not re-add it without removing the real rejectIfUnknown wiring.
             // ResidentialFieldOptions (all author-only; guard by class name)
             "ResidentialFieldOptions",
     };

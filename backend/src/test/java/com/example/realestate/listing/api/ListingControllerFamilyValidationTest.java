@@ -100,7 +100,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenReturn(stub);
         lenient().when(listingCrudService.updateListing(
                 any(), any(), anyBoolean(),
@@ -109,7 +109,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenReturn(stub);
 
         when(listingResponseMapper.toResponse(any(Listing.class))).thenAnswer(inv -> {
@@ -136,7 +136,14 @@ class ListingControllerFamilyValidationTest {
                     null, null, null, null, null, null,
                     null, null, null, null, null, null,
                     null, null, null, null, null, null,
-                    List.of(), List.of(), List.of());
+                    List.of(), List.of(), List.of(),
+                    // 27 nulls: commercialSubtype .. commercialAreaUnit (commercial typed fields, M38-FU2 / #1730)
+                    null, null, null, null, null, null,
+                    null, null, null, null, null, null,
+                    null, null, null, null, null, null,
+                    null, null, null, null, null, null,
+                    null, null, null,
+                    List.of(), List.of());
         });
     }
 
@@ -422,9 +429,12 @@ class ListingControllerFamilyValidationTest {
     @Test
     void ac7_commercial_sharedFieldsAccepted_returns201() throws Exception {
         // floorNumber, totalFloors, washrooms, parkingCount valid for commercial — must NOT be rejected.
+        // commercialSubtype is required for the ambiguous 'commercial' propertyType on POST
+        // (M38-FU2 / #1730 — resolveCommercialSubtype); OFFICE keeps this test's original
+        // field-acceptance intent unchanged.
         performCreate("""
                 {"propertyType":"commercial","title":"Office","locality":"Udupi",
-                 "price":5000000,"description":"desc",
+                 "price":5000000,"description":"desc","commercialSubtype":"OFFICE",
                  "commercialUsage":"OFFICE","roadFrontageFt":30,"numberOfUnits":5,
                  "floorNumber":2,"totalFloors":8,"washrooms":4,"parkingCount":10}
                 """)
@@ -675,6 +685,278 @@ class ListingControllerFamilyValidationTest {
         verifyUpdateNeverCalled();
     }
 
+    // ======================== M38-FU2 / #1730: commercial typed-listing validation ========================
+
+    @Test
+    void commercial_shop_validPayload_returns201() throws Exception {
+        performCreate("""
+                {"propertyType":"commercial","title":"Shop","locality":"Udupi",
+                 "price":2000000,"description":"desc","commercialSubtype":"SHOP",
+                 "floorChoice":"GROUND_FLOOR","hubType":"HIGH_STREET",
+                 "suitableUses":["RETAIL","GROCERY"],"utilities":["POWER","CCTV"]}
+                """)
+                .andExpect(status().isCreated());
+        verifyCreateCalledOnce();
+    }
+
+    @Test
+    void commercial_office_validPayload_returns201() throws Exception {
+        performCreate("""
+                {"propertyType":"commercial","title":"Office","locality":"Udupi",
+                 "price":5000000,"description":"desc","commercialSubtype":"OFFICE",
+                 "floorChoice":"UPPER_FLOOR","hubType":"IT_PARK",
+                 "officeSeats":40,"officeCabins":4,"officeMeetingRooms":2,
+                 "suitableUses":["IT_TECH"],"utilities":["INTERNET","AC"]}
+                """)
+                .andExpect(status().isCreated());
+        verifyCreateCalledOnce();
+    }
+
+    @Test
+    void commercial_building_validPayload_returns201() throws Exception {
+        performCreate("""
+                {"propertyType":"commercial_building","title":"Block","locality":"Udupi",
+                 "price":10000000,"description":"desc",
+                 "floorMode":"WHOLE_BUILDING","occupancyStatus":"VACANT",
+                 "powerLoadKva":50,"suitableUses":["MIXED_USE"],"utilities":["FIRE","SECURITY"]}
+                """)
+                .andExpect(status().isCreated());
+        verifyCreateCalledOnce();
+    }
+
+    @Test
+    void commercial_warehouse_validPayload_returns201() throws Exception {
+        performCreate("""
+                {"propertyType":"warehouse","title":"WH A","locality":"Udupi",
+                 "price":8000000,"description":"desc",
+                 "warehouseClearHeightFt":24,"warehouseLoadingBays":3,
+                 "warehouseTruckAccess":true,"warehouseFlooring":"TRIMIX",
+                 "suitableUses":["STORAGE"],"utilities":["POWER"]}
+                """)
+                .andExpect(status().isCreated());
+        verifyCreateCalledOnce();
+    }
+
+    @Test
+    void commercial_land_validPayload_returns201() throws Exception {
+        performCreate("""
+                {"propertyType":"commercial_land","title":"CommLand","locality":"Udupi",
+                 "price":3000000,"description":"desc",
+                 "commercialZoning":"Mixed-use zone","commercialOwnership":"FREEHOLD",
+                 "commercialApprovals":"DC converted","suitableUses":["RETAIL"]}
+                """)
+                .andExpect(status().isCreated());
+        verifyCreateCalledOnce();
+    }
+
+    @Test
+    void commercial_shop_withOfficeOnlyField_returns400_crudNeverCalled() throws Exception {
+        // officeSeats is OFFICE-only — must be rejected for SHOP (cross-subtype structural).
+        performCreate("""
+                {"propertyType":"commercial","title":"Shop","locality":"Udupi",
+                 "price":2000000,"description":"desc","commercialSubtype":"SHOP","officeSeats":10}
+                """)
+                .andExpect(status().isBadRequest());
+        verifyCreateNeverCalled();
+    }
+
+    @Test
+    void commercial_office_withWarehouseOnlyField_returns400_crudNeverCalled() throws Exception {
+        // warehouseFlooring is WAREHOUSE-only — must be rejected for OFFICE.
+        performCreate("""
+                {"propertyType":"commercial","title":"Office","locality":"Udupi",
+                 "price":5000000,"description":"desc","commercialSubtype":"OFFICE",
+                 "warehouseFlooring":"TRIMIX"}
+                """)
+                .andExpect(status().isBadRequest());
+        verifyCreateNeverCalled();
+    }
+
+    @Test
+    void commercial_warehouse_withLandOnlyField_returns400_crudNeverCalled() throws Exception {
+        // commercialZoning is LAND-only — must be rejected for WAREHOUSE.
+        performCreate("""
+                {"propertyType":"warehouse","title":"WH A","locality":"Udupi",
+                 "price":8000000,"description":"desc","commercialZoning":"Industrial zone"}
+                """)
+                .andExpect(status().isBadRequest());
+        verifyCreateNeverCalled();
+    }
+
+    @Test
+    void commercial_land_withBuiltSpaceOnlyField_returns400_crudNeverCalled() throws Exception {
+        // washroomsPublic is a built-space field — must be rejected for LAND.
+        performCreate("""
+                {"propertyType":"commercial_land","title":"CommLand","locality":"Udupi",
+                 "price":3000000,"description":"desc","washroomsPublic":2}
+                """)
+                .andExpect(status().isBadRequest());
+        verifyCreateNeverCalled();
+    }
+
+    @Test
+    void commercial_shop_withInvalidFloorChoice_returns400_crudNeverCalled() throws Exception {
+        // "BASEMENT" is not a member of CommercialFieldOptions.VALID_FLOOR_CHOICES.
+        performCreate("""
+                {"propertyType":"commercial","title":"Shop","locality":"Udupi",
+                 "price":2000000,"description":"desc","commercialSubtype":"SHOP","floorChoice":"BASEMENT"}
+                """)
+                .andExpect(status().isBadRequest());
+        verifyCreateNeverCalled();
+    }
+
+    @Test
+    void commercial_shop_withInvalidSuitableUseCode_returns400_crudNeverCalled() throws Exception {
+        // "WAREHOUSE_USE" is not a member of CommercialFieldOptions.VALID_SHOP_SUITABLE_USES.
+        performCreate("""
+                {"propertyType":"commercial","title":"Shop","locality":"Udupi",
+                 "price":2000000,"description":"desc","commercialSubtype":"SHOP",
+                 "suitableUses":["WAREHOUSE_USE"]}
+                """)
+                .andExpect(status().isBadRequest());
+        verifyCreateNeverCalled();
+    }
+
+    @Test
+    void commercial_ambiguousPropertyType_missingSubtype_returns400_crudNeverCalled() throws Exception {
+        // propertyType='commercial' is ambiguous between SHOP/OFFICE — commercialSubtype required.
+        performCreate("""
+                {"propertyType":"commercial","title":"Ambiguous","locality":"Udupi",
+                 "price":2000000,"description":"desc"}
+                """)
+                .andExpect(status().isBadRequest());
+        verifyCreateNeverCalled();
+    }
+
+    @Test
+    void commercial_ambiguousPropertyType_invalidSubtype_returns400_crudNeverCalled() throws Exception {
+        // "LAND" is a valid subtype elsewhere but not permitted for the ambiguous 'commercial' type.
+        performCreate("""
+                {"propertyType":"commercial","title":"Ambiguous","locality":"Udupi",
+                 "price":2000000,"description":"desc","commercialSubtype":"LAND"}
+                """)
+                .andExpect(status().isBadRequest());
+        verifyCreateNeverCalled();
+    }
+
+    @Test
+    void commercial_house_withCommercialField_returns400_crudNeverCalled() throws Exception {
+        // RESIDENTIAL must reject every M38-FU2 commercial field (cross-family regression guard).
+        performCreate("""
+                {"propertyType":"house","title":"House","locality":"Udupi",
+                 "price":5000000,"description":"desc","hubType":"MALL"}
+                """)
+                .andExpect(status().isBadRequest());
+        verifyCreateNeverCalled();
+    }
+
+    @Test
+    void commercial_agri_withCommercialField_returns400_crudNeverCalled() throws Exception {
+        performCreate("""
+                {"propertyType":"agricultural_land","title":"Farm","locality":"Brahmavar",
+                 "price":5000000,"description":"desc","occupancyStatus":"VACANT"}
+                """)
+                .andExpect(status().isBadRequest());
+        verifyCreateNeverCalled();
+    }
+
+    @Test
+    void commercial_plot_withCommercialField_returns400_crudNeverCalled() throws Exception {
+        performCreate("""
+                {"propertyType":"land","title":"Plot","locality":"Udupi",
+                 "price":2000000,"description":"desc","warehouseFlooring":"TRIMIX"}
+                """)
+                .andExpect(status().isBadRequest());
+        verifyCreateNeverCalled();
+    }
+
+    @Test
+    void commercial_shop_investmentYield_withRentPurpose_returns400_crudNeverCalled() throws Exception {
+        // expectedRentalYieldPct is SALE-only — must be rejected when listingPurpose is RENT.
+        performCreate("""
+                {"propertyType":"commercial","title":"Shop","locality":"Udupi",
+                 "price":2000000,"description":"desc","commercialSubtype":"SHOP",
+                 "listingPurpose":"RENT","monthlyRent":15000,"expectedRentalYieldPct":6.5}
+                """)
+                .andExpect(status().isBadRequest());
+        verifyCreateNeverCalled();
+    }
+
+    @Test
+    void commercial_shop_leaseTerm_withSalePurpose_returns400_crudNeverCalled() throws Exception {
+        // leaseTermMonths is RENT/LEASE-only — must be rejected when listingPurpose is SALE.
+        performCreate("""
+                {"propertyType":"commercial","title":"Shop","locality":"Udupi",
+                 "price":2000000,"description":"desc","commercialSubtype":"SHOP",
+                 "listingPurpose":"SALE","leaseTermMonths":36}
+                """)
+                .andExpect(status().isBadRequest());
+        verifyCreateNeverCalled();
+    }
+
+    @Test
+    void commercial_shop_investmentYield_withSalePurpose_returns201() throws Exception {
+        performCreate("""
+                {"propertyType":"commercial","title":"Shop","locality":"Udupi",
+                 "price":2000000,"description":"desc","commercialSubtype":"SHOP",
+                 "listingPurpose":"SALE","expectedRentalYieldPct":6.5,"currentMonthlyIncomePaise":1500000}
+                """)
+                .andExpect(status().isCreated());
+        verifyCreateCalledOnce();
+    }
+
+    @Test
+    void commercial_shop_leaseTerm_withLeasePurpose_returns201() throws Exception {
+        performCreate("""
+                {"propertyType":"commercial","title":"Shop","locality":"Udupi",
+                 "price":2000000,"description":"desc","commercialSubtype":"SHOP",
+                 "listingPurpose":"LEASE","leaseTermMonths":36,"leaseEscalationPct":5}
+                """)
+                .andExpect(status().isCreated());
+        verifyCreateCalledOnce();
+    }
+
+    @Test
+    void commercial_update_omittedSubtype_ambiguousType_stillValidates_returns200() throws Exception {
+        // PUT on a legacy 'commercial' listing (existing subtype NULL) omitting commercialSubtype:
+        // per-subtype structural gates find no known subtype (stored value is itself NULL) but the
+        // request still succeeds — the existing stored subtype (NULL) is left unchanged on write.
+        Listing existingCommercial = minimalListing(LISTING_ID, "commercial");
+        when(listingWorkflowService.findListingForCaller(eq(LISTING_ID), any(), anyBoolean()))
+                .thenReturn(existingCommercial);
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(dealer())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Updated title"}
+                                """))
+                .andExpect(status().isOk());
+        verifyUpdateCalledOnce();
+    }
+
+    @Test
+    void commercial_update_omittedSubtype_storedShop_withWarehouseOnlyField_returns400_crudNeverCalled()
+            throws Exception {
+        // Finding 1 (#1730 code review): PUT on a commercial listing whose STORED subtype is SHOP,
+        // omitting commercialSubtype but sending a warehouse-only field (warehouseClearHeightFt).
+        // The controller must fall back to the EXISTING stored subtype for structural validation
+        // (not silently accept), so this is rejected with 400 rather than persisted unchanged.
+        Listing existingShop = minimalListing(LISTING_ID, "commercial");
+        existingShop.setCommercialSubtype("SHOP");
+        when(listingWorkflowService.findListingForCaller(eq(LISTING_ID), any(), anyBoolean()))
+                .thenReturn(existingShop);
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(dealer())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"warehouseClearHeightFt":24}
+                                """))
+                .andExpect(status().isBadRequest());
+        verifyUpdateNeverCalled();
+    }
+
     // ======================== Shared helpers ========================
 
     private RequestPostProcessor dealer() {
@@ -696,7 +978,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     private void verifyCreateCalledOnce() {
@@ -706,7 +988,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     private void verifyUpdateNeverCalled() {
@@ -716,7 +998,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any());
+                any(), any(), any(), any(), any());
     }
 
     private void verifyUpdateCalledOnce() {
@@ -726,7 +1008,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any());
+                any(), any(), any(), any(), any());
     }
 
     private static Listing minimalListing(UUID id, String propertyType) {

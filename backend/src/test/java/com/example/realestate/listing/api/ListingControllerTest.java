@@ -157,7 +157,19 @@ class ListingControllerTest {
                     l.getHasCompound(), l.getHasServantRoom(), l.getIsCornerPlot(), l.getHasBoundaryWall(),
                     l.getIsGatedLayout(), l.getHasWaterConnection(), l.getHasElectricityConnection(), l.getHasDrainage(),
                     l.getPriceNegotiable(), l.getRentNegotiable(), l.getPetsAllowed(), l.getMaintenanceIncluded(),
-                    java.util.List.of(), java.util.List.of(), java.util.List.of());
+                    java.util.List.of(), java.util.List.of(), java.util.List.of(),
+                    l.getCommercialSubtype(), l.getFloorChoice(), l.getFloorMode(), l.getHubType(),
+                    l.getWashroomsPublic(), l.getWashroomsPrivate(),
+                    l.getParkingPublicCount(), l.getParkingPrivateCount(),
+                    l.getOfficeSeats(), l.getOfficeCabins(), l.getOfficeMeetingRooms(),
+                    l.getOccupancyStatus(), l.getPowerLoadKva(),
+                    l.getWarehouseClearHeightFt(), l.getWarehouseLoadingBays(),
+                    l.getWarehouseTruckAccess(), l.getWarehouseFlooring(),
+                    l.getCommercialZoning(), l.getCommercialOwnership(), l.getCommercialApprovals(),
+                    l.getExpectedRentalYieldPct(), l.getCurrentMonthlyIncomePaise(),
+                    l.getLeaseTermMonths(), l.getLeaseEscalationPct(),
+                    l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
+                    java.util.List.of(), java.util.List.of());
         });
         // Batch variant: delegate each listing through the single-listing stub.
         when(listingResponseMapper.toResponseList(any())).thenAnswer(inv -> {
@@ -180,7 +192,7 @@ class ListingControllerTest {
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 eq("broker"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(),
-                any()))
+                any(), any()))
                 .thenReturn(saved);
 
         mockMvc.perform(post("/api/listings")
@@ -201,7 +213,8 @@ class ListingControllerTest {
                 null, null, null, null, null, null,
                 "broker", null, null, null, null, null, null,
                 null, null, null,
-                com.example.realestate.listing.residential.ResidentialListingFields.EMPTY);
+                com.example.realestate.listing.residential.ResidentialListingFields.EMPTY,
+                com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
     }
 
     // ==================== Test 2: GET /mine -> 200, array ====================
@@ -238,7 +251,7 @@ class ListingControllerTest {
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(),
-                any()))
+                any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -259,7 +272,8 @@ class ListingControllerTest {
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null,
                 null, null, null,
-                com.example.realestate.listing.residential.ResidentialListingFields.EMPTY);
+                com.example.realestate.listing.residential.ResidentialListingFields.EMPTY,
+                com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
     }
 
     // ==================== Test 4: DELETE -> 204 ====================
@@ -307,7 +321,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any());
+                any(), any());
     }
 
     // ==================== Test 7: PUT -> not found -> 404 ====================
@@ -320,7 +334,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -343,7 +357,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenThrow(new ListingStatusException(
                         "Cannot update listing with status LIVE"));
 
@@ -565,7 +579,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -589,7 +603,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -610,7 +624,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -631,7 +645,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenThrow(new ListingStatusException(
                         "Cannot update listing with status PENDING_REVIEW"));
 
@@ -653,7 +667,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenThrow(new ListingStatusException(
                         "Cannot update listing with status LIVE"));
 
@@ -675,7 +689,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -699,7 +713,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenReturn(saved);
         when(listingImageRepository.countByListingId(LISTING_ID)).thenReturn(2L);
 
@@ -777,7 +791,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -795,7 +809,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any());
+                any(), any());
     }
 
     @Test
@@ -810,7 +824,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -828,7 +842,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any());
+                any(), any());
     }
 
     // ==================== RE-99: RERA & docs readiness fields ====================
@@ -958,7 +972,7 @@ class ListingControllerTest {
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 eq("owner"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
-                any()))
+                any(), any()))
                 .thenReturn(saved);
 
         mockMvc.perform(post("/api/listings")
@@ -977,7 +991,8 @@ class ListingControllerTest {
                 null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null,
                 "owner", null, null, null, null, null, null, null, null, null,
-                com.example.realestate.listing.residential.ResidentialListingFields.EMPTY);
+                com.example.realestate.listing.residential.ResidentialListingFields.EMPTY,
+                com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
     }
 
     @Test
@@ -986,7 +1001,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 eq("owner"), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenThrow(new OwnerListingLimitException(
                         "Owner accounts are limited to 3 active listings"));
 
@@ -1013,7 +1028,7 @@ class ListingControllerTest {
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 eq("broker"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
-                any()))
+                any(), any()))
                 .thenReturn(saved);
 
         mockMvc.perform(post("/api/listings")
@@ -1032,7 +1047,8 @@ class ListingControllerTest {
                 null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null,
                 "broker", null, null, null, null, null, null, null, null, null,
-                com.example.realestate.listing.residential.ResidentialListingFields.EMPTY);
+                com.example.realestate.listing.residential.ResidentialListingFields.EMPTY,
+                com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
     }
 
     // ==================== RE-135: Archive endpoint tests ====================
@@ -1371,7 +1387,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any());
+                any(), any());
     }
 
     @Test
@@ -1385,7 +1401,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -1407,7 +1423,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -1449,7 +1465,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any());
+                any(), any());
     }
 
     // ==================== #1366: Polygon boundary tests ====================
@@ -1467,7 +1483,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -1487,7 +1503,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenThrow(new ListingValidationException(List.of(
                         Map.of("error", "boundary is only accepted for agricultural_land listings",
                                "code", "BOUNDARY_NON_AGRI_TYPE"))));
@@ -1508,7 +1524,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenThrow(new ListingValidationException(List.of(
                         Map.of("error", "boundary ring is not closed: first and last coordinates must be equal",
                                "code", "BOUNDARY_NOT_CLOSED"))));
@@ -1533,7 +1549,7 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any()))
+                any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
