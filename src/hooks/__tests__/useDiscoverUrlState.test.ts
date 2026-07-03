@@ -20,7 +20,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useDiscoverUrlState } from '../useDiscoverUrlState';
@@ -3153,5 +3153,163 @@ describe('useDiscoverUrlState — clearAgriFilters removes all 8 agri params (Is
     });
 
     expect(result.current[0].city).toBe('udupi');
+  });
+});
+
+// ─── Issue #1745 P0 — URL normalization shim regression coverage ────────────────
+//
+// The shim (discoverUrlNormalize.ts) is unit-tested standalone in
+// discoverUrlNormalize.test.ts. These hook-level tests confirm the shim is wired
+// in at useDiscoverUrlState's read boundary WITHOUT changing observable behaviour:
+// journey short-name aliases resolve on cold-load read, the OD-1 group→region
+// migration still fires exactly once via history.replace (no push, cold-load
+// only), the deprecation warning still logs, and the #1445 maxKm=25 backfill
+// still lands — all now expressed through the shared shim helpers.
+
+describe('useDiscoverUrlState — journey short-name READ aliases (Issue #1745 P0)', () => {
+  it('resolves journey=area to journey="area-first" on cold-load read', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=area'),
+    });
+    expect(result.current[0].journey).toBe('area-first');
+  });
+
+  it('resolves journey=school to journey="school-first" on cold-load read', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=school'),
+    });
+    expect(result.current[0].journey).toBe('school-first');
+  });
+
+  it('resolves journey=agri to journey="agri-first" on cold-load read', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri'),
+    });
+    expect(result.current[0].journey).toBe('agri-first');
+  });
+
+  it('still returns null for unknown journey values (alias does not force validity)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=unknown-mode'),
+    });
+    expect(result.current[0].journey).toBeNull();
+  });
+
+  it('canonical long-form journey values still read correctly (no regression)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=area-first'),
+    });
+    expect(result.current[0].journey).toBe('area-first');
+  });
+
+  it('setJourney still writes the canonical long form to the URL, never the short alias', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setJourney('area-first');
+    });
+
+    expect(result.current[0].journey).toBe('area-first');
+  });
+});
+
+describe('useDiscoverUrlState — OD-1 group migration still routes through history.replace (Issue #1745 P0 regression guard)', () => {
+  it('OD-1 migration replaces (not pushes) — no earlier group= entry is reachable via Back', async () => {
+    const navigateRef: { current: ((delta: number) => void) | null } = { current: null };
+    function NavCapture() {
+      const navigate = useNavigate();
+      navigateRef.current = (delta: number) => navigate(delta);
+      return null;
+    }
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function Wrapper({ children }: { children: React.ReactNode }) {
+      return React.createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        React.createElement(
+          MemoryRouter,
+          { initialEntries: ['/discover?city=udupi&journey=agri-first&group=N:10_25'] },
+          React.createElement(NavCapture, null),
+          children,
+        ),
+      );
+    }
+
+    const { result } = renderHook(() => useDiscoverUrlState(), { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(result.current[0].selectedRegion).toBe('N');
+    });
+
+    act(() => {
+      navigateRef.current?.(-1);
+    });
+
+    // If OD-1 had used PUSH, Back would restore the pre-migration entry (group= present,
+    // selectedRegion=null). Because it uses REPLACE, there is only ever one history
+    // entry — Back is a no-op and the post-migration state is unchanged.
+    expect(result.current[0].selectedRegion).toBe('N');
+    expect(result.current[0].selectedGroup).toBeNull();
+  });
+
+  it('cold-load ?group=N:10_25 still emits the [DEPRECATED] console.warn exactly once', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { result } = renderHook(() => useDiscoverUrlState(), {
+        wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first&group=N:10_25'),
+      });
+
+      await waitFor(() => {
+        expect(result.current[0].selectedRegion).toBe('N');
+      });
+
+      const deprecationCalls = warnSpy.mock.calls.filter((call) =>
+        String(call[0]).includes('[DEPRECATED]'),
+      );
+      expect(deprecationCalls.length).toBe(1);
+      expect(deprecationCalls[0][1]).toBe('N');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('cold-load ?group=N:10_25 still backfills selectedMaxKm=25 via the #1445 canonicalisation effect', async () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first&group=N:10_25'),
+    });
+
+    await waitFor(() => {
+      expect(result.current[0].selectedRegion).toBe('N');
+    });
+
+    await waitFor(() => {
+      expect(result.current[0].selectedMaxKm).toBe(25);
+    });
+
+    // selectedGroup (deprecated legacy field) is null post-migration — group was removed.
+    expect(result.current[0].selectedGroup).toBeNull();
+  });
+
+  it('cold-load with an invalid legacy group direction does not migrate and does not warn', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { result } = renderHook(() => useDiscoverUrlState(), {
+        wrapper: wrapperWithQuery('/discover?city=udupi&group=BADDIR:10_25'),
+      });
+
+      await waitFor(() => {
+        expect(result.current[0].selectedGroup).toBeNull();
+      });
+      expect(result.current[0].selectedRegion).toBeNull();
+
+      const deprecationCalls = warnSpy.mock.calls.filter((call) =>
+        String(call[0]).includes('[DEPRECATED]'),
+      );
+      expect(deprecationCalls.length).toBe(0);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

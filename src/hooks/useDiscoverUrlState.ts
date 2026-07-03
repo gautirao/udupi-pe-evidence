@@ -18,6 +18,9 @@
  *
  * Journey params:
  *   journey    – active journey type: "area-first" | "school-first" | "agri-first" (absent = no journey)
+ *                READ-only short-name aliases (Issue #1745 P0): "area" | "school" | "agri" are
+ *                accepted on read (resolved via the discoverUrlNormalize shim) but the URL is
+ *                never rewritten to the short form — all writes still emit the long canonical form.
  *   groupId    – area-group slug selected for area-first journey (absent when no group)
  *
  * Filter params:
@@ -56,6 +59,11 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type { DiscoverAreasResponse } from '@/hooks/useDiscoverAreas';
+import {
+  VALID_DIRECTIONS,
+  extractLegacyGroupDirection,
+  normalizeDiscoverSearchParams,
+} from '@/hooks/discoverUrlNormalize';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -399,7 +407,8 @@ const DEBOUNCE_MS = 300;
 const LAT_LON_PRECISION = 5;
 const PARAM_LOCALITY = 'locality';
 
-const VALID_DIRECTIONS = new Set(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']);
+// VALID_DIRECTIONS is imported from discoverUrlNormalize.ts (Issue #1745 P0) — single
+// source of truth shared with the pure normalization shim, so the two never diverge.
 const VALID_MAX_KM = new Set([10, 25, 50, 100]);
 export const DEFAULT_MAX_KM = 25;
 
@@ -644,8 +653,12 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
 
   const q = urlParams.get('q') ?? '';
 
-  // journey: validate against allowed values; unknown values are treated as null
-  const rawJourney = urlParams.get('journey');
+  // Issue #1745 P0 — read boundary routed through the normalization shim: resolves
+  // journey short-name aliases (area/school/agri → *-first) before validation. The
+  // shim never rewrites the URL itself — canonical long forms and unknown/invalid
+  // values pass through unchanged, so the fallback-to-null behaviour below is
+  // unaffected for anything the shim doesn't recognise as an alias.
+  const rawJourney = normalizeDiscoverSearchParams(urlParams).get('journey');
   const journey: DiscoverJourney | null =
     rawJourney === 'area-first' || rawJourney === 'school-first' || rawJourney === 'agri-first'
       ? rawJourney
@@ -724,17 +737,23 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   // On initial URL parse: if the `group` param is present, replace history with
   // region=DIR only (band is dropped, maxKm is NOT inferred — Option B is forbidden).
   // console.warn is intentional to aid debugging of stale shared URLs.
+  //
+  // Issue #1745 P0 — the direction-extraction logic is routed through the shared
+  // extractLegacyGroupDirection helper (discoverUrlNormalize.ts) so this write-side
+  // migration and the read-side normalizeDiscoverSearchParams shim can never diverge
+  // on "which legacy group values are valid to migrate". Observable behaviour
+  // (cold-load-only, history.replace, deprecation warning, band always dropped,
+  // maxKm never inferred) is unchanged.
   useEffect(() => {
     const groupParam = urlParams.get('group');
     if (!groupParam) return;
 
-    const parts = groupParam.split(':');
-    const directionCode = parts[0];
+    const migratedDirection = extractLegacyGroupDirection(groupParam);
 
-    if (VALID_DIRECTIONS.has(directionCode)) {
+    if (migratedDirection) {
       console.warn(
         '[DEPRECATED] group=DIR:BAND URL param is deprecated. Use region=DIR&maxKm=N instead. Migrating to region=%s (band dropped, maxKm not inferred).',
-        directionCode,
+        migratedDirection,
       );
     }
 
@@ -743,8 +762,8 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
       (prev) => {
         const next = new URLSearchParams(prev);
         next.delete('group');
-        if (VALID_DIRECTIONS.has(directionCode)) {
-          next.set('region', directionCode);
+        if (migratedDirection) {
+          next.set('region', migratedDirection);
           // maxKm intentionally NOT set (OD-1 Option A — band → maxKm mapping is forbidden)
         }
         return next;
