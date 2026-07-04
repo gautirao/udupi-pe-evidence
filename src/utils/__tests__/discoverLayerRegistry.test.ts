@@ -8,7 +8,9 @@ import {
   applyCityChangeReset,
   applyStartOverReset,
   clearRegionScopeForAgri,
-  fallbackInvalidSelection,
+  paramsToLayerInput,
+  applyLayerSelectionToParams,
+  LAYER_PARAM,
   PANEL_DERIVATION_FIELDS,
   type DiscoverLayerInput,
   type DiscoverLayerSelection,
@@ -384,80 +386,242 @@ describe('clearRegionScopeForAgri', () => {
   });
 });
 
-describe('fallbackInvalidSelection', () => {
-  it('drops areaKey when not in the validity set, preserving schoolId/groupId', () => {
-    const input = makeInput();
-    const result = fallbackInvalidSelection(input, {
-      validAreaKeys: new Set(['some-other-area']),
+// ─── paramsToLayerInput (Issue #1745 P3) ─────────────────────────────────────
+
+describe('paramsToLayerInput', () => {
+  it('reads all 12 layer params when fully populated', () => {
+    const params = new URLSearchParams({
+      journey: 'agri-first',
+      areaKey: 'IN|KA|Udupi|Manipal',
+      schoolId: 'sch-1',
+      groupId: 'zone-a',
+      schoolPicking: '1',
+      groupResults: '1',
+      group: 'N:10_25',
+      region: 'N',
+      maxKm: '25',
+      listing: 'listing-1',
+      locality: 'Manipal',
+      scope: 'north',
     });
-    expect(result.selection.areaKey).toBeNull();
-    expect(result.selection.schoolId).toBe('sch-1');
-    expect(result.selection.groupId).toBe('zone-a');
-  });
 
-  it('drops schoolId when not in the validity set, falling back to area-level (areaKey retained)', () => {
-    const input = makeInput();
-    const result = fallbackInvalidSelection(input, {
-      validSchoolIds: new Set(['some-other-school']),
+    const result = paramsToLayerInput(params);
+
+    expect(result).toEqual({
+      scope: { region: 'north' },
+      journey: 'agri-first',
+      selection: {
+        areaKey: 'IN|KA|Udupi|Manipal',
+        schoolId: 'sch-1',
+        groupId: 'zone-a',
+        schoolPicking: true,
+        groupResults: true,
+        selectedGroup: { directionKey: 'N', distanceBandKey: '10_25' },
+        selectedRegion: 'N',
+        selectedMaxKm: 25,
+        selectedListing: 'listing-1',
+        selectedLocality: 'Manipal',
+      },
     });
-    expect(result.selection.schoolId).toBeNull();
-    expect(result.selection.areaKey).toBe('IN|KA|Udupi|Manipal');
-
-    // Falls back to schools-in-area via computeDiscoverLayer, not a crash/undefined state.
-    expect(computeDiscoverLayer(result)).toBe('schools-in-area');
   });
 
-  it('drops groupId when not in the validity set', () => {
-    const input = makeInput();
-    const result = fallbackInvalidSelection(input, {
-      validGroupIds: new Set(['some-other-group']),
-    });
-    expect(result.selection.groupId).toBeNull();
-  });
+  it('reads null/undefined for every field when the params are sparse/missing', () => {
+    const params = new URLSearchParams({ city: 'udupi' });
 
-  it('keeps ids when they are present in the validity set', () => {
-    const input = makeInput();
-    const result = fallbackInvalidSelection(input, {
-      validAreaKeys: new Set(['IN|KA|Udupi|Manipal']),
-      validSchoolIds: new Set(['sch-1']),
-      validGroupIds: new Set(['zone-a']),
-    });
-    expect(result.selection.areaKey).toBe('IN|KA|Udupi|Manipal');
-    expect(result.selection.schoolId).toBe('sch-1');
-    expect(result.selection.groupId).toBe('zone-a');
-  });
+    const result = paramsToLayerInput(params);
 
-  it('keeps ids when no validity set is supplied for that field (undefined = no check)', () => {
-    const input = makeInput();
-    const result = fallbackInvalidSelection(input, {});
-    expect(result.selection.areaKey).toBe('IN|KA|Udupi|Manipal');
-    expect(result.selection.schoolId).toBe('sch-1');
-    expect(result.selection.groupId).toBe('zone-a');
-  });
-
-  it('never throws, even with empty selection and empty validity sets', () => {
-    const emptyInput = makeInput({
+    expect(result).toEqual({
+      scope: { region: null },
+      journey: null,
       selection: {
         areaKey: null,
         schoolId: null,
         groupId: null,
+        schoolPicking: undefined,
+        groupResults: undefined,
         selectedGroup: null,
+        selectedRegion: null,
+        selectedMaxKm: null,
+        selectedListing: null,
+        selectedLocality: null,
       },
     });
-    expect(() => fallbackInvalidSelection(emptyInput, {})).not.toThrow();
-    expect(() =>
-      fallbackInvalidSelection(emptyInput, {
-        validAreaKeys: new Set(),
-        validSchoolIds: new Set(),
-        validGroupIds: new Set(),
-      }),
-    ).not.toThrow();
   });
 
-  it('does not mutate the input object', () => {
-    const input = makeInput();
-    const snapshot = JSON.parse(JSON.stringify(input));
-    fallbackInvalidSelection(input, { validAreaKeys: new Set(['some-other-area']) });
-    expect(input).toEqual(snapshot);
+  it('handles completely empty params', () => {
+    const result = paramsToLayerInput(new URLSearchParams());
+    expect(result.journey).toBeNull();
+    expect(result.scope.region).toBeNull();
+    expect(Object.values(result.selection).every((v) => v === null || v === undefined)).toBe(true);
+  });
+
+  it('treats "0" / "false" schoolPicking and groupResults as absent (only "1" counts as present)', () => {
+    const params = new URLSearchParams({ schoolPicking: 'false', groupResults: '0' });
+    const result = paramsToLayerInput(params);
+    expect(result.selection.schoolPicking).toBeUndefined();
+    expect(result.selection.groupResults).toBeUndefined();
+  });
+});
+
+// ─── applyLayerSelectionToParams (Issue #1745 P3) ────────────────────────────
+
+describe('applyLayerSelectionToParams', () => {
+  it('deletes a param when the reducer value is null', () => {
+    const params = new URLSearchParams({ journey: 'agri-first', city: 'udupi' });
+    const layer = makeInput({ journey: null });
+
+    applyLayerSelectionToParams(params, layer);
+
+    expect(params.has('journey')).toBe(false);
+  });
+
+  it('leaves a present param byte-identical (including a URL-encoded value) when the reducer value is defined', () => {
+    const params = new URLSearchParams();
+    params.set('areaKey', 'IN|KA|Udupi|Manipal & Sons');
+    const encodedBefore = params.toString();
+    const layer = makeInput({
+      selection: { ...makeInput().selection, areaKey: 'IN|KA|Udupi|Manipal & Sons' },
+    });
+
+    applyLayerSelectionToParams(params, layer);
+
+    expect(params.toString()).toBe(encodedBefore);
+    expect(params.get('areaKey')).toBe('IN|KA|Udupi|Manipal & Sons');
+  });
+
+  it('is a no-op (does not set) when the param is already absent and the reducer value is null/undefined', () => {
+    const params = new URLSearchParams({ city: 'udupi' });
+    const layer = makeInput({
+      journey: null,
+      selection: { ...makeInput().selection, schoolPicking: undefined },
+    });
+
+    applyLayerSelectionToParams(params, layer);
+
+    expect(params.has('journey')).toBe(false);
+    expect(params.has('schoolPicking')).toBe(false);
+  });
+
+  it('never touches non-layer params (city, intent, filters, lat/lon/zoom, radiusKm, q)', () => {
+    const params = new URLSearchParams({
+      city: 'udupi',
+      intent: 'rent',
+      type: 'land,house',
+      lat: '13.35',
+      lon: '74.79',
+      zoom: '12',
+      radiusKm: '5',
+      q: 'sea view',
+      journey: 'agri-first',
+    });
+    const layer = makeInput({ journey: null });
+
+    applyLayerSelectionToParams(params, layer);
+
+    expect(params.get('city')).toBe('udupi');
+    expect(params.get('intent')).toBe('rent');
+    expect(params.get('type')).toBe('land,house');
+    expect(params.get('lat')).toBe('13.35');
+    expect(params.get('lon')).toBe('74.79');
+    expect(params.get('zoom')).toBe('12');
+    expect(params.get('radiusKm')).toBe('5');
+    expect(params.get('q')).toBe('sea view');
+    expect(params.has('journey')).toBe(false);
+  });
+
+  it('touches only the 12 LAYER_PARAM names', () => {
+    expect(new Set(Object.values(LAYER_PARAM)).size).toBe(12);
+  });
+
+  it('changeCity-case: clears journey/areaKey/groupId/groupResults/group/region/maxKm/locality/scope, preserves schoolId/schoolPicking/listing', () => {
+    const params = new URLSearchParams({
+      city: 'udupi',
+      journey: 'area-first',
+      areaKey: 'IN|KA|Udupi|Manipal',
+      schoolId: 'sch-1',
+      groupId: 'zone-a',
+      schoolPicking: '1',
+      groupResults: '1',
+      group: 'N:10_25',
+      region: 'N',
+      maxKm: '25',
+      listing: 'listing-1',
+      locality: 'Manipal',
+      scope: 'north',
+    });
+
+    const reset = applyCityChangeReset(paramsToLayerInput(params));
+    applyLayerSelectionToParams(params, reset);
+
+    expect(params.has('journey')).toBe(false);
+    expect(params.has('areaKey')).toBe(false);
+    expect(params.has('groupId')).toBe(false);
+    expect(params.has('groupResults')).toBe(false);
+    expect(params.has('group')).toBe(false);
+    expect(params.has('region')).toBe(false);
+    expect(params.has('maxKm')).toBe(false);
+    expect(params.has('locality')).toBe(false);
+    expect(params.has('scope')).toBe(false);
+    // Preserved
+    expect(params.get('schoolId')).toBe('sch-1');
+    expect(params.get('schoolPicking')).toBe('1');
+    expect(params.get('listing')).toBe('listing-1');
+    expect(params.get('city')).toBe('udupi');
+  });
+
+  it('clearRegion-case: clears region/maxKm/listing/locality, preserves scope and everything else', () => {
+    const params = new URLSearchParams({
+      city: 'udupi',
+      journey: 'agri-first',
+      areaKey: 'IN|KA|Udupi|Manipal',
+      schoolId: 'sch-1',
+      groupId: 'zone-a',
+      region: 'N',
+      maxKm: '25',
+      listing: 'listing-1',
+      locality: 'Manipal',
+      scope: 'north',
+    });
+
+    const cleared = clearRegionScopeForAgri(paramsToLayerInput(params));
+    applyLayerSelectionToParams(params, cleared);
+
+    expect(params.has('region')).toBe(false);
+    expect(params.has('maxKm')).toBe(false);
+    expect(params.has('listing')).toBe(false);
+    expect(params.has('locality')).toBe(false);
+    // Preserved
+    expect(params.get('scope')).toBe('north');
+    expect(params.get('journey')).toBe('agri-first');
+    expect(params.get('areaKey')).toBe('IN|KA|Udupi|Manipal');
+    expect(params.get('schoolId')).toBe('sch-1');
+    expect(params.get('groupId')).toBe('zone-a');
+  });
+});
+
+// ─── startOver drift guard (Issue #1745 P3) ──────────────────────────────────
+//
+// startOver's real implementation (useDiscoverUrlState.ts) is intentionally left
+// un-delegated (it builds a brand-new URLSearchParams from scratch rather than
+// deleting params off the existing one). This test asserts the two independent
+// implementations still agree on which fields get cleared vs preserved, WITHOUT
+// coupling startOver's code to applyStartOverReset.
+describe('startOver drift guard', () => {
+  it('applyStartOverReset nulls exactly the 12-field layer subset that the real startOver clears', () => {
+    const result = applyStartOverReset(makeInput());
+
+    // The 11 selection fields + journey + scope.region — all null/undefined.
+    expect(result.journey).toBeNull();
+    expect(result.scope.region).toBeNull();
+    expect(result.selection.areaKey).toBeNull();
+    expect(result.selection.schoolId).toBeNull();
+    expect(result.selection.groupId).toBeNull();
+    expect(result.selection.schoolPicking).toBeUndefined();
+    expect(result.selection.groupResults).toBeUndefined();
+    expect(result.selection.selectedGroup).toBeNull();
+    expect(result.selection.selectedRegion).toBeNull();
+    expect(result.selection.selectedMaxKm).toBeNull();
+    expect(result.selection.selectedListing).toBeNull();
+    expect(result.selection.selectedLocality).toBeNull();
   });
 });

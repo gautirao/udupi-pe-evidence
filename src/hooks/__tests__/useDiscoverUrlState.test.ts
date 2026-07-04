@@ -2394,6 +2394,118 @@ describe('useDiscoverUrlState — changeCity clears region and maxKm', () => {
   });
 });
 
+// ─── Issue #1745 P3: changeCity / clearRegionAndMaxKm delegate to discoverLayerRegistry ──
+//
+// changeCity and clearRegionAndMaxKm now delegate their reset semantics + URL-param
+// mapping to discoverLayerRegistry's pure `applyCityChangeReset` / `clearRegionScopeForAgri`
+// + `paramsToLayerInput` / `applyLayerSelectionToParams`, instead of listing the param
+// deletes inline. These tests assert the delegated behaviour is byte-identical to the
+// pre-delegation contract (covered above/elsewhere) on a fully-populated URL, and add a
+// few gaps (schoolId absent-case, scope preserved on clearRegionAndMaxKm, filters/intent/
+// radiusKm/q survival) not previously asserted directly against these two actions.
+describe('useDiscoverUrlState — P3 delegation parity (changeCity / clearRegionAndMaxKm)', () => {
+  const FULL_URL =
+    '/discover?city=udupi&intent=rent&type=house&beds=2,3&priceMin=1000000&priceMax=5000000' +
+    '&radiusKm=5&q=sea+view&journey=agri-first&areaKey=IN%7CKA%7CUdupi%7CManipal' +
+    '&schoolId=sch-1&groupId=zone-a&schoolPicking=1&groupResults=1&group=N%3A10_25' +
+    '&region=N&maxKm=25&listing=listing-1&locality=Manipal&scope=north' +
+    '&lat=13.34090&lon=74.74210&zoom=12';
+
+  it('changeCity: fully-populated URL — clears the 12 layer params + viewport, preserves schoolId/schoolPicking/listing/filters/intent/radiusKm/q', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery(FULL_URL),
+    });
+
+    act(() => {
+      result.current[1].changeCity('kundapur');
+    });
+
+    const state = result.current[0];
+    expect(state.city).toBe('kundapur');
+    expect(state.journey).toBeNull();
+    expect(state.areaKey).toBeNull();
+    expect(state.groupId).toBeNull();
+    expect(state.groupResults).toBeUndefined();
+    expect(state.selectedGroup).toBeNull();
+    expect(state.selectedRegion).toBeNull();
+    expect(state.selectedMaxKm).toBeNull();
+    expect(state.selectedLocality).toBeNull();
+    expect(state.scope).toBeNull();
+    expect(state.viewport).toBeNull();
+
+    // Preserved (real changeCity does not clear these)
+    expect(state.schoolId).toBe('sch-1');
+    expect(state.schoolPicking).toBe(true);
+    expect(state.selectedListing).toBe('listing-1');
+
+    // Untouched — never part of the 12 layer params
+    expect(state.filters.propertyTypes).toEqual(['house']);
+    expect(state.filters.bedrooms).toEqual([2, 3]);
+    expect(state.filters.priceMin).toBe(1000000);
+    expect(state.filters.priceMax).toBe(5000000);
+    expect(state.intent).toBe('rent');
+    expect(state.radiusKm).toBe(5);
+    expect(state.q).toBe('sea view');
+  });
+
+  it('changeCity: absent schoolId stays absent (no accidental set)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=area-first'),
+    });
+
+    act(() => {
+      result.current[1].changeCity('kundapur');
+    });
+
+    expect(result.current[0].schoolId).toBeNull();
+  });
+
+  it('clearRegionAndMaxKm: fully-populated URL — clears region/maxKm/listing/locality, preserves scope + everything else', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery(FULL_URL),
+    });
+
+    act(() => {
+      result.current[1].clearRegionAndMaxKm();
+    });
+
+    const state = result.current[0];
+    expect(state.selectedRegion).toBeNull();
+    expect(state.selectedMaxKm).toBeNull();
+    expect(state.selectedListing).toBeNull();
+    expect(state.selectedLocality).toBeNull();
+
+    // Preserved — scope is orthogonal to the agri region/maxKm corridor model
+    expect(state.scope).toBe('north');
+    expect(state.journey).toBe('agri-first');
+    expect(state.areaKey).toBe('IN|KA|Udupi|Manipal');
+    expect(state.schoolId).toBe('sch-1');
+    expect(state.groupId).toBe('zone-a');
+    expect(state.schoolPicking).toBe(true);
+    expect(state.groupResults).toBe(true);
+
+    // Untouched — never part of the 12 layer params
+    expect(state.filters.propertyTypes).toEqual(['house']);
+    expect(state.intent).toBe('rent');
+    expect(state.radiusKm).toBe(5);
+    expect(state.q).toBe('sea view');
+    expect(state.city).toBe('udupi');
+  });
+
+  it('clearRegionAndMaxKm: absent selectedListing/selectedLocality stay absent (no accidental set)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first&region=N&maxKm=25'),
+    });
+
+    act(() => {
+      result.current[1].clearRegionAndMaxKm();
+    });
+
+    expect(result.current[0].selectedListing).toBeNull();
+    expect(result.current[0].selectedLocality).toBeNull();
+  });
+});
+
 // ─── Issue #1430: selectedListing / setSelectedListing / clearSelectedListing ──
 
 describe('useDiscoverUrlState — selectedListing (Issue #1430)', () => {

@@ -83,17 +83,6 @@ export interface DiscoverLayerInput {
   selection: DiscoverLayerSelection;
 }
 
-/**
- * Validity sets used by `fallbackInvalidSelection` to drop selection ids that
- * no longer resolve to a real entity (e.g. after a dataset refresh). A field
- * left `undefined` means "no validity check for this id" (never drop it).
- */
-export interface DiscoverLayerValiditySets {
-  validAreaKeys?: Set<string>;
-  validSchoolIds?: Set<string>;
-  validGroupIds?: Set<string>;
-}
-
 // ─── Adapter ──────────────────────────────────────────────────────────────────
 
 /**
@@ -119,6 +108,115 @@ export function toLayerInput(urlState: DiscoverUrlState): DiscoverLayerInput {
       selectedLocality: urlState.selectedLocality,
     },
   };
+}
+
+// ─── URL param mapping (Issue #1745 P3) ─────────────────────────────────────
+//
+// Single source of truth for the URL param name backing each of the 12 layer
+// fields (11 `DiscoverLayerSelection` fields + `scope.region`). Mirrors the
+// literal param names `useDiscoverUrlState.ts` reads/writes for these fields
+// (see its module docstring). `selectedGroup` maps to the LEGACY `group`
+// param — NOT `groupId` (that's a separate, non-legacy param for a different
+// field). Pure data — no React, no side effects.
+
+/** Layer field → URL param name. Every value is a distinct param name. */
+export const LAYER_PARAM = {
+  journey: 'journey',
+  areaKey: 'areaKey',
+  schoolId: 'schoolId',
+  groupId: 'groupId',
+  schoolPicking: 'schoolPicking',
+  groupResults: 'groupResults',
+  selectedGroup: 'group',
+  selectedRegion: 'region',
+  selectedMaxKm: 'maxKm',
+  selectedListing: 'listing',
+  selectedLocality: 'locality',
+  scopeRegion: 'scope',
+} as const;
+
+/**
+ * Pure adapter: URLSearchParams → DiscoverLayerInput. Reads each of the 12
+ * layer params RAW off `params` — presence-based, no defaulting. Deliberately
+ * does NOT apply the `VALID_DIRECTIONS`/`VALID_SCOPES`/`VALID_MAX_KM`/
+ * `DEFAULT_MAX_KM` normalization `useDiscoverUrlState` applies when building
+ * its own `DiscoverUrlState` — the pure reducers this feeds
+ * (`applyCityChangeReset`, `clearRegionScopeForAgri`) only ever test a
+ * field's null-ness to decide whether `applyLayerSelectionToParams` should
+ * delete the corresponding param; they never inspect the parsed value. Every
+ * one of the 12 fields is always populated (never left `undefined` by
+ * omission), so `applyLayerSelectionToParams` never mistakes "not read" for
+ * "preserve".
+ */
+export function paramsToLayerInput(params: URLSearchParams): DiscoverLayerInput {
+  const rawGroup = params.get(LAYER_PARAM.selectedGroup);
+  const groupParts = rawGroup ? rawGroup.split(':') : null;
+  const selectedGroup: DiscoverUrlState['selectedGroup'] =
+    groupParts && groupParts.length === 2
+      ? { directionKey: groupParts[0], distanceBandKey: groupParts[1] }
+      : null;
+
+  const rawMaxKm = params.get(LAYER_PARAM.selectedMaxKm);
+  // Cast: raw parse only, not validated against VALID_MAX_KM (see docstring
+  // above) — safe because downstream reducers only test null vs non-null.
+  const selectedMaxKm = (
+    rawMaxKm ? parseInt(rawMaxKm, 10) : null
+  ) as DiscoverUrlState['selectedMaxKm'];
+
+  return {
+    scope: { region: params.get(LAYER_PARAM.scopeRegion) },
+    // Cast: raw string, not validated against the DiscoverJourney union (see
+    // docstring above) — safe for the same null-vs-non-null reason.
+    journey: params.get(LAYER_PARAM.journey) as DiscoverJourney | null,
+    selection: {
+      areaKey: params.get(LAYER_PARAM.areaKey),
+      schoolId: params.get(LAYER_PARAM.schoolId),
+      groupId: params.get(LAYER_PARAM.groupId),
+      schoolPicking: params.get(LAYER_PARAM.schoolPicking) === '1' ? true : undefined,
+      groupResults: params.get(LAYER_PARAM.groupResults) === '1' ? true : undefined,
+      selectedGroup,
+      // Cast: raw string, not validated against VALID_DIRECTIONS (see
+      // docstring above) — safe for the same null-vs-non-null reason.
+      selectedRegion: params.get(LAYER_PARAM.selectedRegion) as DiscoverUrlState['selectedRegion'],
+      selectedMaxKm,
+      selectedListing: params.get(LAYER_PARAM.selectedListing),
+      selectedLocality: params.get(LAYER_PARAM.selectedLocality),
+    },
+  };
+}
+
+/**
+ * Pure adapter: DiscoverLayerInput → URLSearchParams, DELETE-ONLY. For each of
+ * the 12 `LAYER_PARAM` entries: if the field's value on `layer` is
+ * null/undefined, deletes the param; if defined, leaves the existing param on
+ * `params` untouched (byte-for-byte — never re-set/re-encoded). Mutates and
+ * returns `params`. Touches ONLY the 12 `LAYER_PARAM` names — never
+ * city/intent/filters/lat/lon/zoom/radiusKm/q.
+ */
+export function applyLayerSelectionToParams(
+  params: URLSearchParams,
+  layer: DiscoverLayerInput,
+): URLSearchParams {
+  const layerValues: Record<string, unknown> = {
+    [LAYER_PARAM.journey]: layer.journey,
+    [LAYER_PARAM.areaKey]: layer.selection.areaKey,
+    [LAYER_PARAM.schoolId]: layer.selection.schoolId,
+    [LAYER_PARAM.groupId]: layer.selection.groupId,
+    [LAYER_PARAM.schoolPicking]: layer.selection.schoolPicking,
+    [LAYER_PARAM.groupResults]: layer.selection.groupResults,
+    [LAYER_PARAM.selectedGroup]: layer.selection.selectedGroup,
+    [LAYER_PARAM.selectedRegion]: layer.selection.selectedRegion,
+    [LAYER_PARAM.selectedMaxKm]: layer.selection.selectedMaxKm,
+    [LAYER_PARAM.selectedListing]: layer.selection.selectedListing,
+    [LAYER_PARAM.selectedLocality]: layer.selection.selectedLocality,
+    [LAYER_PARAM.scopeRegion]: layer.scope.region,
+  };
+  for (const paramName of Object.values(LAYER_PARAM)) {
+    if (layerValues[paramName] == null) {
+      params.delete(paramName);
+    }
+  }
+  return params;
 }
 
 // ─── Canonical layer entry point ────────────────────────────────────────────
@@ -270,49 +368,6 @@ export function clearRegionScopeForAgri(state: DiscoverLayerInput): DiscoverLaye
       selectedMaxKm: null,
       selectedListing: null,
       selectedLocality: null,
-    },
-  };
-}
-
-/**
- * Drops selection ids that are not present in the supplied validity sets,
- * falling back to the nearest valid level rather than throwing. For example,
- * an invalid `schoolId` is cleared while a still-valid `areaKey` is retained —
- * `computeDiscoverLayer` then naturally resolves to `schools-in-area` instead
- * of `school-selected`/`area-school-combined`, by construction of
- * `derivePanelContent`'s existing precedence rules (no special-casing needed
- * here).
- *
- * A validity set left `undefined` means "no check for this id" (id is never
- * dropped). NEVER throws — every check is a plain optional/nullish guard.
- */
-export function fallbackInvalidSelection(
-  state: DiscoverLayerInput,
-  validity: DiscoverLayerValiditySets,
-): DiscoverLayerInput {
-  const { areaKey, schoolId, groupId } = state.selection;
-
-  const nextAreaKey =
-    areaKey != null && validity.validAreaKeys != null && !validity.validAreaKeys.has(areaKey)
-      ? null
-      : areaKey;
-  const nextSchoolId =
-    schoolId != null && validity.validSchoolIds != null && !validity.validSchoolIds.has(schoolId)
-      ? null
-      : schoolId;
-  const nextGroupId =
-    groupId != null && validity.validGroupIds != null && !validity.validGroupIds.has(groupId)
-      ? null
-      : groupId;
-
-  return {
-    scope: state.scope,
-    journey: state.journey,
-    selection: {
-      ...state.selection,
-      areaKey: nextAreaKey,
-      schoolId: nextSchoolId,
-      groupId: nextGroupId,
     },
   };
 }

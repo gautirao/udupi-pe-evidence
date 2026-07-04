@@ -68,6 +68,12 @@ import {
   extractLegacyGroupDirection,
   normalizeDiscoverSearchParams,
 } from '@/hooks/discoverUrlNormalize';
+import {
+  applyCityChangeReset,
+  applyLayerSelectionToParams,
+  clearRegionScopeForAgri,
+  paramsToLayerInput,
+} from '@/utils/discoverLayerRegistry';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1062,17 +1068,11 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
       setUrlParams(
         (prev) => {
           const next = new URLSearchParams(prev);
+          // Issue #1745 P3 — delegates the journey/selection reset + the 12
+          // layer-param deletes to discoverLayerRegistry's pure reducer, rather
+          // than re-listing them inline here.
+          applyLayerSelectionToParams(next, applyCityChangeReset(paramsToLayerInput(prev)));
           next.set('city', newCity);
-          // Clear journey context — new city starts fresh
-          next.delete('journey');
-          next.delete('groupId');
-          next.delete('groupResults'); // Issue #1597 — clear group-results flag on city switch
-          next.delete('group'); // Issue #1409 — clear agri-first regional group on city switch
-          next.delete('region'); // Issue #1429 — clear corridor on city switch
-          next.delete('maxKm'); // Issue #1429 — clear distance tier on city switch
-          next.delete('scope'); // Issue #1745 P2 — clear residential scope axis on city switch
-          next.delete(PARAM_LOCALITY); // Issue #1464 — clear locality on city switch (stale locality from old city would mismatch new city's listings)
-          next.delete('areaKey');
           // Clear viewport — new city has its own default zoom/center
           next.delete('lat');
           next.delete('lon');
@@ -1434,17 +1434,10 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     setUrlParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        next.delete('region');
-        next.delete('maxKm');
-        // Issue #1430 — atomically remove any open listing peek when clearing the corridor.
-        // A listing peek is only meaningful within a region+maxKm context; clearing the
-        // corridor makes the peek unreachable and must not leave a stale `listing=` in the URL.
-        next.delete('listing');
-        // Issue #1464 — atomically remove locality drill-down when clearing the corridor.
-        // A locality selection is only meaningful within a region+maxKm context; leaving a
-        // stale `locality=` would cause derivePanelContent to route to agri-group-locality
-        // on the next region+maxKm selection instead of agri-group-selected.
-        next.delete(PARAM_LOCALITY);
+        // Issue #1745 P3 — delegates to discoverLayerRegistry's pure reducer
+        // (clears region/maxKm/listing/locality, preserves scope + rest) rather
+        // than re-listing the deletes inline here.
+        applyLayerSelectionToParams(next, clearRegionScopeForAgri(paramsToLayerInput(prev)));
         return next;
       },
       { replace: false }, // PUSH — clearing is a navigational step (Back restores)
