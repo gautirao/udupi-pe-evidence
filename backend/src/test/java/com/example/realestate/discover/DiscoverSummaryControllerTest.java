@@ -273,4 +273,91 @@ class DiscoverSummaryControllerTest {
         verify(service).getSummary(captor.capture());
         org.assertj.core.api.Assertions.assertThat(captor.getValue().propertyType()).isEqualTo("house");
     }
+
+    // ── 13. listingPurpose is a separate param/field from propertyType ────────
+
+    @Test
+    void getSummary_listingPurposeAndPropertyTypeBothSet_passedAsIndependentFields() throws Exception {
+        when(service.getSummary(any())).thenReturn(
+                new DiscoverSummaryResponse("udupi", "house", "area_group", 3L, List.of(), List.of(), Instant.now()));
+
+        mockMvc.perform(get("/api/discover/summary")
+                        .param("city", "udupi")
+                        .param("propertyType", "house")
+                        .param("listingPurpose", "rent"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<SummaryQuery> captor = ArgumentCaptor.forClass(SummaryQuery.class);
+        verify(service).getSummary(captor.capture());
+        SummaryQuery captured = captor.getValue();
+        org.assertj.core.api.Assertions.assertThat(captured.propertyType()).isEqualTo("house");
+        org.assertj.core.api.Assertions.assertThat(captured.listingPurpose()).isEqualTo("rent");
+    }
+
+    // ── 14. listingPurpose omitted → SummaryQuery.listingPurpose() is null ────
+
+    @Test
+    void getSummary_noListingPurpose_summaryQueryListingPurposeIsNull() throws Exception {
+        when(service.getSummary(any())).thenReturn(emptyResponse("udupi", "area_group"));
+
+        mockMvc.perform(get("/api/discover/summary").param("city", "udupi"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<SummaryQuery> captor = ArgumentCaptor.forClass(SummaryQuery.class);
+        verify(service).getSummary(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().listingPurpose()).isNull();
+    }
+
+    // ── 15. blank listingPurpose → no 400; SummaryQuery carries the blank value through
+    //         (blank/invalid normalisation to blended happens in DiscoverSummaryService,
+    //          not the controller — no leak/error at the HTTP layer either way) ─────────
+
+    @Test
+    void getSummary_blankListingPurpose_noBadRequest() throws Exception {
+        when(service.getSummary(any())).thenReturn(emptyResponse("udupi", "area_group"));
+
+        mockMvc.perform(get("/api/discover/summary").param("city", "udupi").param("listingPurpose", "   "))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<SummaryQuery> captor = ArgumentCaptor.forClass(SummaryQuery.class);
+        verify(service).getSummary(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().listingPurpose()).isEqualTo("   ");
+    }
+
+    // ── 16. invalid listingPurpose value → no 400 (validated/normalised downstream in the service) ──
+
+    @Test
+    void getSummary_invalidListingPurpose_noBadRequest() throws Exception {
+        when(service.getSummary(any())).thenReturn(emptyResponse("udupi", "area_group"));
+
+        mockMvc.perform(get("/api/discover/summary").param("city", "udupi").param("listingPurpose", "bogus"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<SummaryQuery> captor = ArgumentCaptor.forClass(SummaryQuery.class);
+        verify(service).getSummary(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().listingPurpose()).isEqualTo("bogus");
+    }
+
+    // ── 17. ETag differs between listingPurpose=sale, rent, and omitted (otherwise identical) ──
+
+    @Test
+    void getSummary_etagDiffersAcrossSaleRentAndOmittedListingPurpose() throws Exception {
+        Instant fixed = Instant.parse("2026-01-01T00:00:00Z");
+        DiscoverSummaryResponse identicalContentResponse =
+                new DiscoverSummaryResponse("udupi", null, "area_group", 0L, List.of(), List.of(), fixed);
+        when(service.getSummary(any())).thenReturn(identicalContentResponse);
+
+        String etagOmitted = mockMvc.perform(get("/api/discover/summary").param("city", "udupi"))
+                .andReturn().getResponse().getHeader("ETag");
+        String etagSale = mockMvc.perform(get("/api/discover/summary")
+                        .param("city", "udupi").param("listingPurpose", "sale"))
+                .andReturn().getResponse().getHeader("ETag");
+        String etagRent = mockMvc.perform(get("/api/discover/summary")
+                        .param("city", "udupi").param("listingPurpose", "rent"))
+                .andReturn().getResponse().getHeader("ETag");
+
+        org.assertj.core.api.Assertions.assertThat(etagOmitted).isNotEqualTo(etagSale);
+        org.assertj.core.api.Assertions.assertThat(etagOmitted).isNotEqualTo(etagRent);
+        org.assertj.core.api.Assertions.assertThat(etagSale).isNotEqualTo(etagRent);
+    }
 }

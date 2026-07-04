@@ -293,6 +293,95 @@ class DiscoverSummaryServiceIT {
         assertThat(regionSum).isEqualTo(response.totalActiveListings());
     }
 
+    // ── listingPurpose (#1745 P5-addendum): independent filter, separate from propertyType ────
+
+    /**
+     * Value-distinct listingPurpose fixture (separate from {@link #seedFixture()}):
+     * <ul>
+     *   <li>2 sale 'house' @ Manipal</li>
+     *   <li>1 rent 'apartment' @ Manipal</li>
+     *   <li>1 sale 'house' @ Malpe</li>
+     *   <li>1 rent 'apartment' @ Katapadi</li>
+     * </ul>
+     * Sale total=3, rent total=2, blended (omitted)=5 — three genuinely different counts so the
+     * three cases cannot pass by a pre-computed/faked expectation.
+     */
+    private void seedListingPurposeFixture() {
+        insertListing(MANIPAL, "house", "LIVE", false, false, "sale");
+        insertListing(MANIPAL, "house", "LIVE", false, false, "sale");
+        insertListing(MANIPAL, "apartment", "LIVE", false, false, "rent");
+        insertListing(MALPE, "house", "LIVE", false, false, "sale");
+        insertListing(KATAPADI, "apartment", "LIVE", false, false, "rent");
+    }
+
+    @Test
+    @DisplayName("listingPurpose=sale(3) vs rent(2) vs omitted(5): independently filtered, sale+rent sums to blended")
+    void listingPurposeFilter_saleVsRentVsOmitted_countsDifferAndSumToBlended() {
+        seedListingPurposeFixture();
+
+        DiscoverSummaryResponse saleOnly = service.getSummary(
+                new SummaryQuery(CITY, null, "area_group", 8, "sale"));
+        DiscoverSummaryResponse rentOnly = service.getSummary(
+                new SummaryQuery(CITY, null, "area_group", 8, "rent"));
+        DiscoverSummaryResponse omitted = service.getSummary(
+                new SummaryQuery(CITY, null, "area_group", 8));
+
+        assertThat(saleOnly.totalActiveListings()).isEqualTo(3L);
+        assertThat(rentOnly.totalActiveListings()).isEqualTo(2L);
+        assertThat(omitted.totalActiveListings()).isEqualTo(5L);
+        assertThat(saleOnly.totalActiveListings() + rentOnly.totalActiveListings())
+                .as("sale + rent must reconcile to the blended (omitted) total")
+                .isEqualTo(omitted.totalActiveListings());
+    }
+
+    @Test
+    @DisplayName("listingPurpose blank/invalid normalises to blended(5) — same as omitted, not zero/error")
+    void listingPurposeFilter_blankOrInvalid_normalisesToBlended() {
+        seedListingPurposeFixture();
+
+        DiscoverSummaryResponse blank = service.getSummary(
+                new SummaryQuery(CITY, null, "area_group", 8, "   "));
+        DiscoverSummaryResponse invalid = service.getSummary(
+                new SummaryQuery(CITY, null, "area_group", 8, "bogus"));
+        DiscoverSummaryResponse omitted = service.getSummary(
+                new SummaryQuery(CITY, null, "area_group", 8));
+
+        assertThat(blank.totalActiveListings()).isEqualTo(5L);
+        assertThat(invalid.totalActiveListings()).isEqualTo(5L);
+        assertThat(omitted.totalActiveListings()).isEqualTo(5L);
+    }
+
+    @Test
+    @DisplayName("listingPurpose and propertyType combine via AND without being conflated: "
+            + "sale+house=3, rent+house=1, sale(any type)=4")
+    void listingPurposeAndPropertyType_combineIndependently_viaAnd() {
+        // Base fixture: sale-house x2 @ Manipal, rent-apartment @ Manipal, sale-house @ Malpe,
+        // rent-apartment @ Katapadi. Plus two more distinguishing rows added here:
+        // rent-house @ Malpe (differentiates rentHouse from saleHouse) and sale-apartment @
+        // Katapadi (differentiates saleAll, which must NOT be conflated with saleHouse).
+        seedListingPurposeFixture();
+        insertListing(MALPE, "house", "LIVE", false, false, "rent");
+        insertListing(KATAPADI, "apartment", "LIVE", false, false, "sale");
+
+        DiscoverSummaryResponse saleHouse = service.getSummary(
+                new SummaryQuery(CITY, "house", "area_group", 8, "sale"));
+        DiscoverSummaryResponse rentHouse = service.getSummary(
+                new SummaryQuery(CITY, "house", "area_group", 8, "rent"));
+        DiscoverSummaryResponse saleAll = service.getSummary(
+                new SummaryQuery(CITY, null, "area_group", 8, "sale"));
+
+        // sale+house: 2 @ Manipal + 1 @ Malpe = 3 — excludes rent-house@Malpe and both rent/sale apartments.
+        assertThat(saleHouse.totalActiveListings()).isEqualTo(3L);
+        assertThat(saleHouse.propertyType()).isEqualTo("house");
+        // rent+house: only the newly-added Malpe row.
+        assertThat(rentHouse.totalActiveListings()).isEqualTo(1L);
+        // sale (propertyType omitted): the 3 sale-house rows PLUS the new sale-apartment@Katapadi = 4 —
+        // strictly greater than saleHouse, proving propertyType and listingPurpose are independent,
+        // not merged/overloaded onto each other.
+        assertThat(saleAll.totalActiveListings()).isEqualTo(4L);
+        assertThat(saleAll.propertyType()).isNull();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static long regionCount(DiscoverSummaryResponse response, String regionKey) {
@@ -305,13 +394,21 @@ class DiscoverSummaryServiceIT {
 
     private void insertListing(String areaKey, String propertyType, String status,
                                 boolean isDuplicate, boolean ignoredArchived) {
+        // Existing (pre-#1745-P5-addendum) callers don't care about listing_purpose — the DB
+        // default ('sale', enforced by V32's chk_listing_purpose CHECK) applies, matching every
+        // seedFixture()-based assertion written before listingPurpose existed.
+        insertListing(areaKey, propertyType, status, isDuplicate, ignoredArchived, "sale");
+    }
+
+    private void insertListing(String areaKey, String propertyType, String status,
+                                boolean isDuplicate, boolean ignoredArchived, String listingPurpose) {
         OffsetDateTime now = OffsetDateTime.now();
         jdbcTemplate.update(
                 "INSERT INTO public.property_listings "
                         + "(id, area_key, status, archived_at, is_duplicate, is_valid, "
-                        + " property_type, latitude, longitude, created_at, updated_at) "
-                        + "VALUES (?, ?, ?, NULL, ?, true, ?, 13.35, 74.79, ?, ?)",
-                UUID.randomUUID(), areaKey, status, isDuplicate, propertyType, now, now);
+                        + " property_type, listing_purpose, latitude, longitude, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, NULL, ?, true, ?, ?, 13.35, 74.79, ?, ?)",
+                UUID.randomUUID(), areaKey, status, isDuplicate, propertyType, listingPurpose, now, now);
     }
 
     /** A LIVE listing that is soft-deleted (archived_at set) — must be excluded by the count guard. */

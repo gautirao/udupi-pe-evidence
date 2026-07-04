@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Postgres implementation of {@link DiscoverSummaryPort} (#1745 P5).
@@ -26,6 +27,11 @@ import java.util.List;
  *
  * <p>All three query shapes (total, regions, hotspots) share the same guarded predicate so the
  * numbers are internally consistent by construction.
+ *
+ * <p>{@code listingPurpose} (#1745 P5-addendum) is a separate, independent optional filter —
+ * {@code "sale"}/{@code "rent"} — passed to the shared {@link DiscoverListingPredicateBuilder}'s
+ * {@code listingPurpose} predicate (never conflated with {@code propertyType}). See
+ * {@link #normalizeListingPurpose(String)}.
  */
 @Service
 public class DiscoverSummaryService implements DiscoverSummaryPort {
@@ -34,6 +40,14 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
 
     private static final String FOUR_SEGMENT_GUARD =
             "array_length(string_to_array(pl.area_key, '|'), 1) = 4";
+
+    /**
+     * Allowed {@code listingPurpose} values (#1745 P5-addendum) — mirrors the {@code chk_listing_purpose}
+     * DB CHECK constraint (V32) and {@link DiscoverListingPredicateBuilder}'s case-sensitive
+     * {@code pl.listing_purpose = ?} equality clause exactly. Independent of {@code propertyType}'s
+     * filter — see {@link #normalizeListingPurpose(String)}.
+     */
+    private static final Set<String> ALLOWED_LISTING_PURPOSES = Set.of("sale", "rent");
 
     private final JdbcOperations jdbcOperations;
 
@@ -46,14 +60,15 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
     public DiscoverSummaryResponse getSummary(SummaryQuery query) {
         String city = query.city();
         String normalizedType = normalizeFilter(query.propertyType());
-        log.debug("getSummary city={} propertyType={} groupBy={} hotspotLimit={}",
-                city, normalizedType, query.groupBy(), query.hotspotLimit());
+        String normalizedPurpose = normalizeListingPurpose(query.listingPurpose());
+        log.debug("getSummary city={} propertyType={} groupBy={} hotspotLimit={} listingPurpose={}",
+                city, normalizedType, query.groupBy(), query.hotspotLimit(), normalizedPurpose);
 
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 city, null, null, null, null, null, null, null,
                 null, null, null, null, null,
                 null, null, null,
-                null, null, null, null, null
+                null, null, normalizedPurpose, null, null
         );
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(filters);
 
@@ -220,6 +235,20 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
         }
         String trimmed = propertyType.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
+     * Normalises {@code listingPurpose} (#1745 P5-addendum) — an independent filter, separate from
+     * {@code propertyType}/{@link #normalizeFilter(String)}. Blank/whitespace-only values and any
+     * value outside {@link #ALLOWED_LISTING_PURPOSES} fall back to {@code null} (blended,
+     * all-purposes) — preserving current behaviour for every existing caller that omits the param.
+     */
+    private static String normalizeListingPurpose(String listingPurpose) {
+        if (listingPurpose == null) {
+            return null;
+        }
+        String trimmed = listingPurpose.trim();
+        return ALLOWED_LISTING_PURPOSES.contains(trimmed) ? trimmed : null;
     }
 
     private static Double nullableDouble(Object val) {
