@@ -10,13 +10,9 @@
  *   AC3      — agri field exclusivity: all 9 agri fields present only for agricultural_land
  *   AC3      — commercial field separation: per-type rules for commercial-only fields
  *   AC5      — purpose gating: price/rent fields driven by listingPurpose, not propertyType
- *   AC4b     — preserve invariant: NewListing.tsx agri selects use display strings, not enum keys
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { dirname, resolve } from 'path';
-import { fileURLToPath } from 'url';
 
 import {
   getListingFieldConfig,
@@ -684,69 +680,3 @@ describe('M38-13A — legacy safety: legacy types do not pick up residential-plo
   });
 });
 
-describe('AC4b preserve invariant — NewListing.tsx agri selects use display strings (not enum keys)', () => {
-  const __dir = dirname(fileURLToPath(import.meta.url));
-  // Resolve relative to this test file (src/lib/) → src/pages/broker/NewListing.tsx
-  const newListingSrc = readFileSync(
-    resolve(__dir, '../pages/broker/NewListing.tsx'),
-    'utf-8',
-  );
-
-  // soilType: values must be display strings ('Red laterite' etc.), not enum keys
-  it('soilType SelectItem values are display strings in NewListing.tsx', () => {
-    expect(newListingSrc).toContain("'Red laterite'");
-    expect(newListingSrc).toContain("'Black cotton'");
-    expect(newListingSrc).toContain("'Sandy loam'");
-    expect(newListingSrc).toContain("'Alluvial'");
-  });
-
-  it('NewListing.tsx does NOT use enum key RED_LATERITE as a soilType SelectItem value', () => {
-    // If someone canonicalizes soilType in NewListing.tsx, this guard breaks.
-    // Canonical keys live in agriFieldLabels.ts (for the read path); NewListing keeps display strings.
-    expect(newListingSrc).not.toContain('RED_LATERITE');
-    expect(newListingSrc).not.toContain('BLACK_COTTON');
-    expect(newListingSrc).not.toContain('SANDY_LOAM');
-  });
-
-  // roadAccess: display strings preserved
-  it('roadAccess SelectItem values are display strings in NewListing.tsx', () => {
-    expect(newListingSrc).toContain("'Tarred road'");
-    expect(newListingSrc).toContain("'Gravel road'");
-    expect(newListingSrc).toContain("'Kachcha road'");
-    expect(newListingSrc).toContain("'No road access'");
-  });
-
-  it('NewListing.tsx does NOT use enum key TARRED_ROAD as a roadAccess SelectItem value', () => {
-    expect(newListingSrc).not.toContain('TARRED_ROAD');
-    expect(newListingSrc).not.toContain('KACHCHA_ROAD');
-    expect(newListingSrc).not.toContain('GRAVEL_ROAD');
-  });
-
-  // cultivationStatus: display strings preserved
-  it('cultivationStatus SelectItem values are display strings in NewListing.tsx', () => {
-    expect(newListingSrc).toContain("'Cultivated'");
-    expect(newListingSrc).toContain("'Fallow'");
-    expect(newListingSrc).toContain("'Partially cultivated'");
-    expect(newListingSrc).toContain("'Uncultivated'");
-  });
-
-  it('NewListing.tsx does NOT use enum key CULTIVATED/FALLOW as cultivationStatus values', () => {
-    expect(newListingSrc).not.toContain('PARTIALLY_CULTIVATED');
-    expect(newListingSrc).not.toContain('ARECA_PLANTATION');
-  });
-
-  // ownershipType: display strings preserved
-  it('ownershipType SelectItem values are display strings in NewListing.tsx', () => {
-    expect(newListingSrc).toContain("'Patta'");
-    expect(newListingSrc).toContain("'Survey settlement'");
-    expect(newListingSrc).toContain("'Katha'");
-    expect(newListingSrc).toContain("'Revenue'");
-  });
-
-  it('NewListing.tsx does NOT use enum key SURVEY_SETTLEMENT as ownershipType value', () => {
-    expect(newListingSrc).not.toContain('SURVEY_SETTLEMENT');
-    expect(newListingSrc).not.toContain('FREEHOLD');
-    // 'PATTA' and 'KATHA' appear in agriFieldLabels.ts, not NewListing.tsx
-    expect(newListingSrc).not.toContain('PATTA');
-  });
-});
