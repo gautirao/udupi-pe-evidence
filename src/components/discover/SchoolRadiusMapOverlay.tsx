@@ -1,15 +1,17 @@
 import React from 'react';
-import { ChevronRight, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 
 /**
- * Map overlays for the school-first selected-school / radius state:
- *   1. SchoolJourneyBreadcrumb — full resolved journey pill (City › Zone › Area › School)
- *   2. SchoolRadiusLegend      — Schools / Homes / "{n} km radius" key
+ * Map overlay + helpers for the school-first selected-school / radius state:
+ *   SchoolRadiusLegend — Schools / Homes / "{n} km radius" key.
  *
- * Both are presentational and take already-resolved labels/values — they never read
- * raw IDs and never fabricate names. Missing segments are omitted gracefully.
+ * (The journey breadcrumb — City › Zone › Area › School — moved to the shared
+ * DiscoverMapBreadcrumb component as part of Issue #1745 P4; MapDiscovery builds its
+ * segments using the prettifyZoneSlug/areaKeyToLabel helpers below.)
+ *
+ * Presentational and takes already-resolved labels/values — never reads raw IDs and
+ * never fabricates names.
  *
  * Swatch colours intentionally MATCH the real Leaflet markers rendered by PropertyMap
  * (school pin + radius ring = #2563eb; the dashed ring uses dashArray '6 4') rather than
@@ -53,78 +55,6 @@ export function isSchoolRadiusOverlayState(
   return (
     hasSelectedSchool &&
     (panelContent === 'school-selected' || panelContent === 'area-school-combined')
-  );
-}
-
-export interface SchoolJourneyBreadcrumbProps {
-  cityLabel?: string | null;
-  zoneLabel?: string | null;
-  areaLabel?: string | null;
-  /** Resolved school NAME (never an id). Omitted while the school is still loading. */
-  schoolName?: string | null;
-  className?: string;
-}
-
-/**
- * White pill breadcrumb showing the resolved journey: City › Zone › Area › School.
- * Any segment whose label is null/blank is omitted (no "undefined", no raw UUIDs). The
- * school segment is accented in the plum school-journey colour. Returns null if nothing
- * resolves yet.
- */
-export function SchoolJourneyBreadcrumb({
-  cityLabel,
-  zoneLabel,
-  areaLabel,
-  schoolName,
-  className,
-}: SchoolJourneyBreadcrumbProps) {
-  const segments = [
-    { key: 'city', label: cityLabel, isSchool: false },
-    { key: 'zone', label: zoneLabel, isSchool: false },
-    { key: 'area', label: areaLabel, isSchool: false },
-    { key: 'school', label: schoolName, isSchool: true },
-  ].filter((s) => typeof s.label === 'string' && s.label.trim().length > 0);
-
-  if (segments.length === 0) return null;
-
-  return (
-    <nav
-      aria-label="Journey breadcrumb"
-      data-testid="school-journey-breadcrumb"
-      className={cn(
-        'flex max-w-[min(88vw,520px)] items-center gap-1.5 rounded-full border border-border/60',
-        'bg-card/95 px-3 py-1.5 shadow-md backdrop-blur-sm select-none',
-        className,
-      )}
-    >
-      <GraduationCap
-        className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--plum))]"
-        aria-hidden
-      />
-      <ol className="flex items-center gap-1 overflow-hidden text-xs">
-        {segments.map((s, i) => (
-          <li key={s.key} className="flex min-w-0 items-center gap-1">
-            {i > 0 && (
-              <ChevronRight
-                className="h-3 w-3 shrink-0 text-muted-foreground/50"
-                aria-hidden
-              />
-            )}
-            <span
-              data-testid={`breadcrumb-seg-${s.key}`}
-              className={cn(
-                'truncate',
-                s.isSchool
-                  ? 'font-semibold text-[hsl(var(--plum))] max-w-[180px]'
-                  : 'text-muted-foreground',
-              )}
-            >
-              {s.label}
-            </span>
-          </li>
-        ))}
-      </ol>
-    </nav>
   );
 }
 

@@ -14,10 +14,8 @@ import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { MapFilters } from '@/components/map/MapFilters';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { AreaIndicatorOverlay } from '@/components/discover/AreaIndicatorOverlay';
-import { MapGroupBreadcrumb } from '@/components/discover/MapGroupBreadcrumb';
-import { AreaFirstLandingBreadcrumb } from '@/components/discover/AreaFirstLandingBreadcrumb';
+import { DiscoverMapBreadcrumb, type DiscoverMapCrumb } from '@/components/discover/DiscoverMapBreadcrumb';
 import {
-  SchoolJourneyBreadcrumb,
   SchoolRadiusLegend,
   isSchoolRadiusOverlayState,
   prettifyZoneSlug,
@@ -58,7 +56,7 @@ import { DiscoverConsentBanner } from '@/components/discover/DiscoverConsentBann
 import { DiscoverPrivacyToggle } from '@/components/discover/DiscoverPrivacyToggle';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, MapPin, GraduationCap, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Re-exported so existing test imports from '@/pages/MapDiscovery' continue to resolve.
 export { isNew } from '@/lib/isNew';
@@ -2332,6 +2330,32 @@ export default function MapDiscovery() {
   const selectedGroupName =
     focusedGroup?.name ?? (urlState.groupId ? prettifyZoneSlug(urlState.groupId) : null);
 
+  // Issue #1745 P4 — resolved City › Zone › Area › School segments for the school-journey
+  // map breadcrumb (DiscoverMapBreadcrumb). Built here (not inside the shared component,
+  // which never filters/fabricates) so any segment whose label hasn't resolved yet is
+  // dropped — a zone-only context reads "Udupi › University Belt", an area context reads
+  // "Udupi › University Belt › Manipal". The school segment only appears once a schoolId is
+  // actually in the URL (guards against a stale selectedSchool lagging a back navigation).
+  // Not memoized: this component already has pre-existing conditionally-invoked hooks
+  // further down (rules-of-hooks violations predating #1745 P4 — out of scope here), so a
+  // useMemo placed after them would itself become conditional. The computation below is a
+  // handful of string comparisons — cheap enough to run on every render without memoizing.
+  const schoolJourneySegmentsRaw: { key: string; label: string | null | undefined; emphasis?: DiscoverMapCrumb['emphasis']; maxWidthClass?: string }[] = [
+    { key: 'city', label: CITY_CONFIG[city]?.label ?? city },
+    { key: 'zone', label: focusedGroup?.name ?? prettifyZoneSlug(urlState.groupId) },
+    { key: 'area', label: selectedArea?.areaLabel ?? areaKeyToLabel(urlState.areaKey) },
+    {
+      key: 'school',
+      label: urlState.schoolId ? (selectedSchool?.name ?? null) : null,
+      emphasis: 'school',
+      maxWidthClass: 'max-w-[180px]',
+    },
+  ];
+  const schoolJourneySegments: DiscoverMapCrumb[] = schoolJourneySegmentsRaw
+    .filter((s): s is { key: string; label: string; emphasis?: DiscoverMapCrumb['emphasis']; maxWidthClass?: string } =>
+      typeof s.label === 'string' && s.label.trim().length > 0)
+    .map((s) => ({ key: s.key, label: s.label, emphasis: s.emphasis, maxWidthClass: s.maxWidthClass }));
+
   return (
     <PublicDiscoverLayout>
       <div className="h-full flex flex-col lg:flex-row relative">
@@ -2508,37 +2532,78 @@ export default function MapDiscovery() {
               // Issue #1607 — the area-first city-level landing shows the
               // "Home › City › Areas" breadcrumb (mock placement). Home and the city
               // crumb route progressively; "Areas" is the terminal (current) page.
-              <AreaFirstLandingBreadcrumb
-                cityLabel={CITY_CONFIG[city]?.label ?? city}
-                cityHref={`/discover?city=${encodeURIComponent(city)}`}
+              <DiscoverMapBreadcrumb
+                testId="area-first-landing-breadcrumb"
+                containerClassName="px-3.5 shadow-md"
+                leadingIcon={MapPin}
+                leadingIconClassName="text-[hsl(var(--copper))]"
+                segments={[
+                  { key: 'home', label: 'Home', href: '/' },
+                  {
+                    key: 'city',
+                    label: CITY_CONFIG[city]?.label ?? city,
+                    href: `/discover?city=${encodeURIComponent(city)}`,
+                    maxWidthClass: 'max-w-[140px]',
+                  },
+                  { key: 'areas', label: 'Areas', current: true, emphasis: 'strong' },
+                ]}
               />
             ) : isSelectedGroupState ? (
               // Issue #1595 (Option A) — the area-first selected-group step shows the
               // dynamic City › Group breadcrumb here on the map (mock placement),
               // replacing the generic area-indicator card for this state only.
-              <MapGroupBreadcrumb
-                cityLabel={CITY_CONFIG[city]?.label ?? city}
-                groupName={focusedGroup?.name ?? ''}
+              <DiscoverMapBreadcrumb
+                testId="map-group-breadcrumb"
+                leadingIcon={MapPin}
+                leadingIconClassName="text-[hsl(var(--copper))]"
+                segments={[
+                  { key: 'city', label: CITY_CONFIG[city]?.label ?? city },
+                  {
+                    key: 'group',
+                    label: focusedGroup?.name ?? '',
+                    maxWidthClass: 'max-w-[160px]',
+                    emphasis: 'strong',
+                  },
+                ]}
               />
             ) : isAreaFirstSelectedAreaState && focusedGroup ? (
               // Issue #1606 — the area-first selected-AREA results step shows the full
               // City › Group › Area breadcrumb on the map (mock placement). Only when a
               // group context exists; group-less areas keep the AreaIndicatorOverlay below.
-              <MapGroupBreadcrumb
-                cityLabel={CITY_CONFIG[city]?.label ?? city}
-                groupName={focusedGroup.name}
-                areaName={selectedArea?.areaLabel}
+              <DiscoverMapBreadcrumb
+                testId="map-group-breadcrumb"
+                leadingIcon={MapPin}
+                leadingIconClassName="text-[hsl(var(--copper))]"
+                segments={[
+                  { key: 'city', label: CITY_CONFIG[city]?.label ?? city },
+                  {
+                    key: 'group',
+                    label: focusedGroup.name,
+                    maxWidthClass: 'max-w-[160px]',
+                    emphasis: selectedArea?.areaLabel?.trim() ? 'muted' : 'strong',
+                  },
+                  ...(selectedArea?.areaLabel?.trim()
+                    ? [
+                        {
+                          key: 'area',
+                          label: selectedArea.areaLabel,
+                          maxWidthClass: 'max-w-[160px]',
+                          emphasis: 'strong' as const,
+                        },
+                      ]
+                    : []),
+                ]}
               />
             ) : showSchoolBreadcrumb ? (
-              <SchoolJourneyBreadcrumb
-                cityLabel={CITY_CONFIG[city]?.label ?? city}
-                zoneLabel={focusedGroup?.name ?? prettifyZoneSlug(urlState.groupId)}
-                areaLabel={selectedArea?.areaLabel ?? areaKeyToLabel(urlState.areaKey)}
-                // Source of truth is the URL: only show the school segment when a
-                // schoolId is actually selected. Guards against a stale selectedSchool
-                // (React state lagging a back-to-area navigation) injecting a school
-                // segment while the user is still at area level.
-                schoolName={urlState.schoolId ? (selectedSchool?.name ?? null) : null}
+              <DiscoverMapBreadcrumb
+                ariaLabel="Journey breadcrumb"
+                testId="school-journey-breadcrumb"
+                density="compact"
+                containerClassName="max-w-[min(88vw,520px)] border-border/60 py-1.5 shadow-md"
+                separatorClassName="text-muted-foreground/50"
+                leadingIcon={GraduationCap}
+                leadingIconClassName="text-[hsl(var(--plum))]"
+                segments={schoolJourneySegments}
               />
             ) : (
               <AreaIndicatorOverlay
