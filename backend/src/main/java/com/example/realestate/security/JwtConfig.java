@@ -79,6 +79,8 @@ public class JwtConfig {
                         .requestMatchers(HttpMethod.POST, "/api/discover/events").permitAll()
                         // Public Trends endpoints — no auth required (#771)
                         .requestMatchers(HttpMethod.GET, "/api/trends/**").permitAll()
+                        // Public discover summary endpoint — no auth required (#1745 P5)
+                        .requestMatchers(HttpMethod.GET, "/api/discover/summary").permitAll()
                         .anyRequest().authenticated()
                 )
                 // Wire DbRoleJwtAuthenticationConverter to perform the user_roles DB lookup per
