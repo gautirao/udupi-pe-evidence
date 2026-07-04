@@ -34,21 +34,46 @@
 // own copy, so the two can never drift.
 export const VALID_DIRECTIONS = new Set(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']);
 
-// Issue #1745 P2 — VALID_SCOPES is the single source of truth for the residential
-// "scope" axis. This is DISTINCT from the agri-first `region` corridor param above:
-// `region` is an agri-only cumulative-distance corridor direction (N/NE/E/...), while
-// `scope` is an orthogonal residential scoping axis. useDiscoverUrlState imports this
-// constant rather than declaring its own copy, so the two can never drift.
+// Issue #1745 P2 — VALID_SCOPES is the single source of truth for the original
+// 5 fixed-direction scope tokens. This is DISTINCT from the agri-first `region`
+// corridor param above: `region` is an agri-only cumulative-distance corridor
+// direction (N/NE/E/...), while `scope` is an orthogonal residential scoping axis.
+// Retained (rather than folded into isValidScope) so the exact 5-token enum stays
+// independently testable/importable — existing callers that only care about this
+// original fixed set keep working unchanged.
 export const VALID_SCOPES: Set<string> = new Set(
   ['north', 'south', 'east', 'west', 'central'] as const,
 );
+
+// Issue #1745 Batch A scope-change (AC2 plan-completeness fix) — real `scope=`
+// values written by the Discover landing macro-region cards are backend `regionKey`
+// values (see useDiscoverSummary), which are NOT restricted to the 5 tokens above:
+// they are either area-group slugs (kebab-case, 2+ segments, e.g. "university-belt",
+// "north-udupi" — see V101__restore_udupi_area_groups_seed.sql) or corridor direction
+// codes (N/NE/E/SE/S/SW/W/NW — see VALID_DIRECTIONS above). A single-segment word
+// like "northeast" that is not one of the 5 fixed tokens must stay invalid (matches
+// existing graceful-degrade behaviour), so the slug pattern requires at least one
+// hyphen rather than accepting any bare word.
+const SCOPE_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)+$/;
+
+/**
+ * Structural validity check for a `scope=` URL param value. Accepts:
+ *  - the original 5 fixed direction/central tokens (VALID_SCOPES),
+ *  - corridor direction codes (VALID_DIRECTIONS), and
+ *  - kebab-case area-group slugs (2+ hyphen-separated segments).
+ * This is landing-level validation only (does it look like a real scope value) —
+ * it does not, and must not, drive any downstream area/school/agri panel filtering.
+ */
+export function isValidScope(value: string): boolean {
+  return VALID_SCOPES.has(value) || VALID_DIRECTIONS.has(value) || SCOPE_SLUG_PATTERN.test(value);
+}
 
 /**
  * Coerces a raw `scope` URL param value to a valid scope string, or null when
  * absent/invalid. Pure — never throws.
  */
 export function coerceScope(raw: string | null): string | null {
-  return raw != null && VALID_SCOPES.has(raw) ? raw : null;
+  return raw != null && isValidScope(raw) ? raw : null;
 }
 
 const JOURNEY_READ_ALIASES: Record<string, string> = {

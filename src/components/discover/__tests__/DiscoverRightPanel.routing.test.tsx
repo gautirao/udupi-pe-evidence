@@ -9,6 +9,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DiscoverRightPanel } from '../DiscoverRightPanel';
 import { derivePanelContent } from '@/utils/discoverPanelState';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
@@ -166,8 +167,20 @@ const baseProps = {
   onSelectJourney: vi.fn(),
 };
 
+// Issue #1745 Batch A scope-change fix — GuidedEntryPanel now calls useDiscoverSummary
+// (a useQuery hook), so every render in this file needs a QueryClientProvider ancestor.
+// Matches the makeQueryClient()/QueryClientProvider convention already used by the other
+// DiscoverRightPanel.*.test.tsx files (e.g. agriLanding, agriCorridor, agriGroupPeek).
+function makeQueryClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
+
 const renderPanel = (ui: React.ReactElement) =>
-  render(<MemoryRouter>{ui}</MemoryRouter>);
+  render(
+    <MemoryRouter>
+      <QueryClientProvider client={makeQueryClient()}>{ui}</QueryClientProvider>
+    </MemoryRouter>,
+  );
 
 describe('DiscoverRightPanel — state machine routing', () => {
   it('panelContent="guided-entry" renders GuidedEntryPanel with journey cards', () => {

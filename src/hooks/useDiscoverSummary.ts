@@ -3,11 +3,22 @@ import { api } from '@/lib/api';
 
 export type DiscoverSummaryGroupBy = 'area_group' | 'corridor';
 
+/** Issue #1745 P5-addendum — buy/rent filter values accepted by GET /api/discover/summary. */
+export type DiscoverSummaryListingPurpose = 'sale' | 'rent';
+
 export interface DiscoverSummaryParams {
   city: string;
   propertyType?: string;
   groupBy?: DiscoverSummaryGroupBy;
   hotspotLimit?: number;
+  /**
+   * Issue #1745 P5-addendum / P7 — buy ("sale") vs rent ("rent") filter.
+   * Independent of `propertyType` (never conflated — see backend SummaryQuery):
+   * `propertyType` filters on the kind of property (apartment/house/...), while
+   * `listingPurpose` filters on whether the listing is for sale or for rent.
+   * Included in the query key so toggling Buy/Rent triggers a real refetch.
+   */
+  listingPurpose?: DiscoverSummaryListingPurpose;
 }
 
 export interface DiscoverSummaryRegion {
@@ -48,11 +59,18 @@ function clampHotspotLimit(hotspotLimit?: number): number {
 /**
  * Fetch the aggregate Discover summary (region counts + hotspots) for a city.
  *
- * Visual consumption (rendering into Discover pages/components) is deferred to a
- * future P7 PR — this hook is contract-only for now.
+ * Consumed by the Discover landing (GuidedEntryPanel, Issue #1745 P7) to render
+ * backend-owned macro-region counts — no client-side aggregation of listings.
  */
-export function useDiscoverSummary({ city, propertyType, groupBy, hotspotLimit }: DiscoverSummaryParams) {
+export function useDiscoverSummary({
+  city,
+  propertyType,
+  groupBy,
+  hotspotLimit,
+  listingPurpose,
+}: DiscoverSummaryParams) {
   const trimmedPropertyType = propertyType?.trim();
+  const trimmedListingPurpose = listingPurpose?.trim();
   const effectiveHotspotLimit = clampHotspotLimit(hotspotLimit);
 
   return useQuery<DiscoverSummaryResponse>({
@@ -62,6 +80,7 @@ export function useDiscoverSummary({ city, propertyType, groupBy, hotspotLimit }
       trimmedPropertyType ?? null,
       groupBy ?? 'area_group',
       effectiveHotspotLimit,
+      trimmedListingPurpose ?? null,
     ],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -73,6 +92,9 @@ export function useDiscoverSummary({ city, propertyType, groupBy, hotspotLimit }
         params.set('groupBy', groupBy);
       }
       params.set('hotspotLimit', String(effectiveHotspotLimit));
+      if (trimmedListingPurpose) {
+        params.set('listingPurpose', trimmedListingPurpose);
+      }
 
       return api.get<DiscoverSummaryResponse>(`/api/discover/summary?${params.toString()}`, {
         skipAuth: true,

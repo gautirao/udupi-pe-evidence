@@ -11,9 +11,10 @@
  *   zoom       – integer zoom level   (debounced replace)
  *   region     – agri-first corridor direction (e.g. "N", "NW"); absent when none selected
  *   maxKm      – selected cumulative distance tier (10|25|50|100); absent until user picks
- *   scope      – residential scope axis (Issue #1745 P2), one of VALID_SCOPES
- *                ("north"|"south"|"east"|"west"|"central"); absent when none selected.
- *                Distinct from `region` (agri-only corridor direction) — orthogonal axis.
+ *   scope      – residential scope axis (Issue #1745 P2), validated via isValidScope
+ *                (the 5 fixed direction/central tokens, corridor codes, or a real
+ *                area-group regionKey slug); absent when none selected. Distinct from
+ *                `region` (agri-only corridor direction) — orthogonal axis.
  *
  * DEPRECATED (OD-1 Option A):
  *   group      – legacy "DIRECTION:BAND" format; cold-loaded URLs are migrated to region=DIR
@@ -64,7 +65,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { DiscoverAreasResponse } from '@/hooks/useDiscoverAreas';
 import {
   VALID_DIRECTIONS,
-  VALID_SCOPES,
+  isValidScope,
   extractLegacyGroupDirection,
   normalizeDiscoverSearchParams,
 } from '@/hooks/discoverUrlNormalize';
@@ -210,9 +211,10 @@ export interface DiscoverUrlState {
    */
   intent: DiscoverIntent;
   /**
-   * Issue #1745 P2 — residential "scope" axis. One of VALID_SCOPES
-   * ("north"|"south"|"east"|"west"|"central"), parsed from URL `scope`. Null when
-   * absent or invalid. Distinct from `selectedRegion` (agri-only corridor direction) —
+   * Issue #1745 P2 — residential "scope" axis. Validated via isValidScope (the 5
+   * fixed direction/central tokens, corridor codes, or a real area-group regionKey
+   * slug), parsed from URL `scope`. Null when absent or invalid. Distinct from
+   * `selectedRegion` (agri-only corridor direction) —
    * an orthogonal residential scoping mechanism. Not yet wired to any UI in P2.
    * Optional (like selectedRegion/selectedListing/etc.) to allow partial construction
    * in tests/callers that predate this field.
@@ -347,10 +349,12 @@ export interface DiscoverUrlActions {
    */
   setRegion: (dir: string) => void;
   /**
-   * Set the residential "scope" axis (Issue #1745 P2). Writes `scope=<value>` to
-   * URL when valid (one of VALID_SCOPES); invalid values or null remove the param
-   * (canonical omission). PUSH — a scope change is a navigational choice, mirroring
-   * setRegion. Not yet wired to any UI in P2.
+   * Set the residential "scope" axis (Issue #1745 P2, wired to the landing macro-region
+   * cards in P8). Writes `scope=<value>` to URL when valid (see isValidScope); invalid
+   * values or null remove the param (canonical omission). REPLACE — a scope selection is a
+   * landing-level refinement, not a navigational destination, mirroring setIntent's REPLACE
+   * semantics (Issue #1745 P8: changed from the original P2 PUSH so selecting/switching/
+   * clearing scope does not stack browser history entries).
    */
   setScope: (scope: string | null) => void;
   /**
@@ -700,9 +704,11 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     rawRegion && VALID_DIRECTIONS.has(rawRegion) ? (rawRegion as DirectionCode) : null;
 
   // Issue #1745 P2 — residential scope axis. Distinct from `region` (agri-only
-  // corridor direction) above; validated against VALID_SCOPES.
+  // corridor direction) above; validated against isValidScope (Batch A: broadened
+  // to accept real regionKey values — area-group slugs / corridor codes — not just
+  // the original 5 fixed direction tokens).
   const rawScope = urlParams.get('scope');
-  const scope: string | null = rawScope && VALID_SCOPES.has(rawScope) ? rawScope : null;
+  const scope: string | null = rawScope && isValidScope(rawScope) ? rawScope : null;
 
   const rawMaxKm = urlParams.get('maxKm');
   const parsedMaxKm = rawMaxKm ? parseInt(rawMaxKm, 10) : null;
@@ -1371,15 +1377,18 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     [setUrlParams],
   );
 
-  // Issue #1745 P2 — residential scope axis. Orthogonal to the agri-only region/maxKm
-  // corridor model above; mirrors setRegion's write shape (PUSH, canonical omission of
-  // invalid/null values) but does not touch region/maxKm.
+  // Issue #1745 P2/P8 — residential scope axis. Orthogonal to the agri-only region/maxKm
+  // corridor model above; mirrors setRegion's canonical omission of invalid/null values,
+  // but does not touch region/maxKm. Issue #1745 P8 — changed from PUSH to REPLACE
+  // (matching setIntent): a scope selection is a landing-level refinement, not a
+  // navigational destination, so selecting/switching/clearing scope must not stack
+  // browser history entries.
   const setScope = useCallback(
     (newScope: string | null) => {
       setUrlParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (newScope != null && VALID_SCOPES.has(newScope)) {
+          if (newScope != null && isValidScope(newScope)) {
             next.set('scope', newScope);
           } else {
             // Silently discard invalid/null scope values (canonical omission)
@@ -1387,7 +1396,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
           }
           return next;
         },
-        { replace: false }, // PUSH — scope selection is a navigational choice
+        { replace: true }, // REPLACE — scope refinement, not a navigational destination
       );
     },
     [setUrlParams],
