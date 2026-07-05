@@ -19,11 +19,16 @@
               "components/**",
               "components/core/**",
               "components/domain/**",
+              "design_handoff_discover_area_first/designs/**",
+              "ui_kits/agri-discovery/**",
+              "ui_kits/area-discovery/**",
               "ui_kits/broker/**",
+              "ui_kits/buyer/**",
               "ui_kits/discover/**",
+              "ui_kits/discover/src/**",
+              "ui_kits/discover/src/components/**",
               "ui_kits/portal/**",
-              "ui_kits/school-discovery/**",
-              "ui_kits/school-zone-selected/**"
+              "ui_kits/school-discovery/**"
             ],
             "message": "Import design-system components from 'index.js', not component internals."
           }

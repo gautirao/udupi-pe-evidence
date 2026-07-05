@@ -1,0 +1,302 @@
+<!-- @dsCard group="Discover" viewport="1200x2400" name="Unified Discover Portal — UX spec" subtitle="One portal, scope × journey model · consolidation spec for #1740" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unified Discover Portal — UX Spec</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  html, body { margin: 0; background: var(--background); }
+  body { font-family: var(--font-sans); color: var(--text-body); line-height: 1.55; }
+  * { box-sizing: border-box; }
+  ::selection { background: var(--accent); color: #fff; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 64px 40px 120px; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--copper-600); margin: 0 0 12px; }
+  h1 { font-family: var(--font-serif); font-size: 44px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-strong); line-height: 1.08; margin: 0 0 16px; }
+  h2 { font-family: var(--font-serif); font-size: 27px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-strong); margin: 56px 0 8px; }
+  h3 { font-size: 16px; font-weight: 700; color: var(--text-strong); letter-spacing: -0.01em; margin: 26px 0 8px; }
+  p { margin: 0 0 14px; text-wrap: pretty; }
+  .lead { font-size: 18px; color: var(--text-body); line-height: 1.6; }
+  .sec-num { font-family: var(--font-mono); font-size: 14px; color: var(--copper-500); font-weight: 600; margin-right: 10px; }
+  a { color: var(--primary); }
+  code, .mono { font-family: var(--font-mono); font-size: 0.88em; background: var(--surface-subtle); padding: 1px 6px; border-radius: 5px; color: var(--navy-800); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; }
+  li { margin: 6px 0; }
+  strong { color: var(--text-strong); font-weight: 600; }
+  .card { background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 26px 28px; box-shadow: var(--shadow-sm); }
+  .callout { background: var(--accent-tint); border: 1px solid var(--copper-100); border-radius: var(--radius-lg); padding: 16px 20px; margin: 18px 0; font-size: 14px; color: var(--text-body); }
+  .callout strong { color: var(--copper-600); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 11px 13px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 11px; font-weight: 700; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--text-muted); background: var(--surface-subtle); }
+  td:first-child { white-space: nowrap; font-weight: 600; color: var(--text-strong); }
+  .pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 10px; border-radius: var(--radius-full); font-size: 11.5px; font-weight: 700; }
+  .pill-area { background: var(--accent-tint); color: var(--copper-600); }
+  .pill-school { background: #F1EDF7; color: #5E5286; }
+  .pill-navy { background: var(--navy-100); color: var(--navy-800); }
+  .funnel { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; margin: 22px 0 8px; }
+  .funnel .step { flex: 1; min-width: 150px; background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; box-shadow: var(--shadow-xs); }
+  .funnel .step .k { font-family: var(--font-mono); font-size: 11px; color: var(--copper-500); font-weight: 600; }
+  .funnel .step .t { font-size: 14.5px; font-weight: 700; color: var(--text-strong); margin: 4px 0 2px; }
+  .funnel .step .d { font-size: 12.5px; color: var(--text-muted); }
+  .toc { columns: 2; column-gap: 40px; font-size: 14px; }
+  .toc a { display: block; padding: 5px 0; color: var(--text-body); text-decoration: none; border-bottom: 1px solid var(--border); }
+  .toc .mono { background: none; color: var(--copper-500); padding: 0; margin-right: 8px; }
+  .state-hdr { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .layer { font-family: var(--font-mono); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="eyebrow">ReTrends · Discover · Consolidation spec · GitHub #1740</p>
+  <h1>One Discover portal:<br>scope × journey, not separate pages</h1>
+  <p class="lead">A single Discover shell for Bangalore. <strong>Region is a scope</strong> the user can set or skip; <strong>journey is a narrowing method</strong> (area · school · listings · agricultural), never a page change. The map and the right-hand decision panel always mirror the same scope and level. This spec defines the model, every required state, the scoped search box, the map-layer rules, and the merge plan for the existing kits. Implementation is deliberately out of scope here.</p>
+
+  <div class="card" style="margin-top:28px">
+    <p class="eyebrow" style="margin-bottom:14px">On this page</p>
+    <nav class="toc">
+      <a href="#model"><span class="mono">01</span> The unified model</a>
+      <a href="#shell"><span class="mono">02</span> Persistent shell anatomy</a>
+      <a href="#states"><span class="mono">03</span> State model</a>
+      <a href="#s1"><span class="mono">04</span> City landing</a>
+      <a href="#s2"><span class="mono">05</span> Region selected</a>
+      <a href="#s3"><span class="mono">06</span> Area · no region</a>
+      <a href="#s4"><span class="mono">07</span> Area · region set</a>
+      <a href="#s5"><span class="mono">08</span> School · no region</a>
+      <a href="#s6"><span class="mono">09</span> School · region set</a>
+      <a href="#search"><span class="mono">10</span> Scoped search box</a>
+      <a href="#layers"><span class="mono">11</span> Map-layer rules</a>
+      <a href="#merge"><span class="mono">12</span> Merge &amp; reuse plan</a>
+      <a href="#url"><span class="mono">13</span> URL / state params</a>
+      <a href="#never"><span class="mono">14</span> Never do this</a>
+    </nav>
+  </div>
+
+  <h2 id="model"><span class="sec-num">01</span>The unified model</h2>
+  <p>Everything in Discover is one expression: <strong>Scope × Journey → Result</strong>. Both scope and journey are optional and independently set. There is no "area page" or "school page" — only the one portal in different narrowing states.</p>
+
+  <div class="funnel">
+    <div class="step"><div class="k">SCOPE (optional)</div><div class="t">Region</div><div class="d">North / South / East / West / Central — or none (all Bangalore)</div></div>
+    <div class="step"><div class="k">JOURNEY (optional)</div><div class="t">Intent</div><div class="d">Area · School · Listings · Agricultural</div></div>
+    <div class="step"><div class="k">RESULT</div><div class="t">Narrowed set</div><div class="d">Groups → areas → listings, or zones → schools → homes-in-radius</div></div>
+  </div>
+  <div class="callout"><strong>The one rule that governs everything:</strong> the left map layer and the right panel content are always two views of the <em>same</em> (scope, journey, level) tuple. Clicking a map bubble === clicking its matching card. Changing scope or journey re-renders both sides in place — the shell never navigates away.</div>
+
+  <p>Two axes, set in either order:</p>
+  <ul>
+    <li><strong>Region as a filter.</strong> Setting a region scopes <em>whatever journey follows</em> to that region. Clearing it widens back to all Bangalore. It is a chip on the shell, not a destination.</li>
+    <li><strong>Journey as a method.</strong> Choosing "Search by area" or "Search near a school" swaps the <em>narrowing mechanism and the map layer</em>, keeping the current region scope. Journeys can be entered before or after a region is set.</li>
+  </ul>
+
+  <h2 id="shell"><span class="sec-num">02</span>Persistent shell anatomy</h2>
+  <p>These elements never unmount or reload across any state. Only the panel body and the map layer change.</p>
+  <table>
+    <thead><tr><th>Region</th><th>Element</th><th>Behaviour</th></tr></thead>
+    <tbody>
+      <tr><td>Top bar</td><td>Product chrome</td><td>Logo, nav, account. Identical everywhere.</td></tr>
+      <tr><td>Panel header</td><td>City + Buy/Rent + Start over</td><td>City = Bangalore (fixed for now). Buy/Rent is wording-only and persists across scope + journey changes.</td></tr>
+      <tr><td>Panel header</td><td>Title + breadcrumb</td><td><span class="mono">Discover Bangalore</span> → <span class="mono">&gt; North Bangalore</span> → <span class="mono">&gt; Airport Belt</span> → … Each crumb is a click-back target.</td></tr>
+      <tr><td>Panel header</td><td>Journey tag</td><td>Shows the active journey (<span class="pill pill-area">By area</span> / <span class="pill pill-school">Near school</span>) once one is chosen; absent on the neutral landing.</td></tr>
+      <tr><td>Panel body</td><td>Scoped search box</td><td>Appears once a region <em>or</em> journey is active (see §10).</td></tr>
+      <tr><td>Left half</td><td>Map</td><td>One Leaflet instance; only its marker layer swaps. Fly-to on every scope/level change.</td></tr>
+    </tbody>
+  </table>
+  <p>Split is a balanced <strong>50 / 50</strong> below the 60px top bar, exactly as the current kits.</p>
+
+  <h2 id="states"><span class="sec-num">03</span>State model</h2>
+  <p>State is three orthogonal variables plus a derived <em>level</em>. No state is a separate route.</p>
+  <table>
+    <thead><tr><th>Variable</th><th>Values</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>scope</td><td><span class="mono">region | null</span></td><td>The macro region, or none (all-Bangalore).</td></tr>
+      <tr><td>journey</td><td><span class="mono">null | area | school | listings | agri</span></td><td>The narrowing method. <span class="mono">null</span> = neutral landing.</td></tr>
+      <tr><td>selection</td><td><span class="mono">group / zone / area / school ids</span></td><td>Progressive picks within the active journey.</td></tr>
+      <tr><td>level</td><td class="layer">derived</td><td>city · region · groups · group · area · listings (area journey) / zones · zone · area · school (school journey).</td></tr>
+    </tbody>
+  </table>
+  <div class="callout"><strong>Guard:</strong> a region id alone never renders listings or schools — it resolves to the region overview. A journey alone (no region) resolves to the all-Bangalore group/zone level. The two compose; neither dead-ends.</div>
+
+  <hr>
+  <h2 id="s1"><span class="sec-num">04</span>State 1 — Initial city landing</h2>
+  <p class="state-hdr"><span class="pill pill-navy">scope: none</span> <span class="pill pill-navy">journey: none</span></p>
+  <div class="grid2" style="margin-top:14px">
+    <div class="card">
+      <h3 style="margin-top:0">Map layer</h3>
+      <ul>
+        <li>Only the <strong>5 macro region bubbles</strong> (North / South / East / West / Central).</li>
+        <li>Each bubble shows a <strong>property/listing count</strong> — never a school count.</li>
+        <li>No areas, no schools, no clusters. Max 5–8 bubbles, ever.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Right panel</h3>
+      <ul>
+        <li>Title <span class="mono">Discover Bangalore</span>; City = Bangalore; Buy/Rent.</li>
+        <li>One line: "Start with a region, or choose how you want to search."</li>
+        <li>Region cards (count each) + four journey cards: <strong>Search by area · Search near a school · View all listings</strong>, and <strong>Agricultural land</strong> visually separated as its own journey.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 id="s2"><span class="sec-num">05</span>State 2 — Region selected</h2>
+  <p class="state-hdr"><span class="pill pill-area">scope: North Bangalore</span> <span class="pill pill-navy">journey: none</span></p>
+  <p>Clicking <strong>North Bangalore</strong> on the map (or its card) sets scope and <em>stays in the shell</em>. Breadcrumb becomes <span class="mono">Discover Bangalore &gt; North Bangalore</span>.</p>
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-top:0">Map layer</h3>
+      <ul>
+        <li>Pan/zoom to North Bangalore bounds.</li>
+        <li>Show <strong>property clusters</strong> inside the region (top hotspots + a "+ N more" hint) — not every area, not schools.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Right panel</h3>
+      <ul>
+        <li>Header: North Bangalore + <strong>total property count</strong> + Change region / Start over.</li>
+        <li>Scoped search box (see §10).</li>
+        <li>In-region journey cards: <strong>Search by area in North Bangalore · Search near a school in North Bangalore · View listings in North Bangalore</strong>.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 id="s3"><span class="sec-num">06</span>State 3 — Search by area, no region</h2>
+  <p class="state-hdr"><span class="pill pill-navy">scope: none</span> <span class="pill pill-area">journey: area</span></p>
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-top:0">Map layer</h3>
+      <ul><li>Area <strong>group/zone bubbles across all Bangalore</strong> (e.g. Airport Belt, IT Corridor, South Core…). Grouped, not every area.</li></ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Right panel</h3>
+      <ul><li>Breadcrumb <span class="mono">Discover Bangalore &gt; Search by area</span>.</li><li>Group cards + scoped search box (Area mode) covering all Bangalore.</li></ul>
+    </div>
+  </div>
+  <p>Progressive disclosure continues: <span class="mono">group → area → listings</span>.</p>
+
+  <h2 id="s4"><span class="sec-num">07</span>State 4 — Search by area, region set</h2>
+  <p class="state-hdr"><span class="pill pill-area">scope: North Bangalore</span> <span class="pill pill-area">journey: area</span></p>
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-top:0">Map layer</h3>
+      <ul><li>Only the area <strong>groups/zones inside North</strong> (Airport Belt, North Growth, Outer North). Then <span class="mono">group → area → listings</span> bubbles as the user narrows.</li></ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Right panel</h3>
+      <ul><li>Breadcrumb <span class="mono">… &gt; North Bangalore &gt; Search by area</span>.</li><li>Region-scoped group cards; search box placeholder "Search North Bangalore".</li><li>Area level adds listing filters: budget · type · bedrooms · verified · buy/rent.</li></ul>
+    </div>
+  </div>
+
+  <h2 id="s5"><span class="sec-num">08</span>State 5 — Search near school, no region</h2>
+  <p class="state-hdr"><span class="pill pill-navy">scope: none</span> <span class="pill pill-school">journey: school</span></p>
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-top:0">Map layer</h3>
+      <ul><li><strong>School zones across all Bangalore.</strong> School-specific bubbles/counts appear <em>only now</em> that the school journey is active — never before.</li></ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Right panel</h3>
+      <ul><li>Breadcrumb <span class="mono">Discover Bangalore &gt; Search near school</span>.</li><li>School-zone cards + scoped search box (School mode) covering all Bangalore.</li></ul>
+    </div>
+  </div>
+
+  <h2 id="s6"><span class="sec-num">09</span>State 6 — Search near school, region set</h2>
+  <p class="state-hdr"><span class="pill pill-area">scope: North Bangalore</span> <span class="pill pill-school">journey: school</span></p>
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-top:0">Map layer</h3>
+      <ul><li>Only <strong>school zones/schools inside North</strong>. Then <span class="mono">zone → area → school pins</span>; selecting a school shows its <strong>radius ring + filtered home pins</strong> (3 / 5 / 10 km).</li></ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Right panel</h3>
+      <ul><li>Breadcrumb <span class="mono">… &gt; North Bangalore &gt; Search near school</span> → <span class="mono">&gt; Hebbal &gt; {school}</span>.</li><li>Zone/area/school cards; selected school → radius chips + listings sorted by distance; Change school.</li></ul>
+    </div>
+  </div>
+
+  <h2 id="search"><span class="sec-num">10</span>Scoped search box behaviour</h2>
+  <p>One search box in the right panel, shown once a region <em>or</em> a journey is active (hidden on the neutral city landing where the region cards do the job). Two responsibilities: <strong>placeholder reflects scope</strong>, <strong>toggle reflects intent</strong>.</p>
+  <table>
+    <thead><tr><th>Aspect</th><th>Rule</th></tr></thead>
+    <tbody>
+      <tr><td>Placeholder</td><td>City scope → "Search Bangalore". Region scope → "Search North Bangalore".</td></tr>
+      <tr><td>Toggle</td><td><span class="pill pill-area">Area</span> searches areas · <span class="pill pill-school">School</span> searches schools. Defaults to the active journey's intent (Area journey → Area; School journey → School).</td></tr>
+      <tr><td>Scope respect</td><td>Results are filtered to the current region when one is set; all-Bangalore otherwise.</td></tr>
+      <tr><td>Result → action</td><td>Area result jumps to that area's listings (area journey) or "Schools in {area}" (school journey), auto-resolving group/zone in the breadcrumb. School result jumps to homes within the default radius.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">This is the merge of the current kits' two separate search widgets — the area journey's "Search area directly" box and the school journey's "What do you know?" intent control — into <strong>one scope-aware, intent-toggled box</strong>.</div>
+
+  <h2 id="layers"><span class="sec-num">11</span>Map-layer rules (single source of truth)</h2>
+  <p>Exactly one layer is active per state. The layer is a pure function of (scope, journey, level).</p>
+  <table>
+    <thead><tr><th>State</th><th>Map layer</th><th>Max markers</th></tr></thead>
+    <tbody>
+      <tr><td>City landing</td><td class="layer">region bubbles (property counts)</td><td>5–8</td></tr>
+      <tr><td>Region selected</td><td class="layer">in-region property clusters / top hotspots + "+N more"</td><td>~3–5</td></tr>
+      <tr><td>Area · no region</td><td class="layer">area group bubbles, all Bangalore</td><td>≤ ~8</td></tr>
+      <tr><td>Area · region</td><td class="layer">group → area → listing pins (in region)</td><td>≤ ~15 at area level</td></tr>
+      <tr><td>School · no region</td><td class="layer">school-zone bubbles, all Bangalore</td><td>≤ ~8</td></tr>
+      <tr><td>School · region</td><td class="layer">zone → area → school pins → radius ring + home pins</td><td>≤ ~15 at area level</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li><strong>Property counts only</strong> on region bubbles; school counts never surface until the school journey is entered.</li>
+    <li>Never render all areas or all schools at once — always the current level's set.</li>
+    <li>Agricultural land uses its own layer and is never mixed into residential layers.</li>
+  </ul>
+
+  <h2 id="merge"><span class="sec-num">12</span>Merge &amp; reuse plan</h2>
+  <p>The two standalone kits collapse into one portal. Nothing needs inventing — the pieces already exist and mostly line up; they are re-hosted under one shell and one state machine.</p>
+
+  <h3>Merge into one shell</h3>
+  <table>
+    <thead><tr><th>Today (two pages)</th><th>Becomes</th></tr></thead>
+    <tbody>
+      <tr><td><span class="mono">ui_kits/area-discovery/index.html</span><br><span class="mono">ui_kits/school-discovery/index.html</span></td><td>One <span class="mono">ui_kits/discover/index.html</span> shell mounting a single <span class="mono">DiscoverPortal</span>. The two current index files are retired (or kept as thin redirects).</td></tr>
+      <tr><td><span class="mono">AreaDiscovery.jsx</span> + <span class="mono">SchoolDiscovery.jsx</span> (two state machines)</td><td>One <span class="mono">DiscoverPortal.jsx</span> holding <span class="mono">{scope, journey, selection, mode}</span> and deriving level. The area/school logic become two <em>journey modules</em> the portal switches between — not two apps.</td></tr>
+      <tr><td>Two Leaflet maps (<span class="mono">AreaMap.jsx</span>, <span class="mono">Map.jsx</span>)</td><td>One <span class="mono">DiscoverMap.jsx</span> with a layer registry keyed by (journey, level). The marker builders (region bubble, group/zone pill, area pin, school pin, home pin, radius ring) move in wholesale — they already share styling.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Reuse as-is (lift into the portal)</h3>
+  <ul>
+    <li><strong>Cards</strong> — <span class="mono">RegionCard</span>, <span class="mono">JourneyOption</span>, <span class="mono">GroupCard</span>, <span class="mono">AreaCard</span>, <span class="mono">ListingCard</span>, <span class="mono">AgriCard</span> (area kit) and <span class="mono">ZoneCard</span>, <span class="mono">SchoolCard</span> (school kit). Region + journey cards are already shared concepts — dedupe to one each.</li>
+    <li><strong>Shared bits</strong> — <span class="mono">BuyRentToggle</span>, <span class="mono">BackLink</span>, <span class="mono">Crumb</span>, <span class="mono">HeaderBand</span>, <span class="mono">SectionLabel</span>, empty states. These are near-identical across both kits; keep one copy.</li>
+    <li><strong>Data</strong> — merge <span class="mono">area-discovery/data.js</span> and <span class="mono">school-discovery/data.js</span> into one <span class="mono">discover/data.js</span>: shared <span class="mono">regions</span>, one <span class="mono">areas</span> table carrying both group and zone membership, plus <span class="mono">groups</span>, <span class="mono">zones</span>, <span class="mono">schools</span>, <span class="mono">listings</span>. Counts stay derived (property counts for region bubbles). Reuse <span class="mono">BLR_DIST</span> / <span class="mono">BLR_HOMES_NEAR</span> for radius.</li>
+    <li><strong>DS components</strong> — <span class="mono">Icon</span>, <span class="mono">Button</span>, <span class="mono">Badge</span>, <span class="mono">Input</span>, <span class="mono">TrustBadge</span> unchanged.</li>
+  </ul>
+
+  <h3>Consolidate (was duplicated)</h3>
+  <ul>
+    <li>Two search widgets → <strong>one scoped, intent-toggled search box</strong> (§10).</li>
+    <li>Two journey headers / breadcrumbs → <strong>one shell header</strong> whose breadcrumb reflects scope + journey + selection.</li>
+    <li>Journey tag becomes a mode indicator inside the one shell, not a page identity.</li>
+  </ul>
+  <div class="callout"><strong>Net effect:</strong> ~8 files across two folders collapse to one <span class="mono">discover/</span> folder (shell, portal, map, cards, data). No new visual language — same ink-navy + copper, plum reserved for the school journey layer/pins only.</div>
+
+  <h2 id="url"><span class="sec-num">13</span>URL / state params</h2>
+  <p>One shareable URL scheme for the whole portal, so any state restores exactly and no state implies a separate page:</p>
+  <p><code>?region=north&journey=area|school|listings|agri&groupId=…&zoneId=…&areaId=…&schoolId=…&radiusKm=5&mode=rent</code></p>
+  <ul>
+    <li><span class="mono">region</span> and <span class="mono">journey</span> are independent and both optional.</li>
+    <li>Selection ids are validated against the active journey; unknown ids fall back to the nearest valid level rather than erroring.</li>
+  </ul>
+
+  <h2 id="never"><span class="sec-num">14</span>Never do this</h2>
+  <ul>
+    <li>Never route to a separate area/school/landing page — it is one shell, always.</li>
+    <li>Never show school bubbles or counts before the school journey is active.</li>
+    <li>Never render all areas or all schools at once; never exceed 5–8 macro bubbles at city level.</li>
+    <li>Never mix agricultural land into residential layers or lists.</li>
+    <li>Never lose scope or Buy/Rent when switching journeys — they persist.</li>
+  </ul>
+
+  <hr>
+  <p style="font-size:13px;color:var(--text-muted)">Spec only — no implementation. Recommended next step: build <span class="mono">ui_kits/discover/</span> as the single portal per §12, retiring the two standalone kits. Say the word and I'll implement it.</p>
+
+</div>
+</body>
+</html>

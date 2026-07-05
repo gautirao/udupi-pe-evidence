@@ -1,25 +1,22 @@
-// Udupi Property Tracker — school-first discovery mock data.
-// Coastal Karnataka context. Prices in ₹. Coordinates are approximate, real-ish
-// places around Udupi so the Leaflet map reads as authentic.
+// Bangalore Property Tracker — SCOPED SCHOOL-FIRST discovery mock data.
+// Redesign for GitHub #1740: scoped discovery navigation.
 //
-// Journey model (school-first):
-//   1. Landing                 → schools + zones
-//   2. Zone selected           → AREAS inside the zone  (the intermediary step)
-//   3. Area selected           → schools + homes in that area
-//   4. School selected         → homes within a chosen radius (5 / 10 km / area-wide)
+// Product model:  City → Region → (Search near school) → School Zone → Area → School
+//   1. City landing        → macro REGION bubbles + journey options
+//   2. Region selected     → journey cards inside the region
+//   7. Search near school   → school ZONE groups inside the region
+//   8. Intent control        → "What do you know?" [I know the school] [I know the area]
+//   9. Area selected          → SCHOOLS in that area (school markers only)
+//  10. School selected         → homes within a radius (3 / 5 / 10 km) of the school
 //
 // DATA HONESTY:
-//   • Distances are computed live with UPT_DIST (haversine) from real lat/lon —
-//     never hard-coded. Listing cards show "X.X km from school" from that math.
-//   • Every school & listing in the University Belt carries real coordinates so
-//     radius filtering is genuine. A listing with no coords is handled, not faked.
-//   • `walk` is EDITORIAL copy (e.g. "6 min walk to campus"). It is NOT a computed
-//     travel time and is only shown as flavour outside the radius context.
-//   • School-first EXCLUDES agricultural land — see UPT_IS_AGRI / UPT_HOME_LISTINGS.
-//   • Area `schools`/`listings` counts equal the number of real records below.
+//   • Distances are computed live with BLR_DIST (haversine) from real lat/lon.
+//   • Radius counts and per-card "homes within N km" come from that math.
+//   • School-first EXCLUDES agricultural land (none is present here).
+//   • The left map and the right panel always render the same navigation level.
 
 // Haversine distance in km between two {lat, lon} points.
-window.UPT_DIST = function (a, b) {
+window.BLR_DIST = function (a, b) {
   if (!a || !b || a.lat == null || a.lon == null || b.lat == null || b.lon == null) return null;
   const R = 6371, toRad = (d) => (d * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
@@ -28,122 +25,199 @@ window.UPT_DIST = function (a, b) {
   return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
 };
 
-// Agricultural / raw-land types are excluded from the school-first journey.
-window.UPT_IS_AGRI = function (l) {
-  return /agri|farm|plot|land/i.test(l.propType || "");
+window.BLR_NOUN = function (mode, n) {
+  if (mode === "Rent") return n === 1 ? "rental" : "rentals";
+  return n === 1 ? "home for sale" : "homes for sale";
 };
-// Homes only (school-first never surfaces agri land).
-window.UPT_HOME_LISTINGS = function (list) {
-  return (list || []).filter((l) => !window.UPT_IS_AGRI(l));
+window.BLR_TITLE = function (mode) { return mode === "Rent" ? "Rentals" : "Homes for sale"; };
+window.BLR_INR = function (p) {
+  const cr = p / 10000000;
+  if (cr >= 1) return `₹${cr.toFixed(2)} Cr`;
+  return `₹${(p / 100000).toFixed(0)} L`;
 };
 
-window.UPT_DATA = {
-  city: { name: "Udupi", lat: 13.34119, lon: 74.74205, zoom: 11 },
+const IMG = [
+  "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=720&h=480&fit=crop",
+  "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=720&h=480&fit=crop",
+  "https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?w=720&h=480&fit=crop",
+  "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=720&h=480&fit=crop",
+  "https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=720&h=480&fit=crop",
+  "https://images.unsplash.com/photo-1576941089067-2de3c901e126?w=720&h=480&fit=crop",
+  "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=720&h=480&fit=crop",
+  "https://images.unsplash.com/photo-1480074568708-e7b720bb3f09?w=720&h=480&fit=crop",
+  "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=720&h=480&fit=crop",
+  "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=720&h=480&fit=crop",
+];
 
-  // ---- Schools (popular list + searchable). areaId ties a school to its area. ----
-  // `board` (CBSE/ICSE/State/International) and `levels` (Primary/Secondary/Higher
-  // Secondary) power the selected-area filter chips. Higher-ed has board:null, levels:[].
-  schools: [
-    // ---------- University Belt · Manipal (mixed K-12 + higher-ed) ----------
-    { id: "s-manipal", name: "Manipal Academy of Higher Education", address: "Madhav Nagar, Eshwar Nagar", area: "Manipal", areaId: "manipal", type: "University", board: null, levels: [], listings: 9, lat: 13.3520, lon: 74.7860, zone: "university-belt" },
-    { id: "s-mit", name: "Manipal Institute of Technology", address: "Eshwar Nagar, Manipal", area: "Manipal", areaId: "manipal", type: "University", board: null, levels: [], listings: 8, lat: 13.3490, lon: 74.7930, zone: "university-belt" },
-    { id: "s-kasturba", name: "Kasturba Medical College", address: "Madhav Nagar, Manipal", area: "Manipal", areaId: "manipal", type: "University", board: null, levels: [], listings: 7, lat: 13.3540, lon: 74.7880, zone: "university-belt" },
-    { id: "s-dps", name: "Delhi Public School, Manipal", address: "Eshwar Nagar, Manipal", area: "Manipal", areaId: "manipal", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary", "Higher Secondary"], listings: 6, lat: 13.3585, lon: 74.7840, zone: "university-belt" },
-    { id: "s-vidyaniketan", name: "Vidya Niketan Public School", address: "Tiger Circle Rd, Manipal", area: "Manipal", areaId: "manipal", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary"], listings: 5, lat: 13.3500, lon: 74.7820, zone: "university-belt" },
-    { id: "s-mgm", name: "Manipal MGM School", address: "Manipal-Udupi Rd, Manipal", area: "Manipal", areaId: "manipal", type: "ICSE", board: "ICSE", levels: ["Primary", "Secondary"], listings: 4, lat: 13.3560, lon: 74.7900, zone: "university-belt" },
-    { id: "s-excel", name: "Excel Public School, Manipal", address: "End Point Rd, Manipal", area: "Manipal", areaId: "manipal", type: "ICSE", board: "ICSE", levels: ["Secondary", "Higher Secondary"], listings: 4, lat: 13.3450, lon: 74.7890, zone: "university-belt" },
-    { id: "s-sharada", name: "Sharada Vidyalaya, Manipal", address: "Madhav Nagar, Manipal", area: "Manipal", areaId: "manipal", type: "State", board: "State", levels: ["Primary", "Secondary"], listings: 3, lat: 13.3535, lon: 74.7810, zone: "university-belt" },
-    { id: "s-mis", name: "Manipal International School", address: "Bailoor, Manipal", area: "Manipal", areaId: "manipal", type: "International", board: "International", levels: ["Primary", "Secondary", "Higher Secondary"], listings: 5, lat: 13.3600, lon: 74.7820, zone: "university-belt" },
-    { id: "s-vikas", name: "Vikas PU College, Manipal", address: "Udupi-Manipal Rd, Manipal", area: "Manipal", areaId: "manipal", type: "PU College", board: null, levels: ["Higher Secondary"], listings: 5, lat: 13.3560, lon: 74.7855, zone: "university-belt" },
-    { id: "s-ghps", name: "Govt Higher Primary School, Manipal", address: "Manipal village, Manipal", area: "Manipal", areaId: "manipal", type: "State", board: "State", levels: ["Primary"], listings: 2, lat: 13.3515, lon: 74.7790, zone: "university-belt" },
-    { id: "s-msap", name: "MIT School of Architecture & Planning", address: "End Point Rd, Manipal", area: "Manipal", areaId: "manipal", type: "University", board: null, levels: [], listings: 4, lat: 13.3470, lon: 74.7910, zone: "university-belt" },
-    // ---------- University Belt · Katapadi (schools, no homes listed yet) ----------
-    { id: "s-littleflower", name: "Little Flower English Medium School", address: "Katapadi, Udupi 574105", area: "Katapadi", areaId: "katapadi", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary"], listings: 0, lat: 13.3865, lon: 74.7535, zone: "university-belt" },
-    { id: "s-kata-govt", name: "Government High School, Katapadi", address: "NH-66, Katapadi, Udupi 574105", area: "Katapadi", areaId: "katapadi", type: "State", board: "State", levels: ["Primary", "Secondary"], listings: 0, lat: 13.3880, lon: 74.7510, zone: "university-belt" },
-    { id: "s-kata-venkat", name: "Sri Venkataramana School, Katapadi", address: "Katapadi Cross, Udupi 574105", area: "Katapadi", areaId: "katapadi", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary", "Higher Secondary"], listings: 0, lat: 13.3850, lon: 74.7560, zone: "university-belt" },
-    // ---------- University Belt · Udyavara ----------
-    { id: "s-udyavara-pu", name: "Udyavara PU College", address: "Udyavara, Udupi 574118", area: "Udyavara", areaId: "udyavara", type: "PU College", board: null, levels: ["Higher Secondary"], listings: 1, lat: 13.3035, lon: 74.7430, zone: "university-belt" },
-    { id: "s-udyavara-eng", name: "Udyavara English Medium School", address: "Udyavara, Udupi 574118", area: "Udyavara", areaId: "udyavara", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary"], listings: 1, lat: 13.3010, lon: 74.7455, zone: "university-belt" },
-    // ---------- University Belt · Parkala ----------
-    { id: "s-parkala-school", name: "Parkala Higher Primary School", address: "Parkala, Udupi 576107", area: "Parkala", areaId: "parkala", type: "State", board: "State", levels: ["Primary"], listings: 1, lat: 13.3705, lon: 74.7635, zone: "university-belt" },
-    { id: "s-parkala-pu", name: "Parkala PU College", address: "Parkala Main Rd, Udupi 576107", area: "Parkala", areaId: "parkala", type: "PU College", board: null, levels: ["Higher Secondary"], listings: 1, lat: 13.3690, lon: 74.7660, zone: "university-belt" },
+window.BLR_SCHOOL_DATA = {
+  city: { name: "Bangalore", lat: 12.9800, lon: 77.6050, zoom: 11 },
 
-    // ---------- Other zones (light coverage) ----------
-    { id: "s-ashrama", name: "Ashrama School Udupi Bannanje", address: "8PRQ+FWJ, Brahmagiri, Udupi 576101", area: "Brahmagiri", areaId: "brahmagiri", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary"], listings: 6, lat: 13.3380, lon: 74.7490, zone: "city-centre" },
-    { id: "s-eurokids", name: "Eurokids Pre-School Udupi", address: "Circuit House Rd, Brahmagiri, Udupi 576101", area: "Brahmagiri", areaId: "brahmagiri", type: "Pre-school", board: null, levels: ["Primary"], listings: 4, lat: 13.3395, lon: 74.7470, zone: "city-centre" },
-    { id: "s-vidyodaya", name: "Vidyodaya Public School", address: "Kunjibettu, Udupi 576102", area: "Kunjibettu", areaId: "kunjibettu", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary", "Higher Secondary"], listings: 5, lat: 13.3310, lon: 74.7560, zone: "city-centre" },
-    { id: "s-asiatech", name: "Asiatech College Kundapura", address: "Church Road, Kundapura 576201", area: "Kundapura", areaId: "kundapura", type: "College", board: null, levels: [], listings: 5, lat: 13.6280, lon: 74.6940, zone: "coastal-strip" },
-    { id: "s-bearys", name: "Bearys First Grade College", address: "Kodi Beach Rd, Kundapur 576217", area: "Kundapura", areaId: "kundapura", type: "College", board: null, levels: [], listings: 4, lat: 13.6500, lon: 74.6800, zone: "coastal-strip" },
-    { id: "s-bareerah", name: "Bareerah International School", address: "Darikere Road, Karkala 574114", area: "Karkala", areaId: "karkala", type: "International", board: "International", levels: ["Primary", "Secondary", "Higher Secondary"], listings: 3, lat: 13.2130, lon: 74.9950, zone: "south-udupi" },
+  // ---- Macro regions (shared with the area journey). ----
+  regions: [
+    { id: "north", name: "North Bangalore", short: "North", cue: "Airport corridor",
+      blurb: "The airport-growth corridor — Hebbal, Yelahanka and Devanahalli. Home to many of the city's international and CBSE schools.",
+      center: { lat: 13.0900, lon: 77.6050 }, bounds: [[12.99, 77.55], [13.28, 77.73]] },
+    { id: "south", name: "South Bangalore", short: "South", cue: "Established south",
+      blurb: "Leafy, established neighbourhoods with long-standing schools — Jayanagar, JP Nagar, Banashankari.",
+      center: { lat: 12.9100, lon: 77.5850 }, bounds: [[12.83, 77.53], [12.95, 77.65]] },
+    { id: "east", name: "East Bangalore", short: "East", cue: "IT corridor",
+      blurb: "The tech belt — Whitefield and Marathahalli — with a dense cluster of international schools near the parks.",
+      center: { lat: 12.9950, lon: 77.7150 }, bounds: [[12.93, 77.66], [13.02, 77.78]] },
+    { id: "west", name: "West Bangalore", short: "West", cue: "Old-city west",
+      blurb: "Rajajinagar and Malleshwaram — established schools in well-connected old-Bangalore addresses.",
+      center: { lat: 12.9950, lon: 77.5450 }, bounds: [[12.95, 77.50], [13.03, 77.58]] },
+    { id: "central", name: "Central Bangalore", short: "Central", cue: "City core",
+      blurb: "Indiranagar and Koramangala — premium central schools in the walkable core.",
+      center: { lat: 12.9720, lon: 77.6280 }, bounds: [[12.94, 77.59], [12.99, 77.66]] },
   ],
 
-  // ---- Zones / groups. schools/listings/areas mirror the records below. ----
+  // ---- School ZONE groups inside a region (the "search near school" level). ----
   zones: [
-    {
-      id: "university-belt", name: "University Belt", subtitle: "Academic and student housing",
-      blurb: "Student-heavy neighbourhoods anchored by Manipal's campuses. Strong rental demand, walk-to-class homes, and quieter family pockets a short drive out.",
-      schools: 19, listings: 7, areas: 4,
-      center: { lat: 13.3560, lon: 74.7720 }, bounds: [[13.290, 74.735], [13.395, 74.800]],
-    },
-    {
-      id: "coastal-strip", name: "Coastal Strip", subtitle: "Beachside and fishing villages",
-      blurb: "Beachside and fishing villages from Malpe to Kundapura — sea views and weekend-home appeal.",
-      schools: 4, listings: 16, areas: 2,
-      center: { lat: 13.3494, lon: 74.7050 }, bounds: [[13.30, 74.68], [13.66, 74.72]],
-    },
-    {
-      id: "city-centre", name: "City Centre", subtitle: "Temple precinct and core",
-      blurb: "Core urban and temple precinct around Car Street — established, well-connected addresses.",
-      schools: 14, listings: 12, areas: 2,
-      center: { lat: 13.3409, lon: 74.7480 }, bounds: [[13.325, 74.735], [13.352, 74.762]],
-    },
-    {
-      id: "north-udupi", name: "North Udupi", subtitle: "Newer northern projects",
-      blurb: "Rapidly developing northern belt around Brahmavar — newer projects and bigger plots.",
-      schools: 4, listings: 0, areas: 1,
-      center: { lat: 13.4309, lon: 74.7480 }, bounds: [[13.41, 74.735], [13.45, 74.762]],
-    },
-    {
-      id: "south-udupi", name: "South Udupi", subtitle: "Quiet value-led south",
-      blurb: "Quiet residential southern belt toward Kaup and Padubidri — calmer, value-led pockets.",
-      schools: 3, listings: 4, areas: 1,
-      center: { lat: 13.2200, lon: 74.7450 }, bounds: [[13.14, 74.73], [13.24, 74.80]],
-    },
+    { id: "hebbal-jakkur", region: "north", name: "Hebbal & Jakkur Schools",
+      blurb: "The Hebbal–Jakkur lake belt — CBSE and ICSE schools wrapped around Manyata and the flyover.",
+      exampleAreas: ["Hebbal", "Jakkur"],
+      center: { lat: 13.0560, lon: 77.6010 }, bounds: [[13.020, 77.582], [13.092, 77.620]] },
+    { id: "yelahanka-airport", region: "north", name: "Yelahanka & Airport Schools",
+      blurb: "Yelahanka's planned layouts out to Devanahalli — the city's densest cluster of international schools.",
+      exampleAreas: ["Yelahanka", "Devanahalli"],
+      center: { lat: 13.1400, lon: 77.6300 }, bounds: [[13.085, 77.582], [13.262, 77.728]] },
+    { id: "thanisandra-hennur", region: "north", name: "Thanisandra & Hennur Schools",
+      blurb: "The Thanisandra–Hennur growth arc — newer international and CBSE schools beside fresh apartment supply.",
+      exampleAreas: ["Thanisandra", "Hennur"],
+      center: { lat: 13.0530, lon: 77.6355 }, bounds: [[13.026, 77.616], [13.080, 77.656]] },
+    // other regions — light coverage so the journey never dead-ends
+    { id: "south-schools", region: "south", name: "South Core Schools",
+      blurb: "Jayanagar and JP Nagar's established schools.",
+      exampleAreas: ["Jayanagar", "JP Nagar"],
+      center: { lat: 12.9160, lon: 77.5840 }, bounds: [[12.892, 77.569], [12.940, 77.600]] },
+    { id: "east-schools", region: "east", name: "IT Corridor Schools",
+      blurb: "The international-school cluster around Whitefield.",
+      exampleAreas: ["Whitefield", "Marathahalli"],
+      center: { lat: 12.9700, lon: 77.7300 }, bounds: [[12.941, 77.687], [12.986, 77.766]] },
+    { id: "west-schools", region: "west", name: "West Core Schools",
+      blurb: "Rajajinagar and Malleshwaram's heritage schools.",
+      exampleAreas: ["Rajajinagar", "Malleshwaram"],
+      center: { lat: 12.9970, lon: 77.5600 }, bounds: [[12.976, 77.541], [13.018, 77.585]] },
+    { id: "central-schools", region: "central", name: "Central Core Schools",
+      blurb: "Premium central schools around Indiranagar and Koramangala.",
+      exampleAreas: ["Indiranagar", "Koramangala"],
+      center: { lat: 12.9550, lon: 77.6320 }, bounds: [[12.920, 77.610], [12.987, 77.656]] },
   ],
 
-  // ---- Areas inside zones (the intermediary step). Counts = real records. ----
+  // ---- Areas inside zones (the neighbourhood level). ----
   areas: [
-    { id: "manipal", zone: "university-belt", name: "Manipal", blurb: "University core with student rentals and family homes within walking distance of campus.", schools: 12, listings: 5, lat: 13.3520, lon: 74.7860, bounds: [[13.340, 74.775], [13.362, 74.800]] },
-    { id: "katapadi", zone: "university-belt", name: "Katapadi", blurb: "Residential coastal-side area on NH-66 with nearby schools and easy campus access.", schools: 3, listings: 0, lat: 13.3870, lon: 74.7530, bounds: [[13.378, 74.745], [13.396, 74.762]] },
-    { id: "udyavara", zone: "university-belt", name: "Udyavara", blurb: "Calmer southern pocket with newer apartments and a short commute to Manipal.", schools: 2, listings: 1, lat: 13.3020, lon: 74.7430, bounds: [[13.293, 74.735], [13.311, 74.752]] },
-    { id: "parkala", zone: "university-belt", name: "Parkala", blurb: "Established township between Manipal and the city — schools, markets and family villas.", schools: 2, listings: 1, lat: 13.3700, lon: 74.7640, bounds: [[13.361, 74.756], [13.379, 74.773]] },
-    // other zones
-    { id: "brahmagiri", zone: "city-centre", name: "Brahmagiri", blurb: "Temple-precinct core, walkable and well connected.", schools: 2, listings: 1, lat: 13.3390, lon: 74.7490, bounds: [[13.330, 74.742], [13.348, 74.758]] },
-    { id: "kunjibettu", zone: "city-centre", name: "Kunjibettu", blurb: "Quiet residential lanes close to the centre.", schools: 1, listings: 1, lat: 13.3310, lon: 74.7560, bounds: [[13.322, 74.748], [13.340, 74.764]] },
-    { id: "kundapura", zone: "coastal-strip", name: "Kundapura", blurb: "Coastal town with colleges and weekend-home plots.", schools: 2, listings: 1, lat: 13.6300, lon: 74.6900, bounds: [[13.61, 74.67], [13.66, 74.71]] },
-    { id: "malpe", zone: "coastal-strip", name: "Malpe", blurb: "Beachfront living minutes from the port and the ferry.", schools: 0, listings: 1, lat: 13.3494, lon: 74.7050, bounds: [[13.34, 74.69], [13.36, 74.71]] },
-    { id: "karkala", zone: "south-udupi", name: "Karkala", blurb: "Heritage town with international schools nearby.", schools: 1, listings: 1, lat: 13.2130, lon: 74.9950, bounds: [[13.20, 74.985], [13.225, 75.005]] },
+    // North · Hebbal & Jakkur
+    { id: "hebbal", zone: "hebbal-jakkur", region: "north", name: "Hebbal", blurb: "Lake-side connectivity hub with CBSE and ICSE schools near the flyover.", lat: 13.0358, lon: 77.5970, bounds: [[13.018, 77.583], [13.055, 77.615]] },
+    { id: "jakkur", zone: "hebbal-jakkur", region: "north", name: "Jakkur", blurb: "Lake-and-aerodrome pocket with newer schools and villa projects.", lat: 13.0776, lon: 77.6060, bounds: [[13.060, 77.590], [13.095, 77.622]] },
+    // North · Yelahanka & Airport
+    { id: "yelahanka", zone: "yelahanka-airport", region: "north", name: "Yelahanka", blurb: "Planned satellite town — the densest international-school cluster in the north.", lat: 13.1007, lon: 77.5963, bounds: [[13.082, 77.580], [13.120, 77.614]] },
+    { id: "devanahalli", zone: "yelahanka-airport", region: "north", name: "Devanahalli", blurb: "Airport-adjacent township belt with boarding and international campuses.", lat: 13.2437, lon: 77.7115, bounds: [[13.185, 77.630], [13.262, 77.728]] },
+    // North · Thanisandra & Hennur
+    { id: "thanisandra", zone: "thanisandra-hennur", region: "north", name: "Thanisandra", blurb: "Fast-supplying apartment corridor with newer CBSE and international schools.", lat: 13.0650, lon: 77.6300, bounds: [[13.048, 77.616], [13.082, 77.646]] },
+    { id: "hennur", zone: "thanisandra-hennur", region: "north", name: "Hennur", blurb: "Green mid-market belt bridging the airport road to the ORR.", lat: 13.0410, lon: 77.6410, bounds: [[13.024, 77.627], [13.058, 77.658]] },
+    // other regions
+    { id: "jayanagar", zone: "south-schools", region: "south", name: "Jayanagar", blurb: "Iconic planned neighbourhood with long-standing schools.", lat: 12.9250, lon: 77.5830, bounds: [[12.910, 77.569], [12.940, 77.598]] },
+    { id: "jp-nagar", zone: "south-schools", region: "south", name: "JP Nagar", blurb: "Family-friendly south belt with good schools.", lat: 12.9070, lon: 77.5850, bounds: [[12.892, 77.571], [12.922, 77.600]] },
+    { id: "whitefield", zone: "east-schools", region: "east", name: "Whitefield", blurb: "Tech township with a dense international-school cluster.", lat: 12.9698, lon: 77.7500, bounds: [[12.954, 77.735], [12.986, 77.766]] },
+    { id: "rajajinagar", zone: "west-schools", region: "west", name: "Rajajinagar", blurb: "Old-city grid with heritage schools.", lat: 12.9910, lon: 77.5550, bounds: [[12.976, 77.541], [13.006, 77.570]] },
+    { id: "indiranagar", zone: "central-schools", region: "central", name: "Indiranagar", blurb: "Premium walkable core with central schools.", lat: 12.9719, lon: 77.6412, bounds: [[12.957, 77.627], [12.987, 77.656]] },
   ],
 
-  // ---- Listings. schoolIds: schools this home is tagged near; zone + areaId locate it. ----
-  listings: [
-    // ----- University Belt · Manipal -----
-    { id: "l1", title: "3 BHK near Manipal University", locality: "Eshwar Nagar", area: "Manipal", areaId: "manipal", price: 13500000, beds: 3, baths: 2, sqft: 1480, propType: "Apartment", trustTier: "verified", image: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=720&h=480&fit=crop", walk: "6 min walk to campus", postedDays: 3, schoolIds: ["s-manipal", "s-mit", "s-kasturba"], zone: "university-belt", lat: 13.3505, lon: 74.7905 },
-    { id: "l2", title: "1 BHK studio, Tiger Circle", locality: "Tiger Circle", area: "Manipal", areaId: "manipal", price: 5200000, beds: 1, baths: 1, sqft: 720, propType: "Apartment", trustTier: "trusted", image: "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=720&h=480&fit=crop", walk: "Furnished · rental-ready", postedDays: 5, schoolIds: ["s-manipal", "s-mit"], zone: "university-belt", lat: 13.3530, lon: 74.7880 },
-    { id: "l3", title: "4 BHK villa, End Point Road", locality: "End Point Rd", area: "Manipal", areaId: "manipal", price: 26500000, beds: 4, baths: 4, sqft: 2600, propType: "Villa", trustTier: "verified", image: "https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?w=720&h=480&fit=crop", walk: "Gated community", postedDays: 8, schoolIds: ["s-manipal", "s-mit", "s-kasturba"], zone: "university-belt", lat: 13.3470, lon: 74.7950 },
-    { id: "l9", title: "2 BHK garden flat, Eshwar Nagar", locality: "Eshwar Nagar", area: "Manipal", areaId: "manipal", price: 8900000, beds: 2, baths: 2, sqft: 1150, propType: "Apartment", trustTier: "trusted", image: "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=720&h=480&fit=crop", walk: "9 min walk to MIT", postedDays: 4, schoolIds: ["s-mit", "s-manipal"], zone: "university-belt", lat: 13.3485, lon: 74.7895 },
-    { id: "l10", title: "Studio + loft, Manipal centre", locality: "Udupi-Manipal Rd", area: "Manipal", areaId: "manipal", price: 4800000, beds: 1, baths: 1, sqft: 640, propType: "Apartment", trustTier: "listed", image: "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=720&h=480&fit=crop", walk: "Student-ready · furnished", postedDays: 2, schoolIds: ["s-manipal", "s-vikas"], zone: "university-belt", lat: 13.3555, lon: 74.7840 },
-    // Agricultural land — MUST be excluded from school-first everywhere.
-    { id: "l-agri1", title: "Agricultural land off NH-66", locality: "Bailoor", area: "Manipal", areaId: "manipal", price: 9000000, beds: 0, baths: 0, sqft: 43560, propType: "Agricultural", trustTier: "listed", image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=720&h=480&fit=crop", walk: "2 acres · red soil", postedDays: 30, schoolIds: [], zone: "university-belt", lat: 13.3600, lon: 74.7800 },
-    // ----- University Belt · Udyavara -----
-    { id: "l11", title: "3 BHK family home, Udyavara", locality: "Udyavara", area: "Udyavara", areaId: "udyavara", price: 7600000, beds: 3, baths: 2, sqft: 1320, propType: "Apartment", trustTier: "trusted", image: "https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=720&h=480&fit=crop", walk: null, postedDays: 10, schoolIds: ["s-udyavara-pu"], zone: "university-belt", lat: 13.3030, lon: 74.7440 },
-    // ----- University Belt · Parkala -----
-    { id: "l14", title: "3 BHK villa, Parkala township", locality: "Parkala Main Rd", area: "Parkala", areaId: "parkala", price: 11200000, beds: 3, baths: 3, sqft: 1720, propType: "Villa", trustTier: "verified", image: "https://images.unsplash.com/photo-1576941089067-2de3c901e126?w=720&h=480&fit=crop", walk: null, postedDays: 7, schoolIds: ["s-parkala-pu", "s-manipal"], zone: "university-belt", lat: 13.3700, lon: 74.7640 },
-    // ----- Other zones -----
-    { id: "l4", title: "2 BHK in Brahmagiri", locality: "Brahmagiri", area: "Udupi", areaId: "brahmagiri", price: 7800000, beds: 2, baths: 2, sqft: 1120, propType: "Apartment", trustTier: "trusted", image: "https://images.unsplash.com/photo-1567496898669-ee935f5f647a?w=720&h=480&fit=crop", walk: "Near Ashrama School", postedDays: 11, schoolIds: ["s-ashrama", "s-eurokids"], zone: "city-centre", lat: 13.3390, lon: 74.7500 },
-    { id: "l5", title: "3 BHK in Kunjibettu", locality: "Kunjibettu", area: "Udupi", areaId: "kunjibettu", price: 8800000, beds: 3, baths: 3, sqft: 1350, propType: "Apartment", trustTier: "listed", image: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=720&h=480&fit=crop", walk: "Quiet residential lane", postedDays: 19, schoolIds: ["s-vidyodaya", "s-ashrama"], zone: "city-centre", lat: 13.3315, lon: 74.7565 },
-    { id: "l6", title: "2 BHK sea-view, Malpe", locality: "Malpe Beach Rd", area: "Malpe", areaId: "malpe", price: 9500000, beds: 2, baths: 2, sqft: 1180, propType: "Apartment", trustTier: "trusted", image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=720&h=480&fit=crop", walk: "300m to the beach", postedDays: 6, schoolIds: [], zone: "coastal-strip", lat: 13.3494, lon: 74.7050 },
-    { id: "l7", title: "3 BHK in Kundapura", locality: "Kodi Beach Rd", area: "Kundapura", areaId: "kundapura", price: 7200000, beds: 3, baths: 2, sqft: 1400, propType: "Apartment", trustTier: "verified", image: "https://images.unsplash.com/photo-1480074568708-e7b720bb3f09?w=720&h=480&fit=crop", walk: "Near Bearys College", postedDays: 14, schoolIds: ["s-bearys", "s-asiatech"], zone: "coastal-strip", lat: 13.6490, lon: 74.6820 },
-    { id: "l8", title: "2 BHK near Karkala", locality: "Kariyakal", area: "Karkala", areaId: "karkala", price: 6200000, beds: 2, baths: 2, sqft: 1080, propType: "Apartment", trustTier: "listed", image: "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=720&h=480&fit=crop", walk: "Near Bareerah Intl.", postedDays: 22, schoolIds: ["s-bareerah"], zone: "south-udupi", lat: 13.2140, lon: 74.9930 },
+  // ---- Schools. areaId + zone + region locate each; board/levels power filters. ----
+  schools: [
+    // North · Hebbal
+    { id: "s-vidyaniketan", name: "Vidyaniketan Public School, Hebbal", address: "Hebbal Kempapura", area: "Hebbal", areaId: "hebbal", zone: "hebbal-jakkur", region: "north", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary", "Higher Secondary"], lat: 13.0442, lon: 77.5910 },
+    { id: "s-presidency", name: "Presidency School, Hebbal", address: "Hebbal", area: "Hebbal", areaId: "hebbal", zone: "hebbal-jakkur", region: "north", type: "ICSE", board: "ICSE", levels: ["Primary", "Secondary"], lat: 13.0385, lon: 77.6035 },
+    { id: "s-kensri", name: "Kensri School, Hebbal", address: "Hennur–Bellary Rd", area: "Hebbal", areaId: "hebbal", zone: "hebbal-jakkur", region: "north", type: "ICSE", board: "ICSE", levels: ["Primary", "Secondary", "Higher Secondary"], lat: 13.0370, lon: 77.6150 },
+    // North · Jakkur
+    { id: "s-dps-north", name: "Delhi Public School North, Sahakarnagar", address: "Sahakar Nagar / Jakkur", area: "Jakkur", areaId: "jakkur", zone: "hebbal-jakkur", region: "north", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary", "Higher Secondary"], lat: 13.0625, lon: 77.5860 },
+    { id: "s-gnan", name: "Gnan Srishti School of Excellence, Jakkur", address: "Jakkur Main Rd", area: "Jakkur", areaId: "jakkur", zone: "hebbal-jakkur", region: "north", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary"], lat: 13.0812, lon: 77.6118 },
+    // North · Yelahanka
+    { id: "s-vidyashilp", name: "Vidyashilp Academy", address: "Yelahanka", area: "Yelahanka", areaId: "yelahanka", zone: "yelahanka-airport", region: "north", type: "International", board: "International", levels: ["Primary", "Secondary", "Higher Secondary"], lat: 13.1060, lon: 77.5850 },
+    { id: "s-canadian", name: "Canadian International School", address: "Yelahanka", area: "Yelahanka", areaId: "yelahanka", zone: "yelahanka-airport", region: "north", type: "International", board: "International", levels: ["Primary", "Secondary", "Higher Secondary"], lat: 13.1120, lon: 77.6010 },
+    { id: "s-ryan-yel", name: "Ryan International School, Yelahanka", address: "Yelahanka New Town", area: "Yelahanka", areaId: "yelahanka", zone: "yelahanka-airport", region: "north", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary"], lat: 13.0985, lon: 77.5905 },
+    // North · Devanahalli
+    { id: "s-akash", name: "Akash International School, Devanahalli", address: "Devanahalli", area: "Devanahalli", areaId: "devanahalli", zone: "yelahanka-airport", region: "north", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary"], lat: 13.2300, lon: 77.7000 },
+    { id: "s-stonehill", name: "Stonehill International School", address: "Tarahunise, Devanahalli", area: "Devanahalli", areaId: "devanahalli", zone: "yelahanka-airport", region: "north", type: "International", board: "International", levels: ["Primary", "Secondary", "Higher Secondary"], lat: 13.1900, lon: 77.6420 },
+    // North · Thanisandra
+    { id: "s-vibgyor", name: "VIBGYOR High, Thanisandra", address: "Thanisandra Main Rd", area: "Thanisandra", areaId: "thanisandra", zone: "thanisandra-hennur", region: "north", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary", "Higher Secondary"], lat: 13.0680, lon: 77.6280 },
+    { id: "s-legacy", name: "Legacy School, Thanisandra", address: "Rachenahalli", area: "Thanisandra", areaId: "thanisandra", zone: "thanisandra-hennur", region: "north", type: "ICSE", board: "ICSE", levels: ["Primary", "Secondary"], lat: 13.0605, lon: 77.6350 },
+    // North · Hennur
+    { id: "s-baldwin", name: "New Baldwin International School, Hennur", address: "Hennur Main Rd", area: "Hennur", areaId: "hennur", zone: "thanisandra-hennur", region: "north", type: "ICSE", board: "ICSE", levels: ["Primary", "Secondary", "Higher Secondary"], lat: 13.0430, lon: 77.6385 },
+    { id: "s-euro", name: "EuroSchool, Hennur", address: "Hennur–Bagalur Rd", area: "Hennur", areaId: "hennur", zone: "thanisandra-hennur", region: "north", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary"], lat: 13.0450, lon: 77.6445 },
+    // other regions (one or two each)
+    { id: "s-nps-jayanagar", name: "National Public School, Jayanagar", address: "Jayanagar 4th Block", area: "Jayanagar", areaId: "jayanagar", zone: "south-schools", region: "south", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary", "Higher Secondary"], lat: 12.9260, lon: 77.5825 },
+    { id: "s-carmel-jp", name: "Carmel School, JP Nagar", address: "JP Nagar 6th Phase", area: "JP Nagar", areaId: "jp-nagar", zone: "south-schools", region: "south", type: "ICSE", board: "ICSE", levels: ["Primary", "Secondary"], lat: 12.9080, lon: 77.5840 },
+    { id: "s-vibgyor-wf", name: "VIBGYOR High, Whitefield", address: "Whitefield Main Rd", area: "Whitefield", areaId: "whitefield", zone: "east-schools", region: "east", type: "International", board: "International", levels: ["Primary", "Secondary", "Higher Secondary"], lat: 12.9710, lon: 77.7480 },
+    { id: "s-mvm-raj", name: "MES Kishora Kendra, Rajajinagar", address: "Rajajinagar", area: "Rajajinagar", areaId: "rajajinagar", zone: "west-schools", region: "west", type: "State", board: "State", levels: ["Primary", "Secondary"], lat: 12.9915, lon: 77.5545 },
+    { id: "s-nps-indira", name: "New Horizon Public School, Indiranagar", address: "Indiranagar", area: "Indiranagar", areaId: "indiranagar", zone: "central-schools", region: "central", type: "CBSE", board: "CBSE", levels: ["Primary", "Secondary"], lat: 12.9720, lon: 77.6405 },
   ],
+
+  // ---- Listings (homes). areaId + zone + region locate each; radius uses lat/lon. ----
+  listings: [
+    // Hebbal
+    { id: "h1", title: "3 BHK lake-view apartment, Hebbal", locality: "Hebbal Kempapura", area: "Hebbal", areaId: "hebbal", zone: "hebbal-jakkur", region: "north", price: 21500000, beds: 3, baths: 3, sqft: 1720, propType: "Apartment", trustTier: "verified", image: IMG[0], lat: 13.0372, lon: 77.5942 },
+    { id: "h2", title: "2 BHK near Hebbal flyover", locality: "Nagavara", area: "Hebbal", areaId: "hebbal", zone: "hebbal-jakkur", region: "north", price: 12800000, beds: 2, baths: 2, sqft: 1180, propType: "Apartment", trustTier: "trusted", image: IMG[1], lat: 13.0410, lon: 77.6020 },
+    { id: "h3", title: "4 BHK villa, Sahakar Nagar", locality: "Sahakar Nagar", area: "Hebbal", areaId: "hebbal", zone: "hebbal-jakkur", region: "north", price: 38500000, beds: 4, baths: 4, sqft: 3100, propType: "Villa", trustTier: "verified", image: IMG[2], lat: 13.0330, lon: 77.5905 },
+    { id: "h4", title: "3 BHK gated flat, Hebbal", locality: "Kempapura", area: "Hebbal", areaId: "hebbal", zone: "hebbal-jakkur", region: "north", price: 17900000, beds: 3, baths: 2, sqft: 1460, propType: "Apartment", trustTier: "trusted", image: IMG[3], lat: 13.0388, lon: 77.5988 },
+    // Jakkur
+    { id: "j1", title: "3 BHK lake-facing, Jakkur", locality: "Jakkur Plantation", area: "Jakkur", areaId: "jakkur", zone: "hebbal-jakkur", region: "north", price: 19500000, beds: 3, baths: 3, sqft: 1620, propType: "Apartment", trustTier: "verified", image: IMG[0], lat: 13.0790, lon: 77.6045 },
+    { id: "j2", title: "2 BHK apartment, Jakkur", locality: "Jakkur Main Rd", area: "Jakkur", areaId: "jakkur", zone: "hebbal-jakkur", region: "north", price: 10800000, beds: 2, baths: 2, sqft: 1120, propType: "Apartment", trustTier: "trusted", image: IMG[3], lat: 13.0800, lon: 77.6030 },
+    { id: "j3", title: "4 BHK villa, Amruthahalli", locality: "Amruthahalli", area: "Jakkur", areaId: "jakkur", zone: "hebbal-jakkur", region: "north", price: 34500000, beds: 4, baths: 4, sqft: 2950, propType: "Villa", trustTier: "verified", image: IMG[2], lat: 13.0660, lon: 77.5920 },
+    // Yelahanka
+    { id: "y1", title: "3 BHK gated apartment, Yelahanka", locality: "Yelahanka New Town", area: "Yelahanka", areaId: "yelahanka", zone: "yelahanka-airport", region: "north", price: 15200000, beds: 3, baths: 2, sqft: 1500, propType: "Apartment", trustTier: "verified", image: IMG[4], lat: 13.1020, lon: 77.5950 },
+    { id: "y2", title: "4 BHK villa, Judicial Layout", locality: "Judicial Layout", area: "Yelahanka", areaId: "yelahanka", zone: "yelahanka-airport", region: "north", price: 32000000, beds: 4, baths: 4, sqft: 2800, propType: "Villa", trustTier: "verified", image: IMG[2], lat: 13.0985, lon: 77.5990 },
+    { id: "y3", title: "2 BHK near Yelahanka station", locality: "Yelahanka Old Town", area: "Yelahanka", areaId: "yelahanka", zone: "yelahanka-airport", region: "north", price: 9800000, beds: 2, baths: 2, sqft: 1050, propType: "Apartment", trustTier: "trusted", image: IMG[1], lat: 13.1040, lon: 77.5920 },
+    { id: "y4", title: "3 BHK near Canadian Intl, Yelahanka", locality: "Attur Layout", area: "Yelahanka", areaId: "yelahanka", zone: "yelahanka-airport", region: "north", price: 18500000, beds: 3, baths: 3, sqft: 1780, propType: "Apartment", trustTier: "trusted", image: IMG[5], lat: 13.1105, lon: 77.5980 },
+    // Thanisandra
+    { id: "t1", title: "3 BHK apartment, Thanisandra", locality: "Thanisandra Main Rd", area: "Thanisandra", areaId: "thanisandra", zone: "thanisandra-hennur", region: "north", price: 13500000, beds: 3, baths: 2, sqft: 1480, propType: "Apartment", trustTier: "verified", image: IMG[0], lat: 13.0665, lon: 77.6285 },
+    { id: "t2", title: "2 BHK gated flat, Rachenahalli", locality: "Rachenahalli", area: "Thanisandra", areaId: "thanisandra", zone: "thanisandra-hennur", region: "north", price: 9500000, beds: 2, baths: 2, sqft: 1080, propType: "Apartment", trustTier: "trusted", image: IMG[1], lat: 13.0630, lon: 77.6320 },
+    // Hennur
+    { id: "he1", title: "3 BHK apartment, Hennur", locality: "Hennur Main Rd", area: "Hennur", areaId: "hennur", zone: "thanisandra-hennur", region: "north", price: 12200000, beds: 3, baths: 2, sqft: 1400, propType: "Apartment", trustTier: "trusted", image: IMG[4], lat: 13.0420, lon: 77.6395 },
+    { id: "he2", title: "2 BHK gated flat, Hennur", locality: "Kalyan Nagar side", area: "Hennur", areaId: "hennur", zone: "thanisandra-hennur", region: "north", price: 8600000, beds: 2, baths: 2, sqft: 1020, propType: "Apartment", trustTier: "listed", image: IMG[8], lat: 13.0395, lon: 77.6430 },
+    // Devanahalli
+    { id: "d1", title: "4 BHK villa, Devanahalli", locality: "Airport Business Park", area: "Devanahalli", areaId: "devanahalli", zone: "yelahanka-airport", region: "north", price: 41000000, beds: 4, baths: 5, sqft: 3400, propType: "Villa", trustTier: "verified", image: IMG[2], lat: 13.2450, lon: 77.7100 },
+    { id: "d2", title: "3 BHK township apartment, Devanahalli", locality: "Devanahalli town", area: "Devanahalli", areaId: "devanahalli", zone: "yelahanka-airport", region: "north", price: 14500000, beds: 3, baths: 3, sqft: 1560, propType: "Apartment", trustTier: "trusted", image: IMG[4], lat: 13.2420, lon: 77.7130 },
+    // other regions (a couple each so area→schools→homes works)
+    { id: "ja1", title: "3 BHK in Jayanagar", locality: "4th Block", area: "Jayanagar", areaId: "jayanagar", zone: "south-schools", region: "south", price: 22500000, beds: 3, baths: 3, sqft: 1650, propType: "Apartment", trustTier: "verified", image: IMG[0], lat: 12.9260, lon: 77.5825 },
+    { id: "jp1", title: "3 BHK apartment, JP Nagar", locality: "6th Phase", area: "JP Nagar", areaId: "jp-nagar", zone: "south-schools", region: "south", price: 16500000, beds: 3, baths: 2, sqft: 1500, propType: "Apartment", trustTier: "trusted", image: IMG[3], lat: 12.9080, lon: 77.5840 },
+    { id: "w1", title: "3 BHK near ITPL, Whitefield", locality: "Whitefield Main Rd", area: "Whitefield", areaId: "whitefield", zone: "east-schools", region: "east", price: 15500000, beds: 3, baths: 3, sqft: 1580, propType: "Apartment", trustTier: "verified", image: IMG[0], lat: 12.9710, lon: 77.7490 },
+    { id: "r1", title: "3 BHK in Rajajinagar", locality: "1st Block", area: "Rajajinagar", areaId: "rajajinagar", zone: "west-schools", region: "west", price: 18500000, beds: 3, baths: 3, sqft: 1550, propType: "Apartment", trustTier: "verified", image: IMG[0], lat: 12.9920, lon: 77.5540 },
+    { id: "i1", title: "3 BHK in Indiranagar", locality: "12th Main", area: "Indiranagar", areaId: "indiranagar", zone: "central-schools", region: "central", price: 34500000, beds: 3, baths: 3, sqft: 1780, propType: "Apartment", trustTier: "verified", image: IMG[0], lat: 12.9725, lon: 77.6400 },
+  ],
+};
+
+// ---- Derived helpers (single source of truth) ----
+window.BLR_SCHOOL_COUNTS = (function () {
+  const D = window.BLR_SCHOOL_DATA;
+  const homesByRegion = {}, schoolsByRegion = {}, schoolsByZone = {}, homesByZone = {}, schoolsByArea = {}, homesByArea = {};
+  D.listings.forEach((l) => {
+    homesByRegion[l.region] = (homesByRegion[l.region] || 0) + 1;
+    homesByZone[l.zone] = (homesByZone[l.zone] || 0) + 1;
+    homesByArea[l.areaId] = (homesByArea[l.areaId] || 0) + 1;
+  });
+  D.schools.forEach((s) => {
+    schoolsByRegion[s.region] = (schoolsByRegion[s.region] || 0) + 1;
+    schoolsByZone[s.zone] = (schoolsByZone[s.zone] || 0) + 1;
+    schoolsByArea[s.areaId] = (schoolsByArea[s.areaId] || 0) + 1;
+  });
+  return {
+    homesRegion: (id) => homesByRegion[id] || 0,
+    schoolsRegion: (id) => schoolsByRegion[id] || 0,
+    homesZone: (id) => homesByZone[id] || 0,
+    schoolsZone: (id) => schoolsByZone[id] || 0,
+    homesArea: (id) => homesByArea[id] || 0,
+    schoolsArea: (id) => schoolsByArea[id] || 0,
+    totalHomes: D.listings.length,
+    totalSchools: D.schools.length,
+  };
+})();
+
+// Count homes within `km` of a school (haversine, honest).
+window.BLR_HOMES_NEAR = function (school, km) {
+  const D = window.BLR_SCHOOL_DATA;
+  return D.listings.filter((l) => {
+    const d = window.BLR_DIST(school, l);
+    return d != null && d <= km;
+  });
 };

@@ -1,0 +1,232 @@
+<!-- @dsCard group="Portal" viewport="1440x880" name="Area-first journey — choose a neighbourhood" subtitle="Udupi Property Tracker — area-first discovery state · pick a neighbourhood group or a locality marker before seeing listings · desktop + mobile, normal & low-data, hover-linked map" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Udupi Property Tracker — Choose an area</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  html, body { margin: 0; height: 100%; background: var(--background); }
+  body { font-family: var(--font-sans); color: var(--text-strong); }
+  * { box-sizing: border-box; }
+  ::selection { background: var(--accent); color: #fff; }
+  .upt-pin { background: transparent !important; border: none !important; }
+  .leaflet-container { font-family: var(--font-sans); background: #EDEBE6; }
+  .leaflet-bar a { color: var(--navy-800); }
+  .leaflet-control-attribution { font-size: 10px; background: rgba(255,255,255,0.7) !important; }
+  .upt-scroll::-webkit-scrollbar { width: 10px; }
+  .upt-scroll::-webkit-scrollbar-thumb { background: var(--stone-400); border-radius: 999px; border: 3px solid var(--background); }
+  @keyframes uptShimmer { 0% { background-position: -420px 0; } 100% { background-position: 420px 0; } }
+  .upt-shimmer { background-image: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.65) 50%, transparent 70%); background-size: 420px 100%; background-repeat: no-repeat; animation: uptShimmer 1.25s ease-in-out infinite; }
+  @keyframes uptSpin { to { transform: rotate(360deg); } }
+  .upt-spin { animation: uptSpin .8s linear infinite; }
+  button { font-family: inherit; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="data.js"></script>
+<script type="text/babel" src="AreaFirstMap.jsx"></script>
+<script type="text/babel" src="AreaFirstPanel.jsx"></script>
+<script type="text/babel">
+  const { Icon } = window.ReTrendsDesignSystem_f37966;
+  const D = window.UPT_AREA_DATA;
+
+  // ---------- Public marketing header (NOT the admin dashboard) ----------
+  function TopNav({ compact }) {
+    const [h, setH] = React.useState(false);
+    return (
+      <header style={{
+        height: compact ? "52px" : "60px", flex: "none", display: "flex", alignItems: "center", gap: compact ? "14px" : "28px",
+        padding: compact ? "0 16px" : "0 28px", background: "var(--paper)", borderBottom: "1px solid var(--border)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{ width: "32px", height: "32px", borderRadius: "var(--radius-md)", background: "var(--navy-800)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name="map-pin" size={18} color="#fff" />
+          </div>
+          <div style={{ lineHeight: 1.1, whiteSpace: "nowrap" }}>
+            <div style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "-0.01em", color: "var(--text-strong)" }}>Udupi Property Tracker</div>
+            {!compact && <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Real estate trends</div>}
+          </div>
+        </div>
+        {!compact && (
+          <nav style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+            {[["Discover", true], ["Trends", false], ["Saved", false]].map(([label, on]) => (
+              <span key={label} style={{
+                padding: "8px 12px", borderRadius: "var(--radius-md)", fontSize: "13.5px", fontWeight: 600, cursor: "pointer",
+                color: on ? "var(--text-strong)" : "var(--text-muted)", background: on ? "var(--surface-subtle)" : "transparent",
+              }}>{label}</span>
+            ))}
+          </nav>
+        )}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "14px" }}>
+          <button onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{
+            border: "1px solid var(--border-strong)", background: h ? "var(--grey-50)" : "var(--paper)", cursor: "pointer",
+            padding: compact ? "7px 14px" : "8px 18px", borderRadius: "var(--radius-md)", fontSize: "13.5px", fontWeight: 600,
+            color: "var(--text-strong)", transition: "background var(--dur-fast) var(--ease-standard)",
+          }}>Sign in</button>
+        </div>
+      </header>
+    );
+  }
+
+  // ---------- Breadcrumb: Discover › Choose an area ----------
+  function Crumb({ compact }) {
+    return (
+      <div style={{
+        flex: "none", display: "flex", alignItems: "center", gap: "7px", padding: compact ? "9px 16px" : "10px 28px",
+        background: "var(--paper)", borderBottom: "1px solid var(--border)", fontSize: "12.5px", fontWeight: 600,
+      }}>
+        <span style={{ color: "var(--text-muted)", cursor: "pointer" }}>Discover</span>
+        <Icon name="chevron-right" size={14} color="var(--grey-400)" />
+        <span style={{ color: "var(--text-strong)" }}>Choose an area</span>
+      </div>
+    );
+  }
+
+  // ---------- Showcase preview switcher (demo chrome) ----------
+  function PreviewBar({ view, setView, mapData, setMapData, onLoad }) {
+    const Seg = ({ opts, val, set }) => (
+      <div style={{ display: "flex", gap: "2px", padding: "3px", background: "rgba(255,255,255,0.08)", borderRadius: "var(--radius-sm)" }}>
+        {opts.map((o) => (
+          <button key={o} onClick={() => set(o)} style={{
+            padding: "5px 11px", border: "none", borderRadius: "var(--radius-xs)", cursor: "pointer", fontSize: "12px", fontWeight: 600,
+            background: val === o ? "rgba(255,255,255,0.95)" : "transparent", color: val === o ? "var(--navy-900)" : "rgba(255,255,255,0.7)",
+          }}>{o}</button>
+        ))}
+      </div>
+    );
+    return (
+      <div style={{
+        height: "40px", flex: "none", display: "flex", alignItems: "center", gap: "16px", padding: "0 18px",
+        background: "var(--navy-900)", color: "#fff", flexWrap: "wrap", overflow: "hidden",
+      }}>
+        <span style={{ fontSize: "10.5px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.55)" }}>Preview</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.65)" }}>Layout</span>
+          <Seg opts={["Desktop", "Mobile"]} val={view} set={setView} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.65)" }}>Data</span>
+          <Seg opts={["Normal", "Low-data"]} val={mapData} set={setMapData} />
+        </div>
+        <button onClick={onLoad} style={{
+          marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 13px", border: "1px solid rgba(255,255,255,0.25)",
+          borderRadius: "var(--radius-sm)", background: "transparent", color: "#fff", cursor: "pointer", fontSize: "12px", fontWeight: 600,
+        }}>Replay loading</button>
+      </div>
+    );
+  }
+
+  // ---------- The product surface (shared by desktop + mobile) ----------
+  function AreaFirst({ view, mapData, loading }) {
+    const compact = view === "Mobile";
+    const [mode, setMode] = React.useState("Buy");
+    const [city, setCity] = React.useState("Udupi");
+    const [selectedGroup, setSelectedGroup] = React.useState(null);
+    const [hoverGroup, setHoverGroup] = React.useState(null);
+    const [mTab, setMTab] = React.useState("browse"); // mobile: browse | map
+
+    const dataState = mapData === "Low-data" ? "low" : "normal";
+    const highlight = hoverGroup || selectedGroup;
+
+    const mapEl = (
+      <window.UPTAreaFirstMap
+        areas={D.areas} dataState={dataState} loading={loading}
+        highlightGroup={highlight} compact={compact}
+        onHoverArea={(a) => setHoverGroup(a ? a.group : null)}
+        onPickArea={(a) => { if (a) setSelectedGroup(a.group); }}
+      />
+    );
+    const panelEl = (
+      <window.UPTAreaFirstPanel
+        mode={mode} setMode={setMode} city={city} setCity={setCity}
+        selectedGroup={selectedGroup} setSelectedGroup={setSelectedGroup} onHoverGroup={setHoverGroup}
+        loading={loading} compact={compact} dataState={dataState}
+        onStartOver={() => { setSelectedGroup(null); setHoverGroup(null); }}
+      />
+    );
+
+    if (compact) {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, background: "var(--background)" }}>
+          <TopNav compact />
+          <Crumb compact />
+          <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+            <div style={{ position: "absolute", inset: 0, display: mTab === "browse" ? "block" : "none" }}>{panelEl}</div>
+            <div style={{ position: "absolute", inset: 0, display: mTab === "map" ? "block" : "none" }}>{mapEl}</div>
+          </div>
+          <div style={{ flex: "none", display: "flex", gap: "8px", padding: "10px 14px", background: "var(--paper)", borderTop: "1px solid var(--border)" }}>
+            {[["browse", "Areas", "layers"], ["map", "Map", "map-pin"]].map(([key, label, icon]) => (
+              <button key={key} onClick={() => setMTab(key)} style={{
+                flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "7px", padding: "11px 0",
+                border: "1px solid " + (mTab === key ? "var(--navy-800)" : "var(--border-strong)"), borderRadius: "var(--radius-md)",
+                background: mTab === key ? "var(--navy-800)" : "var(--paper)", color: mTab === key ? "#fff" : "var(--text-strong)",
+                fontSize: "13.5px", fontWeight: 600, cursor: "pointer",
+              }}>
+                <Icon name={icon} size={16} color={mTab === key ? "#fff" : "var(--navy-800)"} />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // Desktop: map left, decision panel right
+    return (
+      <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+        <TopNav />
+        <Crumb />
+        <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+          <div style={{ flex: 1, minWidth: 0, position: "relative", borderRight: "1px solid var(--border)" }}>{mapEl}</div>
+          <div style={{ width: "clamp(440px, 42%, 560px)", flex: "none", minHeight: 0 }}>{panelEl}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- App: preview chrome + responsive frame ----------
+  function App() {
+    const [view, setView] = React.useState("Desktop");
+    const [mapData, setMapData] = React.useState("Normal");
+    const [loading, setLoading] = React.useState(false);
+    const replay = React.useCallback(() => {
+      setLoading(true);
+      window.clearTimeout(window.__uptLoadT);
+      window.__uptLoadT = window.setTimeout(() => setLoading(false), 1700);
+    }, []);
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", height: "100vh", minHeight: 0 }}>
+        <PreviewBar view={view} setView={setView} mapData={mapData} setMapData={setMapData} onLoad={replay} />
+        {view === "Desktop" ? (
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <AreaFirst view="Desktop" mapData={mapData} loading={loading} />
+          </div>
+        ) : (
+          <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--canvas-200)", padding: "24px" }}>
+            <div style={{
+              width: "393px", height: "min(760px, 100%)", borderRadius: "30px", overflow: "hidden",
+              border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-xl)", background: "var(--paper)",
+            }}>
+              <AreaFirst view="Mobile" mapData={mapData} loading={loading} />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

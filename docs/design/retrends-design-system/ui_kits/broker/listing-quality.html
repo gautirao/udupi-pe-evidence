@@ -13,25 +13,19 @@
   * { box-sizing: border-box; }
   ::selection { background: var(--accent); color: #fff; }
 
-  /* Portfolio summary cards */
-  .rt-lq-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  /* Compact health strip */
+  .rt-lq-health { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 
-  /* Worklist (left) + selected-listing detail panel (right) */
-  .rt-lq-grid  { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+  /* Worklist (left) + Fix plan panel (right) */
+  .rt-lq-grid  { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
   .rt-lq-panel { position: sticky; top: 20px; }
 
-  /* Quick fixes + cross-links */
-  .rt-lq-quick { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-  .rt-lq-cross { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-
   @media (max-width: 1040px) {
-    .rt-lq-summary { grid-template-columns: repeat(2, 1fr); }
     .rt-lq-grid    { grid-template-columns: 1fr; }
     .rt-lq-panel   { position: static; }
-    .rt-lq-cross   { grid-template-columns: 1fr; }
   }
   @media (max-width: 600px) {
-    .rt-lq-summary, .rt-lq-quick { grid-template-columns: 1fr; }
+    .rt-lq-health { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
 </head>

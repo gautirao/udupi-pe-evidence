@@ -8,6 +8,11 @@ import { AreaGroupSelectedPanel } from './AreaGroupSelectedPanel';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
+import {
+  matchesMacroRegion,
+  getGroupMacroRegionLabel,
+  type SummaryRegionRef,
+} from '@/utils/macroRegionResolver';
 import { formatMemberAreaSummary, buildAreaNameIndex } from '@/utils/areaNameSummary';
 import { TrustStrip } from './_shared';
 
@@ -50,6 +55,24 @@ export type AreaGroupsLandingPanelProps = {
    * list + map). Threaded from DiscoverRightPanel → AreaGroupsLandingPanel → AreaGroupSelectedPanel.
    */
   onViewAllResults?: () => void;
+  /**
+   * Issue #1745 4-level hierarchy — active residential scope (macro region key/slug).
+   * When present, filters the displayed groups to only those in the matching macro region.
+   */
+  scope?: string | null;
+  /**
+   * Issue #1745 4-level hierarchy — callback to clear or change the active scope.
+   */
+  onClearScope?: () => void;
+  /**
+   * Issue #1745 4-level hierarchy — summary regions from /api/discover/summary for safe
+   * scope-to-regionLabel matching without hardcoded city names.
+   */
+  summaryRegions?: SummaryRegionRef[];
+  /**
+   * Issue #1745 4-level hierarchy — navigate back to a macro region from Level-2.
+   */
+  onBackToRegion?: (regionLabel: string) => void;
   /**
    * Issue #1607 — city + Buy/Rent controls live inside the panel (mock parity, mirrors
    * GuidedEntryPanel). All four must be supplied together to render the controls card;
@@ -377,6 +400,10 @@ export function AreaGroupsLandingPanel({
   fallbackAreas = [],
   onSelectArea,
   onViewAllResults,
+  scope,
+  onClearScope,
+  summaryRegions,
+  onBackToRegion,
 }: AreaGroupsLandingPanelProps) {
   // Issue #1178 — a groupId is "active" only when it is a non-blank string.
   // Trim guards against whitespace-only deep links (e.g. `?groupId=%20`), which
@@ -384,19 +411,64 @@ export function AreaGroupsLandingPanel({
   // value so padded-but-valid deep links (e.g. `?groupId=%20group-A%20`) still
   // match `g.id` and highlight instead of showing the invalid-group notice.
   const activeGroupId = groupId?.trim() || null;
-  const focusedGroup = activeGroupId
-    ? groups.find((g) => g.id === activeGroupId) ?? null
-    : null;
 
-  // Show the non-alarming "not available" notice only once groups have loaded and
-  // the active groupId matched nothing. The `!isLoading` gate prevents the message
-  // flashing during the cold-load window, and `groups.length > 0` keeps the
-  // Browse-all fallback (no-groups) path untouched.
-  const showInvalidGroupMessage =
-    !isLoading && !!activeGroupId && !focusedGroup && groups.length > 0;
+  const activeScope = scope ?? null;
+  const handleClearScope = onClearScope ?? (() => {});
 
-  // Issue #1483 — Level-2: when a valid group is resolved, build the area rows by
-  // joining focusedGroup.area_keys against the discoverAreas passed as fallbackAreas.
+  const scopedGroups = React.useMemo(() => {
+    if (!activeScope) return groups;
+    return groups.filter((g) => matchesMacroRegion(g.region_label, activeScope, summaryRegions));
+  }, [activeScope, groups, summaryRegions]);
+
+  const displayGroups = activeScope ? scopedGroups : groups;
+
+  const activeScopeLabel = React.useMemo(() => {
+    if (!activeScope) return null;
+    const summaryMatch = summaryRegions?.find(
+      (r) => r.regionKey.toLowerCase() === activeScope.toLowerCase(),
+    );
+    if (summaryMatch) return summaryMatch.regionLabel;
+    const groupMatch = scopedGroups[0]?.region_label;
+    if (groupMatch) return groupMatch;
+    return activeScope.charAt(0).toUpperCase() + activeScope.slice(1);
+  }, [activeScope, summaryRegions, scopedGroups]);
+
+  const macroRegionSections = React.useMemo(() => {
+    if (activeScope) return [];
+    const map = new Map<string, AreaGroup[]>();
+    for (const g of groups) {
+      const label = getGroupMacroRegionLabel(g);
+      const list = map.get(label) ?? [];
+      list.push(g);
+      map.set(label, list);
+    }
+    return Array.from(map.entries()).map(([label, groupList]) => ({
+      label,
+      groups: groupList,
+    }));
+  }, [activeScope, groups]);
+
+  // When activeGroupId is set, find the matching group (by ID or exact slug match).
+  // Issue #1483 / Issue #1178 — supports Level 2 drill-down when valid.
+  const focusedGroup = React.useMemo(() => {
+    if (!activeGroupId) return null;
+    return (
+      groups.find(
+        (g) =>
+          g.id === activeGroupId ||
+          g.name.toLowerCase().replace(/\s+/g, '-') === activeGroupId.toLowerCase(),
+      ) ?? null
+    );
+  }, [groups, activeGroupId]);
+
+  // Issue #1178 — when a non-empty groupId is passed in the URL but matches no loaded group
+  // (e.g. invalid/stale deep-link), we show a non-alarming notice above the group list
+  // instead of rendering a broken/blank page. We only show this once groups have loaded
+  // (!isLoading) so cold-load skeletons remain clean without flickering an error.
+  const showInvalidGroupMessage = !isLoading && activeGroupId !== null && focusedGroup === null;
+
+  // Level 2 entry condition: we render AreaGroupSelectedPanel only when fallbackAreas
+  // (the city's discoverAreas list) and onSelectArea are provided by the parent.
   // This reuses the existing BrowseAllFallback primitive and the same
   // fallbackAreas/onSelectArea discriminated-union contract already in this component —
   // no new data model needed. The join is O(k·n) where k = area_keys (2–6) and
@@ -413,11 +485,6 @@ export function AreaGroupsLandingPanel({
   // Build the Level-2 area list: keep only discoverAreas whose areaKey is in the group.
   // Entries missing from discoverAreas are silently dropped; BrowseAllFallback handles
   // the empty-list case gracefully ("No areas found").
-  //
-  // The casts below are safe: showLevel2 being true guarantees onSelectArea is defined
-  // (checked above) and focusedGroup is non-null (checked above). TypeScript cannot
-  // narrow the discriminated union through the boolean flag, so we assert explicitly
-  // rather than re-checking inline.
   const level2Areas: DiscoverArea[] = showLevel2
     ? (fallbackAreas as DiscoverArea[]).filter((a) =>
         (focusedGroup as AreaGroup).area_keys.includes(a.areaKey),
@@ -433,9 +500,9 @@ export function AreaGroupsLandingPanel({
   );
   const distinctAreaKeys = React.useMemo(() => {
     const set = new Set<string>();
-    for (const g of groups) for (const k of g.area_keys) set.add(k);
+    for (const g of displayGroups) for (const k of g.area_keys) set.add(k);
     return set;
-  }, [groups]);
+  }, [displayGroups]);
   const totalAreaCount = distinctAreaKeys.size;
   const totalForSale = React.useMemo(
     () => forSaleForKeys([...distinctAreaKeys], listingIndex),
@@ -460,6 +527,7 @@ export function AreaGroupsLandingPanel({
           areas={level2Areas}
           cityLabel={cityLabel}
           onBack={onClearGroup}
+          onBackToRegion={onBackToRegion}
           onStartOver={onStartOver}
           // onSelectArea cast: safe — showLevel2 guarantees it is defined (see comment above).
           onSelectArea={onSelectArea as (areaKey: string) => void}
@@ -574,37 +642,99 @@ export function AreaGroupsLandingPanel({
             )}
 
             <AreaGroupsIntro
-              groupCount={groups.length}
+              groupCount={displayGroups.length}
               areaCount={totalAreaCount}
               forSaleCount={totalForSale}
               cityLabel={cityLabel}
             />
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
+            {activeScope && (
+              <div
+                data-testid="macro-region-filter-banner"
+                className="flex items-center justify-between rounded-xl border border-copper/40 bg-copper-tint/50 p-3.5"
+              >
                 <div className="flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                  <p className="text-[12px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-                    Neighbourhood groups
-                  </p>
+                  <MapPin className="h-4 w-4 text-copper" aria-hidden="true" />
+                  <span className="text-sm font-semibold text-foreground">
+                    Showing zones in {activeScopeLabel}
+                  </span>
                 </div>
-                <span className="font-mono text-[11.5px] font-semibold text-muted-foreground">
-                  {groups.length} group{groups.length === 1 ? '' : 's'}
-                </span>
+                <button
+                  type="button"
+                  data-testid="clear-scope-button"
+                  onClick={handleClearScope}
+                  className="inline-flex items-center gap-1 rounded-md bg-card px-2.5 py-1 text-xs font-semibold text-muted-foreground shadow-sm hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  Clear filter
+                </button>
               </div>
+            )}
 
-              {groups.map((group) => (
-                <GroupCard
-                  key={group.id}
-                  group={group}
-                  onSelect={onSelectGroup}
-                  isSelected={group.id === focusedGroup?.id}
-                  forSale={forSaleForKeys(group.area_keys, listingIndex)}
-                  // Issue #1659 — pass resolved member area name summary.
-                  areaNameSummary={formatMemberAreaSummary(group.area_keys, areaNameIndex)}
-                />
-              ))}
-            </div>
+            {activeScope ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                    <p className="text-[12px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+                      Zones in {activeScopeLabel}
+                    </p>
+                  </div>
+                  <span className="font-mono text-[11.5px] font-semibold text-muted-foreground">
+                    {displayGroups.length} group{displayGroups.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+
+                {displayGroups.length === 0 ? (
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+                    {activeScope === 'other' || activeScope === 'unmapped'
+                      ? 'These properties belong to localities across the city that are not currently grouped into a named corridor or zone.'
+                      : 'No zones found matching this region filter.'}
+                  </div>
+                ) : (
+                  displayGroups.map((group) => (
+                    <GroupCard
+                      key={group.id}
+                      group={group}
+                      onSelect={onSelectGroup}
+                      isSelected={group.id === focusedGroup?.id}
+                      forSale={forSaleForKeys(group.area_keys, listingIndex)}
+                      areaNameSummary={formatMemberAreaSummary(group.area_keys, areaNameIndex)}
+                    />
+                  ))
+                )}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {macroRegionSections.map((section) => (
+                  <div key={section.label} className="space-y-3" data-testid={`macro-region-section-${section.label}`}>
+                    <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-copper" aria-hidden="true" />
+                        <h3 className="text-[12px] font-bold uppercase tracking-[0.06em] text-foreground">
+                          {section.label}
+                        </h3>
+                      </div>
+                      <span className="font-mono text-[11px] font-semibold text-muted-foreground">
+                        {section.groups.length} group{section.groups.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                    <div className="space-y-3">
+                      {section.groups.map((group) => (
+                        <GroupCard
+                          key={group.id}
+                          group={group}
+                          onSelect={onSelectGroup}
+                          isSelected={group.id === focusedGroup?.id}
+                          forSale={forSaleForKeys(group.area_keys, listingIndex)}
+                          areaNameSummary={formatMemberAreaSummary(group.area_keys, areaNameIndex)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Issue #1607 — trust strip (mock parity, mirrors GuidedEntryPanel). */}
             <TrustStrip />

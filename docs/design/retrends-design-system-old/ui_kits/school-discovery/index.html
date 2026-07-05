@@ -1,0 +1,113 @@
+<!-- @dsCard group="Portal" viewport="1440x860" name="School-first discovery" subtitle="Udupi Property Tracker — find homes near a school · map + guided panel" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Udupi Property Tracker — School-first discovery</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  html, body { margin: 0; height: 100%; background: var(--background); }
+  body { font-family: var(--font-sans); color: var(--text-strong); }
+  * { box-sizing: border-box; }
+  ::selection { background: var(--accent); color: #fff; }
+  /* Purple — used sparingly as the school-journey accent only (not in the base system) */
+  :root {
+    --plum-600: #5E5286;
+    --plum-500: #7E6BA8;
+    --plum-100: #DED7EC;
+    --plum-tint: #F1EDF7;
+  }
+  /* Leaflet overrides — keep it calm + on-brand */
+  .upt-pin { background: transparent !important; border: none !important; }
+  .leaflet-container { font-family: var(--font-sans); background: #EDEBE6; }
+  .leaflet-bar a { color: var(--navy-800); }
+  .leaflet-control-attribution { font-size: 10px; background: rgba(255,255,255,0.7) !important; }
+  .upt-scroll::-webkit-scrollbar { width: 10px; }
+  .upt-scroll::-webkit-scrollbar-thumb { background: var(--stone-400); border-radius: 999px; border: 3px solid var(--background); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="data.js"></script>
+<script type="text/babel" src="Map.jsx"></script>
+<script type="text/babel" src="Cards.jsx"></script>
+<script type="text/babel" src="SchoolDiscovery.jsx"></script>
+<script type="text/babel">
+  const { Icon, Button, Badge } = window.ReTrendsDesignSystem_f37966;
+
+  const NAV = [
+    { label: "Dashboard", icon: "building" },
+    { label: "My Listings", icon: "layers" },
+    { label: "New Listing", icon: "plus" },
+    { label: "Bookings", icon: "calendar" },
+    { label: "Notifications", icon: "message-circle" },
+  ];
+
+  function TopNav() {
+    return (
+      <header style={{
+        height: "60px", display: "flex", alignItems: "center", gap: "24px",
+        padding: "0 24px", background: "var(--paper)", borderBottom: "1px solid var(--border)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "11px" }}>
+          <div style={{
+            width: "34px", height: "34px", borderRadius: "var(--radius-md)", background: "var(--navy-800)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <Icon name="map-pin" size={19} color="#fff" />
+          </div>
+          <div style={{ lineHeight: 1.1 }}>
+            <div style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "-0.01em", color: "var(--text-strong)" }}>Udupi Property Tracker</div>
+            <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Real estate trends</div>
+          </div>
+        </div>
+        <nav style={{ display: "flex", alignItems: "center", gap: "4px", marginLeft: "12px" }}>
+          {NAV.map((n, i) => (
+            <button key={n.label} style={{
+              display: "inline-flex", alignItems: "center", gap: "7px", padding: "8px 12px",
+              border: "none", background: "transparent", cursor: "pointer", borderRadius: "var(--radius-md)",
+              fontFamily: "var(--font-sans)", fontSize: "13.5px", fontWeight: 600,
+              color: i === 0 ? "var(--text-strong)" : "var(--text-muted)",
+            }}>
+              <Icon name={n.icon} size={16} color={i === 0 ? "var(--navy-800)" : "var(--grey-400)"} />{n.label}
+            </button>
+          ))}
+        </nav>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "16px" }}>
+          <div style={{ position: "relative" }}>
+            <Icon name="message-circle" size={20} color="var(--grey-500)" />
+            <span style={{
+              position: "absolute", top: "-7px", right: "-9px", background: "var(--accent)", color: "#fff",
+              fontFamily: "var(--font-mono)", fontSize: "9px", fontWeight: 700, padding: "1px 4px", borderRadius: "999px",
+            }}>99+</span>
+          </div>
+          <div style={{
+            width: "34px", height: "34px", borderRadius: "var(--radius-full)", background: "var(--navy-100)",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, color: "var(--navy-800)",
+          }}>TE</div>
+        </div>
+      </header>
+    );
+  }
+
+  function App() {
+    return (
+      <div>
+        <TopNav />
+        <window.UPTSchoolDiscovery />
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

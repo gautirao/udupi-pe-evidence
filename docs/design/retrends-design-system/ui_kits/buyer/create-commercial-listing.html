@@ -1,0 +1,1407 @@
+<!-- @dsCard group="Buyer" viewport="1200x1900" name="Create commercial listing (broker)" subtitle="Commercial-specific create-listing flow — type-adaptive (shop/office/building/warehouse/land), sale vs rent/lease terms, AI description, review preview. Place in ui_kits/buyer/." -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReTrends — Create commercial listing</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  html, body { margin: 0; background: var(--canvas-100); }
+  body { font-family: var(--font-sans); color: var(--text-body); }
+  * { box-sizing: border-box; }
+  ::selection { background: var(--accent); color: #fff; }
+  input::placeholder, textarea::placeholder { color: var(--grey-400); }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--navy-800) !important; }
+  textarea { font-family: var(--font-sans); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (max-width: 920px){
+    .cl-edit-grid, .cl-rev-grid { grid-template-columns: 1fr !important; }
+    .cl-photo-grid { grid-template-columns: repeat(3,1fr) !important; }
+    .cl-nav { display: none !important; }
+  }
+  @media (max-width: 560px){
+    .cl-loc-search { flex-direction: column !important; align-items: stretch !important; }
+    .cl-loc-search > button { width: 100% !important; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script type="text/babel">
+const { Button, Input, Select } = window.ReTrendsDesignSystem_f37966;
+
+/* ---- inline icon glyphs (Lucide subset, rendered as raw SVG) ---- */
+const I = {
+  pin:`<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>`,
+  pinFill:`<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3" fill="#fff" stroke="none"/>`,
+  shield:`<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>`,
+  check:`<path d="M20 6 9 17l-5-5"/>`,
+  play:`<path d="M8 5v14l11-7z"/>`,
+  building:`<rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/>`,
+  building2:`<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>`,
+  store:`<path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7"/>`,
+  briefcase:`<path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>`,
+  warehouse:`<path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12"/><path d="M6 14h12"/><rect width="12" height="12" x="6" y="10"/>`,
+  plot:`<rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="3.5 3"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>`,
+  ruler:`<path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/>`,
+  truck:`<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>`,
+  info:`<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>`,
+  chevDown:`<path d="m6 9 6 6 6-6"/>`,
+  chevLeft:`<path d="m15 18-6-6 6-6"/>`,
+  eye:`<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>`,
+  pencil:`<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>`,
+  sparkle:`<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/>`,
+  maximize:`<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>`,
+  route:`<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>`,
+  layers:`<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/>`,
+  calendar:`<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>`,
+  users:`<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>`,
+  fileCheck:`<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m9 15 2 2 4-4"/>`,
+  alert:`<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/>`,
+  warn:`<path d="M12 8v4M12 16h.01"/>`,
+  camera:`<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>`,
+  trending:`<path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/>`,
+  zap:`<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>`,
+  navigation:`<polygon points="3 11 22 2 13 21 11 13"/>`,
+  search:`<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>`,
+};
+const ICON = { 'maximize':I.maximize, 'building':I.building, 'building2':I.building2, 'store':I.store, 'briefcase':I.briefcase, 'warehouse':I.warehouse, 'route':I.route, 'map-pin':I.pin, 'layers':I.layers, 'ruler':I.ruler, 'truck':I.truck, 'users':I.users };
+
+/* CSS-string -> React style object */
+function s(str){ const o={}; (str||'').split(';').forEach(p=>{ const i=p.indexOf(':'); if(i<0) return; const k=p.slice(0,i).trim(); const v=p.slice(i+1).trim(); if(!k) return; o[k.replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=v; }); return o; }
+
+/* raw-SVG icon */
+function Ico({ inner, size=16, stroke='currentColor', fill='none', sw=2, vb='0 0 24 24', style }){
+  return React.createElement('svg', { width:size, height:size, viewBox:vb, fill, stroke, strokeWidth:sw, strokeLinecap:'round', strokeLinejoin:'round', style:Object.assign({flex:'none',display:'block'}, style||{}), dangerouslySetInnerHTML:{ __html: inner } });
+}
+
+const CARD = 'background:var(--paper);border:1px solid var(--border);border-radius:16px;padding:24px 26px;box-shadow:var(--shadow-sm);';
+const NUM = 'width:100%;height:44px;padding:0 14px;background:var(--input-bg);border:1px solid var(--border-strong);border-radius:8px;font-family:var(--font-mono);font-size:15px;color:var(--text-strong);';
+const TXT = 'width:100%;height:44px;padding:0 14px;background:var(--input-bg);border:1px solid var(--border-strong);border-radius:8px;font-family:var(--font-sans);font-size:14px;color:var(--text-strong);';
+const MONO = 'width:100%;height:44px;padding:0 14px;background:var(--input-bg);border:1px solid var(--border-strong);border-radius:8px;font-family:var(--font-mono);font-size:14px;color:var(--text-strong);';
+const BIG = 'width:100%;height:48px;padding:0 16px;background:var(--input-bg);border:1px solid var(--border-strong);border-radius:8px;font-family:var(--font-mono);font-size:17px;font-weight:600;color:var(--text-strong);';
+const FLD = 'display:block;font-size:13px;font-weight:600;color:var(--text-strong);margin-bottom:8px;';
+const FLDt = 'display:block;font-size:13px;font-weight:600;color:var(--text-strong);margin-bottom:10px;';
+const HINT = 'display:block;font-size:12px;color:var(--text-muted);margin-top:7px;';
+const ROW2 = 'display:grid;grid-template-columns:1fr 1fr;gap:16px;';
+const CHIPWRAP = 'display:flex;flex-wrap:wrap;gap:8px;';
+const SEGWRAP = 'display:inline-flex;gap:4px;background:var(--stone-300);padding:4px;border-radius:10px;';
+const EDITLINK = 'font-size:12px;font-weight:600;color:var(--navy-800);background:transparent;border:none;cursor:pointer;';
+const TOGROW = 'display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:var(--canvas-100);border:1px solid var(--border);border-radius:10px;';
+const TOGLBL = 'font-size:14px;color:var(--text-strong);font-weight:500;';
+
+/* type config */
+const TYPES = [
+  { key:'shop', label:'Shop / showroom', icon:I.store },
+  { key:'office', label:'Office space', icon:I.briefcase },
+  { key:'building', label:'Commercial building', icon:I.building2 },
+  { key:'warehouse', label:'Warehouse', icon:I.warehouse },
+  { key:'land', label:'Land / plot', icon:I.plot },
+];
+const SUIT = {
+  shop:['Retail','Showroom','Grocery','Pharmacy','Clinic','Salon','Restaurant / cafe','Food outlet','Footwear','Electronics','Jewellery','Other'],
+  office:['Office','Co-working','Coaching / training','Studio','Clinic','IT / tech','Back office','Other'],
+  building:['Retail','Office','Showroom','Mixed-use','Hospitality','Institutional','Clinic / healthcare','Other'],
+  warehouse:['Storage','Logistics','Distribution','Light industrial','Cold storage','E-commerce fulfilment','Other'],
+  land:['Retail','Office','Showroom','Warehouse','Mixed-use commercial','Hospitality','Other'],
+};
+const HUBS = {
+  shop:[{value:'',label:'Select hub (optional)'},'Mall','High street','Retail complex','Standalone building'],
+  office:[{value:'',label:'Select hub (optional)'},'Business park','IT park','Commercial complex','Standalone building'],
+  building:[{value:'',label:'Select hub (optional)'},'High street','Business district','Retail hub','Mixed-use area'],
+};
+
+class CreateCommercialListing extends React.Component {
+  constructor(props){
+    super(props);
+    this.state = { ctype:'shop', purpose:'sale', v:{ areaUnit:'Sq.ft', floorMode:'GF only' }, moreOpen:false, photos:0, coverPhoto:0, nearby:[], poiDraft:{}, mode:'edit', published:false, desc:'', descTouched:false, aiState:'idle', tone:null, descUsed:false, locQuery:'', locStatus:'empty', locResults:[], resolved:null, locSource:null, geo:'idle', pinDone:false, pickerOpen:false, pinPos:{x:50,y:44} };
+  }
+
+  set(n,val){ this.setState(s=>({ v:{...s.v,[n]:val} })); }
+  toggleVal(n){ this.setState(s=>({ v:{...s.v,[n]:!s.v[n]} })); }
+  toggleMulti(n,item){ this.setState(s=>{ const a=s.v[n]||[]; const has=a.includes(item); return { v:{...s.v,[n]: has?a.filter(x=>x!==item):[...a,item]} }; }); }
+
+  accent(){ return (this.props.accentTheme||'Navy')==='Copper'
+    ? { line:'var(--copper-500)', bg:'var(--copper-100)', fg:'var(--copper-600)' }
+    : { line:'var(--navy-800)', bg:'var(--navy-100)', fg:'var(--navy-800)' }; }
+
+  chipStyle(sel){ const a=this.accent(); return `display:inline-flex;align-items:center;gap:6px;padding:9px 15px;border-radius:9999px;font-family:var(--font-sans);font-size:13px;cursor:pointer;transition:all .12s;white-space:nowrap;border:1px solid ${sel?a.line:'var(--border-strong)'};background:${sel?a.bg:'var(--paper)'};color:${sel?a.fg:'var(--text-body)'};font-weight:${sel?'600':'500'};`; }
+  segStyle(sel){ const a=this.accent(); return `flex:1;text-align:center;padding:9px 14px;border-radius:8px;font-family:var(--font-sans);font-size:13px;font-weight:600;cursor:pointer;border:none;white-space:nowrap;transition:all .12s;background:${sel?'var(--paper)':'transparent'};color:${sel?a.fg:'var(--text-muted)'};box-shadow:${sel?'var(--shadow-xs)':'none'};`; }
+  cardStyle(sel){ const a=this.accent(); return `display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:16px 4px;border-radius:12px;cursor:pointer;background:var(--paper);transition:all .12s;border:1.5px solid ${sel?a.line:'var(--border-strong)'};box-shadow:${sel?'var(--shadow-sm)':'none'};color:${sel?a.fg:'var(--text-body)'};font-family:var(--font-sans);font-size:12px;font-weight:600;text-align:center;line-height:1.25;`; }
+  toggle(n){ const on=!!this.state.v[n]; const a=this.accent(); return { on, onClick:()=>this.toggleVal(n), track:`width:42px;height:24px;border-radius:9999px;border:none;cursor:pointer;padding:0;position:relative;flex:none;transition:background .15s;background:${on?a.line:'var(--stone-400)'};`, knob:`position:absolute;top:3px;left:${on?'21px':'3px'};width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s;` }; }
+
+  chips(n,vals,fmt){ const cur=this.state.v[n]; return vals.map(val=>({ key:val, label:fmt?fmt(val):val, onClick:()=>this.set(n, cur===val?undefined:val), style:this.chipStyle(cur===val) })); }
+  multi(n,vals){ const cur=this.state.v[n]||[]; return vals.map(val=>({ key:val, label:val, onClick:()=>this.toggleMulti(n,val), style:this.chipStyle(cur.includes(val)) })); }
+  seg(n,vals){ const cur=this.state.v[n]; return vals.map(val=>({ key:val, label:val, onClick:()=>this.set(n,val), style:this.segStyle(cur===val) })); }
+
+  num(x){ return parseInt(String(x||'').replace(/[^0-9]/g,''))||0; }
+  fmtINR(raw){ const n=this.num(raw); if(!n) return ''; if(n>=1e7) return '₹'+(n/1e7).toFixed(2).replace(/\.?0+$/,'')+' Cr'; if(n>=1e5) return '₹'+(n/1e5).toFixed(2).replace(/\.?0+$/,'')+' L'; return '₹'+n.toLocaleString('en-IN'); }
+  priceKey(){ return this.state.purpose==='sale'?'price':(this.state.purpose==='lease'?'lease':'rent'); }
+  fmtPrice(){ return this.fmtINR(this.state.v[this.priceKey()]); }
+  cap(x){ return x ? x.charAt(0).toUpperCase()+x.slice(1) : x; }
+
+  areaField(){ return {shop:'carpet',office:'carpet',building:'totalbuiltup',warehouse:'wbuiltup',land:'landarea'}[this.state.ctype]; }
+  areaNum(){ return this.num(this.state.v[this.areaField()]); }
+  floorLabel(){ const v=this.state.v; if(this.state.ctype==='building') return v.floorMode==='Custom'?(v.floorCustom||''):v.floorMode; const fm=v.floorChoice; return fm||''; }
+
+  washStr(){ const v=this.state.v; if(!v.hasWash) return ''; const a=[]; if(v.washPrivate&&v.washPrivate!=='0') a.push(v.washPrivate+' private'); if(v.washPublic&&v.washPublic!=='0') a.push(v.washPublic+' public'); return a.length?a.join(', '):'Available'; }
+  parkStr(){ const v=this.state.v; if(!v.hasPark) return ''; const a=[]; if(v.parkPrivate&&v.parkPrivate!=='0') a.push(v.parkPrivate+' private'); if(v.parkPublic&&v.parkPublic!=='0') a.push(v.parkPublic+' public'); return a.length?a.join(', '):'Available'; }
+  amenityStr(){ const v=this.state.v; const map=[['power','Power backup'],['dg','DG availability'],['water','Water storage'],['internet','Internet connectivity'],['cctv','CCTV surveillance'],['security','Security personnel'],['cafeteria','Cafeteria / food court'],['reception','Reception area'],['fire','Fire extinguishers'],['ac','Central air conditioning']]; return map.filter(([k])=>v[k]).map(([,l])=>l).join(', '); }
+
+  buildDesc(tone){
+    const v=this.state.v, t=this.state.ctype, p=this.state.purpose; const isRL=p!=='sale';
+    const typeName={shop:'commercial '+(/showroom/i.test((v.suit||[]).join(' '))?'showroom':'shop'),office:'office space',building:'commercial building',warehouse:'warehouse',land:'commercial plot'}[t];
+    const loc=v.complex?('at '+v.complex):(v.locality?('in '+v.locality):'');
+    const verb=p==='sale'?'sale':(p==='lease'?'lease':'rent');
+    const S=[];
+    let lead=('A '+typeName+' '+loc).trim()+' is available for '+verb+'.';
+    if(tone==='business'){ const u=(v.suit||[])[0]; lead=this.cap(('Well-positioned '+typeName+' '+loc).trim())+', suited to '+((u&&u!=='Other')?u.toLowerCase():'commercial use')+'.'; }
+    S.push(this.cap(lead));
+    /* core facts */
+    const f=[];
+    const areaVal=this.num(v[this.areaField()]);
+    const areaLab={shop:'sq.ft carpet area',office:'sq.ft carpet area',building:'sq.ft built-up area',warehouse:'sq.ft built-up area',land:'sq.ft plot'}[t];
+    if(areaVal) f.push(areaVal.toLocaleString('en-IN')+' '+areaLab);
+    if(t==='shop'){ if(v.frontage) f.push(v.frontage+' ft frontage'); if(this.floorLabel()) f.push('on the '+this.floorLabel().toLowerCase()); if(v.mainroad) f.push('main-road facing'); }
+    if(t==='office'){ if(v.seats) f.push(v.seats+' seats'); if(v.cabins&&v.cabins!=='0') f.push(v.cabins+' cabin'+(v.cabins==='1'?'':'s')); if(v.furnishing) f.push(v.furnishing.toLowerCase()); }
+    if(t==='building'){ if(this.floorLabel()) f.push(this.floorLabel().toLowerCase()+' floors'); if(v.occupancy) f.push(v.occupancy.toLowerCase()); }
+    if(t==='warehouse'){ if(v.clearHeight) f.push(v.clearHeight+' ft clear height'); if(v.loadingBays&&v.loadingBays!=='0') f.push(v.loadingBays+' loading bay'+(v.loadingBays==='1'?'':'s')); if(v.truckAccess) f.push('truck access'); }
+    if(t==='land'){ if(v.roadwidth) f.push(v.roadwidth+' ft road'); if(v.facing) f.push(v.facing+'-facing'); if(v.corner) f.push('corner plot'); }
+    if(f.length) S.push(this.cap(f.join(', '))+'.');
+    /* suitability */
+    const su=(v.suit||[]).filter(x=>x!=='Other');
+    if(su.length && tone!=='short') S.push('Suitable for '+su.slice(0,4).join(', ').toLowerCase()+'.');
+    /* amenities highlights */
+    if(tone!=='short'&&tone!=='factual'){ const ex=[]; if(v.power) ex.push('power backup'); if(v.dg) ex.push('DG backup'); if(v.lift) ex.push('a lift'); if(v.cctv) ex.push('CCTV'); if(v.ac) ex.push('central air conditioning'); (v.amenities||[]).slice(0,2).forEach(a=>ex.push(a.toLowerCase())); if(ex.length) S.push(this.cap('Facilities include '+[...new Set(ex)].slice(0,4).join(', '))+'.'); }
+    else if(tone==='factual'){ const ex=[]; const w=this.washStr(); if(w) ex.push(w.toLowerCase()+' washrooms'); const pk=this.parkStr(); if(pk) ex.push(pk.toLowerCase()+' parking'); if(v.powerLoad) ex.push(v.powerLoad+' power load'); if(ex.length) S.push(this.cap('Includes '+ex.join(', '))+'.'); }
+    /* terms */
+    const pr=this.fmtPrice();
+    if(pr){ if(isRL){ S.push('Offered at '+pr+' per month'+(v.deposit?(' with a '+this.fmtINR(v.deposit)+' deposit'):'')+'.'); if(v.leaseTenure&&tone!=='short') S.push('Lease tenure '+v.leaseTenure+(v.lockin?(', '+v.lockin+' lock-in'):'')+'.'); }
+      else { S.push('Priced at '+pr+(v.negotiable?' (negotiable)':'')+'.'); if(t==='building'&&v.currentRent&&tone!=='short') S.push('Currently fetching '+this.fmtINR(v.currentRent)+' per month in rent.'); } }
+    if(isRL&&v.availFrom&&tone!=='short') S.push('Available '+(/immediate/i.test(v.availFrom)?'immediately':v.availFrom.toLowerCase())+'.');
+    if(tone==='business') S.push('Schedule a site visit to assess it for your business.');
+    let out=S.join(' '); if(tone==='short') out=S.slice(0,2).join(' '); return out;
+  }
+  generate(tone){ this.setState({ aiState:'generating' }); clearTimeout(this._t); this._t=setTimeout(()=>{ this.setState({ desc:this.buildDesc(tone), aiState:'ready', tone, descTouched:false, descUsed:false }); }, 650); }
+
+  deriveNearby(){
+    const t=this.state.ctype;
+    let list;
+    if(t==='warehouse'){
+      list=[
+        {name:'Highway / NH access', category:'Highway', dist:'1.1 km'},
+        {name:'Loading / access road', category:'Access road', dist:'0.2 km'},
+        {name:'Truck parking / yard', category:'Truck access', dist:'0.4 km'},
+        {name:'Railway siding / goods yard', category:'Rail freight', dist:'3.2 km'},
+        {name:'Industrial / logistics hub', category:'Logistics', dist:'1.6 km'},
+        {name:'Fuel / weighbridge', category:'Services', dist:'0.8 km'},
+      ];
+    } else if(t==='land'){
+      list=[
+        {name:'Main road / highway frontage', category:'Access road', dist:'0.1 km'},
+        {name:'Arterial road junction', category:'Access road', dist:'0.6 km'},
+        {name:'Bus stop', category:'Public transport', dist:'0.5 km'},
+        {name:'Commercial / market hub', category:'Footfall area', dist:'1.0 km'},
+        {name:'Metro / rail station', category:'Metro / rail', dist:'1.8 km'},
+        {name:'Public parking', category:'Parking', dist:'0.7 km'},
+      ];
+    } else {
+      list=[
+        {name:'Main road / arterial road', category:'Access road', dist:'0.3 km'},
+        {name:'Metro / rail station', category:'Metro / rail', dist:'0.9 km'},
+        {name:'Bus stop', category:'Public transport', dist:'0.4 km'},
+        {name:'Market / commercial hub', category:'Footfall area', dist:'0.7 km'},
+        {name:'Bank / ATM', category:'Banking', dist:'0.5 km'},
+        {name:'Public parking', category:'Parking', dist:'0.6 km'},
+        {name:'Restaurants & cafes', category:'Food & footfall', dist:'0.5 km'},
+      ];
+    }
+    return list.map((b,i)=>({ ...b, id:'d'+i, hidden:false, manual:false }));
+  }
+  toggleNearbyHide(id){ this.setState(s=>({ nearby:s.nearby.map(n=>n.id===id?{...n,hidden:!n.hidden}:n) })); }
+  setPoi(k,val){ this.setState(s=>({ poiDraft:{...(s.poiDraft||{}), [k]:val} })); }
+  addPoi(){ const d=this.state.poiDraft||{}; if(!d.name) return; this.setState(s=>({ nearby:[...s.nearby, { id:'m'+Date.now(), name:d.name, category:d.cat||'Other', dist:d.note||'', hidden:false, manual:true }], poiDraft:{} })); }
+  movePin(){ this.setState(s=>({ nearby:[ ...this.deriveNearby(), ...s.nearby.filter(n=>n.manual) ] })); }
+
+  /* ---------- location resolution + map-pin flow ---------- */
+  titleCase(x){ return (x||'').replace(/\b\w/g,c=>c.toUpperCase()); }
+  hashStr(x){ let h=0; for(let i=0;i<x.length;i++){ h=(h*31+x.charCodeAt(i))|0; } return h; }
+  mockResults(q){ const first=(q.split(',')[0]||'').trim().replace(/\s+/g,' '); const area=this.titleCase(first.split(' ').slice(0,3).join(' '))||'This area'; const city='Bengaluru'; const pin=String(560001+(Math.abs(this.hashStr(area))%88)); return [
+    { id:'r1', line:area+', '+city+' '+pin, sub:'Locality \u00b7 '+city, publicLoc:area+', '+city },
+    { id:'r2', line:area+' Main Road, '+city, sub:'Commercial street \u00b7 '+city, publicLoc:area+', '+city },
+    { id:'r3', line:area+' Metro Station, '+city, sub:'Transit stop \u00b7 '+city, publicLoc:area+', '+city }
+  ]; }
+  onLocQuery(e){ const val=e.target.value; this.setState(s=>({ locQuery:val, locStatus: val.trim()?'typed':'empty', resolved:null, locSource:null, pinDone:false, pickerOpen:false, nearby:[], v:{...s.v, locality:''} })); }
+  findLocation(){ const q=(this.state.locQuery||'').trim(); if(!q) return; this.setState({ locStatus:'searching', locResults:[], resolved:null, pinDone:false, geo:'idle' }); clearTimeout(this._loc); this._loc=setTimeout(()=>{ const ok=q.replace(/[^a-z0-9]/gi,'').length>=3 && /[a-z]/i.test(q); this.setState({ locStatus: ok?'results':'notfound', locResults: ok?this.mockResults(q):[] }); }, 750); }
+  selectResult(r){ this.setState(s=>({ locStatus:'resolved', resolved:{...r}, locSource:'search', pinDone:false, pickerOpen:false, v:{...s.v, locality:r.publicLoc} })); }
+  changeLocation(){ this.setState(s=>({ locStatus:(s.locQuery||'').trim()?'typed':'empty', resolved:null, locSource:null, pinDone:false, pickerOpen:false, nearby:[], v:{...s.v, locality:''} })); }
+  useBrowserLoc(){ this.setState({ geo:'prompt' }); }
+  denyGeo(){ this.setState(s=>({ geo:'idle', locStatus:(s.locQuery||'').trim()?'typed':'empty' })); }
+  allowGeo(){ this.setState({ geo:'locating', locStatus:'searching', locResults:[] }); clearTimeout(this._geo); this._geo=setTimeout(()=>{ const r={ id:'geo', line:'Near MG Road, Bengaluru 560001', sub:'Your current location', publicLoc:'MG Road, Bengaluru' }; this.setState(s=>({ geo:'done', locStatus:'resolved', resolved:r, locSource:'browser', pinDone:false, v:{...s.v, locality:r.publicLoc} })); }, 900); }
+  openPicker(){ if(!this.state.resolved) return; this.setState({ pickerOpen:true }); }
+  cancelPicker(){ this.setState({ pickerOpen:false }); }
+  confirmPin(){ this.setState(s=>({ pickerOpen:false, pinDone:true, nearby: s.nearby.length? s.nearby : this.deriveNearby() })); }
+  onPinMove(e){ const box=e.currentTarget.getBoundingClientRect(); let x=((e.clientX-box.left)/box.width)*100; let y=((e.clientY-box.top)/box.height)*100; x=Math.max(6,Math.min(94,x)); y=Math.max(12,Math.min(88,y)); this.setState({ pinPos:{x,y} }); }
+
+  /* ---------- small render helpers ---------- */
+  secHead(n,t,sub){ return (
+    <div style={s('display:flex;align-items:flex-start;gap:12px;margin-bottom:20px;')}>
+      <div style={s('width:28px;height:28px;border-radius:50%;background:var(--navy-100);color:var(--navy-800);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;font-family:var(--font-mono);flex:none;')}>{n}</div>
+      <div>
+        <h2 style={s('font-size:17px;font-weight:700;color:var(--text-strong);margin:0;')}>{t}</h2>
+        {sub && <p style={s('margin:3px 0 0;font-size:12.5px;color:var(--text-muted);')}>{sub}</p>}
+      </div>
+    </div>
+  ); }
+  chipRow(list){ return list.map(o => React.createElement('button',{ key:o.key, type:'button', onClick:o.onClick, style:s(o.style) }, o.label)); }
+  tgl(t){ return React.createElement('button',{ type:'button', onClick:t.onClick, style:s(t.track) }, React.createElement('span',{ style:s(t.knob) })); }
+  togRow(n,label){ const t=this.toggle(n); return (<div key={n} style={s(TOGROW)}><span style={s(TOGLBL)}>{label}</span>{this.tgl(t)}</div>); }
+  countBlock(name,label){ const opts=this.chips(name,['0','1','2','3','4+']); return (<div><span style={s(FLD)}>{label}</span><div style={s(CHIPWRAP)}>{this.chipRow(opts)}</div></div>); }
+  sectionTitle(inner, label, R){ return (
+    <div style={s('display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;')}>
+      <h2 style={s('margin:0;display:flex;align-items:center;gap:9px;font-size:18px;font-weight:700;color:var(--text-strong);')}><Ico inner={inner} size={18} stroke="var(--navy-700)"/>{label}</h2>
+      <button type="button" onClick={R.backToEdit} style={s(EDITLINK)}>Edit</button>
+    </div>
+  ); }
+
+  rv(){
+    const v=this.state.v; const { ctype, purpose, photos, aiState, desc, moreOpen, descUsed, mode, coverPhoto, nearby, poiDraft, published, locQuery, locStatus, locResults, resolved, locSource, geo, pinDone, pickerOpen, pinPos } = this.state;
+    const pinned = pinDone && !!resolved;
+    const isShop=ctype==='shop', isOffice=ctype==='office', isBuilding=ctype==='building', isWarehouse=ctype==='warehouse', isLand=ctype==='land';
+    const isSale=purpose==='sale', isRent=purpose==='rent', isLease=purpose==='lease'; const isRL=isRent||isLease;
+    const hasUtilities=!isLand;
+
+    const ALLF=['locality','complex','title','carpet','builtup','totalbuiltup','plotarea','wbuiltup','landarea','frontage','roadwidth','roadfrontage','floorChoice','floorCustom','totalfloors','seats','cabins','meeting','conference','staircases','clearHeight','loadingBays','officeRoom','toilets','flooring','price','rent','lease','deposit','lockin','leaseTenure','notice','availFrom','fitout','maint','ownership','occupancy','currentRent','leaseDuration','approving','docref','zoning','siteRef','powerLoad','areaUnit'];
+    const h={}, vv={}; ALLF.forEach(n=>{ h[n]=e=>this.set(n,e.target.value); vv[n]=v[n]??''; });
+    const af=this.areaField();
+    vv.areaPrimary = v[af] ?? ''; h.areaPrimary = e=>this.set(af, e.target.value);
+
+    const ts={}; TYPES.forEach(t=>ts[t.key]={ onClick:()=>this.setState({ctype:t.key}), style:this.cardStyle(ctype===t.key) });
+    const ps={ sale:{onClick:()=>this.setState({purpose:'sale'}),style:this.segStyle(isSale)}, rent:{onClick:()=>this.setState({purpose:'rent'}),style:this.segStyle(isRent)}, lease:{onClick:()=>this.setState({purpose:'lease'}),style:this.segStyle(isLease)} };
+
+    const suitChips=this.multi('suit', SUIT[ctype]);
+    const floorChoiceChips=this.chips('floorChoice', isShop?['Ground floor','First floor','Upper floor','Multiple floors']:['Ground floor','First floor','Upper floor','Multiple floors']);
+    const floorModeChips=this.chips('floorMode',['GF only','GF + 1','Multiple floors','Whole building','Custom']);
+    const furnishingSeg=this.seg('furnishing',['Unfurnished','Semi-furnished','Furnished','Plug-and-play']);
+    const occupancySeg=this.seg('occupancy',['Vacant','Partly occupied','Fully occupied']);
+    const maintSeg=this.seg('maintInc',['Included','Excluded']);
+    const availOpts=this.chips('availFrom',['Immediate','Within 15 days','Within 30 days','After 30 days']);
+
+    const hubOpts = HUBS[ctype];
+    const areaUnitOpts=['Sq.ft','Sq.m','Sq.yd','Acre'];
+    const facingOpts=[{value:'',label:'Select direction'},'East','West','North','South','North-East','North-West','South-East','South-West'];
+    const ownershipOpts=[{value:'',label:'Select ownership'},'Freehold','Leasehold','Power of attorney','Other'];
+    const flooringOpts=[{value:'',label:'Select flooring (optional)'},'Concrete / RCC','Trimix','Epoxy coated','Kota / tiled','Other'];
+
+    /* utility / amenity toggles */
+    const utilToggles=[['power','Power backup'],['dg','DG availability'],['water','Water storage'],['internet','Internet connectivity'],['cctv','CCTV surveillance'],['security','Security personnel'],['cafeteria','Cafeteria / food court'],['reception','Reception area'],['fire','Fire extinguishers'],['ac','Central air conditioning']].map(([k,l])=>({key:k,label:l,...this.toggle(k)}));
+
+    const areaLabel = {shop:'Carpet area',office:'Carpet area',building:'Total built-up area',warehouse:'Built-up area',land:'Land area'}[ctype];
+    const areaOptField = {shop:'builtup',office:'builtup',building:'plotarea',warehouse:'landarea',land:null}[ctype];
+    const areaOptLabel = {shop:'Built-up area',office:'Built-up area',building:'Plot area',warehouse:'Land area',land:null}[ctype];
+    vv.areaOpt = areaOptField ? (v[areaOptField] ?? '') : '';
+    h.areaOpt = areaOptField ? (e=>this.set(areaOptField, e.target.value)) : (()=>{});
+    const areaHint = {shop:'Buyers and tenants compare commercial space on carpet area.',office:'Carpet area is what tenants actually use. Add built-up if you like.',building:'Total leasable / built-up area across the building.',warehouse:'Covered built-up area. Add land area below if relevant.',land:'Total commercial land area on offer.'}[ctype];
+
+    const titlePlaceholder = {shop:'e.g. 1,200 sq.ft shop on MG Road, main-road facing',office:'e.g. 40-seat plug-and-play office, Koramangala',building:'e.g. G+4 commercial building, Indiranagar',warehouse:'e.g. 18,000 sq.ft warehouse, NH-44, 30 ft clear height',land:'e.g. 8,000 sq.ft commercial plot, 60 ft road'}[ctype];
+    const coreTitle = {shop:'Shop facts',office:'Office facts',building:'Building facts',warehouse:'Warehouse facts',land:'Land facts'}[ctype];
+    const buildingTitle = isLand ? 'Ownership & approvals' : (isWarehouse ? 'Access & infrastructure' : 'Building, floors & access');
+    const buildingSub = isLand ? 'Optional — broker-entered. Shown as entered, never auto-verified by ReTrends.' : 'Floors, access, parking and washrooms for this property.';
+    const termsTitle = isSale ? 'Sale & investment terms' : (isLease ? 'Lease terms' : 'Rent terms');
+    const priceLabel = isSale ? 'Total price (₹)' : (isLease ? 'Lease amount — ₹ / month' : 'Monthly rent (₹)');
+    const pricePlaceholder = isSale ? 'e.g. 21500000' : 'e.g. 95000';
+
+    /* derived */
+    const priceStr=this.fmtPrice();
+    const areaForSqft=this.areaNum();
+    const priceNum=this.num(v[this.priceKey()]);
+    const perSqft=(priceNum&&areaForSqft) ? ('₹'+Math.round(priceNum/areaForSqft).toLocaleString('en-IN')+'/sq.ft'+(isRL?'/mo':'')) : '';
+    const crNum=this.num(v.currentRent);
+    const grossYield=(isSale&&priceNum&&crNum) ? (((crNum*12)/priceNum)*100) : null;
+    const grossYieldStr=grossYield!=null ? (grossYield.toFixed(2).replace(/\.?0+$/,'')+'% p.a.') : '';
+
+    /* preview specs */
+    let specs=[];
+    if(isShop) specs=[areaForSqft&&(areaForSqft.toLocaleString('en-IN')+' sq.ft'), v.frontage&&(v.frontage+' ft frontage'), this.floorLabel(), v.mainroad&&'Main-road facing', (v.suit||[])[0], priceStr];
+    else if(isOffice) specs=[areaForSqft&&(areaForSqft.toLocaleString('en-IN')+' sq.ft'), v.floorChoice, v.seats&&(v.seats+' seats'), v.furnishing, (v.suit||[])[0], priceStr];
+    else if(isBuilding) specs=[areaForSqft&&(areaForSqft.toLocaleString('en-IN')+' sq.ft'), this.floorLabel(), v.occupancy, crNum&&(this.fmtINR(v.currentRent)+'/mo rent'), priceStr];
+    else if(isWarehouse) specs=[areaForSqft&&(areaForSqft.toLocaleString('en-IN')+' sq.ft'), v.clearHeight&&(v.clearHeight+' ft height'), v.truckAccess&&'Truck access', (v.loadingBays&&v.loadingBays!=='0')&&(v.loadingBays+' bays'), priceStr];
+    else specs=[areaForSqft&&(areaForSqft.toLocaleString('en-IN')+' sq.ft'), v.roadwidth&&(v.roadwidth+' ft road'), v.facing&&(v.facing+'-facing'), v.ownership, priceStr];
+    specs=specs.filter(Boolean);
+
+    const previewTitle = v.title || {shop:'Your shop listing',office:'Your office listing',building:'Your building listing',warehouse:'Your warehouse listing',land:'Your plot listing'}[ctype];
+    const previewLocText = v.complex ? (v.complex + (v.locality?(', '+v.locality):'')) : (v.locality || 'Add a locality');
+    const statusText = isRL ? (v.availFrom?('Available: '+v.availFrom):'') : (v.occupancy||'');
+    const priceDisplay = priceStr ? (priceStr + (isRL?' /mo':'')) : 'Add a price';
+
+    const checks=[true,true,!!resolved,!!areaForSqft,!!priceNum,!!v.title,(v.suit||[]).length>0,photos>0,pinned,(desc||'').length>20];
+    const done=checks.filter(Boolean).length; const strengthPct=Math.round(done/checks.length*100);
+    const strengthLabel = strengthPct>=80?'Strong' : strengthPct>=55?'Good' : strengthPct>=30?'Fair' : 'Just started';
+    const strengthColor = strengthPct>=80?'var(--evergreen-600)' : strengthPct>=55?'var(--navy-800)' : 'var(--ochre-600)';
+    const confirm=[{label:photos+' photo'+(photos===1?'':'s')+' added',on:photos>0},{label:'Location entered',on:!!resolved},{label:'Map pin confirmed',on:pinned},{label:'Business suitability added',on:(v.suit||[]).length>0}];
+    const confirmChips=confirm.map(c=>({ key:c.label, label:c.label, check:c.on?'✓':'', textColor:c.on?'var(--text-body)':'var(--text-muted)', dot:`width:16px;height:16px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;background:${c.on?'var(--evergreen-600)':'var(--grey-300)'};` }));
+    const filledCount = ALLF.filter(n=>v[n]).length + ((v.suit||[]).length?1:0);
+
+    const hasVideo=!!v.videoUrl; vv.videoUrl=v.videoUrl??''; h.videoUrl=e=>this.set('videoUrl',e.target.value);
+    const videoHost = /youtu/i.test(v.videoUrl||'') ? 'YouTube' : (/instagr/i.test(v.videoUrl||'') ? 'Instagram' : 'Video link');
+
+    const photoTiles=Array.from({length:6},(_,i)=>{ const filled=i<photos; return {
+      key:i, filled, empty:!filled, isCover: filled && i===coverPhoto, notCover: filled && i!==coverPhoto,
+      onAdd:()=>this.setState({photos:i+1}), onSelect:()=>this.setState({coverPhoto:i}),
+      onRemove:(e)=>{ if(e&&e.stopPropagation)e.stopPropagation(); this.setState(s2=>{ const np=Math.max(0,s2.photos-1); return { photos:np, coverPhoto:(s2.coverPhoto>=np?0:s2.coverPhoto) }; }); },
+      fillStyle:`position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:linear-gradient(135deg,var(--navy-700),var(--navy-600));`,
+      emptyStyle:`aspect-ratio:1;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:300;transition:all .12s;border:1.5px dashed var(--border-strong);background:var(--input-bg);color:var(--text-muted);`,
+      removeStyle:`position:absolute;top:5px;right:5px;width:20px;height:20px;border-radius:6px;border:none;background:rgba(14,22,38,0.55);color:#fff;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;`,
+      coverBadgeStyle:`position:absolute;bottom:5px;left:5px;font-size:9px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;background:var(--copper-500);color:#fff;padding:2px 6px;border-radius:5px;`,
+      setCoverStyle:`position:absolute;bottom:5px;left:5px;font-size:9px;font-weight:600;background:rgba(255,255,255,0.9);color:var(--navy-800);padding:3px 7px;border-radius:5px;border:none;cursor:pointer;`
+    }; });
+
+    /* nearby */
+    const nearbyRows=(nearby||[]).map(n=>({ key:n.id, name:n.name, meta:[n.category,n.dist].filter(Boolean).join(' · '), manual:!!n.manual, onToggle:()=>this.toggleNearbyHide(n.id), toggleLabel:n.hidden?'Show':'Hide', rowStyle:`display:flex;align-items:center;gap:11px;padding:11px 0;border-top:1px solid var(--border);opacity:${n.hidden?'0.45':'1'};`, nameStyle:`font-size:13.5px;font-weight:600;color:var(--text-strong);${n.hidden?'text-decoration:line-through;':''}` }));
+    const hasNearby=(nearby||[]).length>0;
+    const reviewNearby=(nearby||[]).filter(n=>!n.hidden).map(n=>({ key:n.id, name:n.name, meta:[n.category,n.dist].filter(Boolean).join(' · '), manual:!!n.manual }));
+    const reviewHasNearby=reviewNearby.length>0;
+    const pd=poiDraft||{};
+    const poiVals={ name:pd.name||'', cat:pd.cat||'', note:pd.note||'' };
+    const hPoi={ name:e=>this.setPoi('name',e.target.value), cat:e=>this.setPoi('cat',e.target.value), note:e=>this.setPoi('note',e.target.value) };
+    const poiCatOpts=[{value:'',label:'Category'},'Public transport','Arterial road','Footfall area','Banking','Food','Parking','Landmark','Other'];
+
+    const editMode = mode!=='review'; const reviewMode = mode==='review';
+    const miss=[];
+    if(photos===0) miss.push('Add at least one photo');
+    if(!pinned) miss.push('Pin the location on the map');
+    if((desc||'').length<20) miss.push('Add a short description');
+    if(!priceNum) miss.push(isSale?'Add the total price':(isLease?'Add the lease amount':'Add the monthly rent'));
+    if(!areaForSqft) miss.push('Add the '+areaLabel.toLowerCase());
+    if((v.suit||[]).length===0) miss.push('Add at least one business use');
+
+    const kindLabel = {shop:'Commercial shop',office:'Office space',building:'Commercial building',warehouse:'Warehouse',land:'Commercial plot'}[ctype];
+    const purposeLabel = isSale?'For sale':(isLease?'For lease':'For rent');
+    const refNo = 'RT-C'+({shop:'SHP',office:'OFC',building:'BLD',warehouse:'WHS',land:'LND'}[ctype])+'-'+String((priceNum||1284)%10000).padStart(4,'0');
+    const yes='Yes';
+    const _tiles=[]; const _rows=[];
+    const T=(icon,label,value)=>{ if(value) _tiles.push({key:label,icon,label,value:String(value)}); };
+    const R2=(label,value)=>{ if(value) _rows.push({key:label,label,value:String(value)}); };
+    const A=areaForSqft?(areaForSqft.toLocaleString('en-IN')+' sq.ft'):'';
+    if(isShop){
+      T('maximize','Carpet area',A); T('store','Shop frontage', v.frontage&&(v.frontage+' ft')); T('building','Floor', this.floorLabel()); T('route','Road width', v.roadwidth&&(v.roadwidth+' ft'));
+      R2('Built-up area', v.builtup&&(v.builtup+' sq.ft')); R2('Total floors', v.totalfloors); R2('Road frontage', v.roadfrontage&&(v.roadfrontage+' ft'));
+      R2('Main-road facing', v.mainroad?yes:''); R2('Corner unit', v.corner?yes:''); R2('Signage visibility', v.signage?yes:''); R2('Lift', v.lift?yes:'');
+      R2('Location hub', v.hub); R2('Washrooms', this.washStr()); R2('Parking', this.parkStr());
+    } else if(isOffice){
+      T('maximize','Carpet area',A); T('users','Seats', v.seats); T('briefcase','Cabins', (v.cabins&&v.cabins!=='0')?v.cabins:''); T('building','Floor', this.floorLabel()||v.floorChoice);
+      R2('Built-up area', v.builtup&&(v.builtup+' sq.ft')); R2('Floor / total floors', v.floorChoice&&(v.totalfloors?(v.floorChoice+' of '+v.totalfloors):v.floorChoice));
+      R2('Meeting rooms', (v.meeting&&v.meeting!=='0')?v.meeting:''); R2('Conference rooms', (v.conference&&v.conference!=='0')?v.conference:'');
+      R2('Furnishing', v.furnishing); R2('Reception area', v.reception?yes:''); R2('Lift', v.lift?yes:''); R2('Internet connectivity', v.internet?yes:''); R2('Central air conditioning', v.ac?yes:'');
+      R2('Staircases', v.staircases); R2('Location hub', v.hub); R2('Washrooms', this.washStr()); R2('Parking', this.parkStr());
+    } else if(isBuilding){
+      T('maximize','Total built-up',A); T('building2','Floors', this.floorLabel()); T('layers','Occupancy', v.occupancy); T('route','Road width', v.roadwidth&&(v.roadwidth+' ft'));
+      R2('Plot area', v.plotarea&&(v.plotarea+' sq.ft')); R2('Total floors', v.totalfloors); R2('Lift', v.lift?yes:''); R2('Road frontage', v.roadfrontage&&(v.roadfrontage+' ft'));
+      R2('Power load', v.powerLoad); R2('Current rent', crNum&&(this.fmtINR(v.currentRent)+'/mo')); R2('Washrooms', this.washStr()); R2('Parking', this.parkStr());
+      R2('Fire safety / approvals', v.approving);
+    } else if(isWarehouse){
+      T('maximize','Built-up area',A); T('ruler','Clear height', v.clearHeight&&(v.clearHeight+' ft')); T('truck','Loading bays', (v.loadingBays&&v.loadingBays!=='0')?v.loadingBays:''); T('route','Road width', v.roadwidth&&(v.roadwidth+' ft'));
+      R2('Land area', v.landarea&&(v.landarea+' sq.ft')); R2('Truck access', v.truckAccess?yes:''); R2('Office room', v.officeRoom?yes:''); R2('Toilets', v.toilets);
+      R2('Flooring type', v.flooring); R2('Power load', v.powerLoad);
+    } else {
+      T('maximize','Land area',A); T('route','Road width', v.roadwidth&&(v.roadwidth+' ft')); T('map-pin','Facing', v.facing); T('layers','Road frontage', v.roadfrontage&&(v.roadfrontage+' ft'));
+      R2('Corner plot', v.corner?yes:''); R2('Boundary wall', v.boundary?yes:''); R2('Zoning / permitted use', v.zoning); R2('Ownership type', v.ownership);
+      R2('Approving authority', v.approving); R2('Site / survey ref', v.siteRef);
+    }
+    /* suitability + utilities rows */
+    R2('Suitable for', (v.suit||[]).join(', '));
+    if(hasUtilities) R2('Utilities & amenities', this.amenityStr());
+    if(hasUtilities) R2('Power load', _rows.some(r=>r.label==='Power load')?'':v.powerLoad);
+    if(hasUtilities) R2('DG/UPS charges included', v.dgCharges?yes:'');
+    /* terms rows */
+    if(isRL){ R2('Available from', v.availFrom); R2('Maintenance', v.maintInc?('Maintenance '+v.maintInc.toLowerCase()):''); R2('Lease tenure', v.leaseTenure); R2('Lock-in period', v.lockin); R2('Notice period', v.notice); R2('Fit-out period', v.fitout); R2('Rent', v.negotiableRent?'Negotiable':''); R2('Security deposit', v.deposit&&this.fmtINR(v.deposit)); }
+    else { R2('Ownership type', v.ownership&&!isLand?v.ownership:''); R2('Occupancy', !isBuilding?v.occupancy:''); R2('Current rent / month', crNum&&this.fmtINR(v.currentRent)); R2('Lease duration', v.leaseDuration); R2('Gross yield (derived)', grossYieldStr); R2('Tax & govt charges included', v.taxInc?yes:''); R2('Price', v.negotiable?'Negotiable':''); R2('Approving authority / docs', !isLand?v.docref:''); }
+
+    const reviewTiles=_tiles.slice(0,4); const reviewRows=_rows;
+    const hasReviewTiles=reviewTiles.length>0; const hasReviewRows=reviewRows.length>0;
+    const noDetails=!hasReviewTiles && !hasReviewRows;
+    const reviewTileGrid='repeat('+(reviewTiles.length||1)+',1fr)';
+    const reviewThumbs=Array.from({length:photos},(_,i)=>({ key:i, isCover:i===coverPhoto, style:`position:relative;width:92px;height:66px;flex:none;border-radius:8px;overflow:hidden;background:linear-gradient(135deg,var(--navy-700),var(--navy-600));border:${i===coverPhoto?'2px solid var(--copper-500)':'1px solid var(--border)'};` }));
+    const trustChecks=[
+      {label:'Photos added', ok:photos>0},{label:'Cover photo selected', ok:photos>0},{label:'Location entered', ok:!!resolved},{label:'Map pin confirmed', ok:pinned},
+      {label:'Business suitability added', ok:(v.suit||[]).length>0},{label:'Description added', ok:(desc||'').length>0}
+    ].map(c=>({ key:c.label, label:c.label, ok:c.ok, pending:!c.ok }));
+
+    return {
+      h, vv, ts, ps,
+      isShop, isOffice, isBuilding, isWarehouse, isLand, isSale, isRent, isLease, isRL, hasUtilities,
+      suitChips, floorChoiceChips, floorModeChips, furnishingSeg, occupancySeg, maintSeg, availOpts,
+      hubOpts, areaUnitOpts, facingOpts, ownershipOpts, flooringOpts, utilToggles,
+      tg:this.makeTg(),
+      areaLabel, areaOptField, areaOptLabel, areaHint, titlePlaceholder, coreTitle, buildingTitle, buildingSub, termsTitle, priceLabel, pricePlaceholder,
+      floorModeVal:v.floorMode, floorModeCustom:v.floorMode==='Custom',
+      photoTiles, pinned,
+      moreOpen, chevronRotate: moreOpen?'rotate(180deg)':'rotate(0deg)',
+      priceEcho: priceStr ? ('= '+priceStr+(isRL?' /month':'')) : '',
+      grossYield, grossYieldStr, hasGrossYield: grossYield!=null,
+      aiIdle:aiState==='idle', aiGenerating:aiState==='generating', aiReady:aiState==='ready',
+      desc, useDescLabel: descUsed?'Saved ✓':'Use this description',
+      doGenerate:()=>this.generate(null), doRegen:()=>this.generate(this.state.tone), doShorter:()=>this.generate('short'), doFactual:()=>this.generate('factual'), doBusiness:()=>this.generate('business'),
+      editManual:()=>this.setState({aiState:'ready'}), onDesc:e=>this.setState({desc:e.target.value,descTouched:true,descUsed:false}), useDesc:()=>this.setState({descUsed:true}),
+      onMore:()=>this.setState({moreOpen:!this.state.moreOpen}),
+      /* location + map-pin flow */
+      locQueryVal: locQuery,
+      onLocQuery: e=>this.onLocQuery(e),
+      onLocKey: e=>{ if(e.key==='Enter'){ e.preventDefault(); this.findLocation(); } },
+      findLocation: ()=>this.findLocation(),
+      findDisabled: !locQuery.trim() || locStatus==='searching',
+      findBtnStyle: `height:46px;padding:0 18px;border-radius:8px;border:none;font-family:var(--font-sans);font-size:14px;font-weight:600;white-space:nowrap;flex:none;cursor:${(!locQuery.trim()||locStatus==='searching')?'not-allowed':'pointer'};background:${(!locQuery.trim()||locStatus==='searching')?'var(--grey-200)':'var(--navy-800)'};color:${(!locQuery.trim()||locStatus==='searching')?'var(--grey-400)':'#fff'};`,
+      showGeoLink: !resolved && geo!=='prompt' && geo!=='locating' && locStatus!=='searching',
+      useBrowserLoc: ()=>this.useBrowserLoc(),
+      allowGeo: ()=>this.allowGeo(),
+      denyGeo: ()=>this.denyGeo(),
+      geoPrompt: geo==='prompt',
+      locSearching: locStatus==='searching',
+      locSearchingLabel: geo==='locating'?'Locating you\u2026':'Finding matching locations\u2026',
+      locResultsShown: locStatus==='results',
+      locNotFound: locStatus==='notfound',
+      locResolvedState: locStatus==='resolved' && !!resolved,
+      locResultCards: (locResults||[]).map(r=>({ key:r.id, title:r.line, sub:r.sub, onSelect:()=>this.selectResult(r) })),
+      changeLocation: ()=>this.changeLocation(),
+      resLine: resolved?resolved.line:'',
+      resPublic: resolved?resolved.publicLoc:'',
+      resSourceBrowser: locSource==='browser',
+      pinDisabled: !resolved,
+      pinEnabled: !!resolved && !pinned,
+      pinConfirmed: pinned,
+      pinPos,
+      openPicker: ()=>this.openPicker(),
+      adjustPin: ()=>this.openPicker(),
+      cancelPicker: ()=>this.cancelPicker(),
+      confirmPin: ()=>this.confirmPin(),
+      pickerOpen,
+      onMapDown: e=>{ this._dragging=true; this.onPinMove(e); },
+      onMapMove: e=>{ if(this._dragging) this.onPinMove(e); },
+      onMapUp: ()=>{ this._dragging=false; },
+      previewLocMain: resolved ? (v.complex?(v.complex+', '+resolved.publicLoc):resolved.publicLoc) : (locQuery.trim()?'Location not confirmed':'Add locality'),
+      previewLocColor: (pinned||resolved) ? 'var(--text-body)' : (locQuery.trim()?'var(--ochre-600)':'var(--text-muted)'),
+      previewLocConfirmed: pinned,
+      photoCountLabel: photos===0?'none yet':(photos+' photo'+(photos===1?'':'s')), hasPhotos:photos>0, noPhotos:photos===0,
+      previewTitle, previewLocText, priceDisplay, perSqft, hasPerSqft:!!perSqft, perSqftLabel:isRL?'Rent / sq.ft':'Price / sq.ft',
+      specs, hasSpecs:specs.length>0, noSpecs:specs.length===0, statusText, hasStatus:!!statusText,
+      showStrength: this.props.showStrength!==false,
+      strengthLabel, strengthColor, strengthWidth: strengthPct+'%', confirmChips,
+      derivedNote: perSqft ? ((isRL?'Rent':'Price')+' per sq.ft '+perSqft+' · derived automatically') : ((isRL?'Rent':'Price')+' per sq.ft is derived once you add '+(isRL?'rent':'price')+' and area.'),
+      footerStatus: reviewMode ? (published?'Submitted · pending admin approval':'Review your details, then submit for review') : (filledCount>3 ? (strengthLabel+' listing · '+strengthPct+'% complete') : 'Add a price and commercial details to get started'),
+      hasVideo, videoHost,
+      nearbyRows, hasNearby, reviewNearby, reviewHasNearby, poiVals, hPoi, poiCatOpts,
+      addPoi:()=>this.addPoi(), movePin:()=>this.movePin(),
+      editMode, reviewMode, published, notPublished:!published, reviewNotPublished: reviewMode && !published,
+      pageTitle: reviewMode?'Review your commercial listing':'Create a commercial listing',
+      pageSub: reviewMode?'Check the business facts look right. You can jump back to any section before submitting for review.':'Built for commercial brokers. Only the fields that matter for your selected type are shown — optional and investment details stay tucked away.',
+      goReview:()=>{ this.setState({mode:'review'}); try{window.scrollTo(0,0);}catch(e){} }, backToEdit:()=>this.setState({mode:'edit'}), publish:()=>this.setState({published:true}),
+      reviewMissing: miss, reviewMissingNone: miss.length===0, reviewHasMissing: miss.length>0,
+      mapPinnedText: pinned ? ('Map pin confirmed'+(resolved?(' · near '+resolved.publicLoc):'')) : (resolved?'Location resolved — pin not confirmed yet':'Location not confirmed yet'),
+      hasDesc:(desc||'').length>0, noDesc:(desc||'').length===0, descForReview: desc||'',
+      kindLabel, purposeLabel, refNo, reviewTiles, reviewRows, hasReviewTiles, hasReviewRows, noDetails, reviewTileGrid, reviewThumbs, trustChecks, reviewNoNearby: !reviewHasNearby
+    };
+  }
+
+  makeTg(){ const tg={}; ['lift','mainroad','corner','signage','reception','pantry','internet','ac','power','dg','water','cctv','security','cafeteria','fire','truckAccess','officeRoom','boundary','dgCharges','negotiable','negotiableRent','taxInc','hasWash','hasPark'].forEach(n=>tg[n]=this.toggle(n)); return tg; }
+
+  /* ---------------- header ---------------- */
+  header(){ return (
+    <div style={s('height:64px;background:var(--paper);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:20;')}>
+      <div style={s('display:flex;align-items:center;gap:38px;')}>
+        <div style={s('display:flex;align-items:center;gap:10px;')}>
+          <span style={s('width:30px;height:30px;border-radius:8px;background:var(--navy-800);display:flex;align-items:center;justify-content:center;')}><Ico inner={I.pin} stroke="var(--copper-400)" sw={2.2} size={17}/></span>
+          <div style={s('line-height:1.05;')}>
+            <div style={s('font-size:17px;font-weight:800;letter-spacing:-0.02em;')}><span style={s('color:var(--copper-500);')}>Re</span><span style={s('color:var(--navy-800);')}>Trends</span></div>
+            <div style={s('font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);font-weight:600;')}>Real estate trends</div>
+          </div>
+        </div>
+        <div className="cl-nav" style={s('display:flex;align-items:center;gap:26px;font-size:14px;font-weight:500;color:var(--text-muted);')}>
+          <span>Discover</span><span>Schools</span><span>Trends</span><span>Broker dashboard</span>
+        </div>
+      </div>
+      <div style={s('display:flex;align-items:center;gap:14px;')}>
+        <span style={s('font-size:14px;font-weight:600;color:var(--navy-800);')}>New commercial listing</span>
+        <span style={s('width:34px;height:34px;border-radius:50%;background:var(--navy-100);color:var(--navy-800);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;font-family:var(--font-mono);')}>TE</span>
+      </div>
+    </div>
+  ); }
+
+  washParkBlock(R, kind){
+    const isWash = kind==='wash';
+    const onName = isWash?'hasWash':'hasPark';
+    const tog = R.tg[onName];
+    const on = this.state.v[onName];
+    const title = isWash?'Washrooms':'Parking';
+    const sub = isWash?'Add private/public counts if you know them':'Add private/public counts if you know them';
+    return (
+      <div style={s('background:var(--canvas-100);border:1px solid var(--border);border-radius:12px;padding:14px 16px;')}>
+        <div style={s('display:flex;align-items:center;justify-content:space-between;')}>
+          <div><span style={s('font-size:14px;font-weight:600;color:var(--text-strong);')}>{title}</span><div style={s('font-size:12px;color:var(--text-muted);margin-top:2px;')}>{sub}</div></div>
+          {this.tgl(tog)}
+        </div>
+        {on && (
+          <div style={s('margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:18px;')}>
+            {this.countBlock(isWash?'washPrivate':'parkPrivate','Private')}
+            {this.countBlock(isWash?'washPublic':'parkPublic','Public / shared')}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /* ---------------- edit: form column ---------------- */
+  formCol(R){ return (
+    <div style={s('display:flex;flex-direction:column;gap:18px;')}>
+
+      {/* 1. Type & purpose */}
+      <div style={s(CARD)}>
+        {this.secHead('1','What are you listing?')}
+        <span style={s(FLDt)}>Commercial type</span>
+        <div style={s('display:grid;grid-template-columns:repeat(5,1fr);gap:10px;')}>
+          {TYPES.map(t=>(
+            <button key={t.key} type="button" onClick={R.ts[t.key].onClick} style={s(R.ts[t.key].style)}><Ico inner={t.icon} size={23} sw={1.8}/>{t.label}</button>
+          ))}
+        </div>
+        <div style={s('margin-top:12px;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-muted);background:var(--canvas-200);border-radius:8px;padding:9px 12px;')}><Ico inner={I.info} stroke="var(--grey-500)" size={15}/>Residential &amp; agricultural listings use a separate flow. You'll only see fields relevant to commercial.</div>
+        <div style={s('height:1px;background:var(--border);margin:20px 0;')}></div>
+        <span style={s(FLDt)}>Listing purpose</span>
+        <div style={s('display:inline-flex;gap:4px;background:var(--stone-300);padding:4px;border-radius:10px;width:360px;max-width:100%;')}>
+          <button type="button" onClick={R.ps.sale.onClick} style={s(R.ps.sale.style)}>For sale</button>
+          <button type="button" onClick={R.ps.rent.onClick} style={s(R.ps.rent.style)}>For rent</button>
+          <button type="button" onClick={R.ps.lease.onClick} style={s(R.ps.lease.style)}>For lease</button>
+        </div>
+      </div>
+
+      {/* 2. Location & title */}
+      <div style={s(CARD)}>
+        {this.secHead('2','Where is it?')}
+        <div style={s('display:flex;flex-direction:column;gap:16px;')}>
+
+          {/* address search */}
+          <div>
+            <span style={s(FLD)}>Find the property location</span>
+            <div className="cl-loc-search" style={s('display:flex;gap:10px;')}>
+              <div style={s('flex:1;min-width:0;position:relative;')}>
+                <span style={s('position:absolute;left:13px;top:50%;transform:translateY(-50%);display:flex;color:var(--grey-400);pointer-events:none;')}><Ico inner={I.search} size={17}/></span>
+                <input type="text" placeholder="Search address, road, landmark, project or PIN code" value={R.locQueryVal} onChange={R.onLocQuery} onKeyDown={R.onLocKey} style={s('width:100%;height:46px;padding:0 14px 0 40px;background:var(--input-bg);border:1px solid var(--border-strong);border-radius:8px;font-family:var(--font-sans);font-size:14px;color:var(--text-strong);')} />
+              </div>
+              <button type="button" onClick={R.findLocation} disabled={R.findDisabled} style={s(R.findBtnStyle)}>Find location</button>
+            </div>
+            <span style={s(HINT)}>Enter enough to place the map near the property — a locality, road, landmark, complex or PIN code. You'll set the exact pin next.</span>
+
+            {R.showGeoLink && (
+              <button type="button" onClick={R.useBrowserLoc} style={s('margin-top:12px;display:inline-flex;align-items:center;gap:9px;background:transparent;border:none;cursor:pointer;padding:0;')}>
+                <span style={s('width:28px;height:28px;border-radius:8px;background:var(--navy-100);display:flex;align-items:center;justify-content:center;flex:none;')}><Ico inner={I.navigation} size={14} stroke="var(--navy-800)"/></span>
+                <span style={s('text-align:left;line-height:1.3;')}><span style={s('display:block;font-size:13px;font-weight:600;color:var(--navy-800);')}>Use my current location</span><span style={s('display:block;font-size:11.5px;color:var(--text-muted);font-weight:500;')}>At the property? Start the pin nearby.</span></span>
+              </button>
+            )}
+          </div>
+
+          {R.geoPrompt && (
+            <div style={s('border:1px solid var(--border-strong);background:var(--navy-100);border-radius:12px;padding:16px 18px;display:flex;gap:14px;align-items:flex-start;')}>
+              <span style={s('width:34px;height:34px;border-radius:9px;background:var(--paper);display:flex;align-items:center;justify-content:center;flex:none;')}><Ico inner={I.navigation} size={17} stroke="var(--navy-800)"/></span>
+              <div style={s('flex:1;min-width:0;')}>
+                <div style={s('font-size:13.5px;font-weight:700;color:var(--text-strong);margin-bottom:3px;')}>Use your current location?</div>
+                <p style={s('margin:0 0 12px;font-size:12.5px;color:var(--text-body);line-height:1.5;')}>ReTrends will ask your browser for permission. We use it only to centre the map near you — you'll still set the exact pin. Optional.</p>
+                <div style={s('display:flex;gap:10px;')}>
+                  <Button variant="primary" size="sm" onClick={R.allowGeo}>Allow location</Button>
+                  <Button variant="ghost" size="sm" onClick={R.denyGeo}>Not now</Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {R.locSearching && (
+            <div style={s('border:1px solid var(--border);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:12px;background:var(--canvas-100);')}>
+              <span style={s('width:20px;height:20px;border:2.5px solid var(--navy-100);border-top-color:var(--navy-800);border-radius:50%;animation:spin .7s linear infinite;flex:none;')}></span>
+              <span style={s('font-size:13px;color:var(--text-muted);')}>{R.locSearchingLabel}</span>
+            </div>
+          )}
+
+          {R.locResultsShown && (
+            <div style={s('border:1px solid var(--border-strong);border-radius:12px;overflow:hidden;')}>
+              <div style={s('padding:10px 16px;background:var(--canvas-100);border-bottom:1px solid var(--border);font-size:12px;font-weight:600;color:var(--text-muted);')}>Select the closest match</div>
+              {R.locResultCards.map(r=>(
+                <button key={r.key} type="button" onClick={r.onSelect} style={s('width:100%;text-align:left;display:flex;align-items:center;gap:12px;padding:13px 16px;background:var(--paper);border:none;border-top:1px solid var(--border);cursor:pointer;')}>
+                  <span style={s('width:30px;height:30px;border-radius:8px;background:var(--navy-100);display:flex;align-items:center;justify-content:center;flex:none;')}><Ico inner={I.pin} size={16} stroke="var(--navy-700)"/></span>
+                  <span style={s('flex:1;min-width:0;')}><span style={s('display:block;font-size:14px;font-weight:600;color:var(--text-strong);')}>{r.title}</span><span style={s('display:block;font-size:12px;color:var(--text-muted);')}>{r.sub}</span></span>
+                  <span style={s('flex:none;font-size:12px;font-weight:700;color:var(--navy-800);')}>Use</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {R.locNotFound && (
+            <div style={s('border:1px solid var(--border-strong);background:var(--ochre-50);border-radius:12px;padding:14px 16px;display:flex;gap:11px;align-items:flex-start;')}>
+              <Ico inner={I.alert} stroke="var(--ochre-600)" size={17} style={{marginTop:'1px',flex:'none'}}/>
+              <div><div style={s('font-size:13px;font-weight:700;color:var(--ochre-600);margin-bottom:2px;')}>We couldn't find that location</div><p style={s('margin:0;font-size:12.5px;color:var(--text-body);line-height:1.5;')}>Try adding a landmark, road name or PIN code — or use your current location.</p></div>
+            </div>
+          )}
+
+          {R.locResolvedState && (
+            <div style={s('border:1px solid var(--border);background:var(--trust-verified-bg);border-radius:12px;padding:15px 18px;')}>
+              <div style={s('display:flex;align-items:flex-start;gap:12px;')}>
+                <span style={s('width:30px;height:30px;border-radius:50%;background:var(--evergreen-600);display:flex;align-items:center;justify-content:center;flex:none;')}><Ico inner={I.check} stroke="#fff" sw={2.6} size={16}/></span>
+                <div style={s('flex:1;min-width:0;')}>
+                  <div style={s('font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--trust-verified-fg);text-transform:uppercase;margin-bottom:3px;')}>{R.resSourceBrowser?'Using your current location':'Location found'}</div>
+                  <div style={s('font-size:15px;font-weight:700;color:var(--text-strong);')}>{R.resLine}</div>
+                  <div style={s('margin-top:10px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;')}>
+                    <button type="button" onClick={R.changeLocation} style={s('font-size:12.5px;font-weight:600;color:var(--navy-800);background:transparent;border:none;cursor:pointer;padding:0;')}>Change</button>
+                    <span style={s('font-size:11.5px;color:var(--text-muted);display:inline-flex;align-items:center;gap:5px;')}><Ico inner={I.shield} size={13} stroke="var(--grey-500)"/>Buyers see only {R.resPublic}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div style={s('height:1px;background:var(--border);')}></div>
+
+          <Input label="Building / complex name (optional)" placeholder="e.g. Prestige Tech Park, Phoenix Market City" size="lg" value={R.vv.complex} onChange={R.h.complex} />
+          <Input label="Listing title" hint="Tenants and buyers see this first. Lead with size, location and what stands out." placeholder={R.titlePlaceholder} size="lg" value={R.vv.title} onChange={R.h.title} />
+        </div>
+      </div>
+
+      {/* 3. Core facts */}
+      <div style={s(CARD)}>
+        {this.secHead('3', R.coreTitle)}
+        <div style={s(R.areaOptField?'display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;align-items:start;':'margin-bottom:20px;')}>
+          <div>
+            <span style={s(FLD)}>{R.areaLabel}</span>
+            <div style={s('display:flex;gap:10px;')}>
+              <input type="text" inputMode="numeric" placeholder="e.g. 1200" value={R.vv.areaPrimary} onChange={R.h.areaPrimary} style={s('flex:1;'+NUM)} />
+              <div style={s('width:108px;flex:none;')}><Select options={R.areaUnitOpts} value={R.vv.areaUnit} onChange={R.h.areaUnit} /></div>
+            </div>
+            <span style={s(HINT)}>{R.areaHint}</span>
+          </div>
+          {R.areaOptField && (
+            <div><span style={s(FLD)}>{R.areaOptLabel} (optional)</span><input type="text" inputMode="numeric" placeholder="sq.ft" value={R.vv.areaOpt} onChange={R.h.areaOpt} style={s(NUM)} /></div>
+          )}
+        </div>
+
+        {R.isShop && (
+          <div style={s('display:flex;flex-direction:column;gap:20px;')}>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Shop frontage</span><input type="text" inputMode="numeric" placeholder="e.g. 20 ft" value={R.vv.frontage} onChange={R.h.frontage} style={s(NUM)} /></div>
+              <div><span style={s(FLD)}>Total floors (optional)</span><input type="text" inputMode="numeric" placeholder="e.g. 4" value={R.vv.totalfloors} onChange={R.h.totalfloors} style={s(NUM)} /></div>
+            </div>
+            <div><span style={s(FLDt)}>Floor</span><div style={s(CHIPWRAP)}>{this.chipRow(R.floorChoiceChips)}</div></div>
+          </div>
+        )}
+        {R.isOffice && (
+          <div style={s('display:flex;flex-direction:column;gap:20px;')}>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Seats</span><input type="text" inputMode="numeric" placeholder="e.g. 40" value={R.vv.seats} onChange={R.h.seats} style={s(NUM)} /></div>
+              <div><span style={s(FLD)}>Cabins</span><input type="text" inputMode="numeric" placeholder="e.g. 4" value={R.vv.cabins} onChange={R.h.cabins} style={s(NUM)} /></div>
+            </div>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Meeting rooms</span><input type="text" inputMode="numeric" placeholder="e.g. 2" value={R.vv.meeting} onChange={R.h.meeting} style={s(NUM)} /></div>
+              <div><span style={s(FLD)}>Conference rooms</span><input type="text" inputMode="numeric" placeholder="e.g. 1" value={R.vv.conference} onChange={R.h.conference} style={s(NUM)} /></div>
+            </div>
+            <div><span style={s(FLD)}>Furnishing</span><div style={s(SEGWRAP+'width:100%;flex-wrap:wrap;')}>{this.chipRow(R.furnishingSeg)}</div></div>
+          </div>
+        )}
+        {R.isBuilding && (
+          <div style={s('display:flex;flex-direction:column;gap:20px;')}>
+            <div>
+              <span style={s(FLDt)}>Available floors</span>
+              <div style={s(CHIPWRAP)}>{this.chipRow(R.floorModeChips)}</div>
+              {R.floorModeCustom && <input type="text" placeholder="e.g. GF + 3 upper floors, 1st–3rd let out" value={R.vv.floorCustom} onChange={R.h.floorCustom} style={s('margin-top:10px;'+TXT)} />}
+            </div>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Total floors (optional)</span><input type="text" inputMode="numeric" placeholder="e.g. 5" value={R.vv.totalfloors} onChange={R.h.totalfloors} style={s(NUM)} /></div>
+              <div><span style={s(FLD)}>Current occupancy</span><div style={s(SEGWRAP+'width:100%;')}>{this.chipRow(R.occupancySeg)}</div></div>
+            </div>
+          </div>
+        )}
+        {R.isWarehouse && (
+          <div style={s('display:flex;flex-direction:column;gap:20px;')}>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Clear height</span><input type="text" inputMode="numeric" placeholder="e.g. 30 ft" value={R.vv.clearHeight} onChange={R.h.clearHeight} style={s(NUM)} /></div>
+              <div><span style={s(FLD)}>Loading bays</span><input type="text" inputMode="numeric" placeholder="e.g. 6" value={R.vv.loadingBays} onChange={R.h.loadingBays} style={s(NUM)} /></div>
+            </div>
+            <div style={s(TOGROW)}><span style={s(TOGLBL)}>Truck / container access</span>{this.tgl(R.tg.truckAccess)}</div>
+          </div>
+        )}
+        {R.isLand && (
+          <div style={s('display:flex;flex-direction:column;gap:20px;')}>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Road width</span><input type="text" inputMode="numeric" placeholder="e.g. 60 ft" value={R.vv.roadwidth} onChange={R.h.roadwidth} style={s(NUM)} /></div>
+              <div><span style={s(FLD)}>Road frontage</span><input type="text" inputMode="numeric" placeholder="e.g. 40 ft" value={R.vv.roadfrontage} onChange={R.h.roadfrontage} style={s(NUM)} /></div>
+            </div>
+            <div style={s('width:50%;padding-right:8px;')}><span style={s(FLD)}>Facing</span><Select options={R.facingOpts} value={R.vv.facing} onChange={R.h.facing} /></div>
+          </div>
+        )}
+      </div>
+
+      {/* 4. Business suitability */}
+      <div style={s(CARD)}>
+        {this.secHead('4','Business suitability', 'Pick everything this space works for. Brokers can choose more than one.')}
+        <div style={s(CHIPWRAP)}>{this.chipRow(R.suitChips)}</div>
+        <p style={s('margin:14px 0 0;font-size:12px;color:var(--text-muted);line-height:1.5;')}>No perfect taxonomy needed — pick what fits and use <strong style={s('color:var(--text-body);')}>Other</strong> for anything else.</p>
+      </div>
+
+      {/* 5. Building / access / ownership */}
+      <div style={s(CARD)}>
+        {this.secHead('5', R.buildingTitle, R.buildingSub)}
+
+        {R.isShop && (
+          <div style={s('display:flex;flex-direction:column;gap:20px;')}>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Road frontage (optional)</span><input type="text" inputMode="numeric" placeholder="e.g. 24 ft" value={R.vv.roadfrontage} onChange={R.h.roadfrontage} style={s(NUM)} /></div>
+              <div><span style={s(FLD)}>Road width (optional)</span><input type="text" inputMode="numeric" placeholder="e.g. 40 ft" value={R.vv.roadwidth} onChange={R.h.roadwidth} style={s(NUM)} /></div>
+            </div>
+            <div><span style={s(FLDt)}>Visibility &amp; access</span>
+              <div style={s('display:grid;grid-template-columns:1fr 1fr;gap:10px;')}>
+                {this.togRow('mainroad','Main-road facing')}{this.togRow('corner','Corner unit')}{this.togRow('signage','Signage visibility')}{this.togRow('lift','Lift')}
+              </div>
+            </div>
+            <div style={s('width:60%;')}><span style={s(FLD)}>Location hub (optional)</span><Select options={R.hubOpts} value={this.state.v.hub??''} onChange={e=>this.set('hub',e.target.value)} /></div>
+            {this.washParkBlock(R,'wash')}{this.washParkBlock(R,'park')}
+          </div>
+        )}
+        {R.isOffice && (
+          <div style={s('display:flex;flex-direction:column;gap:20px;')}>
+            <div style={s('display:grid;grid-template-columns:1fr 1fr;gap:18px;')}>
+              <div><span style={s(FLDt)}>Floor</span><div style={s(CHIPWRAP)}>{this.chipRow(R.floorChoiceChips)}</div></div>
+              <div><span style={s(FLD)}>Total floors / staircases</span><div style={s('display:flex;gap:10px;')}><input type="text" inputMode="numeric" placeholder="Floors" value={R.vv.totalfloors} onChange={R.h.totalfloors} style={s(NUM)} /><input type="text" inputMode="numeric" placeholder="Stairs" value={R.vv.staircases} onChange={R.h.staircases} style={s(NUM)} /></div></div>
+            </div>
+            <div><span style={s(FLDt)}>Facilities</span>
+              <div style={s('display:grid;grid-template-columns:1fr 1fr;gap:10px;')}>
+                {this.togRow('lift','Lift')}{this.togRow('reception','Reception area')}{this.togRow('pantry','Pantry')}{this.togRow('ac','Central air conditioning')}{this.togRow('internet','Internet connectivity')}{this.togRow('power','Power backup')}
+              </div>
+            </div>
+            <div style={s('width:60%;')}><span style={s(FLD)}>Location hub (optional)</span><Select options={R.hubOpts} value={this.state.v.hub??''} onChange={e=>this.set('hub',e.target.value)} /></div>
+            {this.washParkBlock(R,'wash')}{this.washParkBlock(R,'park')}
+          </div>
+        )}
+        {R.isBuilding && (
+          <div style={s('display:flex;flex-direction:column;gap:20px;')}>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Road width</span><input type="text" inputMode="numeric" placeholder="e.g. 40 ft" value={R.vv.roadwidth} onChange={R.h.roadwidth} style={s(NUM)} /></div>
+              <div><span style={s(FLD)}>Road frontage</span><input type="text" inputMode="numeric" placeholder="e.g. 60 ft" value={R.vv.roadfrontage} onChange={R.h.roadfrontage} style={s(NUM)} /></div>
+            </div>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Power load (optional)</span><input type="text" placeholder="e.g. 75 kVA" value={R.vv.powerLoad} onChange={R.h.powerLoad} style={s(TXT)} /></div>
+              <div style={s('display:flex;align-items:flex-end;gap:10px;')}><div style={s(TOGROW+'flex:1;')}><span style={s(TOGLBL)}>Lift</span>{this.tgl(R.tg.lift)}</div><div style={s(TOGROW+'flex:1;')}><span style={s(TOGLBL)}>Power backup</span>{this.tgl(R.tg.power)}</div></div>
+            </div>
+            {this.washParkBlock(R,'wash')}{this.washParkBlock(R,'park')}
+            <div>
+              <span style={s('display:block;font-size:13px;font-weight:600;color:var(--text-strong);margin-bottom:6px;')}>Fire safety / approvals (optional)</span>
+              <span style={s('display:block;font-size:12px;color:var(--text-muted);margin-bottom:10px;')}>Broker-entered. Shown exactly as written — ReTrends does not verify approvals.</span>
+              <input type="text" placeholder="e.g. OC received, fire NOC available" value={R.vv.approving} onChange={R.h.approving} style={s(TXT)} />
+            </div>
+          </div>
+        )}
+        {R.isWarehouse && (
+          <div style={s('display:flex;flex-direction:column;gap:20px;')}>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Road width</span><input type="text" inputMode="numeric" placeholder="e.g. 40 ft" value={R.vv.roadwidth} onChange={R.h.roadwidth} style={s(NUM)} /></div>
+              <div><span style={s(FLD)}>Power load</span><input type="text" placeholder="e.g. 100 kVA" value={R.vv.powerLoad} onChange={R.h.powerLoad} style={s(TXT)} /></div>
+            </div>
+            <div><span style={s(FLDt)}>On site</span>
+              <div style={s('display:grid;grid-template-columns:1fr 1fr;gap:10px;')}>
+                {this.togRow('officeRoom','Office room')}{this.togRow('power','Power backup')}{this.togRow('cctv','CCTV surveillance')}{this.togRow('security','Security personnel')}
+              </div>
+            </div>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Toilets</span><input type="text" inputMode="numeric" placeholder="e.g. 2" value={R.vv.toilets} onChange={R.h.toilets} style={s(NUM)} /></div>
+              <div><span style={s(FLD)}>Flooring type (optional)</span><Select options={R.flooringOpts} value={R.vv.flooring} onChange={R.h.flooring} /></div>
+            </div>
+          </div>
+        )}
+        {R.isLand && (
+          <div style={s('display:flex;flex-direction:column;gap:18px;')}>
+            <p style={s('margin:0;font-size:13px;color:var(--text-muted);line-height:1.5;background:var(--canvas-200);border-radius:8px;padding:11px 14px;')}>Add what you know — everything here shows exactly as entered and is <strong style={s('color:var(--text-body);')}>not verified</strong> by ReTrends. No residential fields (BHK, furnishing) appear for plots.</p>
+            <div style={s('display:grid;grid-template-columns:1fr 1fr;gap:10px;')}>{this.togRow('corner','Corner plot')}{this.togRow('boundary','Boundary wall')}</div>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Zoning / permitted commercial use</span><input type="text" placeholder="e.g. Commercial (C-2)" value={R.vv.zoning} onChange={R.h.zoning} style={s(TXT)} /></div>
+              <div><span style={s(FLD)}>Ownership type</span><Select options={R.ownershipOpts} value={R.vv.ownership} onChange={R.h.ownership} /></div>
+            </div>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Approving authority (optional)</span><input type="text" placeholder="e.g. BDA / BMRDA / DTCP" value={R.vv.approving} onChange={R.h.approving} style={s(TXT)} /></div>
+              <div><span style={s(FLD)}>Site / survey / authority ref (optional)</span><input type="text" placeholder="Reference number" value={R.vv.siteRef} onChange={R.h.siteRef} style={s(MONO)} /></div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 6. Utilities & amenities (optional, collapsed) */}
+      {R.hasUtilities && (
+      <div style={s('background:var(--paper);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-sm);overflow:hidden;')}>
+        <button type="button" onClick={R.onMore} style={s('width:100%;display:flex;align-items:center;justify-content:space-between;padding:20px 26px;background:transparent;border:none;cursor:pointer;text-align:left;')}>
+          <div style={s('display:flex;align-items:center;gap:12px;')}>
+            <div style={s('width:28px;height:28px;border-radius:50%;background:var(--navy-100);color:var(--navy-800);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;font-family:var(--font-mono);flex:none;')}>6</div>
+            <div>
+              <h2 style={s('font-size:17px;font-weight:700;color:var(--text-strong);margin:0;')}>Utilities &amp; amenities</h2>
+              <p style={s('margin:3px 0 0;font-size:12.5px;color:var(--text-muted);')}>All optional. Tick what the building actually offers — skip the rest.</p>
+            </div>
+          </div>
+          <span style={s('color:var(--text-muted);transition:transform .2s;transform:'+R.chevronRotate+';display:flex;')}><Ico inner={I.chevDown} size={20}/></span>
+        </button>
+        {R.moreOpen && (
+          <div style={s('padding:4px 26px 26px;')}>
+            <div style={s('height:1px;background:var(--border);margin-bottom:22px;')}></div>
+            <span style={s(FLDt)}>Facilities &amp; amenities</span>
+            <div style={s('display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:22px;')}>
+              {R.utilToggles.map(t=>(<div key={t.key} style={s(TOGROW)}><span style={s(TOGLBL)}>{t.label}</span>{this.tgl(t)}</div>))}
+            </div>
+            <div style={s('display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:end;')}>
+              <div><span style={s(FLD)}>Power load (optional)</span><input type="text" placeholder="e.g. 50 kVA sanctioned" value={R.vv.powerLoad} onChange={R.h.powerLoad} style={s(TXT)} /></div>
+              <div style={s(TOGROW)}><span style={s(TOGLBL)}>DG / UPS charges included</span>{this.tgl(R.tg.dgCharges)}</div>
+            </div>
+          </div>
+        )}
+      </div>
+      )}
+
+      {/* 7. Terms */}
+      <div style={s(CARD)}>
+        {this.secHead('7', R.termsTitle)}
+        {R.isRL && (
+          <div style={s('display:flex;flex-direction:column;gap:20px;')}>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>{R.priceLabel}</span><input type="text" inputMode="numeric" placeholder={R.pricePlaceholder} value={R.vv[this.priceKey()]} onChange={R.h[this.priceKey()]} style={s(BIG)} /></div>
+              <div><span style={s(FLD)}>Security deposit (₹)</span><input type="text" inputMode="numeric" placeholder="e.g. 500000" value={R.vv.deposit} onChange={R.h.deposit} style={s(BIG)} /></div>
+            </div>
+            <div style={s('display:flex;align-items:center;justify-content:space-between;margin-top:-6px;')}>
+              <span style={s('font-size:13px;color:var(--copper-600);font-weight:600;font-family:var(--font-mono);')}>{R.priceEcho}</span>
+              <label style={s('display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text-body);cursor:pointer;')}>{this.tgl(R.tg.negotiableRent)}Negotiable</label>
+            </div>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Lease tenure</span><input type="text" placeholder="e.g. 9 years (3+3+3)" value={R.vv.leaseTenure} onChange={R.h.leaseTenure} style={s(TXT)} /></div>
+              <div><span style={s(FLD)}>Lock-in period</span><input type="text" placeholder="e.g. 36 months" value={R.vv.lockin} onChange={R.h.lockin} style={s(TXT)} /></div>
+            </div>
+            <div>
+              <span style={s(FLD)}>Maintenance</span>
+              <div style={s(SEGWRAP+'width:260px;')}>{this.chipRow(R.maintSeg)}</div>
+            </div>
+            <div>
+              <span style={s(FLDt)}>Available from</span>
+              <div style={s(CHIPWRAP)}>{this.chipRow(R.availOpts)}</div>
+            </div>
+            <div style={s(ROW2)}>
+              <div><span style={s(FLD)}>Notice period (optional)</span><input type="text" placeholder="e.g. 3 months" value={R.vv.notice} onChange={R.h.notice} style={s(TXT)} /></div>
+              <div><span style={s(FLD)}>Fit-out / rent-free period (optional)</span><input type="text" placeholder="e.g. 45 days fit-out" value={R.vv.fitout} onChange={R.h.fitout} style={s(TXT)} /></div>
+            </div>
+          </div>
+        )}
+        {R.isSale && (
+          <div style={s('display:flex;flex-direction:column;gap:20px;')}>
+            <div>
+              <span style={s(FLD)}>Total price (₹)</span>
+              <input type="text" inputMode="numeric" placeholder="e.g. 21500000" value={R.vv.price} onChange={R.h.price} style={s(BIG)} />
+              <div style={s('display:flex;align-items:center;justify-content:space-between;margin-top:8px;')}>
+                <span style={s('font-size:13px;color:var(--copper-600);font-weight:600;font-family:var(--font-mono);')}>{R.priceEcho}</span>
+                <label style={s('display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text-body);cursor:pointer;')}>{this.tgl(R.tg.negotiable)}Price negotiable</label>
+              </div>
+            </div>
+            <div style={s('display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:end;')}>
+              <div><span style={s(FLD)}>Ownership type</span><Select options={R.ownershipOpts} value={R.vv.ownership} onChange={R.h.ownership} /></div>
+              {!R.isBuilding && <div><span style={s(FLD)}>Current occupancy</span><div style={s(SEGWRAP+'width:100%;')}>{this.chipRow(R.occupancySeg)}</div></div>}
+              {R.isBuilding && <div style={s(TOGROW)}><span style={s(TOGLBL)}>Tax &amp; govt charges included</span>{this.tgl(R.tg.taxInc)}</div>}
+            </div>
+
+            <div style={s('border:1px solid var(--border);border-radius:12px;padding:16px 18px;background:var(--canvas-100);')}>
+              <div style={s('display:flex;align-items:center;gap:8px;margin-bottom:4px;')}><Ico inner={I.trending} size={15} stroke="var(--navy-700)"/><span style={s('font-size:13px;font-weight:700;color:var(--text-strong);')}>Investment details (optional)</span></div>
+              <p style={s('margin:0 0 14px;font-size:12px;color:var(--text-muted);line-height:1.5;')}>If the property is already leased, add the current rent. We derive an indicative gross yield — shown clearly as derived, never a guaranteed return.</p>
+              <div style={s(ROW2)}>
+                <div><span style={s(FLD)}>Current rent / month (optional)</span><input type="text" inputMode="numeric" placeholder="e.g. 120000" value={R.vv.currentRent} onChange={R.h.currentRent} style={s(NUM)} /></div>
+                <div><span style={s(FLD)}>Lease duration (optional)</span><input type="text" placeholder="e.g. 2 years remaining" value={R.vv.leaseDuration} onChange={R.h.leaseDuration} style={s(TXT)} /></div>
+              </div>
+              {R.hasGrossYield && (
+                <div style={s('margin-top:14px;display:flex;align-items:center;gap:10px;background:var(--paper);border:1px solid var(--border);border-radius:9px;padding:11px 14px;')}>
+                  <span style={s('font-size:12px;color:var(--text-muted);')}>Gross yield <span style={s("font-size:10px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ochre-600);background:var(--ochre-50);padding:1px 6px;border-radius:4px;margin-left:4px;")}>Derived</span></span>
+                  <span style={s('flex:1;height:1px;background:var(--border);')}></span>
+                  <span style={s('font-family:var(--font-mono);font-size:16px;font-weight:600;color:var(--text-strong);')}>{R.grossYieldStr}</span>
+                </div>
+              )}
+              {!R.isBuilding && <label style={s('display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text-body);cursor:pointer;margin-top:14px;')}>{this.tgl(R.tg.taxInc)}Tax &amp; govt charges included</label>}
+            </div>
+
+            {!R.isLand && (
+              <div>
+                <span style={s(FLD)}>Approving authority / document references (optional)</span>
+                <input type="text" placeholder="As registered — e.g. OC, RERA / khata reference" value={R.vv.docref} onChange={R.h.docref} style={s(TXT)} />
+                <span style={s(HINT)}>Shown exactly as you enter it. ReTrends does not verify ownership, approvals or documents.</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 8. Photos, video & location */}
+      <div style={s(CARD)}>
+        {this.secHead('8','Photos, video & location')}
+        <div style={s('display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;')}>
+          <span style={s('font-size:13px;font-weight:600;color:var(--text-strong);')}>Photos <span style={s('color:var(--text-muted);font-weight:500;')}>· {R.photoCountLabel}</span></span>
+          {R.hasPhotos && <span style={s('font-size:12px;color:var(--text-muted);')}>“Set cover” chooses the first photo buyers see</span>}
+        </div>
+        <div className="cl-photo-grid" style={s('display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:8px;')}>
+          {R.photoTiles.map(t => t.filled ? (
+            <div key={t.key} style={s(t.fillStyle)}>
+              <button type="button" onClick={t.onRemove} style={s(t.removeStyle)}>×</button>
+              {t.isCover && <span style={s(t.coverBadgeStyle)}>Cover</span>}
+              {t.notCover && <button type="button" onClick={t.onSelect} style={s(t.setCoverStyle)}>Set cover</button>}
+            </div>
+          ) : (
+            <button key={t.key} type="button" onClick={t.onAdd} style={s(t.emptyStyle)}>+</button>
+          ))}
+        </div>
+        <span style={s('display:block;font-size:12px;color:var(--text-muted);')}>Add clear photos — frontage, interiors, and access matter most for commercial.</span>
+
+        <div style={s('height:1px;background:var(--border);margin:22px 0;')}></div>
+
+        <span style={s(FLD)}>Video link (optional)</span>
+        <input type="url" placeholder="Paste a YouTube or Instagram walkthrough link" value={R.vv.videoUrl} onChange={R.h.videoUrl} style={s(TXT)} />
+        <span style={s(HINT)}>Optional: a walkthrough helps tenants assess the space remotely.</span>
+        {R.hasVideo && (
+          <div style={s('margin-top:10px;display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--trust-verified-fg);background:var(--trust-verified-bg);padding:5px 11px;border-radius:8px;')}><Ico inner={I.play} fill="currentColor" stroke="none" size={13}/>Video added · {R.videoHost}</div>
+        )}
+
+        <div style={s('height:1px;background:var(--border);margin:22px 0;')}></div>
+
+        <span style={s(FLDt)}>Map pin</span>
+
+        {R.pinDisabled && (
+          <div style={s('border:1.5px dashed var(--border-strong);border-radius:12px;padding:22px 20px;text-align:center;background:var(--canvas-100);')}>
+            <span style={s('width:34px;height:34px;border-radius:9px;background:var(--paper);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 10px;')}><Ico inner={I.pin} size={17} stroke="var(--grey-400)"/></span>
+            <p style={s('margin:0;font-size:13px;color:var(--text-muted);line-height:1.5;max-width:320px;margin-left:auto;margin-right:auto;')}>Add or confirm the address above to enable map pinning.</p>
+          </div>
+        )}
+
+        {R.pinEnabled && (
+          <div style={s('position:relative;height:184px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background-color:#E8EBE6;background-image:linear-gradient(rgba(27,42,69,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(27,42,69,0.06) 1px,transparent 1px);background-size:26px 26px;')}>
+            <div style={s('position:absolute;top:40%;left:0;right:0;height:14px;background:rgba(255,255,255,0.6);transform:rotate(-4deg);')}></div>
+            <div style={s('position:absolute;top:0;bottom:0;left:58%;width:11px;background:rgba(255,255,255,0.6);transform:rotate(3deg);')}></div>
+            <div style={s('position:absolute;top:50%;left:50%;transform:translate(-50%,-100%);opacity:0.4;')}><Ico inner={I.pin} stroke="var(--navy-700)" size={30}/></div>
+            <div style={s('position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:linear-gradient(180deg,rgba(246,245,242,0) 40%,rgba(246,245,242,0.7));')}>
+              <span style={s('font-size:12px;font-weight:600;color:var(--navy-800);background:rgba(255,255,255,0.92);padding:5px 12px;border-radius:8px;box-shadow:var(--shadow-xs);')}>Map centred near {R.resPublic}</span>
+              <button type="button" onClick={R.openPicker} style={s('display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 18px;border-radius:8px;border:none;background:var(--navy-800);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:var(--shadow-sm);')}><Ico inner={I.pin} size={15}/>Pin location on map</button>
+            </div>
+          </div>
+        )}
+
+        {R.pinConfirmed && (
+          <div>
+            <div style={s('position:relative;height:170px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background-color:#E8EBE6;background-image:linear-gradient(rgba(27,42,69,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(27,42,69,0.06) 1px,transparent 1px);background-size:26px 26px;')}>
+              <div style={s('position:absolute;top:40%;left:0;right:0;height:14px;background:rgba(255,255,255,0.6);transform:rotate(-4deg);')}></div>
+              <div style={s('position:absolute;top:0;bottom:0;left:58%;width:11px;background:rgba(255,255,255,0.6);transform:rotate(3deg);')}></div>
+              <div style={s('position:absolute;left:'+R.pinPos.x+'%;top:'+R.pinPos.y+'%;transform:translate(-50%,-100%);')}><Ico inner={I.pinFill} fill="var(--copper-500)" stroke="#fff" sw={1.5} size={34}/></div>
+            </div>
+            <div style={s('margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--trust-verified-bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;')}>
+              <div style={s('display:flex;align-items:center;gap:10px;min-width:0;')}>
+                <span style={s('width:28px;height:28px;border-radius:50%;background:var(--evergreen-600);display:flex;align-items:center;justify-content:center;flex:none;')}><Ico inner={I.check} stroke="#fff" sw={2.6} size={15}/></span>
+                <div style={s('min-width:0;')}><div style={s('font-size:13px;font-weight:700;color:var(--text-strong);')}>Map pin confirmed</div><div style={s('font-size:12px;color:var(--text-muted);')}>Near {R.resPublic}</div></div>
+              </div>
+              <button type="button" onClick={R.adjustPin} style={s('flex:none;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--navy-800);background:var(--paper);border:1px solid var(--border-strong);border-radius:8px;padding:7px 13px;cursor:pointer;')}><Ico inner={I.pin} size={13}/>Adjust pin</button>
+            </div>
+          </div>
+        )}
+
+        {R.pinned && (
+          <div style={s('margin-top:18px;background:var(--canvas-100);border:1px solid var(--border);border-radius:12px;padding:16px 18px;')}>
+            <div style={s('display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;')}>
+              <span style={s('font-size:13px;font-weight:700;color:var(--text-strong);')}>Nearby places</span>
+              <button type="button" onClick={R.movePin} style={s('display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--navy-800);background:var(--paper);border:1px solid var(--border-strong);border-radius:7px;padding:5px 10px;cursor:pointer;')}><Ico inner={I.pin} size={13}/>Move pin</button>
+            </div>
+            <p style={s('margin:0 0 6px;font-size:12px;color:var(--text-muted);line-height:1.5;')}>Derived from the map after location is pinned. Transport, arterial roads and footfall matter most for commercial — hide anything that looks wrong.</p>
+            <div>
+              {R.nearbyRows.map(n=>(
+                <div key={n.key} style={s(n.rowStyle)}>
+                  <span style={s('width:28px;height:28px;border-radius:8px;background:var(--navy-100);color:var(--navy-700);display:flex;align-items:center;justify-content:center;flex:none;')}><Ico inner={I.pin} size={15}/></span>
+                  <div style={s('flex:1;min-width:0;')}>
+                    <div style={s('display:flex;align-items:center;gap:7px;')}><span style={s(n.nameStyle)}>{n.name}</span>{n.manual && <span style={s('font-size:9.5px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;color:var(--ochre-600);background:var(--ochre-50);padding:1px 6px;border-radius:4px;')}>Added by broker</span>}</div>
+                    <div style={s('font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-top:1px;')}>{n.meta}</div>
+                  </div>
+                  <button type="button" onClick={n.onToggle} style={s('font-size:12px;font-weight:600;color:var(--text-muted);background:transparent;border:none;cursor:pointer;flex:none;')}>{n.toggleLabel}</button>
+                </div>
+              ))}
+            </div>
+            <div style={s('border-top:1px solid var(--border);margin-top:6px;padding-top:14px;')}>
+              <span style={s('display:block;font-size:12px;font-weight:600;color:var(--text-strong);margin-bottom:9px;')}>Add a local landmark (optional)</span>
+              <div style={s('display:flex;gap:8px;flex-wrap:wrap;align-items:center;')}>
+                <input type="text" placeholder="Place name" value={R.poiVals.name} onChange={R.hPoi.name} style={s('flex:2;min-width:140px;height:38px;padding:0 12px;background:var(--paper);border:1px solid var(--border-strong);border-radius:8px;font-family:var(--font-sans);font-size:13px;color:var(--text-strong);')} />
+                <div style={s('flex:1.4;min-width:130px;')}><Select options={R.poiCatOpts} value={R.poiVals.cat} onChange={R.hPoi.cat} /></div>
+                <input type="text" placeholder="Distance / note" value={R.poiVals.note} onChange={R.hPoi.note} style={s('flex:1;min-width:110px;height:38px;padding:0 12px;background:var(--paper);border:1px solid var(--border-strong);border-radius:8px;font-family:var(--font-sans);font-size:13px;color:var(--text-strong);')} />
+                <Button variant="outline" size="sm" onClick={R.addPoi}>Add place</Button>
+              </div>
+              <span style={s('display:block;font-size:11.5px;color:var(--text-muted);margin-top:9px;')}>Manually added places are shown as added by broker, not platform-verified.</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 9. Description + AI */}
+      <div style={s(CARD)}>
+        {this.secHead('9','Description')}
+        {R.aiIdle && (
+          <div style={s('border:1.5px dashed var(--border-strong);border-radius:12px;padding:26px 24px;text-align:center;background:var(--canvas-100);')}>
+            <div style={s('width:38px;height:38px;border-radius:10px;background:var(--accent-tint);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;')}><Ico inner={I.sparkle} stroke="var(--copper-500)" size={20}/></div>
+            <p style={s('margin:0 0 16px;font-size:14px;color:var(--text-body);line-height:1.55;max-width:400px;margin-left:auto;margin-right:auto;')}>Draft a commercial description from the facts you've already entered. Every word stays editable — nothing is invented, and no approvals, footfall or returns are ever claimed.</p>
+            <div style={s('display:flex;gap:10px;justify-content:center;')}>
+              <Button variant="accent" onClick={R.doGenerate}>Generate description</Button>
+              <Button variant="ghost" onClick={R.editManual}>Write it myself</Button>
+            </div>
+          </div>
+        )}
+        {R.aiGenerating && (
+          <div style={s('border:1.5px dashed var(--border-strong);border-radius:12px;padding:38px 24px;text-align:center;background:var(--canvas-100);display:flex;flex-direction:column;align-items:center;gap:14px;')}>
+            <span style={s('width:26px;height:26px;border:3px solid var(--navy-100);border-top-color:var(--navy-800);border-radius:50%;animation:spin .7s linear infinite;display:block;')}></span>
+            <span style={s('font-size:14px;color:var(--text-muted);')}>Writing from your details…</span>
+          </div>
+        )}
+        {R.aiReady && (
+          <div>
+            <textarea value={R.desc} onChange={R.onDesc} placeholder="Write a short, factual description…" style={s('width:100%;min-height:148px;padding:14px 16px;background:var(--input-bg);border:1px solid var(--border-strong);border-radius:10px;font-size:14.5px;line-height:1.6;color:var(--text-strong);resize:vertical;')}></textarea>
+            <div style={s('display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px;')}>
+              <Button variant="outline" size="sm" onClick={R.doRegen}>Regenerate</Button>
+              <Button variant="outline" size="sm" onClick={R.doShorter}>Make shorter</Button>
+              <Button variant="outline" size="sm" onClick={R.doFactual}>More factual</Button>
+              <Button variant="outline" size="sm" onClick={R.doBusiness}>More business-like</Button>
+              <span style={s('flex:1;')}></span>
+              <Button variant="primary" size="sm" onClick={R.useDesc}>{R.useDescLabel}</Button>
+            </div>
+            <p style={s('margin:12px 0 0;font-size:12px;color:var(--text-muted);line-height:1.5;display:flex;align-items:flex-start;gap:6px;')}><Ico inner={I.check} stroke="var(--evergreen-600)" sw={2.2} size={14} style={{marginTop:'1px'}}/>Generated only from details you entered. ReTrends never invents facts, approvals, footfall or guaranteed returns.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  ); }
+
+  /* ---------------- edit: preview rail ---------------- */
+  editRail(R){ return (
+    <div style={s('position:sticky;top:88px;display:flex;flex-direction:column;gap:16px;')}>
+      <div>
+        <div style={s('font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);font-weight:700;margin-bottom:10px;')}>Buyer / tenant preview</div>
+        <div style={s('background:var(--paper);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-md);')}>
+          {R.hasPhotos && (
+            <div style={s('height:150px;background:linear-gradient(135deg,var(--navy-700),var(--navy-600));position:relative;display:flex;align-items:flex-end;padding:12px;')}>
+              <span style={s('font-size:11px;color:rgba(255,255,255,0.85);background:rgba(14,22,38,0.45);backdrop-filter:blur(4px);padding:4px 9px;border-radius:6px;font-weight:600;')}>{R.photoCountLabel}</span>
+            </div>
+          )}
+          {R.noPhotos && (
+            <div style={s('height:150px;background:var(--canvas-200);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--text-muted);')}>
+              <Ico inner={I.camera} size={26} sw={1.8}/><span style={s('font-size:12px;')}>Add photos to preview</span>
+            </div>
+          )}
+          <div style={s('padding:16px;')}>
+            <div style={s('display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;')}>
+              <span style={s('display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--trust-trusted-fg);background:var(--trust-trusted-bg);padding:3px 8px;border-radius:6px;')}><Ico inner={I.shield} sw={2.4} size={12}/>Listed by verified broker</span>
+              <span style={s('font-size:11px;font-weight:600;color:var(--navy-800);background:var(--navy-100);padding:3px 8px;border-radius:6px;')}>{R.kindLabel}</span>
+              {R.hasStatus && <span style={s('font-size:11px;font-weight:600;color:var(--copper-600);background:var(--accent-tint);padding:3px 8px;border-radius:6px;')}>{R.statusText}</span>}
+            </div>
+            <div style={s('font-size:16px;font-weight:700;color:var(--text-strong);line-height:1.3;margin-bottom:4px;')}>{R.previewTitle}</div>
+            <div style={s('display:flex;align-items:center;gap:5px;font-size:13px;color:'+R.previewLocColor+';margin-bottom:'+(R.previewLocConfirmed?'8px':'12px')+';')}><Ico inner={I.pin} size={13} stroke="var(--grey-400)"/>{R.previewLocMain}</div>
+            {R.previewLocConfirmed && <div style={s('margin-bottom:12px;')}><span style={s('display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--trust-verified-fg);background:var(--trust-verified-bg);padding:3px 8px;border-radius:6px;')}><Ico inner={I.check} sw={2.6} size={11}/>Location confirmed</span></div>}
+            <div style={s('display:flex;align-items:baseline;gap:8px;margin-bottom:14px;')}>
+              <span style={s('font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--navy-900);')}>{R.priceDisplay}</span>
+              {R.hasPerSqft && <span style={s('font-family:var(--font-mono);font-size:12px;color:var(--text-muted);')}>{R.perSqft}</span>}
+            </div>
+            {R.hasSpecs && (
+              <div style={s('display:flex;flex-wrap:wrap;gap:6px;padding-top:12px;border-top:1px solid var(--border);')}>
+                {R.specs.map((x,i)=>(<span key={i} style={s('font-size:12px;color:var(--text-body);background:var(--grey-100);padding:4px 9px;border-radius:6px;font-weight:500;')}>{x}</span>))}
+              </div>
+            )}
+            {R.noSpecs && <div style={s('padding-top:12px;border-top:1px solid var(--border);font-size:12.5px;color:var(--text-muted);')}>Add details to fill out the preview.</div>}
+          </div>
+        </div>
+      </div>
+      {R.showStrength && (
+        <div style={s('background:var(--paper);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm);')}>
+          <div style={s('display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;')}>
+            <span style={s('font-size:13px;font-weight:700;color:var(--text-strong);')}>Listing strength</span>
+            <span style={s('font-size:13px;font-weight:700;font-family:var(--font-mono);color:'+R.strengthColor+';')}>{R.strengthLabel}</span>
+          </div>
+          <div style={s('height:7px;border-radius:99px;background:var(--grey-200);overflow:hidden;')}><div style={s('height:100%;width:'+R.strengthWidth+';background:'+R.strengthColor+';border-radius:99px;transition:width .3s ease,background .3s ease;')}></div></div>
+          <div style={s('margin-top:12px;display:flex;flex-direction:column;gap:8px;')}>
+            {R.confirmChips.map(c=>(<div key={c.key} style={s('display:flex;align-items:center;gap:8px;')}><span style={s(c.dot)}>{c.check}</span><span style={s('font-size:12.5px;color:'+c.textColor+';')}>{c.label}</span></div>))}
+          </div>
+        </div>
+      )}
+      <div style={s('font-size:11.5px;color:var(--text-muted);text-align:center;line-height:1.5;display:flex;align-items:center;justify-content:center;gap:5px;')}><Ico inner={I.info} size={12}/>{R.derivedNote}</div>
+    </div>
+  ); }
+
+  /* ---------------- review: listing-detail style ---------------- */
+  reviewView(R){ return (
+    <React.Fragment>
+      {R.notPublished && (
+        <React.Fragment>
+          <div style={s('display:flex;align-items:center;gap:10px;background:var(--navy-100);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:18px;')}>
+            <Ico inner={I.eye} stroke="var(--navy-700)" size={17}/>
+            <span style={s('font-size:13px;color:var(--navy-800);font-weight:500;line-height:1.45;')}>A preview of your public listing — this is how buyers and tenants will see it once it's approved. Nothing here is publicly verified; it shows what you entered.</span>
+          </div>
+          <div className="cl-rev-grid" style={s('display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,1fr);gap:28px;align-items:start;')}>
+            <div style={s('display:flex;flex-direction:column;gap:18px;min-width:0;')}>
+
+              {/* Gallery */}
+              <div style={s('display:flex;flex-direction:column;gap:12px;')}>
+                <div style={s('position:relative;height:380px;border-radius:16px;overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow-sm);')}>
+                  {R.hasPhotos && (
+                    <div style={s('position:absolute;inset:0;background:linear-gradient(150deg,var(--navy-700),var(--navy-600) 55%,var(--navy-800));display:flex;align-items:center;justify-content:center;')}>
+                      <span style={s('width:54px;height:54px;border-radius:14px;background:rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;')}><Ico inner={I.camera} stroke="rgba(255,255,255,0.85)" sw={1.8} size={24}/></span>
+                    </div>
+                  )}
+                  {R.noPhotos && (
+                    <div style={s('position:absolute;inset:0;background:linear-gradient(160deg,var(--canvas-100),var(--canvas-200));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:0 24px;')}>
+                      <span style={s('width:54px;height:54px;border-radius:16px;background:var(--paper);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;')}><Ico inner={I.camera} stroke="var(--grey-400)" sw={1.8} size={24}/></span>
+                      <div style={s('font-size:15px;font-weight:700;color:var(--text-strong);')}>No photos added yet</div>
+                      <button type="button" onClick={R.backToEdit} style={s('font-size:13px;font-weight:600;color:var(--navy-800);background:var(--paper);border:1px solid var(--border-strong);border-radius:8px;padding:7px 14px;cursor:pointer;')}>Add photos</button>
+                    </div>
+                  )}
+                  <div style={s('position:absolute;top:16px;left:16px;display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;color:var(--navy-800);background:rgba(255,255,255,0.92);padding:5px 11px;border-radius:9999px;box-shadow:var(--shadow-xs);')}><Ico inner={I.shield} sw={2.2} size={13}/>Listed by verified broker</div>
+                  <button type="button" onClick={R.backToEdit} style={s('position:absolute;top:16px;right:16px;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--navy-800);background:rgba(255,255,255,0.92);border:none;padding:7px 12px;border-radius:9999px;cursor:pointer;box-shadow:var(--shadow-xs);')}><Ico inner={I.pencil} size={13}/>Edit media</button>
+                  {R.hasVideo && <div style={s('position:absolute;bottom:14px;left:16px;display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#fff;background:rgba(14,22,38,0.6);backdrop-filter:blur(4px);padding:5px 11px;border-radius:9999px;font-weight:600;')}><Ico inner={I.play} fill="#fff" stroke="none" size={12}/>Video · {R.videoHost}</div>}
+                  {R.hasPhotos && <div style={s('position:absolute;bottom:14px;right:16px;padding:4px 11px;border-radius:9999px;background:rgba(14,22,38,0.72);color:#fff;font-family:var(--font-mono);font-size:12px;font-weight:500;')}>{R.photoCountLabel}</div>}
+                </div>
+                {R.hasPhotos && (
+                  <div style={s('display:flex;gap:10px;flex-wrap:wrap;')}>
+                    {R.reviewThumbs.map(th=>(<div key={th.key} style={s(th.style)}>{th.isCover && <span style={s('position:absolute;bottom:4px;left:4px;font-size:8.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;background:var(--copper-500);color:#fff;padding:1px 5px;border-radius:4px;')}>Cover</span>}</div>))}
+                    {R.hasVideo && <div style={s('width:92px;height:66px;flex:none;border-radius:8px;border:1px solid var(--border);background:var(--navy-900);display:flex;align-items:center;justify-content:center;')}><Ico inner={I.play} fill="#fff" stroke="none" size={22}/></div>}
+                  </div>
+                )}
+              </div>
+
+              {/* Summary */}
+              <div style={s(CARD)}>
+                <div style={s('display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;')}>
+                  <div style={s('flex:1 1 320px;min-width:0;')}>
+                    <div style={s('display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px;')}>
+                      <span style={s('font-size:11.5px;font-weight:600;color:var(--navy-800);background:var(--navy-100);padding:4px 10px;border-radius:9999px;')}>{R.kindLabel}</span>
+                      <span style={s('font-size:11.5px;font-weight:600;color:var(--copper-600);background:var(--accent-tint);padding:4px 10px;border-radius:9999px;')}>{R.purposeLabel}</span>
+                      <span style={s('font-size:11.5px;font-weight:600;color:var(--text-body);background:var(--grey-100);padding:4px 10px;border-radius:9999px;')}>Listed by verified broker</span>
+                    </div>
+                    <div style={s('display:flex;align-items:flex-start;justify-content:space-between;gap:12px;')}>
+                      <h1 style={s('margin:0;font-family:var(--font-serif);font-size:28px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;color:var(--text-strong);')}>{R.previewTitle}</h1>
+                      <button type="button" onClick={R.backToEdit} style={s(EDITLINK+'flex:none;padding-top:6px;')}>Edit</button>
+                    </div>
+                    <div style={s('font-family:var(--font-mono);font-size:12px;color:var(--text-muted);margin:6px 0 10px;')}>{R.refNo}</div>
+                    {R.hasSpecs && (
+                      <div style={s('display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:12px;')}>
+                        {R.specs.map((x,i)=>(<span key={i} style={s('font-size:13px;font-weight:600;color:var(--text-body);')}>{x}</span>))}
+                      </div>
+                    )}
+                    <div style={s('display:flex;align-items:center;gap:7px;color:var(--text-body);font-size:14px;')}><Ico inner={I.pin} stroke="var(--grey-400)" size={15}/>{R.previewLocText}</div>
+                  </div>
+                  <div style={s('flex:none;text-align:right;')}>
+                    <div style={s('font-family:var(--font-mono);font-size:28px;font-weight:600;color:var(--text-strong);line-height:1.1;white-space:nowrap;')}>{R.priceDisplay}</div>
+                    {R.hasPerSqft && <div style={s('font-family:var(--font-mono);font-size:13px;color:var(--text-muted);margin-top:5px;')}>{R.perSqft}</div>}
+                    {R.hasGrossYield && <div style={s('margin-top:8px;display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ochre-600);background:var(--ochre-50);padding:3px 9px;border-radius:6px;font-weight:600;')}>Gross yield {R.grossYieldStr} · derived</div>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Commercial details */}
+              <div style={s(CARD)}>
+                {this.sectionTitle(I.building,'Commercial details',R)}
+                <p style={s('margin:-4px 0 18px;font-size:13px;color:var(--text-muted);')}>Fields that don't apply to this commercial type stay hidden.</p>
+                {R.hasReviewTiles && (
+                  <div style={s('display:grid;grid-template-columns:'+R.reviewTileGrid+';gap:12px;margin-bottom:18px;')}>
+                    {R.reviewTiles.map(t=>(
+                      <div key={t.key} style={s('display:flex;flex-direction:column;gap:7px;padding:16px;background:var(--surface-subtle);border:1px solid var(--border);border-radius:10px;')}>
+                        <Ico inner={ICON[t.icon]||I.maximize} size={18} stroke="var(--navy-700)"/>
+                        <span style={s('font-family:var(--font-mono);font-size:16px;font-weight:600;color:var(--text-strong);line-height:1.2;')}>{t.value}</span>
+                        <span style={s('font-size:12px;color:var(--text-muted);')}>{t.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {R.hasReviewRows && (
+                  <div style={s('display:grid;grid-template-columns:1fr 1fr;gap:10px;')}>
+                    {R.reviewRows.map(r=>(
+                      <div key={r.key} style={s('display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:8px;border:1px solid var(--border);')}>
+                        <span style={s('font-size:13px;color:var(--text-muted);flex:none;')}>{r.label}</span>
+                        <span style={s('flex:1;height:1px;background:var(--border);')}></span>
+                        <span style={s('font-size:13.5px;font-weight:600;color:var(--text-strong);text-align:right;')}>{r.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {R.noDetails && <p style={s('margin:0;font-size:13.5px;color:var(--text-muted);')}>Add commercial details and they'll appear here.</p>}
+              </div>
+
+              {/* About */}
+              <div style={s(CARD)}>
+                {this.sectionTitle(I.fileCheck,'About this property',R)}
+                {R.hasDesc && <p style={s('margin:0;font-size:15px;line-height:1.7;color:var(--text-body);max-width:70ch;')}>{R.descForReview}</p>}
+                {R.noDesc && <p style={s('margin:0;font-size:14px;color:var(--text-muted);font-style:italic;')}>No description yet. Add one so buyers and tenants understand what the space offers.</p>}
+              </div>
+
+              {/* Location & essentials */}
+              <div style={s(CARD)}>
+                {this.sectionTitle(I.pin,'Location & access',R)}
+                <div style={s('position:relative;height:200px;border-radius:10px;overflow:hidden;border:1px solid var(--border);background-color:#E8EBE6;background-image:linear-gradient(rgba(27,42,69,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(27,42,69,0.06) 1px,transparent 1px);background-size:26px 26px;margin-bottom:10px;')}>
+                  <div style={s('position:absolute;top:40%;left:0;right:0;height:13px;background:rgba(255,255,255,0.6);transform:rotate(-4deg);')}></div>
+                  <div style={s('position:absolute;top:0;bottom:0;left:56%;width:10px;background:rgba(255,255,255,0.6);transform:rotate(3deg);')}></div>
+                  {R.pinned && <div style={s('position:absolute;top:50%;left:50%;transform:translate(-50%,-100%);')}><Ico inner={I.pinFill} fill="var(--copper-500)" stroke="#fff" sw={1.5} size={32}/></div>}
+                </div>
+                <div style={s('display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-muted);margin-bottom:18px;')}><Ico inner={I.pin} stroke="var(--grey-400)" size={14}/>{R.mapPinnedText}</div>
+                {R.reviewHasNearby && (
+                  <React.Fragment>
+                    <h3 style={s('margin:0 0 6px;display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:700;color:var(--text-strong);')}><Ico inner={I.route} stroke="var(--navy-700)" size={16}/>Nearby places</h3>
+                    <div style={s('display:grid;grid-template-columns:1fr 1fr;gap:0 28px;')}>
+                      {R.reviewNearby.map(n=>(
+                        <div key={n.key} style={s('display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--border);')}>
+                          <Ico inner={I.pin} stroke="var(--grey-400)" size={14}/>
+                          <span style={s('font-size:13.5px;color:var(--text-body);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;')}>{n.name}</span>
+                          {n.manual && <span style={s('font-size:9px;font-weight:700;text-transform:uppercase;color:var(--ochre-600);background:var(--ochre-50);padding:1px 5px;border-radius:4px;flex:none;')}>Added by broker</span>}
+                          <span style={s('font-family:var(--font-mono);font-size:12px;color:var(--text-muted);flex:none;')}>{n.meta}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p style={s('margin:12px 0 0;font-size:11.5px;color:var(--text-muted);')}>Derived from the map. Manually added places are shown as added by broker, not platform-verified.</p>
+                  </React.Fragment>
+                )}
+                {R.reviewNoNearby && <p style={s('margin:0;font-size:13px;color:var(--text-muted);')}>Pin the location to show nearby transport, roads and footfall.</p>}
+              </div>
+
+              {/* What's on this listing */}
+              <div style={s(CARD)}>
+                <h2 style={s('margin:0 0 4px;display:flex;align-items:center;gap:9px;font-size:18px;font-weight:700;color:var(--text-strong);')}><Ico inner={I.shield} stroke="var(--navy-700)" size={18}/>What's on this listing</h2>
+                <p style={s('margin:0 0 18px;font-size:13px;color:var(--text-muted);')}>What you've added so far. ReTrends doesn't verify ownership, approvals or documents — buyers see only these honest signals.</p>
+                <div style={s('display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;margin-bottom:16px;')}>
+                  {R.trustChecks.map(c=>(
+                    <div key={c.key} style={s('display:flex;align-items:flex-start;gap:9px;font-size:13.5px;color:var(--text-body);')}>
+                      {c.ok && <Ico inner={I.check} stroke="var(--positive)" sw={2.4} size={16} style={{marginTop:'1px'}}/>}
+                      {c.pending && <Ico inner={I.alert} stroke="var(--caution)" size={16} style={{marginTop:'1px'}}/>}
+                      {c.label}
+                    </div>
+                  ))}
+                </div>
+                <div style={s('display:flex;gap:18px;flex-wrap:wrap;padding-top:16px;border-top:1px solid var(--border);font-size:12.5px;color:var(--text-muted);')}>
+                  <span style={s('display:inline-flex;align-items:center;gap:6px;')}><Ico inner={I.calendar} size={13}/>Last updated just now</span>
+                  <span style={s('display:inline-flex;align-items:center;gap:6px;')}><Ico inner={I.users} size={13}/>Listed by verified broker</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right rail */}
+            <div style={s('position:sticky;top:88px;display:flex;flex-direction:column;gap:16px;')}>
+              <div style={s('font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);font-weight:700;')}>Editor view · only you see this</div>
+              {R.showStrength && (
+                <div style={s('background:var(--paper);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm);')}>
+                  <div style={s('display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;')}><span style={s('font-size:13px;font-weight:700;color:var(--text-strong);')}>Listing strength</span><span style={s('font-size:13px;font-weight:700;font-family:var(--font-mono);color:'+R.strengthColor+';')}>{R.strengthLabel}</span></div>
+                  <div style={s('height:7px;border-radius:99px;background:var(--grey-200);overflow:hidden;')}><div style={s('height:100%;width:'+R.strengthWidth+';background:'+R.strengthColor+';border-radius:99px;transition:width .3s ease;')}></div></div>
+                  <div style={s('margin-top:12px;display:flex;flex-direction:column;gap:8px;')}>{R.confirmChips.map(c=>(<div key={c.key} style={s('display:flex;align-items:center;gap:8px;')}><span style={s(c.dot)}>{c.check}</span><span style={s('font-size:12.5px;color:'+c.textColor+';')}>{c.label}</span></div>))}</div>
+                </div>
+              )}
+              <div style={s('background:var(--paper);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:var(--shadow-sm);')}>
+                <span style={s('display:block;font-size:13px;font-weight:700;color:var(--text-strong);margin-bottom:12px;')}>Before you submit</span>
+                {R.reviewMissingNone && <div style={s('display:flex;align-items:center;gap:9px;font-size:13px;color:var(--trust-verified-fg);')}><span style={s('width:18px;height:18px;border-radius:50%;background:var(--evergreen-600);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;')}>✓</span>Everything useful is filled in.</div>}
+                {R.reviewHasMissing && (
+                  <div style={s('display:flex;flex-direction:column;gap:10px;')}>
+                    {R.reviewMissing.map((m,i)=>(<div key={i} style={s('display:flex;align-items:center;gap:9px;')}><span style={s('width:16px;height:16px;border-radius:50%;background:var(--ochre-50);color:var(--ochre-600);display:flex;align-items:center;justify-content:center;flex:none;')}><Ico inner={I.warn} stroke="currentColor" sw={2.6} size={11}/></span><span style={s('font-size:13px;color:var(--text-body);')}>{m}</span></div>))}
+                    <button type="button" onClick={R.backToEdit} style={s('margin-top:4px;align-self:flex-start;font-size:12.5px;font-weight:600;color:var(--navy-800);background:transparent;border:none;cursor:pointer;padding:0;')}>Go back and complete →</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </React.Fragment>
+      )}
+
+      {R.published && (
+        <div style={s('max-width:560px;margin:30px auto;text-align:center;background:var(--paper);border:1px solid var(--border);border-radius:18px;padding:44px 36px;box-shadow:var(--shadow-md);')}>
+          <div style={s('width:56px;height:56px;border-radius:50%;background:var(--trust-verified-bg);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;')}><Ico inner={I.check} stroke="var(--evergreen-600)" sw={2.4} size={28}/></div>
+          <h2 style={s('font-family:var(--font-serif);font-size:26px;font-weight:600;letter-spacing:-0.02em;color:var(--navy-900);margin:0 0 8px;')}>Submitted for review</h2>
+          <p style={s('margin:0 0 22px;font-size:14.5px;color:var(--text-muted);line-height:1.55;')}>Your commercial listing has been submitted and is pending admin approval. We'll let you know once it's approved and live. You can keep editing it any time from your dashboard.</p>
+          <div style={s('display:flex;gap:10px;justify-content:center;')}>
+            <Button variant="primary">View listing</Button>
+            <Button variant="outline" onClick={R.backToEdit}>Back to editing</Button>
+          </div>
+        </div>
+      )}
+    </React.Fragment>
+  ); }
+
+  /* ---------------- footer ---------------- */
+  footer(R){ return (
+    <div style={s('position:fixed;bottom:0;left:0;right:0;height:72px;background:var(--paper);border-top:1px solid var(--border);box-shadow:0 -2px 12px rgba(14,22,38,0.05);display:flex;align-items:center;z-index:15;')}>
+      <div style={s('max-width:1180px;margin:0 auto;width:100%;padding:0 24px;display:flex;align-items:center;justify-content:space-between;')}>
+        <span style={s('font-size:13px;color:var(--text-muted);')}>{R.footerStatus}</span>
+        <div>
+          {R.editMode && (
+            <div style={s('display:flex;gap:12px;')}>
+              <Button variant="ghost">Save draft</Button>
+              <Button variant="primary" onClick={R.goReview}>Review &amp; submit</Button>
+            </div>
+          )}
+          {R.reviewNotPublished && (
+            <div style={s('display:flex;gap:12px;')}>
+              <Button variant="ghost" onClick={R.backToEdit}>Back to editing</Button>
+              <Button variant="outline">Save draft</Button>
+              <Button variant="accent" onClick={R.publish}>Submit for review</Button>
+            </div>
+          )}
+          {R.published && <Button variant="primary" onClick={R.backToEdit}>Back to dashboard</Button>}
+        </div>
+      </div>
+    </div>
+  ); }
+
+  /* ---------------- map picker modal ---------------- */
+  picker(R){ if(!R.pickerOpen) return null; return (
+    <div style={s('position:fixed;inset:0;z-index:60;background:rgba(14,22,38,0.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:24px;')}>
+      <div style={s('background:var(--paper);border-radius:18px;box-shadow:var(--shadow-xl);width:100%;max-width:640px;overflow:hidden;')}>
+        <div style={s('padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:16px;')}>
+          <div>
+            <h3 style={s('margin:0 0 3px;font-size:16px;font-weight:700;color:var(--text-strong);')}>Pin the exact location</h3>
+            <p style={s('margin:0;font-size:12.5px;color:var(--text-muted);')}>Drag the pin to the exact property. Centred near {R.resPublic}.</p>
+          </div>
+          <button type="button" onClick={R.cancelPicker} style={s('width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--paper);color:var(--text-muted);font-size:16px;line-height:1;cursor:pointer;flex:none;')}>×</button>
+        </div>
+        <div onMouseDown={R.onMapDown} onMouseMove={R.onMapMove} onMouseUp={R.onMapUp} onMouseLeave={R.onMapUp} style={s('position:relative;height:340px;cursor:grab;user-select:none;background-color:#E8EBE6;background-image:linear-gradient(rgba(27,42,69,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(27,42,69,0.06) 1px,transparent 1px);background-size:30px 30px;')}>
+          <div style={s('position:absolute;top:44%;left:0;right:0;height:16px;background:rgba(255,255,255,0.65);transform:rotate(-3deg);pointer-events:none;')}></div>
+          <div style={s('position:absolute;top:0;bottom:0;left:60%;width:13px;background:rgba(255,255,255,0.65);transform:rotate(2deg);pointer-events:none;')}></div>
+          <div style={s('position:absolute;top:0;bottom:0;left:28%;width:9px;background:rgba(255,255,255,0.5);pointer-events:none;')}></div>
+          <div style={s('position:absolute;left:'+R.pinPos.x+'%;top:'+R.pinPos.y+'%;transform:translate(-50%,-100%);pointer-events:none;')}><Ico inner={I.pinFill} fill="var(--copper-500)" stroke="#fff" sw={1.5} size={40}/></div>
+          <div style={s('position:absolute;top:12px;left:12px;background:rgba(255,255,255,0.92);border-radius:8px;padding:6px 11px;font-size:11.5px;font-weight:600;color:var(--navy-800);box-shadow:var(--shadow-xs);display:inline-flex;align-items:center;gap:6px;pointer-events:none;')}><Ico inner={I.pin} size={13}/>Drag or tap to move the pin</div>
+        </div>
+        <div style={s('padding:16px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;border-top:1px solid var(--border);flex-wrap:wrap;')}>
+          <span style={s('font-size:11.5px;color:var(--text-muted);display:inline-flex;align-items:center;gap:6px;')}><Ico inner={I.shield} size={13} stroke="var(--grey-500)"/>Exact pin stays private — buyers see only {R.resPublic}.</span>
+          <div style={s('display:flex;gap:10px;')}>
+            <Button variant="ghost" onClick={R.cancelPicker}>Cancel</Button>
+            <Button variant="accent" onClick={R.confirmPin}>Confirm pin</Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  ); }
+
+  render(){
+    const R = this.rv();
+    return (
+      <div style={s('min-height:100vh;background:var(--canvas-100);font-family:var(--font-sans);color:var(--text-body);')}>
+        {this.header()}
+        <div style={s('max-width:1180px;margin:0 auto;padding:34px 24px 130px;')}>
+          <div style={s('margin-bottom:28px;')}>
+            {R.reviewMode && <button type="button" onClick={R.backToEdit} style={s('display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--navy-800);background:transparent;border:none;cursor:pointer;padding:0;margin-bottom:14px;')}><Ico inner={I.chevLeft} size={16}/>Back to editing</button>}
+            <div style={s('font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--copper-500);font-weight:700;margin-bottom:8px;')}>Commercial listing</div>
+            <h1 style={s('font-family:var(--font-serif);font-size:34px;font-weight:600;letter-spacing:-0.02em;color:var(--navy-900);margin:0 0 8px;')}>{R.pageTitle}</h1>
+            <p style={s('margin:0;font-size:15px;color:var(--text-muted);max-width:620px;line-height:1.5;')}>{R.pageSub}</p>
+          </div>
+          {R.editMode && (
+            <div className="cl-edit-grid" style={s('display:grid;grid-template-columns:minmax(0,1fr) 348px;gap:28px;align-items:start;')}>
+              {this.formCol(R)}
+              {this.editRail(R)}
+            </div>
+          )}
+          {R.reviewMode && this.reviewView(R)}
+        </div>
+        {this.footer(R)}
+        {this.picker(R)}
+      </div>
+    );
+  }
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<CreateCommercialListing />);
+</script>
+</body>
+</html>

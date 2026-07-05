@@ -1,0 +1,122 @@
+<!-- @dsCard group="Portal" viewport="1280x760" name="ReTrends portal" subtitle="Interactive web portal — Home · Discover · Trends · Listing" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReTrends — Portal UI Kit</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  html, body { margin: 0; background: var(--background); }
+  body { font-family: var(--font-sans); color: var(--text-strong); }
+  * { box-sizing: border-box; }
+  ::selection { background: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="data.js"></script>
+<script type="text/babel" src="Header.jsx"></script>
+<script type="text/babel" src="HomeScreen.jsx"></script>
+<script type="text/babel" src="DiscoverScreen.jsx"></script>
+<script type="text/babel" src="TrendsScreen.jsx"></script>
+<script type="text/babel" src="ListingScreen.jsx"></script>
+<script type="text/babel">
+  const { Button, Icon, Input, PropertyCard } = window.ReTrendsDesignSystem_f37966;
+
+  function SignInDialog({ open, onClose, onSignIn }) {
+    if (!open) return null;
+    return (
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(17,24,39,0.45)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "400px", maxWidth: "100%", background: "var(--paper)", borderRadius: "var(--radius-xl)", boxShadow: "var(--shadow-xl)", padding: "28px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
+            <span style={{ fontSize: "22px", fontWeight: 700, letterSpacing: "-0.02em" }}><span style={{ color: "var(--copper-500)" }}>Re</span><span style={{ color: "var(--navy-800)" }}>Trends</span></span>
+            <Button variant="ghost" size="icon" onClick={onClose}><Icon name="x" size={18} /></Button>
+          </div>
+          <h2 style={{ margin: "8px 0 4px", fontFamily: "var(--font-serif)", fontSize: "26px", fontWeight: 600, letterSpacing: "-0.01em" }}>Welcome back</h2>
+          <p style={{ margin: "0 0 22px", fontSize: "14px", color: "var(--text-muted)" }}>Sign in to save searches and unlock prices.</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <Input label="Phone or email" placeholder="you@example.com" />
+            <Input label="Password" type="password" placeholder="••••••••" />
+            <Button variant="accent" size="lg" fullWidth onClick={onSignIn}>Sign in</Button>
+          </div>
+          <p style={{ margin: "16px 0 0", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>New to ReTrends? <span style={{ color: "var(--accent)", fontWeight: 600, cursor: "pointer" }}>Create an account</span></p>
+        </div>
+      </div>
+    );
+  }
+
+  function SavedScreen({ navigate, signedIn, onSignIn }) {
+    const D = window.RT_DATA;
+    if (!signedIn) {
+      return (
+        <div style={{ maxWidth: "520px", margin: "80px auto", textAlign: "center", padding: "0 24px" }}>
+          <div style={{ width: "64px", height: "64px", borderRadius: "var(--radius-full)", background: "var(--navy-100)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+            <Icon name="heart" size={30} color="var(--navy-800)" />
+          </div>
+          <h2 style={{ margin: "0 0 10px", fontFamily: "var(--font-serif)", fontSize: "28px", fontWeight: 600 }}>Sign in to see saved homes</h2>
+          <p style={{ margin: "0 0 22px", color: "var(--text-muted)" }}>Keep track of properties you love and get alerts when prices change.</p>
+          <Button variant="primary" size="lg" onClick={onSignIn}>Sign in</Button>
+        </div>
+      );
+    }
+    const saved = D.properties.slice(0, 3);
+    return (
+      <div style={{ maxWidth: "var(--container-max)", margin: "0 auto", padding: "32px 24px" }}>
+        <h1 style={{ margin: "0 0 6px", fontFamily: "var(--font-serif)", fontSize: "34px", fontWeight: 600, letterSpacing: "-0.02em" }}>Saved homes</h1>
+        <p style={{ margin: "0 0 28px", color: "var(--text-muted)" }}>{saved.length} properties · 2 with price drops</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "20px" }}>
+          {saved.map((p) => <PropertyCard key={p.id} property={p} onClick={() => navigate("listing", p.id)} />)}
+        </div>
+      </div>
+    );
+  }
+
+  function Footer() {
+    return (
+      <footer style={{ background: "var(--paper)", borderTop: "1px solid var(--border)", marginTop: "48px" }}>
+        <div style={{ maxWidth: "var(--container-max)", margin: "0 auto", padding: "32px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "18px", fontWeight: 700, letterSpacing: "-0.02em" }}><span style={{ color: "var(--copper-500)" }}>Re</span><span style={{ color: "var(--navy-800)" }}>Trends</span></span>
+            <span style={{ fontSize: "14px", color: "var(--text-muted)" }}>© 2026 · India's real-estate intelligence platform</span>
+          </div>
+          <div style={{ display: "flex", gap: "20px", fontSize: "13px", color: "var(--text-muted)", fontWeight: 500 }}>
+            <span>About</span><span>RERA</span><span>For brokers</span><span>Privacy</span>
+          </div>
+        </div>
+      </footer>
+    );
+  }
+
+  function App() {
+    const [route, setRoute] = React.useState("home");
+    const [listingId, setListingId] = React.useState("p1");
+    const [signedIn, setSignedIn] = React.useState(false);
+    const [showSignIn, setShowSignIn] = React.useState(false);
+
+    const navigate = (r, id) => { if (id) setListingId(id); setRoute(r); window.scrollTo(0, 0); };
+    const openListing = (id) => navigate("listing", id);
+
+    return (
+      <div>
+        <window.RTHeader route={route} navigate={navigate} signedIn={signedIn}
+          onSignIn={() => setShowSignIn(true)} onSignOut={() => setSignedIn(false)} />
+        {route === "home" && <window.RTHome navigate={navigate} />}
+        {route === "discover" && <window.RTDiscover navigate={navigate} onOpenListing={openListing} />}
+        {route === "trends" && <window.RTTrends navigate={navigate} />}
+        {route === "listing" && <window.RTListing navigate={navigate} propertyId={listingId} />}
+        {route === "saved" && <SavedScreen navigate={navigate} signedIn={signedIn} onSignIn={() => setShowSignIn(true)} />}
+        <Footer />
+        <SignInDialog open={showSignIn} onClose={() => setShowSignIn(false)} onSignIn={() => { setSignedIn(true); setShowSignIn(false); }} />
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

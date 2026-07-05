@@ -28,6 +28,7 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { grantDiscoverConsent } from './helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SS = (name: string) => path.join(__dirname, `../screenshots/discover-map-hierarchy-${name}.png`);
@@ -109,6 +110,7 @@ const CITY_LISTINGS_FIXTURE = { city: CITY, limitPerArea: 50, areas: [] };
 const EMPTY_LISTINGS_PAGE = { content: [], page: 0, size: 50, totalElements: 0, totalPages: 0, aggregates: { topLocalities: [] } };
 
 async function stubResidentialRoutes(page: Page): Promise<void> {
+  await grantDiscoverConsent(page);
   await page.route('**/api/trends/options**', (r) => fulfillJson(r, 200, TRENDS_OPTIONS_FIXTURE));
   await page.route('**/api/discover/areas**', (r) => fulfillJson(r, 200, DISCOVER_AREAS_FIXTURE));
   await page.route('**/api/discover/area-groups**', (r) => fulfillJson(r, 200, AREA_GROUPS_FIXTURE));
@@ -282,5 +284,67 @@ test.describe('Issue #1745 Batch B — map hierarchy (macro-region bubbles / reg
     await expect(page.locator(AREA_MARKER, { hasText: 'South Udupi' })).toHaveCount(0);
     await expect(page.locator(AREA_MARKER, { hasText: 'Coastal Belt' })).toHaveCount(0);
     await expect(page.locator(AREA_MARKER, { hasText: 'Manipal' })).toHaveCount(0);
+  });
+
+  test('4-level hierarchy lockstep (Bangalore) — city -> macro-region -> zone/corridor -> area', async ({ page }) => {
+    const BLR_YEL = 'IN|KA|Bangalore|Yelahanka';
+    const BLR_DEV = 'IN|KA|Bangalore|Devanahalli';
+    const BLR_HEB = 'IN|KA|Bangalore|Hebbal';
+
+    await page.route('**/api/trends/options**', (r) => fulfillJson(r, 200, { city: 'bangalore', defaultAreas: [] }));
+    await page.route('**/api/discover/areas**', (r) =>
+      fulfillJson(r, 200, {
+        city: 'bangalore',
+        areas: [
+          { areaKey: BLR_YEL, name: 'Yelahanka', geoCenterLat: 13.1, geoCenterLon: 77.59, minLat: 13.08, maxLat: 13.12, minLon: 77.57, maxLon: 77.61, listingCount: 15, schoolCount: 2, trendDirection: 'stable' },
+          { areaKey: BLR_DEV, name: 'Devanahalli', geoCenterLat: 13.25, geoCenterLon: 77.7, minLat: 13.23, maxLat: 13.27, minLon: 77.68, maxLon: 77.72, listingCount: 10, schoolCount: 1, trendDirection: 'stable' },
+          { areaKey: BLR_HEB, name: 'Hebbal', geoCenterLat: 13.03, geoCenterLon: 77.58, minLat: 13.01, maxLat: 13.05, minLon: 77.56, maxLon: 77.6, listingCount: 5, schoolCount: 3, trendDirection: 'stable' },
+        ],
+      }),
+    );
+    await page.route('**/api/discover/area-groups**', (r) =>
+      fulfillJson(r, 200, {
+        city: 'bangalore',
+        groups: [
+          { slug: 'airport-belt', name: 'Airport Belt', regionLabel: 'North Bangalore', areaKeys: [BLR_YEL, BLR_DEV], focusLat: 13.17, focusLon: 77.64 },
+          { slug: 'hebbal-belt', name: 'Hebbal Belt', regionLabel: 'North Bangalore', areaKeys: [BLR_HEB], focusLat: 13.03, focusLon: 77.58 },
+        ],
+      }),
+    );
+    await page.route('**/api/discover/summary**', (r) =>
+      fulfillJson(r, 200, {
+        city: 'bangalore',
+        propertyType: null,
+        groupBy: 'area_group',
+        totalActiveListings: 30,
+        regions: [{ regionKey: 'north', regionLabel: 'North Bangalore', listingCount: 30 }],
+        hotspots: [],
+        generatedAt: '2026-07-01T00:00:00Z',
+      }),
+    );
+    await page.route('**/api/discover/cities/*/listings**', (r) => fulfillJson(r, 200, { city: 'bangalore', limitPerArea: 50, areas: [] }));
+    await page.route('**/api/discover/listings**', (r) => fulfillJson(r, 200, EMPTY_LISTINGS_PAGE));
+    await page.route('**/api/discover/markers**', (r) => fulfillJson(r, 200, { city: 'bangalore', markers: [], truncated: false, returnedElements: 0 }));
+
+    // Level 1: City Landing -> Macro-region bubbles only
+    await page.goto('/discover?city=bangalore');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator(AREA_MARKER, { hasText: 'North Bangalore' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(AREA_MARKER, { hasText: 'Airport Belt' })).toHaveCount(0);
+    await expect(page.locator(AREA_MARKER, { hasText: 'Hebbal Belt' })).toHaveCount(0);
+    await expect(page.locator(AREA_MARKER, { hasText: 'Yelahanka' })).toHaveCount(0);
+
+    // Level 2: Click macro-region -> Zone/corridor bubbles inside North Bangalore
+    await page.locator(AREA_MARKER, { hasText: 'North Bangalore' }).click();
+    await expect(page.locator(AREA_MARKER, { hasText: 'Airport Belt' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(AREA_MARKER, { hasText: 'Hebbal Belt' })).toBeVisible();
+    await expect(page.locator(AREA_MARKER, { hasText: 'North Bangalore' })).toHaveCount(0);
+    await expect(page.locator(AREA_MARKER, { hasText: 'Yelahanka' })).toHaveCount(0);
+
+    // Level 3: Click zone/corridor -> Area pills inside Airport Belt
+    await page.locator(AREA_MARKER, { hasText: 'Airport Belt' }).click();
+    await expect(page.locator(AREA_MARKER, { hasText: 'Yelahanka' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(AREA_MARKER, { hasText: 'Devanahalli' })).toBeVisible();
+    await expect(page.locator(AREA_MARKER, { hasText: 'Hebbal Belt' })).toHaveCount(0);
   });
 });

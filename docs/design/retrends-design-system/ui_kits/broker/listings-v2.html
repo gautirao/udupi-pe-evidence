@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Listings — ReTrends Broker</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  html, body { margin: 0; background: var(--background); }
+  body { font-family: var(--font-sans); color: var(--text-strong); }
+  * { box-sizing: border-box; }
+  ::selection { background: var(--accent); color: #fff; }
+
+  /* ---- Layout grid ---- */
+  .listings-page {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto 1fr;
+    min-height: 100vh;
+  }
+
+  /* ---- Header ---- */
+  .listings-header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: var(--paper);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 24px;
+  }
+
+  .listings-header-top {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+  }
+
+  .listings-header-content h1 {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    letter-spacing: var(--tracking-tight);
+    margin: 0 0 4px 0;
+    color: var(--text-strong);
+  }
+
+  .listings-header-content p {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin: 0;
+    line-height: var(--leading-normal);
+  }
+
+  .listings-header-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: var(--radius-md);
+    background: var(--primary);
+    color: var(--text-on-navy);
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-standard);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .btn-primary:hover {
+    background: var(--primary-hover);
+  }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-body);
+    border: 1px solid var(--border-strong);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease-standard);
+    text-decoration: none;
+  }
+
+  .btn-secondary:hover {
+    background: var(--grey-50);
+  }
+
+  /* ---- Stats strip ---- */
+  .stats-strip {
+    background: var(--paper);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+  }
+
+  .stats-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    gap: 24px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+    cursor: pointer;
+    padding: 6px 0;
+    transition: opacity var(--dur-fast) var(--ease-standard);
+    border-radius: 4px;
+    padding: 6px 8px;
+  }
+
+  .stat-item:hover {
+    background: var(--grey-50);
+    opacity: 0.9;
+  }
+
+  .stat-item.active {
+    background: var(--navy-100);
+    border-radius: 4px;
+  }
+
+  .stat-label {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-caps);
+  }
+
+  .stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-strong);
+  }
+
+  .stat-item.attention .stat-value {
+    color: var(--caution);
+  }
+
+  /* ---- Filters bar ---- */
+  .filters-bar {
+    background: var(--paper);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    position: sticky;
+    top: 60px;
+    z-index: 20;
+  }
+
+  .filters-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .search-box {
+    flex: 1;
+    min-width: 180px;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-strong);
+    background: var(--input-bg);
+    font-size: 13px;
+    color: var(--text-strong);
+    font-family: var(--font-sans);
+  }
+
+  .search-box::placeholder {
+    color: var(--text-muted);
+  }
+
+  .search-box:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--ring-color);
+  }
+
+  .filter-select {
+    height: 36px;
+    padding: 0 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-strong);
+    background: var(--paper);
+    font-size: 13px;
+    color: var(--text-body);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-weight: 500;
+    transition: all var(--dur-fast) var(--ease-standard);
+  }
+
+  .filter-select:hover {
+    border-color: var(--border);
+    background: var(--grey-50);
+  }
+
+  .filter-select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--ring-color);
+  }
+
+  /* ---- Content area ---- */
+  .listings-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 16px 24px;
+    width: 100%;
+  }
+
+  /* ---- Layout Toggle ---- */
+  .layout-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 16px;
+  }
+
+  .layout-btn {
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all var(--dur-fast) var(--ease-standard);
+  }
+
+  .layout-btn.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+  }
+
+  .layout-section {
+    display: none;
+  }
+
+  .layout-section.active {
+    display: block;
+  }
+
+  /* ====== LAYOUT A: COMPACT SINGLE-COLUMN LIST ====== */
+
+  .listings-grid-a {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .listing-card-a {
+    display: grid;
+    grid-template-columns: 80px 1fr auto;
+    gap: 12px;
+    padding: 12px;
+    background: var(--surface-card);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    align-items: center;
+    transition: all var(--dur-fast) var(--ease-standard));
+  }
+
+  .listing-card-a:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-xs);
+  }
+
+  .listing-card-a.attention {
+    border-color: var(--caution);
+    border-width: 2px;
+    padding: 11px;
+  }
+
+  .listing-thumbnail-a {
+    width: 80px;
+    height: 80px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted);
+    flex-shrink: 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 4px;
+  }
+
+  .listing-thumbnail-a img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .listing-body-a {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .listing-title-a {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-strong);
+    margin: 0;
+    line-height: var(--leading-snug);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .listing-meta-a {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+  }
+
+  .meta-item-a {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .listing-status-line-a {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .badge-a {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: var(--radius-full);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .badge-live { background: var(--positive-bg); color: var(--positive); }
+  .badge-draft { background: var(--grey-100); color: var(--text-muted); }
+  .badge-review { background: var(--secondary); color: var(--secondary-foreground); }
+  .badge-archived { background: var(--grey-100); color: var(--grey-500); }
+  .badge-quality-good { background: var(--positive-bg); color: var(--positive); }
+  .badge-quality-needs { background: var(--caution-bg); color: var(--caution); }
+  .badge-quality-incomplete { background: var(--brick-50); color: var(--brick-600); }
+
+  .attention-indicator-a {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--caution);
+    background: var(--caution-bg);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  .enquiry-badge-a {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: var(--radius-full);
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--navy-100);
+    color: var(--navy-800);
+    white-space: nowrap;
+  }
+
+  .listing-actions-a {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .btn-action-a {
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-body);
+    border: 1px solid var(--border-strong);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease-standard);
+    white-space: nowrap;
+  }
+
+  .btn-action-a:hover {
+    background: var(--grey-50);
+    border-color: var(--border);
+  }
+
+  .btn-action-primary-a {
+    background: var(--primary);
+    color: var(--text-on-navy);
+    border-color: var(--primary);
+  }
+
+  .btn-action-primary-a:hover {
+    background: var(--primary-hover);
+  }
+
+  .btn-action-urgent-a {
+    background: var(--caution);
+    color: #fff;
+    border-color: var(--caution);
+  }
+
+  .btn-action-urgent-a:hover {
+    background: var(--caution-hover);
+  }
+
+  /* ====== LAYOUT B: TWO-COLUMN CARD GRID ====== */
+
+  .listings-grid-b {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .listing-card-b {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: var(--surface-card);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    transition: all var(--dur-fast) var(--ease-standard));
+  }
+
+  .listing-card-b:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-xs);
+  }
+
+  .listing-card-b.attention {
+    border-color: var(--caution);
+    border-width: 2px;
+    padding: 13px;
+  }
+
+  .listing-thumbnail-b {
+    width: 100%;
+    height: 120px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  .listing-thumbnail-b img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .listing-title-b {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-strong);
+    margin: 0;
+    line-height: var(--leading-snug);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .listing-meta-b {
+    display: flex;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+  }
+
+  .meta-item-b {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .listing-price-b {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-strong);
+  }
+
+  .listing-badges-b {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .badge-b {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: var(--radius-full);
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .badge-live { background: var(--positive-bg); color: var(--positive); }
+  .badge-draft { background: var(--grey-100); color: var(--text-muted); }
+  .badge-review { background: var(--secondary); color: var(--secondary-foreground); }
+  .badge-archived { background: var(--grey-100); color: var(--grey-500); }
+  .badge-quality-good { background: var(--positive-bg); color: var(--positive); }
+  .badge-quality-needs { background: var(--caution-bg); color: var(--caution); }
+  .badge-quality-incomplete { background: var(--brick-50); color: var(--brick-600); }
+
+  .attention-indicator-b {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--caution);
+    background: var(--caution-bg);
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  .enquiry-badge-b {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--navy-100);
+    color: var(--navy-800);
+    padding: 3px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  .listing-actions-b {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .btn-action-b {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    padding: 0 8px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-body);
+    border: 1px solid var(--border-strong);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease-standard);
+    white-space: nowrap;
+  }
+
+  .btn-action-b:hover {
+    background: var(--grey-50);
+    border-color: var(--border);
+  }
+
+  .btn-action-primary-b {
+    background: var(--primary);
+    color: var(--text-on-navy);
+    border-color: var(--primary);
+    grid-column: 1 / -1;
+  }
+
+  .btn-action-primary-b:hover {
+    background: var(--primary-hover);
+  }
+
+  .btn-action-urgent-b {
+    background: var(--caution);
+    color: #fff;
+    border-color: var(--caution);
+    grid-column: 1 / -1;
+  }
+
+  .btn-action-urgent-b:hover {
+    background: var(--caution-hover);
+  }
+
+  /* ---- Empty state ---- */
+  .empty-state {
+    padding: 60px 24px;
+    text-align: center;
+  }
+
+  .empty-state-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 16px;
+    background: var(--surface-muted);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+  }
+
+  .empty-state h2 {
+    font-size: var(--text-xl);
+    font-weight: 700;
+    margin: 0 0 8px 0;
+    color: var(--text-strong);
+  }
+
+  .empty-state p {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 0 0 20px 0;
+  }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 1024px) {
+    .listings-grid-b {
+      grid-template-columns: 1fr;
+    }
+
+    .filters-container {
+      gap: 6px;
+    }
+
+    .filter-select {
+      font-size: 12px;
+      padding: 0 8px;
+    }
+
+    .search-box {
+      font-size: 12px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .listings-header-top {
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .listings-header-actions {
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .btn-primary, .btn-secondary {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .listings-content {
+      padding: 12px;
+    }
+
+    .layout-toggle {
+      display: none;
+    }
+
+    .listings-grid-a, .listings-grid-b {
+      grid-template-columns: 1fr !important;
+    }
+
+    .listing-card-a {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .listing-thumbnail-a {
+      width: 100%;
+      height: 120px;
+    }
+
+    .listing-actions-a {
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .btn-action-a {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .filters-container {
+      flex-direction: column;
+    }
+
+    .search-box, .filter-select {
+      width: 100%;
+    }
+
+    .stats-container {
+      flex-direction: row;
+      overflow-x: auto;
+      gap: 12px;
+    }
+
+    .stat-item {
+      min-width: fit-content;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel">
+  const mockListings = [
+    {
+      id: 1,
+      title: "Luxury 3BHK with Sunlit Courtyard",
+      area: "Balmatta",
+      price: "₹78,50,000",
+      type: "3BHK",
+      saleRent: "Sale",
+      status: "live",
+      quality: "good",
+      thumbnail: null,
+      lastUpdated: "2d",
+      enquiries: 3,
+      viewingRequests: 1,
+      topIssue: null,
+    },
+    {
+      id: 2,
+      title: "Cozy 2BHK Near Beach Road",
+      area: "Manipal Rd",
+      price: "₹42,00,000",
+      type: "2BHK",
+      saleRent: "Sale",
+      status: "live",
+      quality: "needs-work",
+      thumbnail: null,
+      lastUpdated: "5d",
+      enquiries: 0,
+      viewingRequests: 0,
+      topIssue: "Add 3+ photos",
+    },
+    {
+      id: 3,
+      title: "Independent House with Garden",
+      area: "Adarsh Nagar",
+      price: "₹1,05,00,000",
+      type: "House",
+      saleRent: "Sale",
+      status: "review",
+      quality: "incomplete",
+      thumbnail: null,
+      lastUpdated: "1d",
+      enquiries: 0,
+      viewingRequests: 0,
+      topIssue: "Missing property details",
+    },
+    {
+      id: 4,
+      title: "1BHK Flat in Modern Complex",
+      area: "Indiranagar",
+      price: "₹28,50,000",
+      type: "1BHK",
+      saleRent: "Sale",
+      status: "draft",
+      quality: null,
+      thumbnail: null,
+      lastUpdated: "7d",
+      enquiries: 0,
+      viewingRequests: 0,
+      topIssue: null,
+    },
+    {
+      id: 5,
+      title: "Premium 4BHK Villa with Pool",
+      area: "Ashok Nagar",
+      price: "₹1,25,00,000",
+      type: "Villa",
+      saleRent: "Sale",
+      status: "live",
+      quality: "good",
+      thumbnail: null,
+      lastUpdated: "Today",
+      enquiries: 5,
+      viewingRequests: 2,
+      topIssue: null,
+    },
+    {
+      id: 6,
+      title: "Cozy Studio for Rent",
+      area: "City Center",
+      price: "₹15,000/mo",
+      type: "Studio",
+      saleRent: "Rent",
+      status: "live",
+      quality: "needs-work",
+      thumbnail: null,
+      lastUpdated: "3d",
+      enquiries: 2,
+      viewingRequests: 0,
+      topIssue: "Improve description",
+    },
+    {
+      id: 7,
+      title: "Spacious Commercial Space",
+      area: "Balmatta",
+      price: "₹12,00,000",
+      type: "Commercial",
+      saleRent: "Sale",
+      status: "archived",
+      quality: "good",
+      thumbnail: null,
+      lastUpdated: "30d",
+      enquiries: 0,
+      viewingRequests: 0,
+      topIssue: null,
+    },
+  ];
+
+  function BrokerListingsPageV2() {
+    const [layout, setLayout] = React.useState("a");
+    const [searchTerm, setSearchTerm] = React.useState("");
+    const [statusFilter, setStatusFilter] = React.useState("all");
+    const [attentionFilter, setAttentionFilter] = React.useState("all");
+    const [typeFilter, setTypeFilter] = React.useState("all");
+
+    // Determine if listing needs attention
+    const needsAttention = (listing) => {
+      return (
+        listing.quality === "needs-work" ||
+        listing.quality === "incomplete" ||
+        listing.status === "review" ||
+        listing.enquiries > 0 ||
+        listing.viewingRequests > 0 ||
+        listing.topIssue
+      );
+    };
+
+    // Filter listings
+    const filteredListings = mockListings.filter((listing) => {
+      const matchesSearch =
+        listing.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        listing.area.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        listing.id.toString().includes(searchTerm);
+
+      const matchesStatus = statusFilter === "all" || listing.status === statusFilter;
+      const matchesAttention = attentionFilter === "all" || 
+        (attentionFilter === "needs-attention" && needsAttention(listing));
+      const matchesType = typeFilter === "all" || listing.type === typeFilter;
+
+      return matchesSearch && matchesStatus && matchesAttention && matchesType;
+    });
+
+    // Calculate stats
+    const stats = {
+      total: mockListings.length,
+      attention: mockListings.filter(needsAttention).length,
+      enquiries: mockListings.filter((l) => l.enquiries > 0 || l.viewingRequests > 0).length,
+      viewingRequests: mockListings.filter((l) => l.viewingRequests > 0).length,
+      review: mockListings.filter((l) => l.status === "review").length,
+      draft: mockListings.filter((l) => l.status === "draft").length,
+    };
+
+    // Get primary action for a listing
+    const getPrimaryAction = (listing) => {
+      if (listing.quality === "needs-work" || listing.quality === "incomplete") {
+        return { label: "Improve", type: "urgent" };
+      }
+      if (listing.viewingRequests > 0) {
+        return { label: "Review request", type: "urgent" };
+      }
+      if (listing.enquiries > 0) {
+        return { label: "Reply", type: "urgent" };
+      }
+      if (listing.status === "review") {
+        return { label: "Check status", type: "primary" };
+      }
+      return { label: "Edit", type: "default" };
+    };
+
+    return (
+      <div className="listings-page">
+        {/* Header */}
+        <div className="listings-header">
+          <div className="listings-header-top">
+            <div className="listings-header-content">
+              <h1>My Listings</h1>
+              <p>Manage and respond to your active properties</p>
+            </div>
+            <div className="listings-header-actions">
+              <button className="btn-primary">+ New listing</button>
+              <a href="#" className="btn-secondary">Dashboard</a>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats strip */}
+        <div className="stats-strip">
+          <div className="stats-container">
+            <div 
+              className={`stat-item ${attentionFilter === "needs-attention" ? "active" : ""} attention`}
+              onClick={() => setAttentionFilter(attentionFilter === "needs-attention" ? "all" : "needs-attention")}
+              title="Listings needing attention: quality issues, enquiries, or pending actions"
+            >
+              <span className="stat-label">Needs attention</span>
+              <span className="stat-value">{stats.attention}</span>
+            </div>
+            <div 
+              className={`stat-item ${statusFilter === "live" && attentionFilter === "all" ? "active" : ""}`}
+              onClick={() => { setStatusFilter("live"); setAttentionFilter("all"); }}
+              title="Live listings"
+            >
+              <span className="stat-label">New enquiries</span>
+              <span className="stat-value">{stats.enquiries}</span>
+            </div>
+            <div 
+              className={`stat-item ${attentionFilter === "all" && statusFilter === "all" ? "" : ""}`}
+              title="Viewing requests"
+              onClick={() => setAttentionFilter("all")}
+            >
+              <span className="stat-label">Viewing requests</span>
+              <span className="stat-value">{stats.viewingRequests}</span>
+            </div>
+            <div 
+              className={`stat-item ${statusFilter === "review" ? "active" : ""}`}
+              onClick={() => { setStatusFilter("review"); setAttentionFilter("all"); }}
+              title="Under review"
+            >
+              <span className="stat-label">Under review</span>
+              <span className="stat-value">{stats.review}</span>
+            </div>
+            <div 
+              className={`stat-item ${statusFilter === "draft" ? "active" : ""}`}
+              onClick={() => { setStatusFilter("draft"); setAttentionFilter("all"); }}
+              title="Draft listings"
+            >
+              <span className="stat-label">Drafts</span>
+              <span className="stat-value">{stats.draft}</span>
+            </div>
+            <div 
+              className={`stat-item`}
+              title="Total listings"
+            >
+              <span className="stat-label">Total</span>
+              <span className="stat-value">{stats.total}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="filters-bar">
+          <div className="filters-container">
+            <input
+              type="text"
+              className="search-box"
+              placeholder="Search title, area, ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <select
+              className="filter-select"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All status</option>
+              <option value="live">Live</option>
+              <option value="draft">Draft</option>
+              <option value="review">Under review</option>
+              <option value="archived">Archived</option>
+            </select>
+            <select
+              className="filter-select"
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+            >
+              <option value="all">All types</option>
+              <option value="1BHK">1BHK</option>
+              <option value="2BHK">2BHK</option>
+              <option value="3BHK">3BHK</option>
+              <option value="House">House</option>
+              <option value="Villa">Villa</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="listings-content">
+          {/* Layout toggle */}
+          <div className="layout-toggle">
+            <button 
+              className={`layout-btn ${layout === "a" ? "active" : ""}`}
+              onClick={() => setLayout("a")}
+            >
+              📋 Single-column (compact list)
+            </button>
+            <button 
+              className={`layout-btn ${layout === "b" ? "active" : ""}`}
+              onClick={() => setLayout("b")}
+            >
+              📊 Two-column (card grid)
+            </button>
+          </div>
+
+          {filteredListings.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">📋</div>
+              <h2>No listings found</h2>
+              <p>
+                {searchTerm || statusFilter !== "all"
+                  ? "Try adjusting your filters."
+                  : "Create your first listing to get started."}
+              </p>
+              <button className="btn-primary">+ Create new listing</button>
+            </div>
+          ) : (
+            <>
+              {/* LAYOUT A */}
+              <div className={`layout-section ${layout === "a" ? "active" : ""}`}>
+                <div className="listings-grid-a">
+                  {filteredListings.map((listing) => {
+                    const primary = getPrimaryAction(listing);
+                    const isAttention = needsAttention(listing);
+
+                    return (
+                      <div 
+                        key={listing.id} 
+                        className={`listing-card-a ${isAttention ? "attention" : ""}`}
+                      >
+                        {/* Thumbnail */}
+                        <div className="listing-thumbnail-a">
+                          {listing.thumbnail ? (
+                            <img src={listing.thumbnail} alt={listing.title} />
+                          ) : (
+                            "No photo"
+                          )}
+                        </div>
+
+                        {/* Body */}
+                        <div className="listing-body-a">
+                          <h3 className="listing-title-a">{listing.title}</h3>
+                          
+                          <div className="listing-meta-a">
+                            <div className="meta-item-a">📍 {listing.area}</div>
+                            <div className="meta-item-a">{listing.type}</div>
+                            <div className="meta-item-a">{listing.price}</div>
+                          </div>
+
+                          <div className="listing-status-line-a">
+                            {listing.status === "live" && <span className="badge-a badge-live">Live</span>}
+                            {listing.status === "draft" && <span className="badge-a badge-draft">Draft</span>}
+                            {listing.status === "review" && <span className="badge-a badge-review">Review</span>}
+                            {listing.status === "archived" && <span className="badge-a badge-archived">Archived</span>}
+
+                            {listing.quality === "good" && <span className="badge-a badge-quality-good">✓ Good</span>}
+                            {listing.quality === "needs-work" && <span className="badge-a badge-quality-needs">Needs work</span>}
+                            {listing.quality === "incomplete" && <span className="badge-a badge-quality-incomplete">Incomplete</span>}
+
+                            {listing.topIssue && <span className="attention-indicator-a">⚠ {listing.topIssue}</span>}
+
+                            {listing.enquiries > 0 && (
+                              <span className="enquiry-badge-a">💬 {listing.enquiries}</span>
+                            )}
+                            {listing.viewingRequests > 0 && (
+                              <span className="enquiry-badge-a">👁 {listing.viewingRequests}</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="listing-actions-a">
+                          <button className={`btn-action-a ${primary.type === "urgent" ? "btn-action-urgent-a" : primary.type === "primary" ? "btn-action-primary-a" : ""}`}>
+                            {primary.label}
+                          </button>
+                          <button className="btn-action-a">→ Area</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* LAYOUT B */}
+              <div className={`layout-section ${layout === "b" ? "active" : ""}`}>
+                <div className="listings-grid-b">
+                  {filteredListings.map((listing) => {
+                    const primary = getPrimaryAction(listing);
+                    const isAttention = needsAttention(listing);
+
+                    return (
+                      <div 
+                        key={listing.id} 
+                        className={`listing-card-b ${isAttention ? "attention" : ""}`}
+                      >
+                        {/* Thumbnail */}
+                        <div className="listing-thumbnail-b">
+                          {listing.thumbnail ? (
+                            <img src={listing.thumbnail} alt={listing.title} />
+                          ) : (
+                            "No photo"
+                          )}
+                        </div>
+
+                        {/* Title */}
+                        <h3 className="listing-title-b">{listing.title}</h3>
+
+                        {/* Metadata */}
+                        <div className="listing-meta-b">
+                          <div className="meta-item-b">📍 {listing.area}</div>
+                          <div className="meta-item-b">{listing.type}</div>
+                        </div>
+
+                        {/* Price */}
+                        <div className="listing-price-b">{listing.price}</div>
+
+                        {/* Status badges */}
+                        <div className="listing-badges-b">
+                          {listing.status === "live" && <span className="badge-b badge-live">Live</span>}
+                          {listing.status === "draft" && <span className="badge-b badge-draft">Draft</span>}
+                          {listing.status === "review" && <span className="badge-b badge-review">Review</span>}
+                          {listing.status === "archived" && <span className="badge-b badge-archived">Archived</span>}
+
+                          {listing.quality === "good" && <span className="badge-b badge-quality-good">✓ Good</span>}
+                          {listing.quality === "needs-work" && <span className="badge-b badge-quality-needs">Needs work</span>}
+                          {listing.quality === "incomplete" && <span className="badge-b badge-quality-incomplete">Incomplete</span>}
+
+                          {listing.topIssue && <span className="attention-indicator-b">⚠ {listing.topIssue}</span>}
+
+                          {listing.enquiries > 0 && (
+                            <span className="enquiry-badge-b">💬 {listing.enquiries}</span>
+                          )}
+                          {listing.viewingRequests > 0 && (
+                            <span className="enquiry-badge-b">👁 {listing.viewingRequests}</span>
+                          )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="listing-actions-b">
+                          <button className={`btn-action-b ${primary.type === "urgent" ? "btn-action-urgent-b" : primary.type === "primary" ? "btn-action-primary-b" : ""}`}>
+                            {primary.label}
+                          </button>
+                          <button className="btn-action-b">Area insights</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<BrokerListingsPageV2 />);
+</script>
+
+</body>
+</html>

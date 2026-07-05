@@ -78,3 +78,14 @@ export async function loginAsUser(page: Page, email: string, password: string): 
     .click();
   await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
 }
+
+/**
+ * Grants telemetry consent cleanly in test initialization so the Discover consent banner
+ * does not block UI interactions or cover automated QA evidence screenshots.
+ */
+export async function grantDiscoverConsent(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    localStorage.setItem('discover_telemetry_consent', 'granted');
+  });
+}
+

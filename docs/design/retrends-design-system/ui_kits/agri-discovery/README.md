@@ -105,6 +105,6 @@ Nothing here needs a new backend field. The two groups (Agumbe 70.85 ac / 2 prop
 Manipal 45.43 ac / 2 props), the **4**-property summary, the **116.28-acre** total
 (a sum of the two rows), the **2**-group count, the **24**-property map indicator, the
 region polygon, distance chips, and Buy/Rent are all already present on the current
-page. No price, photo, owner, soil, water, crop, school or demand-score data is
+page. No price, photo, owner, soil, water, crop, road, school or demand-score data is
 introduced, and the state remains the grouped agri-region result view — not a
 listing-card page.

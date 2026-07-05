@@ -179,7 +179,26 @@ describe('AreaGroupSelectedPanel — navigation affordances', () => {
     expect(within(card).getByText('Backend Region')).toBeInTheDocument();
     expect(within(card).queryByText(/student-heavy neighbourhoods/i)).not.toBeInTheDocument();
   });
+
+  it('renders 4-level breadcrumb and calls onBackToRegion when regionLabel is present', async () => {
+    const onBack = vi.fn();
+    const onBackToRegion = vi.fn();
+    render(
+      <AreaGroupSelectedPanel
+        {...baseProps}
+        group={{ ...UNIVERSITY_BELT, region_label: 'North Udupi' }}
+        onBack={onBack}
+        onBackToRegion={onBackToRegion}
+      />,
+    );
+    expect(screen.getByTestId('area-group-back-to-all')).toHaveTextContent('All zones');
+    const regionBtn = screen.getByTestId('area-group-back-to-region');
+    expect(regionBtn).toHaveTextContent('North Udupi');
+    await userEvent.click(regionBtn);
+    expect(onBackToRegion).toHaveBeenCalledWith('North Udupi');
+  });
 });
+
 
 describe('AreaGroupSelectedPanel — empty member list', () => {
   it('shows a graceful "No areas found" state', () => {

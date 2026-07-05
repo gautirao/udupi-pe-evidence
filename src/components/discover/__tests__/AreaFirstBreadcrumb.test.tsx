@@ -76,4 +76,21 @@ describe('AreaFirstBreadcrumb', () => {
     expect(screen.getByTestId('breadcrumb-city')).toBeDisabled();
     expect(screen.getByTestId('breadcrumb-group')).toBeDisabled();
   });
+
+  it('renders and navigates the region crumb when regionName is supplied (4-level hierarchy)', () => {
+    const onRegion = vi.fn();
+    render(
+      <AreaFirstBreadcrumb
+        cityLabel="Bangalore"
+        regionName="North Bangalore"
+        groupName="Airport Belt"
+        areaLabel="Hebbal"
+        onRegion={onRegion}
+      />,
+    );
+    expect(screen.getByTestId('breadcrumb-region')).toHaveTextContent('North Bangalore');
+    fireEvent.click(screen.getByTestId('breadcrumb-region'));
+    expect(onRegion).toHaveBeenCalledTimes(1);
+  });
 });
+

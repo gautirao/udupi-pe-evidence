@@ -99,6 +99,6 @@ Nothing here needs a new backend field. The four corridors (N/E/S/W towards Brah
 Manipal / Padubidri / Malpe), the **Up to 100 km** radius, Buy/Rent, the city, the
 Udupi origin and the **24**-property map indicator are all already present on the
 current page. Town coordinates are approximate real places used only as direction
-anchors. No price, photo, owner, soil, water, crop, school, per-corridor count or
+anchors. No price, photo, owner, soil, water, crop, road, school, per-corridor count or
 demand-score data is introduced, and the state remains the **corridor-selection
 landing** view — not a results or listing page.

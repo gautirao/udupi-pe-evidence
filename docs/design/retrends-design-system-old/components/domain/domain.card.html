@@ -1,0 +1,58 @@
+<!-- @dsCard group="Components" viewport="700x460" name="Listings & data" subtitle="TrustBadge · PropertyCard · StatTile" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  body { margin:0; font-family:var(--font-sans); background:var(--background); padding:24px; color:var(--text-strong); }
+  .lbl { font-size:11px; font-weight:600; letter-spacing:var(--tracking-caps); text-transform:uppercase; color:var(--text-muted); margin:0 0 10px; }
+  .row { display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; }
+  .sect { margin-bottom:22px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script type="text/babel">
+  const { TrustBadge, PropertyCard, StatTile } = window.ReTrendsDesignSystem_f37966;
+  function Demo() {
+    return (
+      <div>
+        <div className="sect">
+          <p className="lbl">Trust tiers</p>
+          <div className="row">
+            <TrustBadge tier="verified" />
+            <TrustBadge tier="trusted" />
+            <TrustBadge tier="listed" />
+          </div>
+        </div>
+        <div className="sect">
+          <p className="lbl">Stat tiles</p>
+          <div className="row">
+            <StatTile label="Avg. price" value="₹1.42" unit="Cr" delta="12.4%" hint="vs last year" />
+            <StatTile label="Per sq.ft" value="₹8,750" delta="-2.1%" />
+            <StatTile label="Active listings" value="428" />
+          </div>
+        </div>
+        <div className="sect">
+          <p className="lbl">Property card</p>
+          <div className="row">
+            <PropertyCard style={{width:'320px'}} property={{
+              title:'3 BHK in Whitefield', locality:'Whitefield', city:'Bangalore',
+              image:'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=600&h=400&fit=crop',
+              trustTier:'verified', bedrooms:3, bathrooms:2, area:1450, price:14200000, postedDays:4,
+              highlights:['Park-facing','Modular kitchen','Covered parking']
+            }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script>
+</body>
+</html>

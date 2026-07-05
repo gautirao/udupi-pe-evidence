@@ -1,0 +1,120 @@
+<!-- @dsCard group="Portal" viewport="1440x900" name="Discover results" subtitle="Map-left / results-right — residential (area + school) & agricultural patterns" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReTrends — Discover results</title>
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  html, body { margin: 0; height: 100%; background: var(--background); }
+  body { font-family: var(--font-sans); color: var(--text-strong); }
+  #root { height: 100vh; display: flex; flex-direction: column; }
+  * { box-sizing: border-box; }
+  ::selection { background: var(--accent); color: #fff; }
+  .leaflet-container { font-family: var(--font-sans); background: var(--canvas-200); }
+  .leaflet-control-zoom a { color: var(--text-strong) !important; }
+  .leaflet-bar { box-shadow: var(--shadow-md) !important; border: none !important; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="discover-data.js"></script>
+<script type="text/babel" src="map.jsx"></script>
+<script type="text/babel" src="cards.jsx"></script>
+<script type="text/babel" src="panels.jsx"></script>
+<script type="text/babel">
+  const { Icon } = window.ReTrendsDesignSystem_f37966;
+
+  const NAV = [
+    { label: "Dashboard", icon: "building" },
+    { label: "My Listings", icon: "layers" },
+    { label: "New Listing", icon: "plus" },
+    { label: "Bookings", icon: "calendar" },
+    { label: "Notifications", icon: "message-circle" },
+  ];
+
+  function AppHeader() {
+    return (
+      <header style={{ flex: "0 0 auto", height: "64px", display: "flex", alignItems: "center", gap: "28px", padding: "0 24px", background: "var(--paper)", borderBottom: "1px solid var(--border)", zIndex: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "11px" }}>
+          <span style={{ width: "38px", height: "38px", borderRadius: "var(--radius-md)", background: "var(--navy-800)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name="map-pin" size={20} color="#fff" />
+          </span>
+          <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
+            <span style={{ fontSize: "16px", fontWeight: 700, letterSpacing: "-0.01em", color: "var(--text-strong)" }}>Udupi Property Tracker</span>
+            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Real estate trends</span>
+          </span>
+        </div>
+        <nav style={{ display: "flex", alignItems: "center", gap: "4px", marginLeft: "8px" }}>
+          {NAV.map((n, i) => (
+            <a key={n.label} href="#" onClick={(e) => e.preventDefault()} style={{ display: "inline-flex", alignItems: "center", gap: "7px", padding: "8px 12px", borderRadius: "var(--radius-md)", textDecoration: "none", fontSize: "14px", fontWeight: 600, color: i === 0 ? "var(--text-strong)" : "var(--text-muted)", background: i === 0 ? "var(--surface-subtle)" : "transparent" }}>
+              <Icon name={n.icon} size={16} color={i === 0 ? "var(--navy-800)" : "var(--text-muted)"} />{n.label}
+            </a>
+          ))}
+        </nav>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "16px" }}>
+          <span style={{ position: "relative", display: "flex" }}>
+            <Icon name="message-circle" size={21} color="var(--text-body)" />
+            <span style={{ position: "absolute", top: "-7px", right: "-9px", minWidth: "18px", height: "18px", padding: "0 4px", borderRadius: "var(--radius-full)", background: "var(--accent)", color: "#fff", fontFamily: "var(--font-mono)", fontSize: "10px", fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>99+</span>
+          </span>
+          <span style={{ width: "36px", height: "36px", borderRadius: "var(--radius-full)", background: "var(--navy-100)", color: "var(--navy-800)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700 }}>TE</span>
+        </div>
+      </header>
+    );
+  }
+
+  const PAGES = [
+    { id: "area", label: "Residential · by area" },
+    { id: "school", label: "Residential · by school" },
+    { id: "agri", label: "Agricultural" },
+  ];
+
+  function ReviewBar({ page, setPage }) {
+    return (
+      <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "9px 24px", background: "var(--surface-subtle)", borderBottom: "1px solid var(--border)" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "12px", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+          <Icon name="layers" size={14} color="var(--text-muted)" />Discover results — design review
+        </span>
+        <div style={{ display: "inline-flex", padding: "3px", gap: "2px", background: "var(--paper)", borderRadius: "var(--radius-full)", border: "1px solid var(--border)" }}>
+          {PAGES.map((p) => {
+            const on = p.id === page;
+            return (
+              <button key={p.id} onClick={() => setPage(p.id)} style={{
+                padding: "6px 14px", border: "none", cursor: "pointer", borderRadius: "var(--radius-full)",
+                fontFamily: "var(--font-sans)", fontSize: "12.5px", fontWeight: 600,
+                background: on ? "var(--navy-800)" : "transparent", color: on ? "#fff" : "var(--text-muted)",
+                transition: "all var(--dur-fast) var(--ease-standard)",
+              }}>{p.label}</button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  function App() {
+    const [page, setPage] = React.useState("area");
+    return (
+      <>
+        <AppHeader />
+        <ReviewBar page={page} setPage={setPage} />
+        <main style={{ flex: "1 1 0", minHeight: 0 }}>
+          {page === "agri"
+            ? <window.RTAgriScreen key="agri" />
+            : <window.RTResidentialScreen key={page} journey={page} />}
+        </main>
+      </>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

@@ -84,8 +84,8 @@ test('Q1 — app loads without blank screen or JS error banner', async ({ page }
 // ---------------------------------------------------------------------------
 // Q2 — Protected route redirects to login when unauthenticated
 // ---------------------------------------------------------------------------
-test('Q2 — /dealer/listings/new redirects to /auth when not logged in', async ({ page }) => {
-  await page.goto('/dealer/listings/new');
+test('Q2 — /broker/listings/new redirects to /auth when not logged in', async ({ page }) => {
+  await page.goto('/broker/listings/new');
   // React Router loads, ProtectedRoute waits for Supabase auth to initialise
   // (isLoading true → false), then redirects unauthenticated users to /auth.
   // Allow up to 10 s for the Supabase session check to complete.

@@ -1,7 +1,11 @@
-// ReTrends — Broker Area Insights: data model.
+// ReTrends — Area Intelligence (selected-area workspace): data model.
 // Reusable across city/area. Malpe (Udupi) carries the exact spec copy;
 // every other area is generated from a short summary so the dashboard is
 // clearly NOT hardcoded to one place. All numbers are stable per area.
+//
+// This page is the SELECTED-AREA workspace. It does not own the full
+// Demand Gaps mechanics or the Listing Quality fix workflow — it only
+// previews them and routes out. Keep data shapes lean accordingly.
 
 // --- City + area taxonomy ---------------------------------------------------
 window.RT_CITIES = [
@@ -22,10 +26,10 @@ window.RT_AREAS = {
   pune:      [["wakad","Wakad"],["hinjewadi","Hinjewadi"],["baner","Baner"],["kharadi","Kharadi"]],
 };
 
-// Short per-area summary — drives the comparison strip + the generator.
-// { demand: "highest buyer need", action: "short broker action" }
+// Short per-area summary — drives the generator.
+// { demand: "top buyer need", action: "short broker action" }
 window.RT_AREA_SUMMARY = {
-  "udupi/malpe":      { demand: "Plots under ₹50L",        action: "Add lower-budget verified plots" },
+  "udupi/malpe":      { demand: "Plots under ₹50L",        action: "Add verified plots under ₹50L" },
   "udupi/manipal":    { demand: "2BHK rentals",            action: "Add furnished listings" },
   "udupi/brahmavar":  { demand: "Plots under ₹40L",        action: "Verify plot locations" },
   "udupi/karkala":    { demand: "Agricultural land",       action: "Add road and water details" },
@@ -53,36 +57,37 @@ window.RT_AREA_SUMMARY = {
 
 // --- Full, hand-written record for the opening example: Udupi / Malpe -------
 const MALPE = {
-  supplyGap: "Plots under ₹50L",
+  topNeed: "Plots under ₹50L",
   kpis: [
-    { label: "Buyer searches for this area", value: "41", helper: "Searches and filters for Malpe this week", confidence: "Enough data" },
+    { label: "Buyer searches in this area",     value: "41", helper: "ReTrends searches and filters for Malpe this week", confidence: "Enough data" },
     { label: "Enquiries on your area listings", value: "18", helper: "Calls, WhatsApp clicks and forms on your Malpe listings", confidence: "Enough data" },
-    { label: "Your live listings", value: "5", helper: "Matching Malpe listings", confidence: "Enough data" },
-    { label: "Listings needing fixes", value: "3", helper: "Missing location, photos or key details", confidence: "Limited data" },
-    { label: "Biggest supply gap", value: "Plots under ₹50L", helper: "41 searches, 5 matching listings", confidence: "Enough data", highlight: true },
+    { label: "Your live listings",              value: "5",  helper: "Live Malpe listings on ReTrends", confidence: "Enough data" },
+    { label: "Listings needing attention",      value: "3",  helper: "Missing location, photos or key details", confidence: "Limited data" },
+    { label: "Top buyer need",                  value: "Plots under ₹50L", helper: "41 searches vs 5 matching listings", confidence: "Enough data", highlight: true },
   ],
   insight: {
-    text: "Your best opportunity in Malpe is lower-budget plots. Add verified plots under ₹50L if available, and fix location or photo issues on 3 current listings.",
-    chips: ["Plots under ₹50L", "Limited matching supply", "3 listings need fixes"],
+    text: "Your strongest Malpe opportunity is lower-budget plots. Buyer searches are ahead of visible matching listings, and 3 of your current Malpe listings need location or photo fixes.",
+    chips: ["Plots under ₹50L", "Limited matching supply", "3 listings need attention"],
     confidence: "Enough data",
+    primary: "demand", // which workspace the single CTA routes to: "demand" | "quality"
   },
-  demandSupply: [
-    { need: "Plots under ₹50L",            searches: 41, matching: 5,  availability: "Limited options", action: "Add lower-budget verified plots" },
-    { need: "Plots ₹50L–₹70L",             searches: 28, matching: 12, availability: "Some options",    action: "Improve photos and location accuracy" },
-    { need: "2BHK near schools",           searches: 18, matching: 7,  availability: "Some options",    action: "Add school-distance details" },
-    { need: "Agricultural land near Malpe", searches: 8,  matching: 3,  availability: "Limited data",    action: "Add road and water details" },
+  // Area-specific demand PREVIEW only (3–4 rows). Full mechanics live in Demand Gaps.
+  demand: [
+    { need: "Plots under ₹50L",             searches: 41, matching: 5,  signal: "Searches ahead of supply", next: "Add verified plots under ₹50L" },
+    { need: "Plots ₹50L–₹70L",              searches: 28, matching: 12, signal: "Supply appears balanced",   next: "Improve photos & location" },
+    { need: "2BHK near schools",            searches: 18, matching: 7,  signal: "Some matching supply",      next: "Add school-distance details" },
+    { need: "Agricultural land near Malpe", searches: 8,  matching: 3,  signal: "Limited data",             next: "Add road & water details" },
   ],
-  listings: [
-    { title: "Plot — Malpe, 8 cents", views: 84, enquiries: "0", signal: "Many views, no enquiries", issue: "No exact location",     action: "Verify location so buyers know where the plot is.", cta: "Verify location", icon: "map-pin", severity: "high" },
-    { title: "Plot — Survey No. 142", views: 41, enquiries: "1", signal: "Low enquiry response",     issue: "Missing photos",        action: "Upload clear, recent photos.",                     cta: "Upload photos",   icon: "camera",  severity: "med" },
-    { title: "2BHK near school",      views: 18, enquiries: "0", signal: "Not enough buyer activity yet", issue: "School distance missing", action: "Add school-distance details.",                 cta: "Add school details", icon: "pencil", severity: "muted" },
-  ],
-  actions: [
-    { title: "Add lower-budget plots if available",   detail: "Plots under ₹50L are the biggest supply gap in Malpe.",                          cta: "Add listing",     icon: "plus",      link: "demand" },
-    { title: "Verify location on 3 listings",         detail: "Listings with unclear location are less likely to convert views into enquiries.", cta: "Review listings", icon: "map-pin",   link: "listings" },
-    { title: "Upload photos for 1 listing",           detail: "Clear, recent photos help buyers trust the listing.",                            cta: "Upload photos",   icon: "camera",    link: "listings" },
-    { title: "Add school, road and access details",   detail: "These details help buyers decide faster.",                                       cta: "Add details",     icon: "file-check", link: "listings" },
-  ],
+  // Compact listing-health SUMMARY only. Full fix workflow lives in Listing Quality.
+  health: {
+    needFixes: 3,
+    commonIssue: "Missing location or photos",
+    lowEnquiries: 2,
+    previews: [
+      { title: "Plot — Malpe, 8 cents",   note: "84 views · 0 enquiries · location not verified" },
+      { title: "Plot — Survey No. 142",   note: "41 views · 1 enquiry · photos missing" },
+    ],
+  },
 };
 
 // --- Generator for every other area ----------------------------------------
@@ -95,39 +100,40 @@ function genArea(cityKey, areaKey, areaName) {
   const enquiries = 8 + (h % 18);          // 8–25
   const live = 3 + (h % 7);                // 3–9
   const fixes = 1 + (h % 4);               // 1–4
+  const lowEnq = Math.max(1, fixes - 1);
+  const matching = Math.max(3, live);
   const d = sum.demand;
   const lower = d.toLowerCase();
   return {
-    supplyGap: d,
+    topNeed: d,
     kpis: [
-      { label: "Buyer searches for this area", value: String(searches), helper: `Searches and filters for ${areaName} this week`, confidence: "Enough data" },
+      { label: "Buyer searches in this area",     value: String(searches), helper: `ReTrends searches and filters for ${areaName} this week`, confidence: "Enough data" },
       { label: "Enquiries on your area listings", value: String(enquiries), helper: `Calls, WhatsApp clicks and forms on your ${areaName} listings`, confidence: "Enough data" },
-      { label: "Your live listings", value: String(live), helper: `Matching ${areaName} listings`, confidence: live >= 4 ? "Enough data" : "Limited data" },
-      { label: "Listings needing fixes", value: String(fixes), helper: "Missing location, photos or key details", confidence: "Limited data" },
-      { label: "Biggest supply gap", value: d, helper: `${searches} searches, ${Math.max(3, live)} matching listings`, confidence: "Enough data", highlight: true },
+      { label: "Your live listings",              value: String(live), helper: `Live ${areaName} listings on ReTrends`, confidence: live >= 4 ? "Enough data" : "Limited data" },
+      { label: "Listings needing attention",      value: String(fixes), helper: "Missing location, photos or key details", confidence: "Limited data" },
+      { label: "Top buyer need",                  value: d, helper: `${searches} searches vs ${matching} matching listings`, confidence: "Enough data", highlight: true },
     ],
     insight: {
-      text: `Your best opportunity in ${areaName} is ${lower}. Add verified ${lower} if available, and fix location or photo issues on ${fixes} current listings.`,
-      chips: [d, "Limited matching supply", `${fixes} listings need fixes`],
-      confidence: "Enough data",
+      text: `Your strongest ${areaName} opportunity is ${lower}. Buyer searches are ahead of visible matching listings, and ${fixes} of your current ${areaName} listings need location or photo fixes.`,
+      chips: [d, "Limited matching supply", `${fixes} listings need attention`],
+      confidence: live >= 4 ? "Enough data" : "Limited data",
+      primary: "demand",
     },
-    demandSupply: [
-      { need: d, searches, matching: Math.max(3, live), availability: "Limited options", action: sum.action },
-      { need: "Resale " + lower, searches: Math.round(searches * 0.7), matching: live + 6, availability: "Some options", action: "Improve photos and location accuracy" },
-      { need: "Homes near schools", searches: Math.round(searches * 0.45), matching: live + 2, availability: "Some options", action: "Add school-distance details" },
-      { need: "Premium " + lower, searches: Math.round(searches * 0.2), matching: 3, availability: "Limited data", action: "Add more verified details" },
+    demand: [
+      { need: d,                       searches, matching, signal: "Searches ahead of supply", next: sum.action },
+      { need: "Resale " + lower,       searches: Math.round(searches * 0.7), matching: live + 6, signal: "Supply appears balanced", next: "Improve photos & location" },
+      { need: "Homes near schools",    searches: Math.round(searches * 0.45), matching: live + 2, signal: "Some matching supply", next: "Add school-distance details" },
+      { need: "Premium " + lower,      searches: Math.round(searches * 0.2), matching: 3, signal: "Limited data", next: "Add more verified details" },
     ],
-    listings: [
-      { title: `Listing 1 — ${areaName}`, views: 60 + (h % 40), enquiries: "0", signal: "Many views, no enquiries", issue: "No exact location", action: "Verify location so buyers know where it is.", cta: "Verify location", icon: "map-pin", severity: "high" },
-      { title: `Listing 2 — ${areaName}`, views: 30 + (h % 25), enquiries: "1", signal: "Low enquiry response", issue: "Missing photos", action: "Upload clear, recent photos.", cta: "Upload photos", icon: "camera", severity: "med" },
-      { title: `Listing 3 — ${areaName}`, views: 12 + (h % 15), enquiries: "0", signal: "Not enough buyer activity yet", issue: "Key details missing", action: "Add the missing property details.", cta: "Add details", icon: "pencil", severity: "muted" },
-    ],
-    actions: [
-      { title: `Add ${lower} if available`, detail: `${d} is the biggest supply gap in ${areaName}.`, cta: "Add listing", icon: "plus", link: "demand" },
-      { title: `Verify location on ${fixes} listings`, detail: "Listings with unclear location are less likely to convert views into enquiries.", cta: "Review listings", icon: "map-pin", link: "listings" },
-      { title: "Upload photos for 1 listing", detail: "Clear, recent photos help buyers trust the listing.", cta: "Upload photos", icon: "camera", link: "listings" },
-      { title: "Add school, road and access details", detail: "These details help buyers decide faster.", cta: "Add details", icon: "file-check", link: "listings" },
-    ],
+    health: {
+      needFixes: fixes,
+      commonIssue: "Missing location or photos",
+      lowEnquiries: lowEnq,
+      previews: [
+        { title: `Listing 1 — ${areaName}`, note: `${60 + (h % 40)} views · 0 enquiries · location not verified` },
+        { title: `Listing 2 — ${areaName}`, note: `${30 + (h % 25)} views · 1 enquiry · photos missing` },
+      ],
+    },
   };
 }
 

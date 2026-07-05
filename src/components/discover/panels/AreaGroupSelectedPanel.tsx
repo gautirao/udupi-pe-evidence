@@ -21,6 +21,12 @@ export interface AreaGroupSelectedPanelProps {
    * (mirrors AreaGroupsLandingPanel's onClearGroup contract).
    */
   onBack?: () => void;
+  /**
+   * Issue #1745 4-level hierarchy — navigate back to the macro region's zone list.
+   * When provided and regionLabel exists, renders the 4-level breadcrumb:
+   * All zones › {regionLabel} › {group.name}
+   */
+  onBackToRegion?: (regionLabel: string) => void;
   /** Start over → return to journey selection. Rendered top-right when provided. */
   onStartOver?: () => void;
   /** Select a member locality → drill into its results page (PUSH areaKey). */
@@ -140,6 +146,7 @@ export function AreaGroupSelectedPanel({
   areas,
   cityLabel,
   onBack,
+  onBackToRegion,
   onStartOver,
   onSelectArea,
   onViewAllResults,
@@ -211,16 +218,43 @@ export function AreaGroupSelectedPanel({
         </div>
 
         {onBack && (
-          <button
-            type="button"
-            onClick={onBack}
-            aria-label="Back to all neighbourhood groups"
-            data-testid="area-group-back-to-all"
-            className="flex w-fit items-center gap-1.5 rounded text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
-            Back to all neighbourhood groups
-          </button>
+          onBackToRegion && regionLabel ? (
+            <nav aria-label="Group breadcrumb" data-testid="area-group-breadcrumb" className="flex items-center gap-1.5 text-[13px] text-muted-foreground flex-wrap">
+              <button
+                type="button"
+                onClick={onBack}
+                data-testid="area-group-back-to-all"
+                className="inline-flex items-center gap-1 rounded font-semibold transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <ChevronLeft className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>All zones</span>
+              </button>
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={() => onBackToRegion(regionLabel)}
+                data-testid="area-group-back-to-region"
+                className="rounded font-semibold transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {regionLabel}
+              </button>
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" aria-hidden="true" />
+              <span className="font-bold text-foreground truncate max-w-[180px]" aria-current="page">
+                {group.name}
+              </span>
+            </nav>
+          ) : (
+            <button
+              type="button"
+              onClick={onBack}
+              aria-label="Back to all neighbourhood groups"
+              data-testid="area-group-back-to-all"
+              className="flex w-fit items-center gap-1.5 rounded text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+              Back to all neighbourhood groups
+            </button>
+          )
         )}
       </div>
 

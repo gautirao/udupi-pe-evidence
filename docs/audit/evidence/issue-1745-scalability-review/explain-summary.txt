@@ -1,0 +1,267 @@
+==========================================================================================
+Issue #1745 — Scalability Review: EXPLAIN ANALYZE for GET /api/discover/summary Queries
+==========================================================================================
+
+--- 1. SALE — Total Active Listings ---
+SQL: EXPLAIN ANALYZE
+SELECT COUNT(*) FROM property_listings pl
+WHERE pl.status = 'LIVE' AND pl.archived_at IS NULL AND pl.is_duplicate = false
+  AND pl.area_key IN (SELECT a.area_key FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = 'bangalore')
+  AND pl.listing_purpose = 'sale' AND array_length(string_to_array(pl.area_key, '|'), 1) = 4;
+
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=16.24..16.25 rows=1 width=8) (actual time=4.401..4.403 rows=1 loops=1)
+   ->  Nested Loop  (cost=14.91..16.24 rows=1 width=0) (actual time=0.320..4.285 rows=1737 loops=1)
+         ->  HashAggregate  (cost=14.63..14.64 rows=1 width=29) (actual time=0.302..0.374 rows=323 loops=1)
+               Group Key: a.area_key
+               Batches: 1  Memory Usage: 85kB
+               ->  Nested Loop  (cost=0.42..14.63 rows=1 width=29) (actual time=0.020..0.170 rows=323 loops=1)
+                     ->  Index Scan using cities_slug_key on cities c  (cost=0.15..2.37 rows=1 width=4) (actual time=0.007..0.007 rows=1 loops=1)
+                           Index Cond: (slug = 'bangalore'::text)
+                     ->  Index Scan using uq_areas_city_id_area_slug on areas a  (cost=0.27..11.39 rows=87 width=33) (actual time=0.010..0.123 rows=323 loops=1)
+                           Index Cond: (city_id = c.id)
+         ->  Index Scan using idx_listing_area_key_status_created on property_listings pl  (cost=0.28..1.59 rows=1 width=28) (actual time=0.004..0.011 rows=5 loops=323)
+               Index Cond: ((area_key = a.area_key) AND ((status)::text = 'LIVE'::text))
+               Filter: ((archived_at IS NULL) AND (NOT is_duplicate) AND ((listing_purpose)::text = 'sale'::text) AND (array_length(string_to_array(area_key, '|'::text), 1) = 4))
+ Planning Time: 0.563 ms
+ Execution Time: 4.475 ms
+(15 rows)
+
+
+
+==========================================================================================
+
+--- 2. SALE — Macro Regions (area_group) ---
+SQL: EXPLAIN ANALYZE
+SELECT ag.slug AS region_key, ag.name AS region_label, COUNT(pl.id) AS listing_count
+FROM area_groups ag
+JOIN cities c ON c.id = ag.city_id
+JOIN area_group_members agm ON agm.area_group_id = ag.id
+LEFT JOIN property_listings pl ON pl.area_key = agm.area_key
+  AND pl.status = 'LIVE' AND pl.archived_at IS NULL AND pl.is_duplicate = false
+  AND pl.area_key IN (SELECT a.area_key FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = 'bangalore')
+  AND pl.listing_purpose = 'sale' AND array_length(string_to_array(pl.area_key, '|'), 1) = 4
+WHERE c.slug = 'bangalore' AND ag.is_active = true
+GROUP BY ag.slug, ag.name
+ORDER BY listing_count DESC, ag.name ASC;
+
+                                                                                             QUERY PLAN                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=17.45..17.45 rows=1 width=72) (actual time=1.850..1.852 rows=5 loops=1)
+   Sort Key: (count(pl.id)) DESC, ag.name
+   Sort Method: quicksort  Memory: 25kB
+   ->  GroupAggregate  (cost=17.41..17.44 rows=1 width=72) (actual time=1.780..1.844 rows=5 loops=1)
+         Group Key: ag.slug, ag.name
+         ->  Sort  (cost=17.41..17.42 rows=1 width=80) (actual time=1.764..1.781 rows=286 loops=1)
+               Sort Key: ag.slug, ag.name
+               Sort Method: quicksort  Memory: 42kB
+               ->  Nested Loop Left Join  (cost=1.16..17.40 rows=1 width=80) (actual time=0.050..1.603 rows=286 loops=1)
+                     ->  Nested Loop  (cost=0.45..5.15 rows=4 width=96) (actual time=0.023..0.040 rows=13 loops=1)
+                           ->  Nested Loop  (cost=0.30..4.75 rows=1 width=68) (actual time=0.018..0.022 rows=5 loops=1)
+                                 ->  Index Scan using cities_slug_key on cities c  (cost=0.15..2.37 rows=1 width=4) (actual time=0.008..0.009 rows=1 loops=1)
+                                       Index Cond: (slug = 'bangalore'::text)
+                                 ->  Index Scan using idx_area_groups_city_active_order on area_groups ag  (cost=0.15..2.37 rows=1 width=72) (actual time=0.006..0.008 rows=5 loops=1)
+                                       Index Cond: ((city_id = c.id) AND (is_active = true))
+                           ->  Index Scan using idx_area_group_members_group_order on area_group_members agm  (cost=0.15..0.34 rows=6 width=36) (actual time=0.002..0.003 rows=3 loops=5)
+                                 Index Cond: (area_group_id = ag.id)
+                     ->  Nested Loop Semi Join  (cost=0.71..3.05 rows=1 width=44) (actual time=0.010..0.118 rows=22 loops=13)
+                           ->  Index Scan using idx_listing_area_key_status_created on property_listings pl  (cost=0.28..0.77 rows=1 width=44) (actual time=0.006..0.047 rows=22 loops=13)
+                                 Index Cond: ((area_key = agm.area_key) AND ((status)::text = 'LIVE'::text))
+                                 Filter: ((archived_at IS NULL) AND (NOT is_duplicate) AND ((listing_purpose)::text = 'sale'::text) AND (array_length(string_to_array(area_key, '|'::text), 1) = 4))
+                           ->  Nested Loop  (cost=0.43..2.28 rows=1 width=29) (actual time=0.003..0.003 rows=1 loops=284)
+                                 ->  Index Scan using areas_pkey on areas a  (cost=0.27..2.05 rows=1 width=33) (actual time=0.002..0.002 rows=1 loops=284)
+                                       Index Cond: (area_key = pl.area_key)
+                                 ->  Memoize  (cost=0.16..0.22 rows=1 width=4) (actual time=0.000..0.000 rows=1 loops=284)
+                                       Cache Key: a.city_id
+                                       Cache Mode: logical
+                                       Hits: 283  Misses: 1  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+                                       ->  Index Scan using cities_pkey on cities c_1  (cost=0.15..0.21 rows=1 width=4) (actual time=0.003..0.003 rows=1 loops=1)
+                                             Index Cond: (id = a.city_id)
+                                             Filter: (slug = 'bangalore'::text)
+ Planning Time: 6.201 ms
+ Execution Time: 1.950 ms
+(33 rows)
+
+
+
+==========================================================================================
+
+--- 3. SALE — Hotspots (limit 8) ---
+SQL: EXPLAIN ANALYZE
+SELECT pl.area_key AS area_key, a.name AS name, a.geo_center_lat AS geo_center_lat, a.geo_center_lon AS geo_center_lon, COUNT(*) AS listing_count
+FROM property_listings pl
+JOIN areas a ON a.area_key = pl.area_key
+WHERE pl.status = 'LIVE' AND pl.archived_at IS NULL AND pl.is_duplicate = false
+  AND pl.area_key IN (SELECT a.area_key FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = 'bangalore')
+  AND pl.listing_purpose = 'sale' AND array_length(string_to_array(pl.area_key, '|'), 1) = 4
+GROUP BY pl.area_key, a.name, a.geo_center_lat, a.geo_center_lon
+ORDER BY listing_count DESC, a.name ASC, pl.area_key ASC
+LIMIT 8;
+
+                                                                                             QUERY PLAN                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=16.62..16.62 rows=1 width=65) (actual time=8.042..8.046 rows=8 loops=1)
+   ->  Sort  (cost=16.62..16.62 rows=1 width=65) (actual time=8.041..8.043 rows=8 loops=1)
+         Sort Key: (count(*)) DESC, a.name, pl.area_key
+         Sort Method: top-N heapsort  Memory: 26kB
+         ->  GroupAggregate  (cost=16.58..16.61 rows=1 width=65) (actual time=7.427..7.969 rows=312 loops=1)
+               Group Key: pl.area_key, a.name, a.geo_center_lat, a.geo_center_lon
+               ->  Sort  (cost=16.58..16.58 rows=1 width=57) (actual time=7.413..7.514 rows=1737 loops=1)
+                     Sort Key: pl.area_key, a.name, a.geo_center_lat, a.geo_center_lon
+                     Sort Method: quicksort  Memory: 177kB
+                     ->  Nested Loop  (cost=15.18..16.57 rows=1 width=57) (actual time=0.316..5.419 rows=1737 loops=1)
+                           ->  Nested Loop  (cost=14.90..14.97 rows=1 width=87) (actual time=0.300..1.302 rows=323 loops=1)
+                                 ->  HashAggregate  (cost=14.63..14.64 rows=1 width=29) (actual time=0.294..0.366 rows=323 loops=1)
+                                       Group Key: a_1.area_key
+                                       Batches: 1  Memory Usage: 85kB
+                                       ->  Nested Loop  (cost=0.42..14.63 rows=1 width=29) (actual time=0.021..0.171 rows=323 loops=1)
+                                             ->  Index Scan using cities_slug_key on cities c  (cost=0.15..2.37 rows=1 width=4) (actual time=0.007..0.007 rows=1 loops=1)
+                                                   Index Cond: (slug = 'bangalore'::text)
+                                             ->  Index Scan using uq_areas_city_id_area_slug on areas a_1  (cost=0.27..11.39 rows=87 width=33) (actual time=0.012..0.125 rows=323 loops=1)
+                                                   Index Cond: (city_id = c.id)
+                                 ->  Index Scan using areas_pkey on areas a  (cost=0.27..0.33 rows=1 width=58) (actual time=0.002..0.002 rows=1 loops=323)
+                                       Index Cond: (area_key = a_1.area_key)
+                           ->  Index Scan using idx_listing_area_key_status_created on property_listings pl  (cost=0.28..1.59 rows=1 width=28) (actual time=0.004..0.012 rows=5 loops=323)
+                                 Index Cond: ((area_key = a.area_key) AND ((status)::text = 'LIVE'::text))
+                                 Filter: ((archived_at IS NULL) AND (NOT is_duplicate) AND ((listing_purpose)::text = 'sale'::text) AND (array_length(string_to_array(area_key, '|'::text), 1) = 4))
+ Planning Time: 0.913 ms
+ Execution Time: 8.129 ms
+(26 rows)
+
+
+
+==========================================================================================
+
+--- 4. RENT — Total Active Listings ---
+SQL: EXPLAIN ANALYZE
+SELECT COUNT(*) FROM property_listings pl
+WHERE pl.status = 'LIVE' AND pl.archived_at IS NULL AND pl.is_duplicate = false
+  AND pl.area_key IN (SELECT a.area_key FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = 'bangalore')
+  AND pl.listing_purpose = 'rent' AND array_length(string_to_array(pl.area_key, '|'), 1) = 4;
+
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=16.24..16.25 rows=1 width=8) (actual time=2.737..2.738 rows=1 loops=1)
+   ->  Nested Loop  (cost=14.91..16.24 rows=1 width=0) (actual time=2.734..2.735 rows=0 loops=1)
+         ->  HashAggregate  (cost=14.63..14.64 rows=1 width=29) (actual time=0.285..0.345 rows=323 loops=1)
+               Group Key: a.area_key
+               Batches: 1  Memory Usage: 85kB
+               ->  Nested Loop  (cost=0.42..14.63 rows=1 width=29) (actual time=0.019..0.168 rows=323 loops=1)
+                     ->  Index Scan using cities_slug_key on cities c  (cost=0.15..2.37 rows=1 width=4) (actual time=0.006..0.006 rows=1 loops=1)
+                           Index Cond: (slug = 'bangalore'::text)
+                     ->  Index Scan using uq_areas_city_id_area_slug on areas a  (cost=0.27..11.39 rows=87 width=33) (actual time=0.010..0.122 rows=323 loops=1)
+                           Index Cond: (city_id = c.id)
+         ->  Index Scan using idx_listing_area_key_status_created on property_listings pl  (cost=0.28..1.59 rows=1 width=28) (actual time=0.007..0.007 rows=0 loops=323)
+               Index Cond: ((area_key = a.area_key) AND ((status)::text = 'LIVE'::text))
+               Filter: ((archived_at IS NULL) AND (NOT is_duplicate) AND ((listing_purpose)::text = 'rent'::text) AND (array_length(string_to_array(area_key, '|'::text), 1) = 4))
+               Rows Removed by Filter: 5
+ Planning Time: 0.594 ms
+ Execution Time: 2.806 ms
+(16 rows)
+
+
+
+==========================================================================================
+
+--- 5. RENT — Macro Regions (area_group) ---
+SQL: EXPLAIN ANALYZE
+SELECT ag.slug AS region_key, ag.name AS region_label, COUNT(pl.id) AS listing_count
+FROM area_groups ag
+JOIN cities c ON c.id = ag.city_id
+JOIN area_group_members agm ON agm.area_group_id = ag.id
+LEFT JOIN property_listings pl ON pl.area_key = agm.area_key
+  AND pl.status = 'LIVE' AND pl.archived_at IS NULL AND pl.is_duplicate = false
+  AND pl.area_key IN (SELECT a.area_key FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = 'bangalore')
+  AND pl.listing_purpose = 'rent' AND array_length(string_to_array(pl.area_key, '|'), 1) = 4
+WHERE c.slug = 'bangalore' AND ag.is_active = true
+GROUP BY ag.slug, ag.name
+ORDER BY listing_count DESC, ag.name ASC;
+
+                                                                                             QUERY PLAN                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=19.21..19.21 rows=1 width=72) (actual time=0.442..0.444 rows=5 loops=1)
+   Sort Key: (count(pl.id)) DESC, ag.name
+   Sort Method: quicksort  Memory: 25kB
+   ->  GroupAggregate  (cost=19.17..19.20 rows=1 width=72) (actual time=0.431..0.436 rows=5 loops=1)
+         Group Key: ag.slug, ag.name
+         ->  Sort  (cost=19.17..19.18 rows=1 width=80) (actual time=0.425..0.428 rows=13 loops=1)
+               Sort Key: ag.slug, ag.name
+               Sort Method: quicksort  Memory: 25kB
+               ->  Nested Loop Left Join  (cost=1.16..19.16 rows=1 width=80) (actual time=0.151..0.407 rows=13 loops=1)
+                     ->  Nested Loop  (cost=0.45..5.15 rows=4 width=96) (actual time=0.020..0.035 rows=13 loops=1)
+                           ->  Nested Loop  (cost=0.30..4.75 rows=1 width=68) (actual time=0.015..0.018 rows=5 loops=1)
+                                 ->  Index Scan using cities_slug_key on cities c  (cost=0.15..2.37 rows=1 width=4) (actual time=0.006..0.007 rows=1 loops=1)
+                                       Index Cond: (slug = 'bangalore'::text)
+                                 ->  Index Scan using idx_area_groups_city_active_order on area_groups ag  (cost=0.15..2.37 rows=1 width=72) (actual time=0.005..0.007 rows=5 loops=1)
+                                       Index Cond: ((city_id = c.id) AND (is_active = true))
+                           ->  Index Scan using idx_area_group_members_group_order on area_group_members agm  (cost=0.15..0.34 rows=6 width=36) (actual time=0.002..0.002 rows=3 loops=5)
+                                 Index Cond: (area_group_id = ag.id)
+                     ->  Nested Loop Semi Join  (cost=0.71..3.49 rows=1 width=44) (actual time=0.028..0.028 rows=0 loops=13)
+                           ->  Index Scan using idx_listing_area_key_status_created on property_listings pl  (cost=0.28..0.77 rows=1 width=44) (actual time=0.028..0.028 rows=0 loops=13)
+                                 Index Cond: ((area_key = agm.area_key) AND ((status)::text = 'LIVE'::text))
+                                 Filter: ((archived_at IS NULL) AND (NOT is_duplicate) AND ((listing_purpose)::text = 'rent'::text) AND (array_length(string_to_array(area_key, '|'::text), 1) = 4))
+                                 Rows Removed by Filter: 22
+                           ->  Nested Loop  (cost=0.43..2.72 rows=1 width=29) (never executed)
+                                 ->  Index Scan using areas_pkey on areas a  (cost=0.27..2.49 rows=1 width=33) (never executed)
+                                       Index Cond: (area_key = pl.area_key)
+                                 ->  Memoize  (cost=0.16..0.22 rows=1 width=4) (never executed)
+                                       Cache Key: a.city_id
+                                       Cache Mode: logical
+                                       ->  Index Scan using cities_pkey on cities c_1  (cost=0.15..0.21 rows=1 width=4) (never executed)
+                                             Index Cond: (id = a.city_id)
+                                             Filter: (slug = 'bangalore'::text)
+ Planning Time: 0.933 ms
+ Execution Time: 0.527 ms
+(33 rows)
+
+
+
+==========================================================================================
+
+--- 6. RENT — Hotspots (limit 8) ---
+SQL: EXPLAIN ANALYZE
+SELECT pl.area_key AS area_key, a.name AS name, a.geo_center_lat AS geo_center_lat, a.geo_center_lon AS geo_center_lon, COUNT(*) AS listing_count
+FROM property_listings pl
+JOIN areas a ON a.area_key = pl.area_key
+WHERE pl.status = 'LIVE' AND pl.archived_at IS NULL AND pl.is_duplicate = false
+  AND pl.area_key IN (SELECT a.area_key FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = 'bangalore')
+  AND pl.listing_purpose = 'rent' AND array_length(string_to_array(pl.area_key, '|'), 1) = 4
+GROUP BY pl.area_key, a.name, a.geo_center_lat, a.geo_center_lon
+ORDER BY listing_count DESC, a.name ASC, pl.area_key ASC
+LIMIT 8;
+
+                                                                                             QUERY PLAN                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=16.62..16.62 rows=1 width=65) (actual time=3.718..3.720 rows=0 loops=1)
+   ->  Sort  (cost=16.62..16.62 rows=1 width=65) (actual time=3.717..3.719 rows=0 loops=1)
+         Sort Key: (count(*)) DESC, a.name, pl.area_key
+         Sort Method: quicksort  Memory: 25kB
+         ->  GroupAggregate  (cost=16.58..16.61 rows=1 width=65) (actual time=3.713..3.714 rows=0 loops=1)
+               Group Key: pl.area_key, a.name, a.geo_center_lat, a.geo_center_lon
+               ->  Sort  (cost=16.58..16.58 rows=1 width=57) (actual time=3.711..3.713 rows=0 loops=1)
+                     Sort Key: pl.area_key, a.name, a.geo_center_lat, a.geo_center_lon
+                     Sort Method: quicksort  Memory: 25kB
+                     ->  Nested Loop  (cost=15.18..16.57 rows=1 width=57) (actual time=3.707..3.709 rows=0 loops=1)
+                           ->  Nested Loop  (cost=14.90..14.97 rows=1 width=87) (actual time=0.293..1.209 rows=323 loops=1)
+                                 ->  HashAggregate  (cost=14.63..14.64 rows=1 width=29) (actual time=0.287..0.351 rows=323 loops=1)
+                                       Group Key: a_1.area_key
+                                       Batches: 1  Memory Usage: 85kB
+                                       ->  Nested Loop  (cost=0.42..14.63 rows=1 width=29) (actual time=0.020..0.176 rows=323 loops=1)
+                                             ->  Index Scan using cities_slug_key on cities c  (cost=0.15..2.37 rows=1 width=4) (actual time=0.007..0.008 rows=1 loops=1)
+                                                   Index Cond: (slug = 'bangalore'::text)
+                                             ->  Index Scan using uq_areas_city_id_area_slug on areas a_1  (cost=0.27..11.39 rows=87 width=33) (actual time=0.010..0.129 rows=323 loops=1)
+                                                   Index Cond: (city_id = c.id)
+                                 ->  Index Scan using areas_pkey on areas a  (cost=0.27..0.33 rows=1 width=58) (actual time=0.002..0.002 rows=1 loops=323)
+                                       Index Cond: (area_key = a_1.area_key)
+                           ->  Index Scan using idx_listing_area_key_status_created on property_listings pl  (cost=0.28..1.59 rows=1 width=28) (actual time=0.007..0.007 rows=0 loops=323)
+                                 Index Cond: ((area_key = a.area_key) AND ((status)::text = 'LIVE'::text))
+                                 Filter: ((archived_at IS NULL) AND (NOT is_duplicate) AND ((listing_purpose)::text = 'rent'::text) AND (array_length(string_to_array(area_key, '|'::text), 1) = 4))
+                                 Rows Removed by Filter: 5
+ Planning Time: 0.878 ms
+ Execution Time: 3.816 ms
+(27 rows)
+
+
+
+==========================================================================================

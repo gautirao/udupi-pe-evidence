@@ -210,24 +210,33 @@ test.describe('Discover real-data smoke', () => {
         await page.waitForURL((url) => !url.pathname.startsWith('/auth'), { timeout: 15_000 });
       }
 
+      // Set up a promise that resolves when the school-radius endpoint is called
+      const schoolRadiusResponsePromise = page.waitForResponse(
+        (resp) => resp.url().includes('/school-radius-listings'),
+        { timeout: 20_000 },
+      );
+
       await page.goto(`/discover?city=udupi&schoolId=${encodeURIComponent(schoolId!)}&radiusKm=2`);
 
       // Wait for the right panel
       await page.waitForSelector('[data-testid="discover-right-panel"]', { timeout: 20_000 });
 
-      // School-radius listing cards render asynchronously after API response.
-      // Without this timeout, cards are not yet DOM-attached and count as 0.
-      await page.waitForTimeout(1000);
+      // Wait for the school-radius endpoint to be called
+      await schoolRadiusResponsePromise.catch(() => {}); // handle cache hits or fast responses
 
       // Authenticated school-radius path uses same public school-radius endpoint as anon path.
       // May show listing cards OR property markers/clusters.
-      const cardCount = await page.locator('[data-testid="listing-card"]').count();
-      const markerCount = await page.locator('[data-testid="property-marker"]').count();
-      const clusterCount = await page.locator('.custom-marker-cluster').count();
-
-      expect(
-        cardCount + markerCount + clusterCount,
-        'J3: at least 1 listing card OR property marker/cluster expected for authenticated school-radius journey',
+      await expect.poll(
+        async () => {
+          const cards = await page.locator('[data-testid="listing-card"]').count();
+          const markers = await page.locator('[data-testid="property-marker"]').count();
+          const clusters = await page.locator('.custom-marker-cluster').count();
+          return cards + markers + clusters;
+        },
+        {
+          message: 'J3: at least 1 listing card OR property marker/cluster expected for authenticated school-radius journey',
+          timeout: 15_000,
+        },
       ).toBeGreaterThanOrEqual(1);
     });
   });

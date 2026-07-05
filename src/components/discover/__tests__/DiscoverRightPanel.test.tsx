@@ -568,3 +568,57 @@ describe('DiscoverRightPanel — cumulative distance hint (Issue #1456)', () => 
     ).toBeInTheDocument();
   });
 });
+
+// ─── Issue #1745 — 4-level residential Discover hierarchy ──────────────────────
+
+describe('DiscoverRightPanel — 4-level residential hierarchy (Issue #1745)', () => {
+  it('forwards scope and onClearScope to AreaGroupsLandingPanel', () => {
+    const onClearScope = vi.fn();
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-groups-landing"
+        areas={[]}
+        areaGroups={[
+          {
+            id: 'north-zone',
+            name: 'North Zone',
+            subtitle: '',
+            region_label: 'North Bangalore',
+            area_keys: [],
+            area_count: 0,
+            listing_count: 5,
+            bounding_box: null,
+            centroid: null,
+            focus_lat: null,
+            focus_lon: null,
+            default_zoom: 12,
+            display_order: 1,
+          },
+          {
+            id: 'south-zone',
+            name: 'South Zone',
+            subtitle: '',
+            region_label: 'South Bangalore',
+            area_keys: [],
+            area_count: 0,
+            listing_count: 5,
+            bounding_box: null,
+            centroid: null,
+            focus_lat: null,
+            focus_lon: null,
+            default_zoom: 12,
+            display_order: 2,
+          },
+        ]}
+        scope="north"
+        onClearScope={onClearScope}
+      />,
+    );
+
+    // Verify scope filter banner is displayed in AreaGroupsLandingPanel
+    expect(screen.getByTestId('macro-region-filter-banner')).toBeInTheDocument();
+    expect(screen.getByText('North Zone')).toBeInTheDocument();
+    expect(screen.queryByText('South Zone')).not.toBeInTheDocument();
+  });
+});

@@ -19,9 +19,9 @@ import {
 
 // ─── Structural divergence guard: compile-time typed assertion ────────────────
 //
-// `journey` is hoisted out of `DiscoverLayerSelection` onto `DiscoverLayerInput.journey`
-// directly, so the selection-surface comparison excludes it from PANEL_DERIVATION_FIELDS.
-type SelectionDerivationFields = Exclude<PanelDerivationField, 'journey'>;
+// `journey` and `scope` are hoisted out of `DiscoverLayerSelection` onto `DiscoverLayerInput`
+// directly, so the selection-surface comparison excludes them from PANEL_DERIVATION_FIELDS.
+type SelectionDerivationFields = Exclude<PanelDerivationField, 'journey' | 'scope'>;
 type KeysEqual<A extends PropertyKey, B extends PropertyKey> = [A] extends [B]
   ? [B] extends [A]
     ? true

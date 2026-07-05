@@ -1,72 +1,61 @@
 // ReTrends — Broker Listing Quality data.
-// A broker's own live listings, each with the fix worklist detail, a tailored
-// action checklist, and a simple score breakdown. One fixed scenario (Udupi
-// portfolio) — not a generator. Exposed on window for the page script.
+// A "fix-first listing workbench" for a broker's own live listings. One fixed
+// scenario (Udupi portfolio) — not a generator. Exposed on window for the page.
 
-window.RT_LQ_SUMMARY = [
-  {
-    icon: "star", tone: "caution",
-    title: "Average listing quality", value: "72/100", helper: "Across your live listings",
-    status: "Needs improvement", note: "80+ is good",
-  },
-  {
-    icon: "alert-triangle", tone: "negative",
-    title: "Urgent fixes", value: "6", helper: "Listings below 60",
-    status: "Review first",
-  },
-  {
-    icon: "pencil", tone: "caution",
-    title: "Listings needing fixes", value: "18", helper: "Location, photos or key details missing",
-    status: "Action needed",
-  },
-  {
-    icon: "shield-check", tone: "positive",
-    title: "Fully verified listings", value: "12", helper: "Location and trust details complete",
-    status: "Good",
-  },
-];
-
-// Inline insight strip shown under the summary cards (keeps the row to 4 cards).
-window.RT_LQ_TOP_ISSUE = {
-  label: "Most common issue",
-  value: "Missing exact location",
-  helper: "Affects 18 listings",
+// ---- Today's priority banner (the single biggest problem) ------------------
+window.RT_LQ_PRIORITY = {
+  label: "Today's priority",
+  title: "Verify exact locations",
+  body: "18 listings have an approximate or missing location. 6 of them already have buyer views but very few enquiries — buyers may not trust them yet.",
   cta: "Verify locations",
+  icon: "map-pin",
   href: "/broker/listing-quality?fix=location",
 };
 
-window.RT_LQ_FILTERS = [
-  { key: "all",       label: "All" },
-  { key: "below60",   label: "Below 60" },
-  { key: "location",  label: "Missing location" },
-  { key: "photos",    label: "Missing photos" },
-  { key: "stale",     label: "Stale listings" },
-  { key: "agri",      label: "Agri details missing" },
-  { key: "price",     label: "Price review needed" },
-  { key: "verified",  label: "Fully verified" },
+// ---- Compact health strip (quieter than the old 4 big cards) ---------------
+window.RT_LQ_HEALTH = [
+  { value: "72", suffix: "/100", label: "Average quality", tone: "caution", mono: true },
+  { value: "6",  label: "Priority fixes",   tone: "negative", mono: true },
+  { value: "18", label: "Need improvement", tone: "caution",  mono: true },
+  { value: "12", label: "Buyer-ready listings", tone: "positive", mono: true },
 ];
 
-// signal tone: "caution" = strong, actionable; "muted" = low data.
+// ---- Action-oriented filter chips (replace old filters + bottom quick fixes)
+// count = portfolio-wide number shown on the chip. key matches listing.tags.
+window.RT_LQ_FILTERS = [
+  { key: "all",      label: "All" },
+  { key: "location", label: "Fix location",    count: 18 },
+  { key: "photos",   label: "Add photos",      count: 9 },
+  { key: "stale",    label: "Refresh stale",   count: 6 },
+  { key: "agri",     label: "Add agri details", count: 4 },
+  { key: "price",    label: "Review price",    count: 3 },
+  { key: "ready",    label: "Buyer-ready",     count: 12 },
+];
+
+// signalTone: "caution" = strong, actionable; "muted" = low data.
 window.RT_LQ_LISTINGS = [
   {
     id: "malpe-plot",
     title: "Plot — Malpe, 8 cents",
     area: "Malpe", views: 84, enquiries: 0,
-    signal: "Many views, no enquiries", signalTone: "caution",
+    whyFix: "Many views, no enquiries", signalTone: "caution",
+    mainFix: "Exact location missing",
+    activity: "84 views · 0 enquiries",
     quality: 54,
-    issue: "No exact location", action: "Verify location", actionIcon: "map-pin",
-    tags: ["below60", "location"],
-    statusBadge: "Needs fixes", statusTone: "caution",
+    action: "Verify location", actionIcon: "map-pin",
+    tags: ["location"],
+    statusBadge: "Fix first", statusTone: "negative",
     updated: "31 days ago",
+    enquiryAlert: true,
+    whyFirst: "Buyers are viewing this listing but not enquiring. The exact location is not verified, so buyers may not trust it enough to call or message you.",
+    expected: "This listing should look more trustworthy to buyers, so more of those views can turn into calls and enquiries.",
     confidence: "Enough activity", confidenceTone: "positive",
     locationNote: "Approximate only",
-    note: "Enough activity to prioritise fixes.",
-    enquiryAlert: true, // strong signal -> show 0 with caution emphasis
     checklist: [
-      { title: "Verify exact location", why: "Buyers often skip listings when the location is unclear.", cta: "Verify location", icon: "map-pin", priority: "High" },
-      { title: "Upload fresh photos", why: "Clear photos help buyers trust the plot before contacting you.", cta: "Upload photos", icon: "camera", priority: "Medium" },
-      { title: "Add road access details", why: "Road access is important for plot buyers.", cta: "Add details", icon: "route", priority: "Medium" },
-      { title: "Review price against similar visible listings", why: "Buyers may compare this listing with similar plots nearby.", cta: "Review price", icon: "sliders-horizontal", priority: "Low" },
+      { title: "Verify exact location", impact: "High", why: "Buyers often skip a listing when the location is unclear.", cta: "Verify location", icon: "map-pin" },
+      { title: "Upload clear photos", impact: "Medium", why: "Clear photos help buyers trust the plot before contacting you.", cta: "Upload photos", icon: "camera" },
+      { title: "Add road access details", impact: "Medium", why: "Road access is important for plot buyers.", cta: "Add details", icon: "route" },
+      { title: "Review price against similar visible listings", impact: "Low", why: "Buyers may compare this with similar plots nearby.", cta: "Review price", icon: "sliders-horizontal" },
     ],
     score: [
       { label: "Location confidence", status: "Needs fix",  tone: "negative" },
@@ -80,20 +69,23 @@ window.RT_LQ_LISTINGS = [
     id: "brahmavar-agri",
     title: "Agri land — Brahmavar, 1.5 acre",
     area: "Brahmavar", views: 112, enquiries: 2,
-    signal: "Low enquiry response", signalTone: "caution",
+    whyFix: "Many views, low enquiries", signalTone: "caution",
+    mainFix: "No photos uploaded",
+    activity: "112 views · 2 enquiries",
     quality: 61,
-    issue: "No photos uploaded", action: "Upload photos", actionIcon: "camera",
+    action: "Upload photos", actionIcon: "camera",
     tags: ["photos"],
-    statusBadge: "Needs fixes", statusTone: "caution",
+    statusBadge: "Need improvement", statusTone: "caution",
     updated: "12 days ago",
+    enquiryAlert: false,
+    whyFirst: "This land gets plenty of views but few enquiries. With no photos uploaded, buyers can't picture the land, so most move on without contacting you.",
+    expected: "Photos should give buyers confidence in the land and bring in more enquiries.",
     confidence: "Enough activity", confidenceTone: "positive",
     locationNote: "Verified",
-    note: "Plenty of views but few enquiries — photos are the most likely blocker.",
-    enquiryAlert: false,
     checklist: [
-      { title: "Upload fresh photos", why: "Listings with no photos are skipped most often by buyers.", cta: "Upload photos", icon: "camera", priority: "High" },
-      { title: "Add water and soil details", why: "Agri buyers compare water access and soil type before enquiring.", cta: "Add agri details", icon: "building", priority: "Medium" },
-      { title: "Confirm road access", why: "Access details reassure buyers the land is usable.", cta: "Add details", icon: "route", priority: "Low" },
+      { title: "Upload clear photos", impact: "High", why: "Listings with no photos are skipped most often by buyers.", cta: "Upload photos", icon: "camera" },
+      { title: "Add water and soil details", impact: "Medium", why: "Agri buyers compare water access and soil type before enquiring.", cta: "Add agri details", icon: "building" },
+      { title: "Confirm road access", impact: "Low", why: "Access details reassure buyers the land is usable.", cta: "Add details", icon: "route" },
     ],
     score: [
       { label: "Location confidence", status: "Good",        tone: "positive" },
@@ -107,20 +99,23 @@ window.RT_LQ_LISTINGS = [
     id: "manipal-2bhk",
     title: "2BHK flat — Manipal, near MIT",
     area: "Manipal", views: 67, enquiries: 1,
-    signal: "Low enquiry response", signalTone: "caution",
+    whyFix: "Low enquiry response", signalTone: "caution",
+    mainFix: "Not updated in 42 days",
+    activity: "67 views · 1 enquiry",
     quality: 63,
-    issue: "Not updated in 42 days", action: "Refresh listing", actionIcon: "calendar",
+    action: "Refresh listing", actionIcon: "calendar",
     tags: ["stale"],
-    statusBadge: "Needs refresh", statusTone: "caution",
+    statusBadge: "Need improvement", statusTone: "caution",
     updated: "42 days ago",
+    enquiryAlert: false,
+    whyFirst: "This flat hasn't been updated in 42 days, so it looks inactive to buyers. A stale listing lowers buyer trust even when the details are good.",
+    expected: "A refreshed listing should look active again and rebuild buyer trust.",
     confidence: "Enough activity", confidenceTone: "positive",
     locationNote: "Verified",
-    note: "Stale listings drop in buyer trust. A refresh of price and photos usually helps.",
-    enquiryAlert: false,
     checklist: [
-      { title: "Refresh the listing", why: "Listings not updated recently look inactive to buyers.", cta: "Refresh listing", icon: "calendar", priority: "High" },
-      { title: "Re-check the asking price", why: "Confirm the price is still in line with similar flats nearby.", cta: "Review price", icon: "sliders-horizontal", priority: "Medium" },
-      { title: "Add recent photos", why: "Current photos reassure buyers the flat is available.", cta: "Upload photos", icon: "camera", priority: "Low" },
+      { title: "Refresh the listing", impact: "High", why: "Listings not updated recently look inactive to buyers.", cta: "Refresh listing", icon: "calendar" },
+      { title: "Re-check the asking price", impact: "Medium", why: "Confirm the price is still in line with similar flats nearby.", cta: "Review price", icon: "sliders-horizontal" },
+      { title: "Add recent photos", impact: "Low", why: "Current photos reassure buyers the flat is available.", cta: "Upload photos", icon: "camera" },
     ],
     score: [
       { label: "Location confidence", status: "Good",        tone: "positive" },
@@ -134,20 +129,23 @@ window.RT_LQ_LISTINGS = [
     id: "udupi-commercial",
     title: "Commercial plot — Udupi town",
     area: "Udupi", views: 45, enquiries: 0,
-    signal: "Not enough buyer activity yet", signalTone: "muted",
+    whyFix: "Not enough buyer activity yet", signalTone: "muted",
+    mainFix: "Review price",
+    activity: "45 views · 0 enquiries",
     quality: 58,
-    issue: "Review price", action: "Review price", actionIcon: "sliders-horizontal",
-    tags: ["below60", "price"],
-    statusBadge: "Review price", statusTone: "caution",
+    action: "Review price", actionIcon: "sliders-horizontal",
+    tags: ["price"],
+    statusBadge: "Fix first", statusTone: "negative",
     updated: "20 days ago",
+    enquiryAlert: false,
+    whyFirst: "This plot doesn't have enough buyer activity yet to read a clear signal. Strengthen the basics first — a price review and more photos give it a fair chance.",
+    expected: "Stronger basics should help this listing start attracting buyer interest.",
     confidence: "Not enough activity yet", confidenceTone: "muted",
     locationNote: "Verified",
-    note: "This listing does not have enough buyer activity yet. Improve the basics first: location, photos and key details.",
-    enquiryAlert: false,
     checklist: [
-      { title: "Review price against similar listings", why: "Buyers may compare this plot with similar commercial plots nearby.", cta: "Review price", icon: "sliders-horizontal", priority: "Medium" },
-      { title: "Add more photos", why: "More photos build trust while buyer activity is still low.", cta: "Upload photos", icon: "camera", priority: "Medium" },
-      { title: "Highlight frontage and approvals", why: "Commercial buyers look for frontage and usage approvals.", cta: "Add details", icon: "building", priority: "Low" },
+      { title: "Review price against similar visible listings", impact: "Medium", why: "Buyers may compare this with similar commercial plots nearby.", cta: "Review price", icon: "sliders-horizontal" },
+      { title: "Add more photos", impact: "Medium", why: "More photos build trust while buyer activity is still low.", cta: "Upload photos", icon: "camera" },
+      { title: "Highlight frontage and approvals", impact: "Low", why: "Commercial buyers look for frontage and usage approvals.", cta: "Add details", icon: "building" },
     ],
     score: [
       { label: "Location confidence", status: "Good",        tone: "positive" },
@@ -161,20 +159,23 @@ window.RT_LQ_LISTINGS = [
     id: "karkala-coconut",
     title: "Coconut farm — Karkala",
     area: "Karkala", views: 39, enquiries: 1,
-    signal: "Limited data", signalTone: "muted",
+    whyFix: "Limited data", signalTone: "muted",
+    mainFix: "Road & water details missing",
+    activity: "39 views · 1 enquiry",
     quality: 59,
-    issue: "Missing road and water details", action: "Add agri details", actionIcon: "building",
-    tags: ["below60", "agri"],
-    statusBadge: "Needs fixes", statusTone: "caution",
+    action: "Add agri details", actionIcon: "building",
+    tags: ["agri", "location"],
+    statusBadge: "Fix first", statusTone: "negative",
     updated: "26 days ago",
+    enquiryAlert: false,
+    whyFirst: "There's limited buyer activity so far and key farm details are missing. Completing road, water and location details is the safest first step.",
+    expected: "Complete details should make the farm easier to trust and compare.",
     confidence: "Not enough activity yet", confidenceTone: "muted",
     locationNote: "Approximate only",
-    note: "Limited buyer activity so far. Completing key details is the safest first step.",
-    enquiryAlert: false,
     checklist: [
-      { title: "Add road and water details", why: "Agri buyers need water access and road details before enquiring.", cta: "Add agri details", icon: "building", priority: "High" },
-      { title: "Verify exact location", why: "An approximate location lowers buyer trust in farm listings.", cta: "Verify location", icon: "map-pin", priority: "Medium" },
-      { title: "Add photos of the land", why: "Photos of the trees and access help buyers picture the farm.", cta: "Upload photos", icon: "camera", priority: "Low" },
+      { title: "Add road and water details", impact: "High", why: "Agri buyers need water access and road details before enquiring.", cta: "Add agri details", icon: "building" },
+      { title: "Verify exact location", impact: "Medium", why: "An approximate location lowers buyer trust in farm listings.", cta: "Verify location", icon: "map-pin" },
+      { title: "Add photos of the land", impact: "Low", why: "Photos of the trees and access help buyers picture the farm.", cta: "Upload photos", icon: "camera" },
     ],
     score: [
       { label: "Location confidence", status: "Needs fix",   tone: "negative" },
@@ -184,11 +185,4 @@ window.RT_LQ_LISTINGS = [
       { label: "Verification",        status: "Incomplete",  tone: "caution" },
     ],
   },
-];
-
-window.RT_LQ_QUICKFIXES = [
-  { label: "Verify locations", icon: "map-pin", count: 18 },
-  { label: "Upload missing photos", icon: "camera", count: 9 },
-  { label: "Refresh stale listings", icon: "calendar", count: 6 },
-  { label: "Add agri details", icon: "building", count: 4 },
 ];

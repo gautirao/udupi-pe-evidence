@@ -89,7 +89,7 @@ How ReTrends writes:
 - `core/` — `Button`, `Badge`, `Input`, `Select`, `Card` (+ `CardTitle`, `CardDescription`).
 - `domain/` — `TrustBadge`, `PropertyCard`, `StatTile`.
 
-**UI kit** (`ui_kits/portal/`)
+**UI kit** (`ui_kits/discover/`, `ui_kits/agri-discovery`, `ui_kits/broker/`,`ui_kits/buyer`)
 - Interactive ReTrends consumer portal — Home, Discover, Trends, Listing detail, Saved. See its own `README.md`.
 
 > Components are consumed via `window.ReTrendsDesignSystem_f37966.<Name>` after loading `_ds_bundle.js`. Each component has a sibling `.d.ts` (props) and `.prompt.md` (usage).

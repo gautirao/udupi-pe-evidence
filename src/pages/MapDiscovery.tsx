@@ -22,6 +22,7 @@ import {
   areaKeyToLabel,
 } from '@/components/discover/SchoolRadiusMapOverlay';
 import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
+import { resolveScopeKeyFromLabel, matchesMacroRegion, labelToSlug, aggregateMacroRegions } from '@/utils/macroRegionResolver';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import {
   computeDiscoverLayer,
@@ -1004,6 +1005,12 @@ export default function MapDiscovery() {
     city,
     listingPurpose: summaryListingPurpose,
   });
+  const rawSummaryRegions = discoverSummaryData?.regions;
+  const areaGroupsList = areaGroupsData?.groups;
+  const summaryRegions = useMemo(
+    () => aggregateMacroRegions(rawSummaryRegions, areaGroupsList, discoverSummaryData?.totalActiveListings),
+    [rawSummaryRegions, areaGroupsList, discoverSummaryData?.totalActiveListings]
+  );
 
   // Issue #1064 AC2 — composed tick + Start Over handler (see startOverTick declaration above).
   const composedResetMapTick = resetMapTick + startOverTick;
@@ -1919,6 +1926,45 @@ export default function MapDiscovery() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlState.groupId, urlState.areaKey, areasLoading, discoverAreas, areaGroupsData]);
 
+  // Issue #1745 Bug 2 — fitBounds to member areas when a macro-region scope is selected
+  // so the user does not need to manually zoom out to see corridors in that macro region.
+  const prevScopeRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!urlState.scope) return;
+    if (areasLoading || isLoadingAreaGroups) return;
+
+    const scopeChanged = urlState.scope !== prevScopeRef.current;
+    prevScopeRef.current = urlState.scope;
+
+    if (urlState.groupId !== null || urlState.areaKey !== null) return;
+    if (!scopeChanged) return;
+
+    const groups = areaGroupsData?.groups ?? [];
+    const targetGroups = groups.filter(
+      (g) =>
+        g.id === urlState.scope ||
+        g.name.toLowerCase() === urlState.scope?.toLowerCase() ||
+        labelToSlug(g.name) === urlState.scope ||
+        matchesMacroRegion(g.region_label, urlState.scope, summaryRegions)
+    );
+
+    let memberAreas: typeof discoverAreas = [];
+    if (targetGroups.length > 0) {
+      const groupAreaKeys = targetGroups.flatMap((g) => g.area_keys ?? []);
+      memberAreas = discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
+    } else if (urlState.scope === 'other' || urlState.scope === 'unmapped') {
+      const allGroupAreaKeys = new Set(groups.flatMap((g) => g.area_keys ?? []));
+      memberAreas = discoverAreas.filter((a) => !allGroupAreaKeys.has(a.areaKey));
+    }
+
+    const bounds = computeGroupBounds(memberAreas);
+    if (bounds) {
+      setPanToArea(bounds);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlState.scope, urlState.groupId, urlState.areaKey, areasLoading, isLoadingAreaGroups, discoverAreas, areaGroupsData, summaryRegions]);
+
   // Issue #1410 (B3) — viewport-fit when agri group listings arrive.
   // Uses a state variable fed into PropertyMap's focusBounds so it's consistent with how
   // all other fitBounds effects work in this page (no direct mapRef access).
@@ -2098,7 +2144,7 @@ export default function MapDiscovery() {
   // Hoisted above the isCityValid early return to satisfy Rules of Hooks.
   const memoizedInitialCenter = useMemo(
     () => urlState.viewport ? [urlState.viewport.lat, urlState.viewport.lon] as [number, number] : undefined,
-    [urlState.viewport?.lat, urlState.viewport?.lon],
+    [urlState.viewport],
   );
 
   // Issue #1160 GAP 2 — derive area coordinates for AreaRestorePanner.
@@ -2121,8 +2167,6 @@ export default function MapDiscovery() {
         .map((l) => ({ lat: l.lat as number, lon: l.lon as number })),
     [schoolListings],
   );
-
-  if (!isCityValid) return <CityNotSupported city={city} />;
 
   const trendsHref = selectedArea
     ? `/trends/${city}/areas/${slugifyFromAreaKey(selectedArea.areaKey)}`
@@ -2216,13 +2260,36 @@ export default function MapDiscovery() {
   const overviewAreas = useMemo((): AreaPoint[] => {
     if (mapLayerKind === 'zoom-gated' || mapLayerKind === 'agri-drilldown') return [];
 
-    if (mapLayerKind === 'area-group-bubbles') {
+    if (mapLayerKind === 'area-group-bubbles' || mapLayerKind === 'region-zone-areas') {
       if (isLoadingAreaGroups) return [];
       const groups = areaGroupsData?.groups ?? [];
-      if (groups.length === 0) {
+      const activeScope = urlState.scope ?? null;
+
+      let targetGroups = groups;
+      if (activeScope) {
+        targetGroups = groups.filter(
+          (g) =>
+            g.id === activeScope ||
+            g.name.toLowerCase() === activeScope.toLowerCase() ||
+            labelToSlug(g.name) === activeScope ||
+            matchesMacroRegion(g.region_label, activeScope, summaryRegions)
+        );
+        if (targetGroups.length === 0) return [];
+
+        // If the matched scope is itself a single area group (e.g. Udupi 3-level where scope="south-udupi" is group.id),
+        // there are no sub-zones inside it, so return its member areas directly.
+        const isDirectGroupMatch =
+          targetGroups.length === 1 &&
+          (targetGroups[0].id === activeScope || labelToSlug(targetGroups[0].name) === activeScope);
+        if (isDirectGroupMatch) {
+          const groupAreaKeys = targetGroups[0].area_keys ?? [];
+          return discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
+        }
+      } else if (groups.length === 0) {
         return isLandingState || isAreaFirstCityLanding ? liveAreas : discoverAreas;
       }
-      return groups
+
+      return targetGroups
         .map((group): AreaPoint | null => {
           const groupAreaKeys = group.area_keys ?? [];
           const memberAreas = discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
@@ -2254,65 +2321,87 @@ export default function MapDiscovery() {
         .filter((a): a is AreaPoint => a !== null && (a.listingCount ?? 0) > 0);
     }
 
-    // Issue #1745 Batch B map-hierarchy fix (NEW) — journeyless city landing,
-    // scope=null: macro-region bubbles. Reuses the SAME member-area geometry
-    // derivation as the area-group-bubbles branch above for PLACEMENT, but the
-    // displayed count/label come from the backend-owned useDiscoverSummary regions
-    // (joined by regionKey === group.id — both are area_groups.slug; confirmed via
-    // backend DiscoverSummaryService.java + live /api/discover/summary response),
-    // never a frontend sum (AC7). A group with no matching summary region, or a
-    // zero backend count, is OMITTED (never defaulted/summed) — same visual
-    // precedent as the area-group-bubbles branch's own zero-count filter above.
+    // Issue #1745 Batch B map-hierarchy fix — journeyless city landing,
+    // scope=null: macro-region summary bubbles from useDiscoverSummary().regions.
     if (mapLayerKind === 'macro-region-bubbles') {
       if (isLoadingAreaGroups) return [];
       const groups = areaGroupsData?.groups ?? [];
-      if (groups.length === 0) return liveAreas;
-      const summaryRegions = discoverSummaryData?.regions ?? [];
-      return groups
-        .map((group): AreaPoint | null => {
-          const groupAreaKeys = group.area_keys ?? [];
+      if (summaryRegions.length === 0) {
+        return isLandingState || isAreaFirstCityLanding ? liveAreas : discoverAreas;
+      }
+      return summaryRegions
+        .map((region): AreaPoint | null => {
+          if (region.listingCount == null || region.listingCount === 0) return null;
+
+          const matchingGroups = groups.filter(
+            (g) =>
+              g.id === region.regionKey ||
+              g.name.toLowerCase() === region.regionLabel.toLowerCase() ||
+              matchesMacroRegion(g.region_label, region.regionKey, summaryRegions) ||
+              matchesMacroRegion(g.region_label, region.regionLabel, summaryRegions)
+          );
+
+          const groupAreaKeys = matchingGroups.flatMap((g) => g.area_keys ?? []);
           const memberAreas = discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
 
-          let lat = group.focus_lat != null ? group.focus_lat : null;
-          let lon = group.focus_lon != null ? group.focus_lon : null;
-          if (lat == null || lon == null) {
+          let lat: number | null = null;
+          let lon: number | null = null;
+          const focusGroups = matchingGroups.filter((g) => g.focus_lat != null && g.focus_lon != null);
+          if (focusGroups.length > 0) {
+            lat = focusGroups.reduce((sum, g) => sum + (g.focus_lat as number), 0) / focusGroups.length;
+            lon = focusGroups.reduce((sum, g) => sum + (g.focus_lon as number), 0) / focusGroups.length;
+          } else {
             const coords = memberAreas.filter((a) => a.geo_center_lat != null && a.geo_center_lon != null);
             if (coords.length > 0) {
               lat = coords.reduce((sum, a) => sum + a.geo_center_lat, 0) / coords.length;
               lon = coords.reduce((sum, a) => sum + a.geo_center_lon, 0) / coords.length;
             }
           }
-          if (lat == null || lon == null) return null;
+
+          if (lat == null || lon == null) {
+            const rKey = region.regionKey.toLowerCase();
+            const rLabel = region.regionLabel.toLowerCase();
+            const fallbackCoords = (discoverAreas.length > 0 ? discoverAreas : liveAreas).filter(
+              (a) =>
+                (a.areaLabel ?? '').toLowerCase().includes(rKey) ||
+                (a.areaLabel ?? '').toLowerCase().includes(rLabel) ||
+                rLabel.includes((a.areaLabel ?? '').toLowerCase())
+            );
+            if (fallbackCoords.length > 0) {
+              const valid = fallbackCoords.filter((a) => a.geo_center_lat != null && a.geo_center_lon != null);
+              if (valid.length > 0) {
+                lat = valid.reduce((sum, a) => sum + a.geo_center_lat, 0) / valid.length;
+                lon = valid.reduce((sum, a) => sum + a.geo_center_lon, 0) / valid.length;
+              }
+            }
+          }
+
+          if (lat == null || lon == null) {
+            const baseLat = urlState.viewport?.lat ?? cityCenter[0] ?? 13.34;
+            const baseLon = urlState.viewport?.lon ?? cityCenter[1] ?? 74.74;
+            const offset = 0.04;
+            const key = region.regionKey.toLowerCase();
+            lat =
+              baseLat +
+              (key.includes('north') || key === 'n' ? offset : key.includes('south') || key === 's' ? -offset : 0);
+            lon =
+              baseLon +
+              (key.includes('east') || key === 'e' ? offset : key.includes('west') || key === 'w' ? -offset : 0);
+          }
 
           const unionBbox = computeGroupBounds(memberAreas)?.bbox ?? null;
-          const summaryListingCount = summaryRegions.find((r) => r.regionKey === group.id)?.listingCount;
-          if (summaryListingCount == null || summaryListingCount === 0) return null;
 
           return {
-            areaKey: group.id,
-            areaLabel: group.name,
+            areaKey: region.regionKey,
+            areaLabel: region.regionLabel,
             geo_center_lat: lat,
             geo_center_lon: lon,
             bbox: unionBbox,
-            listingCount: summaryListingCount,
+            listingCount: region.listingCount,
             schoolCount: undefined,
           };
         })
         .filter((a): a is AreaPoint => a !== null);
-    }
-
-    // Issue #1745 Batch B map-hierarchy fix (NEW) — journeyless city landing,
-    // scope=<groupId>: that region's member-area pills only (no city-wide noise,
-    // no listing markers — gated separately in the `listings` prop selection below).
-    // An unknown/orphaned scope slug (no matching group) renders an empty set rather
-    // than falling back to the full city — matches the "no city-wide noise" intent.
-    if (mapLayerKind === 'region-zone-areas') {
-      if (isLoadingAreaGroups) return [];
-      const groups = areaGroupsData?.groups ?? [];
-      const activeGroup = groups.find((g) => g.id === (urlState.scope ?? null));
-      if (!activeGroup) return [];
-      const groupAreaKeys = activeGroup.area_keys ?? [];
-      return discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
     }
 
     if (mapLayerKind === 'agri-corridor-bubbles') {
@@ -2388,7 +2477,8 @@ export default function MapDiscovery() {
     liveAreas,
     urlState.viewport,
     urlState.scope,
-    discoverSummaryData,
+    summaryRegions,
+    cityCenter,
   ]);
 
   const handleOverviewAreaClick = useCallback((area: AreaPoint) => {
@@ -2396,36 +2486,20 @@ export default function MapDiscovery() {
       urlActions.setRegionWithMaxKm(area.areaKey);
       return;
     }
-    if (isTopGroupedAreaOrSchool && (areaGroupsData?.groups ?? []).some((g) => g.id === area.areaKey)) {
-      urlActions.selectGroup(area.areaKey);
-      return;
-    }
-    // Issue #1745 Batch B map-hierarchy fix — journeyless city landing, scope=null:
-    // the clicked bubble's areaKey is a macro-region group.id (see the
-    // 'macro-region-bubbles' overviewAreas branch above), not a real area. Route it
-    // through setScope (same action the GuidedEntryPanel region card uses) so the map
-    // drills into that region's member-area pills ('region-zone-areas') instead of
-    // falling through to handleAreaClick, which would set an invalid areaKey.
-    //
-    // Guard (code-review follow-up): the 'macro-region-bubbles' overviewAreas branch
-    // falls back to rendering REAL AREA PILLS (liveAreas) when the city has zero
-    // area_groups (see the `if (groups.length === 0) return liveAreas;` line above).
-    // Without the group-membership check below, clicking one of those fallback area
-    // pills would wrongly call setScope with a real areaKey (not a group id), so no
-    // area drill would happen. Mirror the already-correct area-group-bubbles branch
-    // above: only take the setScope path when area.areaKey is actually a group id.
-    if (mapLayerKind === 'macro-region-bubbles' && (areaGroupsData?.groups ?? []).some((g) => g.id === area.areaKey)) {
+    if (
+      mapLayerKind === 'macro-region-bubbles' &&
+      (summaryRegions.some((r) => r.regionKey === area.areaKey) ||
+        (areaGroupsData?.groups ?? []).some((g) => g.id === area.areaKey))
+    ) {
       urlActions.setScope(area.areaKey);
       return;
     }
-    // mapLayerKind === 'region-zone-areas' (journeyless landing, scope=<groupId>): the
-    // rendered points here ARE real member areas (filtered from discoverAreas by the
-    // active group's area_keys — see the 'region-zone-areas' branch above), so
-    // handleAreaClick(area) is the correct, intentional path — not accidental fallthrough.
-    // This also correctly covers the zero-groups fallback above: a liveAreas pill click
-    // falls through here (real areaKey), never through the setScope branch.
+    if ((areaGroupsData?.groups ?? []).some((g) => g.id === area.areaKey)) {
+      urlActions.selectGroup(area.areaKey);
+      return;
+    }
     handleAreaClick(area);
-  }, [isTopGroupedAgri, corridorGroups, isTopGroupedAreaOrSchool, areaGroupsData, mapLayerKind, urlActions, handleAreaClick]);
+  }, [isTopGroupedAgri, corridorGroups, areaGroupsData, mapLayerKind, urlActions, handleAreaClick, summaryRegions]);
 
   // Issue #1595 — the area-first selected-group drill-down state (a group is focused,
   // no specific area selected yet). Drives the mock-aligned map chrome for this step:
@@ -2489,6 +2563,8 @@ export default function MapDiscovery() {
     .filter((s): s is { key: string; label: string; emphasis?: DiscoverMapCrumb['emphasis']; maxWidthClass?: string } =>
       typeof s.label === 'string' && s.label.trim().length > 0)
     .map((s) => ({ key: s.key, label: s.label, emphasis: s.emphasis, maxWidthClass: s.maxWidthClass }));
+
+  if (!isCityValid) return <CityNotSupported city={city} />;
 
   return (
     <PublicDiscoverLayout>
@@ -3000,6 +3076,17 @@ export default function MapDiscovery() {
           // Issue #1483 — clear groupId to return from Level-2 area list to Level-1 group cards.
           // Issue #1485 — same callback also used by school-first: school-group-areas → school-browse.
           onClearGroup={() => urlActions.selectGroup(null)}
+          // Issue #1745 — 4-level residential Discover hierarchy
+          scope={urlState.scope ?? null}
+          onClearScope={() => urlActions.setScope(null)}
+          summaryRegions={summaryRegions}
+          onBackToRegion={(regionLabel) => {
+            const targetScope = resolveScopeKeyFromLabel(regionLabel, summaryRegions);
+            if (targetScope) {
+              urlActions.setScope(targetScope);
+            }
+            urlActions.selectGroup(null);
+          }}
           // Issue #1606 — area-first results breadcrumb: resolved group name + city-crumb nav.
           // selectGroup(null) clears both groupId and areaKey in a single PUSH, returning to
           // the area-first landing (Level 1 group cards) while preserving journey=area-first.

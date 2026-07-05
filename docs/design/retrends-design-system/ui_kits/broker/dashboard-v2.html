@@ -1,0 +1,117 @@
+<!-- @dsCard group="Broker" viewport="1280x1400" name="Broker dashboard v2" subtitle="Broker landing — performance summary + highest-impact action queue, routes into Listing Quality / Areas / Demand Gaps" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReTrends — Broker Dashboard</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  html, body { margin: 0; background: var(--background); }
+  body { font-family: var(--font-sans); color: var(--text-strong); }
+  * { box-sizing: border-box; }
+  ::selection { background: var(--accent); color: #fff; }
+
+  .rt-kpi    { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .rt-cards4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .rt-cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+  @media (max-width: 1080px) {
+    .rt-kpi    { grid-template-columns: repeat(3, 1fr); }
+    .rt-cards4 { grid-template-columns: repeat(2, 1fr); }
+    .rt-cards3 { grid-template-columns: repeat(3, 1fr); }
+    .rt-nav-links { display: none !important; }
+  }
+  @media (max-width: 760px) {
+    .rt-kpi    { grid-template-columns: repeat(2, 1fr); }
+    .rt-cards4 { grid-template-columns: 1fr; }
+    .rt-cards3 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script type="text/babel" src="BrokerDashboard.jsx"></script>
+<script type="text/babel">
+  const { Icon } = window.ReTrendsDesignSystem_f37966;
+
+  function NavItem({ icon, label, selected, chevron }) {
+    const [hover, setHover] = React.useState(false);
+    return (
+      <a
+        href="#"
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: "7px",
+          height: "38px", padding: selected ? "0 16px" : "0 12px",
+          borderRadius: "var(--radius-full)", textDecoration: "none",
+          fontSize: "14.5px", fontWeight: 600, whiteSpace: "nowrap",
+          color: selected ? "#fff" : "var(--text-body)",
+          background: selected ? "var(--navy-800)" : (hover ? "var(--grey-100)" : "transparent"),
+          transition: "background var(--dur-fast) var(--ease-standard)",
+        }}
+      >
+        <Icon name={icon} size={17} color={selected ? "#fff" : "var(--text-muted)"} />
+        {label}
+        {chevron && <Icon name="chevron-down" size={15} color={selected ? "#fff" : "var(--text-muted)"} />}
+      </a>
+    );
+  }
+
+  function TopNav() {
+    return (
+      <header style={{ position: "sticky", top: 0, zIndex: 40, background: "var(--paper)", borderBottom: "1px solid var(--border)" }}>
+        <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "0 24px", height: "76px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "20px" }}>
+          {/* logo lockup */}
+          <a href="/" style={{ display: "flex", alignItems: "center", gap: "12px", textDecoration: "none", flex: "none" }}>
+            <span style={{ width: "42px", height: "42px", borderRadius: "11px", background: "var(--navy-800)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Icon name="map-pin" size={22} color="#fff" />
+            </span>
+            <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
+              <span style={{ fontSize: "19px", fontWeight: 700, letterSpacing: "-0.02em" }}>
+                <span style={{ color: "var(--copper-500)" }}>Re</span><span style={{ color: "var(--navy-800)" }}>Trends</span>
+              </span>
+              <span style={{ fontSize: "11px", fontWeight: 500, color: "var(--text-muted)" }}>Real estate trends</span>
+            </span>
+          </a>
+
+          {/* center nav */}
+          <nav className="rt-nav-links" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <NavItem icon="map-pin" label="Discover" />
+            <NavItem icon="map-pin" label="Areas" chevron />
+            <NavItem icon="building" label="Broker" selected chevron />
+            <NavItem icon="heart" label="Saved" />
+            <NavItem icon="plus" label="Add listing" />
+          </nav>
+
+          {/* sign in */}
+          <a href="/signin" style={{ textDecoration: "none", flex: "none" }}>
+            <span style={{
+              display: "inline-flex", alignItems: "center", height: "40px", padding: "0 20px",
+              borderRadius: "var(--radius-md)", border: "1px solid var(--border-strong)",
+              fontSize: "14px", fontWeight: 600, color: "var(--text-strong)", background: "var(--paper)",
+            }}>Sign in</span>
+          </a>
+        </div>
+      </header>
+    );
+  }
+
+  function App() {
+    return (
+      <div>
+        <TopNav />
+        <window.RTBrokerDashboard />
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

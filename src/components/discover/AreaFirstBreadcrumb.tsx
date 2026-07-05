@@ -6,6 +6,10 @@ interface AreaFirstBreadcrumbProps {
   /** Human-readable city label (e.g. "Udupi"). */
   cityLabel: string;
   /**
+   * Issue #1745 4-level hierarchy — Macro region display name (e.g. "North Bangalore").
+   */
+  regionName?: string | null;
+  /**
    * Selected neighbourhood-group display name (e.g. "University Belt").
    * Null/undefined when the area was reached without a group context — the
    * group crumb is omitted entirely so the trail stays truthful.
@@ -17,6 +21,8 @@ interface AreaFirstBreadcrumbProps {
   onHome?: () => void;
   /** Navigate to the city's area-first landing (city crumb). */
   onCity?: () => void;
+  /** Navigate back to the macro region's zone list (region crumb). */
+  onRegion?: () => void;
   /** Navigate back to the selected group's drill-down (group crumb). */
   onGroup?: () => void;
   className?: string;
@@ -25,7 +31,7 @@ interface AreaFirstBreadcrumbProps {
 /**
  * Progressive area-first breadcrumb for the selected-area results state (Issue #1606).
  *
- * Renders the true area-first hierarchy — Home › {City} › {Group} › {Area} — replacing
+ * Renders the true area-first hierarchy — Home › {City} › {Region} › {Group} › {Area} — replacing
  * the previous generic title-only context. Crumbs route back progressively where a
  * handler is supplied; the terminal area crumb is non-clickable (`aria-current="page"`).
  * The group crumb is omitted when no group context exists, so other area groups/areas
@@ -36,10 +42,12 @@ interface AreaFirstBreadcrumbProps {
  */
 export function AreaFirstBreadcrumb({
   cityLabel,
+  regionName,
   groupName,
   areaLabel,
   onHome,
   onCity,
+  onRegion,
   onGroup,
   className,
 }: AreaFirstBreadcrumbProps) {
@@ -83,6 +91,21 @@ export function AreaFirstBreadcrumb({
       >
         {cityLabel}
       </button>
+
+      {regionName && (
+        <>
+          {sep}
+          <button
+            type="button"
+            onClick={onRegion}
+            disabled={!onRegion}
+            data-testid="breadcrumb-region"
+            className={cn('max-w-[130px]', linkClass, !onRegion && 'cursor-default')}
+          >
+            {regionName}
+          </button>
+        </>
+      )}
 
       {groupName && (
         <>

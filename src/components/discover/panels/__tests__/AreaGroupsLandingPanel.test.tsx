@@ -116,7 +116,7 @@ describe('AreaGroupsLandingPanel — Level-1 (no valid groupId) group card list'
     );
     expect(screen.getByText('South Zone')).toBeInTheDocument();
     expect(screen.getByText('Koramangala, HSR, BTM')).toBeInTheDocument();
-    expect(screen.getByText('South')).toBeInTheDocument();
+    expect(screen.getAllByText('South').length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows area count badge', () => {
@@ -139,6 +139,38 @@ describe('AreaGroupsLandingPanel — Level-1 (no valid groupId) group card list'
     );
     expect(screen.queryByText(/browse all areas/i)).not.toBeInTheDocument();
     expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
+  });
+
+  it('renders under macro-region section headers when scope is null/absent', () => {
+    const northGroup = makeGroup({ id: 'north-1', name: 'North Belt', region_label: 'North Bangalore' });
+    const southGroup = makeGroup({ id: 'south-1', name: 'South Belt', region_label: 'South Bangalore' });
+    renderPanel(
+      <AreaGroupsLandingPanel {...baseProps} groups={[northGroup, southGroup]} isLoading={false} scope={null} />,
+    );
+    expect(screen.getByTestId('macro-region-section-North Bangalore')).toBeInTheDocument();
+    expect(screen.getByTestId('macro-region-section-South Bangalore')).toBeInTheDocument();
+  });
+
+  it('filters groups by scope and shows clear filter banner when scope is provided', () => {
+    const onClearScope = vi.fn();
+    const northGroup = makeGroup({ id: 'north-1', name: 'North Belt', region_label: 'North Bangalore' });
+    const southGroup = makeGroup({ id: 'south-1', name: 'South Belt', region_label: 'South Bangalore' });
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[northGroup, southGroup]}
+        isLoading={false}
+        scope="north"
+        onClearScope={onClearScope}
+      />,
+    );
+    expect(screen.getByTestId('macro-region-filter-banner')).toBeInTheDocument();
+    expect(screen.getByText('North Belt')).toBeInTheDocument();
+    expect(screen.queryByText('South Belt')).not.toBeInTheDocument();
+
+    const clearBtn = screen.getByTestId('clear-scope-button');
+    clearBtn.click();
+    expect(onClearScope).toHaveBeenCalledTimes(1);
   });
 });
 

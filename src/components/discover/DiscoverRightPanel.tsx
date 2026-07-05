@@ -426,6 +426,14 @@ export interface DiscoverRightPanelProps {
    * school-group-areas (Level 2) to school-browse (Level 1).
    */
   onClearGroup?: () => void;
+  /** Issue #1745 — active residential macro region scope from URL. */
+  scope?: string | null;
+  /** Issue #1745 — callback to clear the active scope. */
+  onClearScope?: () => void;
+  /** Issue #1745 — callback when navigating back to a macro region from Level-2 or breadcrumb. */
+  onBackToRegion?: (regionLabel: string) => void;
+  /** Issue #1745 — summary regions from /api/discover/summary for safe matching. */
+  summaryRegions?: import('@/utils/macroRegionResolver').SummaryRegionRef[];
   /**
    * Issue #1485 — true while areaGroups is loading. Forwarded to SchoolBrowsePanel
    * so zone cards show skeleton state on cold load.
@@ -498,11 +506,11 @@ export interface DiscoverRightPanelProps {
   // ── School-selected panel ────────────────────────────────────────────────
   /** The school currently selected — drives SchoolSelectedPanel header. */
   selectedSchool?: SchoolResult | null;
-  /** Listings filtered by school proximity — rendered in SchoolSelectedPanel card list. */
+  /** Listings inside the selected school's commute polygon. */
   schoolListings?: DiscoverCityListingItem[];
-  /** True while school proximity listings are loading. */
+  /** True while school polygon listings are loading. */
   schoolListingsLoading?: boolean;
-  /** Active radius in km — drives the radius selector active state. */
+  /** Selected commute distance tier in km (e.g. 5, 10, 15, 20). */
   radiusKm?: number | null;
   /** Called when the user picks a new radius in SchoolSelectedPanel. */
   onRadiusChange?: (radiusKm: number) => void;
@@ -728,6 +736,10 @@ export function DiscoverRightPanel({
   onSelectGroup,
   groupId = null,
   onClearGroup,
+  scope = null,
+  onClearScope,
+  onBackToRegion,
+  summaryRegions = [],
   discoverAreas = [],
   onSelectAreaKey,
   corridorGroups = [],
@@ -1160,6 +1172,10 @@ export function DiscoverRightPanel({
               onStartOver={onStartOver}
               groupId={groupId}
               onClearGroup={onClearGroup}
+              scope={scope}
+              onClearScope={onClearScope}
+              summaryRegions={summaryRegions}
+              onBackToRegion={onBackToRegion}
               cityLabel={cityLabel ?? city}
               city={city}
               onCityChange={onCityChange}
@@ -1179,6 +1195,10 @@ export function DiscoverRightPanel({
             onStartOver={onStartOver}
             groupId={groupId}
             onClearGroup={onClearGroup}
+            scope={scope}
+            onClearScope={onClearScope}
+            summaryRegions={summaryRegions}
+            onBackToRegion={onBackToRegion}
             cityLabel={cityLabel ?? city}
             city={city}
             onCityChange={onCityChange}
@@ -1204,6 +1224,10 @@ export function DiscoverRightPanel({
                 onStartOver={onStartOver}
                 groupId={groupId}
                 onClearGroup={onClearGroup}
+                scope={scope}
+                onClearScope={onClearScope}
+                summaryRegions={summaryRegions}
+                onBackToRegion={onBackToRegion}
                 cityLabel={cityLabel ?? city}
                 fallbackAreas={discoverAreas}
                 onSelectArea={onSelectAreaKey}
@@ -1218,6 +1242,10 @@ export function DiscoverRightPanel({
               onStartOver={onStartOver}
               groupId={groupId}
               onClearGroup={onClearGroup}
+              scope={scope}
+              onClearScope={onClearScope}
+              summaryRegions={summaryRegions}
+              onBackToRegion={onBackToRegion}
               cityLabel={cityLabel ?? city}
             />
           );

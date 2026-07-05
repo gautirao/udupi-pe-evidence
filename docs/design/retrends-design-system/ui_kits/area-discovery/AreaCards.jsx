@@ -1,13 +1,121 @@
-// Udupi AREA-FIRST discovery — card components.
-// Exports: UPTAreaGroupCard, UPTAreaAreaCard, UPTAreaListingCard, UPTAreaEmptyState
+// Bangalore AREA-FIRST discovery — card components.
+// Exports: BLRRegionCard, BLRJourneyOption, BLRGroupCard, BLRAreaCard,
+//          BLRListingCard, BLREmptyState, BLRAgriCard
 //
-// Treatment: ink-navy structure + restrained copper accent. NO plum/lavender
-// (that's the school-first journey), NO green hover wash, NO raw list rows.
+// Treatment: ink-navy structure + restrained copper accent. Residential only.
 const { Icon: CIcon, Button: CButton, Badge: CBadge, TrustBadge: CTrust } = window.ReTrendsDesignSystem_f37966;
-const inr = window.UPT_AREA_INR;
-const noun = window.UPT_AREA_NOUN;
+const inr = window.BLR_INR;
+const noun = window.BLR_NOUN;
+const COUNTS = window.BLR_AREA_COUNTS;
 
-const TYPE_TONE = { Villa: "navy", Apartment: "neutral", "Independent House": "navy", Plot: "neutral" };
+const TYPE_TONE = { Villa: "navy", Apartment: "neutral", "Independent House": "navy", Penthouse: "accent", Plot: "neutral" };
+
+// ---------- Macro REGION card (city landing) ----------
+// Maps 1:1 to a region bubble on the map. Shows the region's total property count.
+function RegionCard({ region, onView }) {
+  const [hover, setHover] = React.useState(false);
+  const count = COUNTS.region(region.id);
+  return (
+    <div
+      onMouseEnter={() => { setHover(true); onView.hover && onView.hover(region.id); }}
+      onMouseLeave={() => { setHover(false); onView.hover && onView.hover(null); }}
+      onClick={() => onView.open(region.id)}
+      style={{
+        background: "var(--surface-card)", border: "1px solid var(--border)",
+        borderRadius: "var(--radius-lg)", padding: "16px 18px", cursor: "pointer",
+        boxShadow: hover ? "var(--shadow-md)" : "var(--shadow-xs)",
+        transform: hover ? "translateY(-2px)" : "none",
+        transition: "box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard)",
+        display: "flex", gap: "14px", alignItems: "center",
+      }}
+    >
+      <div style={{
+        flex: "none", width: "44px", height: "44px", borderRadius: "var(--radius-md)",
+        background: "var(--navy-100)", display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <CIcon name="map-pin" size={21} color="var(--navy-800)" />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "9px", flexWrap: "wrap" }}>
+          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em" }}>{region.name}</h3>
+        </div>
+        <div style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "3px" }}>{region.cue}</div>
+      </div>
+      <div style={{ flex: "none", textAlign: "right" }}>
+        <div style={{ fontFamily: "var(--font-mono)", fontSize: "18px", fontWeight: 600, color: "var(--text-strong)" }}>{count.toLocaleString("en-IN")}</div>
+        <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>properties</div>
+      </div>
+      <CIcon name="arrow-right" size={17} color={hover ? "var(--accent)" : "var(--grey-400)"} style={{ flex: "none" }} />
+    </div>
+  );
+}
+
+// ---------- Journey option card (Search by area / near school / view all) ----------
+function JourneyOption({ icon, title, body, cta, accent, onClick }) {
+  const [hover, setHover] = React.useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      onClick={onClick}
+      style={{
+        background: "var(--surface-card)", border: accent ? "1px solid var(--copper-400)" : "1px solid var(--border)",
+        borderRadius: "var(--radius-lg)", padding: "16px 18px", cursor: "pointer",
+        boxShadow: hover ? "var(--shadow-md)" : "var(--shadow-xs)",
+        transform: hover ? "translateY(-2px)" : "none",
+        transition: "box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard)",
+        display: "flex", gap: "14px", alignItems: "center",
+      }}
+    >
+      <div style={{
+        flex: "none", width: "40px", height: "40px", borderRadius: "var(--radius-md)",
+        background: accent ? "var(--accent-tint)" : "var(--surface-subtle)", display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <CIcon name={icon} size={20} color={accent ? "var(--copper-600)" : "var(--navy-800)"} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <h4 style={{ margin: 0, fontSize: "14.5px", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em" }}>{title}</h4>
+        <p style={{ margin: "3px 0 0", fontSize: "12.5px", lineHeight: 1.45, color: "var(--text-muted)", textWrap: "pretty" }}>{body}</p>
+      </div>
+      <span style={{
+        flex: "none", display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12.5px", fontWeight: 600, whiteSpace: "nowrap",
+        color: hover ? "var(--accent)" : "var(--primary)", transition: "color var(--dur-fast) var(--ease-standard)",
+      }}>{cta} <CIcon name="arrow-right" size={14} /></span>
+    </div>
+  );
+}
+
+// ---------- Agricultural-land card (kept visually SEPARATE from residential) ----------
+function AgriCard({ onClick }) {
+  const [hover, setHover] = React.useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      onClick={onClick}
+      style={{
+        background: "var(--surface-subtle)", border: "1px dashed var(--border-strong)",
+        borderRadius: "var(--radius-lg)", padding: "15px 18px", cursor: "pointer",
+        display: "flex", gap: "13px", alignItems: "center",
+        boxShadow: hover ? "var(--shadow-sm)" : "none",
+        transition: "box-shadow var(--dur-normal) var(--ease-standard)",
+      }}
+    >
+      <div style={{
+        flex: "none", width: "38px", height: "38px", borderRadius: "var(--radius-md)",
+        background: "var(--paper)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "var(--shadow-xs)",
+      }}>
+        <CIcon name="layers" size={19} color="var(--grey-500)" />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <h4 style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "var(--text-body)", letterSpacing: "-0.01em" }}>Agricultural land</h4>
+          <span style={{ fontSize: "10.5px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "var(--text-muted)" }}>Separate journey</span>
+        </div>
+        <p style={{ margin: "3px 0 0", fontSize: "12.5px", lineHeight: 1.4, color: "var(--text-muted)" }}>Farmland and plots are searched differently — open the land journey.</p>
+      </div>
+      <CIcon name="arrow-right" size={15} color="var(--grey-400)" style={{ flex: "none" }} />
+    </div>
+  );
+}
 
 // Small mono stat used inside group / area cards.
 function StatChip({ icon, value, label, accent }) {
@@ -25,29 +133,16 @@ function StatChip({ icon, value, label, accent }) {
   );
 }
 
-// Location cue — quiet outline pill (e.g. "Central Udupi").
-function CuePill({ children }) {
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 10px",
-      borderRadius: "var(--radius-full)", border: "1px solid var(--border)", background: "var(--surface-card)",
-      fontSize: "11.5px", fontWeight: 600, color: "var(--text-muted)", whiteSpace: "nowrap",
-    }}>
-      <CIcon name="map-pin" size={12} color="var(--grey-400)" />{children}
-    </span>
-  );
-}
-
-// ---------- Neighbourhood GROUP card (the landing) ----------
-// Premium card, never a row: name, description, location cue, area + home counts,
-// "best for" cue, quiet CTA. Buy/Rent-aware home wording. Zero-home aware.
+// ---------- Area GROUP / ZONE card (search-by-area level) ----------
+// Shows group name, property count, example areas, "Explore group" CTA.
 function GroupCard({ group, mode, onView }) {
   const [hover, setHover] = React.useState(false);
-  const noHomes = group.homes === 0;
+  const count = COUNTS.group(group.id);
+  const areaCount = window.BLR_AREA_DATA.areas.filter((a) => a.group === group.id).length;
   return (
     <div
-      onMouseEnter={() => { setHover(true); onView && onView.hover && onView.hover(group.id); }}
-      onMouseLeave={() => { setHover(false); onView && onView.hover && onView.hover(null); }}
+      onMouseEnter={() => { setHover(true); onView.hover && onView.hover(group.id); }}
+      onMouseLeave={() => { setHover(false); onView.hover && onView.hover(null); }}
       onClick={() => onView.open(group.id)}
       style={{
         background: "var(--surface-card)", border: "1px solid var(--border)",
@@ -58,7 +153,6 @@ function GroupCard({ group, mode, onView }) {
         display: "flex", flexDirection: "column",
       }}
     >
-      {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
           <div style={{
@@ -69,37 +163,31 @@ function GroupCard({ group, mode, onView }) {
           </div>
           <div style={{ minWidth: 0 }}>
             <h3 style={{ margin: 0, fontSize: "16.5px", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.25 }}>{group.name}</h3>
-            <div style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "2px" }}>{group.subtitle}</div>
+            <div style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "2px" }}>{areaCount} {areaCount === 1 ? "area" : "areas"}</div>
           </div>
         </div>
-        <CBadge tone="neutral" pill style={{ flex: "none" }}>{group.areas} {group.areas === 1 ? "area" : "areas"}</CBadge>
+        <CBadge tone="neutral" pill style={{ flex: "none" }}>{count} {count === 1 ? "home" : "homes"}</CBadge>
       </div>
 
-      {/* Description */}
       <p style={{ margin: "13px 0 0", fontSize: "13.5px", lineHeight: 1.55, color: "var(--text-body)", textWrap: "pretty" }}>{group.blurb}</p>
 
-      {/* Cue + stats */}
-      <div style={{ display: "flex", alignItems: "center", gap: "9px", margin: "14px 0 12px" }}>
-        <CuePill>{group.cue}</CuePill>
-      </div>
-      <div style={{ display: "flex", gap: "10px" }}>
-        <StatChip icon="map-pin" value={group.areas} label={group.areas === 1 ? "area" : "areas"} />
-        <StatChip icon="building" value={group.homes} label={mode === "Rent" ? "to rent" : "for sale"} accent={!noHomes} />
+      {/* Example areas */}
+      <div style={{ display: "flex", alignItems: "center", gap: "7px", flexWrap: "wrap", margin: "14px 0 0" }}>
+        <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "var(--text-muted)", marginRight: "2px" }}>Areas</span>
+        {group.exampleAreas.map((a) => (
+          <span key={a} style={{
+            display: "inline-flex", alignItems: "center", padding: "3px 10px", borderRadius: "var(--radius-full)",
+            border: "1px solid var(--border)", background: "var(--surface-subtle)", fontSize: "11.5px", fontWeight: 600, color: "var(--text-body)",
+          }}>{a}</span>
+        ))}
       </div>
 
-      {/* Best-for cue */}
-      {group.bestFor && (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", marginTop: "13px" }}>
-          <span style={{ flex: "none", marginTop: "1px", fontSize: "11px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "var(--copper-600)" }}>Best for</span>
-          <span style={{ fontSize: "12.5px", lineHeight: 1.45, color: "var(--text-body)", textWrap: "pretty" }}>{group.bestFor}</span>
-        </div>
-      )}
+      <div style={{ display: "flex", gap: "10px", marginTop: "14px" }}>
+        <StatChip icon="map-pin" value={areaCount} label={areaCount === 1 ? "area" : "areas"} />
+        <StatChip icon="building" value={count} label={mode === "Rent" ? "to rent" : "for sale"} accent={count > 0} />
+      </div>
 
-      {/* CTA */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginTop: "16px", paddingTop: "14px", borderTop: "1px solid var(--border)" }}>
-        <span style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: noHomes ? "var(--text-muted)" : "var(--text-strong)" }}>{group.homes}</span> {noun(mode, group.homes)}
-        </span>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginTop: "16px", paddingTop: "14px", borderTop: "1px solid var(--border)" }}>
         <span style={{
           display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13.5px", fontWeight: 600,
           color: hover ? "var(--accent)" : "var(--primary)", transition: "color var(--dur-fast) var(--ease-standard)",
@@ -114,7 +202,8 @@ function GroupCard({ group, mode, onView }) {
 // ---------- AREA card (inside a selected group) ----------
 function AreaCard({ area, mode, onView }) {
   const [hover, setHover] = React.useState(false);
-  const noHomes = area.homes === 0;
+  const count = COUNTS.area(area.id);
+  const noHomes = count === 0;
   return (
     <div
       onMouseEnter={() => { setHover(true); onView.hover && onView.hover(area.id); }}
@@ -145,13 +234,13 @@ function AreaCard({ area, mode, onView }) {
           <span style={{ fontSize: "13px", color: "var(--text-body)", fontWeight: 500 }}>
             {noHomes
               ? <span style={{ color: "var(--text-muted)" }}>No {mode === "Rent" ? "rentals" : "homes"} listed yet</span>
-              : <><span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--text-strong)" }}>{area.homes}</span> {noun(mode, area.homes)}</>}
+              : <><span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--text-strong)" }}>{count}</span> {noun(mode, count)}</>}
           </span>
           <span style={{
             display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 600,
             color: hover ? "var(--accent)" : "var(--primary)", transition: "color var(--dur-fast) var(--ease-standard)", whiteSpace: "nowrap", flex: "none",
           }}>
-            {noHomes ? "View area" : "View homes"} <CIcon name="arrow-right" size={15} />
+            {noHomes ? "View area" : "View listings"} <CIcon name="arrow-right" size={15} />
           </span>
         </div>
       </div>
@@ -175,7 +264,6 @@ function ListingCard({ listing, onHover, onOpen, saved, onToggleSave }) {
         display: "flex", flexDirection: "column",
       }}
     >
-      {/* Image */}
       <div style={{ position: "relative", height: "168px", background: "var(--surface-muted)", overflow: "hidden" }}>
         <img src={listing.image} alt={listing.title} loading="lazy" style={{
           width: "100%", height: "100%", objectFit: "cover",
@@ -201,7 +289,6 @@ function ListingCard({ listing, onHover, onOpen, saved, onToggleSave }) {
           }}>{listing.tag}</div>
         )}
       </div>
-      {/* Body */}
       <div style={{ padding: "15px", display: "flex", flexDirection: "column", flex: 1 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "8px" }}>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: "19px", fontWeight: 600, color: "var(--text-strong)" }}>{inr(listing.price)}</span>
@@ -245,8 +332,11 @@ function EmptyState({ icon = "map-pin", title, body, actions }) {
 }
 
 Object.assign(window, {
-  UPTAreaGroupCard: GroupCard,
-  UPTAreaAreaCard: AreaCard,
-  UPTAreaListingCard: ListingCard,
-  UPTAreaEmptyState: EmptyState,
+  BLRRegionCard: RegionCard,
+  BLRJourneyOption: JourneyOption,
+  BLRAgriCard: AgriCard,
+  BLRGroupCard: GroupCard,
+  BLRAreaCard: AreaCard,
+  BLRListingCard: ListingCard,
+  BLREmptyState: EmptyState,
 });

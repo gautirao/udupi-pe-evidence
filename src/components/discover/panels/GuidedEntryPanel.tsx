@@ -8,6 +8,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverSummary } from '@/hooks/useDiscoverSummary';
+import { useAreaGroups } from '@/hooks/useAreaGroups';
+import { aggregateMacroRegions } from '@/utils/macroRegionResolver';
 import { TrustStrip } from './_shared';
 
 interface GuidedEntryPanelProps {
@@ -79,10 +81,17 @@ export function GuidedEntryPanel({
   const listingPurpose = intent === 'rent' ? 'rent' : 'sale';
   const {
     data: summaryData,
-    isLoading: isSummaryLoading,
+    isLoading: isSummaryLoadingRaw,
     isError: isSummaryError,
   } = useDiscoverSummary({ city, listingPurpose });
-  const regions = summaryData?.regions ?? [];
+  const { data: areaGroupsData, isLoading: isGroupsLoading } = useAreaGroups(city);
+  const rawRegions = summaryData?.regions;
+  const areaGroups = areaGroupsData?.groups;
+  const regions = React.useMemo(
+    () => aggregateMacroRegions(rawRegions, areaGroups, summaryData?.totalActiveListings),
+    [rawRegions, areaGroups, summaryData?.totalActiveListings]
+  );
+  const isSummaryLoading = isSummaryLoadingRaw || isGroupsLoading;
 
   const handleRegionClick = (regionKey: string) => {
     urlActions.setScope(selectedScope === regionKey ? null : regionKey);

@@ -235,11 +235,8 @@ export function applyLayerSelectionToParams(
  * the returned layer.
  *
  * `input.scope.region` is threaded into the reconstruction below (as
- * `DiscoverUrlState.scope`) purely for structural completeness — it is still
- * unused BY `derivePanelContent` (it has no scope concept at all; scope is not
- * one of `PANEL_DERIVATION_FIELDS`), so it never affects the returned layer. A
- * future slice will extend `derivePanelContent`/this function when scope needs
- * to influence panel routing.
+ * `DiscoverUrlState.scope`) and is read by `derivePanelContent` (as part of
+ * `PANEL_DERIVATION_FIELDS`) to route macro-region drill-down to `'area-groups-landing'`.
  */
 export function computeDiscoverLayer(input: DiscoverLayerInput): DiscoverLayer {
   const reconstructed: DiscoverUrlState = {
@@ -355,10 +352,10 @@ export function selectDiscoverMapLayer(
     !selection.schoolId;
   if (isTopGroupedAreaOrSchool) return 'area-group-bubbles';
 
-  // Issue #1745 Batch B — THE FIX. A journeyless landing (derivePanelContent
-  // resolves to 'guided-entry') is the ONLY state that gains new behaviour here.
-  if (journey == null && computeDiscoverLayer(input) === 'guided-entry') {
-    return scope.region ? 'region-zone-areas' : 'macro-region-bubbles';
+  if (journey == null && (computeDiscoverLayer(input) === 'guided-entry' || computeDiscoverLayer(input) === 'area-groups-landing')) {
+    if (!selection.groupId && !selection.areaKey) {
+      return scope.region ? 'region-zone-areas' : 'macro-region-bubbles';
+    }
   }
 
   return 'all-areas';
@@ -494,6 +491,7 @@ export const PANEL_DERIVATION_FIELDS = [
   'selectedMaxKm',
   'selectedListing',
   'selectedLocality',
+  'scope',
 ] as const satisfies readonly (keyof DiscoverUrlState)[];
 
 export type PanelDerivationField = (typeof PANEL_DERIVATION_FIELDS)[number];
