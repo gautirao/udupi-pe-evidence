@@ -22,6 +22,9 @@ export interface AreaPoint {
   /** Number of schools in this area — from /api/discover/areas. Null/undefined means not yet loaded. */
   schoolCount?: number | null;
   trendDirection?: 'rising' | 'falling' | 'stable' | null;
+  isMacroRegion?: boolean;
+  isGroup?: boolean;
+  isSelected?: boolean;
 }
 
 interface AreaMarkerLayerProps {
@@ -80,6 +83,16 @@ const pinSvg = (color: string) =>
 const gradCapSvg = (color: string) =>
   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>`;
 
+function getShortRegionLabel(label: string): string {
+  const trimmed = label.trim();
+  if (trimmed.endsWith(' Bangalore')) return trimmed.replace(/ Bangalore$/i, '');
+  if (trimmed.endsWith(' Udupi')) return trimmed.replace(/ Udupi$/i, '');
+  if (trimmed.replace(/-/g, ' ').toLowerCase() === 'university belt') return 'Uni Belt';
+  if (trimmed.replace(/-/g, ' ').toLowerCase() === 'coastal strip') return 'Coastal';
+  if (trimmed.replace(/-/g, ' ').toLowerCase() === 'city centre') return 'Centre';
+  return trimmed.split(' ')[0] || trimmed;
+}
+
 /**
  * Premium ReTrends locality marker (Issue #1588).
  *
@@ -103,7 +116,19 @@ function makeAreaCard(
 
   let html: string;
 
-  if (isZero) {
+  if (area.isMacroRegion) {
+    const sel = area.isSelected;
+    const bg = sel ? '#0F172A' : 'rgba(27,42,69,0.95)';
+    const count = (area.listingCount ?? 0).toLocaleString();
+    const shortLabel = getShortRegionLabel(area.areaLabel);
+
+    html = `<div data-testid="area-marker" class="macro-region-bubble" style="transform:translate(-50%,-50%);font-family:inherit;opacity:${opacity};pointer-events:auto;cursor:pointer;">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:86px;height:86px;border-radius:9999px;background:${bg};color:#fff;box-shadow:0 10px 25px rgba(17,24,39,0.25);border:2px solid rgba(255,255,255,0.6);transform:scale(${sel ? 1.06 : 1});transition:all .15s cubic-bezier(.4,0,.2,1);">
+        <span style="font-family:${MONO};font-size:19px;font-weight:700;line-height:1;color:#fff;">${count}</span>
+        <span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.95);white-space:nowrap;max-width:74px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(shortLabel)}</span>
+      </div>
+    </div>`;
+  } else if (isZero) {
     // Quiet muted variant — dashed ring, no tail, de-emphasised.
     html = `<div data-testid="area-marker" class="area-marker-zero" style="transform:translate(-50%,-50%);font-family:inherit;opacity:${opacity * 0.66};pointer-events:auto;cursor:pointer;">
       <div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:9999px;background:rgba(255,255,255,0.9);border:1px dashed ${C_STONE_400};white-space:nowrap;">
@@ -168,16 +193,19 @@ export function AreaMarkerLayer({
 
       marker.on('click', () => {
         onAreaClick?.(area);
+        const isOverviewGroupOrRegion = area.isMacroRegion || area.isGroup;
         if (area.bbox) {
-          map.fitBounds(area.bbox, { padding: [40, 40], maxZoom: 16 });
+          map.fitBounds(area.bbox, { padding: [40, 40], maxZoom: isOverviewGroupOrRegion ? 12 : 16 });
         } else {
-          map.flyTo([area.geo_center_lat, area.geo_center_lon], 13);
+          map.flyTo([area.geo_center_lat, area.geo_center_lon], isOverviewGroupOrRegion ? 12 : 13);
         }
-        // If the bbox was too large to cross the area→listing zoom threshold (12),
-        // bump to 13 once the animation settles so listing markers appear.
-        map.once('zoomend', () => {
-          if (map.getZoom() <= 12) map.setZoom(13, { animate: true });
-        });
+        if (!isOverviewGroupOrRegion) {
+          // If the bbox was too large to cross the area→listing zoom threshold (12),
+          // bump to 13 once the animation settles so listing markers appear.
+          map.once('zoomend', () => {
+            if (map.getZoom() <= 12) map.setZoom(13, { animate: true });
+          });
+        }
       });
 
       marker.addTo(map);
@@ -190,7 +218,6 @@ export function AreaMarkerLayer({
   // focusedGroupAreas is an array reference — it changes identity when the group
   // changes, which is correct: re-render recreates markers with new opacity values.
   // journey and selectedSchool change the badge content so must also be deps.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areas, map, onAreaClick, focusedGroupAreas, journey, selectedSchool]);
 
   return null;

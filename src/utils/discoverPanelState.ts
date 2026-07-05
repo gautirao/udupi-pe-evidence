@@ -160,6 +160,9 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
 
   // Infer area-first journey when areaKey is present without explicit journey.
   // This handles area-only cold-load URLs like /discover?city=udupi&areaKey=udupi-west
+  if (areaKey && schoolPicking && !schoolId) {
+    return 'schools-in-area';
+  }
   if (areaKey) {
     return 'area-selected';
   }

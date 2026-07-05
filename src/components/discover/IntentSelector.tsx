@@ -47,7 +47,7 @@ export function IntentSelector({
       <div
         className={cn(
           'inline-flex items-center gap-0.5 rounded-lg border border-border bg-[hsl(var(--input-bg))] p-1',
-          fill && 'flex w-full',
+          fill && 'flex w-full h-11',
         )}
       >
         {OPTIONS.map(({ value, label }) => {
@@ -60,9 +60,9 @@ export function IntentSelector({
               data-testid={`intent-selector-${value}`}
               onClick={() => onIntentChange(value)}
               className={cn(
-                'rounded-md px-4 py-1.5 text-sm font-semibold transition-all',
+                'rounded-md px-4 py-1.5 text-sm font-semibold transition-all flex items-center justify-center',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                fill && 'flex-1',
+                fill && 'flex-1 h-full py-0',
                 selected
                   ? 'bg-card text-foreground shadow-[0_1px_2px_rgba(24,16,12,0.12)] ring-1 ring-border/60'
                   : 'text-muted-foreground hover:text-foreground',

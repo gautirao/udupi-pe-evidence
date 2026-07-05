@@ -2316,6 +2316,7 @@ export default function MapDiscovery() {
             bbox: unionBbox,
             listingCount: totalListings,
             schoolCount: undefined,
+            isGroup: true,
           };
         })
         .filter((a): a is AreaPoint => a !== null && (a.listingCount ?? 0) > 0);
@@ -2326,7 +2327,7 @@ export default function MapDiscovery() {
     if (mapLayerKind === 'macro-region-bubbles') {
       if (isLoadingAreaGroups) return [];
       const groups = areaGroupsData?.groups ?? [];
-      if (summaryRegions.length === 0) {
+      if (groups.length === 0 || summaryRegions.length === 0) {
         return isLandingState || isAreaFirstCityLanding ? liveAreas : discoverAreas;
       }
       return summaryRegions
@@ -2343,10 +2344,11 @@ export default function MapDiscovery() {
 
           const groupAreaKeys = matchingGroups.flatMap((g) => g.area_keys ?? []);
           const memberAreas = discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
+          const focusGroups = matchingGroups.filter((g) => g.focus_lat != null && g.focus_lon != null);
 
           let lat: number | null = null;
           let lon: number | null = null;
-          const focusGroups = matchingGroups.filter((g) => g.focus_lat != null && g.focus_lon != null);
+          
           if (focusGroups.length > 0) {
             lat = focusGroups.reduce((sum, g) => sum + (g.focus_lat as number), 0) / focusGroups.length;
             lon = focusGroups.reduce((sum, g) => sum + (g.focus_lon as number), 0) / focusGroups.length;
@@ -2399,6 +2401,8 @@ export default function MapDiscovery() {
             bbox: unionBbox,
             listingCount: region.listingCount,
             schoolCount: undefined,
+            isMacroRegion: true,
+            isSelected: urlState.scope === region.regionKey || labelToSlug(region.regionLabel) === urlState.scope,
           };
         })
         .filter((a): a is AreaPoint => a !== null);
@@ -2451,6 +2455,7 @@ export default function MapDiscovery() {
             geo_center_lon: lon,
             bbox: unionBbox,
             listingCount: totalListings,
+            isGroup: true,
           };
         })
         .filter((a) => (a.listingCount ?? 0) > 0);

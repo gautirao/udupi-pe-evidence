@@ -32,6 +32,19 @@ interface GuidedEntryPanelProps {
 
 const EYEBROW = 'text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground';
 
+function getMacroRegionCue(regionKey: string, regionLabel: string, cityLabel: string): string {
+  const key = regionKey.toLowerCase();
+  const label = regionLabel.toLowerCase();
+  if (key.includes('north') || label.includes('north')) return 'Northern neighbourhoods & growth corridors';
+  if (key.includes('east') || label.includes('east')) return 'Eastern neighbourhoods & commute corridors';
+  if (key.includes('south') || label.includes('south')) return 'Established residential neighbourhoods';
+  if (key.includes('west') || label.includes('west')) return 'Western communities & transit links';
+  if (key.includes('central') || label.includes('central') || label.includes('centre')) return 'City core & business district';
+  if (key.includes('university') || label.includes('university')) return 'Academic institutions & student living';
+  if (key.includes('coastal') || label.includes('coastal') || label.includes('beach')) return 'Beachfront & coastal properties';
+  return `Explore verified properties across ${cityLabel}`;
+}
+
 /**
  * Public Discover landing — the journey-selection entry (Issue #1588), rebuilt to the
  * approved ReTrends mock: eyebrow + Fraunces hero + City/Buy-Rent controls card +
@@ -64,20 +77,10 @@ export function GuidedEntryPanel({
   areasCount,
   isCityEmpty = false,
 }: GuidedEntryPanelProps) {
-  // Display name for the selected city, sourced from the shared CITY_CONFIG registry
-  // (single source of truth — no parallel city list). Falls back to the DEFAULT_CITY
-  // label when the slug is empty/unknown so copy never renders a blank city name.
   const cityLabel = CITY_CONFIG[city]?.label ?? CITY_CONFIG[DEFAULT_CITY].label;
-
-  // Issue #1745 P8 — own URL-state instance for the scope axis only (city/intent stay
-  // props from the parent, which owns the single source of truth for those). Reading
-  // the full useDiscoverUrlState here mirrors the established pattern of independent
-  // per-panel instances (see SchoolsInAreaPanel, SchoolJourneyPanels).
   const [urlState, urlActions] = useDiscoverUrlState();
   const selectedScope = urlState.scope ?? null;
 
-  // Issue #1745 P7 — listingPurpose is a SEPARATE filter from propertyType (never
-  // conflated — matches the backend SummaryQuery contract). Buy maps to "sale".
   const listingPurpose = intent === 'rent' ? 'rent' : 'sale';
   const {
     data: summaryData,
@@ -103,7 +106,7 @@ export function GuidedEntryPanel({
       className="flex-1 overflow-y-auto px-5 py-7 lg:px-11 lg:py-10"
       data-testid="guided-entry-panel"
     >
-      <div className="mx-auto max-w-[560px]">
+      <div className="mx-auto max-w-[580px]">
         {/* Eyebrow */}
         <div className="mb-3.5 flex items-center gap-2">
           <MapPin className="h-[15px] w-[15px] text-[hsl(var(--copper))]" aria-hidden="true" />
@@ -116,134 +119,56 @@ export function GuidedEntryPanel({
         <h1 className="mb-3.5 font-['Fraunces',_ui-serif,_Georgia,_serif] text-3xl font-semibold leading-tight tracking-[-0.02em] text-foreground lg:text-[40px]">
           Find your place in {cityLabel}, your way.
         </h1>
-        <p className="mb-6 max-w-[46ch] text-[15px] leading-relaxed text-muted-foreground lg:text-[16.5px]">
+        <p className="mb-3 max-w-[48ch] text-[15px] leading-relaxed text-muted-foreground lg:text-[16.5px]">
           Browse verified properties across {cityLabel}. Pick how you&rsquo;d like to
           start — by neighbourhood, by school, or by farmland.
         </p>
+        <p className="mb-4 text-[13px] text-muted-foreground">
+          {intent === 'buy'
+            ? 'Showing sale prices in ₹ across every journey.'
+            : 'Showing monthly rents in ₹ — same properties, reworded for renting.'}
+        </p>
 
         {/* Controls: city + Buy/Rent */}
-        <div className="mb-2.5 flex flex-wrap items-end gap-4 rounded-xl border border-border bg-card p-3.5 shadow-sm">
-          <label className="flex min-w-[150px] flex-1 flex-col gap-1.5">
+        <div className="mb-8 flex flex-wrap items-end gap-3.5 rounded-xl border border-border bg-card p-4 shadow-sm">
+          <label className="flex min-w-[160px] flex-1 flex-col gap-1.5">
             <span className={EYEBROW}>City</span>
             <CitySelect
               value={city}
               onChange={onCityChange}
-              className="h-11 w-full rounded-md border-border bg-[hsl(var(--input-bg))] px-3 text-sm font-semibold text-foreground"
+              className="h-11 w-full rounded-md border-border bg-[hsl(var(--input-bg))] px-3.5 text-sm font-semibold text-foreground"
             />
           </label>
-          <div className="flex min-w-[150px] flex-1 flex-col gap-1.5">
+          <div className="flex min-w-[180px] flex-1 flex-col gap-1.5">
             <span className={EYEBROW}>Looking to</span>
             <IntentSelector intent={intent} onIntentChange={onIntentChange} hideLabel fill />
           </div>
         </div>
-        <p className="mb-6 pl-0.5 text-[12.5px] text-muted-foreground">
-          {intent === 'buy'
-            ? 'Showing sale prices in ₹ across every journey.'
-            : 'Showing monthly rents — same properties, reworded for renting.'}
-        </p>
 
-        {/* Empty-state notice — shown only when the selected city has loaded with zero
-            live properties. Honest, calm, city-aware; the journey cards stay below so
-            farmland/school journeys remain reachable and the city switcher above lets
-            the user pick another city. */}
+        {/* Empty-state notice */}
         {isCityEmpty && (
           <div
             data-testid="guided-entry-empty-state"
-            className="mb-6 flex items-start gap-3 rounded-xl border border-border bg-muted/40 p-4"
+            className="mb-8 flex items-start gap-3.5 rounded-xl border border-border bg-muted/40 p-4"
           >
-            <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md bg-card">
-              <SearchX className="h-[19px] w-[19px] text-muted-foreground" aria-hidden="true" />
+            <span className="flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-lg bg-card shadow-sm">
+              <SearchX className="h-[20px] w-[20px] text-muted-foreground" aria-hidden="true" />
             </span>
             <div>
-              <p className="text-[14px] font-semibold text-foreground">
+              <p className="text-[14.5px] font-semibold text-foreground">
                 No properties in {cityLabel} yet
               </p>
-              <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground">
+              <p className="mt-0.5 text-[13.5px] leading-snug text-muted-foreground">
                 Try another city above, or check back soon as new listings are added.
               </p>
             </div>
           </div>
         )}
 
-        {/* Macro-region cards (Issue #1745 P7/P8) — backend-owned counts from
-            useDiscoverSummary. Landing-level refinement only: selecting a card sets
-            `scope=` (highlight + URL persistence), never filters downstream panels. */}
-        <div aria-live="polite">
-          {isSummaryLoading && (
-            <div
-              data-testid="guided-entry-regions-loading"
-              className="mb-6 grid grid-cols-2 gap-2.5 sm:grid-cols-3"
-            >
-              {[0, 1, 2, 3, 4, 5].map((i) => (
-                <Skeleton key={i} className="h-[64px] rounded-lg" />
-              ))}
-            </div>
-          )}
-
-          {!isSummaryLoading && isSummaryError && (
-            <p
-              data-testid="guided-entry-regions-error"
-              className="mb-6 text-[12.5px] text-muted-foreground"
-            >
-              Area counts are unavailable right now — you can still search {cityLabel} below.
-            </p>
-          )}
-
-          {!isSummaryLoading && !isSummaryError && regions.length > 0 && (
-            <div className="mb-6">
-              <div className="mb-2 flex items-center justify-between">
-                <span className={EYEBROW}>Popular areas in {cityLabel}</span>
-                {selectedScope && (
-                  <button
-                    type="button"
-                    onClick={handleClearScope}
-                    className="flex items-center gap-1 text-[12px] font-semibold text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="h-3 w-3" aria-hidden="true" />
-                    Clear
-                  </button>
-                )}
-              </div>
-              <div
-                data-testid="guided-entry-regions-grid"
-                className="grid grid-cols-2 gap-2.5 sm:grid-cols-3"
-              >
-                {regions.map((region) => {
-                  const isSelected = selectedScope === region.regionKey;
-                  return (
-                    <button
-                      key={region.regionKey}
-                      type="button"
-                      aria-pressed={isSelected}
-                      onClick={() => handleRegionClick(region.regionKey)}
-                      className={`flex flex-col items-start gap-1 rounded-lg border p-2.5 text-left transition-colors ${
-                        isSelected
-                          ? 'border-[hsl(var(--copper))] bg-[hsl(var(--copper)/0.08)]'
-                          : 'border-border bg-card hover:bg-muted/40'
-                      }`}
-                    >
-                      <span className="flex items-center gap-1 text-[13px] font-semibold text-foreground">
-                        <Compass
-                          className="h-3.5 w-3.5 text-[hsl(var(--copper))]"
-                          aria-hidden="true"
-                        />
-                        {region.regionLabel}
-                      </span>
-                      <span className="text-[12px] text-muted-foreground">
-                        {region.listingCount.toLocaleString()}{' '}
-                        {region.listingCount === 1 ? 'property' : 'properties'}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Section label */}
-        <div className="mb-3 text-[12px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-          Three ways to search
+        {/* Section B: Journey CTAs — the primary decision */}
+        <div className="mb-3.5 flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+          <Compass className="h-[15px] w-[15px] text-[hsl(var(--copper))]" aria-hidden="true" />
+          <span>Choose how you want to search</span>
         </div>
 
         {/* Journey cards */}
@@ -254,8 +179,122 @@ export function GuidedEntryPanel({
           areasCount={areasCount}
         />
 
+        {/* Section C: Macro regions — secondary "or start with a region" */}
+        <div className="my-8 h-px w-full bg-border" />
+
+        <div aria-live="polite">
+          <div className="mb-1.5 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+              <MapPin className="h-[15px] w-[15px] text-[hsl(var(--copper))]" aria-hidden="true" />
+              <span>Or start with a region</span>
+            </div>
+            <div className="flex items-center gap-3">
+              {!isSummaryLoading && !isSummaryError && regions.length > 0 && (
+                <span className="text-[13px] font-medium text-muted-foreground">
+                  {regions.length} {regions.length === 1 ? 'region' : 'regions'}
+                </span>
+              )}
+              {selectedScope && (
+                <button
+                  type="button"
+                  onClick={handleClearScope}
+                  className="flex items-center gap-1 rounded px-2 py-0.5 text-[12px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  <X className="h-3 w-3" aria-hidden="true" />
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+          <p className="mb-4 text-[13.5px] leading-relaxed text-muted-foreground">
+            Prefer to narrow by part of the city first? Pick a region to scope the map, then choose how to search inside it.
+          </p>
+
+          {isSummaryLoading && (
+            <div
+              data-testid="guided-entry-regions-loading"
+              className="flex flex-col gap-3"
+            >
+              {[0, 1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} className="h-[72px] w-full rounded-xl" />
+              ))}
+            </div>
+          )}
+
+          {!isSummaryLoading && isSummaryError && (
+            <div
+              data-testid="guided-entry-regions-error"
+              className="rounded-xl border border-border bg-muted/30 p-4 text-[13.5px] text-muted-foreground"
+            >
+              Area counts are unavailable right now — you can still search {cityLabel} above.
+            </div>
+          )}
+
+          {!isSummaryLoading && !isSummaryError && regions.length > 0 && (
+            <div
+              data-testid="guided-entry-regions-grid"
+              className="flex flex-col gap-3"
+            >
+              {regions.map((region) => {
+                const isSelected = selectedScope === region.regionKey;
+                const cue = getMacroRegionCue(region.regionKey, region.regionLabel, cityLabel);
+                return (
+                  <button
+                    key={region.regionKey}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => handleRegionClick(region.regionKey)}
+                    className={`group flex items-center justify-between gap-3.5 rounded-xl border-[1.5px] p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      isSelected
+                        ? 'border-[hsl(var(--copper))] bg-[hsl(var(--copper)/0.08)] shadow-sm'
+                        : 'border-border bg-card hover:border-foreground/30'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                      <span
+                        className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-lg transition-colors ${
+                          isSelected
+                            ? 'bg-[hsl(var(--copper))] text-white'
+                            : 'bg-secondary text-foreground group-hover:bg-primary group-hover:text-primary-foreground'
+                        }`}
+                      >
+                        <MapPin className="h-[20px] w-[20px]" aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-[16px] font-bold tracking-tight text-foreground truncate">
+                          {region.regionLabel}
+                        </h3>
+                        <div className="mt-0.5 text-[13px] text-muted-foreground truncate">
+                          {cue}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 text-right">
+                      <div>
+                        <div className="font-mono text-[17px] font-bold text-foreground leading-none">
+                          {region.listingCount.toLocaleString()}
+                        </div>
+                        <div className="mt-1 text-[11.5px] font-medium text-muted-foreground">
+                          {region.listingCount === 1 ? 'property' : 'properties'}
+                        </div>
+                      </div>
+                      <span className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                        isSelected ? 'bg-[hsl(var(--copper))] text-white' : 'text-muted-foreground group-hover:bg-secondary group-hover:text-foreground'
+                      }`}>
+                        <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Trust strip */}
-        <TrustStrip className="mt-6" />
+        <TrustStrip className="mt-8 pt-6 border-t border-border" />
       </div>
     </div>
   );

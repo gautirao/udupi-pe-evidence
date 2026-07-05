@@ -629,6 +629,15 @@ describe('area-first school-picking sub-step (Issue #1157)', () => {
     ).toBe('schools-in-area');
   });
 
+  // (d) Journeyless (unified city landing drill-down) + areaKey + schoolPicking + no schoolId → schools-in-area
+  it('(d) journeyless + areaKey + schoolPicking + no schoolId → schools-in-area', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: null, areaKey: 'IN|KA|Udupi|Manipal', schoolPicking: true }),
+      ),
+    ).toBe('schools-in-area');
+  });
+
   // (b) Once a school is selected, schoolId precedence wins (placement + !schoolId guard).
   it('(b) area-first + areaKey + schoolId (+schoolPicking) → area-school-combined (precedence)', () => {
     expect(
