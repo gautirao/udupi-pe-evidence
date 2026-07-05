@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPin, SearchX, ShieldCheck, Compass, X } from 'lucide-react';
+import { MapPin, SearchX, Compass, X } from 'lucide-react';
 import { JourneySwitcher } from '../JourneySwitcher';
 import { CitySelect } from '../CitySelect';
 import { IntentSelector } from '../IntentSelector';
@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverSummary } from '@/hooks/useDiscoverSummary';
+import { TrustStrip } from './_shared';
 
 interface GuidedEntryPanelProps {
   onSelectJourney: (journey: DiscoverJourney) => void;
@@ -245,15 +246,7 @@ export function GuidedEntryPanel({
         />
 
         {/* Trust strip */}
-        <div className="mt-6 flex items-center gap-3 border-t border-border pt-5">
-          <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md bg-[hsl(var(--evergreen-tint))]">
-            <ShieldCheck className="h-[19px] w-[19px] text-[hsl(var(--evergreen))]" aria-hidden="true" />
-          </span>
-          <p className="text-[13px] leading-snug text-muted-foreground">
-            <strong className="text-foreground">Every listing is verified.</strong> Documents
-            checked, RERA registered, broker confirmed — before it reaches you.
-          </p>
-        </div>
+        <TrustStrip className="mt-6" />
       </div>
     </div>
   );

@@ -328,9 +328,11 @@ describe('AreaSelectedPanel', () => {
       // Also verify the old --input-bg class is NOT on the controls card itself.
       const inputBgEl = container.querySelector('.bg-\\[hsl\\(var\\(--input-bg\\)\\)\\]');
       // The CitySelect trigger MAY carry --input-bg; the CONTROLS CARD wrapping div must not.
-      // We simply assert the grid wrapper carries bg-card.
-      const gridWrapper = container.querySelector('.grid.grid-cols-2');
-      expect(gridWrapper?.className).toContain('bg-card');
+      // Issue #1745 Batch B — controls card converged from `grid grid-cols-2` to
+      // `flex flex-wrap` (matches GuidedEntryPanel/AreaGroupsLandingPanel, avoids the
+      // md squeeze); assert the flex wrapper carries bg-card instead of the old grid selector.
+      const flexWrapper = container.querySelector('.flex.flex-wrap.items-end');
+      expect(flexWrapper?.className).toContain('bg-card');
     });
 
     it('property-type filter is wrapped in a white card (rounded-xl bg-card)', () => {

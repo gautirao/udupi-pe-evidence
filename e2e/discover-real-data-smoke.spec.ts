@@ -97,13 +97,16 @@ test.describe('Discover real-data smoke', () => {
       if (r.status() === 401 || r.status() === 403) authErrors.push(r.status());
     });
 
-    await page.goto('/discover?city=udupi');
-
-    // Wait for area markers — Leaflet divIcon class applied by the area-layer
-    await page.waitForSelector('.leaflet-marker-icon.area-marker', { timeout: 15_000 });
-
-    // Click the Manipal area marker (has 4 seeded [E2E] listings)
-    await page.locator('.leaflet-marker-icon.area-marker', { hasText: 'Manipal' }).click({ force: true });
+    // Issue #1745 Batch B map-hierarchy fix — the journeyless /discover?city=udupi
+    // landing now correctly renders macro-region BUBBLES (Coastal Strip / University
+    // Belt / South Udupi / North Udupi), not per-area '.area-marker' pills, so a
+    // direct '.leaflet-marker-icon.area-marker' click with hasText 'Manipal' no
+    // longer exists at that landing (pre-fix behavior this test used to assert).
+    // Navigate straight to the Manipal area (real backend-confirmed seeded [E2E]
+    // listings) to preserve this test's area-first anon intent — listing cards
+    // reachable, zero 401/403 — without depending on the intermediate
+    // bubble → pill drill-down UI.
+    await page.goto(`/discover?city=udupi&areaKey=${encodeURIComponent(MANIPAL_AREA_KEY)}`);
 
     // Wait for listing cards to appear in the right panel
     await page.waitForSelector('[data-testid="listing-card"]', { timeout: 15_000 });

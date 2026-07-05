@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import { getAreaGroupContent, getLocalityDescription } from '@/lib/discoverGroupContent';
+import { PanelColumn } from './_shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,13 +40,13 @@ function Stat({ value, label, accent = false }: { value: number; label: string; 
     <div className="flex flex-col">
       <span
         className={cn(
-          'text-lg font-bold leading-none tabular-nums',
+          'font-mono text-xl font-bold leading-none tracking-tight tabular-nums',
           accent ? 'text-copper' : 'text-foreground',
         )}
       >
         {value}
       </span>
-      <span className="mt-1 text-xs text-muted-foreground">{label}</span>
+      <span className="mt-1.5 text-xs text-muted-foreground">{label}</span>
     </div>
   );
 }
@@ -76,7 +77,7 @@ function LocalityCard({
         <div
           data-testid={testId}
           aria-disabled="true"
-          className="rounded-2xl border border-border/60 bg-muted/40 p-4"
+          className="rounded-xl border border-border/60 bg-muted/40 p-4"
         >
           <div className="flex items-start gap-3.5">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground/60">
@@ -104,7 +105,7 @@ function LocalityCard({
         data-testid={testId}
         onClick={() => onSelectArea(area.areaKey)}
         aria-label={`View ${count} propert${count === 1 ? 'y' : 'ies'} in ${area.name}`}
-        className="group w-full rounded-2xl border border-border/70 bg-card p-4 text-left shadow-[0_1px_2px_rgba(24,16,12,0.03)] transition-all hover:-translate-y-px hover:border-copper/40 hover:shadow-[0_1px_2px_rgba(24,16,12,0.04),0_10px_20px_-14px_rgba(176,92,58,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="group w-full rounded-xl border border-border/70 bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-px hover:border-copper/40 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <div className="flex items-start gap-3.5">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-copper-tint text-copper ring-1 ring-copper/15">
@@ -224,11 +225,12 @@ export function AreaGroupSelectedPanel({
       </div>
 
       {/* ── Body: selected-group card + member-area list ── */}
-      <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
+      <div className="flex-1 overflow-y-auto px-4 py-5">
+      <PanelColumn className="space-y-5">
         {/* Selected-group context card */}
         <article
           data-testid="area-group-selected-card"
-          className="rounded-2xl border border-border/70 bg-card p-5 shadow-[0_1px_2px_rgba(24,16,12,0.04),0_8px_24px_-12px_rgba(24,16,12,0.12)]"
+          className="rounded-xl border border-border/70 bg-card p-5 shadow-sm"
         >
           <div className="flex items-start gap-3.5">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-copper-tint text-copper ring-1 ring-copper/15">
@@ -313,6 +315,7 @@ export function AreaGroupSelectedPanel({
             </>
           )}
         </div>
+      </PanelColumn>
       </div>
     </>
   );

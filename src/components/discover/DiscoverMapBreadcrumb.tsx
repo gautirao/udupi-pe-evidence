@@ -10,8 +10,12 @@ export interface DiscoverMapCrumb {
   href?: string;
   /** Marks this as the terminal/current crumb — adds `aria-current="page"` (non-link crumbs only). */
   current?: boolean;
-  /** Visual treatment: 'muted' ancestor (default), 'strong' bold current, 'school' plum accent. */
-  emphasis?: 'muted' | 'strong' | 'school';
+  /**
+   * Visual treatment: 'muted' ancestor (default), 'strong' bold current,
+   * 'school' plum accent, 'agri' evergreen accent (Issue #1745 Batch B — so
+   * agri breadcrumbs aren't stuck on muted/strong like the other two journeys).
+   */
+  emphasis?: 'muted' | 'strong' | 'school' | 'agri';
   /** Optional truncation width for long labels, e.g. 'max-w-[160px]'. Applies `truncate` alongside it. */
   maxWidthClass?: string;
   /** React list key. When present, also emits a `data-testid="breadcrumb-seg-{key}"` on this crumb. */
@@ -85,7 +89,9 @@ export function DiscoverMapBreadcrumb({
               ? 'font-semibold text-foreground'
               : seg.emphasis === 'school'
                 ? 'font-semibold text-[hsl(var(--plum))]'
-                : 'text-muted-foreground';
+                : seg.emphasis === 'agri'
+                  ? 'font-semibold text-[hsl(var(--evergreen))]'
+                  : 'text-muted-foreground';
           const widthClass = cn('truncate', seg.maxWidthClass);
           const testIdAttr = seg.key ? `breadcrumb-seg-${seg.key}` : undefined;
 

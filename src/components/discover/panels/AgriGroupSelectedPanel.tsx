@@ -17,6 +17,7 @@ import type { AgriFilterValues } from './AgriFiltersPanel';
 import { landCategoryLabel, waterSourceLabel } from './agriFilterOptions';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { formatPrice } from '@/lib/formatters';
+import { PanelColumn, SummaryBandCard } from './_shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -257,56 +258,37 @@ export function AgriGroupSelectedPanel({
       data-testid="agri-group-selected-panel"
       className="flex flex-col h-full bg-muted/20"
     >
-      {/* ── Selected-corridor summary band (ReTrends evergreen) ───────────────── */}
-      <div
-        className="m-4 mb-3 rounded-xl bg-evergreen p-5 text-evergreen-foreground shadow-md shrink-0"
-        data-testid="agri-group-summary-band"
-      >
-        {/* "Change corridor" affordance — resets the selected region */}
-        <button
-          type="button"
-          aria-label="Clear selected region"
-          data-testid="agri-group-selected-clear"
-          onClick={onClear}
-          className="mb-3 flex items-center gap-1 text-xs text-evergreen-foreground/70 hover:text-evergreen-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-evergreen-foreground/40 rounded"
-        >
-          <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
-          Change corridor
-        </button>
-
-        {/* Eyebrow + Buy/Rent badge */}
-        <div className="mb-1.5 flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-evergreen-foreground/70">
-            <Sprout className="h-3.5 w-3.5" aria-hidden="true" />
-            Agricultural land
-          </span>
-          <span className="inline-flex items-center rounded-full border border-evergreen-foreground/20 bg-evergreen-foreground/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-evergreen-foreground/85">
-            {intent === 'rent' ? 'Rent' : 'Buy'}
-          </span>
-        </div>
-
-        {/* Selected corridor name (e.g. "N towards Brahmavar") */}
-        <h2
-          data-testid="agri-group-selected-label"
-          className="text-xl font-bold leading-tight text-evergreen-foreground truncate"
-        >
-          {groupLabel}
-        </h2>
-
-        {/* Authoritative result count for this corridor */}
-        {!isLoading && !isError && (
-          <p className="mt-3">
-            <span
-              data-testid="agri-group-listing-count"
-              className="text-2xl font-extrabold tabular-nums text-evergreen-foreground"
-            >
-              {listingCount}{' '}
-              <span className="text-sm font-semibold text-evergreen-foreground/80">
-                agri propert{listingCount === 1 ? 'y' : 'ies'} for {intent === 'rent' ? 'rent' : 'sale'} in this region
-              </span>
+      {/* ── Selected-corridor summary band (ReTrends evergreen — tinted-card model) ── */}
+      <div className="m-4 mb-3 shrink-0">
+        <SummaryBandCard
+          accent="evergreen"
+          icon={Sprout}
+          dataTestId="agri-group-summary-band"
+          onChange={onClear}
+          changeLabel="Change corridor"
+          changeAriaLabel="Clear selected region"
+          changeTestId="agri-group-selected-clear"
+          eyebrow="Agricultural land"
+          badge={
+            <span className="inline-flex items-center rounded-full border border-evergreen/20 bg-evergreen-tint px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-evergreen">
+              {intent === 'rent' ? 'Rent' : 'Buy'}
             </span>
-          </p>
-        )}
+          }
+          title={groupLabel}
+          titleTestId="agri-group-selected-label"
+          stats={
+            !isLoading && !isError
+              ? [
+                  {
+                    key: 'listings',
+                    value: listingCount,
+                    label: `agri propert${listingCount === 1 ? 'y' : 'ies'} for ${intent === 'rent' ? 'rent' : 'sale'} in this region`,
+                    testId: 'agri-group-listing-count',
+                  },
+                ]
+              : []
+          }
+        />
       </div>
 
       {/* ── Distance + filters controls ──────────────────────────────────────── */}
@@ -431,6 +413,7 @@ export function AgriGroupSelectedPanel({
 
       {/* ── Body ─────────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
+        <PanelColumn>
         {isLoading ? (
           <div className="flex flex-col gap-2 p-4 pt-1" aria-busy="true">
             <ListingSkeleton />
@@ -557,6 +540,7 @@ export function AgriGroupSelectedPanel({
             </div>
           </div>
         )}
+        </PanelColumn>
       </div>
 
       {/* Issue #1460 — non-blocking truncation notice, rendered only when backend capped results. */}

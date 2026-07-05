@@ -265,6 +265,105 @@ export function computeDiscoverLayer(input: DiscoverLayerInput): DiscoverLayer {
   return derivePanelContent(reconstructed);
 }
 
+// ─── Map-layer axis (Issue #1745 Batch B — map-hierarchy fix) ───────────────
+//
+// THE BUG this section fixes: at the journeyless city landing (no journey,
+// scope=null) MapDiscovery.tsx's `overviewAreas` fell through to `liveAreas`
+// (every area with listingCount > 0 — ~100 individual pills) instead of the
+// ~4-8 macro-region bubbles the right-panel summary shows. Root cause: the
+// existing group-bubble derivation was gated on a journey being active
+// (`isTopGroupedAreaOrSchool`); the public journeyless landing never set it.
+//
+// `selectDiscoverMapLayer` is the single identifiable rule deciding WHICH
+// family of map markers applies for a given URL state + a coarse zoom bucket.
+// It COMPOSES with `computeDiscoverLayer` (which delegates to
+// `derivePanelContent`) for the panel axis — it must never re-implement
+// journey/precedence routing itself. The ONLY new behaviour vs. the
+// pre-existing scattered `isTopGroupedAreaOrSchool` / `isTopGroupedAgri` /
+// `isLandingState` / `isAreaFirstCityLanding` booleans is: a journeyless
+// landing (`computeDiscoverLayer` resolves to 'guided-entry') with no `scope`
+// now resolves to `'macro-region-bubbles'` instead of falling through to the
+// generic area/listing fallback; with a `scope` set it resolves to
+// `'region-zone-areas'`. Every other row reproduces the pre-existing booleans'
+// behaviour exactly — see the parity table in discoverLayerRegistry.test.ts.
+//
+// `zoomBucket` only ever collapses the OVERVIEW-bucket category to `'none'`
+// when zoomed past the area-marker cutoff (mirrors MapDiscovery's pre-existing
+// unconditional `mapZoom > AREA_LAYER_MAX_ZOOM` gate) — it does not otherwise
+// change which category a given URL state maps to. Callers that need the
+// zoom-INDEPENDENT category (e.g. to decide whether raw listing markers
+// should stay suppressed even if the user manually zooms in on a grouped/
+// landing state) should call this with `zoomBucket: 'overview'` explicitly.
+//
+// Data availability (has the area-groups query loaded yet? are there zero
+// groups for this city?) is NOT a pure URL-state concern, so it is NOT
+// decided here — MapDiscovery still applies its own loading/empty-groups
+// fallback to the areas each returned kind implies. This function only
+// decides the CATEGORY, never the underlying data.
+export type DiscoverMapZoomBucket = 'overview' | 'detail';
+
+export type DiscoverMapLayerKind =
+  /** Area-first/school-first landing, no group/area/school yet (pre-existing). */
+  | 'area-group-bubbles'
+  /** NEW (Issue #1745 Batch B) — journeyless city landing, scope=null. */
+  | 'macro-region-bubbles'
+  /** NEW (Issue #1745 Batch B) — journeyless city landing, scope=<groupId>. */
+  | 'region-zone-areas'
+  /** Agri-first landing, no corridor/area/locality/group yet (pre-existing). */
+  | 'agri-corridor-bubbles'
+  /** Agri-first drill-down past the corridor landing (pre-existing — hides area markers entirely). */
+  | 'agri-drilldown'
+  /** Every other residential drill-down state (pre-existing — full discoverAreas set). */
+  | 'all-areas'
+  /** Zoomed in past the area-marker cutoff (pre-existing — hides area markers entirely). */
+  | 'zoom-gated';
+
+export function selectDiscoverMapLayer(
+  input: DiscoverLayerInput,
+  zoomBucket: DiscoverMapZoomBucket,
+): DiscoverMapLayerKind {
+  // Single top-level zoom gate — mirrors MapDiscovery's pre-existing unconditional
+  // `mapZoom > AREA_LAYER_MAX_ZOOM` check, which always ran FIRST regardless of
+  // journey/URL state. Callers that need the zoom-INDEPENDENT category (e.g. to
+  // decide whether raw listing markers should stay suppressed even if the user
+  // manually zooms in on a grouped/landing state) should pass `zoomBucket: 'overview'`
+  // explicitly rather than relying on this function to ignore it.
+  if (zoomBucket === 'detail') return 'zoom-gated';
+
+  const { journey, selection, scope } = input;
+
+  if (journey === 'agri-first') {
+    // Mirrors MapDiscovery's pre-existing `isTopGroupedAgri` exactly.
+    const isTopGroupedAgri =
+      selection.selectedRegion == null &&
+      !selection.areaKey &&
+      selection.selectedLocality == null &&
+      selection.selectedGroup == null;
+    return isTopGroupedAgri ? 'agri-corridor-bubbles' : 'agri-drilldown';
+  }
+
+  // Mirrors MapDiscovery's pre-existing `isTopGroupedAreaOrSchool`, minus the
+  // runtime `!selectedArea` / `!selectedSchool` checks — those are local UI-state
+  // objects, not URL-state, and are redundant given `!areaKey` / `!schoolId` are
+  // already required true (the same simplification `derivePanelContent`, the
+  // authoritative panel-routing function this composes with, already relies on:
+  // it never checks resolved-object state either, only the URL param).
+  const isTopGroupedAreaOrSchool =
+    (journey === 'area-first' || journey === 'school-first') &&
+    !selection.groupId &&
+    !selection.areaKey &&
+    !selection.schoolId;
+  if (isTopGroupedAreaOrSchool) return 'area-group-bubbles';
+
+  // Issue #1745 Batch B — THE FIX. A journeyless landing (derivePanelContent
+  // resolves to 'guided-entry') is the ONLY state that gains new behaviour here.
+  if (journey == null && computeDiscoverLayer(input) === 'guided-entry') {
+    return scope.region ? 'region-zone-areas' : 'macro-region-bubbles';
+  }
+
+  return 'all-areas';
+}
+
 // ─── Pure guard reducers ─────────────────────────────────────────────────────
 //
 // These mirror the equivalent URL-mutation semantics in useDiscoverUrlState.ts

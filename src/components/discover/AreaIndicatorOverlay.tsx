@@ -41,7 +41,7 @@ export function AreaIndicatorOverlay({
         data-state="area"
       >
         <div className="flex items-center gap-1.5">
-          <Building2 className="h-4 w-4 text-primary flex-shrink-0" />
+          <Building2 className="h-4 w-4 text-copper flex-shrink-0" />
           <span className="text-sm font-semibold truncate max-w-[180px]">
             {selectedArea.areaLabel}
           </span>
@@ -72,7 +72,7 @@ export function AreaIndicatorOverlay({
         data-state="group"
       >
         <div className="flex items-center gap-1.5">
-          <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
+          <MapPin className="h-4 w-4 text-copper flex-shrink-0" />
           <span className="text-sm font-semibold truncate max-w-[180px]">
             {focusedGroup.name}
           </span>

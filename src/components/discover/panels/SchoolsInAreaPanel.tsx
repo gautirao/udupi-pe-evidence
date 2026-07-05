@@ -5,6 +5,7 @@ import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import { useDiscoverUrlState, type DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { PanelHeader } from '../PanelHeader';
+import { PanelColumn, SummaryBandCard } from './_shared';
 import { prettifyZoneSlug } from '@/components/discover/SchoolRadiusMapOverlay';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -347,66 +348,54 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
 
       {/* Single scroll surface: selected-area summary → school filters → school list */}
       <div className="flex-1 overflow-y-auto">
+        <PanelColumn>
         {/* Selected-area summary (school-first only) — breadcrumb + area title + metrics.
             The area-first school-picking sub-step (#1157) reuses this panel and skips this. */}
         {isSchoolFirst && (
-          <div
-            data-testid="selected-area-summary"
-            className="m-4 rounded-2xl bg-primary p-5 text-primary-foreground shadow-lg ring-1 ring-white/5"
-          >
-            <nav aria-label="Breadcrumb" className="mb-2.5">
-              <ol className="flex flex-wrap items-center gap-1.5 text-xs text-primary-foreground/60">
-                <li>{cityLabel}</li>
-                {zoneLabel && (
-                  <>
-                    <ChevronRight className="h-3 w-3 text-primary-foreground/40" aria-hidden />
-                    <li>{zoneLabel}</li>
-                  </>
-                )}
-                <ChevronRight className="h-3 w-3 text-primary-foreground/40" aria-hidden />
-                <li className="font-semibold text-primary-foreground/90" aria-current="page">
-                  {areaLabel}
-                </li>
-              </ol>
-            </nav>
-            <div className="flex items-start gap-3">
-              <div className="flex-none flex h-10 w-10 items-center justify-center rounded-lg bg-plum/30">
-                <MapPin className="h-5 w-5 text-primary-foreground" aria-hidden />
-              </div>
-              <div className="min-w-0">
+          <div className="m-4">
+            <SummaryBandCard
+              accent="plum"
+              icon={MapPin}
+              dataTestId="selected-area-summary"
+              badge={
                 <span className="inline-flex items-center rounded-full bg-copper px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-copper-foreground">
                   Selected area
                 </span>
-                <h2 className="mt-1 font-serif text-2xl font-semibold leading-tight tracking-tight">{areaLabel}</h2>
-              </div>
-            </div>
-            <p className="mt-2 text-sm leading-relaxed text-primary-foreground/75">
-              Choose a school in {areaLabel} to filter homes within reach of it.
-            </p>
-            <div className="mt-4 flex gap-8 border-t border-primary-foreground/15 pt-3">
-              <div>
-                <div
-                  className="font-mono text-xl font-semibold tabular-nums"
-                  data-testid="summary-school-count"
-                >
-                  {summarySchoolCount}
-                </div>
-                <div className="text-xs text-primary-foreground/60">
-                  {summarySchoolCount === 1 ? 'school' : 'schools'}
-                </div>
-              </div>
-              <div>
-                <div
-                  className="font-mono text-xl font-semibold tabular-nums"
-                  data-testid="summary-homes-count"
-                >
-                  {summaryHomesCount}
-                </div>
-                <div className="text-xs text-primary-foreground/60">
-                  {homesNoun(intent, summaryHomesCount)}
-                </div>
-              </div>
-            </div>
+              }
+              breadcrumb={
+                <nav aria-label="Breadcrumb" className="mb-2.5">
+                  <ol className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                    <li>{cityLabel}</li>
+                    {zoneLabel && (
+                      <>
+                        <ChevronRight className="h-3 w-3 text-muted-foreground/60" aria-hidden />
+                        <li>{zoneLabel}</li>
+                      </>
+                    )}
+                    <ChevronRight className="h-3 w-3 text-muted-foreground/60" aria-hidden />
+                    <li className="font-semibold text-foreground" aria-current="page">
+                      {areaLabel}
+                    </li>
+                  </ol>
+                </nav>
+              }
+              title={areaLabel}
+              description={`Choose a school in ${areaLabel} to filter homes within reach of it.`}
+              stats={[
+                {
+                  key: 'schools',
+                  value: summarySchoolCount,
+                  label: summarySchoolCount === 1 ? 'school' : 'schools',
+                  testId: 'summary-school-count',
+                },
+                {
+                  key: 'homes',
+                  value: summaryHomesCount,
+                  label: homesNoun(intent, summaryHomesCount),
+                  testId: 'summary-homes-count',
+                },
+              ]}
+            />
           </div>
         )}
 
@@ -703,9 +692,13 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
             </div>
           </div>
         )}
+        </PanelColumn>
 
         {/* Homes section (school-first) renders inside this SAME scroll surface, so the
-            whole right panel scrolls as one page — no nested scrollbars. */}
+            whole right panel scrolls as one page — no nested scrollbars. It intentionally
+            sits OUTSIDE PanelColumn (full panel width), matching the AreaSelectedPanel
+            listing-grid precedent — the reading column applies to the school-browse
+            content, not the final results grid. */}
         {footerSlot}
       </div>
     </div>

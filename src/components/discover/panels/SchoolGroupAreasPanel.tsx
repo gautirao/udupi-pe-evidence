@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PanelHeader } from '../PanelHeader';
+import { PanelColumn } from './_shared';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
@@ -55,7 +56,7 @@ function SummaryStat({ value, label, tone = 'neutral' }: SummaryStatProps) {
     <div className="flex flex-col">
       <span
         className={cn(
-          'text-lg font-bold leading-none tabular-nums',
+          'font-mono text-xl font-bold leading-none tracking-tight tabular-nums',
           tone === 'school' && 'text-plum',
           tone === 'home' && 'text-copper',
           tone === 'neutral' && 'text-foreground',
@@ -63,7 +64,7 @@ function SummaryStat({ value, label, tone = 'neutral' }: SummaryStatProps) {
       >
         {value}
       </span>
-      <span className="mt-1 text-xs text-muted-foreground">{label}</span>
+      <span className="mt-1.5 text-xs text-muted-foreground">{label}</span>
     </div>
   );
 }
@@ -329,59 +330,61 @@ export function SchoolGroupAreasPanel({
       </div>
 
       <div
-        className="flex-1 overflow-y-auto bg-background px-4 py-4 space-y-4"
+        className="flex-1 overflow-y-auto bg-background px-4 py-4"
         aria-busy={isLoading}
         aria-label={`Areas in ${group.name}`}
         data-testid="school-group-areas-list"
       >
-        {isLoading ? (
-          // Skeleton state — while discoverAreas is still loading
-          <div className="space-y-3" data-testid="school-group-areas-loading">
-            {[0, 1, 2, 3].map((i) => (
-              <AreaCardSkeleton key={i} />
-            ))}
-          </div>
-        ) : groupAreas.length === 0 ? (
-          // Empty state — group exists but no areas resolved (data gap or all filtered)
-          <div
-            className="flex flex-col items-center justify-center py-12 px-4 text-center"
-            data-testid="school-group-areas-empty"
-          >
-            <MapPin className="h-8 w-8 text-muted-foreground/40 mb-3" aria-hidden="true" />
-            <p className="text-sm font-medium text-foreground mb-1">No areas in this zone</p>
-            <p className="text-xs text-muted-foreground">Try a different zone or search by school name.</p>
-          </div>
-        ) : (
-          <>
-            {/* Guided 3-step strip sits ABOVE the zone summary (matches design source). */}
-            <HowSchoolSearchWorks />
-
-            <ZoneSummaryCard
-              group={group}
-              areaCount={groupAreas.length}
-              schoolCount={totalSchools}
-              listingCount={totalListings}
-            />
-
-            <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Areas inside {group.name}
-                </p>
-              </div>
-              <span className="text-xs text-muted-foreground">
-                {groupAreas.length} area{groupAreas.length === 1 ? '' : 's'}
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {groupAreas.map((area) => (
-                <AreaCard key={area.areaKey} area={area} onSelect={onSelectAreaKey} />
+        <PanelColumn className="space-y-4">
+          {isLoading ? (
+            // Skeleton state — while discoverAreas is still loading
+            <div className="space-y-3" data-testid="school-group-areas-loading">
+              {[0, 1, 2, 3].map((i) => (
+                <AreaCardSkeleton key={i} />
               ))}
             </div>
-          </>
-        )}
+          ) : groupAreas.length === 0 ? (
+            // Empty state — group exists but no areas resolved (data gap or all filtered)
+            <div
+              className="flex flex-col items-center justify-center py-12 px-4 text-center"
+              data-testid="school-group-areas-empty"
+            >
+              <MapPin className="h-8 w-8 text-muted-foreground/40 mb-3" aria-hidden="true" />
+              <p className="text-sm font-medium text-foreground mb-1">No areas in this zone</p>
+              <p className="text-xs text-muted-foreground">Try a different zone or search by school name.</p>
+            </div>
+          ) : (
+            <>
+              {/* Guided 3-step strip sits ABOVE the zone summary (matches design source). */}
+              <HowSchoolSearchWorks />
+
+              <ZoneSummaryCard
+                group={group}
+                areaCount={groupAreas.length}
+                schoolCount={totalSchools}
+                listingCount={totalListings}
+              />
+
+              <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Areas inside {group.name}
+                  </p>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {groupAreas.length} area{groupAreas.length === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {groupAreas.map((area) => (
+                  <AreaCard key={area.areaKey} area={area} onSelect={onSelectAreaKey} />
+                ))}
+              </div>
+            </>
+          )}
+        </PanelColumn>
       </div>
     </div>
   );

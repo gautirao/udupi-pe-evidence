@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronRight, Layers, MapPin, ShieldCheck, X } from 'lucide-react';
+import { ChevronRight, Layers, MapPin, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CitySelect } from '../CitySelect';
@@ -9,6 +9,7 @@ import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { formatMemberAreaSummary, buildAreaNameIndex } from '@/utils/areaNameSummary';
+import { TrustStrip } from './_shared';
 
 // Shared uppercase eyebrow for the in-panel control labels (mirrors GuidedEntryPanel).
 const CONTROL_EYEBROW = 'text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground';
@@ -606,15 +607,7 @@ export function AreaGroupsLandingPanel({
             </div>
 
             {/* Issue #1607 — trust strip (mock parity, mirrors GuidedEntryPanel). */}
-            <div className="flex items-center gap-3 border-t border-border pt-5">
-              <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md bg-[hsl(var(--evergreen-tint))]">
-                <ShieldCheck className="h-[19px] w-[19px] text-[hsl(var(--evergreen))]" aria-hidden="true" />
-              </span>
-              <p className="text-[13px] leading-snug text-muted-foreground">
-                <strong className="text-foreground">Every listing is verified.</strong> Documents
-                checked, RERA registered, broker confirmed — before it reaches you.
-              </p>
-            </div>
+            <TrustStrip />
           </div>
         ) : (
           // ── No groups: Browse-all fallback across all city areas ────────────────

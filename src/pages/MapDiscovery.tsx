@@ -23,7 +23,12 @@ import {
 } from '@/components/discover/SchoolRadiusMapOverlay';
 import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
-import { computeDiscoverLayer, toLayerInput } from '@/utils/discoverLayerRegistry';
+import {
+  computeDiscoverLayer,
+  toLayerInput,
+  selectDiscoverMapLayer,
+  type DiscoverMapLayerKind,
+} from '@/utils/discoverLayerRegistry';
 import { computeGroupBounds } from '@/utils/discoverGroupBounds';
 import { CitySelect } from '@/components/discover/CitySelect';
 import { CityNotSupported } from '@/components/discover/CityNotSupported';
@@ -36,6 +41,7 @@ import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { useAreaGroups } from '@/hooks/useAreaGroups';
 import { useRegionalAreaGroups } from '@/hooks/useRegionalAreaGroups';
+import { useDiscoverSummary, type DiscoverSummaryListingPurpose } from '@/hooks/useDiscoverSummary';
 import { useAgriMapListings } from '@/hooks/useAgriMapListings';
 import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import { useDiscoverListings } from '@/hooks/useDiscoverListings';
@@ -44,7 +50,7 @@ import { useDiscoverFilteredMarkers } from '@/hooks/useDiscoverFilteredMarkers';
 import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
-import { CITY_CONFIG } from '@/lib/localityUtils';
+import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { slugifyFromAreaKey } from '@/lib/areaSlug';
 import { getSectorBounds } from '@/lib/geo';
 import { clampSchoolRadiusKm, PropertyListing, PropertyImage, PropertyFilters } from '@/hooks/usePropertyListings';
@@ -449,21 +455,32 @@ export default function MapDiscovery() {
 
   // Fetch area groups for the current city.
   // The hook's enabled guard (city.length > 0) prevents fetching on empty city.
-  // Passing urlState.city directly avoids a stale-data window that the conditional ''
-  // approach would create when the panel briefly re-renders before city resolves.
+  // Issue #1745 Batch B map-hierarchy fix — pass the DEFAULTED city (matching
+  // useDiscoverPageState's `urlState.city || DEFAULT_CITY`), not the raw
+  // urlState.city. At plain /discover (no ?city= param) urlState.city is '',
+  // which previously left this hook disabled (no groups) while the panel showed
+  // the defaulted city's region cards — a landing-vs-panel mismatch that made
+  // macro-region-bubbles fall back to the full liveAreas pill set. Falling back
+  // to DEFAULT_CITY here does NOT reintroduce the stale-data window this comment
+  // used to warn about — that contrast was raw urlState.city vs a conditional ''
+  // placeholder, not vs `|| DEFAULT_CITY`, which resolves to the same city the
+  // panel already renders.
   const {
     data: areaGroupsData,
     isLoading: isLoadingAreaGroups,
-  } = useAreaGroups(urlState.city);
+  } = useAreaGroups(urlState.city || DEFAULT_CITY);
 
   // Issue #1429 (B2) — precomputed corridor groups for the agri-first landing panel.
   // useRegionalAreaGroups returns { groups, isLoading, error } directly (no .data wrapper).
+  // Issue #1745 Batch B — same DEFAULT_CITY fallback as useAreaGroups above, for
+  // agri-first city-landing consistency (same bug class: empty urlState.city
+  // disabling the hook while the panel shows the defaulted city).
   const {
     groups: corridorGroups,
     isLoading: isLoadingRegionalAreaGroups,
     isError: isRegionalAreaGroupsError,
     refetch: refetchRegionalAreaGroups,
-  } = useRegionalAreaGroups(urlState.city);
+  } = useRegionalAreaGroups(urlState.city || DEFAULT_CITY);
 
   // Issue #1429 — derive areaKeys from the selected corridor + distance tier to fetch
   // agri map listings. Hook is disabled when selectedRegion + selectedMaxKm are not both set.
@@ -974,6 +991,19 @@ export default function MapDiscovery() {
     handleAreaClick, handleAreaSelect, handleAreaBack,
     page, setPage,
   } = useDiscoverPageState({ urlState, urlActions });
+
+  // Issue #1745 Batch B map-hierarchy fix — backend-owned region counts for the
+  // journeyless-landing macro-region bubbles (see overviewAreas below). Called with the
+  // SAME { city, listingPurpose } shape GuidedEntryPanel uses (city, listingPurpose only —
+  // no propertyType/groupBy/hotspotLimit — so groupBy defaults to 'area_group' and
+  // hotspotLimit defaults to 8 identically), so the query key matches exactly and this
+  // hits the React Query cache the right panel already populated — zero extra fetch.
+  const summaryListingPurpose: DiscoverSummaryListingPurpose =
+    urlState.intent === 'rent' ? 'rent' : 'sale';
+  const { data: discoverSummaryData } = useDiscoverSummary({
+    city,
+    listingPurpose: summaryListingPurpose,
+  });
 
   // Issue #1064 AC2 — composed tick + Start Over handler (see startOverTick declaration above).
   const composedResetMapTick = resetMapTick + startOverTick;
@@ -2166,10 +2196,27 @@ export default function MapDiscovery() {
     !urlState.selectedLocality &&
     !urlState.selectedGroup;
 
-  const overviewAreas = useMemo((): AreaPoint[] => {
-    if (mapZoom > AREA_LAYER_MAX_ZOOM) return [];
+  // Issue #1745 Batch B map-hierarchy fix — single derivation rule deciding WHICH
+  // family of map markers `overviewAreas` (below) and the `listings` prop selection
+  // (in the PropertyMap render further down) should use for the current URL state.
+  // `mapLayerCategory` is the URL-driven category IGNORING the current zoom (bucket
+  // forced to 'overview') — used wherever a decision must NOT flip with manual
+  // zooming (e.g. suppressing raw listing markers at a grouped/landing state).
+  // `mapLayerKind` additionally folds in the REAL current zoom bucket — used for the
+  // area-marker layer itself, which already always hid above AREA_LAYER_MAX_ZOOM.
+  // Composes with `computeDiscoverLayer`/`derivePanelContent` for the panel axis
+  // (see discoverLayerRegistry.ts); does not duplicate journey-precedence routing.
+  const discoverLayerInput = toLayerInput(urlState);
+  const mapLayerCategory: DiscoverMapLayerKind = selectDiscoverMapLayer(discoverLayerInput, 'overview');
+  const mapLayerKind: DiscoverMapLayerKind = selectDiscoverMapLayer(
+    discoverLayerInput,
+    mapZoom > AREA_LAYER_MAX_ZOOM ? 'detail' : 'overview',
+  );
 
-    if (isTopGroupedAreaOrSchool) {
+  const overviewAreas = useMemo((): AreaPoint[] => {
+    if (mapLayerKind === 'zoom-gated' || mapLayerKind === 'agri-drilldown') return [];
+
+    if (mapLayerKind === 'area-group-bubbles') {
       if (isLoadingAreaGroups) return [];
       const groups = areaGroupsData?.groups ?? [];
       if (groups.length === 0) {
@@ -2207,7 +2254,68 @@ export default function MapDiscovery() {
         .filter((a): a is AreaPoint => a !== null && (a.listingCount ?? 0) > 0);
     }
 
-    if (isTopGroupedAgri) {
+    // Issue #1745 Batch B map-hierarchy fix (NEW) — journeyless city landing,
+    // scope=null: macro-region bubbles. Reuses the SAME member-area geometry
+    // derivation as the area-group-bubbles branch above for PLACEMENT, but the
+    // displayed count/label come from the backend-owned useDiscoverSummary regions
+    // (joined by regionKey === group.id — both are area_groups.slug; confirmed via
+    // backend DiscoverSummaryService.java + live /api/discover/summary response),
+    // never a frontend sum (AC7). A group with no matching summary region, or a
+    // zero backend count, is OMITTED (never defaulted/summed) — same visual
+    // precedent as the area-group-bubbles branch's own zero-count filter above.
+    if (mapLayerKind === 'macro-region-bubbles') {
+      if (isLoadingAreaGroups) return [];
+      const groups = areaGroupsData?.groups ?? [];
+      if (groups.length === 0) return liveAreas;
+      const summaryRegions = discoverSummaryData?.regions ?? [];
+      return groups
+        .map((group): AreaPoint | null => {
+          const groupAreaKeys = group.area_keys ?? [];
+          const memberAreas = discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
+
+          let lat = group.focus_lat != null ? group.focus_lat : null;
+          let lon = group.focus_lon != null ? group.focus_lon : null;
+          if (lat == null || lon == null) {
+            const coords = memberAreas.filter((a) => a.geo_center_lat != null && a.geo_center_lon != null);
+            if (coords.length > 0) {
+              lat = coords.reduce((sum, a) => sum + a.geo_center_lat, 0) / coords.length;
+              lon = coords.reduce((sum, a) => sum + a.geo_center_lon, 0) / coords.length;
+            }
+          }
+          if (lat == null || lon == null) return null;
+
+          const unionBbox = computeGroupBounds(memberAreas)?.bbox ?? null;
+          const summaryListingCount = summaryRegions.find((r) => r.regionKey === group.id)?.listingCount;
+          if (summaryListingCount == null || summaryListingCount === 0) return null;
+
+          return {
+            areaKey: group.id,
+            areaLabel: group.name,
+            geo_center_lat: lat,
+            geo_center_lon: lon,
+            bbox: unionBbox,
+            listingCount: summaryListingCount,
+            schoolCount: undefined,
+          };
+        })
+        .filter((a): a is AreaPoint => a !== null);
+    }
+
+    // Issue #1745 Batch B map-hierarchy fix (NEW) — journeyless city landing,
+    // scope=<groupId>: that region's member-area pills only (no city-wide noise,
+    // no listing markers — gated separately in the `listings` prop selection below).
+    // An unknown/orphaned scope slug (no matching group) renders an empty set rather
+    // than falling back to the full city — matches the "no city-wide noise" intent.
+    if (mapLayerKind === 'region-zone-areas') {
+      if (isLoadingAreaGroups) return [];
+      const groups = areaGroupsData?.groups ?? [];
+      const activeGroup = groups.find((g) => g.id === (urlState.scope ?? null));
+      if (!activeGroup) return [];
+      const groupAreaKeys = activeGroup.area_keys ?? [];
+      return discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
+    }
+
+    if (mapLayerKind === 'agri-corridor-bubbles') {
       if (isLoadingRegionalAreaGroups) return [];
       if (corridorGroups.length === 0) return [];
       const sourceAreas = agriAreasData ?? [];
@@ -2259,18 +2367,18 @@ export default function MapDiscovery() {
         .filter((a) => (a.listingCount ?? 0) > 0);
     }
 
-    if (!isAgriJourney) {
-      return isLandingState || isAreaFirstCityLanding ? liveAreas : discoverAreas;
-    }
-
-    return [];
+    // 'all-areas' — every remaining residential drill-down state (group selected,
+    // area selected, school selected, combined) — unchanged: full discoverAreas,
+    // dimmed via the separate `focusedGroupAreas` prop passed to PropertyMap.
+    // isLandingState/isAreaFirstCityLanding are always false whenever mapLayerKind
+    // resolves to 'all-areas' (both are fully covered by the branches above), so
+    // this is equivalent to `discoverAreas`; the ternary is kept verbatim from the
+    // pre-existing fallback for maximum behavior-preservation.
+    return isLandingState || isAreaFirstCityLanding ? liveAreas : discoverAreas;
   }, [
-    mapZoom,
-    isTopGroupedAreaOrSchool,
-    isTopGroupedAgri,
+    mapLayerKind,
     isLoadingAreaGroups,
     isLoadingRegionalAreaGroups,
-    isAgriJourney,
     isLandingState,
     isAreaFirstCityLanding,
     areaGroupsData,
@@ -2279,6 +2387,8 @@ export default function MapDiscovery() {
     agriAreasData,
     liveAreas,
     urlState.viewport,
+    urlState.scope,
+    discoverSummaryData,
   ]);
 
   const handleOverviewAreaClick = useCallback((area: AreaPoint) => {
@@ -2290,8 +2400,32 @@ export default function MapDiscovery() {
       urlActions.selectGroup(area.areaKey);
       return;
     }
+    // Issue #1745 Batch B map-hierarchy fix — journeyless city landing, scope=null:
+    // the clicked bubble's areaKey is a macro-region group.id (see the
+    // 'macro-region-bubbles' overviewAreas branch above), not a real area. Route it
+    // through setScope (same action the GuidedEntryPanel region card uses) so the map
+    // drills into that region's member-area pills ('region-zone-areas') instead of
+    // falling through to handleAreaClick, which would set an invalid areaKey.
+    //
+    // Guard (code-review follow-up): the 'macro-region-bubbles' overviewAreas branch
+    // falls back to rendering REAL AREA PILLS (liveAreas) when the city has zero
+    // area_groups (see the `if (groups.length === 0) return liveAreas;` line above).
+    // Without the group-membership check below, clicking one of those fallback area
+    // pills would wrongly call setScope with a real areaKey (not a group id), so no
+    // area drill would happen. Mirror the already-correct area-group-bubbles branch
+    // above: only take the setScope path when area.areaKey is actually a group id.
+    if (mapLayerKind === 'macro-region-bubbles' && (areaGroupsData?.groups ?? []).some((g) => g.id === area.areaKey)) {
+      urlActions.setScope(area.areaKey);
+      return;
+    }
+    // mapLayerKind === 'region-zone-areas' (journeyless landing, scope=<groupId>): the
+    // rendered points here ARE real member areas (filtered from discoverAreas by the
+    // active group's area_keys — see the 'region-zone-areas' branch above), so
+    // handleAreaClick(area) is the correct, intentional path — not accidental fallthrough.
+    // This also correctly covers the zero-groups fallback above: a liveAreas pill click
+    // falls through here (real areaKey), never through the setScope branch.
     handleAreaClick(area);
-  }, [isTopGroupedAgri, corridorGroups, isTopGroupedAreaOrSchool, areaGroupsData, urlActions, handleAreaClick]);
+  }, [isTopGroupedAgri, corridorGroups, isTopGroupedAreaOrSchool, areaGroupsData, mapLayerKind, urlActions, handleAreaClick]);
 
   // Issue #1595 — the area-first selected-group drill-down state (a group is focused,
   // no specific area selected yet). Drives the mock-aligned map chrome for this step:
@@ -2385,7 +2519,22 @@ export default function MapDiscovery() {
           ) : (
             <PropertyMap
               listings={(() => {
-                if (isTopGroupedAreaOrSchool || isTopGroupedAgri) return [];
+                // Issue #1745 Batch B map-hierarchy fix — zoom-independent grouped/landing
+                // check (mapLayerCategory ignores the current zoom bucket by construction),
+                // so listing markers stay suppressed at these states even if the user
+                // manually zooms in. Extends the pre-existing isTopGroupedAreaOrSchool /
+                // isTopGroupedAgri suppression to the two NEW journeyless-landing states
+                // (macro-region-bubbles / region-zone-areas), matching AC1/AC2 ("no listing
+                // markers"); every other state (area/school/agri drill-down) is unaffected —
+                // mapLayerCategory resolves to 'all-areas' or 'agri-drilldown' there, neither
+                // of which is in this list, so this line is a no-op for those states exactly
+                // as before.
+                if (
+                  mapLayerCategory === 'area-group-bubbles' ||
+                  mapLayerCategory === 'agri-corridor-bubbles' ||
+                  mapLayerCategory === 'macro-region-bubbles' ||
+                  mapLayerCategory === 'region-zone-areas'
+                ) return [];
                 if (mapZoom <= AREA_LAYER_MAX_ZOOM) return [];
                 // Issue #1597 — area-group-results state: serve ONLY the group-filtered
                 // markers. Must come before the area-first/school-first branches so no

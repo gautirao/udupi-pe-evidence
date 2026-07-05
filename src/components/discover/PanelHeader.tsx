@@ -29,7 +29,10 @@ const JOURNEY_PILL: Record<DiscoverJourney, JourneyPill> = {
   'agri-first': {
     label: 'Agricultural',
     icon: Sprout,
-    className: 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300',
+    // Converged onto the evergreen design token (was a raw Tailwind green) so the
+    // agri journey pill matches the evergreen accent used everywhere else in the
+    // unified portal model (Issue #1745 Batch B AC3).
+    className: 'bg-evergreen-tint text-evergreen',
   },
 };
 

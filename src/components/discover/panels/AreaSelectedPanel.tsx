@@ -308,9 +308,9 @@ export function AreaSelectedPanel({
         {/* Controls card — City + Buy/Rent (Issue #1606, mock parity) */}
         {/* F2 — clean WHITE card surface; warm fill moves to the SELECT trigger inside the card */}
         {(onCityChange || onIntentChange) && (
-          <div className="mt-3.5 grid grid-cols-2 gap-3 rounded-xl border border-border bg-card p-3 shadow-sm">
+          <div className="mt-3.5 flex flex-wrap items-end gap-4 rounded-xl border border-border bg-card p-3.5 shadow-sm">
             {onCityChange && (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex min-w-[150px] flex-1 flex-col gap-1.5">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                   City
                 </span>
@@ -318,7 +318,7 @@ export function AreaSelectedPanel({
               </div>
             )}
             {onIntentChange && (
-              <div className={cn('flex flex-col gap-1.5', !onCityChange && 'col-span-2')}>
+              <div className="flex min-w-[150px] flex-1 flex-col gap-1.5">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                   Looking to
                 </span>
