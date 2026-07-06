@@ -5,12 +5,12 @@ import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import { useDiscoverUrlState, type DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { PanelHeader } from '../PanelHeader';
-import { PanelColumn, SummaryBandCard } from './_shared';
+import { PanelColumn } from './_shared';
+import { SchoolJourneyHero } from './SchoolJourneyHero';
 import { prettifyZoneSlug } from '@/components/discover/SchoolRadiusMapOverlay';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 
@@ -353,34 +353,26 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
             The area-first school-picking sub-step (#1157) reuses this panel and skips this. */}
         {isSchoolFirst && (
           <div className="m-4">
-            <SummaryBandCard
-              accent="plum"
-              icon={MapPin}
+            {/* Visual-parity polish (cycle 2) — dark-navy hero (mock parity), replacing
+                the tinted-card SummaryBandCard. School-first-local component; does not
+                touch the shared _shared/SummaryBandCard used by area-first/agri-first. */}
+            <SchoolJourneyHero
               dataTestId="selected-area-summary"
+              icon={MapPin}
+              eyebrowLabel="Schools in area"
               badge={
                 <span className="inline-flex items-center rounded-full bg-plum px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-plum-foreground">
                   Selected area
                 </span>
               }
-              breadcrumb={
-                <nav aria-label="Breadcrumb" className="mb-2.5">
-                  <ol className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                    <li>{cityLabel}</li>
-                    {zoneLabel && (
-                      <>
-                        <ChevronRight className="h-3 w-3 text-muted-foreground/60" aria-hidden />
-                        <li>{zoneLabel}</li>
-                      </>
-                    )}
-                    <ChevronRight className="h-3 w-3 text-muted-foreground/60" aria-hidden />
-                    <li className="font-semibold text-foreground" aria-current="page">
-                      {areaLabel}
-                    </li>
-                  </ol>
-                </nav>
-              }
-              title={areaLabel}
-              description={`Choose a school in ${areaLabel} to filter homes within reach of it.`}
+              breadcrumb={[
+                { key: 'city', label: cityLabel },
+                ...(zoneLabel ? [{ key: 'zone', label: zoneLabel }] : []),
+                { key: 'area', label: areaLabel, current: true },
+              ]}
+              title={`Schools in ${areaLabel}`}
+              titleTestId="selected-area-summary-title"
+              description="Choose a school to see homes within 3, 5 or 10 km."
               stats={[
                 {
                   key: 'schools',
@@ -404,9 +396,13 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
             contained card (mirrors the design source) instead of a bare ruled section. */}
         <div className="space-y-3 px-4 pb-4 pt-2">
           <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-              {isSchoolFirst ? `Find a school in ${areaLabel}` : 'Filter schools'}
+            <h3 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-muted-foreground">
+              <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+              {isSchoolFirst ? `Schools in ${areaLabel}` : 'Filter schools'}
             </h3>
+            {/* Mock parity: right-aligned count. Kept as "Showing {n} of {total} schools"
+                (rather than the mock's plain "{n} schools") because it also carries the
+                live search/filter-match count, which the plain form would drop. */}
             <span className="shrink-0 text-xs text-muted-foreground" data-testid="school-result-count">
               Showing{' '}
               <span className="font-mono font-semibold tabular-nums text-foreground">
@@ -565,10 +561,12 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="truncate font-semibold text-foreground">{school.name}</h3>
                         <div className="flex flex-none flex-col items-end gap-1">
+                          {/* Board chip — dark/ink (mock parity, cycle 2); theme-aware via
+                              bg-foreground/text-background instead of a hardcoded slate. */}
                           {boardText && (
-                            <Badge variant="secondary" className="whitespace-nowrap">
+                            <span className="whitespace-nowrap rounded-full bg-foreground px-2 py-0.5 text-[11px] font-semibold text-background">
                               {boardText}
-                            </Badge>
+                            </span>
                           )}
                           {level && (
                             <span className="whitespace-nowrap rounded-full bg-plum-tint px-2 py-0.5 text-[11px] font-medium text-plum">
@@ -588,7 +586,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
                               <span className="font-mono font-semibold tabular-nums text-foreground">
                                 {nearby}
                               </span>{' '}
-                              homes nearby
+                              homes within {DEFAULT_SCHOOL_RADIUS_KM} km
                             </>
                           ) : (
                             <span className="inline-flex items-center gap-1">

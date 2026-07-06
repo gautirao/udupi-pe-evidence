@@ -202,15 +202,17 @@ describe('SchoolSelectedPanel', () => {
 
   // ── Result heading ────────────────────────────────────────────────────────────
 
-  it('shows result heading "Homes for sale near this school" with count+radius when listings present', () => {
+  it('shows result heading "Homes near {School}" with count+radius when listings present (mock parity, cycle 2)', () => {
     renderPanel({ listings: [makeListing('l-1'), makeListing('l-2')], radiusKm: 3, intent: 'buy' });
-    expect(screen.getByTestId('radius-result-heading')).toHaveTextContent('Homes for sale near this school');
+    // mockSchool.name === 'Manipal Public School' — the heading names the real selected
+    // school, never the generic "this school" placeholder, once it has resolved.
+    expect(screen.getByTestId('radius-result-heading')).toHaveTextContent('Homes near Manipal Public School');
     expect(screen.getByTestId('radius-result-heading')).toHaveTextContent('2 within 3 km');
   });
 
-  it('shows "Rentals near this school" heading when intent=rent', () => {
+  it('shows "Rentals near {School}" heading when intent=rent', () => {
     renderPanel({ listings: [makeListing('l-1')], radiusKm: 5, intent: 'rent' });
-    expect(screen.getByTestId('radius-result-heading')).toHaveTextContent('Rentals near this school');
+    expect(screen.getByTestId('radius-result-heading')).toHaveTextContent('Rentals near Manipal Public School');
   });
 
   it('does not show result heading when 0 listings', () => {

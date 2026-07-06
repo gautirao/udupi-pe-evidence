@@ -226,17 +226,18 @@ describe('AreaSchoolCombinedPanel — radius chips (ReTrends redesign)', () => {
 // ── Result heading ─────────────────────────────────────────────────────────────
 
 describe('AreaSchoolCombinedPanel — result heading', () => {
-  it('shows "Homes for sale near this school" heading (intent=buy) with count and radius', () => {
+  it('shows "Homes near {School}" heading (intent=buy) with count and radius (mock parity, cycle 2)', () => {
     renderPanel({ listings: [makeListing('l-1'), makeListing('l-2')], radiusKm: 3, intent: 'buy' });
     const heading = screen.getByTestId('radius-result-heading');
-    expect(heading).toHaveTextContent('Homes for sale near this school');
+    // mockSchool.name === 'Manipal Public School'
+    expect(heading).toHaveTextContent('Homes near Manipal Public School');
     expect(heading).toHaveTextContent('2 within 3 km');
   });
 
-  it('shows "Rentals near this school" heading when intent=rent', () => {
+  it('shows "Rentals near {School}" heading when intent=rent', () => {
     renderPanel({ listings: [makeListing('l-1')], radiusKm: 5, intent: 'rent' });
     const heading = screen.getByTestId('radius-result-heading');
-    expect(heading).toHaveTextContent('Rentals near this school');
+    expect(heading).toHaveTextContent('Rentals near Manipal Public School');
     expect(heading).toHaveTextContent('1 within 5 km');
   });
 

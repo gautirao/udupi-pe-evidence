@@ -184,9 +184,13 @@ describe('School-first selected-area redesign — RealSchoolsInAreaPanel', () =>
     expect(within(summary).queryByText(/homes for sale/i)).not.toBeInTheDocument();
   });
 
-  it('renders "Find a school in Manipal" section, search input and result count', () => {
+  it('renders "Schools in Manipal" hero title + section heading, search input and result count', () => {
     renderPanel();
-    expect(screen.getByText(/find a school in manipal/i)).toBeInTheDocument();
+    // Mock parity (cycle 2): the hero title AND the section heading both read
+    // "Schools in Manipal" (serif hero title + small-caps section label) — two
+    // distinct elements by design, so assert both render rather than a single match.
+    expect(screen.getAllByText(/schools in manipal/i).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByTestId('selected-area-summary-title')).toHaveTextContent('Schools in Manipal');
     expect(screen.getByTestId('school-search-input')).toBeInTheDocument();
     expect(screen.getByTestId('school-result-count')).toHaveTextContent('Showing 2 of 2 schools');
   });
@@ -244,8 +248,9 @@ describe('School-first selected-area redesign — RealSchoolsInAreaPanel', () =>
     renderPanel();
     const cards = screen.getAllByTestId('school-card');
     expect(within(cards[0]).getByText(/view homes/i)).toBeInTheDocument();
-    // Card with real nearby count shows it; the null-count card must NOT fabricate a number.
-    expect(within(cards[0]).getByText(/homes nearby/i)).toBeInTheDocument();
+    // Card with real nearby count shows it (mock parity, cycle 2: "N homes within {radius} km");
+    // the null-count card must NOT fabricate a number.
+    expect(within(cards[0]).getByText(/homes within \d+ km/i)).toBeInTheDocument();
     fireEvent.click(cards[0]);
     expect(setSchoolJourney).toHaveBeenCalledWith(
       expect.objectContaining({ schoolId: 's-dps' }),

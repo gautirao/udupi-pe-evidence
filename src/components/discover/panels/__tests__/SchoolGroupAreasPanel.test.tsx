@@ -87,14 +87,14 @@ describe('SchoolGroupAreasPanel', () => {
     expect(screen.queryByText('Hebri')).not.toBeInTheDocument();
   });
 
-  it('shows school count and listing count for each area row', () => {
+  it('shows "X schools · Y homes" for each area row (mock parity, cycle 2)', () => {
     renderPanel();
-    // Manipal: 4 schools, 12 listings
+    // Manipal: 4 schools, 12 homes
     expect(screen.getByTestId('school-group-area-row-IN|KA|Udupi|Manipal')).toHaveTextContent('4 schools');
-    expect(screen.getByTestId('school-group-area-row-IN|KA|Udupi|Manipal')).toHaveTextContent('12 listings');
-    // Malpe: 2 schools, 7 listings
+    expect(screen.getByTestId('school-group-area-row-IN|KA|Udupi|Manipal')).toHaveTextContent('12 homes');
+    // Malpe: 2 schools, 7 homes
     expect(screen.getByTestId('school-group-area-row-IN|KA|Udupi|Malpe')).toHaveTextContent('2 schools');
-    expect(screen.getByTestId('school-group-area-row-IN|KA|Udupi|Malpe')).toHaveTextContent('7 listings');
+    expect(screen.getByTestId('school-group-area-row-IN|KA|Udupi|Malpe')).toHaveTextContent('7 homes');
   });
 
   it('calls onSelectAreaKey with the exact canonical areaKey when a row is clicked', async () => {
@@ -131,10 +131,10 @@ describe('SchoolGroupAreasPanel', () => {
     expect(screen.getByTestId('school-group-areas-empty')).toBeInTheDocument();
   });
 
-  it('renders "Back to all area zones" in the Back button label', () => {
+  it('renders "Back to school zones" in the Back button label (mock parity, cycle 2)', () => {
     renderPanel();
     const backBtn = screen.getByTestId('school-group-areas-back-btn');
-    expect(backBtn).toHaveTextContent('Back to all area zones');
+    expect(backBtn).toHaveTextContent('Back to school zones');
   });
 
   it('renders the list container with the correct testid', () => {
@@ -153,6 +153,6 @@ describe('SchoolGroupAreasPanel', () => {
     };
     renderPanel({ ...defaultProps, discoverAreas: [singleCountArea, AREAS[1]] });
     expect(screen.getByTestId('school-group-area-row-IN|KA|Udupi|Manipal')).toHaveTextContent('1 school');
-    expect(screen.getByTestId('school-group-area-row-IN|KA|Udupi|Manipal')).toHaveTextContent('1 listing');
+    expect(screen.getByTestId('school-group-area-row-IN|KA|Udupi|Manipal')).toHaveTextContent('1 home');
   });
 });

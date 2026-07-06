@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PanelHeader } from '../PanelHeader';
-import { SummaryBandCard } from './_shared';
+import { SchoolJourneyHero } from './SchoolJourneyHero';
 import { matchesMacroRegion, getGroupMacroRegionLabel, type SummaryRegionRef } from '@/utils/macroRegionResolver';
 import { PropertyCard } from '../PropertyCard';
 import { Button } from '@/components/ui/button';
@@ -98,52 +98,35 @@ function SchoolSummaryBand({
   const boardDisplay = school.board ?? school.boardType ?? null;
   const count = listings.length;
 
+  // Visual-parity polish (cycle 2) — dark-navy hero (mock parity), replacing the
+  // tinted-card SummaryBandCard. School-first-local component; does not touch the
+  // shared _shared/SummaryBandCard used by area-first/agri-first.
+  const breadcrumb = [
+    ...(groupId ? [{ key: 'zone', label: prettifySlug(groupId) }] : []),
+    ...(areaLabel ? [{ key: 'area', label: areaLabel }] : []),
+    { key: 'school', label: school.name, current: true },
+  ];
+
   return (
     <div className="m-4">
-      <SummaryBandCard
-        accent="plum"
-        icon={GraduationCap}
+      <SchoolJourneyHero
         dataTestId="school-summary-band"
-        onChange={onChangeSchool}
-        changeLabel="Change school"
-        changeTestId="change-school-btn"
-        breadcrumb={
-          (groupId || areaLabel || school.name) && (
-            <nav aria-label="School breadcrumb" className="mb-2.5">
-              <ol className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                {groupId && (
-                  <>
-                    <li>{prettifySlug(groupId)}</li>
-                    <ChevronRight className="h-3 w-3 text-muted-foreground/60" aria-hidden />
-                  </>
-                )}
-                {areaLabel && (
-                  <>
-                    <li>{areaLabel}</li>
-                    <ChevronRight className="h-3 w-3 text-muted-foreground/60" aria-hidden />
-                  </>
-                )}
-                <li className="font-semibold text-foreground" aria-current="page">
-                  {school.name}
-                </li>
-              </ol>
-            </nav>
-          )
-        }
-        eyebrow="Selected school"
+        breadcrumb={breadcrumb}
+        icon={GraduationCap}
+        eyebrowLabel="Selected school"
         badge={
-          boardDisplay && (
+          boardDisplay ? (
             <span className="inline-flex items-center rounded-full bg-plum-tint px-2.5 py-0.5 text-[11px] font-semibold text-plum">
               {boardDisplay}
             </span>
-          )
+          ) : undefined
         }
         title={school.name}
         titleTestId="school-summary-name"
         description={
           school.address ? (
             <span className="flex items-center gap-1.5">
-              <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" aria-hidden />
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
               {school.address}
             </span>
           ) : undefined
@@ -156,6 +139,9 @@ function SchoolSummaryBand({
             testId: 'school-summary-count',
           },
         ]}
+        onChangeAction={onChangeSchool}
+        changeActionLabel="Change school"
+        changeActionTestId="change-school-btn"
       />
     </div>
   );
@@ -183,6 +169,10 @@ function RadiusChips({
       <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">
         Search radius
       </p>
+      {/* Three equal-width buttons (mock parity, cycle 2) — active chip = strong plum
+          border + tinted plum fill (not a solid plum block), count stacked under the
+          label. Counts on the two non-active chips are never fabricated — a per-radius
+          count would need a separate fetch per radius, which does not exist. */}
       <div className="flex gap-2" role="group" aria-label="Select search radius">
         {RADIUS_OPTIONS.map((km) => {
           const isActive = effectiveRadius === km;
@@ -194,18 +184,16 @@ function RadiusChips({
               data-testid={`${testIdPrefix}-${km}`}
               onClick={() => onRadiusChange(km)}
               className={cn(
-                'flex-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all',
+                'flex flex-1 flex-col items-center gap-0.5 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition-all',
                 isActive
-                  ? 'border-[hsl(var(--plum))] bg-[hsl(var(--plum))] text-white shadow-sm'
+                  ? 'border-[hsl(var(--plum))] bg-[hsl(var(--plum-tint))] text-[hsl(var(--plum))] shadow-sm'
                   : 'border-border bg-card text-muted-foreground hover:border-[hsl(var(--plum))]/50 hover:text-foreground',
               )}
             >
-              {km} km
-              {/* Only show count on the active chip — cannot honestly show per-chip
-                  counts for other radii without a separate fetch per radius. */}
+              <span>{km} km</span>
               {isActive && (
-                <span className="ml-1 opacity-80">
-                  · {listingCount} {listingCount === 1 ? noun : `${noun}s`}
+                <span className="text-xs font-medium tabular-nums opacity-80">
+                  {listingCount} {listingCount === 1 ? noun : `${noun}s`}
                 </span>
               )}
             </button>
@@ -220,20 +208,25 @@ interface RadiusResultHeadingProps {
   listingCount: number;
   effectiveRadius: number;
   intent: DiscoverIntent;
+  /** School name for the "Homes near {School}" heading (mock parity, cycle 2). Falls
+   * back to the generic "this school" copy when the school hasn't resolved yet. */
+  schoolName?: string | null;
 }
 
-function RadiusResultHeading({ listingCount, effectiveRadius, intent }: RadiusResultHeadingProps) {
+function RadiusResultHeading({ listingCount, effectiveRadius, intent, schoolName }: RadiusResultHeadingProps) {
+  const target = schoolName?.trim() || 'this school';
   const headingText =
     intent === 'rent'
-      ? 'Rentals near this school'
-      : 'Homes for sale near this school';
+      ? `Rentals near ${target}`
+      : `Homes near ${target}`;
 
   return (
     <div
       className="flex items-center justify-between px-4 py-2 border-b border-border"
       data-testid="radius-result-heading"
     >
-      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+      <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+        <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         {headingText}
       </p>
       <p className="text-xs font-semibold tabular-nums text-muted-foreground">
@@ -430,6 +423,15 @@ export interface SchoolBrowsePanelProps {
   onClearScope?: () => void;
   /** Issue #1770 — summary regions for macro region matching. */
   summaryRegions?: SummaryRegionRef[];
+  /**
+   * Visual-parity polish (cycle 2) — Area/School segmented toggle under the hero.
+   * Reuses the exact same journey-switch setter JourneySwitcher already calls at the
+   * guided-entry stage (no useDiscoverUrlState/discoverPanelState changes). Optional:
+   * when absent, the toggle is not rendered (defensive — never a dead/no-op control).
+   * "School" always renders as the active pill (this panel IS the school-first
+   * landing); "Area" calls onSelectJourney('area-first') to switch journeys.
+   */
+  onSelectJourney?: (journey: DiscoverJourney) => void;
 }
 
 // ─── Internal sub-components ─────────────────────────────────────────────────
@@ -539,10 +541,32 @@ interface ZoneCardProps {
   areaNameSummary: string | null;
 }
 
+// Chip cap for the "AREAS" row — mirrors formatMemberAreaSummary's default maxShown
+// so the "+ n more" count stays consistent with the previous plain-text rendering.
+const ZONE_CARD_AREA_CHIPS_MAX = 3;
+
 function ZoneCard({ group, memberAreas, onClick, areaNameSummary }: ZoneCardProps) {
   const totalSchools = memberAreas.reduce((sum, a) => sum + a.schoolCount, 0);
   const totalListings = memberAreas.reduce((sum, a) => sum + a.listingCount, 0);
   const areaCount = group.area_keys.length;
+
+  // Visual-parity polish (cycle 3) — individual bordered chip pills per area name
+  // (mock parity), replacing the plain comma-separated summary text. Derived
+  // directly from memberAreas (already resolved by the caller) — no new fetch,
+  // no re-parsing of the formatted summary string.
+  const areaChipNames = React.useMemo(() => {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    for (const a of memberAreas) {
+      if (a.name && !seen.has(a.name)) {
+        seen.add(a.name);
+        names.push(a.name);
+      }
+    }
+    return names;
+  }, [memberAreas]);
+  const shownAreaChips = areaChipNames.slice(0, ZONE_CARD_AREA_CHIPS_MAX);
+  const remainingAreaChips = areaChipNames.length - shownAreaChips.length;
 
   return (
     <button
@@ -563,33 +587,60 @@ function ZoneCard({ group, memberAreas, onClick, areaNameSummary }: ZoneCardProp
               {areaCount} area{areaCount === 1 ? '' : 's'}
             </span>
           </div>
-          {/* Issue #1659 — show member area names; fall back to subtitle when unavailable. */}
-          {areaNameSummary ? (
-            <p
-              className="text-xs text-muted-foreground mt-0.5 truncate"
-              data-testid="school-zone-card-area-names"
-            >
-              {areaNameSummary}
-            </p>
-          ) : group.subtitle ? (
+          {/* One-line description (mock parity) — the zone's own subtitle when present. */}
+          {group.subtitle && (
             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{group.subtitle}</p>
-          ) : null}
+          )}
+          {/* Issue #1659 — member area names, labelled "AREAS" (mock parity), rendered as
+              individual bordered chip pills (cycle 3 visual-parity polish) rather than
+              plain comma-separated text. Falls back to nothing when unresolved — never
+              fabricated. Testid preserved on the chip row container so existing
+              containment assertions (name substrings, "+ n more") still hold. */}
+          {shownAreaChips.length > 0 && (
+            <div className="mt-1.5">
+              <span className="mr-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+                Areas
+              </span>
+              <span className="mt-1 inline-flex flex-wrap gap-1.5" data-testid="school-zone-card-area-names">
+                {shownAreaChips.map((name) => (
+                  <span
+                    key={name}
+                    className="inline-flex items-center rounded-full border border-border bg-card px-2 py-0.5 text-xs text-muted-foreground"
+                  >
+                    {name}
+                  </span>
+                ))}
+                {remainingAreaChips > 0 && (
+                  <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground">
+                    + {remainingAreaChips} more
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/70 pt-3">
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <GraduationCap className="h-3.5 w-3.5 shrink-0 text-plum" aria-hidden="true" />
-            <span data-testid="school-zone-card-school-count">
-              <span className="font-semibold text-foreground tabular-nums">{totalSchools}</span> school{totalSchools === 1 ? '' : 's'}
-            </span>
-          </span>
-          <span className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="school-zone-card-listing-count">
-            <Home className="h-3.5 w-3.5 shrink-0 text-copper" aria-hidden="true" />
-            <span className="font-semibold text-foreground tabular-nums">{totalListings}</span> listing{totalListings === 1 ? '' : 's'}
+      {/* Two stat bands (mock parity) — plum "schools" band + copper "nearby homes" band,
+          each filling half the card width. Testids/wording ("school"/"listing") are kept
+          stable for the existing e2e + unit coverage (groupedCardAreaNames, #1485/#1770
+          specs); only the visual treatment (inline row → two filled bands) changes. */}
+      <div className="mt-3 flex items-center gap-2 border-t border-border/70 pt-3">
+        <div className="flex flex-1 items-center gap-2 rounded-lg bg-plum-tint px-3 py-2">
+          <GraduationCap className="h-4 w-4 shrink-0 text-plum" aria-hidden="true" />
+          <span className="text-xs text-plum" data-testid="school-zone-card-school-count">
+            <span className="font-mono text-sm font-semibold tabular-nums">{totalSchools}</span> school{totalSchools === 1 ? '' : 's'}
           </span>
         </div>
+        <div className="flex flex-1 items-center gap-2 rounded-lg bg-copper-tint px-3 py-2" data-testid="school-zone-card-listing-count">
+          <Home className="h-4 w-4 shrink-0 text-copper" aria-hidden="true" />
+          <span className="text-xs text-copper">
+            <span className="font-mono text-sm font-semibold tabular-nums">{totalListings}</span> listing{totalListings === 1 ? '' : 's'}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-end border-t border-border/70 pt-3">
         <span className="inline-flex items-center gap-1 text-xs font-semibold text-foreground transition-colors group-hover:text-plum">
           Explore zone
           <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -657,6 +708,7 @@ export function SchoolBrowsePanel({
   scope = null,
   onClearScope,
   summaryRegions = [],
+  onSelectJourney,
 }: SchoolBrowsePanelProps) {
   // Issue #1659 — build area-name index once per discoverAreas change.
   const areaNameIndex = React.useMemo(
@@ -771,14 +823,53 @@ export function SchoolBrowsePanel({
           />
         )}
 
-        {/* Search input */}
+        {/* Area/School segmented toggle (mock parity, cycle 2) — reuses the exact
+            journey-switch setter JourneySwitcher already calls at guided-entry; no
+            useDiscoverUrlState/discoverPanelState changes. Only rendered when the
+            parent threads onSelectJourney (defensive — never a dead control). */}
+        {onSelectJourney && (
+          <div
+            className="inline-flex rounded-full border border-border bg-muted/50 p-1"
+            role="group"
+            aria-label="Browse by area or school"
+            data-testid="area-school-toggle"
+          >
+            <button
+              type="button"
+              onClick={() => onSelectJourney('area-first')}
+              data-testid="area-school-toggle-area"
+              aria-pressed={false}
+              className="rounded-full px-4 py-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Area
+            </button>
+            <button
+              type="button"
+              disabled
+              data-testid="area-school-toggle-school"
+              aria-pressed={true}
+              className="rounded-full bg-[hsl(var(--plum))] px-4 py-1.5 text-sm font-semibold text-white shadow-sm"
+            >
+              School
+            </button>
+          </div>
+        )}
+
+        {/* Search input. NOTE (cycle 2): the mock shows placeholder "Search {City}", but
+            "Search school name..." is kept verbatim — it is used as a live TESTING LOCATOR
+            (getByPlaceholderText), not just an assertion, by 2 unit test files and 5 e2e
+            specs (DiscoverRightPanel.routing, SchoolBrowsePanel.no-results-headline, plus
+            e2e/discover-school-first-*.spec.ts, e2e/capture-school-first-polish-1770.spec.ts).
+            Changing it would silently break every one of those locators. Styling (rounded
+            pill + icon) is updated for mock parity; the copy itself is an intentional,
+            flagged deviation — see cycle-2 report. */}
         <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search school name..."
-            className="pl-9"
+            className="h-11 rounded-full pl-10"
           />
         </div>
 
@@ -869,10 +960,16 @@ export function SchoolBrowsePanel({
               </div>
             ) : areaGroups.length > 0 && onSelectGroup ? (
               <div className="space-y-4" data-testid="school-zones-list">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5" data-testid="school-zones-heading">
-                  <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
-                  School zones
-                </h3>
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5" data-testid="school-zones-heading">
+                    <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+                    School zones
+                  </h3>
+                  <span className="shrink-0 text-xs text-muted-foreground" data-testid="school-zones-count">
+                    {(scope ? scopedGroups.length : areaGroups.length)}{' '}
+                    zone{(scope ? scopedGroups.length : areaGroups.length) === 1 ? '' : 's'}
+                  </span>
+                </div>
                 {scope ? (
                   <div className="space-y-2">
                     {scopedGroups.map((group) => {
@@ -1360,14 +1457,17 @@ export function SchoolSelectedPanel({
           loaded SchoolSummaryBand (border + bg-card, not a solid fill) so loading/loaded
           read as one consistent surface (AC5). */}
       {school == null ? (
+        // Visual-parity polish (cycle 2) — navy skeleton shell matches the loaded
+        // SchoolJourneyHero surface (mock parity) so loading/loaded read as one
+        // consistent dark hero, not a light-card flash before it.
         <div
-          className="m-4 rounded-xl border border-plum/20 bg-card p-5 shadow-sm"
+          className="m-4 rounded-2xl border border-slate-800 bg-[#0F172A] p-5 shadow-lg"
           data-testid="school-summary-skeleton"
         >
-          <Skeleton className="h-3 w-24 mb-3" />
-          <Skeleton className="h-6 w-3/4 mb-2" />
-          <Skeleton className="h-3 w-1/2 mb-3" />
-          <Skeleton className="h-8 w-1/3" />
+          <Skeleton className="h-3 w-24 mb-3 bg-slate-700" />
+          <Skeleton className="h-6 w-3/4 mb-2 bg-slate-700" />
+          <Skeleton className="h-3 w-1/2 mb-3 bg-slate-700" />
+          <Skeleton className="h-8 w-1/3 bg-slate-700" />
         </div>
       ) : (
         <SchoolSummaryBand
@@ -1431,6 +1531,7 @@ export function SchoolSelectedPanel({
           listingCount={listings.length}
           effectiveRadius={effectiveRadius}
           intent={intent}
+          schoolName={school?.name}
         />
       )}
 
@@ -1719,6 +1820,7 @@ export function AreaSchoolCombinedPanel({
           listingCount={listings.length}
           effectiveRadius={effectiveRadius}
           intent={intent}
+          schoolName={selectedSchool.name}
         />
       )}
 

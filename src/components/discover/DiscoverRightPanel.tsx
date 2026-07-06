@@ -1484,6 +1484,9 @@ export function DiscoverRightPanel({
             scope={scope}
             onClearScope={onClearScope}
             summaryRegions={summaryRegions}
+            // Visual-parity polish (cycle 2) — Area/School toggle reuses the same
+            // journey-switch setter JourneySwitcher calls at guided-entry.
+            onSelectJourney={onSelectJourney}
           />
         );
 
@@ -1538,6 +1541,7 @@ export function DiscoverRightPanel({
             onSelectAreaKey={onSelectAreaKey ?? (() => undefined)}
             onStartOver={onStartOver}
             journey={journey}
+            cityLabel={cityLabel ?? city}
           />
         );
       }

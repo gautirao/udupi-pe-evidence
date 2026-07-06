@@ -344,9 +344,9 @@ describe('DiscoverRightPanel — state machine routing', () => {
     );
     // Verify the real SchoolsInAreaPanel renders (school-first journey header + board chips).
     // Title is the school-first journey promise; the area context ("Manipal") shows in the
-    // selected-area summary + "Find a school in Manipal" section heading.
+    // selected-area summary + "Schools in Manipal" section heading (mock parity, cycle 2).
     expect(screen.getByText(/find homes near a school/i)).toBeInTheDocument();
-    expect(screen.getByText(/find a school in manipal/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/schools in manipal/i).length).toBeGreaterThanOrEqual(1);
     // Verify board filter chips are present
     expect(screen.getByTestId('board-chip-cbse')).toBeInTheDocument();
   });

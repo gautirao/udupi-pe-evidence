@@ -182,7 +182,7 @@ describe('Batch B panels-parity — SchoolGroupAreasPanel', () => {
       ),
     );
     expect(screen.getByTestId('school-group-areas-loading')).toBeInTheDocument();
-    expect(screen.queryByTestId('school-zone-summary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('school-zone-hero')).not.toBeInTheDocument();
   });
 
   it('empty: shows the no-areas-in-zone empty state', () => {
@@ -202,8 +202,8 @@ describe('Batch B panels-parity — SchoolGroupAreasPanel', () => {
     expect(screen.getByTestId('school-group-areas-empty')).toBeInTheDocument();
   });
 
-  it('data: zone summary Stat typography converges on font-mono (Issue #1745 Batch B)', () => {
-    const { container } = render(
+  it('data: zone hero Stat typography converges on font-mono (Issue #1745 Batch B)', () => {
+    render(
       withProviders(
         <SchoolGroupAreasPanel
           group={mockGroup}
@@ -216,7 +216,13 @@ describe('Batch B panels-parity — SchoolGroupAreasPanel', () => {
         />,
       ),
     );
-    const summary = screen.getByTestId('school-zone-summary');
+    // Visual-parity polish (cycle 2): the zone-selected hero is now a school-first-local
+    // dark-navy SchoolJourneyHero (not the shared tinted-card SummaryBandCard model), so
+    // this test only asserts the font-mono stat typography convergence still holds —
+    // it does NOT assert "not solid fill" (unlike the school-summary-band / selected-area-
+    // summary / agri-group-summary-band assertions below, which remain on the shared
+    // tinted-card model per the original Batch B decision and are intentionally untouched).
+    const summary = screen.getByTestId('school-zone-hero');
     expect(summary).toBeInTheDocument();
     const stat = summary.querySelector('.font-mono');
     expect(stat).not.toBeNull();
@@ -295,10 +301,15 @@ describe('Batch B panels-parity — AgriGroupSelectedPanel corridor band', () =>
 });
 
 describe('Batch B panels-parity — SchoolsInAreaPanel selected-area summary gate', () => {
-  it('school-first: renders the tinted selected-area summary band', () => {
+  it('school-first: renders the selected-area summary band (now a dark-navy SchoolJourneyHero, mock parity cycle 2)', () => {
     render(withProviders(<SchoolsInAreaPanel journey="school-first" onStartOver={vi.fn()} />));
     const band = screen.getByTestId('selected-area-summary');
-    expect(band.className).toContain('bg-card');
+    // Cycle 2 visual-parity polish: the selected-area summary converged on the same
+    // dark-navy SchoolJourneyHero used for the zone-selected + school-selected states
+    // (mirrors the agri-first AgriGroupSelectedPanel corridor hero, #1771 precedent).
+    // It is a school-first-local component — never bg-primary (the old solid-fill token
+    // this gate was originally guarding against).
+    expect(band.className).toContain('bg-[#0F172A]');
     expect(band.className).not.toMatch(/(?:^|\s)bg-primary(?:\s|$)/);
   });
 
@@ -309,7 +320,7 @@ describe('Batch B panels-parity — SchoolsInAreaPanel selected-area summary gat
 });
 
 describe('Batch B panels-parity — SchoolSelectedPanel summary band + skeleton', () => {
-  it('loading (school=null): renders the tinted skeleton shell, not a solid bg-primary fill', () => {
+  it('loading (school=null): renders a navy skeleton shell matching the loaded hero (mock parity, cycle 2)', () => {
     render(
       withProviders(
         <SchoolSelectedPanel
@@ -324,11 +335,14 @@ describe('Batch B panels-parity — SchoolSelectedPanel summary band + skeleton'
       ),
     );
     const skeleton = screen.getByTestId('school-summary-skeleton');
-    expect(skeleton.className).toContain('bg-card');
+    // Cycle 2: the skeleton now matches the loaded SchoolJourneyHero's navy surface
+    // (previously bg-card) so loading→loaded never flashes between two different
+    // background colours. Never a solid brand-accent (plum/copper/evergreen) fill.
+    expect(skeleton.className).toContain('bg-[#0F172A]');
     expect(skeleton.className).not.toMatch(/(?:^|\s)bg-primary\/20(?:\s|$)/);
   });
 
-  it('data: renders the tinted school-summary-band (border + bg-card, not solid navy fill)', () => {
+  it('data: renders the dark-navy school-summary-band (SchoolJourneyHero, mock parity cycle 2)', () => {
     render(
       withProviders(
         <SchoolSelectedPanel
@@ -343,7 +357,7 @@ describe('Batch B panels-parity — SchoolSelectedPanel summary band + skeleton'
       ),
     );
     const band = screen.getByTestId('school-summary-band');
-    expect(band.className).toContain('bg-card');
+    expect(band.className).toContain('bg-[#0F172A]');
     expect(screen.getByTestId('school-summary-name')).toHaveTextContent('Manipal School');
   });
 });

@@ -6,6 +6,7 @@ import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PublicDiscoverLayout } from '@/components/layout/PublicDiscoverLayout';
 import { MapAreaLegend } from '@/components/discover/MapAreaLegend';
 import { MapAgriLegend } from '@/components/discover/MapAgriLegend';
+import { MapSchoolLegend, type SchoolLegendStage } from '@/components/discover/MapSchoolLegend';
 import { MapMarkerLegend } from '@/components/discover/MapMarkerLegend';
 import { MarkerPopoverCard } from '@/components/discover/MarkerPopoverCard';
 import { PropertyMap, PropertyListingWithImages } from '@/components/map/PropertyMap';
@@ -228,6 +229,134 @@ export function deriveDiscoverBadge({
     return { visible: false, count: null, loading: false };
   }
   return { visible: true, count: cityTotal, loading: false };
+}
+
+// ── School-first status-pill "Showing X schools" derivation ────────────────────
+//
+// Pure helpers — exported so they can be unit-tested without mounting the page
+// (mirrors deriveDiscoverBadge above). Each returns the school count the bottom
+// status pill should show for one school-first pre-radius state, reusing the same
+// discoverAreas/focusedGroup/selectedArea data already driving the school-first
+// panels/hero — no new fetch, no fabrication.
+//
+// All three are gated on `areasLoading`, exactly like the existing
+// schoolListingsCount null-while-loading pattern above, so the pill never flashes
+// "Showing 0 schools" mid-load — it simply hides (returns null) until settled.
+
+interface SchoolFirstAreaLike {
+  areaKey: string;
+  schoolCount?: number | null;
+}
+
+interface SchoolFirstSelectedAreaLike {
+  schoolCount?: number | null;
+}
+
+interface SchoolFirstGroupLike {
+  area_keys: string[];
+}
+
+export interface SchoolFirstLandingCountInput {
+  journey: string | null | undefined;
+  groupId: string | null | undefined;
+  selectedArea: SchoolFirstSelectedAreaLike | null | undefined;
+  areasLoading: boolean;
+  discoverAreas: ReadonlyArray<SchoolFirstAreaLike>;
+}
+
+/** School-first landing (no zone/area/school selected yet) — schools across the city scope currently on the map. */
+export function deriveSchoolFirstLandingSchoolCount({
+  journey,
+  groupId,
+  selectedArea,
+  areasLoading,
+  discoverAreas,
+}: SchoolFirstLandingCountInput): number | null {
+  if (areasLoading) return null;
+  if (journey !== 'school-first' || !!groupId || selectedArea != null) return null;
+  return discoverAreas.reduce((sum, a) => sum + (a.schoolCount ?? 0), 0);
+}
+
+export interface SchoolFirstZoneCountInput {
+  journey: string | null | undefined;
+  groupId: string | null | undefined;
+  selectedArea: SchoolFirstSelectedAreaLike | null | undefined;
+  focusedGroup: SchoolFirstGroupLike | null | undefined;
+  areasLoading: boolean;
+  discoverAreas: ReadonlyArray<SchoolFirstAreaLike>;
+}
+
+/** School-first zone selected (no area selected yet) — schools summed across the zone's member areas. */
+export function deriveSchoolFirstZoneSchoolCount({
+  journey,
+  groupId,
+  selectedArea,
+  focusedGroup,
+  areasLoading,
+  discoverAreas,
+}: SchoolFirstZoneCountInput): number | null {
+  if (areasLoading) return null;
+  if (journey !== 'school-first' || !groupId || selectedArea != null || !focusedGroup) return null;
+  const memberKeySet = new Set(focusedGroup.area_keys);
+  return discoverAreas
+    .filter((a) => memberKeySet.has(a.areaKey))
+    .reduce((sum, a) => sum + (a.schoolCount ?? 0), 0);
+}
+
+export interface SchoolFirstAreaCountInput {
+  journey: string | null | undefined;
+  selectedArea: SchoolFirstSelectedAreaLike | null | undefined;
+  areasLoading: boolean;
+}
+
+/** School-first area selected (no school picked yet) — schools in the selected area. */
+export function deriveSchoolFirstAreaSchoolCount({
+  journey,
+  selectedArea,
+  areasLoading,
+}: SchoolFirstAreaCountInput): number | null {
+  if (areasLoading) return null;
+  if (journey !== 'school-first' || selectedArea == null) return null;
+  return selectedArea.schoolCount ?? null;
+}
+
+// ── School-marker-layer visibility gate (Issue #1157 rev-5 DEFECT A) ───────────
+//
+// Pure helper — exported so it can be unit-tested without mounting the page.
+// school-first only mounts the marker layer once an area is resolved (areaKey set)
+// — at landing/zone-selected there is never any school-marker data to show (the
+// schools-by-area query is disabled until areaKey resolves), so requiring areaKey
+// here is a no-op for real marker rendering while also suppressing
+// SchoolMarkerLayer's "No schools found in this area" empty-state toast at those
+// two states (visual-parity polish, cycle 3). area-first keeps its existing
+// school-picking / area-school-combined behaviour unchanged.
+export interface ShowSchoolMarkersInput {
+  journey: string | null | undefined;
+  areaKey: string | null | undefined;
+  schoolPicking: boolean | null | undefined;
+  schoolId: string | null | undefined;
+}
+
+export function deriveShowSchoolMarkers({
+  journey,
+  areaKey,
+  schoolPicking,
+  schoolId,
+}: ShowSchoolMarkersInput): boolean {
+  return (
+    (journey === 'school-first' && !!areaKey) ||
+    !!schoolPicking ||
+    (journey === 'area-first' && !!areaKey && !!schoolId)
+  );
+}
+
+/**
+ * Status-pill noun for the school-first, school-selected (school-radius-active)
+ * state — "Showing X homes"/"Showing X rentals". Pure so the branch is
+ * unit-testable without mounting the page.
+ */
+export function deriveSchoolRadiusPillNoun(intent: string | null | undefined): 'homes' | 'rentals' {
+  return intent === 'rent' ? 'rentals' : 'homes';
 }
 
 // ── Anon client-side PropertyFilter parity (Issue #1261, DECISION-1) ──────────
@@ -1481,6 +1610,47 @@ export default function MapDiscovery() {
       .reduce((sum, a) => sum + (a.listingCount ?? 0), 0);
   }, [urlState.groupId, focusedGroup, discoverAreas]);
 
+  // Visual-parity polish (cycle 3/4) — school-first "Showing X schools" status-pill
+  // counts. Reuses discoverAreas/focusedGroup/selectedArea already computed above
+  // (same data the school-first panels/hero already display) — no new fetch.
+  // Derivations are pure exported helpers (mirrors deriveDiscoverBadge) so they can
+  // be unit-tested without mounting the page — see
+  // src/pages/__tests__/MapDiscovery.school-pill.test.tsx.
+  // null = not applicable to the current state (falls through to the generic
+  // properties-count pill below), the source data hasn't resolved yet, OR
+  // areasLoading is still true — gated exactly like schoolListingsCount above so the
+  // pill never flashes "Showing 0 schools" mid-load.
+  const schoolFirstLandingSchoolCount = useMemo(
+    () =>
+      deriveSchoolFirstLandingSchoolCount({
+        journey: urlState.journey,
+        groupId: urlState.groupId,
+        selectedArea,
+        areasLoading,
+        discoverAreas,
+      }),
+    [urlState.journey, urlState.groupId, selectedArea, areasLoading, discoverAreas],
+  );
+
+  const schoolFirstZoneSchoolCount = useMemo(
+    () =>
+      deriveSchoolFirstZoneSchoolCount({
+        journey: urlState.journey,
+        groupId: urlState.groupId,
+        selectedArea,
+        focusedGroup,
+        areasLoading,
+        discoverAreas,
+      }),
+    [urlState.journey, urlState.groupId, selectedArea, focusedGroup, areasLoading, discoverAreas],
+  );
+
+  const schoolFirstAreaSchoolCount = deriveSchoolFirstAreaSchoolCount({
+    journey: urlState.journey,
+    selectedArea,
+    areasLoading,
+  });
+
   // School-first overview: dark zone/group label pills positioned truthfully
   // (group focus point, else member-area bounds-centre; groups with neither are
   // dropped). Shown ONLY in the school-first browse/landing state (no group/area/
@@ -1700,16 +1870,31 @@ export default function MapDiscovery() {
   }, [urlActions, setSelectedArea]);
 
   // Issue #1157 rev-5 DEFECT A — gate for mounting the school-marker layer.
-  // school-first keeps markers (first OR term, value unchanged → byte-for-byte
-  // identical school-first rendering). Additionally surface markers in the
+  // school-first keeps markers (first OR term). Additionally surface markers in the
   // area-first school-picking sub-step (schoolPicking) and in area-school-combined
   // (area-first + areaKey + schoolId), so the area-first flow shows both school
   // CARDS and map MARKERS. Reuses the schools[] already passed to PropertyMap —
   // no extra fetch.
-  const showSchoolMarkers =
-    urlState.journey === 'school-first' ||
-    !!urlState.schoolPicking ||
-    (urlState.journey === 'area-first' && !!urlState.areaKey && !!urlState.schoolId);
+  //
+  // Visual-parity polish (cycle 3) — the school-first term is additionally gated on
+  // `areaKey` being resolved. `schools` (allSchools, above) is fetched via
+  // useSchoolsByArea(schoolsAreaKey, ...), and schoolsAreaKey is `undefined` for
+  // school-first until an area is selected — so on the landing (school-browse) and
+  // zone-selected (school-group-areas) states `schools` is ALWAYS empty regardless
+  // of this gate. Un-gated, SchoolMarkerLayer still mounted at those two states
+  // (journey === 'school-first' alone was true) and rendered its "No schools found
+  // in this area" empty-state overlay even though the map is correctly showing zone/
+  // area clusters, not individual school pins, at that zoom level — a stale/confusing
+  // toast pre-dating this branch. Requiring `areaKey` removes the toast at exactly the
+  // two states where there was never any real school-marker data to report, while
+  // leaving schools-in-area / school-selected / area-school-combined (all of which
+  // resolve an areaKey by construction — see setSchoolJourney) byte-for-byte unchanged.
+  const showSchoolMarkers = deriveShowSchoolMarkers({
+    journey: urlState.journey,
+    areaKey: urlState.areaKey,
+    schoolPicking: urlState.schoolPicking,
+    schoolId: urlState.schoolId,
+  });
 
   // MVP2 — in the agri-first journey the school controls are not part of the flow.
   // Hide (do not disable) the "Near a school" trigger button and the NearSchoolSheet
@@ -2921,6 +3106,26 @@ export default function MapDiscovery() {
             </div>
           )}
 
+          {/* School-first journey map legend, contextual per drill-down stage (mirrors
+              the #1771 MapAgriLegend pattern): school-browse → School zones;
+              school-group-areas → Areas; schools-in-area → Schools. Once a specific
+              school is selected the existing SchoolRadiusLegend (above) already covers
+              the school marker + radius-circle swatches, so this legend is gated off via
+              !schoolRadiusOverlay to avoid a redundant/competing bottom-left legend. */}
+          {urlState.journey === 'school-first' && !schoolRadiusOverlay && (
+            <div className="absolute bottom-10 left-4 z-[1000]">
+              <MapSchoolLegend
+                stage={
+                  ((): SchoolLegendStage => {
+                    if (resolvedPanelContent === 'schools-in-area') return 'area';
+                    if (resolvedPanelContent === 'school-group-areas') return 'zone';
+                    return 'landing';
+                  })()
+                }
+              />
+            </div>
+          )}
+
           {/* "Near a school" quick-filter button removed (Figma polish) — the school
               journey is reachable via the "Search by school area" card in the right panel.
               NearSchoolSheet stays mounted below but is no longer triggered from here. */}
@@ -2964,6 +3169,49 @@ export default function MapDiscovery() {
                       {discoverBadge.count.toLocaleString()}
                     </strong>
                     {' '}verified properties in {selectedArea.areaLabel}
+                  </span>
+                ) : urlState.journey === 'school-first' && schoolRadiusActive ? (
+                  // School-first, school selected — the badge count IS the school-radius
+                  // listing count (schoolListingsCount, threaded above), so "homes"/"rentals"
+                  // is an honest label here (mock parity: "Showing X homes").
+                  <span>
+                    Showing{' '}
+                    <strong className="font-semibold tabular-nums text-foreground">
+                      {discoverBadge.count.toLocaleString()}
+                    </strong>
+                    {' '}{deriveSchoolRadiusPillNoun(urlState.intent)}
+                  </span>
+                ) : urlState.journey === 'school-first' && !schoolRadiusActive && selectedArea && schoolFirstAreaSchoolCount != null ? (
+                  // School-first, area selected, no school picked yet — mock parity:
+                  // "Showing X schools" using the same schoolCount the area-selected hero
+                  // displays (selectedArea.schoolCount), not the generic listings total.
+                  <span>
+                    Showing{' '}
+                    <strong className="font-semibold tabular-nums text-foreground">
+                      {schoolFirstAreaSchoolCount.toLocaleString()}
+                    </strong>
+                    {' '}school{schoolFirstAreaSchoolCount === 1 ? '' : 's'}
+                  </span>
+                ) : urlState.journey === 'school-first' && !schoolRadiusActive && !selectedArea && focusedGroup && schoolFirstZoneSchoolCount != null ? (
+                  // School-first, zone selected, no area picked yet — mock parity:
+                  // "Showing X schools" using the same member-area schoolCount sum the
+                  // zone-selected hero displays.
+                  <span>
+                    Showing{' '}
+                    <strong className="font-semibold tabular-nums text-foreground">
+                      {schoolFirstZoneSchoolCount.toLocaleString()}
+                    </strong>
+                    {' '}school{schoolFirstZoneSchoolCount === 1 ? '' : 's'}
+                  </span>
+                ) : urlState.journey === 'school-first' && !schoolRadiusActive && !selectedArea && !focusedGroup && schoolFirstLandingSchoolCount != null ? (
+                  // School-first landing (no zone/area/school selected yet) — mock parity:
+                  // "Showing X schools" across the city scope currently on the map.
+                  <span>
+                    Showing{' '}
+                    <strong className="font-semibold tabular-nums text-foreground">
+                      {schoolFirstLandingSchoolCount.toLocaleString()}
+                    </strong>
+                    {' '}school{schoolFirstLandingSchoolCount === 1 ? '' : 's'}
                   </span>
                 ) : (
                   <span>
