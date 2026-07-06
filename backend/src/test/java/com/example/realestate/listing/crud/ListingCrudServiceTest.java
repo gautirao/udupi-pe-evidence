@@ -35,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -83,6 +84,12 @@ class ListingCrudServiceTest {
     @Mock
     private com.example.realestate.listing.commercial.ListingSuitableUseRepository listingSuitableUseRepository;
 
+    @Mock
+    private com.example.realestate.listing.typed.CommercialSpaceDetailRepository commercialSpaceDetailRepository;
+
+    @Mock
+    private com.example.realestate.listing.typed.ResidentialUnitDetailRepository residentialUnitDetailRepository;
+
     private ListingCrudService crudService;
 
     @BeforeEach
@@ -92,7 +99,8 @@ class ListingCrudServiceTest {
                 listingDeduplicationService, priceChangeLogRepository,
                 badgeInvalidationService, searchOutboxWriter, polygonBoundaryValidator,
                 qualityRecomputeService, listingAmenityRepository, listingLocationFeatureRepository,
-                listingPreferredTenantRepository, listingSuitableUseRepository);
+                listingPreferredTenantRepository, listingSuitableUseRepository,
+                commercialSpaceDetailRepository, residentialUnitDetailRepository);
     }
 
     // --- RE-83: createDraft sets dedupe hash and flags duplicates ---
@@ -1210,5 +1218,305 @@ class ListingCrudServiceTest {
 
     private static com.example.realestate.listing.residential.ResidentialListingFields ResidentialListingFieldsEmpty() {
         return com.example.realestate.listing.residential.ResidentialListingFields.EMPTY;
+    }
+
+    private static com.example.realestate.listing.commercial.CommercialListingFields commercialFields(
+            String commercialSubtype) {
+        return new com.example.realestate.listing.commercial.CommercialListingFields(
+                commercialSubtype,
+                null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null);
+    }
+
+    // --- #1734: typed detail projection refresh (refreshTypedProjections) ---
+
+    @Test
+    void createDraft_commercialListing_upsertsCommercialProjection_deletesStaleResidentialRow() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        crudService.createDraft(
+                userId, "commercial", "Shop near market", "Udupi",
+                new BigDecimal("2000000"), "Retail shop", null, null, null, null, null, null,
+                null, null, null, 1, 3, "FURNISHED", 2, 1, new BigDecimal("30"), "RETAIL",
+                null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null,
+                ResidentialListingFieldsEmpty(), commercialFields("SHOP"));
+
+        verify(commercialSpaceDetailRepository).upsertFromListing(
+                isNull(), eq("SHOP"), eq(1), eq(3), eq("FURNISHED"), eq(2), eq(1),
+                eq(new BigDecimal("30")), eq("RETAIL"));
+        verify(residentialUnitDetailRepository).deleteByListingId(isNull());
+        verify(residentialUnitDetailRepository, never()).upsertFromListing(
+                any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createDraft_residentialListing_upsertsResidentialProjection_deletesStaleCommercialRow() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        crudService.createDraft(
+                userId, "apartment", "Flat", "Udupi",
+                new BigDecimal("3000000"), "Nice flat", null, 3, null, null, null, null,
+                null, null, null, 2, 10, "SEMI_FURNISHED", null, null, null, null,
+                null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null,
+                residentialFields(2, null, null, null, null, null, null),
+                com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
+
+        verify(residentialUnitDetailRepository).upsertFromListing(
+                isNull(), eq(3), eq(2), eq(2), eq(10), eq("SEMI_FURNISHED"));
+        verify(commercialSpaceDetailRepository).deleteByListingId(isNull());
+        verify(commercialSpaceDetailRepository, never()).upsertFromListing(
+                any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createDraft_untypedFamily_deletesBothProjections_neverUpserts() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        crudService.createDraft(userId, "land", "Plot", "Manipal",
+                new BigDecimal("5000000"), "Nice plot");
+
+        verify(commercialSpaceDetailRepository).deleteByListingId(isNull());
+        verify(residentialUnitDetailRepository).deleteByListingId(isNull());
+        verify(commercialSpaceDetailRepository, never()).upsertFromListing(
+                any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(residentialUnitDetailRepository, never()).upsertFromListing(
+                any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void updateListing_familySwitchCommercialToResidential_upsertsResidential_deletesStaleCommercial() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("commercial");
+        existing.setListingFamily("COMMERCIAL");
+
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(existing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        crudService.updateListing(
+                listingId, userId, false,
+                "apartment", null, null,
+                null, null,
+                null, 3, null,
+                null, null, null,
+                null, null,
+                null, false, null,
+                null, null, null,
+                2, 10,
+                "SEMI_FURNISHED", null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null,
+                residentialFields(2, null, null, null, null, null, null),
+                com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
+
+        verify(residentialUnitDetailRepository).upsertFromListing(
+                eq(listingId), eq(3), eq(2), eq(2), eq(10), eq("SEMI_FURNISHED"));
+        verify(commercialSpaceDetailRepository).deleteByListingId(listingId);
+        verify(commercialSpaceDetailRepository, never()).upsertFromListing(
+                any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void updateListing_sameFamily_refreshInvokedExactlyOnce_notDoubleInvoked() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("commercial");
+        existing.setListingFamily("COMMERCIAL");
+
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(existing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        crudService.updateListing(
+                listingId, userId, false,
+                null, "Updated title", null,
+                null, null,
+                null, null, null,
+                null, null, null,
+                null, null,
+                null, false, null,
+                null, null, null,
+                null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null,
+                ResidentialListingFieldsEmpty(),
+                com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
+
+        verify(commercialSpaceDetailRepository, times(1)).upsertFromListing(
+                any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(residentialUnitDetailRepository, times(1)).deleteByListingId(any());
+        verify(residentialUnitDetailRepository, never()).upsertFromListing(
+                any(), any(), any(), any(), any(), any());
+    }
+
+    // --- Cycle-2 fix: listingFamily must not remain stale on a switch to an untyped property type ---
+
+    @Test
+    void updateListing_houseToLand_clearsStaleResidentialFamilyStamp_deletesBothProjections() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("house");
+        existing.setListingFamily("RESIDENTIAL");
+
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(existing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = crudService.updateListing(
+                listingId, userId, false,
+                "land", null, null,
+                null, null,
+                null, null, null,
+                null, null, null,
+                null, null,
+                null, false, null,
+                null, null, null,
+                null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null,
+                ResidentialListingFieldsEmpty(),
+                com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
+
+        assertThat(result.getListingFamily())
+                .as("switching away from a typed property type must clear the stale RESIDENTIAL stamp")
+                .isNull();
+        verify(commercialSpaceDetailRepository).deleteByListingId(listingId);
+        verify(residentialUnitDetailRepository).deleteByListingId(listingId);
+        verify(commercialSpaceDetailRepository, never()).upsertFromListing(
+                any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(residentialUnitDetailRepository, never()).upsertFromListing(
+                any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void updateListing_commercialToAgriculturalLand_clearsStaleCommercialFamilyStamp() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("commercial");
+        existing.setListingFamily("COMMERCIAL");
+
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(existing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = crudService.updateListing(
+                listingId, userId, false,
+                "agricultural_land", null, null,
+                null, null,
+                null, null, null,
+                null, null, null,
+                null, null,
+                null, false, null,
+                null, null, null,
+                null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null,
+                ResidentialListingFieldsEmpty(),
+                com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
+
+        assertThat(result.getListingFamily())
+                .as("AGRICULTURAL family population is out of scope for #1734 — the stale "
+                        + "COMMERCIAL stamp must still be cleared rather than left behind")
+                .isNull();
+        verify(commercialSpaceDetailRepository).deleteByListingId(listingId);
+        verify(residentialUnitDetailRepository).deleteByListingId(listingId);
+    }
+
+    @Test
+    void updateListing_titleOnlyEditOfAgriculturalListing_preservesExistingAgriculturalFamilyStamp() {
+        // Regression test (cycle-3 fix): an agricultural_land listing stamped listingFamily=
+        // 'AGRICULTURAL' by the one-time V102 backfill DML (never written by this class) must
+        // keep that stamp across an ordinary title/price-only edit. propertyType is not supplied
+        // (null) — the effective propertyType stays 'agricultural_land', which matches neither
+        // RESIDENTIAL_PROPERTY_TYPES nor COMMERCIAL_PROPERTY_TYPES. The first version of the
+        // cycle-2 fix incorrectly nulled the stamp in exactly this scenario because it reset on
+        // "propertyType matches neither typed set" alone, without checking whether the PRIOR
+        // stamp was one this class actually owns.
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("agricultural_land");
+        existing.setListingFamily("AGRICULTURAL");
+
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(existing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = crudService.updateListing(
+                listingId, userId, false,
+                null, "Updated title only", null,
+                null, null,
+                null, null, null,
+                null, null, null,
+                null, null,
+                null, false, null,
+                null, null, null,
+                null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null,
+                ResidentialListingFieldsEmpty(),
+                com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
+
+        assertThat(result.getTitle()).isEqualTo("Updated title only");
+        assertThat(result.getListingFamily())
+                .as("a pre-existing AGRICULTURAL stamp (owned by V102 backfill, not this class) "
+                        + "must survive an unrelated title-only edit")
+                .isEqualTo("AGRICULTURAL");
+        // AGRICULTURAL projection population is out of scope for #1734 — both typed tables are
+        // still cleaned up (idempotent no-op if no row exists), but the family stamp itself must
+        // not be touched.
+        verify(commercialSpaceDetailRepository).deleteByListingId(listingId);
+        verify(residentialUnitDetailRepository).deleteByListingId(listingId);
     }
 }

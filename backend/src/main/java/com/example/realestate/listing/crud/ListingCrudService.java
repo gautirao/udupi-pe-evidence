@@ -22,6 +22,8 @@ import com.example.realestate.listing.residential.ListingLocationFeatureReposito
 import com.example.realestate.listing.residential.ListingPreferredTenant;
 import com.example.realestate.listing.residential.ListingPreferredTenantRepository;
 import com.example.realestate.listing.residential.ResidentialListingFields;
+import com.example.realestate.listing.typed.CommercialSpaceDetailRepository;
+import com.example.realestate.listing.typed.ResidentialUnitDetailRepository;
 import com.example.realestate.listing.event.SettlementEnrichmentRequestedEvent;
 import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
@@ -79,6 +81,8 @@ public class ListingCrudService {
     private final ListingLocationFeatureRepository listingLocationFeatureRepository;
     private final ListingPreferredTenantRepository listingPreferredTenantRepository;
     private final ListingSuitableUseRepository listingSuitableUseRepository;
+    private final CommercialSpaceDetailRepository commercialSpaceDetailRepository;
+    private final ResidentialUnitDetailRepository residentialUnitDetailRepository;
 
     /** Residential-family property types (M38-13A / #1626) that get the DB listing_family stamp. */
     private static final Set<String> RESIDENTIAL_PROPERTY_TYPES =
@@ -101,7 +105,9 @@ public class ListingCrudService {
             ListingAmenityRepository listingAmenityRepository,
             ListingLocationFeatureRepository listingLocationFeatureRepository,
             ListingPreferredTenantRepository listingPreferredTenantRepository,
-            ListingSuitableUseRepository listingSuitableUseRepository) {
+            ListingSuitableUseRepository listingSuitableUseRepository,
+            CommercialSpaceDetailRepository commercialSpaceDetailRepository,
+            ResidentialUnitDetailRepository residentialUnitDetailRepository) {
         this.listingRepository = listingRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingOwnershipGuard = listingOwnershipGuard;
@@ -115,6 +121,8 @@ public class ListingCrudService {
         this.listingLocationFeatureRepository = listingLocationFeatureRepository;
         this.listingPreferredTenantRepository = listingPreferredTenantRepository;
         this.listingSuitableUseRepository = listingSuitableUseRepository;
+        this.commercialSpaceDetailRepository = commercialSpaceDetailRepository;
+        this.residentialUnitDetailRepository = residentialUnitDetailRepository;
     }
 
     /**
@@ -259,6 +267,11 @@ public class ListingCrudService {
         }
 
         Listing listing = new Listing();
+        // Snapshot the family stamp as it existed BEFORE this create (#1734 cycle-3 fix) — see
+        // the family-reset gate below. Always null for a brand-new entity; captured here purely
+        // for symmetry with updateListing's identical gate (so both call sites read the same way
+        // and neither silently drifts if this method is ever changed to pre-populate the field).
+        String previousListingFamily = listing.getListingFamily();
         listing.setCreatedBy(createdBy);
         listing.setStatus(ListingStatus.DRAFT.toDbValue());
         listing.setPropertyType(propertyType != null ? propertyType : "other");
@@ -317,6 +330,19 @@ public class ListingCrudService {
         if (COMMERCIAL_PROPERTY_TYPES.contains(listing.getPropertyType())) {
             listing.setListingFamily("COMMERCIAL");
         }
+        // Family reset (#1734 cycle-2 fix, gate corrected in cycle-3): only clears a PRIOR
+        // RESIDENTIAL/COMMERCIAL stamp (owned by this class) — see updateListing's identical
+        // gate for the full rationale (AGRICULTURAL, stamped only by the V102 backfill DML, must
+        // never be clobbered). Always a no-op here since previousListingFamily is always null for
+        // a brand-new entity; retained for symmetry with updateListing so both call sites read
+        // identically and neither silently drifts.
+        boolean previousFamilyOwnedByThisClass =
+                "RESIDENTIAL".equals(previousListingFamily) || "COMMERCIAL".equals(previousListingFamily);
+        if (previousFamilyOwnedByThisClass
+                && !RESIDENTIAL_PROPERTY_TYPES.contains(listing.getPropertyType())
+                && !COMMERCIAL_PROPERTY_TYPES.contains(listing.getPropertyType())) {
+            listing.setListingFamily(null);
+        }
 
         // Compute derived area fields only when both area and unit are supplied
         if (landArea != null && landAreaUnit != null) {
@@ -337,6 +363,9 @@ public class ListingCrudService {
         writeResidentialChildSets(saved.getId(), residentialFields);
         // Commercial child-set writes (utilities / suitable uses) — insert-only on create.
         writeCommercialChildSets(saved.getId(), commercialFields);
+        // Typed detail projection refresh (#1734) — keeps listing_commercial_space_details /
+        // listing_residential_unit_details current for the search indexer read path.
+        refreshTypedProjections(saved);
         log.info("Created draft listing listingId={} createdBy={} sellerType={} isDuplicate={}",
                 saved.getId(), createdBy, sellerType, saved.isDuplicate());
         searchOutboxWriter.writeEvent(
@@ -508,6 +537,65 @@ public class ListingCrudService {
                 row.setCreatedAt(now);
                 listingSuitableUseRepository.save(row);
             }
+        }
+    }
+
+    /**
+     * Refreshes the typed detail-table projection for the listing's family, in the same
+     * transaction as the {@code listingRepository.save()} call that must precede this method
+     * (#1734). Idempotent: safe to call on every create and every update.
+     *
+     * <p>Routing by {@code listing.getListingFamily()}:
+     * <ul>
+     *   <li>COMMERCIAL — upsert {@code listing_commercial_space_details}, delete any stale
+     *       {@code listing_residential_unit_details} row (family-switch cleanup).</li>
+     *   <li>RESIDENTIAL — upsert {@code listing_residential_unit_details}, delete any stale
+     *       {@code listing_commercial_space_details} row.</li>
+     *   <li>Any other family (AGRICULTURAL, or null for legacy 'land'/'other' listings) —
+     *       delete both rows. Population of the AGRICULTURAL/other projection tables is
+     *       out of scope for #1734 (M38-FU4); this branch only prevents an orphaned row from
+     *       a prior family surviving a family-switch.</li>
+     * </ul>
+     *
+     * <p>Source columns are read from the listing's LEGACY flat fields (floorNumber,
+     * totalFloors, furnishingStatus, washrooms, parkingCount, roadFrontageFt, commercialUsage,
+     * bedrooms, bathrooms) — mirroring the V102 backfill SELECTs, not the V104 split fields
+     * (washroomsPublic/Private, officeSeats, warehouseClearHeightFt, etc.), so backfilled and
+     * newly-written projection rows stay consistent for those columns.
+     *
+     * <p><b>Deliberate exception — {@code commercialSubtype}:</b> unlike the other commercial
+     * source columns, this one is NOT a V102-backfill mirror — V102 hardcodes it to {@code NULL}
+     * for every legacy row. It is intentionally sourced from {@code listing.getCommercialSubtype()}
+     * (the V104/#1730 field) because populating it for newly created/updated commercial
+     * listings is the core purpose of #1734. See
+     * {@link CommercialSpaceDetailRepository#upsertFromListing} for the full rationale.
+     */
+    private void refreshTypedProjections(Listing listing) {
+        String family = listing.getListingFamily();
+        if ("COMMERCIAL".equals(family)) {
+            commercialSpaceDetailRepository.upsertFromListing(
+                    listing.getId(),
+                    listing.getCommercialSubtype(),
+                    listing.getFloorNumber(),
+                    listing.getTotalFloors(),
+                    listing.getFurnishingStatus(),
+                    listing.getWashrooms(),
+                    listing.getParkingCount(),
+                    listing.getRoadFrontageFt(),
+                    listing.getCommercialUsage());
+            residentialUnitDetailRepository.deleteByListingId(listing.getId());
+        } else if ("RESIDENTIAL".equals(family)) {
+            residentialUnitDetailRepository.upsertFromListing(
+                    listing.getId(),
+                    listing.getBedrooms(),
+                    listing.getBathrooms(),
+                    listing.getFloorNumber(),
+                    listing.getTotalFloors(),
+                    listing.getFurnishingStatus());
+            commercialSpaceDetailRepository.deleteByListingId(listing.getId());
+        } else {
+            commercialSpaceDetailRepository.deleteByListingId(listing.getId());
+            residentialUnitDetailRepository.deleteByListingId(listing.getId());
         }
     }
 
@@ -759,6 +847,12 @@ public class ListingCrudService {
             throw new ListingStatusException("Cannot update listing with status " + listing.getStatus());
         }
 
+        // Snapshot the family stamp as it existed BEFORE this update (#1734 cycle-3 fix).
+        // Required to distinguish stamps THIS CLASS owns (RESIDENTIAL/COMMERCIAL) from ones it
+        // never writes (AGRICULTURAL, stamped only by the one-time V102 backfill DML) — see the
+        // family-reset gate below.
+        String previousListingFamily = listing.getListingFamily();
+
         // Snapshot trust-relevant fields before the update so badge invalidation
         // can detect which fields changed.
         Map<String, Object> previousValues = snapshotTrustFields(listing);
@@ -851,6 +945,30 @@ public class ListingCrudService {
         if (COMMERCIAL_PROPERTY_TYPES.contains(listing.getPropertyType())) {
             listing.setListingFamily("COMMERCIAL");
         }
+        // Family reset (#1734 cycle-2 fix, gate corrected in cycle-3): if the PRIOR family stamp
+        // was one THIS CLASS owns (RESIDENTIAL/COMMERCIAL) and the effective (post-update)
+        // propertyType now matches neither typed set (e.g. switched to 'land', 'other',
+        // 'agricultural_land'), the stamp must not silently survive as a stale RESIDENTIAL/
+        // COMMERCIAL value — refreshTypedProjections and SearchOutboxPoller both route purely
+        // off this field, so a stale stamp would keep upserting/serving the wrong typed
+        // projection forever.
+        //
+        // Gated on previousListingFamily (snapshotted before any stamping above) rather than on
+        // "propertyType matches neither typed set" alone: an AGRICULTURAL stamp is written ONLY
+        // by the one-time V102 backfill DML, never by this class. An ordinary title/price-only
+        // edit of an existing agricultural_land listing (propertyType param null, effective type
+        // stays agricultural_land — which is itself outside both typed sets) must NOT be treated
+        // as a "switch away from a typed family" and must NOT have its AGRICULTURAL stamp
+        // clobbered to null — that was a real regression against production V102-backfilled data
+        // in the first version of this fix. Any other pre-existing value (AGRICULTURAL, or an
+        // already-null stamp) is left completely untouched by this branch.
+        boolean previousFamilyOwnedByThisClass =
+                "RESIDENTIAL".equals(previousListingFamily) || "COMMERCIAL".equals(previousListingFamily);
+        if (previousFamilyOwnedByThisClass
+                && !RESIDENTIAL_PROPERTY_TYPES.contains(listing.getPropertyType())
+                && !COMMERCIAL_PROPERTY_TYPES.contains(listing.getPropertyType())) {
+            listing.setListingFamily(null);
+        }
 
         // Recompute dedupe hash if any hash-relevant field changed
         if (description != null || locality != null || price != null) {
@@ -884,6 +1002,10 @@ public class ListingCrudService {
         // Child-set REPLACE (delete-then-insert) — the request's list is the FINAL desired set.
         writeResidentialChildSets(saved.getId(), residentialFields);
         writeCommercialChildSets(saved.getId(), commercialFields);
+
+        // Typed detail projection refresh (#1734) — keeps listing_commercial_space_details /
+        // listing_residential_unit_details current for the search indexer read path.
+        refreshTypedProjections(saved);
 
         // Persist boundary via native SQL (after JPA save, within same @Transactional scope).
         // Mapper re-fetches boundary via findBoundaryGeoJson — no need to set @Transient field here.

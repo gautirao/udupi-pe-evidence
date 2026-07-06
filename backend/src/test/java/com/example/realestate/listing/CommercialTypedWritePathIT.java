@@ -130,11 +130,15 @@ class CommercialTypedWritePathIT {
         SearchOutboxWriter outbox = mock(SearchOutboxWriter.class);
         QualityRecomputeService qualityRecompute = mock(QualityRecomputeService.class);
 
+        var commercialSpaceDetailRepo = mock(com.example.realestate.listing.typed.CommercialSpaceDetailRepository.class);
+        var residentialUnitDetailRepo = mock(com.example.realestate.listing.typed.ResidentialUnitDetailRepository.class);
+
         crudService = new ListingCrudService(
                 listingRepository, events, ownershipGuard, dedup,
                 priceChangeLogRepository, badge, outbox, validator,
                 qualityRecompute, listingAmenityRepository, listingLocationFeatureRepository,
-                listingPreferredTenantRepository, listingSuitableUseRepository);
+                listingPreferredTenantRepository, listingSuitableUseRepository,
+                commercialSpaceDetailRepo, residentialUnitDetailRepo);
     }
 
     private CommercialListingFields shopFields() {

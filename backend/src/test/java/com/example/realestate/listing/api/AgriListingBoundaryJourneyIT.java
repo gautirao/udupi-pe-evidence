@@ -144,11 +144,14 @@ class AgriListingBoundaryJourneyIT {
         var locationFeatureRepo = mock(com.example.realestate.listing.residential.ListingLocationFeatureRepository.class);
         var preferredTenantRepo = mock(com.example.realestate.listing.residential.ListingPreferredTenantRepository.class);
         var suitableUseRepo = mock(com.example.realestate.listing.commercial.ListingSuitableUseRepository.class);
+        var commercialSpaceDetailRepo = mock(com.example.realestate.listing.typed.CommercialSpaceDetailRepository.class);
+        var residentialUnitDetailRepo = mock(com.example.realestate.listing.typed.ResidentialUnitDetailRepository.class);
 
         crudService = new ListingCrudService(
                 listingRepository, events, ownershipGuard, dedup,
                 priceChangeLogRepository, badge, outbox, validator,
-                qualityRecompute, amenityRepo, locationFeatureRepo, preferredTenantRepo, suitableUseRepo);
+                qualityRecompute, amenityRepo, locationFeatureRepo, preferredTenantRepo, suitableUseRepo,
+                commercialSpaceDetailRepo, residentialUnitDetailRepo);
 
         workflowService = new ListingWorkflowService(
                 listingRepository, events, ownershipGuard, proximity, policy,
