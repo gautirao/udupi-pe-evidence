@@ -180,6 +180,15 @@ proximity:
 # The timeout values are intentionally aggressive: OS must respond in 500ms (read)
 # or 1000ms (connect) or the routing service falls back to Postgres.
 discover:
+  summary:
+    cache:
+      # Kill switch: set DISCOVER_SUMMARY_CACHE_ENABLED=false to bypass the cache entirely and
+      # delegate to RoutingDiscoverSummaryService on every request (#1760).
+      enabled: ${DISCOVER_SUMMARY_CACHE_ENABLED:true}
+      # Staleness bound — matches the existing Cache-Control max-age=120 HTTP contract on
+      # GET /api/discover/summary, so cache staleness never exceeds what clients already accept.
+      ttl-seconds: ${DISCOVER_SUMMARY_CACHE_TTL_SECONDS:120}
+      max-size: ${DISCOVER_SUMMARY_CACHE_MAX_SIZE:1000}
   opensearch:
     enabled: false
     url: ${OPENSEARCH_URL:http://localhost:9200}

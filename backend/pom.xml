@@ -85,6 +85,13 @@
             <version>8.10.1</version>
         </dependency>
 
+        <!-- Caffeine: in-process TTL cache for DiscoverSummary (#1760). Version managed by the
+             Spring Boot BOM (spring-boot-dependencies -> caffeine.version), not pinned here. -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- Sentry error monitoring (jakarta variant required for Spring Boot 3.x) -->
         <dependency>
             <groupId>io.sentry</groupId>

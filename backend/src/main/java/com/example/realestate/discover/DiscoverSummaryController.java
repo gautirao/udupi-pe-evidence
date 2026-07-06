@@ -2,6 +2,7 @@ package com.example.realestate.discover;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +33,11 @@ import java.util.concurrent.TimeUnit;
  * Unknown/empty city returns 200 with empty {@code regions}/{@code hotspots} and
  * {@code totalActiveListings=0} — mirroring {@link AreaSummaryController}'s unknown-city contract
  * (not 404).
+ *
+ * <p>{@code Cache-Control: max-age} is derived from {@code discover.summary.cache.ttl-seconds}
+ * (#1760) — the SAME property that bounds {@link CachingDiscoverSummaryService}'s in-process TTL
+ * — so the advertised HTTP cache lifetime can never drift from the server-side cache staleness
+ * window. Default (unset) is 120 seconds, matching pre-#1760 behaviour.
  */
 @RestController
 @RequestMapping("/api/discover")
@@ -47,9 +53,13 @@ public class DiscoverSummaryController {
     private static final int MAX_HOTSPOT_LIMIT = 20;
 
     private final DiscoverSummaryPort service;
+    private final long cacheMaxAgeSeconds;
 
-    public DiscoverSummaryController(DiscoverSummaryPort service) {
+    public DiscoverSummaryController(
+            DiscoverSummaryPort service,
+            @Value("${discover.summary.cache.ttl-seconds:120}") long cacheMaxAgeSeconds) {
         this.service = service;
+        this.cacheMaxAgeSeconds = cacheMaxAgeSeconds;
     }
 
     @GetMapping("/summary")
@@ -75,7 +85,7 @@ public class DiscoverSummaryController {
         DiscoverSummaryResponse response = service.getSummary(query);
 
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(120, TimeUnit.SECONDS).cachePublic())
+                .cacheControl(CacheControl.maxAge(cacheMaxAgeSeconds, TimeUnit.SECONDS).cachePublic())
                 .eTag(computeETag(response, listingPurpose))
                 .body(response);
     }

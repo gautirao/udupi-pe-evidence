@@ -210,7 +210,7 @@ class DiscoverSummaryControllerTest {
                 .andExpect(jsonPath("$.groupBy", is("corridor")));
     }
 
-    // ── 10. Cache-Control + ETag headers ──────────────────────────────────────
+    // ── 10. Cache-Control + ETag headers (default TTL, no override property set) ──
 
     @Test
     void getSummary_responseHasCacheControlPublicMaxAge120AndETag() throws Exception {
@@ -359,5 +359,41 @@ class DiscoverSummaryControllerTest {
         org.assertj.core.api.Assertions.assertThat(etagOmitted).isNotEqualTo(etagSale);
         org.assertj.core.api.Assertions.assertThat(etagOmitted).isNotEqualTo(etagRent);
         org.assertj.core.api.Assertions.assertThat(etagSale).isNotEqualTo(etagRent);
+    }
+
+    /**
+     * #1760 cycle-2: verifies Cache-Control max-age is DERIVED from
+     * {@code discover.summary.cache.ttl-seconds} (wired as a constructor parameter) rather than
+     * hardcoded — a non-default TTL value must flow straight through to the advertised HTTP
+     * header, so ops raising the property can never desync server-side cache staleness from the
+     * client-facing contract. Plain unit-level construction (no Spring context) — a nested
+     * {@code @WebMvcTest} here would collide with the enclosing class's {@code @MockitoBean}
+     * fields under Spring's duplicate-BeanOverrideHandler check.
+     */
+    @Test
+    void getSummary_nonDefaultTtl_cacheControlMaxAgeFollowsConfiguredTtl() {
+        DiscoverSummaryPort mockService = org.mockito.Mockito.mock(DiscoverSummaryPort.class);
+        when(mockService.getSummary(any())).thenReturn(emptyResponse("udupi", "area_group"));
+        DiscoverSummaryController controller = new DiscoverSummaryController(mockService, 300L);
+
+        org.springframework.http.ResponseEntity<DiscoverSummaryResponse> response =
+                controller.getSummary("udupi", null, null, null, null);
+
+        org.assertj.core.api.Assertions.assertThat(response.getHeaders().getFirst("Cache-Control"))
+                .contains("max-age=300")
+                .doesNotContain("max-age=120");
+    }
+
+    @Test
+    void getSummary_defaultTtlConstructorArg_cacheControlMaxAgeIs120() {
+        DiscoverSummaryPort mockService = org.mockito.Mockito.mock(DiscoverSummaryPort.class);
+        when(mockService.getSummary(any())).thenReturn(emptyResponse("udupi", "area_group"));
+        DiscoverSummaryController controller = new DiscoverSummaryController(mockService, 120L);
+
+        org.springframework.http.ResponseEntity<DiscoverSummaryResponse> response =
+                controller.getSummary("udupi", null, null, null, null);
+
+        org.assertj.core.api.Assertions.assertThat(response.getHeaders().getFirst("Cache-Control"))
+                .contains("max-age=120");
     }
 }

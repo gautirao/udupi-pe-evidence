@@ -8,14 +8,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
 
 import java.net.SocketTimeoutException;
 
 /**
- * {@code @Primary} routing service for discover summary (#1745 P5).
+ * Routing service for discover summary (#1745 P5).
  *
  * <p>Mirrors {@link RoutingDiscoverMarkersService}: when {@code discover.opensearch.enabled=true}
  * and an OpenSearch summary adapter is available, delegates to it and falls back to Postgres on
@@ -28,9 +27,11 @@ import java.net.SocketTimeoutException;
  * {@link ShadowComparisonRunner} seam) is kept identical to the markers routing service so a
  * future OpenSearch summary adapter + shadow-comparison method can be wired in without changing
  * this class's shape.
+ *
+ * <p>{@code @Primary} moved to {@link CachingDiscoverSummaryService} (#1760) — this bean is no
+ * longer the port's default; it is wired into the caching decorator by concrete type instead.
  */
 @Service
-@Primary
 public class RoutingDiscoverSummaryService implements DiscoverSummaryPort {
 
     private static final Logger log = LoggerFactory.getLogger(RoutingDiscoverSummaryService.class);
