@@ -7,6 +7,7 @@ import { SchoolSelectedPanel } from '../SchoolJourneyPanels';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 
+
 const mockSchool: SchoolResult = {
   id: 'sch-1',
   name: 'Manipal Public School',
@@ -519,3 +520,4 @@ describe('SchoolSelectedPanel', () => {
     });
   });
 });
+

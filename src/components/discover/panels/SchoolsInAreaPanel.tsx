@@ -358,7 +358,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
               icon={MapPin}
               dataTestId="selected-area-summary"
               badge={
-                <span className="inline-flex items-center rounded-full bg-copper px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-copper-foreground">
+                <span className="inline-flex items-center rounded-full bg-plum px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-plum-foreground">
                   Selected area
                 </span>
               }

@@ -286,7 +286,7 @@ describe('DiscoverRightPanel — state machine routing', () => {
         onSelectAreaKey={onSelectAreaKey}
       />,
     );
-    expect(screen.getByText('Find homes near a school')).toBeInTheDocument();
+    expect(screen.getByTestId('school-browse-intro')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search school name...')).toBeInTheDocument();
     // Popular schools section (from usePopularSchools mock)
     expect(screen.getByText('Manipal Public School')).toBeInTheDocument();
@@ -426,20 +426,18 @@ describe('DiscoverRightPanel — groupId deep-link without journey (issue #1154)
   it('renders AreaGroupsLandingPanel when panelContent=area-groups-landing (groupId deep-link result)', () => {
     // When derivePanelContent returns area-groups-landing for a groupId deep-link,
     // the panel must render the landing panel (not guided-entry).
-    render(
-      <MemoryRouter>
-        <DiscoverRightPanel
-          areas={[]}
-          onStartOver={vi.fn()}
-          onSelectJourney={vi.fn()}
-          panelContent="area-groups-landing"
-          areaGroups={[]}
-          isLoadingAreaGroups={false}
-          onSelectGroup={vi.fn()}
-          discoverAreas={[]}
-          onSelectAreaKey={vi.fn()}
-        />
-      </MemoryRouter>,
+    renderPanel(
+      <DiscoverRightPanel
+        areas={[]}
+        onStartOver={vi.fn()}
+        onSelectJourney={vi.fn()}
+        panelContent="area-groups-landing"
+        areaGroups={[]}
+        isLoadingAreaGroups={false}
+        onSelectGroup={vi.fn()}
+        discoverAreas={[]}
+        onSelectAreaKey={vi.fn()}
+      />,
     );
     // Issue #1607 — area-groups landing now uses the mock "Choose an area" hero
     // (neutral form here because no cityLabel is supplied in this routing test).
@@ -587,7 +585,7 @@ describe('DiscoverRightPanel — area-first + resolved groupId → Level-2 area 
         onSelectAreaKey={vi.fn()}
       />,
     );
-    expect(screen.getByText('Find homes near a school')).toBeInTheDocument();
+    expect(screen.getByTestId('school-browse-intro')).toBeInTheDocument();
     expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
   });
 });
@@ -1152,7 +1150,7 @@ describe('DiscoverRightPanel — school-first + groupId → school-group-areas (
         onSelectGroup={vi.fn()}
       />,
     );
-    expect(screen.getByText('Find homes near a school')).toBeInTheDocument();
+    expect(screen.getByTestId('school-browse-intro')).toBeInTheDocument();
     // Zone card for south-zone should appear
     expect(screen.getByTestId('school-zone-card-south-zone')).toBeInTheDocument();
     // Area rows should NOT appear at Level 1

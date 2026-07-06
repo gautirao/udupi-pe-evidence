@@ -1348,6 +1348,7 @@ export function DiscoverRightPanel({
             onStartOver={onStartOver}
             journey={journey}
             city={city}
+            cityLabel={cityLabel}
             onSelectSchool={onSelectSchool ?? (() => undefined)}
             onSelectAreaKey={onSelectAreaKey ?? (() => undefined)}
             // Issue #1485 — zone cards (Level 1 grouped hierarchy)
@@ -1355,6 +1356,9 @@ export function DiscoverRightPanel({
             isLoadingAreaGroups={isLoadingAreaGroupsForSchool}
             onSelectGroup={onSelectGroup}
             discoverAreas={discoverAreas}
+            scope={scope}
+            onClearScope={onClearScope}
+            summaryRegions={summaryRegions}
           />
         );
 
@@ -1387,12 +1391,16 @@ export function DiscoverRightPanel({
               onStartOver={onStartOver}
               journey={journey}
               city={city}
+              cityLabel={cityLabel}
               onSelectSchool={onSelectSchool ?? (() => undefined)}
               onSelectAreaKey={onSelectAreaKey ?? (() => undefined)}
               areaGroups={areaGroups}
               isLoadingAreaGroups={isLoadingAreaGroupsForSchool}
               onSelectGroup={onSelectGroup}
               discoverAreas={discoverAreas}
+              scope={scope}
+              onClearScope={onClearScope}
+              summaryRegions={summaryRegions}
             />
           );
         }

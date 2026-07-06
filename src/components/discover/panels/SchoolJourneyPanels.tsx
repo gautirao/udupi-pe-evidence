@@ -7,12 +7,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, ChevronLeft, ChevronRight, GraduationCap, Home, Layers, LayoutGrid, MapPin, Search, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, GraduationCap, Home, Layers, LayoutGrid, MapPin, Search, SlidersHorizontal, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PanelHeader } from '../PanelHeader';
 import { SummaryBandCard } from './_shared';
+import { matchesMacroRegion, getGroupMacroRegionLabel, type SummaryRegionRef } from '@/utils/macroRegionResolver';
 import { PropertyCard } from '../PropertyCard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -132,7 +133,7 @@ function SchoolSummaryBand({
         eyebrow="Selected school"
         badge={
           boardDisplay && (
-            <span className="inline-flex items-center rounded-full bg-copper-tint px-2.5 py-0.5 text-[11px] font-semibold text-copper-hover dark:text-copper">
+            <span className="inline-flex items-center rounded-full bg-plum-tint px-2.5 py-0.5 text-[11px] font-semibold text-plum">
               {boardDisplay}
             </span>
           )
@@ -401,6 +402,11 @@ export interface SchoolBrowsePanelProps {
   /** City to fetch schools/areas for — threaded from the parent to avoid a redundant useDiscoverUrlState call. */
   city: string;
   /**
+   * Issue #1770 — human-readable city label for the "Discover {City}" header and intro card.
+   * Falls back to capitalised `city` slug when not provided.
+   */
+  cityLabel?: string | null;
+  /**
    * Issue #1485 — zone/group cards for Level-1 school-browse (zones → areas → schools).
    * When provided (non-empty), zone cards replace the flat area list.
    * The flat area list is kept as a fallback when areaGroups is empty/loading.
@@ -418,9 +424,81 @@ export interface SchoolBrowsePanelProps {
    * The count badges on zone cards are client-side Σ of member area counts.
    */
   discoverAreas?: DiscoverArea[];
+  /** Issue #1770 — active macro region scope from URL for filtering school zones. */
+  scope?: string | null;
+  /** Issue #1770 — callback to clear the active scope. */
+  onClearScope?: () => void;
+  /** Issue #1770 — summary regions for macro region matching. */
+  summaryRegions?: SummaryRegionRef[];
 }
 
 // ─── Internal sub-components ─────────────────────────────────────────────────
+
+// Issue #1770 — dark navy intro card for the school-first landing.
+// Mirrors AreaGroupsIntro (area-first) with plum identity colour.
+interface SchoolBrowseIntroProps {
+  displayCity: string;
+  activeScopeLabel: string | null;
+  totalSchoolCount: number;
+  onClearScope?: () => void;
+}
+
+function SchoolBrowseIntro({ displayCity, activeScopeLabel, totalSchoolCount, onClearScope }: SchoolBrowseIntroProps) {
+  const titleText = activeScopeLabel
+    ? `School zones in ${activeScopeLabel}`
+    : `School zones across ${displayCity}`;
+
+  return (
+    <div
+      className="rounded-xl border border-slate-800 bg-[#0F172A] p-5 shadow-lg text-white"
+      data-testid="school-browse-intro"
+    >
+      {/* Breadcrumb / Eyebrow */}
+      <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+        <span>Discover {displayCity}</span>
+        <span className="text-slate-600">›</span>
+        <span className="text-[hsl(var(--plum))] uppercase tracking-wider">Search near school</span>
+      </div>
+
+      <div className="flex items-start gap-3.5">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--plum-tint))] text-[hsl(var(--plum))]">
+          <GraduationCap className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-lg sm:text-xl font-bold tracking-tight text-white" data-testid="school-browse-intro-title">
+            {titleText}
+          </h3>
+          <p className="mt-1 text-sm leading-relaxed text-slate-300">
+            {activeScopeLabel
+              ? `Pick a school zone within ${activeScopeLabel}, or search a school by name.`
+              : 'Pick a school zone below, or search a school by name.'}
+          </p>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div className="mt-4 flex items-center justify-between border-t border-slate-700 pt-3">
+        <div className="flex items-center gap-1.5 text-xs text-slate-300">
+          <GraduationCap className="h-3.5 w-3.5 text-[hsl(var(--plum))]" aria-hidden="true" />
+          <span className="font-mono font-semibold text-white tabular-nums" data-testid="school-browse-intro-count">
+            {totalSchoolCount > 0 ? totalSchoolCount : '–'}
+          </span>
+          <span>schools</span>
+        </div>
+        {activeScopeLabel && onClearScope && (
+          <button
+            type="button"
+            onClick={onClearScope}
+            className="inline-flex items-center gap-1 rounded-md bg-slate-700/60 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-600 hover:text-white transition-colors"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+            {activeScopeLabel}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function SchoolCard({ school, onClick }: { school: SchoolResult; onClick: () => void }) {
   return (
@@ -571,16 +649,53 @@ export function SchoolBrowsePanel({
   onSelectSchool,
   onSelectAreaKey,
   city,
+  cityLabel = null,
   areaGroups = [],
   isLoadingAreaGroups = false,
   onSelectGroup,
   discoverAreas = [],
+  scope = null,
+  onClearScope,
+  summaryRegions = [],
 }: SchoolBrowsePanelProps) {
   // Issue #1659 — build area-name index once per discoverAreas change.
   const areaNameIndex = React.useMemo(
     () => buildAreaNameIndex(discoverAreas),
     [discoverAreas],
   );
+
+  const scopedGroups = React.useMemo(() => {
+    if (!scope) return areaGroups;
+    return areaGroups.filter((g) =>
+      matchesMacroRegion(g.region_label, scope, summaryRegions),
+    );
+  }, [areaGroups, scope, summaryRegions]);
+
+  const activeScopeLabel = React.useMemo(() => {
+    if (!scope) return null;
+    const summaryMatch = summaryRegions.find(
+      (r) => r.regionKey.toLowerCase() === scope.toLowerCase(),
+    );
+    if (summaryMatch) return summaryMatch.regionLabel;
+    const groupMatch = scopedGroups[0]?.region_label;
+    if (groupMatch) return groupMatch;
+    return scope.charAt(0).toUpperCase() + scope.slice(1);
+  }, [scope, summaryRegions, scopedGroups]);
+
+  const macroRegionSections = React.useMemo(() => {
+    if (scope) return [];
+    const map = new Map<string, AreaGroup[]>();
+    for (const g of areaGroups) {
+      const label = getGroupMacroRegionLabel(g);
+      const list = map.get(label) ?? [];
+      list.push(g);
+      map.set(label, list);
+    }
+    return Array.from(map.entries()).map(([label, groupList]) => ({
+      label,
+      groups: groupList,
+    }));
+  }, [scope, areaGroups]);
 
   const [searchQuery, setSearchQuery] = useState('');
   // Issue #1160 cycle-2: must call setSchoolJourney (not delegate via onSelectSchool(id))
@@ -620,16 +735,42 @@ export function SchoolBrowsePanel({
 
   const isSearching = searchQuery.trim().length >= 2;
 
+  // Issue #1770 — build a human-readable city label for the intro card.
+  // Use the provided cityLabel prop; fall back to capitalising the city slug.
+  const displayCity = (cityLabel && cityLabel !== city)
+    ? cityLabel
+    : city.charAt(0).toUpperCase() + city.slice(1);
+
+  // Total school count across visible (scoped or unscoped) zones for the intro card stat.
+  const totalSchoolCount = React.useMemo(() => {
+    const groups = scope
+      ? areaGroups.filter((g) => matchesMacroRegion(g.region_label, scope, summaryRegions))
+      : areaGroups;
+    return groups.reduce((sum, g) => {
+      const memberAreas = discoverAreas.filter((a) => g.area_keys.includes(a.areaKey));
+      return sum + memberAreas.reduce((s, a) => s + a.schoolCount, 0);
+    }, 0);
+  }, [areaGroups, discoverAreas, scope, summaryRegions]);
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PanelHeader
-        title="Find homes near a school"
-        subtitle="Search for a school, or explore school areas on the map."
+        title={`Discover ${displayCity}`}
         onStartOver={onStartOver}
         journey={journey}
       />
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        {/* Issue #1770 — dark navy intro card (mirrors area-first AreaGroupsIntro) */}
+        {!isSearching && (
+          <SchoolBrowseIntro
+            displayCity={displayCity}
+            activeScopeLabel={activeScopeLabel}
+            totalSchoolCount={totalSchoolCount}
+            onClearScope={onClearScope}
+          />
+        )}
+
         {/* Search input */}
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -727,26 +868,65 @@ export function SchoolBrowsePanel({
                 ))}
               </div>
             ) : areaGroups.length > 0 && onSelectGroup ? (
-              <div className="space-y-2" data-testid="school-zones-list">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <div className="space-y-4" data-testid="school-zones-list">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5" data-testid="school-zones-heading">
                   <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
-                  Browse schools by zone
+                  School zones
                 </h3>
-                {areaGroups.map((group) => {
-                  const memberAreas = discoverAreas.filter((a) =>
-                    group.area_keys.includes(a.areaKey),
-                  );
-                  const areaNameSummary = formatMemberAreaSummary(group.area_keys, areaNameIndex);
-                  return (
-                    <ZoneCard
-                      key={group.id}
-                      group={group}
-                      memberAreas={memberAreas}
-                      onClick={() => onSelectGroup(group.id)}
-                      areaNameSummary={areaNameSummary}
-                    />
-                  );
-                })}
+                {scope ? (
+                  <div className="space-y-2">
+                    {scopedGroups.map((group) => {
+                      const memberAreas = discoverAreas.filter((a) =>
+                        group.area_keys.includes(a.areaKey),
+                      );
+                      const areaNameSummary = formatMemberAreaSummary(group.area_keys, areaNameIndex);
+                      return (
+                        <ZoneCard
+                          key={group.id}
+                          group={group}
+                          memberAreas={memberAreas}
+                          onClick={() => onSelectGroup(group.id)}
+                          areaNameSummary={areaNameSummary}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {macroRegionSections.map((section) => (
+                      <div key={section.label} className="space-y-2" data-testid={`macro-region-section-${section.label}`}>
+                        <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5 text-plum" aria-hidden="true" />
+                            <h4 className="text-[12px] font-bold uppercase tracking-[0.06em] text-foreground">
+                              {section.label}
+                            </h4>
+                          </div>
+                          <span className="font-mono text-[11px] font-semibold text-muted-foreground">
+                            {section.groups.length} zone{section.groups.length === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          {section.groups.map((group) => {
+                            const memberAreas = discoverAreas.filter((a) =>
+                              group.area_keys.includes(a.areaKey),
+                            );
+                            const areaNameSummary = formatMemberAreaSummary(group.area_keys, areaNameIndex);
+                            return (
+                              <ZoneCard
+                                key={group.id}
+                                group={group}
+                                memberAreas={memberAreas}
+                                onClick={() => onSelectGroup(group.id)}
+                                areaNameSummary={areaNameSummary}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : discoverAreasResult.isLoading ? (
               /* Flat area fallback loading */
@@ -979,7 +1159,7 @@ export function SchoolsInAreaPanel({
   // renders at the bottom of it via footerSlot.
   return (
     <RealSchoolsInAreaPanel
-      journey={journey ?? 'area-first'}
+      journey={(journey ?? 'area-first') as 'area-first' | 'school-first'}
       onStartOver={onStartOver || (() => undefined)}
       onBack={onBack}
       schools={schools}
@@ -1057,6 +1237,7 @@ export interface SchoolSelectedPanelProps {
   onHoverListing?: (id: string | null) => void;
 }
 
+
 export function SchoolSelectedPanel({
   school,
   listings,
@@ -1080,7 +1261,7 @@ export function SchoolSelectedPanel({
   onHoverListing,
 }: SchoolSelectedPanelProps) {
   const navigate = useNavigate();
-  const [urlState] = useDiscoverUrlState();
+  const [urlState, urlActions] = useDiscoverUrlState();
 
   // Issue #1547 — scroll selected card into view when selection changes.
   const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
@@ -1127,14 +1308,15 @@ export function SchoolSelectedPanel({
   // Derive area label from URL groupId/areaKey for breadcrumb if available.
   const groupId = urlState.groupId ?? null;
   // areaLabel is not directly on urlState — extract from selectedArea if passed via school.areaKey
-  const areaLabelForBreadcrumb: string | null = null; // SchoolSelectedPanel has no selectedArea prop
+  const areaLabelForBreadcrumb: string | null =
+    school?.areaKey?.split('|').pop() ?? urlState.areaKey?.split('|').pop() ?? null;
+
 
   // Detect missing school coordinates — listing fetch is disabled without coords so list will be empty.
   // SchoolResult types latitude/longitude as number, but legacy rows may have null at runtime.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const hasMissingCoords =
     school != null &&
-    ((school.latitude as any) == null || (school.longitude as any) == null);
+    ((school.latitude as unknown) == null || (school.longitude as unknown) == null);
 
   return (
     <>
@@ -1296,11 +1478,10 @@ export function SchoolSelectedPanel({
           <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3 p-3">
             {listings.map((listing) => {
               // Compute real haversine distance — only when both school and listing have coords.
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const distanceKm =
                 school != null &&
-                (school.latitude as any) != null &&
-                (school.longitude as any) != null &&
+                (school.latitude as unknown) != null &&
+                (school.longitude as unknown) != null &&
                 listing.lat != null &&
                 listing.lon != null
                   ? haversineKm(school.latitude, school.longitude, listing.lat, listing.lon)
@@ -1444,10 +1625,9 @@ export function AreaSchoolCombinedPanel({
   const groupId = urlState.groupId ?? null;
 
   // Detect missing school coordinates — legacy rows may have null at runtime despite number type.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const hasMissingCoords =
     selectedSchool != null &&
-    ((selectedSchool.latitude as any) == null || (selectedSchool.longitude as any) == null);
+    ((selectedSchool.latitude as unknown) == null || (selectedSchool.longitude as unknown) == null);
 
   // Loading skeleton — shown when either dimension is still resolving on cold load.
   if (!selectedArea || !selectedSchool) {
@@ -1584,10 +1764,9 @@ export function AreaSchoolCombinedPanel({
           <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3 p-3">
             {listings.map((listing) => {
               // Compute real haversine distance — only when both school and listing have coords.
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const distanceKm =
-                (selectedSchool.latitude as any) != null &&
-                (selectedSchool.longitude as any) != null &&
+                (selectedSchool.latitude as unknown) != null &&
+                (selectedSchool.longitude as unknown) != null &&
                 listing.lat != null &&
                 listing.lon != null
                   ? haversineKm(

@@ -20,6 +20,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AreaGroupsLandingPanel } from '../AreaGroupsLandingPanel';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
@@ -52,8 +53,21 @@ const baseProps = {
   onStartOver: vi.fn(),
 };
 
-const renderPanel = (ui: React.ReactElement) =>
-  render(<MemoryRouter>{ui}</MemoryRouter>);
+const renderPanel = (ui: React.ReactElement, options = {}) => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+  const Wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </QueryClientProvider>
+  );
+  return render(ui, { wrapper: Wrapper, ...options });
+};
 
 // ─── Loading state ────────────────────────────────────────────
 
@@ -607,14 +621,12 @@ describe('AreaGroupsLandingPanel — group card highlight for non-matching state
     expect(screen.getByTestId('area-group-card-group-B')).not.toHaveAttribute('aria-current');
 
     rerender(
-      <MemoryRouter>
-        <AreaGroupsLandingPanel
-          {...baseProps}
-          groups={groups}
-          isLoading={false}
-          groupId="group-B"
-        />
-      </MemoryRouter>,
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={groups}
+        isLoading={false}
+        groupId="group-B"
+      />,
     );
     expect(screen.getByTestId('area-group-card-group-A')).not.toHaveAttribute('aria-current');
     expect(screen.getByTestId('area-group-card-group-B')).toHaveAttribute('aria-current', 'true');
