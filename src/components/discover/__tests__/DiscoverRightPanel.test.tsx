@@ -564,7 +564,7 @@ describe('DiscoverRightPanel — cumulative distance hint (Issue #1456)', () => 
       />,
     );
     expect(
-      screen.getByText('Includes properties at closer distances too.'),
+      screen.getByText('Includes parcels at closer distances too.'),
     ).toBeInTheDocument();
   });
 });

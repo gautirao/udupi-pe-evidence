@@ -745,9 +745,9 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   const rawListing = urlParams.get('listing');
   const selectedListing: string | null = rawListing && rawListing.length > 0 ? rawListing : null;
 
-  // Issue #1464 — agri-group-locality drill-down. Plain string from `locality` URL param.
+  // Issue #1464 — agri-group-locality drill-down. Plain string from `locality` or `town` URL param.
   // useSearchParams.get() returns the already-decoded value (no manual decodeURIComponent needed).
-  const rawLocality = urlParams.get(PARAM_LOCALITY);
+  const rawLocality = urlParams.get(PARAM_LOCALITY) || urlParams.get('town');
   const selectedLocality: string | null = rawLocality && rawLocality.length > 0 ? rawLocality : null;
 
   const state: DiscoverUrlState = {
@@ -1496,8 +1496,10 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
             // We pass the plain decoded string; it is percent-encoded on write
             // and decoded back by .get() on the next render.
             next.set(PARAM_LOCALITY, name);
+            next.delete('town');
           } else {
             next.delete(PARAM_LOCALITY);
+            next.delete('town');
           }
           return next;
         },
@@ -1512,6 +1514,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
       (prev) => {
         const next = new URLSearchParams(prev);
         next.delete(PARAM_LOCALITY);
+        next.delete('town');
         return next;
       },
       { replace: true }, // REPLACE — closing locality view is not a new destination

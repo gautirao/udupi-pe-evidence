@@ -69,20 +69,21 @@ const BEARING_LABELS: Record<string, string> = {
   SW: 'South-west',
 };
 
-/** Compass-style badge: the corridor's cardinal letter, with a subtle edge arrow
- *  for the four primary directions. Decorative — labelled by the card's aria-label. */
+/** Compass-style badge: the corridor's cardinal letter on a solid evergreen disc
+ *  (mock parity, Issue #1771), with a subtle edge arrow for the four primary
+ *  directions. Decorative — labelled by the card's aria-label. */
 function DirectionBadge({ code }: { code: string }) {
   const arrow = CARDINAL_ARROW[code];
   const Arrow = arrow?.Arrow;
   return (
     <div
       aria-hidden="true"
-      className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-evergreen/20 bg-evergreen-tint transition-colors group-hover:border-evergreen/40"
+      className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-evergreen text-white shadow-sm transition-transform group-hover:scale-105"
     >
       {Arrow && arrow && (
-        <Arrow className={cn('absolute h-3 w-3 text-evergreen/70', arrow.pos)} />
+        <Arrow className={cn('absolute h-3 w-3 text-white/60', arrow.pos)} />
       )}
-      <span className="font-mono text-lg font-bold tracking-tight text-evergreen">
+      <span className="font-mono text-lg font-bold tracking-tight">
         {code}
       </span>
     </div>
@@ -104,6 +105,63 @@ interface CorridorLandingPanelProps {
   onClearRegionAndMaxKm: () => void;
   discoverAreas?: DiscoverArea[];
   onSelectAreaKey?: (areaKey: string) => void;
+  cityLabel?: string;
+}
+
+interface AgriLandingIntroProps {
+  corridorCount: number;
+  parcelCount: number;
+  cityLabel?: string;
+}
+
+function AgriLandingIntro({
+  corridorCount,
+  parcelCount,
+  cityLabel,
+}: AgriLandingIntroProps) {
+  const displayCity = cityLabel && cityLabel !== 'this city' ? cityLabel : 'Udupi';
+
+  return (
+    <div
+      className="rounded-xl border border-slate-800 bg-[#0F172A] p-5 shadow-lg text-white"
+      data-testid="agri-landing-intro"
+    >
+      {/* Breadcrumb / Eyebrow */}
+      <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+        <span>Discover {displayCity}</span>
+        <span className="text-slate-600">›</span>
+        <span className="text-evergreen uppercase tracking-wider">Agricultural land</span>
+      </div>
+
+      <div className="flex items-start gap-3.5">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-evergreen-tint text-evergreen">
+          <Sprout className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-lg sm:text-xl font-bold tracking-tight text-white">
+            Agricultural land near {displayCity}
+          </h3>
+          <p className="mt-1 text-sm leading-relaxed text-slate-300">
+            Farmland is searched by corridor, direction and distance from town — not by residential neighbourhood.
+          </p>
+        </div>
+      </div>
+      <div className="mt-5 grid grid-cols-2 border-t border-slate-800 pt-4">
+        <div className="flex min-w-0 flex-col">
+          <span className="font-mono text-xl font-bold leading-none tracking-tight tabular-nums text-white">
+            {corridorCount}
+          </span>
+          <span className="mt-1.5 text-xs text-slate-400">{corridorCount === 1 ? 'corridor' : 'corridors'}</span>
+        </div>
+        <div className="flex min-w-0 flex-col border-l border-slate-800 pl-4">
+          <span className="font-mono text-xl font-bold leading-none tracking-tight tabular-nums text-evergreen">
+            {parcelCount}
+          </span>
+          <span className="mt-1.5 text-xs text-slate-400">{parcelCount === 1 ? 'parcel' : 'parcels'}</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function CorridorLandingPanel({
@@ -117,12 +175,23 @@ function CorridorLandingPanel({
   onSetMaxKm,
   onClearRegionAndMaxKm,
   discoverAreas = [],
+  cityLabel,
 }: CorridorLandingPanelProps) {
   // Issue #1659 — build area-name index once per discoverAreas change.
   const corridorAreaNameIndex = React.useMemo(
     () => buildAreaNameIndex(discoverAreas),
     [discoverAreas],
   );
+
+  const totalParcels = React.useMemo(() => {
+    return corridorGroups.reduce((sum, c) => {
+      let maxCount = 0;
+      for (const t of c.availableMaxDistances || []) {
+        if (t.listingCount > maxCount) maxCount = t.listingCount;
+      }
+      return sum + maxCount;
+    }, 0);
+  }, [corridorGroups]);
 
   // ── Loading state ──
   if (isLoading) {
@@ -226,7 +295,7 @@ function CorridorLandingPanel({
           })}
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          Includes properties at closer distances too.
+          Includes parcels at closer distances too.
         </p>
         {tiers.length === 0 && (
           <p className="text-sm text-muted-foreground">No distance tiers available for this corridor.</p>
@@ -257,34 +326,45 @@ function CorridorLandingPanel({
       className="flex flex-col gap-4 p-4"
       aria-label="Agricultural corridors"
     >
-      {/* Guided step — promotes the next action from a faint line to a clear instruction. */}
-      <div>
-        <div className="mb-1.5 flex items-center gap-2">
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-evergreen text-[11px] font-bold text-evergreen-foreground">
-            1
-          </span>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-evergreen">
-            Choose a direction
-          </span>
+      {/* ReTrends hero-card style: breadcrumb + stats row */}
+      <AgriLandingIntro
+        corridorCount={corridorGroups.length}
+        parcelCount={totalParcels}
+        cityLabel={cityLabel}
+      />
+
+      {/* Dedicated agricultural model informational banner */}
+      <div
+        role="note"
+        className="rounded-xl border border-evergreen/30 bg-evergreen-tint/30 p-4 text-sm text-foreground shadow-sm flex items-start gap-3"
+      >
+        <Sprout className="h-5 w-5 text-evergreen shrink-0 mt-0.5" aria-hidden="true" />
+        <div className="space-y-1">
+          <p className="font-semibold text-foreground">Dedicated agricultural model</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Agricultural land is a separate model — parcels, corridors and distances, kept apart from residential counts and neighbourhoods.
+          </p>
         </div>
-        <h2 className="text-base font-semibold text-foreground">
-          Select a corridor to explore
-        </h2>
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          Each corridor groups agricultural land in one direction. Pick the one
-          you want to explore — you can switch corridors anytime.
-        </p>
       </div>
 
-      {/* Four directional corridor cards. */}
-      <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between pt-1">
+        <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <Route className="h-3.5 w-3.5 text-evergreen" aria-hidden="true" />
+          Direction / Corridor
+        </span>
+        <span className="text-xs font-medium text-muted-foreground">
+          {corridorGroups.length} corridor{corridorGroups.length === 1 ? '' : 's'}
+        </span>
+      </div>
+
+      {/* Four directional corridor cards (mock parity, Issue #1771). */}
+      <div className="flex flex-col gap-4">
         {corridorGroups.map((corridor) => {
-          const maxKm = corridor.availableMaxDistances.reduce(
-            (max, t) => Math.max(max, t.maxKm),
-            0,
+          const maxTier = corridor.availableMaxDistances.reduce(
+            (max, t) => (t.maxKm > (max?.maxKm ?? 0) ? t : max),
+            corridor.availableMaxDistances[0],
           );
-          const bearing =
-            BEARING_LABELS[corridor.directionCode] ?? corridor.directionCode;
+          const maxKm = maxTier?.maxKm ?? 0;
 
           // Issue #1659 — union of area keys across all tiers for this corridor.
           // The largest tier (maxKm) includes all closer-tier areas cumulatively,
@@ -292,7 +372,14 @@ function CorridorLandingPanel({
           const corridorAreaKeys = Array.from(
             new Set(corridor.availableMaxDistances.flatMap((t) => t.areaKeys)),
           );
-          const corridorAreaSummary = formatMemberAreaSummary(corridorAreaKeys, corridorAreaNameIndex);
+          // Resolve individual town names for the chips row (dedup by name).
+          const townNames = Array.from(
+            new Set(
+              corridorAreaKeys
+                .map((k) => corridorAreaNameIndex.get(k))
+                .filter((n): n is string => !!n),
+            ),
+          );
 
           return (
             <button
@@ -300,68 +387,96 @@ function CorridorLandingPanel({
               type="button"
               data-testid="corridor-card"
               onClick={() => onSetRegionWithMaxKm(corridor.directionCode)}
-              className="group relative w-full overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-evergreen/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="group relative w-full overflow-hidden rounded-xl border border-border bg-card p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-evergreen/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label={`Select corridor ${corridor.groupName}`}
             >
-              {/* Selection-affordance accent rail (appears on hover/focus). */}
-              <span
-                aria-hidden="true"
-                className="absolute inset-y-0 left-0 w-1 bg-evergreen opacity-0 transition-opacity group-hover:opacity-100"
-              />
-              <div className="flex items-center gap-4 p-4">
+              {/* Header row: direction disc + title/subtitle + parcel badge top-right */}
+              <div className="flex items-start gap-3.5">
                 <DirectionBadge code={corridor.directionCode} />
                 <div className="min-w-0 flex-1">
-                  <span className="block text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                    {bearing}
-                  </span>
                   <span
                     data-testid="corridor-group-name"
-                    className="mt-0.5 block truncate text-[15px] font-semibold text-foreground"
+                    className="block truncate text-[16px] font-bold tracking-tight text-foreground"
                   >
                     {corridor.groupName}
                   </span>
-                  {/* Issue #1659 — show covered area names; fall back to distance badge. */}
-                  {corridorAreaSummary ? (
-                    <span
-                      className="mt-1 block text-[12px] text-muted-foreground truncate"
-                      data-testid="corridor-card-area-names"
-                    >
-                      {corridorAreaSummary}
+                  {maxKm > 0 && (
+                    <span className="mt-0.5 block text-[13px] text-muted-foreground">
+                      Up to {maxKm} km from the city
                     </span>
-                  ) : maxKm > 0 ? (
-                    <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1">
-                      <Route
-                        className="h-3.5 w-3.5 text-evergreen"
-                        aria-hidden="true"
-                      />
-                      <span className="text-xs font-medium text-foreground">
-                        Up to {maxKm} km
-                      </span>
-                    </span>
-                  ) : null}
+                  )}
                 </div>
+                {maxTier && (
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-evergreen-tint px-2.5 py-1 text-xs font-semibold text-evergreen">
+                    {maxTier.listingCount} parcel{maxTier.listingCount === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
+
+              {/* Pale green stat bands: town count + acreage (mock parity) */}
+              <div className="mt-4 grid grid-cols-2 gap-2.5">
+                <span className="inline-flex items-center gap-2 rounded-lg bg-evergreen-tint/70 px-3 py-2.5">
+                  <MapPin className="h-4 w-4 shrink-0 text-evergreen" aria-hidden="true" />
+                  <span className="text-sm text-foreground">
+                    <strong className="font-mono font-bold tabular-nums">{corridorAreaKeys.length}</strong>{' '}
+                    town{corridorAreaKeys.length === 1 ? '' : 's'}
+                  </span>
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-lg bg-evergreen-tint/70 px-3 py-2.5">
+                  <Sprout className="h-4 w-4 shrink-0 text-evergreen" aria-hidden="true" />
+                  <span className="text-sm text-foreground">
+                    {maxTier?.agriAcreage != null ? (
+                      <>
+                        <strong className="font-mono font-bold tabular-nums">{maxTier.agriAcreage}</strong> acres
+                      </>
+                    ) : (
+                      <>
+                        <strong className="font-mono font-bold tabular-nums">{maxTier?.listingCount ?? 0}</strong>{' '}
+                        parcel{(maxTier?.listingCount ?? 0) === 1 ? '' : 's'}
+                      </>
+                    )}
+                  </span>
+                </span>
+              </div>
+
+              {/* Town chips row (Issue #1659 names, chip presentation per mock) */}
+              {townNames.length > 0 && (
+                <div
+                  className="mt-3.5 flex flex-wrap items-center gap-1.5"
+                  data-testid="corridor-card-area-names"
+                >
+                  <span className="mr-0.5 text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Towns
+                  </span>
+                  {townNames.slice(0, 4).map((name) => (
+                    <span
+                      key={name}
+                      className="inline-flex items-center rounded-full border border-border bg-muted/60 px-2.5 py-0.5 text-xs font-medium text-foreground"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                  {townNames.length > 4 && (
+                    <span className="text-xs text-muted-foreground">
+                      + {townNames.length - 4} more
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Explore CTA — bottom-right (mock parity) */}
+              <div className="mt-4 flex justify-end border-t border-border/60 pt-3">
                 <span
                   aria-hidden="true"
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:bg-evergreen group-hover:text-evergreen-foreground"
+                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-evergreen transition-transform group-hover:translate-x-0.5"
                 >
-                  <ChevronRight className="h-4 w-4" />
+                  Explore direction
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </span>
               </div>
             </button>
           );
         })}
-      </div>
-
-      {/* Calm guidance footer — orients the user without inventing data. */}
-      <div className="flex items-start gap-2.5 rounded-lg border border-border bg-muted/50 px-3.5 py-3">
-        <MapPin
-          className="mt-0.5 h-4 w-4 shrink-0 text-evergreen"
-          aria-hidden="true"
-        />
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Choosing a corridor groups agricultural land along that direction on
-          the map. You can switch corridors anytime.
-        </p>
       </div>
     </div>
   );
@@ -909,6 +1024,7 @@ export function DiscoverRightPanel({
               onClearRegionAndMaxKm={onClearRegionAndMaxKm ?? (() => {})}
               discoverAreas={discoverAreas}
               onSelectAreaKey={onSelectAreaKey}
+              cityLabel={cityLabel ?? city}
             />
           </>
         );
@@ -1103,6 +1219,11 @@ export function DiscoverRightPanel({
               intent={intent}
               isAuthenticated={isAuthenticated}
               selectedListingId={selectedListingId}
+              // Issue #1771: navy hero breadcrumb + back-link context (mock parity)
+              cityLabel={cityLabel ?? city}
+              regionLabel={
+                selectedRegion ? (BEARING_LABELS[selectedRegion] ?? selectedRegion) : null
+              }
             />
           </>
         );
@@ -1154,6 +1275,10 @@ export function DiscoverRightPanel({
               // Issue #1460: truncation notice
               truncated={agriGroupTruncated}
               limit={agriGroupListingsLimit}
+              // Issue #1771: navy hero breadcrumb + title (mock parity)
+              cityLabel={cityLabel ?? city}
+              corridorName={corridorGroups?.find((c) => c.directionCode === selectedRegion)?.groupName ?? null}
+              directionCode={selectedRegion}
             />
           </>
         );

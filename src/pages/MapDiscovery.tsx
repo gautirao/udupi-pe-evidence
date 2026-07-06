@@ -5,6 +5,7 @@ import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PublicDiscoverLayout } from '@/components/layout/PublicDiscoverLayout';
 import { MapAreaLegend } from '@/components/discover/MapAreaLegend';
+import { MapAgriLegend } from '@/components/discover/MapAgriLegend';
 import { MapMarkerLegend } from '@/components/discover/MapMarkerLegend';
 import { MarkerPopoverCard } from '@/components/discover/MarkerPopoverCard';
 import { PropertyMap, PropertyListingWithImages } from '@/components/map/PropertyMap';
@@ -2900,6 +2901,23 @@ export default function MapDiscovery() {
           {isAreaFirstCityLanding && !schoolRadiusOverlay && overviewAreas.length > 0 && (
             <div className="absolute bottom-10 left-4 z-[1000]">
               <MapAreaLegend showZeroRow={false} />
+            </div>
+          )}
+
+          {/* Issue #1771 — Agri-first journey map legend, contextual per drill-down stage:
+              landing → Corridors; corridor selected → Corridors + Village clusters;
+              locality selected → Parcels. */}
+          {urlState.journey === 'agri-first' && !schoolRadiusOverlay && (
+            <div className="absolute bottom-10 left-4 z-[1000]">
+              <MapAgriLegend
+                stage={
+                  urlState.selectedLocality
+                    ? 'locality'
+                    : selectedRegion
+                      ? 'corridor'
+                      : 'landing'
+                }
+              />
             </div>
           )}
 

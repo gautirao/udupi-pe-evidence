@@ -77,8 +77,11 @@ describe('AgriGroupLocalityPanel — price gate (AC7, AC8)', () => {
     const lockEl = screen.getByTestId('agri-locality-price-signin');
     expect(lockEl).toBeDefined();
     expect(lockEl.textContent).toContain('Sign in to view price');
-    // Formatted price must NOT appear
-    expect(screen.queryByText(/₹/)).toBeNull();
+    // Formatted price must NOT appear in the parcel cards. (The static "< ₹1 Cr"
+    // filter PILL LABELS contain ₹ but are constants, not listing data — the guard
+    // is scoped to the listings list, the actual leak surface.)
+    const list = screen.getByTestId('agri-locality-listings-list');
+    expect(list.textContent).not.toMatch(/₹/);
   });
 
   it('AC8: anon with null pricePaise also sees Lock (not "Price on request")', () => {
@@ -125,7 +128,9 @@ describe('AgriGroupLocalityPanel — new field chips (AC9)', () => {
         isAuthenticated={false}
       />,
     );
-    expect(screen.getByText('Red laterite')).toBeDefined();
+    // Scoped to the card row — the inline soil FILTER pill also shows the label.
+    const row = screen.getAllByTestId('agri-locality-listing-row')[0];
+    expect(within(row).getByText('Red laterite')).toBeDefined();
   });
 
   it('AC9: ownershipType renders as a fact chip via OWNERSHIP_TYPE_LABELS', () => {
@@ -139,7 +144,9 @@ describe('AgriGroupLocalityPanel — new field chips (AC9)', () => {
     expect(screen.getByText('Freehold')).toBeDefined();
   });
 
-  it('AC9: 4-chip cap — 5 chips produces "+1 more details" overflow pill', () => {
+  it('AC9 (revised #1771): all populated fields render on the card — no overflow pill', () => {
+    // The #1771 mock-parity card shows a category tag + a 2-col metadata grid,
+    // replacing the previous 4-chip cap + "+N more details" overflow model.
     render(
       <AgriGroupLocalityPanel
         {...defaultProps}
@@ -153,8 +160,13 @@ describe('AgriGroupLocalityPanel — new field chips (AC9)', () => {
         isAuthenticated={false}
       />,
     );
-    // 5 chips → 4 visible + 1 overflow
-    expect(screen.getByText('+1 more details')).toBeDefined();
+    const row = screen.getAllByTestId('agri-locality-listing-row')[0];
+    expect(within(row).getByText('Farmland')).toBeDefined();
+    expect(within(row).getByText('Cultivated')).toBeDefined();
+    expect(within(row).getByText('Tarred road')).toBeDefined();
+    expect(within(row).getByText('Red laterite')).toBeDefined();
+    expect(within(row).getByText('Borewell')).toBeDefined();
+    expect(screen.queryByText(/\+\d+ more/)).toBeNull();
   });
 
   it('AC9: 4 chips renders all visible with no overflow pill', () => {

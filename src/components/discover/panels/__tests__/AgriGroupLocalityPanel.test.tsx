@@ -52,28 +52,24 @@ describe('AgriGroupLocalityPanel — header', () => {
     expect(screen.getByTestId('agri-locality-name')).toHaveTextContent('Shirva');
   });
 
-  it('renders count in header (plural, default intent=buy → "for sale")', () => {
+  it('renders count in hero stats (plural, default intent=buy → "for sale")', () => {
     const listings = [makeListing('l1'), makeListing('l2')];
     render(<AgriGroupLocalityPanel {...baseProps} listings={listings} />);
-    expect(screen.getByTestId('agri-locality-count')).toHaveTextContent(
-      '2 agricultural properties for sale',
-    );
+    expect(screen.getByTestId('agri-locality-count')).toHaveTextContent('2');
+    expect(screen.getByTestId('agri-locality-count')).toHaveTextContent('parcels for sale');
   });
 
-  it('renders count in header (singular, default intent=buy → "for sale")', () => {
+  it('renders count in hero stats (singular, default intent=buy → "for sale")', () => {
     const listings = [makeListing('l1')];
     render(<AgriGroupLocalityPanel {...baseProps} listings={listings} />);
-    expect(screen.getByTestId('agri-locality-count')).toHaveTextContent(
-      '1 agricultural property for sale',
-    );
+    expect(screen.getByTestId('agri-locality-count')).toHaveTextContent('1');
+    expect(screen.getByTestId('agri-locality-count')).toHaveTextContent('parcel for sale');
   });
 
   it('renders "for rent" count when intent=rent', () => {
     const listings = [makeListing('l1'), makeListing('l2')];
     render(<AgriGroupLocalityPanel {...baseProps} listings={listings} intent="rent" />);
-    expect(screen.getByTestId('agri-locality-count')).toHaveTextContent(
-      '2 agricultural properties for rent',
-    );
+    expect(screen.getByTestId('agri-locality-count')).toHaveTextContent('parcels for rent');
   });
 
   it('close button calls onClose when clicked', async () => {
@@ -203,7 +199,12 @@ describe('AgriGroupLocalityPanel — anon price gate (no-leak)', () => {
       <AgriGroupLocalityPanel {...baseProps} listings={[priced]} isAuthenticated={false} />,
     );
     expect(screen.getByTestId('agri-locality-price-signin')).toBeInTheDocument();
-    expect(container.textContent).not.toMatch(/₹/);
+    // No rupee glyph anywhere in the parcel cards (the static "< ₹1 Cr" filter
+    // PILL LABELS are constants, not listing data, so the ₹ guard is scoped to
+    // the listings list — the actual leak surface).
+    const list = screen.getByTestId('agri-locality-listings-list');
+    expect(list.textContent).not.toMatch(/₹/);
+    // No price VALUE anywhere in the whole panel.
     expect(container.textContent).not.toMatch(/75,00,000|7,500,000/);
   });
 
@@ -217,11 +218,13 @@ describe('AgriGroupLocalityPanel — anon price gate (no-leak)', () => {
 
   it('authenticated with no price: shows "Price on request", no rupee value', () => {
     const noPrice = makeListing('np', { pricePaise: null });
-    const { container } = render(
+    render(
       <AgriGroupLocalityPanel {...baseProps} listings={[noPrice]} isAuthenticated />,
     );
     expect(screen.getByText('Price on request')).toBeInTheDocument();
-    expect(container.textContent).not.toMatch(/₹/);
+    // ₹ guard scoped to the parcel cards; static filter pill labels contain ₹.
+    const list = screen.getByTestId('agri-locality-listings-list');
+    expect(list.textContent).not.toMatch(/₹/);
   });
 });
 

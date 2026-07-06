@@ -193,21 +193,27 @@ describe('AgriGroupSelectedPanel — listings state', () => {
 });
 
 describe('AgriGroupSelectedPanel — aggregate count', () => {
-  it('renders plural "properties for sale" when listingCount > 1 (default intent=buy)', () => {
+  it('renders plural parcel count in hero + summary band (default intent=buy)', () => {
     render(
       <AgriGroupSelectedPanel {...baseProps} listings={[makeListing('a1'), makeListing('a2')]} listingCount={2} />,
     );
-    expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent(
-      '2 agri properties for sale in this region',
+    // Hero stat row: value + "parcels" label
+    expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent('2');
+    expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent('parcels');
+    // Pale green summary band: intent-aware copy grouped-by-towns line
+    expect(screen.getByTestId('agri-group-count-band')).toHaveTextContent(
+      'Agri parcels for sale · grouped into 2 towns',
     );
   });
 
-  it('renders singular "property for sale" when listingCount === 1 (default intent=buy)', () => {
+  it('renders singular parcel count when listingCount === 1 (default intent=buy)', () => {
     render(
       <AgriGroupSelectedPanel {...baseProps} listings={[makeListing('a1')]} listingCount={1} />,
     );
-    expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent(
-      '1 agri property for sale in this region',
+    expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent('1');
+    expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent('parcel');
+    expect(screen.getByTestId('agri-group-count-band')).toHaveTextContent(
+      'Agri parcel for sale · grouped into 1 town',
     );
   });
 
@@ -215,8 +221,8 @@ describe('AgriGroupSelectedPanel — aggregate count', () => {
     render(
       <AgriGroupSelectedPanel {...baseProps} listings={[makeListing('a1'), makeListing('a2')]} listingCount={2} intent="rent" />,
     );
-    expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent(
-      '2 agri properties for rent in this region',
+    expect(screen.getByTestId('agri-group-count-band')).toHaveTextContent(
+      'Agri parcels for rent · grouped into 2 towns',
     );
   });
 });
@@ -373,7 +379,7 @@ describe('AgriGroupSelectedPanel — locality grouping (Issue #1464)', () => {
       <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
     );
     const btns = screen.getAllByTestId('agri-group-locality-btn');
-    expect(btns[0]).toHaveTextContent('2 agricultural properties');
+    expect(btns[0]).toHaveTextContent('2 parcels');
   });
 
   it('renders correct count label for a single-item group (singular)', () => {
@@ -384,7 +390,7 @@ describe('AgriGroupSelectedPanel — locality grouping (Issue #1464)', () => {
       <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={1} />,
     );
     const btn = screen.getByTestId('agri-group-locality-btn');
-    expect(btn).toHaveTextContent('1 agricultural property');
+    expect(btn).toHaveTextContent('1 parcel');
   });
 
   it('listing with null locality is grouped under its areaKey', () => {
@@ -432,7 +438,7 @@ describe('AgriGroupSelectedPanel — locality grouping (Issue #1464)', () => {
     // One group section, one button showing count 3, no listing rows
     expect(screen.getAllByTestId('agri-group-locality-group')).toHaveLength(1);
     const btn = screen.getByTestId('agri-group-locality-btn');
-    expect(btn).toHaveTextContent('3 agricultural properties');
+    expect(btn).toHaveTextContent('3 parcels');
     expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
   });
 
@@ -701,7 +707,7 @@ describe('AgriGroupSelectedPanel — cumulative distance hint (Issue #1456)', ()
       />,
     );
     expect(
-      screen.getByText('Includes properties at closer distances too.'),
+      screen.getByText('Includes parcels at closer distances too.'),
     ).toBeInTheDocument();
   });
 
@@ -715,7 +721,7 @@ describe('AgriGroupSelectedPanel — cumulative distance hint (Issue #1456)', ()
       />,
     );
     expect(
-      screen.queryByText('Includes properties at closer distances too.'),
+      screen.queryByText('Includes parcels at closer distances too.'),
     ).not.toBeInTheDocument();
   });
 });

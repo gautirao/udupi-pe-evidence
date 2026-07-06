@@ -180,7 +180,7 @@ export function paramsToLayerInput(params: URLSearchParams): DiscoverLayerInput 
       selectedRegion: params.get(LAYER_PARAM.selectedRegion) as DiscoverUrlState['selectedRegion'],
       selectedMaxKm,
       selectedListing: params.get(LAYER_PARAM.selectedListing),
-      selectedLocality: params.get(LAYER_PARAM.selectedLocality),
+      selectedLocality: params.get(LAYER_PARAM.selectedLocality) || params.get('town'),
     },
   };
 }
@@ -214,6 +214,9 @@ export function applyLayerSelectionToParams(
   for (const paramName of Object.values(LAYER_PARAM)) {
     if (layerValues[paramName] == null) {
       params.delete(paramName);
+      if (paramName === LAYER_PARAM.selectedLocality) {
+        params.delete('town');
+      }
     }
   }
   return params;
