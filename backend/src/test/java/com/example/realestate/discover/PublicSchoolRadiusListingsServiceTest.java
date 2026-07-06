@@ -306,6 +306,55 @@ class PublicSchoolRadiusListingsServiceTest {
         assertThat(card.createdAt()).isNotNull();
     }
 
+    // ── #1726: exact lat/lng from DB must be coarsened before leaving the server ──
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @org.junit.jupiter.api.DisplayName("#1726: high-precision lat/lng from DB is coarsened to 2dp (this endpoint is anon-only)")
+    void rowMapper_coarsensHighPrecisionLatLng() throws Exception {
+        ArgumentCaptor<RowMapper<PublicSchoolRadiusListingCard>> mapperCaptor =
+                ArgumentCaptor.forClass(RowMapper.class);
+
+        when(jdbc.query(anyString(), mapperCaptor.capture(), any(Object[].class)))
+                .thenAnswer(inv -> {
+                    RowMapper<PublicSchoolRadiusListingCard> mapper = mapperCaptor.getValue();
+                    ResultSet rs = mock(ResultSet.class);
+                    Timestamp now = Timestamp.from(Instant.now());
+                    when(rs.getString("id")).thenReturn("precise-1");
+                    when(rs.getString("listing_number")).thenReturn("L-1");
+                    when(rs.getString("property_type")).thenReturn("house");
+                    when(rs.getString("title")).thenReturn("Precise House");
+                    when(rs.getString("locality")).thenReturn("Malpe");
+                    when(rs.getString("area_key")).thenReturn("IN|KA|Udupi|Malpe");
+                    when(rs.getObject("price_paise")).thenReturn(5_000_000L);
+                    when(rs.getLong("price_paise")).thenReturn(5_000_000L);
+                    when(rs.getObject("land_area")).thenReturn(null);
+                    when(rs.getString("land_area_unit")).thenReturn(null);
+                    when(rs.getObject("built_area")).thenReturn(null);
+                    when(rs.getString("built_area_unit")).thenReturn(null);
+                    when(rs.getObject("bedrooms")).thenReturn(null);
+                    when(rs.getObject("latitude")).thenReturn(13.34091);
+                    when(rs.getDouble("latitude")).thenReturn(13.34091);
+                    when(rs.getObject("longitude")).thenReturn(74.74215);
+                    when(rs.getDouble("longitude")).thenReturn(74.74215);
+                    when(rs.getString("hero_image_url")).thenReturn(null);
+                    when(rs.getString("listing_purpose")).thenReturn("sale");
+                    when(rs.getString("possession_status")).thenReturn("READY");
+                    when(rs.getTimestamp("created_at")).thenReturn(now);
+                    when(rs.getTimestamp("first_published_at")).thenReturn(now);
+                    when(rs.getTimestamp("back_to_market_at")).thenReturn(null);
+                    return List.of(mapper.mapRow(rs, 0));
+                });
+
+        PublicSchoolRadiusListingsPage page = service.getListings("udupi", 13.3, 74.7, 2.0, 0, 20, null);
+
+        PublicSchoolRadiusListingCard card = page.content().get(0);
+        assertThat(card.latitude()).isEqualTo(13.34);
+        assertThat(card.longitude()).isEqualTo(74.74);
+        assertThat(card.latitude()).isNotEqualTo(13.34091);
+        assertThat(card.longitude()).isNotEqualTo(74.74215);
+    }
+
     // ── 9. #1494 listingPurpose filter: 'sale' → AND pl.listing_purpose = ? in SQL ─
 
     @Test

@@ -1,7 +1,9 @@
 package com.example.realestate.discover.opensearch;
 
 import com.example.realestate.discover.DiscoverListingResponse;
+import com.example.realestate.discover.DiscoverListingsService;
 import com.example.realestate.discover.DiscoverMarker;
+import com.example.realestate.discover.DiscoverMarkersService;
 import com.example.realestate.listing.api.ListingResponse;
 
 import java.time.LocalDate;
@@ -44,7 +46,9 @@ final class OpenSearchHitMapper {
         String locality = string(source, "locality");
         String propertyType = string(source, "property_type");
 
-        return new DiscoverMarker(
+        // #1726: route through the same DTO-construction funnel as the Postgres path so this
+        // (currently dormant) OpenSearch backend cannot reintroduce the exact-pin leak.
+        return DiscoverMarkersService.buildMarker(
                 id,
                 latNum.doubleValue(),
                 lonNum.doubleValue(),
@@ -118,7 +122,9 @@ final class OpenSearchHitMapper {
         String listingPurpose = string(source, "listing_purpose");
         String status = string(source, "status");
 
-        return new DiscoverListingResponse(
+        // #1726: route through the same DTO-construction funnel as the Postgres path so this
+        // (currently dormant) OpenSearch backend cannot reintroduce the exact-pin leak.
+        return DiscoverListingsService.buildListing(
                 id,
                 listingNumber,
                 propertyType,

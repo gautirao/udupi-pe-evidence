@@ -2,6 +2,7 @@ package com.example.realestate.listing.api;
 
 import com.example.realestate.common.api.PagedResponse;
 import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.core.ListingOwnershipGuard;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.pricing.PriceChangeLog;
@@ -17,7 +18,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -51,15 +54,18 @@ public class PublicListingController {
     private final ListingResponseMapper listingResponseMapper;
     private final PriceChangeLogRepository priceChangeLogRepository;
     private final SchoolService schoolService;
+    private final ListingOwnershipGuard listingOwnershipGuard;
 
     public PublicListingController(ListingRepository listingRepository,
                                    ListingResponseMapper listingResponseMapper,
                                    PriceChangeLogRepository priceChangeLogRepository,
-                                   SchoolService schoolService) {
+                                   SchoolService schoolService,
+                                   ListingOwnershipGuard listingOwnershipGuard) {
         this.listingRepository = listingRepository;
         this.listingResponseMapper = listingResponseMapper;
         this.priceChangeLogRepository = priceChangeLogRepository;
         this.schoolService = schoolService;
+        this.listingOwnershipGuard = listingOwnershipGuard;
     }
 
     /**
@@ -70,6 +76,14 @@ public class PublicListingController {
      * anonymous callers receive the teaser {@link ListingTeaserResponse} (no location, no PII).
      * Invalid/expired JWTs are rejected by {@code BearerTokenAuthenticationFilter} before this
      * method runs — the controller does not need to handle that case.
+     *
+     * <p>#1726: among authenticated callers, only the listing's owner or an admin receives the
+     * exact pin; every other authenticated buyer receives a coarsened latitude/longitude (see
+     * {@link ListingOwnershipGuard#canAccessExactPin}). Note: a {@code CallerInfo}-typed
+     * parameter is intentionally NOT used here — {@code CallerInfoResolver} throws on anonymous
+     * requests, which would break this endpoint's anonymous teaser path (this route is
+     * {@code permitAll()}). Caller identity is instead resolved manually, only inside the
+     * already-established {@code isAuthenticated} branch below.
      */
     @GetMapping("/{id}")
     public ResponseEntity<?> getById(@PathVariable UUID id) {
@@ -85,10 +99,42 @@ public class PublicListingController {
 
         log.debug("GET /api/public/listings/{} authenticated={} -> 200", id, isAuthenticated);
         if (isAuthenticated) {
-            return ResponseEntity.ok(listingResponseMapper.toPublicResponse(listing));
+            UUID callerId = extractUserId(auth);
+            boolean isAdmin = hasAdminAuthority(auth);
+            boolean allowExactPin = listingOwnershipGuard.canAccessExactPin(listing, callerId, isAdmin);
+            return ResponseEntity.ok(listingResponseMapper.toPublicResponse(listing, allowExactPin));
         } else {
             return ResponseEntity.ok(listingResponseMapper.toTeaserResponse(listing));
         }
+    }
+
+    /**
+     * Extracts the caller's user id from a JWT subject. Returns null if the authentication is
+     * not a JWT (should not happen on the {@code isAuthenticated} branch) or the subject is
+     * missing/malformed — {@link ListingOwnershipGuard#canAccessExactPin} treats a null userId
+     * as "not the owner", never as "grant exact pin".
+     */
+    private static UUID extractUserId(Authentication auth) {
+        if (!(auth instanceof JwtAuthenticationToken jwtAuth)) {
+            return null;
+        }
+        String subject = jwtAuth.getToken().getSubject();
+        if (subject == null || subject.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(subject);
+        } catch (IllegalArgumentException e) {
+            log.warn("GET /api/public/listings/{{}}: malformed JWT subject", subject);
+            return null;
+        }
+    }
+
+    /** Returns true when the authenticated caller holds the ROLE_ADMIN authority. */
+    private static boolean hasAdminAuthority(Authentication auth) {
+        return auth.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch("ROLE_ADMIN"::equals);
     }
 
     /**

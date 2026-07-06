@@ -1,5 +1,6 @@
 package com.example.realestate.discover;
 
+import com.example.realestate.geo.GeoCoarsener;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
@@ -78,7 +79,7 @@ public class DiscoverMarkersService implements DiscoverMarkersPort {
         try {
             List<DiscoverMarker> markers = jdbc.query(
                     sql,
-                    (rs, rowNum) -> new DiscoverMarker(
+                    (rs, rowNum) -> buildMarker(
                             rs.getString("id"),
                             rs.getDouble("latitude"),
                             rs.getDouble("longitude"),
@@ -139,5 +140,23 @@ public class DiscoverMarkersService implements DiscoverMarkersPort {
         } finally {
             sample.stop(timers.get(resultStatus));
         }
+    }
+
+    /**
+     * Shared DTO-construction funnel for {@link DiscoverMarker} (#1726). Used by both this
+     * Postgres row-mapper and {@code OpenSearchHitMapper.toMarker} so the dormant
+     * {@code discover.opensearch.enabled} path cannot reintroduce the exact-pin leak if ever
+     * turned on — both backends for GET /api/discover/markers apply the same coarsening.
+     */
+    public static DiscoverMarker buildMarker(String id, double latitude, double longitude, Long pricePaise,
+                                              String locality, String propertyType, String boundaryGeoJson) {
+        return new DiscoverMarker(
+                id,
+                GeoCoarsener.coarsen(latitude),
+                GeoCoarsener.coarsen(longitude),
+                pricePaise,
+                locality,
+                propertyType,
+                boundaryGeoJson);
     }
 }

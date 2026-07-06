@@ -1,5 +1,6 @@
 package com.example.realestate.discover;
 
+import com.example.realestate.geo.GeoCoarsener;
 import com.example.realestate.listing.api.ListingResponse;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -164,7 +165,7 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                 boolean backOnMarket = backToMarketAt != null
                         && backToMarketAt.isAfter(OffsetDateTime.now().minusDays(BACK_ON_MARKET_WINDOW_DAYS));
 
-                return new DiscoverListingResponse(
+                return buildListing(
                         rs.getString("id"),
                         rs.getString("listing_number"),
                         rs.getString("property_type"),
@@ -256,6 +257,30 @@ public class DiscoverListingsService implements DiscoverListingsPort {
         );
 
         return new DiscoverListingsAggregates(topLocalities);
+    }
+
+    /**
+     * Shared DTO-construction funnel for {@link DiscoverListingResponse} (#1726). Used by both
+     * this Postgres row-mapper and {@code OpenSearchHitMapper.toListing} so the dormant
+     * {@code discover.opensearch.enabled} path cannot reintroduce the exact-pin leak if ever
+     * turned on — both backends for GET /api/discover/listings apply the same coarsening.
+     */
+    @SuppressWarnings("java:S107") // mirrors the DiscoverListingResponse record's field count
+    public static DiscoverListingResponse buildListing(
+            String id, String listingNumber, String propertyType, String title, String locality,
+            String areaKey, Long pricePaise, Double landArea, String landAreaUnit,
+            Double builtArea, String builtAreaUnit, Integer bedrooms, Double latitude, Double longitude,
+            String heroImageUrl, OffsetDateTime createdAt, OffsetDateTime updatedAt,
+            OffsetDateTime firstPublishedAt, OffsetDateTime lastUpdatedAt, int daysOnMarket,
+            boolean backOnMarket, String reraNumber, boolean reraValid, String trustTier,
+            String possessionStatus, String sellerType, String listingPurpose, String status) {
+        return new DiscoverListingResponse(
+                id, listingNumber, propertyType, title, locality, areaKey, pricePaise,
+                landArea, landAreaUnit, builtArea, builtAreaUnit, bedrooms,
+                GeoCoarsener.coarsen(latitude), GeoCoarsener.coarsen(longitude),
+                heroImageUrl, createdAt, updatedAt, firstPublishedAt, lastUpdatedAt,
+                daysOnMarket, backOnMarket, reraNumber, reraValid, trustTier,
+                possessionStatus, sellerType, listingPurpose, status);
     }
 
     private static boolean reraValidFrom(String reraNumber) {

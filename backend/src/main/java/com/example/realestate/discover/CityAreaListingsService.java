@@ -1,6 +1,7 @@
 package com.example.realestate.discover;
 
 import com.example.realestate.ai.PropertyType;
+import com.example.realestate.geo.GeoCoarsener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -268,8 +269,12 @@ public class CityAreaListingsService {
                         rs.getString("furnishing_status"),
                         createdAt,
                         rs.getString("trust_tier"),
-                        latitude,
-                        longitude
+                        // #1726: this endpoint is permitAll (fully public) — always coarsen,
+                        // regardless of isAuthenticated. Unlike price, exact pin has no
+                        // buyer-vs-anon distinction on a browse/list surface with no ownership
+                        // concept.
+                        GeoCoarsener.coarsen(latitude),
+                        GeoCoarsener.coarsen(longitude)
                 ));
             }
             // if rawId is null: area exists but has no LIVE listings — leave the list empty

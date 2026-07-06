@@ -1,5 +1,6 @@
 package com.example.realestate.discover;
 
+import com.example.realestate.geo.GeoCoarsener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -255,8 +256,8 @@ public class DiscoverAgriMapListingsService {
                 item.id(),
                 item.title(),
                 item.areaKey(),
-                coarsen(item.latitude()),
-                coarsen(item.longitude()),
+                GeoCoarsener.coarsen(item.latitude()),
+                GeoCoarsener.coarsen(item.longitude()),
                 item.propertyType(),
                 item.locality(),
                 item.boundaryGeoJson(),
@@ -277,18 +278,4 @@ public class DiscoverAgriMapListingsService {
                 item.updatedAt());
     }
 
-    /**
-     * Coarsens a coordinate to {@value #ANON_COORD_DECIMALS} decimal places by truncating
-     * toward zero (sign-correct: magnitude is truncated, sign preserved). Null-guarded so a
-     * SQL NULL coordinate stays null — never coerced to 0.0 (would place a marker at (0,0)).
-     */
-    private static Double coarsen(Double coord) {
-        if (coord == null) {
-            return null;
-        }
-        double factor = Math.pow(10, ANON_COORD_DECIMALS);
-        // Truncate toward zero so the sign is preserved symmetrically for +/- values.
-        double truncated = (coord < 0 ? Math.ceil(coord * factor) : Math.floor(coord * factor)) / factor;
-        return truncated;
-    }
 }

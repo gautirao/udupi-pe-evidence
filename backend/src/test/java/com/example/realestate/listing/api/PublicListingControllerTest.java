@@ -1,6 +1,8 @@
 package com.example.realestate.listing.api;
 
+import com.example.realestate.geo.GeoCoarsener;
 import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.core.ListingOwnershipGuard;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.pricing.PriceChangeLog;
@@ -36,6 +38,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -91,16 +94,25 @@ class PublicListingControllerTest {
     @MockitoBean
     private SchoolService schoolService;
 
+    @MockitoBean
+    private ListingOwnershipGuard listingOwnershipGuard;
+
     @BeforeEach
     void setUp() {
-        reset(listingRepository, listingResponseMapper, priceChangeLogRepository, userRoleService, schoolService);
+        reset(listingRepository, listingResponseMapper, priceChangeLogRepository, userRoleService, schoolService,
+                listingOwnershipGuard);
         SecurityContextHolder.clearContext();
+
+        // Default: caller may see the exact pin (owner/admin) unless a test overrides this to
+        // exercise the #1726 non-owner coarsening branch.
+        when(listingOwnershipGuard.canAccessExactPin(any(Listing.class), any(), anyBoolean())).thenReturn(true);
 
         // Delegate public mapper to a minimal implementation.
         // CRITICAL: rejectionReason must always be null (security invariant tested explicitly).
         // Single-listing path always populates images[] (#758).
-        when(listingResponseMapper.toPublicResponse(any(Listing.class))).thenAnswer(inv -> {
+        when(listingResponseMapper.toPublicResponse(any(Listing.class), anyBoolean())).thenAnswer(inv -> {
             Listing l = inv.getArgument(0);
+            boolean allowExactPin = inv.getArgument(1);
             int daysOnMarket = l.getFirstPublishedAt() != null
                     ? (int) java.time.temporal.ChronoUnit.DAYS.between(
                             l.getFirstPublishedAt().toLocalDate(), java.time.LocalDate.now())
@@ -118,7 +130,8 @@ class PublicListingControllerTest {
                     l.getLocality(), l.getPrice(), l.getPricePaise(), l.getDescription(),
                     l.getLandArea(), l.getBedrooms(), l.getBuiltArea(),
                     l.getLandAreaUnit(), l.getBuiltAreaUnit(),
-                    l.getLatitude(), l.getLongitude(),
+                    allowExactPin ? l.getLatitude() : GeoCoarsener.coarsen(l.getLatitude()),
+                    allowExactPin ? l.getLongitude() : GeoCoarsener.coarsen(l.getLongitude()),
                     l.isAddressConfirmed(), null /* rejectionReason always null for public */,
                     l.getCreatedAt(), l.getUpdatedAt(),
                     0, null, l.getVideoUrl(),
@@ -254,6 +267,111 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.images[0].storage_path").doesNotExist())
                 .andExpect(jsonPath("$.images[0].id").doesNotExist())
                 .andExpect(jsonPath("$.images[0].listingId").doesNotExist());
+    }
+
+    // ==================== #1726: authenticated non-owner buyer -> coarsened pin ====================
+
+    @Test
+    void getById_authenticatedNonOwnerBuyer_returnsCoarsenedLatLng() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
+                "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
+        listing.setLatitude(13.34091);
+        listing.setLongitude(74.74215);
+        listing.setCreatedBy(UUID.randomUUID()); // owned by someone else
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        // Not the owner, not an admin -> guard denies exact pin
+        when(listingOwnershipGuard.canAccessExactPin(any(Listing.class), any(), eq(false)))
+                .thenReturn(false);
+
+        UUID buyerId = UUID.randomUUID();
+        var jwt = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("token")
+                .header("alg", "none")
+                .claim("sub", buyerId.toString())
+                .build();
+        var authToken = new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(
+                jwt, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.getContext().setAuthentication(authToken);
+
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.latitude").value(13.34))
+                .andExpect(jsonPath("$.longitude").value(74.74));
+    }
+
+    @Test
+    void getById_authenticatedOwner_returnsExactLatLng() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
+                "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
+        listing.setLatitude(13.34091);
+        listing.setLongitude(74.74215);
+        listing.setCreatedBy(ownerId);
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        // Owner -> guard grants exact pin
+        when(listingOwnershipGuard.canAccessExactPin(any(Listing.class), eq(ownerId), eq(false)))
+                .thenReturn(true);
+
+        var jwt = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("token")
+                .header("alg", "none")
+                .claim("sub", ownerId.toString())
+                .build();
+        var authToken = new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(
+                jwt, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.getContext().setAuthentication(authToken);
+
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.latitude").value(13.34091))
+                .andExpect(jsonPath("$.longitude").value(74.74215));
+    }
+
+    @Test
+    void getById_authenticatedAdminNonOwner_returnsExactLatLng() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID(); // admin, but NOT the listing owner
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
+                "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
+        listing.setLatitude(13.34091);
+        listing.setLongitude(74.74215);
+        listing.setCreatedBy(ownerId);
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        // Admin, non-owner -> guard still grants exact pin (isAdmin=true)
+        when(listingOwnershipGuard.canAccessExactPin(any(Listing.class), eq(adminId), eq(true)))
+                .thenReturn(true);
+
+        var jwt = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("token")
+                .header("alg", "none")
+                .claim("sub", adminId.toString())
+                .build();
+        var authToken = new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(
+                jwt, List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+        SecurityContextHolder.getContext().setAuthentication(authToken);
+
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.latitude").value(13.34091))
+                .andExpect(jsonPath("$.longitude").value(74.74215));
+
+        // Confirms hasAdminAuthority(auth) actually resolved isAdmin=true end-to-end through the
+        // controller, not just at the ListingOwnershipGuard unit level.
+        verify(listingOwnershipGuard).canAccessExactPin(any(Listing.class), eq(adminId), eq(true));
+    }
+
+    @Test
+    void getById_anonymous_ownershipGuardNeverInvoked() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
+                "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        // SecurityContextHolder cleared in @BeforeEach -> anonymous teaser path
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
+                .andExpect(status().isOk());
+
+        verify(listingOwnershipGuard, org.mockito.Mockito.never())
+                .canAccessExactPin(any(Listing.class), any(), anyBoolean());
     }
 
     // ==================== GET /{id} — DRAFT listing -> 404 ====================
@@ -741,7 +859,7 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.images").isArray());
 
         // Assert toPublicResponse was called (not toTeaserResponse)
-        verify(listingResponseMapper).toPublicResponse(any(Listing.class));
+        verify(listingResponseMapper).toPublicResponse(any(Listing.class), anyBoolean());
     }
 
     // ==================== T4: anonymous agri → no seller PII in response ====================

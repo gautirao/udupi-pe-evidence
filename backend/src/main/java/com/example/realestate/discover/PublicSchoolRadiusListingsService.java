@@ -1,6 +1,7 @@
 package com.example.realestate.discover;
 
 import com.example.realestate.ai.PropertyType;
+import com.example.realestate.geo.GeoCoarsener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcOperations;
@@ -157,8 +158,9 @@ public class PublicSchoolRadiusListingsService {
                     rs.getObject("built_area") != null ? rs.getDouble("built_area") : null,
                     rs.getString("built_area_unit"),
                     rs.getObject("bedrooms") != null ? rs.getInt("bedrooms") : null,
-                    rs.getObject("latitude") != null ? rs.getDouble("latitude") : null,
-                    rs.getObject("longitude") != null ? rs.getDouble("longitude") : null,
+                    // #1726: this endpoint is anon-only (permitAll) — always coarsen.
+                    GeoCoarsener.coarsen(rs.getObject("latitude") != null ? rs.getDouble("latitude") : null),
+                    GeoCoarsener.coarsen(rs.getObject("longitude") != null ? rs.getDouble("longitude") : null),
                     rs.getString("hero_image_url"),
                     rs.getString("listing_purpose"),
                     rs.getString("possession_status"),

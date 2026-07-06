@@ -94,7 +94,7 @@ class ListingResponseMapperTest {
         Listing l = buildListing("LIVE");
         l.setRejectionReason("Internal moderation note");
 
-        ListingResponse response = mapper.toPublicResponse(l);
+        ListingResponse response = mapper.toPublicResponse(l, true);
 
         assertThat(response.rejectionReason()).isNull();
     }
@@ -104,7 +104,7 @@ class ListingResponseMapperTest {
         Listing l = buildListing("LIVE");
         l.setRejectionReason(null);
 
-        ListingResponse response = mapper.toPublicResponse(l);
+        ListingResponse response = mapper.toPublicResponse(l, true);
 
         assertThat(response.rejectionReason()).isNull();
     }
@@ -389,7 +389,7 @@ class ListingResponseMapperTest {
         img.setPosition(0);
         when(listingImageRepository.findGalleryByListingId(l.getId())).thenReturn(List.of(img));
 
-        ListingResponse response = mapper.toPublicResponse(l);
+        ListingResponse response = mapper.toPublicResponse(l, true);
 
         assertThat(response.images()).hasSize(1);
         assertThat(response.images().get(0).url()).isEqualTo("https://cdn.example.com/only.jpg");
@@ -766,7 +766,7 @@ class ListingResponseMapperTest {
         l.setPricePaise(12500000L);
         l.setPrice(null);
 
-        ListingResponse response = mapper.toPublicResponse(l);
+        ListingResponse response = mapper.toPublicResponse(l, true);
 
         assertThat(response.pricePaise()).isEqualTo(12500000L);
         // price may be null — must not throw
@@ -779,7 +779,7 @@ class ListingResponseMapperTest {
         l.setPrice(new BigDecimal("750000"));
         l.setPricePaise(null);
 
-        ListingResponse response = mapper.toPublicResponse(l);
+        ListingResponse response = mapper.toPublicResponse(l, true);
 
         assertThat(response.price()).isEqualByComparingTo(new BigDecimal("750000"));
         assertThat(response.pricePaise()).isNull();
@@ -791,7 +791,7 @@ class ListingResponseMapperTest {
         l.setPrice(null);
         l.setPricePaise(null);
 
-        ListingResponse response = mapper.toPublicResponse(l);
+        ListingResponse response = mapper.toPublicResponse(l, true);
 
         assertThat(response.price()).isNull();
         assertThat(response.pricePaise()).isNull();
@@ -854,7 +854,7 @@ class ListingResponseMapperTest {
         l.setLongitude(74.74215);
         l.setSurveyNumber("SY-101/2");
 
-        ListingResponse response = mapper.toPublicResponse(l);
+        ListingResponse response = mapper.toPublicResponse(l, true);
 
         // #1452 canonical pricePaise intact for authed callers
         assertThat(response.pricePaise()).isEqualTo(12500000L);
@@ -931,6 +931,62 @@ class ListingResponseMapperTest {
         // null-guard: coarsen(null) must return null, not 0.0
         assertThat(teaser.latitude()).as("null coord must not become 0.0").isNull();
         assertThat(teaser.longitude()).as("null coord must not become 0.0").isNull();
+    }
+
+    // ==================== #1726: toPublicResponse exact-pin gate ====================
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1726: allowExactPin=false coarsens lat/lng to 2dp (non-owner buyer)")
+    void toPublicResponse_allowExactPinFalse_coarsensLatLng() {
+        Listing l = buildListing("LIVE");
+        l.setLatitude(13.34091);
+        l.setLongitude(74.74215);
+
+        ListingResponse response = mapper.toPublicResponse(l, false);
+
+        assertThat(response.latitude()).isEqualTo(13.34);
+        assertThat(response.longitude()).isEqualTo(74.74);
+        assertThat(response.latitude()).isNotEqualTo(13.34091);
+        assertThat(response.longitude()).isNotEqualTo(74.74215);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1726: allowExactPin=true (owner/admin) keeps exact lat/lng")
+    void toPublicResponse_allowExactPinTrue_keepsExactLatLng() {
+        Listing l = buildListing("LIVE");
+        l.setLatitude(13.34091);
+        l.setLongitude(74.74215);
+
+        ListingResponse response = mapper.toPublicResponse(l, true);
+
+        assertThat(response.latitude()).isEqualTo(13.34091);
+        assertThat(response.longitude()).isEqualTo(74.74215);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1726: allowExactPin=false + null lat/lng stays null (no (0,0) marker)")
+    void toPublicResponse_allowExactPinFalse_nullLatLngStaysNull() {
+        Listing l = buildListing("LIVE");
+        l.setLatitude(null);
+        l.setLongitude(null);
+
+        ListingResponse response = mapper.toPublicResponse(l, false);
+
+        assertThat(response.latitude()).isNull();
+        assertThat(response.longitude()).isNull();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1726: toResponse (broker/admin management path) always keeps exact lat/lng")
+    void toResponse_alwaysKeepsExactLatLng() {
+        Listing l = buildListing("LIVE");
+        l.setLatitude(13.34091);
+        l.setLongitude(74.74215);
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.latitude()).isEqualTo(13.34091);
+        assertThat(response.longitude()).isEqualTo(74.74215);
     }
 
     // ==================== Helper ====================

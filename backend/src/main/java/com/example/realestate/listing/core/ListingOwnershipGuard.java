@@ -41,4 +41,17 @@ public class ListingOwnershipGuard {
         }
         return listing;
     }
+
+    /**
+     * Non-throwing ownership predicate for public detail endpoints (#1726) that must still
+     * return 200 with a coarsened value for non-owners rather than a 403 like {@link #findOwned}.
+     *
+     * @param listing the listing being accessed (never null)
+     * @param userId  the caller's user id, or {@code null} if unresolved
+     * @param isAdmin whether the caller has the admin role
+     * @return {@code true} if the caller may see the listing's exact pin (admin or owner)
+     */
+    public boolean canAccessExactPin(Listing listing, UUID userId, boolean isAdmin) {
+        return isAdmin || (userId != null && userId.equals(listing.getCreatedBy()));
+    }
 }

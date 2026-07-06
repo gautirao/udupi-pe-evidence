@@ -1,5 +1,6 @@
 package com.example.realestate.listing.api;
 
+import com.example.realestate.geo.GeoCoarsener;
 import com.example.realestate.listing.area.AreaNormalizer;
 import com.example.realestate.listing.commercial.ListingSuitableUse;
 import com.example.realestate.listing.commercial.ListingSuitableUseRepository;
@@ -30,10 +31,11 @@ import java.util.stream.Collectors;
  *
  * <p>Two variants are provided:
  * <ul>
- *   <li>{@link #toResponse(Listing)} — full response, including rejectionReason. Use for
- *       authenticated broker / admin endpoints.</li>
- *   <li>{@link #toPublicResponse(Listing)} — identical to toResponse but always returns
- *       {@code null} for rejectionReason. Use for unauthenticated public endpoints.</li>
+ *   <li>{@link #toResponse(Listing)} — full response, including rejectionReason and exact pin.
+ *       Use for authenticated broker / admin endpoints.</li>
+ *   <li>{@link #toPublicResponse(Listing, boolean)} — identical to toResponse but always returns
+ *       {@code null} for rejectionReason, and coarsens latitude/longitude unless the caller is
+ *       the listing's owner or an admin (#1726). Use for the public listing-detail endpoint.</li>
  * </ul>
  */
 @Component
@@ -78,15 +80,21 @@ public class ListingResponseMapper {
      * Full response including rejectionReason. For broker/admin-facing endpoints only.
      */
     public ListingResponse toResponse(Listing l) {
-        return build(l, l.getRejectionReason());
+        return build(l, l.getRejectionReason(), true);
     }
 
     /**
      * Public response with rejectionReason always null.
      * rejectionReason is an internal moderation note — never expose it to unauthenticated callers.
+     *
+     * <p>#1726: {@code allowExactPin} gates latitude/longitude precision. The listing's owner
+     * and admins receive the exact pin; every other authenticated buyer receives a coarsened
+     * value (see {@link GeoCoarsener}). Callers must resolve this via
+     * {@link com.example.realestate.listing.core.ListingOwnershipGuard#canAccessExactPin} —
+     * never trust a client-supplied flag.
      */
-    public ListingResponse toPublicResponse(Listing l) {
-        return build(l, null);
+    public ListingResponse toPublicResponse(Listing l, boolean allowExactPin) {
+        return build(l, null, allowExactPin);
     }
 
     /**
@@ -139,8 +147,8 @@ public class ListingResponseMapper {
                 // #1454: anon agri receives COARSENED lat/lng (~1.1 km, 2 dp) — not exact, not null.
                 // Algorithm is kept identical to DiscoverAgriMapListingsService.coarsen() (parity is a
                 // security requirement so both anon agri surfaces leak the same precision).
-                isAgri ? coarsen(l.getLatitude()) : null,
-                isAgri ? coarsen(l.getLongitude()) : null,
+                isAgri ? GeoCoarsener.coarsen(l.getLatitude()) : null,
+                isAgri ? GeoCoarsener.coarsen(l.getLongitude()) : null,
                 isAgri ? l.getLandArea() : null,
                 isAgri ? l.getLandAreaUnit() : null,
                 computedAreaAcres,
@@ -220,7 +228,12 @@ public class ListingResponseMapper {
                 .toList();
     }
 
-    private ListingResponse build(Listing l, String rejectionReason) {
+    /**
+     * Single-listing detail path with an explicit exact-pin gate (#1726).
+     * {@code allowExactPin=false} coarsens latitude/longitude via {@link GeoCoarsener};
+     * all other fields are unaffected.
+     */
+    private ListingResponse build(Listing l, String rejectionReason, boolean allowExactPin) {
         // Single-listing path: use the gallery-ordering query (position ASC, id ASC tiebreaker,
         // plus url-not-null filter) so the detail-page gallery is deterministic (#758).
         var images = listingImageRepository.findGalleryByListingId(l.getId());
@@ -271,7 +284,7 @@ public class ListingResponseMapper {
                 ? listingSuitableUseRepository.findByListingIdOrderByCodeAsc(l.getId()).stream()
                         .map(ListingSuitableUse::getCode).toList()
                 : List.of();
-        return build(l, rejectionReason, images, earnedBadgeCount, gallery, boundary, computedAreaAcres,
+        return build(l, rejectionReason, allowExactPin, images, earnedBadgeCount, gallery, boundary, computedAreaAcres,
                 amenities, specialLocationViews, preferredTenants, suitableUses, utilities);
     }
 
@@ -280,12 +293,13 @@ public class ListingResponseMapper {
         // not balloon in size. List views render from firstImageUrl + imageCount (#758).
         // computedAreaAcres stays null and residential/commercial child sets stay empty so the
         // hot list path takes NO extra DB calls (#1367, #1626, #1730).
-        return build(l, rejectionReason, images, earnedBadgeCount, List.of(), null, null,
+        // allowExactPin=true: batch/list responses are unaffected by #1726 (out of approved scope).
+        return build(l, rejectionReason, true, images, earnedBadgeCount, List.of(), null, null,
                 List.of(), List.of(), List.of(), List.of(), List.of());
     }
 
     @SuppressWarnings("java:S107") // mirrors existing build() overload chain shape
-    private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images,
+    private ListingResponse build(Listing l, String rejectionReason, boolean allowExactPin, List<ListingImage> images,
                                   int earnedBadgeCount, List<ListingImageDTO> gallery, String boundary,
                                   BigDecimal computedAreaAcres, List<String> amenities,
                                   List<String> specialLocationViews, List<String> preferredTenants,
@@ -319,7 +333,8 @@ public class ListingResponseMapper {
                 l.getLocality(), l.getPrice(), l.getPricePaise(), l.getDescription(),
                 l.getLandArea(), l.getBedrooms(), l.getBuiltArea(),
                 l.getLandAreaUnit(), l.getBuiltAreaUnit(),
-                l.getLatitude(), l.getLongitude(),
+                allowExactPin ? l.getLatitude() : GeoCoarsener.coarsen(l.getLatitude()),
+                allowExactPin ? l.getLongitude() : GeoCoarsener.coarsen(l.getLongitude()),
                 l.isAddressConfirmed(), rejectionReason,
                 l.getCreatedAt(), l.getUpdatedAt(),
                 imageCount, firstImageUrl, l.getVideoUrl(),
@@ -361,19 +376,5 @@ public class ListingResponseMapper {
                 l.getLeaseTermMonths(), l.getLeaseEscalationPct(),
                 l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
                 suitableUses, utilities);
-    }
-
-    /**
-     * Coarsens a coordinate to 2 decimal places (~1.1 km granularity) by truncating toward zero.
-     * Null-safe: null input stays null (never coerced to 0.0, which would place a marker at (0,0)).
-     * Algorithm MUST remain identical to DiscoverAgriMapListingsService.coarsen() (#1454).
-     */
-    private static Double coarsen(Double coord) {
-        if (coord == null) {
-            return null;
-        }
-        double factor = Math.pow(10, 2); // 2 decimal places ≈ 1.1 km granularity
-        // Truncate toward zero so sign is preserved symmetrically for +/- values.
-        return (coord < 0 ? Math.ceil(coord * factor) : Math.floor(coord * factor)) / factor;
     }
 }
