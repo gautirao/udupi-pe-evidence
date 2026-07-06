@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -14,12 +15,14 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.sql.Connection;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 /**
  * Integration test for {@link DiscoverSummaryService} (#1745 P5) driving a REAL Postgres/PostGIS
@@ -63,18 +66,39 @@ class DiscoverSummaryServiceIT {
     // Malformed (non-4-segment) area_key — must be excluded by the 4-part guard.
     private static final String MALFORMED_AREA_KEY = "IN|KA|Udupi";
 
+    // ── Bangalore fixtures (#1761 V106 macro-region mapping) ───────────────────
+    private static final String CITY_BANGALORE = "bangalore";
+
+    // west-corridor member (V106) — new West Bangalore macro-region.
+    private static final String RAJAJINAGAR = "IN|KA|Bengaluru|Rajajinagar";
+    // kr-puram-belt member (V106) — East Bangalore.
+    private static final String KR_PURAM = "IN|KA|Bengaluru|K R Puram";
+    // thanisandra-hennur-belt member (V106) — North Bangalore.
+    private static final String THANISANDRA = "IN|KA|Bengaluru|Thanisandra";
+    // begur-bannerghatta-belt member (V106) — South Bangalore.
+    private static final String BEGUR = "IN|KA|Bengaluru|Begur";
+    // V78 overlap-repair fixtures: Yelahanka/Hebbal must be counted only under
+    // north-growth (not airport-belt); Marathahalli only under tech-corridor (not outer-ring).
+    private static final String YELAHANKA = "IN|KA|Bengaluru|Yelahanka";
+    private static final String HEBBAL = "IN|KA|Bengaluru|Hebbal";
+    private static final String MARATHAHALLI = "IN|KA|Bengaluru|Marathahalli";
+    // airport-belt re-purpose member (V106).
+    private static final String DEVANAHALLI = "IN|KA|Bengaluru|Devanahalli";
+
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
     private DiscoverSummaryService service;
     private AreaSummaryService areaSummaryService;
     private RegionalClassificationBackfillService backfillService;
+    private AreaGroupsService areaGroupsService;
 
     @BeforeEach
     void setUp() {
         service = new DiscoverSummaryService(jdbcTemplate);
         areaSummaryService = new AreaSummaryService(jdbcTemplate);
         backfillService = new RegionalClassificationBackfillService(jdbcTemplate);
+        areaGroupsService = new AreaGroupsService(jdbcTemplate);
         jdbcTemplate.update("DELETE FROM property_listings");
     }
 
@@ -380,6 +404,223 @@ class DiscoverSummaryServiceIT {
         // not merged/overloaded onto each other.
         assertThat(saleAll.totalActiveListings()).isEqualTo(4L);
         assertThat(saleAll.propertyType()).isNull();
+    }
+
+    // ── #1761 V106: Bangalore macro-region mapping ──────────────────────────────
+
+    @Test
+    @DisplayName("IT-1: West Bangalore macro-region exists as an active area_group after Flyway")
+    void westBangalore_existsAsActiveAreaGroup() {
+        AreaGroupsResponse response = areaGroupsService.getGroupsByCity(CITY_BANGALORE);
+
+        List<AreaGroupResponse> westGroups = response.groups().stream()
+                .filter(g -> "West Bangalore".equals(g.regionLabel()))
+                .toList();
+
+        assertThat(westGroups).as("at least one active West Bangalore group").isNotEmpty();
+
+        AreaGroupResponse westCorridor = westGroups.stream()
+                .filter(g -> "west-corridor".equals(g.slug()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("west-corridor group not found"));
+        assertThat(westCorridor.name()).isNotBlank();
+        assertThat(westCorridor.displayOrder()).isPositive();
+        assertThat(westCorridor.areaKeys()).contains(RAJAJINAGAR);
+    }
+
+    @Test
+    @DisplayName("IT-2: a LIVE sale listing at a West Bangalore locality is counted exactly once")
+    void westBangalore_listingCountedExactlyOnce() {
+        insertListing(RAJAJINAGAR, "house", "LIVE", false, false, "sale");
+
+        DiscoverSummaryResponse response = service.getSummary(
+                new SummaryQuery(CITY_BANGALORE, null, "area_group", 20, "sale"));
+
+        assertThat(response.totalActiveListings()).isEqualTo(1L);
+        assertThat(regionCount(response, "west-corridor")).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("IT-3: area_group summary rows carry regionKey/regionLabel enabling a West rollup card")
+    void westBangalore_rollupShape_regionKeyAndLabelPresent() {
+        insertListing(RAJAJINAGAR, "house", "LIVE", false, false, "sale");
+
+        DiscoverSummaryResponse summary = service.getSummary(
+                new SummaryQuery(CITY_BANGALORE, null, "area_group", 20, "sale"));
+        assertThat(summary.regions().stream().map(DiscoverSummaryResponse.RegionCount::regionKey))
+                .contains("west-corridor");
+
+        // The true macro-region label ("West Bangalore") is surfaced via /api/discover/area-groups
+        // (AreaGroupsService), which the frontend rollup (macroRegionResolver) reads directly —
+        // DiscoverSummaryService's regionLabel column is the group's display name, not its
+        // macro-region. Both must agree the group belongs to West Bangalore.
+        AreaGroupsResponse groups = areaGroupsService.getGroupsByCity(CITY_BANGALORE);
+        AreaGroupResponse westCorridor = groups.groups().stream()
+                .filter(g -> "west-corridor".equals(g.slug()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(westCorridor.regionLabel()).isEqualTo("West Bangalore");
+    }
+
+    @Test
+    @DisplayName("IT-4: uniqueness invariant — no bangalore area_key belongs to more than one area_group")
+    void uniquenessInvariant_noBangaloreAreaKeyInMultipleGroups() {
+        List<String> duplicates = jdbcTemplate.queryForList(
+                """
+                SELECT agm.area_key
+                FROM area_group_members agm
+                JOIN area_groups ag ON ag.id = agm.area_group_id
+                JOIN cities c ON c.id = ag.city_id
+                WHERE c.slug = ?
+                GROUP BY agm.area_key
+                HAVING COUNT(*) > 1
+                """,
+                String.class, CITY_BANGALORE);
+
+        assertThat(duplicates).as("bangalore area_keys with >1 area_group_members row").isEmpty();
+    }
+
+    @Test
+    @DisplayName("IT-5: overlap repair — Yelahanka/Hebbal counted only under north-growth, "
+            + "Marathahalli only under tech-corridor; airport-belt holds only re-purposed members")
+    void overlapRepair_yelahankaHebbalMarathahalli_countedOnceInCorrectGroup() {
+        insertListing(YELAHANKA, "house", "LIVE", false, false, "sale");
+        insertListing(HEBBAL, "house", "LIVE", false, false, "sale");
+        insertListing(MARATHAHALLI, "house", "LIVE", false, false, "sale");
+
+        DiscoverSummaryResponse response = service.getSummary(
+                new SummaryQuery(CITY_BANGALORE, null, "area_group", 20, "sale"));
+
+        assertThat(regionCount(response, "north-growth")).isEqualTo(2L); // Yelahanka + Hebbal
+        assertThat(regionCount(response, "airport-belt")).isEqualTo(0L);
+        assertThat(regionCount(response, "tech-corridor")).isEqualTo(1L); // Marathahalli
+        assertThat(regionCount(response, "outer-ring")).isEqualTo(0L);
+
+        long regionSum = response.regions().stream()
+                .mapToLong(DiscoverSummaryResponse.RegionCount::listingCount).sum();
+        assertThat(regionSum).isEqualTo(response.totalActiveListings());
+
+        // airport-belt no longer carries Yelahanka/Hebbal but does carry its re-purposed members.
+        AreaGroupsResponse groups = areaGroupsService.getGroupsByCity(CITY_BANGALORE);
+        AreaGroupResponse airportBelt = groups.groups().stream()
+                .filter(g -> "airport-belt".equals(g.slug()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(airportBelt.areaKeys()).doesNotContain(YELAHANKA, HEBBAL);
+        assertThat(airportBelt.areaKeys()).contains(DEVANAHALLI);
+    }
+
+    @Test
+    @DisplayName("IT-6: exactly-once accounting — N seeded listings across newly-mapped localities "
+            + "sum to N with no inflation")
+    void exactlyOnceAccounting_newlyMappedLocalities_sumEqualsSeededCount() {
+        insertListing(KR_PURAM, "house", "LIVE", false, false, "sale");
+        insertListing(THANISANDRA, "house", "LIVE", false, false, "sale");
+        insertListing(THANISANDRA, "apartment", "LIVE", false, false, "sale");
+        insertListing(BEGUR, "house", "LIVE", false, false, "sale");
+        insertListing(RAJAJINAGAR, "house", "LIVE", false, false, "sale");
+        int seeded = 5;
+
+        DiscoverSummaryResponse response = service.getSummary(
+                new SummaryQuery(CITY_BANGALORE, null, "area_group", 20, "sale"));
+
+        assertThat(response.totalActiveListings()).isEqualTo(seeded);
+
+        long regionSum = response.regions().stream()
+                .mapToLong(DiscoverSummaryResponse.RegionCount::listingCount).sum();
+        assertThat(regionSum)
+                .as("per-group counts must sum to the seeded total with no double counting")
+                .isEqualTo(seeded);
+
+        assertThat(regionCount(response, "kr-puram-belt")).isEqualTo(1L);
+        assertThat(regionCount(response, "thanisandra-hennur-belt")).isEqualTo(2L);
+        assertThat(regionCount(response, "begur-bannerghatta-belt")).isEqualTo(1L);
+        assertThat(regionCount(response, "west-corridor")).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("IT-7: full Flyway chain incl. V106 applied cleanly — expected group/member "
+            + "counts present on a fresh Testcontainers DB")
+    void v106MigrationApplied_expectedGroupAndMemberCounts() {
+        Integer groupCount = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM area_groups ag
+                JOIN cities c ON c.id = ag.city_id
+                WHERE c.slug = ?
+                """,
+                Integer.class, CITY_BANGALORE);
+        // 5 existing (V78) + 11 new (V106) = 16.
+        assertThat(groupCount).isEqualTo(16);
+
+        Integer memberCount = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM area_group_members agm
+                JOIN area_groups ag ON ag.id = agm.area_group_id
+                JOIN cities c ON c.id = ag.city_id
+                WHERE c.slug = ?
+                """,
+                Integer.class, CITY_BANGALORE);
+        // V78 seeded 13 rows (tech-corridor 4 + north-growth 2 + south-premium 3 + outer-ring 2
+        // + airport-belt 2), minus 3 overlap-repair DELETEs, plus 304 new V106 memberships.
+        assertThat(memberCount).isEqualTo(13 - 3 + 304);
+    }
+
+    @Test
+    @DisplayName("V106 is idempotent when re-executed against an already-migrated container")
+    void v106Migration_isIdempotentWhenReExecuted() throws Exception {
+        Integer groupCountBefore = countBangaloreGroups();
+        Integer memberCountBefore = countBangaloreMembers();
+
+        // The migration's own DO $$ ... $$ block is dollar-quoted PL/pgSQL: Spring's ScriptUtils
+        // splits naively on ';' and does not understand $$ quoting, so the whole file is instead
+        // sent as ONE multi-statement command via the JDBC simple-query protocol (jdbcTemplate's
+        // Statement#execute), which Postgres parses server-side — the standard way to safely
+        // re-run a script containing PL/pgSQL blocks.
+        String script;
+        try (var in = new ClassPathResource("db/migration/V106__seed_bangalore_macro_region_mapping.sql")
+                .getInputStream()) {
+            script = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+
+        assertDoesNotThrow(() -> {
+            try (Connection conn = jdbcTemplate.getDataSource().getConnection();
+                 var stmt = conn.createStatement()) {
+                stmt.execute(script);
+            }
+        });
+
+        assertThat(countBangaloreGroups()).isEqualTo(groupCountBefore);
+        assertThat(countBangaloreMembers()).isEqualTo(memberCountBefore);
+
+        List<String> duplicatesAfterRerun = jdbcTemplate.queryForList(
+                """
+                SELECT agm.area_key
+                FROM area_group_members agm
+                JOIN area_groups ag ON ag.id = agm.area_group_id
+                JOIN cities c ON c.id = ag.city_id
+                WHERE c.slug = ?
+                GROUP BY agm.area_key
+                HAVING COUNT(*) > 1
+                """,
+                String.class, CITY_BANGALORE);
+        assertThat(duplicatesAfterRerun).isEmpty();
+    }
+
+    private Integer countBangaloreGroups() {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM area_groups ag JOIN cities c ON c.id = ag.city_id WHERE c.slug = ?",
+                Integer.class, CITY_BANGALORE);
+    }
+
+    private Integer countBangaloreMembers() {
+        return jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM area_group_members agm
+                JOIN area_groups ag ON ag.id = agm.area_group_id
+                JOIN cities c ON c.id = ag.city_id
+                WHERE c.slug = ?
+                """,
+                Integer.class, CITY_BANGALORE);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

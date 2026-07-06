@@ -1,0 +1,305 @@
+area_key,name,sale_cnt,all_cnt,group_slug,region_label,bearing_source_region,overridden
+IN|KA|Bengaluru|Devanahalli,Devanahalli,10,10,airport-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Kogilu,Kogilu,9,9,airport-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Bagalur,Bagalur,7,7,airport-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Rajanukunte,Rajanukunte,4,4,airport-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Bettahalsoor,Bettahalsoor,3,3,airport-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Kattigenahalli,Kattigenahalli,1,1,airport-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Begur,Begur,31,31,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|JP Nagar,JP Nagar,24,24,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Akshayanagar,Akshayanagar,14,14,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Gottigere,Gottigere,11,11,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Kothanur,Kothanur,9,9,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Arakere,Arakere,7,7,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Kudlu Gate,Kudlu Gate,7,7,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|BTM Layout,BTM Layout,6,6,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Bilekahalli,Bilekahalli,4,4,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Kalena Agrahara,Kalena Agrahara,4,4,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Basapura,Basapura,3,3,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Doddanagamangala,Doddanagamangala,3,3,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Hulimavu,Hulimavu,3,3,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Kudlu,Kudlu,3,3,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Vittasandra,Vittasandra,3,3,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|BTM Layout 2nd Stage,BTM Layout 2nd Stage,2,2,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Hongasandra,Hongasandra,2,2,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Konanakunte,Konanakunte,2,2,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Tejaswini Nagar,Tejaswini Nagar,2,2,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Bommanahalli,Bommanahalli,1,1,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Devarachikkana Halli,Devarachikkana Halli,1,1,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Doddakammanahalli,Doddakammanahalli,1,1,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Lal Bahadur Shastri Nagar,Lal Bahadur Shastri Nagar,1,1,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Muneshwara Nagar,Muneshwara Nagar,1,1,begur-bannerghatta-belt,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Hoskote,Hoskote,21,21,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Bommenahalli,Bommenahalli,19,19,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Sompura,Sompura,13,13,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Thirumalashettyhally,Thirumalashettyhally,12,12,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Budigere Cross,Budigere Cross,11,11,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Indira Nagar,Indira Nagar,10,10,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kadagrahara,Kadagrahara,8,8,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Aavalahalli,Aavalahalli,7,7,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kodathi,Kodathi,7,7,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|V. Kallahalli,V. Kallahalli,7,7,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Cheemasandra,Cheemasandra,6,6,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kannamangala - Whitefield Hoskote Road,Kannamangala - Whitefield Hoskote Road,6,6,east-emerging,East Bangalore,East Bangalore,False
+"IN|KA|Bengaluru|Kacharakanahalli,Bisnahalli","Kacharakanahalli,Bisnahalli",5,5,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|BEML Cooperative Society Layout,BEML Cooperative Society Layout,4,4,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Bidaraguppe,Bidaraguppe,4,4,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Bidare Agraha,Bidare Agraha,4,4,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Ittangur,Ittangur,4,4,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Richmond Town,Richmond Town,4,4,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Chambenahalli,Chambenahalli,3,3,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kaggalipura,Kaggalipura,3,3,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Chikkadunnasandra,Chikkadunnasandra,2,2,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Domlur Layout,Domlur Layout,2,2,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Ejipura,Ejipura,2,2,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Gopasandra,Gopasandra,2,2,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Konadasapura,Konadasapura,2,2,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Samethanahalli,Samethanahalli,2,2,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Yelachanayakanapura,Yelachanayakanapura,2,2,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Adigara Kallahalli,Adigara Kallahalli,1,1,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Chikkabana Halli,Chikkabana Halli,1,1,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Choudadenahalli,Choudadenahalli,1,1,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Chowdenahalli,Chowdenahalli,1,1,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Cox Town,Cox Town,1,1,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Gonighattapura,Gonighattapura,1,1,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Halasuru,Halasuru,1,1,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Hancharahalli Village,Hancharahalli Village,1,1,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Haralur,Haralur,1,1,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kammanahalli,Kammanahalli,1,1,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Katamnallur,Katamnallur,1,1,east-emerging,East Bangalore,East Bangalore,False
+"IN|KA|Bengaluru|Mallasandra, Hosakote","Mallasandra, Hosakote",1,1,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Malur,Malur,1,1,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Sannatammanahalli,Sannatammanahalli,1,1,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Yamare,Yamare,1,1,east-emerging,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Bommasandra,Bommasandra,14,14,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Singasandra,Singasandra,12,12,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Electronic City Phase 2,Electronic City Phase 2,9,9,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Gulimangala,Gulimangala,4,4,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Jigani,Jigani,4,4,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Attibele,Attibele,3,3,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Anekal,Anekal,2,2,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Bendiganahalli,Bendiganahalli,2,2,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Chandapura,Chandapura,2,2,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Hebbagodi,Hebbagodi,2,2,electronic-city-extension,South Bangalore,South Bangalore,False
+"IN|KA|Bengaluru|Kommasandra, Anekal","Kommasandra, Anekal",2,2,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Madivala,Madivala,2,2,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Marsur,Marsur,2,2,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Attibele Industrial Area,Attibele Industrial Area,1,1,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Byagadadhenahalli,Byagadadhenahalli,1,1,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Chikkanagamangala,Chikkanagamangala,1,1,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|RS Gardens,RS Gardens,1,1,electronic-city-extension,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|K R Puram,K R Puram,53,53,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Horamavu,Horamavu,26,26,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kaggadasapura,Kaggadasapura,11,11,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Banaswadi,Banaswadi,9,9,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Medahalli,Medahalli,8,8,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Hallehalli,Hallehalli,6,6,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Battarahalli,Battarahalli,5,5,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Hoodi,Hoodi,5,5,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kalkere,Kalkere,5,5,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|K Channasandra,K Channasandra,4,4,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|NRI Layout,NRI Layout,4,4,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|C V Raman Nagar,C V Raman Nagar,3,3,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kasturi Nagar,Kasturi Nagar,3,3,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Mahadevapura,Mahadevapura,3,3,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Margondanahalli,Margondanahalli,3,3,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Bennigana Halli,Bennigana Halli,2,2,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Dodda Banaswadi,Dodda Banaswadi,2,2,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Ramamurthy Nagar,Ramamurthy Nagar,2,2,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Dooravani Nagar,Dooravani Nagar,1,1,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|GB Palya,GB Palya,1,1,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kithiganur,Kithiganur,1,1,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Varanasi,Varanasi,1,1,kr-puram-belt,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Gummanahalli,Gummanahalli,25,25,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Vidyaranyapura,Vidyaranyapura,11,11,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Navarathna Agrahara,Navarathna Agrahara,9,9,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Kannuru,Kannuru,7,7,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Mallasandra,Mallasandra,6,6,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Yeswanthpur,Yeswanthpur,6,6,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|RMV Extension Stage 2,RMV Extension Stage 2,5,5,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Allalasandra,Allalasandra,4,4,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Devinagar,Devinagar,4,4,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Mahalakshmi Layout,Mahalakshmi Layout,4,4,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Ramanashree California Gardens Layout,Ramanashree California Gardens Layout,4,4,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Sanjaynagar,Sanjaynagar,4,4,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Anagalapura,Anagalapura,3,3,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Boovanahalli,Boovanahalli,3,3,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Yelahanka New Town,Yelahanka New Town,3,3,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Anantapura,Anantapura,2,2,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Benson Town,Benson Town,2,2,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Boodihal,Boodihal,2,2,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Geddalahalli,Geddalahalli,2,2,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Hunasamaranahalli,Hunasamaranahalli,2,2,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Jalahalli West,Jalahalli West,2,2,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Sathnur,Sathnur,2,2,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Shettigere,Shettigere,2,2,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Vasanth Nagar,Vasanth Nagar,2,2,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Abbigere,Abbigere,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Bandaramanahalli,Bandaramanahalli,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Bengaluru Hardware Park,Bengaluru Hardware Park,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Chikkabanavara,Chikkabanavara,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Chikkabettahalli,Chikkabettahalli,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|D Group Employees Layout,D Group Employees Layout,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Harohalli,Harohalli,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Huvinayakanahalli,Huvinayakanahalli,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Jayamahal,Jayamahal,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Kannamangala - Ballari road,Kannamangala - Ballari road,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Kasuvanahalli,Kasuvanahalli,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Kempalingapura,Kempalingapura,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Kodalagurki,Kodalagurki,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Kodigehalli,Kodigehalli,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Madhura Nagar,Madhura Nagar,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Mathikere,Mathikere,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Muddanahalli,Muddanahalli,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Mukkidipeta,Mukkidipeta,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Sadenahalli,Sadenahalli,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Shivaji Nagar,Shivaji Nagar,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Singapura,Singapura,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Srinivaspur,Srinivaspur,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Upparahalli,Upparahalli,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Virupakshapura,Virupakshapura,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Yerthiganahalli,Yerthiganahalli,1,1,north-emerging,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Sarjapur,Sarjapur,33,33,sarjapur-corridor,East Bangalore,South Bangalore,True
+IN|KA|Bengaluru|Harlur,Harlur,18,18,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Bellandur,Bellandur,17,17,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Carmelaram,Carmelaram,17,17,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Chikkakannalli,Chikkakannalli,14,14,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Dommasandra,Dommasandra,13,13,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Doddakannelli,Doddakannelli,10,10,sarjapur-corridor,East Bangalore,East Bangalore,False
+"IN|KA|Bengaluru|Chikkanayakanahalli, Choodasandra","Chikkanayakanahalli, Choodasandra",8,8,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kadubeesanahalli,Kadubeesanahalli,7,7,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kasavanahalli,Kasavanahalli,6,6,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Brookefield,Brookefield,5,5,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kodihalli,Kodihalli,5,5,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|KPC Layout,KPC Layout,5,5,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Junnasandra,Junnasandra,3,3,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Munnekollal,Munnekollal,3,3,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Bhoganhalli,Bhoganhalli,2,2,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kartik Nagar,Kartik Nagar,2,2,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Yemalur,Yemalur,2,2,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Challaghatta,Challaghatta,1,1,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Chikkabellandur,Chikkabellandur,1,1,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Doddanekundi,Doddanekundi,1,1,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Jeevan Bima Nagar,Jeevan Bima Nagar,1,1,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kaikondrahalli,Kaikondrahalli,1,1,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Lakeview Residency,Lakeview Residency,1,1,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|New Tippasandra,New Tippasandra,1,1,sarjapur-corridor,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Talaghattapura,Talaghattapura,20,20,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Subramanyapura,Subramanyapura,15,15,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Choodasandra,Choodasandra,13,13,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Rayasandra,Rayasandra,9,9,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Parappana Agrahara,Parappana Agrahara,8,8,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Sudhama Nagar,Sudhama Nagar,8,8,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Vajarahalli,Vajarahalli,7,7,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Gattahalli,Gattahalli,6,6,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Uttarahalli -Manavarthekaval,Uttarahalli -Manavarthekaval,6,6,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Uttarahalli Hobli,Uttarahalli Hobli,5,5,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Jyotipuram,Jyotipuram,4,4,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|S.Medihalli,S.Medihalli,4,4,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Vakil Garden City,Vakil Garden City,3,3,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Badamanavarathekaval,Badamanavarathekaval,2,2,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Basavanagudi,Basavanagudi,2,2,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Chikkalasandra,Chikkalasandra,2,2,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Gangasandra,Gangasandra,2,2,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Kumaraswamy Layout,Kumaraswamy Layout,2,2,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Lavelle Road,Lavelle Road,2,2,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|S.Bingipura,S.Bingipura,2,2,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Sanjeevini Nagar,Sanjeevini Nagar,2,2,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Agrahara,Agrahara,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Banashankari Temple Ward,Banashankari Temple Ward,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Bangalore City Municipal Corporation Layout,Bangalore City Municipal Corporation Layout,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Bikasipura,Bikasipura,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Doddakallasandra,Doddakallasandra,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Jigala,Jigala,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Kanakapura,Kanakapura,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Koppa Gate,Koppa Gate,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|KSRTC Colony,KSRTC Colony,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Langford Gardens,Langford Gardens,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Lingadheeranahalli,Lingadheeranahalli,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|S.G. Palya,S.G. Palya,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Shanti Nagar,Shanti Nagar,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Soppahalli,Soppahalli,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Thurahalli,Thurahalli,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Vaderamanchana Halli,Vaderamanchana Halli,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Virupakshipura,Virupakshipura,1,1,south-emerging,South Bangalore,South Bangalore,False
+IN|KA|Bengaluru|Thanisandra,Thanisandra,46,46,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Jakkur,Jakkur,16,16,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|R.K. Hegde Nagar,R.K. Hegde Nagar,13,13,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Sahakara Nagar,Sahakara Nagar,9,9,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Chokkanahalli,Chokkanahalli,8,8,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Kyalasanahalli,Kyalasanahalli,8,8,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Chikkagubbi Village,Chikkagubbi Village,7,7,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Narayanapura,Narayanapura,7,7,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Tirumanahalli,Tirumanahalli,7,7,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Visthar,Visthar,6,6,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Agrahara Layout,Agrahara Layout,5,5,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Byrathi,Byrathi,5,5,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Cooke Town,Cooke Town,5,5,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Kalyan Nagar,Kalyan Nagar,5,5,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Byatarayanapura,Byatarayanapura,4,4,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Frazer Town,Frazer Town,4,4,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|HBR Layout,HBR Layout,4,4,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Hennur,Hennur,4,4,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Essel Gardens,Essel Gardens,3,3,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Kothnur Narayanapura,Kothnur Narayanapura,3,3,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Bileshivale,Bileshivale,2,2,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Dodda Gubbi,Dodda Gubbi,2,2,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Nagareshwara - Nagenahalli,Nagareshwara - Nagenahalli,2,2,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Amani Byrathikhane,Amani Byrathikhane,1,1,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Ganganagar,Ganganagar,1,1,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Hebbal Kempapura,Hebbal Kempapura,1,1,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Kaval Bairasandra,Kaval Bairasandra,1,1,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Nagavara,Nagavara,1,1,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|Vignana Kendra,Vignana Kendra,1,1,thanisandra-hennur-belt,North Bangalore,North Bangalore,False
+IN|KA|Bengaluru|RR Nagar,RR Nagar,23,23,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Rajajinagar,Rajajinagar,9,9,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Banashankari,Banashankari,8,8,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Hosakerehalli,Hosakerehalli,7,7,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Hosahalli,Hosahalli,6,6,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Vijayanagar,Vijayanagar,6,6,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Kengeri,Kengeri,5,5,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Nehru Nagar,Nehru Nagar,4,4,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Gnana Bharathi,Gnana Bharathi,3,3,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Malleswaram,Malleswaram,2,2,west-corridor,West Bangalore,North Bangalore,True
+IN|KA|Bengaluru|B.Hosahalli,B.Hosahalli,2,2,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Binnipete,Binnipete,2,2,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Avalahalli,Avalahalli,1,1,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Basaveshwara Nagar,Basaveshwara Nagar,1,1,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Chandra Layout Extension,Chandra Layout Extension,1,1,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Deepanjali Nagar,Deepanjali Nagar,1,1,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Jnana Ganga Nagar,Jnana Ganga Nagar,1,1,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Mallathahalli,Mallathahalli,1,1,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Nagarbhavi,Nagarbhavi,1,1,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Tunganagara,Tunganagara,1,1,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Ullal Uppanagar,Ullal Uppanagar,1,1,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Ullalu,Ullalu,1,1,west-corridor,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Kambipura,Kambipura,9,9,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Anchepalya,Anchepalya,6,6,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Srinivaspura,Srinivaspura,5,5,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Kengeri Satellite Town,Kengeri Satellite Town,4,4,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Kumbalgodu,Kumbalgodu,4,4,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Nelamangala,Nelamangala,2,2,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|T Dasarahalli,T Dasarahalli,2,2,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Bagalakunte,Bagalakunte,1,1,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Chokkasandra,Chokkasandra,1,1,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Doddabele,Doddabele,1,1,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Mailasandra,Mailasandra,1,1,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Manganahalli,Manganahalli,1,1,west-emerging,West Bangalore,West Bangalore,False
+"IN|KA|Bengaluru|Nagasandra, Bengaluru North","Nagasandra, Bengaluru North",1,1,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Peenya,Peenya,1,1,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Ramohalli,Ramohalli,1,1,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Sidedahalli,Sidedahalli,1,1,west-emerging,West Bangalore,West Bangalore,False
+"IN|KA|Bengaluru|Venkatapura, Kambipura","Venkatapura, Kambipura",1,1,west-emerging,West Bangalore,West Bangalore,False
+IN|KA|Bengaluru|Varthur,Varthur,56,56,whitefield-extension,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Balagere,Balagere,25,25,whitefield-extension,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Gunjur,Gunjur,11,11,whitefield-extension,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Gunjur Village,Gunjur Village,10,10,whitefield-extension,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kadugodi,Kadugodi,9,9,whitefield-extension,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Panathur,Panathur,9,9,whitefield-extension,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Gunjur Palya,Gunjur Palya,6,6,whitefield-extension,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kachamaranahalli,Kachamaranahalli,4,4,whitefield-extension,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Chansandra,Chansandra,3,3,whitefield-extension,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Mullur,Mullur,3,3,whitefield-extension,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Halasahalli,Halasahalli,1,1,whitefield-extension,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Kadugodi Industrial Area,Kadugodi Industrial Area,1,1,whitefield-extension,East Bangalore,East Bangalore,False
+IN|KA|Bengaluru|Nekkundi Dommasandra,Nekkundi Dommasandra,1,1,whitefield-extension,East Bangalore,East Bangalore,False

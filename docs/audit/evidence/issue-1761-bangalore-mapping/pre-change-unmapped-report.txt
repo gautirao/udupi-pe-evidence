@@ -1,0 +1,306 @@
+area_key|name|live_listings
+IN|KA|Bengaluru|Varthur|Varthur|56
+IN|KA|Bengaluru|K R Puram|K R Puram|53
+IN|KA|Bengaluru|Thanisandra|Thanisandra|46
+IN|KA|Bengaluru|Sarjapur|Sarjapur|33
+IN|KA|Bengaluru|Begur|Begur|31
+IN|KA|Bengaluru|Horamavu|Horamavu|26
+IN|KA|Bengaluru|Gummanahalli|Gummanahalli|25
+IN|KA|Bengaluru|Balagere|Balagere|25
+IN|KA|Bengaluru|JP Nagar|JP Nagar|24
+IN|KA|Bengaluru|RR Nagar|RR Nagar|23
+IN|KA|Bengaluru|Hoskote|Hoskote|21
+IN|KA|Bengaluru|Talaghattapura|Talaghattapura|20
+IN|KA|Bengaluru|Bommenahalli|Bommenahalli|19
+IN|KA|Bengaluru|Harlur|Harlur|18
+IN|KA|Bengaluru|Carmelaram|Carmelaram|17
+IN|KA|Bengaluru|Bellandur|Bellandur|17
+IN|KA|Bengaluru|Jakkur|Jakkur|16
+IN|KA|Bengaluru|Subramanyapura|Subramanyapura|15
+IN|KA|Bengaluru|Akshayanagar|Akshayanagar|14
+IN|KA|Bengaluru|Chikkakannalli|Chikkakannalli|14
+IN|KA|Bengaluru|Bommasandra|Bommasandra|14
+IN|KA|Bengaluru|Sompura|Sompura|13
+IN|KA|Bengaluru|R.K. Hegde Nagar|R.K. Hegde Nagar|13
+IN|KA|Bengaluru|Choodasandra|Choodasandra|13
+IN|KA|Bengaluru|Dommasandra|Dommasandra|13
+IN|KA|Bengaluru|Thirumalashettyhally|Thirumalashettyhally|12
+IN|KA|Bengaluru|Singasandra|Singasandra|12
+IN|KA|Bengaluru|Gunjur|Gunjur|11
+IN|KA|Bengaluru|Kaggadasapura|Kaggadasapura|11
+IN|KA|Bengaluru|Vidyaranyapura|Vidyaranyapura|11
+IN|KA|Bengaluru|Budigere Cross|Budigere Cross|11
+IN|KA|Bengaluru|Gottigere|Gottigere|11
+IN|KA|Bengaluru|Gunjur Village|Gunjur Village|10
+IN|KA|Bengaluru|Devanahalli|Devanahalli|10
+IN|KA|Bengaluru|Indira Nagar|Indira Nagar|10
+IN|KA|Bengaluru|Doddakannelli|Doddakannelli|10
+IN|KA|Bengaluru|Rajajinagar|Rajajinagar|9
+IN|KA|Bengaluru|Kothanur|Kothanur|9
+IN|KA|Bengaluru|Kogilu|Kogilu|9
+IN|KA|Bengaluru|Kambipura|Kambipura|9
+IN|KA|Bengaluru|Kadugodi|Kadugodi|9
+IN|KA|Bengaluru|Rayasandra|Rayasandra|9
+IN|KA|Bengaluru|Banaswadi|Banaswadi|9
+IN|KA|Bengaluru|Sahakara Nagar|Sahakara Nagar|9
+IN|KA|Bengaluru|Electronic City Phase 2|Electronic City Phase 2|9
+IN|KA|Bengaluru|Panathur|Panathur|9
+IN|KA|Bengaluru|Navarathna Agrahara|Navarathna Agrahara|9
+IN|KA|Bengaluru|Banashankari|Banashankari|8
+IN|KA|Bengaluru|Parappana Agrahara|Parappana Agrahara|8
+IN|KA|Bengaluru|Sudhama Nagar|Sudhama Nagar|8
+IN|KA|Bengaluru|Kyalasanahalli|Kyalasanahalli|8
+IN|KA|Bengaluru|Medahalli|Medahalli|8
+IN|KA|Bengaluru|Chokkanahalli|Chokkanahalli|8
+IN|KA|Bengaluru|Chikkanayakanahalli, Choodasandra|Chikkanayakanahalli, Choodasandra|8
+IN|KA|Bengaluru|Kadagrahara|Kadagrahara|8
+IN|KA|Bengaluru|Arakere|Arakere|7
+IN|KA|Bengaluru|Aavalahalli|Aavalahalli|7
+IN|KA|Bengaluru|Kadubeesanahalli|Kadubeesanahalli|7
+IN|KA|Bengaluru|Tirumanahalli|Tirumanahalli|7
+IN|KA|Bengaluru|Vajarahalli|Vajarahalli|7
+IN|KA|Bengaluru|Kannuru|Kannuru|7
+IN|KA|Bengaluru|Bagalur|Bagalur|7
+IN|KA|Bengaluru|V. Kallahalli|V. Kallahalli|7
+IN|KA|Bengaluru|Kodathi|Kodathi|7
+IN|KA|Bengaluru|Kudlu Gate|Kudlu Gate|7
+IN|KA|Bengaluru|Chikkagubbi Village|Chikkagubbi Village|7
+IN|KA|Bengaluru|Narayanapura|Narayanapura|7
+IN|KA|Bengaluru|Hosakerehalli|Hosakerehalli|7
+IN|KA|Bengaluru|Yeswanthpur|Yeswanthpur|6
+IN|KA|Bengaluru|Anchepalya|Anchepalya|6
+IN|KA|Bengaluru|BTM Layout|BTM Layout|6
+IN|KA|Bengaluru|Cheemasandra|Cheemasandra|6
+IN|KA|Bengaluru|Gattahalli|Gattahalli|6
+IN|KA|Bengaluru|Gunjur Palya|Gunjur Palya|6
+IN|KA|Bengaluru|Hallehalli|Hallehalli|6
+IN|KA|Bengaluru|Hosahalli|Hosahalli|6
+IN|KA|Bengaluru|Kannamangala - Whitefield Hoskote Road|Kannamangala - Whitefield Hoskote Road|6
+IN|KA|Bengaluru|Kasavanahalli|Kasavanahalli|6
+IN|KA|Bengaluru|Mallasandra|Mallasandra|6
+IN|KA|Bengaluru|Uttarahalli -Manavarthekaval|Uttarahalli -Manavarthekaval|6
+IN|KA|Bengaluru|Vijayanagar|Vijayanagar|6
+IN|KA|Bengaluru|Visthar|Visthar|6
+IN|KA|Bengaluru|Kacharakanahalli,Bisnahalli|Kacharakanahalli,Bisnahalli|5
+IN|KA|Bengaluru|Kalyan Nagar|Kalyan Nagar|5
+IN|KA|Bengaluru|RMV Extension Stage 2|RMV Extension Stage 2|5
+IN|KA|Bengaluru|Srinivaspura|Srinivaspura|5
+IN|KA|Bengaluru|Uttarahalli Hobli|Uttarahalli Hobli|5
+IN|KA|Bengaluru|Kodihalli|Kodihalli|5
+IN|KA|Bengaluru|Kalkere|Kalkere|5
+IN|KA|Bengaluru|Brookefield|Brookefield|5
+IN|KA|Bengaluru|Kengeri|Kengeri|5
+IN|KA|Bengaluru|KPC Layout|KPC Layout|5
+IN|KA|Bengaluru|Agrahara Layout|Agrahara Layout|5
+IN|KA|Bengaluru|Hoodi|Hoodi|5
+IN|KA|Bengaluru|Cooke Town|Cooke Town|5
+IN|KA|Bengaluru|Battarahalli|Battarahalli|5
+IN|KA|Bengaluru|Byrathi|Byrathi|5
+IN|KA|Bengaluru|Bidare Agraha|Bidare Agraha|4
+IN|KA|Bengaluru|Devinagar|Devinagar|4
+IN|KA|Bengaluru|BEML Cooperative Society Layout|BEML Cooperative Society Layout|4
+IN|KA|Bengaluru|Kengeri Satellite Town|Kengeri Satellite Town|4
+IN|KA|Bengaluru|Hennur|Hennur|4
+IN|KA|Bengaluru|Nehru Nagar|Nehru Nagar|4
+IN|KA|Bengaluru|Rajanukunte|Rajanukunte|4
+IN|KA|Bengaluru|K Channasandra|K Channasandra|4
+IN|KA|Bengaluru|Frazer Town|Frazer Town|4
+IN|KA|Bengaluru|Ramanashree California Gardens Layout|Ramanashree California Gardens Layout|4
+IN|KA|Bengaluru|Bilekahalli|Bilekahalli|4
+IN|KA|Bengaluru|Richmond Town|Richmond Town|4
+IN|KA|Bengaluru|Bidaraguppe|Bidaraguppe|4
+IN|KA|Bengaluru|Byatarayanapura|Byatarayanapura|4
+IN|KA|Bengaluru|Jyotipuram|Jyotipuram|4
+IN|KA|Bengaluru|Mahalakshmi Layout|Mahalakshmi Layout|4
+IN|KA|Bengaluru|Kumbalgodu|Kumbalgodu|4
+IN|KA|Bengaluru|HBR Layout|HBR Layout|4
+IN|KA|Bengaluru|NRI Layout|NRI Layout|4
+IN|KA|Bengaluru|S.Medihalli|S.Medihalli|4
+IN|KA|Bengaluru|Allalasandra|Allalasandra|4
+IN|KA|Bengaluru|Kalena Agrahara|Kalena Agrahara|4
+IN|KA|Bengaluru|Jigani|Jigani|4
+IN|KA|Bengaluru|Sanjaynagar|Sanjaynagar|4
+IN|KA|Bengaluru|Kachamaranahalli|Kachamaranahalli|4
+IN|KA|Bengaluru|Gulimangala|Gulimangala|4
+IN|KA|Bengaluru|Ittangur|Ittangur|4
+IN|KA|Bengaluru|Essel Gardens|Essel Gardens|3
+IN|KA|Bengaluru|Doddanagamangala|Doddanagamangala|3
+IN|KA|Bengaluru|Junnasandra|Junnasandra|3
+IN|KA|Bengaluru|Attibele|Attibele|3
+IN|KA|Bengaluru|Anagalapura|Anagalapura|3
+IN|KA|Bengaluru|Kasturi Nagar|Kasturi Nagar|3
+IN|KA|Bengaluru|Gnana Bharathi|Gnana Bharathi|3
+IN|KA|Bengaluru|Chambenahalli|Chambenahalli|3
+IN|KA|Bengaluru|Vakil Garden City|Vakil Garden City|3
+IN|KA|Bengaluru|Hulimavu|Hulimavu|3
+IN|KA|Bengaluru|Basapura|Basapura|3
+IN|KA|Bengaluru|Chansandra|Chansandra|3
+IN|KA|Bengaluru|Margondanahalli|Margondanahalli|3
+IN|KA|Bengaluru|Bettahalsoor|Bettahalsoor|3
+IN|KA|Bengaluru|Mahadevapura|Mahadevapura|3
+IN|KA|Bengaluru|Kothnur Narayanapura|Kothnur Narayanapura|3
+IN|KA|Bengaluru|Kudlu|Kudlu|3
+IN|KA|Bengaluru|Vittasandra|Vittasandra|3
+IN|KA|Bengaluru|Yelahanka New Town|Yelahanka New Town|3
+IN|KA|Bengaluru|Kaggalipura|Kaggalipura|3
+IN|KA|Bengaluru|C V Raman Nagar|C V Raman Nagar|3
+IN|KA|Bengaluru|Mullur|Mullur|3
+IN|KA|Bengaluru|Munnekollal|Munnekollal|3
+IN|KA|Bengaluru|Boovanahalli|Boovanahalli|3
+IN|KA|Bengaluru|Kartik Nagar|Kartik Nagar|2
+IN|KA|Bengaluru|BTM Layout 2nd Stage|BTM Layout 2nd Stage|2
+IN|KA|Bengaluru|Lavelle Road|Lavelle Road|2
+IN|KA|Bengaluru|Hunasamaranahalli|Hunasamaranahalli|2
+IN|KA|Bengaluru|Madivala|Madivala|2
+IN|KA|Bengaluru|Malleswaram|Malleswaram|2
+IN|KA|Bengaluru|Jalahalli West|Jalahalli West|2
+IN|KA|Bengaluru|Marsur|Marsur|2
+IN|KA|Bengaluru|Gopasandra|Gopasandra|2
+IN|KA|Bengaluru|Bendiganahalli|Bendiganahalli|2
+IN|KA|Bengaluru|Chandapura|Chandapura|2
+IN|KA|Bengaluru|Boodihal|Boodihal|2
+IN|KA|Bengaluru|Nagareshwara - Nagenahalli|Nagareshwara - Nagenahalli|2
+IN|KA|Bengaluru|Nelamangala|Nelamangala|2
+IN|KA|Bengaluru|Basavanagudi|Basavanagudi|2
+IN|KA|Bengaluru|Binnipete|Binnipete|2
+IN|KA|Bengaluru|Ramamurthy Nagar|Ramamurthy Nagar|2
+IN|KA|Bengaluru|Bileshivale|Bileshivale|2
+IN|KA|Bengaluru|Dodda Gubbi|Dodda Gubbi|2
+IN|KA|Bengaluru|Ejipura|Ejipura|2
+IN|KA|Bengaluru|S.Bingipura|S.Bingipura|2
+IN|KA|Bengaluru|Samethanahalli|Samethanahalli|2
+IN|KA|Bengaluru|Sanjeevini Nagar|Sanjeevini Nagar|2
+IN|KA|Bengaluru|Badamanavarathekaval|Badamanavarathekaval|2
+IN|KA|Bengaluru|Sathnur|Sathnur|2
+IN|KA|Bengaluru|Shettigere|Shettigere|2
+IN|KA|Bengaluru|B.Hosahalli|B.Hosahalli|2
+IN|KA|Bengaluru|Geddalahalli|Geddalahalli|2
+IN|KA|Bengaluru|T Dasarahalli|T Dasarahalli|2
+IN|KA|Bengaluru|Anekal|Anekal|2
+IN|KA|Bengaluru|Tejaswini Nagar|Tejaswini Nagar|2
+IN|KA|Bengaluru|Anantapura|Anantapura|2
+IN|KA|Bengaluru|Yelachanayakanapura|Yelachanayakanapura|2
+IN|KA|Bengaluru|Gangasandra|Gangasandra|2
+IN|KA|Bengaluru|Dodda Banaswadi|Dodda Banaswadi|2
+IN|KA|Bengaluru|Yemalur|Yemalur|2
+IN|KA|Bengaluru|Hebbagodi|Hebbagodi|2
+IN|KA|Bengaluru|Vasanth Nagar|Vasanth Nagar|2
+IN|KA|Bengaluru|Domlur Layout|Domlur Layout|2
+IN|KA|Bengaluru|Bhoganhalli|Bhoganhalli|2
+IN|KA|Bengaluru|Hongasandra|Hongasandra|2
+IN|KA|Bengaluru|Chikkalasandra|Chikkalasandra|2
+IN|KA|Bengaluru|Chikkadunnasandra|Chikkadunnasandra|2
+IN|KA|Bengaluru|Kommasandra, Anekal|Kommasandra, Anekal|2
+IN|KA|Bengaluru|Konadasapura|Konadasapura|2
+IN|KA|Bengaluru|Konanakunte|Konanakunte|2
+IN|KA|Bengaluru|Benson Town|Benson Town|2
+IN|KA|Bengaluru|Bennigana Halli|Bennigana Halli|2
+IN|KA|Bengaluru|Kumaraswamy Layout|Kumaraswamy Layout|2
+IN|KA|Bengaluru|Cox Town|Cox Town|1
+IN|KA|Bengaluru|Deepanjali Nagar|Deepanjali Nagar|1
+IN|KA|Bengaluru|Chikkabanavara|Chikkabanavara|1
+IN|KA|Bengaluru|Devarachikkana Halli|Devarachikkana Halli|1
+IN|KA|Bengaluru|Doddabele|Doddabele|1
+IN|KA|Bengaluru|Doddakallasandra|Doddakallasandra|1
+IN|KA|Bengaluru|Doddakammanahalli|Doddakammanahalli|1
+IN|KA|Bengaluru|Chikkabana Halli|Chikkabana Halli|1
+IN|KA|Bengaluru|Doddanekundi|Doddanekundi|1
+IN|KA|Bengaluru|Dooravani Nagar|Dooravani Nagar|1
+IN|KA|Bengaluru|Chandra Layout Extension|Chandra Layout Extension|1
+IN|KA|Bengaluru|Ganganagar|Ganganagar|1
+IN|KA|Bengaluru|Virupakshapura|Virupakshapura|1
+IN|KA|Bengaluru|GB Palya|GB Palya|1
+IN|KA|Bengaluru|Gonighattapura|Gonighattapura|1
+IN|KA|Bengaluru|Challaghatta|Challaghatta|1
+IN|KA|Bengaluru|Virupakshipura|Virupakshipura|1
+IN|KA|Bengaluru|Halasahalli|Halasahalli|1
+IN|KA|Bengaluru|Halasuru|Halasuru|1
+IN|KA|Bengaluru|Abbigere|Abbigere|1
+IN|KA|Bengaluru|Hancharahalli Village|Hancharahalli Village|1
+IN|KA|Bengaluru|Haralur|Haralur|1
+IN|KA|Bengaluru|Harohalli|Harohalli|1
+IN|KA|Bengaluru|Hebbal Kempapura|Hebbal Kempapura|1
+IN|KA|Bengaluru|Byagadadhenahalli|Byagadadhenahalli|1
+IN|KA|Bengaluru|Huvinayakanahalli|Huvinayakanahalli|1
+IN|KA|Bengaluru|Jayamahal|Jayamahal|1
+IN|KA|Bengaluru|Jeevan Bima Nagar|Jeevan Bima Nagar|1
+IN|KA|Bengaluru|Jigala|Jigala|1
+IN|KA|Bengaluru|Jnana Ganga Nagar|Jnana Ganga Nagar|1
+IN|KA|Bengaluru|Bommanahalli|Bommanahalli|1
+IN|KA|Bengaluru|Kadugodi Industrial Area|Kadugodi Industrial Area|1
+IN|KA|Bengaluru|Bikasipura|Bikasipura|1
+IN|KA|Bengaluru|Kaikondrahalli|Kaikondrahalli|1
+IN|KA|Bengaluru|Kammanahalli|Kammanahalli|1
+IN|KA|Bengaluru|Kanakapura|Kanakapura|1
+IN|KA|Bengaluru|Kannamangala - Ballari road|Kannamangala - Ballari road|1
+IN|KA|Bengaluru|Yamare|Yamare|1
+IN|KA|Bengaluru|Kasuvanahalli|Kasuvanahalli|1
+IN|KA|Bengaluru|Katamnallur|Katamnallur|1
+IN|KA|Bengaluru|Kattigenahalli|Kattigenahalli|1
+IN|KA|Bengaluru|Kaval Bairasandra|Kaval Bairasandra|1
+IN|KA|Bengaluru|Kempalingapura|Kempalingapura|1
+IN|KA|Bengaluru|Kithiganur|Kithiganur|1
+IN|KA|Bengaluru|Kodalagurki|Kodalagurki|1
+IN|KA|Bengaluru|Kodigehalli|Kodigehalli|1
+IN|KA|Bengaluru|Koppa Gate|Koppa Gate|1
+IN|KA|Bengaluru|KSRTC Colony|KSRTC Colony|1
+IN|KA|Bengaluru|Bengaluru Hardware Park|Bengaluru Hardware Park|1
+IN|KA|Bengaluru|Lakeview Residency|Lakeview Residency|1
+IN|KA|Bengaluru|Lal Bahadur Shastri Nagar|Lal Bahadur Shastri Nagar|1
+IN|KA|Bengaluru|Langford Gardens|Langford Gardens|1
+IN|KA|Bengaluru|Lingadheeranahalli|Lingadheeranahalli|1
+IN|KA|Bengaluru|Madhura Nagar|Madhura Nagar|1
+IN|KA|Bengaluru|Mailasandra|Mailasandra|1
+IN|KA|Bengaluru|Mallasandra, Hosakote|Mallasandra, Hosakote|1
+IN|KA|Bengaluru|Mallathahalli|Mallathahalli|1
+IN|KA|Bengaluru|Malur|Malur|1
+IN|KA|Bengaluru|Manganahalli|Manganahalli|1
+IN|KA|Bengaluru|Mathikere|Mathikere|1
+IN|KA|Bengaluru|Muddanahalli|Muddanahalli|1
+IN|KA|Bengaluru|Mukkidipeta|Mukkidipeta|1
+IN|KA|Bengaluru|Muneshwara Nagar|Muneshwara Nagar|1
+IN|KA|Bengaluru|Nagarbhavi|Nagarbhavi|1
+IN|KA|Bengaluru|Nagasandra, Bengaluru North|Nagasandra, Bengaluru North|1
+IN|KA|Bengaluru|Nagavara|Nagavara|1
+IN|KA|Bengaluru|Nekkundi Dommasandra|Nekkundi Dommasandra|1
+IN|KA|Bengaluru|New Tippasandra|New Tippasandra|1
+IN|KA|Bengaluru|Basaveshwara Nagar|Basaveshwara Nagar|1
+IN|KA|Bengaluru|Peenya|Peenya|1
+IN|KA|Bengaluru|Bangalore City Municipal Corporation Layout|Bangalore City Municipal Corporation Layout|1
+IN|KA|Bengaluru|Ramohalli|Ramohalli|1
+IN|KA|Bengaluru|Bandaramanahalli|Bandaramanahalli|1
+IN|KA|Bengaluru|Banashankari Temple Ward|Banashankari Temple Ward|1
+IN|KA|Bengaluru|RS Gardens|RS Gardens|1
+IN|KA|Bengaluru|S.G. Palya|S.G. Palya|1
+IN|KA|Bengaluru|Sadenahalli|Sadenahalli|1
+IN|KA|Bengaluru|Bagalakunte|Bagalakunte|1
+IN|KA|Bengaluru|Sannatammanahalli|Sannatammanahalli|1
+IN|KA|Bengaluru|Shanti Nagar|Shanti Nagar|1
+IN|KA|Bengaluru|Shivaji Nagar|Shivaji Nagar|1
+IN|KA|Bengaluru|Sidedahalli|Sidedahalli|1
+IN|KA|Bengaluru|Singapura|Singapura|1
+IN|KA|Bengaluru|Avalahalli|Avalahalli|1
+IN|KA|Bengaluru|Soppahalli|Soppahalli|1
+IN|KA|Bengaluru|Srinivaspur|Srinivaspur|1
+IN|KA|Bengaluru|Attibele Industrial Area|Attibele Industrial Area|1
+IN|KA|Bengaluru|Thurahalli|Thurahalli|1
+IN|KA|Bengaluru|Amani Byrathikhane|Amani Byrathikhane|1
+IN|KA|Bengaluru|Tunganagara|Tunganagara|1
+IN|KA|Bengaluru|Ullal Uppanagar|Ullal Uppanagar|1
+IN|KA|Bengaluru|Ullalu|Ullalu|1
+IN|KA|Bengaluru|Upparahalli|Upparahalli|1
+IN|KA|Bengaluru|Vaderamanchana Halli|Vaderamanchana Halli|1
+IN|KA|Bengaluru|Varanasi|Varanasi|1
+IN|KA|Bengaluru|Agrahara|Agrahara|1
+IN|KA|Bengaluru|Venkatapura, Kambipura|Venkatapura, Kambipura|1
+IN|KA|Bengaluru|Adigara Kallahalli|Adigara Kallahalli|1
+IN|KA|Bengaluru|Vignana Kendra|Vignana Kendra|1
+IN|KA|Bengaluru|Yerthiganahalli|Yerthiganahalli|1
+IN|KA|Bengaluru|Chikkanagamangala|Chikkanagamangala|1
+IN|KA|Bengaluru|Chikkabettahalli|Chikkabettahalli|1
+IN|KA|Bengaluru|Chokkasandra|Chokkasandra|1
+IN|KA|Bengaluru|Chikkabellandur|Chikkabellandur|1
+IN|KA|Bengaluru|Choudadenahalli|Choudadenahalli|1
+IN|KA|Bengaluru|Chowdenahalli|Chowdenahalli|1
+IN|KA|Bengaluru|D Group Employees Layout|D Group Employees Layout|1
+(304 rows)
