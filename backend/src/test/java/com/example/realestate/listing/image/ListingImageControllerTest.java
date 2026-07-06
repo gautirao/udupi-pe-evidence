@@ -1,5 +1,6 @@
 package com.example.realestate.listing.image;
 
+import com.example.realestate.exception.RateLimiterService;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
@@ -11,6 +12,7 @@ import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
 import com.example.realestate.trust.BadgeInvalidationService;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -24,6 +26,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.test.context.NestedTestConfiguration;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -52,7 +56,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration.class
         }
 )
-@Import({ListingImageControllerTest.TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class})
+@Import({ListingImageControllerTest.TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class,
+        RateLimiterService.class})
 class ListingImageControllerTest {
 
     private static final UUID DEALER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -837,5 +842,159 @@ class ListingImageControllerTest {
         img.setPosition(position);
         img.setCreatedAt(OffsetDateTime.now());
         return img;
+    }
+
+    // ==================== Nested: upload-url rate limiting (#1699) ====================
+
+    /**
+     * Runs against a dedicated Spring context ({@code @NestedTestConfiguration(OVERRIDE)}) with a
+     * tiny configured limit (2/min via {@code @TestPropertySource}), rather than the outer class's
+     * real default (30/min). This keeps the throttling test fast and deterministic without looping
+     * 31 times against the real default, and — since it's a separate {@code ApplicationContext} —
+     * its {@link RateLimiterService} bucket state can never leak into/from the outer class's tests.
+     *
+     * <p>Each test method uses its own dedicated caller UUID so per-user bucket state can't leak
+     * between test methods either, regardless of JUnit execution order.
+     */
+    @Nested
+    @NestedTestConfiguration(NestedTestConfiguration.EnclosingConfiguration.OVERRIDE)
+    @WebMvcTest(
+            controllers = ListingImageController.class,
+            excludeAutoConfiguration = {
+                    org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration.class
+            }
+    )
+    @Import({TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class, RateLimiterService.class})
+    @TestPropertySource(properties = "listing.images.upload-url.rate-limit.per-minute=2")
+    class UploadUrlRateLimitTests {
+
+        private final UUID withinLimitOwner = UUID.fromString("00000000-0000-0000-0000-0000000000a1");
+        private final UUID overLimitOwner = UUID.fromString("00000000-0000-0000-0000-0000000000a2");
+        private final UUID unaffectedOwner = UUID.fromString("00000000-0000-0000-0000-0000000000a3");
+
+        @Autowired
+        private MockMvc mockMvc;
+
+        @MockitoBean
+        private ListingRepository listingRepository;
+
+        @MockitoBean
+        private ListingImageRepository imageRepository;
+
+        @MockitoBean
+        private SupabaseStorageService storageService;
+
+        @MockitoBean
+        private ListingImageRegistrar imageRegistrar;
+
+        @MockitoBean
+        private ListingImageService imageService;
+
+        @MockitoBean
+        private UserRoleService userRoleService;
+
+        @MockitoBean
+        private ListingWorkflowService listingWorkflowService;
+
+        @MockitoBean
+        private BadgeInvalidationService badgeInvalidationService;
+
+        @BeforeEach
+        void setUp() {
+            stubOwnedDraftListing(withinLimitOwner);
+            stubOwnedDraftListing(overLimitOwner);
+            stubOwnedDraftListing(unaffectedOwner);
+            when(storageService.createSignedUploadUrl(eq("listing-images"), anyString()))
+                    .thenReturn(Optional.of(SIGNED_URL));
+        }
+
+        private void stubOwnedDraftListing(UUID ownerId) {
+            Listing listing = new Listing();
+            listing.setId(LISTING_ID);
+            listing.setCreatedBy(ownerId);
+            listing.setStatus(ListingStatus.DRAFT.toDbValue());
+            listing.setPropertyType("land");
+            listing.setCreatedAt(OffsetDateTime.now());
+            listing.setUpdatedAt(OffsetDateTime.now());
+            when(listingWorkflowService.findListingForCaller(LISTING_ID, ownerId, false))
+                    .thenReturn(listing);
+        }
+
+        private org.springframework.test.web.servlet.ResultActions performUploadUrl(UUID ownerId) throws Exception {
+            return mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images/upload-url")
+                    .with(jwt().jwt(j -> j.subject(ownerId.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""
+                            {"fileName":"photo.jpg","contentType":"image/jpeg","sizeBytes":1024}
+                            """));
+        }
+
+        /** (a) Owner within the configured limit — 200, unaffected by the new guard. */
+        @Test
+        void uploadUrl_ownerWithinLimit_returns200() throws Exception {
+            performUploadUrl(withinLimitOwner)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.signedUrl").value(SIGNED_URL));
+        }
+
+        /** (b) Owner over the configured limit (2/min) — 429 with the existing {"error": ...} shape. */
+        @Test
+        void uploadUrl_ownerOverLimit_returns429() throws Exception {
+            performUploadUrl(overLimitOwner).andExpect(status().isOk());
+            performUploadUrl(overLimitOwner).andExpect(status().isOk());
+
+            performUploadUrl(overLimitOwner)
+                    .andExpect(status().isTooManyRequests())
+                    .andExpect(jsonPath("$.error").value("RATE_LIMIT_EXCEEDED"));
+
+            verify(storageService, times(2)).createSignedUploadUrl(eq("listing-images"), anyString());
+        }
+
+        /**
+         * (c) Non-owner (404) and invalid-metadata (400) requests never reach the limiter — both
+         * fail before the rate-limit check runs, so they don't consume this owner's 2/min budget,
+         * which remains fully available afterward.
+         */
+        @Test
+        void uploadUrl_nonOwnerAndInvalidMetadata_unaffectedByLimiter() throws Exception {
+            UUID nonOwnerCaller = UUID.fromString("00000000-0000-0000-0000-0000000000a9");
+            when(listingWorkflowService.findListingForCaller(LISTING_ID, nonOwnerCaller, false))
+                    .thenThrow(new ListingOwnershipException(LISTING_ID));
+            when(listingRepository.findById(LISTING_ID))
+                    .thenReturn(Optional.of(ownedListing(unaffectedOwner)));
+
+            mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images/upload-url")
+                            .with(jwt().jwt(j -> j.subject(nonOwnerCaller.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"fileName":"photo.jpg","contentType":"image/jpeg","sizeBytes":1024}
+                                    """))
+                    .andExpect(status().isNotFound());
+
+            mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images/upload-url")
+                            .with(jwt().jwt(j -> j.subject(unaffectedOwner.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"fileName":"doc.pdf","contentType":"application/pdf","sizeBytes":1024}
+                                    """))
+                    .andExpect(status().isBadRequest());
+
+            // Neither of the above consumed the 2/min budget — both owner-path calls still succeed.
+            performUploadUrl(unaffectedOwner).andExpect(status().isOk());
+            performUploadUrl(unaffectedOwner).andExpect(status().isOk());
+
+            verify(storageService, times(2)).createSignedUploadUrl(eq("listing-images"), anyString());
+        }
+
+        private Listing ownedListing(UUID ownerId) {
+            Listing listing = new Listing();
+            listing.setId(LISTING_ID);
+            listing.setCreatedBy(ownerId);
+            listing.setStatus(ListingStatus.DRAFT.toDbValue());
+            listing.setPropertyType("land");
+            listing.setCreatedAt(OffsetDateTime.now());
+            listing.setUpdatedAt(OffsetDateTime.now());
+            return listing;
+        }
     }
 }

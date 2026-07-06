@@ -1,5 +1,6 @@
 package com.example.realestate.listing.image;
 
+import com.example.realestate.exception.RateLimiterService;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
@@ -9,6 +10,7 @@ import com.example.realestate.listing.storage.SupabaseStorageService;
 import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfo;
 import com.example.realestate.trust.BadgeInvalidationService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -61,6 +64,7 @@ public class ListingImageController {
     private final ListingWorkflowService listingWorkflowService;
     private final BadgeInvalidationService badgeInvalidationService;
     private final SupabaseStorageService storageService;
+    private final RateLimiterService rateLimiterService;
 
     public ListingImageController(ListingRepository listingRepository,
                                    ListingImageRepository imageRepository,
@@ -68,7 +72,8 @@ public class ListingImageController {
                                    ListingImageService imageService,
                                    ListingWorkflowService listingWorkflowService,
                                    BadgeInvalidationService badgeInvalidationService,
-                                   SupabaseStorageService storageService) {
+                                   SupabaseStorageService storageService,
+                                   RateLimiterService rateLimiterService) {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
         this.imageRegistrar = imageRegistrar;
@@ -76,6 +81,7 @@ public class ListingImageController {
         this.listingWorkflowService = listingWorkflowService;
         this.badgeInvalidationService = badgeInvalidationService;
         this.storageService = storageService;
+        this.rateLimiterService = rateLimiterService;
     }
 
     // ==================== GET — list images ====================
@@ -171,7 +177,8 @@ public class ListingImageController {
     @PostMapping("/upload-url")
     public ResponseEntity<?> requestUploadUrl(CallerInfo caller,
                                                @PathVariable UUID listingId,
-                                               @RequestBody UploadUrlRequest req) {
+                                               @RequestBody UploadUrlRequest req,
+                                               HttpServletRequest request) {
 
         FindResult result = findOwnedListing(listingId, caller);
         if (result.error() != null) return result.error();
@@ -202,6 +209,19 @@ public class ListingImageController {
 
         if (req.sizeBytes() <= 0 || req.sizeBytes() > MAX_FILE_SIZE) {
             return badRequest("File size must be between 1 byte and 5 MB");
+        }
+
+        // Per-user rate limit (#1699) — checked after ownership/status/scraped/metadata validation
+        // so non-owner, unauthenticated, and invalid-metadata requests never consume the bucket.
+        // IP fallback is defensive-only: Spring Security guarantees an authenticated caller.userId()
+        // reaches this point.
+        String rateLimitKey = caller.userId() != null
+                ? "listing-upload-url:user:" + caller.userId()
+                : "listing-upload-url:ip:" + request.getRemoteAddr();
+        if (!rateLimiterService.getImageUploadUrlBucket(rateLimitKey).tryConsume(1)) {
+            log.warn("POST /api/listings/{}/images/upload-url -> 429 rate limit exceeded key={}",
+                    listingId, rateLimitKey);
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED");
         }
 
         // Build storagePath server-side from DB-owned values (createdBy is from the listing entity,

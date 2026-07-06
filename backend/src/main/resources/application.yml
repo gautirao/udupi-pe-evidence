@@ -125,6 +125,12 @@ listing:
   lifecycle:
     booking-cascade:
       enabled: true
+  images:
+    upload-url:
+      # Per-user in-memory Bucket4j rate limit for POST /api/listings/{id}/images/upload-url (#1699).
+      # Local/in-memory/per-instance only — not distributed across app instances.
+      rate-limit:
+        per-minute: ${LISTING_IMAGES_UPLOAD_URL_RATE_LIMIT_PER_MINUTE:30}
 
 logging:
   level:
