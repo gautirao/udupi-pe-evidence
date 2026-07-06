@@ -1,5 +1,6 @@
 package com.example.realestate.security;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -17,13 +18,16 @@ public class JwtConfig {
 
     private final IngestionApiKeyFilter ingestionApiKeyFilter;
     private final PrometheusApiKeyFilter prometheusApiKeyFilter;
+    private final ObjectProvider<DiscoverRateLimitFilter> discoverRateLimitFilterProvider;
     private final DbRoleJwtAuthenticationConverter dbRoleJwtAuthenticationConverter;
 
     public JwtConfig(IngestionApiKeyFilter ingestionApiKeyFilter,
                      PrometheusApiKeyFilter prometheusApiKeyFilter,
+                     ObjectProvider<DiscoverRateLimitFilter> discoverRateLimitFilterProvider,
                      DbRoleJwtAuthenticationConverter dbRoleJwtAuthenticationConverter) {
         this.ingestionApiKeyFilter = ingestionApiKeyFilter;
         this.prometheusApiKeyFilter = prometheusApiKeyFilter;
+        this.discoverRateLimitFilterProvider = discoverRateLimitFilterProvider;
         this.dbRoleJwtAuthenticationConverter = dbRoleJwtAuthenticationConverter;
     }
 
@@ -37,7 +41,24 @@ public class JwtConfig {
                 // Register API key filters before JWT validation so
                 // BearerTokenAuthenticationFilter never runs on these paths.
                 .addFilterBefore(ingestionApiKeyFilter, BearerTokenAuthenticationFilter.class)
-                .addFilterBefore(prometheusApiKeyFilter, BearerTokenAuthenticationFilter.class)
+                .addFilterBefore(prometheusApiKeyFilter, BearerTokenAuthenticationFilter.class);
+
+        // Public discover GET rate limit guard (#1671) — runs before JWT validation so it also
+        // covers permitAll GET paths below. DiscoverRateLimitFilter self-excludes the two
+        // authenticated discover GETs (/api/discover/markers, /api/discover/listings) — keep that
+        // exclusion list paired with the permitAll matchers below.
+        //
+        // Resolved via ObjectProvider (optional) rather than a required constructor dependency so
+        // pre-existing sliced security tests that @Import(JwtConfig.class) without also importing
+        // DiscoverRateLimitFilter keep loading their (smaller, unrelated) contexts unchanged. In
+        // every real application context the filter is always present (@Component, no conditions),
+        // so production wiring is unaffected.
+        DiscoverRateLimitFilter discoverRateLimitFilter = discoverRateLimitFilterProvider.getIfAvailable();
+        if (discoverRateLimitFilter != null) {
+            http.addFilterBefore(discoverRateLimitFilter, BearerTokenAuthenticationFilter.class);
+        }
+
+        http
                 .authorizeHttpRequests(auth -> auth
                         // Allow CORS preflight requests — BearerTokenAuthenticationFilter
                         // runs before CORS headers are evaluated, causing 401 on OPTIONS.
@@ -60,6 +81,13 @@ public class JwtConfig {
                         .requestMatchers(HttpMethod.GET, "/api/listings/*/trust").permitAll()
                         // Public POI listing endpoint — no auth required (#907)
                         .requestMatchers(HttpMethod.GET, "/api/listings/*/pois").permitAll()
+                        // Public discover GET family below is anti-abuse rate-limited by
+                        // DiscoverRateLimitFilter (#1671). NOTE: /api/discover/markers and
+                        // /api/discover/listings are intentionally NOT in this permitAll list —
+                        // they fall through to anyRequest().authenticated() below, and
+                        // DiscoverRateLimitFilter self-excludes those same two paths. Keep both
+                        // lists in sync if a discover GET's auth requirement ever changes.
+                        //
                         // Public discover areas endpoint — no auth required (B-4)
                         .requestMatchers(HttpMethod.GET, "/api/discover/areas").permitAll()
                         // Public area listings endpoint — no auth required (C-2)

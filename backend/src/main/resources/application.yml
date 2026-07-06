@@ -63,6 +63,23 @@ app:
   regional-classification:
     backfill-enabled: false  # Set to true on a single deployment to populate regional_area_classifications
 
+  # Public discover GET anti-abuse rate limit (#1671). Per-IP in-memory Bucket4j guard for the
+  # unauthenticated discover GET family (see DiscoverRateLimitFilter). Does NOT apply to
+  # authenticated discover GETs (/api/discover/markers, /api/discover/listings) or to any non-GET
+  # method. Distributed/Redis-backed limiting across multiple instances is a follow-up.
+  ratelimit:
+    discover:
+      enabled: ${RATE_LIMIT_DISCOVER_ENABLED:true}
+      # ~3x a heavy real single-user session, incl. some headroom for NAT-shared IPs.
+      requests-per-minute: ${RATE_LIMIT_DISCOVER_REQUESTS_PER_MINUTE:120}
+      # false (default): key on getRemoteAddr() only — safe for direct/unproxied deployments.
+      # true: key on the leftmost X-Forwarded-For entry instead — only enable behind a trusted
+      # reverse proxy that overwrites/strips client-supplied XFF; otherwise this is spoofable.
+      trust-forwarded-header: ${RATE_LIMIT_DISCOVER_TRUST_FORWARDED_HEADER:false}
+      # Hard cap on concurrently tracked buckets; the map is cleared (not evicted piecemeal) once
+      # this is reached, in addition to the unconditional hourly eviction.
+      max-entries: ${RATE_LIMIT_DISCOVER_MAX_ENTRIES:100000}
+
 management:
   endpoints:
     web:
