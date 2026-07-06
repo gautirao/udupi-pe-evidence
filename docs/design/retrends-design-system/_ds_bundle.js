@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"ReTrendsDesignSystem_f37966","components":[{"name":"Icon","sourcePath":"components/Icon.jsx"},{"name":"Badge","sourcePath":"components/core/Badge.jsx"},{"name":"Button","sourcePath":"components/core/Button.jsx"},{"name":"Card","sourcePath":"components/core/Card.jsx"},{"name":"CardTitle","sourcePath":"components/core/Card.jsx"},{"name":"CardDescription","sourcePath":"components/core/Card.jsx"},{"name":"Input","sourcePath":"components/core/Input.jsx"},{"name":"Select","sourcePath":"components/core/Select.jsx"},{"name":"PropertyCard","sourcePath":"components/domain/PropertyCard.jsx"},{"name":"StatTile","sourcePath":"components/domain/StatTile.jsx"},{"name":"TrustBadge","sourcePath":"components/domain/TrustBadge.jsx"}],"sourceHashes":{"components/Icon.jsx":"6bd11ac8b30a","components/core/Badge.jsx":"ba18c6eaa112","components/core/Button.jsx":"7997ec28af2d","components/core/Card.jsx":"46955e2e0be7","components/core/Input.jsx":"e4b14321cc33","components/core/Select.jsx":"15ec79bf8ad5","components/domain/PropertyCard.jsx":"c9f9cca8f7c2","components/domain/StatTile.jsx":"0a1a6e034b70","components/domain/TrustBadge.jsx":"a688791e5fee","design_handoff_discover_area_first/designs/data.js":"bc7c3fc95e68","design_handoff_discover_area_first/designs/uni-belt-data.js":"4615efefa2bb","ui_kits/agri-discovery/AgriDiscovery.jsx":"c7d912b64a0a","ui_kits/agri-discovery/AgriMap.jsx":"b158a63dc937","ui_kits/agri-discovery/CorridorDiscovery.jsx":"27e45b9e4852","ui_kits/agri-discovery/CorridorMap.jsx":"111f355c03d6","ui_kits/agri-discovery/CorridorPanel.jsx":"e4da99dfc924","ui_kits/agri-discovery/Panel.jsx":"3770280bb32b","ui_kits/agri-discovery/corridor-data.js":"4f4a5d29cce2","ui_kits/agri-discovery/data.js":"0d01c48cd67b","ui_kits/area-discovery/AreaCards.jsx":"28217654d7c4","ui_kits/area-discovery/AreaDiscovery.jsx":"a975bc54f039","ui_kits/area-discovery/AreaMap.jsx":"aefb677bdb79","ui_kits/area-discovery/data.js":"58e5bbcff3c0","ui_kits/broker/AreaInsights.jsx":"e1f690ce9354","ui_kits/broker/BrokerDashboard.jsx":"0ae926a0be25","ui_kits/broker/DemandGaps.jsx":"cfa511fb5b6b","ui_kits/broker/ListingQuality.jsx":"1ef2ff4230f6","ui_kits/broker/data.js":"487f26207df7","ui_kits/broker/listing-quality-data.js":"694a235c1b91","ui_kits/buyer/BuyerArea.jsx":"b97fadfb8bdd","ui_kits/buyer/data.js":"75326eacebe2","ui_kits/discover/AreaFirstMap.jsx":"c8ed0dd3c444","ui_kits/discover/AreaFirstPanel.jsx":"a57ff9a242c8","ui_kits/discover/DiscoverMap.jsx":"9ddd8c2a7f30","ui_kits/discover/JourneyPanel.jsx":"364d6ad12901","ui_kits/discover/ListingActions.jsx":"e3fa47a860b2","ui_kits/discover/ListingDetail.jsx":"c9e75587b6fd","ui_kits/discover/ManipalResultsMap.jsx":"5cbe46865d7d","ui_kits/discover/ManipalResultsPanel.jsx":"fe7efeda8ca1","ui_kits/discover/UniBeltMap.jsx":"bf4cc6b45a52","ui_kits/discover/UniBeltPanel.jsx":"e35f4d1898f0","ui_kits/discover/cards.jsx":"62e0d8c90053","ui_kits/discover/data.js":"bc7c3fc95e68","ui_kits/discover/discover-data.js":"2924fdbb8e6e","ui_kits/discover/listing-data.js":"6628648dd09b","ui_kits/discover/manipal-data.js":"b69becf252f3","ui_kits/discover/map.jsx":"1b0053303478","ui_kits/discover/panels.jsx":"9407d1278d21","ui_kits/discover/src/DiscoverPanel.jsx":"c7b226f045fe","ui_kits/discover/src/DiscoverPortal.jsx":"175204435795","ui_kits/discover/src/PortalMap.jsx":"46a89ff0c17f","ui_kits/discover/src/components/cards.jsx":"ddcb2b30f8ec","ui_kits/discover/src/components/shared.jsx":"e009e8d1cced","ui_kits/discover/src/data.js":"c26217966b3e","ui_kits/discover/uni-belt-data.js":"4615efefa2bb","ui_kits/portal/DiscoverScreen.jsx":"78cdd6cd4bbc","ui_kits/portal/Header.jsx":"6ef7d125655e","ui_kits/portal/HomeScreen.jsx":"a7c6df4e022e","ui_kits/portal/ListingScreen.jsx":"300372c59177","ui_kits/portal/TrendsScreen.jsx":"340ecee7c320","ui_kits/portal/data.js":"b82007b95258","ui_kits/school-discovery/Cards.jsx":"072db7f51fa6","ui_kits/school-discovery/Map.jsx":"61c74789b8e4","ui_kits/school-discovery/SchoolDiscovery.jsx":"74bae9ee7773","ui_kits/school-discovery/data.js":"0338cda8c6dd"},"inlinedExternals":[],"unexposedExports":[]} */
+/* @ds-bundle: {"format":4,"namespace":"ReTrendsDesignSystem_f37966","components":[{"name":"Icon","sourcePath":"components/Icon.jsx"},{"name":"Badge","sourcePath":"components/core/Badge.jsx"},{"name":"Button","sourcePath":"components/core/Button.jsx"},{"name":"Card","sourcePath":"components/core/Card.jsx"},{"name":"CardTitle","sourcePath":"components/core/Card.jsx"},{"name":"CardDescription","sourcePath":"components/core/Card.jsx"},{"name":"Input","sourcePath":"components/core/Input.jsx"},{"name":"Select","sourcePath":"components/core/Select.jsx"},{"name":"PropertyCard","sourcePath":"components/domain/PropertyCard.jsx"},{"name":"StatTile","sourcePath":"components/domain/StatTile.jsx"},{"name":"TrustBadge","sourcePath":"components/domain/TrustBadge.jsx"}],"sourceHashes":{"components/Icon.jsx":"6bd11ac8b30a","components/core/Badge.jsx":"ba18c6eaa112","components/core/Button.jsx":"7997ec28af2d","components/core/Card.jsx":"46955e2e0be7","components/core/Input.jsx":"e4b14321cc33","components/core/Select.jsx":"15ec79bf8ad5","components/domain/PropertyCard.jsx":"c9f9cca8f7c2","components/domain/StatTile.jsx":"0a1a6e034b70","components/domain/TrustBadge.jsx":"a688791e5fee","design_handoff_discover_area_first/designs/data.js":"bc7c3fc95e68","design_handoff_discover_area_first/designs/uni-belt-data.js":"4615efefa2bb","ui_kits/agri-discovery/AgriDiscovery.jsx":"c7d912b64a0a","ui_kits/agri-discovery/AgriMap.jsx":"b158a63dc937","ui_kits/agri-discovery/CorridorDiscovery.jsx":"27e45b9e4852","ui_kits/agri-discovery/CorridorMap.jsx":"111f355c03d6","ui_kits/agri-discovery/CorridorPanel.jsx":"e4da99dfc924","ui_kits/agri-discovery/Panel.jsx":"3770280bb32b","ui_kits/agri-discovery/corridor-data.js":"4f4a5d29cce2","ui_kits/agri-discovery/data.js":"0d01c48cd67b","ui_kits/area-discovery/AreaCards.jsx":"28217654d7c4","ui_kits/area-discovery/AreaDiscovery.jsx":"a975bc54f039","ui_kits/area-discovery/AreaMap.jsx":"aefb677bdb79","ui_kits/area-discovery/data.js":"58e5bbcff3c0","ui_kits/broker/AreaInsights.jsx":"e1f690ce9354","ui_kits/broker/BrokerDashboard.jsx":"0ae926a0be25","ui_kits/broker/DemandGaps.jsx":"cfa511fb5b6b","ui_kits/broker/ListingQuality.jsx":"1ef2ff4230f6","ui_kits/broker/data.js":"487f26207df7","ui_kits/broker/listing-quality-data.js":"694a235c1b91","ui_kits/buyer/BuyerArea.jsx":"b97fadfb8bdd","ui_kits/buyer/data.js":"75326eacebe2","ui_kits/discover/AreaFirstMap.jsx":"c8ed0dd3c444","ui_kits/discover/AreaFirstPanel.jsx":"a57ff9a242c8","ui_kits/discover/DiscoverMap.jsx":"9ddd8c2a7f30","ui_kits/discover/JourneyPanel.jsx":"364d6ad12901","ui_kits/discover/ListingActions.jsx":"e3fa47a860b2","ui_kits/discover/ListingDetail.jsx":"c9e75587b6fd","ui_kits/discover/ManipalResultsMap.jsx":"5cbe46865d7d","ui_kits/discover/ManipalResultsPanel.jsx":"fe7efeda8ca1","ui_kits/discover/UniBeltMap.jsx":"bf4cc6b45a52","ui_kits/discover/UniBeltPanel.jsx":"e35f4d1898f0","ui_kits/discover/cards.jsx":"62e0d8c90053","ui_kits/discover/data.js":"bc7c3fc95e68","ui_kits/discover/discover-data.js":"2924fdbb8e6e","ui_kits/discover/listing-data.js":"6628648dd09b","ui_kits/discover/manipal-data.js":"b69becf252f3","ui_kits/discover/map.jsx":"1b0053303478","ui_kits/discover/panels.jsx":"9407d1278d21","ui_kits/discover/src/DiscoverPanel.jsx":"00759fc9ed86","ui_kits/discover/src/DiscoverPortal.jsx":"9b19a595c9f7","ui_kits/discover/src/PortalMap.jsx":"46a89ff0c17f","ui_kits/discover/src/components/cards.jsx":"ddcb2b30f8ec","ui_kits/discover/src/components/shared.jsx":"e009e8d1cced","ui_kits/discover/src/data.js":"c26217966b3e","ui_kits/discover/uni-belt-data.js":"4615efefa2bb","ui_kits/portal/DiscoverScreen.jsx":"78cdd6cd4bbc","ui_kits/portal/Header.jsx":"6ef7d125655e","ui_kits/portal/HomeScreen.jsx":"a7c6df4e022e","ui_kits/portal/ListingScreen.jsx":"300372c59177","ui_kits/portal/TrendsScreen.jsx":"340ecee7c320","ui_kits/portal/data.js":"b82007b95258","ui_kits/school-discovery/Cards.jsx":"072db7f51fa6","ui_kits/school-discovery/Map.jsx":"61c74789b8e4","ui_kits/school-discovery/SchoolDiscovery.jsx":"74bae9ee7773","ui_kits/school-discovery/data.js":"0338cda8c6dd"},"inlinedExternals":[],"unexposedExports":[]} */
 
 (() => {
 
@@ -24890,7 +24890,7 @@ function DiscoverPanelBody({
       eyebrow: "Area group",
       title: groupObj.name,
       sub: groupObj.blurb,
-      crumb: [`Discover ${city}`, regionObj.name, groupObj.name],
+      crumb: [`Discover ${city}`, regionObj && regionObj.name, groupObj.name].filter(Boolean),
       stats: [{
         value: CO.homesGroup(ctx.groupId),
         label: noun(mode, CO.homesGroup(ctx.groupId))
@@ -25013,7 +25013,7 @@ function DiscoverPanelBody({
       icon: "layers",
       title: zoneObj.name,
       sub: zoneObj.blurb,
-      crumb: [`Discover ${city}`, regionObj.name, zoneObj.name],
+      crumb: [`Discover ${city}`, regionObj && regionObj.name, zoneObj.name].filter(Boolean),
       stats: [{
         value: CO.schoolsZone(ctx.zoneId),
         label: "schools"
@@ -25438,6 +25438,8 @@ function DiscoverPortal() {
     if (clusterId && corridorId && D.agri.clusters.find(c => c.id === clusterId).corridor !== corridorId) clusterId = null;
     if (!scope && areaId) scope = D.areas.find(a => a.id === areaId).region;
     if (!scope && schoolId) scope = D.schools.find(s => s.id === schoolId).region;
+    if (!scope && zoneId) scope = D.zones.find(z => z.id === zoneId).region;
+    if (!scope && groupId) scope = D.groups.find(g => g.id === groupId).region;
     const mk = parseInt(p.get("maxKm"), 10);
     let maxKm = D.agri.distances.indexOf(mk) !== -1 ? mk : D.agri.defaultMaxKm;
     if (clusterId) {
@@ -25538,13 +25540,19 @@ function DiscoverPortal() {
     if (j === "area" || j === "listings") setFilters(window.DP_DEFAULT_FILTERS);
   };
   const pickGroup = id => {
+    const g = D.groups.find(x => x.id === id);
+    if (!g) return;
     setJourney_("area");
+    setScope(g.region);
     setGroupId(id);
     setAreaId(null);
     setActive(null);
   };
   const pickZone = id => {
+    const z = D.zones.find(x => x.id === id);
+    if (!z) return;
     setJourney_("school");
+    setScope(z.region);
     setZoneId(id);
     setAreaId(null);
     setSchoolId(null);

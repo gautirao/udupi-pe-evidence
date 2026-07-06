@@ -42,6 +42,8 @@ function DiscoverPortal() {
     if (clusterId && corridorId && D.agri.clusters.find((c) => c.id === clusterId).corridor !== corridorId) clusterId = null;
     if (!scope && areaId) scope = D.areas.find((a) => a.id === areaId).region;
     if (!scope && schoolId) scope = D.schools.find((s) => s.id === schoolId).region;
+    if (!scope && zoneId) scope = D.zones.find((z) => z.id === zoneId).region;
+    if (!scope && groupId) scope = D.groups.find((g) => g.id === groupId).region;
     const mk = parseInt(p.get("maxKm"), 10);
     let maxKm = D.agri.distances.indexOf(mk) !== -1 ? mk : D.agri.defaultMaxKm;
     if (clusterId) { const t = D.agri.clusters.find((c) => c.id === clusterId); if (t && t.distKm > maxKm) maxKm = D.agri.distances.find((k) => k >= t.distKm) || 100; }
@@ -91,8 +93,8 @@ function DiscoverPortal() {
     setSearchMode(j === "school" ? "school" : "area");
     if (j === "area" || j === "listings") setFilters(window.DP_DEFAULT_FILTERS);
   };
-  const pickGroup = (id) => { setJourney_("area"); setGroupId(id); setAreaId(null); setActive(null); };
-  const pickZone = (id) => { setJourney_("school"); setZoneId(id); setAreaId(null); setSchoolId(null); setActive(null); };
+  const pickGroup = (id) => { const g = D.groups.find((x) => x.id === id); if (!g) return; setJourney_("area"); setScope(g.region); setGroupId(id); setAreaId(null); setActive(null); };
+  const pickZone = (id) => { const z = D.zones.find((x) => x.id === id); if (!z) return; setJourney_("school"); setScope(z.region); setZoneId(id); setAreaId(null); setSchoolId(null); setActive(null); };
   const openAreaListings = (a) => { setJourney_("area"); setScope(a.region); setGroupId(a.group); setZoneId(null); setSchoolId(null); setAreaId(a.id); setFilters(window.DP_DEFAULT_FILTERS); setActive(null); };
   const openAreaSchools = (a) => { setJourney_("school"); setScope(a.region); setZoneId(a.zone); setGroupId(null); setSchoolId(null); setAreaId(a.id); setRadiusKm(5); setActive(null); };
   const pickArea = (id) => { const a = D.areas.find((x) => x.id === id); if (!a) return; journey === "school" ? openAreaSchools(a) : openAreaListings(a); };

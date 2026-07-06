@@ -191,7 +191,7 @@ function DiscoverPanelBody({ ctx }) {
     return (
       <>
         <window.DPBackLink onClick={ctx.back}>Back to area groups{ctx.scope ? ` in ${rShort}` : ""}</window.DPBackLink>
-        <window.DPHeaderBand eyebrow="Area group" title={groupObj.name} sub={groupObj.blurb} crumb={[`Discover ${city}`, regionObj.name, groupObj.name]}
+        <window.DPHeaderBand eyebrow="Area group" title={groupObj.name} sub={groupObj.blurb} crumb={[`Discover ${city}`, regionObj && regionObj.name, groupObj.name].filter(Boolean)}
           stats={[{ value: CO.homesGroup(ctx.groupId), label: noun(mode, CO.homesGroup(ctx.groupId)) }]} />
         <SearchRow ctx={ctx} />
         <window.DPSection icon="map-pin" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{areas.length} areas</span>}>Areas inside {groupObj.name}</window.DPSection>
@@ -247,7 +247,7 @@ function DiscoverPanelBody({ ctx }) {
     return (
       <>
         <window.DPBackLink onClick={ctx.back}>Back to school zones{ctx.scope ? ` in ${rShort}` : ""}</window.DPBackLink>
-        <window.DPHeaderBand eyebrow="School zone" accent="plum" icon="layers" title={zoneObj.name} sub={zoneObj.blurb} crumb={[`Discover ${city}`, regionObj.name, zoneObj.name]}
+        <window.DPHeaderBand eyebrow="School zone" accent="plum" icon="layers" title={zoneObj.name} sub={zoneObj.blurb} crumb={[`Discover ${city}`, regionObj && regionObj.name, zoneObj.name].filter(Boolean)}
           stats={[{ value: CO.schoolsZone(ctx.zoneId), label: "schools" }, { value: CO.homesZone(ctx.zoneId), label: "nearby homes" }]} />
         <SearchRow ctx={ctx} />
         <window.DPSection icon="map-pin" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{areas.length} areas</span>}>Areas in {zoneObj.name}</window.DPSection>
