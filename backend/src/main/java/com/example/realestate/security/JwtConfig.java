@@ -19,15 +19,18 @@ public class JwtConfig {
     private final IngestionApiKeyFilter ingestionApiKeyFilter;
     private final PrometheusApiKeyFilter prometheusApiKeyFilter;
     private final ObjectProvider<DiscoverRateLimitFilter> discoverRateLimitFilterProvider;
+    private final ObjectProvider<TrendsRateLimitFilter> trendsRateLimitFilterProvider;
     private final DbRoleJwtAuthenticationConverter dbRoleJwtAuthenticationConverter;
 
     public JwtConfig(IngestionApiKeyFilter ingestionApiKeyFilter,
                      PrometheusApiKeyFilter prometheusApiKeyFilter,
                      ObjectProvider<DiscoverRateLimitFilter> discoverRateLimitFilterProvider,
+                     ObjectProvider<TrendsRateLimitFilter> trendsRateLimitFilterProvider,
                      DbRoleJwtAuthenticationConverter dbRoleJwtAuthenticationConverter) {
         this.ingestionApiKeyFilter = ingestionApiKeyFilter;
         this.prometheusApiKeyFilter = prometheusApiKeyFilter;
         this.discoverRateLimitFilterProvider = discoverRateLimitFilterProvider;
+        this.trendsRateLimitFilterProvider = trendsRateLimitFilterProvider;
         this.dbRoleJwtAuthenticationConverter = dbRoleJwtAuthenticationConverter;
     }
 
@@ -56,6 +59,16 @@ public class JwtConfig {
         DiscoverRateLimitFilter discoverRateLimitFilter = discoverRateLimitFilterProvider.getIfAvailable();
         if (discoverRateLimitFilter != null) {
             http.addFilterBefore(discoverRateLimitFilter, BearerTokenAuthenticationFilter.class);
+        }
+
+        // Public trends GET rate limit guard (#1612) — runs before JWT validation so it also
+        // covers the fully-anonymous permitAll GET paths below (/api/trends/**). Unlike
+        // DiscoverRateLimitFilter, there is no authenticated sub-path to exclude — every trends
+        // GET is permitAll(). Resolved via ObjectProvider (optional) for the same sliced-test
+        // context-loading reason documented on discoverRateLimitFilterProvider above.
+        TrendsRateLimitFilter trendsRateLimitFilter = trendsRateLimitFilterProvider.getIfAvailable();
+        if (trendsRateLimitFilter != null) {
+            http.addFilterBefore(trendsRateLimitFilter, BearerTokenAuthenticationFilter.class);
         }
 
         http

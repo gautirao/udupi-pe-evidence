@@ -80,6 +80,23 @@ app:
       # this is reached, in addition to the unconditional hourly eviction.
       max-entries: ${RATE_LIMIT_DISCOVER_MAX_ENTRIES:100000}
 
+    # Public trends GET anti-abuse rate limit (#1612). Per-IP in-memory Bucket4j guard for the
+    # fully-anonymous trends GET family (see TrendsRateLimitFilter): /api/trends/options,
+    # /api/trends/overview, /api/trends/area-intelligence, /api/trends/resolve-area. Does NOT
+    # apply to any non-GET/HEAD method. Distributed/Redis-backed limiting across multiple
+    # instances is a follow-up.
+    trends:
+      enabled: ${RATE_LIMIT_TRENDS_ENABLED:true}
+      # Lower default than discover — trends endpoints are lighter-traffic, single-page lookups.
+      requests-per-minute: ${RATE_LIMIT_TRENDS_REQUESTS_PER_MINUTE:60}
+      # false (default): key on getRemoteAddr() only — safe for direct/unproxied deployments.
+      # true: key on the leftmost X-Forwarded-For entry instead — only enable behind a trusted
+      # reverse proxy that overwrites/strips client-supplied XFF; otherwise this is spoofable.
+      trust-forwarded-header: ${RATE_LIMIT_TRENDS_TRUST_FORWARDED_HEADER:false}
+      # Hard cap on concurrently tracked buckets; the map is cleared (not evicted piecemeal) once
+      # this is reached, in addition to the unconditional hourly eviction.
+      max-entries: ${RATE_LIMIT_TRENDS_MAX_ENTRIES:100000}
+
 management:
   endpoints:
     web:
