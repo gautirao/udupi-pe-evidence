@@ -475,8 +475,8 @@ export function AreaSelectedPanel({
             ))}
           </div>
         ) : !areaListings || areaListings.length === 0 ? (
-          <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
-            <MapPin className="mb-2 h-8 w-8 text-muted-foreground/40" />
+          <div className="m-4 flex flex-col items-center justify-center rounded-xl border border-border bg-muted/20 px-4 py-14 text-center shadow-sm">
+            <MapPin className="mb-3 h-8 w-8 text-muted-foreground/40" />
             {hasPropertyFilters && searchQuery ? (
               <>
                 <p className="mb-4 text-sm text-muted-foreground">No listings match this search and filters</p>

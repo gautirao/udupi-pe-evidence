@@ -128,6 +128,17 @@ function makeAreaCard(
         <span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.95);white-space:nowrap;max-width:74px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(shortLabel)}</span>
       </div>
     </div>`;
+  } else if (area.isGroup) {
+    const sel = area.isSelected;
+    const bg = sel ? '#0F172A' : 'rgba(27,42,69,0.95)';
+    const count = (area.listingCount ?? 0).toLocaleString();
+
+    html = `<div data-testid="area-marker" class="group-pill-marker" style="transform:translate(-50%,-50%);font-family:inherit;opacity:${opacity};pointer-events:auto;cursor:pointer;">
+      <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:9999px;background:${bg};color:#fff;box-shadow:0 8px 20px rgba(17,24,39,0.25);border:2px solid rgba(255,255,255,0.6);transform:scale(${sel ? 1.06 : 1});transition:all .15s cubic-bezier(.4,0,.2,1);white-space:nowrap;">
+        <span style="font-size:12.5px;font-weight:700;color:rgba(255,255,255,0.95);">${label}</span>
+        <span style="font-family:${MONO};font-size:12px;font-weight:700;color:#fff;background:rgba(255,255,255,0.15);padding:1px 6px;border-radius:9999px;">${count}</span>
+      </div>
+    </div>`;
   } else if (isZero) {
     // Quiet muted variant — dashed ring, no tail, de-emphasised.
     html = `<div data-testid="area-marker" class="area-marker-zero" style="transform:translate(-50%,-50%);font-family:inherit;opacity:${opacity * 0.66};pointer-events:auto;cursor:pointer;">

@@ -1301,10 +1301,28 @@ export default function MapDiscovery() {
   const handleSelectSchoolById = useCallback(
     (schoolId: string) => {
       const radiusKm = DEFAULT_SCHOOL_RADIUS_KM;
-      urlActions.setSchoolParams({ schoolId, radiusKm });
-      // Look up the school from the already-loaded schools[] (from useSchoolsByArea).
-      // schools is derived from schoolsQuery which is fetched before the user can click.
-      const school = schools.find((s) => s.id === schoolId) ?? null;
+      // Look up the school from the already-loaded schools[] (from useSchoolsByArea)
+      // or from React Query cache (e.g. ScopedSearch click, another mount, or deep-link prefetch).
+      const school =
+        schools.find((s) => s.id === schoolId) ??
+        queryClient.getQueryData<SchoolResult>(['school-by-id', schoolId]) ??
+        null;
+
+      if (urlState.journey !== 'school-first' && !urlState.areaKey) {
+        // If no area is selected, selecting a school flips the journey to school-first
+        // (e.g. searching for a school from the area-first landing page via ScopedSearch).
+        urlActions.setSchoolJourney({
+          schoolId,
+          radiusKm,
+          lat: school?.latitude ?? urlState.viewport?.lat ?? 12.9716,
+          lon: school?.longitude ?? urlState.viewport?.lon ?? 77.5946,
+          zoom: urlState.viewport?.zoom ?? 14,
+          areaKey: school?.areaKey ?? null,
+        });
+      } else {
+        urlActions.setSchoolParams({ schoolId, radiusKm });
+      }
+
       if (school) {
         setSelectedSchool(school);
         setFilters((prev) => ({
@@ -1319,34 +1337,13 @@ export default function MapDiscovery() {
         return;
       }
 
-      // Issue #1160 v3 Bug A1 — top-level school-first selection (no areaKey) means
-      // useSchoolsByArea is disabled, so schools[] is empty and the lookup above fails.
-      // Before falling through to the async useSchoolById restore path (which causes
-      // delayed markers/no markers), check the React Query cache: if the useSchoolById
-      // query has already resolved for this id (e.g. another mount, deep-link prefetch,
-      // or a previous click in the same session), reuse it synchronously so the markers
-      // query fires immediately with the school coordinates.
-      // Key shape must match useSchoolSearch.ts (SCHOOL_BY_ID_KEY = ['school-by-id']).
-      const cachedSchool = queryClient.getQueryData<SchoolResult>(['school-by-id', schoolId]);
-      if (cachedSchool) {
-        setSelectedSchool(cachedSchool);
-        setFilters((prev) => ({
-          ...prev,
-          schoolLat: cachedSchool.latitude,
-          schoolLon: cachedSchool.longitude,
-          schoolRadiusKm: radiusKm,
-        }));
-        // Issue #1115 — reset after coord-sync (#1109 guard preserved).
-        setBoundedSearchTriggered(false);
-        return;
-      }
       // If neither path resolves, fall through to the existing useSchoolById async
       // restore effect which will set state once the fetch resolves. The placeholderData
       // in useDiscoverFilteredMarkers bridges the visual gap.
       // Issue #1115 — reset on fall-through too (coords will be set by the async effect).
       setBoundedSearchTriggered(false);
     },
-    [urlActions, schools, setSelectedSchool, setFilters, queryClient],
+    [urlActions, schools, setSelectedSchool, setFilters, queryClient, urlState.journey, urlState.areaKey, urlState.viewport],
   );
 
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).

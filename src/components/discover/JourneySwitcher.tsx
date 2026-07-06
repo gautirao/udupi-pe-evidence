@@ -39,7 +39,7 @@ type JourneyDef = {
 // surface-subtle #EEEDE9 fill, hairline border, Geist Mono 11.5/600, grey-700 text.
 function Chip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center whitespace-nowrap rounded-full border border-border bg-[#EEEDE9] px-[9px] py-[3px] font-mono text-[11.5px] font-semibold text-[#374151] dark:bg-muted dark:text-muted-foreground">
+    <span className="inline-flex items-center whitespace-nowrap rounded-full border border-border bg-muted px-[9px] py-[3px] font-mono text-[11.5px] font-semibold text-muted-foreground">
       {children}
     </span>
   );

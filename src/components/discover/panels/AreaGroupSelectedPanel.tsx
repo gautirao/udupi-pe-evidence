@@ -4,7 +4,9 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
+import type { DiscoverJourney } from '@/types/discover';
 import { getAreaGroupContent, getLocalityDescription } from '@/lib/discoverGroupContent';
+import { ScopedSearch } from '../ScopedSearch';
 import { PanelColumn } from './_shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -37,6 +39,10 @@ export interface AreaGroupSelectedPanelProps {
    * When omitted, the previous scroll-to-list behaviour is preserved (safe fallback).
    */
   onViewAllResults?: () => void;
+  /** Callback to switch journey mode (e.g. from area to school). */
+  onSelectJourney?: (journey: DiscoverJourney) => void;
+  /** Callback when a school is selected */
+  onSelectSchool?: (schoolId: string) => void;
 }
 
 // ─── Summary stat tile ──────────────────────────────────────────────────────
@@ -86,17 +92,19 @@ function LocalityCard({
           className="rounded-xl border border-border/60 bg-muted/40 p-4"
         >
           <div className="flex items-start gap-3.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground/60">
-              <MapPin className="h-[18px] w-[18px]" aria-hidden="true" />
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground/60">
+              <MapPin className="h-[20px] w-[20px]" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-muted-foreground">{area.name}</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-base font-bold tracking-[-0.01em] text-muted-foreground">{area.name}</p>
+                <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground/70">
+                  No properties yet
+                </span>
+              </div>
               {description && (
-                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground/70">{description}</p>
+                <p className="mt-1 text-[13.5px] leading-relaxed text-muted-foreground/70">{description}</p>
               )}
-              <p className="mt-2 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground/70">
-                No properties yet
-              </p>
             </div>
           </div>
         </div>
@@ -111,25 +119,25 @@ function LocalityCard({
         data-testid={testId}
         onClick={() => onSelectArea(area.areaKey)}
         aria-label={`View ${count} propert${count === 1 ? 'y' : 'ies'} in ${area.name}`}
-        className="group w-full rounded-xl border border-border/70 bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-px hover:border-copper/40 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="group w-full rounded-xl border border-border/70 bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-copper/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <div className="flex items-start gap-3.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-copper-tint text-copper ring-1 ring-copper/15">
-            <MapPin className="h-[18px] w-[18px]" aria-hidden="true" />
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-copper-tint text-copper">
+            <MapPin className="h-[20px] w-[20px]" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-foreground">{area.name}</p>
+            <p className="text-base font-bold tracking-[-0.01em] text-foreground">{area.name}</p>
             {description && (
-              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{description}</p>
+              <p className="mt-1 text-[13.5px] leading-relaxed text-muted-foreground">{description}</p>
             )}
-            <div className="mt-2.5 flex items-center justify-between gap-2">
-              <span className="text-xs text-muted-foreground">
-                <span className="font-semibold tabular-nums text-copper">{count}</span>{' '}
+            <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-2.5">
+              <span className="text-[12.5px] text-muted-foreground">
+                <span className="font-mono font-semibold tabular-nums text-copper">{count}</span>{' '}
                 propert{count === 1 ? 'y' : 'ies'}
               </span>
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-foreground transition-colors group-hover:text-copper">
+              <span className="inline-flex items-center gap-1 text-[13.5px] font-semibold text-foreground transition-colors group-hover:text-copper">
                 View properties
-                <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
               </span>
             </div>
           </div>
@@ -150,6 +158,8 @@ export function AreaGroupSelectedPanel({
   onStartOver,
   onSelectArea,
   onViewAllResults,
+  onSelectJourney,
+  onSelectSchool,
 }: AreaGroupSelectedPanelProps) {
   const areasRef = useRef<HTMLDivElement | null>(null);
 
@@ -193,17 +203,16 @@ export function AreaGroupSelectedPanel({
       <div className="sticky top-0 z-20 flex-shrink-0 flex flex-col gap-2.5 bg-background border-b border-border/50 px-4 pt-3 pb-3.5">
         {onStartOver && (
           <div className="flex items-center justify-end gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+            <button
+              type="button"
+              data-testid="start-over-button"
               onClick={onStartOver}
               aria-label="Start over and return to journey selection"
-              data-testid="start-over-button"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[12.5px] font-semibold text-foreground transition-colors hover:bg-muted/40"
             >
               Start over
-              <X className="h-3.5 w-3.5" />
-            </Button>
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
           </div>
         )}
 
@@ -216,6 +225,9 @@ export function AreaGroupSelectedPanel({
             By area
           </span>
         </div>
+        <p className="text-[13.5px] text-muted-foreground">
+          Pick a group to narrow to its areas, or jump straight to an area with search.
+        </p>
 
         {onBack && (
           onBackToRegion && regionLabel ? (
@@ -261,14 +273,20 @@ export function AreaGroupSelectedPanel({
       {/* ── Body: selected-group card + member-area list ── */}
       <div className="flex-1 overflow-y-auto px-4 py-5">
       <PanelColumn className="space-y-5">
+        <ScopedSearch
+          cityLabel={cityLabel}
+          areas={areas}
+          onSelectArea={onSelectArea}
+          onSelectSchool={onSelectSchool}
+        />
         {/* Selected-group context card */}
         <article
           data-testid="area-group-selected-card"
           className="rounded-xl border border-border/70 bg-card p-5 shadow-sm"
         >
           <div className="flex items-start gap-3.5">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-copper-tint text-copper ring-1 ring-copper/15">
-              <Layers className="h-[22px] w-[22px]" aria-hidden="true" />
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-copper-tint text-copper">
+              <Layers className="h-[20px] w-[20px]" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -276,7 +294,7 @@ export function AreaGroupSelectedPanel({
                   {group.name}
                 </h2>
                 {regionLabel && (
-                  <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                  <span className="rounded-full border border-border bg-muted px-2 py-0.5 font-mono text-[11.5px] font-semibold text-muted-foreground">
                     {regionLabel}
                   </span>
                 )}
@@ -302,15 +320,17 @@ export function AreaGroupSelectedPanel({
           </div>
 
           {totalProperties > 0 && (
-            <button
-              type="button"
-              onClick={handleViewAll}
-              data-testid="area-group-view-all"
-              className="mt-3.5 inline-flex items-center gap-1.5 rounded text-sm font-semibold text-copper transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              View all {totalProperties} properties across {group.name}
-              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
+            <div className="mt-4 flex items-center justify-end border-t border-border/70 pt-3.5">
+              <button
+                type="button"
+                onClick={handleViewAll}
+                data-testid="area-group-view-all"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-copper transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                View all {totalProperties} properties across {group.name}
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
           )}
         </article>
 

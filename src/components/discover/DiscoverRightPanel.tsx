@@ -853,23 +853,24 @@ export function DiscoverRightPanel({
   const renderAreaHydrating = (): React.ReactNode => (
     <div
       data-testid="discover-area-hydrating"
-      className="flex flex-1 items-center justify-center p-8"
+      className="m-5 flex flex-1 items-center justify-center rounded-xl border border-border bg-muted/20 p-8 shadow-sm"
       aria-live="polite"
     >
       <div className="flex flex-col items-center gap-3 text-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
-        <p className="text-sm text-muted-foreground">Loading area details…</p>
+        <p className="text-sm font-medium text-foreground">Loading area details…</p>
+        <p className="text-xs text-muted-foreground">Fetching locality listings and boundaries.</p>
       </div>
     </div>
   );
   const renderAreaNotFound = (areaKey: string): React.ReactNode => (
     <div
       data-testid="discover-area-not-found"
-      className="flex flex-1 items-center justify-center p-8"
+      className="m-5 flex flex-1 items-center justify-center rounded-xl border border-border bg-muted/20 p-8 shadow-sm"
     >
       <div className="flex max-w-sm flex-col items-center gap-3 text-center">
         <AlertCircle className="h-8 w-8 text-destructive" aria-hidden="true" />
-        <h2 className="text-base font-semibold">Area not found</h2>
+        <h2 className="text-base font-semibold text-foreground">Area not found</h2>
         <p className="text-sm text-muted-foreground break-all">
           We could not find an area for <span className="font-mono">{areaKey}</span>.
         </p>
@@ -1184,6 +1185,8 @@ export function DiscoverRightPanel({
               fallbackAreas={discoverAreas}
               onSelectArea={onSelectAreaKey}
               onViewAllResults={onEnterGroupResults}
+              onSelectJourney={onSelectJourney}
+              onSelectSchool={onSelectSchool}
             />
           );
         }
@@ -1205,6 +1208,8 @@ export function DiscoverRightPanel({
             intent={intent}
             onIntentChange={onIntentChange}
             onViewAllResults={onEnterGroupResults}
+            onSelectJourney={onSelectJourney}
+            onSelectSchool={onSelectSchool}
           />
         );
 
@@ -1229,8 +1234,12 @@ export function DiscoverRightPanel({
                 summaryRegions={summaryRegions}
                 onBackToRegion={onBackToRegion}
                 cityLabel={cityLabel ?? city}
+                intent={intent}
+                onIntentChange={onIntentChange}
                 fallbackAreas={discoverAreas}
                 onSelectArea={onSelectAreaKey}
+                onSelectJourney={onSelectJourney}
+                onSelectSchool={onSelectSchool}
               />
             );
           }
@@ -1247,6 +1256,10 @@ export function DiscoverRightPanel({
               summaryRegions={summaryRegions}
               onBackToRegion={onBackToRegion}
               cityLabel={cityLabel ?? city}
+              intent={intent}
+              onIntentChange={onIntentChange}
+              onSelectJourney={onSelectJourney}
+              onSelectSchool={onSelectSchool}
             />
           );
         }
