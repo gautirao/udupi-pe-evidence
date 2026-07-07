@@ -10,7 +10,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
 import { PropertyListing, PropertyType, PropertyImage } from '@/hooks/usePropertyListings';
 import { DrawControl } from '@/components/map/DrawControl';
-import { AreaMarkerLayer, AreaPoint } from '@/components/map/AreaMarkerLayer';
+import { AreaMarkerLayer, AreaPoint, type AreaMarkerClusterInfo } from '@/components/map/AreaMarkerLayer';
 import { SchoolMarkerLayer } from '@/components/map/SchoolMarkerLayer';
 import { SchoolZoneLabelLayer, type ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
@@ -287,6 +287,22 @@ interface PropertyMapProps {
    * Passed through to AreaMarkerLayer unchanged.
    */
   focusedGroupAreas?: string[];
+  /**
+   * Issue #1798 PR-B — area-marker density degradation for dense area groups.
+   * All passed through to AreaMarkerLayer unchanged; every one defaults to
+   * undefined so existing callers are byte-for-byte unaffected.
+   */
+  enableAreaMarkerDegradation?: boolean;
+  /** The currently-selected area's key. Passed through to AreaMarkerLayer. */
+  selectedAreaKey?: string | null;
+  /** Areas matching the active panel search. Passed through to AreaMarkerLayer. */
+  areaSearchMatchKeys?: string[];
+  /** The area currently hovered/focused in the panel. Passed through to AreaMarkerLayer. */
+  hoveredAreaKey?: string | null;
+  /** Fired when an area-cluster chip is clicked. Passed through to AreaMarkerLayer. */
+  onAreaClusterClick?: (cluster: AreaMarkerClusterInfo) => void;
+  /** Fired after each area-marker bucketing recompute with (shown, total). */
+  onAreaMarkersComputed?: (shownCount: number, totalCount: number) => void;
   /** Called on every zoomend with the new zoom level. Used by zoom-band switching logic. */
   onZoomChange?: (zoom: number) => void;
   /**
@@ -1388,6 +1404,12 @@ export function PropertyMap({
   areas = [],
   onAreaClick,
   focusedGroupAreas,
+  enableAreaMarkerDegradation,
+  selectedAreaKey,
+  areaSearchMatchKeys,
+  hoveredAreaKey,
+  onAreaClusterClick,
+  onAreaMarkersComputed,
   onZoomChange,
   onViewportChange,
   onBoundsChange,
@@ -1527,6 +1549,12 @@ export function PropertyMap({
             focusedGroupAreas={focusedGroupAreas}
             journey={journey}
             selectedSchool={selectedSchool}
+            enableDegradation={enableAreaMarkerDegradation}
+            selectedAreaKey={selectedAreaKey}
+            searchMatchKeys={areaSearchMatchKeys}
+            hoveredAreaKey={hoveredAreaKey}
+            onAreaClusterClick={onAreaClusterClick}
+            onMarkersComputed={onAreaMarkersComputed}
           />
         )}
         {schoolZoneLabels && schoolZoneLabels.length > 0 && (

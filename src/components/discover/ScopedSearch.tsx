@@ -27,6 +27,13 @@ export interface ScopedSearchProps {
   onSelectArea?: (areaKey: string) => void;
   /** Callback when a school is selected */
   onSelectSchool?: (schoolId: string) => void;
+  /**
+   * Issue #1798 PR-B — fired with the live (unsubmitted) search query on every
+   * keystroke, in AREA mode only. Lets a parent promote matching area markers
+   * on the map without waiting for a result to be picked. Optional — omitted
+   * callers keep today's behaviour unchanged (in-panel dropdown only).
+   */
+  onQueryChange?: (query: string) => void;
 }
 
 export function ScopedSearch({
@@ -37,6 +44,7 @@ export function ScopedSearch({
   areas = [],
   onSelectArea,
   onSelectSchool,
+  onQueryChange,
 }: ScopedSearchProps) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
@@ -52,6 +60,7 @@ export function ScopedSearch({
 
   const handleModeSwitch = (newMode: 'area' | 'school') => {
     setQuery('');
+    onQueryChange?.('');
     if (onModeChange) {
       onModeChange(newMode);
     } else {
@@ -64,6 +73,7 @@ export function ScopedSearch({
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setQuery('');
+        onQueryChange?.('');
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -85,6 +95,7 @@ export function ScopedSearch({
 
   const handlePickArea = (areaKey: string) => {
     setQuery('');
+    onQueryChange?.('');
     onSelectArea?.(areaKey);
   };
 
@@ -148,7 +159,12 @@ export function ScopedSearch({
               : 'Search school name…'
           }
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            const next = e.target.value;
+            setQuery(next);
+            // Area-mode only — school search has no map-marker promotion concept.
+            if (searchMode === 'area') onQueryChange?.(next);
+          }}
           className="h-11 rounded-full border-border bg-card pl-10 pr-10 text-sm shadow-xs focus-visible:ring-ring"
           data-testid="scoped-search-input"
           aria-label={searchMode === 'area' ? `Search ${cleanCity}` : 'Search school name'}
@@ -156,7 +172,10 @@ export function ScopedSearch({
         {query && (
           <button
             type="button"
-            onClick={() => setQuery('')}
+            onClick={() => {
+              setQuery('');
+              onQueryChange?.('');
+            }}
             aria-label="Clear search"
             data-testid="scoped-search-clear"
             className="absolute right-2.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"

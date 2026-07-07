@@ -824,6 +824,26 @@ export interface DiscoverRightPanelProps {
    * Drives the area-first results breadcrumb's city crumb.
    */
   onNavigateAreaLanding?: () => void;
+  // ── Issue #1798 PR-B — panel↔map area-marker plumbing (Units D/F) ───────────
+  /**
+   * Fired with the live search query as the user types in ScopedSearch (area mode
+   * only). Pass-through to AreaGroupsLandingPanel → ScopedSearch (Level-1 and
+   * Level-2). Lets MapDiscovery promote matching area markers on the map without
+   * moving the camera.
+   */
+  onAreaSearchQueryChange?: (query: string) => void;
+  /**
+   * "Showing X of N areas on the map" counts from the map's area-marker bucketing
+   * (AreaMarkerLayer.onMarkersComputed). Pass-through to the Level-2
+   * AreaGroupSelectedPanel note only.
+   */
+  shownAreaCount?: number;
+  totalAreaMarkerCount?: number;
+  /**
+   * Fired with the hovered/unhovered area's key from the Level-2 locality list, so
+   * the map can emphasise the matching marker. Never triggers camera movement.
+   */
+  onAreaHover?: (areaKey: string | null) => void;
 }
 
 export function DiscoverRightPanel({
@@ -936,6 +956,10 @@ export function DiscoverRightPanel({
   onClearGroupResults,
   selectedGroupName = null,
   onNavigateAreaLanding,
+  onAreaSearchQueryChange,
+  shownAreaCount,
+  totalAreaMarkerCount,
+  onAreaHover,
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
 
@@ -1312,6 +1336,10 @@ export function DiscoverRightPanel({
               onViewAllResults={onEnterGroupResults}
               onSelectJourney={onSelectJourney}
               onSelectSchool={onSelectSchool}
+              onSearchQueryChange={onAreaSearchQueryChange}
+              shownAreaCount={shownAreaCount}
+              totalAreaMarkerCount={totalAreaMarkerCount}
+              onAreaHover={onAreaHover}
             />
           );
         }
@@ -1335,6 +1363,10 @@ export function DiscoverRightPanel({
             onViewAllResults={onEnterGroupResults}
             onSelectJourney={onSelectJourney}
             onSelectSchool={onSelectSchool}
+            onSearchQueryChange={onAreaSearchQueryChange}
+            shownAreaCount={shownAreaCount}
+            totalAreaMarkerCount={totalAreaMarkerCount}
+            onAreaHover={onAreaHover}
           />
         );
 
@@ -1365,6 +1397,10 @@ export function DiscoverRightPanel({
                 onSelectArea={onSelectAreaKey}
                 onSelectJourney={onSelectJourney}
                 onSelectSchool={onSelectSchool}
+                onSearchQueryChange={onAreaSearchQueryChange}
+                shownAreaCount={shownAreaCount}
+                totalAreaMarkerCount={totalAreaMarkerCount}
+                onAreaHover={onAreaHover}
               />
             );
           }
@@ -1385,6 +1421,10 @@ export function DiscoverRightPanel({
               onIntentChange={onIntentChange}
               onSelectJourney={onSelectJourney}
               onSelectSchool={onSelectSchool}
+              onSearchQueryChange={onAreaSearchQueryChange}
+              shownAreaCount={shownAreaCount}
+              totalAreaMarkerCount={totalAreaMarkerCount}
+              onAreaHover={onAreaHover}
             />
           );
         }

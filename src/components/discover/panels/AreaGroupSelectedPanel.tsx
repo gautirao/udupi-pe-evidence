@@ -19,6 +19,14 @@ export interface AreaGroupSelectedPanelProps {
   /** Human-readable city label (e.g. "Udupi") for the breadcrumb + heading. */
   cityLabel: string;
   /**
+   * Active city slug (e.g. "udupi", "bangalore") used to scope this panel's
+   * ScopedSearch school search to the current city/region — mirrors
+   * AreaGroupsLandingPanel's citySlug threading. Optional — when omitted,
+   * school search stays unscoped (prior behaviour); callers with no city
+   * context should leave this unset rather than fabricate a value.
+   */
+  citySlug?: string;
+  /**
    * Back to the all-groups (Level-1) list. When omitted the affordance is not rendered
    * (mirrors AreaGroupsLandingPanel's onClearGroup contract).
    */
@@ -43,6 +51,26 @@ export interface AreaGroupSelectedPanelProps {
   onSelectJourney?: (journey: DiscoverJourney) => void;
   /** Callback when a school is selected */
   onSelectSchool?: (schoolId: string) => void;
+  /**
+   * Issue #1798 PR-B — fired with the live search query as the user types in this
+   * panel's ScopedSearch (area mode only). Lets MapDiscovery promote matching area
+   * markers on the map. Optional — omitted callers keep prior behaviour.
+   */
+  onSearchQueryChange?: (query: string) => void;
+  /**
+   * Issue #1798 PR-B — "Showing X of N areas on the map" counts from the map's
+   * area-marker bucketing (AreaMarkerLayer.onMarkersComputed). Both must be present
+   * and shownCount < totalCount for the note to render — counts are never fabricated
+   * here, only forwarded from the map's own computed result.
+   */
+  shownCount?: number;
+  totalCount?: number;
+  /**
+   * Issue #1798 PR-B — fired with the hovered/unhovered area's key so the map can
+   * emphasise the matching marker. Called with null on mouse-leave. Never triggers
+   * any camera movement — purely a marker-emphasis signal.
+   */
+  onAreaHover?: (areaKey: string | null) => void;
 }
 
 // ─── Summary stat tile ──────────────────────────────────────────────────────
@@ -71,9 +99,12 @@ function Stat({ value, label, accent = false }: { value: number; label: string; 
 function LocalityCard({
   area,
   onSelectArea,
+  onAreaHover,
 }: {
   area: DiscoverArea;
   onSelectArea: (areaKey: string) => void;
+  /** Issue #1798 PR-B — map-marker emphasis signal; null on mouse-leave/blur. */
+  onAreaHover?: (areaKey: string | null) => void;
 }) {
   const count = area.listingCount ?? 0;
   const hasProperties = count > 0;
@@ -90,6 +121,8 @@ function LocalityCard({
           data-testid={testId}
           aria-disabled="true"
           className="rounded-xl border border-border/60 bg-muted/40 p-4"
+          onMouseEnter={() => onAreaHover?.(area.areaKey)}
+          onMouseLeave={() => onAreaHover?.(null)}
         >
           <div className="flex items-start gap-3.5">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground/60">
@@ -118,6 +151,10 @@ function LocalityCard({
         type="button"
         data-testid={testId}
         onClick={() => onSelectArea(area.areaKey)}
+        onMouseEnter={() => onAreaHover?.(area.areaKey)}
+        onMouseLeave={() => onAreaHover?.(null)}
+        onFocus={() => onAreaHover?.(area.areaKey)}
+        onBlur={() => onAreaHover?.(null)}
         aria-label={`View ${count} propert${count === 1 ? 'y' : 'ies'} in ${area.name}`}
         className="group w-full rounded-xl border border-border/70 bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-copper/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
@@ -153,6 +190,7 @@ export function AreaGroupSelectedPanel({
   group,
   areas,
   cityLabel,
+  citySlug,
   onBack,
   onBackToRegion,
   onStartOver,
@@ -160,6 +198,10 @@ export function AreaGroupSelectedPanel({
   onViewAllResults,
   onSelectJourney,
   onSelectSchool,
+  onSearchQueryChange,
+  shownCount,
+  totalCount,
+  onAreaHover,
 }: AreaGroupSelectedPanelProps) {
   const areasRef = useRef<HTMLDivElement | null>(null);
 
@@ -275,10 +317,25 @@ export function AreaGroupSelectedPanel({
       <PanelColumn className="space-y-5">
         <ScopedSearch
           cityLabel={cityLabel}
+          citySlug={citySlug}
           areas={areas}
           onSelectArea={onSelectArea}
           onSelectSchool={onSelectSchool}
+          onQueryChange={onSearchQueryChange}
         />
+
+        {/* Issue #1798 PR-B — panel-is-source-of-truth note: only when the map is
+            showing fewer representative pins than the total area count (dense-group
+            degradation active). Counts come straight from the map's own bucketing
+            result — never recomputed or fabricated here. */}
+        {shownCount != null && totalCount != null && shownCount < totalCount && (
+          <p
+            data-testid="area-marker-shown-of-total-note"
+            className="text-xs text-muted-foreground"
+          >
+            Showing {shownCount} of {totalCount} areas on the map — all {totalCount} are listed below.
+          </p>
+        )}
         {/* Selected-group context card */}
         <article
           data-testid="area-group-selected-card"
@@ -363,7 +420,12 @@ export function AreaGroupSelectedPanel({
               </div>
               <ul className="mt-3.5 space-y-3" role="list" aria-label={`Areas inside ${group.name}`}>
                 {areas.map((area) => (
-                  <LocalityCard key={area.areaKey} area={area} onSelectArea={onSelectArea} />
+                  <LocalityCard
+                    key={area.areaKey}
+                    area={area}
+                    onSelectArea={onSelectArea}
+                    onAreaHover={onAreaHover}
+                  />
                 ))}
               </ul>
             </>

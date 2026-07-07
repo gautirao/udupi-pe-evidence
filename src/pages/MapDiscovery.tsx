@@ -1045,6 +1045,32 @@ export default function MapDiscovery() {
   // unmounts). School-first intentionally NOT wired (RISK-3: 3-tier desynced markers).
   const [hoveredListingId, setHoveredListingId] = useState<string | null>(null);
 
+  // Issue #1798 PR-B — panel↔map area-marker plumbing (Unit D).
+  // Live (unsubmitted) area-search query typed into a panel's ScopedSearch. Debounced
+  // before driving searchMatchKeys so keystrokes never directly trigger a bucketing
+  // recompute on every char — purely a marker-promotion signal, never URL/camera state.
+  const [areaSearchQuery, setAreaSearchQuery] = useState('');
+  const [debouncedAreaSearchQuery, setDebouncedAreaSearchQuery] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedAreaSearchQuery(areaSearchQuery), 200);
+    return () => clearTimeout(t);
+  }, [areaSearchQuery]);
+
+  // Ephemeral hover/focus signal from a panel locality row → map marker emphasis.
+  // NOT persisted to URL; resets on mouse-leave/blur. Mirrors hoveredListingId above.
+  // Never drives any camera movement (no panner ticks are keyed on this state).
+  const [hoveredAreaKeyForMap, setHoveredAreaKeyForMap] = useState<string | null>(null);
+
+  // "Showing X of N areas on the map" — sourced from AreaMarkerLayer's own
+  // onMarkersComputed callback (never fetched/fabricated independently).
+  const [areaMarkerCounts, setAreaMarkerCounts] = useState<{ shown: number; total: number }>({
+    shown: 0,
+    total: 0,
+  });
+  const handleAreaMarkersComputed = useCallback((shown: number, total: number) => {
+    setAreaMarkerCounts({ shown, total });
+  }, []);
+
   // Issue #1160 — school-focus tick for SchoolFocusPanner in PropertyMap.
   // Incremented when the selected school changes (new school ID) or when radiusKm
   // changes while a school is selected in school-first journey. The tick pattern
@@ -2676,6 +2702,19 @@ export default function MapDiscovery() {
     cityCenter,
   ]);
 
+  // Issue #1798 PR-B — search-promotion (Unit D). Case-insensitive substring match
+  // against the areaLabels already being rendered on the map (overviewAreas) — never
+  // a separate fetch. undefined (not []) when the query is blank, matching
+  // AreaMarkerLayer's "forced.searchMatchIds only set when non-empty" contract.
+  const areaSearchMatchKeys = useMemo((): string[] | undefined => {
+    const q = debouncedAreaSearchQuery.trim().toLowerCase();
+    if (!q) return undefined;
+    const matches = overviewAreas
+      .filter((a) => a.areaLabel.toLowerCase().includes(q))
+      .map((a) => a.areaKey);
+    return matches.length > 0 ? matches : undefined;
+  }, [debouncedAreaSearchQuery, overviewAreas]);
+
   const handleOverviewAreaClick = useCallback((area: AreaPoint) => {
     if (isTopGroupedAgri && corridorGroups.some((c) => c.directionCode === area.areaKey)) {
       urlActions.setRegionWithMaxKm(area.areaKey);
@@ -2725,6 +2764,24 @@ export default function MapDiscovery() {
     !!selectedArea &&
     (resolvedPanelContent === 'area-selected' ||
       resolvedPanelContent === 'area-school-combined');
+
+  // Issue #1798 PR-B — append-only extension of the #1738 popover gate above
+  // (isAreaFirstPopoverEligible is left byte-for-byte unmodified so its existing
+  // regression tests stay green). Restores the marker popover in the
+  // group-results / dense-area-group states, carried forward from the same
+  // product decision made during PR-A's planning (bug-repro regression 2):
+  //   - 'area-group-results': the real Issue #1597 server-filtered group-results
+  //     view (map can show listing markers for the group).
+  //   - isSelectedGroupState: the dense area-group Level-2 state (group focused,
+  //     no area chosen yet) — listing markers can also render underneath the
+  //     area pins there (see the `listings` prop resolution above: authenticated
+  //     users see markerListings even with !selectedArea).
+  // School-first and agri-first are intentionally excluded, unchanged from #1738.
+  const isGroupResultsPopoverEligible =
+    urlState.journey === 'area-first' &&
+    (resolvedPanelContent === 'area-group-results' || isSelectedGroupState);
+
+  const isMarkerPopoverEligible = isAreaFirstPopoverEligible || isGroupResultsPopoverEligible;
 
   // Issue #1606 — resolved group display name for the area-first breadcrumb. Prefers the
   // backend group name, falls back to a prettified slug so a deep-linked groupId that has
@@ -2879,6 +2936,21 @@ export default function MapDiscovery() {
               areas={overviewAreas}
               onAreaClick={handleOverviewAreaClick}
               focusedGroupAreas={mapZoom <= AREA_LAYER_MAX_ZOOM ? focusedGroupAreas : undefined}
+              // Issue #1798 PR-B — area-marker density degradation. Gated on the SAME
+              // condition as focusedGroupAreas above (a dense group of member areas is
+              // focused, at/below the area-marker zoom cutoff) — this is the shared
+              // area-first/school-first "dense group selected" seam per Stage-A evidence
+              // (focusedGroupAreas is derived from urlState.groupId alone, journey-agnostic).
+              enableAreaMarkerDegradation={mapZoom <= AREA_LAYER_MAX_ZOOM && !!focusedGroupAreas}
+              selectedAreaKey={selectedArea?.areaKey ?? urlState.areaKey ?? null}
+              // Issue #1798 PR-B (Unit D) — panel↔map plumbing. areaSearchMatchKeys forces
+              // matching areas to full labelled pins as the user types (no camera move —
+              // this only affects AreaMarkerLayer's bucketing, never a panner tick).
+              // hoveredAreaKey mirrors hoveredListingId's ephemeral-state pattern above.
+              // onAreaMarkersComputed feeds the panel's "Showing X of N areas" note.
+              areaSearchMatchKeys={areaSearchMatchKeys}
+              hoveredAreaKey={hoveredAreaKeyForMap}
+              onAreaMarkersComputed={handleAreaMarkersComputed}
               schoolZoneLabels={schoolZoneLabels}
               onSelectZone={(groupId) => urlActions.selectGroup(groupId)}
               onZoomChange={setMapZoom}
@@ -3303,7 +3375,7 @@ export default function MapDiscovery() {
               intentionally excluded. ONE popover at a time; clicking a new marker replaces
               it. Dismiss: X button (inside card), Escape key, map-background click (onClick
               on this container div). */}
-          {isAreaFirstPopoverEligible &&
+          {isMarkerPopoverEligible &&
             selectedMarkerListing != null &&
             markerPixelPos != null && (
               <MarkerPopoverCard
@@ -3451,6 +3523,12 @@ export default function MapDiscovery() {
           // hoveredListingId is ephemeral useState (NOT URL); resets to null on mouseleave/blur
           // and naturally on journey switch. School-first NOT wired (RISK-3 unsafe tier sources).
           onHoverResultListing={setHoveredListingId}
+          // Issue #1798 PR-B (Unit D/F) — panel↔map area-marker plumbing. Mirrors the
+          // onHoverResultListing pattern above: purely ephemeral state, no camera move.
+          onAreaSearchQueryChange={setAreaSearchQuery}
+          onAreaHover={setHoveredAreaKeyForMap}
+          shownAreaCount={areaMarkerCounts.shown}
+          totalAreaMarkerCount={areaMarkerCounts.total}
           // Issue #1430 — agri-group listing peek wiring.
           onSelectAgriGroupListing={(id) => urlActions.setSelectedListing(id)}
           selectedGroupListingItem={selectedGroupListingItem}

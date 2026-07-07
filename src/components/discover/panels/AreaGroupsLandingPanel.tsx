@@ -87,6 +87,25 @@ export type AreaGroupsLandingPanelProps = {
   onIntentChange?: (intent: DiscoverIntent) => void;
   onSelectJourney?: (journey: DiscoverJourney) => void;
   onSelectSchool?: (schoolId: string) => void;
+  /**
+   * Issue #1798 PR-B — fired with the live search query as the user types in
+   * ScopedSearch (area mode only, Level-1 and Level-2). Forwarded unchanged to
+   * MapDiscovery so matching area markers can be promoted on the map.
+   */
+  onSearchQueryChange?: (query: string) => void;
+  /**
+   * Issue #1798 PR-B — "Showing X of N areas on the map" counts from the map's
+   * area-marker bucketing. Forwarded to the Level-2 AreaGroupSelectedPanel only
+   * (the note is not shown on the Level-1 group-card list).
+   */
+  shownAreaCount?: number;
+  totalAreaMarkerCount?: number;
+  /**
+   * Issue #1798 PR-B — fired with the hovered/unhovered area's key from the
+   * Level-2 locality list, so the map can emphasise the matching marker.
+   * Never triggers camera movement.
+   */
+  onAreaHover?: (areaKey: string | null) => void;
 } & (
   | { fallbackAreas: DiscoverArea[]; onSelectArea: (areaKey: string) => void }
   | { fallbackAreas?: never; onSelectArea?: never }
@@ -454,6 +473,10 @@ export function AreaGroupsLandingPanel({
   onBackToRegion,
   onSelectJourney,
   onSelectSchool,
+  onSearchQueryChange,
+  shownAreaCount,
+  totalAreaMarkerCount,
+  onAreaHover,
 }: AreaGroupsLandingPanelProps) {
   // Issue #1178 — a groupId is "active" only when it is a non-blank string.
   // Trim guards against whitespace-only deep links (e.g. `?groupId=%20`), which
@@ -576,6 +599,9 @@ export function AreaGroupsLandingPanel({
           group={focusedGroup as AreaGroup}
           areas={level2Areas}
           cityLabel={cityLabel}
+          // Issue #1798 PR-B (Unit F) — scope this panel's ScopedSearch school search
+          // to the active city, mirroring the Level-1 ScopedSearch below.
+          citySlug={city}
           onBack={onClearGroup}
           onBackToRegion={onBackToRegion}
           onStartOver={onStartOver}
@@ -585,6 +611,11 @@ export function AreaGroupsLandingPanel({
           onViewAllResults={onViewAllResults}
           onSelectJourney={onSelectJourney}
           onSelectSchool={onSelectSchool}
+          // Issue #1798 PR-B (Unit D) — search-promotion + panel-source-of-truth wiring.
+          onSearchQueryChange={onSearchQueryChange}
+          shownCount={shownAreaCount}
+          totalCount={totalAreaMarkerCount}
+          onAreaHover={onAreaHover}
         />
       </div>
     );
@@ -648,6 +679,7 @@ export function AreaGroupsLandingPanel({
           areas={fallbackAreas}
           onSelectArea={onSelectArea}
           onSelectSchool={onSelectSchool}
+          onQueryChange={onSearchQueryChange}
         />
 
         {/* Controls card: city + Buy/Rent (mock parity, mirrors GuidedEntryPanel) */}

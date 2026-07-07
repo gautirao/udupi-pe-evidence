@@ -1,8 +1,13 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
+import {
+  computeAreaMarkers,
+  type RankableArea,
+  type AreaCluster as BucketedAreaCluster,
+} from '@/lib/map/areaMarkerBucketing';
 
 /**
  * One area marker point.
@@ -47,6 +52,47 @@ interface AreaMarkerLayerProps {
    * falls back to property count badge (school has already been chosen).
    */
   selectedSchool?: unknown;
+
+  // ── Issue #1798 PR-B — dense-group area-marker degradation ────────────────
+  // All of the following default to OFF/undefined, preserving today's
+  // render-every-area behaviour exactly for any caller that omits them
+  // (school-first non-dense, agri-first, and any other existing call site).
+
+  /**
+   * When true, degrades dense area sets (design-spec-area-marker-ux.md) into
+   * a spatially-representative subset + navigation area-clusters instead of
+   * plotting every area's labelled pin. When false/undefined, renders exactly
+   * as before this issue (no behaviour change).
+   */
+  enableDegradation?: boolean;
+  /** The currently-selected area's key — always forced to a full labelled pin. */
+  selectedAreaKey?: string | null;
+  /** Areas matching the active panel search — always forced to full labelled pins. */
+  searchMatchKeys?: string[];
+  /** The area currently hovered/focused in the panel — always forced to a full labelled pin. */
+  hoveredAreaKey?: string | null;
+  /**
+   * Fired when an area-cluster chip is clicked. The layer itself flies into
+   * the cluster's member bounds (fly-to-split, never drilling to listings);
+   * this callback additionally lets the parent filter/scroll/highlight the
+   * matching panel rows (design-spec §4/§6).
+   */
+  onAreaClusterClick?: (cluster: AreaMarkerClusterInfo) => void;
+  /**
+   * Fired after each bucketing recompute with (shown, total) area counts, so
+   * the parent can render the "Showing X of N areas on the map" panel note.
+   */
+  onMarkersComputed?: (shownCount: number, totalCount: number) => void;
+}
+
+/** Area-cluster payload surfaced to onAreaClusterClick — original AreaPoints, not the lossy RankableArea projection. */
+export interface AreaMarkerClusterInfo {
+  cellKey: string;
+  areas: AreaPoint[];
+  dominantName: string;
+  /** Member AREA count — never a property/listing count sum. */
+  count: number;
+  anchor: { lat: number; lon: number };
 }
 
 /**
@@ -74,6 +120,9 @@ const C_BORDER = 'rgba(17,24,39,0.09)';
 const C_COPPER = '#B05C3A';
 const C_COPPER_HOVER = '#934B2D';
 const C_COPPER_TINT = '#F2E8E1';
+// ReTrends school-journey accent (index.css --plum). Restrained plum/lavender —
+// used ONLY for school-first area-cluster / dot chips (design-spec §11).
+const C_PLUM = '#5E5286';
 const MONO = `'Geist Mono', ui-monospace, 'SF Mono', monospace`;
 const PILL_SHADOW = '0 4px 10px rgba(17,24,39,0.10), 0 2px 4px rgba(17,24,39,0.05)';
 
@@ -177,16 +226,79 @@ function makeAreaCard(
   });
 }
 
+const stackSvg = (color: string) =>
+  `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;"><path d="m12 2 8.5 5-8.5 5-8.5-5L12 2Z"/><path d="m3.5 12 8.5 5 8.5-5"/><path d="m3.5 17 8.5 5 8.5-5"/></svg>`;
+
+/**
+ * A demoted, non-representative area — small hover-only dot (design-spec §5).
+ * Not revealed/labelled: hover reveal is handled via native marker
+ * mouseover/mouseout in the effect below (setIcon swap), since this divIcon
+ * HTML has no CSS pipeline behind it.
+ */
+function makeDotIcon(area: AreaPoint, accent: string, revealed: boolean): L.DivIcon {
+  const label = escapeHtml(area.areaLabel);
+  const html = revealed
+    ? `<div data-testid="area-marker-dot" data-revealed="true" style="transform:translate(-50%,-118%);font-family:inherit;pointer-events:auto;cursor:pointer;">
+        <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:9999px;background:${C_PAPER};border:1px solid ${C_BORDER};box-shadow:${PILL_SHADOW};white-space:nowrap;">
+          ${pinSvg(accent)}
+          <span style="font-size:11.5px;font-weight:700;color:${C_INK};">${label}</span>
+        </div>
+      </div>`
+    : `<div data-testid="area-marker-dot" data-revealed="false" style="transform:translate(-50%,-50%);pointer-events:auto;cursor:pointer;">
+        <span style="display:block;width:7px;height:7px;border-radius:50%;background:${accent};border:1.5px solid ${C_PAPER};box-shadow:0 1px 3px rgba(17,24,39,0.25);"></span>
+      </div>`;
+  return L.divIcon({ className: 'area-marker-dot-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
+}
+
+/**
+ * Navigation area-cluster chip — visually distinct from the filled/solid
+ * listing cluster disc (design-spec §4): soft outline chip, areas glyph,
+ * "+N areas" label (N = member AREA count, never a property sum).
+ */
+function makeClusterIcon(cluster: BucketedAreaCluster, accent: string): L.DivIcon {
+  const label = escapeHtml(cluster.dominantName);
+  const html = `<div data-testid="area-cluster-marker" style="transform:translate(-50%,-50%);font-family:inherit;pointer-events:auto;cursor:pointer;">
+    <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:9999px;background:${C_PAPER};border:1.5px solid ${accent};box-shadow:${PILL_SHADOW};white-space:nowrap;">
+      ${stackSvg(accent)}
+      <span style="font-size:11.5px;font-weight:700;color:${C_INK};">${label}</span>
+      <span style="font-family:${MONO};font-size:11px;font-weight:700;color:${accent};">+${cluster.count} area${cluster.count === 1 ? '' : 's'}</span>
+    </div>
+  </div>`;
+  return L.divIcon({ className: 'area-cluster-marker-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
+}
+
+/** Union bbox of a set of AreaPoints, falling back to their geo centers when bbox is null. */
+function unionBounds(areas: AreaPoint[]): L.LatLngBoundsExpression {
+  const points: [number, number][] = [];
+  for (const a of areas) {
+    if (a.bbox) {
+      points.push(a.bbox[0], a.bbox[1]);
+    } else {
+      points.push([a.geo_center_lat, a.geo_center_lon]);
+    }
+  }
+  return points;
+}
+
 export function AreaMarkerLayer({
   areas,
   onAreaClick,
   focusedGroupAreas,
   journey,
   selectedSchool,
+  enableDegradation,
+  selectedAreaKey,
+  searchMatchKeys,
+  hoveredAreaKey,
+  onAreaClusterClick,
+  onMarkersComputed,
 }: AreaMarkerLayerProps) {
   const map = useMap();
 
+  // ── Legacy path (default) — renders exactly as before this issue. Every
+  // area passed in gets its own full labelled pin; no density degradation.
   useEffect(() => {
+    if (enableDegradation) return;
     const markers: L.Marker[] = [];
     // Recompute inside the effect so the closure captures the current focusedGroupAreas.
     const effectFocusedSet = focusedGroupAreas ? new Set(focusedGroupAreas) : null;
@@ -229,7 +341,155 @@ export function AreaMarkerLayer({
   // focusedGroupAreas is an array reference — it changes identity when the group
   // changes, which is correct: re-render recreates markers with new opacity values.
   // journey and selectedSchool change the badge content so must also be deps.
-  }, [areas, map, onAreaClick, focusedGroupAreas, journey, selectedSchool]);
+  }, [areas, map, onAreaClick, focusedGroupAreas, journey, selectedSchool, enableDegradation]);
+
+  // ── Degraded path (Issue #1798 PR-B, opt-in) ───────────────────────────────
+  // Tracks the current zoom so bucketing recomputes on zoom only (pan-invariant,
+  // design-spec §3 step 5, §8). Initialised eagerly so the first render (before
+  // any zoomend fires) already has a value.
+  const [zoomTick, setZoomTick] = useState(() => map.getZoom());
+  useEffect(() => {
+    if (!enableDegradation) return;
+    const onZoomEnd = () => setZoomTick(map.getZoom());
+    map.on('zoomend', onZoomEnd);
+    return () => {
+      map.off('zoomend', onZoomEnd);
+    };
+  }, [map, enableDegradation]);
+
+  const areaByKey = useMemo(() => new Map(areas.map((a) => [a.areaKey, a])), [areas]);
+
+  const bucketing = useMemo(() => {
+    if (!enableDegradation || areas.length === 0) return null;
+    const rankable: RankableArea[] = areas.map((a) => ({
+      id: a.areaKey,
+      name: a.areaLabel,
+      count: a.listingCount ?? 0,
+      lat: a.geo_center_lat,
+      lon: a.geo_center_lon,
+    }));
+    const lats = areas.map((a) => a.geo_center_lat);
+    const lons = areas.map((a) => a.geo_center_lon);
+    const groupBounds = {
+      minLat: Math.min(...lats),
+      minLon: Math.min(...lons),
+      maxLat: Math.max(...lats),
+      maxLon: Math.max(...lons),
+    };
+    const searchMatchIds =
+      searchMatchKeys && searchMatchKeys.length > 0 ? new Set(searchMatchKeys) : undefined;
+    const size = map.getSize();
+    return computeAreaMarkers({
+      areas: rankable,
+      project: (lat, lon) => {
+        const pt = map.latLngToContainerPoint([lat, lon]);
+        return { x: pt.x, y: pt.y };
+      },
+      viewport: { width: size.x, height: size.y },
+      zoom: zoomTick,
+      forced: {
+        selectedId: selectedAreaKey ?? null,
+        searchMatchIds,
+        hoveredOrFocusedId: hoveredAreaKey ?? null,
+      },
+      groupBounds,
+    });
+    // map is stable per PropertyMap instance; zoomTick is the deliberate
+    // zoom-only recompute trigger. Pan is intentionally NOT a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enableDegradation, areas, zoomTick, selectedAreaKey, searchMatchKeys, hoveredAreaKey]);
+
+  useEffect(() => {
+    if (!enableDegradation || !bucketing) return;
+    onMarkersComputed?.(bucketing.representatives.length, areas.length);
+  }, [enableDegradation, bucketing, areas.length, onMarkersComputed]);
+
+  useEffect(() => {
+    if (!enableDegradation || !bucketing) return;
+    const markers: L.Marker[] = [];
+    const accent = journey === 'school-first' ? C_PLUM : C_COPPER;
+
+    // Representatives — same visual/click contract as the legacy full pin.
+    for (const rankedArea of bucketing.representatives) {
+      const area = areaByKey.get(rankedArea.id);
+      if (!area) continue;
+      const marker = L.marker([area.geo_center_lat, area.geo_center_lon], {
+        icon: makeAreaCard(area, 1.0, journey, selectedSchool),
+      });
+      marker.on('click', () => {
+        onAreaClick?.(area);
+        const isOverviewGroupOrRegion = area.isMacroRegion || area.isGroup;
+        if (area.bbox) {
+          map.fitBounds(area.bbox, { padding: [40, 40], maxZoom: isOverviewGroupOrRegion ? 12 : 16 });
+        } else {
+          map.flyTo([area.geo_center_lat, area.geo_center_lon], isOverviewGroupOrRegion ? 12 : 13);
+        }
+        if (!isOverviewGroupOrRegion) {
+          // If the bbox was too large to cross the area→listing zoom threshold (12),
+          // bump to 13 once the animation settles so listing markers appear.
+          map.once('zoomend', () => {
+            if (map.getZoom() <= 12) map.setZoom(13, { animate: true });
+          });
+        }
+      });
+      marker.addTo(map);
+      markers.push(marker);
+    }
+
+    // Dots — demoted low-priority areas. Hover/focus reveals the full label
+    // via a native marker icon swap (this divIcon HTML has no CSS pipeline).
+    for (const rankedArea of bucketing.dots) {
+      const area = areaByKey.get(rankedArea.id);
+      if (!area) continue;
+      const marker = L.marker([area.geo_center_lat, area.geo_center_lon], {
+        icon: makeDotIcon(area, accent, false),
+      });
+      marker.on('mouseover', () => marker.setIcon(makeDotIcon(area, accent, true)));
+      marker.on('mouseout', () => marker.setIcon(makeDotIcon(area, accent, false)));
+      marker.on('click', () => {
+        marker.setIcon(makeDotIcon(area, accent, true));
+        onAreaClick?.(area);
+      });
+      marker.addTo(map);
+      markers.push(marker);
+    }
+
+    // Area clusters — navigation chips (design-spec §4). Click flies into the
+    // member bounds to split, and NEVER drills to listings.
+    for (const cluster of bucketing.clusters) {
+      const clusterAreas = cluster.areas
+        .map((a) => areaByKey.get(a.id))
+        .filter((a): a is AreaPoint => a != null);
+      if (clusterAreas.length === 0) continue;
+      const anchor: [number, number] = [cluster.anchor.lat, cluster.anchor.lon];
+      const marker = L.marker(anchor, { icon: makeClusterIcon(cluster, accent) });
+      marker.on('click', () => {
+        map.fitBounds(unionBounds(clusterAreas), { padding: [50, 50], maxZoom: 16 });
+        onAreaClusterClick?.({
+          cellKey: cluster.cellKey,
+          areas: clusterAreas,
+          dominantName: cluster.dominantName,
+          count: cluster.count,
+          anchor: cluster.anchor,
+        });
+      });
+      marker.addTo(map);
+      markers.push(marker);
+    }
+
+    return () => {
+      markers.forEach((m) => m.remove());
+    };
+  }, [
+    enableDegradation,
+    bucketing,
+    areaByKey,
+    map,
+    onAreaClick,
+    onAreaClusterClick,
+    journey,
+    selectedSchool,
+  ]);
 
   return null;
 }
