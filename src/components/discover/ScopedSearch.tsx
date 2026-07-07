@@ -13,6 +13,14 @@ export interface ScopedSearchProps {
   onModeChange?: (mode: 'area' | 'school') => void;
   /** City label (e.g. "Udupi", "Bangalore") */
   cityLabel?: string;
+  /**
+   * Active city slug (e.g. "udupi", "bangalore" — same format as the /popular
+   * endpoint's `city` param) used to scope school search to the current
+   * city/region. Optional — when omitted, school search stays unscoped
+   * (prior behaviour); callers with no city context should leave this unset
+   * rather than fabricate a value.
+   */
+  citySlug?: string;
   /** List of available areas to search within when in area mode */
   areas?: DiscoverArea[];
   /** Callback when an area is selected */
@@ -25,6 +33,7 @@ export function ScopedSearch({
   searchMode: searchModeProp = 'area',
   onModeChange,
   cityLabel = 'this city',
+  citySlug,
   areas = [],
   onSelectArea,
   onSelectSchool,
@@ -70,7 +79,8 @@ export function ScopedSearch({
   }, [query, areas, searchMode]);
 
   const { data: schoolsData = [], isLoading: isLoadingSchools } = useSchoolSearch(
-    searchMode === 'school' ? query : ''
+    searchMode === 'school' ? query : '',
+    citySlug,
   );
 
   const handlePickArea = (areaKey: string) => {

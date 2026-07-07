@@ -34,15 +34,25 @@ const NEARBY_SCHOOLS_KEY = ['nearby-schools'] as const;
 /**
  * Debounced autocomplete search for schools.
  * Enabled only when query is at least 2 characters.
+ *
+ * @param query Free-text search string.
+ * @param city  Optional city slug (e.g. "udupi", "bangalore" — same format as
+ *              usePopularSchools) to scope results to the active city/region.
+ *              Omitted or blank preserves the prior unscoped global search.
  */
-export function useSchoolSearch(query: string) {
+export function useSchoolSearch(query: string, city?: string | null) {
+  const trimmedCity = city?.trim() ?? '';
+
   return useQuery({
-    queryKey: [...SCHOOL_SEARCH_KEY, query],
-    queryFn: () =>
-      api.get<SchoolResult[]>(
-        `/api/public/schools/search?q=${encodeURIComponent(query)}&limit=10`,
+    queryKey: [...SCHOOL_SEARCH_KEY, query, trimmedCity],
+    queryFn: () => {
+      const params = new URLSearchParams({ q: query, limit: '10' });
+      if (trimmedCity) params.set('city', trimmedCity);
+      return api.get<SchoolResult[]>(
+        `/api/public/schools/search?${params.toString()}`,
         { skipAuth: true },
-      ),
+      );
+    },
     enabled: query.trim().length >= 2,
     staleTime: 60_000,
   });

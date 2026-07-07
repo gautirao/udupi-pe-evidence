@@ -644,6 +644,7 @@ export function AreaGroupsLandingPanel({
         {/* Scoped Search with Area/School switch */}
         <ScopedSearch
           cityLabel={cityLabel}
+          citySlug={city}
           areas={fallbackAreas}
           onSelectArea={onSelectArea}
           onSelectSchool={onSelectSchool}

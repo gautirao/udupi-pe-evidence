@@ -78,6 +78,73 @@ describe('useSchoolSearch', () => {
     });
     expect(result.current.fetchStatus).toBe('idle');
   });
+
+  // ─── Issue #1798: region-scoped search (city param) ─────────
+
+  it('omits city param when city is undefined (backward-compat)', async () => {
+    mockGet.mockResolvedValue([sampleSchool]);
+    const { result } = renderHook(() => useSchoolSearch('Delhi'), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGet).toHaveBeenCalledWith(
+      '/api/public/schools/search?q=Delhi&limit=10',
+      { skipAuth: true },
+    );
+    const calledUrl = mockGet.mock.calls[0][0] as string;
+    expect(calledUrl).not.toContain('city=');
+  });
+
+  it('omits city param when city is blank/whitespace', async () => {
+    mockGet.mockResolvedValue([sampleSchool]);
+    const { result } = renderHook(() => useSchoolSearch('Delhi', '   '), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGet).toHaveBeenCalledWith(
+      '/api/public/schools/search?q=Delhi&limit=10',
+      { skipAuth: true },
+    );
+    const calledUrl = mockGet.mock.calls[0][0] as string;
+    expect(calledUrl).not.toContain('city=');
+  });
+
+  it('includes city param when city="bangalore" is provided', async () => {
+    mockGet.mockResolvedValue([sampleSchool]);
+    const { result } = renderHook(() => useSchoolSearch('heb', 'bangalore'), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGet).toHaveBeenCalledWith(
+      '/api/public/schools/search?q=heb&limit=10&city=bangalore',
+      { skipAuth: true },
+    );
+  });
+
+  it('re-fetches when city changes (city is part of queryKey)', async () => {
+    mockGet.mockResolvedValue([sampleSchool]);
+    const { rerender, result } = renderHook(
+      ({ city }: { city?: string }) => useSchoolSearch('heb', city),
+      { wrapper: makeWrapper(), initialProps: { city: 'udupi' } },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(mockGet).toHaveBeenLastCalledWith(
+      '/api/public/schools/search?q=heb&limit=10&city=udupi',
+      { skipAuth: true },
+    );
+
+    rerender({ city: 'bangalore' });
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+    expect(mockGet).toHaveBeenLastCalledWith(
+      '/api/public/schools/search?q=heb&limit=10&city=bangalore',
+      { skipAuth: true },
+    );
+  });
 });
 
 describe('useSchoolById', () => {

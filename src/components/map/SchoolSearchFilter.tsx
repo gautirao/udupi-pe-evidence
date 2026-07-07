@@ -22,6 +22,12 @@ interface SchoolSearchFilterProps {
   onRadiusChange: (radius: number) => void;
   boardFilter: string[];
   onBoardFilterChange: (boards: string[]) => void;
+  /**
+   * Active city slug (e.g. "udupi", "bangalore" — same format as the sibling
+   * NearSchoolSheet `city` prop used for the popular-schools grid). Optional —
+   * when omitted, search stays unscoped (prior behaviour).
+   */
+  city?: string | null;
 }
 
 export function SchoolSearchFilter({
@@ -31,6 +37,7 @@ export function SchoolSearchFilter({
   onRadiusChange,
   boardFilter,
   onBoardFilterChange,
+  city,
 }: SchoolSearchFilterProps) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -44,7 +51,7 @@ export function SchoolSearchFilter({
     return () => clearTimeout(timer);
   }, [query]);
 
-  const { data: results = [], isLoading } = useSchoolSearch(debouncedQuery);
+  const { data: results = [], isLoading } = useSchoolSearch(debouncedQuery, city);
 
   // Filter results by board type if board filter is active
   const filteredResults = boardFilter.length > 0

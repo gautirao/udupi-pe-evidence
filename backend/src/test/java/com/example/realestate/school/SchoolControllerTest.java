@@ -80,7 +80,7 @@ class SchoolControllerTest {
                 SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
                 "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, null, null, null, null);
 
-        when(schoolService.search(anyString(), anyInt()))
+        when(schoolService.search(anyString(), anyInt(), eq(null)))
                 .thenReturn(List.of(school));
 
         mockMvc.perform(get("/api/public/schools/search")
@@ -94,6 +94,47 @@ class SchoolControllerTest {
                 .andExpect(jsonPath("$[0].latitude").value(13.3511))
                 .andExpect(jsonPath("$[0].longitude").value(74.7871))
                 .andExpect(jsonPath("$[0].prominenceTier").value((Object) null));
+
+        // Guardrail: no city param supplied — must delegate with city=null (unscoped, backward compatible)
+        verify(schoolService).search("Sharada", 10, null);
+    }
+
+    // ==================== GET /search — city scope param (issue #1798) ====================
+
+    @Test
+    void search_withCityScope_delegatesCityToService_regressionScopeExclusion() throws Exception {
+        // Regression: GET /search?q=heb&city=bangalore must scope to Bangalore-district schools
+        // only, not the globally-unscoped match that previously leaked Udupi schools into a
+        // Bangalore search.
+        SchoolResponse school = new SchoolResponse(
+                SCHOOL_ID.toString(), "Hebbal Public School", "CBSE",
+                "CBSE", 13.0451, 77.5977, "Hebbal, Bengaluru", null, null, null, null, null);
+
+        when(schoolService.search(eq("heb"), anyInt(), eq("bangalore")))
+                .thenReturn(List.of(school));
+
+        mockMvc.perform(get("/api/public/schools/search")
+                        .param("q", "heb")
+                        .param("city", "bangalore"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("Hebbal Public School"));
+
+        verify(schoolService).search("heb", 10, "bangalore");
+    }
+
+    @Test
+    void search_blankCityScope_passedThroughAsBlank_serviceHandlesUnscoping() throws Exception {
+        // Controller does not strip blank city — SchoolService.search treats blank as unscoped.
+        when(schoolService.search(eq("heb"), anyInt(), eq("  ")))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/public/schools/search")
+                        .param("q", "heb")
+                        .param("city", "  "))
+                .andExpect(status().isOk());
+
+        verify(schoolService).search("heb", 10, "  ");
     }
 
     // ==================== GET /search — empty query -> 400 ====================

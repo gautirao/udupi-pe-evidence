@@ -64,15 +64,29 @@ public class SchoolService {
     /**
      * Autocomplete search by school name (case-insensitive substring match).
      *
+     * <p>When {@code city} is present and non-blank, results are additionally scoped to that
+     * city using the same district-based city JOIN as {@link #findPopularByCity}. A null or
+     * blank {@code city} preserves the original globally-unscoped behaviour.
+     *
      * @param query  search string
      * @param limit  max results (clamped to 1..50)
+     * @param city   optional city slug to scope results to (e.g. "udupi"); null/blank = unscoped
      * @return matching schools as response DTOs
      */
     @Transactional(readOnly = true)
-    public List<SchoolResponse> search(String query, int limit) {
+    public List<SchoolResponse> search(String query, int limit, String city) {
         int clampedLimit = Math.max(1, Math.min(50, limit));
-        log.debug("search query='{}' limit={}", query, clampedLimit);
 
+        if (city != null && !city.isBlank()) {
+            String trimmedCity = city.trim();
+            log.debug("search query='{}' limit={} city='{}'", query, clampedLimit, trimmedCity);
+            return repository.findByNameContainingIgnoreCaseAndCity(query, trimmedCity, clampedLimit)
+                    .stream()
+                    .map(SchoolResponse::from)
+                    .toList();
+        }
+
+        log.debug("search query='{}' limit={}", query, clampedLimit);
         return repository.findByNameContainingIgnoreCase(query, PageRequest.of(0, clampedLimit))
                 .stream()
                 .map(SchoolResponse::from)

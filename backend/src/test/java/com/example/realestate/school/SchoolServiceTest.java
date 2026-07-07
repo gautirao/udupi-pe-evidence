@@ -17,6 +17,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -156,7 +158,95 @@ class SchoolServiceTest {
         assertThat(results.get(0).nearbyListingCount()).isEqualTo(12);
     }
 
+    // ==================== search — scope regression (issue #1798) ====================
+
+    @Test
+    void search_blankCity_usesUnscopedQuery_preservesBackwardCompat() {
+        UUID id = UUID.fromString("00000000-0000-0000-0000-000000000020");
+        School school = stubSchool(id, "Hebbal Public School");
+
+        when(repository.findByNameContainingIgnoreCase(eq("heb"), any()))
+                .thenReturn(List.of(school));
+
+        List<SchoolResponse> results = service.search("heb", 10, "  ");
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).name()).isEqualTo("Hebbal Public School");
+        verify(repository).findByNameContainingIgnoreCase(eq("heb"), any());
+        verify(repository, never()).findByNameContainingIgnoreCaseAndCity(any(), any(), anyInt());
+    }
+
+    @Test
+    void search_nullCity_usesUnscopedQuery_preservesBackwardCompat() {
+        UUID id = UUID.fromString("00000000-0000-0000-0000-000000000021");
+        School school = stubSchool(id, "Hebbal Public School");
+
+        when(repository.findByNameContainingIgnoreCase(eq("heb"), any()))
+                .thenReturn(List.of(school));
+
+        List<SchoolResponse> results = service.search("heb", 10, null);
+
+        assertThat(results).hasSize(1);
+        verify(repository).findByNameContainingIgnoreCase(eq("heb"), any());
+        verify(repository, never()).findByNameContainingIgnoreCaseAndCity(any(), any(), anyInt());
+    }
+
+    @Test
+    void search_nonBlankCity_delegatesToScopedQuery_excludesOtherCitySchools() {
+        UUID id = UUID.fromString("00000000-0000-0000-0000-000000000022");
+        School school = stubSchool(id, "Hebbal Public School");
+
+        // Only the Bangalore-scoped query returns the school; the unscoped query is not invoked.
+        when(repository.findByNameContainingIgnoreCaseAndCity(eq("heb"), eq("bangalore"), anyInt()))
+                .thenReturn(List.of(school));
+
+        List<SchoolResponse> results = service.search("heb", 10, "bangalore");
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).name()).isEqualTo("Hebbal Public School");
+        verify(repository).findByNameContainingIgnoreCaseAndCity(eq("heb"), eq("bangalore"), anyInt());
+        verify(repository, never()).findByNameContainingIgnoreCase(any(), any());
+    }
+
+    @Test
+    void search_nonBlankCity_outOfScopeCity_returnsEmpty() {
+        // Simulates the regression scenario: an "udupi" scope excludes Bangalore-only matches
+        // because the repository query itself performs the district filter.
+        when(repository.findByNameContainingIgnoreCaseAndCity(eq("heb"), eq("udupi"), anyInt()))
+                .thenReturn(List.of());
+
+        List<SchoolResponse> results = service.search("heb", 10, "udupi");
+
+        assertThat(results).isEmpty();
+        verify(repository).findByNameContainingIgnoreCaseAndCity(eq("heb"), eq("udupi"), anyInt());
+    }
+
+    @Test
+    void search_city_limitClamping_min_and_max() {
+        UUID id = UUID.fromString("00000000-0000-0000-0000-000000000023");
+        School school = stubSchool(id, "Test School");
+
+        when(repository.findByNameContainingIgnoreCaseAndCity(eq("test"), eq("udupi"), eq(1)))
+                .thenReturn(List.of(school));
+        List<SchoolResponse> resultsMin = service.search("test", 0, "udupi");
+        assertThat(resultsMin).hasSize(1);
+
+        when(repository.findByNameContainingIgnoreCaseAndCity(eq("test"), eq("udupi"), eq(50)))
+                .thenReturn(List.of(school));
+        List<SchoolResponse> resultsMax = service.search("test", 51, "udupi");
+        assertThat(resultsMax).hasSize(1);
+    }
+
     // ==================== helpers ====================
+
+    private School stubSchool(UUID id, String name) {
+        School school = new School();
+        school.setId(id);
+        school.setName(name);
+        school.setLatitude(13.0);
+        school.setLongitude(77.0);
+        return school;
+    }
 
     /**
      * Returns a minimal {@link SchoolRepository.AreaSchoolProjection} backed by a concrete class.

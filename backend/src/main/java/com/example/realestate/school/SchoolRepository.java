@@ -21,6 +21,39 @@ public interface SchoolRepository extends JpaRepository<School, UUID> {
      */
     List<School> findByNameContainingIgnoreCase(String name, Pageable pageable);
 
+    /**
+     * Autocomplete search scoped to a single city, using the same district-based city JOIN
+     * as {@link #findPopularByCity}: {@code schools.district IN (SELECT DISTINCT a.district
+     * FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = ?)}.
+     *
+     * <p>Used when a caller supplies a non-blank {@code city} scope to
+     * {@code GET /api/public/schools/search}, preventing an unscoped substring match from
+     * returning schools outside the requested city (e.g. a Bangalore "heb" search returning
+     * Udupi schools).
+     *
+     * @param name     substring to match against school name (case-insensitive)
+     * @param citySlug city slug to scope results to (e.g. "udupi")
+     * @param limit    maximum number of results to return
+     * @return matching schools within the city, name-substring matched
+     */
+    @Query(value = """
+            SELECT s.*
+            FROM schools s
+            WHERE s.name ILIKE CONCAT('%', CAST(:name AS text), '%')
+              AND s.district IN (
+                  SELECT DISTINCT a.district
+                  FROM areas a
+                  JOIN cities c ON c.id = a.city_id
+                  WHERE c.slug = :citySlug
+              )
+            ORDER BY s.name ASC, s.id ASC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<School> findByNameContainingIgnoreCaseAndCity(
+            @Param("name") String name,
+            @Param("citySlug") String citySlug,
+            @Param("limit") int limit);
+
     /** Returns all schools with the given board type. */
     List<School> findByBoardType(String boardType);
 

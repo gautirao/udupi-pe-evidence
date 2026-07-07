@@ -754,7 +754,7 @@ export function SchoolBrowsePanel({
   // so that areaKey is resolved and written to the URL in the same atomic push.
   const [urlState, urlActions] = useDiscoverUrlState();
 
-  const schoolSearchResult = useSchoolSearch(searchQuery);
+  const schoolSearchResult = useSchoolSearch(searchQuery, city);
   const popularSchoolsResult = usePopularSchools(city, undefined, 6);
   const discoverAreasResult = useDiscoverAreas(city);
 

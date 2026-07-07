@@ -108,6 +108,19 @@ class SchoolRepositoryTest {
     }
 
     /**
+     * Inserts a fixture school with an explicit {@code district}, used by the city-scoped
+     * search tests to seed schools in different districts (e.g. "Bengaluru" vs "Udupi") so the
+     * {@code findByNameContainingIgnoreCaseAndCity} JOIN filter can be exercised.
+     */
+    private void insertSchoolWithDistrict(String id, String name, double lat, double lon, String district) {
+        jdbc.update("""
+                INSERT INTO schools (id, name, board_type, latitude, longitude, address, district)
+                VALUES (?::uuid, ?, 'STATE', ?, ?, 'Test fixture', ?)
+                ON CONFLICT (id) DO NOTHING
+                """, id, name, lat, lon, district);
+    }
+
+    /**
      * Inserts a property listing at the given coordinates with the given status.
      * {@code isValid}, {@code isDuplicate} default to their AC2 requirements.
      *
@@ -317,5 +330,70 @@ class SchoolRepositoryTest {
         assertThat(counts.get(manipalId))
                 .as("Only SCRAPED/LIVE non-duplicate valid listings within 1 km must be counted")
                 .isEqualTo(3);
+    }
+
+    // ── findByNameContainingIgnoreCaseAndCity — issue #1798 region-scoping regression ────────
+
+    /**
+     * Reproduces the reported bug: a "heb" search matches "Hebbal Public School" (Bengaluru
+     * district, seeded by V71) and a same-substring "Hebri" school placed in the Udupi
+     * district. The unscoped query returns both; the city-scoped query for "bangalore" must
+     * return only the Bengaluru-district school.
+     */
+    @Test
+    @DisplayName("#1798: findByNameContainingIgnoreCaseAndCity('heb','bangalore') excludes Udupi-district matches")
+    void findByNameContainingIgnoreCaseAndCity_scopesToRequestedCity_excludesOtherCityMatches() {
+        String bangaloreSchoolId = "10000000-0000-0000-0000-000000000010";
+        String udupiSchoolId = "10000000-0000-0000-0000-000000000011";
+
+        // V71 seeds area 'IN|KA|Bengaluru|Hebbal' with district='Bengaluru' under city slug 'bangalore',
+        // and 'IN|KA|Udupi|Udupi' with district='Udupi' under city slug 'udupi'.
+        insertSchoolWithDistrict(bangaloreSchoolId, "Hebbal Public School", 13.0451, 77.5977, "Bengaluru");
+        insertSchoolWithDistrict(udupiSchoolId, "Hebri Government School", 13.3409, 74.7421, "Udupi");
+
+        List<School> bangaloreResults =
+                schoolRepository.findByNameContainingIgnoreCaseAndCity("heb", "bangalore", 10);
+        List<String> bangaloreNames = bangaloreResults.stream().map(School::getName).toList();
+
+        assertThat(bangaloreNames)
+                .as("city='bangalore' scope must include the Bengaluru-district match")
+                .contains("Hebbal Public School");
+        assertThat(bangaloreNames)
+                .as("city='bangalore' scope must exclude the Udupi-district match (issue #1798 regression)")
+                .doesNotContain("Hebri Government School");
+
+        List<School> udupiResults =
+                schoolRepository.findByNameContainingIgnoreCaseAndCity("heb", "udupi", 10);
+        List<String> udupiNames = udupiResults.stream().map(School::getName).toList();
+
+        assertThat(udupiNames)
+                .as("city='udupi' scope must include the Udupi-district match")
+                .contains("Hebri Government School");
+        assertThat(udupiNames)
+                .as("city='udupi' scope must exclude the Bengaluru-district match")
+                .doesNotContain("Hebbal Public School");
+    }
+
+    /**
+     * Confirms the pre-existing unscoped path ({@code findByNameContainingIgnoreCase}, used
+     * when the caller supplies no city) still returns matches across all districts —
+     * i.e. backward compatibility is preserved for callers that omit the scope.
+     */
+    @Test
+    @DisplayName("#1798: unscoped findByNameContainingIgnoreCase still matches across all districts")
+    void findByNameContainingIgnoreCase_unscoped_stillMatchesAcrossDistricts() {
+        String bangaloreSchoolId = "10000000-0000-0000-0000-000000000012";
+        String udupiSchoolId = "10000000-0000-0000-0000-000000000013";
+
+        insertSchoolWithDistrict(bangaloreSchoolId, "Hebbal Cross School", 13.0451, 77.5977, "Bengaluru");
+        insertSchoolWithDistrict(udupiSchoolId, "Hebri Cross School", 13.3409, 74.7421, "Udupi");
+
+        List<School> results = schoolRepository.findByNameContainingIgnoreCase(
+                "Cross School", org.springframework.data.domain.PageRequest.of(0, 10));
+        List<String> names = results.stream().map(School::getName).toList();
+
+        assertThat(names)
+                .as("unscoped search (no city param) must preserve today's cross-district behaviour")
+                .contains("Hebbal Cross School", "Hebri Cross School");
     }
 }
