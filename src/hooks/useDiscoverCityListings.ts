@@ -26,7 +26,12 @@ export interface DiscoverCityListingItem {
   parkingCount?: number | null;
   furnishingStatus?: string | null;
   createdAt?: string | null;
-  trustTier?: string | null;
+  /**
+   * Issue #1567 — public-safe trust badge word ("verified"/"trusted"/"listed"), or
+   * null/absent when the listing has no badge (D tier, legacy rows, or unknown grade).
+   * Never the raw internal letter grade — the backend never sends A/B/C/D on this field.
+   */
+  trustBadge?: 'verified' | 'trusted' | 'listed' | null;
   lat?: number | null;
   lon?: number | null;
   latitude?: number | null;

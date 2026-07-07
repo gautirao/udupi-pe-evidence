@@ -1,0 +1,58 @@
+gate = "PHASE_7B_EXPLORATORY_PRODUCT_SWEEP"
+issue = 1567
+written_by = "mode3-orchestrator"
+written_at = "2026-07-06T23:15:00Z"
+
+[product_sweep]
+verdict = "CLEAN"   # CLEAN | MINOR_FINDINGS | BLOCKING_REGRESSION
+lens = "Trust-badge consistency across nearby discover journeys (area-first / school-first / agri-first)."
+journeys_checked = [
+  "area-first Manipal discover (LIVE_BROWSER)",
+  "school-first radius listing grid (NETWORK + CODE verified)",
+  "agri-first map listings (NETWORK + CODE verified)",
+]
+provenance = "orchestrator first-hand — both qa specialists could not execute a browser in this session (7B specialist: Bash denies `node <script>` outright; 7A specialist: mcp browser tools/Skill denied). Honest tooling-blocked reports on file."
+
+[[findings]]
+severity = "none"
+journey = "area-first Manipal"
+description = "Consistent + correct. Default (For Sale) view: D/null-tier seed rows render clean cards with NO badge (trustBadge omitted by NON_NULL). For Rent view: 5 C-tier cards each render the public 'Listed' badge. No raw letter (A/B/C/D) badge anywhere; no trustTier key in the response. Method: LIVE_BROWSER (headless Chromium vs FE :5187) + dual-filter curl."
+
+[[findings]]
+severity = "none"
+journey = "school-first radius grid"
+description = "Consistent + correct. GET /api/discover/cities/udupi/school-radius-listings (schoolLat=13.35,schoolLon=74.79,radiusKm=5) -> HTTP 200, 9 items, NO trustTier AND NO trustBadge key (badge-free by contract: PublicSchoolRadiusListingCard carries no trust field). No badge is EXPECTED here and is correct — cross-journey consistent. Method: NETWORK (curl) + CODE (DTO has no trust field)."
+
+[[findings]]
+severity = "none"
+journey = "agri-first map listings"
+description = "Consistent + correct. GET /api/discover/agri-map-listings (city=udupi, areaKeys=IN|KA|Udupi|Manipal) -> HTTP 200, 2 items, NO trustTier AND NO trustBadge key (badge-free by contract: AgriMapListingItem carries no trust field). No badge is EXPECTED here and is correct. Method: NETWORK (curl) + CODE (DTO has no trust field)."
+
+[consistency_verdict]
+text = """
+The trust badge is presented CONSISTENTLY across all three journeys: it appears ONLY on area-first cards that
+have a genuine public grade, drawn strictly from the public vocabulary (verified/trusted/listed); it is cleanly
+absent (no broken/empty element) where the listing has no public grade (area-first D/null rows) and where the
+journey has no trust concept by contract (school-first, agri-first). A raw internal letter grade (A/B/C/D) never
+renders on any journey, and the raw `trustTier` key is absent from every discover response inspected
+(city-listings sale+rent, school-radius, agri-map). No UX inconsistency or regression found.
+"""
+
+[evidence]
+screenshots = [
+  "docs/audit/evidence/issue-1567-public-trust-badge/live-browser-01-default-sale-view.png (area-first sale = 0 badges, clean)",
+  "docs/audit/evidence/issue-1567-public-trust-badge/live-browser-02-rent-view-listed-badge.png (area-first rent = 5 'Listed' badges)",
+]
+network_checks = [
+  "curl /api/discover/cities/udupi/listings?...listingPurpose=sale -> 4 rows, trustBadge absent, no trustTier (HTTP 200)",
+  "curl /api/discover/cities/udupi/listings?...listingPurpose=rent -> 5 rows, trustBadge='listed', no trustTier (HTTP 200)",
+  "curl /api/discover/cities/udupi/school-radius-listings?schoolLat=13.35&schoolLon=74.79&schoolRadiusKm=5 -> 9 items, no trustTier, no trustBadge (HTTP 200)",
+  "curl /api/discover/agri-map-listings?city=udupi&areaKeys=IN|KA|Udupi|Manipal -> 2 items, no trustTier, no trustBadge (HTTP 200)",
+]
+method_note = "area-first: LIVE_BROWSER (real headless Chromium render + network). school-first & agri-first: NETWORK (live curl) + CODE (DTOs carry no trust field; Stage-A confirmed) — no badge CAN render, so browser nav was not required to prove absence. Method labelled per browser-validation evidence-quality rules; no browser render claimed for school/agri."
+
+[recommendation]
+next = "proceed_to_pr"
+
+[coverage_note]
+text = "school-first + agri-first were NOT navigated in a real browser (specialists tooling-blocked; orchestrator confirmed badge-absence at the decisive network+code level instead). If a live-browser render screenshot of those two journeys is required by the gate, re-run in a session where a browser can be driven; the badge-free contract is not in doubt (DTOs have no trust field)."

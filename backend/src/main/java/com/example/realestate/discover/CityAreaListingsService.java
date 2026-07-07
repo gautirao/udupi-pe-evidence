@@ -268,7 +268,9 @@ public class CityAreaListingsService {
                         rs.getObject("parking_count") != null ? rs.getInt("parking_count") : null,
                         rs.getString("furnishing_status"),
                         createdAt,
-                        rs.getString("trust_tier"),
+                        // #1567: project the raw internal letter grade to a public-safe badge
+                        // word before it leaves the server — never expose trust_tier directly.
+                        TrustBadge.publicBadge(rs.getString("trust_tier")),
                         // #1726: this endpoint is permitAll (fully public) — always coarsen,
                         // regardless of isAuthenticated. Unlike price, exact pin has no
                         // buyer-vs-anon distinction on a browse/list surface with no ownership

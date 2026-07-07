@@ -95,7 +95,9 @@ const ONE_LISTING_PAGE = {
       backOnMarket: false,
       reraNumber: null,
       reraValid: false,
-      trustTier: 'B',
+      // #1567: fixture uses the public trustBadge word (never the raw trustTier
+      // letter grade) — 'B' -> 'trusted' per TrustBadge.publicBadge().
+      trustBadge: 'trusted',
       possessionStatus: null,
       sellerType: 'owner',
       listingPurpose: 'sale',

@@ -33,7 +33,9 @@ import java.util.UUID;
  * @param parkingCount      parking spots, or null (commercial)
  * @param furnishingStatus  "furnished", "semi-furnished", "unfurnished", or null (residential rent)
  * @param createdAt         ISO-8601 timestamp when listing was first saved, or null
- * @param trustTier         backend trust score: A, B, C, or D; null for legacy rows
+ * @param trustBadge        public-safe trust badge word ("verified"/"trusted"/"listed"), or null
+ *                          when the listing has no badge (D tier, legacy rows, or unknown grade).
+ *                          Never the raw internal letter grade — see {@link TrustBadge}.
  * @param latitude          geo-coordinate latitude, or null when not geocoded
  * @param longitude         geo-coordinate longitude, or null when not geocoded
  */
@@ -57,7 +59,7 @@ public record AreaListingCard(
         Integer parkingCount,
         String furnishingStatus,
         String createdAt,
-        String trustTier,
+        String trustBadge,
         Double latitude,
         Double longitude
 ) {}

@@ -56,7 +56,7 @@ function makeListing(id: string): DiscoverListingItem {
     backOnMarket: false,
     reraNumber: null,
     reraValid: false,
-    trustTier: null,
+    trustBadge: null,
     possessionStatus: null,
     sellerType: null,
     listingPurpose: 'sale',

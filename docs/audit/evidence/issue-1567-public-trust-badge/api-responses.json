@@ -1,0 +1,64 @@
+[
+  {
+    "url": "http://localhost:8093/api/discover/cities/udupi/listings?areaKeys=IN%7CKA%7CUdupi%7CManipal&limitPerArea=50&listingPurpose=sale",
+    "status": 200,
+    "hasTrustBadge": false,
+    "hasTrustTier": false,
+    "sample": {
+      "city": "udupi",
+      "limitPerArea": 20,
+      "areas": [
+        {
+          "areaKey": "IN|KA|Udupi|Manipal",
+          "areaName": "Manipal",
+          "listings": [
+            {
+              "id": "e2e00001-0000-0000-0000-000000000001",
+              "priceBand": "₹0–25L",
+              "propertyType": "apartment",
+              "locality": "Manipal",
+              "listingPurpose": "sale",
+              "title": "[E2E] 1 Lakh Manipal Apartment",
+              "createdAt": "2026-06-25T11:22:51.232186Z",
+              "latitude": 13.35,
+              "longitude": 74.78
+            },
+            {
+              "id": "e2e00001-0000-0000-0000-000000000003",
+              "priceBand": "₹1–2Cr",
+              "propertyType": "apartment",
+              "locality": "Manipal",
+              "listingPurpose": "sale",
+              "title": "[E2E] 1 Crore Manipal Apartment",
+              "createdAt": "2026-06-25T11:22:51.232186Z",
+              "latitude": 13.34,
+              "longitude": 74.78
+            },
+            {
+              "id": "e2e00001-0000-0000-0000-000000000002",
+              "priceBand": "₹0–25L",
+              "propertyType": "house",
+              "locality": "Manipal",
+              "listingPurpose": "sale",
+              "title": "[E2E] 10 Lakh Manipal House",
+              "createdAt": "2026-06-25T11:22:51.232186Z",
+              "latitude": 13.35,
+              "longitude": 74.78
+            },
+            {
+              "id": "e2e00001-0000-0000-0000-000000000004",
+              "priceBand": "₹1–2Cr",
+              "propertyType": "house",
+              "locality": "Manipal",
+              "listingPurpose": "sale",
+              "title": "[E2E] 1.5 Crore Manipal House",
+              "createdAt": "2026-06-25T11:22:51.232186Z",
+              "latitude": 13.35,
+              "longitude": 74.78
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

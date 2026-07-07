@@ -71,11 +71,14 @@ class CityAreaListingsControllerTest {
         // Anon response: priceBand populated, pricePaise null (omitted by NON_NULL).
         // The TestConfig security chain permits all requests and does not inject an
         // AnonymousAuthenticationToken, so SecurityContextHolder auth == null → isAuthenticated=false.
+        // AreaListingCard.trustBadge is the already-projected public value — the raw letter
+        // grade is projected by TrustBadge.publicBadge(...) inside CityAreaListingsService,
+        // before construction, so the mock here supplies the public word directly ("A" -> "verified").
         AreaListingCard card = new AreaListingCard(id, null, "₹50L–1Cr", "apartment", "Malpe",
                 "https://example.com/img.jpg", "sale", 2,
                 "Spacious 2BHK near beach", 2, 850.0, "sq ft",
                 null, null, null, null, null,
-                "2024-01-15T10:30:00Z", "A", null, null);
+                "2024-01-15T10:30:00Z", "verified", null, null);
         AreaListingsEntry entry = new AreaListingsEntry("IN|KA|Udupi|Malpe", "Malpe", null,
                 List.of(card));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -103,7 +106,9 @@ class CityAreaListingsControllerTest {
                 .andExpect(jsonPath("$.areas[0].listings[0].title", is("Spacious 2BHK near beach")))
                 .andExpect(jsonPath("$.areas[0].listings[0].bathrooms", is(2)))
                 .andExpect(jsonPath("$.areas[0].listings[0].createdAt", is("2024-01-15T10:30:00Z")))
-                .andExpect(jsonPath("$.areas[0].listings[0].trustTier", is("A")));
+                .andExpect(jsonPath("$.areas[0].listings[0].trustBadge", is("verified")))
+                // Raw letter grade must never appear under the old field name.
+                .andExpect(jsonPath("$.areas[0].listings[0].trustTier").doesNotExist());
     }
 
     // ── AC2: only LIVE listings (enforced in service/SQL — tested via service unit test) ─

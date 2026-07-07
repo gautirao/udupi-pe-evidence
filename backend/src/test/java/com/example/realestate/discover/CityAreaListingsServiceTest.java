@@ -133,4 +133,26 @@ class CityAreaListingsServiceTest {
         assertThat(card.latitude()).isNull();
         assertThat(card.longitude()).isNull();
     }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1567: trustBadge is the public-safe projection of trust_tier ('A' -> 'verified'), "
+            + "identical for anonymous and authenticated callers, never the raw letter grade")
+    void getAreaListings_trustBadge_projectedAndIdenticalRegardlessOfAuth() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215);
+
+        CityAreaListingsResponse anonResp = service.getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false);
+        CityAreaListingsResponse authedResp = service.getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, true);
+
+        AreaListingCard anonCard = anonResp.areas().get(0).listings().get(0);
+        AreaListingCard authedCard = authedResp.areas().get(0).listings().get(0);
+
+        // stubSingleRow sets trust_tier="A" — the projected public badge must be "verified",
+        // never the raw letter "A", and must be identical for anon and authed callers.
+        assertThat(anonCard.trustBadge()).isEqualTo("verified");
+        assertThat(authedCard.trustBadge()).isEqualTo("verified");
+        assertThat(anonCard.trustBadge()).isEqualTo(authedCard.trustBadge());
+    }
 }

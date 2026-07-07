@@ -28,7 +28,12 @@ export interface DiscoverListingItem {
   backOnMarket: boolean;
   reraNumber: string | null;
   reraValid: boolean;
-  trustTier: string | null;
+  /**
+   * Issue #1567 — public-safe trust badge word ("verified"/"trusted"/"listed"), or
+   * null/absent when the listing has no badge (D tier, legacy rows, or unknown grade).
+   * Never the raw internal letter grade — the backend never sends A/B/C/D on this field.
+   */
+  trustBadge?: 'verified' | 'trusted' | 'listed' | null;
   possessionStatus: string | null;
   sellerType: string | null;
   listingPurpose: string | null;

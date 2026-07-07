@@ -22,15 +22,15 @@ export function purposeLabel(p: string | null | undefined): string {
 }
 
 /**
- * Trust-tier badge mapping. The backend exposes an opaque letter grade on `trustTier`
- * (A/B/C). This maps it conservatively to the ReTrends trust vocabulary — A → Verified
- * (top, evergreen), B → Trusted (calm navy), C → Listed (neutral). Any other / null
- * value yields no badge (never invent a tier). Documented mapping per request.
+ * Trust badge display config, keyed on the backend's public-safe trust vocabulary
+ * (Issue #1567 — the raw internal letter grade A/B/C/D never reaches the frontend;
+ * the backend emits "verified" | "trusted" | "listed", or omits the field entirely).
+ * Any value outside this vocabulary (or null/absent) yields no badge — never invent one.
  */
-const TRUST_TIERS: Record<string, { label: string; className: string; icon: typeof ShieldCheck }> = {
-  A: { label: 'Verified', className: 'bg-[hsl(var(--evergreen-tint))] text-[hsl(var(--evergreen))]', icon: ShieldCheck },
-  B: { label: 'Trusted', className: 'bg-secondary text-secondary-foreground', icon: Shield },
-  C: { label: 'Listed', className: 'bg-muted/60 text-muted-foreground', icon: Shield },
+const TRUST_BADGES: Record<'verified' | 'trusted' | 'listed', { label: string; className: string; icon: typeof ShieldCheck }> = {
+  verified: { label: 'Verified', className: 'bg-[hsl(var(--evergreen-tint))] text-[hsl(var(--evergreen))]', icon: ShieldCheck },
+  trusted: { label: 'Trusted', className: 'bg-secondary text-secondary-foreground', icon: Shield },
+  listed: { label: 'Listed', className: 'bg-muted/60 text-muted-foreground', icon: Shield },
 };
 
 /** Build a deduplicated "Sublocality, Area" location string from real fields only. */
@@ -104,9 +104,10 @@ export function PropertyCard({
   areaLabel,
   distanceKm,
 }: PropertyCardProps) {
-  // Render real trust badge only when trustTier maps to a known tier (A/B/C).
-  // Tiers outside this vocabulary (e.g. 'D') and null/undefined yield no badge.
-  const trust = listing.trustTier ? TRUST_TIERS[listing.trustTier] : undefined;
+  // Render a trust badge only for the three public values (verified/trusted/listed).
+  // null/absent/unknown values yield no badge — the backend is the single source of
+  // truth here and never sends the raw internal letter grade.
+  const trust = listing.trustBadge ? TRUST_BADGES[listing.trustBadge] : undefined;
 
   // Visual-only "save" affordance (heart). Session-local toggle for the affordance feel —
   // it does NOT persist, hit any API, or touch the user profile. Real save/unsave +

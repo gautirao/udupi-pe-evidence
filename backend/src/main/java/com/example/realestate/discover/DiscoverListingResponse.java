@@ -28,7 +28,9 @@ public record DiscoverListingResponse(
         Boolean backOnMarket,
         String reraNumber,
         Boolean reraValid,
-        String trustTier,
+        // Public-safe trust badge word ("verified"/"trusted"/"listed"), or null when the
+        // listing has no badge. Never the raw internal letter grade — see TrustBadge.
+        String trustBadge,
         String possessionStatus,
         String sellerType,
         String listingPurpose,

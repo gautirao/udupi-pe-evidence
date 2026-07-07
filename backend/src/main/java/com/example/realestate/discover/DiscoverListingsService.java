@@ -260,10 +260,15 @@ public class DiscoverListingsService implements DiscoverListingsPort {
     }
 
     /**
-     * Shared DTO-construction funnel for {@link DiscoverListingResponse} (#1726). Used by both
-     * this Postgres row-mapper and {@code OpenSearchHitMapper.toListing} so the dormant
-     * {@code discover.opensearch.enabled} path cannot reintroduce the exact-pin leak if ever
-     * turned on — both backends for GET /api/discover/listings apply the same coarsening.
+     * Shared DTO-construction funnel for {@link DiscoverListingResponse} (#1726/#1567). Used by
+     * both this Postgres row-mapper and {@code OpenSearchHitMapper.toListing} so the dormant
+     * {@code discover.opensearch.enabled} path cannot reintroduce the exact-pin leak (or a raw
+     * trust-tier leak) if ever turned on — both backends for GET /api/discover/listings apply
+     * the same coarsening and the same public trust-badge projection.
+     *
+     * @param rawTrustTier internal trust tier letter grade (A/B/C/D) as stored in the DB or
+     *                     OpenSearch index; projected to a public badge word via
+     *                     {@link TrustBadge#publicBadge(String)} before it ever leaves the server
      */
     @SuppressWarnings("java:S107") // mirrors the DiscoverListingResponse record's field count
     public static DiscoverListingResponse buildListing(
@@ -272,14 +277,14 @@ public class DiscoverListingsService implements DiscoverListingsPort {
             Double builtArea, String builtAreaUnit, Integer bedrooms, Double latitude, Double longitude,
             String heroImageUrl, OffsetDateTime createdAt, OffsetDateTime updatedAt,
             OffsetDateTime firstPublishedAt, OffsetDateTime lastUpdatedAt, int daysOnMarket,
-            boolean backOnMarket, String reraNumber, boolean reraValid, String trustTier,
+            boolean backOnMarket, String reraNumber, boolean reraValid, String rawTrustTier,
             String possessionStatus, String sellerType, String listingPurpose, String status) {
         return new DiscoverListingResponse(
                 id, listingNumber, propertyType, title, locality, areaKey, pricePaise,
                 landArea, landAreaUnit, builtArea, builtAreaUnit, bedrooms,
                 GeoCoarsener.coarsen(latitude), GeoCoarsener.coarsen(longitude),
                 heroImageUrl, createdAt, updatedAt, firstPublishedAt, lastUpdatedAt,
-                daysOnMarket, backOnMarket, reraNumber, reraValid, trustTier,
+                daysOnMarket, backOnMarket, reraNumber, reraValid, TrustBadge.publicBadge(rawTrustTier),
                 possessionStatus, sellerType, listingPurpose, status);
     }
 

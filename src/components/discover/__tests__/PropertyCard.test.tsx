@@ -24,7 +24,7 @@ const makeListing = (overrides: Partial<DiscoverCityListingItem> = {}): Discover
   parkingCount: null,
   furnishingStatus: null,
   createdAt: null,
-  trustTier: null,
+  trustBadge: null,
   ...overrides,
 });
 
@@ -83,77 +83,78 @@ describe('PropertyCard', () => {
     expect(screen.getByTestId('listing-card')).toBeInTheDocument();
   });
 
-  it('shows the Verified trust badge for trustTier A', () => {
-    renderCard({ listing: makeListing({ trustTier: 'A' }), isAuthenticated: true, onNavigate: vi.fn() });
+  it('shows the Verified trust badge for trustBadge "verified"', () => {
+    renderCard({ listing: makeListing({ trustBadge: 'verified' }), isAuthenticated: true, onNavigate: vi.fn() });
     expect(screen.getByText('Verified')).toBeInTheDocument();
   });
 
-  it('shows the Trusted trust badge for trustTier B', () => {
-    renderCard({ listing: makeListing({ trustTier: 'B' }), isAuthenticated: true, onNavigate: vi.fn() });
+  it('shows the Trusted trust badge for trustBadge "trusted"', () => {
+    renderCard({ listing: makeListing({ trustBadge: 'trusted' }), isAuthenticated: true, onNavigate: vi.fn() });
     expect(screen.getByText('Trusted')).toBeInTheDocument();
   });
 
-  it('shows the Listed trust badge for trustTier C', () => {
-    renderCard({ listing: makeListing({ trustTier: 'C' }), isAuthenticated: true, onNavigate: vi.fn() });
+  it('shows the Listed trust badge for trustBadge "listed"', () => {
+    renderCard({ listing: makeListing({ trustBadge: 'listed' }), isAuthenticated: true, onNavigate: vi.fn() });
     expect(screen.getByText('Listed')).toBeInTheDocument();
   });
 
-  it('shows no trust badge when trustTier is null (never invents a tier)', () => {
-    renderCard({ listing: makeListing({ trustTier: null }), isAuthenticated: true, onNavigate: vi.fn() });
+  it('shows no trust badge when trustBadge is null (never invents a badge)', () => {
+    renderCard({ listing: makeListing({ trustBadge: null }), isAuthenticated: true, onNavigate: vi.fn() });
     expect(screen.queryByText('Verified')).not.toBeInTheDocument();
     expect(screen.queryByText('Trusted')).not.toBeInTheDocument();
     expect(screen.queryByText('Listed')).not.toBeInTheDocument();
   });
 
-  // ── F4 — Trust-tier badge colour tokens (round-3 refinement) ────────────────
+  // ── F4 — Trust badge colour tokens (round-3 refinement) ────────────────
   // These tests verify the COLOUR classes on the badge span, not just label presence.
-  // A: evergreen-tint bg + evergreen text (ShieldCheck icon).
-  // B: bg-secondary + text-secondary-foreground (Shield icon, NOT ShieldCheck).
-  // C: bg-muted/60 + text-muted-foreground (Shield icon).
-  // null / 'D' / unknown → NO badge rendered at all.
+  // verified: evergreen-tint bg + evergreen text (ShieldCheck icon).
+  // trusted: bg-secondary + text-secondary-foreground (Shield icon, NOT ShieldCheck).
+  // listed: bg-muted/60 + text-muted-foreground (Shield icon).
+  // null / undefined / unknown → NO badge rendered at all.
 
   describe('F4 — trust badge colour tokens (round-3)', () => {
-    it('trustTier A → badge has bg-[hsl(var(--evergreen-tint))] class', () => {
-      renderCard({ listing: makeListing({ trustTier: 'A' }), isAuthenticated: true, onNavigate: vi.fn() });
+    it('trustBadge "verified" → badge has bg-[hsl(var(--evergreen-tint))] class', () => {
+      renderCard({ listing: makeListing({ trustBadge: 'verified' }), isAuthenticated: true, onNavigate: vi.fn() });
       const badge = screen.getByTestId('trust-badge');
       expect(badge.className).toContain('bg-[hsl(var(--evergreen-tint))]');
     });
 
-    it('trustTier A → badge has text-[hsl(var(--evergreen))] class', () => {
-      renderCard({ listing: makeListing({ trustTier: 'A' }), isAuthenticated: true, onNavigate: vi.fn() });
+    it('trustBadge "verified" → badge has text-[hsl(var(--evergreen))] class', () => {
+      renderCard({ listing: makeListing({ trustBadge: 'verified' }), isAuthenticated: true, onNavigate: vi.fn() });
       const badge = screen.getByTestId('trust-badge');
       expect(badge.className).toContain('text-[hsl(var(--evergreen))]');
     });
 
-    it('trustTier B → badge has bg-secondary class (calm navy, NOT evergreen)', () => {
-      renderCard({ listing: makeListing({ trustTier: 'B' }), isAuthenticated: true, onNavigate: vi.fn() });
+    it('trustBadge "trusted" → badge has bg-secondary class (calm navy, NOT evergreen)', () => {
+      renderCard({ listing: makeListing({ trustBadge: 'trusted' }), isAuthenticated: true, onNavigate: vi.fn() });
       const badge = screen.getByTestId('trust-badge');
       expect(badge.className).toContain('bg-secondary');
       expect(badge.className).not.toContain('bg-[hsl(var(--evergreen-tint))]');
     });
 
-    it('trustTier B → badge has text-secondary-foreground class', () => {
-      renderCard({ listing: makeListing({ trustTier: 'B' }), isAuthenticated: true, onNavigate: vi.fn() });
+    it('trustBadge "trusted" → badge has text-secondary-foreground class', () => {
+      renderCard({ listing: makeListing({ trustBadge: 'trusted' }), isAuthenticated: true, onNavigate: vi.fn() });
       const badge = screen.getByTestId('trust-badge');
       expect(badge.className).toContain('text-secondary-foreground');
     });
 
-    it('trustTier C → badge has bg-muted/60 class', () => {
-      renderCard({ listing: makeListing({ trustTier: 'C' }), isAuthenticated: true, onNavigate: vi.fn() });
+    it('trustBadge "listed" → badge has bg-muted/60 class', () => {
+      renderCard({ listing: makeListing({ trustBadge: 'listed' }), isAuthenticated: true, onNavigate: vi.fn() });
       const badge = screen.getByTestId('trust-badge');
       expect(badge.className).toContain('bg-muted/60');
     });
 
-    it('trustTier C → badge has text-muted-foreground class', () => {
-      renderCard({ listing: makeListing({ trustTier: 'C' }), isAuthenticated: true, onNavigate: vi.fn() });
+    it('trustBadge "listed" → badge has text-muted-foreground class', () => {
+      renderCard({ listing: makeListing({ trustBadge: 'listed' }), isAuthenticated: true, onNavigate: vi.fn() });
       const badge = screen.getByTestId('trust-badge');
       expect(badge.className).toContain('text-muted-foreground');
     });
 
-    it('trustTier D → NO badge rendered (D is outside A/B/C vocabulary)', () => {
-      // The backend may return 'D' for seed data; the component must silently omit it.
+    it('trustBadge absent/undefined → NO badge rendered', () => {
+      // The backend omits the field entirely for D-tier/legacy rows; the component
+      // must silently render nothing (never fabricate a badge).
       renderCard({
-        listing: makeListing({ trustTier: 'D' as DiscoverCityListingItem['trustTier'] }),
+        listing: makeListing({ trustBadge: undefined }),
         isAuthenticated: true,
         onNavigate: vi.fn(),
       });
@@ -163,17 +164,17 @@ describe('PropertyCard', () => {
       expect(screen.queryByText('Listed')).not.toBeInTheDocument();
     });
 
-    it('trustTier unknown string → NO badge rendered', () => {
+    it('trustBadge unknown string → NO badge rendered', () => {
       renderCard({
-        listing: makeListing({ trustTier: 'UNKNOWN' as DiscoverCityListingItem['trustTier'] }),
+        listing: makeListing({ trustBadge: 'UNKNOWN' as DiscoverCityListingItem['trustBadge'] }),
         isAuthenticated: true,
         onNavigate: vi.fn(),
       });
       expect(screen.queryByTestId('trust-badge')).not.toBeInTheDocument();
     });
 
-    it('trustTier null → NO badge rendered (data-testid trust-badge absent)', () => {
-      renderCard({ listing: makeListing({ trustTier: null }), isAuthenticated: true, onNavigate: vi.fn() });
+    it('trustBadge null → NO badge rendered (data-testid trust-badge absent)', () => {
+      renderCard({ listing: makeListing({ trustBadge: null }), isAuthenticated: true, onNavigate: vi.fn() });
       expect(screen.queryByTestId('trust-badge')).not.toBeInTheDocument();
     });
   });
@@ -594,7 +595,7 @@ describe('PropertyCard', () => {
   // PropertyCard is the SHARED listing card used by area-first, school-first, and agri-first.
   // These tests guard that #1606 round-3 colour changes do not break any journey's data contract.
   describe('Cross-journey non-regression (shared card)', () => {
-    // Agri-first: agricultural_land type, trustTier null → no trust badge, no crash
+    // Agri-first: agricultural_land type, trustBadge null → no trust badge, no crash
     it('renders without crash for agricultural_land property type (agri-first journey)', () => {
       expect(() =>
         renderCard({
@@ -608,10 +609,10 @@ describe('PropertyCard', () => {
       expect(screen.getByTestId('listing-card')).toBeInTheDocument();
     });
 
-    // Agri-first: trustTier is typically null → no trust badge regardless of round-3 colours
-    it('renders NO trust badge for agri-first listing with trustTier null', () => {
+    // Agri-first: trustBadge is typically null → no trust badge regardless of round-3 colours
+    it('renders NO trust badge for agri-first listing with trustBadge null', () => {
       renderCard({
-        listing: makeListing({ propertyType: 'agricultural_land', title: 'Agri Plot', trustTier: null }),
+        listing: makeListing({ propertyType: 'agricultural_land', title: 'Agri Plot', trustBadge: null }),
         isAuthenticated: true,
         onNavigate: vi.fn(),
       });
@@ -694,7 +695,7 @@ describe('PropertyCard', () => {
         parkingCount: null,
         furnishingStatus: null,
         createdAt: null,
-        trustTier: null,
+        trustBadge: null,
       };
       expect(() =>
         renderCard({
@@ -772,7 +773,7 @@ describe('PropertyCard', () => {
 
     it('trust badge and distance badge can both render simultaneously', () => {
       renderCard({
-        listing: makeListing({ trustTier: 'A', primaryImageUrl: 'https://example.com/img.jpg' }),
+        listing: makeListing({ trustBadge: 'verified', primaryImageUrl: 'https://example.com/img.jpg' }),
         isAuthenticated: true,
         onNavigate: vi.fn(),
         distanceKm: 1.5,
@@ -787,44 +788,44 @@ describe('PropertyCard', () => {
   // PropertyCard must never invent a trust tier — real data or no badge.
 
   describe('#1616 trust badge: no fabrication (AC10/AC11)', () => {
-    it('AC10: trustTier A → Verified badge rendered', () => {
-      renderCard({ listing: makeListing({ trustTier: 'A' }), isAuthenticated: true, onNavigate: vi.fn() });
+    it('AC10: trustBadge "verified" → Verified badge rendered', () => {
+      renderCard({ listing: makeListing({ trustBadge: 'verified' }), isAuthenticated: true, onNavigate: vi.fn() });
       expect(screen.getByTestId('trust-badge')).toBeInTheDocument();
       expect(screen.getByText('Verified')).toBeInTheDocument();
     });
 
-    it('AC10: trustTier B → Trusted badge rendered', () => {
-      renderCard({ listing: makeListing({ trustTier: 'B' }), isAuthenticated: true, onNavigate: vi.fn() });
+    it('AC10: trustBadge "trusted" → Trusted badge rendered', () => {
+      renderCard({ listing: makeListing({ trustBadge: 'trusted' }), isAuthenticated: true, onNavigate: vi.fn() });
       expect(screen.getByTestId('trust-badge')).toBeInTheDocument();
       expect(screen.getByText('Trusted')).toBeInTheDocument();
     });
 
-    it('AC10: trustTier C → Listed badge rendered', () => {
-      renderCard({ listing: makeListing({ trustTier: 'C' }), isAuthenticated: true, onNavigate: vi.fn() });
+    it('AC10: trustBadge "listed" → Listed badge rendered', () => {
+      renderCard({ listing: makeListing({ trustBadge: 'listed' }), isAuthenticated: true, onNavigate: vi.fn() });
       expect(screen.getByTestId('trust-badge')).toBeInTheDocument();
       expect(screen.getByText('Listed')).toBeInTheDocument();
     });
 
-    it('AC10: trustTier D → NO badge (D is outside A/B/C vocabulary)', () => {
+    it('AC10: trustBadge absent (D-tier/unknown grade) → NO badge', () => {
       renderCard({
-        listing: makeListing({ trustTier: 'D' as DiscoverCityListingItem['trustTier'] }),
+        listing: makeListing({ trustBadge: undefined }),
         isAuthenticated: true,
         onNavigate: vi.fn(),
       });
       expect(screen.queryByTestId('trust-badge')).not.toBeInTheDocument();
     });
 
-    it('AC10: trustTier null → NO badge (never invent a tier)', () => {
-      renderCard({ listing: makeListing({ trustTier: null }), isAuthenticated: true, onNavigate: vi.fn() });
+    it('AC10: trustBadge null → NO badge (never invent a badge)', () => {
+      renderCard({ listing: makeListing({ trustBadge: null }), isAuthenticated: true, onNavigate: vi.fn() });
       expect(screen.queryByTestId('trust-badge')).not.toBeInTheDocument();
     });
 
-    it('AC11: anon school-first listing (no trustTier, no pricePaise) → NO trust badge rendered', () => {
-      // This is the AC11 / school-first anon case: backend omits trustTier from the
+    it('AC11: anon school-first listing (no trustBadge, no pricePaise) → NO trust badge rendered', () => {
+      // This is the AC11 / school-first anon case: backend omits trustBadge from the
       // PublicSchoolRadiusListingCard record (deliberate exclusion per #1239/#1551).
       // Component must render no badge — never fabricate one.
       renderCard({
-        listing: makeListing({ trustTier: null, pricePaise: undefined, priceBand: '₹50L–1Cr' }),
+        listing: makeListing({ trustBadge: null, pricePaise: undefined, priceBand: '₹50L–1Cr' }),
         isAuthenticated: false,
         onNavigate: vi.fn(),
         distanceKm: 0.8,
@@ -843,16 +844,16 @@ describe('PropertyCard', () => {
       // If demoTrustFallback were still accepted, this assertion would catch a re-introduction.
       // We test by passing an unexpected prop — TypeScript would catch it at compile time;
       // at runtime the component must render WITHOUT any fabricated badge.
-      const listingNullTier = makeListing({ trustTier: null });
+      const listingNoBadge = makeListing({ trustBadge: null });
       // Cast to any to bypass TS so the test remains valid even if the type definition changes
       renderCard({
-        listing: listingNullTier,
+        listing: listingNoBadge,
         isAuthenticated: false,
         onNavigate: vi.fn(),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ...({ demoTrustFallback: true } as any),
       });
-      // With demoTrustFallback removed, no badge should appear for null trustTier
+      // With demoTrustFallback removed, no badge should appear for null trustBadge
       expect(screen.queryByTestId('trust-badge')).not.toBeInTheDocument();
       expect(screen.queryByText('Verified')).not.toBeInTheDocument();
       expect(screen.queryByText('Trusted')).not.toBeInTheDocument();

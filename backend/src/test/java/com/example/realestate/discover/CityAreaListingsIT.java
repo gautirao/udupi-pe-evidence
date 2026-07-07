@@ -128,7 +128,9 @@ class CityAreaListingsIT {
                 null, null,
                 null, null, null,
                 "2025-01-10T09:00:00Z",
-                "B",
+                // Already-projected public value ("B" -> "trusted") — CityAreaListingsService
+                // projects via TrustBadge.publicBadge(...) before constructing the card.
+                "trusted",
                 13.35, 74.79
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(anonCard));
@@ -148,7 +150,9 @@ class CityAreaListingsIT {
                 // Non-price fields pass through normally
                 .andExpect(jsonPath("$.areas[0].listings[0].id", is(id.toString())))
                 .andExpect(jsonPath("$.areas[0].listings[0].propertyType", is("apartment")))
-                .andExpect(jsonPath("$.areas[0].listings[0].trustTier", is("B")))
+                .andExpect(jsonPath("$.areas[0].listings[0].trustBadge", is("trusted")))
+                // Raw letter grade must never appear under the old field name.
+                .andExpect(jsonPath("$.areas[0].listings[0].trustTier").doesNotExist())
                 // Cache-Control: public (anon response is CDN-cacheable for 60s)
                 .andExpect(header().string("Cache-Control", containsString("public")))
                 .andExpect(header().string("Cache-Control", containsString("max-age=60")))
@@ -178,7 +182,10 @@ class CityAreaListingsIT {
                 null, null,
                 null, null, null,
                 "2025-02-15T11:00:00Z",
-                "A",
+                // Already-projected public value ("A" -> "verified"); trustBadge is never
+                // auth-branched, so this proves the SAME public value shape as the anon card
+                // above (each mapped from its own raw tier, per the TrustBadge allow-list).
+                "verified",
                 13.36, 74.80
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(authedCard));
@@ -202,7 +209,9 @@ class CityAreaListingsIT {
                 // Non-price fields pass through normally
                 .andExpect(jsonPath("$.areas[0].listings[0].id", is(id.toString())))
                 .andExpect(jsonPath("$.areas[0].listings[0].propertyType", is("villa")))
-                .andExpect(jsonPath("$.areas[0].listings[0].trustTier", is("A")))
+                .andExpect(jsonPath("$.areas[0].listings[0].trustBadge", is("verified")))
+                // Raw letter grade must never appear under the old field name.
+                .andExpect(jsonPath("$.areas[0].listings[0].trustTier").doesNotExist())
                 // Cache-Control: no-store (authed response with exact price must not be cached)
                 .andExpect(header().string("Cache-Control", containsString("no-store")))
                 .andExpect(header().string("Cache-Control", not(containsString("public"))))

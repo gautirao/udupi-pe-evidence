@@ -95,7 +95,9 @@ const UNFILTERED_AREA_LISTINGS = {
           backOnMarket: false,
           reraNumber: null,
           reraValid: false,
-          trustTier: 'A',
+          // #1567: fixture uses the public trustBadge word (never the raw trustTier
+          // letter grade) — 'A' -> 'verified' per TrustBadge.publicBadge().
+          trustBadge: 'verified',
           possessionStatus: null,
           sellerType: 'owner',
           listingPurpose: 'sale',
@@ -125,7 +127,8 @@ const UNFILTERED_AREA_LISTINGS = {
           backOnMarket: false,
           reraNumber: null,
           reraValid: false,
-          trustTier: 'B',
+          // #1567: 'B' -> 'trusted' per TrustBadge.publicBadge().
+          trustBadge: 'trusted',
           possessionStatus: null,
           sellerType: 'broker',
           listingPurpose: 'sale',
@@ -155,7 +158,8 @@ const UNFILTERED_AREA_LISTINGS = {
           backOnMarket: false,
           reraNumber: null,
           reraValid: false,
-          trustTier: 'B',
+          // #1567: 'B' -> 'trusted' per TrustBadge.publicBadge().
+          trustBadge: 'trusted',
           possessionStatus: null,
           sellerType: 'owner',
           listingPurpose: 'sale',

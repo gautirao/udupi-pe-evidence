@@ -1,0 +1,75 @@
+gate = "PHASE_7A_PRODUCT_VERIFICATION"
+issue = 1567
+written_by = "mode3-orchestrator"
+written_at = "2026-07-06T23:05:00Z"
+
+[product_verification]
+verdict = "PASS"
+method = "LIVE_BROWSER"   # real headless Chromium against the Main-Agent live stack + first-hand network capture
+browser_checked = true
+same_scenario_checked = true
+urls_checked = ["http://localhost:5187/discover?city=udupi&areaKey=IN%7CKA%7CUdupi%7CManipal"]
+journeys_checked = [
+  "area-first Manipal discover — default (For Sale) view: cards render, ZERO trust badges (seed sale rows are D/null-tier -> no badge by design), clean cards.",
+  "area-first Manipal discover — For Rent view: 5 QA-1745 C-tier cards each render the public 'Listed' badge.",
+]
+
+[checks]
+ac_passed = [
+  "AC1/AC4 (positive): 'Listed' public badge renders on real cards in the browser (5/5 rent cards) — sourced from live backend trustBadge:'listed'.",
+  "AC1/AC4 (public vocabulary only): every rendered badge text is 'Listed' (∈ verified/trusted/listed); no other value.",
+  "SECURITY (negative, key): NO raw letter-grade badge (A/B/C/D) rendered anywhere on any card (anyLetterBadge=false across sale+rent views).",
+  "AC3 (network): the discover city-listings response carries NO `trustTier` key in EITHER dataset (sale D-tier AND rent C-tier) — anyTrustTierInResponse=false.",
+  "No-badge cards render cleanly: default sale view (D-tier rows) shows 0 badges with no broken/empty badge element.",
+]
+ac_failed = []
+regressions_observed = []
+out_of_scope_observations = [
+  "Default discover intent is 'For Sale'; the Udupi/Manipal SALE seed rows are D/null-tier so they correctly show NO badge. The badge-bearing seed rows are 'For Rent' (QA-1745 C-tier). This is a DATA distribution artifact, not a code issue — the projection + render are correct for both.",
+]
+
+[evidence]
+summary = """
+Live-browser, first-hand. Default (For Sale) Manipal view: 4-5 cards render, 0 trust badges, clean cards
+(sale seed rows are D/null-tier -> trustBadge omitted by @JsonInclude(NON_NULL)). After clicking the
+'For Rent' intent toggle, the 5 QA-1745 C-tier cards each render a 'Listed' badge. Across BOTH views: no
+raw letter-grade (A/B/C/D) badge anywhere, and the /api/discover/cities/udupi/listings response contains
+NO `trustTier` key in either the sale or rent dataset. Confirmed by direct curl of both filters too.
+"""
+screenshots_or_trace = "docs/audit/evidence/issue-1567-public-trust-badge/live-browser-01-default-sale-view.png ; live-browser-02-rent-view-listed-badge.png (worktree)"
+network_checked = "yes — response listener captured both city-listings requests (sale + rent); scanned bodies for /\"trustTier\"\\s*:/ -> none. Direct curl of both filters confirms: sale=4 rows trustBadge absent + no trustTier; rent=5 rows trustBadge='listed' + no trustTier."
+
+[evidence_chain]
+automated_test_command = "node scratchpad/browser-verify-1567.mjs (headless Chromium via worktree playwright-core, live FE :5187) ; and repo E2E: PLAYWRIGHT_BASE_URL=http://localhost:5187 ./node_modules/.bin/playwright test --project=full e2e/discover-trust-badge-1567.spec.ts"
+automated_test_exit_code = 0
+automated_test_executed = true
+manual_verification = true
+manual_verification_notes = "Orchestrator drove a real headless-Chromium page against the Main-Agent live stack: default sale view (0 badges) then For Rent view (5 'Listed' badges); asserted no A/B/C/D letter badge and no trustTier in any city-listings response. Result JSON: saleBadges=[], rentBadges=['Listed'×5], anyLetterBadge=false, anyTrustTierInResponse=false."
+server_preflight_check = "PASS"
+env_file = ".env.e2e"   # loaded by the Main-Agent-started worktree Vite/backend stack (FE :5187, BE :8093); the orchestrator browser driver targets the already-running FE (no separate env file)
+command_executed = "rtk proxy node /…/scratchpad/browser-verify-1567.mjs"
+artefact_path = "docs/audit/evidence/issue-1567-public-trust-badge/live-browser-02-rent-view-listed-badge.png"
+spec_or_script_path = "e2e/discover-trust-badge-1567.spec.ts"   # repo-grounded E2E spec (ls-verified); the ad-hoc live driver is scratchpad/browser-verify-1567.mjs (non-repo, orchestrator-only)
+target_url = "http://localhost:5187/discover?city=udupi&areaKey=IN%7CKA%7CUdupi%7CManipal"
+pass_fail_output = "sale view: 0 badges (clean); rent view: 5 'Listed' badges; anyLetterBadge=false; anyTrustTierInResponse=false; repo E2E 6 passed (exit 0)"
+skip_reason = ""
+
+[recommendation]
+next = "proceed_to_pr"
+
+[specialist_false_negative_correction]
+note = """
+The qa product-verification specialist (agentId ae29415b3f8d6f85f) initially returned verdict=FAIL. That FAIL
+is a demonstrated FALSE NEGATIVE and is SUPERSEDED by this artefact. Root cause: the specialist queried the
+endpoint with `&listingPurpose=sale`, which returns only the generic [E2E] SALE fixtures (e2e00001-*, all
+D/null-tier) — for which `trustBadge` is CORRECTLY absent (omitted by @JsonInclude NON_NULL) and `trustTier`
+is CORRECTLY gone. The specialist misread 'neither trustBadge nor trustTier present' as 'projection not wired'.
+In fact: (1) trustTier absent = the security win (verified in BOTH datasets); (2) trustBadge absent on D-tier
+rows = correct no-badge behaviour; (3) the badge-bearing rows are 'For Rent' (QA-1745 C-tier), which render
+'Listed' in the browser (verified above). The specialist also could NOT use the mcp browser tools / the Skill
+(harness denied) and could not write the .claude path; it ran an ad-hoc playwright script honestly (no
+fabrication) but against the wrong (sale) dataset. Its raw artefacts remain in the evidence dir
+(api-responses.json, cards-container.html, manipal-discover-cards*.png) as the sale-view record; its FAIL
+product-verification.toml in the evidence dir is corrected by this PASS. Provenance of THIS verdict:
+orchestrator first-hand (live browser + dual-filter curl). Recommend Main Agent confirm the gate on this.
+"""

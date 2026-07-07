@@ -801,7 +801,7 @@ export default function MapDiscovery() {
         backOnMarket: false,
         reraNumber: null,
         reraValid: false,
-        trustTier: l.trustTier ?? null,
+        trustBadge: l.trustBadge ?? null,
         possessionStatus: null,
         sellerType: null,
         listingPurpose: l.listingPurpose ?? null,
@@ -1562,7 +1562,14 @@ export default function MapDiscovery() {
         parkingCount: l.parking_count,
         furnishingStatus: l.furnishing_status,
         createdAt: l.created_at,
-        trustTier: l.trustTier,
+        // l.trustTier here is the DEALER contract's raw internal letter grade
+        // (A/B/C/D — see usePropertyListings.ts), not the public-safe badge word.
+        // DiscoverCityListingItem.trustBadge is public vocabulary only
+        // ("verified"/"trusted"/"listed"); the letter-to-word mapping is a backend-only
+        // concern (TrustBadge.java) and must never be replicated client-side (#1567/#1616).
+        // The dealer endpoint does not (yet) expose a public-safe badge field, so there is
+        // no honest value to pass through here — null (no badge) is correct, not a regression.
+        trustBadge: null,
         lat: l.latitude,
         lon: l.longitude,
       }));

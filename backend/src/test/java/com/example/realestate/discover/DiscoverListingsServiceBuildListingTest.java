@@ -53,6 +53,38 @@ class DiscoverListingsServiceBuildListingTest {
         assertThat(listing.pricePaise()).isEqualTo(8_000_000L);
         assertThat(listing.heroImageUrl()).isEqualTo("https://cdn.example.com/img.jpg");
         assertThat(listing.reraValid()).isTrue();
-        assertThat(listing.trustTier()).isEqualTo("B");
+        // Raw "B" is projected to the public badge word "trusted" — see #1567 / TrustBadge.
+        assertThat(listing.trustBadge()).isEqualTo("trusted");
+    }
+
+    @Test
+    void buildListing_dTier_yieldsNoBadge() {
+        DiscoverListingResponse listing = DiscoverListingsService.buildListing(
+                "id-4", "L-004", "house", "Title", "Malpe", "IN|KA|Udupi|Malpe",
+                5_000_000L, null, null, 100.0, "sq m", 3,
+                13.3, 74.7, null,
+                null, null, null, null,
+                5, false, null, false, "D", "READY", "owner", "sale", "LIVE");
+
+        assertThat(listing.trustBadge()).isNull();
+    }
+
+    @Test
+    void buildListing_unknownOrNullRawTier_yieldsNoBadge_neverInventsATier() {
+        DiscoverListingResponse unknown = DiscoverListingsService.buildListing(
+                "id-5", "L-005", "house", "Title", "Malpe", "IN|KA|Udupi|Malpe",
+                5_000_000L, null, null, 100.0, "sq m", 3,
+                13.3, 74.7, null,
+                null, null, null, null,
+                5, false, null, false, "Z", "READY", "owner", "sale", "LIVE");
+        DiscoverListingResponse nullTier = DiscoverListingsService.buildListing(
+                "id-6", "L-006", "house", "Title", "Malpe", "IN|KA|Udupi|Malpe",
+                5_000_000L, null, null, 100.0, "sq m", 3,
+                13.3, 74.7, null,
+                null, null, null, null,
+                5, false, null, false, null, "READY", "owner", "sale", "LIVE");
+
+        assertThat(unknown.trustBadge()).isNull();
+        assertThat(nullTier.trustBadge()).isNull();
     }
 }
