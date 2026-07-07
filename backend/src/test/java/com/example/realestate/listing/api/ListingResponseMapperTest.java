@@ -455,6 +455,114 @@ class ListingResponseMapperTest {
         assertThat(response.trustTier()).isNull();
     }
 
+    // ==================== #1786: internal toResponse never sets trustBadge ====================
+
+    @Test
+    void toResponse_trustBadge_alwaysNullOnInternalResponse() {
+        Listing l = buildListing("LIVE");
+        l.setTrustTier("A");
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.trustTier()).isEqualTo("A");
+        assertThat(response.trustBadge()).isNull();
+    }
+
+    // ==================== #1786: public toPublicResponse projects trustBadge, hides trustTier ====================
+
+    @Test
+    void toPublicResponse_trustTierA_projectsVerifiedBadgeAndHidesRawTier() {
+        Listing l = buildListing("LIVE");
+        l.setTrustTier("A");
+
+        ListingResponse response = mapper.toPublicResponse(l, true);
+
+        assertThat(response.trustBadge()).isEqualTo("verified");
+        assertThat(response.trustTier()).isNull();
+    }
+
+    @Test
+    void toPublicResponse_trustTierB_projectsTrustedBadgeAndHidesRawTier() {
+        Listing l = buildListing("LIVE");
+        l.setTrustTier("B");
+
+        ListingResponse response = mapper.toPublicResponse(l, true);
+
+        assertThat(response.trustBadge()).isEqualTo("trusted");
+        assertThat(response.trustTier()).isNull();
+    }
+
+    @Test
+    void toPublicResponse_trustTierC_projectsListedBadgeAndHidesRawTier() {
+        Listing l = buildListing("LIVE");
+        l.setTrustTier("C");
+
+        ListingResponse response = mapper.toPublicResponse(l, true);
+
+        assertThat(response.trustBadge()).isEqualTo("listed");
+        assertThat(response.trustTier()).isNull();
+    }
+
+    @Test
+    void toPublicResponse_trustTierD_noBadgeAndHidesRawTier() {
+        Listing l = buildListing("LIVE");
+        l.setTrustTier("D");
+
+        ListingResponse response = mapper.toPublicResponse(l, true);
+
+        assertThat(response.trustBadge()).isNull();
+        assertThat(response.trustTier()).isNull();
+    }
+
+    @Test
+    void toPublicResponse_trustTierNull_noBadgeAndTierStaysNull() {
+        Listing l = buildListing("LIVE");
+        l.setTrustTier(null);
+
+        ListingResponse response = mapper.toPublicResponse(l, true);
+
+        assertThat(response.trustBadge()).isNull();
+        assertThat(response.trustTier()).isNull();
+    }
+
+    // ==================== #1786: toPublicResponseList (batch) is public-safe by construction ====================
+
+    @Test
+    void toPublicResponseList_projectsBadgeAndNullsRawTierOnBatchPath() {
+        Listing l1 = buildListing("LIVE");
+        l1.setTrustTier("A");
+        Listing l2 = buildListing("LIVE");
+        l2.setTrustTier("D");
+
+        when(listingImageRepository.findByListingIdInOrderByListingIdAscPositionAsc(anyList()))
+                .thenReturn(List.of());
+
+        List<ListingResponse> responses = mapper.toPublicResponseList(List.of(l1, l2));
+
+        ListingResponse r1 = responses.stream().filter(r -> r.id().equals(l1.getId())).findFirst().orElseThrow();
+        assertThat(r1.trustTier()).isNull();
+        assertThat(r1.trustBadge()).isEqualTo("verified");
+
+        ListingResponse r2 = responses.stream().filter(r -> r.id().equals(l2.getId())).findFirst().orElseThrow();
+        assertThat(r2.trustTier()).isNull();
+        assertThat(r2.trustBadge()).isNull();
+    }
+
+    @Test
+    void toResponseList_internalBatchPath_preservesRawTierAndNullsBadge() {
+        Listing l = buildListing("LIVE");
+        l.setTrustTier("A");
+
+        when(listingImageRepository.findByListingIdInOrderByListingIdAscPositionAsc(anyList()))
+                .thenReturn(List.of());
+
+        List<ListingResponse> responses = mapper.toResponseList(List.of(l));
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).trustTier()).isEqualTo("A");
+        assertThat(responses.get(0).trustBadge()).isNull();
+    }
+
     // ==================== toTeaserResponse — core 7 fields populated, correct values ====================
 
     @Test

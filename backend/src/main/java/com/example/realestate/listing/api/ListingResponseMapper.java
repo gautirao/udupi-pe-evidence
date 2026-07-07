@@ -1,5 +1,6 @@
 package com.example.realestate.listing.api;
 
+import com.example.realestate.discover.TrustBadge;
 import com.example.realestate.geo.GeoCoarsener;
 import com.example.realestate.listing.area.AreaNormalizer;
 import com.example.realestate.listing.commercial.ListingSuitableUse;
@@ -80,7 +81,7 @@ public class ListingResponseMapper {
      * Full response including rejectionReason. For broker/admin-facing endpoints only.
      */
     public ListingResponse toResponse(Listing l) {
-        return build(l, l.getRejectionReason(), true);
+        return build(l, l.getRejectionReason(), true, false);
     }
 
     /**
@@ -94,21 +95,25 @@ public class ListingResponseMapper {
      * never trust a client-supplied flag.
      */
     public ListingResponse toPublicResponse(Listing l, boolean allowExactPin) {
-        return build(l, null, allowExactPin);
+        return build(l, null, allowExactPin, true);
     }
 
     /**
      * Batch variant for broker/admin list endpoints. Fires a single image query for all listings.
      */
     public List<ListingResponse> toResponseList(List<Listing> listings) {
-        return toBatchResponseList(listings, true);
+        return toBatchResponseList(listings, true, false);
     }
 
     /**
      * Batch variant for public list endpoints. Fires a single image query; always omits rejectionReason.
+     *
+     * <p>#1786: hardened (not just kept alive) to always project the public-safe trust badge and
+     * null the raw trust tier, so this stays public-safe by construction even though it has no
+     * caller today.
      */
     public List<ListingResponse> toPublicResponseList(List<Listing> listings) {
-        return toBatchResponseList(listings, false);
+        return toBatchResponseList(listings, false, true);
     }
 
     /**
@@ -204,7 +209,8 @@ public class ListingResponseMapper {
                 .toList();
     }
 
-    private List<ListingResponse> toBatchResponseList(List<Listing> listings, boolean includeRejectionReason) {
+    private List<ListingResponse> toBatchResponseList(List<Listing> listings, boolean includeRejectionReason,
+                                                       boolean publicProjection) {
         if (listings.isEmpty()) return List.of();
 
         List<UUID> ids = listings.stream().map(Listing::getId).toList();
@@ -224,7 +230,8 @@ public class ListingResponseMapper {
                 .map(l -> build(l,
                         includeRejectionReason ? l.getRejectionReason() : null,
                         imagesByListing.getOrDefault(l.getId(), List.of()),
-                        earnedCountByListing.getOrDefault(l.getId(), 0L).intValue()))
+                        earnedCountByListing.getOrDefault(l.getId(), 0L).intValue(),
+                        publicProjection))
                 .toList();
     }
 
@@ -233,7 +240,8 @@ public class ListingResponseMapper {
      * {@code allowExactPin=false} coarsens latitude/longitude via {@link GeoCoarsener};
      * all other fields are unaffected.
      */
-    private ListingResponse build(Listing l, String rejectionReason, boolean allowExactPin) {
+    private ListingResponse build(Listing l, String rejectionReason, boolean allowExactPin,
+                                  boolean publicProjection) {
         // Single-listing path: use the gallery-ordering query (position ASC, id ASC tiebreaker,
         // plus url-not-null filter) so the detail-page gallery is deterministic (#758).
         var images = listingImageRepository.findGalleryByListingId(l.getId());
@@ -285,17 +293,18 @@ public class ListingResponseMapper {
                         .map(ListingSuitableUse::getCode).toList()
                 : List.of();
         return build(l, rejectionReason, allowExactPin, images, earnedBadgeCount, gallery, boundary, computedAreaAcres,
-                amenities, specialLocationViews, preferredTenants, suitableUses, utilities);
+                amenities, specialLocationViews, preferredTenants, suitableUses, utilities, publicProjection);
     }
 
-    private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images, int earnedBadgeCount) {
+    private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images, int earnedBadgeCount,
+                                  boolean publicProjection) {
         // Batch/list path: keep payload unchanged — images[] stays empty so list endpoints do
         // not balloon in size. List views render from firstImageUrl + imageCount (#758).
         // computedAreaAcres stays null and residential/commercial child sets stay empty so the
         // hot list path takes NO extra DB calls (#1367, #1626, #1730).
         // allowExactPin=true: batch/list responses are unaffected by #1726 (out of approved scope).
         return build(l, rejectionReason, true, images, earnedBadgeCount, List.of(), null, null,
-                List.of(), List.of(), List.of(), List.of(), List.of());
+                List.of(), List.of(), List.of(), List.of(), List.of(), publicProjection);
     }
 
     @SuppressWarnings("java:S107") // mirrors existing build() overload chain shape
@@ -303,7 +312,7 @@ public class ListingResponseMapper {
                                   int earnedBadgeCount, List<ListingImageDTO> gallery, String boundary,
                                   BigDecimal computedAreaAcres, List<String> amenities,
                                   List<String> specialLocationViews, List<String> preferredTenants,
-                                  List<String> suitableUses, List<String> utilities) {
+                                  List<String> suitableUses, List<String> utilities, boolean publicProjection) {
         int imageCount = images.size();
         String firstImageUrl = images.stream().findFirst()
                 .map(ListingImage::getUrl)
@@ -327,6 +336,12 @@ public class ListingResponseMapper {
         boolean reraValid = l.getReraNumber() != null
                 && ListingResponse.RERA_PATTERN.matcher(l.getReraNumber()).matches();
 
+        // #1786: public responses never carry the raw internal trust grade — only the
+        // public-safe projected badge word. Internal admin/owner responses keep the raw grade
+        // and never populate the badge. TrustBadge.publicBadge is the ONLY allowed projector.
+        String trustTier = publicProjection ? null : l.getTrustTier();
+        String trustBadge = publicProjection ? TrustBadge.publicBadge(l.getTrustTier()) : null;
+
         return new ListingResponse(
                 l.getId(), l.getListingNumber(), l.getDisplayId(),
                 l.getStatus(), l.getPropertyType(), l.getTitle(),
@@ -349,7 +364,7 @@ public class ListingResponseMapper {
                 daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt(),
                 l.getPossessionStatus(), l.getExpectedPossessionDate(),
                 l.getApprovalsDeclared(), reraValid, earnedBadgeCount,
-                l.getTrustTier(), l.getAreaKey(), gallery,
+                trustTier, trustBadge, l.getAreaKey(), gallery,
                 l.getWaterSource(), l.getSoilType(), l.getRoadAccess(),
                 l.getCultivationStatus(), l.getOwnershipType(), l.getSurveyNumber(),
                 l.getLandCategory(), l.getFarmhouseAvailable(), l.getFencingDone(),

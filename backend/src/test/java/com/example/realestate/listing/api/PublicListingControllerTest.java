@@ -144,7 +144,11 @@ class PublicListingControllerTest {
                     l.getSellerType(), daysOnMarket, false, lastUpdatedAt,
                     l.getFirstPublishedAt(), l.getPossessionStatus(),
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0,
-                    l.getTrustTier(), l.getAreaKey(),
+                    // #1786: mirror real mapper's publicProjection=true behaviour — raw trustTier is
+                    // always null on the public path; trustBadge is the ONLY projected badge word,
+                    // derived via the single allowed projector (TrustBadge.publicBadge).
+                    null, com.example.realestate.discover.TrustBadge.publicBadge(l.getTrustTier()),
+                    l.getAreaKey(),
                     java.util.List.of(
                             new ListingImageDTO("https://cdn.example.com/img-a.jpg", null, 0),
                             new ListingImageDTO("https://cdn.example.com/img-b.jpg", null, 1),
@@ -237,6 +241,9 @@ class PublicListingControllerTest {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
                 "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
         listing.setFirstPublishedAt(OffsetDateTime.now().minusDays(5));
+        // #1786: raw grade must never reach an authenticated buyer's public JSON — only the
+        // projected badge word may appear.
+        listing.setTrustTier("A");
 
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
 
@@ -254,6 +261,10 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.daysOnMarket").value(5))
                 .andExpect(jsonPath("$.backOnMarket").value(false))
                 .andExpect(jsonPath("$.firstPublishedAt").isNotEmpty())
+                // #1786: authenticated buyer's public detail response never carries the raw
+                // internal trust grade — only the public-safe projected badge word.
+                .andExpect(jsonPath("$.trustTier").doesNotExist())
+                .andExpect(jsonPath("$.trustBadge").value("verified"))
                 // #758: single-listing response exposes images[] with non-empty URLs, ordered by position
                 .andExpect(jsonPath("$.images.length()").value(3))
                 .andExpect(jsonPath("$.images[0].url").value("https://cdn.example.com/img-a.jpg"))
@@ -278,6 +289,8 @@ class PublicListingControllerTest {
         listing.setLatitude(13.34091);
         listing.setLongitude(74.74215);
         listing.setCreatedBy(UUID.randomUUID()); // owned by someone else
+        // #1786: raw grade must never reach an authenticated non-owner buyer's public JSON.
+        listing.setTrustTier("B");
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
 
         // Not the owner, not an admin -> guard denies exact pin
@@ -296,7 +309,11 @@ class PublicListingControllerTest {
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.latitude").value(13.34))
-                .andExpect(jsonPath("$.longitude").value(74.74));
+                .andExpect(jsonPath("$.longitude").value(74.74))
+                // #1786: authenticated non-owner buyer's public detail response never carries the
+                // raw internal trust grade — only the public-safe projected badge word.
+                .andExpect(jsonPath("$.trustTier").doesNotExist())
+                .andExpect(jsonPath("$.trustBadge").value("trusted"));
     }
 
     @Test

@@ -122,7 +122,7 @@ class AdminListingControllerTest {
                     l.getSellerType(), 0, false, lastUpdatedAt,
                     l.getFirstPublishedAt(), l.getPossessionStatus(),
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0,
-                    l.getTrustTier(), l.getAreaKey(), java.util.List.of(),
+                    l.getTrustTier(), null, l.getAreaKey(), java.util.List.of(),
                     null, null, null, null, null, null,
                     l.getLandCategory(), l.getFarmhouseAvailable(), l.getFencingDone(),
                     l.getBoundaryGeoJson(), null,

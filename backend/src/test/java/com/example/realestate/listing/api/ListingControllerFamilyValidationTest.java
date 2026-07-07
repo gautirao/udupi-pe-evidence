@@ -127,7 +127,7 @@ class ListingControllerFamilyValidationTest {
                     null, null, null,
                     "broker", 0, false, l.getUpdatedAt(),
                     null, null, null, null, false, 0,
-                    null, null, List.of(),
+                    null, null, null, List.of(),
                     null, null, null, null, null, null, null, null, null, null, null,
                     // 36 nulls: bathrooms .. maintenanceIncluded (residential typed fields, M38-13A / #1626)
                     null, null, null, null, null, null,

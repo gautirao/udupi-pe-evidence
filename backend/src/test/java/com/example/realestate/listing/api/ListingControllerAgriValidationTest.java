@@ -142,7 +142,7 @@ class ListingControllerAgriValidationTest {
                     l.getSellerType(), 0, false, l.getUpdatedAt(),
                     l.getFirstPublishedAt(), l.getPossessionStatus(),
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), false, 0,
-                    l.getTrustTier(), l.getAreaKey(), List.of(),
+                    l.getTrustTier(), null, l.getAreaKey(), List.of(),
                     null, null, null, null, null, null, null, null, null,
                     l.getBoundaryGeoJson(), null,
                     l.getBathrooms(), l.getBalconies(), l.getFacing(), l.getAvailabilityTimeline(),

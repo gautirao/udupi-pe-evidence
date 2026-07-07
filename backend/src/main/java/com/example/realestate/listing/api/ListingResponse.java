@@ -62,8 +62,23 @@ public record ListingResponse(
         boolean reraValid,
         /** Number of EARNED (Verified) trust badges for this listing. Never negative. */
         int earnedBadgeCount,
-        /** Computed trust tier: A, B, C, or D. Null only for legacy rows before V46. */
+        /**
+         * Computed trust tier: A, B, C, or D. Null only for legacy rows before V46.
+         *
+         * <p>#1786: this is the RAW internal grade. It is populated ONLY on internal
+         * admin/owner responses ({@link ListingResponseMapper#toResponse}); public responses
+         * ({@link ListingResponseMapper#toPublicResponse}) always null this out and populate
+         * {@link #trustBadge} instead — never expose the raw letter grade to public callers.
+         */
         String trustTier,
+        /**
+         * #1786: public-safe projected trust badge word (one of {@code verified}/{@code trusted}/
+         * {@code listed}), or {@code null} if no badge should be shown. Populated ONLY on public
+         * listing responses via {@link com.example.realestate.discover.TrustBadge#publicBadge},
+         * projected from the raw {@link #trustTier}. Always {@code null} on internal admin/owner
+         * responses, which carry the raw grade in {@link #trustTier} instead.
+         */
+        String trustBadge,
         String areaKey,
         /**
          * Ordered image gallery for the listing detail view.

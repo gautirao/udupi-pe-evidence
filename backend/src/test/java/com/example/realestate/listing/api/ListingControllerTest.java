@@ -146,7 +146,7 @@ class ListingControllerTest {
                     l.getSellerType(), daysOnMarket, false, lastUpdatedAt,
                     l.getFirstPublishedAt(), l.getPossessionStatus(),
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0,
-                    l.getTrustTier(), l.getAreaKey(), java.util.List.of(),
+                    l.getTrustTier(), null, l.getAreaKey(), java.util.List.of(),
                     null, null, null, null, null, null, null, null, null, l.getBoundaryGeoJson(), null,
                     l.getBathrooms(), l.getBalconies(), l.getFacing(), l.getAvailabilityTimeline(),
                     l.getSuperBuiltArea(), l.getSuperBuiltAreaUnit(), l.getPropertyAge(), l.getResidentialWaterSource(),
