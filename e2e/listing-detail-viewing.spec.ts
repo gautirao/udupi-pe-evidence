@@ -1,10 +1,18 @@
 /**
  * listing-detail-viewing.spec.ts — #1617 listing detail viewing flow
+ * Adapted for #1797 — the modal (Dialog) "Request Viewing" flow was replaced by
+ * a fully inline, sticky ViewingRequestPanel in the sidebar. There is no dialog
+ * for the request-viewing journey anymore (agri listings still use the legacy
+ * RequestViewingModal, but that page variant is out of scope here).
  *
  * Covers:
- *   LDV1 — Authed buyer opens "Request Viewing", selects date + slot, submits (journey intact)
- *   LDV2 — "Contact Broker" button is absent (dishonest duplicate removed in D2-A)
- *   LDV3 — Anonymous buyer sees the sign-in gate, NOT the "Request Viewing" button
+ *   LDV1 — Authed buyer picks a date pill + time slot in the inline panel, submits
+ *          (journey intact) — POST /api/bookings contract unchanged.
+ *   LDV2 — "Contact Broker" button is absent (dishonest duplicate removed in D2-A);
+ *          the inline contact-lister card is out of scope for this spec.
+ *   LDV3 — Anonymous buyer sees the SAME interactive inline panel (Option A, #1797)
+ *          — not a sign-in wall. Submitting as anon preserves date+time intent to
+ *          sessionStorage and opens the sign-in modal WITHOUT posting to /api/bookings.
  *   LDV4 — Anonymous buyer: first image visible; gallery lock appears at image 2
  *
  * Prerequisites:
@@ -82,97 +90,80 @@ async function gotoListing(page: import('@playwright/test').Page) {
 test.describe('@journey LDV1 — authed buyer: Request Viewing journey intact', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
-  test('LDV1 — authed buyer opens modal, selects date + slot, submits', async ({ page }) => {
+  test('LDV1 — authed buyer picks a date pill + time slot in the inline panel, submits', async ({ page }) => {
     test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set');
 
     await gotoListing(page);
 
-    // "Request Viewing" button must be visible (authed)
-    const requestBtn = page.getByRole('button', { name: /request viewing/i });
-    await expect(requestBtn).toBeVisible({ timeout: 10_000 });
-
-    // Open the modal
-    await requestBtn.click();
-
-    // Modal heading visible
-    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
+    // Inline panel heading is visible (authed) — no modal/dialog involved.
     await expect(
-      page.locator('[role="dialog"]').getByText(/request a viewing/i),
-    ).toBeVisible();
+      page.getByRole('heading', { level: 2, name: /request a viewing time/i }),
+    ).toBeVisible({ timeout: 10_000 });
+    // There must be no dialog for this flow anymore (D2-A/#1797: modal replaced by inline panel).
+    await expect(page.getByRole('dialog')).toHaveCount(0);
 
-    // Fill preferred date (tomorrow, formatted yyyy-MM-dd)
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const dateStr = tomorrow.toISOString().slice(0, 10);
-    await page.locator('#requested-date').fill(dateStr);
+    // Pick the first quick-pick date pill (tomorrow).
+    const firstDatePill = page.locator('[data-testid^="viewing-date-pill-"]').first();
+    await firstDatePill.waitFor({ state: 'visible', timeout: 5_000 });
+    await firstDatePill.click();
 
-    // Select a time slot — pick the first available option
-    const selectTrigger = page.locator('[role="dialog"] button').filter({ hasText: /select a time slot/i });
-    if (await selectTrigger.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await selectTrigger.click();
-      // Pick first option in the dropdown
-      const firstOption = page.locator('[role="option"]').first();
-      await firstOption.waitFor({ state: 'visible', timeout: 3_000 });
-      await firstOption.click();
-    } else {
-      // Time slot may already be pre-selected or use a different pattern
-      // Try the combobox approach
-      const combobox = page.locator('[role="combobox"]').first();
-      if (await combobox.isVisible({ timeout: 2_000 }).catch(() => false)) {
-        await combobox.click();
-        const option = page.locator('[role="option"]').first();
-        await option.waitFor({ state: 'visible', timeout: 3_000 });
-        await option.click();
-      }
-    }
+    // Pick the first available time slot — revealed only after a date is chosen.
+    const firstTimeSlot = page.locator('[data-testid^="viewing-time-slot-"]').first();
+    await firstTimeSlot.waitFor({ state: 'visible', timeout: 5_000 });
+    await firstTimeSlot.click();
 
-    // Submit button becomes enabled after date + slot selection
-    const submitBtn = page.locator('[role="dialog"] button[type="submit"]');
+    // Submit button becomes enabled after date + slot selection.
+    const submitBtn = page.getByTestId('request-viewing-btn');
     await expect(submitBtn).toBeEnabled({ timeout: 5_000 });
 
-    // Submit — booking may succeed (201) or conflict (409 duplicate on a seeded
-    // listing). Both outcomes are acceptable for the "journey intact" check.
-    // What is NOT acceptable: the submit silently hanging with the dialog still open
-    // and no feedback rendered at all.
-    await submitBtn.click();
+    // Assert the underlying POST /api/bookings contract is unchanged: capture the
+    // request payload and response status alongside the click (journey-intact check
+    // for the API boundary, not just the UI).
+    const [bookingRequest] = await Promise.all([
+      page.waitForRequest(
+        (req) => req.url().includes('/api/bookings') && req.method() === 'POST',
+        { timeout: 10_000 },
+      ),
+      submitBtn.click(),
+    ]);
+    const payload = bookingRequest.postDataJSON() as {
+      listingId?: string;
+      requestedDate?: string;
+      requestedTimeSlot?: string;
+    };
+    expect(payload.listingId).toBe(LISTING_ID);
+    expect(payload.requestedDate).toBeTruthy();
+    expect(payload.requestedTimeSlot).toBeTruthy();
 
-    // Deterministic terminal-state assertion: wait for EITHER
-    //   (a) the dialog to close (success path — booking accepted), OR
-    //   (b) a visible error / duplicate message inside the dialog (409 / error path).
-    //
-    // We race these two conditions with a generous timeout. If NEITHER branch
-    // materialises, the test fails — which is the correct signal that the submit
-    // silently broke.
-    const dialog = page.getByRole('dialog');
-    const errorMsg = dialog.locator(
-      [
-        '[data-testid="booking-error"]',
-        '[role="alert"]',
-        'text=/already/i',
-        'text=/error/i',
-        'text=/failed/i',
-        'text=/conflict/i',
-      ].join(', '),
-    );
+    // Submit may succeed (201) or conflict (409 duplicate on a seeded listing). Both
+    // outcomes are acceptable for the "journey intact" check. What is NOT acceptable:
+    // the submit silently hanging with no feedback rendered at all.
+    const success = page.getByTestId('viewing-request-success');
+    const errorMsg = page.getByTestId('viewing-request-error');
 
     await expect
       .poll(
         async () => {
-          const dialogGone = await dialog.isVisible().then((v) => !v).catch(() => true);
-          if (dialogGone) return 'dialog-closed';
-          const hasError = await errorMsg.first().isVisible().catch(() => false);
-          if (hasError) return 'error-shown';
+          if (await success.isVisible().catch(() => false)) return 'success-shown';
+          if (await errorMsg.isVisible().catch(() => false)) return 'error-shown';
           return 'pending';
         },
         {
           message:
-            'LDV1: expected dialog to close (success) or error message to appear (409/error) after submit — ' +
-            'got neither; the submit may have silently broken',
+            'LDV1: expected the inline success state (viewing-request-success) or error state ' +
+            '(viewing-request-error) to appear after submit — got neither; the submit may have silently broken',
           timeout: 12_000,
           intervals: [500, 500, 500, 1_000, 1_000, 1_000],
         },
       )
-      .toMatch(/^(dialog-closed|error-shown)$/);
+      .toMatch(/^(success-shown|error-shown)$/);
+
+    // If the success path was reached, assert the honest "request, not a confirmed
+    // booking" semantics carried over from the modal copy.
+    if (await success.isVisible().catch(() => false)) {
+      await expect(success).toHaveAttribute('role', 'status');
+      await expect(success).toContainText(/not a confirmed booking/i);
+    }
   });
 });
 
@@ -187,12 +178,14 @@ test.describe('@journey LDV2 — authed buyer: Contact Broker button removed', (
 
     await gotoListing(page);
 
-    // "Request Viewing" must be present
-    await expect(
-      page.getByRole('button', { name: /request viewing/i }),
-    ).toBeVisible({ timeout: 10_000 });
+    // The inline viewing-request panel (its submit CTA) must be present.
+    await expect(page.getByTestId('request-viewing-btn')).toBeVisible({ timeout: 10_000 });
 
-    // "Contact Broker" must NOT be present anywhere on the page
+    // "Contact Broker" must NOT be present anywhere on the page — the honesty fix from
+    // D2-A carries over to the inline layout. (The inline contact-lister card that
+    // conditionally shows a verified-broker phone number is a separate, in-scope-elsewhere
+    // control and is not what this check is about — it asserts the OLD broken/no-op
+    // "Contact Broker" button never reappears.)
     await expect(
       page.getByRole('button', { name: /contact broker/i }),
     ).toHaveCount(0);
@@ -200,25 +193,58 @@ test.describe('@journey LDV2 — authed buyer: Contact Broker button removed', (
 });
 
 // ---------------------------------------------------------------------------
-// LDV3 — Anonymous buyer: sign-in gate visible; no Request Viewing button
+// LDV3 — Anonymous buyer: same interactive inline panel (Option A, #1797) —
+// NOT a sign-in wall. Submitting routes to the in-page sign-in modal and does
+// NOT call POST /api/bookings.
 // ---------------------------------------------------------------------------
-test('LDV3 — anonymous buyer sees sign-in gate, not Request Viewing button', async ({ page }) => {
+test('LDV3 — anonymous buyer sees the same interactive inline panel; submit opens sign-in without posting', async ({ page }) => {
   await gotoListing(page);
 
-  // Sign-in gate text should be visible (from SignInGateCard)
+  // Anon buyers get the SAME inline panel — not a SignInGateCard wall.
   await expect(
-    page.locator('text=Sign in to view full details').first(),
+    page.getByRole('heading', { level: 2, name: /request a viewing time/i }),
   ).toBeVisible({ timeout: 10_000 });
-
-  // "Request Viewing" must NOT appear for anonymous users
-  await expect(
-    page.getByRole('button', { name: /request viewing/i }),
-  ).toHaveCount(0);
+  await expect(page.locator('text=Sign in to view full details')).toHaveCount(0);
 
   // "Contact Broker" must also be absent
   await expect(
     page.getByRole('button', { name: /contact broker/i }),
   ).toHaveCount(0);
+
+  // Pick a date pill + time slot exactly like an authed buyer would.
+  const firstDatePill = page.locator('[data-testid^="viewing-date-pill-"]').first();
+  await firstDatePill.waitFor({ state: 'visible', timeout: 5_000 });
+  await firstDatePill.click();
+  const firstTimeSlot = page.locator('[data-testid^="viewing-time-slot-"]').first();
+  await firstTimeSlot.waitFor({ state: 'visible', timeout: 5_000 });
+  await firstTimeSlot.click();
+
+  const submitBtn = page.getByTestId('request-viewing-btn');
+  await expect(submitBtn).toBeEnabled({ timeout: 5_000 });
+  await expect(submitBtn).toHaveText(/sign in to request viewing/i);
+
+  // Fail loudly if the anon submit ever posts to /api/bookings — there is no anon
+  // submit path (no auth broadening); only sign-in should occur.
+  let bookingPosted = false;
+  page.on('request', (req) => {
+    if (req.url().includes('/api/bookings') && req.method() === 'POST') bookingPosted = true;
+  });
+
+  await submitBtn.click();
+
+  // The in-page sign-in modal (AuthModalContext) opens — no navigation to a hard wall.
+  await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
+
+  expect(bookingPosted).toBe(false);
+
+  // The intent (date + time slot ONLY — no PII) is preserved to sessionStorage so the
+  // pick survives the sign-in round trip.
+  const storedIntent = await page.evaluate((listingId) => {
+    const raw = sessionStorage.getItem(`viewing-intent:${listingId}`);
+    return raw ? JSON.parse(raw) : null;
+  }, LISTING_ID);
+  expect(storedIntent).not.toBeNull();
+  expect(Object.keys(storedIntent).sort()).toEqual(['date', 'timeSlot']);
 });
 
 // ---------------------------------------------------------------------------

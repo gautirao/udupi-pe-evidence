@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { MapContainer, TileLayer, Marker, Polyline, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { Map as MapIcon } from 'lucide-react';
 import { api } from '@/lib/api';
 import { CATEGORY_LABELS, CATEGORY_ICONS, SETTLEMENT_CATEGORIES, formatDistance } from '@/lib/poi-categories';
 
@@ -19,9 +20,17 @@ interface PoiResponse {
 
 interface PoiMiniMapProps {
   listingId: string;
-  latitude: number;
-  longitude: number;
+  /**
+   * Coords are optional (#1797 AC8): withheld (null/undefined) for anon residential
+   * listings under #1726 coarsening. When absent, the component renders an honest
+   * static fallback — no map, no fabricated POIs/distances, no exact-pin exposure —
+   * instead of erroring or guessing a location.
+   */
+  latitude?: number | null;
+  longitude?: number | null;
   propertyType?: string;
+  /** Label used in the coords-absent fallback, e.g. the listing's locality. */
+  localityLabel?: string;
 }
 
 const ZOOM_BY_TYPE: Record<string, number> = {
@@ -123,15 +132,31 @@ interface MappablePoi extends PoiResponse {
   longitude: number;
 }
 
-export function PoiMiniMap({ listingId, latitude, longitude, propertyType }: PoiMiniMapProps) {
+export function PoiMiniMap({ listingId, latitude, longitude, propertyType, localityLabel }: PoiMiniMapProps) {
   const [visible, setVisible] = useState(propertyType === 'land');
+  const hasCoords = typeof latitude === 'number' && typeof longitude === 'number';
 
+  // Hook order must stay stable across renders — call useQuery unconditionally, but
+  // gate the network request itself so an anon residential listing (coords withheld)
+  // never fires a POI fetch (#1797 AC8 — no POI call, no leakage via the network tab).
   const { data } = useQuery({
     queryKey: ['pois', listingId],
     queryFn: () => api.get<PoiResponse[]>(`/api/listings/${listingId}/pois`),
+    enabled: hasCoords,
   });
 
-  // Always render the map when the listing has confirmed coordinates — POI overlays are optional.
+  // Coords withheld (e.g. #1726 coarsening returned null for anon residential) — honest
+  // static fallback. No map, no fabricated POIs/distances, no exact-pin exposure.
+  if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+    return (
+      <div className="flex h-[200px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/40">
+        <div className="text-center text-muted-foreground">
+          <MapIcon className="mx-auto mb-2 h-6 w-6 opacity-60" aria-hidden="true" />
+          <p className="text-sm">Map view{localityLabel ? ` — ${localityLabel}` : ''}</p>
+        </div>
+      </div>
+    );
+  }
 
   const zoom = ZOOM_BY_TYPE[propertyType ?? ''] ?? 15;
 

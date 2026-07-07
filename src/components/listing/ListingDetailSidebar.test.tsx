@@ -1,13 +1,19 @@
 /**
- * ListingDetailSidebar — unit tests for #1617
+ * ListingDetailSidebar — unit tests for #1617 / #1797
  *
- * Contact / viewing honesty
- *   T1  — authenticated user sees "Request viewing time" button
- *   T2  — "Contact broker" opens the honest viewing-request relay (no number leak)
- *   T3  — picking a day enables and fires the viewing request
+ * #1797 redesign: the inline viewing-request flow itself (date/time picking, submit,
+ * pending/success/error states, anon sign-in intent handoff) is covered in depth by
+ * ViewingRequestPanel.test.tsx. ViewingRequestPanel is mocked out here so this file
+ * stays focused on what ListingDetailSidebar itself owns: wiring the panel with the
+ * right props, the verified-broker message, save toggle, contact-phone leak guard,
+ * and area-CTA canonicalization.
+ *
+ * Contact / broker honesty
+ *   T1  — ViewingRequestPanel is rendered with the listing id + current user
+ *   T2  — "Contact broker" button is NOT rendered (out of scope, no endpoint — #1797)
  *   T4  — contact_phone present + authed → tel: link and Call Now shown
  *   T5  — contact_phone absent + authed → contact section absent
- *   T6  — anonymous user sees sign-in gate, NOT Request Viewing button
+ *   T6  — anonymous user still renders the (mocked) ViewingRequestPanel — no sign-in wall
  *
  * Area CTA canonicalization
  *   T7  — valid areaKey (IN|KA|Udupi|Malpe) → canonical /trends/udupi/areas/malpe
@@ -21,7 +27,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 // ── Hoisted mocks ───────────────────────────────────────────────────────────
@@ -36,10 +42,15 @@ vi.mock('@/components/listing/AreaMarketWidget', () => ({
   AreaMarketWidget: () => null,
 }));
 
-// SignInGateCard — render a minimal sentinel so we can assert its presence.
-vi.mock('@/components/auth/SignInGateCard', () => ({
-  SignInGateCard: ({ ctaLabel }: { ctaLabel: string }) =>
-    React.createElement('div', { 'data-testid': 'sign-in-gate' }, ctaLabel),
+// ViewingRequestPanel has its own dedicated test suite (ViewingRequestPanel.test.tsx);
+// stub it here so Sidebar tests aren't coupled to its internal state machine.
+vi.mock('@/components/listing/ViewingRequestPanel', () => ({
+  ViewingRequestPanel: ({ listingId, user }: { listingId: string; user: { id: string } | null }) =>
+    React.createElement(
+      'div',
+      { 'data-testid': 'viewing-request-panel-stub' },
+      `listing=${listingId} user=${user ? user.id : 'anon'}`,
+    ),
 }));
 
 // ── Import after mocks ───────────────────────────────────────────────────────
@@ -74,7 +85,6 @@ const MOCK_USER = { id: 'user-1', email: 'user@example.com' } as unknown as User
 function renderSidebar(
   listing: PublicListingDetail,
   user: User | null,
-  onOpenBookingModal = vi.fn(),
   onShare = vi.fn(),
   onToggleSaved = vi.fn(),
 ) {
@@ -83,7 +93,6 @@ function renderSidebar(
       <ListingDetailSidebar
         listing={listing}
         user={user}
-        onOpenBookingModal={onOpenBookingModal}
         onShare={onShare}
         saved={false}
         onToggleSaved={onToggleSaved}
@@ -97,40 +106,20 @@ beforeEach(() => {
   mockUseListingMarketContext.mockReturnValue({ data: [], isLoading: false, error: null });
 });
 
-// ── D2-A: Contact Broker honesty ─────────────────────────────────────────────
+// ── Contact / broker honesty ─────────────────────────────────────────────────
 
-describe('D2-A: Contact Broker honesty', () => {
-  it('T1 — authenticated user sees "Request Viewing" button', () => {
+describe('Contact / broker honesty (#1797)', () => {
+  it('T1 — renders ViewingRequestPanel wired with the listing id + signed-in user', () => {
     renderSidebar(makeListing(), MOCK_USER);
-    expect(screen.getByRole('button', { name: /request viewing/i })).toBeInTheDocument();
+    expect(screen.getByTestId('viewing-request-panel-stub')).toHaveTextContent(
+      'listing=listing-123 user=user-1',
+    );
   });
 
-  it('T2 — "Contact broker" routes to the honest viewing-request relay (no number leak)', () => {
-    // The redesigned sidebar reintroduces a "Contact broker" button that opens the
-    // existing viewing-request modal (POST /api/bookings) — an honest relay where no
-    // phone numbers are exchanged. It is NOT a dishonest duplicate and never reveals a number.
-    const onOpenBookingModal = vi.fn();
-    renderSidebar(makeListing(), MOCK_USER, onOpenBookingModal);
-    const btn = screen.getByRole('button', { name: /contact broker/i });
-    expect(btn).toBeInTheDocument();
-    fireEvent.click(btn);
-    expect(onOpenBookingModal).toHaveBeenCalledOnce();
-  });
-
-  it('T3 — picking a day then a time enables and fires the viewing request', () => {
-    const onOpenBookingModal = vi.fn();
-    renderSidebar(makeListing(), MOCK_USER, onOpenBookingModal);
-    const requestBtn = screen.getByRole('button', { name: /request viewing/i });
-    // Gated until BOTH day AND time are picked.
-    expect(requestBtn).toBeDisabled();
-    // Pick a day → time slots appear, but button is still disabled until a time is picked.
-    fireEvent.click(screen.getByText('Today'));
-    expect(requestBtn).toBeDisabled();
-    // Pick a time slot → button enables.
-    fireEvent.click(screen.getByRole('button', { name: /9 am/i }));
-    expect(requestBtn).toBeEnabled();
-    fireEvent.click(requestBtn);
-    expect(onOpenBookingModal).toHaveBeenCalledOnce();
+  it('T2 — "Contact broker" button is not rendered (no endpoint — out of scope)', () => {
+    renderSidebar(makeListing(), MOCK_USER);
+    expect(screen.queryByTestId('contact-broker-btn')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /contact broker/i })).not.toBeInTheDocument();
   });
 
   it('T4 — contact_phone + authed → tel: link and Call Now button shown', () => {
@@ -150,10 +139,17 @@ describe('D2-A: Contact Broker honesty', () => {
     expect(screen.queryByRole('link', { name: /call now/i })).not.toBeInTheDocument();
   });
 
-  it('T6 — anonymous user sees sign-in gate, NOT the Request Viewing button', () => {
+  it('T6 — anonymous user still gets the (same) ViewingRequestPanel — no sign-in wall', () => {
     renderSidebar(makeListing(), null);
-    expect(screen.getByTestId('sign-in-gate')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /request viewing/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId('viewing-request-panel-stub')).toHaveTextContent(
+      'listing=listing-123 user=anon',
+    );
+    expect(screen.queryByTestId('sign-in-gate')).not.toBeInTheDocument();
+  });
+
+  it('verified-broker message renders for a broker-listed property', () => {
+    renderSidebar(makeListing({ sellerType: 'broker' }), MOCK_USER);
+    expect(screen.getByText(/listed by a verified broker/i)).toBeInTheDocument();
   });
 });
 
@@ -251,9 +247,6 @@ describe('Phone-number leak guard', () => {
 
       // The tel: link must not appear (belt-and-suspenders)
       expect(document.querySelector('a[href^="tel:"]')).toBeNull();
-
-      // Sign-in gate should be present (anonymous users always see it instead)
-      expect(screen.getByTestId('sign-in-gate')).toBeInTheDocument();
     },
   );
 });

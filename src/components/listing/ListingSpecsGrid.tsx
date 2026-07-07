@@ -146,8 +146,10 @@ export function ListingSpecsGrid({ listing }: ListingSpecsGridProps) {
       label: 'Floor',
       testId: 'spec-floor',
     });
-  } else if (isHouseOrVilla && listing.totalFloors != null) {
-    // House/Villa — "Floors" tile (design §5), reusing totalFloors (no separate
+  } else if (listing.totalFloors != null) {
+    // "Floors" tile (design §5 for house/villa) — kept type-agnostic so a type not
+    // in TYPE_NOUN (unmapped-type fallback, #1797 AC6) still shows this field
+    // rather than silently dropping it, reusing totalFloors (no separate
     // number-of-floors column exists on the backend).
     primarySpecs.push({
       icon: <Building2 className="h-5 w-5" />,
@@ -376,7 +378,10 @@ export function ListingSpecsGrid({ listing }: ListingSpecsGridProps) {
       secondarySpecs.push({ icon: <CheckCircle className="h-4 w-4" />, label: 'Survey ref', value: listing.surveyNumber });
     }
   }
-  if (listing.ownershipType && (isApartment || isHouseOrVilla || isResidentialPlot)) {
+  // Type-agnostic (#1797 AC6 unmapped-type fallback): shown whenever present, not
+  // gated to a known-type allowlist, so a future/unmapped property type still
+  // surfaces this field instead of it being silently hidden.
+  if (listing.ownershipType) {
     secondarySpecs.push({
       icon: <CheckCircle className="h-4 w-4" />,
       label: 'Ownership',

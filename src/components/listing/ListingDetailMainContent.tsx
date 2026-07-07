@@ -14,6 +14,7 @@ import { AgriSpecRows } from '@/components/listing/AgriSpecRows';
 import { ListingDetailBoundaryMap } from '@/components/listing/ListingDetailBoundaryMap';
 import { formatPrice, formatRelativeDate, formatArea } from '@/lib/formatters';
 import { formatListingId } from '@/lib/listing-id';
+import { cn } from '@/lib/utils';
 import type { PublicListingDetail } from '@/pages/ListingDetail';
 
 interface TrustBadge {
@@ -90,7 +91,7 @@ export function ListingDetailMainContent({
             <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
               <Badge className={badgeClass}>{label}</Badge>
               {purpose && (
-                <Badge className="bg-orange-100 text-orange-700 border-0 font-medium">
+                <Badge className="bg-secondary text-secondary-foreground border-0 font-medium">
                   {isRent ? 'For rent' : 'For sale'}
                 </Badge>
               )}
@@ -101,7 +102,7 @@ export function ListingDetailMainContent({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Badge variant="outline" className="text-yellow-600 border-yellow-400 cursor-help">
+                      <Badge variant="outline" className="text-warning border-warning cursor-help">
                         Low confidence
                       </Badge>
                     </TooltipTrigger>
@@ -156,7 +157,7 @@ export function ListingDetailMainContent({
 
         {listing.reraNumber && (
           <div className="mt-4">
-            <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50 gap-1">
+            <Badge variant="outline" className="text-evergreen border-evergreen/40 bg-evergreen-tint gap-1">
               <ShieldCheck className="h-3.5 w-3.5" />
               RERA number provided: {listing.reraNumber}
             </Badge>
@@ -231,18 +232,7 @@ export function ListingDetailMainContent({
         </DetailSection>
       )}
 
-      {/* ── RERA & legal readiness (preserved) ───────────────────────────── */}
-      <RERACard
-        reraNumber={listing.reraNumber}
-        reraValid={listing.reraValid}
-        possessionStatus={listing.possessionStatus}
-        expectedPossessionDate={listing.expectedPossessionDate}
-        approvalsDeclared={listing.approvalsDeclared}
-      />
-
-      {trustBadges && trustBadges.length > 0 && <TrustBadgeCard badges={trustBadges} />}
-
-      {/* ── Location & essentials ─────────────────────────────────────────── */}
+      {/* ── Location & nearby essentials ──────────────────────────────────── */}
       <DetailSection>
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -266,21 +256,17 @@ export function ListingDetailMainContent({
             </a>
           )}
         </div>
-        {hasCoords ? (
-          <PoiMiniMap
-            listingId={listing.id}
-            latitude={listing.latitude!}
-            longitude={listing.longitude!}
-            propertyType={listing.propertyType}
-          />
-        ) : (
-          <div className="flex h-[200px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/40">
-            <div className="text-center text-muted-foreground">
-              <MapIcon className="mx-auto mb-2 h-6 w-6 opacity-60" aria-hidden="true" />
-              <p className="text-sm">Map view{listing.locality ? ` — ${listing.locality}` : ''}</p>
-            </div>
-          </div>
-        )}
+
+        {/* PoiMiniMap owns its own null-guard: renders an honest fallback (no map, no
+            fabricated POIs/distances) when coords are withheld (e.g. anon residential
+            under #1726 coarsening) instead of relying on the caller to gate it. */}
+        <PoiMiniMap
+          listingId={listing.id}
+          latitude={listing.latitude}
+          longitude={listing.longitude}
+          propertyType={listing.propertyType}
+          localityLabel={listing.locality ?? undefined}
+        />
 
         <div className="mt-5 border-t border-border pt-5">
           <NearbySchoolsCard listingId={listing.id} embedded />
@@ -291,7 +277,9 @@ export function ListingDetailMainContent({
         </div>
       </DetailSection>
 
-      {/* ── Why trust this listing? + footer meta ─────────────────────────── */}
+      {/* ── Why trust this listing? — consolidated (#1797 AC5): groups the RERA/legal
+          card, the public trust badges, and the buyer checklist into ONE section
+          instead of three scattered cards. ──────────────────────────────────── */}
       {(() => {
         const checks = [
           listing.sellerType === 'broker' && 'Listed by a verified broker',
@@ -299,7 +287,15 @@ export function ListingDetailMainContent({
           (listing.imageCount ?? listing.images?.length ?? 0) > 0 && 'Photos confirmed for this property',
           listing.reraNumber && 'RERA number provided',
         ].filter(Boolean) as string[];
-        if (checks.length === 0) return null;
+
+        const safeTrustBadges = trustBadges ?? [];
+        const hasTrustBadges = safeTrustBadges.length > 0;
+        const hasReraContent =
+          (listing.reraNumber != null && listing.reraNumber !== '') ||
+          listing.possessionStatus != null ||
+          listing.approvalsDeclared != null;
+
+        if (checks.length === 0 && !hasTrustBadges && !hasReraContent) return null;
 
         const lastUpdated = listing.lastUpdatedAt || listing.createdAt;
         const updatedToday = lastUpdated
@@ -311,14 +307,36 @@ export function ListingDetailMainContent({
             <p className="-mt-2 mb-4 text-sm text-muted-foreground">
               What we've checked, and what's still in progress — so you know what you're looking at.
             </p>
-            <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-              {checks.map((c) => (
-                <li key={c} className="flex items-center gap-2 text-sm text-foreground">
-                  <Check className="h-4 w-4 shrink-0 text-evergreen" aria-hidden="true" />
-                  {c}
-                </li>
-              ))}
-            </ul>
+
+            {checks.length > 0 && (
+              <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+                {checks.map((c) => (
+                  <li key={c} className="flex items-center gap-2 text-sm text-foreground">
+                    <Check className="h-4 w-4 shrink-0 text-evergreen" aria-hidden="true" />
+                    {c}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {hasTrustBadges && (
+              <div className={cn(checks.length > 0 && 'mt-5 border-t border-border pt-5')}>
+                <TrustBadgeCard badges={safeTrustBadges} embedded />
+              </div>
+            )}
+
+            {hasReraContent && (
+              <div className={cn((checks.length > 0 || hasTrustBadges) && 'mt-5 border-t border-border pt-5')}>
+                <RERACard
+                  reraNumber={listing.reraNumber}
+                  reraValid={listing.reraValid}
+                  possessionStatus={listing.possessionStatus}
+                  expectedPossessionDate={listing.expectedPossessionDate}
+                  approvalsDeclared={listing.approvalsDeclared}
+                  embedded
+                />
+              </div>
+            )}
 
             <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border pt-4 text-xs text-muted-foreground">
               {lastUpdated && (

@@ -375,10 +375,14 @@ describe('ListingDetail — anonymous teaser (RE-189)', () => {
     expect(screen.getByRole('heading', { level: 1, name: /Land in Udupi/ })).toBeInTheDocument();
   });
 
-  it('shows sign-in CTA for anonymous users', () => {
+  it('anonymous users get the same interactive viewing-request panel — no sign-in wall (#1797 Option A)', () => {
     renderWithListing(makeTeaserListing());
-    // Sidebar SignInGateCard renders the description as a <p>; copy updated in #1617 redesign.
-    expect(screen.getByText('Sign in to request a viewing or contact the lister', { selector: 'p' })).toBeInTheDocument();
+    // #1797: anon buyers see the fully interactive inline panel (not a SignInGateCard
+    // wall). "Sign in" only happens when they actually try to send the request.
+    expect(
+      screen.getByRole('heading', { level: 2, name: /request a viewing time/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('sign-in-gate')).not.toBeInTheDocument();
   });
 
   it('does not render the Posted Date section when createdAt is absent', () => {
@@ -649,6 +653,26 @@ describe('anonymous gallery teaser flow (issue #844)', () => {
     }));
 
     expect(screen.queryByText(/^1 \/ 1$/)).not.toBeInTheDocument();
+  });
+});
+
+// ── L. Non-agri: RequestViewingModal replaced by inline panel (#1797 AC1) ──
+// The agri branch (AgriListingDetail) still opens the legacy RequestViewingModal
+// dialog — out of scope for #1797. The non-agri/residential branch below must
+// render the fully inline ViewingRequestPanel (via ListingDetailSidebar) instead
+// and must NEVER mount the modal, authed or anonymous.
+
+describe('ListingDetail — non-agri: RequestViewingModal not rendered (#1797 AC1)', () => {
+  it('does not render RequestViewingModal for a non-agri (land) listing — authed', () => {
+    mockUser.current = { id: 'user-1' };
+    renderWithListing(makeListing({ propertyType: 'land' }));
+    expect(screen.queryByTestId('request-viewing-modal')).not.toBeInTheDocument();
+    mockUser.current = null;
+  });
+
+  it('does not render RequestViewingModal for a non-agri (apartment) listing — anonymous', () => {
+    renderWithListing(makeListing({ propertyType: 'apartment' }));
+    expect(screen.queryByTestId('request-viewing-modal')).not.toBeInTheDocument();
   });
 });
 

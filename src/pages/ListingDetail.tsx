@@ -18,22 +18,25 @@ import { RequestViewingModal } from '@/components/listing/RequestViewingModal';
 import { ListingGallery } from '@/components/listing/ListingGallery';
 import { ListingDetailMainContent } from '@/components/listing/ListingDetailMainContent';
 import { ListingDetailSidebar } from '@/components/listing/ListingDetailSidebar';
+import { ListingMobileActionBar } from '@/components/listing/ListingMobileActionBar';
 import { TakeOfflineButton, ReopenForEditingButton } from '@/components/listing/ListingPreviewActions';
 import { AgriListingDetail } from '@/components/listing/agri/AgriListingDetail';
 
+// AC11 (#1797) — property-type badges use the neutral navy-tint token (--secondary),
+// not per-type hardcoded Tailwind colours. Copper is reserved for the single primary CTA.
 const propertyConfig: Record<string, { label: string; badgeClass: string }> = {
-  land:                { label: 'Land',              badgeClass: 'bg-green-100 text-green-800 border-0' },
-  house:               { label: 'Independent house', badgeClass: 'bg-blue-100 text-blue-800 border-0' },
-  apartment:           { label: 'Apartment',         badgeClass: 'bg-violet-100 text-violet-800 border-0' },
+  land:                { label: 'Land',              badgeClass: 'bg-secondary text-secondary-foreground border-0' },
+  house:               { label: 'Independent house', badgeClass: 'bg-secondary text-secondary-foreground border-0' },
+  apartment:           { label: 'Apartment',         badgeClass: 'bg-secondary text-secondary-foreground border-0' },
   // M38-13A (#1626)
-  villa:               { label: 'Villa',              badgeClass: 'bg-indigo-100 text-indigo-800 border-0' },
-  residential_plot:    { label: 'Residential plot',   badgeClass: 'bg-emerald-100 text-emerald-800 border-0' },
-  commercial:          { label: 'Commercial',        badgeClass: 'bg-orange-100 text-orange-800 border-0' },
-  commercial_building: { label: 'Comm. Building',    badgeClass: 'bg-blue-100 text-blue-800 border-0' },
-  warehouse:           { label: 'Warehouse',         badgeClass: 'bg-amber-100 text-amber-800 border-0' },
-  commercial_land:     { label: 'Comm. Land',        badgeClass: 'bg-teal-100 text-teal-800 border-0' },
-  agricultural_land:   { label: 'Agricultural Land', badgeClass: 'bg-lime-100 text-lime-800 border-0' },
-  other:               { label: 'Other',             badgeClass: 'bg-gray-100 text-gray-600 border-0' },
+  villa:               { label: 'Villa',              badgeClass: 'bg-secondary text-secondary-foreground border-0' },
+  residential_plot:    { label: 'Residential plot',   badgeClass: 'bg-secondary text-secondary-foreground border-0' },
+  commercial:          { label: 'Commercial',        badgeClass: 'bg-secondary text-secondary-foreground border-0' },
+  commercial_building: { label: 'Comm. Building',    badgeClass: 'bg-secondary text-secondary-foreground border-0' },
+  warehouse:           { label: 'Warehouse',         badgeClass: 'bg-secondary text-secondary-foreground border-0' },
+  commercial_land:     { label: 'Comm. Land',        badgeClass: 'bg-secondary text-secondary-foreground border-0' },
+  agricultural_land:   { label: 'Agricultural Land', badgeClass: 'bg-secondary text-secondary-foreground border-0' },
+  other:               { label: 'Other',             badgeClass: 'bg-muted text-muted-foreground border-0' },
 };
 
 /** Shape returned by GET /api/public/listings/:id. Extends camelCase backend DTO. */
@@ -134,15 +137,10 @@ export default function ListingDetail() {
   const { data: trustData } = useTrustBadges(id);
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Retained for the agri branch only (AgriListingDetail is out of scope for #1797 and
+  // still opens the RequestViewingModal dialog). The residential/typed listing view below
+  // uses the fully inline ViewingRequestPanel instead — no modal, no page-level state.
   const [bookingModalOpen, setBookingModalOpen] = useState(false);
-  const [bookingInitialDate, setBookingInitialDate] = useState<string | undefined>(undefined);
-  const [bookingInitialTime, setBookingInitialTime] = useState<string | undefined>(undefined);
-
-  const openBooking = (date?: string, time?: string) => {
-    setBookingInitialDate(date);
-    setBookingInitialTime(time);
-    setBookingModalOpen(true);
-  };
 
   if (isLoading) {
     return (
@@ -263,7 +261,7 @@ export default function ListingDetail() {
 
   return (
     <AppLayout>
-      <div className="bg-muted/40 min-h-screen">
+      <div className="bg-muted/40 min-h-screen pb-20 md:pb-0">
       <div className="max-w-6xl mx-auto p-4 md:p-6">
         {/* Preview banner */}
         {isPreview && (
@@ -398,24 +396,14 @@ export default function ListingDetail() {
           <ListingDetailSidebar
             listing={listing}
             user={user}
-            onOpenBookingModal={openBooking}
             onShare={handleShare}
             saved={saved}
             onToggleSaved={handleToggleSaved}
           />
         </div>
       </div>
-
-      {user && (
-        <RequestViewingModal
-          listingId={listing.id}
-          open={bookingModalOpen}
-          onClose={() => setBookingModalOpen(false)}
-          initialDate={bookingInitialDate}
-          initialTime={bookingInitialTime}
-        />
-      )}
       </div>
+      {!isPreview && <ListingMobileActionBar saved={saved} onToggleSaved={handleToggleSaved} />}
     </AppLayout>
   );
 }
