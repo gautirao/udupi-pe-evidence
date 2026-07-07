@@ -36,4 +36,22 @@ export const listingKeys = {
    */
   trust: (id: string | undefined) =>
     ['listing', 'trust', id] as const,
+
+  /**
+   * Issue #1566 — saved-homes ids (hydration for the PropertyCard heart affordance).
+   * Nested under the ['listing', ...] prefix (not a separate top-level key) so the
+   * existing useAuthCacheSync invalidation (`invalidateQueries({ queryKey: listingKeys.all })`)
+   * automatically covers it on sign-in/sign-out — no competing invalidation mechanism needed.
+   * Auth-scoped like `public` above: the query itself is only enabled when authenticated
+   * (there is no anonymous saved-listings concept), but the scope segment keeps the anon
+   * and authed cache entries distinct across a sign-out/sign-in cycle.
+   */
+  savedListingIds: (isAuthenticated: boolean) =>
+    ['listing', 'saved', 'ids', isAuthenticated ? 'authed' : 'anon'] as const,
+
+  /**
+   * Issue #1566 — full saved-listing cards for the "Saved homes" page.
+   */
+  savedListings: (isAuthenticated: boolean) =>
+    ['listing', 'saved', 'list', isAuthenticated ? 'authed' : 'anon'] as const,
 } as const;

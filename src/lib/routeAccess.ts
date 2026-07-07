@@ -90,7 +90,7 @@ export function canAccessRoute(route: string, role?: string | null): boolean {
 
   // Normal signed-in user ('user')
   if (r === 'user') {
-    if (clean === '/saved-areas' || clean === '/my-bookings' || clean === '/notifications' || clean === '/onboarding') {
+    if (clean === '/saved-areas' || clean === '/saved-homes' || clean === '/my-bookings' || clean === '/notifications' || clean === '/onboarding') {
       return true;
     }
     // Listing create / edit routes are allowed for normal consumers to list properties

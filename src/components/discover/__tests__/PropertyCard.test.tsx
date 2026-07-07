@@ -1,10 +1,33 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { PropertyCard } from '../PropertyCard';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+
+// ─── Issue #1566 — saved-homes mocks ────────────────────────────────────────
+// PropertyCard's heart is now server-backed (useSavedListingIds/useSaveListing/
+// useUnsaveListing) and gated by useAuthModal for anon clicks. Mocking the hooks
+// directly (rather than wrapping every test in a QueryClientProvider) keeps the
+// existing pre-#1566 test suite unaffected while giving the new tests below
+// direct control over saved/pending state.
+const mockSavedIds = vi.hoisted(() => ({ current: new Set<string>() }));
+const mockSaveMutate = vi.hoisted(() => vi.fn());
+const mockUnsaveMutate = vi.hoisted(() => vi.fn());
+const mockSavePending = vi.hoisted(() => ({ current: false }));
+const mockUnsavePending = vi.hoisted(() => ({ current: false }));
+const mockOpenAuthModal = vi.hoisted(() => vi.fn());
+
+vi.mock('@/hooks/useSavedListings', () => ({
+  useSavedListingIds: () => ({ idSet: mockSavedIds.current }),
+  useSaveListing: () => ({ mutate: mockSaveMutate, isPending: mockSavePending.current }),
+  useUnsaveListing: () => ({ mutate: mockUnsaveMutate, isPending: mockUnsavePending.current }),
+}));
+
+vi.mock('@/contexts/AuthModalContext', () => ({
+  useAuthModal: () => ({ isOpen: false, openAuthModal: mockOpenAuthModal, closeAuthModal: vi.fn() }),
+}));
 
 const makeListing = (overrides: Partial<DiscoverCityListingItem> = {}): DiscoverCityListingItem => ({
   id: 'l1',
@@ -32,6 +55,15 @@ const renderCard = (props: React.ComponentProps<typeof PropertyCard>) =>
   render(<MemoryRouter>{<PropertyCard {...props} />}</MemoryRouter>);
 
 describe('PropertyCard', () => {
+  beforeEach(() => {
+    mockSavedIds.current = new Set<string>();
+    mockSaveMutate.mockReset();
+    mockUnsaveMutate.mockReset();
+    mockSavePending.current = false;
+    mockUnsavePending.current = false;
+    mockOpenAuthModal.mockReset();
+  });
+
   it('renders the listing-card testid', () => {
     renderCard({ listing: makeListing(), isAuthenticated: true, onNavigate: vi.fn() });
     expect(screen.getByTestId('listing-card')).toBeInTheDocument();
@@ -858,6 +890,93 @@ describe('PropertyCard', () => {
       expect(screen.queryByText('Verified')).not.toBeInTheDocument();
       expect(screen.queryByText('Trusted')).not.toBeInTheDocument();
       expect(screen.queryByText('Listed')).not.toBeInTheDocument();
+    });
+  });
+
+  // ── Issue #1566 — server-backed saved-homes heart ──────────────────────────
+  describe('save button — Issue #1566 (server-backed)', () => {
+    it('hydrates unfilled when the listing id is not in savedIds', () => {
+      mockSavedIds.current = new Set<string>();
+      renderCard({ listing: makeListing({ id: 'l1' }), isAuthenticated: true, onNavigate: vi.fn() });
+      const btn = screen.getByTestId('listing-save-button');
+      expect(btn).toHaveAttribute('aria-pressed', 'false');
+      expect(btn).toHaveAttribute('aria-label', 'Save property');
+    });
+
+    it('hydrates filled when the listing id is in savedIds', () => {
+      mockSavedIds.current = new Set(['l1']);
+      renderCard({ listing: makeListing({ id: 'l1' }), isAuthenticated: true, onNavigate: vi.fn() });
+      const btn = screen.getByTestId('listing-save-button');
+      expect(btn).toHaveAttribute('aria-pressed', 'true');
+      expect(btn).toHaveAttribute('aria-label', 'Remove saved property');
+    });
+
+    it('anon click opens the AuthModal, makes zero mutation calls, and does not toggle local state', async () => {
+      mockSavedIds.current = new Set<string>();
+      renderCard({ listing: makeListing({ id: 'l1' }), isAuthenticated: false, onNavigate: vi.fn() });
+      const btn = screen.getByTestId('listing-save-button');
+
+      await userEvent.click(btn);
+
+      expect(mockOpenAuthModal).toHaveBeenCalledTimes(1);
+      expect(mockSaveMutate).not.toHaveBeenCalled();
+      expect(mockUnsaveMutate).not.toHaveBeenCalled();
+      // Still unfilled — no local toggle occurred.
+      expect(btn).toHaveAttribute('aria-pressed', 'false');
+      expect(btn).toHaveAttribute('aria-label', 'Save property');
+    });
+
+    it('authed click on an unsaved listing fires useSaveListing with the listing id', async () => {
+      mockSavedIds.current = new Set<string>();
+      renderCard({ listing: makeListing({ id: 'l1' }), isAuthenticated: true, onNavigate: vi.fn() });
+
+      await userEvent.click(screen.getByTestId('listing-save-button'));
+
+      expect(mockSaveMutate).toHaveBeenCalledWith('l1');
+      expect(mockUnsaveMutate).not.toHaveBeenCalled();
+      expect(mockOpenAuthModal).not.toHaveBeenCalled();
+    });
+
+    it('authed click on an already-saved listing fires useUnsaveListing with the listing id', async () => {
+      mockSavedIds.current = new Set(['l1']);
+      renderCard({ listing: makeListing({ id: 'l1' }), isAuthenticated: true, onNavigate: vi.fn() });
+
+      await userEvent.click(screen.getByTestId('listing-save-button'));
+
+      expect(mockUnsaveMutate).toHaveBeenCalledWith('l1');
+      expect(mockSaveMutate).not.toHaveBeenCalled();
+    });
+
+    it('is disabled and guards against double-submit while a mutation is in flight', async () => {
+      mockSavedIds.current = new Set<string>();
+      mockSavePending.current = true;
+      renderCard({ listing: makeListing({ id: 'l1' }), isAuthenticated: true, onNavigate: vi.fn() });
+
+      const btn = screen.getByTestId('listing-save-button');
+      expect(btn).toBeDisabled();
+
+      await userEvent.click(btn);
+      expect(mockSaveMutate).not.toHaveBeenCalled();
+    });
+
+    it('click stops propagation — clicking the heart never triggers card navigation', async () => {
+      const onNavigate = vi.fn();
+      renderCard({ listing: makeListing({ id: 'l1' }), isAuthenticated: true, onNavigate });
+
+      await userEvent.click(screen.getByTestId('listing-save-button'));
+
+      expect(onNavigate).not.toHaveBeenCalled();
+    });
+
+    it('is keyboard operable (Enter activates the button)', async () => {
+      mockSavedIds.current = new Set<string>();
+      renderCard({ listing: makeListing({ id: 'l1' }), isAuthenticated: true, onNavigate: vi.fn() });
+
+      const btn = screen.getByTestId('listing-save-button');
+      btn.focus();
+      await userEvent.keyboard('{Enter}');
+
+      expect(mockSaveMutate).toHaveBeenCalledWith('l1');
     });
   });
 });

@@ -32,6 +32,12 @@ describe('routeAccess governance module (Issue #1633)', () => {
     expect(canAccessRoute('/broker/listings/123/edit', 'user')).toBe(true);
   });
 
+  it('3b. regression (#1566) — normal user accessing /saved-homes is allowed; anonymous/missing role is blocked', () => {
+    expect(canAccessRoute('/saved-homes', 'user')).toBe(true);
+    expect(canAccessRoute('/saved-homes', 'anonymous')).toBe(false);
+    expect(canAccessRoute('/saved-homes', null)).toBe(false);
+  });
+
   it('4. normal user accessing broker workspace (/broker/dashboard, /broker/listings) is blocked', () => {
     expect(canAccessRoute('/broker/dashboard', 'user')).toBe(false);
     expect(canAccessRoute('/broker/listings', 'user')).toBe(false);

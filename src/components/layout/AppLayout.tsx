@@ -42,6 +42,7 @@ import {
   ChevronDown,
   GraduationCap,
   Sprout,
+  Heart,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { cn } from '@/lib/utils';
@@ -88,6 +89,8 @@ const brokerDetailedNavigation = [
 const userRoleNavigation = [
   { name: 'List property', href: '/broker/listings/new', icon: Plus },
   { name: 'Saved', href: '/saved-areas', icon: Bookmark },
+  // Issue #1566 — persist saved homes; mirrors the "Saved" (areas) slot above.
+  { name: 'Saved homes', href: '/saved-homes', icon: Heart },
   { name: 'My bookings', href: '/my-bookings', icon: CalendarCheck2 },
   { name: 'Notifications', href: '/notifications', icon: Bell },
 ];
@@ -111,6 +114,7 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
       location.pathname.startsWith('/admin') ||
       location.pathname.startsWith('/my-bookings') ||
       location.pathname.startsWith('/saved-areas') ||
+      location.pathname.startsWith('/saved-homes') ||
       location.pathname.startsWith('/onboarding') ||
       location.pathname.startsWith('/auth');
     if (isProtected) {
@@ -188,6 +192,7 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
             My activity
           </div>
           <NavItem item={{ name: 'Saved', href: '/saved-areas', icon: Bookmark }} mobile onClick={() => setMobileOpen(false)} />
+          <NavItem item={{ name: 'Saved homes', href: '/saved-homes', icon: Heart }} mobile onClick={() => setMobileOpen(false)} />
           <NavItem item={{ name: 'My bookings', href: '/my-bookings', icon: CalendarCheck2 }} mobile onClick={() => setMobileOpen(false)} />
           <NavItem item={{ name: 'Notifications', href: '/notifications', icon: Bell }} mobile onClick={() => setMobileOpen(false)} />
         </>

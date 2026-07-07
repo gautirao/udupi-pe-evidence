@@ -5,6 +5,8 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import { useSavedListingIds, useSaveListing, useUnsaveListing } from '@/hooks/useSavedListings';
+import { useAuthModal } from '@/contexts/AuthModalContext';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { getPropertyTypeVisual } from '@/lib/propertyTypeConfig';
 
@@ -109,10 +111,28 @@ export function PropertyCard({
   // truth here and never sends the raw internal letter grade.
   const trust = listing.trustBadge ? TRUST_BADGES[listing.trustBadge] : undefined;
 
-  // Visual-only "save" affordance (heart). Session-local toggle for the affordance feel —
-  // it does NOT persist, hit any API, or touch the user profile. Real save/unsave +
-  // profile persistence is tracked as a separate follow-up issue.
-  const [saved, setSaved] = React.useState(false);
+  // Issue #1566 — server-backed save/unsave. Anonymous users are prompted to sign in
+  // (no API call, no local persistence); authenticated users get an optimistic
+  // save/unsave via useSaveListing/useUnsaveListing (rollback on error).
+  const { idSet: savedIds } = useSavedListingIds();
+  const isSaved = savedIds.has(listing.id);
+  const saveListing = useSaveListing();
+  const unsaveListing = useUnsaveListing();
+  const isSaveMutating = saveListing.isPending || unsaveListing.isPending;
+  const { openAuthModal } = useAuthModal();
+
+  const handleToggleSave = () => {
+    if (!isAuthenticated) {
+      openAuthModal();
+      return;
+    }
+    if (isSaveMutating) return;
+    if (isSaved) {
+      unsaveListing.mutate(listing.id);
+    } else {
+      saveListing.mutate(listing.id);
+    }
+  };
 
   const handleActivate = () => {
     onSelect?.(listing.id);
@@ -181,27 +201,30 @@ export function PropertyCard({
             <Building2 className="h-10 w-10 text-muted-foreground/30" />
           </div>
         )}
-        {/* Save (heart) affordance — top-right. Visual-only: toggles session-local state for
-            feel, but never persists or calls any API. aria-label reflects the toggle state. */}
+        {/* Save (heart) affordance — top-right. Anonymous click opens the sign-in modal
+            (zero network, no local toggle); authenticated click fires an optimistic
+            save/unsave mutation. aria-label/aria-pressed reflect the real saved state. */}
         <button
           type="button"
           data-testid="listing-save-button"
-          aria-label={saved ? 'Remove saved property' : 'Save property'}
-          aria-pressed={saved}
+          aria-label={isSaved ? 'Remove saved property' : 'Save property'}
+          aria-pressed={isSaved}
+          disabled={isSaveMutating}
           onClick={(e) => {
             e.stopPropagation();
-            setSaved((v) => !v);
+            handleToggleSave();
           }}
           className={cn(
             'absolute top-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-full',
             'bg-white/90 shadow-sm backdrop-blur-sm transition-colors hover:bg-white',
             'focus:outline-none focus-visible:ring-2 focus-visible:ring-copper focus-visible:ring-offset-1',
+            'disabled:opacity-60 disabled:cursor-not-allowed',
           )}
         >
           <Heart
             className={cn(
               'h-4 w-4 transition-colors',
-              saved ? 'fill-copper text-copper' : 'text-muted-foreground',
+              isSaved ? 'fill-copper text-copper' : 'text-muted-foreground',
             )}
             aria-hidden
           />

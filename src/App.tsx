@@ -46,6 +46,7 @@ const BrokerDemandGaps = lazy(() => import("./pages/broker/BrokerDemandGaps"));
 const BrokerAreaInsights = lazy(() => import("./pages/broker/BrokerAreaInsights"));
 const MyBookings = lazy(() => import("./pages/MyBookings"));
 const SavedAreas = lazy(() => import("./pages/SavedAreas"));
+const SavedHomes = lazy(() => import("./pages/SavedHomes"));
 
 // Lazily loaded — Admin pages; never needed by non-admin users
 const FacebookGroups = lazy(() => import("./pages/admin/FacebookGroups"));
@@ -229,6 +230,15 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <SavedAreas />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Issue #1566 — persist saved homes */}
+              <Route
+                path="/saved-homes"
+                element={
+                  <ProtectedRoute>
+                    <SavedHomes />
                   </ProtectedRoute>
                 }
               />

@@ -370,7 +370,10 @@ describe('PublicDiscoverLayout — /discover route behaviour', () => {
     expect(screen.getByRole('link', { name: /^trends$/i })).toBeInTheDocument();
 
     expect(screen.getByRole('link', { name: /list property/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /saved/i })).toBeInTheDocument();
+    // Issue #1566 — two distinct "Saved" links now exist (saved areas + saved homes);
+    // anchor the regex so each assertion targets exactly one.
+    expect(screen.getByRole('link', { name: /^saved$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /saved homes/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /my bookings/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /notifications/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^US$/i })).toBeInTheDocument();
