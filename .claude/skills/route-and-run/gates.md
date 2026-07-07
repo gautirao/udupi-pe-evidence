@@ -1,6 +1,8 @@
 # Route-and-Run — Gate Packets & Gate Operations
 
 > Migrated from `route-and-run/SKILL.md` (which is now a thin entrypoint). This file holds the standalone Route-and-Run gate packet schemas and gate-operational details. **Authoritative per-PR policy remains `.claude/skills/ROUTE_AND_RUN.md`**; this file carries the ChatGPT-gated packet formats and gate mechanics that support it. Sprint-level orchestration is `.claude/skills/SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md`. Mode-3 hands-off execution is `.claude/commands/mode3-run.md` + `.claude/mode3/contracts/*`. Content moved verbatim; no gate weakened.
+>
+> **Gate lane note:** the verdict vocabulary in THIS file belongs to the **manual / standalone ChatGPT-review lane** (packets reviewed conversationally). The **automated Mode-3 lane** uses `openai_gate.py`, whose canonical field is `verdict` with schema-enforced per-gate enums (PLAN_REVIEW `APPROVED | REVISION_REQUIRED | BLOCKED | NEEDS_USER_DECISION | NEEDS_MORE_EVIDENCE`; WORKDONE_REVIEW `APPROVED_FOR_PR | NEEDS_FIXES | NEEDS_MORE_EVIDENCE | NEEDS_USER_DECISION`; PR_REVIEW `APPROVED_TO_MERGE | NEEDS_FIXES | NEEDS_MORE_EVIDENCE | NEEDS_USER_DECISION`) plus the #1221 structured objects — see `.claude/mode3/contracts/plan-review.md` and `.claude/docs/openai-gate.md`. Do not mix the two vocabularies within one run.
 
 ## OpenAI Gate Automation (v1 — PLAN_REVIEW)
 

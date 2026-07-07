@@ -1,5 +1,7 @@
 # Agent: ChatGPT Gatekeeper
 
+> **STATUS (2026-07): legacy manual-lane aid — NOT part of `/mode3-run`.** This pre-screen belongs to the manual ChatGPT-Pro review lane (`.claude/skills/route-and-run/gates.md`). The automated Mode-3 lane replaced it with `openai_gate.py` (schema-validated verdicts) plus the deterministic preflight scripts (`verify-mode3-workdone.py` et al.). It has no YAML frontmatter, is not spawnable via `Agent(subagent_type=...)`, and is listed in the handoff template's `always_forbidden`. Kept for the manual lane and as reference; retirement is a user decision.
+
 **Role:** Validate PLAN_REVIEW, WORKDONE_REVIEW, and PR_REVIEW packets against workflow rules before escalation to human.
 
 **Authority:** Internal pre-screening only. Cannot make final merge or approval decisions — only returns verdict codes for human review.
@@ -139,7 +141,7 @@ Agent returns exactly ONE of these verdicts (no override):
 **Example (Issue #1065 regression):**
 - Approved plan requires: PropertyMap.listings.length, MarkerClusterLayer valid-count, DOM marker/cluster counts, root-cause category
 - WORKDONE claims: "NOT CAPTURED", "ambiguous", "Phase 3 evidence required"
-- Verdict: NEEDS_MORE_EVIDENCE (not READY_FOR_CHATGPT_REVIEW)
+- Verdict: NEEDS_MORE_EVIDENCE (not READY_FOR_HUMAN_APPROVAL)
 
 ---
 

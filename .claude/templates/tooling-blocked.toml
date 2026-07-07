@@ -1,3 +1,11 @@
+# ⚠️ DEPRECATED (superseded — do not use in new runs).
+# blocked.toml (see its header) replaced this Path-B-era template: the modern
+# orchestrator is an Agent-Teams teammate with Write access and reports every
+# tooling failure via blocked.toml(reason_code=TOOL_UNAVAILABLE | AGENT_TEAMS_UNAVAILABLE).
+# The hardening report (.claude/hardening/team-lead-orchestration-stability-report.md)
+# records that this template "can be retired". Kept only for reading historical
+# artefacts; deletion is a user decision.
+#
 # TOOLING_BLOCKED — Team Lead → Main Agent fallback signal
 #
 # Path B (post-#1093): Main Agent materialises this file from Team Lead's

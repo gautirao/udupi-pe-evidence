@@ -1,6 +1,13 @@
 # Mode-3 contract — Validation Matrix (risk-triggered evidence packet)
 
-> Loaded at Phase 0.7 (Team Lead classifies the level), Phase 1 (PLAN_REVIEW validates the level), Phase 5–6 (Team Lead authors the matrix for COMPACT/FULL), Phase 7C (WORKDONE_REVIEW checks presence/verdict/credibility) and Phase 8 (PR_REVIEW consumes it). This is the single source of truth for the validation-matrix policy; other contracts reference it rather than restating it.
+> **Purpose:** the risk-triggered evidence packet policy (NOT_REQUIRED | COMPACT | FULL) and the repo's **canonical evidence grammar** (test-suite precision rules below — command + exit code + scope + freshness + provenance). Other docs (ROUTE_AND_RUN evidence contracts, CLAUDE.md §11) state compatible subsets; when evidence wording differs, this contract's grammar is the superset to follow.
+> **When to load:** Phase 0.7 (Team Lead classifies the level), Phase 1 (PLAN_REVIEW validates it), Phase 5–6 (Team Lead authors the matrix for COMPACT/FULL), Phase 7C (WORKDONE_REVIEW checks presence/verdict/credibility), Phase 8 (PR_REVIEW consumes it).
+> **Actor:** Team Lead proposes/authors; gates validate/consume.
+> **Forbidden:** under-classifying below a hard-trigger category; vague evidence rows; log dumps.
+> **Stop conditions:** unsafe downgrade at PLAN_REVIEW; missing/REQUEST_CHANGES matrix at WORKDONE/PR_REVIEW.
+> **Outputs:** `[validation_matrix]` plan block; `.claude/handoffs/issue-<N>/validation-matrix.md` for COMPACT/FULL.
+>
+> This is the single source of truth for the validation-matrix policy; other contracts reference it rather than restating it.
 
 ## What the validation matrix is — and is NOT
 

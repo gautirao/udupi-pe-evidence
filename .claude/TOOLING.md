@@ -44,7 +44,7 @@ These commands modify local files but are non-destructive:
 - storage deletions
 - production deployments
 
-**Exception:** When executing inside `ROUTE_AND_RUN` or `SPRINT_EXECUTOR_ROLLING_CHECKPOINT`, the git operations listed in `ROUTE_AND_RUN.md § Git Operations — Pre-Approved` (checkout, add, commit, push, pr create, pr merge) are pre-approved and do not require confirmation.
+**Exception:** When executing inside `ROUTE_AND_RUN` or `SPRINT_EXECUTOR_ROLLING_CHECKPOINT`, the git operations listed in `ROUTE_AND_RUN.md § Git Operations — Pre-Approved` (checkout, add, commit, push, pr create) are pre-approved and do not require confirmation. **This exception never covers `gh pr merge` or any other release command — CLAUDE.md §10 (explicit user merge approval; no `--admin`, no branch-protection bypass, no force merge) applies in every lane.**
 
 Rules:
 - Do not ask for permission for auto-approved commands.

@@ -256,8 +256,15 @@ Never pause to ask for confirmation before executing any of these:
 - `git push -u origin <branch>` — push feature branch to remote
 - `gh pr create ...` — open pull request
   - **Workflow invariant:** Every PR body must include `Closes #<issue-number>` for the issue being executed. Missing closing keyword is a workflow error — PR creation is not complete until the correct closing keyword is present in the body.
-- `gh pr merge <number> --merge --delete-branch` — merge pull request
 - `git checkout main && git pull origin main` — sync main after merge
+
+**`gh pr merge` is NOT pre-approved — CLAUDE.md §10 wins in every lane.** Merging is a release command: it requires an explicit user approval message in the current session (a gate verdict, a green pipeline, or sprint auto-advance context is NOT approval). When the user has approved, execute a **normal squash merge**:
+
+```bash
+gh pr merge <number> --squash --delete-branch
+```
+
+Never pass `--admin`, never bypass branch protection, never force merge. If branch protection or required checks block the merge, stop and report — do not work around it. (Sprint auto-advance after merge — SPRINT_EXECUTOR — governs what happens *after* an approved merge, not the approval itself.)
 - `gh issue close <number>` — close the associated GitHub issue after PR merge (always, if a GitHub issue number is known)
 - `gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOAAVnaM4BSWI7 --field-id PVTSSF_lAHOAAVnaM4BSWI7zg_6HMc --single-select-option-id 25c24fa1` — set GitHub Project item status to Done (if project item ID is known)
 
@@ -891,6 +898,8 @@ Record result in Gate Satisfaction Record as:
 ## Stage Evidence Contract (Mandatory)
 
 Each stage must produce minimum structured evidence. Missing evidence is a gate failure — the orchestrator must not proceed.
+
+> **Canonical evidence grammar:** where evidence wording differs across docs, the test-suite precision rules in `.claude/mode3/contracts/validation-matrix.md` (exact command + exit code + scope + freshness + provenance; separate rows per command) are the superset to follow. The formats below are compatible subsets. Also: specialist agents here are spawned with `mode: "dontAsk"` (per § Trivial classification evidence); the Mode-3 orchestrator *teammate* is a different spawn context and uses `mode: "auto"` per `mode3-run.md` Phase 0.2 — the two rules do not conflict.
 
 ### Engineer output (required)
 ```

@@ -25,7 +25,7 @@ This is a **thin entrypoint / loader**. It tells you when to use Route-and-Run, 
 | Routing recommendation analysis (sprint kickoff / complex decomposition) | `.claude/agents/team-lead.md` (Modes 1 & 2 only) |
 | Model tier per agent, who may raise a tier, escalation protocol, delegation-packet shape, parallelism / MCP-context / compact policy | **`.claude/MODEL_TIERING_AND_ESCALATION.md`** (authoritative for model/escalation) |
 
-**Authority order:** `ROUTE_AND_RUN.md` is the single source of truth for per-PR execution policy; `SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md` is authoritative for sprint-level orchestration. If `ROUTE_AND_RUN_TABLES.md` contradicts prose, the table wins. This entrypoint never overrides those docs.
+**Authority order:** `ROUTE_AND_RUN.md` is the single source of truth for per-PR execution policy; `SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md` is authoritative for sprint-level orchestration. On any contradiction between `ROUTE_AND_RUN.md` and `ROUTE_AND_RUN_TABLES.md`, **the main document (`ROUTE_AND_RUN.md`) wins** — the tables are the route-selection detail, not policy (this matches the authority note in both files). This entrypoint never overrides those docs.
 
 ## Single-issue vs sprint vs resume
 

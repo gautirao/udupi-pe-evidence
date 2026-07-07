@@ -1,6 +1,15 @@
 # Mode-3 contract — Bugfix Fast Path (bug issues only)
 
-> Loaded ONLY after the issue is classified as a BUG. The BUG_REPRO gate (Phase B1) runs in Phase 0.7 BEFORE the Team Lead authors `team-lead-plan.toml`. Semantics unchanged from the original `mode3-run.md`.
+> **Purpose:** reproduction-first bug protocol — Phases B0–B5, the BUG_REPRO_REPORT schema, severity shortcuts, and bug gate-packet requirements.
+> **When to load:** ONLY after the issue is classified as a BUG; the BUG_REPRO gate (Phase B1) runs in Phase 0.7 BEFORE the Team Lead authors `team-lead-plan.toml`.
+> **Actor:** Team Lead (via QA for reproduction), then normal Stage-B specialists.
+> **Inputs:** issue reproduction steps/URL, expected vs observed behaviour.
+> **Allowed scope:** smallest safe fix targeting the reproduced failure.
+> **Forbidden:** speculative fixes for NOT_REPRODUCED bugs, broad refactors, unrelated cleanup, opportunistic test rewrites (full list: Phase B3).
+> **Stop conditions:** NOT_REPRODUCED with no OpenAI-approved exception or user authorisation; same scenario cannot be retested.
+> **Outputs:** `bug-repro-report.toml`, `[bug_reproduction]`/`[bug_fix_verification]`/`[regression_test]`/`[bug_eval_checklist_result]` blocks in the WORKDONE packet.
+>
+> Canonical status vocabulary: `REPRODUCED | NOT_REPRODUCED | PARTIALLY_REPRODUCED | ENVIRONMENT_OR_DATA_DEPENDENT` (`REPRO_CONFIRMED`/`REPRO_NOT_CONFIRMED` are accepted only as legacy aliases when reading old artefacts — never write them in new artefacts). Semantics unchanged from the original `mode3-run.md`.
 
 Use this path when the issue is a concrete bug with a user-provided reproduction or observable failure.
 
@@ -189,7 +198,7 @@ The WORKDONE packet must include:
 
 ```toml
 [bug_reproduction]
-status = "REPRO_CONFIRMED"
+status = "REPRODUCED"   # canonical vocabulary; do not write the legacy alias REPRO_CONFIRMED
 evidence = "..."
 
 [bug_fix_verification]

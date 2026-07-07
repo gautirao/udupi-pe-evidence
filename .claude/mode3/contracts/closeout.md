@@ -1,6 +1,15 @@
 # Mode-3 contract — PR / merge / closeout (Phases 8–12)
 
-> Loaded at Phase 8 onward. Includes the Stale PR and branch safety policy. Semantics unchanged from the original `mode3-run.md`.
+> **Purpose:** PR creation, PR_REVIEW gate, mandatory user merge approval, team/lock cleanup, main sync, closeout report.
+> **When to load:** Phase 8 onward only.
+> **Actor:** Main Agent (the orchestrator never creates or merges PRs).
+> **Inputs:** approved handoff, `workdone-candidate.toml`, 7A/7B evidence, validation matrix (when required).
+> **Allowed scope:** push the run's feature branch, create/update the run's PR, run PR_REVIEW, merge only after explicit user approval, clean up only this run's artefacts.
+> **Forbidden:** `--admin` / branch-protection bypass / force merge; touching stale PRs, branches, worktrees, or untracked files without explicit user approval; merging on a gate verdict alone.
+> **Stop conditions:** PR_REVIEW `NEEDS_FIXES` (rework loop), `NEEDS_MORE_EVIDENCE` / `NEEDS_USER_DECISION` (halt to user), user declines merge, branch protection blocks the merge.
+> **Outputs:** merged PR (or open PR + halt), run-lock disposition, Phase-12 closeout summary.
+>
+> Includes the Stale PR and branch safety policy. Semantics otherwise unchanged from the original `mode3-run.md`.
 
 ## Phase 8 — PR creation
 
@@ -9,7 +18,7 @@
 3. Assemble `.claude/handoffs/issue-<N>/pr-review-request.toml`. For `validation_matrix.level` = `COMPACT`/`FULL`, **include the validation matrix** (`.claude/handoffs/issue-<N>/validation-matrix.md`) as the evidence packet PR_REVIEW consumes; for `NOT_REQUIRED`, include the one-line justification.
 4. **Gate before PR_REVIEW is sent (validation matrix consumption).** PR_REVIEW MUST NOT be submitted/approved while the required matrix is incomplete. PR_REVIEW MUST NOT approve if: the required matrix is missing; its verdict is `REQUEST_CHANGES`; required changes remain; hard safety/failure-mode rows are missing for `FULL`; factual claims are unsupported; or deferred `NOT_PROVEN` items invalidate the PR's main goal. PR_REVIEW MAY approve **with non-blocking follow-ups** when the main goal is proven, deferred items are explicitly out of scope, follow-ups are documented, and no safety rule is violated. Full rules: `.claude/mode3/contracts/validation-matrix.md`.
 5. Invoke `python3 .claude/scripts/openai_gate.py --issue <N> --gate PR_REVIEW --input .claude/handoffs/issue-<N>/pr-review-request.toml`.
-6. On APPROVED → Phase 9. On REVISION_REQUIRED → rework re-entry (OUTER gate; does not consume the inner specialist 2-cycle counter). Full mechanism: `.claude/mode3/contracts/main-agent.md` → Rework routing. In short:
+6. On `APPROVED_TO_MERGE` → Phase 9. On `NEEDS_FIXES` (the PR_REVIEW rework verdict per `openai_gate.py` PER_GATE_ENUMS — this gate never returns `REVISION_REQUIRED`) → rework re-entry (OUTER gate; does not consume the inner specialist 2-cycle counter). On `NEEDS_MORE_EVIDENCE` or `NEEDS_USER_DECISION` → halt and surface to the user. Full rework mechanism: `.claude/mode3/contracts/main-agent.md` → Rework routing. In short:
    1. **Disk-before-send:** write `.claude/handoffs/issue-<N>/rework-request-pr-review-<n>.toml` (template `.claude/templates/rework-request.toml`) with the PR_REVIEW verdict, concrete required changes, evidence pointers, classification, and `revalidation.rerun` (the required validation + a re-run of PR_REVIEW).
    2. **Resume the orchestrator by `agent_id`** (`orchestrator-agent.toml`); if unavailable/degraded → **respawn a fresh Opus orchestrator** (`model: "opus"`) briefed from durable artefacts only. **If respawn fails → `blocked.toml(reason_code=AGENT_TEAMS_UNAVAILABLE)` and stop.**
    3. The orchestrator routes the fix to a specialist; **the Main Agent never authors the fix.** Re-run the required validation, then re-run PR_REVIEW.
@@ -35,10 +44,15 @@ Main Agent **MUST**:
 
 User must send a message approving merge (e.g., "approve", "merge", "yes") or declining ("hold", "no", "don't merge").
 
-**Only after receiving explicit user approval**, Main Agent executes:
+**Only after receiving explicit user approval**, Main Agent executes a **normal squash merge**:
 ```bash
-gh pr merge <PR#> --squash --admin
+gh pr merge <PR#> --squash
 ```
+
+**Merge-command hard rules (binding):**
+- **Never pass `--admin`.** Bypassing branch protection is forbidden, even with user merge approval — merge approval authorises a *normal* merge only.
+- **Never force-merge** or override failing required checks. If branch protection or required checks block the merge, report the blocker to the user and stop; resolving it (re-running CI, rebasing, or an explicit user-driven exception) is a separate user decision.
+- Squash is the only merge strategy for Mode-3 PRs (no merge commits, no rebase-merge) unless the user explicitly requests otherwise.
 
 On user decline: leave the PR open; halt the run; record the approval decision and user message in `team-lead-execution-log.md`.
 
@@ -85,7 +99,7 @@ Until all four hold, the lock stays in place. If the run halts **without** mergi
 
 ## Phase 12 — Closeout summary
 
-Print a one-screen summary:
+Print a one-screen summary — **compact but complete**: every field below is required; use table/bullet form, cite artefact paths instead of pasting their contents, no logs, no run-history narration. Compactness never drops a required field.
 - PR URL and merged sha.
 - Final index status (timestamp + summary).
 - Team cleanup confirmation.

@@ -23,7 +23,7 @@ This command runs one issue end-to-end with a single user kick-off and a single 
 
 > **Harness migration note (not a repo regression).** The explicit `TeamCreate` / `TeamDelete` tools were **removed from the Claude Code harness**; Mode-3 now uses the harness's **single implicit per-session team** (the Main Agent is its lead) and spawns the orchestrator via `Agent`. This repair does **not** re-create the old explicit-team API. Whether teammates render in **separate tmux panes** is governed by the harness `teamMateMode` setting and session context (top-level vs child session) — it is a harness/terminal concern, **not** something this workflow or repo controls. Pane visibility being absent in a given session is therefore not a Mode-3 regression.
 
-> **This file is a thin dispatcher / phase index.** Full phase detail lives in `.claude/.claude/mode3/contracts/*.md`, loaded **on demand** per the phase index below — this keeps per-run token load low without weakening any gate. Semantics are identical to the prior single-file workflow; only the layout changed. Load a contract when its phase fires; do not preload all of them.
+> **This file is a thin dispatcher / phase index.** Full phase detail lives in `.claude/mode3/contracts/*.md`, loaded **on demand** per the phase index below — this keeps per-run token load low without weakening any gate. Semantics are identical to the prior single-file workflow; only the layout changed. Load a contract when its phase fires; do not preload all of them.
 
 ## Scope and authority (summary — full detail in `.claude/mode3/contracts/main-agent.md`)
 
@@ -99,6 +99,18 @@ Main Agent: PR / PR_REVIEW (consumes the matrix) / merge gate / closeout / loop 
 
 **Conditional loads:** `.claude/mode3/contracts/bug-repro.md` loads only after the issue is classified a BUG. `.claude/mode3/contracts/browser-validation.md` loads only for user-visible changes (skip for docs/backend-only/test-only/pure-refactor). `.claude/mode3/contracts/closeout.md`'s stale-PR/branch safety policy is needed only at Phase 8–12. Do not load any contract before its phase.
 
+## Context loading & token policy (binding — reduces tokens, never safety)
+
+1. **Load order:** the issue (one fetch) + this dispatcher first; then exactly one contract per phase as the phase index fires. From `issue-checklists.md`, load only the section matching the classified issue type.
+2. **Specialist docs load only when that specialist is invoked** — never preload agent definitions "for reference".
+3. **Evidence templates** (`templates/validation-matrix.md`, `workdone-candidate.toml` comments) load only at the evidence/terminal phase; gate contracts load only at their gate.
+4. **Historical material is not run context.** `.claude/hardening/*`, `.claude/archive/*`, `.claude/state/*` runbooks, sprint archives, and prior issues' `.claude/handoffs/issue-*/` or `.claude/openai-gates/issue-*/` folders are never loaded during a run unless the user explicitly asks. On resume/rework, read only: the newest `rework-request-*.toml`, the terminal artefact, the latest gate verdict, and the tail of `team-lead-execution-log.md` — not the run's full verdict/artefact history.
+5. **Targeted reads over sweeps:** when scope is narrow (globs already known), read the plan-cited files/sections via indexed lookup; no whole-repo scans outside `allowed_file_globs` except the authoritative `git diff` scope-lock check.
+6. **Logs are artefacts, not prose:** store full command output under `.claude/handoffs/issue-<N>/`; quote only the exit code and the failing/relevant lines (≤20) anywhere else.
+7. **Say standing rules once:** after the scope lock exists, cite the handoff path instead of re-pasting authority/glob/gate lists into later prompts, messages, or reports.
+8. **Gate inputs stay focused:** diff summary, risk, test commands + exit codes, evidence artefact paths, unresolved decisions — reference artefacts by path; a packet approaching the 64 KB gate cap is a defect, not a thoroughness signal.
+9. **Reports are compact but complete:** every required field of the phase's template, table-form where possible, no pasted logs, no restated history. Compactness never drops a required field, a stop condition, or an evidence pointer — when in doubt, keep the field and link the artefact.
+
 ## Stop conditions (the run halts at the first match)
 
 | Phase | Stop condition | Next state |
@@ -120,8 +132,8 @@ Main Agent: PR / PR_REVIEW (consumes the matrix) / merge gate / closeout / loop 
 | 7C | sha256 mismatch on approved-plan | stop; do not invoke WORKDONE_REVIEW |
 | 7C | scope-lock violation outside `allowed_file_globs` | stop; require explicit scope-change approval |
 | 7C | QA/E2E evidence missing or FAIL, or eval-checklist item not PASS | stop; do not invoke WORKDONE_REVIEW |
-| 7C | WORKDONE_REVIEW REVISION_REQUIRED (NEEDS_FIXES) | outer-gate failure; does NOT consume the inner specialist 2-cycle budget. Write `rework-request-workdone-review-<n>.toml` (disk-before-send), resume the orchestrator by `agent_id` (else respawn a fresh Opus orchestrator from durable artefacts), route the fix, re-enter Phase 7A browser re-validation, then re-submit WORKDONE_REVIEW. Main Agent never authors the fix. See `main-agent.md` → Rework routing. |
-| 9 | PR_REVIEW REVISION_REQUIRED | outer gate, no shared counter with inner specialist loop. Write `rework-request-pr-review-<n>.toml` (disk-before-send), resume-or-respawn the Opus orchestrator, route the fix, re-run required validation, then re-run PR_REVIEW. Main Agent never authors the fix. See `main-agent.md` → Rework routing. |
+| 7C | WORKDONE_REVIEW NEEDS_FIXES (the WORKDONE_REVIEW rework verdict per `openai_gate.py`) | outer-gate failure; does NOT consume the inner specialist 2-cycle budget. Write `rework-request-workdone-review-<n>.toml` (disk-before-send), resume the orchestrator by `agent_id` (else respawn a fresh Opus orchestrator from durable artefacts), route the fix, re-enter Phase 7A browser re-validation, then re-submit WORKDONE_REVIEW. Main Agent never authors the fix. See `main-agent.md` → Rework routing. |
+| 9 | PR_REVIEW NEEDS_FIXES (the PR_REVIEW rework verdict — this gate never returns REVISION_REQUIRED) | outer gate, no shared counter with inner specialist loop. Write `rework-request-pr-review-<n>.toml` (disk-before-send), resume-or-respawn the Opus orchestrator, route the fix, re-run required validation, then re-run PR_REVIEW. Main Agent never authors the fix. NEEDS_MORE_EVIDENCE / NEEDS_USER_DECISION → halt to user. See `main-agent.md` → Rework routing. |
 | 10 | User declines merge | halt with PR open; do not merge |
 
 ## Run lock — `.claude/active-runs/issue-<N>.lock`
@@ -228,7 +240,7 @@ On probe failure:
 
 ## Phase 0.6 — TEAM_LEAD_ASSIGNMENT
 
-Main Agent writes the lightweight `team-lead-assignment.toml`. **Load `.claude/mode3/contracts/main-agent.md`** for the assignment template and the "no implementation recipe" rule.
+Main Agent writes the lightweight `team-lead-assignment.toml`. **Load `.claude/mode3/contracts/main-agent.md`** for the assignment template and the "no implementation recipe" rule. When classifying the issue type, consult `.claude/mode3/contracts/issue-checklists.md` for the per-type specialist set, evidence requirements, and stop conditions (the Team Lead re-checks the same checklist at Phase 0.7 planning).
 
 ## Phase 0.7 — Team Lead investigation + plan authoring
 
@@ -244,7 +256,7 @@ The team (implicit session team) was established and the `orchestrator` teammate
 
 ## Phase 4 — Sentinel probe (already passed in 0.2)
 
-The behavioural sentinel was a precondition to proceeding. Phases 1–3 only ran because Phase 0.2 passed. If Phase 4 work uncovers a regression in Task callability (e.g. the executor process died and was replaced), re-run the sentinel before continuing.
+The behavioural sentinel was a precondition to proceeding. Phases 1–3 only ran because Phase 0.2 passed. If Phase 4 work uncovers a regression in specialist-spawn (`Agent`) callability (e.g. the executor process died and was replaced), re-run the sentinel before continuing.
 
 ## Phase 5 — Real execution
 
@@ -284,6 +296,7 @@ For bug issues, the full Bugfix Fast Path (Principle, Phases B0–B5, BUG_REPRO_
 - `.claude/mode3/contracts/validation-matrix.md` — risk-triggered validation matrix (NOT_REQUIRED \| COMPACT \| FULL); proposed at Phase 0.7, validated at PLAN_REVIEW, authored at Phase 5–6, checked at WORKDONE_REVIEW, consumed by PR_REVIEW
 - `.claude/mode3/contracts/browser-validation.md` — Phase 7A/7B (load only for user-visible changes)
 - `.claude/mode3/contracts/closeout.md` — Phases 8–12 + stale-PR/branch safety policy
+- `.claude/mode3/contracts/issue-checklists.md` — per-issue-type checklists (backend/API, frontend/UX, security/privacy, DB/migration, docs-only, data-ingestion, refactor) consulted at Phase 0.6 intake and Phase 0.7 planning
 - `.claude/mode3/contracts/notifications.md` — 12-event notification catalogue, payload schema, dual-channel invariant, bounded fallback polling (replaces open-ended Phase 6 polling)
 
 ## Definition-of-Done (DoD) autopilot review gate — FOUNDATION, DRY-RUN ONLY

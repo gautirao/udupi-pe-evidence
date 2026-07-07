@@ -110,6 +110,7 @@ Run artifacts are written to `.claude/openai-gates/issue-<N>/<timestamp>-<gate>/
 | `verdict.toml` | Same compact shape in TOML format |
 | `transcript.md` | Full human-readable run transcript (post-redaction) |
 | `metadata.json` | Model, usage, timestamps (no secrets) |
+| `verdict-structured.json` | #1221 native structured objects (eval_checklist, required_evidence, self_critic, bug_repro_check / contract_check, evidence_check), size-capped; the full untruncated copy stays in `raw-response.txt` |
 | `error.json` | Present only on error runs |
 
 The `INDEX.md` in `.claude/openai-gates/` is append-only — each run adds one row.

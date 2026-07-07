@@ -1,6 +1,15 @@
 # Mode-3 contract — terminal artefact + WORKDONE_REVIEW
 
-> Loaded at Phase 6 (wait for terminal artefact) and Phase 7C (WORKDONE_REVIEW). WORKDONE_REVIEW runs AFTER Phase 7A/7B browser validation (`.claude/mode3/contracts/browser-validation.md`). Semantics unchanged from the original `mode3-run.md`.
+> **Purpose:** Phase 6 terminal-artefact handling and Phase 7C WORKDONE_REVIEW (automated preflight + manual verification + gate call).
+> **When to load:** Phase 6 and Phase 7C; WORKDONE_REVIEW runs AFTER Phase 7A/7B browser validation (`.claude/mode3/contracts/browser-validation.md`).
+> **Actor:** Main Agent.
+> **Inputs:** `workdone-candidate.toml` or `blocked.toml`, execution log, 7A/7B evidence, validation matrix.
+> **Allowed scope:** integrity/scope/evidence verification, gate packet assembly, gate call.
+> **Forbidden:** authoring fixes (route `NEEDS_FIXES` via Rework routing), invoking WORKDONE_REVIEW on a blocked run or with a failed preflight.
+> **Stop conditions:** sha mismatch, routing-log violation, scope-lock violation, missing/failed QA-E2E or eval-checklist evidence, both terminal artefacts present.
+> **Outputs:** `workdone-review-request.toml` + gate verdict (per `openai_gate.py`: `APPROVED_FOR_PR | NEEDS_FIXES | NEEDS_MORE_EVIDENCE | NEEDS_USER_DECISION`).
+>
+> Semantics unchanged from the original `mode3-run.md`.
 
 ## Phase 6 — Wait for terminal artefact
 
@@ -53,7 +62,7 @@ Output is compact JSON summarizing:
 
    `workdone-candidate.toml.handoff_sha256` is the **handoff** digest (as defined in the workdone-candidate template comments), not the approved-plan digest. The approved-plan integrity is anchored by the handoff (step b), not directly by the candidate.
 2. **Routing-decision-log verification (NEW per #1098):**
-   - Read `.claude/handoffs/issue-<N>/team-lead-execution-log.md` and locate the ROUTING DECISION entry (one per run, phase: routing).
+   - Read `.claude/handoffs/issue-<N>/team-lead-execution-log.md` and locate the routing-decision entry (one per run, phase: routing; its heading carries the literal `[ROUTING DECISION]` marker that `verify-mode3-workdone.py` greps for).
    - Verify the entry's timestamp precedes the timestamp of the first specialist-call entry. If a specialist call precedes the routing-decision entry → halt; do NOT invoke WORKDONE_REVIEW.
    - Verify `selected_sequence` contains all `[executor.specialist_policy].mandatory_gates` from the handoff. Any missing mandatory gate → halt.
    - Verify every entry in `skipped` has all four AC26 fields: `specialist_skipped`, `reason`, `rule_citation`, `replacement_evidence`. Any missing field → halt.
@@ -67,12 +76,12 @@ Output is compact JSON summarizing:
    - `level = NOT_REQUIRED` → confirm the one-line justification exists in `workdone-candidate.toml` (carried from `team-lead-plan.toml`) and is plausible for a genuinely trivial change. No matrix file is expected.
    - `level = COMPACT | FULL` → confirm the matrix file exists at `required_artifact` (`.claude/handoffs/issue-<N>/validation-matrix.md`), its verdict is `APPROVE`, no `Required changes before PR_REVIEW` remain, `NOT_PROVEN` items are honestly documented and either acceptable or linked to follow-up, and the matrix does not contradict the tests/reviews/7A-7B evidence already verified.
    - Any failure → halt; do NOT invoke WORKDONE_REVIEW. Full policy: `.claude/mode3/contracts/validation-matrix.md`.
-7. Assemble `.claude/handoffs/issue-<N>/workdone-review-request.toml` per the standard schema, including: **original issue, approved Team Lead plan ref, the OpenAI PLAN_REVIEW `[eval_checklist]`, the Team Lead `[eval_checklist_result]` satisfaction matrix, the `[validation_matrix]` level + matrix path/verdict, Phase 7A evidence (`product-verification.toml`), Phase 7B evidence if run (`product-sweep.toml`), diff summary, deviations/risks**, scope-lock table, AC mapping, reviewer verdicts, test evidence, runtime-probe block, and **routing_decision_log_summary**.
+7. Assemble `.claude/handoffs/issue-<N>/workdone-review-request.toml` per the standard schema, including: **original issue, approved Team Lead plan ref, the OpenAI PLAN_REVIEW `[eval_checklist]`, the Team Lead `[eval_checklist_result]` satisfaction matrix, the `[validation_matrix]` level + matrix path/verdict, Phase 7A evidence (`product-verification.toml`), Phase 7B evidence if run (`product-sweep.toml`), diff summary, deviations/risks**, scope-lock table, AC mapping, reviewer verdicts, test evidence, runtime-probe block, and **routing_decision_log_summary**. **Keep the packet focused:** diff, risk, tests (commands + exit codes), evidence, unresolved decisions; reference artefacts by path instead of inlining their contents; never paste full logs or the raw execution log (summarize it — the disk artefact is the audit trail). A packet approaching the gate's 64 KB cap is a defect, not thoroughness.
 8. Invoke `python3 .claude/scripts/openai_gate.py --issue <N> --gate WORKDONE_REVIEW --input .claude/handoffs/issue-<N>/workdone-review-request.toml`. **OpenAI WORKDONE_REVIEW compares actual work against: the original issue, the approved Team Lead plan, OpenAI's own PLAN_REVIEW eval_checklist, the Team Lead checklist satisfaction matrix, the Phase 7A (+7B) browser evidence, the diff summary, and the deviations/risks.** WORKDONE_REVIEW now natively emits `contract_check`, `evidence_check`, and `self_critic` via the per-gate strict schema (#1221), persisted to `verdict-structured.json` (capped) / `raw-response.txt` (full); prefer those when present and fall back to the transcription mechanism when absent — see `.claude/mode3/contracts/plan-review.md` → `## OpenAI eval-checklist mechanism (native, with transcription fallback)` and `### Schema mechanics (#1221)`. Structured output shape:
 
    ```toml
-   gate = "OPENAI_WORKDONE_REVIEW"
-   decision = "APPROVED_FOR_PR"   # or NEEDS_FIXES | BLOCKED
+   gate = "WORKDONE_REVIEW"
+   verdict = "APPROVED_FOR_PR"   # or NEEDS_FIXES | NEEDS_MORE_EVIDENCE | NEEDS_USER_DECISION (per openai_gate.py PER_GATE_ENUMS)
    [contract_check]
    approved_plan_followed = true
    eval_checklist_satisfied = true

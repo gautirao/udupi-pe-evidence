@@ -30,7 +30,7 @@ gate = "APPROVED_EXECUTION_HANDOFF"
 issue = 0
 created_at = "YYYY-MM-DDTHH:MM:SSZ"
 
-# Risk tier per ROUTE_AND_RUN.md Step 1B + tier table at ROUTE_AND_RUN.md:64.
+# Risk tier per ROUTE_AND_RUN.md Step 1B + the classification tier table.
 # Drives the high-risk minimum specialist set (qa-fast + engineer +
 # code-reviewer(opus) + security-reviewer + qa verification).
 risk_tier = "normal"  # trivial | normal | high-risk | doc-only
@@ -120,9 +120,9 @@ category_allowlist = { engineers = ["frontend-engineer", "backend-engineer", "su
 # Gate F triggers. The Orchestrator MAY ADD entries (e.g. late-detected
 # Gate F → add "security-reviewer"); it MAY NEVER REMOVE entries.
 mandatory_gates = [
-  "qa-fast",          # ROUTE_AND_RUN.md:352 — mandatory unless Lean-mode skip
-  "code-reviewer",    # ROUTE_AND_RUN.md:471 — mandatory unless single-file low-risk
-  "qa-verification",  # ROUTE_AND_RUN.md:495 — mandatory for Normal/High-risk
+  "qa-fast",          # ROUTE_AND_RUN.md § qa-fast pre-implementation — mandatory unless Lean-mode skip
+  "code-reviewer",    # ROUTE_AND_RUN.md § code-reviewer skip rule — mandatory unless single-file low-risk
+  "qa-verification",  # ROUTE_AND_RUN.md § qa in verification mode — mandatory for Normal/High-risk
   # Add "security-reviewer" for Gate F triggers
   # Add "architect" if architecture gate triggers
 ]
@@ -147,9 +147,9 @@ trigger = "qa-fast recommends 'E2E authoring recommended: YES'"
 # Verbatim Route-and-Run citations for when a mandatory_gate may be skipped.
 # Lifted directly from the policy docs; do NOT reword.
 [executor.specialist_policy.skip_authority]
-qa_fast = "Lean-mode only — ALL conditions at ROUTE_AND_RUN.md:357-369 must hold; skip log entry MUST cite that section and include replacement_evidence (e.g. doc-only diff)."
-code_reviewer = "Risk=low AND single-file AND no logic/behaviour change (ROUTE_AND_RUN.md:472). Skip log entry MUST cite this and replacement_evidence MAY be NONE."
-security_reviewer = "NO skip authority when Gate F triggers (auth/JWT/secrets/PII/payments/CORS/CSP/RLS) per ROUTE_AND_RUN_TABLES.md:68-72."
+qa_fast = "Lean-mode only — ALL conditions in ROUTE_AND_RUN.md § 'qa-fast may be skipped (Lean mode only)' must hold; skip log entry MUST cite that section and include replacement_evidence (e.g. doc-only diff)."
+code_reviewer = "Risk=low AND single-file AND no logic/behaviour change (ROUTE_AND_RUN.md § code-reviewer skip rule). Skip log entry MUST cite this and replacement_evidence MAY be NONE."
+security_reviewer = "NO skip authority when Gate F triggers (auth/JWT/secrets/PII/payments/CORS/CSP/RLS) per ROUTE_AND_RUN_TABLES.md § Gate F."
 qa_verification = "NO skip authority for Normal/High-risk. May be skipped only for trivial/doc-only changes documented in the approved plan."
 
 # --- AUTHORITY BLOCK — LOCKED ------------------------------------------------
@@ -210,13 +210,13 @@ high_risk_minimum_set = [
   "security-reviewer",
   "qa (verification)",
 ]
-reroute_cycle_limit = 2  # per ROUTE_AND_RUN.md:473-474 (2-cycle reroute rule, Failure Routing Protocol in .claude/skills/ROUTE_AND_RUN.md)
+reroute_cycle_limit = 2  # per the ROUTE_AND_RUN.md code-reviewer re-run rule (2-cycle reroute rule, Failure Routing Protocol in .claude/skills/ROUTE_AND_RUN.md)
 
 [escalation_rules]
 # What the Orchestrator does on common runtime escalations.
 gate_f_discovered_late = "ADD security-reviewer to the remaining sequence; log the discovery + trigger in team-lead-execution-log.md as a 'ROUTING DECISION (REVISED)' entry citing the file:line that triggered Gate F. Continue execution. Do NOT halt unless adding security-reviewer is structurally impossible."
 scope_expansion_needed = "Halt immediately. Write blocked.toml(reason_code=SCOPE_EXPANSION_REQUIRED) with detail naming the required path/scope. Main Agent decides whether to re-plan."
-lean_mode_skip_eligible = "Orchestrator MAY skip qa-fast under Lean-mode only if ALL conditions at ROUTE_AND_RUN.md:357-369 hold. The skip MUST be recorded in team-lead-execution-log.md with all four AC26 fields (specialist_skipped, reason, rule_citation, replacement_evidence)."
+lean_mode_skip_eligible = "Orchestrator MAY skip qa-fast under Lean-mode only if ALL conditions in ROUTE_AND_RUN.md § 'qa-fast may be skipped (Lean mode only)' hold. The skip MUST be recorded in team-lead-execution-log.md with all four AC26 fields (specialist_skipped, reason, rule_citation, replacement_evidence)."
 ambiguous_plan = "Halt. Write blocked.toml(reason_code=AMBIGUOUS_PLAN) with detail quoting the contradictory or incomplete section of approved-plan.toml. Main Agent routes back to Planner."
 model_routing_failure = "Halt. Write blocked.toml(reason_code=UNKNOWN, detail='model_routing_failure: <description>'). NO silent model switch. User decides retry on same model, escalation to Sonnet/Opus, or rollback."
 specialist_unavailable = "Halt. Write blocked.toml(reason_code=SPECIALIST_FAILURE | SPECIALIST_NOT_ALLOWED) per the cause."
@@ -236,7 +236,7 @@ items = [
   "qa verification FAIL (QA_FAILED) — no fix attempt; qa is read-only",
   "rate limit hit (RATE_LIMITED)",
   "timebox exceeded (TIMEBOX_EXCEEDED)",
-  "Task tool not callable on Orchestrator (TOOL_UNAVAILABLE)",
+  "specialist spawn tool (Agent) not callable on Orchestrator (TOOL_UNAVAILABLE)",
   "approved_plan_sha256 mismatch at start of execution (AMBIGUOUS_PLAN)",
   "specialist not in category_allowlist or in always_forbidden (SPECIALIST_NOT_ALLOWED)",
 ]

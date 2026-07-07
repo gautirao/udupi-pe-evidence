@@ -69,7 +69,7 @@ review_instructions:
 - Return findings using the reviewer's exact required output format.
 
 additional_context:
-- known_repo_rules: <optional — see code-review-orchestrator.md for established patterns>
+- known_repo_rules: <optional — see ROUTE_AND_RUN.md § Known repo rules (Code-Reviewer Invocation Protocol) for established patterns>
 - areas_to_ignore: <optional>
 - risk_notes: <optional>
 - ac_checklist: <sprint executor only — paste enriched spec AC bullets; reviewer must mark each PRESENT or MISSING; MISSING without OUT OF SCOPE justification = BLOCKING>

@@ -1,6 +1,15 @@
 # Mode-3 contract — PLAN_REVIEW + handoff build
 
-> Loaded at Phase 1 (PLAN_REVIEW) and Phase 2 (handoff build). The plan under review is authored by the Team Lead (`team-lead.md` Phase 0.7), not the Main Agent. Semantics unchanged from the original `mode3-run.md`.
+> **Purpose:** Phase 1 OpenAI PLAN_REVIEW of the Team Lead's plan and Phase 2 construction of the execution boundary (`approved-execution-handoff.toml`).
+> **When to load:** Phase 1 and Phase 2 only.
+> **Actor:** Main Agent (the gate caller); the plan under review is authored by the Team Lead (`team-lead.md` Phase 0.7), never the Main Agent.
+> **Inputs:** `team-lead-plan.toml` (+ `bug-repro-report.toml` for bugs).
+> **Allowed scope:** transcribe the plan into the gate packet, call `openai_gate.py`, materialise the approved plan, build the handoff boundary.
+> **Forbidden:** substituting or improving the plan, inventing eval-checklist items, weakening the proposed validation level.
+> **Stop conditions:** `verdict = REVISION_REQUIRED | BLOCKED | NEEDS_USER_DECISION | NEEDS_MORE_EVIDENCE` → halt/route back to the Team Lead; missing `team-lead-plan.toml`.
+> **Outputs:** `001-plan-review-request.toml`, `approved-plan.toml`, `approved-execution-handoff.toml`.
+>
+> **Gate lane note:** this contract describes the automated `openai_gate.py` lane. The canonical response field is **`verdict`** with per-gate enums enforced by the script (PLAN_REVIEW: `APPROVED | REVISION_REQUIRED | BLOCKED | NEEDS_USER_DECISION | NEEDS_MORE_EVIDENCE`). The manual ChatGPT-Pro lane documented in `.claude/skills/route-and-run/gates.md` is a different lane. Semantics unchanged from the original `mode3-run.md`.
 
 ## OpenAI eval-checklist mechanism (native, with transcription fallback)
 
@@ -29,11 +38,11 @@ Either path is verbatim copying of OpenAI's own output — never Main-Agent-inve
 1. Confirm `team-lead-plan.toml` exists (and, for bugs, `bug-repro-report.toml` with an acceptable status). If absent → halt; the Team Lead has not completed planning.
 2. The Main Agent assembles the PLAN_REVIEW packet at `.claude/handoffs/issue-<N>/001-plan-review-request.toml` **from `team-lead-plan.toml`** (it transcribes the Team Lead's plan + bug-repro evidence into the gate schema; it does NOT substitute its own plan). For bugs, include the `[bug_repro_check]` inputs (reproduction status + evidence).
 3. Invoke `python3 .claude/scripts/openai_gate.py --issue <N> --gate PLAN_REVIEW --input .claude/handoffs/issue-<N>/001-plan-review-request.toml`.
-4. **OpenAI PLAN_REVIEW must return an acceptance contract, not just approve/reject.** The intended structured output (see `### OpenAI gate output dependency` for the current transcription mechanism) is:
+4. **OpenAI PLAN_REVIEW must return an acceptance contract, not just approve/reject.** The verdict field is `verdict` with the PLAN_REVIEW enum enforced by `openai_gate.py` (`APPROVED | REVISION_REQUIRED | BLOCKED | NEEDS_USER_DECISION | NEEDS_MORE_EVIDENCE`); alongside the 9 base fields the gate natively emits the structured acceptance objects:
 
    ```toml
-   gate = "OPENAI_PLAN_REVIEW"
-   decision = "APPROVED_FOR_IMPLEMENTATION"   # or NEEDS_REVISION | BLOCKED
+   gate = "PLAN_REVIEW"
+   verdict = "APPROVED"   # or REVISION_REQUIRED | BLOCKED | NEEDS_USER_DECISION | NEEDS_MORE_EVIDENCE
    [scope]
    allowed_changes = []
    forbidden_changes = []
@@ -75,10 +84,10 @@ This phase writes the **boundary** the Orchestrator must operate within. It does
 5. Derive `executor.forbidden_globs` from approved plan `forbidden`.
 6. Build `[executor.specialist_policy]` (replaces exact `allowed_specialists`):
    - `category_allowlist`: broad categories permitted by the approved plan — typically `engineers = [frontend-engineer, backend-engineer, supabase-engineer]`, `reviewers = [code-reviewer, security-reviewer]`, `qa = [qa-fast, qa]`, plus `architect` / `ui-designer` if the plan routing mentions them.
-   - `mandatory_gates`: specialists the Orchestrator MUST invoke (e.g. `["qa-fast", "code-reviewer", "qa-verification"]` for Normal; add `"security-reviewer"` for Gate F triggers; the full High-risk minimum from `ROUTE_AND_RUN.md:64` if risk_tier == high-risk).
+   - `mandatory_gates`: specialists the Orchestrator MUST invoke (e.g. `["qa-fast", "code-reviewer", "qa-verification"]` for Normal; add `"security-reviewer"` for Gate F triggers; the full High-risk minimum from the `ROUTE_AND_RUN.md` classification tier table if risk_tier == high-risk).
    - `conditional_gates`: specialists with triggers (e.g. `[{name = "ui-designer", trigger = "ui_design_gate"}, {name = "architect", trigger = "architecture_gate"}, {name = "qa-e2e-authoring", trigger = "qa-fast recommends YES"}]`).
    - `always_forbidden`: non-Route-and-Run agent types (e.g. `["general-purpose", "Plan", "Explore"]`).
-   - `skip_authority`: verbatim Route-and-Run citations for when a `mandatory_gate` may be skipped (e.g. `"qa-fast: only via Lean-mode at ROUTE_AND_RUN.md:357-369 if ALL skip conditions hold; code-reviewer: only at ROUTE_AND_RUN.md:472 if risk=low+single-file+no-logic"`).
+   - `skip_authority`: verbatim Route-and-Run citations for when a `mandatory_gate` may be skipped (e.g. `"qa-fast: only via ROUTE_AND_RUN.md § 'qa-fast may be skipped (Lean mode only)' if ALL skip conditions hold; code-reviewer: only via ROUTE_AND_RUN.md § code-reviewer skip rule if risk=low+single-file+no-logic"`). Cite section names, not line numbers — line numbers drift.
 7. Set `executor.model = "opus"` (the orchestrator/executor teammate MUST run on Opus, never Sonnet). Specialists keep their own configured models — do NOT set a model for them here.
 8. Set authority block all false (`openai_gates`, `chatgpt_contact`, `pr_creation`, `merge`, `scope_change`).
 9. Copy `qa_requirements` from approved plan (unit_tests_required, e2e_tests_required, justifications if NOT_REQUIRED).

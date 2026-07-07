@@ -1,6 +1,14 @@
 # Mode-3 contract — Notification flow
 
-> **Purpose:** defines the proactive orchestrator→Main-Agent SendMessage notification flow that replaces open-ended Main-Agent polling between phase boundaries. Main Agent REACTS to notifications; bounded fallback polling is a safety net only. Disk artefacts remain the sole source of truth.
+> **Purpose:** the proactive orchestrator→Main-Agent SendMessage notification flow (12-event catalogue + rework channel) that replaces open-ended Main-Agent polling between phase boundaries.
+> **When to load:** referenced from Phases 0.7, 5, 6, and any rework event.
+> **Actors:** orchestrator (O2M), Main Agent (M2O, M2U).
+> **Inputs/outputs:** `[notification]` TOML payloads, mirrored to `team-lead-execution-log.md` before every send (dual-channel invariant).
+> **Allowed scope:** notifications are pointers only — never state.
+> **Forbidden:** sending a notification with no on-disk backing artefact; treating a message as the source of truth; open-ended polling.
+> **Stop conditions:** stall window 10 min → ONE reconciliation read; ≤3 reads per phase → STALL_DETECTED escalation and halt.
+>
+> Main Agent REACTS to notifications; bounded fallback polling is a safety net only. Disk artefacts remain the sole source of truth.
 
 ---
 
@@ -12,7 +20,7 @@ Previously the Main Agent polled `.claude/handoffs/issue-<N>/` files to learn wh
 
 - The gate sequence (PLAN_REVIEW → WORKDONE_REVIEW → PR_REVIEW) is **unchanged**.
 - CLAUDE.md §10 (mandatory user merge-approval halt before any `gh pr merge`) is **unchanged**.
-- `mode3-run.md` line 120 remains word-for-word: `File artefacts are authoritative. SendMessage is for notifications only. Lead determines completion state by reading from disk.`
+- The `mode3-run.md` source-of-truth sentence (in "Artefacts produced under `.claude/handoffs/issue-<N>/`") remains word-for-word: `File artefacts are authoritative. SendMessage is for notifications only. Lead determines completion state by reading from disk.`
 
 ---
 
@@ -69,7 +77,7 @@ The 12-event catalogue above covers the forward (plan → execute → review) pa
 
 | Name | Direction | Required | Fires at | Backing artefact |
 |---|---|---|---|---|
-| REWORK_REQUEST | M2O | false (disk-authoritative) | Any rework/course-correction (WORKDONE_REVIEW NEEDS_FIXES, PR_REVIEW REVISION_REQUIRED, OpenAI review, user correction, QA/E2E reroute) | `rework-request-<gate>-<n>.toml` |
+| REWORK_REQUEST | M2O | false (disk-authoritative) | Any rework/course-correction (WORKDONE_REVIEW NEEDS_FIXES, PR_REVIEW NEEDS_FIXES, OpenAI review, user correction, QA/E2E reroute) | `rework-request-<gate>-<n>.toml` |
 | READY | O2M | false | Orchestrator has read assignment/handoff and started | `team-lead-execution-log.md` |
 | IDLE_READY | O2M | false | Orchestrator finished a unit of work / a rework cycle and is standing by | `team-lead-execution-log.md` (or terminal artefact) |
 | REWORK_RECEIVED | O2M | false | Orchestrator ingested a `rework-request-*.toml` and will route it | `team-lead-execution-log.md` (`phase: rework-intake`) |
@@ -131,7 +139,7 @@ next_expected_event = "SPECIALIST_DONE (qa verification)"
 
 Every notification has a corresponding on-disk record. **SendMessage is a notification pointer only; it is never itself the source of truth.** If a notification and the disk artefact ever disagree, the **disk wins**.
 
-Orchestrator-originated notifications (O2M) are each mirrored as a `## <ts> — NOTIFICATION` block (the `[notification]` payload) appended to `team-lead-execution-log.md` before/with the SendMessage. This keeps `mode3-run.md` line 120 true verbatim and makes the flow crash-safe and resumable.
+Orchestrator-originated notifications (O2M) are each mirrored as a `## <ts> — NOTIFICATION` block (the `[notification]` payload) appended to `team-lead-execution-log.md` before/with the SendMessage. This keeps the `mode3-run.md` source-of-truth sentence ("File artefacts are authoritative…") true verbatim and makes the flow crash-safe and resumable.
 
 Main-Agent-originated notifications (M2O, M2U) are similarly mirrored in the relevant handoff artefact or closeout summary.
 
@@ -171,4 +179,4 @@ This contract does NOT alter:
 - Any authority-hardening rule in `mode3-orchestrator.md`.
 - Any specialist choreography order in Route-and-Run.
 
-See also: `.claude/commands/mode3-run.md` line 120 (source-of-truth invariant, verbatim preserved).
+See also: `.claude/commands/mode3-run.md` → "Artefacts produced under `.claude/handoffs/issue-<N>/`" (source-of-truth invariant, verbatim preserved).

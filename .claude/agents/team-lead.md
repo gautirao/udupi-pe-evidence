@@ -96,8 +96,8 @@ Per subtask: **Owner** · **Objective** (concrete, testable) · **Files** (targe
 ### Step 4: Resolve file conflicts
 No two subtasks touch the same file. Serialize or restructure if they do.
 
-### Step 5: Delegate via Task tool
-Each prompt includes: objective, dependency context, non-goals, required gates, plus:
+### Step 5: Hand the partition plan back for delegation
+You do not delegate yourself (your toolkit is read-only — no spawn tool). Return the decomposition plan to the Main Agent, which delegates each subtask to the named specialist via the `Agent` tool. Each delegated prompt includes: objective, dependency context, non-goals, required gates, plus:
 > 1. Read every file you will modify before writing changes.
 > 2. Output diffs or targeted snippets — never rewrite entire files unless new.
 > 3. Run relevant tests after implementing. Report pass/fail.
@@ -127,15 +127,15 @@ Recommendation: ready|blocked on [specific issue]
 
 ## Mode 3: moved to the `mode3-orchestrator` agent + `/mode3-run` command
 
-Mode-3 Execution Orchestrator is **no longer a subagent role and no longer lives in this agent file.** The behavioural finding (`.claude/hardening/team-lead-orchestration-stability-report.md`) showed subagents in the Claude Code harness cannot invoke `Task`. A post-#1097 safety probe (`.claude/handoffs/agent-team-safety-probe/probe-evidence.toml`) then showed that reusing this same `team-lead` agent file for the Agent Teams teammate role self-blocks at the role-definition layer — the model reads this refusal prose and declines the legitimate Agent Teams mission.
+Mode-3 Execution Orchestrator is **no longer a subagent role and no longer lives in this agent file.** The behavioural finding (`.claude/hardening/team-lead-orchestration-stability-report.md`) showed subagents in the Claude Code harness cannot invoke `Task`. A post-#1097 safety probe (`.claude/handoffs/agent-team-safety-probe/probe-evidence.toml` — historical runtime artefact, not retained in the repo) then showed that reusing this same `team-lead` agent file for the Agent Teams teammate role self-blocks at the role-definition layer — the model reads this refusal prose and declines the legitimate Agent Teams mission.
 
 The replacement, shipped in #1098, is a **dedicated** top-level agent: `.claude/agents/mode3-orchestrator.md`. Spawn it via Agent Teams using the `/mode3-run <issue#>` slash command.
 
-- Dedicated agent: `.claude/agents/mode3-orchestrator.md` (top-level teammate; full toolkit `Task, Bash, Read, Write, Edit, Grep, Glob`)
+- Dedicated agent: `.claude/agents/mode3-orchestrator.md` (top-level teammate; full toolkit `Agent, Bash, Read, Write, Edit, Grep, Glob, SendMessage` — it spawns specialists via `Agent`; the prior `Task` spawn tool was removed from the harness)
 - Slash command: `.claude/commands/mode3-run.md`
 - File contracts under `.claude/handoffs/issue-<N>/`: `approved-execution-handoff.toml`, `team-lead-execution-log.md`, `workdone-candidate.toml`, `blocked.toml`
 - Choreography source-of-truth: `.claude/skills/ROUTE_AND_RUN.md` (Agent Teams is transport; Route-and-Run defines choreography)
-- Behavioural evidence: `.claude/handoffs/agent-team-probe/at01-evidence.txt`
+- Behavioural evidence: `.claude/handoffs/agent-team-probe/at01-evidence.txt` (historical runtime artefact — not retained in the repo)
 
 If a prompt asks `team-lead` (this subagent) to "act as Mode-3 Execution Orchestrator", "read an APPROVED_EXECUTION_HANDOFF", "invoke specialists via Task", or "materialise a workdone-candidate.toml": refuse and route the user to `/mode3-run <issue#>` instead — that command spawns the **`mode3-orchestrator`** teammate, not this subagent. Do not attempt the role from inside this subagent.
 

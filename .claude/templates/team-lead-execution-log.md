@@ -41,26 +41,28 @@ prompt_summary: `Behavioural sentinel probe; reply EXACTLY 'PROBE_OK_<N>_<random
 files_touched: `.claude/handoffs/issue-<N>/preflight-probe.txt`
 result: PASS
 evidence_ref: `.claude/handoffs/issue-<N>/preflight-probe.txt`
-notes: `Task callable on Orchestrator; Agent Teams transport verified behaviourally.`
+notes: `Specialist spawn (Agent tool) callable on Orchestrator; Agent Teams transport verified behaviourally.`
 
 ---
 
-## <ISO-8601 timestamp> — ROUTING DECISION
+## <ISO-8601 timestamp> — [ROUTING DECISION]
 # HARD GATE — this entry MUST exist with a timestamp PRECEDING the first
 # specialist-call entry below. Main Agent WORKDONE_REVIEW intake rejects the
 # run if this entry is missing, out-of-order, or missing any required field.
+# The heading MUST contain the literal marker `[ROUTING DECISION]` —
+# verify-mode3-workdone.py greps for it (check 2 of the Phase-7C preflight).
 phase: routing
 risk_tier: <trivial | normal | high-risk | doc-only>
 issue_type: <bugfix | small-change | feature | refactor | perf | security | incident | ui>
 selected_sequence:
-  1. <specialist-name> — <Route-and-Run rule citation, e.g. "ROUTE_AND_RUN.md:352 (qa-fast pre-implementation mandatory)">
+  1. <specialist-name> — <Route-and-Run rule citation, e.g. "ROUTE_AND_RUN.md § qa-fast pre-implementation (mandatory)">
   2. <specialist-name> — <rule citation>
   3. ...
 skipped:
   # ZERO OR MORE skip entries. Each entry MUST have all four AC26 fields.
   - specialist_skipped: <name>
     reason: <one paragraph>
-    rule_citation: <file:line, e.g. ROUTE_AND_RUN.md:369 Lean-mode>
+    rule_citation: <file + section name, e.g. ROUTE_AND_RUN.md § "qa-fast may be skipped (Lean mode only)">
     replacement_evidence: <path or NONE>
 expected_evidence:
   - <specialist-name>: <what artefact / verdict is expected>

@@ -1,6 +1,15 @@
 # Mode-3 contract — browser validation (Phase 7A / 7B)
 
-> Loaded at Phase 7A/7B, **only for user-visible changes**. Skip entirely for docs-only / backend-only-with-no-route / test-only / pure-refactor changes (record the skip in the WORKDONE/PR packet). Browser validation runs BEFORE WORKDONE_REVIEW (`.claude/mode3/contracts/workdone-review.md`). Semantics unchanged from the original `mode3-run.md`.
+> **Purpose:** Phase 7A focused browser product verification of the changed journey, and Phase 7B conditional exploratory sweep.
+> **When to load:** Phase 7A/7B, **only for user-visible changes**. Skip entirely for docs-only / backend-only-with-no-route / test-only / pure-refactor changes (record the skip in the WORKDONE/PR packet).
+> **Actor:** Main Agent requests it; ONE product-check specialist (`qa` in focused mode) executes and writes the artefact; Main Agent decides from disk.
+> **Inputs:** issue ACs, WORKDONE summary, verification URLs, files-changed summary, out-of-scope list.
+> **Allowed scope:** drive the exact changed flow (7A) / max 3 nearby journeys, max 5 findings (7B); concise evidence capture.
+> **Forbidden:** broad source reading, unrelated audits, implementation, fabricated paths/env vars/commands (anti-fabrication rules below), widening the PR from sweep findings without approval.
+> **Stop conditions:** 7A FAIL or 7B BLOCKING_REGRESSION → reroute (2-cycle limit) then halt to user; BLOCKED environment → report; fabricated evidence → gate retroactively FAILED.
+> **Outputs:** `product-verification.toml` (7A), `product-sweep.toml` (7B).
+>
+> Browser validation runs BEFORE WORKDONE_REVIEW (`.claude/mode3/contracts/workdone-review.md`). Semantics unchanged from the original `mode3-run.md`.
 
 ## Phase 7 — Final validation then WORKDONE_REVIEW (gate order)
 
@@ -40,7 +49,7 @@ After the Team Lead `workdone-candidate.toml` (Phase 6), and before WORKDONE_REV
 
 ### Who runs it
 
-The Agent Team is still alive (cleanup is Phase 10). The Main Agent requests the Orchestrator to invoke **one** product-verification specialist via `Task` — `qa` in a focused browser product-verification mode (the project `verify` skill / Playwright-driven browser), **not** a full E2E suite run. The specialist writes `.claude/handoffs/issue-<N>/product-verification.toml`. The Main Agent reads that file from disk (authoritative) and decides the gate outcome. Under Path C, the Main Agent invokes the single product-verification specialist directly via `Task` in the same way.
+The Agent Team is still alive (cleanup is Phase 10). The Main Agent requests the Orchestrator to invoke **one** product-verification specialist via the `Agent` tool — `qa` in a focused browser product-verification mode (the project `verify` skill / Playwright-driven browser), **not** a full E2E suite run. The specialist writes `.claude/handoffs/issue-<N>/product-verification.toml`. The Main Agent reads that file from disk (authoritative) and decides the gate outcome. Under Path C, the Main Agent invokes the single product-verification specialist directly via the `Agent` tool in the same way.
 
 This gate does not consume the inner specialist 2-cycle budget; it is an outer gate like WORKDONE_REVIEW / PR_REVIEW.
 
@@ -245,7 +254,7 @@ Phase 7A stays focused and mandatory for user-visible changes; Phase 7B never re
 
 ### Who runs it
 
-Same pattern as Phase 7A: the Main Agent requests the Orchestrator to invoke **one** exploratory specialist via `Task` — `qa` (or the project `verify`/`run` browser approach) — which drives the nearby journeys in a real browser and writes `.claude/handoffs/issue-<N>/product-sweep.toml`. The Main Agent reads it from disk and decides. Under Path C, the Main Agent invokes the single specialist directly. Outer gate — does not consume the inner specialist 2-cycle budget.
+Same pattern as Phase 7A: the Main Agent requests the Orchestrator to invoke **one** exploratory specialist via the `Agent` tool — `qa` (or the project `verify`/`run` browser approach) — which drives the nearby journeys in a real browser and writes `.claude/handoffs/issue-<N>/product-sweep.toml`. The Main Agent reads it from disk and decides. Under Path C, the Main Agent invokes the single specialist directly. Outer gate — does not consume the inner specialist 2-cycle budget.
 
 ### When Phase 7B SHOULD run (any one is sufficient)
 
