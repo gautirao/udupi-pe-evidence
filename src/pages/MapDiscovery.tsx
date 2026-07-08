@@ -30,6 +30,8 @@ import {
   computeDiscoverLayer,
   toLayerInput,
   selectDiscoverMapLayer,
+  resolveActiveDiscoverGroup,
+  resolveDiscoverGroupForAreaKey,
   type DiscoverMapLayerKind,
 } from '@/utils/discoverLayerRegistry';
 import { computeGroupBounds } from '@/utils/discoverGroupBounds';
@@ -660,8 +662,8 @@ export default function MapDiscovery() {
   // because derivePanelContent only routes there when groupId is present; groupId drives
   // the useAreaGroups fetch; when areaGroupsData has loaded, the resolved group is present.
   const isGroupResultsState = panelContent === 'area-group-results';
-  const resolvedGroupForResults = isGroupResultsState && urlState.groupId
-    ? (areaGroupsData?.groups.find((g) => g.id === urlState.groupId) ?? null)
+  const resolvedGroupForResults = isGroupResultsState
+    ? resolveActiveDiscoverGroup(areaGroupsData?.groups, urlState.groupId)
     : null;
   const resolvedGroupAreaKeys: string[] = resolvedGroupForResults?.area_keys ?? [];
 
@@ -1622,13 +1624,12 @@ export default function MapDiscovery() {
     [urlState.journey, urlState.schoolId, schoolRadiusListings],
   );
 
-  // Issue #1175 v3 — focusedGroup is needed by the badge before the group-map behaviour
-  // block (line ~920) so it is declared here. It depends only on urlState.groupId and
-  // areaGroupsData, both available at this point. The group-map block below re-reads the
-  // same expression via focusedGroupAreas (derived from focusedGroup).
-  const focusedGroup = urlState.groupId
-    ? (areaGroupsData?.groups ?? []).find((g) => g.id === urlState.groupId) ?? null
-    : null;
+  // Issue #1175 v3 / Issue #1798 PR-B1 — focusedGroup is resolved from both groupId (by ID
+  // or exact slug match) and automatically derived from urlState.areaKey if needed.
+  // Guarantees right panel, map layer, map markers, and map breadcrumb derive from unified context.
+  const focusedGroup = useMemo(() => {
+    return resolveDiscoverGroupForAreaKey(areaGroupsData?.groups, urlState.groupId, urlState.areaKey);
+  }, [areaGroupsData?.groups, urlState.groupId, urlState.areaKey]);
 
   // Issue #1175 v3 — group aggregate count for the badge.
   // Only active when groupId is set and no area/school is selected (those take precedence).
@@ -2678,13 +2679,20 @@ export default function MapDiscovery() {
         .filter((a) => (a.listingCount ?? 0) > 0);
     }
 
-    // 'all-areas' — every remaining residential drill-down state (group selected,
-    // area selected, school selected, combined) — unchanged: full discoverAreas,
-    // dimmed via the separate `focusedGroupAreas` prop passed to PropertyMap.
-    // isLandingState/isAreaFirstCityLanding are always false whenever mapLayerKind
-    // resolves to 'all-areas' (both are fully covered by the branches above), so
-    // this is equivalent to `discoverAreas`; the ternary is kept verbatim from the
-    // pre-existing fallback for maximum behavior-preservation.
+    // Issue #1798 PR-B1 — strictly align overview area markers with the active group or area context.
+    // If an area is explicitly selected (`urlState.areaKey`), we do not show parent overview areas;
+    // only the area's listings stand out on the map.
+    if (urlState.areaKey) {
+      return [];
+    }
+    // If a group is selected (`focusedGroup`), we strictly limit overview areas to member areas (`focusedGroup.area_keys`).
+    if (focusedGroup) {
+      const memberKeySet = new Set(focusedGroup.area_keys);
+      return discoverAreas.filter((a) => memberKeySet.has(a.areaKey));
+    }
+
+    // 'all-areas' — every remaining residential drill-down state (school selected, combined) —
+    // unchanged: full discoverAreas, dimmed via the separate `focusedGroupAreas` prop passed to PropertyMap.
     return isLandingState || isAreaFirstCityLanding ? liveAreas : discoverAreas;
   }, [
     mapLayerKind,
@@ -2701,20 +2709,13 @@ export default function MapDiscovery() {
     urlState.scope,
     summaryRegions,
     cityCenter,
+    urlState.areaKey,
+    focusedGroup,
   ]);
 
-  // Issue #1798 PR-B — search-promotion (Unit D). Case-insensitive substring match
-  // against the areaLabels already being rendered on the map (overviewAreas) — never
-  // a separate fetch. undefined (not []) when the query is blank, matching
-  // AreaMarkerLayer's "forced.searchMatchIds only set when non-empty" contract.
-  const areaSearchMatchKeys = useMemo((): string[] | undefined => {
-    const q = debouncedAreaSearchQuery.trim().toLowerCase();
-    if (!q) return undefined;
-    const matches = overviewAreas
-      .filter((a) => a.areaLabel.toLowerCase().includes(q))
-      .map((a) => a.areaKey);
-    return matches.length > 0 ? matches : undefined;
-  }, [debouncedAreaSearchQuery, overviewAreas]);
+  // Issue #1798 PR-B1 — Search query text must NOT drive map markers.
+  // Search results are dropdown-only until the user selects one.
+  const areaSearchMatchKeys = undefined;
 
   const handleOverviewAreaClick = useCallback((area: AreaPoint) => {
     if (isTopGroupedAgri && corridorGroups.some((c) => c.directionCode === area.areaKey)) {
@@ -2864,7 +2865,7 @@ export default function MapDiscovery() {
                   mapLayerCategory === 'macro-region-bubbles' ||
                   mapLayerCategory === 'region-zone-areas'
                 ) return [];
-                if (mapZoom <= AREA_LAYER_MAX_ZOOM) return [];
+                if (!selectedArea && !isGroupResultsState && mapZoom <= AREA_LAYER_MAX_ZOOM) return [];
                 // Issue #1597 — area-group-results state: serve ONLY the group-filtered
                 // markers. Must come before the area-first/school-first branches so no
                 // unfiltered city-wide markerListings leak as ghost/shadow markers.
@@ -3051,15 +3052,24 @@ export default function MapDiscovery() {
                 ]}
               />
             ) : isSelectedGroupState ? (
-              // Issue #1595 (Option A) — the area-first selected-group step shows the
-              // dynamic City › Group breadcrumb here on the map (mock placement),
-              // replacing the generic area-indicator card for this state only.
+              // Issue #1595 (Option A) / Issue #1798 PR-B1 — the area-first selected-group step shows the
+              // dynamic City › Region › Group breadcrumb on the map.
               <DiscoverMapBreadcrumb
                 testId="map-group-breadcrumb"
                 leadingIcon={MapPin}
                 leadingIconClassName="text-[hsl(var(--copper))]"
                 segments={[
                   { key: 'city', label: CITY_CONFIG[city]?.label ?? city },
+                  ...((focusedGroup?.region_label || urlState.scope)
+                    ? [
+                        {
+                          key: 'region',
+                          label: focusedGroup?.region_label || prettifyZoneSlug(urlState.scope!),
+                          maxWidthClass: 'max-w-[140px]',
+                          emphasis: 'muted' as const,
+                        },
+                      ]
+                    : []),
                   {
                     key: 'group',
                     label: focusedGroup?.name ?? '',
@@ -3068,22 +3078,35 @@ export default function MapDiscovery() {
                   },
                 ]}
               />
-            ) : isAreaFirstSelectedAreaState && focusedGroup ? (
-              // Issue #1606 — the area-first selected-AREA results step shows the full
-              // City › Group › Area breadcrumb on the map (mock placement). Only when a
-              // group context exists; group-less areas keep the AreaIndicatorOverlay below.
+            ) : (isAreaFirstSelectedAreaState || (resolvedPanelContent === 'area-selected' && !!selectedArea)) && (focusedGroup || selectedArea) ? (
+              // Issue #1606 / Issue #1798 PR-B1 — the area-first selected-AREA results step shows the full
+              // City › Region › Group › Area breadcrumb on the map, preserving full hierarchy context.
               <DiscoverMapBreadcrumb
                 testId="map-group-breadcrumb"
                 leadingIcon={MapPin}
                 leadingIconClassName="text-[hsl(var(--copper))]"
                 segments={[
                   { key: 'city', label: CITY_CONFIG[city]?.label ?? city },
-                  {
-                    key: 'group',
-                    label: focusedGroup.name,
-                    maxWidthClass: 'max-w-[160px]',
-                    emphasis: selectedArea?.areaLabel?.trim() ? 'muted' : 'strong',
-                  },
+                  ...((focusedGroup?.region_label || urlState.scope)
+                    ? [
+                        {
+                          key: 'region',
+                          label: focusedGroup?.region_label || prettifyZoneSlug(urlState.scope!),
+                          maxWidthClass: 'max-w-[140px]',
+                          emphasis: 'muted' as const,
+                        },
+                      ]
+                    : []),
+                  ...(focusedGroup
+                    ? [
+                        {
+                          key: 'group',
+                          label: focusedGroup.name,
+                          maxWidthClass: 'max-w-[160px]',
+                          emphasis: selectedArea?.areaLabel?.trim() ? 'muted' as const : 'strong' as const,
+                        },
+                      ]
+                    : []),
                   ...(selectedArea?.areaLabel?.trim()
                     ? [
                         {

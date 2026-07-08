@@ -16,6 +16,7 @@ import {
   type SummaryRegionRef,
 } from '@/utils/macroRegionResolver';
 import { formatMemberAreaSummary, buildAreaNameIndex } from '@/utils/areaNameSummary';
+import { resolveActiveDiscoverGroup } from '@/utils/discoverLayerRegistry';
 import { TrustStrip } from './_shared';
 
 // Shared uppercase eyebrow for the in-panel control labels (mirrors GuidedEntryPanel).
@@ -521,17 +522,10 @@ export function AreaGroupsLandingPanel({
     }));
   }, [activeScope, groups]);
 
-  // When activeGroupId is set, find the matching group (by ID or exact slug match).
+  // When activeGroupId is set, find the matching group using unified resolver.
   // Issue #1483 / Issue #1178 — supports Level 2 drill-down when valid.
   const focusedGroup = React.useMemo(() => {
-    if (!activeGroupId) return null;
-    return (
-      groups.find(
-        (g) =>
-          g.id === activeGroupId ||
-          g.name.toLowerCase().replace(/\s+/g, '-') === activeGroupId.toLowerCase(),
-      ) ?? null
-    );
+    return resolveActiveDiscoverGroup(groups, activeGroupId);
   }, [groups, activeGroupId]);
 
   // Issue #1178 — when a non-empty groupId is passed in the URL but matches no loaded group

@@ -10,6 +10,8 @@ import {
   clearRegionScopeForAgri,
   paramsToLayerInput,
   applyLayerSelectionToParams,
+  resolveActiveDiscoverGroup,
+  resolveDiscoverGroupForAreaKey,
   LAYER_PARAM,
   PANEL_DERIVATION_FIELDS,
   type DiscoverLayerInput,
@@ -623,5 +625,41 @@ describe('startOver drift guard', () => {
     expect(result.selection.selectedMaxKm).toBeNull();
     expect(result.selection.selectedListing).toBeNull();
     expect(result.selection.selectedLocality).toBeNull();
+  });
+});
+
+describe('PR-B1 Group Resolution Helpers (#1798)', () => {
+  const mockGroups = [
+    {
+      id: 'north-bangalore-emerging',
+      name: 'North Bangalore Emerging',
+      subtitle: null,
+      region_label: 'North',
+      school_count: 5,
+      area_keys: ['IN|KA|Bangalore|Kodalagurki', 'IN|KA|Bangalore|Devenahalli'],
+    },
+    {
+      id: 'university-belt',
+      name: 'University Belt',
+      subtitle: null,
+      region_label: 'Manipal',
+      school_count: 10,
+      area_keys: ['IN|KA|Udupi|Manipal'],
+    },
+  ];
+
+  it('resolveActiveDiscoverGroup matches exact id or slugify match', () => {
+    expect(resolveActiveDiscoverGroup(mockGroups, 'north-bangalore-emerging')?.name).toBe('North Bangalore Emerging');
+    expect(resolveActiveDiscoverGroup(mockGroups, 'north-growth')).toBeNull();
+    expect(resolveActiveDiscoverGroup(undefined, 'any')).toBeNull();
+  });
+
+  it('resolveDiscoverGroupForAreaKey resolves from groupId or falls back to member area matching', () => {
+    // Direct groupId match takes precedence
+    expect(resolveDiscoverGroupForAreaKey(mockGroups, 'university-belt', 'IN|KA|Bangalore|Kodalagurki')?.name).toBe('University Belt');
+    // Mismatched or slug-only groupId falls back to finding the group containing areaKey
+    expect(resolveDiscoverGroupForAreaKey(mockGroups, 'north-growth', 'IN|KA|Bangalore|Kodalagurki')?.name).toBe('North Bangalore Emerging');
+    // No groupId, finds by areaKey alone
+    expect(resolveDiscoverGroupForAreaKey(mockGroups, null, 'IN|KA|Bangalore|Kodalagurki')?.name).toBe('North Bangalore Emerging');
   });
 });

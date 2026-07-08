@@ -38,6 +38,46 @@
 import type { DiscoverPanelContent } from './discoverPanelState';
 import { derivePanelContent } from './discoverPanelState';
 import type { DiscoverJourney, DiscoverUrlState } from '../hooks/useDiscoverUrlState';
+import type { AreaGroup } from '../hooks/useAreaGroups';
+
+/**
+ * Resolves an active group from areaGroupsData by checking ID, exact slugified name, or exact name.
+ * Handles exact matching for deep links carrying either ID or name slugs.
+ */
+export function resolveActiveDiscoverGroup(
+  groups: AreaGroup[] | undefined | null,
+  groupId: string | null | undefined,
+): AreaGroup | null {
+  if (!groups || !groupId?.trim()) return null;
+  const target = groupId.trim().toLowerCase();
+  const slugifiedTarget = target.replace(/\s+/g, '-');
+  return (
+    groups.find(
+      (g) =>
+        g.id.toLowerCase() === target ||
+        g.name.toLowerCase() === target ||
+        g.name.toLowerCase().replace(/\s+/g, '-') === slugifiedTarget ||
+        g.id.toLowerCase().replace(/\s+/g, '-') === slugifiedTarget,
+    ) ?? null
+  );
+}
+
+/**
+ * Resolves an active group given an areaKey, falling back to matching groups that contain that areaKey.
+ * Guarantees state/breadcrumb/map consistency when areaKey is active even if groupId is omitted from deep-link.
+ */
+export function resolveDiscoverGroupForAreaKey(
+  groups: AreaGroup[] | undefined | null,
+  groupId: string | null | undefined,
+  areaKey: string | null | undefined,
+): AreaGroup | null {
+  if (!groups) return null;
+  const direct = resolveActiveDiscoverGroup(groups, groupId);
+  if (direct) return direct;
+  if (!areaKey?.trim()) return null;
+  const targetKey = areaKey.trim();
+  return groups.find((g) => g.area_keys.includes(targetKey)) ?? null;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
