@@ -1287,6 +1287,7 @@ export default function MapDiscovery() {
     totalElements, totalPages,
     markersTruncated, markersReturnedElements, markersTotalFilteredElements,
     agriAreasData, isLoadingAgriAreas,
+    cameraIntent, publishCameraIntent,
   } = useDiscoverMapData({
     city, selectedArea, filters: effectiveFilters, debouncedSearch,
     urlSchoolId: urlState.schoolId, isAuthenticated, fitTick,
@@ -2935,6 +2936,15 @@ export default function MapDiscovery() {
               cityZoom={cityZoom}
               areas={overviewAreas}
               onAreaClick={handleOverviewAreaClick}
+              // Issue #1801 — camera-navigation intent path. AreaMarkerLayer's
+              // full-pin click handlers fire this synchronously (never the
+              // dots/cluster handlers); publishCameraIntent derives the
+              // CameraIntent and MapController is the sole consumer/camera
+              // owner. Independent of handleOverviewAreaClick's scope-change
+              // branching below — every area-pin click used to move the
+              // camera before this issue, regardless of which branch fires.
+              onAreaCameraIntent={publishCameraIntent}
+              cameraIntent={cameraIntent}
               focusedGroupAreas={mapZoom <= AREA_LAYER_MAX_ZOOM ? focusedGroupAreas : undefined}
               // Issue #1798 PR-B — area-marker density degradation. Gated on the SAME
               // condition as focusedGroupAreas above (a dense group of member areas is

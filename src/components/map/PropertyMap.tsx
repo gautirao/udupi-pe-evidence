@@ -11,6 +11,7 @@ import 'leaflet.markercluster';
 import { PropertyListing, PropertyType, PropertyImage } from '@/hooks/usePropertyListings';
 import { DrawControl } from '@/components/map/DrawControl';
 import { AreaMarkerLayer, AreaPoint, type AreaMarkerClusterInfo } from '@/components/map/AreaMarkerLayer';
+import type { CameraIntent } from '@/hooks/useDiscoverMapData';
 import { SchoolMarkerLayer } from '@/components/map/SchoolMarkerLayer';
 import { SchoolZoneLabelLayer, type ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
@@ -281,6 +282,21 @@ interface PropertyMapProps {
   areas?: AreaPoint[];
   /** Called when an area marker is clicked (in addition to the built-in bbox fitBounds). */
   onAreaClick?: (area: AreaPoint) => void;
+  /**
+   * Issue #1801 — fired by AreaMarkerLayer's full-pin click handlers (never by
+   * the dots or cluster handlers). Forwarded verbatim to AreaMarkerLayer's
+   * `onAreaCameraIntent` prop; the caller (MapDiscovery, via
+   * useDiscoverMapData.publishCameraIntent) is expected to synchronously
+   * publish a CameraIntent and pass it back down via the `cameraIntent` prop.
+   */
+  onAreaCameraIntent?: (area: AreaPoint) => void;
+  /**
+   * Issue #1801 — single source of truth for area-navigation camera moves.
+   * MapController fits/flies exactly once per new `seq` and suppresses the one
+   * network-driven `focusBounds` refit that follows the same click navigation
+   * (strict fit-once — see PropertyMap.cameraIntent.test.tsx).
+   */
+  cameraIntent?: CameraIntent | null;
   /**
    * When set, area markers NOT in this array are rendered at 0.3 opacity (dimmed).
    * Markers in the array remain at full opacity. Absent = all markers full opacity.
@@ -1009,12 +1025,14 @@ function MapController({
   cityCenter,
   cityZoom,
   resetMapTick,
+  cameraIntent,
 }: {
   selectedListing?: PropertyListing | null;
   focusBounds?: [[number, number], [number, number]] | null;
   cityCenter?: [number, number];
   cityZoom?: number;
   resetMapTick?: number;
+  cameraIntent?: CameraIntent | null;
 }) {
   const map = useMap();
 
@@ -1026,8 +1044,87 @@ function MapController({
     }
   }, [selectedListing, map]);
 
+  // ── Issue #1801 (rework) — MapController is the SOLE camera owner for
+  // area-marker navigation. lastHandledSeqRef guards against re-firing an
+  // already-handled seq (e.g. a stale cameraIntent surviving a re-render/
+  // forward-history nav without a fresh click).
+  //
+  // suppressForSeqRef/suppressArmedAtRef correlate the "swallow the next
+  // network-driven refit" suppression to the SPECIFIC seq that armed it,
+  // instead of a bare boolean:
+  //   - Armed ONLY for framing === 'leaf'. 'overview' clicks keep zoom at/
+  //     below AREA_LAYER_MAX_ZOOM, so markersEnabled never flips true and no
+  //     activeFocusBounds/agriGroupFocusBounds refit can ever follow one —
+  //     arming for them would create a suppression with no possible
+  //     consumer, guaranteed to leak into a later, unrelated refit.
+  //   - Time-bounded (CAMERA_SUPPRESS_TTL_MS): a leaf click's correlated
+  //     refit (e.g. the agri-first agriGroupFocusBounds sync, or a future
+  //     activeFocusBounds producer) normally lands within one network
+  //     round-trip. If filters/journey state mean NO correlated refit ever
+  //     arrives (e.g. filters.localities cleared on area-click, so
+  //     computeFocusBounds stays null), the flag is guaranteed to expire on
+  //     its own rather than staying armed forever — so it can never swallow
+  //     a later, unrelated focusBounds change (a different navigation, a
+  //     fitTick click, a locality-filter change).
+  //   - Strict one-shot regardless: the very first focusBounds effect run
+  //     after arming ALWAYS consumes (clears) the suppression — it either
+  //     skips (still within the TTL window) or falls through and fits
+  //     (already expired). Either way nothing is left armed afterwards.
+  const lastHandledSeqRef = useRef(0);
+  const suppressForSeqRef = useRef<number | null>(null);
+  const suppressArmedAtRef = useRef(0);
+  // Generous enough to cover a typical markers/agri refit round-trip after a
+  // leaf click, short enough that a suppression that never gets a correlated
+  // refit cannot linger and swallow something unrelated for long.
+  const CAMERA_SUPPRESS_TTL_MS = 8000;
+
+  useEffect(() => {
+    if (!cameraIntent) return;
+    if (cameraIntent.seq <= lastHandledSeqRef.current) return;
+    lastHandledSeqRef.current = cameraIntent.seq;
+    if (cameraIntent.framing === 'leaf') {
+      suppressForSeqRef.current = cameraIntent.seq;
+      suppressArmedAtRef.current = Date.now();
+    }
+
+    if (cameraIntent.framing === 'overview') {
+      // Macro-region / group pin — same framing the removed AreaMarkerLayer
+      // code used to apply: fitBounds capped at zoom 12, or flyTo(center, 12).
+      if (cameraIntent.bounds) {
+        map.fitBounds(cameraIntent.bounds, { padding: [40, 40], maxZoom: 12 });
+      } else {
+        map.flyTo(cameraIntent.center, 12);
+      }
+    } else {
+      // Real-area ("leaf") pin — land directly in the [13,16] listing-marker
+      // zoom band. This REPLACES the removed map.once('zoomend', ...) → 13
+      // correction: instead of fitting then correcting after the animation
+      // settles, the target zoom is computed and clamped up-front.
+      if (cameraIntent.bounds) {
+        const rawZoom = map.getBoundsZoom(cameraIntent.bounds, false, L.point(40, 40));
+        const clampedZoom = Math.min(16, Math.max(13, rawZoom));
+        const center = L.latLngBounds(cameraIntent.bounds).getCenter();
+        map.setView(center, clampedZoom, { animate: true });
+      } else {
+        map.flyTo(cameraIntent.center, 13);
+      }
+    }
+  }, [cameraIntent, map]);
+
   useEffect(() => {
     if (!focusBounds) return;
+    if (suppressForSeqRef.current !== null) {
+      const armedForMs = Date.now() - suppressArmedAtRef.current;
+      // One-shot: this effect run always consumes the armed suppression,
+      // whether it skips (below) or falls through to fit (expired).
+      suppressForSeqRef.current = null;
+      if (armedForMs <= CAMERA_SUPPRESS_TTL_MS) {
+        return;
+      }
+      // Expired — no correlated refit ever arrived for the seq that armed
+      // this suppression, so this focusBounds change is not it. Fit
+      // normally; falls through to the logic below.
+    }
     const [[s, w], [n, e]] = focusBounds;
     if (s === n && w === e) {
       // Single point — fitBounds on a zero-area bounds is degenerate; use flyTo
@@ -1053,6 +1150,10 @@ function MapController({
       hasMountedRef.current = true;
       return;
     }
+    // Issue #1801 (qa-fast R6) — a city change is a brand-new navigation; a
+    // suppression armed by a stale intent from the previous city must not
+    // swallow a legitimate refit here.
+    suppressForSeqRef.current = null;
     if (cityCenter) {
       map.flyTo(cityCenter, cityZoom ?? DEFAULT_ZOOM, { duration: 1 });
     }
@@ -1067,6 +1168,9 @@ function MapController({
     const tick = resetMapTick ?? 0;
     if (tick === 0 || tick <= handledTickRef.current) return;
     handledTickRef.current = tick;
+    // Issue #1801 (qa-fast R6) — area deselect/back is a new navigation; drop
+    // any pending suppression armed by the just-abandoned click intent.
+    suppressForSeqRef.current = null;
     if (cityCenter) {
       map.flyTo(cityCenter, cityZoom ?? DEFAULT_ZOOM, { duration: 1 });
     }
@@ -1403,6 +1507,8 @@ export function PropertyMap({
   cityZoom,
   areas = [],
   onAreaClick,
+  onAreaCameraIntent,
+  cameraIntent,
   focusedGroupAreas,
   enableAreaMarkerDegradation,
   selectedAreaKey,
@@ -1487,6 +1593,7 @@ export function PropertyMap({
           cityCenter={cityCenter}
           cityZoom={cityZoom}
           resetMapTick={resetMapTick}
+          cameraIntent={cameraIntent}
         />
         <ZoomWatcher onZoomChange={onZoomChange} />
         <ViewportWatcher onViewportChange={onViewportChange} />
@@ -1546,6 +1653,7 @@ export function PropertyMap({
           <AreaMarkerLayer
             areas={areas}
             onAreaClick={onAreaClick}
+            onAreaCameraIntent={onAreaCameraIntent}
             focusedGroupAreas={focusedGroupAreas}
             journey={journey}
             selectedSchool={selectedSchool}

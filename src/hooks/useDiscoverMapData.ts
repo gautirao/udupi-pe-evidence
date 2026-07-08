@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { PropertyFilters, PropertyListing, PropertyImage, clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
 import { useDiscoverListings } from '@/hooks/useDiscoverListings';
 import { useDiscoverFilteredMarkers } from '@/hooks/useDiscoverFilteredMarkers';
@@ -17,6 +17,28 @@ import {
   discoverListingToPropertyListing,
   cityListingToPropertyListing,
 } from '@/lib/discoverMappers';
+
+/**
+ * Issue #1801 — optimistic camera-navigation intent for area-marker clicks.
+ *
+ * Published synchronously (same React click tick) by `publishCameraIntent`
+ * below, which is wired to AreaMarkerLayer's `onAreaCameraIntent` — the ONLY
+ * caller. MapController (PropertyMap.tsx) is the sole consumer/camera owner:
+ * it fits/flies exactly once per new `seq`, replacing the two-to-three
+ * uncoordinated map.fitBounds/flyTo/setZoom calls that used to fire
+ * independently from AreaMarkerLayer and from the network-driven
+ * `activeFocusBounds` effect (the "goes somewhere, then pulled back" jitter).
+ */
+export interface CameraIntent {
+  /** Strictly monotonic — a fresh click always produces seq > any prior seq. */
+  seq: number;
+  /** area.bbox verbatim; null falls back to a flyTo on `center`. */
+  bounds: [[number, number], [number, number]] | null;
+  /** [area.geo_center_lat, area.geo_center_lon] — used when bounds is null. */
+  center: [number, number];
+  /** 'overview' for macro-region/group pins (maxZoom 12); 'leaf' for a real area (zoom clamped to [13,16]). */
+  framing: 'overview' | 'leaf';
+}
 
 export interface UseDiscoverMapDataParams {
   city: string;
@@ -123,6 +145,14 @@ export interface UseDiscoverMapDataResult {
   markersTruncated: boolean;
   markersReturnedElements: number | undefined;
   markersTotalFilteredElements: number | undefined;
+  /** Issue #1801 — current optimistic camera-navigation intent (or null if none published yet). */
+  cameraIntent: CameraIntent | null;
+  /**
+   * Issue #1801 — publishes a new CameraIntent derived from an AreaPoint. Call
+   * SYNCHRONOUSLY from the area-marker click path (AreaMarkerLayer's
+   * onAreaCameraIntent) — never from a delayed effect or post-fetch callback.
+   */
+  publishCameraIntent: (area: AreaPoint) => void;
 }
 
 export function useDiscoverMapData({
@@ -361,6 +391,21 @@ export function useDiscoverMapData({
     return focusBounds;
   }, [focusBounds, fitTick]);
 
+  // ── Issue #1801 — optimistic camera-navigation intent ─────────────────────
+  // See the CameraIntent doc comment above. seq lives in a ref (not state) so
+  // publishing never itself triggers a re-render beyond the setCameraIntent below.
+  const cameraIntentSeqRef = useRef(0);
+  const [cameraIntent, setCameraIntent] = useState<CameraIntent | null>(null);
+  const publishCameraIntent = useCallback((area: AreaPoint) => {
+    cameraIntentSeqRef.current += 1;
+    setCameraIntent({
+      seq: cameraIntentSeqRef.current,
+      bounds: area.bbox,
+      center: [area.geo_center_lat, area.geo_center_lon],
+      framing: area.isMacroRegion || area.isGroup ? 'overview' : 'leaf',
+    });
+  }, []);
+
   // ── Derived: locality → areaKey map ──────────────────────────────────────
   const localityToAreaKey = useMemo(() => {
     const m = new Map<string, string>();
@@ -426,5 +471,7 @@ export function useDiscoverMapData({
     markersTruncated,
     markersReturnedElements,
     markersTotalFilteredElements,
+    cameraIntent,
+    publishCameraIntent,
   };
 }

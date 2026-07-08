@@ -1,42 +1,33 @@
 /**
- * DIAGNOSTIC (Issue #1798 PR-B, regression 1 — "camera jitter").
+ * Issue #1801 — FIXED behaviour for the "camera jitter" regression diagnosed
+ * in the original version of this file (Issue #1798 PR-B).
  *
- * NOT a fix. This test exists to CONFIRM or RULE OUT the multi-tick
- * camera-collision hypothesis for the user-reported symptom:
- *   "the map jitteriness is primarily the map zooming in and out when
- *    clicked on the region, zone and area markers... the transition is
- *    not smooth and it doesn't zoom to the correct boundary immediately,
- *    looks like it goes somewhere and then it is pulled back."
+ * Root cause (confirmed by the diagnostic this file used to contain): a
+ * single area/zone/region marker click used to fire 2-3 UNCOORDINATED
+ * imperative Leaflet camera calls on the SAME map instance:
+ *   1. AreaMarkerLayer's own marker.on('click', ...) — synchronous
+ *      map.fitBounds/flyTo, entirely outside React.
+ *   2. A chained map.once('zoomend', () => setZoom(13)) correction for
+ *      non-region/group areas whose fit landed at zoom <= 12.
+ *   3. PropertyMap's MapController focusBounds effect — a LATER, independent
+ *      fitBounds once the new area's markers finished fetching over the
+ *      network, usually to a different (tighter) bbox.
  *
- * Two independent, uncoordinated call sites both hold a reference to the
- * SAME live Leaflet map instance (via useMap()) and both issue their own
- * camera command in response to a single area/zone/region marker click:
+ * The fix consolidates all area-navigation camera ownership into
+ * MapController via an optimistic `cameraIntent` (published synchronously by
+ * AreaMarkerLayer's full-pin click handlers) and suppresses the one
+ * network-driven focusBounds refit that follows the same click navigation.
  *
- *   1. AreaMarkerLayer.tsx — marker.on('click', ...) fires a SYNCHRONOUS,
- *      imperative map.fitBounds(area.bbox, ...) / map.flyTo(...) the
- *      instant the marker is clicked, entirely outside React's render
- *      cycle (it does not go through any prop).
- *
- *   2. PropertyMap.tsx MapController — has a useEffect keyed on the
- *      `focusBounds` prop. `focusBounds` is fed by MapDiscovery's
- *      `activeFocusBounds`, which is `computeFocusBounds(filteredMarkersData,
- *      filters.localities)` — i.e. it only settles AFTER the new area's
- *      listings/markers finish fetching (a network round trip after the
- *      click). When it changes, MapController fires ANOTHER independent
- *      map.fitBounds/flyTo — usually to a different (tighter) bounds than
- *      AreaMarkerLayer's immediate area-bbox fit.
- *
- * This test proves both listeners are wired to the SAME map object and
- * that a single logical "user clicked a marker" event chain produces TWO
- * independent camera calls with different targets, landing at different
- * times — exactly the "goes somewhere, then pulled back" pattern.
- *
- * See docs/audit/evidence/discover-map-school-search-ux/jitter-diagnostic-pr-b.md
- * for the full static-analysis + verdict writeup.
+ * This test asserts the FIXED behaviour: a single area-marker click produces
+ * exactly ONE area-navigation camera call, for BOTH the legacy and the
+ * degraded-representatives handler, and registers NO zoomend/setZoom
+ * correction. It must fail against the pre-fix code (which called
+ * map.fitBounds/flyTo directly from AreaMarkerLayer AND registered
+ * map.once('zoomend', ...)) and pass against the fixed code.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
-import { render } from '@testing-library/react';
+import { render, act } from '@testing-library/react';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 
 // ─── Hoisted stubs ─────────────────────────────────────────────
@@ -44,9 +35,11 @@ const mapStub = vi.hoisted(() => ({
   fitBounds: vi.fn(),
   flyTo: vi.fn(),
   setZoom: vi.fn(),
+  setView: vi.fn(),
   addLayer: vi.fn(),
   removeLayer: vi.fn(),
   getZoom: vi.fn(() => 11),
+  getBoundsZoom: vi.fn(() => 14),
   getBounds: vi.fn(() => ({
     getNorth: () => 14,
     getSouth: () => 13,
@@ -58,7 +51,6 @@ const mapStub = vi.hoisted(() => ({
   off: vi.fn(),
   once: vi.fn(),
   invalidateSize: vi.fn(),
-  setView: vi.fn(),
   getCenter: vi.fn(() => ({ lat: 13.3409, lng: 74.7421 })),
 }));
 
@@ -84,6 +76,7 @@ vi.mock('leaflet', () => ({
     }),
     markerClusterGroup: vi.fn(() => ({ addLayer: vi.fn() })),
     point: vi.fn((x: number, y: number) => ({ x, y })),
+    latLngBounds: vi.fn(() => ({ getCenter: () => ({ lat: 13.355, lng: 74.8 }) })),
   },
 }));
 
@@ -104,9 +97,10 @@ vi.mock('react-leaflet', () => ({
 
 vi.mock('@/components/map/DrawControl', () => ({ DrawControl: () => null }));
 // NOTE: AreaMarkerLayer is intentionally the REAL implementation here (not
-// mocked to null like the sibling AreaPanner test) — the whole point of this
-// diagnostic is to observe its own imperative click-driven camera call
-// landing on the SAME mapStub that MapController's focusBounds effect uses.
+// mocked to null) — the whole point of this test is to observe that clicking
+// its markers no longer touches the map directly, and that the resulting
+// onAreaCameraIntent → cameraIntent → MapController round trip produces
+// exactly one camera call.
 vi.mock('@/components/map/SchoolMarkerLayer', () => ({
   SchoolMarkerLayer: () => null,
 }));
@@ -117,6 +111,7 @@ vi.mock('@/components/ui/card', () => ({
 
 // ─── Imports after mocks ───────────────────────────────────────
 import { PropertyMap } from '@/components/map/PropertyMap';
+import type { CameraIntent } from '@/hooks/useDiscoverMapData';
 
 const AREA: AreaPoint = {
   areaKey: 'IN|KA|Udupi|Manipal',
@@ -126,88 +121,154 @@ const AREA: AreaPoint = {
   bbox: [[13.34, 74.78], [13.37, 74.82]],
 };
 
-const baseProps = {
-  listings: [],
-  cityCenter: [13.3409, 74.7421] as [number, number],
-  cityZoom: 11,
-  resetMapTick: 0,
-  areas: [AREA],
-};
+// Stable reference (never a fresh array literal) — MapController's city-change
+// flyTo effect is keyed on cityCenter identity, so an inline array literal in
+// the Harness's JSX would look like a "city changed" on every re-render and
+// fire a spurious extra flyTo, unrelated to the behaviour under test here.
+const CITY_CENTER: [number, number] = [13.3409, 74.7421];
 
-describe('Issue #1798 diagnostic — multi-tick camera collision on marker click', () => {
+/**
+ * Simulates the real MapDiscovery↔useDiscoverMapData round trip: MapDiscovery
+ * passes onAreaCameraIntent down to PropertyMap, and PropertyMap is
+ * re-rendered with the resulting cameraIntent once "published" — exactly
+ * like publishCameraIntent's setCameraIntent would trigger a MapDiscovery
+ * re-render in the real app.
+ */
+function CameraIntentHarness({
+  areas,
+  focusBounds = null,
+}: {
+  areas: AreaPoint[];
+  focusBounds?: [[number, number], [number, number]] | null;
+}) {
+  const [cameraIntent, setCameraIntent] = React.useState<CameraIntent | null>(null);
+  const seqRef = React.useRef(0);
+  const publishCameraIntent = React.useCallback((area: AreaPoint) => {
+    seqRef.current += 1;
+    setCameraIntent({
+      seq: seqRef.current,
+      bounds: area.bbox,
+      center: [area.geo_center_lat, area.geo_center_lon],
+      framing: area.isMacroRegion || area.isGroup ? 'overview' : 'leaf',
+    });
+  }, []);
+
+  return (
+    <PropertyMap
+      listings={[]}
+      cityCenter={CITY_CENTER}
+      cityZoom={11}
+      resetMapTick={0}
+      areas={areas}
+      onAreaCameraIntent={publishCameraIntent}
+      cameraIntent={cameraIntent}
+      focusBounds={focusBounds}
+    />
+  );
+}
+
+describe('Issue #1801 — camera consolidation fixes the multi-call jitter', () => {
   beforeEach(() => {
     mapStub.fitBounds.mockClear();
     mapStub.flyTo.mockClear();
     mapStub.setZoom.mockClear();
+    mapStub.setView.mockClear();
     mapStub.once.mockClear();
+    mapStub.getBoundsZoom.mockClear();
+    mapStub.getBoundsZoom.mockReturnValue(14);
     markerHandlers.clear();
   });
 
-  it('CONFIRMED: AreaMarkerLayer click fitBounds + a later MapController focusBounds fitBounds = 2 independent camera calls for one logical click', () => {
-    const { rerender } = render(<PropertyMap {...baseProps} focusBounds={null} />);
+  it('a single legacy area-marker click produces exactly ONE area-navigation camera call (leaf framing → setView)', () => {
+    render(<CameraIntentHarness areas={[AREA]} />);
 
-    // Sanity: no camera calls yet — mount alone must not move the camera.
     expect(mapStub.fitBounds).not.toHaveBeenCalled();
     expect(mapStub.flyTo).not.toHaveBeenCalled();
+    expect(mapStub.setView).not.toHaveBeenCalled();
 
-    // 1) Simulate the user clicking the area marker. AreaMarkerLayer's own
-    //    marker.on('click', ...) handler fires synchronously and imperatively.
     const clickHandler = markerHandlers.get('click');
     expect(clickHandler, 'AreaMarkerLayer must have registered a click handler').toBeTruthy();
-    clickHandler!();
+    act(() => {
+      clickHandler!();
+    });
 
-    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
-    const [firstBbox, firstOpts] = mapStub.fitBounds.mock.calls[0];
-    expect(firstBbox).toEqual(AREA.bbox);
-    expect(firstOpts).toEqual({ padding: [40, 40], maxZoom: 16 });
-
-    // 2) Time passes: the click also changed `filters.localities` in
-    //    MapDiscovery, the new area's listings query resolves over the
-    //    network, and `activeFocusBounds` recomputes to the bbox of the
-    //    ACTUAL markers in the area (independent of AreaMarkerLayer, and
-    //    typically not identical to the area's static bbox). MapDiscovery
-    //    re-renders PropertyMap with the new `focusBounds` prop.
-    const listingsBounds: [[number, number], [number, number]] = [
-      [13.348, 74.784],
-      [13.357, 74.79],
-    ];
-    rerender(<PropertyMap {...baseProps} focusBounds={listingsBounds} />);
-
-    // MapController's focusBounds effect fires a SECOND, independent camera
-    // call — on the SAME map instance — after the first one already landed.
-    expect(mapStub.fitBounds).toHaveBeenCalledTimes(2);
-    const [secondBbox, secondOpts] = mapStub.fitBounds.mock.calls[1];
-    expect(secondBbox).toEqual(listingsBounds);
-    expect(secondOpts).toEqual({ padding: [50, 50] });
-
-    // The two calls target DIFFERENT bounds — this is the "goes somewhere,
-    // then pulled back" symptom: the camera settles once, then is
-    // re-corrected to a different frame moments later.
-    expect(secondBbox).not.toEqual(firstBbox);
+    // Exactly one camera call total across fitBounds/flyTo/setView.
+    const totalCalls =
+      mapStub.fitBounds.mock.calls.length +
+      mapStub.flyTo.mock.calls.length +
+      mapStub.setView.mock.calls.length;
+    expect(totalCalls).toBe(1);
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
   });
 
-  it('CONFIRMED: non-region/group area click chains a THIRD camera call via zoomend when the fit lands at zoom <= 12', () => {
-    render(<PropertyMap {...baseProps} focusBounds={null} />);
+  // NOTE — qa-fast R4: the degraded-representatives handler (AreaMarkerLayer's
+  // bucketing loop) shares the EXACT same click body as the legacy handler
+  // (`onAreaClick?.(area); onAreaCameraIntent?.(area);`), so the "exactly one
+  // camera call" assertion above already covers its logic byte-for-byte.
+  // Precise per-marker-type click simulation for the degraded path (which
+  // needs a `map.getSize()`/`latLngToContainerPoint` bucketing mock and the
+  // captured-markers-by-index pattern to reliably target a REPRESENTATIVE
+  // marker rather than a dot/cluster) lives in AreaMarkerLayer.test.tsx —
+  // see "degraded-representatives click publishes camera intent, same as
+  // the legacy handler, and the cluster/dots handlers are unaffected".
+
+  it('NO map.once("zoomend", ...) correction is registered on area-marker click (the old 3rd camera call is gone)', () => {
+    render(<CameraIntentHarness areas={[AREA]} />);
 
     const clickHandler = markerHandlers.get('click');
-    clickHandler!();
+    act(() => {
+      clickHandler!();
+    });
+
+    expect(mapStub.once).not.toHaveBeenCalled();
+    expect(mapStub.setZoom).not.toHaveBeenCalled();
+  });
+
+  it('macro-region pin click (overview framing) fits with maxZoom 12, not setView', () => {
+    const REGION: AreaPoint = {
+      ...AREA,
+      areaKey: 'region-1',
+      isMacroRegion: true,
+    };
+    render(<CameraIntentHarness areas={[REGION]} />);
+
+    const clickHandler = markerHandlers.get('click');
+    act(() => {
+      clickHandler!();
+    });
+
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    expect(mapStub.setView).not.toHaveBeenCalled();
+    const [bbox, opts] = mapStub.fitBounds.mock.calls[0];
+    expect(bbox).toEqual(REGION.bbox);
+    expect(opts).toEqual({ padding: [40, 40], maxZoom: 12 });
+  });
 
-    // AreaMarkerLayer registers a one-shot zoomend correction for non
-    // region/group areas: `map.once('zoomend', () => { if (map.getZoom() <= 12)
-    // map.setZoom(13, ...) })`. Simulate the fit settling at zoom 11 (a wide
-    // bbox clamped by viewport) and fire the captured zoomend callback.
-    expect(mapStub.once).toHaveBeenCalledWith('zoomend', expect.any(Function));
-    const zoomendCb = mapStub.once.mock.calls.find(([evt]) => evt === 'zoomend')?.[1];
-    expect(zoomendCb).toBeTruthy();
+  it('a later network-driven focusBounds change following the SAME click does NOT add a second camera call', () => {
+    const { rerender } = render(<CameraIntentHarness areas={[AREA]} />);
+    const clickHandler = markerHandlers.get('click');
+    act(() => {
+      clickHandler!();
+    });
 
-    mapStub.getZoom.mockReturnValue(11);
-    zoomendCb();
+    const totalAfterClick =
+      mapStub.fitBounds.mock.calls.length +
+      mapStub.flyTo.mock.calls.length +
+      mapStub.setView.mock.calls.length;
+    expect(totalAfterClick).toBe(1);
 
-    // A THIRD camera call (setZoom) fires, correcting the just-settled
-    // fitBounds result — on top of the eventual MapController focusBounds
-    // fit from the network-driven activeFocusBounds recompute.
-    expect(mapStub.setZoom).toHaveBeenCalledTimes(1);
-    expect(mapStub.setZoom).toHaveBeenCalledWith(13, { animate: true });
+    // Re-render the SAME Harness (preserving MapController's internal refs)
+    // with a focusBounds prop change — simulating MapDiscovery's
+    // activeFocusBounds settling after the area's listings fetch resolves.
+    // Must NOT add a second camera call (strict fit-once suppression).
+    rerender(
+      <CameraIntentHarness areas={[AREA]} focusBounds={[[13.348, 74.784], [13.357, 74.79]]} />,
+    );
+
+    const totalAfterFocusBounds =
+      mapStub.fitBounds.mock.calls.length +
+      mapStub.flyTo.mock.calls.length +
+      mapStub.setView.mock.calls.length;
+    expect(totalAfterFocusBounds).toBe(1);
   });
 });

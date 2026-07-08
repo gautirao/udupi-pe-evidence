@@ -70,17 +70,24 @@ function projectLatLon(lat: number, lon: number): { x: number; y: number } {
   return { x: (lon - 74.5) * 10000, y: (13.5 - lat) * 10000 };
 }
 
+// Issue #1801 — a single STABLE map stub (not a fresh object per useMap()
+// call) so tests can assert "no camera call happened" across the click.
+// AreaMarkerLayer must no longer call fitBounds/flyTo/setZoom/once itself —
+// MapController (PropertyMap.tsx) is now the sole camera owner.
+const mapStub = vi.hoisted(() => ({
+  fitBounds: vi.fn(),
+  flyTo: vi.fn(),
+  setZoom: vi.fn(),
+  getZoom: vi.fn(() => 11),
+  once: vi.fn(),
+  on: vi.fn(),
+  off: vi.fn(),
+  getSize: vi.fn(() => ({ x: 1200, y: 800 })),
+  latLngToContainerPoint: vi.fn(([lat, lon]: [number, number]) => projectLatLon(lat, lon)),
+}));
+
 vi.mock('react-leaflet', () => ({
-  useMap: vi.fn(() => ({
-    fitBounds: vi.fn(),
-    flyTo: vi.fn(),
-    getZoom: vi.fn(() => 11),
-    once: vi.fn(),
-    on: vi.fn(),
-    off: vi.fn(),
-    getSize: vi.fn(() => ({ x: 1200, y: 800 })),
-    latLngToContainerPoint: vi.fn(([lat, lon]: [number, number]) => projectLatLon(lat, lon)),
-  })),
+  useMap: vi.fn(() => mapStub),
 }));
 
 vi.mock('leaflet/dist/leaflet.css', () => ({}));
@@ -547,5 +554,140 @@ describe('AreaMarkerLayer — dense-group degradation (Issue #1798 PR-B, enableD
       <AreaMarkerLayer areas={DENSE_GROUP_AREAS} onMarkersComputed={onMarkersComputed} />,
     );
     expect(onMarkersComputed).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Issue #1801 — camera consolidation: AreaMarkerLayer no longer touches
+// the map camera directly. onAreaCameraIntent publishes the optimistic
+// intent; MapController (PropertyMap.tsx) is the sole camera owner. ────────
+describe('AreaMarkerLayer — Issue #1801 camera-intent click contract', () => {
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+    capturedMarkers.length = 0;
+    mapStub.fitBounds.mockClear();
+    mapStub.flyTo.mockClear();
+    mapStub.setZoom.mockClear();
+    mapStub.once.mockClear();
+  });
+
+  it('legacy full-pin click: fires onAreaClick + onAreaCameraIntent, and makes NO direct map camera call', () => {
+    const onAreaClick = vi.fn();
+    const onAreaCameraIntent = vi.fn();
+    render(
+      <AreaMarkerLayer
+        areas={[AREA_A]}
+        onAreaClick={onAreaClick}
+        onAreaCameraIntent={onAreaCameraIntent}
+      />,
+    );
+
+    expect(capturedMarkers).toHaveLength(1);
+    capturedMarkers[0].handlers.click();
+
+    expect(onAreaClick).toHaveBeenCalledTimes(1);
+    expect(onAreaClick).toHaveBeenCalledWith(AREA_A);
+    expect(onAreaCameraIntent).toHaveBeenCalledTimes(1);
+    expect(onAreaCameraIntent).toHaveBeenCalledWith(AREA_A);
+
+    // The old imperative camera calls (fitBounds/flyTo/setZoom + the
+    // zoomend→setZoom(13) correction) must be gone from this handler.
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+    expect(mapStub.flyTo).not.toHaveBeenCalled();
+    expect(mapStub.setZoom).not.toHaveBeenCalled();
+    expect(mapStub.once).not.toHaveBeenCalled();
+  });
+
+  it('legacy full-pin click: onAreaCameraIntent is optional — a missing prop must not throw', () => {
+    const onAreaClick = vi.fn();
+    render(<AreaMarkerLayer areas={[AREA_A]} onAreaClick={onAreaClick} />);
+
+    expect(() => capturedMarkers[0].handlers.click()).not.toThrow();
+    expect(onAreaClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('degraded-representatives click: fires onAreaClick + onAreaCameraIntent, same contract as the legacy handler, and makes NO direct map camera call', () => {
+    const onAreaClick = vi.fn();
+    const onAreaCameraIntent = vi.fn();
+    render(
+      <AreaMarkerLayer
+        areas={DENSE_GROUP_AREAS}
+        enableDegradation
+        onAreaClick={onAreaClick}
+        onAreaCameraIntent={onAreaCameraIntent}
+      />,
+    );
+
+    const repIndex = capturedDivIconCalls.findIndex((c) => c.html.includes('data-testid="area-marker"'));
+    expect(repIndex).toBeGreaterThanOrEqual(0);
+    capturedMarkers[repIndex].handlers.click();
+
+    expect(onAreaClick).toHaveBeenCalledTimes(1);
+    expect(onAreaCameraIntent).toHaveBeenCalledTimes(1);
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+    expect(mapStub.flyTo).not.toHaveBeenCalled();
+    expect(mapStub.setZoom).not.toHaveBeenCalled();
+    expect(mapStub.once).not.toHaveBeenCalled();
+  });
+
+  it('dots handler is UNCHANGED: fires onAreaClick only — never onAreaCameraIntent, never a camera call', () => {
+    const onAreaClick = vi.fn();
+    const onAreaCameraIntent = vi.fn();
+    // Band 9-15 (design-spec §1): the bucketer slices the rank-sorted list
+    // directly into top-8 representatives + the rest as dots, with NO
+    // clustering — the simplest fixture that deterministically produces >=1
+    // dot. DENSE_GROUP_AREAS (29 areas, band 16+) folds all demoted areas
+    // into clusters of 4-5 members, so it never produces a lone dot.
+    const MEDIUM_BAND_AREAS: AreaPoint[] = Array.from({ length: 10 }, (_, i) =>
+      makeArea(`med-${i}`, {
+        geo_center_lat: 13.2 + i * 0.03,
+        geo_center_lon: 74.6 + i * 0.03,
+        listingCount: 10 - i,
+      }),
+    );
+    render(
+      <AreaMarkerLayer
+        areas={MEDIUM_BAND_AREAS}
+        enableDegradation
+        onAreaClick={onAreaClick}
+        onAreaCameraIntent={onAreaCameraIntent}
+      />,
+    );
+
+    const dotIndex = capturedDivIconCalls.findIndex((c) =>
+      c.html.includes('data-testid="area-marker-dot"'),
+    );
+    expect(dotIndex).toBeGreaterThanOrEqual(0);
+    capturedMarkers[dotIndex].handlers.click();
+
+    expect(onAreaClick).toHaveBeenCalledTimes(1);
+    expect(onAreaCameraIntent).not.toHaveBeenCalled();
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+    expect(mapStub.flyTo).not.toHaveBeenCalled();
+  });
+
+  it('cluster handler is PRESERVED exactly: still calls map.fitBounds directly and fires onAreaClusterClick, never onAreaClick/onAreaCameraIntent', () => {
+    const onAreaClick = vi.fn();
+    const onAreaCameraIntent = vi.fn();
+    const onAreaClusterClick = vi.fn();
+    render(
+      <AreaMarkerLayer
+        areas={DENSE_GROUP_AREAS}
+        enableDegradation
+        onAreaClick={onAreaClick}
+        onAreaCameraIntent={onAreaCameraIntent}
+        onAreaClusterClick={onAreaClusterClick}
+      />,
+    );
+
+    const clusterIndex = capturedDivIconCalls.findIndex((c) =>
+      c.html.includes('data-testid="area-cluster-marker"'),
+    );
+    expect(clusterIndex).toBeGreaterThanOrEqual(0);
+    capturedMarkers[clusterIndex].handlers.click();
+
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    expect(onAreaClusterClick).toHaveBeenCalledTimes(1);
+    expect(onAreaClick).not.toHaveBeenCalled();
+    expect(onAreaCameraIntent).not.toHaveBeenCalled();
   });
 });

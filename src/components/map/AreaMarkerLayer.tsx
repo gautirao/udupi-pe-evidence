@@ -36,6 +36,15 @@ interface AreaMarkerLayerProps {
   areas: AreaPoint[];
   onAreaClick?: (area: AreaPoint) => void;
   /**
+   * Issue #1801 — fired ONLY from the full labelled-pin click handlers (legacy
+   * areas loop AND the degraded-representatives loop) — never from the dots or
+   * cluster handlers, matching exactly which markers used to move the camera
+   * imperatively before this issue. The parent (MapDiscovery, via
+   * useDiscoverMapData.publishCameraIntent) is the SOLE camera owner; this
+   * layer no longer touches the map instance directly on area-pin click.
+   */
+  onAreaCameraIntent?: (area: AreaPoint) => void;
+  /**
    * When provided, area markers whose areaKey is NOT in this set are rendered
    * at 0.3 opacity (dimmed). Markers IN the set are at full opacity.
    * When undefined (no group selected), all markers are at full opacity.
@@ -283,6 +292,7 @@ function unionBounds(areas: AreaPoint[]): L.LatLngBoundsExpression {
 export function AreaMarkerLayer({
   areas,
   onAreaClick,
+  onAreaCameraIntent,
   focusedGroupAreas,
   journey,
   selectedSchool,
@@ -314,21 +324,18 @@ export function AreaMarkerLayer({
         { icon: makeAreaCard(area, 1.0, journey, selectedSchool) }
       );
 
+      // Issue #1801 — this handler no longer touches the map camera directly.
+      // AreaMarkerLayer used to fire its own fitBounds/flyTo (+ a chained
+      // zoomend→setZoom(13) correction) here, uncoordinated with MapController's
+      // focusBounds effect — the two independent camera calls landing at
+      // different times produced the reported "goes somewhere, then pulled
+      // back" jitter. The parent now owns the camera: onAreaCameraIntent
+      // publishes an optimistic intent synchronously in this click tick, and
+      // MapController (PropertyMap.tsx) is the sole component that calls
+      // map.fitBounds/flyTo/setView for area navigation.
       marker.on('click', () => {
         onAreaClick?.(area);
-        const isOverviewGroupOrRegion = area.isMacroRegion || area.isGroup;
-        if (area.bbox) {
-          map.fitBounds(area.bbox, { padding: [40, 40], maxZoom: isOverviewGroupOrRegion ? 12 : 16 });
-        } else {
-          map.flyTo([area.geo_center_lat, area.geo_center_lon], isOverviewGroupOrRegion ? 12 : 13);
-        }
-        if (!isOverviewGroupOrRegion) {
-          // If the bbox was too large to cross the area→listing zoom threshold (12),
-          // bump to 13 once the animation settles so listing markers appear.
-          map.once('zoomend', () => {
-            if (map.getZoom() <= 12) map.setZoom(13, { animate: true });
-          });
-        }
+        onAreaCameraIntent?.(area);
       });
 
       marker.addTo(map);
@@ -341,7 +348,7 @@ export function AreaMarkerLayer({
   // focusedGroupAreas is an array reference — it changes identity when the group
   // changes, which is correct: re-render recreates markers with new opacity values.
   // journey and selectedSchool change the badge content so must also be deps.
-  }, [areas, map, onAreaClick, focusedGroupAreas, journey, selectedSchool, enableDegradation]);
+  }, [areas, map, onAreaClick, onAreaCameraIntent, focusedGroupAreas, journey, selectedSchool, enableDegradation]);
 
   // ── Degraded path (Issue #1798 PR-B, opt-in) ───────────────────────────────
   // Tracks the current zoom so bucketing recomputes on zoom only (pan-invariant,
@@ -416,21 +423,12 @@ export function AreaMarkerLayer({
       const marker = L.marker([area.geo_center_lat, area.geo_center_lon], {
         icon: makeAreaCard(area, 1.0, journey, selectedSchool),
       });
+      // Issue #1801 — same click contract as the legacy loop above: no direct
+      // camera call here. onAreaCameraIntent publishes the optimistic intent;
+      // MapController is the sole camera owner.
       marker.on('click', () => {
         onAreaClick?.(area);
-        const isOverviewGroupOrRegion = area.isMacroRegion || area.isGroup;
-        if (area.bbox) {
-          map.fitBounds(area.bbox, { padding: [40, 40], maxZoom: isOverviewGroupOrRegion ? 12 : 16 });
-        } else {
-          map.flyTo([area.geo_center_lat, area.geo_center_lon], isOverviewGroupOrRegion ? 12 : 13);
-        }
-        if (!isOverviewGroupOrRegion) {
-          // If the bbox was too large to cross the area→listing zoom threshold (12),
-          // bump to 13 once the animation settles so listing markers appear.
-          map.once('zoomend', () => {
-            if (map.getZoom() <= 12) map.setZoom(13, { animate: true });
-          });
-        }
+        onAreaCameraIntent?.(area);
       });
       marker.addTo(map);
       markers.push(marker);
@@ -486,6 +484,7 @@ export function AreaMarkerLayer({
     areaByKey,
     map,
     onAreaClick,
+    onAreaCameraIntent,
     onAreaClusterClick,
     journey,
     selectedSchool,
