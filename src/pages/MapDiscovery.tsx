@@ -1070,7 +1070,7 @@ export default function MapDiscovery() {
     total: 0,
   });
   const handleAreaMarkersComputed = useCallback((shown: number, total: number) => {
-    setAreaMarkerCounts({ shown, total });
+    setAreaMarkerCounts((prev) => (prev.shown === shown && prev.total === total ? prev : { shown, total }));
   }, []);
 
   // Issue #1160 — school-focus tick for SchoolFocusPanner in PropertyMap.
@@ -2792,6 +2792,50 @@ export default function MapDiscovery() {
   const selectedGroupName =
     focusedGroup?.name ?? (urlState.groupId ? prettifyZoneSlug(urlState.groupId) : null);
 
+  // Issue #1798 PR-B1 — unified region/scope resolution for map breadcrumb hierarchy.
+  const resolvedRegionLabel =
+    (urlState.scope
+      ? summaryRegions.find((r) => r.regionKey.toLowerCase() === urlState.scope?.toLowerCase())?.regionLabel ?? prettifyZoneSlug(urlState.scope)
+      : focusedGroup?.region_label) ?? null;
+
+  const resolvedScopeKeyForHref =
+    urlState.scope ??
+    (focusedGroup?.region_label
+      ? summaryRegions.find((r) => r.regionLabel.toLowerCase() === focusedGroup.region_label!.toLowerCase())?.regionKey ?? focusedGroup.region_label.toLowerCase().replace(/\s+/g, '-')
+      : null);
+
+  const areaJourneySegmentsRaw: { key: string; label: string | null | undefined; emphasis?: DiscoverMapCrumb['emphasis']; maxWidthClass?: string; href?: string }[] = [
+    {
+      key: 'city',
+      label: CITY_CONFIG[city]?.label ?? city,
+      href: (resolvedRegionLabel || focusedGroup || selectedArea || urlState.groupId || urlState.areaKey) ? `/discover?city=${encodeURIComponent(city)}&journey=${encodeURIComponent(urlState.journey || 'area-first')}` : undefined,
+    },
+    {
+      key: 'region',
+      label: resolvedRegionLabel,
+      href: (focusedGroup || selectedArea || urlState.groupId || urlState.areaKey) && resolvedScopeKeyForHref ? `/discover?city=${encodeURIComponent(city)}&journey=${encodeURIComponent(urlState.journey || 'area-first')}&scope=${encodeURIComponent(resolvedScopeKeyForHref)}` : undefined,
+      maxWidthClass: 'max-w-[140px]',
+      emphasis: (focusedGroup || selectedArea || urlState.groupId || urlState.areaKey) ? ('muted' as const) : ('strong' as const),
+    },
+    {
+      key: 'group',
+      label: focusedGroup?.name ?? (urlState.groupId ? prettifyZoneSlug(urlState.groupId) : null),
+      href: (selectedArea || urlState.areaKey) && (focusedGroup?.id || urlState.groupId) ? `/discover?city=${encodeURIComponent(city)}&journey=${encodeURIComponent(urlState.journey || 'area-first')}&groupId=${encodeURIComponent(focusedGroup?.id ?? urlState.groupId!)}` : undefined,
+      maxWidthClass: 'max-w-[160px]',
+      emphasis: (selectedArea || urlState.areaKey) ? ('muted' as const) : ('strong' as const),
+    },
+    {
+      key: 'area',
+      label: selectedArea?.areaLabel ?? areaKeyToLabel(urlState.areaKey),
+      maxWidthClass: 'max-w-[160px]',
+      emphasis: 'strong' as const,
+    },
+  ];
+  const areaJourneySegments: DiscoverMapCrumb[] = areaJourneySegmentsRaw
+    .filter((s): s is { key: string; label: string; emphasis?: DiscoverMapCrumb['emphasis']; maxWidthClass?: string; href?: string } =>
+      typeof s.label === 'string' && s.label.trim().length > 0)
+    .map((s) => ({ key: s.key, label: s.label, emphasis: s.emphasis, maxWidthClass: s.maxWidthClass, href: s.href }));
+
   // Issue #1745 P4 — resolved City › Zone › Area › School segments for the school-journey
   // map breadcrumb (DiscoverMapBreadcrumb). Built here (not inside the shared component,
   // which never filters/fabricates) so any segment whose label hasn't resolved yet is
@@ -2804,6 +2848,7 @@ export default function MapDiscovery() {
   // handful of string comparisons — cheap enough to run on every render without memoizing.
   const schoolJourneySegmentsRaw: { key: string; label: string | null | undefined; emphasis?: DiscoverMapCrumb['emphasis']; maxWidthClass?: string }[] = [
     { key: 'city', label: CITY_CONFIG[city]?.label ?? city },
+    { key: 'region', label: resolvedRegionLabel, maxWidthClass: 'max-w-[140px]' },
     { key: 'zone', label: focusedGroup?.name ?? prettifyZoneSlug(urlState.groupId) },
     { key: 'area', label: selectedArea?.areaLabel ?? areaKeyToLabel(urlState.areaKey) },
     {
@@ -3051,74 +3096,6 @@ export default function MapDiscovery() {
                   { key: 'areas', label: 'Areas', current: true, emphasis: 'strong' },
                 ]}
               />
-            ) : isSelectedGroupState ? (
-              // Issue #1595 (Option A) / Issue #1798 PR-B1 — the area-first selected-group step shows the
-              // dynamic City › Region › Group breadcrumb on the map.
-              <DiscoverMapBreadcrumb
-                testId="map-group-breadcrumb"
-                leadingIcon={MapPin}
-                leadingIconClassName="text-[hsl(var(--copper))]"
-                segments={[
-                  { key: 'city', label: CITY_CONFIG[city]?.label ?? city },
-                  ...((focusedGroup?.region_label || urlState.scope)
-                    ? [
-                        {
-                          key: 'region',
-                          label: focusedGroup?.region_label || prettifyZoneSlug(urlState.scope!),
-                          maxWidthClass: 'max-w-[140px]',
-                          emphasis: 'muted' as const,
-                        },
-                      ]
-                    : []),
-                  {
-                    key: 'group',
-                    label: focusedGroup?.name ?? '',
-                    maxWidthClass: 'max-w-[160px]',
-                    emphasis: 'strong',
-                  },
-                ]}
-              />
-            ) : (isAreaFirstSelectedAreaState || (resolvedPanelContent === 'area-selected' && !!selectedArea)) && (focusedGroup || selectedArea) ? (
-              // Issue #1606 / Issue #1798 PR-B1 — the area-first selected-AREA results step shows the full
-              // City › Region › Group › Area breadcrumb on the map, preserving full hierarchy context.
-              <DiscoverMapBreadcrumb
-                testId="map-group-breadcrumb"
-                leadingIcon={MapPin}
-                leadingIconClassName="text-[hsl(var(--copper))]"
-                segments={[
-                  { key: 'city', label: CITY_CONFIG[city]?.label ?? city },
-                  ...((focusedGroup?.region_label || urlState.scope)
-                    ? [
-                        {
-                          key: 'region',
-                          label: focusedGroup?.region_label || prettifyZoneSlug(urlState.scope!),
-                          maxWidthClass: 'max-w-[140px]',
-                          emphasis: 'muted' as const,
-                        },
-                      ]
-                    : []),
-                  ...(focusedGroup
-                    ? [
-                        {
-                          key: 'group',
-                          label: focusedGroup.name,
-                          maxWidthClass: 'max-w-[160px]',
-                          emphasis: selectedArea?.areaLabel?.trim() ? 'muted' as const : 'strong' as const,
-                        },
-                      ]
-                    : []),
-                  ...(selectedArea?.areaLabel?.trim()
-                    ? [
-                        {
-                          key: 'area',
-                          label: selectedArea.areaLabel,
-                          maxWidthClass: 'max-w-[160px]',
-                          emphasis: 'strong' as const,
-                        },
-                      ]
-                    : []),
-                ]}
-              />
             ) : showSchoolBreadcrumb ? (
               <DiscoverMapBreadcrumb
                 ariaLabel="Journey breadcrumb"
@@ -3129,6 +3106,15 @@ export default function MapDiscovery() {
                 leadingIcon={GraduationCap}
                 leadingIconClassName="text-[hsl(var(--plum))]"
                 segments={schoolJourneySegments}
+              />
+            ) : areaJourneySegments.length > 1 ? (
+              // Issue #1595 / Issue #1606 / Issue #1798 PR-B1 — unified City › Region › Group › Area
+              // map breadcrumb across all area-first drill-down and return states.
+              <DiscoverMapBreadcrumb
+                testId="map-group-breadcrumb"
+                leadingIcon={MapPin}
+                leadingIconClassName="text-[hsl(var(--copper))]"
+                segments={areaJourneySegments}
               />
             ) : (
               <AreaIndicatorOverlay

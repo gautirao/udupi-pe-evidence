@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
@@ -406,9 +406,14 @@ export function AreaMarkerLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enableDegradation, areas, zoomTick, selectedAreaKey, searchMatchKeys, hoveredAreaKey]);
 
+  const lastNotifiedRef = useRef<{ shown: number; total: number } | null>(null);
   useEffect(() => {
-    if (!enableDegradation || !bucketing) return;
-    onMarkersComputed?.(bucketing.representatives.length, areas.length);
+    if (!enableDegradation || !bucketing || !onMarkersComputed) return;
+    const shown = bucketing.representatives.length;
+    const total = areas.length;
+    if (lastNotifiedRef.current?.shown === shown && lastNotifiedRef.current?.total === total) return;
+    lastNotifiedRef.current = { shown, total };
+    onMarkersComputed(shown, total);
   }, [enableDegradation, bucketing, areas.length, onMarkersComputed]);
 
   useEffect(() => {

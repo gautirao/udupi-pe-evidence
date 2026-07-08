@@ -84,6 +84,8 @@ interface AreaSelectedPanelProps {
   cityLabel?: string;
   /** Selected group display name (e.g. "University Belt"); null when group-less. */
   groupName?: string | null;
+  /** Region/scope name (e.g. "North Bangalore"); null when scope-less. */
+  regionName?: string | null;
   /** City slug — drives the in-panel city selector. */
   city?: string;
   /** Called when the user changes city from the in-panel controls card. */
@@ -94,6 +96,8 @@ interface AreaSelectedPanelProps {
   onCrumbHome?: () => void;
   /** Breadcrumb: navigate to the city's area-first landing (city crumb). */
   onCrumbCity?: () => void;
+  /** Breadcrumb: navigate back to the region's landing (region crumb). */
+  onCrumbRegion?: () => void;
   /** Breadcrumb: navigate back to the selected group's drill-down (group crumb). */
   onCrumbGroup?: () => void;
 }
@@ -123,11 +127,13 @@ export function AreaSelectedPanel({
   onHoverListing,
   cityLabel,
   groupName,
+  regionName,
   city,
   onCityChange,
   onIntentChange,
   onCrumbHome,
   onCrumbCity,
+  onCrumbRegion,
   onCrumbGroup,
 }: AreaSelectedPanelProps) {
   const navigate = useNavigate();
@@ -224,10 +230,12 @@ export function AreaSelectedPanel({
       <div className="sticky top-0 z-20 border-b border-border/60 bg-background/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <AreaFirstBreadcrumb
           cityLabel={resolvedCityLabel || areaLabel}
+          regionName={regionName}
           groupName={groupName}
           areaLabel={areaLabel}
           onHome={onCrumbHome}
           onCity={onCrumbCity}
+          onRegion={regionName ? onCrumbRegion : undefined}
           onGroup={groupName ? onCrumbGroup : undefined}
         />
       </div>

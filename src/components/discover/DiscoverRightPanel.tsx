@@ -1460,7 +1460,7 @@ export function DiscoverRightPanel({
       case 'area-selection':
         return <AreaSelectionPanel onStartOver={onStartOver} />;
 
-      case 'area-selected':
+      case 'area-selected': {
         if (!selectedArea) {
           // Issue #1064 AC3/AC4 — explicit hydration vs not-found states.
           // (a) URL has areaKey, areas still loading → skeleton/spinner
@@ -1471,6 +1471,11 @@ export function DiscoverRightPanel({
           }
           return <GuidedEntryPanel {...guidedEntryProps} />;
         }
+        const activeGroup = areaGroups.find((g) => g.id === groupId);
+        const regionName =
+          scope
+            ? summaryRegions?.find((r) => r.regionKey.toLowerCase() === scope.toLowerCase())?.regionLabel ?? prettifyZoneSlug(scope)
+            : activeGroup?.region_label ?? null;
         return (
           <AreaSelectedPanel
             selectedArea={selectedArea}
@@ -1495,17 +1500,20 @@ export function DiscoverRightPanel({
             selectedListingId={selectedListingId}
             onSelectListing={onSelectResultListing}
             onHoverListing={onHoverResultListing}
-            // Issue #1606 — area-first results redesign: breadcrumb + in-panel controls.
+            // Issue #1606 / Issue #1798 PR-B1 — area-first results redesign: breadcrumb + in-panel controls.
             cityLabel={cityLabel ?? city}
+            regionName={regionName}
             groupName={selectedGroupName}
             city={city}
             onCityChange={onCityChange}
             onIntentChange={onIntentChange}
             onCrumbHome={onStartOver}
             onCrumbCity={onNavigateAreaLanding}
+            onCrumbRegion={regionName && onBackToRegion ? () => onBackToRegion(regionName) : undefined}
             onCrumbGroup={onBack}
           />
         );
+      }
 
       case 'school-browse':
         return (
