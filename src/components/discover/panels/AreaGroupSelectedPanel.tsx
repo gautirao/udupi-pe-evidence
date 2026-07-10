@@ -363,6 +363,8 @@ export function AreaGroupSelectedPanel({
           onSelectArea={onSelectArea}
           onSelectSchool={onSelectSchool}
           onQueryChange={onSearchQueryChange}
+          areaKeys={areas.map((a) => a.areaKey)}
+          scopeLabel={group.name}
         />
 
         {/* Issue #1798 PR-B — panel-is-source-of-truth note: only when the map is

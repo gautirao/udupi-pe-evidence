@@ -20,6 +20,13 @@ export interface SchoolResult {
    * May be absent for older API responses that predate the field addition.
    */
   areaKey?: string | null;
+  /**
+   * Issue #1812 — true when this school's area_key is a member of the
+   * `areaKeys` scope sent by the caller; false when it is outside that
+   * scope; null/undefined when no `areaKeys` scope was sent (unscoped
+   * search). Additive — older responses omit this field.
+   */
+  inScope?: boolean | null;
 }
 
 export interface NearbySchoolsResponse {
@@ -35,19 +42,29 @@ const NEARBY_SCHOOLS_KEY = ['nearby-schools'] as const;
  * Debounced autocomplete search for schools.
  * Enabled only when query is at least 2 characters.
  *
- * @param query Free-text search string.
- * @param city  Optional city slug (e.g. "udupi", "bangalore" — same format as
- *              usePopularSchools) to scope results to the active city/region.
- *              Omitted or blank preserves the prior unscoped global search.
+ * @param query    Free-text search string.
+ * @param city     Optional city slug (e.g. "udupi", "bangalore" — same format as
+ *                 usePopularSchools) to scope results to the active city/region.
+ *                 Omitted or blank preserves the prior unscoped global search.
+ * @param areaKeys Issue #1812 — optional group-scoped area keys. When non-empty,
+ *                 sent as a REPEATED `areaKeys` query param (one per key, NOT
+ *                 comma-joined) so the backend can rank in-scope results first
+ *                 and annotate each result's `inScope` field. Omitted/empty
+ *                 preserves the prior unscoped behaviour (no param sent).
  */
-export function useSchoolSearch(query: string, city?: string | null) {
+export function useSchoolSearch(query: string, city?: string | null, areaKeys?: string[] | null) {
   const trimmedCity = city?.trim() ?? '';
+  const hasAreaKeys = !!areaKeys && areaKeys.length > 0;
+  const areaKeysCacheKey = hasAreaKeys ? [...(areaKeys as string[])].sort().join(',') : '';
 
   return useQuery({
-    queryKey: [...SCHOOL_SEARCH_KEY, query, trimmedCity],
+    queryKey: [...SCHOOL_SEARCH_KEY, query, trimmedCity, areaKeysCacheKey],
     queryFn: () => {
       const params = new URLSearchParams({ q: query, limit: '10' });
       if (trimmedCity) params.set('city', trimmedCity);
+      if (hasAreaKeys) {
+        (areaKeys as string[]).forEach((k) => params.append('areaKeys', k));
+      }
       return api.get<SchoolResult[]>(
         `/api/public/schools/search?${params.toString()}`,
         { skipAuth: true },

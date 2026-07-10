@@ -121,6 +121,24 @@ class SchoolRepositoryTest {
     }
 
     /**
+     * Inserts a fixture school with an explicit {@code district} AND {@code area_key}, used by
+     * the group-scoped search tests (issue #1812) to exercise in-scope-first ranking.
+     *
+     * <p>The V80 {@code trg_school_area_key} trigger fires unconditionally on INSERT and
+     * overwrites any {@code area_key} supplied there with its own geography-based computation
+     * (see {@link SchoolAreaKeyTriggerTest} AC1). Per AC3, the trigger is scoped to
+     * {@code lat/lon/district} changes only — a standalone {@code UPDATE ... SET area_key} is
+     * NOT recomputed. So this inserts without {@code area_key}, then issues a separate UPDATE to
+     * pin the exact value the test needs, deterministically bypassing the trigger's real-geography
+     * nearest-area computation.
+     */
+    private void insertSchoolWithDistrictAndAreaKey(
+            String id, String name, double lat, double lon, String district, String areaKey) {
+        insertSchoolWithDistrict(id, name, lat, lon, district);
+        jdbc.update("UPDATE schools SET area_key = ? WHERE id = ?::uuid", areaKey, id);
+    }
+
+    /**
      * Inserts a property listing at the given coordinates with the given status.
      * {@code isValid}, {@code isDuplicate} default to their AC2 requirements.
      *
@@ -395,5 +413,104 @@ class SchoolRepositoryTest {
         assertThat(names)
                 .as("unscoped search (no city param) must preserve today's cross-district behaviour")
                 .contains("Hebbal Cross School", "Hebri Cross School");
+    }
+
+    // ── findByNameContainingIgnoreCaseAndCityAndAreaKeys — issue #1812 group-scoped search ──
+
+    /**
+     * AC2 / RISK1 (the core trap): seeds 11 city matches (limit=10) where the in-scope school
+     * would rank 11th (last) by name ASC alone — past the limit. The scoped query must rank
+     * in-scope FIRST, then apply LIMIT, so the deep-ranked in-scope school still survives and
+     * a normally-in-range out-of-scope school (rank 10, "Zone1 School J") is bumped out instead.
+     */
+    @Test
+    @DisplayName("#1812 AC2: in-scope school ranked deep city-wide survives the limit (in-scope-first, then LIMIT)")
+    void findByNameContainingIgnoreCaseAndCityAndAreaKeys_inScopeRankedDeep_survivesLimit() {
+        // Real V71-seeded Bengaluru area_keys — schools.area_key has an FK to areas.area_key, so
+        // fabricated values would fail the direct UPDATE in insertSchoolWithDistrictAndAreaKey.
+        // Every fixture's area_key is pinned explicitly (not left to the V80 trigger's
+        // nearest-area auto-assignment) so exactly one school ("K") is in-scope — otherwise the
+        // trigger could coincidentally assign "Hebbal" to another fixture by real geography and
+        // contaminate the single-in-scope assumption this test relies on.
+        String groupAreaKey = "IN|KA|Bengaluru|Hebbal";
+        String otherAreaKey = "IN|KA|Bengaluru|Koramangala";
+        String[] suffixes = {"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"};
+        for (int i = 0; i < suffixes.length; i++) {
+            String id = String.format("10000000-0000-0000-0000-0000000020%02d", i);
+            String areaKey = suffixes[i].equals("K") ? groupAreaKey : otherAreaKey;
+            insertSchoolWithDistrictAndAreaKey(
+                    id, "Zone1 School " + suffixes[i], 13.0 + i * 0.01, 77.5, "Bengaluru", areaKey);
+        }
+
+        List<SchoolRepository.ScopedSchoolProjection> results =
+                schoolRepository.findByNameContainingIgnoreCaseAndCityAndAreaKeys(
+                        "Zone1 School", "bangalore", List.of(groupAreaKey), 10);
+
+        assertThat(results).hasSize(10);
+        assertThat(results.get(0).getName())
+                .as("the in-scope school (rank-11 by name alone) must be ranked FIRST")
+                .isEqualTo("Zone1 School K");
+        assertThat(results.get(0).getInScope()).isTrue();
+
+        List<String> names = results.stream().map(SchoolRepository.ScopedSchoolProjection::getName).toList();
+        assertThat(names)
+                .as("in-scope 'K' displaces the next-lowest-ranked out-of-scope school ('J') from the limit")
+                .doesNotContain("Zone1 School J");
+        assertThat(names)
+                .as("the other 9 out-of-scope matches (A-I) still fill the remaining slots")
+                .contains("Zone1 School A", "Zone1 School B", "Zone1 School C", "Zone1 School D",
+                        "Zone1 School E", "Zone1 School F", "Zone1 School G", "Zone1 School H", "Zone1 School I");
+    }
+
+    /**
+     * AC4 / RISK3: strict city boundary is preserved regardless of areaKeys — an out-of-city
+     * school matching the name substring must never appear, even if its area_key were
+     * (impossibly) passed in areaKeys. Proves the new query reuses the district-IN-(areas of
+     * city) JOIN unchanged.
+     */
+    @Test
+    @DisplayName("#1812 AC4: out-of-city school never appears even when its area_key is passed in areaKeys")
+    void findByNameContainingIgnoreCaseAndCityAndAreaKeys_crossCityLeakage_neverOccurs() {
+        // Real V71-seeded Udupi area_key (also used by SchoolAreaKeyTriggerTest) — required by
+        // the schools.area_key FK constraint.
+        String udupiAreaKey = "IN|KA|Udupi|Manipal";
+        insertSchoolWithDistrictAndAreaKey(
+                "10000000-0000-0000-0000-000000003001", "CrossCity Match School",
+                13.3409, 74.7421, "Udupi", udupiAreaKey);
+
+        List<SchoolRepository.ScopedSchoolProjection> results =
+                schoolRepository.findByNameContainingIgnoreCaseAndCityAndAreaKeys(
+                        "CrossCity Match", "bangalore", List.of(udupiAreaKey), 10);
+
+        assertThat(results)
+                .as("Udupi-district school must never leak into a Bangalore-scoped search, "
+                        + "even when its own area_key is (impossibly) supplied as an areaKeys member")
+                .isEmpty();
+    }
+
+    /**
+     * Edge case: a school with a NULL area_key must be ranked out-of-scope (in_scope=false),
+     * never true and never NULL — SQL {@code NULL IN (...)} evaluates to NULL, not TRUE, and the
+     * CASE expression's ELSE branch converts that to false.
+     */
+    @Test
+    @DisplayName("#1812: school with NULL area_key is ranked out-of-scope (in_scope=false)")
+    void findByNameContainingIgnoreCaseAndCityAndAreaKeys_nullAreaKey_isOutOfScope() {
+        String id = "10000000-0000-0000-0000-000000004001";
+        // The V80 trigger auto-assigns a real nearest-area area_key on INSERT (see
+        // SchoolAreaKeyTriggerTest AC1), so a genuinely NULL area_key must be forced via a
+        // standalone UPDATE — which the trigger's lat/lon/district-scoped OF clause does not
+        // recompute (AC3) — rather than relying on the insert leaving it unset.
+        insertSchoolWithDistrict(id, "NullAreaKey Match School", 13.0, 77.5, "Bengaluru");
+        jdbc.update("UPDATE schools SET area_key = NULL WHERE id = ?::uuid", id);
+
+        List<SchoolRepository.ScopedSchoolProjection> results =
+                schoolRepository.findByNameContainingIgnoreCaseAndCityAndAreaKeys(
+                        "NullAreaKey Match", "bangalore", List.of("IN|KA|Bengaluru|SomeOtherGroup"), 10);
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).getInScope())
+                .as("a school with a NULL area_key must never be in_scope=true")
+                .isFalse();
     }
 }

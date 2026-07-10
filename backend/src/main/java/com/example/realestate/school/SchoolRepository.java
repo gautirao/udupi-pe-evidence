@@ -54,6 +54,78 @@ public interface SchoolRepository extends JpaRepository<School, UUID> {
             @Param("citySlug") String citySlug,
             @Param("limit") int limit);
 
+    /**
+     * Group-scoped autocomplete search (issue #1812): same district-based city JOIN as
+     * {@link #findByNameContainingIgnoreCaseAndCity}, but additionally ranks schools whose
+     * {@code area_key} is in {@code areaKeys} FIRST, BEFORE the {@code LIMIT} is applied — so
+     * an in-scope school that would rank past the city-wide limit still survives.
+     *
+     * <p>Leaves {@link #findByNameContainingIgnoreCaseAndCity} untouched; this is a NEW method
+     * that only activates when the caller has both a non-empty {@code areaKeys} collection and a
+     * city (see {@link SchoolService#search(String, int, String, List)}).
+     *
+     * <p>{@code :areaKeys} is bound as a parameterized collection (JPA expands the {@code IN}
+     * clause) — no string interpolation, so a value like {@code area-1" OR "1"="1} is treated as
+     * a literal, not parsed as SQL.
+     *
+     * <p>A {@code null} {@code area_key} never matches the {@code IN} clause (SQL {@code NULL IN
+     * (...)} evaluates to {@code NULL}, not {@code TRUE}), so schools with no area assignment are
+     * always ranked out-of-scope ({@code in_scope=false}).
+     *
+     * @param name     substring to match against school name (case-insensitive)
+     * @param citySlug city slug to scope results to (e.g. "bangalore")
+     * @param areaKeys the focused group's member area keys (non-empty)
+     * @param limit    maximum number of results to return (applied AFTER in-scope ranking)
+     * @return matching schools within the city, in-scope-first, then name ASC, id ASC
+     */
+    @Query(value = """
+            SELECT
+                s.id,
+                s.name,
+                s.board_type      AS "boardType",
+                s.board           AS "board",
+                s.latitude,
+                s.longitude,
+                s.address,
+                s.prominence_tier AS "prominenceTier",
+                s.school_category AS "schoolCategory",
+                s.area_key        AS "areaKey",
+                (CASE WHEN s.area_key IN (:areaKeys) THEN true ELSE false END) AS "inScope"
+            FROM schools s
+            WHERE s.name ILIKE CONCAT('%', CAST(:name AS text), '%')
+              AND s.district IN (
+                  SELECT DISTINCT a.district
+                  FROM areas a
+                  JOIN cities c ON c.id = a.city_id
+                  WHERE c.slug = :citySlug
+              )
+            ORDER BY (CASE WHEN s.area_key IN (:areaKeys) THEN 0 ELSE 1 END), s.name ASC, s.id ASC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<ScopedSchoolProjection> findByNameContainingIgnoreCaseAndCityAndAreaKeys(
+            @Param("name") String name,
+            @Param("citySlug") String citySlug,
+            @Param("areaKeys") List<String> areaKeys,
+            @Param("limit") int limit);
+
+    /**
+     * Projection interface for {@link #findByNameContainingIgnoreCaseAndCityAndAreaKeys} results.
+     * Carries every field {@link SchoolResponse} needs plus the computed {@code in_scope} flag.
+     */
+    interface ScopedSchoolProjection {
+        UUID getId();
+        String getName();
+        String getBoardType();
+        String getBoard();
+        Double getLatitude();
+        Double getLongitude();
+        String getAddress();
+        String getProminenceTier();
+        String getSchoolCategory();
+        String getAreaKey();
+        Boolean getInScope();
+    }
+
     /** Returns all schools with the given board type. */
     List<School> findByBoardType(String boardType);
 

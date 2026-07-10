@@ -137,6 +137,53 @@ class SchoolControllerTest {
         verify(schoolService).search("heb", 10, "  ");
     }
 
+    // ==================== GET /search — areaKeys repeated param (issue #1812) ====================
+
+    @Test
+    void search_withAreaKeysAndCity_delegatesToScopedServiceOverload() throws Exception {
+        SchoolResponse school = new SchoolResponse(
+                SCHOOL_ID.toString(), "Hebbal North School", "CBSE",
+                "CBSE", 13.05, 77.59, "Hebbal, Bengaluru", null, "notable", null, null,
+                "IN|KA|Bengaluru|Hebbal", true);
+
+        when(schoolService.search(eq("heb"), anyInt(), eq("bangalore"),
+                eq(List.of("IN|KA|Bengaluru|Hebbal", "IN|KA|Bengaluru|Yelahanka"))))
+                .thenReturn(List.of(school));
+
+        mockMvc.perform(get("/api/public/schools/search")
+                        .param("q", "heb")
+                        .param("city", "bangalore")
+                        .param("areaKeys", "IN|KA|Bengaluru|Hebbal", "IN|KA|Bengaluru|Yelahanka"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("Hebbal North School"))
+                .andExpect(jsonPath("$[0].inScope").value(true));
+
+        verify(schoolService).search("heb", 10, "bangalore",
+                List.of("IN|KA|Bengaluru|Hebbal", "IN|KA|Bengaluru|Yelahanka"));
+    }
+
+    @Test
+    void search_noAreaKeys_backwardCompatible_routesToUnscopedThreeArgOverload() throws Exception {
+        // Guardrail (AC1): omitting areaKeys must still invoke the unchanged 3-arg overload,
+        // not the 4-arg scoped one, and inScope must be absent/null on the response.
+        SchoolResponse school = new SchoolResponse(
+                SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, null, null, null, null);
+
+        when(schoolService.search(anyString(), anyInt(), eq(null)))
+                .thenReturn(List.of(school));
+
+        mockMvc.perform(get("/api/public/schools/search")
+                        .param("q", "Sharada"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].inScope").value((Object) null));
+
+        verify(schoolService).search("Sharada", 10, null);
+        verify(schoolService, org.mockito.Mockito.never())
+                .search(any(), anyInt(), any(), any());
+    }
+
     // ==================== GET /search — empty query -> 400 ====================
 
     @Test

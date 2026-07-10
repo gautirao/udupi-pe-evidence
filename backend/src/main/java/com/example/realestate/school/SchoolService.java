@@ -94,6 +94,44 @@ public class SchoolService {
     }
 
     /**
+     * Group-scoped autocomplete search (issue #1812). Overload of {@link #search(String, int, String)}
+     * that additionally accepts the focused group's member {@code areaKeys}.
+     *
+     * <p>Activation: the scoped path (in-scope-first ranking, limit applied after ranking) is used
+     * ONLY when {@code areaKeys} is non-empty AND {@code city} is present. Otherwise this delegates
+     * to {@link #search(String, int, String)} unchanged — i.e. empty/absent {@code areaKeys}, or a
+     * blank {@code city} with {@code areaKeys} present, is treated as unscoped/city-only, exactly as
+     * before this overload existed.
+     *
+     * @param query    search string
+     * @param limit    max results (clamped to 1..50)
+     * @param city     optional city slug; required (non-blank) for the scoped path to activate
+     * @param areaKeys the focused group's member area keys; required (non-empty) for the scoped
+     *                 path to activate
+     * @return matching schools as response DTOs; {@code inScope} is set (true/false) only on the
+     *         scoped path, {@code null} otherwise
+     */
+    @Transactional(readOnly = true)
+    public List<SchoolResponse> search(String query, int limit, String city, List<String> areaKeys) {
+        boolean hasAreaKeys = areaKeys != null && !areaKeys.isEmpty();
+        boolean hasCity = city != null && !city.isBlank();
+
+        if (hasAreaKeys && hasCity) {
+            int clampedLimit = Math.max(1, Math.min(50, limit));
+            String trimmedCity = city.trim();
+            log.debug("search(scoped) query='{}' limit={} city='{}' areaKeys={}",
+                    query, clampedLimit, trimmedCity, areaKeys);
+            return repository.findByNameContainingIgnoreCaseAndCityAndAreaKeys(
+                            query, trimmedCity, areaKeys, clampedLimit)
+                    .stream()
+                    .map(SchoolResponse::from)
+                    .toList();
+        }
+
+        return search(query, limit, city);
+    }
+
+    /**
      * Finds schools within a given radius of a point.
      *
      * @param lat       latitude of the centre point

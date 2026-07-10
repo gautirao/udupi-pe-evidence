@@ -34,6 +34,22 @@ export interface ScopedSearchProps {
    * callers keep today's behaviour unchanged (in-panel dropdown only).
    */
   onQueryChange?: (query: string) => void;
+  /**
+   * Issue #1812 — member-area keys of the currently selected neighbourhood
+   * group. When provided (non-empty), school search is scoped: the backend
+   * ranks in-scope schools first and annotates `inScope` on each result, and
+   * out-of-scope rows are labelled with `scopeLabel`. Omitted/empty preserves
+   * the prior unscoped city-wide school search (e.g. the Level-1 city-landing
+   * ScopedSearch, which intentionally does not pass this prop).
+   */
+  areaKeys?: string[];
+  /**
+   * Issue #1812 — human-readable name of the active scope (e.g. the
+   * neighbourhood group's name) shown in the '· outside {scopeLabel}'
+   * indicator for out-of-scope school results. Only used when `areaKeys`
+   * is also non-empty.
+   */
+  scopeLabel?: string;
 }
 
 export function ScopedSearch({
@@ -45,6 +61,8 @@ export function ScopedSearch({
   onSelectArea,
   onSelectSchool,
   onQueryChange,
+  areaKeys,
+  scopeLabel,
 }: ScopedSearchProps) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
@@ -91,7 +109,13 @@ export function ScopedSearch({
   const { data: schoolsData = [], isLoading: isLoadingSchools } = useSchoolSearch(
     searchMode === 'school' ? query : '',
     citySlug,
+    areaKeys,
   );
+
+  // Issue #1812 — the '· outside {scopeLabel}' indicator only makes sense
+  // when a scope is actually active (areaKeys non-empty) and a label to
+  // show is available. Otherwise never render it, regardless of inScope.
+  const showOutOfScopeLabel = !!areaKeys && areaKeys.length > 0 && !!scopeLabel;
 
   const handlePickArea = (areaKey: string) => {
     setQuery('');
@@ -261,9 +285,14 @@ export function ScopedSearch({
                         <p className="text-sm font-bold text-foreground truncate group-hover:text-purple-600 transition-colors">
                           {school.name}
                         </p>
-                        {school.address && (
+                        {(school.address || (showOutOfScopeLabel && school.inScope === false)) && (
                           <p className="text-xs text-muted-foreground truncate">
                             {school.address}
+                            {showOutOfScopeLabel && school.inScope === false && (
+                              <span className="text-muted-foreground/70">
+                                {' '}· outside {scopeLabel}
+                              </span>
+                            )}
                           </p>
                         )}
                       </div>

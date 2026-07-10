@@ -6,6 +6,12 @@ package com.example.realestate.school;
  *
  * <p>{@code nearbyListingCount} is populated only for {@code /popular} responses
  * (count of SCRAPED/LIVE listings within 1 km). All other endpoints return {@code null}.
+ *
+ * <p>{@code inScope} (issue #1812) is populated only for group-scoped
+ * {@code GET /api/public/schools/search?areaKeys=...} results: {@code true} when the school's
+ * {@code areaKey} is a member of the requested {@code areaKeys}, {@code false} otherwise. It is
+ * {@code null} for every other endpoint and for unscoped/city-only search, preserving backward
+ * compatibility (AC6).
  */
 public record SchoolResponse(
         String id,
@@ -19,8 +25,32 @@ public record SchoolResponse(
         String prominenceTier,
         String schoolCategory,
         Integer nearbyListingCount,
-        String areaKey
+        String areaKey,
+        Boolean inScope
 ) {
+    /**
+     * Legacy 12-arg constructor, preserved additively for backward compatibility with existing
+     * callers (production and test) that construct {@code SchoolResponse} directly without an
+     * {@code inScope} value. Delegates to the canonical constructor with {@code inScope=null}.
+     */
+    public SchoolResponse(
+            String id,
+            String name,
+            String boardType,
+            String board,
+            double latitude,
+            double longitude,
+            String address,
+            Double distanceKm,
+            String prominenceTier,
+            String schoolCategory,
+            Integer nearbyListingCount,
+            String areaKey
+    ) {
+        this(id, name, boardType, board, latitude, longitude, address, distanceKm,
+                prominenceTier, schoolCategory, nearbyListingCount, areaKey, null);
+    }
+
     /** Converts a School entity to a response DTO (without distance, without listing count). */
     public static SchoolResponse from(School s) {
         return new SchoolResponse(
@@ -93,6 +123,28 @@ public record SchoolResponse(
                 p.getSchoolCategory(),
                 nearbyListingCount,
                 null
+        );
+    }
+
+    /**
+     * Converts a {@link SchoolRepository.ScopedSchoolProjection} (group-scoped search, issue
+     * #1812) to a response DTO, carrying the computed {@code inScope} flag through.
+     */
+    public static SchoolResponse from(SchoolRepository.ScopedSchoolProjection p) {
+        return new SchoolResponse(
+                p.getId().toString(),
+                p.getName(),
+                p.getBoardType(),
+                p.getBoard(),
+                p.getLatitude(),
+                p.getLongitude(),
+                p.getAddress(),
+                null,
+                p.getProminenceTier(),
+                p.getSchoolCategory(),
+                null,
+                p.getAreaKey(),
+                p.getInScope()
         );
     }
 }

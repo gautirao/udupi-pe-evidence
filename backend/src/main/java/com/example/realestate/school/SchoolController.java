@@ -18,8 +18,9 @@ import java.util.UUID;
  * These paths are explicitly permitted in JwtConfig — no JWT is required.
  *
  * <ul>
- *   <li>GET /api/public/schools/search?q=&amp;limit=&amp;city= — autocomplete search
- *       (optionally scoped to a city; null/blank city preserves unscoped behaviour)</li>
+ *   <li>GET /api/public/schools/search?q=&amp;limit=&amp;city=&amp;areaKeys[]= — autocomplete search
+ *       (optionally scoped to a city; null/blank city preserves unscoped behaviour; optional
+ *       repeated {@code areaKeys} additively ranks a group's member schools first — issue #1812)</li>
  *   <li>GET /api/public/schools/nearby?lat=&amp;lon=&amp;radiusKm= — spatial nearby</li>
  *   <li>GET /api/public/schools/popular?city=&amp;limit=&amp;areaKey=&amp;board[]=&amp;category[] — notable schools</li>
  *   <li>GET /api/public/schools/by-area?areaKey=&amp;board[]=&amp;category[]=&amp;page=&amp;size= — all schools near area</li>
@@ -41,26 +42,34 @@ public class SchoolController {
     /**
      * Autocomplete search for schools by name.
      *
-     * @param q     search query (required, minimum 1 character)
-     * @param limit max results (default 10, clamped to 1..50)
-     * @param city  optional city slug to scope results to (e.g. "udupi"); null/blank preserves
-     *              the original globally-unscoped behaviour
+     * @param q        search query (required, minimum 1 character)
+     * @param limit    max results (default 10, clamped to 1..50)
+     * @param city     optional city slug to scope results to (e.g. "udupi"); null/blank preserves
+     *                 the original globally-unscoped behaviour
+     * @param areaKeys optional repeated param (issue #1812, e.g. {@code areaKeys=a&areaKeys=b})
+     *                 naming the focused group's member area keys. When non-empty AND {@code city}
+     *                 is present, results are ranked in-scope-first (limit applied after ranking)
+     *                 and each result carries an additive {@code inScope} flag. Absent/empty
+     *                 {@code areaKeys} preserves the original behaviour byte-for-byte.
      * @return matching schools
      */
     @GetMapping("/search")
     public ResponseEntity<?> search(
             @RequestParam String q,
             @RequestParam(defaultValue = "10") int limit,
-            @RequestParam(required = false) String city) {
+            @RequestParam(required = false) String city,
+            @RequestParam(name = "areaKeys", required = false) List<String> areaKeys) {
 
         if (q == null || q.isBlank()) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "Query parameter 'q' is required"));
         }
 
-        List<SchoolResponse> results = schoolService.search(q.trim(), limit, city);
-        log.debug("GET /api/public/schools/search q='{}' limit={} city='{}' results={}",
-                q, limit, city, results.size());
+        List<SchoolResponse> results = (areaKeys != null && !areaKeys.isEmpty())
+                ? schoolService.search(q.trim(), limit, city, areaKeys)
+                : schoolService.search(q.trim(), limit, city);
+        log.debug("GET /api/public/schools/search q='{}' limit={} city='{}' areaKeys={} results={}",
+                q, limit, city, areaKeys, results.size());
         return ResponseEntity.ok(results);
     }
 

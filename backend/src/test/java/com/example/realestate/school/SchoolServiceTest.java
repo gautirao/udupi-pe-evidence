@@ -237,6 +237,79 @@ class SchoolServiceTest {
         assertThat(resultsMax).hasSize(1);
     }
 
+    // ==================== search(query, limit, city, areaKeys) — issue #1812 routing ====================
+
+    @Test
+    void search_withAreaKeysAndCity_routesToScopedMethod() {
+        UUID id = UUID.fromString("00000000-0000-0000-0000-000000000030");
+        SchoolRepository.ScopedSchoolProjection proj = stubScopedProjection(
+                id, "Hebbal North School", "CBSE", "CBSE", 13.05, 77.59, "Hebbal",
+                "notable", null, "IN|KA|Bengaluru|Hebbal", true);
+
+        List<String> areaKeys = List.of("IN|KA|Bengaluru|Hebbal", "IN|KA|Bengaluru|Yelahanka");
+        when(repository.findByNameContainingIgnoreCaseAndCityAndAreaKeys(
+                eq("heb"), eq("bangalore"), eq(areaKeys), anyInt()))
+                .thenReturn(List.of(proj));
+
+        List<SchoolResponse> results = service.search("heb", 10, "bangalore", areaKeys);
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).inScope()).isTrue();
+        verify(repository).findByNameContainingIgnoreCaseAndCityAndAreaKeys(
+                eq("heb"), eq("bangalore"), eq(areaKeys), anyInt());
+        verify(repository, never()).findByNameContainingIgnoreCaseAndCity(any(), any(), anyInt());
+        verify(repository, never()).findByNameContainingIgnoreCase(any(), any());
+    }
+
+    @Test
+    void search_emptyAreaKeys_delegatesToUnchangedCityPath() {
+        UUID id = UUID.fromString("00000000-0000-0000-0000-000000000031");
+        School school = stubSchool(id, "Hebbal Public School");
+
+        when(repository.findByNameContainingIgnoreCaseAndCity(eq("heb"), eq("bangalore"), anyInt()))
+                .thenReturn(List.of(school));
+
+        List<SchoolResponse> results = service.search("heb", 10, "bangalore", List.of());
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).inScope()).isNull();
+        verify(repository).findByNameContainingIgnoreCaseAndCity(eq("heb"), eq("bangalore"), anyInt());
+        verify(repository, never()).findByNameContainingIgnoreCaseAndCityAndAreaKeys(
+                any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void search_nullAreaKeys_delegatesToUnchangedCityPath() {
+        UUID id = UUID.fromString("00000000-0000-0000-0000-000000000032");
+        School school = stubSchool(id, "Hebbal Public School");
+
+        when(repository.findByNameContainingIgnoreCaseAndCity(eq("heb"), eq("bangalore"), anyInt()))
+                .thenReturn(List.of(school));
+
+        List<SchoolResponse> results = service.search("heb", 10, "bangalore", null);
+
+        assertThat(results).hasSize(1);
+        verify(repository).findByNameContainingIgnoreCaseAndCity(eq("heb"), eq("bangalore"), anyInt());
+        verify(repository, never()).findByNameContainingIgnoreCaseAndCityAndAreaKeys(
+                any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void search_areaKeysPresent_blankCity_treatedAsUnscoped() {
+        UUID id = UUID.fromString("00000000-0000-0000-0000-000000000033");
+        School school = stubSchool(id, "Hebbal Public School");
+
+        when(repository.findByNameContainingIgnoreCase(eq("heb"), any()))
+                .thenReturn(List.of(school));
+
+        List<SchoolResponse> results = service.search("heb", 10, "  ", List.of("IN|KA|Bengaluru|Hebbal"));
+
+        assertThat(results).hasSize(1);
+        verify(repository).findByNameContainingIgnoreCase(eq("heb"), any());
+        verify(repository, never()).findByNameContainingIgnoreCaseAndCityAndAreaKeys(
+                any(), any(), any(), anyInt());
+    }
+
     // ==================== helpers ====================
 
     private School stubSchool(UUID id, String name) {
@@ -267,6 +340,29 @@ class SchoolServiceTest {
             @Override public String getAddress()      { return address; }
             @Override public String getProminenceTier(){ return prominenceTier; }
             @Override public String getSchoolCategory(){ return schoolCategory; }
+        };
+    }
+
+    /**
+     * Returns a minimal {@link SchoolRepository.ScopedSchoolProjection} backed by a concrete class.
+     */
+    private SchoolRepository.ScopedSchoolProjection stubScopedProjection(
+            UUID id, String name, String boardType, String board,
+            double latitude, double longitude, String address,
+            String prominenceTier, String schoolCategory, String areaKey, Boolean inScope) {
+
+        return new SchoolRepository.ScopedSchoolProjection() {
+            @Override public UUID getId()              { return id; }
+            @Override public String getName()          { return name; }
+            @Override public String getBoardType()     { return boardType; }
+            @Override public String getBoard()         { return board; }
+            @Override public Double getLatitude()      { return latitude; }
+            @Override public Double getLongitude()     { return longitude; }
+            @Override public String getAddress()       { return address; }
+            @Override public String getProminenceTier(){ return prominenceTier; }
+            @Override public String getSchoolCategory(){ return schoolCategory; }
+            @Override public String getAreaKey()       { return areaKey; }
+            @Override public Boolean getInScope()      { return inScope; }
         };
     }
 

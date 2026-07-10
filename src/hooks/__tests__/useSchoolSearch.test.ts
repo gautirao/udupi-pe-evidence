@@ -145,6 +145,121 @@ describe('useSchoolSearch', () => {
       { skipAuth: true },
     );
   });
+
+  // ─── Issue #1812: group-scoped search (areaKeys param) ─────────
+
+  it('sends areaKeys as a repeated param, not comma-joined', async () => {
+    mockGet.mockResolvedValue([sampleSchool]);
+    const { result } = renderHook(
+      () => useSchoolSearch('heb', 'bangalore', ['area-a', 'area-b']),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const calledUrl = mockGet.mock.calls[0][0] as string;
+    const params = new URLSearchParams(calledUrl.split('?')[1]);
+    expect(params.getAll('areaKeys')).toEqual(['area-a', 'area-b']);
+    expect(calledUrl).not.toContain('area-a%2Carea-b');
+    expect(calledUrl).not.toMatch(/areaKeys=area-a,area-b/);
+  });
+
+  it('omits areaKeys param when areaKeys is empty/absent (backward-compat)', async () => {
+    mockGet.mockResolvedValue([sampleSchool]);
+    const { result } = renderHook(() => useSchoolSearch('heb', 'bangalore', []), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGet).toHaveBeenCalledWith(
+      '/api/public/schools/search?q=heb&limit=10&city=bangalore',
+      { skipAuth: true },
+    );
+    const calledUrl = mockGet.mock.calls[0][0] as string;
+    expect(calledUrl).not.toContain('areaKeys');
+  });
+
+  it('produces the same URL/key when areaKeys is omitted entirely (backward-compat)', async () => {
+    mockGet.mockResolvedValue([sampleSchool]);
+    const { result } = renderHook(() => useSchoolSearch('heb', 'bangalore'), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGet).toHaveBeenCalledWith(
+      '/api/public/schools/search?q=heb&limit=10&city=bangalore',
+      { skipAuth: true },
+    );
+  });
+
+  it('scoped and unscoped searches for the same query/city produce distinct query keys (no cache collision)', async () => {
+    mockGet.mockResolvedValueOnce([sampleSchool]).mockResolvedValueOnce([{ ...sampleSchool, id: 's2', inScope: true }]);
+
+    const { result: unscoped } = renderHook(
+      () => useSchoolSearch('hebbal', 'bangalore'),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(unscoped.current.isSuccess).toBe(true));
+
+    const { result: scoped } = renderHook(
+      () => useSchoolSearch('hebbal', 'bangalore', ['area-x']),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(scoped.current.isSuccess).toBe(true));
+
+    // Distinct wrappers = distinct QueryClients, so this only proves both
+    // fetch independently; the real collision-avoidance guarantee is that
+    // each call hit the network (no cross-hook cache short-circuit is
+    // possible to assert without a shared client) — verify via URL shape.
+    expect(mockGet).toHaveBeenNthCalledWith(
+      1,
+      '/api/public/schools/search?q=hebbal&limit=10&city=bangalore',
+      { skipAuth: true },
+    );
+    expect(mockGet).toHaveBeenNthCalledWith(
+      2,
+      '/api/public/schools/search?q=hebbal&limit=10&city=bangalore&areaKeys=area-x',
+      { skipAuth: true },
+    );
+  });
+
+  it('shares one QueryClient: scoped and unscoped queries do not collide in cache', async () => {
+    mockGet.mockResolvedValueOnce([sampleSchool]).mockResolvedValueOnce([{ ...sampleSchool, id: 's2' }]);
+    const wrapper = makeWrapper();
+
+    const { result: unscoped } = renderHook(() => useSchoolSearch('hebbal', 'bangalore'), { wrapper });
+    await waitFor(() => expect(unscoped.current.isSuccess).toBe(true));
+
+    const { result: scoped } = renderHook(
+      () => useSchoolSearch('hebbal', 'bangalore', ['area-x']),
+      { wrapper },
+    );
+    await waitFor(() => expect(scoped.current.isSuccess).toBe(true));
+
+    expect(mockGet).toHaveBeenCalledTimes(2);
+    expect(unscoped.current.data).toEqual([sampleSchool]);
+    expect(scoped.current.data).toEqual([{ ...sampleSchool, id: 's2' }]);
+  });
+
+  it('sorts areaKeys for a stable query key regardless of input order', async () => {
+    mockGet.mockResolvedValue([sampleSchool]);
+    const wrapper = makeWrapper();
+
+    const { result: r1 } = renderHook(
+      () => useSchoolSearch('heb', 'bangalore', ['area-b', 'area-a']),
+      { wrapper },
+    );
+    await waitFor(() => expect(r1.current.isSuccess).toBe(true));
+
+    const { result: r2 } = renderHook(
+      () => useSchoolSearch('heb', 'bangalore', ['area-a', 'area-b']),
+      { wrapper },
+    );
+    await waitFor(() => expect(r2.current.isSuccess).toBe(true));
+
+    // Same underlying key (order-independent) => second hook resolves from
+    // cache without a second network call.
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('useSchoolById', () => {
