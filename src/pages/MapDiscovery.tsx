@@ -1384,18 +1384,19 @@ export default function MapDiscovery() {
     [urlState.filters.boardFilters],
   );
 
-  // Issue #1157 Option (i) — the schools query must fire for the area-first
-  // "add a school in this area" sub-step too, not only school-first. Without this
-  // the area-first SchoolsInAreaPanel renders 0 schools even though school-first
-  // shows the area's full set for the same areaKey. The school-first branch stays
-  // FIRST and byte-identical; the area-first branch is gated on schoolPicking so the
-  // query only runs while the sub-step is active.
+  // Issue #1798 — gate on panelContent (derivePanelContent's own routing result,
+  // already computed above) instead of re-deriving journey === 'area-first' /
+  // 'school-first' here. derivePanelContent resolves to 'schools-in-area' for
+  // school-first+areaKey AND for area-first+schoolPicking AND for the "journeyless"
+  // cold-load case (areaKey + schoolPicking with no explicit journey param — e.g.
+  // /discover?areaKey=...&groupId=... with no journey=, per #1745 Batch B). The prior
+  // literal `journey === 'area-first' && schoolPicking` check missed that third case,
+  // so area-first "Add school" silently returned 0 schools for journeyless area URLs
+  // even though the SchoolsInAreaPanel itself rendered correctly (routed via the same
+  // journeyless fallback in derivePanelContent). Reusing panelContent keeps this query
+  // byte-for-byte in sync with the single source of truth for panel routing.
   const schoolsAreaKey =
-    urlState.journey === 'school-first'
-      ? (urlState.areaKey ?? undefined)
-      : urlState.journey === 'area-first' && urlState.schoolPicking
-        ? (urlState.areaKey ?? undefined)
-        : undefined;
+    panelContent === 'schools-in-area' ? (urlState.areaKey ?? undefined) : undefined;
   const schoolsQuery = useSchoolsByArea(
     schoolsAreaKey,
     urlBoardFilters,
