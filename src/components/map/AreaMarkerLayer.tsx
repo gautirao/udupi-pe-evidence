@@ -8,6 +8,8 @@ import {
   type RankableArea,
   type AreaCluster as BucketedAreaCluster,
 } from '@/lib/map/areaMarkerBucketing';
+import { AREA_LAYER_MAX_ZOOM, clusterCanSplit, hasSpatialSpread } from '@/lib/map/areaClusterSplit';
+import type { CameraIntent } from '@/hooks/useDiscoverMapData';
 
 /**
  * One area marker point.
@@ -88,6 +90,14 @@ interface AreaMarkerLayerProps {
    */
   onAreaClusterClick?: (cluster: AreaMarkerClusterInfo) => void;
   /**
+   * Issue #1806 (FIX-4) — fired ONLY when a cluster click is splittable
+   * (clusterCanSplit === true), with the cluster's union bounds and center.
+   * This layer never calls map.fitBounds/flyTo/setView itself; the parent
+   * (MapDiscovery, via useDiscoverMapData.publishClusterCameraIntent) is the
+   * SOLE camera owner, mirroring onAreaCameraIntent's contract exactly.
+   */
+  onAreaClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
+  /**
    * Fired after each bucketing recompute with (shown, total) area counts, so
    * the parent can render the "Showing X of N areas on the map" panel note.
    */
@@ -102,6 +112,14 @@ export interface AreaMarkerClusterInfo {
   /** Member AREA count — never a property/listing count sum. */
   count: number;
   anchor: { lat: number; lon: number };
+  /**
+   * Issue #1806 (FIX-5) — true when the cluster's union bounds have real
+   * spatial spread AND the capped target zoom exceeds the current zoom (see
+   * clusterCanSplit in src/lib/map/areaClusterSplit.ts). false means the
+   * camera did NOT move for this click — the parent should highlight the
+   * member rows in the panel instead.
+   */
+  splittable: boolean;
 }
 
 /**
@@ -301,6 +319,7 @@ export function AreaMarkerLayer({
   searchMatchKeys,
   hoveredAreaKey,
   onAreaClusterClick,
+  onAreaClusterCameraIntent,
   onMarkersComputed,
 }: AreaMarkerLayerProps) {
   const map = useMap();
@@ -367,16 +386,29 @@ export function AreaMarkerLayer({
   const areaByKey = useMemo(() => new Map(areas.map((a) => [a.areaKey, a])), [areas]);
 
   const bucketing = useMemo(() => {
-    if (!enableDegradation || areas.length === 0) return null;
-    const rankable: RankableArea[] = areas.map((a) => ({
+    if (!enableDegradation) return null;
+    // Issue #1806 (FIX-3) — in-layer scope guard. Mirrors the legacy path's
+    // focusedGroupAreas guard (line ~321): when a group is focused, only its
+    // member areas are eligible to bucket/render at all — non-member areas
+    // must never appear as representatives, dots, OR cluster members. Without
+    // this, a caller that (unlike MapDiscovery today) passes an unfiltered
+    // `areas` prop would silently leak non-member areas into the degraded
+    // view. `overviewAreas` upstream already pre-filters for MapDiscovery's
+    // own call site, so this is a runtime no-op there today — see the
+    // dedicated regression test that passes an intentionally UNFILTERED
+    // `areas` prop to prove the guard fires independently of the caller.
+    const focusedSet = focusedGroupAreas ? new Set(focusedGroupAreas) : null;
+    const scopedAreas = focusedSet ? areas.filter((a) => focusedSet.has(a.areaKey)) : areas;
+    if (scopedAreas.length === 0) return null;
+    const rankable: RankableArea[] = scopedAreas.map((a) => ({
       id: a.areaKey,
       name: a.areaLabel,
       count: a.listingCount ?? 0,
       lat: a.geo_center_lat,
       lon: a.geo_center_lon,
     }));
-    const lats = areas.map((a) => a.geo_center_lat);
-    const lons = areas.map((a) => a.geo_center_lon);
+    const lats = scopedAreas.map((a) => a.geo_center_lat);
+    const lons = scopedAreas.map((a) => a.geo_center_lon);
     const groupBounds = {
       minLat: Math.min(...lats),
       minLon: Math.min(...lons),
@@ -386,7 +418,7 @@ export function AreaMarkerLayer({
     const searchMatchIds =
       searchMatchKeys && searchMatchKeys.length > 0 ? new Set(searchMatchKeys) : undefined;
     const size = map.getSize();
-    return computeAreaMarkers({
+    const result = computeAreaMarkers({
       areas: rankable,
       project: (lat, lon) => {
         const pt = map.latLngToContainerPoint([lat, lon]);
@@ -401,20 +433,24 @@ export function AreaMarkerLayer({
       },
       groupBounds,
     });
+    // totalAreas = the FILTERED count, so onMarkersComputed (and the panel's
+    // "Showing X of N areas" note it feeds) reports an N the panel actually
+    // lists — never the unfiltered `areas.length` (Risk R6).
+    return { ...result, totalAreas: scopedAreas.length };
     // map is stable per PropertyMap instance; zoomTick is the deliberate
     // zoom-only recompute trigger. Pan is intentionally NOT a dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enableDegradation, areas, zoomTick, selectedAreaKey, searchMatchKeys, hoveredAreaKey]);
+  }, [enableDegradation, areas, focusedGroupAreas, zoomTick, selectedAreaKey, searchMatchKeys, hoveredAreaKey]);
 
   const lastNotifiedRef = useRef<{ shown: number; total: number } | null>(null);
   useEffect(() => {
     if (!enableDegradation || !bucketing || !onMarkersComputed) return;
     const shown = bucketing.representatives.length;
-    const total = areas.length;
+    const total = bucketing.totalAreas;
     if (lastNotifiedRef.current?.shown === shown && lastNotifiedRef.current?.total === total) return;
     lastNotifiedRef.current = { shown, total };
     onMarkersComputed(shown, total);
-  }, [enableDegradation, bucketing, areas.length, onMarkersComputed]);
+  }, [enableDegradation, bucketing, onMarkersComputed]);
 
   useEffect(() => {
     if (!enableDegradation || !bucketing) return;
@@ -467,13 +503,45 @@ export function AreaMarkerLayer({
       const anchor: [number, number] = [cluster.anchor.lat, cluster.anchor.lon];
       const marker = L.marker(anchor, { icon: makeClusterIcon(cluster, accent) });
       marker.on('click', () => {
-        map.fitBounds(unionBounds(clusterAreas), { padding: [50, 50], maxZoom: 16 });
+        // Issue #1806 (FIX-4/FIX-5) — this layer never touches the map camera
+        // directly. The removed `map.fitBounds(..., { maxZoom: 16 })` call was
+        // exactly what landed the user ABOVE AREA_LAYER_MAX_ZOOM, tearing down
+        // this degradation layer, dropping focusedGroupAreas, and flipping
+        // markersEnabled true — producing the reported empty map. Instead:
+        // compute the same splittability MapController will actually apply
+        // (getBoundsZoom mirrors MapController's own call, capped to the SAME
+        // AREA_LAYER_MAX_ZOOM MapController's 'overview' branch uses), and
+        // publish a CameraIntent ONLY when the cluster can meaningfully split.
+        const bounds = L.latLngBounds(unionBounds(clusterAreas));
+        const southWest = bounds.getSouthWest();
+        const northEast = bounds.getNorthEast();
+        const cappedTargetZoom = Math.min(
+          AREA_LAYER_MAX_ZOOM,
+          map.getBoundsZoom(bounds, false, L.point(40, 40)),
+        );
+        const splittable = clusterCanSplit(
+          map.getZoom(),
+          cappedTargetZoom,
+          hasSpatialSpread([southWest.lat, southWest.lng], [northEast.lat, northEast.lng]),
+        );
+        if (splittable) {
+          const center = bounds.getCenter();
+          onAreaClusterCameraIntent?.(
+            [[southWest.lat, southWest.lng], [northEast.lat, northEast.lng]],
+            [center.lat, center.lng],
+          );
+        }
+        // Fired unconditionally — splittable=true lets the parent know a
+        // camera move is under way; splittable=false is the parent's signal
+        // to hold the camera still and highlight + scroll the member rows
+        // in the panel instead (the camera never moves in that case).
         onAreaClusterClick?.({
           cellKey: cluster.cellKey,
           areas: clusterAreas,
           dominantName: cluster.dominantName,
           count: cluster.count,
           anchor: cluster.anchor,
+          splittable,
         });
       });
       marker.addTo(map);
@@ -491,6 +559,7 @@ export function AreaMarkerLayer({
     onAreaClick,
     onAreaCameraIntent,
     onAreaClusterClick,
+    onAreaClusterCameraIntent,
     journey,
     selectedSchool,
   ]);

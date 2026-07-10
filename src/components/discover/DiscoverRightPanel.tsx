@@ -844,6 +844,12 @@ export interface DiscoverRightPanelProps {
    * the map can emphasise the matching marker. Never triggers camera movement.
    */
   onAreaHover?: (areaKey: string | null) => void;
+  /**
+   * Issue #1806 (FIX-5e) — member-area keys to highlight in the Level-2
+   * AreaGroupSelectedPanel (reached via the area-groups-landing case below),
+   * fired by a non-splittable area-cluster chip click on the map.
+   */
+  highlightedAreaKeys?: string[];
 }
 
 export function DiscoverRightPanel({
@@ -960,6 +966,7 @@ export function DiscoverRightPanel({
   shownAreaCount,
   totalAreaMarkerCount,
   onAreaHover,
+  highlightedAreaKeys,
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
 
@@ -1340,6 +1347,7 @@ export function DiscoverRightPanel({
               shownAreaCount={shownAreaCount}
               totalAreaMarkerCount={totalAreaMarkerCount}
               onAreaHover={onAreaHover}
+              highlightedAreaKeys={highlightedAreaKeys}
             />
           );
         }
@@ -1367,6 +1375,7 @@ export function DiscoverRightPanel({
             shownAreaCount={shownAreaCount}
             totalAreaMarkerCount={totalAreaMarkerCount}
             onAreaHover={onAreaHover}
+            highlightedAreaKeys={highlightedAreaKeys}
           />
         );
 

@@ -317,6 +317,15 @@ interface PropertyMapProps {
   hoveredAreaKey?: string | null;
   /** Fired when an area-cluster chip is clicked. Passed through to AreaMarkerLayer. */
   onAreaClusterClick?: (cluster: AreaMarkerClusterInfo) => void;
+  /**
+   * Issue #1806 (FIX-4) — fired ONLY for a splittable cluster click, with the
+   * cluster's union bounds/center. Passed through to AreaMarkerLayer unchanged;
+   * the caller is expected to publish it via
+   * useDiscoverMapData.publishClusterCameraIntent and feed the result back
+   * down via the existing `cameraIntent` prop — MapController's unmodified
+   * 'overview' branch (maxZoom 12) then performs the actual camera move.
+   */
+  onAreaClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
   /** Fired after each area-marker bucketing recompute with (shown, total). */
   onAreaMarkersComputed?: (shownCount: number, totalCount: number) => void;
   /** Called on every zoomend with the new zoom level. Used by zoom-band switching logic. */
@@ -1515,6 +1524,7 @@ export function PropertyMap({
   areaSearchMatchKeys,
   hoveredAreaKey,
   onAreaClusterClick,
+  onAreaClusterCameraIntent,
   onAreaMarkersComputed,
   onZoomChange,
   onViewportChange,
@@ -1662,6 +1672,7 @@ export function PropertyMap({
             searchMatchKeys={areaSearchMatchKeys}
             hoveredAreaKey={hoveredAreaKey}
             onAreaClusterClick={onAreaClusterClick}
+            onAreaClusterCameraIntent={onAreaClusterCameraIntent}
             onMarkersComputed={onAreaMarkersComputed}
           />
         )}

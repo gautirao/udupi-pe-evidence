@@ -107,6 +107,12 @@ export type AreaGroupsLandingPanelProps = {
    * Never triggers camera movement.
    */
   onAreaHover?: (areaKey: string | null) => void;
+  /**
+   * Issue #1806 (FIX-5e) — member-area keys to highlight in the Level-2
+   * AreaGroupSelectedPanel, fired by a non-splittable area-cluster chip
+   * click on the map. Forwarded unchanged; not applicable at Level-1.
+   */
+  highlightedAreaKeys?: string[];
 } & (
   | { fallbackAreas: DiscoverArea[]; onSelectArea: (areaKey: string) => void }
   | { fallbackAreas?: never; onSelectArea?: never }
@@ -478,6 +484,7 @@ export function AreaGroupsLandingPanel({
   shownAreaCount,
   totalAreaMarkerCount,
   onAreaHover,
+  highlightedAreaKeys,
 }: AreaGroupsLandingPanelProps) {
   // Issue #1178 — a groupId is "active" only when it is a non-blank string.
   // Trim guards against whitespace-only deep links (e.g. `?groupId=%20`), which
@@ -610,6 +617,7 @@ export function AreaGroupsLandingPanel({
           shownCount={shownAreaCount}
           totalCount={totalAreaMarkerCount}
           onAreaHover={onAreaHover}
+          highlightedAreaKeys={highlightedAreaKeys}
         />
       </div>
     );

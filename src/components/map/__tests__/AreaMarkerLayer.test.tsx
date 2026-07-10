@@ -28,6 +28,26 @@ const capturedMarkers: CapturedMarker[] = [];
 
 // ─── Mocks (must be declared before imports) ──────────────────────────────────
 
+// Issue #1806 — minimal L.latLngBounds + L.point mocks. The cluster click
+// handler now computes bounds/zoom via L.latLngBounds(unionBounds(...)) and
+// L.point(40, 40) instead of calling map.fitBounds directly; without these
+// the component cannot render/click in jsdom. This is shared test
+// infrastructure, not a behavioural assertion — see the DIRECTIVE 3
+// disclosure in the workdone evidence for what is/isn't authorised to change.
+function boundsFromExpression(expr: [number, number][]) {
+  const lats = expr.map((p) => p[0]);
+  const lons = expr.map((p) => p[1]);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons);
+  const maxLon = Math.max(...lons);
+  return {
+    getSouthWest: () => ({ lat: minLat, lng: minLon }),
+    getNorthEast: () => ({ lat: maxLat, lng: maxLon }),
+    getCenter: () => ({ lat: (minLat + maxLat) / 2, lng: (minLon + maxLon) / 2 }),
+  };
+}
+
 vi.mock('leaflet', () => ({
   default: {
     Icon: {
@@ -40,6 +60,8 @@ vi.mock('leaflet', () => ({
       capturedDivIconCalls.push(opts);
       return { options: opts };
     }),
+    point: vi.fn((x: number, y: number) => ({ x, y })),
+    latLngBounds: vi.fn((expr: [number, number][]) => boundsFromExpression(expr)),
     marker: vi.fn(() => {
       const handlers: Record<string, (...args: unknown[]) => void> = {};
       const instance: Record<string, unknown> = {
@@ -79,6 +101,14 @@ const mapStub = vi.hoisted(() => ({
   flyTo: vi.fn(),
   setZoom: vi.fn(),
   getZoom: vi.fn(() => 11),
+  // Issue #1806 — the cluster click handler now calls map.getBoundsZoom to
+  // compute the capped target zoom for the splittable predicate. Default (13)
+  // is above the default getZoom() (11) and AREA_LAYER_MAX_ZOOM (12), so a
+  // real-spatial-spread cluster (the existing DENSE_GROUP_AREAS fixture)
+  // resolves splittable=true by default without every test needing to
+  // override it. Tests exercising the non-splittable branch override this
+  // per-call with mockReturnValueOnce.
+  getBoundsZoom: vi.fn(() => 13),
   once: vi.fn(),
   on: vi.fn(),
   off: vi.fn(),
@@ -568,6 +598,8 @@ describe('AreaMarkerLayer — Issue #1801 camera-intent click contract', () => {
     mapStub.flyTo.mockClear();
     mapStub.setZoom.mockClear();
     mapStub.once.mockClear();
+    mapStub.getBoundsZoom.mockClear();
+    mapStub.getBoundsZoom.mockReturnValue(13);
   });
 
   it('legacy full-pin click: fires onAreaClick + onAreaCameraIntent, and makes NO direct map camera call', () => {
@@ -665,10 +697,30 @@ describe('AreaMarkerLayer — Issue #1801 camera-intent click contract', () => {
     expect(mapStub.flyTo).not.toHaveBeenCalled();
   });
 
-  it('cluster handler is PRESERVED exactly: still calls map.fitBounds directly and fires onAreaClusterClick, never onAreaClick/onAreaCameraIntent', () => {
+  // Issue #1806 (DIRECTIVE 3) — this test previously asserted the BUG:
+  //   "cluster handler is PRESERVED exactly: still calls map.fitBounds
+  //   directly and fires onAreaClusterClick, never onAreaClick/onAreaCameraIntent"
+  //   ...
+  //   expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+  //
+  // That direct `map.fitBounds(..., { maxZoom: 16 })` call is exactly what
+  // lands the user ABOVE AREA_LAYER_MAX_ZOOM, tears down this degradation
+  // layer, drops focusedGroupAreas, and flips markersEnabled true — the
+  // mechanism behind the reported "empty map after clicking +N areas" bug.
+  // Rationale for inversion: the product behaviour this assertion encoded IS
+  // the defect being fixed (bug-repro-report.toml root_cause f9/f13); per
+  // PLAN_REVIEW directive [directives.test_inversion], inverting it is the
+  // one pre-authorised test change in this PR. Split into two tests below —
+  // splittable (camera moves via CameraIntent, never fitBounds) and
+  // non-splittable (camera holds still, panel highlights instead) — matching
+  // FIX-4/FIX-5's two branches.
+  it('splittable cluster click: routes the camera through onAreaClusterCameraIntent (framing=overview), NEVER calls map.fitBounds directly, and fires onAreaClusterClick with splittable=true', () => {
     const onAreaClick = vi.fn();
     const onAreaCameraIntent = vi.fn();
     const onAreaClusterClick = vi.fn();
+    const onAreaClusterCameraIntent = vi.fn();
+    // Default mapStub: getZoom=11, getBoundsZoom=13 → cappedTargetZoom=min(12,13)=12 > 11,
+    // and DENSE_GROUP_AREAS clusters have real spatial spread → splittable=true.
     render(
       <AreaMarkerLayer
         areas={DENSE_GROUP_AREAS}
@@ -676,6 +728,7 @@ describe('AreaMarkerLayer — Issue #1801 camera-intent click contract', () => {
         onAreaClick={onAreaClick}
         onAreaCameraIntent={onAreaCameraIntent}
         onAreaClusterClick={onAreaClusterClick}
+        onAreaClusterCameraIntent={onAreaClusterCameraIntent}
       />,
     );
 
@@ -685,9 +738,127 @@ describe('AreaMarkerLayer — Issue #1801 camera-intent click contract', () => {
     expect(clusterIndex).toBeGreaterThanOrEqual(0);
     capturedMarkers[clusterIndex].handlers.click();
 
-    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    // This layer never touches the map camera directly — MapController
+    // (PropertyMap.tsx) is the sole camera owner (Issue #1801/#1806).
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+    expect(mapStub.flyTo).not.toHaveBeenCalled();
+    expect(mapStub.setZoom).not.toHaveBeenCalled();
+
+    expect(onAreaClusterCameraIntent).toHaveBeenCalledTimes(1);
+    const [bounds, center] = onAreaClusterCameraIntent.mock.calls[0];
+    expect(Array.isArray(bounds)).toBe(true);
+    expect(Array.isArray(center)).toBe(true);
+
     expect(onAreaClusterClick).toHaveBeenCalledTimes(1);
+    expect(onAreaClusterClick.mock.calls[0][0].splittable).toBe(true);
+
     expect(onAreaClick).not.toHaveBeenCalled();
     expect(onAreaCameraIntent).not.toHaveBeenCalled();
+  });
+
+  it('non-splittable cluster click (targetZoom <= currentZoom): publishes NO camera intent — the camera holds still — and fires onAreaClusterClick with splittable=false', () => {
+    const onAreaClusterClick = vi.fn();
+    const onAreaClusterCameraIntent = vi.fn();
+    // Force the capped target zoom to NOT exceed the current zoom (11), so
+    // clusterCanSplit returns false regardless of the cluster's real spatial
+    // spread — mirrors the "already as zoomed-in as the area layer allows"
+    // case from areaClusterSplit.test.ts.
+    mapStub.getBoundsZoom.mockReturnValue(5);
+    render(
+      <AreaMarkerLayer
+        areas={DENSE_GROUP_AREAS}
+        enableDegradation
+        onAreaClusterClick={onAreaClusterClick}
+        onAreaClusterCameraIntent={onAreaClusterCameraIntent}
+      />,
+    );
+
+    const clusterIndex = capturedDivIconCalls.findIndex((c) =>
+      c.html.includes('data-testid="area-cluster-marker"'),
+    );
+    expect(clusterIndex).toBeGreaterThanOrEqual(0);
+    capturedMarkers[clusterIndex].handlers.click();
+
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+    expect(mapStub.flyTo).not.toHaveBeenCalled();
+    expect(mapStub.setZoom).not.toHaveBeenCalled();
+    // The camera must hold still — no CameraIntent published at all.
+    expect(onAreaClusterCameraIntent).not.toHaveBeenCalled();
+
+    expect(onAreaClusterClick).toHaveBeenCalledTimes(1);
+    expect(onAreaClusterClick.mock.calls[0][0].splittable).toBe(false);
+  });
+});
+
+// ─── Issue #1806 (FIX-3) — in-layer scope guard for the degraded path ────────
+//
+// Before this fix, the `bucketing` useMemo fed an UNFILTERED `areas` prop
+// straight into computeAreaMarkers; only the legacy (non-degraded) path
+// filtered by focusedGroupAreas. This was a LATENT trap — MapDiscovery's own
+// `overviewAreas` already pre-filters upstream, so this guard is a runtime
+// no-op for MapDiscovery today — but any future/different caller that (unlike
+// MapDiscovery) passes an unfiltered `areas` prop would otherwise leak
+// non-member areas into a "group focused" degraded view. This suite proves
+// the guard fires independently of the caller by deliberately passing an
+// UNFILTERED `areas` prop alongside focusedGroupAreas.
+describe('AreaMarkerLayer — Issue #1806 FIX-3: degraded-path in-layer scope guard', () => {
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+    capturedMarkers.length = 0;
+  });
+
+  // Small, non-dense fixture so bucketing does not additionally fold members
+  // into clusters — every area gets its own representative pin, matching the
+  // legacy-path test fixtures above (AREA_A/AREA_B/AREA_C) and letting the
+  // assertions be about MEMBERSHIP, not clustering.
+  const AREA_D = makeArea('area-d');
+
+  it('renders ONLY focusedGroupAreas members even when `areas` is passed UNFILTERED (A,B,C,D; group=[A,B])', () => {
+    const onMarkersComputed = vi.fn();
+    render(
+      <AreaMarkerLayer
+        areas={[AREA_A, AREA_B, AREA_C, AREA_D]}
+        enableDegradation
+        focusedGroupAreas={['area-a', 'area-b']}
+        onMarkersComputed={onMarkersComputed}
+      />,
+    );
+
+    const pins = capturedDivIconCalls.filter((c) => c.html.includes('data-testid="area-marker"'));
+    expect(pins.some((c) => c.html.includes('area-a'))).toBe(true);
+    expect(pins.some((c) => c.html.includes('area-b'))).toBe(true);
+    // Non-member areas must NEVER appear — not as pins, dots, or cluster members.
+    expect(capturedDivIconCalls.some((c) => c.html.includes('area-c'))).toBe(false);
+    expect(capturedDivIconCalls.some((c) => c.html.includes('area-d'))).toBe(false);
+  });
+
+  it('onMarkersComputed reports the FILTERED total (2), not the unfiltered `areas.length` (4) — Risk R6', () => {
+    const onMarkersComputed = vi.fn();
+    render(
+      <AreaMarkerLayer
+        areas={[AREA_A, AREA_B, AREA_C, AREA_D]}
+        enableDegradation
+        focusedGroupAreas={['area-a', 'area-b']}
+        onMarkersComputed={onMarkersComputed}
+      />,
+    );
+
+    expect(onMarkersComputed).toHaveBeenCalled();
+    const [, total] = onMarkersComputed.mock.calls[onMarkersComputed.mock.calls.length - 1];
+    expect(total).toBe(2);
+  });
+
+  it('regression: focusedGroupAreas=undefined + degradation on → every area still eligible (no accidental over-filtering)', () => {
+    const onMarkersComputed = vi.fn();
+    render(
+      <AreaMarkerLayer
+        areas={[AREA_A, AREA_B, AREA_C, AREA_D]}
+        enableDegradation
+        onMarkersComputed={onMarkersComputed}
+      />,
+    );
+
+    const [, total] = onMarkersComputed.mock.calls[onMarkersComputed.mock.calls.length - 1];
+    expect(total).toBe(4);
   });
 });

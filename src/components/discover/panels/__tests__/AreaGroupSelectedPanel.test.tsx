@@ -9,7 +9,7 @@
  * - Back to all groups + Start over affordances
  * - Group/locality copy resolved via the data/config adapter (no hardcoded JSX)
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render as rtlRender, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
@@ -340,5 +340,78 @@ describe('AreaGroupSelectedPanel — Issue #1597 description priority chain (A2)
     );
     expect(screen.getByTestId('area-group-selected-card')).toHaveTextContent('Copy for group B');
     expect(screen.getByTestId('area-group-selected-card')).not.toHaveTextContent('Copy for group A');
+  });
+});
+
+// ─── Issue #1806 (FIX-5e) — non-splittable cluster click highlight + scroll ──
+//
+// A non-splittable area-cluster chip click on the map holds the camera still
+// (FIX-4/FIX-5) and instead highlights the cluster's member rows here, with
+// the FIRST member scrolled into view. Traced path (DIRECTIVE 4):
+// DiscoverRightPanel 'area-groups-landing' case → AreaGroupsLandingPanel's
+// Level-2 (showLevel2) branch → THIS component.
+describe('AreaGroupSelectedPanel — Issue #1806 FIX-5e: highlightedAreaKeys', () => {
+  // jsdom does not implement scrollIntoView — stub it for every test in this
+  // block so the FIX-5e effect never throws, regardless of whether the test
+  // itself asserts on the call.
+  const scrollIntoViewMock = vi.fn();
+  beforeEach(() => {
+    scrollIntoViewMock.mockClear();
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+  });
+
+  it('applies a highlight treatment to member rows in highlightedAreaKeys, and none to rows not in the set', () => {
+    render(
+      <AreaGroupSelectedPanel
+        {...baseProps}
+        highlightedAreaKeys={['IN|KA|Udupi|Manipal']}
+      />,
+    );
+
+    const manipalRow = screen.getByTestId('browse-all-area-IN|KA|Udupi|Manipal');
+    const udyavaraRow = screen.getByTestId('browse-all-area-IN|KA|Udupi|Udyavara');
+    expect(manipalRow.className).toMatch(/ring-copper/);
+    expect(udyavaraRow.className).not.toMatch(/ring-copper/);
+  });
+
+  it('scrolls the FIRST highlighted member row into view', () => {
+    render(
+      <AreaGroupSelectedPanel
+        {...baseProps}
+        highlightedAreaKeys={['IN|KA|Udupi|Udyavara', 'IN|KA|Udupi|Manipal']}
+      />,
+    );
+
+    expect(scrollIntoViewMock).toHaveBeenCalledTimes(1);
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' });
+    // Called on the FIRST key's row (Udyavara)'s <li> — registerRef is attached
+    // to the row's <li>, not the inner <button> the data-testid lives on.
+    const udyavaraRow = screen.getByTestId('browse-all-area-IN|KA|Udupi|Udyavara');
+    expect(scrollIntoViewMock.mock.instances[0]).toBe(udyavaraRow.closest('li'));
+  });
+
+  it('regression: highlightedAreaKeys=undefined → no highlight treatment on any row, no scrollIntoView call', () => {
+    render(<AreaGroupSelectedPanel {...baseProps} />);
+
+    const manipalRow = screen.getByTestId('browse-all-area-IN|KA|Udupi|Manipal');
+    const udyavaraRow = screen.getByTestId('browse-all-area-IN|KA|Udupi|Udyavara');
+    expect(manipalRow.className).not.toMatch(/ring-copper/);
+    expect(udyavaraRow.className).not.toMatch(/ring-copper/);
+    expect(scrollIntoViewMock).not.toHaveBeenCalled();
+  });
+
+  it('highlight also applies to a zero-property (muted) row without breaking its disabled state', () => {
+    const zeroArea = makeArea({ areaKey: 'IN|KA|Udupi|Zero', name: 'Zero Town', listingCount: 0 });
+    render(
+      <AreaGroupSelectedPanel
+        {...baseProps}
+        areas={[MANIPAL, zeroArea]}
+        highlightedAreaKeys={['IN|KA|Udupi|Zero']}
+      />,
+    );
+
+    const zeroRow = screen.getByTestId('browse-all-area-IN|KA|Udupi|Zero');
+    expect(zeroRow.className).toMatch(/ring-copper/);
+    expect(zeroRow).toHaveAttribute('aria-disabled', 'true');
   });
 });

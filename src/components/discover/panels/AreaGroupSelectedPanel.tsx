@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ArrowRight, ChevronLeft, ChevronRight, Layers, MapPin, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -71,6 +71,14 @@ export interface AreaGroupSelectedPanelProps {
    * any camera movement — purely a marker-emphasis signal.
    */
   onAreaHover?: (areaKey: string | null) => void;
+  /**
+   * Issue #1806 (FIX-5e) — member-area keys to highlight, fired by a
+   * non-splittable area-cluster chip click on the map (the camera holds
+   * still for that click; this is the panel-side consequence instead).
+   * The FIRST key in the array is scrolled into view. Undefined/empty =
+   * no active highlight (default — every existing caller is unaffected).
+   */
+  highlightedAreaKeys?: string[];
 }
 
 // ─── Summary stat tile ──────────────────────────────────────────────────────
@@ -100,11 +108,17 @@ function LocalityCard({
   area,
   onSelectArea,
   onAreaHover,
+  highlighted,
+  registerRef,
 }: {
   area: DiscoverArea;
   onSelectArea: (areaKey: string) => void;
   /** Issue #1798 PR-B — map-marker emphasis signal; null on mouse-leave/blur. */
   onAreaHover?: (areaKey: string | null) => void;
+  /** Issue #1806 (FIX-5e) — true when this row is a member of the active non-splittable cluster click. */
+  highlighted?: boolean;
+  /** Issue #1806 (FIX-5e) — registers this row's DOM node so the panel can scrollIntoView the first highlighted member. */
+  registerRef?: (node: HTMLLIElement | null) => void;
 }) {
   const count = area.listingCount ?? 0;
   const hasProperties = count > 0;
@@ -116,11 +130,14 @@ function LocalityCard({
 
   if (!hasProperties) {
     return (
-      <li>
+      <li ref={registerRef}>
         <div
           data-testid={testId}
           aria-disabled="true"
-          className="rounded-xl border border-border/60 bg-muted/40 p-4"
+          className={cn(
+            'rounded-xl border border-border/60 bg-muted/40 p-4',
+            highlighted && 'ring-2 ring-copper ring-offset-2',
+          )}
           onMouseEnter={() => onAreaHover?.(area.areaKey)}
           onMouseLeave={() => onAreaHover?.(null)}
         >
@@ -146,7 +163,7 @@ function LocalityCard({
   }
 
   return (
-    <li>
+    <li ref={registerRef}>
       <button
         type="button"
         data-testid={testId}
@@ -156,7 +173,10 @@ function LocalityCard({
         onFocus={() => onAreaHover?.(area.areaKey)}
         onBlur={() => onAreaHover?.(null)}
         aria-label={`View ${count} propert${count === 1 ? 'y' : 'ies'} in ${area.name}`}
-        className="group w-full rounded-xl border border-border/70 bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-copper/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(
+          'group w-full rounded-xl border border-border/70 bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-copper/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          highlighted && 'ring-2 ring-copper ring-offset-2',
+        )}
       >
         <div className="flex items-start gap-3.5">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-copper-tint text-copper">
@@ -202,8 +222,29 @@ export function AreaGroupSelectedPanel({
   shownCount,
   totalCount,
   onAreaHover,
+  highlightedAreaKeys,
 }: AreaGroupSelectedPanelProps) {
   const areasRef = useRef<HTMLDivElement | null>(null);
+  // Issue #1806 (FIX-5e) — per-row refs, keyed by areaKey, so the FIRST
+  // highlighted member can be scrolled into view without a full-list
+  // scrollIntoView (which would jump to the top of the section instead of
+  // the actual highlighted row).
+  const rowRefs = useRef<Map<string, HTMLLIElement>>(new Map());
+  const highlightedSet = useMemo(
+    () => (highlightedAreaKeys && highlightedAreaKeys.length > 0 ? new Set(highlightedAreaKeys) : null),
+    [highlightedAreaKeys],
+  );
+
+  useEffect(() => {
+    if (!highlightedAreaKeys || highlightedAreaKeys.length === 0) return;
+    const firstKey = highlightedAreaKeys[0];
+    const node = rowRefs.current.get(firstKey);
+    if (node) {
+      node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    // Only re-run when the highlighted set changes — a new cluster click.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightedAreaKeys]);
 
   // Truthful aggregates — derived only from live area data (never fabricated).
   const areaCount = areas.length;
@@ -425,6 +466,11 @@ export function AreaGroupSelectedPanel({
                     area={area}
                     onSelectArea={onSelectArea}
                     onAreaHover={onAreaHover}
+                    highlighted={highlightedSet?.has(area.areaKey) ?? false}
+                    registerRef={(node) => {
+                      if (node) rowRefs.current.set(area.areaKey, node);
+                      else rowRefs.current.delete(area.areaKey);
+                    }}
                   />
                 ))}
               </ul>

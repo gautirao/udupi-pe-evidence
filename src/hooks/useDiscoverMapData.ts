@@ -81,6 +81,23 @@ export interface UseDiscoverMapDataParams {
    * When undefined or 'sale', no listing_purpose filter is applied (backward-compatible).
    */
   listingPurpose?: string;
+  /**
+   * Issue #1806 (FIX-1) — the active group's member area keys, forwarded to
+   * useDiscoverFilteredMarkers so the map's marker fetch is scoped to the SAME
+   * areas the right panel shows for a selected group, instead of leaking a
+   * city-wide fetch. Three states, all deliberate (see caller):
+   *   undefined  → no group is focused; unscoped city-wide query (unchanged).
+   *   []         → a group IS focused but its area keys have not resolved yet
+   *                 (cold-load race) — the empty-areaKeys guard in
+   *                 useDiscoverFilteredMarkers DISABLES the fetch rather than
+   *                 firing unscoped (fail-safe: empty map, never a wrong map).
+   *   [k1, k2..] → a group is focused and resolved; the fetch is scoped to
+   *                exactly these areas.
+   * The caller (MapDiscovery.tsx) MUST NOT pass this for the school-first
+   * radius surface (schoolId set) — that surface is radius-scoped by design
+   * (#1261), not group-scoped.
+   */
+  groupAreaKeys?: string[];
 }
 
 export interface UseDiscoverMapDataResult {
@@ -108,6 +125,15 @@ export interface UseDiscoverMapDataResult {
   filteredListings: (PropertyListing & { images?: PropertyImage[] })[];
   markerListings: (PropertyListing & { images?: PropertyImage[] })[];
   areaListings: DiscoverCityListingItem[];
+  /**
+   * Issue #1806 (DIRECTIVE 1) — true once the area-listings query has settled
+   * WITH an error (404/500/timeout/etc.), as opposed to settling with a
+   * genuinely empty result. useDiscoverCityListings does not otherwise expose
+   * its error state; callers use this to distinguish "the area truly has zero
+   * listings" (show nothing) from "the query failed" (a distinct case) rather
+   * than conflating both into a bare empty array.
+   */
+  isErrorAreaListings: boolean;
   /**
    * Issue #1261 — cross-area listings within the selected school radius, sourced from
    * the PUBLIC /school-radius-listings endpoint. Populated for anon users (their only
@@ -153,6 +179,19 @@ export interface UseDiscoverMapDataResult {
    * onAreaCameraIntent) — never from a delayed effect or post-fetch callback.
    */
   publishCameraIntent: (area: AreaPoint) => void;
+  /**
+   * Issue #1806 (FIX-4) — sibling producer to publishCameraIntent for an
+   * area-CLUSTER click. Shares the same monotonic seq ref, so MapController's
+   * existing seq-guard treats a cluster intent identically to an area intent
+   * (a fresh click always wins over a stale one, regardless of which producer
+   * published it). Always framing='overview' — a cluster is never a 'leaf'.
+   * Caller passes the cluster's union bounds and center; this does NOT
+   * recompute or validate them.
+   */
+  publishClusterCameraIntent: (
+    bounds: CameraIntent['bounds'],
+    center: [number, number],
+  ) => void;
 }
 
 export function useDiscoverMapData({
@@ -169,6 +208,7 @@ export function useDiscoverMapData({
   bbox,
   journey,
   listingPurpose,
+  groupAreaKeys,
 }: UseDiscoverMapDataParams): UseDiscoverMapDataResult {
   const isCityValid = city in CITY_CONFIG;
 
@@ -212,7 +252,20 @@ export function useDiscoverMapData({
     data: filteredMarkersData,
     isLoading: filteredMarkersLoading,
     isFetching: filteredMarkersFetching,
-  } = useDiscoverFilteredMarkers(city, agriFilters, markersEnabled, bbox, debouncedSearch?.trim() || undefined, listingPurpose, excludePropertyType);
+  } = useDiscoverFilteredMarkers(
+    city,
+    agriFilters,
+    markersEnabled,
+    bbox,
+    debouncedSearch?.trim() || undefined,
+    listingPurpose,
+    excludePropertyType,
+    // Issue #1806 (FIX-1) — group-scope the map's marker fetch. undefined = no
+    // group focused (unchanged, unscoped). [] = a group is focused but not yet
+    // resolved (disables the fetch via the hook's empty-areaKeys guard, never
+    // an unscoped flash). [k1, k2..] = scoped to the group's member areas.
+    groupAreaKeys,
+  );
 
   // ── Static data ───────────────────────────────────────────────────────────
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
@@ -245,7 +298,16 @@ export function useDiscoverMapData({
     ? filters.propertyTypes[0]
     : undefined;
 
-  const { data: cityListingsData, isLoading: isLoadingAreaListings } = useDiscoverCityListings({
+  const {
+    data: cityListingsData,
+    isLoading: isLoadingAreaListings,
+    // Issue #1806 (DIRECTIVE 1) — useDiscoverCityListings previously had its error
+    // state dropped entirely at this call site, so a 404/500/timeout was
+    // indistinguishable from "the area genuinely has zero listings" (both settle
+    // to isLoading=false, data=undefined → areaListings=[] downstream). Exposed
+    // here so the caller's empty-area fallback can tell the two apart.
+    isError: isErrorAreaListings,
+  } = useDiscoverCityListings({
     city,
     areaKeys: selectedArea ? [selectedArea.areaKey] : [],
     limitPerArea: 50, // Issue #1122: raised from 5; backend clamps at 20 server-side (effective ceiling = 20)
@@ -406,6 +468,26 @@ export function useDiscoverMapData({
     });
   }, []);
 
+  // Issue #1806 (FIX-4) — sibling producer for an area-CLUSTER chip click.
+  // Shares cameraIntentSeqRef with publishCameraIntent above so MapController's
+  // seq-guard (`if (cameraIntent.seq <= lastHandledSeqRef.current) return;`)
+  // treats the two producers as one monotonic stream — a fresh cluster click
+  // always wins over a stale area click and vice versa. Always framing='overview':
+  // a cluster is never framed as a 'leaf' (that would arm the 8s focusBounds
+  // suppression with no correlated consumer, and drill past AREA_LAYER_MAX_ZOOM).
+  const publishClusterCameraIntent = useCallback(
+    (bounds: CameraIntent['bounds'], center: [number, number]) => {
+      cameraIntentSeqRef.current += 1;
+      setCameraIntent({
+        seq: cameraIntentSeqRef.current,
+        bounds,
+        center,
+        framing: 'overview',
+      });
+    },
+    [],
+  );
+
   // ── Derived: locality → areaKey map ──────────────────────────────────────
   const localityToAreaKey = useMemo(() => {
     const m = new Map<string, string>();
@@ -452,6 +534,7 @@ export function useDiscoverMapData({
     filteredListings,
     markerListings,
     areaListings,
+    isErrorAreaListings,
     schoolRadiusListings,
     schoolRadiusListingsLoading,
     schoolRadiusHasMore,
@@ -473,5 +556,6 @@ export function useDiscoverMapData({
     markersTotalFilteredElements,
     cameraIntent,
     publishCameraIntent,
+    publishClusterCameraIntent,
   };
 }

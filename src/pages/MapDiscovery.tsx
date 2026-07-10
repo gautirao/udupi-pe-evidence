@@ -12,7 +12,7 @@ import { MarkerPopoverCard } from '@/components/discover/MarkerPopoverCard';
 import { PropertyMap, PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { computeZoneLabelPoints } from '@/lib/schoolZoneLabels';
 import type { ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
-import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
+import type { AreaPoint, AreaMarkerClusterInfo } from '@/components/map/AreaMarkerLayer';
 import { MapFilters } from '@/components/map/MapFilters';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { AreaIndicatorOverlay } from '@/components/discover/AreaIndicatorOverlay';
@@ -1063,6 +1063,16 @@ export default function MapDiscovery() {
   // Never drives any camera movement (no panner ticks are keyed on this state).
   const [hoveredAreaKeyForMap, setHoveredAreaKeyForMap] = useState<string | null>(null);
 
+  // Issue #1806 (FIX-5d) — ephemeral highlight signal from a non-splittable
+  // area-cluster chip click → the panel's member-area rows. NOT persisted to
+  // URL; mirrors hoveredAreaKeyForMap's ephemeral-state pattern above. Never
+  // drives any camera movement (the camera intentionally holds still for a
+  // non-splittable cluster click — see handleAreaClusterClick below).
+  const [highlightedAreaKeys, setHighlightedAreaKeys] = useState<string[]>([]);
+  const handleAreaClusterClick = useCallback((cluster: AreaMarkerClusterInfo) => {
+    setHighlightedAreaKeys(cluster.areas.map((a) => a.areaKey));
+  }, []);
+
   // "Showing X of N areas on the map" — sourced from AreaMarkerLayer's own
   // onMarkersComputed callback (never fetched/fabricated independently).
   const [areaMarkerCounts, setAreaMarkerCounts] = useState<{ shown: number; total: number }>({
@@ -1278,21 +1288,57 @@ export default function MapDiscovery() {
     return false;
   })();
 
+  // Issue #1806 (FIX-1) — group-scope the map's marker fetch. The right panel
+  // (AreaGroupSelectedPanel, reached whenever urlState.groupId resolves to a
+  // real group) already shows only the group's member areas; before this fix
+  // the map's marker fetch ignored groupId entirely and showed city-wide
+  // markers instead (the reported map/panel scope mismatch).
+  //
+  // This MUST be resolved here, before the useDiscoverMapData() call below,
+  // which is earlier in the file than the focusedGroup/focusedGroupAreas
+  // declarations used everywhere else on this page (~line 1631/2102, for
+  // fitBounds + AreaMarkerLayer opacity/degradation props). Deliberately
+  // duplicates that derivation — same resolver (resolveDiscoverGroupForAreaKey),
+  // same inputs (areaGroupsData?.groups, urlState.groupId, urlState.areaKey) —
+  // rather than reordering ~1600 lines of existing hooks to hoist them.
+  //
+  // Journey/state → groupAreaKeys mapping (DIRECTIVE 5):
+  //   groupId == null                                    → undefined (unscoped; unchanged)
+  //   groupId set AND journey==='school-first' AND schoolId set → undefined
+  //     (guard: the school-radius surface is radius-scoped by design (#1261),
+  //     never group-scoped — group-clipping markerListings here would
+  //     silently shrink it, R5).
+  //   groupId set (guard above not tripped) AND group not yet resolved
+  //     (areaGroupsData still loading / groupId matches no group)  → []
+  //     (empty-areaKeys guard DISABLES the fetch — an empty map, never an
+  //     unscoped city-wide flash during the cold-load race, R4).
+  //   groupId set AND group resolved                     → group.area_keys
+  //     (the scoped fetch this fix exists for).
+  const groupAreaKeysForMapData = useMemo((): string[] | undefined => {
+    if (!urlState.groupId) return undefined;
+    if (urlState.journey === 'school-first' && urlState.schoolId) return undefined;
+    const group = resolveDiscoverGroupForAreaKey(areaGroupsData?.groups, urlState.groupId, urlState.areaKey);
+    return group?.area_keys ?? [];
+  }, [urlState.groupId, urlState.journey, urlState.schoolId, urlState.areaKey, areaGroupsData?.groups]);
+
   const {
     areasLoading, listingDataLoading, markersLoading, isLoadingAreaListings,
     isFetching,
     discoverAreas, discoverAreasData, listingsWithCoords, filteredListings,
-    markerListings, areaListings, areaMarkerListings,
+    markerListings, areaListings, isErrorAreaListings, areaMarkerListings,
     schoolRadiusListings, schoolRadiusListingsLoading, schoolRadiusHasMore,
     topLocalities, activeFocusBounds, trendsAreaKeys,
     cityCenter, cityZoom, schoolById, schoolByIdError, error,
     totalElements, totalPages,
     markersTruncated, markersReturnedElements, markersTotalFilteredElements,
     agriAreasData, isLoadingAgriAreas,
-    cameraIntent, publishCameraIntent,
+    cameraIntent, publishCameraIntent, publishClusterCameraIntent,
   } = useDiscoverMapData({
     city, selectedArea, filters: effectiveFilters, debouncedSearch,
     urlSchoolId: urlState.schoolId, isAuthenticated, fitTick,
+    // Issue #1806 (FIX-1) — see groupAreaKeysForMapData above for the full
+    // journey/state → value mapping.
+    groupAreaKeys: groupAreaKeysForMapData,
     // Issue #1118: do NOT include !!urlState.schoolId here. The /api/discover/markers
     // endpoint is auth-gated (returns 401 for anonymous users). Enabling the query for
     // unauthenticated school-first users caused a delayed marker disappearance: placeholderData
@@ -2935,16 +2981,41 @@ export default function MapDiscovery() {
                   // the area's property markers alongside the schools list. Mirrors the
                   // area-first fallback below.
                   if (selectedArea) {
+                    // Issue #1806 (FIX-2 / DIRECTIVE 1) — see the area-first branch below
+                    // for the full settled/error/genuinely-empty rationale (identical here).
                     return isLoadingAreaListings
                       ? []
-                      : (areaMarkerListings.length > 0 ? areaMarkerListings : markerListings);
+                      : (areaMarkerListings.length > 0
+                          ? areaMarkerListings
+                          : (isErrorAreaListings ? markerListings : []));
                   }
                   return [];
                 }
                 // area-first or area-selected: show property markers for the selected area
                 // Works for both explicit area-first journey AND implicit area selection
                 if (selectedArea) {
-                  return isLoadingAreaListings ? [] : (areaMarkerListings.length > 0 ? areaMarkerListings : markerListings);
+                  // Issue #1806 (FIX-2 / DIRECTIVE 1) — a selected area with genuinely
+                  // ZERO listings must show an empty state, not borrowed markers from
+                  // elsewhere (the original bug: after FIX-1, `markerListings` is
+                  // group-scoped rather than city-wide, so falling back to it here would
+                  // still leak "other areas in the same group" — still a scope lie).
+                  //
+                  // "Settled" = !isLoadingAreaListings (query is no longer pending — it
+                  // has resolved to either success or error). Within settled, distinguish:
+                  //   - areaMarkerListings non-empty → the area has real listings; use them.
+                  //   - settled + empty + isErrorAreaListings → the area-listings query
+                  //     itself failed (404/500/timeout — previously indistinguishable from
+                  //     a genuinely empty area, since useDiscoverCityListings' error state
+                  //     was never extracted at the useDiscoverMapData call site). Preserve
+                  //     the pre-existing fallback ONLY for this case, so a query failure
+                  //     still shows something rather than a silently blank map.
+                  //   - settled + empty + NOT isErrorAreaListings → the area genuinely has
+                  //     zero listings with coordinates. Return [] — never markerListings.
+                  return isLoadingAreaListings
+                    ? []
+                    : (areaMarkerListings.length > 0
+                        ? areaMarkerListings
+                        : (isErrorAreaListings ? markerListings : []));
                 }
                 // No area selected: show markers only if authenticated
                 return isAuthenticated ? markerListings : [];
@@ -2993,6 +3064,23 @@ export default function MapDiscovery() {
               // onAreaMarkersComputed feeds the panel's "Showing X of N areas" note.
               areaSearchMatchKeys={areaSearchMatchKeys}
               hoveredAreaKey={hoveredAreaKeyForMap}
+              // Issue #1806 (FIX-4/FIX-5) — area-cluster click wiring. Previously
+              // onAreaClusterClick was threaded PropertyMap → AreaMarkerLayer but
+              // never wired here, so a cluster click's payload was silently
+              // dropped and the layer's own direct map.fitBounds(maxZoom:16) was
+              // the ONLY thing that happened — landing the user above
+              // AREA_LAYER_MAX_ZOOM and producing the reported empty map.
+              // onAreaClusterCameraIntent routes a splittable click's camera
+              // move through the SAME cameraIntent stream as onAreaCameraIntent
+              // (shared seq ref, always framing='overview', maxZoom 12 via
+              // MapController's unmodified 'overview' branch — never the
+              // removed maxZoom:16 fit). onAreaClusterClick highlights + scrolls
+              // the member rows in the panel for BOTH splittable and
+              // non-splittable clicks (the panel note is harmless when the
+              // camera also moved); the camera itself never moves for a
+              // non-splittable click.
+              onAreaClusterCameraIntent={publishClusterCameraIntent}
+              onAreaClusterClick={handleAreaClusterClick}
               onAreaMarkersComputed={handleAreaMarkersComputed}
               schoolZoneLabels={schoolZoneLabels}
               onSelectZone={(groupId) => urlActions.selectGroup(groupId)}
@@ -3538,6 +3626,8 @@ export default function MapDiscovery() {
           onAreaHover={setHoveredAreaKeyForMap}
           shownAreaCount={areaMarkerCounts.shown}
           totalAreaMarkerCount={areaMarkerCounts.total}
+          // Issue #1806 (FIX-5d) — non-splittable cluster click highlight signal.
+          highlightedAreaKeys={highlightedAreaKeys}
           // Issue #1430 — agri-group listing peek wiring.
           onSelectAgriGroupListing={(id) => urlActions.setSelectedListing(id)}
           selectedGroupListingItem={selectedGroupListingItem}
