@@ -5,6 +5,8 @@ import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PublicDiscoverLayout } from '@/components/layout/PublicDiscoverLayout';
 import { MapAreaLegend } from '@/components/discover/MapAreaLegend';
+import { MapRegionOverviewLegend } from '@/components/discover/MapRegionOverviewLegend';
+import { RegionGuidanceCard, type RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
 import { MapAgriLegend } from '@/components/discover/MapAgriLegend';
 import { MapSchoolLegend, type SchoolLegendStage } from '@/components/discover/MapSchoolLegend';
 import { MapMarkerLegend } from '@/components/discover/MapMarkerLegend';
@@ -1062,6 +1064,38 @@ export default function MapDiscovery() {
   // NOT persisted to URL; resets on mouse-leave/blur. Mirrors hoveredListingId above.
   // Never drives any camera movement (no panner ticks are keyed on this state).
   const [hoveredAreaKeyForMap, setHoveredAreaKeyForMap] = useState<string | null>(null);
+
+  // Issue #1808 — transient, NON-URL region-selection-source signal for the
+  // region-overview guidance (map guidance card + region legend + panel
+  // attention ring). Mirrors hoveredListingId/hoveredAreaKeyForMap above:
+  // ephemeral React state only, never written to the URL, never persisted.
+  // Defaults to 'deeplink' so a fresh load with `?scope=` already in the URL
+  // never fires the one-shot pulse (design §5/§9) — the source only flips to
+  // 'map'/'panel' via an explicit click (armRegionSelect below).
+  const [regionSelectSource, setRegionSelectSource] = useState<'map' | 'panel' | 'deeplink'>('deeplink');
+  const [regionSelectNonce, setRegionSelectNonce] = useState(0);
+  // Card dismissal is local UI state only (no storage/backend writes) and
+  // resets on the next region selection (design §5) — see armRegionSelect.
+  const [regionGuideDismissed, setRegionGuideDismissed] = useState(false);
+  const armRegionSelect = useCallback((source: 'map' | 'panel') => {
+    setRegionSelectSource(source);
+    setRegionSelectNonce((n) => n + 1);
+    setRegionGuideDismissed(false);
+  }, []);
+
+  // Issue #1808 §8 — reduced-motion detection for the guidance ring/nudge.
+  // JS-driven (not CSS-only) so behaviour is deterministically testable; the
+  // CSS @media (prefers-reduced-motion: reduce) fallback in index.css is
+  // defense-in-depth for the same rule.
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mql.matches);
+    const handleChange = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
+    mql.addEventListener('change', handleChange);
+    return () => mql.removeEventListener('change', handleChange);
+  }, []);
 
   // Issue #1806 (FIX-5d) — ephemeral highlight signal from a non-splittable
   // area-cluster chip click → the panel's member-area rows. NOT persisted to
@@ -2775,6 +2809,9 @@ export default function MapDiscovery() {
         (areaGroupsData?.groups ?? []).some((g) => g.id === area.areaKey))
     ) {
       urlActions.setScope(area.areaKey);
+      // Issue #1808 — arm the region-overview guidance one-shot pulse. Does
+      // NOT change the setScope call above (regression-guarded state contract).
+      armRegionSelect('map');
       return;
     }
     if ((areaGroupsData?.groups ?? []).some((g) => g.id === area.areaKey)) {
@@ -2782,7 +2819,7 @@ export default function MapDiscovery() {
       return;
     }
     handleAreaClick(area);
-  }, [isTopGroupedAgri, corridorGroups, areaGroupsData, mapLayerKind, urlActions, handleAreaClick, summaryRegions]);
+  }, [isTopGroupedAgri, corridorGroups, areaGroupsData, mapLayerKind, urlActions, handleAreaClick, summaryRegions, armRegionSelect]);
 
   // Issue #1595 — the area-first selected-group drill-down state (a group is focused,
   // no specific area selected yet). Drives the mock-aligned map chrome for this step:
@@ -2836,6 +2873,46 @@ export default function MapDiscovery() {
     (focusedGroup?.region_label
       ? summaryRegions.find((r) => r.regionLabel.toLowerCase() === focusedGroup.region_label!.toLowerCase())?.regionKey ?? focusedGroup.region_label.toLowerCase().replace(/\s+/g, '-')
       : null);
+
+  // Issue #1808 — region-overview predicate (AC2-AC12): scope set, journey
+  // null, no narrower selection. Deliberately independent of resolvedPanelContent
+  // (derivePanelContent does not read `scope` — see discoverPanelState.ts —
+  // so this state still resolves to panelContent 'guided-entry', rendering
+  // GuidedEntryPanel; the guidance ring/helper are wired into GuidedEntryPanel's
+  // existing JourneySwitcher section, NOT AreaGroupsLandingPanel, which is only
+  // reachable once journey is set and is never mounted at this state).
+  const isRegionOverview =
+    urlState.scope != null &&
+    urlState.journey == null &&
+    !urlState.groupId &&
+    !urlState.areaKey &&
+    !urlState.schoolId &&
+    selectedMarkerListing == null;
+
+  // Issue #1808 q1 — marker-accurate variant derived from the ACTUAL resolved
+  // overview markers (never a curated/withheld preview). `overviewAreas` items
+  // carry `isGroup: true` only for the zone/group-bubble branch of the
+  // region-zone-areas layer (see the useMemo above); the direct-group-match
+  // branch returns member AREA points with no `isGroup` flag.
+  const regionOverviewMarkerKind: RegionOverviewMarkerKind =
+    isRegionOverview && mapLayerKind === 'region-zone-areas' && overviewAreas.length > 0
+      ? (overviewAreas.some((a) => a.isGroup) ? 'zones' : 'areas')
+      : null;
+
+  // Issue #1808 — short region label for the map legend line 1 (e.g. "East"
+  // from "East Bangalore"). Presentational formatting only, no new data source.
+  const regionOverviewShortLabel = resolvedRegionLabel
+    ? (() => {
+        const cityLabel = CITY_CONFIG[city]?.label ?? city;
+        const stripped = resolvedRegionLabel.replace(new RegExp(`\\s*${cityLabel}$`, 'i'), '').trim();
+        return stripped.length > 0 ? stripped : resolvedRegionLabel;
+      })()
+    : null;
+
+  // Issue #1808 — the ring/helper (not the card/legend) fire only on an actual
+  // map/panel pick, never on deep-link/refresh (design §5/§9, AC5).
+  const regionGuideVisible = isRegionOverview && !regionGuideDismissed;
+  const regionGuideRingActive = regionGuideVisible && regionSelectSource !== 'deeplink';
 
   const areaJourneySegmentsRaw: { key: string; label: string | null | undefined; emphasis?: DiscoverMapCrumb['emphasis']; maxWidthClass?: string; href?: string }[] = [
     {
@@ -3225,13 +3302,47 @@ export default function MapDiscovery() {
             </div>
           )}
 
+          {/* Issue #1808 — region-overview map guidance card. Region-overview
+              is a sub-state of 'guided-entry' (scope set, journey null), so
+              CitySelect above is already hidden here — no collision. Never
+              covers the map centre or the CitySelect control (top-right
+              desktop / top-of-map mobile, below the breadcrumb). Presentational
+              only — no camera/URL writes. Card + legend render for every
+              source (map/panel/deeplink, AC5); only the ring/nudge are gated
+              to a real map/panel pick via regionGuideRingActive. */}
+          {regionGuideVisible && resolvedRegionLabel && (
+            <RegionGuidanceCard
+              key={regionSelectNonce}
+              regionName={resolvedRegionLabel}
+              markerKind={regionOverviewMarkerKind}
+              pulseEligible={regionGuideRingActive}
+              prefersReducedMotion={prefersReducedMotion}
+              onDismiss={() => setRegionGuideDismissed(true)}
+            />
+          )}
+
           {/* Area-count legend — bottom-left, public landing only. Shown ONLY when there
               are actual area markers on the map (hidden entirely on empty cities), and
               never over the school-radius legend. All landing markers are areas with
-              properties, so only the "Areas with properties" row is shown (Issue #1588). */}
-          {resolvedPanelContent === 'guided-entry' && !schoolRadiusOverlay && overviewAreas.length > 0 && (
+              properties, so only the "Areas with properties" row is shown (Issue #1588).
+              Issue #1808 — excluded at region-overview (scope set), which now shows the
+              marker-accurate MapRegionOverviewLegend below instead; the city-landing
+              (scope=null) rendering here is otherwise unchanged. */}
+          {resolvedPanelContent === 'guided-entry' && !schoolRadiusOverlay && overviewAreas.length > 0 && !isRegionOverview && (
             <div className="absolute bottom-10 left-4 z-[1000]">
               <MapAreaLegend showZeroRow={false} />
+            </div>
+          )}
+
+          {/* Issue #1808 — region-aware legend variant, region-overview only.
+              Gated on regionGuideVisible (not the raw isRegionOverview) so the
+              legend note clears together with the card + ring on dismiss (AC6). */}
+          {regionGuideVisible && !schoolRadiusOverlay && regionOverviewShortLabel && (
+            <div className="absolute bottom-10 left-4 z-[1000]">
+              <MapRegionOverviewLegend
+                regionShortLabel={regionOverviewShortLabel}
+                markerKind={regionOverviewMarkerKind}
+              />
             </div>
           )}
 
@@ -3523,6 +3634,14 @@ export default function MapDiscovery() {
           // Issue #1745 — 4-level residential Discover hierarchy
           scope={urlState.scope ?? null}
           onClearScope={() => urlActions.setScope(null)}
+          // Issue #1808 — region-overview guidance signal, threaded to
+          // GuidedEntryPanel (case 'guided-entry') for the panel attention
+          // ring + aria-live helper on the existing JourneySwitcher section.
+          regionGuideRingActive={regionGuideRingActive}
+          regionGuideMarkerKind={regionOverviewMarkerKind}
+          regionGuideNonce={regionSelectNonce}
+          prefersReducedMotion={prefersReducedMotion}
+          onRegionSelectFromPanel={() => armRegionSelect('panel')}
           summaryRegions={summaryRegions}
           onBackToRegion={(regionLabel) => {
             const targetScope = resolveScopeKeyFromLabel(regionLabel, summaryRegions);

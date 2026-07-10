@@ -327,6 +327,64 @@
   .leaflet-draw-actions a:hover {
     @apply bg-muted;
   }
+
+  /* Issue #1808 — region-selection guidance: one-shot copper attention ring on
+     the panel's existing "choose how to continue" section, plus the map
+     guidance card's directional arrow nudge. Fires only after a map/panel
+     region pick (never on deep-link/refresh/hover/scroll/typing — gated in
+     JS by only ever mounting/keying these classes when source !== 'deeplink';
+     see MapDiscovery.tsx regionSelectSource/regionSelectNonce). Two ~1.6s
+     cycles (~3.2s total), matching the design spec's timing. */
+  .dp-attn-target {
+    border-radius: theme('borderRadius.2xl');
+  }
+
+  .dp-attn-on {
+    animation: dpRing 1.6s ease-in-out 2;
+  }
+
+  /* JS-driven reduced-motion path (matchMedia detected in MapDiscovery) —
+     applied instead of .dp-attn-on so no animation ever starts. */
+  .dp-attn-static {
+    box-shadow: 0 0 0 2px hsl(var(--copper));
+  }
+
+  @keyframes dpRing {
+    0%, 100% { box-shadow: 0 0 0 0 hsl(var(--copper) / 0); }
+    50% { box-shadow: 0 0 0 3px hsl(var(--copper) / 0.55); }
+  }
+
+  .dp-cue-arrow--nudge-x {
+    animation: dpNudge 1.4s ease-in-out 2;
+  }
+
+  .dp-cue-arrow--nudge-y {
+    animation: dpNudgeY 1.4s ease-in-out 2;
+  }
+
+  @keyframes dpNudge {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(3px); }
+  }
+
+  @keyframes dpNudgeY {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(3px); }
+  }
+
+  /* Accessibility (Issue #1808 §8) — every guidance animation has a static
+     fallback; meaning is never motion-dependent. */
+  @media (prefers-reduced-motion: reduce) {
+    .dp-attn-on {
+      animation: none;
+      box-shadow: 0 0 0 2px hsl(var(--copper));
+    }
+
+    .dp-cue-arrow--nudge-x,
+    .dp-cue-arrow--nudge-y {
+      animation: none;
+    }
+  }
 }
 
 /* Custom scrollbar */

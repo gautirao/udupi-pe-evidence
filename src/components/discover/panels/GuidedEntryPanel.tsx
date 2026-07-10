@@ -10,6 +10,8 @@ import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverSummary } from '@/hooks/useDiscoverSummary';
 import { useAreaGroups } from '@/hooks/useAreaGroups';
 import { aggregateMacroRegions } from '@/utils/macroRegionResolver';
+import { cn } from '@/lib/utils';
+import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
 import { TrustStrip } from './_shared';
 
 interface GuidedEntryPanelProps {
@@ -28,6 +30,22 @@ interface GuidedEntryPanelProps {
    * Defaults false so the notice never flashes while areas are still loading.
    */
   isCityEmpty?: boolean;
+  /**
+   * Issue #1808 — true only when the region-overview state is active, not
+   * dismissed, AND the pick came from an actual map/panel click (never
+   * deep-link/refresh). Gates BOTH the aria-live helper and the one-shot
+   * ring on the EXISTING JourneySwitcher section (no new journey-choice
+   * row/component — user decision q2).
+   */
+  regionGuideRingActive?: boolean;
+  /** Issue #1808 q1 — marker-accurate zones/areas variant for the helper copy. */
+  regionGuideMarkerKind?: RegionOverviewMarkerKind;
+  /** Issue #1808 — bumped per fresh region selection; keys the ring so it replays only on a new pick. */
+  regionGuideNonce?: number;
+  /** Issue #1808 §8 — suppresses the ring pulse, replaced by a static ring. */
+  prefersReducedMotion?: boolean;
+  /** Issue #1808 — fired when a region card is selected (not deselected), arming the pulse with source='panel'. */
+  onRegionSelectFromPanel?: () => void;
 }
 
 const EYEBROW = 'text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground';
@@ -76,6 +94,11 @@ export function GuidedEntryPanel({
   totalProperties,
   areasCount,
   isCityEmpty = false,
+  regionGuideRingActive = false,
+  regionGuideMarkerKind = null,
+  regionGuideNonce = 0,
+  prefersReducedMotion = false,
+  onRegionSelectFromPanel,
 }: GuidedEntryPanelProps) {
   const cityLabel = CITY_CONFIG[city]?.label ?? CITY_CONFIG[DEFAULT_CITY].label;
   const [urlState, urlActions] = useDiscoverUrlState();
@@ -97,9 +120,34 @@ export function GuidedEntryPanel({
   const isSummaryLoading = isSummaryLoadingRaw || isGroupsLoading;
 
   const handleRegionClick = (regionKey: string) => {
-    urlActions.setScope(selectedScope === regionKey ? null : regionKey);
+    const isDeselecting = selectedScope === regionKey;
+    urlActions.setScope(isDeselecting ? null : regionKey);
+    // Issue #1808 — arm the region-overview guidance pulse only when actually
+    // SELECTING a region (not the toggle-off/deselect branch). Does not
+    // change the setScope call above (regression-guarded state contract).
+    if (!isDeselecting) {
+      onRegionSelectFromPanel?.();
+    }
   };
   const handleClearScope = () => urlActions.setScope(null);
+
+  // Issue #1808 — marker-accurate aria-live helper mirroring the map
+  // guidance-card body (user decision q1: literally accurate, never a
+  // withholding phrase). Region label reuses the same `regions` list the
+  // cards below already render from — no new data source.
+  const selectedRegionLabel =
+    regions.find((r) => r.regionKey === selectedScope)?.regionLabel ?? selectedScope ?? '';
+  const regionGuideHelperText =
+    regionGuideMarkerKind === 'zones'
+      ? `${selectedRegionLabel} selected. The map shows this region's zones — choose how you want to continue below.`
+      : regionGuideMarkerKind === 'areas'
+        ? `${selectedRegionLabel} selected. The map shows this region's areas — choose how you want to continue below.`
+        : `${selectedRegionLabel} selected. The map shows an overview of this region — choose how you want to continue below.`;
+  const ringClass = regionGuideRingActive
+    ? prefersReducedMotion
+      ? 'dp-attn-static'
+      : 'dp-attn-on'
+    : undefined;
 
   return (
     <div
@@ -165,19 +213,43 @@ export function GuidedEntryPanel({
           </div>
         )}
 
-        {/* Section B: Journey CTAs — the primary decision */}
-        <div className="mb-3.5 flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-          <Compass className="h-[15px] w-[15px] text-[hsl(var(--copper))]" aria-hidden="true" />
-          <span>Choose how you want to search</span>
-        </div>
+        {/* Section B: Journey CTAs — the primary decision.
+            Issue #1808 (decision q2 = RING_EXISTING_SECTION) — this is the
+            EXISTING "choose how to continue" section; the one-shot copper
+            attention ring targets it directly. No new journey-choice row/
+            component is added. `key` remounts on a fresh nonce so the ring
+            animation replays only on a new region pick, never on re-render. */}
+        <div
+          key={regionGuideRingActive ? regionGuideNonce : 'static'}
+          data-testid="journey-switcher-section"
+          className={cn('dp-attn-target', ringClass)}
+        >
+          {/* Issue #1808 — ring + helper fire together, ONLY on an actual
+              map/panel pick (regionGuideRingActive), never on deep-link/
+              refresh. The card + legend (mounted elsewhere in MapDiscovery)
+              still show on every source, per AC5. */}
+          {regionGuideRingActive && (
+            <p
+              aria-live="polite"
+              data-testid="region-guide-helper"
+              className="mb-2.5 text-[13px] font-medium text-[hsl(var(--copper))]"
+            >
+              {regionGuideHelperText}
+            </p>
+          )}
+          <div className="mb-3.5 flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+            <Compass className="h-[15px] w-[15px] text-[hsl(var(--copper))]" aria-hidden="true" />
+            <span>Choose how you want to search</span>
+          </div>
 
-        {/* Journey cards */}
-        <JourneySwitcher
-          onSelectJourney={onSelectJourney}
-          cityLabel={cityLabel}
-          totalProperties={totalProperties}
-          areasCount={areasCount}
-        />
+          {/* Journey cards */}
+          <JourneySwitcher
+            onSelectJourney={onSelectJourney}
+            cityLabel={cityLabel}
+            totalProperties={totalProperties}
+            areasCount={areasCount}
+          />
+        </div>
 
         {/* Section C: Macro regions — secondary "or start with a region" */}
         <div className="my-8 h-px w-full bg-border" />

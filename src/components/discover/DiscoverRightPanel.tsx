@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
+import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
 import { AgriListingPanel } from './panels/AgriListingPanel';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
@@ -547,6 +548,25 @@ export interface DiscoverRightPanelProps {
   onClearScope?: () => void;
   /** Issue #1745 — callback when navigating back to a macro region from Level-2 or breadcrumb. */
   onBackToRegion?: (regionLabel: string) => void;
+  /**
+   * Issue #1808 — true only when the region-overview state is active (scope
+   * set, journey/groupId/areaKey/schoolId all null), not dismissed, AND the
+   * pick came from an actual map/panel click (never deep-link/refresh).
+   * Forwarded to GuidedEntryPanel (the panel actually mounted at this state
+   * — derivePanelContent does not read `scope`, so AreaGroupsLandingPanel is
+   * not reachable here) to show the marker-accurate aria-live helper + the
+   * one-shot ring around its existing JourneySwitcher ("choose how to
+   * continue") section.
+   */
+  regionGuideRingActive?: boolean;
+  /** Issue #1808 q1 — marker-accurate zones/areas variant for the helper copy. */
+  regionGuideMarkerKind?: RegionOverviewMarkerKind;
+  /** Issue #1808 — bumped per fresh region selection; keys the one-shot ring so it replays only on a new pick. */
+  regionGuideNonce?: number;
+  /** Issue #1808 §8 — suppresses the ring pulse/arrow nudge, replaced by a static ring. */
+  prefersReducedMotion?: boolean;
+  /** Issue #1808 — fired when a region card is selected (not deselected) in GuidedEntryPanel, arming the one-shot pulse with source='panel'. */
+  onRegionSelectFromPanel?: () => void;
   /** Issue #1745 — summary regions from /api/discover/summary for safe matching. */
   summaryRegions?: import('@/utils/macroRegionResolver').SummaryRegionRef[];
   /**
@@ -880,6 +900,11 @@ export function DiscoverRightPanel({
   scope = null,
   onClearScope,
   onBackToRegion,
+  regionGuideRingActive = false,
+  regionGuideMarkerKind = null,
+  regionGuideNonce = 0,
+  prefersReducedMotion = false,
+  onRegionSelectFromPanel,
   summaryRegions = [],
   discoverAreas = [],
   onSelectAreaKey,
@@ -981,6 +1006,12 @@ export function DiscoverRightPanel({
     totalProperties,
     areasCount,
     isCityEmpty,
+    // Issue #1808 — region-overview guidance signal (see prop docs above).
+    regionGuideRingActive,
+    regionGuideMarkerKind,
+    regionGuideNonce,
+    prefersReducedMotion,
+    onRegionSelectFromPanel,
   };
 
   // Issue #1531 — PANEL_OPEN telemetry on mount (additive; fire-and-forget; never throws).
