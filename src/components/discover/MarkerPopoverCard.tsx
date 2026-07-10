@@ -5,10 +5,12 @@
  * the clicked marker. Auto-positions so it stays on-screen and handles cluster-
  * expansion (spiderfy) overlap via offset + flip logic.
  *
- * Gating (regression guard): only rendered when
- *   areaKey != null && schoolId == null && journey !== 'agri-first'
- * to mirror the #1547 condition and keep school-first (3 desynced marker tiers)
- * and agri-first (own peek/panel) untouched.
+ * Gating (regression guard, Issue #1798 PR-C): only rendered when
+ *   journey !== 'agri-first' && areaKey != null && (schoolId == null || journey === 'area-first')
+ * — this mirrors MapDiscovery's isMarkerPopoverEligible, which is itself kept identical
+ * to the click-capture gate (handleMarkerClickWithPosition / handleSelectMarkerListing)
+ * so render and capture eligibility cannot drift apart. Keeps school-first (3 desynced
+ * marker tiers) and agri-first (own peek/panel) untouched.
  *
  * Dismiss: X button, Escape key, map-background click.
  * Both Escape and background-click handlers stop propagation on the card itself

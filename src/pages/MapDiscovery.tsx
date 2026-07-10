@@ -2753,38 +2753,24 @@ export default function MapDiscovery() {
     urlState.journey === 'area-first' &&
     !!selectedArea;
 
-  // Issue #1738 — marker popover eligibility. Extends isAreaFirstSelectedAreaState (which
-  // only covers the no-school 'area-selected' step) to ALSO cover the area-first
-  // area+school combined step. derivePanelContent routes BOTH area-first and school-first
-  // (and the no-journey default) area+school selections to the same 'area-school-combined'
-  // panel content, so journey === 'area-first' must be checked explicitly — gating on
-  // panelContent alone would wrongly surface this popover during the school-first journey,
-  // which owns its own tiered/peek marker flows. Scoped ONLY to the popover render below;
-  // isAreaFirstSelectedAreaState itself is left unchanged for its other (breadcrumb/legend/
-  // layout) consumers.
-  const isAreaFirstPopoverEligible =
-    urlState.journey === 'area-first' &&
-    !!selectedArea &&
-    (resolvedPanelContent === 'area-selected' ||
-      resolvedPanelContent === 'area-school-combined');
-
-  // Issue #1798 PR-B — append-only extension of the #1738 popover gate above
-  // (isAreaFirstPopoverEligible is left byte-for-byte unmodified so its existing
-  // regression tests stay green). Restores the marker popover in the
-  // group-results / dense-area-group states, carried forward from the same
-  // product decision made during PR-A's planning (bug-repro regression 2):
-  //   - 'area-group-results': the real Issue #1597 server-filtered group-results
-  //     view (map can show listing markers for the group).
-  //   - isSelectedGroupState: the dense area-group Level-2 state (group focused,
-  //     no area chosen yet) — listing markers can also render underneath the
-  //     area pins there (see the `listings` prop resolution above: authenticated
-  //     users see markerListings even with !selectedArea).
-  // School-first and agri-first are intentionally excluded, unchanged from #1738.
-  const isGroupResultsPopoverEligible =
-    urlState.journey === 'area-first' &&
-    (resolvedPanelContent === 'area-group-results' || isSelectedGroupState);
-
-  const isMarkerPopoverEligible = isAreaFirstPopoverEligible || isGroupResultsPopoverEligible;
+  // Issue #1798 PR-C — canonical listing-marker popover RENDER-eligibility predicate.
+  // Previously this gate (formerly isAreaFirstPopoverEligible || isGroupResultsPopoverEligible)
+  // required journey === 'area-first' plus specific panelContent values — strictly narrower
+  // than the click-CAPTURE gate below (handleMarkerClickWithPosition / the setSelectedListing
+  // branch of handleSelectMarkerListing), which already permits journeyless and other
+  // non-agri-first states. That drift meant a listing marker click could already write
+  // markerPixelPos/selectedMarkerListing and drive the #1547 right-panel scroll+highlight,
+  // yet the popup itself would silently never render — the reported #1798 "popup missing"
+  // bug. Fixed by reusing the SAME condition as the capture gate so the two can no longer
+  // drift apart. Still excludes agri-first (own peek/panel) and school-first once a school
+  // is selected (3 desynced marker tiers; owns its own tiered/peek flows) — see #1738/#1547.
+  // Area/cluster/count marker clicks are unaffected: they never set markerPixelPos, so the
+  // `selectedMarkerListing != null && markerPixelPos != null` conjunction at the render site
+  // below still keeps them popup-free regardless of this predicate.
+  const isMarkerPopoverEligible =
+    urlState.journey !== 'agri-first' &&
+    urlState.areaKey != null &&
+    (urlState.schoolId == null || urlState.journey === 'area-first');
 
   // Issue #1606 — resolved group display name for the area-first breadcrumb. Prefers the
   // backend group name, falls back to a prettified slug so a deep-linked groupId that has
@@ -3387,14 +3373,17 @@ export default function MapDiscovery() {
             areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
           />
 
-          {/* a3 — Marker popover mini card. Gated to area-first residential path via
-              isAreaFirstPopoverEligible: areaKey/selectedArea set, journey === area-first.
-              Issue #1738 — also renders in the area-first area+school combined step (not
-              just the no-school area-selected step), since journey is checked explicitly.
-              School-first (3 desynced marker tiers) and agri-first (own peek/panel) are
-              intentionally excluded. ONE popover at a time; clicking a new marker replaces
-              it. Dismiss: X button (inside card), Escape key, map-background click (onClick
-              on this container div). */}
+          {/* a3 — Marker popover mini card. Gated to listing-marker clicks via
+              isMarkerPopoverEligible (Issue #1798 PR-C): journey !== agri-first,
+              areaKey set, and (no school selected OR journey === area-first) — the
+              same condition used by the click-capture gates that populate
+              markerPixelPos/selectedMarkerListing, so render eligibility can never
+              drift from capture eligibility again. School-first (3 desynced marker
+              tiers) and agri-first (own peek/panel) are intentionally excluded.
+              Area/cluster/count marker clicks never populate markerPixelPos, so they
+              stay popup-free regardless. ONE popover at a time; clicking a new marker
+              replaces it. Dismiss: X button (inside card), Escape key, map-background
+              click (onClick on this container div). */}
           {isMarkerPopoverEligible &&
             selectedMarkerListing != null &&
             markerPixelPos != null && (
