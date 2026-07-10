@@ -3648,7 +3648,6 @@ export default function MapDiscovery() {
             if (targetScope) {
               urlActions.setScope(targetScope);
             }
-            urlActions.selectGroup(null);
           }}
           // Issue #1606 — area-first results breadcrumb: resolved group name + city-crumb nav.
           // selectGroup(null) clears both groupId and areaKey in a single PUSH, returning to
