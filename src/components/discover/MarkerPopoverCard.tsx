@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react';
-import { Building2, MapPin, X } from 'lucide-react';
+import { Building2, ChevronLeft, ChevronRight, List, MapPin, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatPrice } from '@/lib/formatters';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
@@ -35,6 +35,24 @@ const PROPERTY_TYPE_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
+/**
+ * MODEL A stepper wiring (Issue #1810 Stage 2A, user-ratified — see
+ * approved-plan.toml [user_decision]). `index`/`total` describe the clicked
+ * listing's position within the SAME ordered array that feeds the results
+ * panel; `onPrev`/`onNext` page to the sibling at index±1. This component
+ * never computes camera moves — MapDiscovery's step handler makes NO camera
+ * call of any kind (MODEL B — on-map markers + panInside — was explicitly
+ * rejected).
+ */
+export interface MarkerPopoverStepper {
+  /** 0-based index of the current listing within the ratified panel array. */
+  index: number;
+  /** Total size of the ratified panel array (>=2 — callers omit the stepper otherwise). */
+  total: number;
+  onPrev: () => void;
+  onNext: () => void;
+}
+
 interface MarkerPopoverCardProps {
   listing: PropertyListingWithImages;
   /** Whether the current user is authenticated (drives price visibility). */
@@ -50,17 +68,28 @@ interface MarkerPopoverCardProps {
   onDismiss: () => void;
   /** Called when "View details" is clicked — typically navigate('/listing/:id'). */
   onViewDetails: (id: string) => void;
+  /**
+   * '‹ n/N ›' stepper (AC8). null/undefined hides the stepper entirely — used
+   * for a standalone listing (array length <=1 or the clicked id not found).
+   */
+  stepper?: MarkerPopoverStepper | null;
+  /**
+   * "Show in list" (AC9) — re-drives setSelectedListing(id) so the matching
+   * panel card scrolls+highlights, then dismisses ONLY the popup overlay
+   * (never clears the panel highlight, never navigates to /listing/:id).
+   */
+  onShowInList: (id: string) => void;
 }
 
 // Popover dimensions (px) — used for clamp-to-bounds and flip calculations.
 const POPOVER_W = 256;
 const POPOVER_H = 220;
+// Extra height reserved when the '‹ n/N ›' stepper row is shown (AC8).
+const STEPPER_ROW_H = 30;
 // Vertical offset above the marker pin tip (so it doesn't occlude the pin).
 const PIN_OFFSET_ABOVE = 12;
 // Horizontal margin from map container edge.
 const EDGE_PAD = 8;
-// Flip threshold from top: flip popover BELOW the pin when pin is within this many px of the top edge.
-const TOP_FLIP_THRESHOLD = POPOVER_H + PIN_OFFSET_ABOVE + 20;
 
 /**
  * Compute clamped popover position.
@@ -72,18 +101,21 @@ function computePopoverStyle(
   markerPos: { x: number; y: number },
   mapW: number,
   mapH: number,
+  popoverH: number,
 ): React.CSSProperties {
   const rawLeft = markerPos.x - POPOVER_W / 2;
   const clampedLeft = Math.max(EDGE_PAD, Math.min(rawLeft, mapW - POPOVER_W - EDGE_PAD));
 
+  // Flip threshold from top: flip popover BELOW the pin when pin is within this many px of the top edge.
+  const topFlipThreshold = popoverH + PIN_OFFSET_ABOVE + 20;
   // Flip below when near the top edge
-  const flipBelow = markerPos.y < TOP_FLIP_THRESHOLD;
+  const flipBelow = markerPos.y < topFlipThreshold;
   const top = flipBelow
     ? markerPos.y + PIN_OFFSET_ABOVE
-    : markerPos.y - POPOVER_H - PIN_OFFSET_ABOVE;
+    : markerPos.y - popoverH - PIN_OFFSET_ABOVE;
 
   // Clamp top so it never goes below the map bottom edge
-  const clampedTop = Math.min(Math.max(EDGE_PAD, top), mapH - POPOVER_H - EDGE_PAD);
+  const clampedTop = Math.min(Math.max(EDGE_PAD, top), mapH - popoverH - EDGE_PAD);
 
   return {
     position: 'absolute',
@@ -101,8 +133,13 @@ export function MarkerPopoverCard({
   mapContainerRef,
   onDismiss,
   onViewDetails,
+  stepper = null,
+  onShowInList,
 }: MarkerPopoverCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
+  // AC8 — hide gracefully (no NaN/undefined) for a standalone-listing context.
+  const showStepper = stepper != null && stepper.total > 1 && stepper.index >= 0;
+  const popoverH = showStepper ? POPOVER_H + STEPPER_ROW_H : POPOVER_H;
 
   // Escape key dismiss — isolate from filter sheet (stopPropagation on card stops
   // the event from bubbling up to sheet's own Escape handler).
@@ -136,7 +173,7 @@ export function MarkerPopoverCard({
 
   const posStyle: React.CSSProperties =
     markerPixelPos != null
-      ? computePopoverStyle(markerPixelPos, mapDims.w, mapDims.h)
+      ? computePopoverStyle(markerPixelPos, mapDims.w, mapDims.h, popoverH)
       : { position: 'absolute', left: EDGE_PAD, top: EDGE_PAD, width: POPOVER_W, zIndex: 1100 };
 
   const imageUrl = listing.images?.[0]?.url ?? null;
@@ -187,6 +224,42 @@ export function MarkerPopoverCard({
         </Button>
       </div>
 
+      {/* '‹ n/N ›' stepper (AC8, MODEL A) — pages the ratified panel-scope array.
+          Hidden entirely for a standalone listing (showStepper false). Stepping
+          never moves the camera — MapDiscovery's handler makes no camera call. */}
+      {showStepper && stepper && (
+        <div
+          className="flex items-center justify-center gap-2 border-b border-border bg-muted/30 py-1"
+          data-testid="marker-popover-stepper"
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5"
+            onClick={stepper.onPrev}
+            disabled={stepper.index <= 0}
+            aria-label="Previous listing"
+            data-testid="popover-stepper-prev"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </Button>
+          <span className="text-[11px] font-medium text-muted-foreground" data-testid="popover-stepper-label">
+            {stepper.index + 1}/{stepper.total}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5"
+            onClick={stepper.onNext}
+            disabled={stepper.index >= stepper.total - 1}
+            aria-label="Next listing"
+            data-testid="popover-stepper-next"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+
       {/* Content */}
       <div className="p-2.5 flex flex-col gap-1">
         {/* Price or auth-gated message */}
@@ -220,15 +293,30 @@ export function MarkerPopoverCard({
           )}
         </div>
 
-        {/* View details CTA */}
-        <Button
-          size="sm"
-          className="mt-1 h-7 w-full text-xs"
-          onClick={() => onViewDetails(listing.id)}
-          data-testid="popover-view-details"
-        >
-          View details
-        </Button>
+        {/* AC9 — "Show in list" scrolls+highlights the matching panel card via the
+            existing setSelectedListing sync and closes ONLY this overlay; it never
+            navigates and never clears the panel highlight. "View details" remains
+            a separate, independently-working action. */}
+        <div className="mt-1 flex gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 flex-1 text-xs"
+            onClick={() => onShowInList(listing.id)}
+            data-testid="popover-show-in-list"
+          >
+            <List className="mr-1 h-3 w-3" aria-hidden="true" />
+            Show in list
+          </Button>
+          <Button
+            size="sm"
+            className="h-7 flex-1 text-xs"
+            onClick={() => onViewDetails(listing.id)}
+            data-testid="popover-view-details"
+          >
+            View details
+          </Button>
+        </div>
       </div>
     </div>
   );

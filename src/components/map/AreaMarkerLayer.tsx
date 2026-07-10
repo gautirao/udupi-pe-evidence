@@ -5,8 +5,10 @@ import { escapeHtml } from '@/lib/security';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import {
   computeAreaMarkers,
+  computeClusterChipPlacements,
   type RankableArea,
   type AreaCluster as BucketedAreaCluster,
+  type ClusterChipPlacement,
 } from '@/lib/map/areaMarkerBucketing';
 import { AREA_LAYER_MAX_ZOOM, clusterCanSplit, hasSpatialSpread } from '@/lib/map/areaClusterSplit';
 import type { CameraIntent } from '@/hooks/useDiscoverMapData';
@@ -150,6 +152,8 @@ const C_COPPER_TINT = '#F2E8E1';
 // ReTrends school-journey accent (index.css --plum). Restrained plum/lavender —
 // used ONLY for school-first area-cluster / dot chips (design-spec §11).
 const C_PLUM = '#5E5286';
+// Leader-line / anchor-dot navy (design-spec §1: "navy, white ring"; plum on school layers).
+const C_NAVY = '#1B2A45';
 const MONO = `'Geist Mono', ui-monospace, 'SF Mono', monospace`;
 const PILL_SHADOW = '0 4px 10px rgba(17,24,39,0.10), 0 2px 4px rgba(17,24,39,0.05)';
 
@@ -158,6 +162,32 @@ const pinSvg = (color: string) =>
 
 const gradCapSvg = (color: string) =>
   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>`;
+
+// Redundant suffixes dropped before falling back to ellipsis truncation
+// (design-spec AREA_MARKER_UX.md §5). Longest-first so "Kempapura Village"
+// only drops the trailing word, not both.
+const REDUNDANT_LABEL_SUFFIXES = [' Village', ' Layout', ' Nagar', ' Kempapura'];
+const TRUNCATE_MAX_CHARS = 18;
+
+/**
+ * Truncates a long representative/dot label (design-spec AREA_MARKER_UX.md §5).
+ * Drops a redundant suffix first, then ellipsis-truncates if still too long.
+ * Callers pass `truncate=false` for selected/searched/hovered areas (never
+ * truncated) and for the legacy (non-degraded) path (unaffected by this issue).
+ */
+function truncateAreaLabel(label: string, truncate: boolean): { text: string; full: string | null } {
+  if (!truncate || label.length <= TRUNCATE_MAX_CHARS) return { text: label, full: null };
+  let short = label;
+  for (const suffix of REDUNDANT_LABEL_SUFFIXES) {
+    if (short.length > TRUNCATE_MAX_CHARS && short.endsWith(suffix)) {
+      short = short.slice(0, -suffix.length).trim();
+    }
+  }
+  if (short.length > TRUNCATE_MAX_CHARS) {
+    short = `${short.slice(0, TRUNCATE_MAX_CHARS - 1).trim()}…`;
+  }
+  return short === label ? { text: label, full: null } : { text: short, full: label };
+}
 
 function getShortRegionLabel(label: string): string {
   const trimmed = label.trim();
@@ -184,6 +214,14 @@ function makeAreaCard(
   opacity: number,
   journey?: DiscoverJourney | null,
   selectedSchool?: unknown,
+  /**
+   * When true, a long label may be truncated (design-spec AREA_MARKER_UX.md
+   * §5) with the full name recoverable via the `title` attribute on hover/
+   * focus. Callers pass `false`/omit for selected/searched/hovered areas
+   * (never truncated — design-spec §2 priority 1-3) and for the legacy
+   * (non-degraded) path, preserving today's behaviour exactly there.
+   */
+  truncate = false,
 ): L.DivIcon {
   const label = escapeHtml(area.areaLabel);
   const isSchoolMode =
@@ -235,10 +273,13 @@ function makeAreaCard(
       const txt = `${n.toLocaleString()} ${n === 1 ? 'property' : 'properties'}`;
       chipHtml = `<span style="font-family:${MONO};font-size:11px;font-weight:600;padding:1.5px 7px;border-radius:9999px;background:${C_COPPER_TINT};color:${C_COPPER_HOVER};">${escapeHtml(txt)}</span>`;
     }
+    const { text: repText, full: repFull } = truncateAreaLabel(area.areaLabel, truncate);
+    const repLabel = escapeHtml(repText);
+    const titleAttr = repFull ? ` title="${escapeHtml(repFull)}"` : '';
     html = `<div data-testid="area-marker" style="transform:translate(-50%,-118%);font-family:inherit;opacity:${opacity};pointer-events:auto;cursor:pointer;">
-      <div class="area-marker-card" style="display:inline-flex;align-items:center;gap:7px;padding:6px 8px 6px 11px;border-radius:9999px;background:${C_PAPER};border:1px solid ${C_BORDER};box-shadow:${PILL_SHADOW};white-space:nowrap;transition:transform .15s cubic-bezier(.4,0,.2,1),box-shadow .15s;">
+      <div class="area-marker-card"${titleAttr} style="display:inline-flex;align-items:center;gap:7px;padding:6px 8px 6px 11px;border-radius:9999px;background:${C_PAPER};border:1px solid ${C_BORDER};box-shadow:${PILL_SHADOW};white-space:nowrap;transition:transform .15s cubic-bezier(.4,0,.2,1),box-shadow .15s;">
         ${pinSvg(C_COPPER)}
-        <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;color:${C_INK};">${label}</span>
+        <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;color:${C_INK};">${repLabel}</span>
         ${chipHtml}
       </div>
       <div style="width:8px;height:8px;background:${C_PAPER};border-right:1px solid ${C_BORDER};border-bottom:1px solid ${C_BORDER};transform:rotate(45deg);margin:-5px auto 0;box-shadow:${PILL_SHADOW};"></div>
@@ -263,9 +304,14 @@ const stackSvg = (color: string) =>
  * HTML has no CSS pipeline behind it.
  */
 function makeDotIcon(area: AreaPoint, accent: string, revealed: boolean): L.DivIcon {
-  const label = escapeHtml(area.areaLabel);
+  // Dots are, by construction, never forced-always (applyForcedAlways in
+  // areaMarkerBucketing.ts pulls selected/searched/hovered areas out of dots
+  // into representatives) — always eligible for truncation when revealed.
+  const { text: dotText, full: dotFull } = truncateAreaLabel(area.areaLabel, true);
+  const label = escapeHtml(dotText);
+  const titleAttr = dotFull ? ` title="${escapeHtml(dotFull)}"` : '';
   const html = revealed
-    ? `<div data-testid="area-marker-dot" data-revealed="true" style="transform:translate(-50%,-118%);font-family:inherit;pointer-events:auto;cursor:pointer;">
+    ? `<div data-testid="area-marker-dot" data-revealed="true"${titleAttr} style="transform:translate(-50%,-118%);font-family:inherit;pointer-events:auto;cursor:pointer;">
         <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:9999px;background:${C_PAPER};border:1px solid ${C_BORDER};box-shadow:${PILL_SHADOW};white-space:nowrap;">
           ${pinSvg(accent)}
           <span style="font-size:11.5px;font-weight:700;color:${C_INK};">${label}</span>
@@ -280,18 +326,55 @@ function makeDotIcon(area: AreaPoint, accent: string, revealed: boolean): L.DivI
 /**
  * Navigation area-cluster chip — visually distinct from the filled/solid
  * listing cluster disc (design-spec §4): soft outline chip, areas glyph,
- * "+N areas" label (N = member AREA count, never a property sum).
+ * NEUTRAL "+N nearby areas · Tap to expand" label (Issue #1810 AC1/AC2/AC3 —
+ * N = member AREA count, never a property sum, and never a named member
+ * area on the chip face; a single named area is a full labelled pin, not a
+ * chip, so N is always >=2 here and "areas" is always plural).
+ *
+ * `offset` is the presentation-only screen-space translate from
+ * computeClusterChipPlacements — the marker itself stays anchored at the
+ * cluster's true centroid; only this CSS transform moves visually.
  */
-function makeClusterIcon(cluster: BucketedAreaCluster, accent: string): L.DivIcon {
-  const label = escapeHtml(cluster.dominantName);
-  const html = `<div data-testid="area-cluster-marker" style="transform:translate(-50%,-50%);font-family:inherit;pointer-events:auto;cursor:pointer;">
+function makeClusterIcon(
+  cluster: BucketedAreaCluster,
+  accent: string,
+  offset: { dx: number; dy: number },
+): L.DivIcon {
+  const html = `<div data-testid="area-cluster-marker" style="transform:translate(calc(-50% + ${offset.dx}px), calc(-50% + ${offset.dy}px));font-family:inherit;pointer-events:auto;cursor:pointer;">
     <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:9999px;background:${C_PAPER};border:1.5px solid ${accent};box-shadow:${PILL_SHADOW};white-space:nowrap;">
       ${stackSvg(accent)}
-      <span style="font-size:11.5px;font-weight:700;color:${C_INK};">${label}</span>
-      <span style="font-family:${MONO};font-size:11px;font-weight:700;color:${accent};">+${cluster.count} area${cluster.count === 1 ? '' : 's'}</span>
+      <span style="font-family:${MONO};font-size:11px;font-weight:700;color:${accent};">+${cluster.count} nearby areas</span>
+      <span style="font-size:10.5px;font-weight:600;color:${C_MUTED};">&middot; Tap to expand</span>
     </div>
   </div>`;
   return L.divIcon({ className: 'area-cluster-marker-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
+}
+
+/**
+ * Leader line + 7px anchor dot back to a chip's true centroid (design-spec
+ * §1), rendered only when the chip's offset is >=16px. This divIcon is
+ * anchored at the TRUE centroid lat/lon (never offset); the SVG line is drawn
+ * locally from the anchor point to (dx, dy) so it visually terminates exactly
+ * under the offset chip without needing a second lat/lon. Non-interactive
+ * (pointer-events:none) so it never steals a click meant for a neighbour.
+ */
+function makeLeaderIcon(offset: { dx: number; dy: number }, color: string): L.DivIcon {
+  const { dx, dy } = offset;
+  const minX = Math.min(0, dx);
+  const minY = Math.min(0, dy);
+  const w = Math.max(0, dx) - minX;
+  const h = Math.max(0, dy) - minY;
+  const x1 = 0 - minX;
+  const y1 = 0 - minY;
+  const x2 = dx - minX;
+  const y2 = dy - minY;
+  const html = `<div data-testid="area-cluster-leader" style="position:relative;transform:translate(${minX}px, ${minY}px);pointer-events:none;">
+    <svg width="${w}" height="${h}" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none;" aria-hidden="true">
+      <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="1.5" stroke-opacity="0.38" />
+    </svg>
+    <span style="position:absolute;left:${x1 - 3.5}px;top:${y1 - 3.5}px;width:7px;height:7px;border-radius:50%;background:${color};border:1.5px solid #fff;box-shadow:0 1px 3px rgba(17,24,39,0.25);"></span>
+  </div>`;
+  return L.divIcon({ className: 'area-cluster-leader-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
 }
 
 /** Union bbox of a set of AreaPoints, falling back to their geo centers when bbox is null. */
@@ -418,12 +501,13 @@ export function AreaMarkerLayer({
     const searchMatchIds =
       searchMatchKeys && searchMatchKeys.length > 0 ? new Set(searchMatchKeys) : undefined;
     const size = map.getSize();
+    const project = (lat: number, lon: number) => {
+      const pt = map.latLngToContainerPoint([lat, lon]);
+      return { x: pt.x, y: pt.y };
+    };
     const result = computeAreaMarkers({
       areas: rankable,
-      project: (lat, lon) => {
-        const pt = map.latLngToContainerPoint([lat, lon]);
-        return { x: pt.x, y: pt.y };
-      },
+      project,
       viewport: { width: size.x, height: size.y },
       zoom: zoomTick,
       forced: {
@@ -433,10 +517,22 @@ export function AreaMarkerLayer({
       },
       groupBounds,
     });
+    // Issue #1810 (Stage 2A) — presentation-only chip-offset pass. ONLY
+    // area-cluster CHIPS may be offset (never representatives/dots); recomputed
+    // in the same zoom-only-triggered useMemo as the rest of the bucketing
+    // pass, so it inherits the pan-invariant / hover-invariant stability
+    // contract for free. chipResult.clusters replaces result.clusters 1:1
+    // (post-merge) — true anchors are untouched.
+    const chipResult = computeClusterChipPlacements(result.clusters, project);
     // totalAreas = the FILTERED count, so onMarkersComputed (and the panel's
     // "Showing X of N areas" note it feeds) reports an N the panel actually
     // lists — never the unfiltered `areas.length` (Risk R6).
-    return { ...result, totalAreas: scopedAreas.length };
+    return {
+      ...result,
+      clusters: chipResult.clusters,
+      chipPlacements: chipResult.placements,
+      totalAreas: scopedAreas.length,
+    };
     // map is stable per PropertyMap instance; zoomTick is the deliberate
     // zoom-only recompute trigger. Pan is intentionally NOT a dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -457,12 +553,18 @@ export function AreaMarkerLayer({
     const markers: L.Marker[] = [];
     const accent = journey === 'school-first' ? C_PLUM : C_COPPER;
 
-    // Representatives — same visual/click contract as the legacy full pin.
+    // Representatives — same visual/click contract as the legacy full pin;
+    // NEVER offset (design-spec §3) — only long labels may truncate, and only
+    // when the area is not forced-always (selected/searched/hovered).
     for (const rankedArea of bucketing.representatives) {
       const area = areaByKey.get(rankedArea.id);
       if (!area) continue;
+      const isForced =
+        area.areaKey === selectedAreaKey ||
+        area.areaKey === hoveredAreaKey ||
+        (searchMatchKeys?.includes(area.areaKey) ?? false);
       const marker = L.marker([area.geo_center_lat, area.geo_center_lon], {
-        icon: makeAreaCard(area, 1.0, journey, selectedSchool),
+        icon: makeAreaCard(area, 1.0, journey, selectedSchool, !isForced),
       });
       // Issue #1801 — same click contract as the legacy loop above: no direct
       // camera call here. onAreaCameraIntent publishes the optimistic intent;
@@ -494,14 +596,24 @@ export function AreaMarkerLayer({
     }
 
     // Area clusters — navigation chips (design-spec §4). Click flies into the
-    // member bounds to split, and NEVER drills to listings.
+    // member bounds to split, and NEVER drills to listings. The chip marker
+    // itself stays anchored at the cluster's TRUE centroid — computeClusterChipPlacements
+    // only supplies a presentation-only CSS offset (Issue #1810 Stage 2A); a
+    // leader line + anchor dot render whenever that offset is >=16px.
     for (const cluster of bucketing.clusters) {
       const clusterAreas = cluster.areas
         .map((a) => areaByKey.get(a.id))
         .filter((a): a is AreaPoint => a != null);
       if (clusterAreas.length === 0) continue;
       const anchor: [number, number] = [cluster.anchor.lat, cluster.anchor.lon];
-      const marker = L.marker(anchor, { icon: makeClusterIcon(cluster, accent) });
+      const placement: ClusterChipPlacement = bucketing.chipPlacements[cluster.cellKey] ?? {
+        offsetX: 0,
+        offsetY: 0,
+        showLeader: false,
+      };
+      const marker = L.marker(anchor, {
+        icon: makeClusterIcon(cluster, accent, { dx: placement.offsetX, dy: placement.offsetY }),
+      });
       marker.on('click', () => {
         // Issue #1806 (FIX-4/FIX-5) — this layer never touches the map camera
         // directly. The removed `map.fitBounds(..., { maxZoom: 16 })` call was
@@ -546,6 +658,17 @@ export function AreaMarkerLayer({
       });
       marker.addTo(map);
       markers.push(marker);
+
+      if (placement.showLeader) {
+        const leaderColor = journey === 'school-first' ? C_PLUM : C_NAVY;
+        const leaderMarker = L.marker(anchor, {
+          icon: makeLeaderIcon({ dx: placement.offsetX, dy: placement.offsetY }, leaderColor),
+          interactive: false,
+          keyboard: false,
+        });
+        leaderMarker.addTo(map);
+        markers.push(leaderMarker);
+      }
     }
 
     return () => {
@@ -562,6 +685,9 @@ export function AreaMarkerLayer({
     onAreaClusterCameraIntent,
     journey,
     selectedSchool,
+    selectedAreaKey,
+    hoveredAreaKey,
+    searchMatchKeys,
   ]);
 
   return null;

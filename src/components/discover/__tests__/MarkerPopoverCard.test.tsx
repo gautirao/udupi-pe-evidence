@@ -92,6 +92,7 @@ function renderCard(props: Partial<React.ComponentProps<typeof MarkerPopoverCard
     mapContainerRef: makeMapRef(),
     onDismiss: vi.fn(),
     onViewDetails: vi.fn(),
+    onShowInList: vi.fn(),
   };
   return render(<MarkerPopoverCard {...defaults} {...props} />);
 }
@@ -229,5 +230,92 @@ describe('MarkerPopoverCard — view details', () => {
     fireEvent.click(screen.getByTestId('popover-view-details'));
     expect(onViewDetails).toHaveBeenCalledTimes(1);
     expect(onViewDetails).toHaveBeenCalledWith('abc-123');
+  });
+});
+
+describe('MarkerPopoverCard — stepper (Issue #1810 AC8, MODEL A)', () => {
+  it('shows "n/N" and enables both arrows for a middle sibling', () => {
+    renderCard({
+      stepper: { index: 2, total: 5, onPrev: vi.fn(), onNext: vi.fn() },
+    });
+    expect(screen.getByTestId('marker-popover-stepper')).toBeInTheDocument();
+    expect(screen.getByTestId('popover-stepper-label')).toHaveTextContent('3/5');
+    expect(screen.getByTestId('popover-stepper-prev')).not.toBeDisabled();
+    expect(screen.getByTestId('popover-stepper-next')).not.toBeDisabled();
+  });
+
+  it('disables the prev arrow at index 0 and the next arrow at the last index', () => {
+    const { unmount } = renderCard({
+      stepper: { index: 0, total: 3, onPrev: vi.fn(), onNext: vi.fn() },
+    });
+    expect(screen.getByTestId('popover-stepper-prev')).toBeDisabled();
+    expect(screen.getByTestId('popover-stepper-next')).not.toBeDisabled();
+    unmount();
+
+    renderCard({
+      stepper: { index: 2, total: 3, onPrev: vi.fn(), onNext: vi.fn() },
+    });
+    expect(screen.getByTestId('popover-stepper-next')).toBeDisabled();
+  });
+
+  it('clicking next/prev calls the corresponding callback', () => {
+    const onPrev = vi.fn();
+    const onNext = vi.fn();
+    renderCard({ stepper: { index: 1, total: 3, onPrev, onNext } });
+    fireEvent.click(screen.getByTestId('popover-stepper-next'));
+    expect(onNext).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('popover-stepper-prev'));
+    expect(onPrev).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the stepper entirely for a standalone listing (stepper=null)', () => {
+    renderCard({ stepper: null });
+    expect(screen.queryByTestId('marker-popover-stepper')).not.toBeInTheDocument();
+  });
+
+  it('hides the stepper when total<=1 even if a stepper object is passed defensively', () => {
+    renderCard({ stepper: { index: 0, total: 1, onPrev: vi.fn(), onNext: vi.fn() } });
+    expect(screen.queryByTestId('marker-popover-stepper')).not.toBeInTheDocument();
+  });
+});
+
+describe('MarkerPopoverCard — Show in list (Issue #1810 AC9)', () => {
+  it('clicking "Show in list" calls onShowInList with the listing id (not onViewDetails, no navigation)', () => {
+    const onShowInList = vi.fn();
+    const onViewDetails = vi.fn();
+    renderCard({
+      listing: makeListing({ id: 'listing-xyz' }),
+      onShowInList,
+      onViewDetails,
+    });
+    fireEvent.click(screen.getByTestId('popover-show-in-list'));
+    expect(onShowInList).toHaveBeenCalledTimes(1);
+    expect(onShowInList).toHaveBeenCalledWith('listing-xyz');
+    expect(onViewDetails).not.toHaveBeenCalled();
+  });
+
+  it('"View details" still navigates independently of Show in list', () => {
+    const onShowInList = vi.fn();
+    const onViewDetails = vi.fn();
+    renderCard({
+      listing: makeListing({ id: 'listing-xyz' }),
+      onShowInList,
+      onViewDetails,
+    });
+    fireEvent.click(screen.getByTestId('popover-view-details'));
+    expect(onViewDetails).toHaveBeenCalledWith('listing-xyz');
+    expect(onShowInList).not.toHaveBeenCalled();
+  });
+});
+
+describe('MarkerPopoverCard — no tier/trust badge (Issue #1810 AC10)', () => {
+  it('never renders a tier/trust badge testid or copy, regardless of props', () => {
+    renderCard({
+      stepper: { index: 0, total: 2, onPrev: vi.fn(), onNext: vi.fn() },
+    });
+    expect(screen.queryByTestId(/trust/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(/tier/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/verified/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/trusted/i)).not.toBeInTheDocument();
   });
 });

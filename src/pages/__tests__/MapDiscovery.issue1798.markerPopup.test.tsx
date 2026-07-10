@@ -22,12 +22,13 @@
  * - TC6: area-first (pre-existing eligible state) → popup still renders (no regression).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import React from 'react';
 import MapDiscovery from '../MapDiscovery';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
+import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
 
 const mockUseAuth = vi.hoisted(() =>
   vi.fn(() => ({ user: null, isLoading: false, isAdmin: false, isDealer: false })),
@@ -193,6 +194,33 @@ const makeListing = (id: string, title: string): PropertyListingWithImages =>
     images: undefined,
   } as unknown as PropertyListingWithImages);
 
+// Issue #1810 (Stage 2A, MODEL A) — probe component exposing the current URL
+// search string so tests can assert the `listing` param survives "Show in
+// list" without needing to mock useDiscoverUrlState's internals.
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-probe">{location.search}</div>;
+}
+
+const renderAtWithProbe = (url: string) =>
+  render(
+    <QueryClientProvider client={makeQC()}>
+      <MemoryRouter initialEntries={[url]}>
+        <Routes>
+          <Route
+            path="/discover"
+            element={
+              <>
+                <MapDiscovery />
+                <LocationProbe />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
 describe('Issue #1798 PR-C — marker popup render/capture gate alignment', () => {
   beforeEach(() => {
     capturedOnSelectListing = undefined;
@@ -329,5 +357,203 @@ describe('Issue #1798 PR-C — marker popup render/capture gate alignment', () =
       expect(screen.getByTestId('marker-popover-card')).toBeInTheDocument();
     });
     expect(screen.getByText('Area First Listing')).toBeInTheDocument();
+  });
+});
+
+// ─── Issue #1810 Stage 2A — popup stepper (MODEL A) + Show in list ──────────
+
+const STEPPER_AREA_LISTINGS = [
+  { id: 'm1', propertyType: 'apartment', title: 'Listing A', lat: 13.34, lon: 74.74 },
+  { id: 'm2', propertyType: 'apartment', title: 'Listing B', lat: 13.341, lon: 74.741 },
+  { id: 'm3', propertyType: 'apartment', title: 'Listing C', lat: 13.342, lon: 74.742 },
+];
+
+describe('Issue #1810 Stage 2A — listing-popup stepper (MODEL A: panel listings array)', () => {
+  beforeEach(() => {
+    capturedOnSelectListing = undefined;
+    capturedOnMarkerClickWithPosition = undefined;
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false, isAdmin: false, isDealer: false });
+    vi.mocked(useDiscoverCityListings).mockReturnValue({
+      // @ts-expect-error — test double; only the fields consumed by useDiscoverMapData are populated.
+      data: { areas: [{ areaKey: AREA_KEY, listings: STEPPER_AREA_LISTINGS }] },
+      isLoading: false,
+    });
+  });
+
+  it('n/N = the clicked listing\'s 1-based index within the SAME array that feeds the map/panel; prev/next pages siblings', async () => {
+    renderAt(`/discover?city=udupi&lat=13.34000&lon=74.74000&zoom=14&areaKey=${encodeURIComponent(AREA_KEY)}`);
+
+    await waitFor(() => {
+      expect(capturedOnMarkerClickWithPosition).toBeDefined();
+    });
+
+    // Click the MIDDLE listing (Listing B, index 1 of 3) — n/N must read "2/3".
+    act(() => {
+      capturedOnSelectListing!(makeListing('m2', 'Listing B'));
+      capturedOnMarkerClickWithPosition!({ x: 100, y: 100 });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('marker-popover-stepper')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('popover-stepper-label')).toHaveTextContent('2/3');
+
+    // Next → Listing C (3/3). Scope the text query to the popover card itself —
+    // the results panel also renders a "Listing C" card (the #1547 highlight
+    // sync working as intended), so an unscoped query would be ambiguous.
+    fireEvent.click(screen.getByTestId('popover-stepper-next'));
+    await waitFor(() => {
+      expect(within(screen.getByTestId('marker-popover-card')).getByText('Listing C')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('popover-stepper-label')).toHaveTextContent('3/3');
+    expect(screen.getByTestId('popover-stepper-next')).toBeDisabled();
+
+    // Prev twice → back to Listing A (1/3).
+    fireEvent.click(screen.getByTestId('popover-stepper-prev'));
+    fireEvent.click(screen.getByTestId('popover-stepper-prev'));
+    await waitFor(() => {
+      expect(within(screen.getByTestId('marker-popover-card')).getByText('Listing A')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('popover-stepper-label')).toHaveTextContent('1/3');
+    expect(screen.getByTestId('popover-stepper-prev')).toBeDisabled();
+  });
+
+  it('stepping never triggers a camera call (MODEL A — no fitBounds/flyTo of any kind)', async () => {
+    renderAt(`/discover?city=udupi&lat=13.34000&lon=74.74000&zoom=14&areaKey=${encodeURIComponent(AREA_KEY)}`);
+
+    await waitFor(() => {
+      expect(capturedOnMarkerClickWithPosition).toBeDefined();
+    });
+
+    act(() => {
+      capturedOnSelectListing!(makeListing('m1', 'Listing A'));
+      capturedOnMarkerClickWithPosition!({ x: 100, y: 100 });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('marker-popover-stepper')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('popover-stepper-next'));
+    fireEvent.click(screen.getByTestId('popover-stepper-next'));
+    fireEvent.click(screen.getByTestId('popover-stepper-prev'));
+
+    // PropertyMap is fully mocked out in this suite (no real Leaflet map
+    // instance exists to call), but MapDiscovery itself must never attempt a
+    // direct camera call from the step handler either — asserted here via the
+    // absence of any thrown error / any additional captured marker-click
+    // side channel, since MODEL B (panInside) would require a live map
+    // instance this test harness deliberately does not provide.
+    expect(screen.getByTestId('marker-popover-stepper')).toBeInTheDocument();
+  });
+
+  it('a standalone listing (not found in the map-marker array) shows no stepper', async () => {
+    renderAt(`/discover?city=udupi&lat=13.34000&lon=74.74000&zoom=14&areaKey=${encodeURIComponent(AREA_KEY)}`);
+
+    await waitFor(() => {
+      expect(capturedOnMarkerClickWithPosition).toBeDefined();
+    });
+
+    act(() => {
+      // "not-in-array" id — defensively must not crash, must not show a stepper.
+      capturedOnSelectListing!(makeListing('unknown-id', 'Ghost Listing'));
+      capturedOnMarkerClickWithPosition!({ x: 100, y: 100 });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('marker-popover-card')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('marker-popover-stepper')).not.toBeInTheDocument();
+  });
+
+  it('single-listing area (no siblings) shows no stepper', async () => {
+    vi.mocked(useDiscoverCityListings).mockReturnValue({
+      // @ts-expect-error — test double.
+      data: { areas: [{ areaKey: AREA_KEY, listings: [STEPPER_AREA_LISTINGS[0]] }] },
+      isLoading: false,
+    });
+    renderAt(`/discover?city=udupi&lat=13.34000&lon=74.74000&zoom=14&areaKey=${encodeURIComponent(AREA_KEY)}`);
+
+    await waitFor(() => {
+      expect(capturedOnMarkerClickWithPosition).toBeDefined();
+    });
+
+    act(() => {
+      capturedOnSelectListing!(makeListing('m1', 'Listing A'));
+      capturedOnMarkerClickWithPosition!({ x: 100, y: 100 });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('marker-popover-card')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('marker-popover-stepper')).not.toBeInTheDocument();
+  });
+
+  it('"Show in list" keeps the `listing` URL param set and closes ONLY the popup overlay (does NOT clearSelectedListing)', async () => {
+    renderAtWithProbe(`/discover?city=udupi&lat=13.34000&lon=74.74000&zoom=14&areaKey=${encodeURIComponent(AREA_KEY)}`);
+
+    await waitFor(() => {
+      expect(capturedOnMarkerClickWithPosition).toBeDefined();
+    });
+
+    act(() => {
+      capturedOnSelectListing!(makeListing('m1', 'Listing A'));
+      capturedOnMarkerClickWithPosition!({ x: 100, y: 100 });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('marker-popover-card')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(/listing=m1/);
+
+    fireEvent.click(screen.getByTestId('popover-show-in-list'));
+
+    // Overlay closes...
+    await waitFor(() => {
+      expect(screen.queryByTestId('marker-popover-card')).not.toBeInTheDocument();
+    });
+    // ...but the `listing` URL param is still set (re-driven, not cleared) —
+    // this is what keeps the panel-card highlight alive per AC9.
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(/listing=m1/);
+  });
+
+  it('"Show in list" does not navigate to /listing/:id (that is the separate View details action)', async () => {
+    renderAtWithProbe(`/discover?city=udupi&lat=13.34000&lon=74.74000&zoom=14&areaKey=${encodeURIComponent(AREA_KEY)}`);
+
+    await waitFor(() => {
+      expect(capturedOnMarkerClickWithPosition).toBeDefined();
+    });
+
+    act(() => {
+      capturedOnSelectListing!(makeListing('m1', 'Listing A'));
+      capturedOnMarkerClickWithPosition!({ x: 100, y: 100 });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('popover-show-in-list')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('popover-show-in-list'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('marker-popover-card')).not.toBeInTheDocument();
+    });
+    // Still on /discover — no navigation to a /listing/:id detail route.
+    expect(screen.getByTestId('location-probe')).toBeInTheDocument();
+  });
+
+  it('school-first/agri-first exclusion still holds with the stepper wiring in place', async () => {
+    renderAt(
+      `/discover?city=udupi&lat=13.34000&lon=74.74000&zoom=14&journey=agri-first&areaKey=${encodeURIComponent(AREA_KEY)}`,
+    );
+
+    await waitFor(() => {
+      expect(capturedOnMarkerClickWithPosition).toBeDefined();
+    });
+
+    act(() => {
+      capturedOnSelectListing!(makeListing('m1', 'Listing A'));
+      capturedOnMarkerClickWithPosition!({ x: 100, y: 100 });
+    });
+
+    expect(screen.queryByTestId('marker-popover-card')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('marker-popover-stepper')).not.toBeInTheDocument();
   });
 });

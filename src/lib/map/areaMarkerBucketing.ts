@@ -350,6 +350,145 @@ function applyForcedAlways(
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
+// ─── Chip-offset declutter pass (Issue #1810 Stage 2A) ──────────────────────
+//
+// Design spec: docs/design/retrends-design-system/ui_kits/discover/src/
+// MARKER_PLACEMENT_SPEC.md §1/§3/§4. ONLY area-cluster CHIPS may be offset in
+// screen space — representative/dot labels are never moved (they truncate
+// instead, handled presentationally in AreaMarkerLayer.tsx). A chip starts at
+// its true member centroid; on a DETECTED footprint collision against an
+// already-placed chip it is moved to the zero-overlap candidate among 15
+// deterministic offsets, or — if the map is genuinely full (no zero-overlap
+// candidate exists) — merged into the first colliding chip rather than left
+// visually overlapping. Pure + deterministic: no Math.random/Date, and the
+// input cluster order is re-sorted by cellKey defensively so output never
+// depends on caller iteration order.
+
+/** Chip footprint (design-spec §4): 176x64px, centre-anchored on the placed point. */
+const CHIP_W = 176;
+const CHIP_H = 64;
+/** Leader-line rule (design-spec §1): below this offset distance, no leader is drawn. */
+const LEADER_THRESHOLD_PX = 16;
+
+/**
+ * 15 deterministic candidate offsets: the true centroid itself (tried first —
+ * so a chip with no collision never moves), then two rings of 7 evenly-spaced
+ * angular positions. Fixed constants only (no Math.random/Date).
+ */
+function buildCandidateOffsets(): { dx: number; dy: number }[] {
+  const offsets: { dx: number; dy: number }[] = [{ dx: 0, dy: 0 }];
+  const ringRadii = [56, 96];
+  const perRing = 7;
+  for (const radius of ringRadii) {
+    for (let i = 0; i < perRing; i++) {
+      const angle = (2 * Math.PI * i) / perRing;
+      offsets.push({
+        dx: Math.round(Math.cos(angle) * radius),
+        dy: Math.round(Math.sin(angle) * radius),
+      });
+    }
+  }
+  return offsets;
+}
+
+const CANDIDATE_OFFSETS = buildCandidateOffsets();
+
+function rectsOverlap(
+  ax: number, ay: number, aw: number, ah: number,
+  bx: number, by: number, bw: number, bh: number,
+): boolean {
+  return Math.abs(ax - bx) * 2 < (aw + bw) && Math.abs(ay - by) * 2 < (ah + bh);
+}
+
+export interface ClusterChipPlacement {
+  offsetX: number;
+  offsetY: number;
+  /** True when the chip's visual centre is >=16px from its true centroid (design-spec §1). */
+  showLeader: boolean;
+}
+
+export interface ChipPlacementResult {
+  /** Post-merge cluster list, in deterministic cellKey order. Anchors are unchanged (never moved). */
+  clusters: AreaCluster[];
+  /** Presentation-only offsets keyed by the (possibly merged) cluster's cellKey. */
+  placements: Record<string, ClusterChipPlacement>;
+}
+
+/**
+ * Computes presentation-only screen-space offsets for area-cluster CHIPS only.
+ * Never persisted, never URL round-tripped, never mutates a true geo anchor —
+ * callers must re-run this on zoom/level/dataset/resize only (never on pan or
+ * hover) to satisfy the stability contract (design-spec §5).
+ */
+export function computeClusterChipPlacements(
+  clusters: AreaCluster[],
+  project: (lat: number, lon: number) => AreaMarkerProjection,
+): ChipPlacementResult {
+  const sorted = [...clusters].sort((a, b) => (a.cellKey < b.cellKey ? -1 : a.cellKey > b.cellKey ? 1 : 0));
+
+  const placedChips: { cellKey: string; x: number; y: number }[] = [];
+  const outClusters: AreaCluster[] = [];
+  const placements: Record<string, ClusterChipPlacement> = {};
+
+  for (const cluster of sorted) {
+    const centroid = project(cluster.anchor.lat, cluster.anchor.lon);
+
+    let zeroOverlapCandidate: { dx: number; dy: number } | null = null;
+    let bestOverlapCount = Infinity;
+    let mergeTargetIndex = -1;
+
+    for (const candidate of CANDIDATE_OFFSETS) {
+      const cx = centroid.x + candidate.dx;
+      const cy = centroid.y + candidate.dy;
+      let overlapCount = 0;
+      let firstOverlapIdx = -1;
+      for (let i = 0; i < placedChips.length; i++) {
+        const placed = placedChips[i];
+        if (rectsOverlap(cx, cy, CHIP_W, CHIP_H, placed.x, placed.y, CHIP_W, CHIP_H)) {
+          overlapCount++;
+          if (firstOverlapIdx === -1) firstOverlapIdx = i;
+        }
+      }
+      if (overlapCount === 0) {
+        zeroOverlapCandidate = candidate;
+        break;
+      }
+      if (overlapCount < bestOverlapCount) {
+        bestOverlapCount = overlapCount;
+        mergeTargetIndex = firstOverlapIdx;
+      }
+    }
+
+    if (zeroOverlapCandidate) {
+      placedChips.push({
+        cellKey: cluster.cellKey,
+        x: centroid.x + zeroOverlapCandidate.dx,
+        y: centroid.y + zeroOverlapCandidate.dy,
+      });
+      const dist = Math.hypot(zeroOverlapCandidate.dx, zeroOverlapCandidate.dy);
+      placements[cluster.cellKey] = {
+        offsetX: zeroOverlapCandidate.dx,
+        offsetY: zeroOverlapCandidate.dy,
+        showLeader: dist >= LEADER_THRESHOLD_PX,
+      };
+      outClusters.push(cluster);
+    } else {
+      // Genuinely full (no zero-overlap candidate among the 15) — merge into
+      // the first colliding already-placed chip rather than render a residual
+      // overlap (design-spec §3: "chips whose footprints overlap merge").
+      const targetCellKey = placedChips[mergeTargetIndex]?.cellKey;
+      const targetIdx = outClusters.findIndex((c) => c.cellKey === targetCellKey);
+      if (targetIdx >= 0) {
+        const target = outClusters[targetIdx];
+        const mergedAreas = [...target.areas, ...cluster.areas];
+        outClusters[targetIdx] = { ...target, areas: mergedAreas, count: mergedAreas.length };
+      }
+    }
+  }
+
+  return { clusters: outClusters, placements };
+}
+
 export function computeAreaMarkers(input: ComputeAreaMarkersInput): BucketingResult {
   const band = computeBand(input.areas.length);
   const rankComparator = makeRankComparator(input.groupBounds);

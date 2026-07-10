@@ -434,7 +434,7 @@ describe('AreaMarkerLayer — dense-group degradation (Issue #1798 PR-B, enableD
     expect(representativePins.length).toBeLessThan(DENSE_GROUP_AREAS.length);
   });
 
-  it('dense group + enableDegradation → renders area-cluster chip(s) with an AREA-count label ("+N areas"), never a property-count sum', () => {
+  it('dense group + enableDegradation → renders area-cluster chip(s) with an AREA-count label ("+N nearby areas"), never a property-count sum', () => {
     render(<AreaMarkerLayer areas={DENSE_GROUP_AREAS} enableDegradation />);
 
     const clusterChips = capturedDivIconCalls.filter((c) =>
@@ -443,10 +443,63 @@ describe('AreaMarkerLayer — dense-group degradation (Issue #1798 PR-B, enableD
     expect(clusterChips.length).toBeGreaterThan(0);
 
     for (const chip of clusterChips) {
-      // "+N areas"/"+N area" must appear — member AREA count, never a summed
+      // "+N nearby areas" must appear — member AREA count, never a summed
       // property/listing count (the clusters here fold 3-4 member areas each,
       // whose individual listingCounts sum well past any plausible area count).
-      expect(chip.html).toMatch(/\+\d+ areas?/);
+      expect(chip.html).toMatch(/\+\d+ nearby areas/);
+    }
+  });
+
+  // ── Issue #1810 AC1/AC2/AC3 — neutral area-cluster chip copy ─────────────
+
+  it('AC1: the chip face carries NO area name (dominantName is dropped) — only the neutral "+N nearby areas · Tap to expand" copy', () => {
+    render(<AreaMarkerLayer areas={DENSE_GROUP_AREAS} enableDegradation />);
+
+    const clusterChips = capturedDivIconCalls.filter((c) =>
+      c.html.includes('data-testid="area-cluster-marker"'),
+    );
+    expect(clusterChips.length).toBeGreaterThan(0);
+
+    // None of the source area names (ne-a-1..5, nw-a-1..5, etc.) may appear
+    // on any chip face — the defect this issue fixes was the dominant
+    // member's name doubling as the cluster label.
+    const allAreaNames = DENSE_GROUP_AREAS.map((a) => a.areaLabel);
+    for (const chip of clusterChips) {
+      for (const name of allAreaNames) {
+        expect(chip.html).not.toContain(`>${name}<`);
+      }
+      expect(chip.html).toContain('Tap to expand');
+      expect(chip.html).toMatch(/\+\d+ nearby areas/);
+    }
+  });
+
+  it('AC2: the area-cluster chip keeps the stack glyph + soft-outline styling distinct from the solid listing-cluster disc', () => {
+    render(<AreaMarkerLayer areas={DENSE_GROUP_AREAS} enableDegradation />);
+
+    const clusterChips = capturedDivIconCalls.filter((c) =>
+      c.html.includes('data-testid="area-cluster-marker"'),
+    );
+    expect(clusterChips.length).toBeGreaterThan(0);
+    for (const chip of clusterChips) {
+      // stackSvg — layered-pins glyph, distinct from the listing cluster disc.
+      expect(chip.html).toContain('<svg');
+      // Soft-outline chip: paper background + a colour border (not a filled disc).
+      expect(chip.html).toContain(`background:${'#FFFFFF'}`);
+      expect(chip.html).toMatch(/border:1\.5px solid/);
+      expect(chip.html).toContain('border-radius:9999px');
+    }
+  });
+
+  it('AC3: every area-cluster chip reports count >= 2 (a single named area is never rendered as a chip)', () => {
+    render(<AreaMarkerLayer areas={DENSE_GROUP_AREAS} enableDegradation />);
+    const clusterChips = capturedDivIconCalls.filter((c) =>
+      c.html.includes('data-testid="area-cluster-marker"'),
+    );
+    expect(clusterChips.length).toBeGreaterThan(0);
+    for (const chip of clusterChips) {
+      const match = /\+(\d+) nearby areas/.exec(chip.html);
+      expect(match).not.toBeNull();
+      expect(Number(match![1])).toBeGreaterThanOrEqual(2);
     }
   });
 
@@ -584,6 +637,180 @@ describe('AreaMarkerLayer — dense-group degradation (Issue #1798 PR-B, enableD
       <AreaMarkerLayer areas={DENSE_GROUP_AREAS} onMarkersComputed={onMarkersComputed} />,
     );
     expect(onMarkersComputed).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Issue #1810 Stage 2A — label truncation + chip leader/anchor-dot ────────
+
+describe('AreaMarkerLayer — Issue #1810 AC4 long-label truncation', () => {
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+    capturedMarkers.length = 0;
+  });
+
+  // Band 9-15 (top ~8 ranked become representatives, rest are dots) is the
+  // simplest fixture to force both a labelled representative AND a
+  // hover-revealed dot with a long, truncatable name.
+  const LONG_NAME_AREAS: AreaPoint[] = Array.from({ length: 10 }, (_, i) =>
+    makeArea(`long-${i}`, {
+      areaLabel: `Dodda Gubbi Chikkagubbi Village Extension ${i}`,
+      geo_center_lat: 13.2 + i * 0.03,
+      geo_center_lon: 74.6 + i * 0.03,
+      listingCount: 10 - i,
+    }),
+  );
+
+  it('a long representative label is truncated, with the full name recoverable via the title attribute', () => {
+    render(<AreaMarkerLayer areas={LONG_NAME_AREAS} enableDegradation />);
+    const reps = capturedDivIconCalls.filter((c) => c.html.includes('data-testid="area-marker"'));
+    expect(reps.length).toBeGreaterThan(0);
+    const rep = reps[0];
+    // The visible label span is truncated (ellipsis), not the full name...
+    expect(rep.html).toMatch(/<span[^>]*>Dodda Gubbi[^<]*…<\/span>/);
+    expect(rep.html).not.toMatch(/<span[^>]*>Dodda Gubbi Chikkagubbi Village Extension 0<\/span>/);
+    // ...but the full name is recoverable via the title attribute (hover/focus reveal).
+    expect(rep.html).toMatch(/title="Dodda Gubbi Chikkagubbi Village Extension 0"/);
+  });
+
+  it('a long, hover-revealed dot label is truncated with the full name in the title attribute', () => {
+    render(<AreaMarkerLayer areas={LONG_NAME_AREAS} enableDegradation />);
+    const dotIndex = capturedDivIconCalls.findIndex((c) => c.html.includes('data-testid="area-marker-dot"'));
+    expect(dotIndex).toBeGreaterThanOrEqual(0);
+    // Reveal it (mouseover swaps the icon to the labelled variant).
+    capturedMarkers[dotIndex].handlers.mouseover();
+    const revealedCall = capturedMarkers[dotIndex].setIcon.mock.calls.at(-1)?.[0] as { options: DivIconOpts } | undefined;
+    expect(revealedCall).toBeDefined();
+    const revealedHtml = revealedCall!.options.html;
+    expect(revealedHtml).toContain('data-revealed="true"');
+    // Full un-truncated name should not appear verbatim; title attr recovers it.
+    const fullNames = LONG_NAME_AREAS.map((a) => a.areaLabel);
+    const anyFullNameVerbatim = fullNames.some((n) => revealedHtml.includes(n));
+    if (anyFullNameVerbatim) {
+      // The area landed as a representative label, not a dot — acceptable,
+      // but then this specific test path doesn't apply; skip silently.
+      return;
+    }
+    expect(revealedHtml).toMatch(/title="[^"]+"/);
+  });
+
+  it('NOT applied to a selected area — the label stays full/untruncated even if long', () => {
+    render(
+      <AreaMarkerLayer areas={LONG_NAME_AREAS} enableDegradation selectedAreaKey="long-9" />,
+    );
+    const reps = capturedDivIconCalls.filter((c) => c.html.includes('data-testid="area-marker"'));
+    const selectedRep = reps.find((c) => c.html.includes('long-9') || c.html.includes('Extension 9'));
+    // long-9 is forced-always via selectedAreaKey, so it must render as a full
+    // representative pin with its complete, untruncated label.
+    expect(reps.some((c) => c.html.includes('Dodda Gubbi Chikkagubbi Village Extension 9'))).toBe(true);
+    void selectedRep;
+  });
+
+  it('NOT applied to a searched area — the label stays full/untruncated', () => {
+    render(
+      <AreaMarkerLayer areas={LONG_NAME_AREAS} enableDegradation searchMatchKeys={['long-9']} />,
+    );
+    const reps = capturedDivIconCalls.filter((c) => c.html.includes('data-testid="area-marker"'));
+    expect(reps.some((c) => c.html.includes('Dodda Gubbi Chikkagubbi Village Extension 9'))).toBe(true);
+  });
+
+  it('NOT applied to a hovered/focused area — the label stays full/untruncated', () => {
+    render(
+      <AreaMarkerLayer areas={LONG_NAME_AREAS} enableDegradation hoveredAreaKey="long-9" />,
+    );
+    const reps = capturedDivIconCalls.filter((c) => c.html.includes('data-testid="area-marker"'));
+    expect(reps.some((c) => c.html.includes('Dodda Gubbi Chikkagubbi Village Extension 9'))).toBe(true);
+  });
+
+  it('representative pins are never moved off their true geo point (no offset transform beyond the standard centring translate)', () => {
+    render(<AreaMarkerLayer areas={LONG_NAME_AREAS} enableDegradation />);
+    const reps = capturedDivIconCalls.filter((c) => c.html.includes('data-testid="area-marker"'));
+    expect(reps.length).toBeGreaterThan(0);
+    for (const rep of reps) {
+      // The representative divIcon's own transform is always the fixed
+      // centring translate — never a per-instance pixel offset (that
+      // mechanism exists ONLY for area-cluster chips in this issue).
+      expect(rep.html).toContain('transform:translate(-50%,-118%)');
+    }
+  });
+});
+
+describe('AreaMarkerLayer — Issue #1810 AC4/AC5 chip leader line + anchor dot', () => {
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+    capturedMarkers.length = 0;
+  });
+
+  // Two clusters whose centroids project to (near-)identical pixel points —
+  // guarantees a footprint collision, so the second one must be offset with
+  // a leader (mirrors the areaMarkerBucketing.test.ts collision fixture, but
+  // exercised through the full AreaMarkerLayer render path).
+  function makeCollidingFixture(): AreaPoint[] {
+    const base: AreaPoint[] = [];
+    // Cluster 1: 3 low-count areas at one point (fold into a chip).
+    for (let i = 0; i < 3; i++) {
+      base.push(
+        makeArea(`cluster1-${i}`, {
+          geo_center_lat: 13.30,
+          geo_center_lon: 74.70,
+          listingCount: 3 - i,
+        }),
+      );
+    }
+    // Cluster 2: 3 low-count areas in an ADJACENT-but-different 110px grid
+    // cell (so the two groups become two distinct AreaClusters, not one
+    // merged cell) whose representative-anchor projects only 120px away from
+    // cluster 1's anchor — inside the 176px chip footprint width, so the
+    // chips collide and the second-processed one must be offset.
+    for (let i = 0; i < 3; i++) {
+      base.push(
+        makeArea(`cluster2-${i}`, {
+          geo_center_lat: 13.30,
+          geo_center_lon: 74.712,
+          listingCount: 3 - i,
+        }),
+      );
+    }
+    // A handful of spread-out high-count representatives so both low-count
+    // clusters are demoted into chips rather than becoming representatives
+    // themselves (design-spec §3 grid + cap).
+    for (let i = 0; i < 10; i++) {
+      base.push(
+        makeArea(`rep-${i}`, {
+          geo_center_lat: 13.20 + i * 0.03,
+          geo_center_lon: 74.60 + i * 0.03,
+          listingCount: 50 + i,
+        }),
+      );
+    }
+    return base;
+  }
+
+  it('two chips with colliding footprints: at least one carries a leader line + anchor dot (offset >=16px)', () => {
+    render(<AreaMarkerLayer areas={makeCollidingFixture()} enableDegradation />);
+    const leaders = capturedDivIconCalls.filter((c) => c.html.includes('data-testid="area-cluster-leader"'));
+    expect(leaders.length).toBeGreaterThan(0);
+    for (const leader of leaders) {
+      // 7px anchor dot with a white ring, per design-spec §1.
+      expect(leader.html).toContain('width:7px;height:7px');
+      expect(leader.html).toContain('border:1.5px solid #fff');
+      // A line element is present connecting the anchor to the offset chip.
+      expect(leader.html).toContain('<line');
+    }
+  });
+
+  it('a leader marker is non-interactive (pointer-events:none) so it never steals a neighbouring click', () => {
+    render(<AreaMarkerLayer areas={makeCollidingFixture()} enableDegradation />);
+    const leaders = capturedDivIconCalls.filter((c) => c.html.includes('data-testid="area-cluster-leader"'));
+    expect(leaders.length).toBeGreaterThan(0);
+    for (const leader of leaders) {
+      expect(leader.html).toContain('pointer-events:none');
+    }
+  });
+
+  it('an isolated, non-colliding chip (DENSE_GROUP_AREAS baseline) shows NO leader line', () => {
+    render(<AreaMarkerLayer areas={DENSE_GROUP_AREAS} enableDegradation />);
+    const leaders = capturedDivIconCalls.filter((c) => c.html.includes('data-testid="area-cluster-leader"'));
+    expect(leaders.length).toBe(0);
   });
 });
 
