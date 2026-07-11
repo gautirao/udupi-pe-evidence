@@ -1,9 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
-import { MemoryRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderWithProviders } from '@/test/renderWithProviders';
 import { DiscoverRightPanel } from '../DiscoverRightPanel';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
@@ -31,18 +30,8 @@ const baseProps = {
 
 // Issue #1745 Batch A scope-change fix — GuidedEntryPanel now calls useDiscoverSummary
 // (a useQuery hook), so every render in this file needs a QueryClientProvider ancestor.
-// Matches the makeQueryClient()/QueryClientProvider convention already used by the other
-// DiscoverRightPanel.*.test.tsx files (e.g. agriLanding, agriCorridor, agriGroupPeek).
-function makeQueryClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-}
-
-const renderPanel = (ui: React.ReactElement) =>
-  render(
-    <MemoryRouter>
-      <QueryClientProvider client={makeQueryClient()}>{ui}</QueryClientProvider>
-    </MemoryRouter>,
-  );
+// Matches the shared renderWithProviders() convention (fresh QueryClient per render).
+const renderPanel = (ui: React.ReactElement) => renderWithProviders(ui);
 
 describe('DiscoverRightPanel', () => {
   it('renders the panel with data-testid', () => {

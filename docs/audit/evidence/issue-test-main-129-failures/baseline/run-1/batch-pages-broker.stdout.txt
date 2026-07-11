@@ -1,0 +1,111 @@
+(node:93363) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:93362) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:93359) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:93360) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:93361) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:93364) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:93357) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:93358) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:93365) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:93380) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:93382) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:93383) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Browserslist: browsers data (caniuse-lite) is 13 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+
+<--- Last few GCs --->
+
+[93382:0xc76000000]   680302 ms: Scavenge (during sweeping) 4046.6 (4126.1) -> 4016.8 (4126.3) MB, pooled: 0.0 MB, 7.66 / 0.00 ms (average mu = 0.529, current mu = 0.545) allocation failure; 
+[93382:0xc76000000]   682676 ms: Mark-Compact (reduce) 4413.3 (4508.9) -> 4129.6 (4190.8) MB, pooled: 0.0 MB, 285.38 / 0.00 ms (+ 1285.4 ms in 220 steps since start of marking, biggest step 23.8 ms, walltime since start of marking 2374 ms) (average mu = 0
+FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory
+----- Native stack trace -----
+
+ 1: 0x1084335ac node::OOMErrorHandler(char const*, v8::OOMDetails const&) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+ 2: 0x1086166ec v8::Utils::ReportOOMFailure(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+ 3: 0x1086166a4 v8::internal::V8::FatalProcessOutOfMemory(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+ 4: 0x1087c309c v8::internal::Heap::ShouldOptimizeForLoadTime() const [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+ 5: 0x1087c2758 v8::internal::Heap::EagerlyFreeExternalMemoryAndWasmCode() [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+ 6: 0x1087c18ec v8::internal::Heap::CollectGarbage(v8::internal::AllocationSpace, v8::internal::GarbageCollectionReason, v8::GCCallbackFlags, v8::internal::PerformHeapLimitCheck) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+ 7: 0x1087515f0 v8::internal::StackGuard::HandleInterrupts(v8::internal::StackGuard::InterruptLevel) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+ 8: 0x108aae34c v8::internal::Runtime_StackGuard(int, unsigned long*, v8::internal::Isolate*) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+ 9: 0x108255474 Builtins_CEntry_Return1_ArgvOnStack_NoBuiltinExit [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+10: 0x1082fec9c Builtins_StringPrototypeTrim [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+11: 0x12a28d088 
+12: 0x12a0f4dd4 
+13: 0x12a0e5b8c 
+14: 0x12a0d8a70 
+15: 0x12a1a6910 
+16: 0x12a208f34 
+17: 0x12a0cea54 
+18: 0x1081b55ec Builtins_InterpreterEntryTrampoline [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+19: 0x1081b55ec Builtins_InterpreterEntryTrampoline [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+20: 0x1081b55ec Builtins_InterpreterEntryTrampoline [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+21: 0x1081b55ec Builtins_InterpreterEntryTrampoline [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+22: 0x1081b55ec Builtins_InterpreterEntryTrampoline [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+23: 0x1081b55ec Builtins_InterpreterEntryTrampoline [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+24: 0x1081b55ec Builtins_InterpreterEntryTrampoline [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+25: 0x1081b55ec Builtins_InterpreterEntryTrampoline [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+26: 0x1081b55ec Builtins_InterpreterEntryTrampoline [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+27: 0x1082c86b0 Builtins_PromiseConstructor [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+28: 0x1081b5f90 Builtins_InterpreterPushArgsThenFastConstructFunction [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+29: 0x108345020 Builtins_ConstructHandler [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+30: 0x1081b55ec Builtins_InterpreterEntryTrampoline [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+31: 0x1081b55ec Builtins_InterpreterEntryTrampoline [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+32: 0x1081f34c4 Builtins_AsyncFunctionAwaitResolveClosure [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+33: 0x1082ca058 Builtins_PromiseFulfillReactionJob [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+34: 0x1081e2920 Builtins_RunMicrotasks [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+35: 0x1081b2850 Builtins_JSRunMicrotasksEntry [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+36: 0x10872de28 v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+37: 0x10872e4d8 v8::internal::(anonymous namespace)::InvokeWithTryCatch(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+38: 0x10872e5c8 v8::internal::Execution::TryRunMicrotasks(v8::internal::Isolate*, v8::internal::MicrotaskQueue*) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+39: 0x10874fb1c v8::internal::MicrotaskQueue::RunMicrotasks(v8::internal::Isolate*) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+40: 0x10874f938 v8::internal::MicrotaskQueue::PerformCheckpointInternal(v8::Isolate*) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+41: 0x1081b7298 Builtins_CallApiCallbackGeneric [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+42: 0x129db94b4 
+43: 0x1081b296c Builtins_JSEntryTrampoline [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+44: 0x1081b2610 Builtins_JSEntry [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+45: 0x10872de58 v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+46: 0x10872d83c v8::internal::Execution::Call(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>, v8::base::Vector<v8::internal::DirectHandle<v8::internal::Object> const>) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+47: 0x10932b474 v8::Function::Call(v8::Isolate*, v8::Local<v8::Context>, v8::Local<v8::Value>, int, v8::Local<v8::Value>*) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+48: 0x10838d93c node::InternalCallbackScope::Close() [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+49: 0x10838dbc0 node::InternalMakeCallback(node::Environment*, v8::Local<v8::Object>, v8::Local<v8::Object>, v8::Local<v8::Function>, int, v8::Local<v8::Value>*, node::async_context, v8::Local<v8::Value>) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+50: 0x10839c2e0 node::AsyncWrap::MakeCallback(v8::Local<v8::Function>, int, v8::Local<v8::Value>*) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+51: 0x1084facc4 node::StreamBase::CallJSOnreadMethod(long, v8::Local<v8::ArrayBuffer>, unsigned long, node::StreamBase::StreamBaseJSChecks) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+52: 0x1084fc0ac node::EmitToJSStreamListener::OnStreamRead(long, uv_buf_t const&) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+53: 0x1084ff45c node::LibuvStreamWrap::OnUvRead(long, uv_buf_t const*) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+54: 0x1084ff860 node::LibuvStreamWrap::ReadStart()::$_1::__invoke(uv_stream_s*, long, uv_buf_t const*) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+55: 0x104263664 uv__stream_io [/opt/homebrew/Cellar/libuv/1.51.0/lib/libuv.1.0.0.dylib]
+56: 0x104268e2c uv__io_poll [/opt/homebrew/Cellar/libuv/1.51.0/lib/libuv.1.0.0.dylib]
+57: 0x10425aa00 uv_run [/opt/homebrew/Cellar/libuv/1.51.0/lib/libuv.1.0.0.dylib]
+58: 0x10838e904 node::SpinEventLoopInternal(node::Environment*) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+59: 0x10846137c node::NodeMainInstance::Run(node::ExitCode*, node::Environment*) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+60: 0x1084610b0 node::NodeMainInstance::Run() [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+61: 0x108405da8 node::Start(int, char**) [/opt/homebrew/Cellar/node/25.4.0/lib/libnode.141.dylib]
+62: 0x181b41d54 start [/usr/lib/dyld]
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: Channel closed
+ ❯ target.send node:internal/child_process:737:16
+ ❯ ProcessWorker.send node_modules/tinypool/dist/index.js:140:41
+ ❯ MessagePort.<anonymous> node_modules/tinypool/dist/index.js:149:62
+ ❯ [nodejs.internal.kHybridDispatch] node:internal/event_target:845:20
+ ❯ MessagePort.<anonymous> node:internal/per_context/messageport:23:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_IPC_CHANNEL_CLOSED' }
+
+
+

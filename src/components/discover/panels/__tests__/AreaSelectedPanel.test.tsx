@@ -1,7 +1,7 @@
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import { renderWithProviders } from '@/test/renderWithProviders';
 import { AreaSelectedPanel } from '../AreaSelectedPanel';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
@@ -36,11 +36,7 @@ describe('AreaSelectedPanel', () => {
       onAddSchool: vi.fn(),
     };
 
-    render(
-      <BrowserRouter>
-        <AreaSelectedPanel {...defaultProps} {...props} />
-      </BrowserRouter>,
-    );
+    renderWithProviders(<AreaSelectedPanel {...defaultProps} {...props} />, { router: 'browser' });
   };
 
   describe('Quick filter chips', () => {
@@ -323,18 +319,17 @@ describe('AreaSelectedPanel', () => {
 
   describe('F1 — Area-first pill and Start-over button (round-3)', () => {
     it('renders the area-first pill with bg-secondary (navy), NOT a copper class', () => {
-      const { container } = render(
-        <BrowserRouter>
-          <AreaSelectedPanel
-            selectedArea={mockArea}
-            areaListings={[mockListing]}
-            filters={{}}
-            onFiltersChange={vi.fn()}
-            onSelectJourney={vi.fn()}
-            onAddSchool={vi.fn()}
-            journey="area-first"
-          />
-        </BrowserRouter>,
+      const { container } = renderWithProviders(
+        <AreaSelectedPanel
+          selectedArea={mockArea}
+          areaListings={[mockListing]}
+          filters={{}}
+          onFiltersChange={vi.fn()}
+          onSelectJourney={vi.fn()}
+          onAddSchool={vi.fn()}
+          journey="area-first"
+        />,
+        { router: 'browser' },
       );
       // The pill is a <span> with text 'Area-first'. Use querySelector for specificity.
       const pill = container.querySelector('span.bg-secondary');
@@ -344,18 +339,17 @@ describe('AreaSelectedPanel', () => {
     });
 
     it('renders the Layers icon alongside the area-first pill (not MapPin)', () => {
-      const { container } = render(
-        <BrowserRouter>
-          <AreaSelectedPanel
-            selectedArea={mockArea}
-            areaListings={[mockListing]}
-            filters={{}}
-            onFiltersChange={vi.fn()}
-            onSelectJourney={vi.fn()}
-            onAddSchool={vi.fn()}
-            journey="area-first"
-          />
-        </BrowserRouter>,
+      const { container } = renderWithProviders(
+        <AreaSelectedPanel
+          selectedArea={mockArea}
+          areaListings={[mockListing]}
+          filters={{}}
+          onFiltersChange={vi.fn()}
+          onSelectJourney={vi.fn()}
+          onAddSchool={vi.fn()}
+          journey="area-first"
+        />,
+        { router: 'browser' },
       );
       // The pill span carries bg-secondary and contains the Layers svg icon.
       const pill = container.querySelector('span.bg-secondary');
@@ -412,18 +406,17 @@ describe('AreaSelectedPanel', () => {
   describe('F2 — Controls card and property-type filter card (round-3)', () => {
     it('controls card uses bg-card (white surface), NOT bg-[hsl(var(--input-bg))]', () => {
       // The controls card only renders when onCityChange or onIntentChange is provided.
-      const { container } = render(
-        <BrowserRouter>
-          <AreaSelectedPanel
-            selectedArea={mockArea}
-            areaListings={[mockListing]}
-            filters={{}}
-            onFiltersChange={vi.fn()}
-            onSelectJourney={vi.fn()}
-            onAddSchool={vi.fn()}
-            onIntentChange={vi.fn()}
-          />
-        </BrowserRouter>,
+      const { container } = renderWithProviders(
+        <AreaSelectedPanel
+          selectedArea={mockArea}
+          areaListings={[mockListing]}
+          filters={{}}
+          onFiltersChange={vi.fn()}
+          onSelectJourney={vi.fn()}
+          onAddSchool={vi.fn()}
+          onIntentChange={vi.fn()}
+        />,
+        { router: 'browser' },
       );
       // The controls card is the grid div wrapping City/Looking-to controls.
       // It must carry bg-card and must NOT carry the old --input-bg fill.
@@ -440,17 +433,16 @@ describe('AreaSelectedPanel', () => {
     });
 
     it('property-type filter is wrapped in a white card (rounded-xl bg-card)', () => {
-      const { container } = render(
-        <BrowserRouter>
-          <AreaSelectedPanel
-            selectedArea={mockArea}
-            areaListings={[mockListing]}
-            filters={{}}
-            onFiltersChange={vi.fn()}
-            onSelectJourney={vi.fn()}
-            onAddSchool={vi.fn()}
-          />
-        </BrowserRouter>,
+      const { container } = renderWithProviders(
+        <AreaSelectedPanel
+          selectedArea={mockArea}
+          areaListings={[mockListing]}
+          filters={{}}
+          onFiltersChange={vi.fn()}
+          onSelectJourney={vi.fn()}
+          onAddSchool={vi.fn()}
+        />,
+        { router: 'browser' },
       );
       // The quick-filter card wraps both property-type and BHK chips.
       // It is the div that contains quick-chip-all and uses rounded-xl bg-card.

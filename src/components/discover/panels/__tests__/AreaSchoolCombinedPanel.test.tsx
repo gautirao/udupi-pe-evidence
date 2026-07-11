@@ -1,8 +1,7 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import { renderWithProviders } from '@/test/renderWithProviders';
 import { AreaSchoolCombinedPanel } from '../SchoolJourneyPanels';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
@@ -48,10 +47,6 @@ const makeListing = (id: string, overrides: Partial<DiscoverCityListingItem> = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function makeQC() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-}
-
 const baseProps = () => ({
   selectedArea: mockArea,
   selectedSchool: mockSchool,
@@ -67,13 +62,7 @@ const baseProps = () => ({
 });
 
 function renderPanel(props: Partial<React.ComponentProps<typeof AreaSchoolCombinedPanel>> = {}) {
-  return render(
-    <BrowserRouter>
-      <QueryClientProvider client={makeQC()}>
-        <AreaSchoolCombinedPanel {...baseProps()} {...props} />
-      </QueryClientProvider>
-    </BrowserRouter>,
-  );
+  return renderWithProviders(<AreaSchoolCombinedPanel {...baseProps()} {...props} />, { router: 'browser' });
 }
 
 // ── AC1: ReTrends redesign — title is now "Find homes near a school" ──────────

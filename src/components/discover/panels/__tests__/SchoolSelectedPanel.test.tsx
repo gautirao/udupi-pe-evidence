@@ -1,8 +1,7 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import { renderWithProviders } from '@/test/renderWithProviders';
 import { SchoolSelectedPanel } from '../SchoolJourneyPanels';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
@@ -36,10 +35,6 @@ const makeListing = (id: string, overrides: Partial<DiscoverCityListingItem> = {
   ...overrides,
 });
 
-function makeQC() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-}
-
 describe('SchoolSelectedPanel', () => {
   const renderPanel = (
     props: Partial<React.ComponentProps<typeof SchoolSelectedPanel>> = {},
@@ -55,13 +50,7 @@ describe('SchoolSelectedPanel', () => {
       isAuthenticated: false,
     };
 
-    return render(
-      <BrowserRouter>
-        <QueryClientProvider client={makeQC()}>
-          <SchoolSelectedPanel {...defaultProps} {...props} />
-        </QueryClientProvider>
-      </BrowserRouter>,
-    );
+    return renderWithProviders(<SchoolSelectedPanel {...defaultProps} {...props} />, { router: 'browser' });
   };
 
   const renderWithReturn = renderPanel;

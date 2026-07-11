@@ -5,11 +5,10 @@
  * logic from URL state derivation (which is tested in discoverPanelState.test.ts).
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
-import { MemoryRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderWithProviders } from '@/test/renderWithProviders';
 import { DiscoverRightPanel } from '../DiscoverRightPanel';
 import { derivePanelContent } from '@/utils/discoverPanelState';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
@@ -22,7 +21,12 @@ const { mockSetSchoolJourney } = vi.hoisted(() => ({
 // Prevent "supabaseUrl is required" crash from transitive usePropertyListings import
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
-    auth: { getSession: vi.fn().mockResolvedValue({ data: { session: null } }) },
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
+      // Issue #1825 — AuthProvider (now required by PropertyCard's useAuth) subscribes
+      // via onAuthStateChange on mount; the mock must return the shape it destructures.
+      onAuthStateChange: vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
+    },
     from: vi.fn().mockReturnValue({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -169,18 +173,8 @@ const baseProps = {
 
 // Issue #1745 Batch A scope-change fix — GuidedEntryPanel now calls useDiscoverSummary
 // (a useQuery hook), so every render in this file needs a QueryClientProvider ancestor.
-// Matches the makeQueryClient()/QueryClientProvider convention already used by the other
-// DiscoverRightPanel.*.test.tsx files (e.g. agriLanding, agriCorridor, agriGroupPeek).
-function makeQueryClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-}
-
-const renderPanel = (ui: React.ReactElement) =>
-  render(
-    <MemoryRouter>
-      <QueryClientProvider client={makeQueryClient()}>{ui}</QueryClientProvider>
-    </MemoryRouter>,
-  );
+// Matches the shared renderWithProviders() convention (fresh QueryClient per render).
+const renderPanel = (ui: React.ReactElement) => renderWithProviders(ui);
 
 describe('DiscoverRightPanel — state machine routing', () => {
   it('panelContent="guided-entry" renders GuidedEntryPanel with journey cards', () => {

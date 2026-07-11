@@ -10,16 +10,11 @@
 
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithProviders } from '@/test/renderWithProviders';
 import { SchoolSelectedPanel } from './SchoolJourneyPanels';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
-
-function makeQC() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-}
 
 // Minimal listing factory
 function makeListing(id: string): DiscoverCityListingItem {
@@ -51,22 +46,18 @@ const mockSchool: SchoolResult = {
 };
 
 function renderPanel(props: Partial<React.ComponentProps<typeof SchoolSelectedPanel>> = {}) {
-  return render(
-    <QueryClientProvider client={makeQC()}>
-      <MemoryRouter>
-        <SchoolSelectedPanel
-          school={mockSchool}
-          listings={[makeListing('l-1'), makeListing('l-2')]}
-          isLoadingListings={false}
-          radiusKm={2}
-          onRadiusChange={vi.fn()}
-          isAuthenticated={true}
-          onStartOver={vi.fn()}
-          intent="buy"
-          {...props}
-        />
-      </MemoryRouter>
-    </QueryClientProvider>,
+  return renderWithProviders(
+    <SchoolSelectedPanel
+      school={mockSchool}
+      listings={[makeListing('l-1'), makeListing('l-2')]}
+      isLoadingListings={false}
+      radiusKm={2}
+      onRadiusChange={vi.fn()}
+      isAuthenticated={true}
+      onStartOver={vi.fn()}
+      intent="buy"
+      {...props}
+    />,
   );
 }
 
