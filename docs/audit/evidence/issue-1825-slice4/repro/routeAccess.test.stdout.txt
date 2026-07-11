@@ -1,0 +1,48 @@
+
+ RUN  v3.2.4 /Users/gouthamrao/projects/udupi-property-explorer
+
+(node:11152) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ❯ src/lib/routeAccess.test.ts (13 tests | 1 failed) 7ms
+   ✓ routeAccess governance module (Issue #1633) > 1. anonymous accessing public discovery route (e.g. /discover or /) is allowed 1ms
+   ✓ routeAccess governance module (Issue #1633) > 2. anonymous accessing protected routes (/broker/listings/new, /saved-areas, /admin/feeds) is blocked 0ms
+   ✓ routeAccess governance module (Issue #1633) > 3. normal user accessing consumer routes (/saved-areas, /my-bookings, /broker/listings/new) is allowed 0ms
+   ✓ routeAccess governance module (Issue #1633) > 3b. regression (#1566) — normal user accessing /saved-homes is allowed; anonymous/missing role is blocked 0ms
+   ✓ routeAccess governance module (Issue #1633) > 4. normal user accessing broker workspace (/broker/dashboard, /broker/listings) is blocked 0ms
+   ✓ routeAccess governance module (Issue #1633) > 5. normal user accessing admin console (/admin/feeds) is blocked 0ms
+   ✓ routeAccess governance module (Issue #1633) > 6. broker accessing broker dashboard / new listing is allowed 0ms
+   ✓ routeAccess governance module (Issue #1633) > 7. broker accessing admin console or consumer saved is blocked 0ms
+   ✓ routeAccess governance module (Issue #1633) > 8. admin accessing admin console is allowed 0ms
+   ✓ routeAccess governance module (Issue #1633) > 9. admin accessing broker/user workspace links (/broker/dashboard, /saved-areas) is blocked 0ms
+   ✓ routeAccess governance module (Issue #1633) > 11. /broker/listings/new/commercial deep link matches /broker/listings/new access for every role (#1741 follow-up) 0ms
+   × routeAccess governance module (Issue #1633) > 12. regression — /broker/listings/new access is unchanged after the commercial deep-link fix 4ms
+     → expected true to be false // Object.is equality
+   ✓ routeAccess governance module (Issue #1633) > 10. navigation visibility and landing helpers align with role policy 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/routeAccess.test.ts > routeAccess governance module (Issue #1633) > 12. regression — /broker/listings/new access is unchanged after the commercial deep-link fix
+AssertionError: expected true to be false // Object.is equality
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- false[39m
+[31m+ true[39m
+
+ ❯ src/lib/routeAccess.test.ts:94:72
+     92| 
+     93|     // Sibling/subpaths must NOT be accidentally broadened by the exac…
+     94|     expect(canAccessRoute('/broker/listings/new/residential', 'user'))…
+       |                                                                        ^
+     95|     expect(canAccessRoute('/broker/listings/new/commercial/extra', 'us…
+     96|     expect(canAccessRoute('/broker/listings/newcommercial', 'user')).t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 passed (13)
+   Start at  20:19:06
+   Duration  620ms (transform 28ms, setup 36ms, collect 16ms, tests 7ms, environment 184ms, prepare 51ms)
+

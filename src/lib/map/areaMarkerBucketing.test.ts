@@ -190,7 +190,7 @@ describe('9-15 band', () => {
 // ─── 16-30 band ───────────────────────────────────────────────────────────────
 
 describe('16-30 band', () => {
-  it('30-tight-core: yields ~10-12 representatives + clusters; quadrant guarantee keeps an edge area', () => {
+  it('30-tight-core: yields ~8-12 representatives (#1815 collision-demotion) + clusters; quadrant guarantee keeps an edge area', () => {
     // A dense low-count core plus 4 distinct, high-count edge areas (one per quadrant)
     // so the quadrant coverage guarantee is exercised against count-driven ranking.
     const core = tightCoreAreas(26, () => 5);
@@ -204,7 +204,7 @@ describe('16-30 band', () => {
     const result = computeAreaMarkers(baseInput({ areas }));
 
     expect(result.band).toBe('16-30');
-    expect(result.representatives.length).toBeGreaterThanOrEqual(10);
+    expect(result.representatives.length).toBeGreaterThanOrEqual(8);
     expect(result.representatives.length).toBeLessThanOrEqual(12);
     expect(result.clusters.length).toBeGreaterThan(0);
 

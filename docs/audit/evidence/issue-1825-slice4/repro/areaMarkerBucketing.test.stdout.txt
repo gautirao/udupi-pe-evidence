@@ -1,0 +1,48 @@
+
+ RUN  v3.2.4 /Users/gouthamrao/projects/udupi-property-explorer
+
+(node:11181) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ❯ src/lib/map/areaMarkerBucketing.test.ts (20 tests | 1 failed) 11ms
+   ✓ computeBand > 1 areas -> band 1-8 1ms
+   ✓ computeBand > 8 areas -> band 1-8 0ms
+   ✓ computeBand > 9 areas -> band 9-15 0ms
+   ✓ computeBand > 15 areas -> band 9-15 0ms
+   ✓ computeBand > 16 areas -> band 16-30 0ms
+   ✓ computeBand > 30 areas -> band 16-30 0ms
+   ✓ computeBand > 31 areas -> band 30+ 0ms
+   ✓ 1-8 band > renders all areas as full labelled representatives with no clusters/dots 1ms
+   ✓ 9-15 band > 12-even: labels ~8 top-ranked areas, rest become dots, no clusters 1ms
+   ✓ 9-15 band > 9 areas: caps representatives at 8, exactly 1 dot 0ms
+   ✓ 9-15 band > 15 areas: caps representatives at 8, 7 dots 0ms
+   × 16-30 band > 30-tight-core: yields ~10-12 representatives + clusters; quadrant guarantee keeps an edge area 4ms
+     → expected 8 to be greater than or equal to 10
+   ✓ 16-30 band > clusters never show a property-sum count, only member-area count 0ms
+   ✓ 30+ band > 40-dense-core+low-edges: quadrant guarantee ensures each low-count edge area keeps a pin 0ms
+   ✓ forced-always overrides > promotes selected/search-matched/hovered areas to representatives, bypassing the cap 0ms
+   ✓ forced-always overrides > a searched 1-property area anywhere in the group is promoted regardless of rank 0ms
+   ✓ cluster.count invariant > cluster.count always equals cluster.areas.length (never a property-count sum) 1ms
+   ✓ cluster.count invariant > every input area appears in exactly one of representatives/dots/clusters 0ms
+   ✓ determinism > identical input produces deep-equal output across repeated calls 0ms
+   ✓ determinism > is unaffected by input array order (same Set of areas -> same result) 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/map/areaMarkerBucketing.test.ts > 16-30 band > 30-tight-core: yields ~10-12 representatives + clusters; quadrant guarantee keeps an edge area
+AssertionError: expected 8 to be greater than or equal to 10
+ ❯ src/lib/map/areaMarkerBucketing.test.ts:207:43
+    205| 
+    206|     expect(result.band).toBe('16-30');
+    207|     expect(result.representatives.length).toBeGreaterThanOrEqual(10);
+       |                                           ^
+    208|     expect(result.representatives.length).toBeLessThanOrEqual(12);
+    209|     expect(result.clusters.length).toBeGreaterThan(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 passed (20)
+   Start at  20:19:07
+   Duration  538ms (transform 44ms, setup 36ms, collect 35ms, tests 11ms, environment 193ms, prepare 52ms)
+

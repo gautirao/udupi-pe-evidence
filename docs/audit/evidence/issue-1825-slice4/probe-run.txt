@@ -1,0 +1,15 @@
+
+ RUN  v3.2.4 /Users/gouthamrao/projects/udupi-property-explorer
+
+(node:23960) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+stdout | src/lib/map/areaMarkerBucketing.probe.test.ts > 16-30 band > 30-tight-core: yields ~10-12 representatives + clusters; quadrant guarantee keeps an edge area
+PROBE_30_TIGHT_CORE reps=8 clusters=9 edgesPresent=["edge-ne","edge-nw","edge-se","edge-sw"]
+
+ ✓ src/lib/map/areaMarkerBucketing.probe.test.ts (20 tests) 7ms
+
+ Test Files  1 passed (1)
+      Tests  20 passed (20)
+   Start at  20:31:25
+   Duration  1.12s (transform 148ms, setup 219ms, collect 44ms, tests 7ms, environment 426ms, prepare 94ms)
+

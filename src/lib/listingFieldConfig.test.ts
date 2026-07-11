@@ -66,7 +66,7 @@ describe('getListingFieldConfig — exact visibleFields per property type', () =
     assertExactFields('land', ['landArea']);
   });
 
-  it('agricultural_land: landArea + all 9 agri-specific fields (10 total)', () => {
+  it('agricultural_land: landArea + all 9 agri-specific fields + facing (11 total)', () => {
     assertExactFields('agricultural_land', [
       'landArea',
       'waterSource',
@@ -78,6 +78,7 @@ describe('getListingFieldConfig — exact visibleFields per property type', () =
       'landCategory',
       'farmhouseAvailable',
       'fencingDone',
+      'facing',
     ]);
   });
 

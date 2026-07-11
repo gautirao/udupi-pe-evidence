@@ -1,0 +1,89 @@
+
+ RUN  v3.2.4 /Users/gouthamrao/projects/udupi-property-explorer
+
+(node:11121) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ❯ src/lib/listingFieldConfig.test.ts (51 tests | 1 failed) 13ms
+   ✓ getListingFieldConfig — exact visibleFields per property type > land: only landArea 1ms
+   × getListingFieldConfig — exact visibleFields per property type > agricultural_land: landArea + all 9 agri-specific fields (10 total) 5ms
+     → agricultural_land: unexpected extra fields: expected [ 'facing' ] to deeply equal []
+   ✓ getListingFieldConfig — exact visibleFields per property type > commercial: carpetArea + floorNumber + furnishing/washrooms/parking + frontage/usage (7 total) 0ms
+   ✓ getListingFieldConfig — exact visibleFields per property type > commercial_building: landArea + builtArea + totalFloors + numberOfUnits + furnishing/washrooms/parking + frontage/usage (9 total) 0ms
+   ✓ getListingFieldConfig — exact visibleFields per property type > warehouse: landArea + builtArea + numberOfUnits + furnishing/washrooms/parking + frontage/usage (8 total) 0ms
+   ✓ getListingFieldConfig — exact visibleFields per property type > commercial_land: landArea + roadFrontageFt + commercialUsage (3 total) 0ms
+   ✓ isListingFieldVisible — irrelevant field hiding > bedrooms is NOT visible for land 0ms
+   ✓ isListingFieldVisible — irrelevant field hiding > bedrooms is NOT visible for commercial 0ms
+   ✓ isListingFieldVisible — irrelevant field hiding > carpetArea is NOT visible for non-commercial, non-apartment types 0ms
+   ✓ isListingFieldVisible — irrelevant field hiding > landArea is NOT visible for apartment (house/villa show it as an optional plot-area extra — M38-13A design §3) 0ms
+   ✓ isListingFieldVisible — irrelevant field hiding > builtArea is NOT visible for land or commercial_land 0ms
+   ✓ isListingFieldVisible — irrelevant field hiding > agri fields are NOT visible for non-agricultural_land types 0ms
+   ✓ isListingFieldVisible — agri field exclusivity to agricultural_land > all 9 agri fields ARE visible for agricultural_land/sale 0ms
+   ✓ isListingFieldVisible — agri field exclusivity to agricultural_land > all 9 agri fields ARE visible for agricultural_land/rent 0ms
+   ✓ isListingFieldVisible — agri field exclusivity to agricultural_land > land type does NOT pick up agricultural_land agri fields (prefix-leak guard) 0ms
+   ✓ isListingFieldVisible — agri field exclusivity to agricultural_land > commercial_land does NOT pick up agricultural_land agri fields 0ms
+   ✓ isListingFieldVisible — agri field exclusivity to agricultural_land > each of the remaining 6 types also excludes all agri fields 0ms
+   ✓ isListingFieldVisible — commercial field separation > carpetArea is visible for commercial and apartment only 0ms
+   ✓ isListingFieldVisible — commercial field separation > floorNumber is visible for commercial and apartment only 0ms
+   ✓ isListingFieldVisible — commercial field separation > totalFloors is visible for commercial_building, apartment, house, and villa only 0ms
+   ✓ isListingFieldVisible — commercial field separation > numberOfUnits is visible for commercial_building and warehouse only 0ms
+   ✓ isListingFieldVisible — commercial field separation > washrooms is visible for commercial/commercial_building/warehouse but NOT commercial_land or residential 0ms
+   ✓ isListingFieldVisible — commercial field separation > parkingCount is visible for commercial/commercial_building/warehouse but NOT commercial_land or residential 0ms
+   ✓ isListingFieldVisible — commercial field separation > furnishingStatus is visible for commercial family and residential-unit types, but NOT commercial_land, plot, or agri 0ms
+   ✓ isListingFieldVisible — commercial field separation > roadFrontageFt is visible for all 4 commercial types 0ms
+   ✓ isListingFieldVisible — commercial field separation > commercialUsage is visible for all 4 commercial types 0ms
+   ✓ isListingFieldVisible — commercial field separation > roadFrontageFt is NOT visible for residential/agri types 0ms
+   ✓ isListingFieldVisible — commercial field separation > commercialUsage is NOT visible for residential/agri types 0ms
+   ✓ isListingFieldVisible — purpose gating > price is visible for sale and hidden for rent (across all sample types) 0ms
+   ✓ isListingFieldVisible — purpose gating > monthlyRent is visible for rent and hidden for sale (across all sample types) 0ms
+   ✓ isListingFieldVisible — purpose gating > securityDepositMonths is visible for rent and hidden for sale (across all sample types) 0ms
+   ✓ isListingFieldVisible — purpose gating > lockInMonths is visible for rent and hidden for sale (across all sample types) 0ms
+   ✓ isListingFieldVisible — purpose gating > purpose-gated fields are independent of propertyType (commercial vs apartment give same result) 0ms
+   ✓ M38-13A — apartment/house/villa/residential_plot exact visibleFields (design §3) > apartment: carpet-primary + residence-shared + apartment-only fields 0ms
+   ✓ M38-13A — apartment/house/villa/residential_plot exact visibleFields (design §3) > house: builtup-primary + residence-shared + house/villa-only fields 0ms
+   ✓ M38-13A — apartment/house/villa/residential_plot exact visibleFields (design §3) > villa: identical visibleFields to house (design §3 has no house-vs-villa distinction) 0ms
+   ✓ M38-13A — apartment/house/villa/residential_plot exact visibleFields (design §3) > residential_plot: plot area + plot-only fields 0ms
+   ✓ M38-13A — hard rule (AC): plot never renders residence-only fields; apartment/house never render plot-only fields > residential_plot renders NONE of the residence-only fields 0ms
+   ✓ M38-13A — hard rule (AC): plot never renders residence-only fields; apartment/house never render plot-only fields > apartment renders NONE of the plot-only fields 0ms
+   ✓ M38-13A — hard rule (AC): plot never renders residence-only fields; apartment/house never render plot-only fields > house/villa render NONE of the plot-only fields 0ms
+   ✓ M38-13A — hard rule (AC): plot never renders residence-only fields; apartment/house never render plot-only fields > apartment does NOT render house/villa-only fields (garden/terrace/compound/servant/age/waterSource) 0ms
+   ✓ M38-13A — hard rule (AC): plot never renders residence-only fields; apartment/house never render plot-only fields > house/villa do NOT render apartment-only fields (balconies/floorNumber/superBuiltArea/lift/power) 0ms
+   ✓ M38-13A — sale vs rent conditional (design §4) > maintenancePaise + priceNegotiable are sale-only across all 4 residential types 0ms
+   ✓ M38-13A — sale vs rent conditional (design §4) > maintenanceIncluded/rentNegotiable/petsAllowed/availabilityTimeline/preferredTenants are rent-only across all 4 residential types 0ms
+   ✓ M38-13A — sale vs rent conditional (design §4) > these gated fields are hidden entirely for non-residential types (commercial/agri/land) 0ms
+   ✓ M38-13A — sale vs rent conditional (design §4) > possessionStatus (property status) is sale AND residence-only — never rent, never residential_plot 0ms
+   ✓ M38-13A — sale vs rent conditional (design §4) > ownershipType is sale-only for apartment/house/villa, but unconditional for residential_plot 0ms
+   ✓ M38-13A — FE/BE parity (FE visibility ⊆ backend-allowed fields) > apartment/house/villa never render a field the backend rejects for RESIDENTIAL 1ms
+   ✓ M38-13A — FE/BE parity (FE visibility ⊆ backend-allowed fields) > residential_plot never renders a field the backend rejects for PLOT 0ms
+   ✓ M38-13A — legacy safety: legacy types do not pick up residential-plot/villa config > land does not render any residential_plot-only field 0ms
+   ✓ M38-13A — legacy safety: legacy types do not pick up residential-plot/villa config > land does not render any villa/house-only field 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/listingFieldConfig.test.ts > getListingFieldConfig — exact visibleFields per property type > agricultural_land: landArea + all 9 agri-specific fields (10 total)
+AssertionError: agricultural_land: unexpected extra fields: expected [ 'facing' ] to deeply equal []
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "facing",[39m
+[31m+ ][39m
+
+ ❯ assertExactFields src/lib/listingFieldConfig.test.ts:45:53
+     43| 
+     44|   expect(missing, `${type}: missing fields`).toEqual([]);
+     45|   expect(extra, `${type}: unexpected extra fields`).toEqual([]);
+       |                                                     ^
+     46|   expect(actual.size, `${type}: total field count`).toBe(expected.leng…
+     47| }
+ ❯ src/lib/listingFieldConfig.test.ts:70:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 50 passed (51)
+   Start at  20:19:05
+   Duration  1.08s (transform 96ms, setup 114ms, collect 40ms, tests 13ms, environment 349ms, prepare 59ms)
+

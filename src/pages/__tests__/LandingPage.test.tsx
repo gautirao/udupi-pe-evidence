@@ -98,7 +98,8 @@ describe('LandingPage (ReTrends redesign)', () => {
     it('renders Saved and List property actions for signed-in normal consumers', () => {
       mockUser = { email: 'user@test.com' };
       renderPage();
-      expect(screen.getByRole('link', { name: /Saved/i })).toHaveAttribute('href', '/saved-areas');
+      expect(screen.getByRole('link', { name: /^Saved$/i })).toHaveAttribute('href', '/saved-areas');
+      expect(screen.getByRole('link', { name: /Saved homes/i })).toHaveAttribute('href', '/saved-homes');
       expect(screen.getByRole('link', { name: /List property/i })).toHaveAttribute('href', '/broker/listings/new');
     });
 

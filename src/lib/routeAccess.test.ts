@@ -91,7 +91,8 @@ describe('routeAccess governance module (Issue #1633)', () => {
     expect(canAccessRoute('/broker/listings/new', 'anonymous')).toBe(false);
 
     // Sibling/subpaths must NOT be accidentally broadened by the exact-match fix
-    expect(canAccessRoute('/broker/listings/new/residential', 'user')).toBe(false);
+    // #1719 — residential deep-link sibling is an intended route for signed-in users (mirrors the commercial sibling in test 11)
+    expect(canAccessRoute('/broker/listings/new/residential', 'user')).toBe(true);
     expect(canAccessRoute('/broker/listings/new/commercial/extra', 'user')).toBe(false);
     expect(canAccessRoute('/broker/listings/newcommercial', 'user')).toBe(false);
   });
