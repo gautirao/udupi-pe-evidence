@@ -28,6 +28,15 @@ export interface UseDiscoverPageStateResult {
   // Refs exposed for orchestration use in Index.tsx
   pendingAreaKeyRef: React.MutableRefObject<string | null>;
   initialViewportRef: React.MutableRefObject<DiscoverUrlState['viewport']>;
+  /**
+   * Issue #1821 — true only when the mount-time URL was a bare area-only deep link
+   * (areaKey present, no groupId/scope). initialViewportRef should only be trusted
+   * to suppress the area-specific fit when this is true; a groupId/scope present at
+   * mount means any inherited viewport is presumptively the group's/region's own
+   * fit (e.g. from a region -> group -> area drill-down), not a genuinely restored
+   * area-specific viewport, so the area fit must always fire fresh in that case.
+   */
+  initialViewportWasBareAreaRef: React.MutableRefObject<boolean>;
   resolveSignal: number;
 
   // Setters needed by Index.tsx (deferred areaKey hydration and school restore live there)
@@ -126,6 +135,15 @@ export function useDiscoverPageState({
   // effect in Index.tsx to decide whether to pan the map — avoiding adding mutable
   // urlState to that effect's dep array.
   const initialViewportRef = useRef(urlState.viewport);
+  // Issue #1821 — companion signal captured at the SAME mount instant: was the
+  // mount-time URL a bare area-only deep link (areaKey, no groupId/scope)? This is
+  // the actual shape of the #1160/#1069 restoration flow initialViewportRef was
+  // built for. When groupId/scope is also present at mount (region -> group -> area
+  // drill-down, reloaded/bookmarked/shared), any inherited viewport is presumptively
+  // the group's/region's own fit, not a genuinely restored area-specific one.
+  const initialViewportWasBareAreaRef = useRef(
+    !urlState.groupId && !urlState.scope && !!urlState.areaKey,
+  );
 
   // ── Effects ──────────────────────────────────────────────────────────────
 
@@ -324,6 +342,7 @@ export function useDiscoverPageState({
     resetMapTick,
     pendingAreaKeyRef,
     initialViewportRef,
+    initialViewportWasBareAreaRef,
     resolveSignal,
     setFilters,
     setSelectedArea,

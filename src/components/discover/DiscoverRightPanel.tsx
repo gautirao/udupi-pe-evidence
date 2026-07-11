@@ -43,6 +43,7 @@ import { AgriGroupLocalityPanel } from './panels/AgriGroupLocalityPanel';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 import type { AgriFilterValues } from './panels/AgriFiltersPanel';
 import { formatMemberAreaSummary, buildAreaNameIndex } from '@/utils/areaNameSummary';
+import { prettifyZoneSlug } from '@/components/discover/SchoolRadiusMapOverlay';
 
 // ─── CorridorLandingPanel — corridor-first two-level UX (Issue #1429) ─────────
 

@@ -1339,7 +1339,7 @@ export default function MapDiscovery() {
   const {
     filters, selectedArea, panToArea, mapZoom, mapReady, showLoader,
     selectedSchool, schoolBoardFilter, city, fitTick, resetMapTick,
-    pendingAreaKeyRef, initialViewportRef, resolveSignal,
+    pendingAreaKeyRef, initialViewportRef, initialViewportWasBareAreaRef, resolveSignal,
     setFilters, setSelectedArea, setPanToArea, setMapReady, setMapZoom,
     setFitTick, setShowLoader, setSchoolBoardFilter, setSelectedSchool,
     handleCityChange, handleSchoolSelect, handleFiltersChange,
@@ -2377,7 +2377,14 @@ export default function MapDiscovery() {
     const match = discoverAreas.find((a) => a.areaKey === pending);
     if (match) {
       setSelectedArea(match);
-      if (!initialViewportRef.current) setPanToArea(match);
+      // Issue #1821 — only trust an inherited viewport (skip the area-specific fit)
+      // when the mount-time URL was a bare area-only deep link (no groupId/scope).
+      // When a group/region drill-down was present at mount, any inherited viewport
+      // is presumptively the group's/region's own fit, not a genuinely restored
+      // area-specific one, so always fit fresh to the resolved area's own bounds.
+      if (!initialViewportRef.current || !initialViewportWasBareAreaRef.current) {
+        setPanToArea(match);
+      }
     } else if (cityRef.current !== urlCityRef.current) {
       // Local city (drives the areas query) hasn't synced with the URL city yet —
       // discoverAreas may be stale. Re-arm and wait for the re-fetch to complete.
