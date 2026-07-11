@@ -76,9 +76,27 @@ export interface BucketingResult {
 }
 
 const DEFAULT_CELL_PX = 110;
-const DEFAULT_LABEL_CAP = 12;
-// design-spec §1: 9-15 band shows "top ~6-8 by rank labeled; rest are dots".
+// Issue #1815 — grid cells are ~110px but a representative label's footprint
+// is far wider (~198-233px real, see estimateRepFootprintWidth below), so the
+// old flat 12-cap let adjacent-cell representatives collide with nothing to
+// demote them. Tightened
+// + made width-responsive per MARKER_PLACEMENT_SPEC: narrow maps (mobile,
+// <=520px) get ~8 labelled representatives; wider maps get ~10. Combined with
+// the label-collision demote pass below, total visible nav markers stay <=12.
+const NARROW_VIEWPORT_MAX_WIDTH = 520;
+const NARROW_LABEL_CAP = 8;
+const WIDE_LABEL_CAP = 10;
+// design-spec §1: 9-15 band shows "top ~6-8 by rank labeled; rest are dots" —
+// this band already sat at the low end of the tightened range pre-#1815, so
+// it stays a fixed 8 rather than widening to 10 on wide viewports (that would
+// let a 10-area 9-15-band group show zero dots, undermining the band's own
+// design intent independent of the grid-band cap tightened below).
 const BAND_9_15_REP_CAP = 8;
+
+function resolveEffectiveLabelCap(input: ComputeAreaMarkersInput): number {
+  if (input.labelCap != null) return input.labelCap;
+  return input.viewport.width <= NARROW_VIEWPORT_MAX_WIDTH ? NARROW_LABEL_CAP : WIDE_LABEL_CAP;
+}
 
 // ─── Band selection ─────────────────────────────────────────────────────────
 
@@ -219,7 +237,7 @@ function computeGridBands(
   rankComparator: (a: RankableArea, b: RankableArea) => number,
 ): { representatives: RankableArea[]; clusters: AreaCluster[]; dots: RankableArea[] } {
   const cellPx = input.cellPx ?? DEFAULT_CELL_PX;
-  const labelCap = input.labelCap ?? DEFAULT_LABEL_CAP;
+  const labelCap = resolveEffectiveLabelCap(input);
 
   const cells = buildGridCells(areas, input.project, cellPx, rankComparator);
   const selectedCellKeys = selectCellsForRepresentation(cells, labelCap, input.groupBounds, rankComparator);
@@ -346,6 +364,221 @@ function applyForcedAlways(
   }
 
   return { representatives, clusters, dots };
+}
+
+// ─── Representative label-rect collision/demote pass (Issue #1815) ─────────
+//
+// #1810 shipped a collision pass for area-cluster CHIPS only (below). Grid
+// cells are ~110px (DEFAULT_CELL_PX) but a representative label's footprint
+// is far wider, so adjacent-cell representatives could still visually
+// overlap with nothing demoting them. This pass runs once per
+// computeAreaMarkers call, AFTER applyForcedAlways and BEFORE the function
+// returns, so a caller's subsequent computeClusterChipPlacements(result.clusters, ...)
+// always operates on the post-demote cluster set — this ordering is
+// load-bearing (qa-fast R2).
+//
+// Representatives are iterated in rankComparator order — never reordered by
+// forced-vs-normal status — so a non-forced area's demotion outcome is a
+// function of its rank position and real geometric collisions only, never of
+// which specific area happens to be forced (qa-fast R1 hover-stability): the
+// only way a forced area influences an unrelated neighbour's outcome is by
+// genuinely occupying screen space once promoted to a representative, exactly
+// as any other representative would.
+
+// Issue #1815 live-E2E fix (round 2) — representative-pill footprint WIDTH is
+// now PER-LABEL, not a single fixed constant. Round 1 replaced the reused
+// CHIP_W=176 (an under-estimate, missed real collisions) with a fixed
+// REP_LABEL_FOOTPRINT_W=248 — but real pills vary 198-233px by area-name
+// length (pin icon + name + count-chip, see makeAreaCard in
+// AreaMarkerLayer.tsx), so reserving a flat 248px for EVERY rep (including
+// short-named ones whose real pill is only ~198px) flagged pairs as
+// colliding that would never actually touch on screen — a false-positive
+// over-demotion that collapsed a real 29-area dense group to just 1
+// labelled pill + 3 chips instead of the target ~8-10.
+//
+// estimateRepFootprintWidth() below models the SAME layout makeAreaCard
+// renders: pin icon + 2 flex gaps + horizontal padding + border (a roughly
+// constant ~46px) + the count/school chip (~100px, digit-count variance is
+// small) + the label text itself (~7px/char, calibrated against the live
+// 198px@13-chars / 233px@18-chars measurements). Only non-forced
+// representatives ever reach the collision check below (forced ones are
+// exempt and never obstacles), and a non-forced representative's rendered
+// label is always truncated to TRUNCATE_MAX_CHARS=18 chars in
+// AreaMarkerLayer.tsx, so the char count is capped at 18 here too — MUST
+// STAY IN SYNC with that constant, or this estimate silently drifts from the
+// real rendered width again.
+/** Fixed part of the pill footprint: pin icon + flex gaps + padding + border + count/school chip. */
+const REP_LABEL_FOOTPRINT_BASE_PX = 107;
+/** Per-character width of the (possibly-truncated) label text, calibrated against real 198px/233px pills. */
+const REP_LABEL_FOOTPRINT_CHAR_PX = 7;
+/** Mirrors AreaMarkerLayer.tsx's TRUNCATE_MAX_CHARS — the max rendered label length for any
+ *  non-forced (collision-checked) representative. Keep these two constants in sync. */
+const REP_LABEL_TRUNCATE_MAX_CHARS = 18;
+/** Representative pill footprint HEIGHT — safely above the observed ~36.5px real height (low variance, kept fixed). */
+const REP_LABEL_FOOTPRINT_H = 44;
+
+/** Per-label pill footprint width, modelling makeAreaCard's real rendered layout (see comment above). */
+function estimateRepFootprintWidth(name: string): number {
+  const chars = Math.min(name.length, REP_LABEL_TRUNCATE_MAX_CHARS);
+  return REP_LABEL_FOOTPRINT_BASE_PX + chars * REP_LABEL_FOOTPRINT_CHAR_PX;
+}
+
+/** ~8px minimum gap from MARKER_PLACEMENT_SPEC §4, added on top of the footprint above. */
+const LABEL_MIN_GAP_PX = 8;
+
+interface DemotePassResult {
+  representatives: RankableArea[];
+  clusters: AreaCluster[];
+  dots: RankableArea[];
+}
+
+/**
+ * Detects representative label-rect collisions in screen space and demotes
+ * the lower-ranked colliding representative into the existing cluster/dot
+ * data model — never offsets it (design-spec §2/§4; forbidden-changes list).
+ *
+ * Guarantees:
+ *  - Forced-always representatives (selectedId/searchMatchIds/hoveredOrFocusedId)
+ *    are exempt from demotion (qa-fast R4) — they never collide-check at all.
+ *  - Hover-stability (MARKER_PLACEMENT_SPEC §5 "hover never re-places
+ *    anything"; qa-fast R1): a forced-always rep is kept but NEVER added to
+ *    the `keptRects` obstacle set, and never itself runs a collision check.
+ *    Only non-forced kept reps become obstacles, and only non-forced reps
+ *    collision-check (against other non-forced kept reps). This makes a
+ *    non-forced rep's demotion outcome a pure function of the *set of
+ *    non-forced rep geometry + rank* — completely independent of which
+ *    area(s) happen to be forced. Hovering/searching/selecting a DIFFERENT
+ *    area therefore can never demote an unrelated label purely because the
+ *    newly-forced rep's rect appeared. (A forced label may still visually
+ *    sit over a neighbour — that transient overlap is the accepted
+ *    forced-set residual per §5's "hover swaps the icon in place" intent,
+ *    not a demotion.)
+ *  - PRECEDENCE DECISION (Issue #1815 live-E2E follow-up, user-approved):
+ *    no-overlap (AC1) ALWAYS WINS over the per-quadrant label guarantee
+ *    (qa-fast R5). A real thanisandra-hennur-belt dataset produced two
+ *    areas that were each the sole representative of their own quadrant
+ *    AND genuinely collided on screen — R5's old absolute veto kept both,
+ *    persisting a visible overlap. A non-forced representative that
+ *    collides with an already-kept representative is now ALWAYS demoted,
+ *    even if it is the last representative in its quadrant; a quadrant CAN
+ *    drop to zero persistent representatives when its sole member collides.
+ *    The guarantee that still holds: a lone-quadrant representative that
+ *    does NOT collide with anything is always kept — this falls out
+ *    automatically (a non-colliding rep is never demoted), no special-casing
+ *    needed. (The substitute-candidate-search alternative — swap in a
+ *    different, non-colliding member of the same quadrant instead of
+ *    dropping to zero — was considered and explicitly declined.)
+ *  - Every demoted representative reappears in `clusters` (folded into the
+ *    cell it geometrically belongs to, or the nearest existing cluster) or in
+ *    `dots` — never silently dropped (qa-fast R7 conservation).
+ *  - Pure and deterministic: only rankComparator order + input.project +
+ *    input.groupBounds drive the outcome, no Math.random/Date (qa-fast R8).
+ */
+function demoteCollidingRepresentatives(
+  withForced: DemotePassResult,
+  forcedIds: string[],
+  input: ComputeAreaMarkersInput,
+  rankComparator: (a: RankableArea, b: RankableArea) => number,
+): DemotePassResult {
+  const reps = withForced.representatives;
+  if (reps.length <= 1) return withForced;
+
+  const forcedIdSet = new Set(forcedIds);
+  const cellPx = input.cellPx ?? DEFAULT_CELL_PX;
+  const footprintH = REP_LABEL_FOOTPRINT_H + LABEL_MIN_GAP_PX;
+
+  // Issue #1815 live-E2E follow-up (user-approved precedence decision):
+  // no-overlap ALWAYS WINS over the per-quadrant guarantee — see the
+  // PRECEDENCE DECISION paragraph in this function's doc comment. There is
+  // therefore no quadrant-based exemption/bookkeeping here at all: a
+  // non-forced rep's keep/demote outcome depends ONLY on whether it collides
+  // with an already-kept non-forced rep (checked below). A lone-quadrant rep
+  // that never collides is still kept — that falls out automatically, since
+  // a non-colliding rep is never demoted.
+
+  const ordered = [...reps].sort(rankComparator);
+  const kept: RankableArea[] = [];
+  // Obstacle set for collision-checking — NON-FORCED kept reps only (hover-
+  // stability guarantee above). `w` is that rep's OWN per-label footprint
+  // width (Issue #1815 round 2) so two reps with different name lengths are
+  // compared using each one's real estimated width, not a shared constant.
+  const keptRects: { x: number; y: number; w: number }[] = [];
+  const demoted: RankableArea[] = [];
+
+  for (const rep of ordered) {
+    const isForced = forcedIdSet.has(rep.id);
+
+    if (isForced) {
+      // Always kept, never collision-checked, never an obstacle for others.
+      kept.push(rep);
+      continue;
+    }
+
+    const { x, y } = input.project(rep.lat, rep.lon);
+    const w = estimateRepFootprintWidth(rep.name) + LABEL_MIN_GAP_PX;
+
+    // No-overlap always wins (see PRECEDENCE DECISION above) — every
+    // non-forced rep collision-checks against every already-kept non-forced
+    // rep, regardless of quadrant membership. Each side of the check uses
+    // ITS OWN per-label width (Issue #1815 round 2 — see
+    // estimateRepFootprintWidth), not a shared fixed constant.
+    let collides = false;
+    for (const placed of keptRects) {
+      if (rectsOverlap(x, y, w, footprintH, placed.x, placed.y, placed.w, footprintH)) {
+        collides = true;
+        break;
+      }
+    }
+
+    if (collides) {
+      demoted.push(rep);
+    } else {
+      kept.push(rep);
+      keptRects.push({ x, y, w });
+    }
+  }
+
+  if (demoted.length === 0) return withForced;
+
+  // Fold every demoted representative into the existing cluster/dot data
+  // model — never offset, never dropped.
+  const clusters = withForced.clusters.map((c) => ({ ...c, areas: [...c.areas] }));
+  const clusterByCellKey = new Map<string, AreaCluster>();
+  for (const c of clusters) clusterByCellKey.set(c.cellKey, c);
+  const dots: RankableArea[] = [...withForced.dots];
+
+  for (const rep of demoted) {
+    const { x, y } = input.project(rep.lat, rep.lon);
+    const cellKey = `${Math.floor(x / cellPx)}:${Math.floor(y / cellPx)}`;
+    const sameCellCluster = clusterByCellKey.get(cellKey);
+    if (sameCellCluster) {
+      sameCellCluster.areas.push(rep);
+      sameCellCluster.count = sameCellCluster.areas.length;
+      continue;
+    }
+    // No cluster occupies this exact grid cell — fold into the nearest
+    // existing cluster by screen distance to its anchor, if any exist.
+    let nearest: AreaCluster | null = null;
+    let nearestDistSq = Infinity;
+    for (const c of clusters) {
+      const anchorPt = input.project(c.anchor.lat, c.anchor.lon);
+      const distSq = (anchorPt.x - x) ** 2 + (anchorPt.y - y) ** 2;
+      if (distSq < nearestDistSq) {
+        nearestDistSq = distSq;
+        nearest = c;
+      }
+    }
+    if (nearest) {
+      nearest.areas.push(rep);
+      nearest.count = nearest.areas.length;
+    } else {
+      // No cluster exists at all (e.g. the 1-8/9-15 bands) — a lone demoted
+      // representative reads better as a hover dot than an orphaned chip.
+      dots.push(rep);
+    }
+  }
+
+  return { representatives: kept, clusters, dots };
 }
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
@@ -499,7 +732,7 @@ export function computeAreaMarkers(input: ComputeAreaMarkersInput): BucketingRes
   if (band === '1-8') {
     core = { representatives: sortedAreas, clusters: [], dots: [] };
   } else if (band === '9-15') {
-    const repCount = Math.min(BAND_9_15_REP_CAP, sortedAreas.length);
+    const repCount = Math.min(input.labelCap ?? BAND_9_15_REP_CAP, sortedAreas.length);
     core = {
       representatives: sortedAreas.slice(0, repCount),
       clusters: [],
@@ -512,10 +745,23 @@ export function computeAreaMarkers(input: ComputeAreaMarkersInput): BucketingRes
   const forcedIds = collectForcedIds(input.forced);
   const withForced = applyForcedAlways(core, forcedIds);
 
+  // Issue #1815 — representative label-rect collision/demote pass. Must run
+  // AFTER applyForcedAlways (forced-always exemption needs the final forced
+  // representative set) and BEFORE this function returns, so that a caller's
+  // subsequent computeClusterChipPlacements(result.clusters, ...) always sees
+  // the post-demote clusters (qa-fast R2 — ordering is load-bearing).
+  //
+  // Gated to bands that actually cluster (9-15 / 16-30 / 30+). The 1-8 band's
+  // design intent (MARKER_PLACEMENT_SPEC §3) is "show all areas with full
+  // labels, no clustering at all" — a small group must never silently demote
+  // one of its handful of labels, even on a real footprint collision.
+  const demoted =
+    band === '1-8' ? withForced : demoteCollidingRepresentatives(withForced, forcedIds, input, rankComparator);
+
   // Deterministic output ordering: representatives + dots by rank, clusters by cellKey.
-  const representatives = [...withForced.representatives].sort(rankComparator);
-  const dots = [...withForced.dots].sort(rankComparator);
-  const clusters = [...withForced.clusters].sort((a, b) => (a.cellKey < b.cellKey ? -1 : a.cellKey > b.cellKey ? 1 : 0));
+  const representatives = [...demoted.representatives].sort(rankComparator);
+  const dots = [...demoted.dots].sort(rankComparator);
+  const clusters = [...demoted.clusters].sort((a, b) => (a.cellKey < b.cellKey ? -1 : a.cellKey > b.cellKey ? 1 : 0));
 
   return { representatives, clusters, dots, band };
 }

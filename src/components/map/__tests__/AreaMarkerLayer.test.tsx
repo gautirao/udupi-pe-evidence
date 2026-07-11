@@ -1089,3 +1089,131 @@ describe('AreaMarkerLayer — Issue #1806 FIX-3: degraded-path in-layer scope gu
     expect(total).toBe(4);
   });
 });
+
+// ─── Issue #1815 — representative label-rect collision/demote pass ──────────
+//
+// areaMarkerBucketing.test.ts unit-tests demoteCollidingRepresentatives in
+// isolation with a synthetic project(). This suite exercises the same pass
+// through the real Leaflet-facing wrapper, using the projectLatLon mock
+// above (a linear stand-in for map.latLngToContainerPoint) so the collision
+// geometry is driven by real geo_center_lat/lon deltas.
+describe('AreaMarkerLayer — Issue #1815 representative collision/demote pass', () => {
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+    capturedMarkers.length = 0;
+  });
+
+  // Band 9-15 (10 areas): collide-0 (rank #1) and collide-1 (rank #2) sit at
+  // the EXACT same lat/lon — a guaranteed footprint collision under
+  // projectLatLon. The 8 filler areas are spread far enough apart (and
+  // low-count enough) to never collide with collide-0/1 or each other, while
+  // still filling the top-8 rep slice so collide-0/1's own quadrant (NE) has
+  // exactly 2 non-forced rep candidates — enough that the last-in-quadrant
+  // exemption does NOT block collide-1's demotion.
+  const COLLISION_REP_AREAS: AreaPoint[] = [
+    makeArea('collide-0', { geo_center_lat: 13.45, geo_center_lon: 74.85, listingCount: 100 }),
+    makeArea('collide-1', { geo_center_lat: 13.45, geo_center_lon: 74.85, listingCount: 99 }),
+    makeArea('filler-0', { geo_center_lat: 13.20, geo_center_lon: 74.60, listingCount: 50 }),
+    makeArea('filler-1', { geo_center_lat: 13.22, geo_center_lon: 74.62, listingCount: 48 }),
+    makeArea('filler-2', { geo_center_lat: 13.24, geo_center_lon: 74.64, listingCount: 46 }),
+    makeArea('filler-3', { geo_center_lat: 13.26, geo_center_lon: 74.66, listingCount: 44 }),
+    makeArea('filler-4', { geo_center_lat: 13.28, geo_center_lon: 74.68, listingCount: 42 }),
+    makeArea('filler-5', { geo_center_lat: 13.30, geo_center_lon: 74.70, listingCount: 40 }),
+    makeArea('filler-6', { geo_center_lat: 13.32, geo_center_lon: 74.72, listingCount: 38 }),
+    makeArea('filler-7', { geo_center_lat: 13.34, geo_center_lon: 74.74, listingCount: 36 }),
+  ];
+
+  it('the higher-ranked of two colliding representatives (collide-0) renders as a full labelled pin', () => {
+    render(<AreaMarkerLayer areas={COLLISION_REP_AREAS} enableDegradation />);
+    const pins = capturedDivIconCalls.filter((c) => c.html.includes('data-testid="area-marker"'));
+    expect(pins.some((c) => c.html.includes('collide-0'))).toBe(true);
+  });
+
+  it('the lower-ranked, colliding representative (collide-1) is demoted to a dot — NOT rendered as a labelled pin', () => {
+    render(<AreaMarkerLayer areas={COLLISION_REP_AREAS} enableDegradation />);
+
+    // Never appears as a full representative pin.
+    const pins = capturedDivIconCalls.filter((c) => c.html.includes('data-testid="area-marker"'));
+    expect(pins.some((c) => c.html.includes('collide-1'))).toBe(false);
+
+    // Reveal every hover-dot (mouseover swaps in the labelled variant) and
+    // confirm collide-1 is one of them.
+    const dotIndices = capturedDivIconCalls
+      .map((c, i) => ({ c, i }))
+      .filter(({ c }) => c.html.includes('data-testid="area-marker-dot"'))
+      .map(({ i }) => i);
+    expect(dotIndices.length).toBeGreaterThan(0);
+
+    let foundCollide1AsDot = false;
+    for (const idx of dotIndices) {
+      capturedMarkers[idx].handlers.mouseover();
+      const revealedCall = capturedMarkers[idx].setIcon.mock.calls.at(-1)?.[0] as { options: DivIconOpts } | undefined;
+      expect(revealedCall).toBeDefined();
+      if (revealedCall!.options.html.includes('collide-1')) {
+        foundCollide1AsDot = true;
+      }
+    }
+    expect(foundCollide1AsDot).toBe(true);
+  });
+
+  it('no area-cluster chip is rendered for the demoted band 9-15 representative (a solo demotion folds to a dot, not a chip)', () => {
+    render(<AreaMarkerLayer areas={COLLISION_REP_AREAS} enableDegradation />);
+    const clusterChips = capturedDivIconCalls.filter((c) => c.html.includes('data-testid="area-cluster-marker"'));
+    // Band 9-15 never produces clusters (design-spec §1: top-N labelled, rest
+    // are dots, no grid clustering) — the demote pass folds a demoted rep
+    // into an existing cluster only if one exists at that cell/nearest; here
+    // none exists, so it becomes a lone dot instead.
+    expect(clusterChips).toHaveLength(0);
+  });
+});
+
+// ─── Issue #1815 (R1) — hovering never publishes a camera intent ───────────
+//
+// Regression the reviewer flagged: forced-always promotion via hover must
+// never trigger a camera move. AreaMarkerLayer already wires
+// onAreaCameraIntent only inside marker.on('click', ...) handlers (never
+// mouseover/mouseout, never a prop-change effect) — this suite proves that
+// contract holds for both the panel-hover path (hoveredAreaKey prop change)
+// and the native marker mouseover-reveal path.
+describe('AreaMarkerLayer — Issue #1815 hover never publishes onAreaCameraIntent', () => {
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+    capturedMarkers.length = 0;
+  });
+
+  it('rerendering with a panel-hovered/focused area (hoveredAreaKey) does not call onAreaCameraIntent (no camera move)', () => {
+    const onAreaCameraIntent = vi.fn();
+    const { rerender } = render(
+      <AreaMarkerLayer areas={DENSE_GROUP_AREAS} enableDegradation onAreaCameraIntent={onAreaCameraIntent} />,
+    );
+    rerender(
+      <AreaMarkerLayer
+        areas={DENSE_GROUP_AREAS}
+        enableDegradation
+        onAreaCameraIntent={onAreaCameraIntent}
+        hoveredAreaKey="se-a-3"
+      />,
+    );
+    expect(onAreaCameraIntent).not.toHaveBeenCalled();
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+    expect(mapStub.flyTo).not.toHaveBeenCalled();
+  });
+
+  it('a native mouseover reveal on a hover-dot does not call onAreaCameraIntent either', () => {
+    const onAreaCameraIntent = vi.fn();
+    const MEDIUM_BAND_AREAS: AreaPoint[] = Array.from({ length: 10 }, (_, i) =>
+      makeArea(`med-${i}`, {
+        geo_center_lat: 13.2 + i * 0.03,
+        geo_center_lon: 74.6 + i * 0.03,
+        listingCount: 10 - i,
+      }),
+    );
+    render(
+      <AreaMarkerLayer areas={MEDIUM_BAND_AREAS} enableDegradation onAreaCameraIntent={onAreaCameraIntent} />,
+    );
+    const dotIndex = capturedDivIconCalls.findIndex((c) => c.html.includes('data-testid="area-marker-dot"'));
+    expect(dotIndex).toBeGreaterThanOrEqual(0);
+    capturedMarkers[dotIndex].handlers.mouseover();
+    expect(onAreaCameraIntent).not.toHaveBeenCalled();
+  });
+});

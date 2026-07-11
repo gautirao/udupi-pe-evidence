@@ -2417,12 +2417,31 @@ export default function MapDiscovery() {
   const prevAreaKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // Guard: wait for area data before computing bounds.
-    // This must run BEFORE updating refs — on cold load with ?groupId= the effect fires
-    // while areasLoading=true, and if refs were updated here the transition check would
-    // see groupChanged=false on the second fire (when data has loaded) and skip fitBounds.
+    // Guard: wait for area data AND group-membership data before computing
+    // bounds. This must run BEFORE updating refs — on cold load with
+    // ?groupId= the effect fires while areasLoading=true, and if refs were
+    // updated here the transition check would see groupChanged=false on the
+    // second fire (when data has loaded) and skip fitBounds.
+    //
+    // Issue #1815 live-e2e follow-up: areasLoading alone is not sufficient.
+    // `discoverAreas` (gated by areasLoading) and `areaGroupsData` (gated by
+    // isLoadingAreaGroups, used the same way two effects below at ~L2234)
+    // are two INDEPENDENT async fetches. If discoverAreas happened to
+    // resolve first, this effect would previously fall through with
+    // areaGroupsData/focusedGroup still unresolved, compute an empty
+    // groupAreaKeys => null bounds => never call setPanToArea — but still
+    // unconditionally advance prevGroupIdRef/prevAreaKeyRef below, burning
+    // the one-shot "group changed" transition signal. When areaGroupsData
+    // then resolved moments later, groupChanged was already false and the
+    // group-framing camera fit silently never fired again for that page
+    // load — the root cause of the reported bimodal pill-count race
+    // (settling to a demote-heavy ~1 representative because the camera was
+    // stuck at the pre-fit overview zoom). Gating on isLoadingAreaGroups too
+    // ensures focusedGroup.area_keys is actually resolved before the refs
+    // (and thus the one-shot signal) ever advance.
     if (!urlState.groupId) return;
     if (areasLoading) return;
+    if (isLoadingAreaGroups) return;
 
     // Now that data is ready, compare against the previous stable values and advance refs.
     const groupChanged = urlState.groupId !== prevGroupIdRef.current;
@@ -2446,7 +2465,7 @@ export default function MapDiscovery() {
       setPanToArea(bounds);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlState.groupId, urlState.areaKey, areasLoading, discoverAreas, areaGroupsData]);
+  }, [urlState.groupId, urlState.areaKey, areasLoading, isLoadingAreaGroups, discoverAreas, areaGroupsData]);
 
   // Issue #1745 Bug 2 — fitBounds to member areas when a macro-region scope is selected
   // so the user does not need to manually zoom out to see corridors in that macro region.
@@ -3026,9 +3045,35 @@ export default function MapDiscovery() {
     focusedGroup,
   ]);
 
-  // Issue #1798 PR-B1 — Search query text must NOT drive map markers.
-  // Search results are dropdown-only until the user selects one.
-  const areaSearchMatchKeys = undefined;
+  // Issue #1815 (R3b/R6) — a panel search match must promote that area to a
+  // full labelled map pin (AreaMarkerLayer's documented searchMatchKeys
+  // contract: "Areas matching the active panel search — always forced to
+  // full labelled pins"). debouncedAreaSearchQuery (declared above) already
+  // exists purely to drive this — wired up from the panel via
+  // onAreaSearchQueryChange={setAreaSearchQuery} below — but the final step
+  // (turning the live query into actual matched area KEYS) was never
+  // implemented; this constant was hardcoded to `undefined`, so
+  // applyForcedAlways in areaMarkerBucketing.ts never had anything to
+  // force-promote. Mirrors ScopedSearch's own matching predicate (name or
+  // areaKey, case-insensitive substring — see
+  // src/components/discover/ScopedSearch.tsx's matchingAreas), adapted to
+  // the shape actually in scope here: `discoverAreas` at this point in the
+  // component is AreaPoint[] (has `areaLabel`, NOT `name` — see the comment
+  // on discoverAreasForPanel a few hundred lines up), not the DiscoverArea[]
+  // ScopedSearch's own predicate is written against. Matches are NOT capped
+  // to 8 (that cap is a dropdown-suggestion-list concern, unrelated to
+  // marker promotion). This only affects AreaMarkerLayer's bucketing
+  // (representative selection) — never a camera move or URL/route change;
+  // searchMatchKeys is read solely inside computeAreaMarkers's
+  // applyForcedAlways, which has no camera-intent side effect.
+  const areaSearchMatchKeys = useMemo(() => {
+    const q = debouncedAreaSearchQuery.trim().toLowerCase();
+    if (!q) return undefined;
+    const matches = discoverAreas
+      .filter((a) => a.areaLabel.toLowerCase().includes(q) || a.areaKey.toLowerCase().includes(q))
+      .map((a) => a.areaKey);
+    return matches.length > 0 ? matches : undefined;
+  }, [debouncedAreaSearchQuery, discoverAreas]);
 
   const handleOverviewAreaClick = useCallback((area: AreaPoint) => {
     if (isTopGroupedAgri && corridorGroups.some((c) => c.directionCode === area.areaKey)) {
