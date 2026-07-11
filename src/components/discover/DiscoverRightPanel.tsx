@@ -506,6 +506,15 @@ export interface DiscoverRightPanelProps {
   isLoadingListings?: boolean;
   isAuthenticated?: boolean;
   onAreaSelect?: (area: AreaPoint) => void;
+  /**
+   * Issue #1817 (code-review follow-up) — the area-selected result-summary copy,
+   * precomputed by MapDiscovery via the SAME formatDiscoverBadgeCopy(discoverBadge, ...)
+   * call that drives the map badge pill, so AreaSelectedPanel's stat and the map badge
+   * can never diverge (design §6 "Area selected + filters" → `M of N match in {scope}`).
+   * Forwarded to AreaSelectedPanel; null/undefined falls back to that panel's own
+   * lightweight default (used by callers/tests that don't wire the full selector).
+   */
+  areaResultSummaryText?: string | null;
   onBack?: () => void;
   onStartOver: () => void;
   onSelectJourney: (journey: DiscoverJourney) => void;
@@ -878,6 +887,7 @@ export function DiscoverRightPanel({
   cityLabel,
   areas: _areas,
   selectedArea,
+  areaResultSummaryText,
   areaListings = [],
   isLoadingListings,
   isAuthenticated = false,
@@ -1520,6 +1530,7 @@ export function DiscoverRightPanel({
           <AreaSelectedPanel
             selectedArea={selectedArea}
             areaListings={areaListings}
+            areaResultSummaryText={areaResultSummaryText}
             isLoadingListings={isLoadingListings}
             isAuthenticated={isAuthenticated}
             onBack={onBack}

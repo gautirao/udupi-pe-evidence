@@ -164,7 +164,15 @@ export function GuidedEntryPanel({
         </div>
 
         {/* Hero */}
-        <h1 className="mb-3.5 font-['Fraunces',_ui-serif,_Georgia,_serif] text-3xl font-semibold leading-tight tracking-[-0.02em] text-foreground lg:text-[40px]">
+        {/* Issue #1817 (AC8) — id + tabIndex=-1 so "Start over" can programmatically
+            move focus here after a reset (design §8: "focus moves to the panel's h1
+            so keyboard users land somewhere sensible"). Not in the natural tab order —
+            only reachable via the imperative .focus() call. */}
+        <h1
+          id="discover-panel-h1"
+          tabIndex={-1}
+          className="mb-3.5 font-['Fraunces',_ui-serif,_Georgia,_serif] text-3xl font-semibold leading-tight tracking-[-0.02em] text-foreground lg:text-[40px] focus:outline-none"
+        >
           Find your place in {cityLabel}, your way.
         </h1>
         <p className="mb-3 max-w-[48ch] text-[15px] leading-relaxed text-muted-foreground lg:text-[16.5px]">

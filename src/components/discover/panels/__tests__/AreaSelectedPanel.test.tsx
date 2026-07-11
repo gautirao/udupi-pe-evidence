@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { describe, it, expect, vi } from 'vitest';
 import { AreaSelectedPanel } from '../AreaSelectedPanel';
@@ -107,17 +107,22 @@ describe('AreaSelectedPanel', () => {
     });
   });
 
+  // Issue #1817 (AC7) — this block predates the cause-routed empty state (design §7)
+  // and is superseded by the "AC7 — empty-state cause routing" describe block below,
+  // which covers all 4 causes against the shared EmptyState component + testid
+  // (area-empty-state / data-empty-cause). Kept here, updated in place, so the
+  // "clears/preserves other filters" behavioural assertions are not lost.
   describe('Empty state', () => {
     it('shows no listings message when empty without filters', () => {
       renderPanel({ areaListings: [] });
-      expect(screen.getByText(/No properties for sale in this area yet/)).toBeInTheDocument();
-      expect(screen.queryByTestId('clear-filters-button')).not.toBeInTheDocument();
+      expect(screen.getByText('No listings here yet')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
     });
 
     it('shows filtered message with clear button when filters active and no listings', () => {
       renderPanel({ areaListings: [], filters: { propertyTypes: ['apartment'] } });
-      expect(screen.getByText('No listings match these filters')).toBeInTheDocument();
-      expect(screen.getByTestId('clear-filters-button')).toBeInTheDocument();
+      expect(screen.getByText('No homes match these filters')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument();
     });
 
     it('clears property filters on clear button click', () => {
@@ -127,7 +132,7 @@ describe('AreaSelectedPanel', () => {
         filters: { propertyTypes: ['apartment'], bedrooms: [2] },
         onFiltersChange,
       });
-      fireEvent.click(screen.getByTestId('clear-filters-button'));
+      fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
       expect(onFiltersChange).toHaveBeenCalledWith({
         propertyTypes: undefined,
         bedrooms: undefined,
@@ -155,7 +160,7 @@ describe('AreaSelectedPanel', () => {
         },
         onFiltersChange,
       });
-      fireEvent.click(screen.getByTestId('clear-filters-button'));
+      fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
       const callArg = onFiltersChange.mock.calls[0][0];
       expect(callArg.schoolLat).toBe(13.5);
       expect(callArg.schoolLon).toBe(74.5);
@@ -209,14 +214,108 @@ describe('AreaSelectedPanel', () => {
       expect(screen.getByTestId('area-result-summary')).toHaveTextContent('1 verified property for rent in Test Area');
     });
 
-    it('shows "for sale in this area yet" empty state by default (intent=buy)', () => {
-      renderPanel({ areaListings: [] });
-      expect(screen.getByText(/No properties for sale in this area yet/)).toBeInTheDocument();
+    // Issue #1817 (code-review follow-up, AC5) — MapDiscovery now precomputes the
+    // result-summary text via the SAME formatDiscoverBadgeCopy(discoverBadge, ...) call
+    // that drives the map badge pill, and forwards it as `areaResultSummaryText`. When
+    // provided, the panel must render it VERBATIM (not its own local {count}-based
+    // text) — this is what guarantees the panel stat and the map badge can never diverge.
+    it('renders the wired areaResultSummaryText verbatim when provided (M-of-N form)', () => {
+      renderPanel({
+        areaListings: [mockListing],
+        areaResultSummaryText: '1 of 18 match your filters in Test Area',
+      });
+      expect(screen.getByTestId('area-result-summary-text')).toHaveTextContent(
+        '1 of 18 match your filters in Test Area',
+      );
+      expect(screen.queryByText(/verified property for sale/)).not.toBeInTheDocument();
     });
 
-    it('shows "for rent in this area yet" empty state when intent=rent', () => {
-      renderPanel({ areaListings: [], intent: 'rent' });
-      expect(screen.getByText(/No properties for rent in this area yet/)).toBeInTheDocument();
+    it('falls back to the local "{count} verified..." text when areaResultSummaryText is not provided (back-compat)', () => {
+      renderPanel({ areaListings: [mockListing] });
+      expect(screen.getByTestId('area-result-summary-text')).toHaveTextContent(
+        '1 verified property for sale in Test Area',
+      );
+    });
+
+    // Issue #1817 (AC7) — genuinely-empty (no filters/search) now routes through the
+    // shared cause-based copy ("No listings here yet"), replacing the old intent-only
+    // "No properties for {sale|rent} in this area yet" wording. Cause routing itself
+    // (filters/search/both) is covered in the "AC7 — empty-state cause routing" block.
+    it('shows "No listings here yet" for the genuinely-empty cause (no filters/search)', () => {
+      renderPanel({ areaListings: [] });
+      expect(screen.getByTestId('area-empty-state')).toHaveAttribute('data-empty-cause', 'empty');
+      expect(screen.getByText('No listings here yet')).toBeInTheDocument();
+    });
+  });
+
+  // ── Issue #1817 (AC7) — empty-state cause routing (design §7) ─────────────
+  // Each cause (filters / search / both / genuinely-empty) must render distinct,
+  // honest copy + the correct primary/secondary actions — never a generic
+  // "no properties" message that could be misread as "this area is empty".
+
+  describe('AC7 — empty-state cause routing', () => {
+    it('filters-only: "No homes match these filters" + Clear filters action', () => {
+      const onFiltersChange = vi.fn();
+      renderPanel({
+        areaListings: [],
+        filters: { propertyTypes: ['apartment'] },
+        onFiltersChange,
+      });
+      const empty = screen.getByTestId('area-empty-state');
+      expect(empty).toHaveAttribute('data-empty-cause', 'filters');
+      expect(within(empty).getByText('No homes match these filters')).toBeInTheDocument();
+      const clearBtn = within(empty).getByRole('button', { name: 'Clear filters' });
+      fireEvent.click(clearBtn);
+      expect(onFiltersChange).toHaveBeenCalledWith(
+        expect.objectContaining({ propertyTypes: undefined, bedrooms: undefined, priceMin: undefined, priceMax: undefined }),
+      );
+    });
+
+    it('search-only: \'No results for "{q}"\' + Clear search action', () => {
+      const onSearchChange = vi.fn();
+      renderPanel({
+        areaListings: [],
+        searchQuery: 'corner plot',
+        onSearchChange,
+      });
+      const empty = screen.getByTestId('area-empty-state');
+      expect(empty).toHaveAttribute('data-empty-cause', 'search');
+      expect(within(empty).getByText('No results for "corner plot"')).toBeInTheDocument();
+      // Scoped to the empty-state block — the search input's own × (data-testid
+      // area-search-clear) also carries aria-label "Clear search" and would otherwise
+      // make this query ambiguous.
+      fireEvent.click(within(empty).getByRole('button', { name: 'Clear search' }));
+      expect(onSearchChange).toHaveBeenCalledWith('');
+    });
+
+    it('filters + search both active: "No homes match your search and filters" with Clear search AND Clear filters', () => {
+      const onFiltersChange = vi.fn();
+      const onSearchChange = vi.fn();
+      renderPanel({
+        areaListings: [],
+        filters: { propertyTypes: ['apartment'] },
+        searchQuery: 'corner plot',
+        onFiltersChange,
+        onSearchChange,
+      });
+      const empty = screen.getByTestId('area-empty-state');
+      expect(empty).toHaveAttribute('data-empty-cause', 'both');
+      expect(within(empty).getByText('No homes match your search and filters')).toBeInTheDocument();
+      expect(within(empty).getByRole('button', { name: 'Clear search' })).toBeInTheDocument();
+      expect(within(empty).getByRole('button', { name: 'Clear filters' })).toBeInTheDocument();
+      fireEvent.click(within(empty).getByRole('button', { name: 'Clear search' }));
+      expect(onSearchChange).toHaveBeenCalledWith('');
+      fireEvent.click(within(empty).getByRole('button', { name: 'Clear filters' }));
+      expect(onFiltersChange).toHaveBeenCalled();
+    });
+
+    it('genuinely empty (N=0, no filters/search): "No listings here yet", no filter/search action offered', () => {
+      renderPanel({ areaListings: [] });
+      const empty = screen.getByTestId('area-empty-state');
+      expect(empty).toHaveAttribute('data-empty-cause', 'empty');
+      expect(within(empty).getByText('No listings here yet')).toBeInTheDocument();
+      expect(within(empty).queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
+      expect(within(empty).queryByRole('button', { name: 'Clear search' })).not.toBeInTheDocument();
     });
   });
 
@@ -292,10 +391,15 @@ describe('AreaSelectedPanel', () => {
       expect(btn.className).toContain('rounded-full');
     });
 
-    it('clicking Start-over calls onStartOver', () => {
+    // Issue #1817 (AC8) — an area is selected in this panel (deeper than a region),
+    // so Start over always confirms first (design §8) rather than resetting immediately.
+    it('clicking Start-over shows a confirm popover; confirming calls onStartOver', async () => {
       const onStartOver = vi.fn();
       renderPanel({ journey: 'area-first', onStartOver });
       fireEvent.click(screen.getByTestId('start-over-button'));
+      expect(onStartOver).not.toHaveBeenCalled();
+      expect(await screen.findByTestId('start-over-confirm-popover')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('start-over-confirm'));
       expect(onStartOver).toHaveBeenCalledTimes(1);
     });
 

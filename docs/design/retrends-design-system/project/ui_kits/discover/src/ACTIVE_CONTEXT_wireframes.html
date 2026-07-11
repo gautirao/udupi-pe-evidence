@@ -1,0 +1,546 @@
+<!-- @dsCard group="Discover" viewport="1200x900" name="Active context & count badge — wireframes" subtitle="Annotated desktop mock screens: context chips, M-of-N count badge, Start over, empty states" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discover — active context & count badge wireframes</title>
+<link rel="stylesheet" href="../../../styles.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--background); }
+  body {
+    font-family: var(--font-sans); color: var(--text-strong);
+    padding: 56px 40px 96px; -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  a:hover { color: var(--accent-hover); }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  .mono { font-family: var(--font-mono); }
+
+  /* ---- doc header ---- */
+  .doc-head { max-width: 760px; margin: 0 auto 8px; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700;
+    letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--text-muted); }
+  .doc-head h1 { font-family: var(--font-serif); font-weight: 600; font-size: 40px; line-height: 1.08;
+    letter-spacing: -0.02em; margin: 14px 0 12px; text-wrap: balance; }
+  .doc-head p { font-size: 16px; line-height: 1.55; color: var(--text-body); margin: 0; text-wrap: pretty; }
+  .doc-head .lead-note { margin-top: 14px; font-size: 13px; color: var(--text-muted); }
+
+  /* ---- section scaffolding ---- */
+  .screen { margin-top: 64px; }
+  .screen-hd { display: flex; align-items: baseline; gap: 14px; margin: 0 0 4px; }
+  .screen-num { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--accent);
+    background: var(--accent-tint); border-radius: var(--radius-full); padding: 3px 10px; }
+  .screen-hd h2 { font-size: 21px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+  .screen-cap { max-width: 720px; font-size: 14px; line-height: 1.55; color: var(--text-body); margin: 6px 0 20px; text-wrap: pretty; }
+  .screen-cap b { color: var(--text-strong); }
+
+  /* ---- device frame ---- */
+  .frame { display: grid; grid-template-columns: 1fr 1fr; height: 480px; border-radius: var(--radius-xl, 16px);
+    overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow-lg); background: var(--paper); }
+  .frame.tall { height: 560px; }
+
+  /* map side */
+  .map { position: relative; background:
+      linear-gradient(0deg, rgba(0,0,0,0.02), rgba(0,0,0,0.02)),
+      repeating-linear-gradient(35deg, #E9E7E1 0 26px, #EDEBE6 26px 52px);
+    border-right: 1px solid var(--border); }
+  .map::after { content: "BANGALORE"; position: absolute; top: 46%; left: 30%; font-family: var(--font-mono);
+    font-size: 13px; letter-spacing: 0.18em; color: rgba(17,24,39,0.16); font-weight: 700; }
+  .map-crumb { position: absolute; top: 16px; left: 16px; z-index: 3; display: inline-flex; align-items: center; gap: 7px;
+    padding: 8px 13px; background: var(--paper); border-radius: var(--radius-full); box-shadow: var(--shadow-md);
+    border: 1px solid var(--border); font-size: 12.5px; font-weight: 600; }
+  .map-crumb .sep { color: var(--grey-400); }
+  .map-crumb .cur { color: var(--accent); }
+  .map-crumb .up { color: var(--text-muted); }
+  /* markers */
+  .mk { position: absolute; z-index: 2; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-full); font-family: var(--font-mono); font-weight: 700; }
+  .mk.match { width: 46px; height: 46px; background: var(--navy-800); color: #fff; font-size: 14px;
+    box-shadow: var(--shadow-md); }
+  .mk.out { width: 30px; height: 30px; background: rgba(255,255,255,0.7); border: 1px dashed var(--border-strong);
+    color: var(--grey-400); font-size: 11px; }
+  /* count badge pill */
+  .badge { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 4;
+    display: inline-flex; align-items: center; gap: 9px; padding: 10px 17px; background: var(--paper);
+    border-radius: var(--radius-full); box-shadow: var(--shadow-lg); border: 1px solid var(--border);
+    font-size: 13.5px; color: var(--text-body); white-space: nowrap; }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+  .badge b { color: var(--text-strong); font-family: var(--font-mono); font-weight: 700; }
+  .badge.loading { color: var(--text-muted); }
+  .badge.loading .spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--border-strong);
+    border-top-color: var(--accent); animation: sp 0.8s linear infinite; }
+  .badge.stale .dot { background: var(--ochre-600); }
+  .badge.empty .dot { background: var(--grey-400); }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .badge.loading .spin { animation: none; } }
+  .legend { position: absolute; bottom: 20px; left: 18px; z-index: 3; display: flex; flex-direction: column; gap: 5px;
+    padding: 9px 12px; background: var(--paper); border-radius: var(--radius-md); box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border); font-size: 11px; color: var(--text-muted); }
+  .legend .row { display: flex; align-items: center; gap: 7px; }
+  .legend .g { width: 9px; height: 9px; border-radius: 50%; }
+
+  /* panel side */
+  .panel { position: relative; padding: 20px 22px; overflow: hidden; display: flex; flex-direction: column; }
+  .back { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600;
+    color: var(--text-muted); margin-bottom: 12px; }
+  .band { background: var(--navy-800); color: #fff; border-radius: var(--radius-lg); padding: 15px 17px; }
+  .band .cr { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: rgba(255,255,255,0.55); margin-bottom: 8px; flex-wrap: wrap; }
+  .band .cr .cur { color: rgba(255,255,255,0.92); font-weight: 600; }
+  .band .eb { font-size: 10.5px; font-weight: 700; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: rgba(255,255,255,0.6); }
+  .band .row2 { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: 5px; }
+  .band h3 { font-family: var(--font-serif); font-weight: 600; font-size: 25px; letter-spacing: -0.01em; margin: 3px 0 0; line-height: 1.1; }
+  .band .stat { text-align: right; flex: none; }
+  .band .stat .v { font-family: var(--font-mono); font-size: 21px; font-weight: 700; line-height: 1; }
+  .band .stat .l { font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 3px; }
+
+  /* editorial hero (landing) */
+  .hero-eb { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700;
+    letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--text-muted); }
+  .hero h3 { font-family: var(--font-serif); font-weight: 600; font-size: 30px; line-height: 1.08; letter-spacing: -0.02em; margin: 12px 0 10px; }
+  .hero p { font-size: 14px; line-height: 1.5; color: var(--text-body); margin: 0; max-width: 40ch; }
+
+  /* ---- context bar ---- */
+  .ctxbar { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; margin: 14px 0 0;
+    padding: 11px 0 13px; border-bottom: 1px solid var(--border); }
+  .ctx-count { font-size: 12.5px; color: var(--text-muted); white-space: nowrap; flex: none; }
+  .ctx-count b { color: var(--text-strong); font-family: var(--font-mono); font-weight: 700; }
+  .ctx-div { width: 1px; height: 18px; background: var(--border); flex: none; }
+  .chips { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; overflow: hidden; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 8px 6px 11px; border-radius: var(--radius-full);
+    background: var(--paper); border: 1px solid var(--border-strong); font-size: 12.5px; font-weight: 600;
+    color: var(--text-body); white-space: nowrap; flex: none; }
+  .chip .x { width: 17px; height: 17px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    background: var(--surface-subtle); color: var(--text-muted); }
+  .chip .x svg { width: 9px; height: 9px; }
+  .chip.search { border-color: var(--copper-400); color: var(--text-strong); }
+  .chip.search .lead { color: var(--accent); display: inline-flex; }
+  .chip .num { font-family: var(--font-mono); }
+  .chip .rera-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--evergreen-600); }
+  .chip.more { background: var(--surface-subtle); border-style: dashed; border-color: var(--border-strong); color: var(--text-body); cursor: pointer; padding: 6px 11px; }
+  .clear-all { flex: none; font-size: 12px; font-weight: 600; color: var(--text-muted); white-space: nowrap; padding: 4px 2px; }
+  .clear-all:hover { color: var(--accent); }
+
+  /* results skeleton */
+  .results { margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; overflow: hidden; }
+  .rcard { background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-xs); overflow: hidden; }
+  .rcard .img { height: 74px; background: repeating-linear-gradient(45deg, var(--surface-subtle) 0 10px, var(--stone-300) 10px 20px); }
+  .rcard .b { padding: 10px 11px; }
+  .rcard .price { font-family: var(--font-mono); font-weight: 700; font-size: 15px; }
+  .rcard .ln { height: 7px; background: var(--surface-subtle); border-radius: 4px; margin-top: 8px; }
+  .rcard .ln.s { width: 60%; }
+
+  /* empty state */
+  .empty { flex: 1; border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); margin-top: 16px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; }
+  .empty .ic { width: 44px; height: 44px; border-radius: var(--radius-md); background: var(--accent-tint);
+    display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+  .empty h4 { font-size: 16px; font-weight: 700; margin: 0 0 6px; }
+  .empty p { font-size: 13px; color: var(--text-muted); margin: 0 0 16px; max-width: 34ch; line-height: 1.5; }
+  .empty .acts { display: flex; gap: 9px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 15px; border-radius: var(--radius-md);
+    font-size: 13px; font-weight: 600; }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn.ghost { background: var(--paper); border: 1px solid var(--border-strong); color: var(--text-body); }
+
+  /* overflow popover */
+  .pop { position: absolute; z-index: 20; width: 226px; background: var(--paper); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-xl, var(--shadow-lg)); padding: 8px; }
+  .pop .ph { font-size: 10.5px; font-weight: 700; letter-spacing: var(--tracking-caps); text-transform: uppercase;
+    color: var(--text-muted); padding: 4px 6px 8px; }
+  .pop .pi { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 8px; border-radius: var(--radius-sm);
+    font-size: 12.5px; font-weight: 600; }
+  .pop .pi:hover { background: var(--grey-50); }
+  .pop .pi .x { width: 17px; height: 17px; border-radius: 50%; background: var(--surface-subtle); color: var(--text-muted);
+    display: inline-flex; align-items: center; justify-content: center; }
+  .pop .pi .x svg { width: 9px; height: 9px; }
+  .pop .pfoot { border-top: 1px solid var(--border); margin-top: 6px; padding: 9px 8px 4px; font-size: 12px; font-weight: 600; color: var(--accent); }
+
+  /* start-over confirm */
+  .confirm { position: absolute; z-index: 20; top: 12px; right: 16px; width: 250px; background: var(--paper);
+    border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-xl, var(--shadow-lg)); padding: 15px; }
+  .confirm h4 { font-size: 14px; font-weight: 700; margin: 0 0 6px; }
+  .confirm p { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; margin: 0 0 13px; }
+  .confirm .acts { display: flex; gap: 8px; }
+  .startover { position: absolute; top: 14px; right: 16px; z-index: 5; display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 13px; border-radius: var(--radius-md); border: 1px solid var(--border-strong); background: var(--paper);
+    font-size: 12.5px; font-weight: 600; color: var(--text-body); }
+
+  /* ---- annotation callouts ---- */
+  .notes { margin-top: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+  .note { display: flex; gap: 11px; }
+  .note .pin { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--navy-800); color: #fff;
+    font-family: var(--font-mono); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .note .t { font-size: 12.5px; line-height: 1.5; color: var(--text-body); }
+  .note .t b { color: var(--text-strong); }
+  .note .t code { font-family: var(--font-mono); font-size: 11.5px; background: var(--surface-subtle); padding: 1px 5px; border-radius: 4px; }
+
+  .callnum { display: inline-flex; align-items: center; justify-content: center; width: 19px; height: 19px; border-radius: 50%;
+    background: var(--navy-800); color: #fff; font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+    position: absolute; z-index: 8; box-shadow: 0 0 0 3px var(--paper); }
+
+  /* spec blocks */
+  .spec { margin-top: 64px; padding: 26px 28px; background: var(--paper); border: 1px solid var(--border);
+    border-radius: var(--radius-xl, 16px); box-shadow: var(--shadow-sm); }
+  .spec h2 { font-size: 19px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .spec .sub { font-size: 13px; color: var(--text-muted); margin: 0 0 20px; }
+  .anat { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-start; }
+  .anat .grp { display: flex; flex-direction: column; gap: 9px; }
+  .anat .lbl { font-size: 11px; font-weight: 700; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--text-muted); }
+  .anat .rowchips { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  table.matrix { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12.5px; }
+  table.matrix th, table.matrix td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.matrix th { font-size: 10.5px; font-weight: 700; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--text-muted); }
+  table.matrix td .cp { font-family: var(--font-mono); font-size: 12px; color: var(--text-strong); }
+  table.matrix tr:last-child td { border-bottom: none; }
+  .tag { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-full); }
+  .tag.show { background: var(--evergreen-50); color: var(--evergreen-600); }
+  .tag.hide { background: var(--ochre-50); color: var(--ochre-600); }
+
+  .footlink { margin-top: 52px; text-align: center; font-size: 13px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="doc-head">
+    <span class="eyebrow"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block"></span>Discover · design handoff</span>
+    <h1>Active context &amp; a count you can trust</h1>
+    <p>Desktop wireframes for the Discover active-context system: scope stays in the breadcrumb, filters and search become clearable <b>chips</b>, and the result count always names its scope and shows <b class="mono">M&nbsp;of&nbsp;N</b> when anything is filtering it — so a filtered zero never reads as "no properties in the city."</p>
+    <p class="lead-note">Full spec, tables and engineering handoff: <a href="./ACTIVE_CONTEXT_AND_COUNT_BADGE_DESIGN.md">ACTIVE_CONTEXT_AND_COUNT_BADGE_DESIGN.md</a>. Mobile is out of scope.</p>
+  </div>
+
+  <!-- ============ 1. CITY LANDING — NO FILTERS ============ -->
+  <section class="screen">
+    <div class="screen-hd"><span class="screen-num">01</span><h2>City landing — no filters</h2></div>
+    <p class="screen-cap">Nothing is filtering results, so <b>the context bar is collapsed</b> — the breadcrumb alone carries scope. The badge states the plain total <b>and names the scope</b>, so it never reads as a global absolute.</p>
+    <div class="frame">
+      <div class="map">
+        <div class="map-crumb"><span class="cur">Bangalore</span></div>
+        <span class="mk match" style="top:24%;left:44%">203</span>
+        <span class="mk match" style="top:52%;left:22%">4</span>
+        <span class="mk match" style="top:60%;left:44%">6</span>
+        <span class="mk match" style="top:46%;left:70%">5</span>
+        <span class="callnum" style="bottom:14px;left:50%;transform:translateX(60px)">1</span>
+        <div class="badge"><span class="dot"></span>Showing <b>1,240</b> properties in Bangalore</div>
+        <div class="legend"><div class="row"><span class="g" style="background:var(--navy-800)"></span>Regions</div></div>
+      </div>
+      <div class="panel">
+        <span class="hero-eb"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block"></span>DISCOVER BANGALORE</span>
+        <div class="hero"><h3>Find your place in Bangalore, your way.</h3>
+        <p>Browse verified properties across Bangalore. Pick how you'd like to start — by neighbourhood, by school, or by farmland.</p></div>
+        <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding-top:16px;border-top:1px solid var(--border);color:var(--text-muted);font-size:12px">
+          <span style="width:26px;height:26px;border-radius:var(--radius-md);background:var(--evergreen-50);display:flex;align-items:center;justify-content:center;color:var(--evergreen-600);font-weight:700">✓</span>
+          <span><b style="color:var(--text-strong)">Every listing is verified.</b> Documents checked, RERA registered.</span>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="note"><span class="pin">1</span><span class="t"><b>Plain badge.</b> <code>{N} {noun} in {scope}</code> — the scope is always named. This is the only state that says "Showing…".</span></div>
+      <div class="note"><span class="pin">·</span><span class="t">No filters, no <code>q</code> → <b>no context bar</b>. Chips are reserved for state the breadcrumb can't express.</span></div>
+    </div>
+  </section>
+
+  <!-- ============ 2. CITY LANDING — WITH FILTERS ============ -->
+  <section class="screen">
+    <div class="screen-hd"><span class="screen-num">02</span><h2>City landing — with filters</h2></div>
+    <p class="screen-cap">Two boolean filters are active (e.g. from <code>?readyToMove=true&amp;reraRegistered=true</code>). The context bar appears with a chip each; the badge switches to <b class="mono">M of N</b> so the buyer sees both the match count <i>and</i> the city total.</p>
+    <div class="frame">
+      <div class="map">
+        <div class="map-crumb"><span class="cur">Bangalore</span></div>
+        <span class="mk match" style="top:26%;left:44%">31</span>
+        <span class="mk out" style="top:24%;left:60%">·</span>
+        <span class="mk match" style="top:54%;left:24%">2</span>
+        <span class="mk out" style="top:58%;left:46%">·</span>
+        <span class="mk match" style="top:46%;left:70%">1</span>
+        <span class="callnum" style="bottom:14px;left:50%;transform:translateX(72px)">2</span>
+        <div class="badge"><span class="dot"></span><b>84</b> of <b>1,240</b> match your filters</div>
+        <div class="legend"><div class="row"><span class="g" style="background:var(--navy-800)"></span>Matches</div><div class="row"><span class="g" style="border:1px dashed var(--border-strong)"></span>Filtered out</div></div>
+      </div>
+      <div class="panel">
+        <span class="hero-eb"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block"></span>DISCOVER BANGALORE</span>
+        <div class="hero"><h3 style="font-size:26px">Find your place in Bangalore.</h3></div>
+        <div class="ctxbar">
+          <span class="ctx-count"><b>84</b> of <b>1,240</b></span>
+          <span class="ctx-div"></span>
+          <div class="chips">
+            <span class="chip"><span class="rera-dot"></span>RERA registered <span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></span>
+            <span class="chip">Ready to move <span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></span>
+          </div>
+          <span class="clear-all">Clear all</span>
+        </div>
+        <div class="results">
+          <div class="rcard"><div class="img"></div><div class="b"><div class="price">₹1.42 Cr</div><div class="ln"></div><div class="ln s"></div></div></div>
+          <div class="rcard"><div class="img"></div><div class="b"><div class="price">₹95.0 L</div><div class="ln"></div><div class="ln s"></div></div></div>
+          <div class="rcard"><div class="img"></div><div class="b"><div class="price">₹2.10 Cr</div><div class="ln"></div><div class="ln s"></div></div></div>
+          <div class="rcard"><div class="img"></div><div class="b"><div class="price">₹1.05 Cr</div><div class="ln"></div><div class="ln s"></div></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="note"><span class="pin">2</span><span class="t"><b>M of N.</b> <code>84 of 1,240 match your filters</code> — the total <code>N</code> stays visible so the buyer knows filters are <i>narrowing</i>, not that the city shrank.</span></div>
+      <div class="note"><span class="pin">·</span><span class="t"><b>Booleans are separate chips.</b> Each is independently clearable; <code>RERA registered</code> carries an evergreen dot echoing the trust system.</span></div>
+      <div class="note"><span class="pin">·</span><span class="t">The panel count and the map badge read the <b>same number</b> from one selector — they can't diverge.</span></div>
+    </div>
+  </section>
+
+  <!-- ============ 3. AREA GROUP SELECTED — WITH FILTERS ============ -->
+  <section class="screen">
+    <div class="screen-hd"><span class="screen-num">03</span><h2>Area group selected — with filters</h2></div>
+    <p class="screen-cap">Scope has narrowed to a group; the <b>breadcrumb</b> carries it (both surfaces). A seller-type filter is active → one value chip. The badge re-scopes: <code>12 of 96 match in Thanisandra–Hennur belt</code>.</p>
+    <div class="frame">
+      <div class="map">
+        <div class="map-crumb"><span class="up">Bangalore</span><span class="sep">›</span><span class="up">East</span><span class="sep">›</span><span class="cur">Thanisandra–Hennur</span></div>
+        <span class="mk match" style="top:30%;left:40%">7</span>
+        <span class="mk match" style="top:50%;left:58%">3</span>
+        <span class="mk out" style="top:40%;left:66%">·</span>
+        <span class="mk match" style="top:60%;left:36%">2</span>
+        <div class="badge"><span class="dot"></span><b>12</b> of <b>96</b> match in this group</div>
+      </div>
+      <div class="panel">
+        <div class="back">‹ Back to area groups in East</div>
+        <div class="band">
+          <div class="cr"><span>Discover Bangalore</span><span>›</span><span>East</span><span>›</span><span class="cur">Thanisandra–Hennur belt</span></div>
+          <span class="eb">Area group</span>
+          <div class="row2"><h3>Thanisandra–Hennur belt</h3><div class="stat"><div class="v">12</div><div class="l">of 96 homes</div></div></div>
+        </div>
+        <div class="ctxbar">
+          <span class="ctx-count"><b>12</b> of <b>96</b></span>
+          <span class="ctx-div"></span>
+          <div class="chips">
+            <span class="chip">Seller: Owner <span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></span>
+          </div>
+          <span class="clear-all">Clear all</span>
+        </div>
+        <div class="results">
+          <div class="rcard"><div class="img"></div><div class="b"><div class="price">₹1.15 Cr</div><div class="ln"></div><div class="ln s"></div></div></div>
+          <div class="rcard"><div class="img"></div><div class="b"><div class="price">₹88.0 L</div><div class="ln"></div><div class="ln s"></div></div></div>
+          <div class="rcard"><div class="img"></div><div class="b"><div class="price">₹1.60 Cr</div><div class="ln"></div><div class="ln s"></div></div></div>
+          <div class="rcard"><div class="img"></div><div class="b"><div class="price">₹72.0 L</div><div class="ln"></div><div class="ln s"></div></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="note"><span class="pin">·</span><span class="t"><b>Scope is not a chip.</b> Group/region/city live in the breadcrumb (clickable to move up), keeping the chip row to just the filter.</span></div>
+      <div class="note"><span class="pin">·</span><span class="t"><b>The header stat mirrors the badge.</b> <code>12</code> · <code>of 96 homes</code> is the same <code>M of N</code> as the map pill.</span></div>
+      <div class="note"><span class="pin">·</span><span class="t">Clearing <code>Seller: Owner</code> drops <code>sellerType</code> from the URL, keeps the group scope, doesn't move the camera, refetches once.</span></div>
+    </div>
+  </section>
+
+  <!-- ============ 4. AREA SELECTED — WITH SEARCH QUERY ============ -->
+  <section class="screen">
+    <div class="screen-hd"><span class="screen-num">04</span><h2>Area selected — with a search query</h2></div>
+    <p class="screen-cap">In Whitefield with a search for <i>corner plot</i>. The <b>search chip is visually distinct</b> (copper hairline + magnifier) because the buyer typed it. It lives in the context bar, not the search box, so it stays visible and clearable.</p>
+    <div class="frame">
+      <div class="map">
+        <div class="map-crumb"><span class="up">Bangalore</span><span class="sep">›</span><span class="up">East</span><span class="sep">›</span><span class="cur">Whitefield</span></div>
+        <span class="mk match" style="top:34%;left:42%">3</span>
+        <span class="mk match" style="top:52%;left:56%">2</span>
+        <span class="callnum" style="bottom:14px;left:50%;transform:translateX(78px)">4</span>
+        <div class="badge"><span class="dot"></span><b>5</b> results for "corner plot" in Whitefield</div>
+      </div>
+      <div class="panel">
+        <div class="back">‹ Back to areas in Thanisandra–Hennur</div>
+        <div class="band">
+          <div class="cr"><span>Discover Bangalore</span><span>›</span><span>East</span><span>›</span><span class="cur">Whitefield</span></div>
+          <span class="eb">Selected area</span>
+          <div class="row2"><h3>Whitefield</h3><div class="stat"><div class="v">5</div><div class="l">of 18 homes</div></div></div>
+        </div>
+        <div class="ctxbar">
+          <span class="ctx-count"><b>5</b> of <b>18</b></span>
+          <span class="ctx-div"></span>
+          <div class="chips">
+            <span class="chip search"><span class="lead"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2.2"/><path d="M20 20L16 16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></span>Search: "corner plot" <span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></span>
+          </div>
+          <span class="clear-all">Clear all</span>
+        </div>
+        <div class="results">
+          <div class="rcard"><div class="img"></div><div class="b"><div class="price">₹2.40 Cr</div><div class="ln"></div><div class="ln s"></div></div></div>
+          <div class="rcard"><div class="img"></div><div class="b"><div class="price">₹1.80 Cr</div><div class="ln"></div><div class="ln s"></div></div></div>
+          <div class="rcard"><div class="img"></div><div class="b"><div class="price">₹3.10 Cr</div><div class="ln"></div><div class="ln s"></div></div></div>
+          <div class="rcard"><div class="img"></div><div class="b"><div class="price">₹2.05 Cr</div><div class="ln"></div><div class="ln s"></div></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="note"><span class="pin">4</span><span class="t"><b>Search-scoped badge.</b> <code>{M} results for "{q}" in {scope}</code> — <code>results</code> noun when a query is the active narrower.</span></div>
+      <div class="note"><span class="pin">·</span><span class="t"><b>Scoped search.</b> <code>q</code> filters within Whitefield; clearing it returns the full 18-home area list without leaving the area.</span></div>
+      <div class="note"><span class="pin">·</span><span class="t">The search chip is the one chip that borrows copper — the accent stays reserved everywhere else.</span></div>
+    </div>
+  </section>
+
+  <!-- ============ 5. ZERO RESULTS — FILTERED ============ -->
+  <section class="screen">
+    <div class="screen-hd"><span class="screen-num">05</span><h2>Zero results — filters caused it</h2></div>
+    <p class="screen-cap">Filters emptied a non-empty scope. The badge says <b class="mono">0 of 1,240</b> — proving the city isn't empty, the filters are. The empty state names the cause and leads with <b>Clear filters</b>. It is never styled like an error.</p>
+    <div class="frame tall">
+      <div class="map">
+        <div class="map-crumb"><span class="cur">Bangalore</span></div>
+        <span class="mk out" style="top:26%;left:44%">·</span>
+        <span class="mk out" style="top:52%;left:24%">·</span>
+        <span class="mk out" style="top:46%;left:66%">·</span>
+        <span class="callnum" style="bottom:14px;left:50%;transform:translateX(74px)">5</span>
+        <div class="badge empty"><span class="dot"></span><b>0</b> of <b>1,240</b> match your filters</div>
+      </div>
+      <div class="panel">
+        <span class="hero-eb"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block"></span>DISCOVER BANGALORE</span>
+        <div class="ctxbar">
+          <span class="ctx-count"><b>0</b> of <b>1,240</b></span>
+          <span class="ctx-div"></span>
+          <div class="chips">
+            <span class="chip">≤ <span class="num">₹60 L</span> <span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></span>
+            <span class="chip"><span class="num">4+</span> BHK <span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></span>
+            <span class="chip"><span class="rera-dot"></span>RERA registered <span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></span>
+          </div>
+          <span class="clear-all">Clear all</span>
+        </div>
+        <div class="empty">
+          <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg></div>
+          <h4>No homes match these filters</h4>
+          <p>All <b class="mono" style="color:var(--text-strong)">1,240</b> homes in Bangalore are still here — your filters are hiding them.</p>
+          <div class="acts">
+            <span class="btn primary">Clear filters</span>
+            <span class="btn ghost">See all 1,240 in Bangalore</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="note"><span class="pin">5</span><span class="t"><b>The whole point.</b> <code>0 of 1,240</code> can only mean "your filters," never "the city is empty."</span></div>
+      <div class="note"><span class="pin">·</span><span class="t"><b>Chips stay put.</b> The buyer sees the three constraints that produced the zero and can lift them one at a time.</span></div>
+      <div class="note"><span class="pin">·</span><span class="t"><b>Cause-aware copy.</b> If a search caused it instead → <code>No results for "{q}"</code> with a <b>Clear search</b> lead action.</span></div>
+    </div>
+  </section>
+
+  <!-- ============ 6. MANY CHIPS — OVERFLOW ============ -->
+  <section class="screen">
+    <div class="screen-hd"><span class="screen-num">06</span><h2>Many active chips — overflow</h2></div>
+    <p class="screen-cap">Six+ constraints active. Recommended desktop behaviour: <b>single row, no wrap</b> — show what fits, then collapse the rest into <b class="mono">+N&nbsp;⌄</b> that opens a popover. The count summary and <b>Clear all</b> never overflow.</p>
+    <div class="frame tall">
+      <div class="map">
+        <div class="map-crumb"><span class="up">Bangalore</span><span class="sep">›</span><span class="cur">East</span></div>
+        <span class="mk match" style="top:30%;left:44%">2</span>
+        <span class="mk match" style="top:52%;left:60%">1</span>
+        <div class="badge"><span class="dot"></span><b>3</b> of <b>310</b> match in East Bangalore</div>
+      </div>
+      <div class="panel">
+        <div class="back">‹ Back to Discover Bangalore</div>
+        <div class="band">
+          <div class="cr"><span>Discover Bangalore</span><span>›</span><span class="cur">East</span></div>
+          <span class="eb">All listings</span>
+          <div class="row2"><h3 style="font-size:22px">All homes in East Bangalore</h3><div class="stat"><div class="v">3</div><div class="l">of 310 homes</div></div></div>
+        </div>
+        <div class="ctxbar">
+          <span class="ctx-count"><b>3</b> of <b>310</b></span>
+          <span class="ctx-div"></span>
+          <div class="chips">
+            <span class="chip search"><span class="lead"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2.2"/><path d="M20 20L16 16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></span>Search: "villa" <span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></span>
+            <span class="chip">Ready to move <span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></span>
+            <span class="chip more">+3 ⌄</span>
+          </div>
+          <span class="clear-all">Clear all</span>
+        </div>
+        <!-- overflow popover -->
+        <div class="pop" style="top:150px;right:64px">
+          <div class="ph">3 more filters</div>
+          <div class="pi"><span>Seller: Owner</span><span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></div>
+          <div class="pi"><span>Listed: last 30 days</span><span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></div>
+          <div class="pi"><span>New to market</span><span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></div>
+          <div class="pfoot">Clear all filters</div>
+        </div>
+        <span class="callnum" style="top:126px;right:96px">6</span>
+        <div class="results" style="opacity:0.5">
+          <div class="rcard"><div class="img"></div><div class="b"><div class="price">₹3.4 Cr</div><div class="ln"></div><div class="ln s"></div></div></div>
+          <div class="rcard"><div class="img"></div><div class="b"><div class="price">₹2.9 Cr</div><div class="ln"></div><div class="ln s"></div></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="note"><span class="pin">6</span><span class="t"><b>+N popover.</b> Every hidden chip stays individually clearable inside; the popover also carries <code>Clear all filters</code>.</span></div>
+      <div class="note"><span class="pin">·</span><span class="t"><b>Priority order:</b> search → booleans → value filters. The search chip stays visible whenever present; <code>+N</code> counts filters only.</span></div>
+      <div class="note"><span class="pin">·</span><span class="t"><b>Why not wrap / scroll:</b> wrap shifts the results start-position; horizontal scroll hides active state. Both fail the "always visible" goal.</span></div>
+    </div>
+  </section>
+
+  <!-- ============ 7. AFTER START OVER ============ -->
+  <section class="screen">
+    <div class="screen-hd"><span class="screen-num">07</span><h2>Start over — confirm, then clean slate</h2></div>
+    <p class="screen-cap"><b>Start over means a true clean slate</b> (Option A). It clears journey, selection, search and all filters — preserving only city and Buy/Rent. A lightweight confirm appears <b>only when there's substantial state to lose</b>. After it, the shell is back to the plain city landing.</p>
+    <div class="frame">
+      <div class="map">
+        <div class="map-crumb"><span class="up">Bangalore</span><span class="sep">›</span><span class="cur">East</span></div>
+        <span class="mk match" style="top:30%;left:44%">2</span>
+        <div class="badge"><span class="dot"></span><b>3</b> of <b>310</b> match in East Bangalore</div>
+      </div>
+      <div class="panel">
+        <span class="startover">↺ Start over</span>
+        <span class="callnum" style="top:8px;right:8px">7</span>
+        <div class="back">‹ Back to Discover Bangalore</div>
+        <div class="confirm">
+          <h4>Start over?</h4>
+          <p>This clears your filters, search and selection. You'll return to Bangalore.</p>
+          <div class="acts"><span class="btn primary">Start over</span><span class="btn ghost">Cancel</span></div>
+        </div>
+        <div style="opacity:0.4;margin-top:8px">
+          <div class="band"><span class="eb">All listings</span><div class="row2"><h3 style="font-size:22px">All homes in East Bangalore</h3></div></div>
+          <div class="ctxbar"><span class="ctx-count"><b>3</b> of <b>310</b></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="note"><span class="pin">7</span><span class="t"><b>Clears:</b> journey · region/group/area/school · <code>q</code> · all filters · map selection · highlighted listing · open popup.</span></div>
+      <div class="note"><span class="pin">·</span><span class="t"><b>Preserves:</b> city + Buy/Rent only. <b>URL after:</b> <code>/discover?city=bangalore</code>.</span></div>
+      <div class="note"><span class="pin">·</span><span class="t"><b>Confirm only when needed</b> — selection deeper than a region, or any filter/search active. Region-only or empty → reset with no confirm.</span></div>
+    </div>
+  </section>
+
+  <!-- ============ CHIP ANATOMY ============ -->
+  <div class="spec">
+    <h2>Chip anatomy</h2>
+    <p class="sub">One pill language, three chip kinds. Numerals in Geist Mono; the search chip is the only one that borrows the copper accent.</p>
+    <div class="anat">
+      <div class="grp"><span class="lbl">Boolean filter</span><div class="rowchips">
+        <span class="chip"><span class="rera-dot"></span>RERA registered <span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></span>
+        <span class="chip">Ready to move <span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></span>
+      </div></div>
+      <div class="grp"><span class="lbl">Value filter</span><div class="rowchips">
+        <span class="chip">Seller: Owner <span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></span>
+        <span class="chip">≤ <span class="num">₹1.5 Cr</span> <span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></span>
+      </div></div>
+      <div class="grp"><span class="lbl">Search query</span><div class="rowchips">
+        <span class="chip search"><span class="lead"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2.2"/><path d="M20 20L16 16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></span>Search: "corner plot" <span class="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></span>
+      </div></div>
+      <div class="grp"><span class="lbl">Overflow</span><div class="rowchips">
+        <span class="chip more">+3 ⌄</span>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ============ BADGE STATE MATRIX ============ -->
+  <div class="spec">
+    <h2>Count-badge states</h2>
+    <p class="sub">One rule: name the scope, and show <span class="mono">M of N</span> whenever anything filters it. Prefer no number to a wrong one.</p>
+    <table class="matrix">
+      <thead><tr><th>Context</th><th>Recommended copy</th><th>Show?</th></tr></thead>
+      <tbody>
+        <tr><td>City landing — no filters</td><td class="cp">1,240 properties in Bangalore</td><td><span class="tag show">Show</span></td></tr>
+        <tr><td>City landing — filters</td><td class="cp">84 of 1,240 match your filters</td><td><span class="tag show">Show</span></td></tr>
+        <tr><td>Region selected</td><td class="cp">310 properties in East Bangalore</td><td><span class="tag show">Show</span></td></tr>
+        <tr><td>Area selected — filters</td><td class="cp">5 of 18 match in Whitefield</td><td><span class="tag show">Show</span></td></tr>
+        <tr><td>School selected</td><td class="cp">14 homes within 5 km of {school}</td><td><span class="tag show">Show</span></td></tr>
+        <tr><td>Search active</td><td class="cp">9 results for "corner plot" in {scope}</td><td><span class="tag show">Show</span></td></tr>
+        <tr><td>Loading / refetching</td><td class="cp">last count, dimmed + spinner (first load: "Searching…")</td><td><span class="tag show">Dimmed</span></td></tr>
+        <tr><td>Zero — filters caused</td><td class="cp">0 of 1,240 match your filters</td><td><span class="tag show">Show</span></td></tr>
+        <tr><td>Zero — scope empty</td><td class="cp">No listings here yet</td><td><span class="tag show">Show</span></td></tr>
+        <tr><td>Stale / error / unreconcilable</td><td class="cp">Filtered results <span style="color:var(--text-muted)">(no number)</span></td><td><span class="tag hide">No number</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footlink">Full spec, chip taxonomy, URL behaviour, accessibility &amp; engineering handoff → <a href="./ACTIVE_CONTEXT_AND_COUNT_BADGE_DESIGN.md">ACTIVE_CONTEXT_AND_COUNT_BADGE_DESIGN.md</a></div>
+
+</div>
+</body>
+</html>

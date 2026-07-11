@@ -1,0 +1,212 @@
+<!-- @dsCard group="Discover" viewport="1440x860" name="Unified Discover Portal" subtitle="Bangalore Property Tracker — ONE Discover shell · scope × journey (area · school · listings · agri)" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bangalore Property Tracker — Discover</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  html, body { margin: 0; height: 100%; background: var(--background); }
+  body { font-family: var(--font-sans); color: var(--text-strong); }
+  * { box-sizing: border-box; }
+  ::selection { background: var(--accent); color: #fff; }
+  /* Plum — the school-journey accent only (not in the base system) */
+  :root {
+    --plum-600: #5E5286; --plum-500: #7E6BA8; --plum-100: #DED7EC; --plum-tint: #F1EDF7;
+    --evergreen-100: #CFE6D9; --evergreen-700: #1F694A;
+  }
+  .upt-pin { background: transparent !important; border: none !important; }
+  .leaflet-container { font-family: var(--font-sans); background: #EDEBE6; }
+  .leaflet-bar a { color: var(--navy-800); }
+  .leaflet-control-attribution { font-size: 10px; background: rgba(255,255,255,0.7) !important; }
+  .upt-scroll::-webkit-scrollbar { width: 10px; }
+  .upt-scroll::-webkit-scrollbar-thumb { background: var(--stone-400); border-radius: 999px; border: 3px solid var(--background); }
+  /* Cluster affordance */
+  .dp-cluster:hover .dp-cluster-disc { transform: scale(1.08); }
+  /* PR-B — guided-picker affordances */
+  .dp-nav { cursor: pointer; }
+  .dp-nav:hover .dp-navcore { transform: scale(1.08) !important; }
+  .dp-hint-cap { display: none; }
+  body[data-dp-hint] .dp-hint-cap { display: inline-block; }
+  @keyframes dpPulse {
+    0% { box-shadow: 0 0 0 0 rgba(30,42,68,0.35); }
+    70% { box-shadow: 0 0 0 12px rgba(30,42,68,0); }
+    100% { box-shadow: 0 0 0 0 rgba(30,42,68,0); }
+  }
+  body[data-dp-hint] .dp-pulse { animation: dpPulse 2.4s ease-out infinite; }
+  @media (prefers-reduced-motion: reduce) { body[data-dp-hint] .dp-pulse { animation: none; } }
+  /* Region-overview guidance (issue #1808) — one-shot ring on the panel journey cards
+     after a map/panel region pick. Copper matches the map guidance card's accent. */
+  @keyframes dpRing {
+    0%   { box-shadow: 0 0 0 0 rgba(176,92,58,0.0), 0 0 0 0 rgba(176,92,58,0.40); }
+    30%  { box-shadow: 0 0 0 3px rgba(176,92,58,0.55), 0 0 0 11px rgba(176,92,58,0.13); }
+    100% { box-shadow: 0 0 0 0 rgba(176,92,58,0.0), 0 0 0 0 rgba(176,92,58,0.0); }
+  }
+  .dp-attn-target { transition: box-shadow 200ms cubic-bezier(0.4,0,0.2,1); }
+  .dp-attn-on { animation: dpRing 1.5s cubic-bezier(0.4,0,0.2,1) 2; }
+  .dp-guide-arr { display: inline-block; animation: dpNudge 1.4s ease-in-out infinite; }
+  .dp-guide-arr-down { animation-name: dpNudgeY; }
+  @keyframes dpNudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+  @keyframes dpNudgeY { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+  @media (prefers-reduced-motion: reduce) {
+    .dp-attn-on { animation: none; box-shadow: 0 0 0 2px rgba(176,92,58,0.5); }
+    .dp-guide-arr, .dp-guide-arr-down { animation: none; }
+  }
+  .dp-acluster:hover .dp-acluster-chip { transform: scale(1.06); }
+  /* Wide fixed-width marker boxes must not eat map clicks — only the visible chip is interactive */
+  .upt-pin .dp-nav, .upt-pin .dp-acluster { pointer-events: none; }
+  .upt-pin .dp-navcore, .upt-pin .dp-acluster-chip { pointer-events: auto; }
+  /* Listing-cluster action caption: only on the largest cluster (.on) or on hover */
+  .dp-cluster .dp-cluster-cap { display: none; }
+  .dp-cluster:hover .dp-cluster-cap, .dp-cluster .dp-cluster-cap.on { display: inline-block; }
+  @media (max-width: 760px) { .dp-legend { display: none; } }
+  /* Infographic popup — matches the card system */
+  .leaflet-popup-content-wrapper { border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); border: 1px solid var(--border); padding: 0; overflow: hidden; }
+  .leaflet-popup-content { margin: 0; width: 232px !important; }
+  .leaflet-popup-tip { box-shadow: var(--shadow-md); }
+  .leaflet-popup-close-button { color: #fff !important; top: 8px !important; right: 8px !important; z-index: 3; width: 22px; height: 22px; line-height: 20px !important; background: rgba(20,26,40,0.5); border-radius: var(--radius-full); }
+  .dp-pop { font-family: var(--font-sans); }
+  .dp-pop-img { position: relative; height: 118px; background-size: cover; background-position: center; background-color: var(--surface-muted); }
+  .dp-pop-tier { position: absolute; top: 9px; left: 9px; padding: 3px 8px; border-radius: var(--radius-full); font-size: 10.5px; font-weight: 700; color: #fff; background: var(--navy-800); box-shadow: var(--shadow-sm); }
+  .dp-tier-verified { background: var(--evergreen-600); }
+  .dp-tier-trusted { background: var(--navy-800); }
+  .dp-tier-listed { background: var(--grey-500); }
+  .dp-pop-tag { position: absolute; bottom: 9px; left: 9px; padding: 3px 8px; border-radius: var(--radius-sm); font-size: 10.5px; font-weight: 700; color: #fff; background: var(--navy-900); }
+  .dp-pop-tag-agri { background: rgba(31,105,74,0.94); font-family: var(--font-mono); }
+  .dp-pop-body { padding: 12px 13px 13px; }
+  .dp-pop-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .dp-pop-price { font-family: var(--font-mono); font-size: 17px; font-weight: 700; color: var(--text-strong); }
+  .dp-pop-type { font-size: 10.5px; font-weight: 700; color: var(--text-muted); padding: 2px 8px; border-radius: var(--radius-full); background: var(--surface-subtle); border: 1px solid var(--border); white-space: nowrap; }
+  .dp-pop-title { margin: 7px 0 3px; font-size: 13px; font-weight: 700; line-height: 1.3; color: var(--text-strong); }
+  .dp-pop-loc { font-size: 11.5px; color: var(--text-muted); }
+  .dp-pop-meta { margin-top: 7px; font-family: var(--font-mono); font-size: 11px; color: var(--text-body); }
+  .dp-pop-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); }
+  .dp-pop-step { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-muted); }
+  .dp-pp { width: 24px; height: 24px; border-radius: var(--radius-full); border: 1px solid var(--border-strong); background: var(--paper); color: var(--text-strong); font-size: 15px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background var(--dur-fast), border-color var(--dur-fast); }
+  .dp-pp:hover { background: var(--grey-50); border-color: var(--navy-800); }
+  .dp-pp-show { border: none; background: var(--accent); color: #fff; font-family: var(--font-sans); font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: var(--radius-md); cursor: pointer; white-space: nowrap; transition: background var(--dur-fast); }
+  .dp-pp-show:hover { background: var(--accent-hover); }
+  .dp-pop-agri .dp-pp-show { background: var(--evergreen-600); }
+</style>
+
+<style id="__print_rules">
+@page { size: letter landscape; margin: 0; }
+@media print {
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { height: auto !important; background: #fff !important; }
+  body { padding: 0.35in 0.4in !important; }
+  /* Portal wrapper uses height:calc(100vh-60px) inline — pin it for the page */
+  #root > div > div { height: 6.9in !important; }
+  .leaflet-control-zoom, .leaflet-control-attribution { display: none !important; }
+  /* freeze animations at end-state */
+  *, *::before, *::after {
+    animation-delay: -99s !important; animation-duration: .001s !important;
+    animation-iteration-count: 1 !important; animation-fill-mode: both !important;
+    animation-play-state: running !important; transition-duration: 0s !important;
+  }
+}
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#F1EDF7">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#F1EDF7"/>
+    <rect x="0" y="0" width="600" height="800" fill="#EDEBE6"/>
+    <circle cx="300" cy="360" r="120" fill="none" stroke="#5E5286" stroke-width="10" opacity="0.5"/>
+    <path d="M300 250 C340 250 372 282 372 322 C372 380 300 450 300 450 C300 450 228 380 228 322 C228 282 260 250 300 250 Z" fill="#1E2A44"/>
+    <circle cx="300" cy="322" r="26" fill="#F1EDF7"/>
+    <rect x="660" y="120" width="440" height="60" rx="10" fill="#1E2A44"/>
+    <rect x="660" y="220" width="200" height="200" rx="16" fill="#C9711E"/>
+    <rect x="900" y="220" width="200" height="200" rx="16" fill="#fff" stroke="#DED7EC" stroke-width="4"/>
+    <rect x="660" y="460" width="440" height="40" rx="8" fill="#DED7EC"/>
+    <rect x="660" y="520" width="360" height="40" rx="8" fill="#DED7EC"/>
+  </svg>
+</template>
+<div id="root"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="src/data.js?v=rg1"></script>
+<script type="text/babel" src="src/components/shared.jsx?v=rg1"></script>
+<script type="text/babel" src="src/components/cards.jsx?v=rg1"></script>
+<script type="text/babel" src="src/PortalMap.jsx?v=rg1"></script>
+<script type="text/babel" src="src/DiscoverPanel.jsx?v=rg1"></script>
+<script type="text/babel" src="src/DiscoverPortal.jsx?v=rg1"></script>
+<script type="text/babel">
+  const { Icon, Button } = window.ReTrendsDesignSystem_f37966;
+
+  function TopNav() {
+    const [h, setH] = React.useState(false);
+    return (
+      <header style={{
+        height: "60px", display: "flex", alignItems: "center", gap: "28px",
+        padding: "0 28px", background: "var(--paper)", borderBottom: "1px solid var(--border)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "11px" }}>
+          <div style={{ width: "34px", height: "34px", borderRadius: "var(--radius-md)", background: "var(--navy-800)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name="map-pin" size={19} color="#fff" />
+          </div>
+          <div style={{ lineHeight: 1.1, whiteSpace: "nowrap" }}>
+            <div style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "-0.01em", color: "var(--text-strong)" }}>Bangalore Property Tracker</div>
+            <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Real estate trends</div>
+          </div>
+        </div>
+        <nav style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+          <button style={{
+            display: "inline-flex", alignItems: "center", gap: "7px", padding: "8px 12px",
+            border: "none", background: "transparent", cursor: "pointer", borderRadius: "var(--radius-md)",
+            fontFamily: "var(--font-sans)", fontSize: "13.5px", fontWeight: 600, color: "var(--text-strong)",
+          }}>
+            <Icon name="building" size={16} color="var(--navy-800)" />Discover
+          </button>
+        </nav>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "18px" }}>
+          <Icon name="message-circle" size={20} color="var(--grey-500)" />
+          <button onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{
+            border: "1px solid var(--border-strong)", background: h ? "var(--grey-50)" : "var(--paper)",
+            cursor: "pointer", padding: "8px 18px", borderRadius: "var(--radius-md)",
+            fontFamily: "var(--font-sans)", fontSize: "13.5px", fontWeight: 600, color: "var(--text-strong)",
+            transition: "background var(--dur-fast) var(--ease-standard)",
+          }}>Sign in</button>
+        </div>
+      </header>
+    );
+  }
+
+  function App() {
+    return (<div><TopNav /><window.DiscoverPortal /></div>);
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+
+<script>
+addEventListener('load', () => {
+  (async () => {
+    try { await document.fonts.ready; } catch (e) {}
+    // wait for the React app + map to mount
+    for (let i = 0; i < 60; i++) {
+      if (document.querySelector('#root > div > div .leaflet-container')) break;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    await new Promise(r => setTimeout(r, 900));
+    const imgs = Array.from(document.images).filter((i) => !i.complete);
+    await Promise.race([
+      Promise.allSettled(imgs.map((i) => i.decode())),
+      new Promise((r) => setTimeout(r, 8000)),
+    ]);
+    // nudge Leaflet to re-render at the print page dimensions
+    const invalidate = () => window.dispatchEvent(new Event('resize'));
+    window.addEventListener('beforeprint', invalidate);
+    invalidate();
+    await new Promise(r => setTimeout(r, 700));
+    setTimeout(() => window.print(), 400);
+  })();
+});
+</script>
+</body>
+</html>

@@ -151,7 +151,7 @@ describe('AC4/AC6 — school-radius NOT active preserves #1152 behaviour', () =>
         // schoolListingsCount not set
       }),
     );
-    expect(result).toEqual({ visible: true, count: 2, loading: false });
+    expect(result).toMatchObject({ visible: true, count: 2, loading: false });
     expect(result.count).not.toBe(4);
     expect(result.count).not.toBe(247);
   });
@@ -164,7 +164,7 @@ describe('AC4/AC6 — school-radius NOT active preserves #1152 behaviour', () =>
         cityTotal: 100,
       }),
     );
-    expect(result).toEqual({ visible: true, count: 8, loading: false });
+    expect(result).toMatchObject({ visible: true, count: 8, loading: false });
   });
 
   // Regression guard: no area, no filters, no school → city total shown
@@ -174,7 +174,7 @@ describe('AC4/AC6 — school-radius NOT active preserves #1152 behaviour', () =>
         cityTotal: 247,
       }),
     );
-    expect(result).toEqual({ visible: true, count: 247, loading: false });
+    expect(result).toMatchObject({ visible: true, count: 247, loading: false });
   });
 });
 
@@ -266,7 +266,11 @@ describe('Issue #1175 v3 — group context: badge shows group aggregate', () => 
     expect(result.count).not.toBe(12);
   });
 
-  it('AC5-G — group-context + active property filters + no area → badge hidden (filters gate fires before group branch)', () => {
+  // Issue #1817 — the filters gate still fires before the group branch (a trustworthy
+  // group-scoped M cannot be derived without a group-filtered query), but the badge is
+  // no longer silently hidden: it now falls back to the design's no-number "Filtered
+  // results" state (AC6) instead of vanishing outright.
+  it('AC5-G — group-context + active property filters + no area → stale (Filtered results, no number)', () => {
     const result = deriveDiscoverBadge(
       makeInput({
         groupListingsCount: 8,
@@ -275,7 +279,8 @@ describe('Issue #1175 v3 — group context: badge shows group aggregate', () => 
         cityTotal: 12,
       }),
     );
-    expect(result.visible).toBe(false);
+    expect(result.visible).toBe(true);
     expect(result.count).toBeNull();
+    expect(result.state).toBe('stale');
   });
 });

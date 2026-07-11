@@ -1,15 +1,15 @@
 /**
  * Issue #1186 — clearable "Search" context chip (page-level integration).
+ * Issue #1817 — REVISED: the Search chip is no longer context-gated on area/school
+ * selection. Per the design (§3/§4), `q` is a first-class piece of result-affecting
+ * filter/search state at ANY scope (city, region, group, area, school) — the OLD
+ * area/school gate predates #1817's "scope lives in the breadcrumb, filters/search
+ * live in chips" model and is now removed. The chip renders whenever `q` is non-empty
+ * (after trim), full stop. Area/school themselves are NEVER chips (AC2) — they live
+ * only in the breadcrumb — so this file no longer asserts a `chip-area` testid.
  *
- * The Search chip must render ONLY in a valid contextual-search context: an area is
- * selected OR a school is selected. It must NOT render at top-level/city-only (no
- * areaKey/schoolId) even when `?q=` is present. Dismissing the chip must clear ONLY
- * `q` (via urlActions.setSearchQuery('')), leaving sibling context/filter chips intact.
- *
- * #1185 (merged) already makes `q` functionally filter area-scoped listings/markers/badge;
- * this issue only adds the chip + its context gate. These tests exercise MapDiscovery →
- * activeContextChips useMemo → ActiveContextChips wiring (searchQuery + onClearSearch) at
- * cold-load (first paint) and on dismiss.
+ * Dismissing the chip must clear ONLY `q` (via urlActions.setSearchQuery('')),
+ * leaving sibling context/filter chips intact.
  *
  * Harness mirrors MapDiscovery.startOver-chip.test.tsx: DiscoverRightPanel is mocked to
  * render the `activeContextChips` prop directly, and a LocationProbe renders the live URL
@@ -168,7 +168,7 @@ describe('Issue #1186 — Search context chip (page-level)', () => {
     mockUseAuth.mockReturnValue({ user: null, isLoading: false, isAdmin: false, isDealer: false });
   });
 
-  it('(i) AC4 — cold-load ?areaKey=...&q=<term> renders the search chip on first paint', async () => {
+  it('(i) AC9 — cold-load ?areaKey=...&q=<term> renders the search chip on first paint', async () => {
     const url =
       '/discover?city=udupi&journey=area-first' +
       '&areaKey=' + encodeURIComponent(KUNJIBETTU_AREA_KEY) +
@@ -179,34 +179,33 @@ describe('Issue #1186 — Search context chip (page-level)', () => {
     const chip = await screen.findByTestId('chip-search');
     expect(chip).toBeInTheDocument();
     expect(chip).toHaveTextContent('villa');
-    // Sibling area chip is also present (valid context).
-    expect(screen.getByTestId('chip-area')).toBeInTheDocument();
   });
 
-  it('(ii) AC3 — cold-load ?q=<term> with no area/school does NOT render the search chip', async () => {
+  // Issue #1817 — REVERSED from the old #1186 AC3: the search chip is no longer
+  // context-gated on area/school. `q` alone (city scope, no area/school) now renders
+  // the chip, matching design §9's `/discover?city=bangalore&q=plot` cold-load row.
+  it('(ii) AC9 — cold-load ?q=<term> with no area/school selected also renders the search chip', async () => {
     const url = '/discover?city=udupi&q=villa';
 
     renderAt(url);
 
-    // Wait for the page to settle (right panel mounts) before asserting absence.
-    await screen.findByTestId('right-panel-mock');
-    expect(screen.queryByTestId('chip-search')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('chip-area')).not.toBeInTheDocument();
+    const chip = await screen.findByTestId('chip-search');
+    expect(chip).toBeInTheDocument();
+    expect(chip).toHaveTextContent('villa');
   });
 
-  it('(iii) negative guard — valid context (area) but no q does NOT render the search chip', async () => {
+  it('(iii) negative guard — area selected but no q does NOT render the search chip', async () => {
     const url =
       '/discover?city=udupi&journey=area-first' +
       '&areaKey=' + encodeURIComponent(KUNJIBETTU_AREA_KEY);
 
     renderAt(url);
 
-    // Area chip proves the context resolved; search chip must still be absent without q.
-    expect(await screen.findByTestId('chip-area')).toBeInTheDocument();
+    await screen.findByTestId('right-panel-mock');
     expect(screen.queryByTestId('chip-search')).not.toBeInTheDocument();
   });
 
-  it('(iv) AC2 — dismissing the search chip clears q from the URL and preserves sibling chips', async () => {
+  it('(iv) AC3 — dismissing the search chip clears q from the URL and preserves sibling chips', async () => {
     const user = userEvent.setup();
     const url =
       '/discover?city=udupi&journey=area-first' +
@@ -215,9 +214,8 @@ describe('Issue #1186 — Search context chip (page-level)', () => {
 
     renderAt(url);
 
-    // Search chip + sibling chips visible on first paint.
+    // Search chip + sibling filter chip visible on first paint.
     expect(await screen.findByTestId('chip-search')).toBeInTheDocument();
-    expect(screen.getByTestId('chip-area')).toBeInTheDocument();
     expect(screen.getByTestId('chip-bhk')).toBeInTheDocument();
     expect(screen.getByTestId('location-probe')).toHaveTextContent('q=villa');
 
@@ -232,7 +230,6 @@ describe('Issue #1186 — Search context chip (page-level)', () => {
     expect(probe).not.toHaveTextContent('q=villa');
     expect(probe).toHaveTextContent('beds=2');
     // Sibling chips survive a search-clear (onClearSearch touched only q).
-    expect(screen.getByTestId('chip-area')).toBeInTheDocument();
     expect(screen.getByTestId('chip-bhk')).toBeInTheDocument();
   });
 });

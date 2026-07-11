@@ -24,6 +24,9 @@ import { CitySelect } from '../CitySelect';
 import { IntentSelector } from '../IntentSelector';
 import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { deriveDiscoverEmptyStateCopy } from '../emptyStateCopy';
+import { StartOverButton } from '../StartOverButton';
 
 // Quick filter options (hardcoded MVP). 'All' is a virtual chip that clears the
 // property-type selection — it is not a property_type value.
@@ -39,6 +42,16 @@ const PROPERTY_TYPE_LABELS: Record<string, string> = {
 interface AreaSelectedPanelProps {
   selectedArea: AreaPoint;
   areaListings?: DiscoverCityListingItem[];
+  /**
+   * Issue #1817 (code-review follow-up, AC5) — precomputed via the SAME
+   * formatDiscoverBadgeCopy(discoverBadge, ...) call the map badge pill renders from
+   * (MapDiscovery.tsx), so this panel's result-summary stat can never diverge from the
+   * map badge (design §6 "Area selected + filters" → `M of N match in {scope}`).
+   * Optional: falls back to a lightweight local "{count} verified properties in {area}"
+   * default when omitted, so existing callers/tests that don't wire the full selector
+   * keep working unchanged.
+   */
+  areaResultSummaryText?: string | null;
   isLoadingListings?: boolean;
   isAuthenticated?: boolean;
   onBack?: () => void;
@@ -105,6 +118,7 @@ interface AreaSelectedPanelProps {
 export function AreaSelectedPanel({
   selectedArea,
   areaListings,
+  areaResultSummaryText,
   isLoadingListings,
   isAuthenticated = false,
   onBack,
@@ -289,17 +303,14 @@ export function AreaSelectedPanel({
               </Button>
             )}
             {journey != null && onStartOver != null && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1 rounded-full px-2 text-xs text-muted-foreground hover:text-foreground"
-                onClick={onStartOver}
-                aria-label="Start over and return to journey selection"
-                data-testid="start-over-button"
-              >
-                <X className="h-3.5 w-3.5" />
-                Start over
-              </Button>
+              // Issue #1817 (AC8) — an area is selected here (deeper than a region),
+              // so this site always confirms before resetting.
+              <StartOverButton
+                onStartOver={onStartOver}
+                hasSubstantialState
+                cityLabel={resolvedCityLabel || areaLabel}
+                className="h-7 gap-1.5 rounded-full border border-input px-2 text-xs text-muted-foreground hover:text-foreground"
+              />
             )}
           </div>
         </div>
@@ -483,38 +494,62 @@ export function AreaSelectedPanel({
             ))}
           </div>
         ) : !areaListings || areaListings.length === 0 ? (
-          <div className="m-4 flex flex-col items-center justify-center rounded-xl border border-border bg-muted/20 px-4 py-14 text-center shadow-sm">
-            <MapPin className="mb-3 h-8 w-8 text-muted-foreground/40" />
-            {hasPropertyFilters && searchQuery ? (
-              <>
-                <p className="mb-4 text-sm text-muted-foreground">No listings match this search and filters</p>
-                <Button variant="outline" size="sm" onClick={handleClearPropertyFilters} data-testid="clear-filters-button">
-                  Clear filters
-                </Button>
-              </>
-            ) : searchQuery ? (
-              <p className="text-sm text-muted-foreground">No listings match this search</p>
-            ) : hasPropertyFilters ? (
-              <>
-                <p className="mb-4 text-sm text-muted-foreground">No listings match these filters</p>
-                <Button variant="outline" size="sm" onClick={handleClearPropertyFilters} data-testid="clear-filters-button">
-                  Clear filters
-                </Button>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No properties for {intentNoun} in this area yet
-              </p>
-            )}
-          </div>
+          (() => {
+            // Issue #1817 (AC7) — cause-routed empty state, sourced from the SAME
+            // hasPropertyFilters/hasSearch signal the badge's zero-filters/zero-search/
+            // zero-empty states use, so the panel and badge never disagree about why
+            // the list is empty (design §7).
+            const copy = deriveDiscoverEmptyStateCopy({
+              hasPropertyFilters,
+              hasSearch: !!searchQuery,
+              searchQuery,
+              n: selectedArea.listingCount ?? null,
+              scopeLabel: areaLabel,
+              cityLabel: resolvedCityLabel || areaLabel,
+              isCityScope: false, // an area is always narrower than its city
+              noun: intentNoun === 'rent' ? 'rentals' : 'homes',
+            });
+            const onClearFilters = hasPropertyFilters ? handleClearPropertyFilters : undefined;
+            const onClearSearch = searchQuery && onSearchChange ? () => onSearchChange('') : undefined;
+            const primaryAction =
+              copy.primaryLabel === 'Clear filters' && onClearFilters
+                ? { label: copy.primaryLabel, onClick: onClearFilters }
+                : copy.primaryLabel === 'Clear search' && onClearSearch
+                  ? { label: copy.primaryLabel, onClick: onClearSearch }
+                  : undefined;
+            const secondaryAction =
+              copy.secondaryLabel == null
+                ? undefined
+                : copy.secondaryIsClearFilters && onClearFilters
+                  ? { label: copy.secondaryLabel, onClick: onClearFilters }
+                  : copy.cause === 'filters' && onClearFilters
+                    ? { label: copy.secondaryLabel, onClick: onClearFilters } // "See all N in {scope}" == clear filters
+                    : undefined;
+            return (
+              <div
+                className="m-4 rounded-xl border border-border bg-muted/20 px-4 py-14 shadow-sm"
+                data-testid="area-empty-state"
+                data-empty-cause={copy.cause}
+              >
+                <EmptyState
+                  icon={<MapPin className="h-8 w-8 text-muted-foreground/40" />}
+                  heading={copy.heading}
+                  description={copy.description}
+                  primaryAction={primaryAction}
+                  secondaryAction={secondaryAction}
+                />
+              </div>
+            );
+          })()
         ) : (
           <>
             {/* Intent-aware verified result summary (Issue #1494 / #1606) */}
             {/* a4 — warm evergreen-tint/60 strip instead of near-invisible bg-muted/20 */}
             <div className="flex items-center gap-1.5 border-b border-border bg-evergreen-tint/60 px-4 py-2.5" data-testid="area-result-summary">
               <ShieldCheck className="h-4 w-4 shrink-0 text-evergreen" aria-hidden="true" />
-              <p className="text-xs font-medium text-foreground">
-                {count} verified {count === 1 ? 'property' : 'properties'} for {intentNoun} in {areaLabel}
+              <p className="text-xs font-medium text-foreground" data-testid="area-result-summary-text">
+                {areaResultSummaryText ??
+                  `${count} verified ${count === 1 ? 'property' : 'properties'} for ${intentNoun} in ${areaLabel}`}
               </p>
             </div>
             <div className="grid grid-cols-1 gap-3 p-4 2xl:grid-cols-2">

@@ -1,8 +1,8 @@
 import React from 'react';
-import { ChevronLeft, X, GraduationCap, MapPin, Sprout } from 'lucide-react';
+import { ChevronLeft, GraduationCap, MapPin, Sprout } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
+import { StartOverButton } from './StartOverButton';
 
 interface JourneyPill {
   label: string;
@@ -52,6 +52,18 @@ interface PanelHeaderProps {
   activeContextChips?: React.ReactNode;
   /** Extra action buttons rendered to the right, before Start Over. */
   actions?: React.ReactNode;
+  /**
+   * Issue #1817 (AC8) — gates the Start-over confirm popover. True when there is
+   * substantial state to lose (selection deeper than a region, or any filter/search
+   * active). Defaults to true: every existing PanelHeader call-site already only
+   * shows Start Over once a journey/selection is active, so confirming-by-default
+   * preserves prior "always confirm-worthy" behaviour unless a caller opts out.
+   */
+  hasSubstantialState?: boolean;
+  /** City display label for the confirm popover copy. */
+  cityLabel?: string;
+  /** Mirrors MapDiscovery's prefersReducedMotion signal — collapses popover motion. */
+  prefersReducedMotion?: boolean;
 }
 
 export function PanelHeader({
@@ -62,6 +74,9 @@ export function PanelHeader({
   backLabel,
   activeContextChips,
   actions,
+  hasSubstantialState = true,
+  cityLabel = '',
+  prefersReducedMotion = false,
 }: PanelHeaderProps) {
   const showStartOver = journey != null && onStartOver != null;
   const pill = journey != null ? JOURNEY_PILL[journey] : null;
@@ -77,17 +92,13 @@ export function PanelHeader({
             <div className="flex items-center gap-1.5 shrink-0">
               {actions}
               {showStartOver && (
-                <Button
-                  variant="ghost"
-                  size="sm"
+                <StartOverButton
+                  onStartOver={onStartOver!}
+                  hasSubstantialState={hasSubstantialState}
+                  cityLabel={cityLabel}
+                  prefersReducedMotion={prefersReducedMotion}
                   className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
-                  onClick={onStartOver}
-                  aria-label="Start over and return to journey selection"
-                  data-testid="start-over-button"
-                >
-                  Start over
-                  <X className="h-3.5 w-3.5" />
-                </Button>
+                />
               )}
             </div>
           )}

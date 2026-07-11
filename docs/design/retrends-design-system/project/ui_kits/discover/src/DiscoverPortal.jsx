@@ -71,10 +71,43 @@ function DiscoverPortal() {
   const [agriFilters, setAgriFilters] = React.useState(window.DP_AGRI_DEFAULTS);
   const [active, setActive] = React.useState(null);
   const [saved, setSaved] = React.useState(["h1"]);
+  // Region-overview guidance (issue #1808). `src` distinguishes a map/panel click
+  // (a user action → pulse the panel journey cards) from a deep-link load (card only,
+  // no motion). `n` is a nonce so each fresh selection re-fires the one-shot pulse.
+  const guideN = React.useRef(0);
+  const [regionGuide, setRegionGuide] = React.useState(init.scope && !init.journey ? { id: init.scope, src: "deeplink", n: 0 } : null);
+  const [guideDismissed, setGuideDismissed] = React.useState(false);
+  const dismissGuide = React.useCallback(() => setGuideDismissed(true), []);
+  // Panel ↔ map coordination (AREA_MARKER_UX.md): shared hover, the map's labeled
+  // subset (for "Showing X of N areas" + "Show on map"), and the show-on-map nonce.
+  const [hoverArea, setHoverArea] = React.useState(null); // { id, src: 'panel'|'map' }
+  const [mapShownIds, setMapShownIds] = React.useState([]);
+  const [focusArea, setFocusArea] = React.useState(null); // { id, n }
+  const focusN = React.useRef(0);
+  const onAreaHover = React.useCallback((id, src) => setHoverArea(id ? { id, src: src || "panel" } : null), []);
+  const showAreaOnMap = React.useCallback((id) => setFocusArea({ id, n: ++focusN.current }), []);
+  const onAreasShown = React.useCallback((ids) => {
+    setMapShownIds((prev) => (prev.length === ids.length && prev.every((x, i) => x === ids[i])) ? prev : ids);
+  }, []);
+  // Mobile: map on top, panel as a bottom sheet. `?mobile=1` forces it for prototyping.
+  const forceMobile = React.useMemo(() => { try { return new URLSearchParams(location.search).get("mobile") === "1"; } catch (e) { return false; } }, []);
+  const [isMobile, setIsMobile] = React.useState(() => forceMobile || (typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches));
+  React.useEffect(() => {
+    if (forceMobile) return;
+    const mq = window.matchMedia("(max-width: 760px)");
+    const f = (e) => setIsMobile(e.matches);
+    mq.addEventListener ? mq.addEventListener("change", f) : mq.addListener(f);
+    return () => { mq.removeEventListener ? mq.removeEventListener("change", f) : mq.removeListener(f); };
+  }, []);
 
   const state = { scope, journey, groupId, zoneId, areaId, schoolId, corridorId, clusterId };
   const layer = computeLayer(state);
   const region = (id) => D.regions.find((r) => r.id === id);
+
+  // Clear hover/shown state when leaving an area-picker level.
+  React.useEffect(() => {
+    if (layer !== "area-areas" && layer !== "school-areas") { setHoverArea(null); setMapShownIds([]); setFocusArea(null); }
+  }, [layer]);
 
   // ---- navigation ----
   const toggleSave = (id) => setSaved((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
@@ -82,10 +115,10 @@ function DiscoverPortal() {
   const reset = () => { setScope(null); setJourney_(null); clearSel(); setFilters(window.DP_DEFAULT_FILTERS); setAgriFilters(window.DP_AGRI_DEFAULTS); };
   // Changing city resets region / journey / selection back to that city's neutral landing (Buy/Rent persists).
   const changeCity = (c) => { setCity(c); reset(); };
-  const changeRegion = () => { setScope(null); setJourney_(null); clearSel(); setSearchMode("area"); };
+  const changeRegion = () => { setScope(null); setJourney_(null); clearSel(); setSearchMode("area"); setRegionGuide(null); };
 
   // Region is scope-only (journey still null) → the search toggle defaults to Area, never School.
-  const pickRegion = (id) => { setScope(id); clearSel(); setSearchMode("area"); };
+  const pickRegion = (id, src) => { setScope(id); clearSel(); setSearchMode("area"); setRegionGuide({ id, src: src || "panel", n: ++guideN.current }); setGuideDismissed(false); };
   const setJourney = (j) => {
     clearSel();
     if (j === "agri") { setScope(null); setJourney_("agri"); setMaxKm(D.agri.defaultMaxKm); setAgriFilters(window.DP_AGRI_DEFAULTS); return; }
@@ -110,14 +143,31 @@ function DiscoverPortal() {
     return setScope(null);
   };
 
-  // ---- scoped search ----
-  const scopeLabel = scope ? region(scope).name : city;
+  // ---- scoped search — narrowest active scope first (group > zone > region > city),
+  //      auto-widening WITH a label when the narrow scope has no matches, so knowing a
+  //      name is always enough (direct access, no forced funnel). Never widens past the
+  //      current city's dataset.
+  const groupAreaIds = groupId ? D.areas.filter((a) => a.group === groupId).map((a) => a.id) : null;
+  const zoneAreaIds = zoneId ? D.areas.filter((a) => a.zone === zoneId).map((a) => a.id) : null;
+  const narrowIds = groupAreaIds || zoneAreaIds;
+  const narrowLabel = groupId ? (D.groups.find((g) => g.id === groupId) || {}).name : zoneId ? (D.zones.find((z) => z.id === zoneId) || {}).name : null;
+  const scopeLabel = narrowLabel || (scope ? region(scope).name : city);
   const searchResults = (q, m) => {
     const t = q.toLowerCase();
-    if (m === "area") return D.areas.filter((a) => (!scope || a.region === scope) && a.name.toLowerCase().includes(t)).slice(0, 5)
-      .map((a) => ({ id: a.id, title: a.name, sub: `Area · ${region(a.region).name}`, cta: journey === "school" ? "Schools here" : "View listings", _kind: "area", _obj: a }));
-    return D.schools.filter((s) => (!scope || s.region === scope) && s.name.toLowerCase().includes(t)).slice(0, 5)
-      .map((s) => ({ id: s.id, title: s.name, sub: `School · ${s.area} · ${window.BLR_HOMES_NEAR(s, 5).length} homes within 5 km`, cta: "Homes near it", _kind: "school", _obj: s }));
+    if (m === "area") {
+      const all = D.areas.filter((a) => a.name.toLowerCase().includes(t));
+      let hits = all.filter((a) => (!scope || a.region === scope) && (!narrowIds || narrowIds.indexOf(a.id) !== -1));
+      let widened = null;
+      if (!hits.length && narrowIds) { hits = all.filter((a) => !scope || a.region === scope); widened = `outside ${narrowLabel}`; }
+      if (!hits.length && scope) { hits = all; widened = "other regions"; }
+      return hits.slice(0, 5).map((a) => ({ id: a.id, title: a.name, sub: `Area · ${region(a.region).name}${widened ? ` · ${widened}` : ""}`, cta: journey === "school" ? "Schools here" : "View listings", _kind: "area", _obj: a }));
+    }
+    const allS = D.schools.filter((s) => s.name.toLowerCase().includes(t) || s.area.toLowerCase().includes(t));
+    let hitsS = allS.filter((s) => (!scope || s.region === scope) && (!narrowIds || narrowIds.indexOf(s.areaId) !== -1));
+    let widenedS = null;
+    if (!hitsS.length && narrowIds) { hitsS = allS.filter((s) => !scope || s.region === scope); widenedS = `outside ${narrowLabel}`; }
+    if (!hitsS.length && scope) { hitsS = allS; widenedS = "other regions"; }
+    return hitsS.slice(0, 5).map((s) => ({ id: s.id, title: s.name, sub: `School · ${s.area} · ${window.BLR_HOMES_NEAR(s, 5).length} homes within 5 km${widenedS ? ` · ${widenedS}` : ""}`, cta: "Homes near it", _kind: "school", _obj: s }));
   };
   const onPickSearch = (r) => { if (r._kind === "area") { journey === "school" || searchMode === "school" ? openAreaSchools(r._obj) : openAreaListings(r._obj); } else pickSchool(r._obj.id); };
 
@@ -198,34 +248,46 @@ function DiscoverPortal() {
   })();
 
   const tag = journey && JOURNEY_TAG[journey];
-  const showSearch = (!!scope || !!journey) && journey !== "agri";
+  const showSearch = journey !== "agri"; // incl. the neutral city landing — direct access, no forced funnel
 
   const ctx = {
     layer, mode, city, scope, journey, regionObj, groupObj, zoneObj, areaObj, schoolObj, corridorObj, clusterObj,
     groupId, zoneId, areaId, schoolId, corridorId, clusterId, radiusKm, setRadiusKm, maxKm, setMaxKm, agriDistances: D.agri.distances,
     filters, setFilters, agriFilters, setAgriFilters,
     searchMode, setSearchMode, scopeLabel, searchResults, onPickSearch, showSearch,
+    regionGuide, guideDismissed, dismissGuide,
     areaListings, areaListingsRaw, schoolHomes, parcels, parcelsRaw,
-    saved, toggleSave, setActive, setMode,
+    saved, toggleSave, active, setActive, setMode,
+    hoverAreaId: hoverArea ? hoverArea.id : null, hoverAreaSrc: hoverArea ? hoverArea.src : null, onAreaHover, mapShownIds, showAreaOnMap, isMobile,
     pickRegion, setJourney, pickGroup, pickZone, pickArea, pickSchool, pickCorridor, pickCluster,
     back, reset, changeRegion, changeCity, setCity, cities: ["Bangalore", "Udupi", "Mangaluru"],
   };
 
   return (
-    <div style={{ display: "flex", height: "calc(100vh - 60px)" }}>
-      {/* ---- Map (left) ---- */}
-      <div style={{ flex: "0 0 50%", position: "relative", borderRight: "1px solid var(--border)" }}>
+    <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", height: "calc(100vh - 60px)" }}>
+      {/* ---- Map (left / top sheet backdrop on mobile) ---- */}
+      <div style={isMobile
+        ? { flex: "0 0 44%", minHeight: "280px", position: "relative", borderBottom: "1px solid var(--border)" }
+        : { flex: "0 0 50%", position: "relative", borderRight: "1px solid var(--border)" }}>
         <window.DPMap
           layer={layer} scope={scope} selection={{ groupId, zoneId, areaId, schoolId, corridorId, clusterId }}
           radiusKm={radiusKm} maxKm={maxKm} activeListing={active} listings={mapListings} parcels={parcels}
-          crumb={crumbMap} summary={summary}
+          crumb={crumbMap} summary={summary} onActivate={setActive}
           onPickRegion={pickRegion} onPickGroup={pickGroup} onPickArea={pickArea} onPickSchool={pickSchool}
           onPickZone={pickZone} onPickCorridor={pickCorridor} onPickCluster={pickCluster}
+          hoverAreaId={hoverArea ? hoverArea.id : null} hoverSrc={hoverArea ? hoverArea.src : null}
+          onAreaHover={onAreaHover} onAreasShown={onAreasShown} focusArea={focusArea}
+          regionGuide={regionGuide} guideDismissed={guideDismissed} onDismissGuide={dismissGuide} isMobile={isMobile}
         />
       </div>
 
-      {/* ---- Panel (right) ---- */}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--background)" }}>
+      {/* ---- Panel (right / bottom sheet on mobile) ---- */}
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", background: "var(--background)", ...(isMobile ? { borderRadius: "var(--radius-xl, 16px) var(--radius-xl, 16px) 0 0", marginTop: "-14px", zIndex: 600, boxShadow: "0 -6px 24px rgba(20,26,40,0.12)" } : {}) }}>
+        {isMobile && (
+          <div style={{ display: "flex", justifyContent: "center", padding: "8px 0 2px", flex: "none" }}>
+            <span style={{ width: "40px", height: "4px", borderRadius: "var(--radius-full)", background: "var(--grey-300, #D8D4CC)" }}></span>
+          </div>
+        )}
         {/* Persistent shell header — shown once a scope/journey is chosen. On the neutral
             landing the city + Buy/Rent controls live inside the hero (see DiscoverPanelBody). */}
         {(scope || journey) && (

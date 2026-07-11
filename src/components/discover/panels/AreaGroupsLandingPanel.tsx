@@ -18,6 +18,7 @@ import {
 import { formatMemberAreaSummary, buildAreaNameIndex } from '@/utils/areaNameSummary';
 import { resolveActiveDiscoverGroup } from '@/utils/discoverLayerRegistry';
 import { TrustStrip } from './_shared';
+import { StartOverButton } from '../StartOverButton';
 
 // Shared uppercase eyebrow for the in-panel control labels (mirrors GuidedEntryPanel).
 const CONTROL_EYEBROW = 'text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground';
@@ -653,16 +654,15 @@ export function AreaGroupsLandingPanel({
             Area-first
           </span>
           {onStartOver && (
-            <button
-              type="button"
-              data-testid="start-over-button"
-              onClick={onStartOver}
-              aria-label="Start over and return to journey selection"
-              className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[12.5px] font-semibold text-foreground transition-colors hover:bg-muted/40"
-            >
-              Start over
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
+            // Issue #1817 (AC8) — this is the group-BROWSE landing (no specific group
+            // drilled into yet), i.e. only-a-region-equivalent state, so it resets
+            // directly with no confirm (design §8).
+            <StartOverButton
+              onStartOver={onStartOver}
+              hasSubstantialState={false}
+              cityLabel={cityLabel ?? ''}
+              className="ml-auto h-auto gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[12.5px] font-semibold text-foreground transition-colors hover:bg-muted/40"
+            />
           )}
         </div>
 

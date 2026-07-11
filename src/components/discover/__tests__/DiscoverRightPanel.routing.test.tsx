@@ -616,7 +616,9 @@ describe('DiscoverRightPanel — area-selected content parity', () => {
         isLoadingListings={false}
       />,
     );
-    expect(screen.getByText(/No properties for sale in this area yet/)).toBeInTheDocument();
+    // Issue #1817 (AC7) — genuinely-empty cause now routes through the shared
+    // cause-based copy ("No listings here yet"), replacing the old intent-only wording.
+    expect(screen.getByText('No listings here yet')).toBeInTheDocument();
   });
 
   it('renders PropertyCard list with correct price', () => {

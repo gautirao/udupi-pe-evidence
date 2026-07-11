@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { ArrowRight, ChevronLeft, ChevronRight, Layers, MapPin, X } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, Layers, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
@@ -8,6 +8,7 @@ import type { DiscoverJourney } from '@/types/discover';
 import { getAreaGroupContent, getLocalityDescription } from '@/lib/discoverGroupContent';
 import { ScopedSearch } from '../ScopedSearch';
 import { PanelColumn } from './_shared';
+import { StartOverButton } from '../StartOverButton';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -286,16 +287,14 @@ export function AreaGroupSelectedPanel({
       <div className="sticky top-0 z-20 flex-shrink-0 flex flex-col gap-2.5 bg-background border-b border-border/50 px-4 pt-3 pb-3.5">
         {onStartOver && (
           <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              data-testid="start-over-button"
-              onClick={onStartOver}
-              aria-label="Start over and return to journey selection"
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[12.5px] font-semibold text-foreground transition-colors hover:bg-muted/40"
-            >
-              Start over
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
+            {/* Issue #1817 (AC8) — a group is selected here (deeper than a region),
+                so this site always confirms before resetting. */}
+            <StartOverButton
+              onStartOver={onStartOver}
+              hasSubstantialState
+              cityLabel={cityLabel}
+              className="h-auto gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[12.5px] font-semibold text-foreground transition-colors hover:bg-muted/40"
+            />
           </div>
         )}
 

@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"ReTrendsDesignSystem_f37966","components":[{"name":"Icon","sourcePath":"components/Icon.jsx"},{"name":"Badge","sourcePath":"components/core/Badge.jsx"},{"name":"Button","sourcePath":"components/core/Button.jsx"},{"name":"Card","sourcePath":"components/core/Card.jsx"},{"name":"CardTitle","sourcePath":"components/core/Card.jsx"},{"name":"CardDescription","sourcePath":"components/core/Card.jsx"},{"name":"Input","sourcePath":"components/core/Input.jsx"},{"name":"Select","sourcePath":"components/core/Select.jsx"},{"name":"PropertyCard","sourcePath":"components/domain/PropertyCard.jsx"},{"name":"StatTile","sourcePath":"components/domain/StatTile.jsx"},{"name":"TrustBadge","sourcePath":"components/domain/TrustBadge.jsx"}],"sourceHashes":{"components/Icon.jsx":"6bd11ac8b30a","components/core/Badge.jsx":"ba18c6eaa112","components/core/Button.jsx":"7997ec28af2d","components/core/Card.jsx":"46955e2e0be7","components/core/Input.jsx":"e4b14321cc33","components/core/Select.jsx":"15ec79bf8ad5","components/domain/PropertyCard.jsx":"c9f9cca8f7c2","components/domain/StatTile.jsx":"0a1a6e034b70","components/domain/TrustBadge.jsx":"a688791e5fee","design_handoff_discover_area_first/designs/data.js":"bc7c3fc95e68","design_handoff_discover_area_first/designs/uni-belt-data.js":"4615efefa2bb","ui_kits/agri-discovery/AgriDiscovery.jsx":"c7d912b64a0a","ui_kits/agri-discovery/AgriMap.jsx":"b158a63dc937","ui_kits/agri-discovery/CorridorDiscovery.jsx":"27e45b9e4852","ui_kits/agri-discovery/CorridorMap.jsx":"111f355c03d6","ui_kits/agri-discovery/CorridorPanel.jsx":"e4da99dfc924","ui_kits/agri-discovery/Panel.jsx":"3770280bb32b","ui_kits/agri-discovery/corridor-data.js":"4f4a5d29cce2","ui_kits/agri-discovery/data.js":"0d01c48cd67b","ui_kits/area-discovery/AreaCards.jsx":"28217654d7c4","ui_kits/area-discovery/AreaDiscovery.jsx":"a975bc54f039","ui_kits/area-discovery/AreaMap.jsx":"aefb677bdb79","ui_kits/area-discovery/data.js":"58e5bbcff3c0","ui_kits/broker/AreaInsights.jsx":"e1f690ce9354","ui_kits/broker/BrokerDashboard.jsx":"0ae926a0be25","ui_kits/broker/DemandGaps.jsx":"cfa511fb5b6b","ui_kits/broker/ListingQuality.jsx":"1ef2ff4230f6","ui_kits/broker/data.js":"487f26207df7","ui_kits/broker/listing-quality-data.js":"694a235c1b91","ui_kits/buyer/BuyerArea.jsx":"b97fadfb8bdd","ui_kits/buyer/data.js":"75326eacebe2","ui_kits/discover/AreaFirstMap.jsx":"c8ed0dd3c444","ui_kits/discover/AreaFirstPanel.jsx":"a57ff9a242c8","ui_kits/discover/DiscoverMap.jsx":"9ddd8c2a7f30","ui_kits/discover/JourneyPanel.jsx":"364d6ad12901","ui_kits/discover/ListingActions.jsx":"e3fa47a860b2","ui_kits/discover/ListingDetail.jsx":"c9e75587b6fd","ui_kits/discover/ManipalResultsMap.jsx":"5cbe46865d7d","ui_kits/discover/ManipalResultsPanel.jsx":"fe7efeda8ca1","ui_kits/discover/UniBeltMap.jsx":"bf4cc6b45a52","ui_kits/discover/UniBeltPanel.jsx":"e35f4d1898f0","ui_kits/discover/cards.jsx":"62e0d8c90053","ui_kits/discover/data.js":"bc7c3fc95e68","ui_kits/discover/discover-data.js":"2924fdbb8e6e","ui_kits/discover/listing-data.js":"6628648dd09b","ui_kits/discover/manipal-data.js":"b69becf252f3","ui_kits/discover/map.jsx":"1b0053303478","ui_kits/discover/panels.jsx":"9407d1278d21","ui_kits/discover/src/DiscoverPanel.jsx":"00759fc9ed86","ui_kits/discover/src/DiscoverPortal.jsx":"9b19a595c9f7","ui_kits/discover/src/PortalMap.jsx":"46a89ff0c17f","ui_kits/discover/src/components/cards.jsx":"ddcb2b30f8ec","ui_kits/discover/src/components/shared.jsx":"e009e8d1cced","ui_kits/discover/src/data.js":"c26217966b3e","ui_kits/discover/uni-belt-data.js":"4615efefa2bb","ui_kits/portal/DiscoverScreen.jsx":"78cdd6cd4bbc","ui_kits/portal/Header.jsx":"6ef7d125655e","ui_kits/portal/HomeScreen.jsx":"a7c6df4e022e","ui_kits/portal/ListingScreen.jsx":"300372c59177","ui_kits/portal/TrendsScreen.jsx":"340ecee7c320","ui_kits/portal/data.js":"b82007b95258","ui_kits/school-discovery/Cards.jsx":"072db7f51fa6","ui_kits/school-discovery/Map.jsx":"61c74789b8e4","ui_kits/school-discovery/SchoolDiscovery.jsx":"74bae9ee7773","ui_kits/school-discovery/data.js":"0338cda8c6dd"},"inlinedExternals":[],"unexposedExports":[]} */
+/* @ds-bundle: {"format":4,"namespace":"ReTrendsDesignSystem_f37966","components":[{"name":"Icon","sourcePath":"components/Icon.jsx"},{"name":"Badge","sourcePath":"components/core/Badge.jsx"},{"name":"Button","sourcePath":"components/core/Button.jsx"},{"name":"Card","sourcePath":"components/core/Card.jsx"},{"name":"CardTitle","sourcePath":"components/core/Card.jsx"},{"name":"CardDescription","sourcePath":"components/core/Card.jsx"},{"name":"Input","sourcePath":"components/core/Input.jsx"},{"name":"Select","sourcePath":"components/core/Select.jsx"},{"name":"PropertyCard","sourcePath":"components/domain/PropertyCard.jsx"},{"name":"StatTile","sourcePath":"components/domain/StatTile.jsx"},{"name":"TrustBadge","sourcePath":"components/domain/TrustBadge.jsx"}],"sourceHashes":{"components/Icon.jsx":"6bd11ac8b30a","components/core/Badge.jsx":"ba18c6eaa112","components/core/Button.jsx":"7997ec28af2d","components/core/Card.jsx":"46955e2e0be7","components/core/Input.jsx":"e4b14321cc33","components/core/Select.jsx":"15ec79bf8ad5","components/domain/PropertyCard.jsx":"c9f9cca8f7c2","components/domain/StatTile.jsx":"0a1a6e034b70","components/domain/TrustBadge.jsx":"a688791e5fee","design_handoff_discover_area_first/designs/data.js":"bc7c3fc95e68","design_handoff_discover_area_first/designs/uni-belt-data.js":"4615efefa2bb","ui_kits/agri-discovery/AgriDiscovery.jsx":"c7d912b64a0a","ui_kits/agri-discovery/AgriMap.jsx":"b158a63dc937","ui_kits/agri-discovery/CorridorDiscovery.jsx":"27e45b9e4852","ui_kits/agri-discovery/CorridorMap.jsx":"111f355c03d6","ui_kits/agri-discovery/CorridorPanel.jsx":"e4da99dfc924","ui_kits/agri-discovery/Panel.jsx":"3770280bb32b","ui_kits/agri-discovery/corridor-data.js":"4f4a5d29cce2","ui_kits/agri-discovery/data.js":"0d01c48cd67b","ui_kits/area-discovery/AreaCards.jsx":"28217654d7c4","ui_kits/area-discovery/AreaDiscovery.jsx":"a975bc54f039","ui_kits/area-discovery/AreaMap.jsx":"aefb677bdb79","ui_kits/area-discovery/data.js":"58e5bbcff3c0","ui_kits/broker/AreaInsights.jsx":"e1f690ce9354","ui_kits/broker/BrokerDashboard.jsx":"0ae926a0be25","ui_kits/broker/DemandGaps.jsx":"cfa511fb5b6b","ui_kits/broker/ListingQuality.jsx":"1ef2ff4230f6","ui_kits/broker/data.js":"487f26207df7","ui_kits/broker/listing-quality-data.js":"694a235c1b91","ui_kits/buyer/BuyerArea.jsx":"b97fadfb8bdd","ui_kits/buyer/data.js":"75326eacebe2","ui_kits/discover/AreaFirstMap.jsx":"c8ed0dd3c444","ui_kits/discover/AreaFirstPanel.jsx":"a57ff9a242c8","ui_kits/discover/DiscoverMap.jsx":"9ddd8c2a7f30","ui_kits/discover/JourneyPanel.jsx":"364d6ad12901","ui_kits/discover/ListingActions.jsx":"e3fa47a860b2","ui_kits/discover/ListingDetail.jsx":"c9e75587b6fd","ui_kits/discover/ManipalResultsMap.jsx":"5cbe46865d7d","ui_kits/discover/ManipalResultsPanel.jsx":"fe7efeda8ca1","ui_kits/discover/UniBeltMap.jsx":"bf4cc6b45a52","ui_kits/discover/UniBeltPanel.jsx":"e35f4d1898f0","ui_kits/discover/cards.jsx":"62e0d8c90053","ui_kits/discover/data.js":"bc7c3fc95e68","ui_kits/discover/discover-data.js":"2924fdbb8e6e","ui_kits/discover/listing-data.js":"6628648dd09b","ui_kits/discover/manipal-data.js":"b69becf252f3","ui_kits/discover/map.jsx":"1b0053303478","ui_kits/discover/panels.jsx":"9407d1278d21","ui_kits/discover/src/DiscoverPanel.jsx":"8f954b16994f","ui_kits/discover/src/DiscoverPortal.jsx":"bfcb773966e0","ui_kits/discover/src/PortalMap.jsx":"df71e7719fd2","ui_kits/discover/src/components/cards.jsx":"ddcb2b30f8ec","ui_kits/discover/src/components/shared.jsx":"e009e8d1cced","ui_kits/discover/src/data.js":"67ec10dcde7d","ui_kits/discover/uni-belt-data.js":"4615efefa2bb","ui_kits/portal/DiscoverScreen.jsx":"78cdd6cd4bbc","ui_kits/portal/Header.jsx":"6ef7d125655e","ui_kits/portal/HomeScreen.jsx":"a7c6df4e022e","ui_kits/portal/ListingScreen.jsx":"300372c59177","ui_kits/portal/TrendsScreen.jsx":"340ecee7c320","ui_kits/portal/data.js":"b82007b95258","ui_kits/school-discovery/Cards.jsx":"072db7f51fa6","ui_kits/school-discovery/Map.jsx":"61c74789b8e4","ui_kits/school-discovery/SchoolDiscovery.jsx":"74bae9ee7773","ui_kits/school-discovery/data.js":"0338cda8c6dd"},"inlinedExternals":[],"unexposedExports":[]} */
 
 (() => {
 
@@ -24457,15 +24457,27 @@ function ListingGrid({
       gridTemplateColumns: "1fr 1fr",
       gap: "16px"
     }
-  }, list.map(l => /*#__PURE__*/React.createElement(window.DPListingCard, {
-    key: l.id,
-    listing: l,
-    onHover: ctx.setActive,
-    onOpen: () => {},
-    saved: ctx.saved.includes(l.id),
-    onToggleSave: ctx.toggleSave,
-    distanceKm: distFrom ? window.BLR_DIST(distFrom, l) : null
-  })));
+  }, list.map(l => {
+    const on = ctx.active === l.id;
+    return /*#__PURE__*/React.createElement("div", {
+      key: l.id,
+      "data-dp-card": l.id,
+      style: {
+        borderRadius: "var(--radius-lg)",
+        outline: on ? "2px solid var(--accent)" : "2px solid transparent",
+        outlineOffset: "2px",
+        transition: "outline-color var(--dur-fast) var(--ease-standard)",
+        scrollMarginTop: "12px"
+      }
+    }, /*#__PURE__*/React.createElement(window.DPListingCard, {
+      listing: l,
+      onHover: ctx.setActive,
+      onOpen: () => {},
+      saved: ctx.saved.includes(l.id),
+      onToggleSave: ctx.toggleSave,
+      distanceKm: distFrom ? window.BLR_DIST(distFrom, l) : null
+    }));
+  }));
 }
 function ColStack({
   children
@@ -24477,6 +24489,99 @@ function ColStack({
       gap: "12px"
     }
   }, children);
+}
+
+// Slim map-guidance line — tells the user the map is tappable (PR-B copy).
+function MapGuide({
+  children,
+  accent
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "flex-start",
+      gap: "8px",
+      margin: "-6px 0 18px",
+      fontSize: "12.5px",
+      lineHeight: 1.5,
+      color: "var(--text-muted)"
+    }
+  }, /*#__PURE__*/React.createElement(NIcon, {
+    name: "map-pin",
+    size: 14,
+    color: accent === "plum" ? "var(--plum-600)" : "var(--accent)",
+    style: {
+      flex: "none",
+      marginTop: "2px"
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      textWrap: "pretty"
+    }
+  }, children));
+}
+
+// Area rows with map coordination: hover ↔ marker emphasis (no camera move),
+// map-hover outline, and "Show on map" for areas demoted off the initial map.
+function AreaRows({
+  areas,
+  ctx,
+  plum
+}) {
+  const shown = ctx.mapShownIds || [];
+  const partial = shown.length > 0 && shown.length < areas.length;
+  return /*#__PURE__*/React.createElement(ColStack, null, areas.map(a => {
+    const demoted = partial && shown.indexOf(a.id) === -1;
+    const hov = ctx.hoverAreaId === a.id && ctx.hoverAreaSrc !== "panel";
+    return /*#__PURE__*/React.createElement("div", {
+      key: a.id,
+      "data-dp-area": a.id,
+      onMouseEnter: () => ctx.onAreaHover(a.id, "panel"),
+      onMouseLeave: () => ctx.onAreaHover(null, "panel"),
+      style: {
+        position: "relative",
+        borderRadius: "var(--radius-lg)",
+        outline: hov ? `2px solid ${plum ? "var(--plum-500)" : "var(--accent)"}` : "2px solid transparent",
+        outlineOffset: "2px",
+        transition: "outline-color var(--dur-fast) var(--ease-standard)"
+      }
+    }, plum ? /*#__PURE__*/React.createElement(window.DPSchoolAreaCard, {
+      area: a,
+      onView: ctx.pickArea
+    }) : /*#__PURE__*/React.createElement(window.DPAreaCard, {
+      area: a,
+      mode: ctx.mode,
+      onView: ctx.pickArea
+    }), demoted && /*#__PURE__*/React.createElement("button", {
+      onClick: e => {
+        e.stopPropagation();
+        ctx.showAreaOnMap(a.id);
+      },
+      title: "Reveal this area on the map",
+      style: {
+        position: "absolute",
+        top: "14px",
+        right: "16px",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "5px",
+        padding: "4px 10px",
+        border: "1px solid var(--border-strong)",
+        borderRadius: "var(--radius-full)",
+        background: "var(--paper)",
+        cursor: "pointer",
+        fontFamily: "var(--font-sans)",
+        fontSize: "11.5px",
+        fontWeight: 600,
+        color: "var(--text-body)",
+        whiteSpace: "nowrap"
+      }
+    }, /*#__PURE__*/React.createElement(NIcon, {
+      name: "map-pin",
+      size: 12,
+      color: plum ? "var(--plum-600)" : "var(--copper-600)"
+    }), "Show on map"));
+  }));
 }
 function SearchRow({
   ctx
@@ -24552,6 +24657,52 @@ function DiscoverPanelBody({
   const changeRegionBtn = ctx.scope ? /*#__PURE__*/React.createElement(window.DPGhostBtn, {
     onClick: ctx.changeRegion
   }, "Change region") : null;
+
+  // Marker click / step highlights a card — scroll the panel to it (manual, no scrollIntoView).
+  React.useEffect(() => {
+    if (!ctx.active) return;
+    const scroller = document.querySelector(".upt-scroll");
+    const card = scroller && scroller.querySelector('[data-dp-card="' + ctx.active + '"]');
+    if (!scroller || !card) return;
+    const cr = card.getBoundingClientRect(),
+      sr = scroller.getBoundingClientRect();
+    if (cr.top < sr.top + 8 || cr.bottom > sr.bottom - 8) {
+      scroller.scrollTo({
+        top: scroller.scrollTop + (cr.top - sr.top) - 20,
+        behavior: "smooth"
+      });
+    }
+  }, [ctx.active]);
+
+  // Cluster couldn't split (map-spot) → scroll the panel to the highlighted area row.
+  React.useEffect(() => {
+    if (!ctx.hoverAreaId || ctx.hoverAreaSrc !== "map-spot") return;
+    const scroller = document.querySelector(".upt-scroll");
+    const row = scroller && scroller.querySelector('[data-dp-area="' + ctx.hoverAreaId + '"]');
+    if (!scroller || !row) return;
+    const rr = row.getBoundingClientRect(),
+      sr = scroller.getBoundingClientRect();
+    if (rr.top < sr.top + 8 || rr.bottom > sr.bottom - 8) {
+      scroller.scrollTo({
+        top: scroller.scrollTop + (rr.top - sr.top) - 20,
+        behavior: "smooth"
+      });
+    }
+  }, [ctx.hoverAreaId, ctx.hoverAreaSrc]);
+
+  // Region-overview attention (issue #1808). One-shot ring pulse on the journey cards
+  // after a map/panel region pick — NOT on deep-link load, and never moves focus.
+  // CSS honours prefers-reduced-motion (static ring, no motion).
+  const [attn, setAttn] = React.useState(false);
+  const attnNRef = React.useRef(null);
+  React.useEffect(() => {
+    const g = ctx.regionGuide;
+    if (!g || g.src === "deeplink" || attnNRef.current === g.n) return;
+    attnNRef.current = g.n;
+    setAttn(true);
+    const t = setTimeout(() => setAttn(false), 3200);
+    return () => clearTimeout(t);
+  }, [ctx.regionGuide && ctx.regionGuide.n]);
 
   // ============ CITY LANDING (neutral) — editorial hero, journey CTAs first, regions second ============
   if (layer === "region-bubbles") {
@@ -24712,7 +24863,9 @@ function DiscoverPanelBody({
           transition: "background var(--dur-fast), color var(--dur-fast)"
         }
       }, opt);
-    })))), /*#__PURE__*/React.createElement(window.DPSection, {
+    })))), /*#__PURE__*/React.createElement(SearchRow, {
+      ctx: ctx
+    }), /*#__PURE__*/React.createElement(window.DPSection, {
       icon: "route"
     }, "Choose how you want to search"), /*#__PURE__*/React.createElement(ColStack, null, /*#__PURE__*/React.createElement(window.DPRichJourneyCard, {
       accent: "area",
@@ -24810,10 +24963,16 @@ function DiscoverPanelBody({
 
   // ============ REGION SELECTED (journey null) ============
   if (layer === "region-hotspots") {
-    const hotspots = window.BLR_DATA.areas.filter(a => a.region === ctx.scope).map(a => ({
-      a,
-      c: CO.homesArea(a.id)
-    })).sort((x, y) => y.c - x.c).slice(0, 4);
+    // Top area per group — mirrors the map's spatially diverse hotspot pins.
+    const best = new Map();
+    window.BLR_DATA.areas.filter(a => a.region === ctx.scope).forEach(a => {
+      const c = CO.homesArea(a.id);
+      if (!best.has(a.group) || c > best.get(a.group).c) best.set(a.group, {
+        a,
+        c
+      });
+    });
+    const hotspots = Array.from(best.values()).sort((x, y) => y.c - x.c).slice(0, 4);
     return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(window.DPBackLink, {
       onClick: ctx.back
     }, "Back to all regions"), /*#__PURE__*/React.createElement(window.DPHeaderBand, {
@@ -24828,11 +24987,45 @@ function DiscoverPanelBody({
       actions: changeRegionBtn
     }), /*#__PURE__*/React.createElement(SearchRow, {
       ctx: ctx
-    }), /*#__PURE__*/React.createElement(window.DPSection, {
+    }), /*#__PURE__*/React.createElement("div", {
+      "aria-live": "polite",
+      style: {
+        display: "flex",
+        alignItems: "flex-start",
+        gap: "8px",
+        margin: "-2px 0 16px"
+      }
+    }, /*#__PURE__*/React.createElement(NIcon, {
+      name: "map-pin",
+      size: 14,
+      color: "var(--accent)",
+      style: {
+        flex: "none",
+        marginTop: "2px"
+      }
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: "13px",
+        lineHeight: 1.5,
+        color: "var(--text-body)",
+        textWrap: "pretty"
+      }
+    }, /*#__PURE__*/React.createElement("strong", {
+      style: {
+        color: "var(--text-strong)"
+      }
+    }, regionObj.name, " selected."), " The map shows top areas only \u2014 choose how you want to search below.")), /*#__PURE__*/React.createElement("div", {
+      className: "dp-attn-target" + (attn ? " dp-attn-on" : ""),
+      style: {
+        borderRadius: "var(--radius-xl, 16px)",
+        margin: "0 -8px",
+        padding: "8px"
+      }
+    }, /*#__PURE__*/React.createElement(window.DPSection, {
       icon: "route"
     }, "Continue in ", rShort, " Bangalore"), /*#__PURE__*/React.createElement(RegionJourneys, {
       ctx: ctx
-    }), /*#__PURE__*/React.createElement("div", {
+    })), /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: "22px"
       }
@@ -24865,7 +25058,7 @@ function DiscoverPanelBody({
       actions: changeRegionBtn
     }), /*#__PURE__*/React.createElement(SearchRow, {
       ctx: ctx
-    }), /*#__PURE__*/React.createElement(window.DPSection, {
+    }), /*#__PURE__*/React.createElement(MapGuide, null, "Tap a marker on the map or choose from the list below."), /*#__PURE__*/React.createElement(window.DPSection, {
       icon: "layers",
       right: /*#__PURE__*/React.createElement("span", {
         style: {
@@ -24883,7 +25076,9 @@ function DiscoverPanelBody({
 
   // ============ AREA JOURNEY — areas in group ============
   if (layer === "area-areas") {
-    const areas = window.BLR_DATA.areas.filter(a => a.group === ctx.groupId);
+    const areas = window.BLR_DATA.areas.filter(a => a.group === ctx.groupId).slice().sort((a, b) => CO.homesArea(b.id) - CO.homesArea(a.id));
+    const shownN = (ctx.mapShownIds || []).length;
+    const partial = shownN > 0 && shownN < areas.length;
     return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(window.DPBackLink, {
       onClick: ctx.back
     }, "Back to area groups", ctx.scope ? ` in ${rShort}` : ""), /*#__PURE__*/React.createElement(window.DPHeaderBand, {
@@ -24892,12 +25087,20 @@ function DiscoverPanelBody({
       sub: groupObj.blurb,
       crumb: [`Discover ${city}`, regionObj && regionObj.name, groupObj.name].filter(Boolean),
       stats: [{
+        value: areas.length,
+        label: "areas"
+      }, {
         value: CO.homesGroup(ctx.groupId),
         label: noun(mode, CO.homesGroup(ctx.groupId))
       }]
     }), /*#__PURE__*/React.createElement(SearchRow, {
       ctx: ctx
-    }), /*#__PURE__*/React.createElement(window.DPSection, {
+    }), /*#__PURE__*/React.createElement(MapGuide, null, "Tap a marker on the map or choose from the list below.", partial && /*#__PURE__*/React.createElement(React.Fragment, null, " Showing ", /*#__PURE__*/React.createElement("strong", {
+      style: {
+        color: "var(--text-strong)",
+        fontFamily: "var(--font-mono)"
+      }
+    }, shownN), " of ", areas.length, " areas on the map \u2014 all ", areas.length, " are listed below.")), /*#__PURE__*/React.createElement(window.DPSection, {
       icon: "map-pin",
       right: /*#__PURE__*/React.createElement("span", {
         style: {
@@ -24905,12 +25108,10 @@ function DiscoverPanelBody({
           color: "var(--text-muted)"
         }
       }, areas.length, " areas")
-    }, "Areas inside ", groupObj.name), /*#__PURE__*/React.createElement(ColStack, null, areas.map(a => /*#__PURE__*/React.createElement(window.DPAreaCard, {
-      key: a.id,
-      area: a,
-      mode: mode,
-      onView: ctx.pickArea
-    }))));
+    }, "Areas inside ", groupObj.name), /*#__PURE__*/React.createElement(AreaRows, {
+      areas: areas,
+      ctx: ctx
+    }));
   }
 
   // ============ AREA / ALL LISTINGS ============
@@ -24935,7 +25136,7 @@ function DiscoverPanelBody({
       f: ctx.filters,
       setF: ctx.setFilters,
       onClear: () => ctx.setFilters(window.DP_DEFAULT_FILTERS)
-    }), listings.length === 0 ? /*#__PURE__*/React.createElement(window.DPEmpty, {
+    }), /*#__PURE__*/React.createElement(MapGuide, null, "Tap markers to preview, or choose from the list."), listings.length === 0 ? /*#__PURE__*/React.createElement(window.DPEmpty, {
       icon: "sliders-horizontal",
       title: "No homes match these filters",
       body: "Widen the budget or bedrooms, turn off Verified only, or switch Buy/Rent.",
@@ -24987,7 +25188,9 @@ function DiscoverPanelBody({
       actions: changeRegionBtn
     }), /*#__PURE__*/React.createElement(SearchRow, {
       ctx: ctx
-    }), /*#__PURE__*/React.createElement(window.DPSection, {
+    }), /*#__PURE__*/React.createElement(MapGuide, {
+      accent: "plum"
+    }, "Tap a marker on the map or choose from the list below."), /*#__PURE__*/React.createElement(window.DPSection, {
       icon: "layers",
       right: /*#__PURE__*/React.createElement("span", {
         style: {
@@ -25004,7 +25207,9 @@ function DiscoverPanelBody({
 
   // ============ SCHOOL JOURNEY — areas in zone ============
   if (layer === "school-areas") {
-    const areas = window.BLR_DATA.areas.filter(a => a.zone === ctx.zoneId);
+    const areas = window.BLR_DATA.areas.filter(a => a.zone === ctx.zoneId).slice().sort((a, b) => CO.schoolsArea(b.id) - CO.schoolsArea(a.id));
+    const shownN = (ctx.mapShownIds || []).length;
+    const partial = shownN > 0 && shownN < areas.length;
     return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(window.DPBackLink, {
       onClick: ctx.back
     }, "Back to school zones", ctx.scope ? ` in ${rShort}` : ""), /*#__PURE__*/React.createElement(window.DPHeaderBand, {
@@ -25023,7 +25228,14 @@ function DiscoverPanelBody({
       }]
     }), /*#__PURE__*/React.createElement(SearchRow, {
       ctx: ctx
-    }), /*#__PURE__*/React.createElement(window.DPSection, {
+    }), /*#__PURE__*/React.createElement(MapGuide, {
+      accent: "plum"
+    }, "Tap a marker on the map or choose from the list below.", partial && /*#__PURE__*/React.createElement(React.Fragment, null, " Showing ", /*#__PURE__*/React.createElement("strong", {
+      style: {
+        color: "var(--text-strong)",
+        fontFamily: "var(--font-mono)"
+      }
+    }, shownN), " of ", areas.length, " areas on the map \u2014 all ", areas.length, " are listed below.")), /*#__PURE__*/React.createElement(window.DPSection, {
       icon: "map-pin",
       right: /*#__PURE__*/React.createElement("span", {
         style: {
@@ -25031,11 +25243,11 @@ function DiscoverPanelBody({
           color: "var(--text-muted)"
         }
       }, areas.length, " areas")
-    }, "Areas in ", zoneObj.name), /*#__PURE__*/React.createElement(ColStack, null, areas.map(a => /*#__PURE__*/React.createElement(window.DPSchoolAreaCard, {
-      key: a.id,
-      area: a,
-      onView: ctx.pickArea
-    }))));
+    }, "Areas in ", zoneObj.name), /*#__PURE__*/React.createElement(AreaRows, {
+      areas: areas,
+      ctx: ctx,
+      plum: true
+    }));
   }
 
   // ============ SCHOOL JOURNEY — schools in area ============
@@ -25059,7 +25271,9 @@ function DiscoverPanelBody({
       }]
     }), /*#__PURE__*/React.createElement(SearchRow, {
       ctx: ctx
-    }), /*#__PURE__*/React.createElement(window.DPSection, {
+    }), /*#__PURE__*/React.createElement(MapGuide, {
+      accent: "plum"
+    }, "Tap a school pin on the map or choose from the list below."), /*#__PURE__*/React.createElement(window.DPSection, {
       icon: "building",
       right: /*#__PURE__*/React.createElement("span", {
         style: {
@@ -25111,7 +25325,9 @@ function DiscoverPanelBody({
       value: ctx.radiusKm,
       onChange: ctx.setRadiusKm,
       school: schoolObj
-    }), homes.length === 0 ? /*#__PURE__*/React.createElement(window.DPEmpty, {
+    }), /*#__PURE__*/React.createElement(MapGuide, {
+      accent: "plum"
+    }, "Tap markers to preview, or choose from the list."), homes.length === 0 ? /*#__PURE__*/React.createElement(window.DPEmpty, {
       accent: "plum",
       icon: "route",
       title: `No homes within ${ctx.radiusKm} km`,
@@ -25477,6 +25693,52 @@ function DiscoverPortal() {
   const [agriFilters, setAgriFilters] = React.useState(window.DP_AGRI_DEFAULTS);
   const [active, setActive] = React.useState(null);
   const [saved, setSaved] = React.useState(["h1"]);
+  // Region-overview guidance (issue #1808). `src` distinguishes a map/panel click
+  // (a user action → pulse the panel journey cards) from a deep-link load (card only,
+  // no motion). `n` is a nonce so each fresh selection re-fires the one-shot pulse.
+  const guideN = React.useRef(0);
+  const [regionGuide, setRegionGuide] = React.useState(init.scope && !init.journey ? {
+    id: init.scope,
+    src: "deeplink",
+    n: 0
+  } : null);
+  const [guideDismissed, setGuideDismissed] = React.useState(false);
+  const dismissGuide = React.useCallback(() => setGuideDismissed(true), []);
+  // Panel ↔ map coordination (AREA_MARKER_UX.md): shared hover, the map's labeled
+  // subset (for "Showing X of N areas" + "Show on map"), and the show-on-map nonce.
+  const [hoverArea, setHoverArea] = React.useState(null); // { id, src: 'panel'|'map' }
+  const [mapShownIds, setMapShownIds] = React.useState([]);
+  const [focusArea, setFocusArea] = React.useState(null); // { id, n }
+  const focusN = React.useRef(0);
+  const onAreaHover = React.useCallback((id, src) => setHoverArea(id ? {
+    id,
+    src: src || "panel"
+  } : null), []);
+  const showAreaOnMap = React.useCallback(id => setFocusArea({
+    id,
+    n: ++focusN.current
+  }), []);
+  const onAreasShown = React.useCallback(ids => {
+    setMapShownIds(prev => prev.length === ids.length && prev.every((x, i) => x === ids[i]) ? prev : ids);
+  }, []);
+  // Mobile: map on top, panel as a bottom sheet. `?mobile=1` forces it for prototyping.
+  const forceMobile = React.useMemo(() => {
+    try {
+      return new URLSearchParams(location.search).get("mobile") === "1";
+    } catch (e) {
+      return false;
+    }
+  }, []);
+  const [isMobile, setIsMobile] = React.useState(() => forceMobile || typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches);
+  React.useEffect(() => {
+    if (forceMobile) return;
+    const mq = window.matchMedia("(max-width: 760px)");
+    const f = e => setIsMobile(e.matches);
+    mq.addEventListener ? mq.addEventListener("change", f) : mq.addListener(f);
+    return () => {
+      mq.removeEventListener ? mq.removeEventListener("change", f) : mq.removeListener(f);
+    };
+  }, []);
   const state = {
     scope,
     journey,
@@ -25489,6 +25751,15 @@ function DiscoverPortal() {
   };
   const layer = computeLayer(state);
   const region = id => D.regions.find(r => r.id === id);
+
+  // Clear hover/shown state when leaving an area-picker level.
+  React.useEffect(() => {
+    if (layer !== "area-areas" && layer !== "school-areas") {
+      setHoverArea(null);
+      setMapShownIds([]);
+      setFocusArea(null);
+    }
+  }, [layer]);
 
   // ---- navigation ----
   const toggleSave = id => setSaved(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
@@ -25518,13 +25789,20 @@ function DiscoverPortal() {
     setJourney_(null);
     clearSel();
     setSearchMode("area");
+    setRegionGuide(null);
   };
 
   // Region is scope-only (journey still null) → the search toggle defaults to Area, never School.
-  const pickRegion = id => {
+  const pickRegion = (id, src) => {
     setScope(id);
     clearSel();
     setSearchMode("area");
+    setRegionGuide({
+      id,
+      src: src || "panel",
+      n: ++guideN.current
+    });
+    setGuideDismissed(false);
   };
   const setJourney = j => {
     clearSel();
@@ -25631,22 +25909,53 @@ function DiscoverPortal() {
     return setScope(null);
   };
 
-  // ---- scoped search ----
-  const scopeLabel = scope ? region(scope).name : city;
+  // ---- scoped search — narrowest active scope first (group > zone > region > city),
+  //      auto-widening WITH a label when the narrow scope has no matches, so knowing a
+  //      name is always enough (direct access, no forced funnel). Never widens past the
+  //      current city's dataset.
+  const groupAreaIds = groupId ? D.areas.filter(a => a.group === groupId).map(a => a.id) : null;
+  const zoneAreaIds = zoneId ? D.areas.filter(a => a.zone === zoneId).map(a => a.id) : null;
+  const narrowIds = groupAreaIds || zoneAreaIds;
+  const narrowLabel = groupId ? (D.groups.find(g => g.id === groupId) || {}).name : zoneId ? (D.zones.find(z => z.id === zoneId) || {}).name : null;
+  const scopeLabel = narrowLabel || (scope ? region(scope).name : city);
   const searchResults = (q, m) => {
     const t = q.toLowerCase();
-    if (m === "area") return D.areas.filter(a => (!scope || a.region === scope) && a.name.toLowerCase().includes(t)).slice(0, 5).map(a => ({
-      id: a.id,
-      title: a.name,
-      sub: `Area · ${region(a.region).name}`,
-      cta: journey === "school" ? "Schools here" : "View listings",
-      _kind: "area",
-      _obj: a
-    }));
-    return D.schools.filter(s => (!scope || s.region === scope) && s.name.toLowerCase().includes(t)).slice(0, 5).map(s => ({
+    if (m === "area") {
+      const all = D.areas.filter(a => a.name.toLowerCase().includes(t));
+      let hits = all.filter(a => (!scope || a.region === scope) && (!narrowIds || narrowIds.indexOf(a.id) !== -1));
+      let widened = null;
+      if (!hits.length && narrowIds) {
+        hits = all.filter(a => !scope || a.region === scope);
+        widened = `outside ${narrowLabel}`;
+      }
+      if (!hits.length && scope) {
+        hits = all;
+        widened = "other regions";
+      }
+      return hits.slice(0, 5).map(a => ({
+        id: a.id,
+        title: a.name,
+        sub: `Area · ${region(a.region).name}${widened ? ` · ${widened}` : ""}`,
+        cta: journey === "school" ? "Schools here" : "View listings",
+        _kind: "area",
+        _obj: a
+      }));
+    }
+    const allS = D.schools.filter(s => s.name.toLowerCase().includes(t) || s.area.toLowerCase().includes(t));
+    let hitsS = allS.filter(s => (!scope || s.region === scope) && (!narrowIds || narrowIds.indexOf(s.areaId) !== -1));
+    let widenedS = null;
+    if (!hitsS.length && narrowIds) {
+      hitsS = allS.filter(s => !scope || s.region === scope);
+      widenedS = `outside ${narrowLabel}`;
+    }
+    if (!hitsS.length && scope) {
+      hitsS = allS;
+      widenedS = "other regions";
+    }
+    return hitsS.slice(0, 5).map(s => ({
       id: s.id,
       title: s.name,
-      sub: `School · ${s.area} · ${window.BLR_HOMES_NEAR(s, 5).length} homes within 5 km`,
+      sub: `School · ${s.area} · ${window.BLR_HOMES_NEAR(s, 5).length} homes within 5 km${widenedS ? ` · ${widenedS}` : ""}`,
       cta: "Homes near it",
       _kind: "school",
       _obj: s
@@ -25784,7 +26093,8 @@ function DiscoverPortal() {
     }
   })();
   const tag = journey && JOURNEY_TAG[journey];
-  const showSearch = (!!scope || !!journey) && journey !== "agri";
+  const showSearch = journey !== "agri"; // incl. the neutral city landing — direct access, no forced funnel
+
   const ctx = {
     layer,
     mode,
@@ -25819,6 +26129,9 @@ function DiscoverPortal() {
     searchResults,
     onPickSearch,
     showSearch,
+    regionGuide,
+    guideDismissed,
+    dismissGuide,
     areaListings,
     areaListingsRaw,
     schoolHomes,
@@ -25826,8 +26139,15 @@ function DiscoverPortal() {
     parcelsRaw,
     saved,
     toggleSave,
+    active,
     setActive,
     setMode,
+    hoverAreaId: hoverArea ? hoverArea.id : null,
+    hoverAreaSrc: hoverArea ? hoverArea.src : null,
+    onAreaHover,
+    mapShownIds,
+    showAreaOnMap,
+    isMobile,
     pickRegion,
     setJourney,
     pickGroup,
@@ -25846,10 +26166,16 @@ function DiscoverPortal() {
   return /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
+      flexDirection: isMobile ? "column" : "row",
       height: "calc(100vh - 60px)"
     }
   }, /*#__PURE__*/React.createElement("div", {
-    style: {
+    style: isMobile ? {
+      flex: "0 0 44%",
+      minHeight: "280px",
+      position: "relative",
+      borderBottom: "1px solid var(--border)"
+    } : {
       flex: "0 0 50%",
       position: "relative",
       borderRight: "1px solid var(--border)"
@@ -25872,22 +26198,53 @@ function DiscoverPortal() {
     parcels: parcels,
     crumb: crumbMap,
     summary: summary,
+    onActivate: setActive,
     onPickRegion: pickRegion,
     onPickGroup: pickGroup,
     onPickArea: pickArea,
     onPickSchool: pickSchool,
     onPickZone: pickZone,
     onPickCorridor: pickCorridor,
-    onPickCluster: pickCluster
+    onPickCluster: pickCluster,
+    hoverAreaId: hoverArea ? hoverArea.id : null,
+    hoverSrc: hoverArea ? hoverArea.src : null,
+    onAreaHover: onAreaHover,
+    onAreasShown: onAreasShown,
+    focusArea: focusArea,
+    regionGuide: regionGuide,
+    guideDismissed: guideDismissed,
+    onDismissGuide: dismissGuide,
+    isMobile: isMobile
   })), /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
       minWidth: 0,
+      minHeight: 0,
       display: "flex",
       flexDirection: "column",
-      background: "var(--background)"
+      background: "var(--background)",
+      ...(isMobile ? {
+        borderRadius: "var(--radius-xl, 16px) var(--radius-xl, 16px) 0 0",
+        marginTop: "-14px",
+        zIndex: 600,
+        boxShadow: "0 -6px 24px rgba(20,26,40,0.12)"
+      } : {})
     }
-  }, (scope || journey) && /*#__PURE__*/React.createElement("div", {
+  }, isMobile && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "center",
+      padding: "8px 0 2px",
+      flex: "none"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: "40px",
+      height: "4px",
+      borderRadius: "var(--radius-full)",
+      background: "var(--grey-300, #D8D4CC)"
+    }
+  })), (scope || journey) && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "16px 28px 14px",
       borderBottom: "1px solid var(--border)",
@@ -26050,58 +26407,162 @@ window.DiscoverPortal = DiscoverPortal;
 // ui_kits/discover/src/PortalMap.jsx
 try { (() => {
 // Unified Discover Portal — ONE Leaflet map. Exports window.DPMap
-// A single map instance; only its marker layer swaps. The active layer is a
-// pure function of (journey, level) passed in as `layer`. Agri has its own
-// evergreen layers and never mixes with residential/ school markers.
+//
+// Progressive-disclosure map UX (GitHub map-marker redesign).
+// Design principles wired in here:
+//   1. ONE map instance. Marker set = pure function of (journey, level) → `layer`.
+//   2. Three independent concerns, three effects — this is what kills the jitter:
+//        • rebuild()      rebuilds markers    → fires on buildKey  (level + selection + result-set)
+//        • camera move    flyTo / flyToBounds → fires only when cameraKey changes (level + selection)
+//        • applyActive()  restyle + panInside → fires only when the focused listing changes
+//      Hovering a card or clicking a pin NEVER re-runs the camera, so the view holds still.
+//   3. Dense leaf markers (listings / homes / parcels) are CLUSTERED by pixel proximity at the
+//      live zoom, and re-clustered on every zoom/pan. Clicking a cluster flies into its bounds,
+//      which reveals the markers inside it — progressive disclosure, never a marker dump.
+//   4. Leaf markers carry an infographic POPUP (image + price + facts) with ‹ / › to step
+//      marker-to-marker without losing context, plus "Show in list" to highlight the panel card.
+//   Agri keeps its own evergreen layers and never mixes with residential / school markers.
+
 const {
   Icon: MIcon
 } = window.ReTrendsDesignSystem_f37966;
 const CO = window.BLR_COUNTS;
 const AG = window.BLR_AGRI;
 const short = window.BLR_INR_SHORT;
+const TIER_LABEL = {
+  verified: "Verified",
+  trusted: "Trusted",
+  listed: "Listed"
+};
 
-// ---- marker HTML builders ----
-function regionBubble(r, count, sel) {
+// ---- marker HTML builders (navigation levels) ----
+// `leader` (optional): subtle line + anchor dot drawn from the visible chip back to the
+// TRUE geographic anchor when the chip has been offset in screen space (Part A declutter).
+function leaderHTML(dx, dy, tone) {
+  const len = Math.hypot(dx, dy);
+  if (len < 16) return "";
+  const ang = Math.atan2(dy, dx) * 180 / Math.PI;
+  const c = tone === "plum" ? "var(--plum-500)" : "var(--navy-700, #2A3B5F)";
+  return `<div style="position:absolute;left:50%;top:50%;width:${Math.round(len)}px;height:1.5px;background:${c};opacity:.38;transform-origin:0 50%;transform:rotate(${ang.toFixed(1)}deg);pointer-events:none;"></div>
+    <div style="position:absolute;left:calc(50% + ${Math.round(dx)}px);top:calc(50% + ${Math.round(dy)}px);width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border-radius:var(--radius-full);background:${c};border:1.5px solid #fff;box-shadow:var(--shadow-sm);pointer-events:none;"></div>`;
+}
+// Deterministic screen-space declutter (Part A). True anchors never move — only the
+// visible chip shifts. Entries are placed in PRIORITY order (selected > count > rest);
+// higher-priority chips move less (they claim their spot first). `dir` locks the shift
+// direction (used to preserve N/S/E/W meaning for region bubbles).
+function declutterPoints(entries) {
+  const out = [];
+  const rectAt = (p, e) => ({
+    x: p.x - e.w / 2,
+    y: p.y - e.h / 2,
+    w: e.w,
+    h: e.h
+  });
+  const overlap = (a, b) => a.x - 8 < b.x + b.w && b.x - 8 < a.x + a.w && a.y - 8 < b.y + b.h && b.y - 8 < a.y + a.h;
+  entries.slice().sort((a, b) => b.pri - a.pri).forEach(e => {
+    let p = e.pt,
+      guard = 0;
+    while (guard++ < 26) {
+      const hit = out.find(o => overlap(rectAt(p, e), o.rect));
+      if (!hit) break;
+      let vx, vy;
+      if (e.dir) {
+        vx = e.dir[0];
+        vy = e.dir[1];
+      } else {
+        vx = p.x - (hit.rect.x + hit.rect.w / 2);
+        vy = p.y - (hit.rect.y + hit.rect.h / 2);
+        const n = Math.hypot(vx, vy);
+        if (n < 0.5) {
+          vx = 0;
+          vy = 1;
+        } else {
+          vx /= n;
+          vy /= n;
+        }
+      }
+      p = window.L.point(p.x + vx * 14, p.y + vy * 14);
+    }
+    out.push({
+      e,
+      p,
+      rect: rectAt(p, e)
+    });
+  });
+  return out;
+}
+function regionBubble(r, count, sel, leader) {
   const bg = sel ? "var(--navy-900)" : "rgba(27,42,69,0.95)";
-  return `<div style="transform:translate(-50%,-50%);font-family:var(--font-sans);text-align:center;">
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:86px;height:86px;border-radius:var(--radius-full);background:${bg};color:#fff;box-shadow:var(--shadow-lg);border:2px solid rgba(255,255,255,0.5);transform:scale(${sel ? 1.06 : 1});transition:all .15s cubic-bezier(.4,0,.2,1);">
+  return `<div class="dp-nav" style="position:relative;width:130px;margin-left:-65px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;">
+    ${leader || ""}
+    <div class="dp-pulse" style="display:inline-block;border-radius:var(--radius-full);">
+    <div class="dp-navcore" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:86px;height:86px;border-radius:var(--radius-full);background:${bg};color:#fff;box-shadow:var(--shadow-lg);border:2px solid rgba(255,255,255,0.5);transform:scale(${sel ? 1.06 : 1});transition:all .18s cubic-bezier(.4,0,.2,1);">
       <span style="font-family:var(--font-mono);font-size:19px;font-weight:700;line-height:1;">${count}</span>
       <span style="font-size:11px;font-weight:700;">${r.short}</span>
-    </div></div>`;
+    </div></div>
+    <div class="dp-hint-cap" style="margin-top:4px;padding:2px 8px;border-radius:var(--radius-full);background:var(--paper);box-shadow:var(--shadow-sm);font-size:10px;font-weight:700;color:var(--text-muted);white-space:nowrap;">Tap to explore</div></div>`;
 }
-function bubblePill(name, count, sel, accent) {
+function bubblePill(name, count, sel, accent, leader) {
   const bg = sel ? "var(--navy-900)" : "rgba(27,42,69,0.95)";
   const svg = accent === "agri" ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M5 8c4 0 7-3 7-6 0 3 3 6 7 6"/></svg>` : accent === "school" ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>` : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/></svg>`;
-  return `<div style="transform:translate(-50%,-50%);font-family:var(--font-sans);">
-    <div style="display:inline-flex;align-items:center;gap:9px;padding:8px 14px;border-radius:var(--radius-full);background:${bg};color:#fff;box-shadow:var(--shadow-lg);white-space:nowrap;border:1.5px solid rgba(255,255,255,0.45);transform:scale(${sel ? 1.06 : 1});transition:all .15s cubic-bezier(.4,0,.2,1);">
+  return `<div class="dp-nav" style="position:relative;width:300px;margin-left:-150px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;">
+    ${leader || ""}
+    <div class="dp-pulse" style="display:inline-block;border-radius:var(--radius-full);">
+    <div class="dp-navcore" style="display:inline-flex;align-items:center;gap:9px;padding:8px 14px;border-radius:var(--radius-full);background:${bg};color:#fff;box-shadow:var(--shadow-lg);white-space:nowrap;border:1.5px solid rgba(255,255,255,0.45);transform:scale(${sel ? 1.06 : 1});transition:all .18s cubic-bezier(.4,0,.2,1);">
       ${svg}<span style="font-size:13px;font-weight:700;letter-spacing:-0.01em;">${name}</span>
       <span style="font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,0.7);">${count}</span>
-    </div></div>`;
+      <span style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.65);">&#8250;</span>
+    </div></div></div>`;
 }
-function areaPin(name, count, sel, tone) {
+function areaPin(name, count, sel, tone, o) {
+  o = o || {};
+  const hot = sel || o.promoted;
   const bg = sel ? "var(--navy-800)" : "var(--paper)";
   const fg = sel ? "#fff" : "var(--navy-800)";
   const sub = sel ? "rgba(255,255,255,0.7)" : "var(--text-muted)";
-  const border = sel ? "none" : "1px solid var(--border)";
-  const shadow = sel ? "var(--shadow-lg)" : "var(--shadow-md)";
+  const border = sel ? "none" : `1px solid ${o.promoted ? "var(--navy-800)" : "var(--border)"}`;
+  const shadow = hot ? "var(--shadow-lg)" : "var(--shadow-md)";
   const pin = sel ? "#fff" : tone === "plum" ? "var(--plum-500)" : tone === "agri" ? "var(--evergreen-600)" : "var(--copper-500)";
+  const chev = sel ? "rgba(255,255,255,0.75)" : tone === "plum" ? "var(--plum-600)" : "var(--copper-600)";
   const glyph = tone === "plum" ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="${pin}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>` : `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="${pin}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
-  return `<div style="transform:translate(-50%,-100%);font-family:var(--font-sans);">
-    <div style="display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border-radius:var(--radius-full);background:${bg};color:${fg};box-shadow:${shadow};border:${border};white-space:nowrap;transition:all .15s cubic-bezier(.4,0,.2,1);transform:scale(${sel ? 1.06 : 1});">
+  return `<div class="dp-nav" style="position:relative;width:230px;margin-left:-115px;transform:translateY(-100%);text-align:center;font-family:var(--font-sans);" title="${name} · ${count} ${o.noun || "properties"}">
+    <div class="dp-navcore" style="display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border-radius:var(--radius-full);background:${bg};color:${fg};box-shadow:${shadow};border:${border};white-space:nowrap;transition:all .18s cubic-bezier(.4,0,.2,1);transform:scale(${hot ? 1.07 : 1});">
       <span style="font-size:13px;font-weight:700;letter-spacing:-0.01em;">${name}</span>
-      <span style="display:inline-flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:11px;color:${sub};">${glyph}${count}</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:11px;color:${sub};">${glyph}${count}${o.noun ? ` ${o.noun}` : ""}</span>
+      <span style="font-size:13.5px;font-weight:700;color:${chev};line-height:1;">&#8250;</span>
     </div>
     <div style="width:10px;height:10px;background:${bg};border-right:${border};border-bottom:${border};transform:rotate(45deg);margin:-6px auto 0;box-shadow:${shadow};"></div></div>`;
+}
+// Compact count-dot for demoted areas (9–15 band and grid leftovers) — hover/panel promotes it.
+function areaDot(count, tone) {
+  const ring = tone === "plum" ? "var(--plum-500)" : "var(--copper-500)";
+  return `<div class="dp-nav" style="position:relative;width:24px;margin-left:-12px;transform:translateY(-50%);font-family:var(--font-mono);">
+    <div class="dp-navcore" style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:var(--radius-full);background:var(--paper);border:1.5px solid ${ring};box-shadow:var(--shadow-sm);font-size:10.5px;font-weight:700;color:var(--text-strong);transition:all .18s cubic-bezier(.4,0,.2,1);">${count}</div></div>`;
+}
+// Area NAVIGATION cluster — dashed paper chip, area count (never a property sum),
+// NEUTRAL label (never named after an area that has its own marker — no duplicate
+// semantics). Visually distinct from the solid listing-cluster disc.
+function areaClusterChip(n, tone, hiName, leader) {
+  const ring = tone === "plum" ? "var(--plum-600)" : "var(--navy-800)";
+  const glyph = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${ring}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
+  return `<div class="dp-acluster dp-nav" style="position:relative;width:200px;margin-left:-100px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;">
+    ${leader || ""}
+    <div class="dp-acluster-chip" style="display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:var(--radius-full);background:${hiName ? "var(--navy-100)" : "var(--paper)"};border:1.5px dashed ${ring};box-shadow:var(--shadow-md);white-space:nowrap;transition:transform .18s cubic-bezier(.4,0,.2,1);">
+      ${glyph}<span style="font-size:12.5px;font-weight:700;color:var(--text-strong);">+${n} nearby areas</span>
+    </div>
+    <div style="margin-top:4px;display:inline-block;padding:2px 8px;border-radius:var(--radius-full);background:var(--paper);box-shadow:var(--shadow-sm);font-size:10px;font-weight:700;color:${hiName ? "var(--text-strong)" : "var(--text-muted)"};white-space:nowrap;">${hiName ? `Includes ${hiName}` : "Tap to expand"}</div>
+  </div>`;
 }
 function schoolPin(s, sel) {
   const bg = sel ? "var(--plum-600)" : "var(--paper)";
   const fg = sel ? "#fff" : "var(--navy-800)";
   const shadow = sel ? "var(--shadow-lg)" : "var(--shadow-sm)";
   const border = sel ? "none" : "1px solid var(--border)";
-  return `<div style="transform:translate(-50%,-100%);font-family:var(--font-sans);">
-    <div style="display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:var(--radius-full);background:${bg};color:${fg};box-shadow:${shadow};border:${border};white-space:nowrap;transition:all .15s cubic-bezier(.4,0,.2,1);transform:scale(${sel ? 1.06 : 1});max-width:220px;">
+  return `<div class="dp-nav" style="position:relative;width:240px;margin-left:-120px;transform:translateY(-100%);text-align:center;font-family:var(--font-sans);">
+    <div class="dp-navcore" style="display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:var(--radius-full);background:${bg};color:${fg};box-shadow:${shadow};border:${border};white-space:nowrap;transition:all .18s cubic-bezier(.4,0,.2,1);transform:scale(${sel ? 1.06 : 1});max-width:220px;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${sel ? '#fff' : 'var(--plum-600)'}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>
       <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;">${s.name.split(",")[0]}</span>
+      ${sel ? "" : `<span style="font-size:13.5px;font-weight:700;color:var(--plum-600);line-height:1;">&#8250;</span>`}
     </div>
     <div style="width:10px;height:10px;background:${bg};border-right:${border};border-bottom:${border};transform:rotate(45deg);margin:-6px auto 0;box-shadow:${shadow};"></div></div>`;
 }
@@ -26109,34 +26570,121 @@ function homePin(l, active) {
   const bg = active ? "var(--accent)" : "var(--paper)";
   const fg = active ? "#fff" : "var(--navy-800)";
   return `<div style="transform:translate(-50%,-100%);font-family:var(--font-mono);">
-    <div style="display:inline-flex;align-items:center;padding:5px 10px;border-radius:var(--radius-full);background:${bg};color:${fg};box-shadow:${active ? 'var(--shadow-lg)' : 'var(--shadow-sm)'};border:${active ? 'none' : '1px solid var(--border)'};white-space:nowrap;font-size:12px;font-weight:600;transform:scale(${active ? 1.08 : 1});transition:all .15s cubic-bezier(.4,0,.2,1);">${short(l.price)}</div></div>`;
+    <div style="display:inline-flex;align-items:center;padding:5px 10px;border-radius:var(--radius-full);background:${bg};color:${fg};box-shadow:${active ? 'var(--shadow-lg)' : 'var(--shadow-sm)'};border:${active ? '1.5px solid #fff' : '1px solid var(--border)'};white-space:nowrap;font-size:12px;font-weight:600;transform:scale(${active ? 1.12 : 1});transition:all .18s cubic-bezier(.4,0,.2,1);z-index:${active ? 5 : 1};">${short(l.price)}</div></div>`;
 }
 function parcelPin(p, active) {
   const bg = active ? "var(--evergreen-600)" : "var(--paper)";
   const fg = active ? "#fff" : "var(--evergreen-700, #1F694A)";
   return `<div style="transform:translate(-50%,-100%);font-family:var(--font-mono);">
-    <div style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:var(--radius-full);background:${bg};color:${fg};box-shadow:${active ? 'var(--shadow-lg)' : 'var(--shadow-sm)'};border:${active ? 'none' : '1px solid var(--border)'};white-space:nowrap;font-size:12px;font-weight:600;transform:scale(${active ? 1.06 : 1});transition:all .15s cubic-bezier(.4,0,.2,1);">${p.acres} ac</div></div>`;
+    <div style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:var(--radius-full);background:${bg};color:${fg};box-shadow:${active ? 'var(--shadow-lg)' : 'var(--shadow-sm)'};border:${active ? '1.5px solid #fff' : '1px solid var(--border)'};white-space:nowrap;font-size:12px;font-weight:600;transform:scale(${active ? 1.1 : 1});transition:all .18s cubic-bezier(.4,0,.2,1);">${p.acres} ac</div></div>`;
 }
 
-// Big evergreen DIRECTION bubble (agri landing) — dir letter + parcel count + short label.
+// ---- cluster bubble (dense leaf markers). Sized by count. The action caption renders
+// only on the LARGEST cluster in view (or on hover — CSS) so a busy map isn't wallpapered
+// with repeated "Tap to zoom in" labels. ----
+function clusterBubble(count, tone, showCap) {
+  const bg = tone === "agri" ? "var(--evergreen-600)" : "var(--navy-800)";
+  const size = Math.round(42 + Math.min(count, 24) * 0.8);
+  const cap = tone === "agri" ? "parcels" : "homes";
+  return `<div class="dp-cluster" style="transform:translate(-50%,-50%);font-family:var(--font-sans);text-align:center;cursor:pointer;">
+    <div class="dp-cluster-disc" style="width:${size}px;height:${size}px;border-radius:var(--radius-full);background:${bg};color:#fff;box-shadow:var(--shadow-lg);border:3px solid rgba(255,255,255,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;margin:0 auto;transition:transform .18s cubic-bezier(.4,0,.2,1);">
+      <span style="font-family:var(--font-mono);font-size:17px;font-weight:700;">${count}</span>
+      <span style="font-size:8px;font-weight:700;letter-spacing:.05em;opacity:.82;text-transform:uppercase;">${cap}</span>
+    </div>
+    <div class="dp-cluster-cap${showCap ? " on" : ""}" style="margin-top:5px;padding:2px 8px;border-radius:var(--radius-full);background:var(--paper);box-shadow:var(--shadow-sm);font-size:10px;font-weight:700;color:var(--text-muted);white-space:nowrap;">Tap to zoom in</div>
+  </div>`;
+}
+
+// ---- infographic popup bodies ----
+function listingPopupHTML(l, idx, total) {
+  return `<div class="dp-pop">
+    <div class="dp-pop-img" style="background-image:url('${l.image}')">
+      <span class="dp-pop-tier dp-tier-${l.trustTier}">${TIER_LABEL[l.trustTier] || "Listed"}</span>
+      ${l.tag ? `<span class="dp-pop-tag">${l.tag}</span>` : ""}
+    </div>
+    <div class="dp-pop-body">
+      <div class="dp-pop-row"><span class="dp-pop-price">${window.BLR_INR(l.price)}</span><span class="dp-pop-type">${l.propType}</span></div>
+      <div class="dp-pop-title">${l.title}</div>
+      <div class="dp-pop-loc">${l.locality}, ${l.area}</div>
+      <div class="dp-pop-meta">${l.beds} BHK &middot; ${l.baths} bath &middot; ${l.sqft} sq.ft</div>
+      <div class="dp-pop-foot">
+        <div class="dp-pop-step">
+          <button class="dp-pp dp-pp-prev" aria-label="Previous listing">&#8249;</button>
+          <span class="dp-pp-idx">${idx + 1} / ${total}</span>
+          <button class="dp-pp dp-pp-next" aria-label="Next listing">&#8250;</button>
+        </div>
+        <button class="dp-pp-show">Show in list</button>
+      </div>
+    </div>
+  </div>`;
+}
+function parcelPopupHTML(p, idx, total) {
+  return `<div class="dp-pop dp-pop-agri">
+    <div class="dp-pop-img" style="background-image:url('${p.image}')">
+      <span class="dp-pop-tier dp-tier-${p.trustTier}">${TIER_LABEL[p.trustTier] || "Listed"}</span>
+      <span class="dp-pop-tag dp-pop-tag-agri">${p.acres} acres</span>
+    </div>
+    <div class="dp-pop-body">
+      <div class="dp-pop-row"><span class="dp-pop-price">${window.BLR_INR(p.price)}</span><span class="dp-pop-type">${p.crop}</span></div>
+      <div class="dp-pop-title">${p.title}</div>
+      <div class="dp-pop-loc">${p.distKm} km out &middot; ${p.road}</div>
+      <div class="dp-pop-meta">${p.water} &middot; ${p.soil}${p.survey ? " &middot; " + p.survey : ""}</div>
+      <div class="dp-pop-foot">
+        <div class="dp-pop-step">
+          <button class="dp-pp dp-pp-prev" aria-label="Previous parcel">&#8249;</button>
+          <span class="dp-pp-idx">${idx + 1} / ${total}</span>
+          <button class="dp-pp dp-pp-next" aria-label="Next parcel">&#8250;</button>
+        </div>
+        <button class="dp-pp-show">Show in list</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ---- greedy pixel-proximity clustering at the live zoom ----
+function clusterLeaves(items, map, px) {
+  const pts = items.map(it => ({
+    it,
+    p: map.latLngToContainerPoint([it.lat, it.lon])
+  }));
+  const used = new Array(pts.length).fill(false);
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    if (used[i]) continue;
+    const grp = [pts[i]];
+    used[i] = true;
+    for (let j = i + 1; j < pts.length; j++) {
+      if (used[j]) continue;
+      const dx = pts[i].p.x - pts[j].p.x,
+        dy = pts[i].p.y - pts[j].p.y;
+      if (Math.sqrt(dx * dx + dy * dy) < px) {
+        grp.push(pts[j]);
+        used[j] = true;
+      }
+    }
+    out.push(grp);
+  }
+  return out;
+}
+
+// ---- agri bubbles (unchanged) ----
 function agriDirBubble(c, count, sel) {
   const bg = sel ? "#1C5B43" : "#1F7A5C";
   return `<div style="transform:translate(-50%,-50%);font-family:var(--font-sans);text-align:center;">
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:74px;height:74px;border-radius:var(--radius-full);background:${bg};color:#fff;box-shadow:0 4px 14px rgba(20,50,40,.35);border:3px solid #fff;transform:scale(${sel ? 1.06 : 1});transition:all .15s cubic-bezier(.4,0,.2,1);">
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:74px;height:74px;border-radius:var(--radius-full);background:${bg};color:#fff;box-shadow:0 4px 14px rgba(20,50,40,.35);border:3px solid #fff;transform:scale(${sel ? 1.06 : 1});transition:all .18s cubic-bezier(.4,0,.2,1);">
       <span style="font-family:var(--font-mono);font-size:18px;font-weight:800;line-height:1;">${count}</span>
       <span style="font-size:10px;font-weight:700;">${c.dir}</span>
     </div>
     <div style="margin-top:5px;display:inline-block;padding:3px 9px;border-radius:var(--radius-full);background:#fff;box-shadow:var(--shadow-sm);font-size:11px;font-weight:700;color:var(--text-strong);white-space:nowrap;">${c.short}</div>
   </div>`;
 }
-// White-haloed evergreen TOWN disc — high-contrast count over green tiles + name chip.
 function agriTownDisc(name, count, sel) {
   const size = sel ? 52 : 44;
   return `<div style="transform:translate(-50%,-100%);font-family:var(--font-sans);text-align:center;">
-    <div style="width:${size}px;height:${size}px;border-radius:var(--radius-full);background:linear-gradient(160deg,#2E9B74,#1C5B43);border:3px solid #fff;box-shadow:0 4px 14px rgba(20,50,40,.35);display:flex;align-items:center;justify-content:center;margin:0 auto;transition:all .15s cubic-bezier(.4,0,.2,1);">
+    <div style="width:${size}px;height:${size}px;border-radius:var(--radius-full);background:linear-gradient(160deg,#2E9B74,#1C5B43);border:3px solid #fff;box-shadow:0 4px 14px rgba(20,50,40,.35);display:flex;align-items:center;justify-content:center;margin:0 auto;transition:all .18s cubic-bezier(.4,0,.2,1);">
       <span style="font-family:var(--font-mono);font-size:17px;font-weight:800;color:#fff;">${count}</span>
     </div>
-    <div style="margin-top:4px;display:inline-block;padding:3px 9px;border-radius:var(--radius-full);background:#fff;box-shadow:var(--shadow-sm);font-size:11px;font-weight:700;color:var(--text-strong);white-space:nowrap;">${name} · ${count} agri</div>
+    <div style="margin-top:4px;display:inline-block;padding:3px 9px;border-radius:var(--radius-full);background:#fff;box-shadow:var(--shadow-sm);font-size:11px;font-weight:700;color:var(--text-strong);white-space:nowrap;">${name} &middot; ${count} agri</div>
   </div>`;
 }
 const CITY_LEGEND = {
@@ -26160,7 +26708,8 @@ const CITY_LEGEND = {
   },
   "area-listings": {
     dot: "var(--accent)",
-    text: "Listings"
+    text: "Listings",
+    cluster: true
   },
   "school-zones": {
     dot: "var(--navy-800)",
@@ -26178,7 +26727,8 @@ const CITY_LEGEND = {
   },
   "school-homes": {
     dot: "var(--accent)",
-    text: "Homes"
+    text: "Homes",
+    cluster: true
   },
   "agri-corridors": {
     dot: "var(--navy-800)",
@@ -26191,9 +26741,21 @@ const CITY_LEGEND = {
   },
   "agri-parcels": {
     dot: "var(--evergreen-600)",
-    text: "Parcels"
+    text: "Parcels",
+    cluster: true
   }
 };
+
+// consistent camera padding — extra bottom clears the summary pill, extra left clears the legend
+const PAD = {
+  paddingTopLeft: [82, 82],
+  paddingBottomRight: [70, 96]
+};
+const CAM = {
+  duration: 0.85,
+  easeLinearity: 0.22
+};
+const CLUSTER_PX = 46;
 function DPMap({
   layer,
   scope,
@@ -26205,21 +26767,84 @@ function DPMap({
   parcels,
   crumb,
   summary,
+  onActivate,
   onPickRegion,
   onPickGroup,
   onPickArea,
   onPickSchool,
   onPickZone,
   onPickCorridor,
-  onPickCluster
+  onPickCluster,
+  hoverAreaId,
+  hoverSrc,
+  onAreaHover,
+  onAreasShown,
+  focusArea,
+  regionGuide,
+  guideDismissed,
+  onDismissGuide,
+  isMobile
 }) {
   const D = window.BLR_DATA;
   const elRef = React.useRef(null);
   const mapRef = React.useRef(null);
-  const layerRef = React.useRef(null);
+  const layerRef = React.useRef(null); // navigation / fixed markers
+  const leafLayerRef = React.useRef(null); // clustered leaf markers (rebuilt on zoom)
   const ringRef = React.useRef(null);
   const polyRef = React.useRef(null);
+  const cameraKeyRef = React.useRef(null);
+  const reclusterRef = React.useRef(null);
+  const zoomDrawnRef = React.useRef(null); // zoom at which the last leaf/area draw ran
+  const singletonRef = React.useRef(new Map()); // id → { marker, item }
+  const orderRef = React.useRef([]); // ordered ids of on-map singletons (for ‹ ›)
+  const kindRef = React.useRef("listing");
+  const activeRef = React.useRef(activeListing);
+  activeRef.current = activeListing;
+  // Area-marker degradation state (AREA_MARKER_UX.md)
+  const areaRef = React.useRef(new Map()); // areaId → { marker, area, count, tone, kind: 'label'|'dot' }
+  const chipRef = React.useRef([]); // area NAVIGATION clusters: { marker, members, tone, count, hi }
+  const reclusterOnMoveRef = React.useRef(false); // area layers re-place on ANY moveend (no popups to protect)
+  const focusAreaRef = React.useRef(null); // "Show on map" area — force-kept as a label (never a duplicate pin)
+  const areaToneRef = React.useRef("copper");
+  const areaPickRef = React.useRef(null);
+  const areaCountRef = React.useRef(null);
+  // First-time helper hint (localStorage-remembered)
+  const [hint, setHint] = React.useState(() => {
+    try {
+      return !localStorage.getItem("dp_map_hint_v1");
+    } catch (e) {
+      return true;
+    }
+  });
+  const hintRef = React.useRef(hint);
+  hintRef.current = hint;
+  const dismissHint = () => {
+    setHint(false);
+    try {
+      localStorage.setItem("dp_map_hint_v1", "1");
+    } catch (e) {}
+  };
+  const dismissRef = React.useRef(dismissHint);
+  dismissRef.current = dismissHint;
+  React.useEffect(() => {
+    if (hint) document.body.setAttribute("data-dp-hint", "1");else document.body.removeAttribute("data-dp-hint");
+    return () => document.body.removeAttribute("data-dp-hint");
+  }, [hint]);
   const sel = selection || {};
+
+  // --- stable keys -------------------------------------------------------
+  const cameraKey = [layer, scope, sel.groupId, sel.zoneId, sel.areaId, sel.schoolId, sel.corridorId, sel.clusterId, radiusKm, maxKm].join("|");
+  const listIds = (listings || []).map(l => l.id).join(",");
+  const parcelIds = (parcels || []).map(p => p.id).join(",");
+  const buildKey = cameraKey + "||" + listIds + "||" + parcelIds;
+  const icon = html => window.L.divIcon({
+    html,
+    className: "upt-pin",
+    iconSize: [1, 1]
+  });
+  const region = id => D.regions.find(r => r.id === id);
+
+  // --- init once ---------------------------------------------------------
   React.useEffect(() => {
     if (mapRef.current || !window.L) return;
     const map = window.L.map(elRef.current, {
@@ -26230,7 +26855,7 @@ function DPMap({
       scrollWheelZoom: true
     });
     window.L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-      attribution: '© OpenStreetMap · © CARTO',
+      attribution: "© OpenStreetMap · © CARTO",
       maxZoom: 19,
       subdomains: "abcd"
     }).addTo(map);
@@ -26240,41 +26865,127 @@ function DPMap({
     map.attributionControl.setPosition("bottomleft");
     mapRef.current = map;
     layerRef.current = window.L.layerGroup().addTo(map);
-    setTimeout(() => map.invalidateSize(), 60);
-    redraw();
+    leafLayerRef.current = window.L.layerGroup().addTo(map);
+    // Re-cluster leaf markers only on ZOOM change — pixel proximity is pan-invariant, so
+    // panning (incl. autoPan for popups) must NOT rebuild markers, or it would close open popups.
+    map.on("zoomend", () => {
+      if (reclusterRef.current) reclusterRef.current();
+    });
+    // Leaf (listing) layers re-cluster on ZOOM only — pixel proximity is pan-invariant and
+    // panning must never close an open popup. AREA layers have no popups, so they re-place
+    // on every settled move: this is what keeps label/chip placement exact after a fly
+    // (zoomend alone can fire a few px before the pan fully settles).
+    map.on("moveend", () => {
+      if (reclusterRef.current && (reclusterOnMoveRef.current || zoomDrawnRef.current !== map.getZoom())) reclusterRef.current();
+    });
+    setTimeout(() => {
+      map.invalidateSize();
+      rebuild();
+    }, 60);
     // eslint-disable-next-line
   }, []);
+
+  // --- keep Leaflet sized to its container (mobile sheet / layout changes) ---
   React.useEffect(() => {
-    redraw();
-  });
-  const icon = html => window.L.divIcon({
-    html,
-    className: "upt-pin",
-    iconSize: [1, 1]
-  });
-  const region = id => D.regions.find(r => r.id === id);
-  const fit = (b, cLat, cLon, z) => {
-    const m = mapRef.current;
-    try {
-      m.flyToBounds(b, {
-        padding: [70, 70],
-        duration: 0.7,
-        maxZoom: z || 15
-      });
-    } catch (e) {
-      m.flyTo([cLat, cLon], z || 12, {
-        duration: 0.7
+    if (!elRef.current || !window.ResizeObserver) return;
+    const ro = new ResizeObserver(() => {
+      if (mapRef.current) mapRef.current.invalidateSize();
+    });
+    ro.observe(elRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // --- rebuild markers + (conditionally) move camera --------------------
+  React.useEffect(() => {
+    if (mapRef.current) rebuild(); /* eslint-disable-next-line */
+  }, [buildKey]);
+
+  // --- focused-listing restyle + gentle pan (never a full fly) ----------
+  React.useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    singletonRef.current.forEach(({
+      marker,
+      item
+    }, id) => {
+      const on = id === activeListing;
+      marker.setIcon(icon(kindRef.current === "parcel" ? parcelPin(item, on) : homePin(item, on)));
+    });
+    if (activeListing && singletonRef.current.has(activeListing)) {
+      map.panInside(singletonRef.current.get(activeListing).marker.getLatLng(), {
+        padding: [80, 80]
       });
     }
-  };
-  const fitCity = () => mapRef.current.flyTo([D.city.lat, D.city.lon], D.city.zoom, {
-    duration: 0.6
-  });
-  function redraw() {
+    // eslint-disable-next-line
+  }, [activeListing]);
+
+  // --- panel-hover → marker promotion (no camera move, no rebuild) ----------
+  // Map-originating hovers only highlight the PANEL row (CSS handles the marker's
+  // own hover scale) — swapping the icon under the cursor would flicker.
+  React.useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    areaRef.current.forEach((rec, id) => {
+      if (!rec.hover) return;
+      rec.hover = false;
+      rec.marker.setIcon(icon(rec.kind === "dot" ? areaDot(rec.count, rec.tone) : areaPin(rec.area.name, rec.count, id === sel.areaId, rec.tone, {})));
+      rec.marker.setZIndexOffset(rec.kind === "dot" ? 400 : 900);
+    });
+    chipRef.current.forEach(ch => {
+      if (!ch.hi) return;
+      ch.hi = false;
+      ch.marker.setIcon(icon(areaClusterChip(ch.count, ch.tone, null, leaderHTML(ch.ldx || 0, ch.ldy || 0, ch.tone))));
+      ch.marker.setZIndexOffset(600);
+    });
+    if (!hoverAreaId || hoverSrc === "map") return;
+    const rec = areaRef.current.get(hoverAreaId);
+    if (rec) {
+      rec.hover = true;
+      rec.marker.setIcon(icon(areaPin(rec.area.name, rec.count, hoverAreaId === sel.areaId, rec.tone, {
+        promoted: true
+      })));
+      rec.marker.setZIndexOffset(2000);
+    } else {
+      const ch = chipRef.current.find(c => c.members.some(a => a.id === hoverAreaId));
+      if (ch) {
+        ch.hi = true;
+        const a = ch.members.find(x => x.id === hoverAreaId);
+        ch.marker.setIcon(icon(areaClusterChip(ch.count, ch.tone, a.name, leaderHTML(ch.ldx || 0, ch.ldy || 0, ch.tone))));
+        ch.marker.setZIndexOffset(2000);
+      }
+    }
+    // eslint-disable-next-line
+  }, [hoverAreaId, hoverSrc]);
+
+  // --- "Show on map" → force-keep the area as a labeled pin + panInside (never a duplicate marker) ---
+  React.useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusArea || !focusArea.id) return;
+    const a = D.areas.find(x => x.id === focusArea.id);
+    if (!a) return;
+    focusAreaRef.current = a.id;
+    if (reclusterRef.current) reclusterRef.current(); // re-place with the area force-kept
+    const rec = areaRef.current.get(a.id);
+    if (rec) rec.marker.setZIndexOffset(2200);
+    map.panInside([a.lat, a.lon], {
+      padding: [90, 90]
+    });
+    // eslint-disable-next-line
+  }, [focusArea && focusArea.n]);
+  function rebuild() {
     const map = mapRef.current,
-      g = layerRef.current;
+      g = layerRef.current,
+      leaf = leafLayerRef.current;
     if (!map || !g) return;
     g.clearLayers();
+    leaf.clearLayers();
+    singletonRef.current.clear();
+    orderRef.current = [];
+    areaRef.current.clear();
+    chipRef.current = [];
+    reclusterRef.current = null;
+    reclusterOnMoveRef.current = false;
+    focusAreaRef.current = focusArea ? focusArea.id : null;
     if (ringRef.current) {
       map.removeLayer(ringRef.current);
       ringRef.current = null;
@@ -26283,10 +26994,15 @@ function DPMap({
       map.removeLayer(polyRef.current);
       polyRef.current = null;
     }
+    const moveCam = cameraKey !== cameraKeyRef.current;
+    cameraKeyRef.current = cameraKey;
     const add = (lat, lon, html, click, z) => window.L.marker([lat, lon], {
       icon: icon(html),
       zIndexOffset: z || 0
-    }).on("click", click || (() => {})).addTo(g);
+    }).on("click", e => {
+      if (hintRef.current) dismissRef.current();
+      (click || (() => {}))(e);
+    }).addTo(g);
     const offsetPt = (bearing, km) => {
       const kLat = 1 / 111,
         kLon = 1 / (111 * Math.cos(D.city.lat * Math.PI / 180)),
@@ -26303,69 +27019,500 @@ function DPMap({
         fillOpacity: faint ? 0.05 : 0.09
       }).addTo(map);
     };
+    const fitBounds = (b, cLat, cLon, z) => {
+      try {
+        map.flyToBounds(b, {
+          ...PAD,
+          ...CAM,
+          maxZoom: z || 15
+        });
+      } catch (e) {
+        map.flyTo([cLat, cLon], z || 12, CAM);
+      }
+    };
+    const fitCity = () => map.flyTo([D.city.lat, D.city.lon], D.city.zoom, CAM);
+
+    // ------- clustered leaf renderer (listings / homes / parcels) -------
+    function mountLeaves(items, kind, tone) {
+      kindRef.current = kind;
+      const drawLeaves = () => {
+        zoomDrawnRef.current = map.getZoom();
+        leaf.clearLayers();
+        singletonRef.current.clear();
+        orderRef.current = [];
+        const groups = clusterLeaves(items, map, CLUSTER_PX);
+        // Merge multi-member clusters whose DISCS would overlap on screen (disc radius
+        // grows with count) — keeps the cluster field readable at any density.
+        const discR = n => (42 + Math.min(n, 24) * 0.8) / 2 + 5;
+        const gc = grp => grp.reduce((s, x) => ({
+          x: s.x + x.p.x / grp.length,
+          y: s.y + x.p.y / grp.length
+        }), {
+          x: 0,
+          y: 0
+        });
+        let merged = true,
+          mguard = 0;
+        while (merged && mguard++ < 8) {
+          merged = false;
+          outer: for (let i = 0; i < groups.length; i++) {
+            if (groups[i].length < 2) continue;
+            for (let j = i + 1; j < groups.length; j++) {
+              if (groups[j].length < 2) continue;
+              const ci = gc(groups[i]),
+                cj = gc(groups[j]);
+              if (Math.hypot(ci.x - cj.x, ci.y - cj.y) < discR(groups[i].length) + discR(groups[j].length)) {
+                groups[i] = groups[i].concat(groups[j]);
+                groups.splice(j, 1);
+                merged = true;
+                break outer;
+              }
+            }
+          }
+        }
+        const maxN = groups.reduce((m, g0) => Math.max(m, g0.length > 1 ? g0.length : 0), 0);
+        groups.forEach(grp => {
+          if (grp.length === 1) {
+            const it = grp[0].it;
+            const on = it.id === activeRef.current;
+            const m = window.L.marker([it.lat, it.lon], {
+              icon: icon(kind === "parcel" ? parcelPin(it, on) : homePin(it, on)),
+              zIndexOffset: on ? 1000 : 0
+            }).addTo(leaf);
+            m.bindPopup(kind === "parcel" ? parcelPopupHTML(it, 0, 1) : listingPopupHTML(it, 0, 1), {
+              closeButton: true,
+              autoPan: true,
+              autoPanPadding: [40, 40],
+              offset: [0, -14],
+              minWidth: 232,
+              maxWidth: 232
+            });
+            m.on("click", () => {
+              onActivate && onActivate(it.id);
+              focusLeaf(it.id);
+            });
+            wirePopup(m, it.id, kind);
+            singletonRef.current.set(it.id, {
+              marker: m,
+              item: it
+            });
+            orderRef.current.push(it.id);
+          } else {
+            const lat = grp.reduce((s, x) => s + x.it.lat, 0) / grp.length;
+            const lon = grp.reduce((s, x) => s + x.it.lon, 0) / grp.length;
+            const members = grp.map(x => x.it);
+            const m = window.L.marker([lat, lon], {
+              icon: icon(clusterBubble(grp.length, tone, grp.length === maxN))
+            }).addTo(leaf);
+            m.on("click", () => {
+              const b = window.L.latLngBounds(members.map(x => [x.lat, x.lon])).pad(0.25);
+              try {
+                map.flyToBounds(b, {
+                  ...PAD,
+                  duration: 0.7,
+                  easeLinearity: 0.22,
+                  maxZoom: 17
+                });
+              } catch (e) {}
+            });
+          }
+        });
+        // Rebuild popup contents so idx / total stay correct after re-clustering.
+        orderRef.current.forEach((id, i) => {
+          const rec = singletonRef.current.get(id);
+          if (rec) rec.marker.setPopupContent(kind === "parcel" ? parcelPopupHTML(rec.item, i, orderRef.current.length) : listingPopupHTML(rec.item, i, orderRef.current.length));
+        });
+      };
+      const focusLeaf = id => {
+        const rec = singletonRef.current.get(id);
+        if (!rec) return;
+        onActivate && onActivate(id);
+        map.panInside(rec.marker.getLatLng(), {
+          padding: [90, 90]
+        });
+        rec.marker.openPopup();
+      };
+      const wirePopup = (marker, id, k) => {
+        marker.on("popupopen", ev => {
+          const el = ev.popup.getElement();
+          if (!el) return;
+          const order = orderRef.current;
+          const i = order.indexOf(id);
+          const prev = el.querySelector(".dp-pp-prev");
+          const next = el.querySelector(".dp-pp-next");
+          const show = el.querySelector(".dp-pp-show");
+          const step = el.querySelector(".dp-pop-step");
+          if (order.length <= 1 && step) step.style.visibility = "hidden";
+          if (prev) prev.onclick = e => {
+            e.stopPropagation();
+            focusLeaf(order[(i - 1 + order.length) % order.length]);
+          };
+          if (next) next.onclick = e => {
+            e.stopPropagation();
+            focusLeaf(order[(i + 1) % order.length]);
+          };
+          if (show) show.onclick = e => {
+            e.stopPropagation();
+            onActivate && onActivate(id);
+          };
+        });
+      };
+      reclusterRef.current = drawLeaves;
+      drawLeaves();
+    }
+
+    // ------- area-marker degradation renderer (AREA_MARKER_UX.md) -------
+    // Bands: ≤8 all labeled · 9–15 top-8 labeled + count-dots · 16+ grid-bucketed
+    // representatives (cap 12, quadrant coverage) + "+N areas" navigation clusters.
+    // Panel stays the complete source of truth; onAreasShown reports the labeled set.
+    function mountAreas(list, tone, countFn, pickFn) {
+      areaToneRef.current = tone;
+      areaPickRef.current = pickFn;
+      areaCountRef.current = countFn;
+      reclusterOnMoveRef.current = true;
+      const pick = id => {
+        if (hintRef.current) dismissRef.current();
+        pickFn(id);
+      };
+      const drawAreas = () => {
+        zoomDrawnRef.current = map.getZoom();
+        leaf.clearLayers();
+        areaRef.current.clear();
+        chipRef.current = [];
+        const ranked = list.slice().sort((a, b) => countFn(b.id) - countFn(a.id));
+        const mk = (a, kind) => {
+          const html = kind === "dot" ? areaDot(countFn(a.id), tone) : areaPin(a.name, countFn(a.id), a.id === sel.areaId, tone, {});
+          const m = window.L.marker([a.lat, a.lon], {
+            icon: icon(html),
+            zIndexOffset: kind === "dot" ? 400 : 900
+          }).on("click", () => pick(a.id)).addTo(leaf);
+          if (onAreaHover) {
+            m.on("mouseover", () => onAreaHover(a.id, "map"));
+            m.on("mouseout", () => onAreaHover(null, "map"));
+          }
+          areaRef.current.set(a.id, {
+            marker: m,
+            area: a,
+            count: countFn(a.id),
+            tone,
+            kind
+          });
+        };
+        let labeledIds;
+        if (list.length <= 8) {
+          ranked.forEach(a => mk(a, "label"));
+          labeledIds = ranked.map(a => a.id);
+        } else if (list.length <= 15) {
+          ranked.forEach((a, i) => mk(a, i < 8 ? "label" : "dot"));
+          labeledIds = ranked.map(a => a.id); // every area is individually on the map
+        } else {
+          // Label-shaped grid cells (≈ pin footprint) → one labeled rep per cell = collision-free by construction.
+          const CELL_W = 170,
+            CELL_H = 64,
+            CAP = map.getSize().x < 520 ? 8 : 12; // tighter label cap on small maps
+          const cells = new Map();
+          ranked.forEach(a => {
+            const p = map.latLngToContainerPoint([a.lat, a.lon]);
+            const k = Math.floor(p.x / CELL_W) + "_" + Math.floor(p.y / CELL_H);
+            if (!cells.has(k)) cells.set(k, []);
+            cells.get(k).push(a); // ranked order → [0] = best in cell
+          });
+          let reps = Array.from(cells.values()).map(members => members[0]);
+          if (reps.length > CAP) {
+            // keep ≥1 representative per quadrant, then fill by count
+            const cLat = list.reduce((s, a) => s + a.lat, 0) / list.length;
+            const cLon = list.reduce((s, a) => s + a.lon, 0) / list.length;
+            const quad = a => (a.lat >= cLat ? 0 : 2) + (a.lon >= cLon ? 0 : 1);
+            const byQuad = [null, null, null, null];
+            reps.forEach(a => {
+              const q = quad(a);
+              if (!byQuad[q] || countFn(a.id) > countFn(byQuad[q].id)) byQuad[q] = a;
+            });
+            const keep = byQuad.filter(Boolean);
+            reps.sort((a, b) => countFn(b.id) - countFn(a.id)).forEach(a => {
+              if (keep.length < CAP && keep.indexOf(a) === -1) keep.push(a);
+            });
+            reps = keep;
+          }
+          const repSet = new Set(reps.map(a => a.id));
+          [sel.areaId, focusAreaRef.current].forEach(fid => {
+            if (fid && !repSet.has(fid)) {
+              const a = list.find(x => x.id === fid);
+              if (a) {
+                reps.push(a);
+                repSet.add(a.id);
+              }
+            }
+          });
+          // Collision pass — the grid guarantees one label per cell, but near-boundary
+          // points in ADJACENT cells can still collide. Keep labels greedily in rank
+          // order (selected area always first); losers demote into their cell's
+          // chip / dot so no two persistent labels overlap at this zoom.
+          // Deterministic anchoring: labels are fixed-width blocks centered on the anchor
+          // (see areaPin), so rects are exact by construction.
+          const labelRect = a => {
+            const p = map.latLngToContainerPoint([a.lat, a.lon]);
+            const w = 8 * (a.name.length + String(countFn(a.id)).length) + 64;
+            return {
+              x: p.x - w / 2,
+              y: p.y - 44,
+              w,
+              h: 44
+            };
+          };
+          const hits = (r, s, pad) => r.x - pad < s.x + s.w && s.x - pad < r.x + r.w && r.y - pad < s.y + s.h && s.y - pad < r.y + r.h;
+          const forced = id => id === sel.areaId || id === focusAreaRef.current;
+          const ordered = reps.slice().sort((a, b) => forced(a.id) ? -1 : forced(b.id) ? 1 : countFn(b.id) - countFn(a.id));
+          const kept = [],
+            keptRects = [];
+          ordered.forEach(a => {
+            const r = labelRect(a);
+            if (keptRects.some(s => hits(r, s, 4))) {
+              repSet.delete(a.id);
+              return;
+            }
+            kept.push(a);
+            keptRects.push(r);
+          });
+          kept.forEach(a => mk(a, "label"));
+          labeledIds = kept.map(a => a.id);
+          // Leftovers per cell → navigation chip (≥2) or count-dot (1)
+          const chipCands = [];
+          cells.forEach(members => {
+            const rest = members.filter(a => !repSet.has(a.id));
+            if (!rest.length) return;
+            if (rest.length === 1) {
+              mk(rest[0], "dot");
+              return;
+            }
+            chipCands.push({
+              members: rest
+            });
+          });
+          // Merge chips whose footprints overlap, then nudge any chip clear of kept labels.
+          const centroidPt = members => map.latLngToContainerPoint([members.reduce((s, a) => s + a.lat, 0) / members.length, members.reduce((s, a) => s + a.lon, 0) / members.length]);
+          // Chips are fixed-width blocks centered on the anchor (see areaClusterChip).
+          const chipRect = pt => ({
+            x: pt.x - 88,
+            y: pt.y - 32,
+            w: 176,
+            h: 64
+          });
+          const chipGroups = [];
+          chipCands.forEach(c => {
+            const pt = centroidPt(c.members);
+            const prev = chipGroups.find(g => hits(chipRect(pt), chipRect(g.pt), 0));
+            if (prev) {
+              prev.members = prev.members.concat(c.members);
+              prev.pt = centroidPt(prev.members);
+            } else chipGroups.push({
+              members: c.members,
+              pt
+            });
+          });
+          const placedRects = [];
+          const mapSz = map.getSize();
+          const OFFS = [[0, 0], [0, 30], [0, -30], [-70, 30], [70, 30], [-70, -30], [70, -30], [-100, 0], [100, 0], [0, 62], [0, -62], [-140, 46], [140, 46], [-140, -46], [140, -46]];
+          chipGroups.forEach(g => {
+            const inBounds = p => p.x > 84 && p.x < mapSz.x - 84 && p.y > 96 && p.y < mapSz.y - 84;
+            // Pick the candidate with ZERO overlap if one exists, else the LEAST overlap —
+            // never the raw centroid when a better spot is available.
+            const overlapArea = p => {
+              const c = chipRect(p);
+              const r = {
+                x: c.x - 6,
+                y: c.y - 6,
+                w: c.w + 12,
+                h: c.h + 12
+              };
+              let s = 0;
+              const acc = q => {
+                const ix = Math.max(0, Math.min(r.x + r.w, q.x + q.w) - Math.max(r.x, q.x));
+                const iy = Math.max(0, Math.min(r.y + r.h, q.y + q.h) - Math.max(r.y, q.y));
+                s += ix * iy;
+              };
+              keptRects.forEach(acc);
+              placedRects.forEach(acc);
+              return s;
+            };
+            let pt = g.pt,
+              best = Infinity;
+            for (let i = 0; i < OFFS.length; i++) {
+              const c = window.L.point(g.pt.x + OFFS[i][0], g.pt.y + OFFS[i][1]);
+              if (i > 0 && !inBounds(c)) continue;
+              const a = overlapArea(c);
+              if (a === 0) {
+                pt = c;
+                best = 0;
+                break;
+              }
+              if (a < best) {
+                best = a;
+                pt = c;
+              }
+            }
+            placedRects.push(chipRect(pt));
+            const ll = map.containerPointToLatLng(pt);
+            const members = g.members;
+            // Offset chip → leader line + anchor dot back to the true member centroid.
+            const ldx = g.pt.x - pt.x,
+              ldy = g.pt.y - pt.y;
+            const m = window.L.marker(ll, {
+              icon: icon(areaClusterChip(members.length, tone, null, leaderHTML(ldx, ldy, tone))),
+              zIndexOffset: 600
+            }).addTo(leaf);
+            m.on("click", () => {
+              if (hintRef.current) dismissRef.current();
+              // Never zoom into an empty view: members are real in-scope areas, and if the
+              // camera can't actually get closer (no split possible), guide to the panel
+              // list instead of flying.
+              const b = window.L.latLngBounds(members.map(a => [a.lat, a.lon])).pad(0.45);
+              let tz = map.getZoom() + 1;
+              try {
+                tz = Math.min(16, map.getBoundsZoom(b));
+              } catch (e) {}
+              if (tz > map.getZoom()) {
+                try {
+                  map.flyToBounds(b, {
+                    ...PAD,
+                    duration: 0.7,
+                    easeLinearity: 0.22,
+                    maxZoom: 16
+                  });
+                } catch (e) {}
+              } else if (onAreaHover) {
+                onAreaHover(members[0].id, "map-spot"); // highlight + scroll the panel rows
+              }
+            });
+            chipRef.current.push({
+              marker: m,
+              members,
+              tone,
+              count: members.length,
+              hi: false,
+              ldx,
+              ldy
+            });
+          });
+        }
+        if (onAreasShown) onAreasShown(labeledIds);
+      };
+      reclusterRef.current = drawAreas; // re-bucket on ZOOM only (pan-invariant)
+      drawAreas();
+    }
+
+    // ------- decluttered pill renderer (group / zone pills) -------
+    // True anchors stay put; colliding pills shift in screen space (priority: selected,
+    // then count) with a leader line + anchor dot when offset. Deterministic; recomputed
+    // on zoomend/moveend/resize only — never on hover.
+    function mountPills(list, accent, countFn, selId, pickFn) {
+      reclusterOnMoveRef.current = true;
+      const drawPills = () => {
+        zoomDrawnRef.current = map.getZoom();
+        leaf.clearLayers();
+        const entries = list.map(it => ({
+          item: it,
+          pt: map.latLngToContainerPoint([it.center.lat, it.center.lon]),
+          w: 8.5 * it.name.length + 110,
+          h: 46,
+          pri: it.id === selId ? 100000 : countFn(it.id),
+          dir: null
+        }));
+        declutterPoints(entries).forEach(({
+          e,
+          p
+        }) => {
+          const dx = e.pt.x - p.x,
+            dy = e.pt.y - p.y;
+          window.L.marker(map.containerPointToLatLng(p), {
+            icon: icon(bubblePill(e.item.name, countFn(e.item.id), e.item.id === selId, accent, leaderHTML(dx, dy))),
+            zIndexOffset: e.item.id === selId ? 900 : 0
+          }).on("click", () => {
+            if (hintRef.current) dismissRef.current();
+            pickFn(e.item.id);
+          }).addTo(leaf);
+        });
+      };
+      reclusterRef.current = drawPills;
+      drawPills();
+    }
     switch (layer) {
       case "region-hotspots":
         {
           const r = region(scope);
-          D.areas.filter(a => a.region === scope).map(a => ({
-            a,
-            c: CO.homesArea(a.id)
-          })).sort((x, y) => y.c - x.c).slice(0, 4).forEach(({
+          // Top area per GROUP (spatial diversity) — a single dense belt must not claim every hotspot pin.
+          const best = new Map();
+          D.areas.filter(a => a.region === scope).forEach(a => {
+            const c = CO.homesArea(a.id);
+            if (!best.has(a.group) || c > best.get(a.group).c) best.set(a.group, {
+              a,
+              c
+            });
+          });
+          Array.from(best.values()).sort((x, y) => y.c - x.c).slice(0, 4).forEach(({
             a,
             c
-          }) => add(a.lat, a.lon, areaPin(a.name, c, false, "copper"), () => onPickArea(a.id), 900));
-          if (r) fit(r.bounds, r.center.lat, r.center.lon, 12);
+          }) => add(a.lat, a.lon, areaPin(a.name, c, false, "copper", {
+            noun: "properties"
+          }), () => onPickArea(a.id), 900));
+          if (moveCam && r) fitBounds(r.bounds, r.center.lat, r.center.lon, 12);
           return;
         }
       case "area-groups":
         {
           const groups = D.groups.filter(gr => !scope || gr.region === scope);
-          groups.forEach(gr => add(gr.center.lat, gr.center.lon, bubblePill(gr.name, CO.homesGroup(gr.id), gr.id === sel.groupId), () => onPickGroup(gr.id)));
-          if (scope) {
-            const r = region(scope);
-            fit(r.bounds, r.center.lat, r.center.lon, 12);
-          } else fitCity();
+          mountPills(groups, "area", id => CO.homesGroup(id), sel.groupId, onPickGroup);
+          if (moveCam) {
+            if (scope) {
+              const r = region(scope);
+              fitBounds(r.bounds, r.center.lat, r.center.lon, 12);
+            } else fitCity();
+          }
           return;
         }
       case "area-areas":
         {
           const gr = D.groups.find(x => x.id === sel.groupId);
-          D.areas.filter(a => a.group === sel.groupId).forEach(a => add(a.lat, a.lon, areaPin(a.name, CO.homesArea(a.id), a.id === sel.areaId, "copper"), () => onPickArea(a.id), 900));
-          if (gr) fit(gr.bounds, gr.center.lat, gr.center.lon, 14);
+          mountAreas(D.areas.filter(a => a.group === sel.groupId), "copper", id => CO.homesArea(id), onPickArea);
+          if (moveCam && gr) fitBounds(gr.bounds, gr.center.lat, gr.center.lon, 14);
           return;
         }
       case "area-listings":
         {
-          (listings || []).forEach(l => add(l.lat, l.lon, homePin(l, l.id === activeListing)));
-          const a = D.areas.find(x => x.id === sel.areaId);
-          if (a) fit(a.bounds, a.lat, a.lon, 15);else if (scope) {
-            const r = region(scope);
-            fit(r.bounds, r.center.lat, r.center.lon, 12);
-          } else fitCity();
+          mountLeaves(listings || [], "listing", "home");
+          if (moveCam) {
+            const a = D.areas.find(x => x.id === sel.areaId);
+            if (a) fitBounds(a.bounds, a.lat, a.lon, 15);else if (scope) {
+              const r = region(scope);
+              fitBounds(r.bounds, r.center.lat, r.center.lon, 12);
+            } else fitCity();
+          }
           return;
         }
       case "school-zones":
         {
           const zones = D.zones.filter(z => !scope || z.region === scope);
-          zones.forEach(z => add(z.center.lat, z.center.lon, bubblePill(z.name, CO.schoolsZone(z.id), z.id === sel.zoneId, "school"), () => onPickZone(z.id)));
-          if (scope) {
-            const r = region(scope);
-            fit(r.bounds, r.center.lat, r.center.lon, 12);
-          } else fitCity();
+          mountPills(zones, "school", id => CO.schoolsZone(id), sel.zoneId, onPickZone);
+          if (moveCam) {
+            if (scope) {
+              const r = region(scope);
+              fitBounds(r.bounds, r.center.lat, r.center.lon, 12);
+            } else fitCity();
+          }
           return;
         }
       case "school-areas":
         {
           const z = D.zones.find(x => x.id === sel.zoneId);
-          D.areas.filter(a => a.zone === sel.zoneId).forEach(a => add(a.lat, a.lon, areaPin(a.name, CO.schoolsArea(a.id), a.id === sel.areaId, "plum"), () => onPickArea(a.id), 900));
-          if (z) fit(z.bounds, z.center.lat, z.center.lon, 13);
+          mountAreas(D.areas.filter(a => a.zone === sel.zoneId), "plum", id => CO.schoolsArea(id), onPickArea);
+          if (moveCam && z) fitBounds(z.bounds, z.center.lat, z.center.lon, 13);
           return;
         }
       case "school-schools":
         {
           const a = D.areas.find(x => x.id === sel.areaId);
           D.schools.filter(s => s.areaId === sel.areaId).forEach(s => add(s.lat, s.lon, schoolPin(s, s.id === sel.schoolId), () => onPickSchool(s.id), 800));
-          if (a) fit(a.bounds, a.lat, a.lon, 15);
+          if (moveCam && a) fitBounds(a.bounds, a.lat, a.lon, 15);
           return;
         }
       case "school-homes":
@@ -26383,22 +27530,20 @@ function DPMap({
                 dashArray: "4 5"
               }).addTo(map);
             }
-            (listings || []).forEach(l => add(l.lat, l.lon, homePin(l, l.id === activeListing)));
             add(s.lat, s.lon, schoolPin(s, true), () => {}, 1000);
-            if (ringRef.current) {
-              try {
-                map.flyToBounds(ringRef.current.getBounds(), {
-                  padding: [50, 50],
-                  duration: 0.7
-                });
-              } catch (e) {
-                map.flyTo([s.lat, s.lon], 13, {
-                  duration: 0.7
-                });
-              }
-            } else map.flyTo([s.lat, s.lon], 13, {
-              duration: 0.7
-            });
+            mountLeaves(listings || [], "listing", "home");
+            if (moveCam) {
+              if (ringRef.current) {
+                try {
+                  map.flyToBounds(ringRef.current.getBounds(), {
+                    ...PAD,
+                    ...CAM
+                  });
+                } catch (e) {
+                  map.flyTo([s.lat, s.lon], 13, CAM);
+                }
+              } else map.flyTo([s.lat, s.lon], 13, CAM);
+            }
           }
           return;
         }
@@ -26408,7 +27553,7 @@ function DPMap({
             const [plat, plon] = offsetPt(c.bearing, Math.max(20, AG.maxTownDist(c.id) * 0.55));
             add(plat, plon, agriDirBubble(c, AG.dirProps(c.id), c.id === sel.corridorId), () => onPickCorridor(c.id));
           });
-          fitCity();
+          if (moveCam) fitCity();
           return;
         }
       case "agri-clusters":
@@ -26418,15 +27563,15 @@ function DPMap({
           if (c) {
             drawWedge(c, km);
             AG.visibleTowns(c.id, km).forEach(cl => add(cl.lat, cl.lon, agriTownDisc(cl.name, AG.townProps(cl.id), cl.id === sel.clusterId), () => onPickCluster(cl.id), 900));
-            try {
-              map.flyToBounds(polyRef.current.getBounds(), {
-                padding: [55, 55],
-                duration: 0.7
-              });
-            } catch (e) {
-              map.flyTo([D.city.lat, D.city.lon], 9, {
-                duration: 0.7
-              });
+            if (moveCam) {
+              try {
+                map.flyToBounds(polyRef.current.getBounds(), {
+                  ...PAD,
+                  ...CAM
+                });
+              } catch (e) {
+                map.flyTo([D.city.lat, D.city.lon], 9, CAM);
+              }
             }
           }
           return;
@@ -26436,21 +27581,65 @@ function DPMap({
           const c = D.agri.corridors.find(x => x.id === sel.corridorId);
           const cl = D.agri.clusters.find(x => x.id === sel.clusterId);
           if (c) drawWedge(c, maxKm || 100, true);
-          (parcels || []).forEach(p => add(p.lat, p.lon, parcelPin(p, p.id === activeListing)));
-          if (cl) fit(cl.bounds, cl.lat, cl.lon, 13);
+          mountLeaves(parcels || [], "parcel", "agri");
+          if (moveCam && cl) fitBounds(cl.bounds, cl.lat, cl.lon, 13);
           return;
         }
       default:
         {
-          // region-bubbles (city landing)
-          D.regions.forEach(r => add(r.center.lat, r.center.lon, regionBubble(r, CO.homesRegion(r.id), r.id === scope), () => onPickRegion(r.id)));
-          fitCity();
+          // region-bubbles (city landing) — directional declutter (Part A)
+          // N pushes up, S down, E right, W left; Central holds the centre. Anchors (region
+          // centres) never move — offset bubbles carry a leader line back to the true point.
+          reclusterOnMoveRef.current = true;
+          const DIRV = {
+            north: [0, -1],
+            south: [0, 1],
+            east: [1, 0],
+            west: [-1, 0],
+            central: null
+          };
+          const drawRegions = () => {
+            zoomDrawnRef.current = map.getZoom();
+            leaf.clearLayers();
+            const entries = D.regions.map(r => ({
+              item: r,
+              pt: map.latLngToContainerPoint([r.center.lat, r.center.lon]),
+              w: 104,
+              h: 104,
+              pri: r.id === scope ? 100000 : r.id === "central" ? 50000 : CO.homesRegion(r.id),
+              dir: DIRV[r.id] || null
+            }));
+            declutterPoints(entries).forEach(({
+              e,
+              p
+            }) => {
+              const dx = e.pt.x - p.x,
+                dy = e.pt.y - p.y;
+              window.L.marker(map.containerPointToLatLng(p), {
+                icon: icon(regionBubble(e.item, CO.homesRegion(e.item.id), e.item.id === scope, leaderHTML(dx, dy))),
+                zIndexOffset: e.item.id === scope ? 900 : 0
+              }).on("click", () => {
+                if (hintRef.current) dismissRef.current();
+                onPickRegion(e.item.id, "map");
+              }).addTo(leaf);
+            });
+          };
+          reclusterRef.current = drawRegions;
+          drawRegions();
+          if (moveCam) fitCity();
         }
     }
   }
   const lg = CITY_LEGEND[layer] || CITY_LEGEND["region-bubbles"];
   const isAgri = String(layer).startsWith("agri");
   const crumbColor = isAgri ? "var(--evergreen-600)" : "var(--plum-600)";
+  // ---- Region-overview guidance (issue #1808) — only while a region is selected
+  //      and no journey has been chosen yet (layer === region-hotspots). ----
+  const rObj = scope ? region(scope) : null;
+  const rName = rObj ? rObj.name : null;
+  const rShort = rObj ? rObj.short : null;
+  const showGuide = layer === "region-hotspots" && !!regionGuide && !guideDismissed;
+  const guideTitleId = "dp-guide-title";
   return /*#__PURE__*/React.createElement("div", {
     style: {
       position: "relative",
@@ -26502,7 +27691,153 @@ function DPMap({
       overflow: "hidden",
       textOverflow: "ellipsis"
     }
-  }, c)))), /*#__PURE__*/React.createElement("div", {
+  }, c)))), showGuide && /*#__PURE__*/React.createElement("div", {
+    role: "note",
+    "aria-labelledby": guideTitleId,
+    style: isMobile ? {
+      position: "absolute",
+      top: "58px",
+      left: "14px",
+      right: "14px",
+      zIndex: 560,
+      background: "var(--paper)",
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-lg)",
+      border: "1px solid var(--border)",
+      borderLeft: "3px solid var(--accent)",
+      padding: "12px 12px 12px 14px",
+      fontFamily: "var(--font-sans)"
+    } : {
+      position: "absolute",
+      top: "18px",
+      right: "18px",
+      zIndex: 560,
+      width: "258px",
+      background: "var(--paper)",
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-lg)",
+      border: "1px solid var(--border)",
+      borderRight: "3px solid var(--accent)",
+      padding: "14px 16px",
+      fontFamily: "var(--font-sans)"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onDismissGuide,
+    "aria-label": "Dismiss region guidance",
+    style: {
+      position: "absolute",
+      top: "8px",
+      right: "8px",
+      width: "22px",
+      height: "22px",
+      border: "none",
+      background: "transparent",
+      color: "var(--grey-500)",
+      cursor: "pointer",
+      borderRadius: "var(--radius-full)",
+      fontSize: "15px",
+      lineHeight: 1,
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, "\xD7"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "7px",
+      marginBottom: "6px"
+    }
+  }, /*#__PURE__*/React.createElement(MIcon, {
+    name: "map-pin",
+    size: 14,
+    color: "var(--accent)"
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "11px",
+      fontWeight: 700,
+      letterSpacing: "var(--tracking-caps)",
+      textTransform: "uppercase",
+      color: "var(--accent)"
+    }
+  }, "Region selected")), /*#__PURE__*/React.createElement("div", {
+    id: guideTitleId,
+    style: {
+      fontSize: "14.5px",
+      fontWeight: 700,
+      letterSpacing: "-0.01em",
+      color: "var(--text-strong)"
+    }
+  }, rName), /*#__PURE__*/React.createElement("p", {
+    style: {
+      margin: "3px 0 10px",
+      fontSize: "12.5px",
+      lineHeight: 1.45,
+      color: "var(--text-muted)",
+      textWrap: "pretty"
+    }
+  }, "Showing top areas only \u2014 a preview, not the full list."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "6px",
+      fontSize: "12.5px",
+      fontWeight: 700,
+      color: "var(--copper-600)"
+    }
+  }, isMobile ? /*#__PURE__*/React.createElement(React.Fragment, null, "Choose how to search below ", /*#__PURE__*/React.createElement("span", {
+    className: "dp-guide-arr dp-guide-arr-down",
+    "aria-hidden": "true"
+  }, "\u2193")) : /*#__PURE__*/React.createElement(React.Fragment, null, "Choose how to continue on the right ", /*#__PURE__*/React.createElement("span", {
+    className: "dp-guide-arr",
+    "aria-hidden": "true"
+  }, "\u2192")))), hint && !showGuide && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: "66px",
+      left: "18px",
+      zIndex: 500,
+      display: "flex",
+      alignItems: "center",
+      gap: "9px",
+      padding: "9px 12px",
+      background: "var(--navy-800)",
+      color: "#fff",
+      borderRadius: "var(--radius-md)",
+      boxShadow: "var(--shadow-lg)",
+      fontFamily: "var(--font-sans)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      maxWidth: "min(300px, calc(100% - 36px))"
+    }
+  }, /*#__PURE__*/React.createElement(MIcon, {
+    name: "map-pin",
+    size: 15,
+    color: "#fff",
+    style: {
+      flex: "none"
+    }
+  }), "Tap map markers to explore", /*#__PURE__*/React.createElement("button", {
+    onClick: dismissHint,
+    "aria-label": "Dismiss hint",
+    style: {
+      marginLeft: "2px",
+      flex: "none",
+      border: "none",
+      background: "rgba(255,255,255,0.16)",
+      color: "#fff",
+      width: "20px",
+      height: "20px",
+      borderRadius: "var(--radius-full)",
+      cursor: "pointer",
+      fontSize: "13px",
+      lineHeight: 1,
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, "\xD7")), /*#__PURE__*/React.createElement("div", {
+    className: "dp-legend",
     style: {
       position: "absolute",
       bottom: "44px",
@@ -26535,7 +27870,43 @@ function DPMap({
       background: lg.ring ? "var(--paper)" : lg.dot,
       border: lg.ring ? `1px solid ${lg.dot}` : "none"
     }
-  }), lg.text), layer === "school-homes" && /*#__PURE__*/React.createElement("span", {
+  }), layer === "region-hotspots" && rShort ? `${rShort} overview` : lg.text), layer === "region-hotspots" && /*#__PURE__*/React.createElement("span", {
+    style: {
+      paddingLeft: "19px",
+      marginTop: "-3px",
+      fontSize: "11px",
+      color: "var(--text-muted)"
+    }
+  }, "Top areas only \xB7 not all areas"), (layer === "area-areas" || layer === "school-areas") && /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: "11px",
+      height: "11px",
+      borderRadius: "var(--radius-full)",
+      border: `1.5px dashed ${layer === "school-areas" ? "var(--plum-600)" : "var(--navy-800)"}`,
+      background: "var(--paper)"
+    }
+  }), "+N areas \xB7 tap to expand"), lg.cluster && /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: "11px",
+      height: "11px",
+      borderRadius: "var(--radius-full)",
+      background: isAgri ? "var(--evergreen-600)" : "var(--navy-800)",
+      border: "1.5px solid #fff",
+      boxShadow: "0 0 0 1px var(--border)"
+    }
+  }), "Clusters \xB7 tap to open"), layer === "school-homes" && /*#__PURE__*/React.createElement("span", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -29673,14 +31044,14 @@ window.BLR_DATA = {
   }, {
     id: "north-growth",
     region: "north",
-    name: "North Growth",
-    blurb: "The Thanisandra–Hennur growth arc — newer apartment supply and metro-linked demand east of the airport road.",
-    exampleAreas: ["Thanisandra", "Hennur"],
+    name: "Thanisandra–Hennur Belt",
+    blurb: "The Thanisandra–Hennur growth arc — 29 localities of newer apartment supply and metro-linked demand east of the airport road.",
+    exampleAreas: ["Thanisandra", "Hennur", "Kalyan Nagar"],
     center: {
-      lat: 13.0500,
-      lon: 77.6350
+      lat: 13.0480,
+      lon: 77.6380
     },
-    bounds: [[13.02, 77.61], [13.08, 77.67]]
+    bounds: [[13.000, 77.598], [13.098, 77.678]]
   }, {
     id: "outer-north",
     region: "north",
@@ -29878,6 +31249,278 @@ window.BLR_DATA = {
     lat: 13.0410,
     lon: 77.6410,
     bounds: [[13.026, 77.627], [13.056, 77.656]]
+  },
+  // --- Thanisandra–Hennur Belt — dense-group localities (backend-owned; listings generated below) ---
+  {
+    id: "rk-hegde-nagar",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "R.K. Hegde Nagar",
+    blurb: "Apartment-heavy pocket beside Thanisandra Main Road.",
+    lat: 13.0620,
+    lon: 77.6205,
+    bounds: [[13.054, 77.612], [13.070, 77.629]]
+  }, {
+    id: "kalyan-nagar",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Kalyan Nagar",
+    blurb: "Established mid-premium address off the outer ring road.",
+    lat: 13.0230,
+    lon: 77.6420,
+    bounds: [[13.015, 77.634], [13.031, 77.650]]
+  }, {
+    id: "hbr-layout",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "HBR Layout",
+    blurb: "Planned blocks between Hennur Road and the ORR.",
+    lat: 13.0350,
+    lon: 77.6270,
+    bounds: [[13.027, 77.619], [13.043, 77.635]]
+  }, {
+    id: "hennur-gardens",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Hennur Gardens",
+    blurb: "Leafy gated-community stretch off Hennur Main Road.",
+    lat: 13.0480,
+    lon: 77.6440,
+    bounds: [[13.040, 77.636], [13.056, 77.652]]
+  }, {
+    id: "nagavara",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Nagavara",
+    blurb: "Lakeside pocket beside Manyata Tech Park.",
+    lat: 13.0450,
+    lon: 77.6210,
+    bounds: [[13.037, 77.613], [13.053, 77.629]]
+  }, {
+    id: "byrathi",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Byrathi",
+    blurb: "Fast-building villa-and-plot belt on Hennur–Bagalur Road.",
+    lat: 13.0630,
+    lon: 77.6560,
+    bounds: [[13.055, 77.648], [13.071, 77.664]]
+  }, {
+    id: "kothanur",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Kothanur",
+    blurb: "Mid-market apartments around the Kothanur junction.",
+    lat: 13.0570,
+    lon: 77.6480,
+    bounds: [[13.049, 77.640], [13.065, 77.656]]
+  }, {
+    id: "horamavu",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Horamavu",
+    blurb: "Value corridor between Banaswadi and the ORR.",
+    lat: 13.0270,
+    lon: 77.6600,
+    bounds: [[13.019, 77.652], [13.035, 77.668]]
+  }, {
+    id: "banaswadi",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Banaswadi",
+    blurb: "Old-Bangalore grid with rail and ring-road links.",
+    lat: 13.0140,
+    lon: 77.6480,
+    bounds: [[13.006, 77.640], [13.022, 77.656]]
+  }, {
+    id: "kacharakanahalli",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Kacharakanahalli",
+    blurb: "Quiet infill pocket between Hennur Road and Banaswadi.",
+    lat: 13.0190,
+    lon: 77.6350,
+    bounds: [[13.011, 77.627], [13.027, 77.643]]
+  }, {
+    id: "hrbr-layout",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "HRBR Layout",
+    blurb: "Premium planned blocks beside Kalyan Nagar.",
+    lat: 13.0180,
+    lon: 77.6440,
+    bounds: [[13.010, 77.636], [13.026, 77.652]]
+  }, {
+    id: "babusapalya",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Babusapalya",
+    blurb: "High-churn rental pocket off Hennur Main Road.",
+    lat: 13.0290,
+    lon: 77.6500,
+    bounds: [[13.021, 77.642], [13.037, 77.658]]
+  }, {
+    id: "kalkere",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Kalkere",
+    blurb: "Lake-adjacent value belt toward Horamavu.",
+    lat: 13.0230,
+    lon: 77.6660,
+    bounds: [[13.015, 77.658], [13.031, 77.674]]
+  }, {
+    id: "rachenahalli",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Rachenahalli",
+    blurb: "Lakeside supply corridor behind Manyata.",
+    lat: 13.0580,
+    lon: 77.6250,
+    bounds: [[13.050, 77.617], [13.066, 77.633]]
+  }, {
+    id: "dodda-gubbi",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Dodda Gubbi",
+    blurb: "Emerging plotted-development edge near the lake.",
+    lat: 13.0900,
+    lon: 77.6650,
+    bounds: [[13.082, 77.657], [13.098, 77.673]]
+  }, {
+    id: "chikkagubbi",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Chikkagubbi Village",
+    blurb: "Village-edge plots on the belt's northern rim.",
+    lat: 13.0830,
+    lon: 77.6580,
+    bounds: [[13.075, 77.650], [13.091, 77.666]]
+  }, {
+    id: "bileshivale",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Bileshivale",
+    blurb: "Low-density villa pocket off Hennur–Bagalur Road.",
+    lat: 13.0740,
+    lon: 77.6620,
+    bounds: [[13.066, 77.654], [13.082, 77.670]]
+  }, {
+    id: "kaval-bairasandra",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Kaval Bairasandra",
+    blurb: "Dense inner pocket toward RT Nagar.",
+    lat: 13.0140,
+    lon: 77.6110,
+    bounds: [[13.006, 77.603], [13.022, 77.619]]
+  }, {
+    id: "ganganagar",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Ganganagar",
+    blurb: "Old residential grid south of Hebbal.",
+    lat: 13.0080,
+    lon: 77.6050,
+    bounds: [[13.000, 77.597], [13.016, 77.613]]
+  }, {
+    id: "amani-byrathikhane",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Amani Byrathikhane",
+    blurb: "Small lakeside pocket off Hennur Road.",
+    lat: 13.0700,
+    lon: 77.6480,
+    bounds: [[13.062, 77.640], [13.078, 77.656]]
+  }, {
+    id: "vignana-kendra",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Vignana Kendra",
+    blurb: "Institutional edge beside Jakkur aerodrome.",
+    lat: 13.0720,
+    lon: 77.6150,
+    bounds: [[13.064, 77.607], [13.080, 77.623]]
+  }, {
+    id: "chelekere",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Chelekere",
+    blurb: "Compact pocket between Kalyan Nagar and Hennur.",
+    lat: 13.0300,
+    lon: 77.6390,
+    bounds: [[13.022, 77.631], [13.038, 77.647]]
+  }, {
+    id: "geddalahalli",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Geddalahalli",
+    blurb: "Hennur Road frontage with new mid-rise supply.",
+    lat: 13.0480,
+    lon: 77.6330,
+    bounds: [[13.040, 77.625], [13.056, 77.641]]
+  }, {
+    id: "k-narayanapura",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "K. Narayanapura",
+    blurb: "Student-and-rental pocket near Kristu Jayanti College.",
+    lat: 13.0650,
+    lon: 77.6440,
+    bounds: [[13.057, 77.636], [13.073, 77.652]]
+  }, {
+    id: "kyalasanahalli",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Kyalasanahalli",
+    blurb: "Quiet village-edge plots off Hennur–Bagalur Road.",
+    lat: 13.0780,
+    lon: 77.6500,
+    bounds: [[13.070, 77.642], [13.086, 77.658]]
+  }, {
+    id: "sampigehalli",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Sampigehalli",
+    blurb: "Emerging apartment pocket north of Thanisandra.",
+    lat: 13.0750,
+    lon: 77.6350,
+    bounds: [[13.067, 77.627], [13.083, 77.643]]
+  }, {
+    id: "thirumenahalli",
+    region: "north",
+    group: "north-growth",
+    zone: null,
+    name: "Thirumenahalli",
+    blurb: "Gated-project belt between Jakkur and Thanisandra.",
+    lat: 13.0850,
+    lon: 77.6250,
+    bounds: [[13.077, 77.617], [13.093, 77.633]]
   }, {
     id: "doddaballapur",
     region: "north",
@@ -31662,6 +33305,140 @@ window.BLR_DATA = {
     }]
   }
 };
+
+// ---- Generated belt listings (Thanisandra–Hennur Belt dense-group stress case) ----
+// ⚠ DESIGN-PROTOTYPE MOCK DATA ONLY. This file is the fixture for the Claude Design
+// kit — it is not application code and touches no backend, API, OpenSearch index or
+// database. In production every count stays backend/API-owned; this generator exists
+// solely so the mock belt is real *records* (not fabricated render-time counts):
+// every marker/panel number is still derived from `listings`.
+(function () {
+  const D = window.BLR_DATA;
+  // Target homes per belt area. Thanisandra (4 curated) + Hennur (3 curated)
+  // are topped up; every other belt area is fully generated. Belt total = 181.
+  const TARGET = {
+    thanisandra: 46,
+    hennur: 17,
+    "rk-hegde-nagar": 13,
+    "kalyan-nagar": 12,
+    "hbr-layout": 11,
+    "hennur-gardens": 9,
+    nagavara: 8,
+    byrathi: 8,
+    kothanur: 7,
+    horamavu: 7,
+    banaswadi: 6,
+    kacharakanahalli: 5,
+    "hrbr-layout": 5,
+    babusapalya: 4,
+    kalkere: 3,
+    rachenahalli: 3,
+    "dodda-gubbi": 2,
+    chikkagubbi: 2,
+    bileshivale: 2,
+    "kaval-bairasandra": 2,
+    ganganagar: 1,
+    "amani-byrathikhane": 1,
+    "vignana-kendra": 1,
+    chelekere: 1,
+    geddalahalli: 1,
+    "k-narayanapura": 1,
+    kyalasanahalli: 1,
+    sampigehalli: 1,
+    thirumenahalli: 1
+  };
+  const SPECS = [{
+    t: "Apartment",
+    beds: 2,
+    baths: 2,
+    sqft: 1080,
+    base: 9600000
+  }, {
+    t: "Apartment",
+    beds: 3,
+    baths: 2,
+    sqft: 1460,
+    base: 13900000
+  }, {
+    t: "Apartment",
+    beds: 3,
+    baths: 3,
+    sqft: 1640,
+    base: 17200000
+  }, {
+    t: "Apartment",
+    beds: 1,
+    baths: 1,
+    sqft: 630,
+    base: 6300000
+  }, {
+    t: "Villa",
+    beds: 4,
+    baths: 4,
+    sqft: 2760,
+    base: 28800000
+  }, {
+    t: "Independent House",
+    beds: 3,
+    baths: 3,
+    sqft: 1880,
+    base: 20500000
+  }, {
+    t: "Apartment",
+    beds: 2,
+    baths: 2,
+    sqft: 1180,
+    base: 11200000
+  }, {
+    t: "Penthouse",
+    beds: 4,
+    baths: 5,
+    sqft: 3300,
+    base: 43500000
+  }];
+  const TIERS = ["verified", "trusted", "listed", "trusted", "verified"];
+  const IMGS = [];
+  D.listings.forEach(l => {
+    if (IMGS.indexOf(l.image) === -1) IMGS.push(l.image);
+  });
+  const existing = {};
+  D.listings.forEach(l => {
+    existing[l.areaId] = (existing[l.areaId] || 0) + 1;
+  });
+  let seq = 0;
+  Object.keys(TARGET).forEach(areaId => {
+    const a = D.areas.find(x => x.id === areaId);
+    if (!a) return;
+    const need = TARGET[areaId] - (existing[areaId] || 0);
+    for (let i = 0; i < need; i++) {
+      seq++;
+      const sp = SPECS[seq % SPECS.length];
+      const frac = seq * 37 % 100 / 100; // deterministic 0..1
+      const ang = seq * 2.399963; // golden angle — even scatter
+      const rad = 0.0028 + 0.0052 * (seq * 53 % 100 / 100);
+      const price = Math.round(sp.base * (0.86 + 0.28 * frac) / 100000) * 100000;
+      D.listings.push({
+        id: "g-" + areaId + "-" + i,
+        title: sp.beds + " BHK " + (sp.t === "Apartment" ? "apartment" : sp.t.toLowerCase()) + ", " + a.name,
+        locality: a.name,
+        area: a.name,
+        areaId: areaId,
+        group: "north-growth",
+        region: "north",
+        price: price,
+        beds: sp.beds,
+        baths: sp.baths,
+        sqft: sp.sqft,
+        propType: sp.t,
+        trustTier: TIERS[seq % TIERS.length],
+        tag: seq % 9 === 0 ? "New" : undefined,
+        image: IMGS[seq % IMGS.length],
+        lat: +(a.lat + rad * Math.cos(ang)).toFixed(5),
+        lon: +(a.lon + rad * Math.sin(ang)).toFixed(5)
+      });
+    }
+  });
+})();
 
 // ---- Derived residential counts (single source of truth) ----
 window.BLR_COUNTS = function () {

@@ -204,7 +204,9 @@ describe('DiscoverRightPanel', () => {
         isLoadingListings={false}
       />,
     );
-    expect(screen.getByText(/No properties for sale in this area yet/)).toBeInTheDocument();
+    // Issue #1817 (AC7) — genuinely-empty cause now routes through the shared
+    // cause-based copy ("No listings here yet"), replacing the old intent-only wording.
+    expect(screen.getByText('No listings here yet')).toBeInTheDocument();
   });
 
   it('renders listing cards with price and locality', () => {
@@ -467,7 +469,11 @@ describe('DiscoverRightPanel — search input (#952)', () => {
         onSearchChange={onSearchChange}
       />,
     );
-    const clearBtn = screen.getByRole('button', { name: /clear search/i });
+    // Issue #1817 (AC7) — scoped to the search input's own inline × (data-testid
+    // area-search-clear): with areaListings=[] + a search cause, the empty state
+    // below also renders a "Clear search" action now, which would otherwise make a
+    // bare role/name query ambiguous.
+    const clearBtn = screen.getByTestId('area-search-clear');
     expect(clearBtn).toBeInTheDocument();
     await user.click(clearBtn);
     expect(onSearchChange).toHaveBeenCalledWith('');

@@ -17,7 +17,7 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ChevronLeft, Layers, X } from 'lucide-react';
+import { AlertCircle, ChevronLeft, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
@@ -25,6 +25,7 @@ import type { DiscoverListingItem } from '@/hooks/useDiscoverListings';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { formatPrice } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
+import { StartOverButton } from '../StartOverButton';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -190,17 +191,14 @@ export function AreaGroupResultsPanel({
       >
         {onStartOver && (
           <div className="flex items-center justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-              onClick={onStartOver}
-              aria-label="Start over and return to journey selection"
-              data-testid="area-group-results-start-over"
-            >
-              Start over
-              <X className="h-3.5 w-3.5" />
-            </Button>
+            {/* Issue #1817 (AC8) — a group's results are being viewed, i.e. selection
+                deeper than a region, so this site always confirms before resetting. */}
+            <StartOverButton
+              onStartOver={onStartOver}
+              hasSubstantialState
+              cityLabel={cityLabel}
+              className="h-7 shrink-0 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+            />
           </div>
         )}
 

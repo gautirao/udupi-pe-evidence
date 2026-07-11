@@ -9,15 +9,58 @@ const CO = window.BLR_COUNTS;
 function ListingGrid({ list, ctx, distFrom }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-      {list.map((l) => (
-        <window.DPListingCard key={l.id} listing={l} onHover={ctx.setActive} onOpen={() => {}}
-          saved={ctx.saved.includes(l.id)} onToggleSave={ctx.toggleSave}
-          distanceKm={distFrom ? window.BLR_DIST(distFrom, l) : null} />
-      ))}
+      {list.map((l) => {
+        const on = ctx.active === l.id;
+        return (
+          <div key={l.id} data-dp-card={l.id} style={{ borderRadius: "var(--radius-lg)", outline: on ? "2px solid var(--accent)" : "2px solid transparent", outlineOffset: "2px", transition: "outline-color var(--dur-fast) var(--ease-standard)", scrollMarginTop: "12px" }}>
+            <window.DPListingCard listing={l} onHover={ctx.setActive} onOpen={() => {}}
+              saved={ctx.saved.includes(l.id)} onToggleSave={ctx.toggleSave}
+              distanceKm={distFrom ? window.BLR_DIST(distFrom, l) : null} />
+          </div>
+        );
+      })}
     </div>
   );
 }
 function ColStack({ children }) { return <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>{children}</div>; }
+
+// Slim map-guidance line — tells the user the map is tappable (PR-B copy).
+function MapGuide({ children, accent }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", margin: "-6px 0 18px", fontSize: "12.5px", lineHeight: 1.5, color: "var(--text-muted)" }}>
+      <NIcon name="map-pin" size={14} color={accent === "plum" ? "var(--plum-600)" : "var(--accent)"} style={{ flex: "none", marginTop: "2px" }} />
+      <span style={{ textWrap: "pretty" }}>{children}</span>
+    </div>
+  );
+}
+
+// Area rows with map coordination: hover ↔ marker emphasis (no camera move),
+// map-hover outline, and "Show on map" for areas demoted off the initial map.
+function AreaRows({ areas, ctx, plum }) {
+  const shown = ctx.mapShownIds || [];
+  const partial = shown.length > 0 && shown.length < areas.length;
+  return (
+    <ColStack>
+      {areas.map((a) => {
+        const demoted = partial && shown.indexOf(a.id) === -1;
+        const hov = ctx.hoverAreaId === a.id && ctx.hoverAreaSrc !== "panel";
+        return (
+          <div key={a.id} data-dp-area={a.id}
+            onMouseEnter={() => ctx.onAreaHover(a.id, "panel")} onMouseLeave={() => ctx.onAreaHover(null, "panel")}
+            style={{ position: "relative", borderRadius: "var(--radius-lg)", outline: hov ? `2px solid ${plum ? "var(--plum-500)" : "var(--accent)"}` : "2px solid transparent", outlineOffset: "2px", transition: "outline-color var(--dur-fast) var(--ease-standard)" }}>
+            {plum ? <window.DPSchoolAreaCard area={a} onView={ctx.pickArea} /> : <window.DPAreaCard area={a} mode={ctx.mode} onView={ctx.pickArea} />}
+            {demoted && (
+              <button onClick={(e) => { e.stopPropagation(); ctx.showAreaOnMap(a.id); }} title="Reveal this area on the map"
+                style={{ position: "absolute", top: "14px", right: "16px", display: "inline-flex", alignItems: "center", gap: "5px", padding: "4px 10px", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-full)", background: "var(--paper)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11.5px", fontWeight: 600, color: "var(--text-body)", whiteSpace: "nowrap" }}>
+                <NIcon name="map-pin" size={12} color={plum ? "var(--plum-600)" : "var(--copper-600)"} />Show on map
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </ColStack>
+  );
+}
 
 function SearchRow({ ctx }) {
   const hide = ctx.layer === "area-listings" || ctx.layer === "school-homes";
@@ -56,6 +99,44 @@ function DiscoverPanelBody({ ctx }) {
   const city = ctx.city;
   const rShort = regionObj ? regionObj.short : null;
   const changeRegionBtn = ctx.scope ? <window.DPGhostBtn onClick={ctx.changeRegion}>Change region</window.DPGhostBtn> : null;
+
+  // Marker click / step highlights a card — scroll the panel to it (manual, no scrollIntoView).
+  React.useEffect(() => {
+    if (!ctx.active) return;
+    const scroller = document.querySelector(".upt-scroll");
+    const card = scroller && scroller.querySelector('[data-dp-card="' + ctx.active + '"]');
+    if (!scroller || !card) return;
+    const cr = card.getBoundingClientRect(), sr = scroller.getBoundingClientRect();
+    if (cr.top < sr.top + 8 || cr.bottom > sr.bottom - 8) {
+      scroller.scrollTo({ top: scroller.scrollTop + (cr.top - sr.top) - 20, behavior: "smooth" });
+    }
+  }, [ctx.active]);
+
+  // Cluster couldn't split (map-spot) → scroll the panel to the highlighted area row.
+  React.useEffect(() => {
+    if (!ctx.hoverAreaId || ctx.hoverAreaSrc !== "map-spot") return;
+    const scroller = document.querySelector(".upt-scroll");
+    const row = scroller && scroller.querySelector('[data-dp-area="' + ctx.hoverAreaId + '"]');
+    if (!scroller || !row) return;
+    const rr = row.getBoundingClientRect(), sr = scroller.getBoundingClientRect();
+    if (rr.top < sr.top + 8 || rr.bottom > sr.bottom - 8) {
+      scroller.scrollTo({ top: scroller.scrollTop + (rr.top - sr.top) - 20, behavior: "smooth" });
+    }
+  }, [ctx.hoverAreaId, ctx.hoverAreaSrc]);
+
+  // Region-overview attention (issue #1808). One-shot ring pulse on the journey cards
+  // after a map/panel region pick — NOT on deep-link load, and never moves focus.
+  // CSS honours prefers-reduced-motion (static ring, no motion).
+  const [attn, setAttn] = React.useState(false);
+  const attnNRef = React.useRef(null);
+  React.useEffect(() => {
+    const g = ctx.regionGuide;
+    if (!g || g.src === "deeplink" || attnNRef.current === g.n) return;
+    attnNRef.current = g.n;
+    setAttn(true);
+    const t = setTimeout(() => setAttn(false), 3200);
+    return () => clearTimeout(t);
+  }, [ctx.regionGuide && ctx.regionGuide.n]);
 
   // ============ CITY LANDING (neutral) — editorial hero, journey CTAs first, regions second ============
   if (layer === "region-bubbles") {
@@ -112,6 +193,9 @@ function DiscoverPanelBody({ ctx }) {
           </div>
         </div>
 
+        {/* Direct access — jump straight to an area or school without the funnel */}
+        <SearchRow ctx={ctx} />
+
         {/* B. Journey CTAs — the primary decision */}
         <window.DPSection icon="route">Choose how you want to search</window.DPSection>
         <ColStack>
@@ -152,15 +236,29 @@ function DiscoverPanelBody({ ctx }) {
 
   // ============ REGION SELECTED (journey null) ============
   if (layer === "region-hotspots") {
-    const hotspots = window.BLR_DATA.areas.filter((a) => a.region === ctx.scope).map((a) => ({ a, c: CO.homesArea(a.id) })).sort((x, y) => y.c - x.c).slice(0, 4);
+    // Top area per group — mirrors the map's spatially diverse hotspot pins.
+    const best = new Map();
+    window.BLR_DATA.areas.filter((a) => a.region === ctx.scope).forEach((a) => {
+      const c = CO.homesArea(a.id);
+      if (!best.has(a.group) || c > best.get(a.group).c) best.set(a.group, { a, c });
+    });
+    const hotspots = Array.from(best.values()).sort((x, y) => y.c - x.c).slice(0, 4);
     return (
       <>
         <window.DPBackLink onClick={ctx.back}>Back to all regions</window.DPBackLink>
         <window.DPHeaderBand eyebrow="Region" title={regionObj.name} sub={regionObj.blurb} crumb={[`Discover ${city}`, regionObj.name]}
           stats={[{ value: CO.homesRegion(ctx.scope), label: noun(mode, CO.homesRegion(ctx.scope)) }]} actions={changeRegionBtn} />
         <SearchRow ctx={ctx} />
-        <window.DPSection icon="route">Continue in {rShort} Bangalore</window.DPSection>
-        <RegionJourneys ctx={ctx} />
+        <div aria-live="polite" style={{ display: "flex", alignItems: "flex-start", gap: "8px", margin: "-2px 0 16px" }}>
+          <NIcon name="map-pin" size={14} color="var(--accent)" style={{ flex: "none", marginTop: "2px" }} />
+          <span style={{ fontSize: "13px", lineHeight: 1.5, color: "var(--text-body)", textWrap: "pretty" }}>
+            <strong style={{ color: "var(--text-strong)" }}>{regionObj.name} selected.</strong> The map shows top areas only — choose how you want to search below.
+          </span>
+        </div>
+        <div className={"dp-attn-target" + (attn ? " dp-attn-on" : "")} style={{ borderRadius: "var(--radius-xl, 16px)", margin: "0 -8px", padding: "8px" }}>
+          <window.DPSection icon="route">Continue in {rShort} Bangalore</window.DPSection>
+          <RegionJourneys ctx={ctx} />
+        </div>
         <div style={{ marginTop: "22px" }}>
           <window.DPSection icon="map-pin">Top areas</window.DPSection>
           <ColStack>{hotspots.map(({ a }) => <window.DPAreaCard key={a.id} area={a} mode={mode} onView={ctx.pickArea} />)}</ColStack>
@@ -179,6 +277,7 @@ function DiscoverPanelBody({ ctx }) {
           sub="Pick a group to narrow to its areas, or jump straight to an area with search." crumb={ctx.scope ? [`Discover ${city}`, regionObj.name, "Search by area"] : [`Discover ${city}`, "Search by area"]}
           stats={[{ value: ctx.scope ? CO.homesRegion(ctx.scope) : CO.totalHomes, label: noun(mode, ctx.scope ? CO.homesRegion(ctx.scope) : CO.totalHomes) }]} actions={changeRegionBtn} />
         <SearchRow ctx={ctx} />
+        <MapGuide>Tap a marker on the map or choose from the list below.</MapGuide>
         <window.DPSection icon="layers" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{groups.length} groups</span>}>Area groups</window.DPSection>
         <ColStack>{groups.map((g) => <window.DPGroupCard key={g.id} group={g} mode={mode} onView={ctx.pickGroup} />)}</ColStack>
       </>
@@ -187,15 +286,21 @@ function DiscoverPanelBody({ ctx }) {
 
   // ============ AREA JOURNEY — areas in group ============
   if (layer === "area-areas") {
-    const areas = window.BLR_DATA.areas.filter((a) => a.group === ctx.groupId);
+    const areas = window.BLR_DATA.areas.filter((a) => a.group === ctx.groupId).slice().sort((a, b) => CO.homesArea(b.id) - CO.homesArea(a.id));
+    const shownN = (ctx.mapShownIds || []).length;
+    const partial = shownN > 0 && shownN < areas.length;
     return (
       <>
         <window.DPBackLink onClick={ctx.back}>Back to area groups{ctx.scope ? ` in ${rShort}` : ""}</window.DPBackLink>
         <window.DPHeaderBand eyebrow="Area group" title={groupObj.name} sub={groupObj.blurb} crumb={[`Discover ${city}`, regionObj && regionObj.name, groupObj.name].filter(Boolean)}
-          stats={[{ value: CO.homesGroup(ctx.groupId), label: noun(mode, CO.homesGroup(ctx.groupId)) }]} />
+          stats={[{ value: areas.length, label: "areas" }, { value: CO.homesGroup(ctx.groupId), label: noun(mode, CO.homesGroup(ctx.groupId)) }]} />
         <SearchRow ctx={ctx} />
+        <MapGuide>
+          Tap a marker on the map or choose from the list below.
+          {partial && <> Showing <strong style={{ color: "var(--text-strong)", fontFamily: "var(--font-mono)" }}>{shownN}</strong> of {areas.length} areas on the map &mdash; all {areas.length} are listed below.</>}
+        </MapGuide>
         <window.DPSection icon="map-pin" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{areas.length} areas</span>}>Areas inside {groupObj.name}</window.DPSection>
-        <ColStack>{areas.map((a) => <window.DPAreaCard key={a.id} area={a} mode={mode} onView={ctx.pickArea} />)}</ColStack>
+        <AreaRows areas={areas} ctx={ctx} />
       </>
     );
   }
@@ -212,6 +317,7 @@ function DiscoverPanelBody({ ctx }) {
         <window.DPHeaderBand eyebrow={isAll ? "All listings" : "Selected area"} title={heading} sub={isAll ? "Every residential listing in scope — narrow with the filters below." : areaObj.blurb}
           crumb={crumb} stats={[{ value: listings.length, label: noun(mode, listings.length) }]} actions={isAll && ctx.scope ? changeRegionBtn : null} />
         <window.DPFilterBar f={ctx.filters} setF={ctx.setFilters} onClear={() => ctx.setFilters(window.DP_DEFAULT_FILTERS)} />
+        <MapGuide>Tap markers to preview, or choose from the list.</MapGuide>
         {listings.length === 0 ? (
           <window.DPEmpty icon="sliders-horizontal" title="No homes match these filters" body="Widen the budget or bedrooms, turn off Verified only, or switch Buy/Rent."
             actions={<><NButton variant="primary" size="md" onClick={() => ctx.setFilters(window.DP_DEFAULT_FILTERS)}>Clear filters</NButton><NButton variant="outline" size="md" onClick={() => ctx.setMode(mode === "Rent" ? "Buy" : "Rent")}>Switch to {mode === "Rent" ? "Buy" : "Rent"}</NButton></>} />
@@ -235,6 +341,7 @@ function DiscoverPanelBody({ ctx }) {
           sub="Search a school or area directly, or pick a zone below." crumb={ctx.scope ? [`Discover ${city}`, regionObj.name, "Search near school"] : [`Discover ${city}`, "Search near school"]}
           stats={[{ value: ctx.scope ? CO.schoolsRegion(ctx.scope) : CO.totalSchools, label: "schools" }]} actions={changeRegionBtn} />
         <SearchRow ctx={ctx} />
+        <MapGuide accent="plum">Tap a marker on the map or choose from the list below.</MapGuide>
         <window.DPSection icon="layers" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{zones.length} zones</span>}>School zones</window.DPSection>
         <ColStack>{zones.map((z) => <window.DPZoneCard key={z.id} zone={z} onView={ctx.pickZone} />)}</ColStack>
       </>
@@ -243,15 +350,21 @@ function DiscoverPanelBody({ ctx }) {
 
   // ============ SCHOOL JOURNEY — areas in zone ============
   if (layer === "school-areas") {
-    const areas = window.BLR_DATA.areas.filter((a) => a.zone === ctx.zoneId);
+    const areas = window.BLR_DATA.areas.filter((a) => a.zone === ctx.zoneId).slice().sort((a, b) => CO.schoolsArea(b.id) - CO.schoolsArea(a.id));
+    const shownN = (ctx.mapShownIds || []).length;
+    const partial = shownN > 0 && shownN < areas.length;
     return (
       <>
         <window.DPBackLink onClick={ctx.back}>Back to school zones{ctx.scope ? ` in ${rShort}` : ""}</window.DPBackLink>
         <window.DPHeaderBand eyebrow="School zone" accent="plum" icon="layers" title={zoneObj.name} sub={zoneObj.blurb} crumb={[`Discover ${city}`, regionObj && regionObj.name, zoneObj.name].filter(Boolean)}
           stats={[{ value: CO.schoolsZone(ctx.zoneId), label: "schools" }, { value: CO.homesZone(ctx.zoneId), label: "nearby homes" }]} />
         <SearchRow ctx={ctx} />
+        <MapGuide accent="plum">
+          Tap a marker on the map or choose from the list below.
+          {partial && <> Showing <strong style={{ color: "var(--text-strong)", fontFamily: "var(--font-mono)" }}>{shownN}</strong> of {areas.length} areas on the map &mdash; all {areas.length} are listed below.</>}
+        </MapGuide>
         <window.DPSection icon="map-pin" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{areas.length} areas</span>}>Areas in {zoneObj.name}</window.DPSection>
-        <ColStack>{areas.map((a) => <window.DPSchoolAreaCard key={a.id} area={a} onView={ctx.pickArea} />)}</ColStack>
+        <AreaRows areas={areas} ctx={ctx} plum />
       </>
     );
   }
@@ -265,6 +378,7 @@ function DiscoverPanelBody({ ctx }) {
         <window.DPHeaderBand eyebrow="Schools in area" accent="plum" icon="map-pin" title={`Schools in ${areaObj.name}`} sub="Choose a school to see homes within 3, 5 or 10 km."
           crumb={[`Discover ${city}`, regionObj.name, areaObj.name]} stats={[{ value: CO.schoolsArea(ctx.areaId), label: "schools" }, { value: CO.homesArea(ctx.areaId), label: "nearby homes" }]} />
         <SearchRow ctx={ctx} />
+        <MapGuide accent="plum">Tap a school pin on the map or choose from the list below.</MapGuide>
         <window.DPSection icon="building" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{schools.length} schools</span>}>Schools in {areaObj.name}</window.DPSection>
         {schools.length === 0 ? (
           <window.DPEmpty accent="plum" icon="building" title="No schools mapped here yet" body="Try a nearby area in this zone." actions={<NButton variant="primary" size="md" onClick={ctx.back}>Back to areas</NButton>} />
@@ -284,6 +398,7 @@ function DiscoverPanelBody({ ctx }) {
           stats={[{ value: homes.length, label: noun(mode, homes.length) }, { value: `${ctx.radiusKm} km`, label: "radius" }]}
           actions={<window.DPGhostBtn onClick={ctx.back}>Change school</window.DPGhostBtn>} />
         <window.DPRadius value={ctx.radiusKm} onChange={ctx.setRadiusKm} school={schoolObj} />
+        <MapGuide accent="plum">Tap markers to preview, or choose from the list.</MapGuide>
         {homes.length === 0 ? (
           <window.DPEmpty accent="plum" icon="route" title={`No homes within ${ctx.radiusKm} km`} body={`No ${mode === "Rent" ? "rentals" : "homes"} within ${ctx.radiusKm} km of ${schoolObj.name.split(",")[0]}. Try a wider radius or change the school.`}
             actions={<>{ctx.radiusKm < 10 && <NButton variant="primary" size="md" onClick={() => ctx.setRadiusKm(ctx.radiusKm === 3 ? 5 : 10)}>Try {ctx.radiusKm === 3 ? 5 : 10} km</NButton>}<NButton variant="outline" size="md" onClick={ctx.back}>Change school</NButton></>} />

@@ -85,7 +85,7 @@ window.BLR_DATA = {
   // ---- Area GROUPS (residential "search by area" journey). ----
   groups: [
     { id: "airport-belt", region: "north", name: "Airport Belt", blurb: "The Bellary Road / airport corridor — the fastest-growing pocket, anchored by Hebbal and running out to Devanahalli.", exampleAreas: ["Hebbal", "Yelahanka", "Devanahalli", "Jakkur"], center: { lat: 13.1000, lon: 77.6100 }, bounds: [[13.02, 77.57], [13.26, 77.72]] },
-    { id: "north-growth", region: "north", name: "North Growth", blurb: "The Thanisandra–Hennur growth arc — newer apartment supply and metro-linked demand east of the airport road.", exampleAreas: ["Thanisandra", "Hennur"], center: { lat: 13.0500, lon: 77.6350 }, bounds: [[13.02, 77.61], [13.08, 77.67]] },
+    { id: "north-growth", region: "north", name: "Thanisandra–Hennur Belt", blurb: "The Thanisandra–Hennur growth arc — 29 localities of newer apartment supply and metro-linked demand east of the airport road.", exampleAreas: ["Thanisandra", "Hennur", "Kalyan Nagar"], center: { lat: 13.0480, lon: 77.6380 }, bounds: [[13.000, 77.598], [13.098, 77.678]] },
     { id: "outer-north", region: "north", name: "Outer North", blurb: "Value-led outer pockets toward Doddaballapur — bigger plots and emerging township projects.", exampleAreas: ["Doddaballapur"], center: { lat: 13.2200, lon: 77.5400 }, bounds: [[13.18, 77.50], [13.30, 77.58]] },
     { id: "south-core", region: "south", name: "South Core", blurb: "Jayanagar and JP Nagar — the established heart of the south with mature streets and dependable resale.", exampleAreas: ["Jayanagar", "JP Nagar"], center: { lat: 12.9200, lon: 77.5850 }, bounds: [[12.88, 77.56], [12.95, 77.61]] },
     { id: "it-corridor", region: "east", name: "IT Corridor", blurb: "Whitefield and Marathahalli — the deepest rental market in the city, wrapped around the tech parks.", exampleAreas: ["Whitefield", "Marathahalli"], center: { lat: 12.9800, lon: 77.7250 }, bounds: [[12.93, 77.69], [13.01, 77.77]] },
@@ -113,6 +113,34 @@ window.BLR_DATA = {
     { id: "devanahalli", region: "north", group: "airport-belt", zone: "yelahanka-airport", name: "Devanahalli", blurb: "Airport-adjacent township belt — larger plots, business park and premium gated communities.", lat: 13.2437, lon: 77.7115, bounds: [[13.228, 77.696], [13.262, 77.728]] },
     { id: "thanisandra", region: "north", group: "north-growth", zone: "thanisandra-hennur", name: "Thanisandra", blurb: "Fast-supplying apartment corridor off the airport road with metro-linked demand.", lat: 13.0650, lon: 77.6300, bounds: [[13.050, 77.616], [13.080, 77.645]] },
     { id: "hennur", region: "north", group: "north-growth", zone: "thanisandra-hennur", name: "Hennur", blurb: "Green, mid-market belt bridging the airport road to the outer ring road.", lat: 13.0410, lon: 77.6410, bounds: [[13.026, 77.627], [13.056, 77.656]] },
+    // --- Thanisandra–Hennur Belt — dense-group localities (backend-owned; listings generated below) ---
+    { id: "rk-hegde-nagar", region: "north", group: "north-growth", zone: null, name: "R.K. Hegde Nagar", blurb: "Apartment-heavy pocket beside Thanisandra Main Road.", lat: 13.0620, lon: 77.6205, bounds: [[13.054, 77.612], [13.070, 77.629]] },
+    { id: "kalyan-nagar", region: "north", group: "north-growth", zone: null, name: "Kalyan Nagar", blurb: "Established mid-premium address off the outer ring road.", lat: 13.0230, lon: 77.6420, bounds: [[13.015, 77.634], [13.031, 77.650]] },
+    { id: "hbr-layout", region: "north", group: "north-growth", zone: null, name: "HBR Layout", blurb: "Planned blocks between Hennur Road and the ORR.", lat: 13.0350, lon: 77.6270, bounds: [[13.027, 77.619], [13.043, 77.635]] },
+    { id: "hennur-gardens", region: "north", group: "north-growth", zone: null, name: "Hennur Gardens", blurb: "Leafy gated-community stretch off Hennur Main Road.", lat: 13.0480, lon: 77.6440, bounds: [[13.040, 77.636], [13.056, 77.652]] },
+    { id: "nagavara", region: "north", group: "north-growth", zone: null, name: "Nagavara", blurb: "Lakeside pocket beside Manyata Tech Park.", lat: 13.0450, lon: 77.6210, bounds: [[13.037, 77.613], [13.053, 77.629]] },
+    { id: "byrathi", region: "north", group: "north-growth", zone: null, name: "Byrathi", blurb: "Fast-building villa-and-plot belt on Hennur–Bagalur Road.", lat: 13.0630, lon: 77.6560, bounds: [[13.055, 77.648], [13.071, 77.664]] },
+    { id: "kothanur", region: "north", group: "north-growth", zone: null, name: "Kothanur", blurb: "Mid-market apartments around the Kothanur junction.", lat: 13.0570, lon: 77.6480, bounds: [[13.049, 77.640], [13.065, 77.656]] },
+    { id: "horamavu", region: "north", group: "north-growth", zone: null, name: "Horamavu", blurb: "Value corridor between Banaswadi and the ORR.", lat: 13.0270, lon: 77.6600, bounds: [[13.019, 77.652], [13.035, 77.668]] },
+    { id: "banaswadi", region: "north", group: "north-growth", zone: null, name: "Banaswadi", blurb: "Old-Bangalore grid with rail and ring-road links.", lat: 13.0140, lon: 77.6480, bounds: [[13.006, 77.640], [13.022, 77.656]] },
+    { id: "kacharakanahalli", region: "north", group: "north-growth", zone: null, name: "Kacharakanahalli", blurb: "Quiet infill pocket between Hennur Road and Banaswadi.", lat: 13.0190, lon: 77.6350, bounds: [[13.011, 77.627], [13.027, 77.643]] },
+    { id: "hrbr-layout", region: "north", group: "north-growth", zone: null, name: "HRBR Layout", blurb: "Premium planned blocks beside Kalyan Nagar.", lat: 13.0180, lon: 77.6440, bounds: [[13.010, 77.636], [13.026, 77.652]] },
+    { id: "babusapalya", region: "north", group: "north-growth", zone: null, name: "Babusapalya", blurb: "High-churn rental pocket off Hennur Main Road.", lat: 13.0290, lon: 77.6500, bounds: [[13.021, 77.642], [13.037, 77.658]] },
+    { id: "kalkere", region: "north", group: "north-growth", zone: null, name: "Kalkere", blurb: "Lake-adjacent value belt toward Horamavu.", lat: 13.0230, lon: 77.6660, bounds: [[13.015, 77.658], [13.031, 77.674]] },
+    { id: "rachenahalli", region: "north", group: "north-growth", zone: null, name: "Rachenahalli", blurb: "Lakeside supply corridor behind Manyata.", lat: 13.0580, lon: 77.6250, bounds: [[13.050, 77.617], [13.066, 77.633]] },
+    { id: "dodda-gubbi", region: "north", group: "north-growth", zone: null, name: "Dodda Gubbi", blurb: "Emerging plotted-development edge near the lake.", lat: 13.0900, lon: 77.6650, bounds: [[13.082, 77.657], [13.098, 77.673]] },
+    { id: "chikkagubbi", region: "north", group: "north-growth", zone: null, name: "Chikkagubbi Village", blurb: "Village-edge plots on the belt's northern rim.", lat: 13.0830, lon: 77.6580, bounds: [[13.075, 77.650], [13.091, 77.666]] },
+    { id: "bileshivale", region: "north", group: "north-growth", zone: null, name: "Bileshivale", blurb: "Low-density villa pocket off Hennur–Bagalur Road.", lat: 13.0740, lon: 77.6620, bounds: [[13.066, 77.654], [13.082, 77.670]] },
+    { id: "kaval-bairasandra", region: "north", group: "north-growth", zone: null, name: "Kaval Bairasandra", blurb: "Dense inner pocket toward RT Nagar.", lat: 13.0140, lon: 77.6110, bounds: [[13.006, 77.603], [13.022, 77.619]] },
+    { id: "ganganagar", region: "north", group: "north-growth", zone: null, name: "Ganganagar", blurb: "Old residential grid south of Hebbal.", lat: 13.0080, lon: 77.6050, bounds: [[13.000, 77.597], [13.016, 77.613]] },
+    { id: "amani-byrathikhane", region: "north", group: "north-growth", zone: null, name: "Amani Byrathikhane", blurb: "Small lakeside pocket off Hennur Road.", lat: 13.0700, lon: 77.6480, bounds: [[13.062, 77.640], [13.078, 77.656]] },
+    { id: "vignana-kendra", region: "north", group: "north-growth", zone: null, name: "Vignana Kendra", blurb: "Institutional edge beside Jakkur aerodrome.", lat: 13.0720, lon: 77.6150, bounds: [[13.064, 77.607], [13.080, 77.623]] },
+    { id: "chelekere", region: "north", group: "north-growth", zone: null, name: "Chelekere", blurb: "Compact pocket between Kalyan Nagar and Hennur.", lat: 13.0300, lon: 77.6390, bounds: [[13.022, 77.631], [13.038, 77.647]] },
+    { id: "geddalahalli", region: "north", group: "north-growth", zone: null, name: "Geddalahalli", blurb: "Hennur Road frontage with new mid-rise supply.", lat: 13.0480, lon: 77.6330, bounds: [[13.040, 77.625], [13.056, 77.641]] },
+    { id: "k-narayanapura", region: "north", group: "north-growth", zone: null, name: "K. Narayanapura", blurb: "Student-and-rental pocket near Kristu Jayanti College.", lat: 13.0650, lon: 77.6440, bounds: [[13.057, 77.636], [13.073, 77.652]] },
+    { id: "kyalasanahalli", region: "north", group: "north-growth", zone: null, name: "Kyalasanahalli", blurb: "Quiet village-edge plots off Hennur–Bagalur Road.", lat: 13.0780, lon: 77.6500, bounds: [[13.070, 77.642], [13.086, 77.658]] },
+    { id: "sampigehalli", region: "north", group: "north-growth", zone: null, name: "Sampigehalli", blurb: "Emerging apartment pocket north of Thanisandra.", lat: 13.0750, lon: 77.6350, bounds: [[13.067, 77.627], [13.083, 77.643]] },
+    { id: "thirumenahalli", region: "north", group: "north-growth", zone: null, name: "Thirumenahalli", blurb: "Gated-project belt between Jakkur and Thanisandra.", lat: 13.0850, lon: 77.6250, bounds: [[13.077, 77.617], [13.093, 77.633]] },
     { id: "doddaballapur", region: "north", group: "outer-north", zone: null, name: "Doddaballapur", blurb: "Emerging township and plotted-development belt for value buyers.", lat: 13.2257, lon: 77.5370, bounds: [[13.208, 77.520], [13.244, 77.556]] },
     { id: "jayanagar", region: "south", group: "south-core", zone: "south-schools", name: "Jayanagar", blurb: "Iconic planned neighbourhood with blocks, parks and strong resale.", lat: 12.9250, lon: 77.5830, bounds: [[12.910, 77.569], [12.940, 77.598]] },
     { id: "jp-nagar", region: "south", group: "south-core", zone: "south-schools", name: "JP Nagar", blurb: "Family-friendly south belt with good schools and steady demand.", lat: 12.9070, lon: 77.5850, bounds: [[12.892, 77.571], [12.922, 77.600]] },
@@ -274,6 +302,65 @@ window.BLR_DATA = {
     ],
   },
 };
+
+// ---- Generated belt listings (Thanisandra–Hennur Belt dense-group stress case) ----
+// ⚠ DESIGN-PROTOTYPE MOCK DATA ONLY. This file is the fixture for the Claude Design
+// kit — it is not application code and touches no backend, API, OpenSearch index or
+// database. In production every count stays backend/API-owned; this generator exists
+// solely so the mock belt is real *records* (not fabricated render-time counts):
+// every marker/panel number is still derived from `listings`.
+(function () {
+  const D = window.BLR_DATA;
+  // Target homes per belt area. Thanisandra (4 curated) + Hennur (3 curated)
+  // are topped up; every other belt area is fully generated. Belt total = 181.
+  const TARGET = {
+    thanisandra: 46, hennur: 17, "rk-hegde-nagar": 13, "kalyan-nagar": 12, "hbr-layout": 11,
+    "hennur-gardens": 9, nagavara: 8, byrathi: 8, kothanur: 7, horamavu: 7, banaswadi: 6,
+    kacharakanahalli: 5, "hrbr-layout": 5, babusapalya: 4, kalkere: 3, rachenahalli: 3,
+    "dodda-gubbi": 2, chikkagubbi: 2, bileshivale: 2, "kaval-bairasandra": 2,
+    ganganagar: 1, "amani-byrathikhane": 1, "vignana-kendra": 1, chelekere: 1,
+    geddalahalli: 1, "k-narayanapura": 1, kyalasanahalli: 1, sampigehalli: 1, thirumenahalli: 1,
+  };
+  const SPECS = [
+    { t: "Apartment", beds: 2, baths: 2, sqft: 1080, base: 9600000 },
+    { t: "Apartment", beds: 3, baths: 2, sqft: 1460, base: 13900000 },
+    { t: "Apartment", beds: 3, baths: 3, sqft: 1640, base: 17200000 },
+    { t: "Apartment", beds: 1, baths: 1, sqft: 630, base: 6300000 },
+    { t: "Villa", beds: 4, baths: 4, sqft: 2760, base: 28800000 },
+    { t: "Independent House", beds: 3, baths: 3, sqft: 1880, base: 20500000 },
+    { t: "Apartment", beds: 2, baths: 2, sqft: 1180, base: 11200000 },
+    { t: "Penthouse", beds: 4, baths: 5, sqft: 3300, base: 43500000 },
+  ];
+  const TIERS = ["verified", "trusted", "listed", "trusted", "verified"];
+  const IMGS = [];
+  D.listings.forEach((l) => { if (IMGS.indexOf(l.image) === -1) IMGS.push(l.image); });
+  const existing = {};
+  D.listings.forEach((l) => { existing[l.areaId] = (existing[l.areaId] || 0) + 1; });
+  let seq = 0;
+  Object.keys(TARGET).forEach((areaId) => {
+    const a = D.areas.find((x) => x.id === areaId);
+    if (!a) return;
+    const need = TARGET[areaId] - (existing[areaId] || 0);
+    for (let i = 0; i < need; i++) {
+      seq++;
+      const sp = SPECS[seq % SPECS.length];
+      const frac = ((seq * 37) % 100) / 100;              // deterministic 0..1
+      const ang = seq * 2.399963;                          // golden angle — even scatter
+      const rad = 0.0028 + 0.0052 * (((seq * 53) % 100) / 100);
+      const price = Math.round(sp.base * (0.86 + 0.28 * frac) / 100000) * 100000;
+      D.listings.push({
+        id: "g-" + areaId + "-" + i,
+        title: sp.beds + " BHK " + (sp.t === "Apartment" ? "apartment" : sp.t.toLowerCase()) + ", " + a.name,
+        locality: a.name, area: a.name, areaId: areaId, group: "north-growth", region: "north",
+        price: price, beds: sp.beds, baths: sp.baths, sqft: sp.sqft, propType: sp.t,
+        trustTier: TIERS[seq % TIERS.length], tag: seq % 9 === 0 ? "New" : undefined,
+        image: IMGS[seq % IMGS.length],
+        lat: +(a.lat + rad * Math.cos(ang)).toFixed(5),
+        lon: +(a.lon + rad * Math.sin(ang)).toFixed(5),
+      });
+    }
+  });
+})();
 
 // ---- Derived residential counts (single source of truth) ----
 window.BLR_COUNTS = (function () {

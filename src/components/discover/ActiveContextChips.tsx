@@ -1,11 +1,14 @@
-import React, { useMemo } from 'react';
-import { Building2, GraduationCap, Home, IndianRupee, Search, X } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { ChevronDown, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { formatPrice } from '@/lib/formatters';
 import type { DiscoverUrlFilters } from '@/hooks/useDiscoverUrlState';
-import type { SchoolResult } from '@/hooks/useSchoolSearch';
-import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
+
+// Issue #1817 — full chip taxonomy per design §3. Scope objects (city, macro-region,
+// area group, area, school) are NEVER chips (AC2) — they live exclusively in the
+// breadcrumb/header band. This component renders ONLY clearable filter + search state.
 
 const PROPERTY_TYPE_LABELS: Record<string, string> = {
   apartment: 'Apartment',
@@ -28,11 +31,20 @@ const BOOLEAN_FILTER_LABELS: ReadonlyArray<{
   label: string;
   testId: string;
 }> = [
-  { key: 'backOnMarket', label: 'Back on Market', testId: 'chip-bool-bom' },
-  { key: 'newToMarket', label: 'New to Market', testId: 'chip-bool-ntm' },
-  { key: 'reraRegistered', label: 'RERA Registered', testId: 'chip-bool-rera' },
-  { key: 'readyToMove', label: 'Ready to Move', testId: 'chip-bool-rtm' },
+  { key: 'backOnMarket', label: 'Back on market', testId: 'chip-bool-bom' },
+  { key: 'newToMarket', label: 'New to market', testId: 'chip-bool-ntm' },
+  { key: 'reraRegistered', label: 'RERA registered', testId: 'chip-bool-rera' },
+  { key: 'readyToMove', label: 'Ready to move', testId: 'chip-bool-rtm' },
 ];
+
+/**
+ * Filter chips shown inline before the rest collapse into the "+N" overflow
+ * popover (design §5). A fixed count rather than a ResizeObserver measurement —
+ * deterministic, testable, and avoids the resize-instability risk (qa-fast R5) a
+ * live measurement would introduce. The search chip and Clear all are NOT counted
+ * against this limit — they are always visible (design §5).
+ */
+const MAX_VISIBLE_FILTER_CHIPS = 4;
 
 /** Mirror of MapFilters.tsx date formatter — co-located here, do NOT import from map/. */
 function formatFilterDate(isoDate: string): string {
@@ -44,9 +56,12 @@ function humanizePropertyType(raw: string): string {
   return PROPERTY_TYPE_LABELS[raw.toLowerCase()] ?? raw;
 }
 
+/** Truncate the search chip label to ~24 chars per design §3/§4. */
+function truncateSearchLabel(term: string): string {
+  return term.length > 24 ? `${term.slice(0, 24)}…` : term;
+}
+
 interface ActiveContextChipsCallbacks {
-  onClearArea: () => void;
-  onClearSchool: () => void;
   onClearPropertyType: () => void;
   onClearBhk: () => void;
   onClearPrice: () => void;
@@ -58,44 +73,91 @@ interface ActiveContextChipsCallbacks {
   onClearDateRange?: () => void;
   /** Clear a single boolean filter by its DiscoverUrlFilters key. */
   onClearBoolean?: (key: keyof Pick<DiscoverUrlFilters, 'backOnMarket' | 'newToMarket' | 'reraRegistered' | 'readyToMove'>) => void;
+  /**
+   * Issue #1817 (AC10) — clears every filter + the search query in one action,
+   * preserving journey/scope/selected object and map camera. Optional so existing
+   * callers/tests need no change; the "Clear all" affordance renders only when provided.
+   */
+  onClearAll?: () => void;
 }
 
 interface ActiveContextChipsProps extends ActiveContextChipsCallbacks {
-  selectedArea?: AreaPoint | null;
-  selectedSchool?: SchoolResult | null;
-  radiusKm?: number | null;
   filters: DiscoverUrlFilters;
   /**
    * Free-text search query (the `q` URL-state field; NOT part of DiscoverUrlFilters).
    * Optional so existing callers/tests need no change. The Search chip renders ONLY
-   * when this is non-empty (after trim) AND a valid result context exists (area or school).
+   * when this is non-empty (after trim). Issue #1817 — no longer context-gated on
+   * area/school selection: per design §4, the search chip is a first-class piece of
+   * result-affecting state at ANY scope (city, region, group, area, school).
    */
   searchQuery?: string;
   /** Clear the free-text search query (clears only `q`, never sibling filters). */
   onClearSearch?: () => void;
 }
 
-interface ChipProps {
+/** One clearable chip's rendering spec, built before roving-focus indices are assigned. */
+interface ChipSpec {
+  id: string;
   icon: React.ReactNode;
   label: string;
   onClear: () => void;
   testId?: string;
   dismissTestId?: string;
+  emphasis?: boolean;
 }
 
-function Chip({ icon, label, onClear, testId, dismissTestId }: ChipProps) {
+interface RovingChipProps extends ChipSpec {
+  tabIndex: number;
+  onFocus: () => void;
+  onArrow: (delta: number) => void;
+  chipRef: React.Ref<HTMLDivElement>;
+}
+
+/** A single dismissable chip with roving-focus keyboard support (design §10). */
+function Chip({
+  icon,
+  label,
+  onClear,
+  testId,
+  dismissTestId,
+  emphasis,
+  tabIndex,
+  onFocus,
+  onArrow,
+  chipRef,
+}: RovingChipProps) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      onArrow(1);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      onArrow(-1);
+    } else if (e.key === 'Enter' || e.key === ' ' || e.key === 'Backspace' || e.key === 'Delete') {
+      e.preventDefault();
+      onClear();
+    }
+  };
+
   return (
     <div
+      ref={chipRef}
       role="group"
       aria-label={`Active filter: ${label}`}
+      tabIndex={tabIndex}
+      onFocus={onFocus}
+      onKeyDown={handleKeyDown}
       className={cn(
-        'inline-flex items-center gap-1 bg-secondary text-secondary-foreground',
-        'rounded-full px-2.5 py-1 text-xs font-medium',
+        'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium',
+        'focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring',
+        emphasis
+          ? 'border border-[hsl(var(--copper))]/60 bg-secondary text-secondary-foreground'
+          : 'bg-secondary text-secondary-foreground',
       )}
       data-testid={testId}
     >
       {icon}
-      <span className="max-w-[120px] truncate">{label}</span>
+      <span className="max-w-[160px] truncate">{label}</span>
       <Button
         variant="ghost"
         size="icon"
@@ -104,7 +166,8 @@ function Chip({ icon, label, onClear, testId, dismissTestId }: ChipProps) {
           e.stopPropagation();
           onClear();
         }}
-        aria-label={`Clear ${label}`}
+        tabIndex={-1}
+        aria-label={`Remove ${label}`}
         data-testid={dismissTestId}
       >
         <X className="h-2.5 w-2.5" />
@@ -114,19 +177,16 @@ function Chip({ icon, label, onClear, testId, dismissTestId }: ChipProps) {
 }
 
 /**
- * Horizontal row of dismissable context chips.
- * Each chip appears only when its corresponding filter dimension is active.
- * Returns null when no chips are active (renders nothing).
+ * Context bar of dismissable, clearable filter + search chips (design §3–§5, §10).
+ * Scope objects (city/region/group/area/school) are never rendered here — AC2.
+ * Chips are ordered search → booleans → value filters; beyond MAX_VISIBLE_FILTER_CHIPS
+ * the remainder collapses into a "+N" overflow popover; "Clear all" never overflows.
+ * Returns null when no chips are active (renders nothing, collapsing the bar).
  */
 export function ActiveContextChips({
-  selectedArea,
-  selectedSchool,
-  radiusKm,
   filters,
   searchQuery,
   onClearSearch,
-  onClearArea,
-  onClearSchool,
   onClearPropertyType,
   onClearBhk,
   onClearPrice,
@@ -135,29 +195,26 @@ export function ActiveContextChips({
   onClearSeller,
   onClearDateRange,
   onClearBoolean,
+  onClearAll,
 }: ActiveContextChipsProps) {
-  const hasArea = selectedArea != null;
-  const hasSchool = selectedSchool != null;
-  // Context-gated search: trim BEFORE the gate so whitespace-only q never renders a
-  // chip. The (hasArea || hasSchool) gate is the lynchpin — `q` at top-level/city/group
-  // (no valid result context) must NOT show a chip even when present in the URL.
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [rovingIndex, setRovingIndex] = useState(0);
+  const focusableRefs = useRef<Array<HTMLElement | null>>([]);
+
   const searchTerm = searchQuery?.trim() ?? '';
-  const hasSearch = searchTerm !== '' && (hasArea || hasSchool);
+  const hasSearch = searchTerm !== '';
   const boardFilters = filters.boardFilters ?? [];
   const categoryFilters = filters.categoryFilters ?? [];
-  const hasType =
-    filters.propertyTypes != null && filters.propertyTypes.length > 0;
-  const hasBhk =
-    filters.bedrooms != null && filters.bedrooms.length > 0;
-  const hasPrice =
-    filters.priceMin != null || filters.priceMax != null;
+  const hasType = filters.propertyTypes != null && filters.propertyTypes.length > 0;
+  const hasBhk = filters.bedrooms != null && filters.bedrooms.length > 0;
+  const hasPrice = filters.priceMin != null || filters.priceMax != null;
 
   // ── Seller ───────────────────────────────────────────────────────────────
   const sellerLabel = useMemo(() => {
     const types = (filters.sellerTypes ?? []).filter((s) => s.trim() !== '');
     if (types.length === 0) return null;
     const first = SELLER_LABELS[types[0].toLowerCase()] ?? types[0];
-    return types.length > 1 ? `${first} +${types.length - 1}` : first;
+    return types.length > 1 ? `Seller: ${first} +${types.length - 1}` : `Seller: ${first}`;
   }, [filters.sellerTypes]);
 
   // ── Date range ───────────────────────────────────────────────────────────
@@ -165,10 +222,10 @@ export function ActiveContextChips({
     const { dateFrom, dateTo } = filters;
     if (!dateFrom && !dateTo) return null;
     if (dateFrom && dateTo) {
-      return `${formatFilterDate(dateFrom)} – ${formatFilterDate(dateTo)}`;
+      return `Listed: ${formatFilterDate(dateFrom)} – ${formatFilterDate(dateTo)}`;
     }
-    if (dateFrom) return `From ${formatFilterDate(dateFrom)}`;
-    return `Until ${formatFilterDate(dateTo!)}`;
+    if (dateFrom) return `Listed: from ${formatFilterDate(dateFrom)}`;
+    return `Listed: until ${formatFilterDate(dateTo!)}`;
   }, [filters.dateFrom, filters.dateTo]);
 
   // ── Active booleans (ordered: bom → ntm → rera → rtm) ───────────────────
@@ -178,25 +235,8 @@ export function ActiveContextChips({
 
   const hasSeller = sellerLabel != null;
   const hasDate = dateLabel != null;
-  const hasBooleans = activeBooleans.length > 0;
 
-  if (
-    !hasSearch &&
-    !hasArea &&
-    !hasSchool &&
-    !hasType &&
-    !hasBhk &&
-    !hasPrice &&
-    !hasSeller &&
-    !hasDate &&
-    !hasBooleans &&
-    boardFilters.length === 0 &&
-    categoryFilters.length === 0
-  ) {
-    return null;
-  }
-
-  // ── Property type label ──────────────────────────────────────────────────
+  // ── Property type / BHK / price labels ────────────────────────────────────
   let typeLabel = '';
   if (hasType) {
     const types = filters.propertyTypes!;
@@ -205,7 +245,6 @@ export function ActiveContextChips({
     typeLabel = extra > 0 ? `${firstLabel} +${extra}` : firstLabel;
   }
 
-  // ── BHK label ────────────────────────────────────────────────────────────
   let bhkLabel = '';
   if (hasBhk) {
     const beds = filters.bedrooms!;
@@ -219,7 +258,6 @@ export function ActiveContextChips({
     }
   }
 
-  // ── Price label ──────────────────────────────────────────────────────────
   let priceLabel = '';
   if (hasPrice) {
     const { priceMin, priceMax } = filters;
@@ -232,121 +270,272 @@ export function ActiveContextChips({
     }
   }
 
-  // ── School label ─────────────────────────────────────────────────────────
-  let schoolLabel = '';
-  if (hasSchool) {
-    const r = radiusKm ?? 2;
-    schoolLabel = `${selectedSchool!.name} (${r} km)`;
+  // ── Build ordered filter-chip specs: booleans → value filters (design §5) ─
+  const filterChips: ChipSpec[] = [];
+
+  activeBooleans.forEach(({ key, label, testId }) => {
+    filterChips.push({
+      id: `bool-${key}`,
+      icon: <span className="text-[10px] font-bold leading-none">✓</span>,
+      label,
+      onClear: () => onClearBoolean?.(key),
+      testId,
+      dismissTestId: `${testId}-dismiss`,
+    });
+  });
+
+  if (hasSeller) {
+    filterChips.push({
+      id: 'seller',
+      icon: <span className="text-[10px] font-bold leading-none">BY</span>,
+      label: sellerLabel!,
+      onClear: () => onClearSeller?.(),
+      testId: 'chip-seller',
+      dismissTestId: 'chip-seller-dismiss',
+    });
   }
+
+  if (hasDate) {
+    filterChips.push({
+      id: 'date',
+      icon: <span className="text-[10px] font-bold leading-none">📅</span>,
+      label: dateLabel!,
+      onClear: () => onClearDateRange?.(),
+      testId: 'chip-date',
+      dismissTestId: 'chip-date-dismiss',
+    });
+  }
+
+  if (hasType) {
+    filterChips.push({
+      id: 'type',
+      icon: <span className="text-[10px] font-bold leading-none">TY</span>,
+      label: typeLabel,
+      onClear: onClearPropertyType,
+      testId: 'chip-type',
+    });
+  }
+
+  if (hasPrice) {
+    filterChips.push({
+      id: 'price',
+      icon: <span className="text-[10px] font-bold leading-none">₹</span>,
+      label: priceLabel,
+      onClear: onClearPrice,
+      testId: 'chip-price',
+    });
+  }
+
+  if (hasBhk) {
+    filterChips.push({
+      id: 'bhk',
+      icon: <span className="text-[10px] font-bold leading-none">BHK</span>,
+      label: bhkLabel,
+      onClear: onClearBhk,
+      testId: 'chip-bhk',
+    });
+  }
+
+  boardFilters.forEach((board) => {
+    const key = board.toLowerCase();
+    filterChips.push({
+      id: `board-${key}`,
+      icon: <span className="text-[10px] font-bold leading-none">B</span>,
+      label: board,
+      onClear: () => onClearBoard?.(board),
+      testId: `active-chip-board-${key}`,
+      dismissTestId: `active-chip-board-${key}-dismiss`,
+    });
+  });
+
+  categoryFilters.forEach((category) => {
+    const key = category.toLowerCase();
+    filterChips.push({
+      id: `category-${key}`,
+      icon: <span className="text-[10px] font-bold leading-none">C</span>,
+      label: category,
+      onClear: () => onClearCategory?.(category),
+      testId: `active-chip-category-${key}`,
+      dismissTestId: `active-chip-category-${key}-dismiss`,
+    });
+  });
+
+  if (!hasSearch && filterChips.length === 0) {
+    return null;
+  }
+
+  const visibleFilterChips = filterChips.slice(0, MAX_VISIBLE_FILTER_CHIPS);
+  const overflowFilterChips = filterChips.slice(MAX_VISIBLE_FILTER_CHIPS);
+  const overflowCount = overflowFilterChips.length;
+
+  // ── Roving focus (design §10): search → visible filter chips → +N → Clear all.
+  const focusableCount =
+    (hasSearch ? 1 : 0) + visibleFilterChips.length + (overflowCount > 0 ? 1 : 0) + (onClearAll ? 1 : 0);
+  focusableRefs.current = focusableRefs.current.slice(0, focusableCount);
+  const clampedRovingIndex = Math.min(rovingIndex, Math.max(focusableCount - 1, 0));
+
+  const moveFocus = (delta: number) => {
+    if (focusableCount === 0) return;
+    const next = (clampedRovingIndex + delta + focusableCount) % focusableCount;
+    setRovingIndex(next);
+    focusableRefs.current[next]?.focus();
+  };
+
+  let cursor = -1;
+  const nextIndex = () => ++cursor;
 
   return (
     <div
-      className="flex flex-wrap items-center gap-1.5"
+      role="group"
+      aria-label="Active filters and search"
+      className="flex flex-nowrap items-center gap-1.5 overflow-hidden"
       data-testid="active-context-chips"
     >
-      {hasSearch && (
-        <Chip
-          icon={<Search className="h-3 w-3 flex-shrink-0" />}
-          label={searchTerm}
-          onClear={() => onClearSearch?.()}
-          testId="chip-search"
-          dismissTestId="chip-search-dismiss"
-        />
-      )}
-      {hasArea && (
-        <Chip
-          icon={<Building2 className="h-3 w-3 flex-shrink-0" />}
-          label={selectedArea!.areaLabel}
-          onClear={onClearArea}
-          testId="chip-area"
-        />
-      )}
-      {hasSchool && (
-        <Chip
-          icon={<GraduationCap className="h-3 w-3 flex-shrink-0" />}
-          label={schoolLabel}
-          onClear={onClearSchool}
-          testId="chip-school"
-        />
-      )}
-      {hasType && (
-        <Chip
-          icon={<Home className="h-3 w-3 flex-shrink-0" />}
-          label={typeLabel}
-          onClear={onClearPropertyType}
-          testId="chip-type"
-        />
-      )}
-      {hasBhk && (
-        <Chip
-          icon={<span className="text-[10px] font-bold leading-none">BHK</span>}
-          label={bhkLabel}
-          onClear={onClearBhk}
-          testId="chip-bhk"
-        />
-      )}
-      {hasPrice && (
-        <Chip
-          icon={<IndianRupee className="h-3 w-3 flex-shrink-0" />}
-          label={priceLabel}
-          onClear={onClearPrice}
-          testId="chip-price"
-        />
-      )}
-      {boardFilters.map((board) => {
-        const key = board.toLowerCase();
+      {hasSearch &&
+        (() => {
+          const idx = nextIndex();
+          return (
+            <Chip
+              id="search"
+              icon={<Search className="h-3 w-3 flex-shrink-0" aria-hidden="true" />}
+              label={`Search: "${truncateSearchLabel(searchTerm)}"`}
+              onClear={() => onClearSearch?.()}
+              testId="chip-search"
+              dismissTestId="chip-search-dismiss"
+              emphasis
+              tabIndex={clampedRovingIndex === idx ? 0 : -1}
+              onFocus={() => setRovingIndex(idx)}
+              onArrow={moveFocus}
+              chipRef={(el) => {
+                focusableRefs.current[idx] = el;
+              }}
+            />
+          );
+        })()}
+
+      {visibleFilterChips.map((chip) => {
+        const idx = nextIndex();
         return (
           <Chip
-            key={`board-${key}`}
-            icon={<GraduationCap className="h-3 w-3 flex-shrink-0" />}
-            label={board}
-            onClear={() => onClearBoard?.(board)}
-            testId={`active-chip-board-${key}`}
-            dismissTestId={`active-chip-board-${key}-dismiss`}
+            key={chip.id}
+            {...chip}
+            tabIndex={clampedRovingIndex === idx ? 0 : -1}
+            onFocus={() => setRovingIndex(idx)}
+            onArrow={moveFocus}
+            chipRef={(el) => {
+              focusableRefs.current[idx] = el;
+            }}
           />
         );
       })}
-      {categoryFilters.map((category) => {
-        const key = category.toLowerCase();
-        return (
-          <Chip
-            key={`category-${key}`}
-            icon={<GraduationCap className="h-3 w-3 flex-shrink-0" />}
-            label={category}
-            onClear={() => onClearCategory?.(category)}
-            testId={`active-chip-category-${key}`}
-            dismissTestId={`active-chip-category-${key}-dismiss`}
-          />
-        );
-      })}
-      {hasSeller && (
-        <Chip
-          icon={<span className="text-[10px] font-bold leading-none">BY</span>}
-          label={sellerLabel!}
-          onClear={() => onClearSeller?.()}
-          testId="chip-seller"
-          dismissTestId="chip-seller-dismiss"
-        />
-      )}
-      {hasDate && (
-        <Chip
-          icon={<span className="text-[10px] font-bold leading-none">📅</span>}
-          label={dateLabel!}
-          onClear={() => onClearDateRange?.()}
-          testId="chip-date"
-          dismissTestId="chip-date-dismiss"
-        />
-      )}
-      {activeBooleans.map(({ key, label, testId }) => (
-        <Chip
-          key={key}
-          icon={<span className="text-[10px] font-bold leading-none">✓</span>}
-          label={label}
-          onClear={() => onClearBoolean?.(key)}
-          testId={testId}
-          dismissTestId={`${testId}-dismiss`}
-        />
-      ))}
+
+      {overflowCount > 0 &&
+        (() => {
+          const idx = nextIndex();
+          return (
+            <Popover open={overflowOpen} onOpenChange={setOverflowOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  ref={(el) => {
+                    focusableRefs.current[idx] = el;
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="h-6 gap-0.5 rounded-full px-2 text-xs"
+                  tabIndex={clampedRovingIndex === idx ? 0 : -1}
+                  onFocus={() => setRovingIndex(idx)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowRight') {
+                      e.preventDefault();
+                      moveFocus(1);
+                    } else if (e.key === 'ArrowLeft') {
+                      e.preventDefault();
+                      moveFocus(-1);
+                    }
+                  }}
+                  aria-label={`Show ${overflowCount} more active filters`}
+                  data-testid="active-chips-overflow-trigger"
+                >
+                  +{overflowCount}
+                  <ChevronDown className="h-3 w-3" aria-hidden="true" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-64 p-2"
+                data-testid="active-chips-overflow-popover"
+                onCloseAutoFocus={(e) => {
+                  // Radix default already returns focus to the trigger; keep it explicit
+                  // so the "returns focus to +N on close" a11y contract (design §10) holds
+                  // even if the trigger unmounts (overflow count drops to 0 on this render).
+                  e.preventDefault();
+                  focusableRefs.current[idx]?.focus();
+                }}
+              >
+                <div className="flex flex-col gap-1.5">
+                  {overflowFilterChips.map((chip, i) => (
+                    <Chip
+                      key={chip.id}
+                      {...chip}
+                      tabIndex={0}
+                      onFocus={() => {}}
+                      onArrow={(delta) => {
+                        const el = overflowFilterChips[i + delta]?.id;
+                        if (!el) return;
+                      }}
+                      chipRef={() => {}}
+                    />
+                  ))}
+                  {onClearAll && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-1 h-7 justify-start px-1 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        onClearAll();
+                        setOverflowOpen(false);
+                      }}
+                      aria-label="Clear all filters and search"
+                    >
+                      Clear all filters
+                    </Button>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          );
+        })()}
+
+      {onClearAll &&
+        (() => {
+          const idx = nextIndex();
+          return (
+            <Button
+              ref={(el) => {
+                focusableRefs.current[idx] = el;
+              }}
+              variant="link"
+              size="sm"
+              className="h-6 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+              tabIndex={clampedRovingIndex === idx ? 0 : -1}
+              onFocus={() => setRovingIndex(idx)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowRight') {
+                  e.preventDefault();
+                  moveFocus(1);
+                } else if (e.key === 'ArrowLeft') {
+                  e.preventDefault();
+                  moveFocus(-1);
+                }
+              }}
+              onClick={onClearAll}
+              aria-label="Clear all filters and search"
+              data-testid="active-chips-clear-all"
+            >
+              Clear all
+            </Button>
+          );
+        })()}
     </div>
   );
 }

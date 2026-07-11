@@ -195,7 +195,12 @@ describe('Issue #1064 — MapDiscovery wiring', () => {
       // Click the first reachable one (right-panel header).
       await user.click(startOverButtons[0]);
 
-      // After click, MapDiscovery re-renders with composedResetMapTick incremented.
+      // Issue #1817 (AC8) — an area is selected here (deeper than a region), so
+      // Start over now shows a confirm popover before resetting; confirm it.
+      const confirmButtons = await screen.findAllByTestId('start-over-confirm');
+      await user.click(confirmButtons[0]);
+
+      // After confirming, MapDiscovery re-renders with composedResetMapTick incremented.
       await waitFor(() => {
         const tickAfter = propertyMapPropsLog.resetMapTicks.at(-1)!;
         expect(tickAfter).toBeGreaterThan(tickBefore);

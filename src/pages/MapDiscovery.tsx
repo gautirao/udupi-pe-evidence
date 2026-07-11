@@ -138,12 +138,56 @@ export interface DiscoverBadgeInput {
   groupListingsCount?: number | null;
   /** Free-text keyword query active in the search box. When set, badge uses filtered count. */
   searchQuery?: string;
+  /**
+   * Issue #1817 — the UNFILTERED count of listings within the active school radius,
+   * i.e. N before applyAnonPropertyFilters. Only derivable on the anon path (the public
+   * /school-radius-listings endpoint returns the full radius set; filters are applied
+   * client-side — see applyAnonPropertyFilters). The authenticated proximity endpoint
+   * pre-filters server-side and does not retain this total, so authed callers must leave
+   * this `undefined` — the selector then honestly falls back to the no-number
+   * "Filtered results" state (AC6) rather than fabricating N.
+   */
+  schoolRadiusUnfilteredCount?: number | null;
 }
 
+/** Issue #1817 — design state codes driving badge/panel-stat copy (design §6 state table). */
+export type DiscoverBadgeState =
+  | 'ok'
+  | 'loading'
+  | 'zero-filters'
+  | 'zero-search'
+  | 'zero-empty'
+  | 'stale';
+
 export interface DiscoverBadgeResult {
+  /** @deprecated kept for back-compat call-sites; true whenever the badge should render at all (with or without a number — see `state`). */
   visible: boolean;
+  /**
+   * @deprecated back-compat alias — equals `m` when filters/search are active and
+   * derivable, otherwise `n`. New call-sites should read `n`/`m`/`state` directly.
+   */
   count: number | null;
   loading: boolean;
+  /** Issue #1817 — total in-scope count (N), independent of filters/search. Null when not yet resolved or not derivable. */
+  n: number | null;
+  /**
+   * Issue #1817 — filtered/matched count (M). Equals `n` when no filters/search are
+   * active. Null when M cannot be honestly derived for the active scope (the
+   * authenticated school-radius + filters gap) — the state falls back to `'stale'` and
+   * no number is shown (AC6: "a number the user cannot trust is worse than no number").
+   */
+  m: number | null;
+  /** Issue #1817 — whether filters and/or a search query are currently narrowing the in-scope set. */
+  hasActiveFilters: boolean;
+  /**
+   * Issue #1817 — whether a property FILTER specifically is active (independent of
+   * search). Distinguishes "search only" from "filters only" / "filters and search"
+   * for the copy contract (design §6: `your filters` | `"{q}"` | `your filters and "{q}"`) —
+   * `hasActiveFilters` alone cannot make that distinction since it is true for either.
+   */
+  hasPropertyFilters: boolean;
+  /** Issue #1817 — design state code (design §6 badge state table); drives copy at the render call-site. */
+  state: DiscoverBadgeState;
 }
 
 export function deriveDiscoverBadge({
@@ -155,25 +199,9 @@ export function deriveDiscoverBadge({
   schoolListingsCount,
   groupListingsCount,
   searchQuery,
+  schoolRadiusUnfilteredCount,
 }: DiscoverBadgeInput): DiscoverBadgeResult {
-  // Issue #1175 v2 — school-radius context: badge follows the active count.
-  //
-  // schoolListingsCount is set (not undefined) when a school-radius filter is active:
-  //   • null    → listings are still loading → hide badge temporarily (avoids stale flash)
-  //   • number  → resolved count (0 or N) → show it directly so badge stays truthful
-  //
-  // Showing 0 is intentional: it matches "No properties found within N km" in the right
-  // panel rather than contradicting it with an unrelated area/city total.
-  if (schoolListingsCount !== undefined) {
-    if (schoolListingsCount === null) {
-      // Still loading — hide temporarily rather than flash a stale number.
-      return { visible: false, count: null, loading: true };
-    }
-    // Resolved (0 or N): show the scoped count.
-    return { visible: true, count: schoolListingsCount, loading: false };
-  }
-
-  // Compute hasPropertyFilters once — used by both the area branch and the no-area branch.
+  // Compute hasPropertyFilters once — used by every branch below.
   const hasPropertyFilters =
     (filters.propertyTypes?.length ?? 0) > 0 ||
     (filters.bedrooms?.length ?? 0) > 0 ||
@@ -186,36 +214,115 @@ export function deriveDiscoverBadge({
     !!filters.newToMarket ||
     !!filters.reraRegistered ||
     !!filters.readyToMove;
+  const hasSearch = !!searchQuery && searchQuery.trim() !== '';
+  const hasActiveFilters = hasPropertyFilters || hasSearch;
+  const zeroState: DiscoverBadgeState = hasPropertyFilters
+    ? 'zero-filters'
+    : hasSearch
+      ? 'zero-search'
+      : 'zero-empty';
+
+  const loadingResult: DiscoverBadgeResult = {
+    visible: false,
+    count: null,
+    loading: true,
+    n: null,
+    m: null,
+    hasActiveFilters,
+    hasPropertyFilters,
+    state: 'loading',
+  };
+  /** AC6 — a number we cannot stand behind is worse than none: labelled fallback, no figure. */
+  const staleResult: DiscoverBadgeResult = {
+    visible: true,
+    count: null,
+    loading: false,
+    n: null,
+    m: null,
+    hasActiveFilters,
+    hasPropertyFilters,
+    state: 'stale',
+  };
+
+  // Issue #1175 v2 / #1817 — school-radius context: badge follows the active count.
+  //
+  // schoolListingsCount is set (not undefined) when a school-radius filter is active:
+  //   • null    → listings are still loading → hide badge temporarily (avoids stale flash)
+  //   • number  → resolved count (0 or N-if-unfiltered)
+  if (schoolListingsCount !== undefined) {
+    if (schoolListingsCount === null) {
+      return loadingResult;
+    }
+    if (!hasActiveFilters) {
+      // No filters/search: schoolListingsCount already IS the unfiltered radius total.
+      const state: DiscoverBadgeState = schoolListingsCount === 0 ? 'zero-empty' : 'ok';
+      return {
+        visible: true,
+        count: schoolListingsCount,
+        loading: false,
+        n: schoolListingsCount,
+        m: schoolListingsCount,
+        hasActiveFilters,
+        hasPropertyFilters,
+        state,
+      };
+    }
+    // Filters/search active: M is schoolListingsCount, but N (the unfiltered radius
+    // total) is only derivable on the anon path (schoolRadiusUnfilteredCount).
+    if (schoolRadiusUnfilteredCount == null) {
+      // Authenticated school-radius + filters gap (count-contract review, Q1):
+      // no honest N — fall back to the no-number "Filtered results" state.
+      return staleResult;
+    }
+    const m = schoolListingsCount;
+    const state: DiscoverBadgeState = m === 0 ? zeroState : 'ok';
+    return {
+      visible: true,
+      count: m,
+      loading: false,
+      n: schoolRadiusUnfilteredCount,
+      m,
+      hasActiveFilters,
+      hasPropertyFilters,
+      state,
+    };
+  }
 
   // Area selected path (AC1, AC2 combined, AC4, AC5)
   if (selectedArea != null) {
     if (isLoadingAreaListings) {
-      return { visible: false, count: null, loading: true };
+      return loadingResult;
     }
-    if (hasPropertyFilters || !!searchQuery) {
+    if (hasActiveFilters) {
       // Area + property filters or keyword search: show the filtered count from areaListings
-      // (filter-aware, matches right panel and map markers — AC4).
-      // areaListings is undefined while the first fetch is in flight but
-      // isLoadingAreaListings already caught that above; here it should be an array.
+      // (filter-aware, matches right panel and map markers — AC4). N is the area's
+      // unfiltered listingCount (may be null/undefined for stale area metadata).
       if (Array.isArray(areaListings)) {
-        return { visible: true, count: areaListings.length, loading: false };
+        const m = areaListings.length;
+        const n = selectedArea.listingCount ?? null;
+        const state: DiscoverBadgeState = m === 0 ? zeroState : 'ok';
+        return { visible: true, count: m, loading: false, n, m, hasActiveFilters, hasPropertyFilters, state };
       }
       // Defensive fallback: areaListings not yet an array (should not reach here
       // after loading settles, but hide rather than show a stale number).
-      return { visible: false, count: null, loading: false };
+      return { visible: false, count: null, loading: false, n: null, m: null, hasActiveFilters, hasPropertyFilters, state: 'loading' };
     }
     const count = selectedArea.listingCount ?? null;
     if (count == null) {
       // AC4 safety: don't show a number we can't verify
-      return { visible: false, count: null, loading: false };
+      return { visible: false, count: null, loading: false, n: null, m: null, hasActiveFilters, hasPropertyFilters, state: 'stale' };
     }
-    return { visible: true, count, loading: false };
+    const state: DiscoverBadgeState = count === 0 ? 'zero-empty' : 'ok';
+    return { visible: true, count, loading: false, n: count, m: count, hasActiveFilters, hasPropertyFilters, state };
   }
 
-  // No area: check for active property filters (AC2 + AC4)
-  if (hasPropertyFilters) {
-    // Filtered count is auth-gated and unreliable — hide to avoid AC4 contradiction.
-    return { visible: false, count: null, loading: false };
+  // No area, no school-radius: filters/search active but the only scopes left (group/city)
+  // do not have a filter-aware query backing them — a trustworthy M cannot be derived here.
+  // AC6 + the anon-count-exposure guard (qa-fast): never show a number in this case, for
+  // BOTH authed and anon users. Falls back to the labelled "Filtered results" state instead
+  // of hiding outright, per the design's own no-number fallback (§6).
+  if (hasActiveFilters) {
+    return staleResult;
   }
 
   // Issue #1175 v3 — group context (precedence: below school/area, above city).
@@ -223,16 +330,62 @@ export function deriveDiscoverBadge({
   // is selected. null = group metadata still loading; number = resolved aggregate (0 or N).
   if (groupListingsCount !== undefined) {
     if (groupListingsCount === null) {
-      return { visible: false, count: null, loading: true };
+      return loadingResult;
     }
-    return { visible: true, count: groupListingsCount, loading: false };
+    const state: DiscoverBadgeState = groupListingsCount === 0 ? 'zero-empty' : 'ok';
+    return {
+      visible: true,
+      count: groupListingsCount,
+      loading: false,
+      n: groupListingsCount,
+      m: groupListingsCount,
+      hasActiveFilters,
+      hasPropertyFilters,
+      state,
+    };
   }
 
   // Baseline city total (AC3)
   if (cityTotal === 0) {
-    return { visible: false, count: null, loading: false };
+    return { visible: false, count: null, loading: false, n: null, m: null, hasActiveFilters, hasPropertyFilters, state: 'stale' };
   }
-  return { visible: true, count: cityTotal, loading: false };
+  return { visible: true, count: cityTotal, loading: false, n: cityTotal, m: cityTotal, hasActiveFilters, hasPropertyFilters, state: 'ok' };
+}
+
+/**
+ * Issue #1817 — pure copy formatter implementing the design's badge/panel-stat copy
+ * contract (design §6). Consumed by both the map badge pill and the panel header stat
+ * so their wording can never diverge. Exported for isolated unit testing.
+ */
+export function formatDiscoverBadgeCopy(
+  badge: Pick<DiscoverBadgeResult, 'n' | 'm' | 'hasActiveFilters' | 'hasPropertyFilters' | 'state'>,
+  opts: { scopeLabel: string; noun: string; searchQuery?: string },
+): string {
+  const { scopeLabel, noun, searchQuery } = opts;
+  const q = searchQuery?.trim();
+  if (badge.state === 'stale') {
+    return 'Filtered results';
+  }
+  if (badge.state === 'zero-search') {
+    return `No results for "${q ?? ''}" in ${scopeLabel}`;
+  }
+  if (badge.state === 'zero-empty' && !badge.hasActiveFilters) {
+    return 'No listings here yet';
+  }
+  const n = badge.n ?? 0;
+  if (!badge.hasActiveFilters) {
+    return `${n.toLocaleString()} ${noun} in ${scopeLabel}`;
+  }
+  const m = badge.m ?? 0;
+  // design §6/AC5: "your filters" | `"{q}"` | `your filters and "{q}"` — determined by
+  // hasPropertyFilters + presence of q independently (hasActiveFilters alone is true for
+  // either and cannot distinguish "search only" from "filters and search").
+  const matchTarget = q
+    ? badge.hasPropertyFilters
+      ? `your filters and "${q}"`
+      : `"${q}"`
+    : 'your filters';
+  return `${m.toLocaleString()} of ${n.toLocaleString()} match ${matchTarget} in ${scopeLabel}`;
 }
 
 // ── School-first status-pill "Showing X schools" derivation ────────────────────
@@ -1235,6 +1388,22 @@ export default function MapDiscovery() {
     setBoundedSearchTriggered(false);
   }, [urlActions, setSelectedSchool, setSelectedArea, setPanToArea, setFilters, setSchoolBoardFilter]);
 
+  // Issue #1817 (AC8) — after Start Over, move focus to the panel's h1 (city hero) so
+  // keyboard users land somewhere sensible (design §8). Start Over always lands on the
+  // guided-entry city landing (bare ?city=...), whose h1 carries id="discover-panel-h1"
+  // (GuidedEntryPanel). Runs on the next paint after startOverTick changes, since the
+  // panel tree must re-render to guided-entry (and mount the new h1) before it can be
+  // focused; a plain synchronous focus() call would target the about-to-unmount node.
+  const prevStartOverTickRef = useRef(startOverTick);
+  useEffect(() => {
+    if (startOverTick === prevStartOverTickRef.current) return;
+    prevStartOverTickRef.current = startOverTick;
+    const raf = requestAnimationFrame(() => {
+      document.getElementById('discover-panel-h1')?.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [startOverTick]);
+
   // Reset bbox when city changes — the previous city's viewport is out-of-bounds for the new city.
   useEffect(() => {
     setMapBbox(null);
@@ -1816,6 +1985,15 @@ export default function MapDiscovery() {
           : undefined,
         groupListingsCount,
         searchQuery: debouncedSearch,
+        // Issue #1817 — anon path only: schoolRadiusListings is the FULL radius set
+        // BEFORE applyAnonPropertyFilters (schoolListings, above, is the post-filter
+        // set), so its length is the honest unfiltered N. The authenticated proximity
+        // endpoint pre-filters server-side and has no equivalent unfiltered total —
+        // left undefined there so the selector falls back to the no-number state (AC6).
+        schoolRadiusUnfilteredCount:
+          schoolRadiusActive && !isAuthenticated && !schoolRadiusListingsLoading
+            ? schoolRadiusListings.length
+            : undefined,
       }),
     // schoolListings.length is a number primitive — safe dep (no spurious identity changes).
     // schoolRadiusActive is derived from filters (already a dep), but listed explicitly for clarity.
@@ -1824,8 +2002,53 @@ export default function MapDiscovery() {
     // (number | null | undefined) so it is safe to use directly as a dep.
     // debouncedSearch: keyword search — badge shows filtered count when active (Issue #1185).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedArea, filters, isLoadingAreaListings, listingDataLoading, isAuthenticated, schoolRadiusListingsLoading, cityTotal, areaListings, schoolRadiusActive, schoolListings.length, groupListingsCount, debouncedSearch],
+    [selectedArea, filters, isLoadingAreaListings, listingDataLoading, isAuthenticated, schoolRadiusListingsLoading, cityTotal, areaListings, schoolRadiusActive, schoolListings.length, groupListingsCount, debouncedSearch, schoolRadiusListings.length],
   );
+
+  // Issue #1817 (code-review follow-up) — single computed copy string for the
+  // area-selected scope, shared verbatim by the map badge (isAreaFirstSelectedAreaState
+  // branch below) AND the AreaSelectedPanel result-summary stat (via DiscoverRightPanel
+  // → AreaSelectedPanel's `areaResultSummaryText` prop), so the two surfaces can never
+  // diverge — exactly one call to formatDiscoverBadgeCopy, exactly one selector
+  // (discoverBadge) behind it.
+  const areaResultSummaryText = useMemo(
+    () =>
+      selectedArea
+        ? formatDiscoverBadgeCopy(discoverBadge, {
+            scopeLabel: selectedArea.areaLabel,
+            noun: 'verified properties',
+            searchQuery: urlState.q,
+          })
+        : null,
+    [selectedArea, discoverBadge, urlState.q],
+  );
+
+  // Issue #1817 (AC11) — debounced, polite result-count announcement. A visually-hidden
+  // mirror of the badge copy, updated ~500ms after the badge SETTLES (not while loading),
+  // so screen-reader users hear one announcement per fetch settle — never per keystroke,
+  // never mid-refetch. Uses the same shared copy contract as the generic map-badge branch
+  // (formatDiscoverBadgeCopy) for an honest, if not always verbatim, summary of every scope.
+  const [announcedBadgeText, setAnnouncedBadgeText] = useState('');
+  const badgeAnnounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (discoverBadge.loading) return; // never announce mid-refetch
+    if (badgeAnnounceTimer.current) clearTimeout(badgeAnnounceTimer.current);
+    badgeAnnounceTimer.current = setTimeout(() => {
+      const text = !discoverBadge.visible
+        ? ''
+        : formatDiscoverBadgeCopy(discoverBadge, {
+            scopeLabel:
+              selectedArea?.areaLabel ?? focusedGroup?.name ?? (CITY_CONFIG[city]?.label ?? city),
+            noun: selectedArea ? 'homes' : 'properties',
+            searchQuery: urlState.q,
+          });
+      setAnnouncedBadgeText(text);
+    }, 500);
+    return () => {
+      if (badgeAnnounceTimer.current) clearTimeout(badgeAnnounceTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discoverBadge, selectedArea, focusedGroup, city, urlState.q]);
 
   // Issue #1160 GAP 1 — listingsReadyKey: a stable primitive string that changes only when
   // all three conditions are true simultaneously:
@@ -2372,12 +2595,22 @@ export default function MapDiscovery() {
   // activeContextChips is memoised so its identity only changes when a relevant
   // dimension actually changes — prevents unnecessary re-renders of DiscoverRightPanel.
   // Hoisted above the isCityValid early return to satisfy Rules of Hooks.
+  // Issue #1817 (AC10) — "Clear all" composes the two existing, already-tested atomic
+  // primitives (handleFiltersChange + setSearchQuery) rather than a new URL action:
+  // handleFiltersChange({}) serialises every DiscoverUrlFilters key as absent (see
+  // serializeFilters — a key not present in the payload is explicitly deleted from the
+  // URL, not just skipped), which clears type/beds/price/seller/board/category/booleans/
+  // dates via a single REPLACE. setSearchQuery('') separately clears `q`. Journey, scope,
+  // areaKey/schoolId, and the map camera are untouched by either call (design §9: "Clear
+  // all drops all filter+q keys but keeps city, journey, and scope keys").
+  const handleClearAllFiltersAndSearch = useCallback(() => {
+    handleFiltersChange({});
+    urlActions.setSearchQuery('');
+  }, [handleFiltersChange, urlActions]);
+
   const activeContextChips = useMemo(
     () => (
       <ActiveContextChips
-        selectedArea={selectedArea}
-        selectedSchool={selectedSchool}
-        radiusKm={urlState.radiusKm}
         searchQuery={urlState.q}
         onClearSearch={() => urlActions.setSearchQuery('')}
         filters={{
@@ -2401,8 +2634,6 @@ export default function MapDiscovery() {
               : filters.dateTo.toISOString().slice(0, 10)
             : undefined,
         }}
-        onClearArea={handleAreaBack}
-        onClearSchool={onClearSchool}
         onClearPropertyType={() =>
           handleFiltersChange({ ...filters, propertyTypes: undefined })
         }
@@ -2433,10 +2664,11 @@ export default function MapDiscovery() {
         onClearBoolean={(key) =>
           handleFiltersChange({ ...filters, [key]: undefined })
         }
+        onClearAll={handleClearAllFiltersAndSearch}
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedArea, selectedSchool, urlState.radiusKm, urlState.q, urlState.filters.boardFilters, urlState.filters.categoryFilters, filters, urlActions, handleAreaBack],
+    [urlState.q, urlState.filters.boardFilters, urlState.filters.categoryFilters, filters, urlActions, handleClearAllFiltersAndSearch],
   );
 
   // Memoize initialCenter to prevent URLViewportController effect re-runs on every parent render.
@@ -3465,10 +3697,18 @@ export default function MapDiscovery() {
               journey is reachable via the "Search by school area" card in the right panel.
               NearSchoolSheet stays mounted below but is no longer triggered from here. */}
 
+          {/* Issue #1817 (AC11) — visually-hidden, debounced, polite mirror of the result
+              count. Separate from the visible pill(s) below so the visible number can
+              update immediately (never flash-hidden) while the announcement itself is
+              debounced ~500ms and only fires once the fetch settles. */}
+          <div className="sr-only" aria-live="polite" data-testid="discover-badge-announce">
+            {announcedBadgeText}
+          </div>
+
           {/* City / area listing count — bottom-right (Issue #1152). Issue #1588 — on the
               public landing this is replaced by the centered city-wide summary pill below;
               kept bottom-right for contextual (area/school/group) drill-down counts. */}
-          {resolvedPanelContent !== 'guided-entry' && !isAreaFirstCityLanding && discoverBadge.visible && discoverBadge.count != null && (
+          {resolvedPanelContent !== 'guided-entry' && !isAreaFirstCityLanding && discoverBadge.visible && (discoverBadge.count != null || discoverBadge.state === 'stale') && (
             <div
               className={
                 // Issue #1595 — on the selected-group step the pill is centred at the bottom.
@@ -3481,30 +3721,41 @@ export default function MapDiscovery() {
               }
               data-testid="discover-badge"
             >
-              <div className="flex items-center gap-2 whitespace-nowrap rounded-full border border-border bg-card/95 px-4 py-2 text-sm text-muted-foreground shadow-sm backdrop-blur-sm">
+              <div
+                className="flex items-center gap-2 whitespace-nowrap rounded-full border border-border bg-card/95 px-4 py-2 text-sm text-muted-foreground shadow-sm backdrop-blur-sm"
+                aria-busy={discoverBadge.loading}
+              >
                 <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 {/* Issue #1595 — in the selected-group drill-down the footer pill names the
                     group and marks the count as verified ("Showing 8 verified properties in
                     University Belt").
                     Issue #1606 — in the area-first selected-area state the pill reads
                     "Showing N verified properties in {areaLabel}". Every other context keeps
-                    the plain "N properties". */}
-                {resolvedPanelContent === 'area-groups-landing' && focusedGroup && !selectedArea ? (
+                    the plain "N properties".
+                    Issue #1817 — the 'stale' state (count-contract unreliable, e.g. authed
+                    school-radius + filters) is checked FIRST, before any of the specific
+                    journey branches below, because those branches assume a non-null count. */}
+                {discoverBadge.state === 'stale' ? (
+                  <span data-testid="discover-badge-stale">Filtered results</span>
+                ) : resolvedPanelContent === 'area-groups-landing' && focusedGroup && !selectedArea ? (
+                  // Issue #1817 (code-review follow-up) — routed through the shared copy
+                  // contract so filters/search active here render `M of N match ... in
+                  // {Group}` (design §6 "Area group selected + filters") instead of always
+                  // showing the plain verified-properties form.
                   <span>
-                    Showing{' '}
-                    <strong className="font-semibold tabular-nums text-foreground">
-                      {discoverBadge.count.toLocaleString()}
-                    </strong>
-                    {' '}verified properties in {focusedGroup.name}
+                    {formatDiscoverBadgeCopy(discoverBadge, {
+                      scopeLabel: focusedGroup.name,
+                      noun: 'verified properties',
+                      searchQuery: urlState.q,
+                    })}
                   </span>
                 ) : isAreaFirstSelectedAreaState && selectedArea ? (
-                  <span>
-                    Showing{' '}
-                    <strong className="font-semibold tabular-nums text-foreground">
-                      {discoverBadge.count.toLocaleString()}
-                    </strong>
-                    {' '}verified properties in {selectedArea.areaLabel}
-                  </span>
+                  // Issue #1817 (code-review follow-up) — same fix for the area-first
+                  // selected-area state (design §6 "Area selected + filters" → `5 of 18
+                  // match in Whitefield"). Reuses areaResultSummaryText — the SAME
+                  // computed string the AreaSelectedPanel stat renders — so the two
+                  // surfaces can never diverge.
+                  <span>{areaResultSummaryText}</span>
                 ) : urlState.journey === 'school-first' && schoolRadiusActive ? (
                   // School-first, school selected — the badge count IS the school-radius
                   // listing count (schoolListingsCount, threaded above), so "homes"/"rentals"
@@ -3549,12 +3800,18 @@ export default function MapDiscovery() {
                     {' '}school{schoolFirstLandingSchoolCount === 1 ? '' : 's'}
                   </span>
                 ) : (
+                  // Issue #1817 — generic fallback (city / group / area outside the
+                  // special-cased journeys above): render via the shared copy contract
+                  // so this pill and the panel header stat can never diverge (AC4/AC5).
                   <span>
-                    Showing{' '}
-                    <strong className="font-semibold tabular-nums text-foreground">
-                      {discoverBadge.count.toLocaleString()}
-                    </strong>
-                    {' '}properties
+                    {formatDiscoverBadgeCopy(discoverBadge, {
+                      scopeLabel:
+                        selectedArea?.areaLabel ??
+                        focusedGroup?.name ??
+                        (CITY_CONFIG[city]?.label ?? city),
+                      noun: selectedArea ? 'homes' : 'properties',
+                      searchQuery: urlState.q,
+                    })}
                   </span>
                 )}
               </div>
@@ -3673,6 +3930,10 @@ export default function MapDiscovery() {
           isLoadingListings={isLoadingAreaListings}
           isAuthenticated={isAuthenticated}
           onAreaSelect={handleAreaSelect}
+          // Issue #1817 (code-review follow-up) — precomputed via the shared
+          // formatDiscoverBadgeCopy(discoverBadge, ...) call above (areaResultSummaryText),
+          // so AreaSelectedPanel's result-summary stat can never diverge from the map badge.
+          areaResultSummaryText={areaResultSummaryText}
           // schoolFirstOnBack is undefined when panelContent is not 'school-browse' or
           // 'school-selected' (i.e. Level 0), so Back correctly hides at Level 0.
           // 'school-selected' panelContent is only reachable in the school-first journey.

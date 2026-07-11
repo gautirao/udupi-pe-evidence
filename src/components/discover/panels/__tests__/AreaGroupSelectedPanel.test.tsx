@@ -171,10 +171,15 @@ describe('AreaGroupSelectedPanel — navigation affordances', () => {
     expect(screen.queryByTestId('area-group-back-to-all')).not.toBeInTheDocument();
   });
 
-  it('renders Start over and calls onStartOver', async () => {
+  // Issue #1817 (AC8) — a group is selected in this panel (deeper than a region), so
+  // Start over always confirms first (design §8) rather than resetting immediately.
+  it('renders Start over, confirms, and calls onStartOver only after confirming', async () => {
     const onStartOver = vi.fn();
     render(<AreaGroupSelectedPanel {...baseProps} onStartOver={onStartOver} />);
     await userEvent.click(screen.getByTestId('start-over-button'));
+    expect(onStartOver).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('start-over-confirm-popover')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('start-over-confirm'));
     expect(onStartOver).toHaveBeenCalledTimes(1);
   });
 
