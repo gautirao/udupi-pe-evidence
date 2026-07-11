@@ -218,24 +218,33 @@ class SchoolAreaMatchingIntegrationTest {
     }
 
     // ── AC8 — Drift regression guard: AreaSummaryService school_count vs direct count ─────────
+    // UPDATED for #1828 PR1: production school_count now counts THROUGH
+    // school_discover_area_coverage (V110) instead of a direct schools.area_key string
+    // equality. This is a deliberate, reviewed change to what the guard encodes — PR1's
+    // whole thesis is that the two must still agree for every school with a non-NULL
+    // area_key, because V110's backfill is a pure 'primary' mirror. The V110 trigger
+    // (AFTER INSERT OR UPDATE OF area_key) keeps coverage convergent with the fixture rows
+    // this test inserts in @BeforeEach, so the mirror holds here without any extra setup.
     @Test
-    @DisplayName("AC8: AREAS_BY_CITY_SQL school_count agrees with direct COUNT(*) FROM schools WHERE area_key=?")
-    void area_summary_count_matches_direct_count_for_brahmavar() {
+    @DisplayName("AC8: AREAS_BY_CITY_SQL school_count agrees with a direct count via school_discover_area_coverage")
+    void area_summary_count_matches_coverage_count_for_brahmavar() {
         String areaKey = "IN|KA|Udupi|Brahmavar";
         Integer direct = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM schools WHERE area_key = ?", Integer.class, areaKey);
         assertThat(direct).isNotNull();
 
         // Inline the production school_count subquery (kept verbatim to detect drift).
-        // The production AREAS_BY_CITY_SQL projects this same expression.
+        // The production AREAS_BY_CITY_SQL / AREAS_BY_CITY_TYPE_FILTERED_SQL project this
+        // same expression via AreaSummaryService.SCHOOL_COUNT_SUBQUERY.
         Integer viaProductionSql = jdbc.queryForObject("""
                 SELECT COUNT(*)
-                FROM schools s
-                WHERE s.area_key = ?
+                FROM school_discover_area_coverage c
+                WHERE c.curated_area_key = ?
+                  AND c.relationship_type IN ('contained','primary','reviewed_override')
                 """, Integer.class, areaKey);
 
         assertThat(viaProductionSql)
-                .as("school_count must equal direct count for Brahmavar (drift guard)")
+                .as("coverage-derived school_count must equal the legacy direct area_key count for Brahmavar (V110 mirror drift guard)")
                 .isEqualTo(direct);
         assertThat(direct)
                 .as("Brahmavar must contain at least Carmel after fixture setup")
@@ -283,6 +292,9 @@ class SchoolAreaMatchingIntegrationTest {
     @DisplayName("AC10: EXPLAIN ANALYZE — idx_schools_area_key used by area_key lookup")
     void explain_analyze_confirms_index_used() {
         // Plan 1: AreaSummaryService AREAS_BY_CITY_SQL (full statement).
+        // #1828 PR1: school_count now counts THROUGH school_discover_area_coverage
+        // (AreaSummaryService.SCHOOL_COUNT_SUBQUERY) — kept in lockstep here for the same
+        // reason as AC8 above.
         List<Map<String, Object>> plan1 = jdbc.queryForList("""
                 EXPLAIN ANALYZE
                 SELECT
@@ -296,8 +308,9 @@ class SchoolAreaMatchingIntegrationTest {
                     aos.confidence_tier,
                     (
                         SELECT COUNT(*)
-                        FROM schools s
-                        WHERE s.area_key = a.area_key
+                        FROM school_discover_area_coverage c
+                        WHERE c.curated_area_key = a.area_key
+                          AND c.relationship_type IN ('contained','primary','reviewed_override')
                     ) AS school_count
                 FROM areas a
                 JOIN cities c ON c.id = a.city_id

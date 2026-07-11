@@ -9,12 +9,12 @@ VALUES
     (gen_random_uuid(), 'APIFY-KUN-NAVU-01', 'Don Bosco School', 'CBSE', 'CBSE', 'Karnataka', 'Udupi', 'Apify', 'Hosadu Post, Trasi, Kundapura Taluk, Udupi District, Karnataka 576235, India', 13.6916548, 74.6650457, 'directory', 'IN|KA|Udupi|Navunda'),
     (gen_random_uuid(), 'APIFY-KUN-BYND-01', 'St. Thomas Residential School', 'CBSE', 'CBSE', 'Karnataka', 'Udupi', 'Apify', 'Yedthare Village, Byndoor Taluk, Udupi District, Karnataka 576214, India', 13.8763924, 74.6343347, 'directory', 'IN|KA|Udupi|Byndoor'),
     (gen_random_uuid(), 'APIFY-KUN-BYND-02', 'Sri Mookambika Public School', 'CBSE', 'CBSE', 'Karnataka', 'Udupi', 'Apify', 'Jayendra Nagar, Mavinamane, Byndoor Taluk, Udupi District, Karnataka 576214, India', 13.8684632, 74.6342709, 'directory', 'IN|KA|Udupi|Byndoor')
+-- #1828 AC7: latitude, longitude AND area_key are deliberately EXCLUDED from this
+-- DO UPDATE SET — see bangalore-mangalore-schools-seed.sql for the full rationale
+-- (re-firing V80 collapses curated counts; re-writing area_key re-imposes stale attribution).
 ON CONFLICT (udise_code) WHERE udise_code IS NOT NULL DO UPDATE SET
     name = EXCLUDED.name,
     board = EXCLUDED.board,
     board_type = EXCLUDED.board_type,
     address = EXCLUDED.address,
-    latitude = EXCLUDED.latitude,
-    longitude = EXCLUDED.longitude,
-    prominence_tier = EXCLUDED.prominence_tier,
-    area_key = EXCLUDED.area_key;
+    prominence_tier = EXCLUDED.prominence_tier;

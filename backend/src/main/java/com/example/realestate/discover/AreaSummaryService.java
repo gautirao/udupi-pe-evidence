@@ -155,7 +155,39 @@ public class AreaSummaryService {
         return val == null ? null : ((Number) val).longValue();
     }
 
-    private static final String AREAS_BY_CITY_SQL = """
+    /**
+     * Correlated scalar subquery counting a curated area's schools THROUGH
+     * {@code school_discover_area_coverage} (#1828 PR1) instead of the legacy
+     * {@code schools.area_key} string equality. Uses the POSITIVE relationship_type IN-list
+     * — {@code 'contained','primary','reviewed_override'} — never a negative
+     * {@code <> 'nearby'}: a negative form is default-allow, so a future new
+     * relationship_type would silently start being counted (and would stop matching
+     * {@code idx_school_coverage_counted}'s identical partial-index predicate, causing a seq
+     * scan instead of a wrong count). 'nearby' is recorded but deliberately never counted.
+     *
+     * <p>Interpolated as a SQL literal — contains ZERO {@code '?'} bind parameters — because
+     * the relationship-type vocabulary is a closed, code-owned constant set. A bound
+     * parameter here would sit textually BEFORE the existing {@code '?'}s in
+     * {@link #AREAS_BY_CITY_TYPE_FILTERED_SQL} and silently shift every downstream binding
+     * (see the {@code Object[] args} hand-alignment warning above): all values are String,
+     * so JDBC would raise nothing and the endpoint would silently return zeros.
+     *
+     * <p>Defined ONCE and reused in both {@link #AREAS_BY_CITY_SQL} and
+     * {@link #AREAS_BY_CITY_TYPE_FILTERED_SQL} so the two constants cannot drift from each
+     * other (further enforced by {@code AreaSummaryServiceCoverageCountTest}'s byte-identity
+     * assertion — editing one copy and not the other is the single most likely error here).
+     *
+     * <p>Kept as a correlated SCALAR subquery (not a {@code LEFT JOIN + GROUP BY}) so an area
+     * with zero schools yields {@code 0}, never {@code NULL} — {@link AreaSummary#schoolCount}
+     * is a primitive {@code long} and this shape removes the NULL-vs-0 hazard by construction.
+     */
+    private static final String SCHOOL_COUNT_SUBQUERY = """
+            (SELECT COUNT(*)
+             FROM school_discover_area_coverage c
+             WHERE c.curated_area_key = a.area_key
+               AND c.relationship_type IN ('contained','primary','reviewed_override'))""";
+
+    private static final String AREAS_BY_CITY_SQL = ("""
             SELECT
                 a.area_key,
                 a.name,
@@ -169,8 +201,9 @@ public class AreaSummaryService {
                 aos.median_price_paise,
                 aos.trend_direction,
                 aos.confidence_tier,
-                (SELECT COUNT(*) FROM schools s WHERE s.area_key = a.area_key)
-                                                     AS school_count
+            """
+            + SCHOOL_COUNT_SUBQUERY + """
+                                                 AS school_count
             FROM areas a
             JOIN cities c ON c.id = a.city_id
             LEFT JOIN area_overview_stats aos
@@ -188,7 +221,7 @@ public class AreaSummaryService {
             WHERE c.slug = ?
               AND array_length(string_to_array(a.area_key, '|'), 1) = 4
             ORDER BY COALESCE(pl.listing_count, 0) DESC, a.name
-            """.formatted(PropertyType.AGRICULTURAL_LAND.getValue());
+            """).formatted(PropertyType.AGRICULTURAL_LAND.getValue());
 
     /**
      * Variant of {@link #AREAS_BY_CITY_SQL} that scopes the per-area count subquery to a single
@@ -198,6 +231,11 @@ public class AreaSummaryService {
      * Bound-arg order: [propertyType, city]. The median/trend (area_overview_stats) join is
      * intentionally left blended — only the count is agri-scoped.
      */
+    // NOTE (tech debt, not fixed here): unlike AREAS_BY_CITY_SQL, this constant concatenates
+    // SCHOOL_COUNT_SUBQUERY WITHOUT wrapping the result in .formatted(...) — harmless today
+    // because the subquery contains no '%', but if a future edit to SCHOOL_COUNT_SUBQUERY
+    // ever introduced one, only AREAS_BY_CITY_SQL's .formatted(...) call would blow up at
+    // class-init (UnknownFormatConversionException), not this constant.
     private static final String AREAS_BY_CITY_TYPE_FILTERED_SQL = """
             SELECT
                 a.area_key,
@@ -212,8 +250,9 @@ public class AreaSummaryService {
                 aos.median_price_paise,
                 aos.trend_direction,
                 aos.confidence_tier,
-                (SELECT COUNT(*) FROM schools s WHERE s.area_key = a.area_key)
-                                                     AS school_count
+            """
+            + SCHOOL_COUNT_SUBQUERY + """
+                                                 AS school_count
             FROM areas a
             JOIN cities c ON c.id = a.city_id
             LEFT JOIN area_overview_stats aos

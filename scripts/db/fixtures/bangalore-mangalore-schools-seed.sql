@@ -58,12 +58,17 @@ VALUES
     (gen_random_uuid(), 'APIFY-MAN-PUMP-03', 'Podar International School Mangalore (CBSE)', 'CBSE', 'CBSE', 'Karnataka', 'Mangalore', 'Apify', 'Survey No. 83, Maladi Estate Road, Kottara Chowki, Padukodi, Mangaluru, Karnataka 575015, India', 12.9180608, 74.8411910, 'directory', 'IN|KA|Mangalore|Pumpwell'),
     (gen_random_uuid(), 'APIFY-MAN-PUMP-04', 'Sri Chaitanya Techno School', 'CBSE', 'CBSE', 'Karnataka', 'Mangalore', 'Apify', 'Bhangra Road, Kottarachowki, Kuloor, Derebail, Mangaluru, Karnataka 575013, India', 12.9143723, 74.8362570, 'directory', 'IN|KA|Mangalore|Pumpwell'),
     (gen_random_uuid(), 'APIFY-MAN-SURA-01', 'Ryan International School, Kulai, Mangalore - ICSE', 'ICSE', 'ICSE', 'Karnataka', 'Mangalore', 'Apify', 'XR84+JFM, Ryan International School, Kulai Main Road Post, 5, near Suratkal, Honne Katte, Kulai, Mangaluru, Karnataka 575019, India', 12.9662053, 74.8057772, 'directory', 'IN|KA|Mangalore|Surathkal')
+-- #1828 AC7: latitude, longitude AND area_key are deliberately EXCLUDED from this
+-- DO UPDATE SET. Writing latitude/longitude would re-fire the V80 trigger and re-derive
+-- area_key against the full 313-area catalogue — measured to collapse curated per-area
+-- school counts from 32 to 6 (see bug-repro-report.toml). Writing area_key directly would
+-- re-impose the coarse, disproven #1737 attribution (this file's literals for the 27
+-- schools untouched by V109 ARE the historical coarse values — 0 mismatches/27, measured).
+-- A re-run of this fixture is therefore attribution-neutral in EITHER direction: it can
+-- neither re-derive nor overwrite a durable correction.
 ON CONFLICT (udise_code) WHERE udise_code IS NOT NULL DO UPDATE SET
     name = EXCLUDED.name,
     board = EXCLUDED.board,
     board_type = EXCLUDED.board_type,
     address = EXCLUDED.address,
-    latitude = EXCLUDED.latitude,
-    longitude = EXCLUDED.longitude,
-    prominence_tier = EXCLUDED.prominence_tier,
-    area_key = EXCLUDED.area_key;
+    prominence_tier = EXCLUDED.prominence_tier;
