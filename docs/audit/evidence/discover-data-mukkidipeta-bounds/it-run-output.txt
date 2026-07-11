@@ -1,0 +1,243 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -------------------< com.example:realestate-backend >-------------------
+[INFO] Building Real Estate Backend 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- jacoco:0.8.12:prepare-agent (prepare-agent) @ realestate-backend ---
+[INFO] argLine set to -javaagent:/Users/gouthamrao/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/Users/gouthamrao/Documents/workspaces/lovable/udupi-property-explorer-worktrees/issue-1819-mukkidipeta-bounds/backend/target/jacoco.exec
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ realestate-backend ---
+[INFO] Copying 1 resource from src/main/resources to target/classes
+[INFO] Copying 113 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ realestate-backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ realestate-backend ---
+[INFO] Copying 5 resources from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ realestate-backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.2:test (default-test) @ realestate-backend ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+09:45:01.948 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 1.21.4
+09:45:02.230 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+09:45:02.507 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+09:45:02.509 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is localhost
+09:45:02.524 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 29.4.3
+  API Version: 1.54
+  Operating System: Docker Desktop
+  Total Memory: 7936 MB
+  Labels: 
+    com.docker.desktop.address=unix:///Users/gouthamrao/Library/Containers/com.docker.docker/Data/docker-cli.sock
+09:45:02.542 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+09:45:02.544 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+09:45:02.700 [main] INFO tc.testcontainers/ryuk:0.12.0 -- Creating container for image: testcontainers/ryuk:0.12.0
+09:45:02.823 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Credential helper/store (docker-credential-desktop) does not have credentials for https://index.docker.io/v1/
+09:45:02.943 [main] INFO tc.testcontainers/ryuk:0.12.0 -- Container testcontainers/ryuk:0.12.0 is starting: 965c2e028c0b88ce022fb0bcc59b28b4abb72dfe6dec909977a2494b45cade47
+09:45:03.190 [main] INFO tc.testcontainers/ryuk:0.12.0 -- Container testcontainers/ryuk:0.12.0 started in PT0.490177S
+09:45:03.197 [main] INFO org.testcontainers.utility.RyukResourceReaper -- Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+09:45:03.197 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+09:45:03.197 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+[INFO] Running com.example.realestate.discover.AreaGroupBengaluruBoundsEnvelopeIT
+09:45:03.285 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.example.realestate.discover.AreaGroupBengaluruBoundsEnvelopeIT]: AreaGroupBengaluruBoundsEnvelopeIT does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+09:45:03.498 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.example.realestate.RealEstateApplication for test class com.example.realestate.discover.AreaGroupBengaluruBoundsEnvelopeIT
+09:45:03.528 [main] INFO tc.postgis/postgis:15-3.4 -- Creating container for image: postgis/postgis:15-3.4
+09:45:03.567 [main] INFO tc.postgis/postgis:15-3.4 -- Container postgis/postgis:15-3.4 is starting: 6ab74d170de25c4443a43d09c90352acb5e52719ede9c50d34b8491a290a59f9
+09:45:03.682 [main] WARN tc.postgis/postgis:15-3.4 -- The architecture 'amd64' for image 'postgis/postgis:15-3.4' (ID sha256:3f4a5d48e0be9580ed70ed618cd039ce57bbb2dd113053d3836e28513f1f87cd) does not match the Docker server architecture 'arm64'. This will cause the container to execute much more slowly due to emulation and may lead to timeout failures.
+09:45:07.928 [main] INFO tc.postgis/postgis:15-3.4 -- Container postgis/postgis:15-3.4 started in PT4.400198S
+09:45:07.930 [main] INFO tc.postgis/postgis:15-3.4 -- Container is started (JDBC URL: jdbc:postgresql://localhost:59885/test?loggerLevel=OFF)
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.1)
+
+2026-07-11 09:45:08.285 [main] INFO  [requestId=none] c.e.r.d.AreaGroupBengaluruBoundsEnvelopeIT - Starting AreaGroupBengaluruBoundsEnvelopeIT using Java 21.0.9 with PID 81749 (started by gouthamrao in /Users/gouthamrao/Documents/workspaces/lovable/udupi-property-explorer-worktrees/issue-1819-mukkidipeta-bounds/backend)
+2026-07-11 09:45:08.286 [main] DEBUG [requestId=none] c.e.r.d.AreaGroupBengaluruBoundsEnvelopeIT - Running with Spring Boot v3.4.1, Spring v6.2.1
+2026-07-11 09:45:08.286 [main] INFO  [requestId=none] c.e.r.d.AreaGroupBengaluruBoundsEnvelopeIT - No active profile set, falling back to 1 default profile: "default"
+2026-07-11 09:45:08.737 [main] INFO  [requestId=none] o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-07-11 09:45:08.855 [main] INFO  [requestId=none] o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 108 ms. Found 35 JPA repository interfaces.
+2026-07-11 09:45:09.483 [main] INFO  [requestId=none] org.flywaydb.core.FlywayExecutor - Database: jdbc:postgresql://localhost:59885/test?loggerLevel=OFF (PostgreSQL 15.8)
+2026-07-11 09:45:09.586 [main] INFO  [requestId=none] o.f.c.i.s.JdbcTableSchemaHistory - Schema history table "public"."flyway_schema_history" does not exist yet
+2026-07-11 09:45:09.592 [main] INFO  [requestId=none] o.f.core.internal.command.DbValidate - Successfully validated 111 migrations (execution time 00:00.057s)
+2026-07-11 09:45:09.616 [main] INFO  [requestId=none] o.f.c.i.s.JdbcTableSchemaHistory - Creating Schema History table "public"."flyway_schema_history" ...
+2026-07-11 09:45:09.805 [main] INFO  [requestId=none] o.f.c.i.c.SqlScriptCallbackFactory - Executing SQL callback: beforeMigrate - 
+2026-07-11 09:45:09.852 [main] WARN  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: wal_level is insufficient to publish logical changes (SQL State: 55000 - Error Code: 0)
+2026-07-11 09:45:09.874 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Current version of schema "public": << Empty Schema >>
+2026-07-11 09:45:09.889 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "0 - initial schema"
+2026-07-11 09:45:09.981 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "0.1 - auth rls policies"
+2026-07-11 09:45:10.021 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "1 - add processing started at to raw posts"
+2026-07-11 09:45:10.035 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "2 - create area price weekly"
+2026-07-11 09:45:10.051 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "3 - add normalized area fields"
+2026-07-11 09:45:10.065 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "4 - create area stats latest"
+2026-07-11 09:45:10.080 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "5 - add repost count to property listings"
+2026-07-11 09:45:10.090 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "6 - add area key to property listings"
+2026-07-11 09:45:10.101 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "7 - add dealer role and listing status"
+2026-07-11 09:45:10.116 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "8 - add dealer listing columns"
+2026-07-11 09:45:10.127 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "9 - create listing images notifications saved areas"
+2026-07-11 09:45:10.145 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "10 - update rls for mvp roles"
+2026-07-11 09:45:10.170 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "11 - add missing listing columns"
+2026-07-11 09:45:10.182 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "12 - add listing images unique constraint"
+2026-07-11 09:45:10.192 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "13 - add hot query indexes"
+2026-07-11 09:45:10.196 [main] WARN  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: relation "idx_property_listings_area_key" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+2026-07-11 09:45:10.198 [main] WARN  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: relation "idx_raw_posts_unprocessed" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+2026-07-11 09:45:10.200 [main] WARN  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: relation "idx_property_listings_dedupe_hash" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+2026-07-11 09:45:10.208 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "14 - add phone to profiles"
+2026-07-11 09:45:10.216 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "15 - create viewing requests"
+2026-07-11 09:45:10.231 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "16 - add insights access"
+2026-07-11 09:45:10.248 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "17 - booking index improvements"
+2026-07-11 09:45:10.261 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "18 - add listing fts vector"
+2026-07-11 09:45:10.281 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "19 - create admin audit log"
+2026-07-11 09:45:10.292 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "20 - add alerts enabled to saved areas"
+2026-07-11 09:45:10.300 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "21 - add property type to rollup tables"
+2026-07-11 09:45:10.315 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "22 - add price threshold to saved areas"
+2026-07-11 09:45:10.323 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "23 - add bedrooms to rollup tables"
+2026-07-11 09:45:10.335 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "24 - create geocode cache"
+2026-07-11 09:45:10.336 [main] WARN  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: relation "geocode_cache" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+2026-07-11 09:45:10.347 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "25 - create listing pois"
+2026-07-11 09:45:10.361 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "26 - add video url to listings"
+2026-07-11 09:45:10.367 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "27 - update rls delete policy for rejected"
+2026-07-11 09:45:10.380 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "28 - extend poi source constraint"
+2026-07-11 09:45:10.392 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "29 - add listing number"
+2026-07-11 09:45:10.423 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "30 - add rera number"
+2026-07-11 09:45:10.431 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "31 - add commercial property types"
+2026-07-11 09:45:10.441 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "32 - add commercial and rent columns"
+2026-07-11 09:45:10.459 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "33 - add seller type"
+2026-07-11 09:45:10.468 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "34 - extend rls for owner role"
+2026-07-11 09:45:10.481 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "35 - soft delete listings"
+2026-07-11 09:45:10.491 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "36 - proximity duplicate candidates"
+2026-07-11 09:45:10.503 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "37 - fix duplicate candidates status casing"
+2026-07-11 09:45:10.516 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "38 - listing transparency fields"
+2026-07-11 09:45:10.526 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "39 - price change log paise columns"
+2026-07-11 09:45:10.534 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "40 - rera possession fields"
+2026-07-11 09:45:10.542 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "41 - rename dealer to broker expand"
+2026-07-11 09:45:10.550 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "42 - rename dealer to broker schema"
+2026-07-11 09:45:10.579 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "43 - create listing status history"
+2026-07-11 09:45:10.592 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "44 - add last approved snapshot"
+2026-07-11 09:45:10.599 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "45 - add cancellation reason to viewing requests"
+2026-07-11 09:45:10.607 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "46 - add trust tier and ranking score"
+2026-07-11 09:45:10.616 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "47 - create listing verification dimension"
+2026-07-11 09:45:10.628 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "48 - create authority evidence"
+2026-07-11 09:45:10.640 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "49 - create listing complaint"
+2026-07-11 09:45:10.647 [main] WARN  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: identifier "Authenticated users can file a complaint against a listing they do not own" will be truncated to "Authenticated users can file a complaint against a listing they" (SQL State: 42622 - Error Code: 0)
+2026-07-11 09:45:10.654 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "50 - add trust columns to profiles"
+2026-07-11 09:45:10.662 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "51 - create photo hash blocklist"
+2026-07-11 09:45:10.670 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "52 - add verification asset url"
+2026-07-11 09:45:10.677 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "53 - add otp lockout columns"
+2026-07-11 09:45:10.685 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "54 - add location verify rate limit"
+2026-07-11 09:45:10.693 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "55 - add rejection reason to dimension"
+2026-07-11 09:45:10.700 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "56 - migrate commercial to granular types"
+2026-07-11 09:45:10.708 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "57 - add spatial index"
+2026-07-11 09:45:10.717 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "58 - create schools table"
+2026-07-11 09:45:10.731 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "59 - expand broker update rls policy"
+2026-07-11 09:45:10.744 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "60 - convert status enum to varchar"
+2026-07-11 09:45:10.778 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "61 - convert property type enum to varchar"
+2026-07-11 09:45:10.796 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "62 - add trust ranking sort index"
+2026-07-11 09:45:10.804 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "63 - add owner self auth evidence type"
+2026-07-11 09:45:10.814 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "64 - create identity evidence table"
+2026-07-11 09:45:10.826 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "66 - extend schools for udise import"
+2026-07-11 09:45:10.835 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "67 - extend schools add metadata columns"
+2026-07-11 09:45:10.843 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "68 - add coordinate provenance to schools"
+2026-07-11 09:45:10.851 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "69 - add prominence tier to schools"
+2026-07-11 09:45:10.869 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "70 - add area overview stats"
+2026-07-11 09:45:10.880 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "71 - cities and areas"
+2026-07-11 09:45:10.901 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "72 - area bbox city slug"
+2026-07-11 09:45:10.911 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "73 - postgis geog"
+2026-07-11 09:45:10.912 [main] WARN  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: extension "postgis" already exists, skipping (SQL State: 42710 - Error Code: 0)
+2026-07-11 09:45:10.949 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "74 - idx listing area key status created"
+2026-07-11 09:45:10.962 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "75 - idx schools geog"
+2026-07-11 09:45:10.981 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "76 - idx schools geog gist"
+2026-07-11 09:45:10.996 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "77 - area groups schema"
+2026-07-11 09:45:11.011 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "78 - seed area groups"
+2026-07-11 09:45:11.028 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "79 - add school area key"
+2026-07-11 09:45:11.115 [main] INFO  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: District 'Udupi': 20 schools, 20 assigned
+2026-07-11 09:45:11.115 [main] INFO  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: Total: 20 schools, 20 assigned
+2026-07-11 09:45:11.123 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "80 - school area key trigger"
+2026-07-11 09:45:11.125 [main] INFO  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: trigger "trg_school_area_key" for relation "schools" does not exist, skipping
+2026-07-11 09:45:11.133 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "81 - listing search outbox"
+2026-07-11 09:45:11.145 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "82 - listing search outbox error column"
+2026-07-11 09:45:11.156 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "83 - listing search outbox retry"
+2026-07-11 09:45:11.170 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "84 - add agricultural land fields"
+2026-07-11 09:45:11.178 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "85 - add listing boundary"
+2026-07-11 09:45:11.185 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "86 - expand property type constraint agricultural land"
+2026-07-11 09:45:11.198 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "87 - regional classification schema"
+2026-07-11 09:45:11.217 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "88 - city regional direction labels"
+2026-07-11 09:45:11.231 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "89 - add agri structured fields"
+2026-07-11 09:45:11.240 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "89.9 - precreate agri lower type index for tests"
+2026-07-11 09:45:11.251 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "90 - idx property listings agri live" [non-transactional]
+2026-07-11 09:45:11.253 [main] WARN  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: relation "idx_property_listings_live_lower_type_area" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+2026-07-11 09:45:11.260 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "91 - normalize agri field values"
+2026-07-11 09:45:11.276 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "92 - listing quality foundation"
+2026-07-11 09:45:11.288 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "93 - discover event"
+2026-07-11 09:45:11.299 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "94 - area intelligence snapshot"
+2026-07-11 09:45:11.312 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "95 - broker market focus"
+2026-07-11 09:45:11.323 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "96 - area demand signal"
+2026-07-11 09:45:11.336 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "97 - broker demand gap state"
+2026-07-11 09:45:11.346 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "98 - area groups description"
+2026-07-11 09:45:11.351 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "99 - seed udupi area groups description"
+2026-07-11 09:45:11.359 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "100 - add area slug to areas"
+2026-07-11 09:45:11.375 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "101 - restore udupi area groups seed"
+2026-07-11 09:45:11.385 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "102 - typed listing schema expand and backfill"
+2026-07-11 09:45:11.387 [main] INFO  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: constraint "chk_listing_listing_family" of relation "property_listings" does not exist, skipping
+2026-07-11 09:45:11.426 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "103 - residential listing fields expand"
+2026-07-11 09:45:11.445 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "104 - commercial typed write columns"
+2026-07-11 09:45:11.451 [main] WARN  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: relation "listing_suitable_uses" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+2026-07-11 09:45:11.452 [main] WARN  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: relation "idx_listing_suitable_uses_listing" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+2026-07-11 09:45:11.458 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "104.9 - precreate purpose live index for tests"
+2026-07-11 09:45:11.466 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "105 - idx property listings purpose live" [non-transactional]
+2026-07-11 09:45:11.467 [main] WARN  [requestId=none] o.f.c.i.s.DefaultSqlScriptExecutor - DB: relation "idx_property_listings_live_purpose_area" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+2026-07-11 09:45:11.483 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "106 - seed bangalore macro region mapping"
+2026-07-11 09:45:11.522 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "107 - create saved listings"
+2026-07-11 09:45:11.531 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "108 - fix mukkidipeta north emerging bounds"
+2026-07-11 09:45:11.545 [main] INFO  [requestId=none] o.f.core.internal.command.DbMigrate - Successfully applied 111 migrations to schema "public", now at version v108 (execution time 00:00.907s)
+2026-07-11 09:45:11.626 [main] INFO  [requestId=none] o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-07-11 09:45:11.670 [main] INFO  [requestId=none] org.hibernate.Version - HHH000412: Hibernate ORM core version 6.6.4.Final
+2026-07-11 09:45:11.702 [main] INFO  [requestId=none] o.h.c.i.RegionFactoryInitiator - HHH000026: Second-level cache disabled
+2026-07-11 09:45:11.917 [main] INFO  [requestId=none] o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-07-11 09:45:11.943 [main] INFO  [requestId=none] com.zaxxer.hikari.HikariDataSource - udupi-pool - Starting...
+2026-07-11 09:45:11.998 [main] INFO  [requestId=none] com.zaxxer.hikari.pool.HikariPool - udupi-pool - Added connection org.postgresql.jdbc.PgConnection@5eca6e7d
+2026-07-11 09:45:11.999 [main] INFO  [requestId=none] com.zaxxer.hikari.HikariDataSource - udupi-pool - Start completed.
+2026-07-11 09:45:12.056 [main] WARN  [requestId=none] org.hibernate.orm.deprecation - HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-07-11 09:45:12.070 [main] INFO  [requestId=none] o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [Connecting through datasource 'HikariDataSource (udupi-pool)']
+	Database driver: undefined/unknown
+	Database version: 15.8
+	Autocommit mode: undefined/unknown
+	Isolation level: undefined/unknown
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-07-11 09:45:13.155 [main] INFO  [requestId=none] o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-07-11 09:45:13.157 [main] INFO  [requestId=none] o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-07-11 09:45:13.393 [main] INFO  [requestId=none] o.s.d.j.r.query.QueryEnhancerFactory - Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-07-11 09:45:14.672 [main] INFO  [requestId=none] c.e.r.d.AreaGroupBengaluruBoundsEnvelopeIT - Started AreaGroupBengaluruBoundsEnvelopeIT in 6.702 seconds (process running for 13.419)
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 12.13 s -- in com.example.realestate.discover.AreaGroupBengaluruBoundsEnvelopeIT
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jacoco:0.8.12:report (report) @ realestate-backend ---
+[INFO] Loading execution data file /Users/gouthamrao/Documents/workspaces/lovable/udupi-property-explorer-worktrees/issue-1819-mukkidipeta-bounds/backend/target/jacoco.exec
+[INFO] Analyzed bundle 'Real Estate Backend' with 471 classes
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  15.868 s
+[INFO] Finished at: 2026-07-11T09:45:16+01:00
+[INFO] ------------------------------------------------------------------------
+EXIT_CODE:0
