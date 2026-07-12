@@ -33,6 +33,7 @@ import { PropertyTypeCardSelector } from '@/components/broker/PropertyTypeCardSe
 import { BoundaryDrawStep } from '@/components/dealer/BoundaryDrawStep';
 import { ApiError } from '@/lib/api';
 import { formatListingId } from '@/lib/listing-id';
+import { buildListingUpdatePayload } from '@/lib/editListing/buildUpdatePayload';
 import {
   COMMERCIAL_TYPES,
   FURNISHING_OPTIONS,
@@ -51,7 +52,6 @@ import {
   HOUSE_VILLA_AMENITY_OPTIONS,
 } from '@/lib/listing-constants';
 import type { PropertyType } from '@/lib/listing-constants';
-import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
 import { fromGeoJsonString, toGeoJsonString } from '@/lib/geoJsonUtils';
 import { isListingFieldVisible } from '@/lib/listingFieldConfig';
 import type { ListingFieldKey } from '@/lib/listingFieldConfig';
@@ -67,7 +67,6 @@ import {
   extractYouTubeId,
   isInstagramUrl,
   boolToTriState,
-  triStateToBool,
   validateVideoUrl,
 } from '@/lib/editListing/valueMappers';
 import {
@@ -469,130 +468,102 @@ export default function EditListing() {
   const handleStep1Save = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const bedroomsNum = bedrooms !== '' ? parseInt(bedrooms, 10) : undefined;
-    const landAreaVal = landArea != null && landArea > 0 ? landArea : undefined;
-    const builtAreaVal = builtArea != null && builtArea > 0 ? builtArea : undefined;
-
     // Unit validation is now handled by AreaField (unit is always set via Select).
     // Clear any stale errors from before the AreaField migration.
     setLandAreaUnitError('');
     setBuiltAreaUnitError('');
 
-    const carpetAreaVal = carpetArea != null && carpetArea > 0 ? carpetArea : undefined;
-
-    updateListing.mutate(
+    const payload = buildListingUpdatePayload(
       {
-        title: title.trim() || undefined,
-        description: description.trim() || undefined,
-        price: isRent ? undefined : (priceRupees ?? undefined),
-        propertyType: propertyType || undefined,
-        locality: locality.trim() || undefined,
-        landArea: landAreaVal,
-        landAreaUnit: showLandArea && landAreaVal !== undefined ? landAreaUnit : undefined,
-        // M38-13A (#1626) code-review follow-up: bedrooms and every field through
-        // fencingDone below are PRE-EXISTING type-scoped fields (see listingFieldConfig
-        // CONFIG_MAP) and must be gated the same way as the new M38-13A fields further
-        // down — otherwise a mid-edit PropertyTypeCardSelector switch (e.g.
-        // house→residential_plot, house→commercial) resends a stale prior-type value the
-        // backend's validateFamilyFields/validateResidentialFieldSet rejects with 400.
-        bedrooms: fieldVisible('bedrooms') ? bedroomsNum : undefined,
-        builtArea: builtAreaVal,
-        builtAreaUnit: showBuiltArea && builtAreaVal !== undefined ? builtAreaUnit : undefined,
-        reraNumber: (propertyType === 'apartment' || propertyType === 'house' || propertyType === 'villa'
-          || propertyType === 'residential_plot')
-          ? (reraNumber.trim() || null)
-          : undefined,
+        title,
+        description,
+        priceRupees,
+        propertyType,
+        locality,
+        landArea,
+        landAreaUnit,
+        bedrooms,
+        builtArea,
+        builtAreaUnit,
+        reraNumber,
         listingPurpose,
-        carpetArea: carpetAreaVal,
-        carpetAreaUnit: carpetAreaVal !== undefined ? carpetAreaUnit : undefined,
-        floorNumber: fieldVisible('floorNumber') ? intOrUndef(floorNumber) : undefined,
-        totalFloors: fieldVisible('totalFloors') ? intOrUndef(totalFloors) : undefined,
-        furnishingStatus: fieldVisible('furnishingStatus') ? (furnishingStatus || undefined) : undefined,
-        washrooms: fieldVisible('washrooms') ? intOrUndef(washrooms) : undefined,
-        parkingCount: fieldVisible('parkingCount') ? intOrUndef(parkingCount) : undefined,
-        roadFrontageFt: fieldVisible('roadFrontageFt') ? floatOrUndef(roadFrontageFt) : undefined,
-        commercialUsage: fieldVisible('commercialUsage') ? (commercialUsage.trim() || undefined) : undefined,
-        numberOfUnits: fieldVisible('numberOfUnits') ? intOrUndef(numberOfUnits) : undefined,
-        monthlyRent: isRent ? intOrUndef(monthlyRent) : undefined,
-        securityDepositMonths: isRent ? intOrUndef(securityDepositMonths) : undefined,
-        lockInMonths: isRent ? intOrUndef(lockInMonths) : undefined,
-        waterSource: fieldVisible('waterSource') ? (waterSource.trim() || undefined) : undefined,
-        soilType: fieldVisible('soilType') ? (soilType.trim() || undefined) : undefined,
-        roadAccess: fieldVisible('roadAccess') ? (roadAccess.trim() || undefined) : undefined,
-        cultivationStatus: fieldVisible('cultivationStatus') ? (cultivationStatus.trim() || undefined) : undefined,
-        ownershipType: fieldVisible('ownershipType') ? (ownershipType.trim() || undefined) : undefined,
-        surveyNumber: fieldVisible('surveyNumber') ? (surveyNumber.trim() || undefined) : undefined,
-        // Issue #1458 — new structured agri fields
-        landCategory: fieldVisible('landCategory') ? (landCategory || undefined) : undefined,
-        farmhouseAvailable: fieldVisible('farmhouseAvailable')
-          ? (farmhouseAvailable === 'true' ? true : farmhouseAvailable === 'false' ? false : undefined)
-          : undefined,
-        fencingDone: fieldVisible('fencingDone')
-          ? (fencingDone === 'true' ? true : fencingDone === 'false' ? false : undefined)
-          : undefined,
-        // M38-13A (#1626) — residential typed-listing fields.
-        // Every type-scoped field is gated behind fieldVisible('...') — the SAME predicate
-        // that governs rendering — so that switching PropertyTypeCardSelector mid-edit
-        // (e.g. house→apartment) never sends a stale prior-type value the backend's
-        // validateResidentialFieldSet/validateFamilyFields would reject with 400. Code
-        // review fix (post #1626 REQUEST_CHANGES): these were previously sent unconditionally.
-        bathrooms: fieldVisible('bathrooms') ? intOrUndef(bathrooms) : undefined,
-        balconies: fieldVisible('balconies') ? intOrUndef(balconies) : undefined,
-        facing: fieldVisible('facing') ? (facing || undefined) : undefined,
-        availabilityTimeline: fieldVisible('availabilityTimeline') ? (availabilityTimeline || undefined) : undefined,
-        superBuiltArea: fieldVisible('superBuiltArea') ? floatOrUndef(String(superBuiltArea ?? '')) : undefined,
-        superBuiltAreaUnit: fieldVisible('superBuiltArea') && superBuiltArea != null ? superBuiltAreaUnit : undefined,
-        propertyAge: fieldVisible('propertyAge') ? (propertyAge || undefined) : undefined,
-        residentialWaterSource: fieldVisible('residentialWaterSource') ? (residentialWaterSource || undefined) : undefined,
-        parking2wCount: fieldVisible('parking2wCount') ? intOrUndef(parking2wCount) : undefined,
-        parking4wCount: fieldVisible('parking4wCount') ? intOrUndef(parking4wCount) : undefined,
-        roadWidthFt: fieldVisible('roadWidthFt') ? floatOrUndef(roadWidthFt) : undefined,
-        plotDimensions: fieldVisible('plotDimensions') ? (plotDimensions.trim() || undefined) : undefined,
-        conversionStatus: fieldVisible('conversionStatus') ? (conversionStatus || undefined) : undefined,
-        khataNumber: fieldVisible('khataNumber') ? (khataNumber.trim() || undefined) : undefined,
-        propertyTaxPid: fieldVisible('propertyTaxPid') ? (propertyTaxPid.trim() || undefined) : undefined,
-        approvingAuthority: fieldVisible('approvingAuthority') ? (approvingAuthority.trim() || undefined) : undefined,
-        projectName: fieldVisible('projectName') ? (projectName.trim() || undefined) : undefined,
-        builderName: fieldVisible('builderName') ? (builderName.trim() || undefined) : undefined,
-        maintenancePaise: fieldVisible('maintenancePaise') ? intOrUndef(maintenancePaise) : undefined,
-        possessionStatus: fieldVisible('possessionStatus') ? (possessionStatus || undefined) : undefined,
-        maintenanceIncluded: fieldVisible('maintenanceIncluded') ? triStateToBool(maintenanceIncluded) : undefined,
-        priceNegotiable: fieldVisible('priceNegotiable') ? triStateToBool(priceNegotiable) : undefined,
-        rentNegotiable: fieldVisible('rentNegotiable') ? triStateToBool(rentNegotiable) : undefined,
-        petsAllowed: fieldVisible('petsAllowed') ? triStateToBool(petsAllowed) : undefined,
-        hasLift: fieldVisible('hasLift') ? triStateToBool(hasLift) : undefined,
-        hasPowerBackup: fieldVisible('hasPowerBackup') ? triStateToBool(hasPowerBackup) : undefined,
-        isGated: fieldVisible('isGated') ? triStateToBool(isGated) : undefined,
-        hasGarden: fieldVisible('hasGarden') ? triStateToBool(hasGarden) : undefined,
-        hasTerrace: fieldVisible('hasTerrace') ? triStateToBool(hasTerrace) : undefined,
-        hasCompound: fieldVisible('hasCompound') ? triStateToBool(hasCompound) : undefined,
-        hasServantRoom: fieldVisible('hasServantRoom') ? triStateToBool(hasServantRoom) : undefined,
-        isCornerPlot: fieldVisible('isCornerPlot') ? triStateToBool(isCornerPlot) : undefined,
-        hasBoundaryWall: fieldVisible('hasBoundaryWall') ? triStateToBool(hasBoundaryWall) : undefined,
-        isGatedLayout: fieldVisible('isGatedLayout') ? triStateToBool(isGatedLayout) : undefined,
-        hasWaterConnection: fieldVisible('hasWaterConnection') ? triStateToBool(hasWaterConnection) : undefined,
-        hasElectricityConnection: fieldVisible('hasElectricityConnection') ? triStateToBool(hasElectricityConnection) : undefined,
-        hasDrainage: fieldVisible('hasDrainage') ? triStateToBool(hasDrainage) : undefined,
-        // Multi-selects send the FINAL desired set (not a delta) — omitted when empty
-        // so a type with no applicable section doesn't wipe unrelated child rows.
-        // Also gated on fieldVisible so switching away from a type doesn't resend a
-        // stale prior-type selection the backend would reject.
-        amenities: fieldVisible('amenities') && amenities.length > 0 ? amenities : undefined,
-        specialLocationViews: fieldVisible('specialLocationViews') && specialLocationViews.length > 0 ? specialLocationViews : undefined,
-        preferredTenants: fieldVisible('preferredTenants') && preferredTenants.length > 0 ? preferredTenants : undefined,
+        carpetArea,
+        carpetAreaUnit,
+        floorNumber,
+        totalFloors,
+        furnishingStatus,
+        washrooms,
+        parkingCount,
+        roadFrontageFt,
+        commercialUsage,
+        numberOfUnits,
+        monthlyRent,
+        securityDepositMonths,
+        lockInMonths,
+        waterSource,
+        soilType,
+        roadAccess,
+        cultivationStatus,
+        ownershipType,
+        surveyNumber,
+        landCategory,
+        farmhouseAvailable,
+        fencingDone,
+        bathrooms,
+        balconies,
+        facing,
+        availabilityTimeline,
+        superBuiltArea,
+        superBuiltAreaUnit,
+        propertyAge,
+        residentialWaterSource,
+        parking2wCount,
+        parking4wCount,
+        roadWidthFt,
+        plotDimensions,
+        conversionStatus,
+        khataNumber,
+        propertyTaxPid,
+        approvingAuthority,
+        projectName,
+        builderName,
+        maintenancePaise,
+        possessionStatus,
+        maintenanceIncluded,
+        priceNegotiable,
+        rentNegotiable,
+        petsAllowed,
+        hasLift,
+        hasPowerBackup,
+        isGated,
+        hasGarden,
+        hasTerrace,
+        hasCompound,
+        hasServantRoom,
+        isCornerPlot,
+        hasBoundaryWall,
+        isGatedLayout,
+        hasWaterConnection,
+        hasElectricityConnection,
+        hasDrainage,
+        amenities,
+        specialLocationViews,
+        preferredTenants,
       },
-      {
-        onSuccess: () => {
-          toast({ title: 'Listing updated', description: 'Your listing has been saved.' });
-          if (cameFromReview) {
-            setCameFromReview(false);
-            setCurrentStep(reviewStep);
-          } else {
-            setCurrentStep(2);
-          }
-        },
-      },
+      { isRent, showLandArea, showBuiltArea, fieldVisible },
     );
+
+    updateListing.mutate(payload, {
+      onSuccess: () => {
+        toast({ title: 'Listing updated', description: 'Your listing has been saved.' });
+        if (cameFromReview) {
+          setCameFromReview(false);
+          setCurrentStep(reviewStep);
+        } else {
+          setCurrentStep(2);
+        }
+      },
+    });
   };
 
   const handleVideoUrlChange = (value: string) => {
