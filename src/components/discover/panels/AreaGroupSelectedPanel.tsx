@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
-import type { DiscoverJourney } from '@/types/discover';
+import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import { getAreaGroupContent, getLocalityDescription } from '@/lib/discoverGroupContent';
 import { ScopedSearch } from '../ScopedSearch';
 import { PanelColumn } from './_shared';

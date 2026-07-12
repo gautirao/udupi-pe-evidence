@@ -8,8 +8,7 @@ import { AreaGroupSelectedPanel } from './AreaGroupSelectedPanel';
 import { ScopedSearch } from '../ScopedSearch';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
-import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
-import type { DiscoverJourney } from '@/types/discover';
+import type { DiscoverIntent, DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import {
   matchesMacroRegion,
   getGroupMacroRegionLabel,
