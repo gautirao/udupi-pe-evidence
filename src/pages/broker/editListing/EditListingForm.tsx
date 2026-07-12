@@ -77,6 +77,7 @@ import {
 } from './chipGroups';
 import { useAgriFields } from './useAgriFields';
 import { useCommercialFields } from './useCommercialFields';
+import { useRentFields } from './useRentFields';
 
 // Issue #1458 + #1459 — derive canonical value lists from shared label maps to avoid duplication.
 // Any future addition to agriFieldLabels.ts is automatically reflected here.
@@ -177,10 +178,16 @@ export function EditListingForm({ listing }: EditListingFormProps) {
     setWashrooms, setParkingCount, setRoadFrontageFt, setCommercialUsage, setNumberOfUnits,
   } = commercial.setters;
 
-  // Rent-specific fields
-  const [monthlyRent, setMonthlyRent] = useState('');
-  const [securityDepositMonths, setSecurityDepositMonths] = useState('');
-  const [lockInMonths, setLockInMonths] = useState('');
+  // Rent-exclusive fields — Issue #1838 slice-5c: 3 rent-only fields
+  // extracted into useRentFields(). Gated purely by isRent (listingPurpose
+  // === 'rent'), independent of propertyType.
+  const rent = useRentFields();
+  const {
+    monthlyRent, securityDepositMonths, lockInMonths,
+  } = rent.values;
+  const {
+    setMonthlyRent, setSecurityDepositMonths, setLockInMonths,
+  } = rent.setters;
 
   // Agricultural land fields — Issue #1838 slice-5a: 8 agri-only fields extracted
   // into useAgriFields(). ownershipType is shared with residential and stays here.
@@ -270,9 +277,7 @@ export function EditListingForm({ listing }: EditListingFormProps) {
     setTotalFloors(listing.totalFloors != null ? String(listing.totalFloors) : '');
     setFurnishingStatus(listing.furnishingStatus ?? '');
     commercial.hydrate(listing);
-    setMonthlyRent(listing.monthlyRent != null ? String(listing.monthlyRent) : '');
-    setSecurityDepositMonths(listing.securityDepositMonths != null ? String(listing.securityDepositMonths) : '');
-    setLockInMonths(listing.lockInMonths != null ? String(listing.lockInMonths) : '');
+    rent.hydrate(listing);
     setOwnershipType(listing.ownershipType ?? '');
     agri.hydrate(listing);
     // Pre-populate boundary coords from existing agri listing
@@ -323,7 +328,7 @@ export function EditListingForm({ listing }: EditListingFormProps) {
     setAmenities(listing.amenities ?? []);
     setSpecialLocationViews(listing.specialLocationViews ?? []);
     setPreferredTenants(listing.preferredTenants ?? []);
-  }, [listing, agri.hydrate, commercial.hydrate]);
+  }, [listing, agri.hydrate, commercial.hydrate, rent.hydrate]);
 
   // Step 1 is complete when required fields match the submit gate (requiredFieldsComplete).
   // For rent listings: propertyType + monthlyRent + locality. For sale: propertyType + price + locality.
