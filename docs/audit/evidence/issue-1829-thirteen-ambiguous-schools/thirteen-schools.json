@@ -1,0 +1,249 @@
+[
+ {
+  "udise": "APIFY-BAN-ELEC-02",
+  "name": "BS International School, Electronic City",
+  "address": "Phase I, Electronics City, 229/1, S Bingipura Main Rd, Bengaluru, S.Bingipura, Karnataka 560105, India",
+  "lat": 12.8284568,
+  "lon": 77.6321322,
+  "stored_coarse": "Electronic City",
+  "stored_now": "Electronic City",
+  "corrected_by_v109": false,
+  "address_says": [
+   "S.Bingipura"
+  ],
+  "geometry_says": "Koppa Gate",
+  "d_to_stored_coarse_m": 3881,
+  "d_to_nearest_m": 3774,
+  "inside_stored_coarse_bbox": false,
+  "suspected": true,
+  "auto_correctable": false
+ },
+ {
+  "udise": "APIFY-BAN-HSRL-01",
+  "name": "Carmel Garden Public School",
+  "address": "8, 4th Ave St, Teacher's Colony, Jakkasandra, 1st Block Koramangala, Koramangala, Bengaluru, Karnataka 560034, India",
+  "lat": 12.917289,
+  "lon": 77.63203,
+  "stored_coarse": "HSR Layout",
+  "stored_now": "HSR Layout",
+  "corrected_by_v109": false,
+  "address_says": [
+   "Koramangala"
+  ],
+  "geometry_says": "Sarjapur",
+  "d_to_stored_coarse_m": 1480,
+  "d_to_nearest_m": 972,
+  "inside_stored_coarse_bbox": true,
+  "suspected": true,
+  "auto_correctable": false
+ },
+ {
+  "udise": "APIFY-BAN-HSRL-03",
+  "name": "Narayana eTechno (CBSE) School - Electronic City Phase 1",
+  "address": "Site No 8, Electronic City Phase 1, 9, Hosur Rd, nearby Maruti Suzuki Showroom, Microlayout, Garvebhavi Palya, Bengaluru, Karnataka 560068, India",
+  "lat": 12.8966245,
+  "lon": 77.6341217,
+  "stored_coarse": "HSR Layout",
+  "stored_now": "HSR Layout",
+  "corrected_by_v109": false,
+  "address_says": [
+   "Electronic City"
+  ],
+  "geometry_says": "Hongasandra",
+  "d_to_stored_coarse_m": 2062,
+  "d_to_nearest_m": 631,
+  "inside_stored_coarse_bbox": false,
+  "suspected": true,
+  "auto_correctable": false
+ },
+ {
+  "udise": "APIFY-BAN-HSRL-04",
+  "name": "ORCHIDS The International School in Haralur - CBSE - Affiliation Nu - 831418",
+  "address": "Survey No, 15, Taluk, Haralur village, Varthur Hobli, Bengaluru, Karnataka 560102, India",
+  "lat": 12.8999972,
+  "lon": 77.6653442,
+  "stored_coarse": "HSR Layout",
+  "stored_now": "HSR Layout",
+  "corrected_by_v109": false,
+  "address_says": [
+   "Varthur",
+   "Haralur"
+  ],
+  "geometry_says": "Kasavanahalli",
+  "d_to_stored_coarse_m": 2620,
+  "d_to_nearest_m": 1024,
+  "inside_stored_coarse_bbox": false,
+  "suspected": true,
+  "auto_correctable": false
+ },
+ {
+  "udise": "APIFY-BAN-HEBB-02",
+  "name": "Vivekananda ORCHIDS The International School - ICSE School in Sahakar Nagar",
+  "address": "Road, near Cafe Nosh, off Bangalore International Airport, Nti Layout, Rajiv Gandhi Nagar, Kodigehalli, Bengaluru, Karnataka 560092, India",
+  "lat": 13.068806,
+  "lon": 77.5807851,
+  "stored_coarse": "Hebbal",
+  "stored_now": "Hebbal",
+  "corrected_by_v109": false,
+  "address_says": [
+   "Kodigehalli"
+  ],
+  "geometry_says": "Vignana Kendra",
+  "d_to_stored_coarse_m": 3210,
+  "d_to_nearest_m": 672,
+  "inside_stored_coarse_bbox": false,
+  "suspected": true,
+  "auto_correctable": false
+ },
+ {
+  "udise": "APIFY-BAN-INDI-01",
+  "name": "Poornaprajna Education Centre, Indiranagar",
+  "address": "Poornaprajna Education Centre, 48, HAL 3rd Stage, Bhoomi Reddy Colony, New Tippasandra, Bengaluru, Karnataka 560075, India",
+  "lat": 12.9721576,
+  "lon": 77.656383,
+  "stored_coarse": "Indiranagar",
+  "stored_now": "Indiranagar",
+  "corrected_by_v109": false,
+  "address_says": [
+   "New Tippasandra"
+  ],
+  "geometry_says": "New Tippasandra",
+  "d_to_stored_coarse_m": 1826,
+  "d_to_nearest_m": 424,
+  "inside_stored_coarse_bbox": true,
+  "suspected": true,
+  "auto_correctable": false
+ },
+ {
+  "udise": "APIFY-BAN-JAYA-02",
+  "name": "Narayana eTechno (CBSE) School - Rk Layout",
+  "address": "Appanna Reddy Building, D No 20/5, Kanakapura Main Rd, opposite Government Play Ground, RK Layout, Yelachenahalli, Naidu Layout, Bengaluru, Karnataka 560111, India",
+  "lat": 12.9003095,
+  "lon": 77.5717347,
+  "stored_coarse": "Jayanagar",
+  "stored_now": "Jayanagar",
+  "corrected_by_v109": false,
+  "address_says": [
+   "Kanakapura"
+  ],
+  "geometry_says": "Banashankari Temple Ward",
+  "d_to_stored_coarse_m": 3641,
+  "d_to_nearest_m": 1273,
+  "inside_stored_coarse_bbox": false,
+  "suspected": true,
+  "auto_correctable": false
+ },
+ {
+  "udise": "APIFY-BAN-JAYA-03",
+  "name": "National Public School, Banashankari",
+  "address": "No.81, 3rd Cross, 60 Feet Road, Dr.Vishnuvardhan Rd, 5th Stage, Banashankari, Bengaluru, Karnataka 560061, India",
+  "lat": 12.900026,
+  "lon": 77.5276092,
+  "stored_coarse": "Jayanagar",
+  "stored_now": "Jayanagar",
+  "corrected_by_v109": false,
+  "address_says": [
+   "Banashankari"
+  ],
+  "geometry_says": "Subramanyapura",
+  "d_to_stored_coarse_m": 7693,
+  "d_to_nearest_m": 502,
+  "inside_stored_coarse_bbox": false,
+  "suspected": true,
+  "auto_correctable": false
+ },
+ {
+  "udise": "APIFY-BAN-JAYA-04",
+  "name": "RMS International School",
+  "address": "18, Kanakapura Main Rd, next to Metro cash & carry, Mango Garden Layout, Bikasipura, Bengaluru, Karnataka 560111, India",
+  "lat": 12.892054,
+  "lon": 77.5658623,
+  "stored_coarse": "Jayanagar",
+  "stored_now": "Jayanagar",
+  "corrected_by_v109": false,
+  "address_says": [
+   "Bikasipura",
+   "Kanakapura"
+  ],
+  "geometry_says": "Konanakunte",
+  "d_to_stored_coarse_m": 4753,
+  "d_to_nearest_m": 1154,
+  "inside_stored_coarse_bbox": false,
+  "suspected": true,
+  "auto_correctable": false
+ },
+ {
+  "udise": "APIFY-BAN-MARA-01",
+  "name": "EuroSchool Whitefield - CBSE School",
+  "address": "No. 36, 183, NCPR Industrial Layout, Doddanakundi Industrial Area 2, Seetharampalya, Whitefield, Bengaluru, Karnataka 560048, India",
+  "lat": 12.9856361,
+  "lon": 77.7137513,
+  "stored_coarse": "Marathahalli",
+  "stored_now": "Marathahalli",
+  "corrected_by_v109": false,
+  "address_says": [
+   "Whitefield"
+  ],
+  "geometry_says": "Hoodi",
+  "d_to_stored_coarse_m": 3291,
+  "d_to_nearest_m": 1575,
+  "inside_stored_coarse_bbox": false,
+  "suspected": true,
+  "auto_correctable": false
+ },
+ {
+  "udise": "APIFY-BAN-MARA-03",
+  "name": "Narayana eTechno (CBSE) School - KR Puram",
+  "address": "Survey no 65/1B, Main Road, Vinayaka Temple Rd, nearby Sri Muneshwara Swamy, Ayyappa Nagar, Krishnarajapuram, Bengaluru, Karnataka 560036, India",
+  "lat": 13.0041217,
+  "lon": 77.7130365,
+  "stored_coarse": "Marathahalli",
+  "stored_now": "Marathahalli",
+  "corrected_by_v109": false,
+  "address_says": [],
+  "geometry_says": "Hoodi",
+  "d_to_stored_coarse_m": 5193,
+  "d_to_nearest_m": 496,
+  "inside_stored_coarse_bbox": false,
+  "suspected": true,
+  "auto_correctable": false
+ },
+ {
+  "udise": "APIFY-BAN-SARJ-01",
+  "name": "Narayana eTechno (CBSE) School - Bellandur",
+  "address": "No 338, RR Dwithi Square, behind SOBHA MARVELLA APARTMENT, Green Glen Layout, Bellandur, Bengaluru, Karnataka 560103, India",
+  "lat": 12.9267614,
+  "lon": 77.673367,
+  "stored_coarse": "Sarjapur Road",
+  "stored_now": "Sarjapur Road",
+  "corrected_by_v109": false,
+  "address_says": [
+   "Bellandur"
+  ],
+  "geometry_says": "Bellandur",
+  "d_to_stored_coarse_m": 1769,
+  "d_to_nearest_m": 1322,
+  "inside_stored_coarse_bbox": true,
+  "suspected": true,
+  "auto_correctable": false
+ },
+ {
+  "udise": "APIFY-BAN-SARJ-02",
+  "name": "ORCHIDS The International School - CBSE School Sarjapur Road - Affiliation No. 830782",
+  "address": "Survey no. 19, 13, Ambalipura - Sarjapur Rd, beside Springfield Apartments, Ambalipura, Hobli, Vathur, Bengaluru, Karnataka 560102, India",
+  "lat": 12.9170635,
+  "lon": 77.6704478,
+  "stored_coarse": "Sarjapur Road",
+  "stored_now": "Sarjapur Road",
+  "corrected_by_v109": false,
+  "address_says": [
+   "Sarjapur"
+  ],
+  "geometry_says": "Lakeview Residency",
+  "d_to_stored_coarse_m": 1595,
+  "d_to_nearest_m": 858,
+  "inside_stored_coarse_bbox": true,
+  "suspected": true,
+  "auto_correctable": false
+ }
+]

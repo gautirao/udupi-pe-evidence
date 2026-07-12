@@ -513,4 +513,105 @@ class SchoolRepositoryTest {
                 .as("a school with a NULL area_key must never be in_scope=true")
                 .isFalse();
     }
+
+    // ── findByAreaKey / findPopularByAreaKey — issue #1829 AC14 ──────────────────────────────
+
+    /**
+     * AC14 (code review cycle 2, issue #1829): a school whose ONLY coverage row for an area is
+     * {@code relationship_type='nearby'} must appear in NEITHER {@link SchoolRepository#findByAreaKey}
+     * NOR {@link SchoolRepository#findPopularByAreaKey} — 'nearby' is deliberately excluded from
+     * {@link SchoolRepository#COUNTED_RELATIONSHIP_TYPES_SQL} (the same positive list the area
+     * badge count uses), and must never leak into the by-area list either.
+     */
+    @Test
+    @DisplayName("#1829 AC14: a school with ONLY `nearby` coverage for an area appears in neither findByAreaKey nor findPopularByAreaKey")
+    void findByAreaKeyAndFindPopularByAreaKey_excludeSchoolWithOnlyNearbyCoverage() {
+        String areaKey = "IN|KA|Bengaluru|Hebbal";
+        String otherAreaKey = "IN|KA|Bengaluru|Koramangala";
+        String schoolId = "10000000-0000-0000-0000-000000005001";
+
+        // The school's OWN canonical area is Koramangala, not Hebbal — its only relationship to
+        // Hebbal is the manually-inserted 'nearby' row below (never 'contained' or 'primary').
+        insertSchoolWithDistrictAndAreaKey(
+                schoolId, "NearbyOnly Test School", 13.02, 77.55, "Bengaluru", otherAreaKey);
+        jdbc.update("UPDATE schools SET prominence_tier = 'notable' WHERE id = ?::uuid", schoolId);
+
+        // relationship_type='nearby' requires a non-null distance_meters (V110 CHECK constraint).
+        jdbc.update(
+                "INSERT INTO school_discover_area_coverage "
+                        + "(school_id, curated_area_key, relationship_type, distance_meters, source) "
+                        + "VALUES (?::uuid, ?, 'nearby', 500.0, 'proximity_backfill')",
+                schoolId, areaKey);
+
+        List<SchoolRepository.AreaSchoolProjection> byAreaResults =
+                schoolRepository.findByAreaKey(areaKey, List.of(), List.of(), 0, 1000);
+        assertThat(byAreaResults.stream().map(SchoolRepository.AreaSchoolProjection::getId).toList())
+                .as("a school with only `nearby` coverage must never appear in findByAreaKey")
+                .doesNotContain(UUID.fromString(schoolId));
+
+        List<SchoolRepository.AreaSchoolProjection> popularResults =
+                schoolRepository.findPopularByAreaKey(areaKey, 1000);
+        assertThat(popularResults.stream().map(SchoolRepository.AreaSchoolProjection::getId).toList())
+                .as("a school with only `nearby` coverage must never appear in findPopularByAreaKey")
+                .doesNotContain(UUID.fromString(schoolId));
+
+        // Independent cross-check: the area badge's coverage-based count (same positive
+        // relationship_type list) must also be zero for this school+area pair.
+        Integer badgeCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM school_discover_area_coverage c "
+                        + "WHERE c.school_id = ?::uuid AND c.curated_area_key = ? "
+                        + "AND c.relationship_type IN ('contained','primary','reviewed_override')",
+                Integer.class, schoolId, areaKey);
+        assertThat(badgeCount)
+                .as("a school with only `nearby` coverage must never be counted toward the area badge")
+                .isZero();
+    }
+
+    /**
+     * Positive counterpart to {@link #findByAreaKeyAndFindPopularByAreaKey_excludeSchoolWithOnlyNearbyCoverage}:
+     * a school whose ONLY coverage row for a curated area is {@code relationship_type='reviewed_override'}
+     * (a manually curated inclusion, {@code source='manual_review'}) must appear in
+     * {@link SchoolRepository#findByAreaKey} AND be counted toward the area badge.
+     *
+     * <p>Before this test, {@code reviewed_override} had ZERO behavioural coverage anywhere in the
+     * suite -- that arm of {@link SchoolRepository#COUNTED_RELATIONSHIP_TYPES_SQL} was defended only
+     * by a constant-reflection guard ({@code AreaSummaryServiceCoverageCountTest}), so a silent drop
+     * of {@code reviewed_override} from the counted list would not have failed any behavioural test.
+     */
+    @Test
+    @DisplayName("#1829: a school with ONLY `reviewed_override` coverage for an area IS returned by findByAreaKey and IS counted by the badge")
+    void findByAreaKey_includesSchoolWithOnlyReviewedOverrideCoverage_andCountsTowardBadge() {
+        String areaKey = "IN|KA|Bengaluru|Hebbal";
+        String otherAreaKey = "IN|KA|Bengaluru|Koramangala";
+        String schoolId = "10000000-0000-0000-0000-000000005002";
+
+        // The school's OWN canonical area is Koramangala, not Hebbal -- its only relationship to
+        // Hebbal is the manually-curated 'reviewed_override' row below (never 'contained' or
+        // 'primary'), proving the coverage-table join -- not schools.area_key -- drives inclusion.
+        insertSchoolWithDistrictAndAreaKey(
+                schoolId, "ReviewedOverride Test School", 13.02, 77.55, "Bengaluru", otherAreaKey);
+
+        jdbc.update(
+                "INSERT INTO school_discover_area_coverage "
+                        + "(school_id, curated_area_key, relationship_type, source) "
+                        + "VALUES (?::uuid, ?, 'reviewed_override', 'manual_review')",
+                schoolId, areaKey);
+
+        List<SchoolRepository.AreaSchoolProjection> byAreaResults =
+                schoolRepository.findByAreaKey(areaKey, List.of(), List.of(), 0, 1000);
+        assertThat(byAreaResults.stream().map(SchoolRepository.AreaSchoolProjection::getId).toList())
+                .as("a school with only `reviewed_override` coverage must be returned by findByAreaKey")
+                .contains(UUID.fromString(schoolId));
+
+        // Independent cross-check: the area badge's coverage-based count (same positive
+        // relationship_type list) must also count this school for this area.
+        Integer badgeCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM school_discover_area_coverage c "
+                        + "WHERE c.school_id = ?::uuid AND c.curated_area_key = ? "
+                        + "AND c.relationship_type IN ('contained','primary','reviewed_override')",
+                Integer.class, schoolId, areaKey);
+        assertThat(badgeCount)
+                .as("a school with only `reviewed_override` coverage must be counted toward the area badge")
+                .isEqualTo(1);
+    }
 }

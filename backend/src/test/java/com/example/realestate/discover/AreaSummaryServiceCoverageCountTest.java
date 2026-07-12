@@ -1,13 +1,17 @@
 package com.example.realestate.discover;
 
+import com.example.realestate.school.SchoolRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.jdbc.core.RowMapper;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.sql.ResultSet;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -74,6 +78,71 @@ class AreaSummaryServiceCoverageCountTest {
                 .contains("IN ('contained','primary','reviewed_override')")
                 .doesNotContain("<>")
                 .doesNotContain("!=");
+    }
+
+    @Test
+    @DisplayName("#1829 drift guard: the counted relationship-type list is IDENTICAL between "
+            + "AreaSummaryService's badge count and SchoolRepository's by-area/popular list query")
+    void countedRelationshipTypes_matchBetweenBadgeCountAndListRepository() throws Exception {
+        String subquery = readPrivateStaticString("SCHOOL_COUNT_SUBQUERY");
+
+        Field repositoryField = SchoolRepository.class.getDeclaredField("COUNTED_RELATIONSHIP_TYPES_SQL");
+        repositoryField.setAccessible(true);
+        String repositoryList = (String) repositoryField.get(null);
+
+        // Neither copy may use the negative "<> 'nearby'" / "!= 'nearby'" form. A negative form
+        // is default-ALLOW: a future new relationship_type would silently start being counted
+        // toward the badge (or listed) AND would stop matching idx_school_coverage_counted's
+        // positive partial-index predicate (V110), causing a silent seq-scan-or-wrong-count split
+        // instead of the deliberate, reviewed positive allow-list.
+        assertThat(subquery)
+                .as("AreaSummaryService.SCHOOL_COUNT_SUBQUERY must never use the negative exclusion form")
+                .doesNotContain("<> 'nearby'")
+                .doesNotContain("!= 'nearby'");
+        assertThat(repositoryList)
+                .as("SchoolRepository.COUNTED_RELATIONSHIP_TYPES_SQL must never use the negative exclusion form")
+                .doesNotContain("<> 'nearby'")
+                .doesNotContain("!= 'nearby'");
+
+        // The badge (SCHOOL_COUNT_SUBQUERY) and the by-area/popular LIST queries
+        // (SchoolRepository.COUNTED_RELATIONSHIP_TYPES_SQL, used by findByAreaKey and
+        // findPopularByAreaKey) are two hand-maintained copies of the SAME predicate — nothing in
+        // production enforces they stay aligned beyond a comment-documented convention. If they
+        // ever drift, the badge and the list silently disagree again: the precise defect #1829
+        // fixed. Asserting the repository's parenthesized list appears verbatim, immediately
+        // after "IN ", inside the service's subquery proves both the relationship-type SET and
+        // its POSITIVE-IN-LIST form are identical between the two call sites.
+        assertThat(subquery)
+                .as("AreaSummaryService's badge-count subquery must contain SchoolRepository's "
+                        + "COUNTED_RELATIONSHIP_TYPES_SQL verbatim as its IN-list -- if these ever drift, "
+                        + "the area badge and the by-area/popular school lists will silently disagree again")
+                .contains("IN " + repositoryList);
+
+        // The above only proves the CONSTANT is consistent with itself. It says nothing about
+        // whether findByAreaKey/findPopularByAreaKey's SHIPPED @Query SQL actually USES that
+        // constant -- someone could inline a literal relationship-type list into either @Query
+        // (e.g. dropping 'reviewed_override') while leaving COUNTED_RELATIONSHIP_TYPES_SQL
+        // untouched, and every assertion above would stay green while the badge and the list
+        // silently diverge again (the precise defect #1829 fixed). So reflect the actual
+        // shipped @Query annotation VALUES here too -- the annotation value is a compile-time
+        // constant, so reflection sees SchoolRepository's fully concatenated SQL, not a copy.
+        Method findByAreaKey = SchoolRepository.class.getMethod(
+                "findByAreaKey", String.class, List.class, List.class, int.class, int.class);
+        String findByAreaKeySql = findByAreaKey.getAnnotation(Query.class).value();
+        assertThat(findByAreaKeySql)
+                .as("SchoolRepository#findByAreaKey's SHIPPED @Query SQL must actually use "
+                        + "COUNTED_RELATIONSHIP_TYPES_SQL as its IN-list, not an inlined literal copy "
+                        + "that could silently drift from it")
+                .contains("IN " + repositoryList);
+
+        Method findPopularByAreaKey = SchoolRepository.class.getMethod(
+                "findPopularByAreaKey", String.class, int.class);
+        String findPopularByAreaKeySql = findPopularByAreaKey.getAnnotation(Query.class).value();
+        assertThat(findPopularByAreaKeySql)
+                .as("SchoolRepository#findPopularByAreaKey's SHIPPED @Query SQL must actually use "
+                        + "COUNTED_RELATIONSHIP_TYPES_SQL as its IN-list, not an inlined literal copy "
+                        + "that could silently drift from it")
+                .contains("IN " + repositoryList);
     }
 
     @Test

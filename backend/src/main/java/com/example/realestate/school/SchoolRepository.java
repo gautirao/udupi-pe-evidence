@@ -16,6 +16,21 @@ import java.util.UUID;
 public interface SchoolRepository extends JpaRepository<School, UUID> {
 
     /**
+     * The positive {@code relationship_type} IN-list that determines which
+     * {@code school_discover_area_coverage} rows count as "this school is surfaced under this
+     * curated area". Kept CHARACTER-IDENTICAL to {@code AreaSummaryService.SCHOOL_COUNT_SUBQUERY}'s
+     * WHERE clause (the area badge count) — {@link #findByAreaKey} and
+     * {@link #findPopularByAreaKey} (the by-area/popular LIST) filter through this SAME constant
+     * so the two queries cannot drift from each other, and must be kept in lockstep with
+     * {@code AreaSummaryService} by hand (issue #1829 AC13: list and badge must agree).
+     *
+     * <p>Deliberately a POSITIVE list, never a negative form like {@code <> 'nearby'}: negative
+     * forms are default-allow and would silently start counting/listing a future new
+     * {@code relationship_type} value.
+     */
+    String COUNTED_RELATIONSHIP_TYPES_SQL = "('contained','primary','reviewed_override')";
+
+    /**
      * Autocomplete search: finds schools whose name contains the query string (case-insensitive).
      * Results are limited by the provided {@link Pageable}.
      */
@@ -285,76 +300,73 @@ public interface SchoolRepository extends JpaRepository<School, UUID> {
     int countByAreaKey(@Param("areaKey") String areaKey);
 
     /**
-     * Returns notable schools assigned to the given {@code areaKey} via FK matching.
+     * Returns notable schools whose CURATED COVERAGE includes the given {@code areaKey}.
      *
-     * <p>Query shape: {@code FROM schools s WHERE s.area_key = :areaKey AND s.prominence_tier = 'notable'
-     * ORDER BY s.name ASC, s.id ASC}. This uses the deterministic area_key FK assignment from
-     * the V79 migration (nearest_configured_area_within_district algorithm).
+     * <p>Pre-#1829 this queried {@code schools.area_key} directly (a correct mirror under
+     * #1828's PR1). #1829's V112 breaks that mirror on purpose, so this now joins through
+     * {@code school_discover_area_coverage} using {@link #COUNTED_RELATIONSHIP_TYPES_SQL} — the
+     * SAME positive relationship_type list as {@code AreaSummaryService.SCHOOL_COUNT_SUBQUERY}
+     * (the area badge count) — so this LIST and that COUNT can never disagree (AC13). See
+     * {@link #findByAreaKey} for the full rationale.
      *
      * <p>An empty result does NOT signal whether the area exists; callers must use {@code countByAreaKey}
      * separately to distinguish "area not found" (404) from "area with no notable schools" (200 empty).
      *
      * <p>Results are ordered {@code s.name ASC, s.id ASC} for stable, deterministic output.
      *
-     * @param areaKey pipe-separated area key (e.g. "IN|KA|Udupi|Manipal")
+     * @param areaKey pipe-separated curated area key (e.g. "IN|KA|Udupi|Manipal")
      * @param limit   maximum number of results to return
-     * @return notable schools assigned to this area
+     * @return notable schools whose curated coverage includes this area
      */
-    @Query(value = """
-            SELECT
-                s.id,
-                s.name,
-                s.board_type      AS "boardType",
-                s.board           AS "board",
-                s.latitude,
-                s.longitude,
-                s.address,
-                s.prominence_tier AS "prominenceTier",
-                s.school_category AS "schoolCategory"
-            FROM schools s
-            WHERE s.area_key = :areaKey
-              AND s.prominence_tier = 'notable'
-            ORDER BY s.name ASC, s.id ASC
-            LIMIT :limit
-            """, nativeQuery = true)
+    @Query(value = "SELECT s.id, s.name, s.board_type AS \"boardType\", s.board AS \"board\", "
+            + "s.latitude, s.longitude, s.address, s.prominence_tier AS \"prominenceTier\", "
+            + "s.school_category AS \"schoolCategory\" "
+            + "FROM schools s "
+            + "WHERE EXISTS (SELECT 1 FROM school_discover_area_coverage c "
+            + "WHERE c.school_id = s.id AND c.curated_area_key = :areaKey "
+            + "AND c.relationship_type IN " + COUNTED_RELATIONSHIP_TYPES_SQL + ") "
+            + "AND s.prominence_tier = 'notable' "
+            + "ORDER BY s.name ASC, s.id ASC "
+            + "LIMIT :limit", nativeQuery = true)
     List<AreaSchoolProjection> findPopularByAreaKey(
             @Param("areaKey") String areaKey,
             @Param("limit") int limit);
 
     /**
-     * Returns schools assigned to {@code areaKey} via FK matching,
-     * with optional board and category filters. Does NOT filter by prominence_tier.
+     * Returns schools whose CURATED COVERAGE (issue #1828/#1829's
+     * {@code school_discover_area_coverage} junction table) includes {@code areaKey}, with
+     * optional board and category filters. Does NOT filter by prominence_tier.
      *
-     * <p>Uses {@code schools.area_key} FK for deterministic assignment (from V79 migration).
+     * <p>Pre-#1829 this queried {@code schools.area_key} (canonical locality) directly, which was
+     * a correct MIRROR of the coverage table under #1828's PR1 (pure mirror, only 'primary' rows
+     * existed). #1829's V112 breaks that mirror on purpose (2 schools' canonical locality now
+     * differs from their curated coverage; 3 schools gain EXTRA curated coverage beyond their own
+     * area) — so this method now joins through {@code school_discover_area_coverage} using
+     * {@link #COUNTED_RELATIONSHIP_TYPES_SQL}, the SAME positive relationship_type list as
+     * {@code AreaSummaryService.SCHOOL_COUNT_SUBQUERY} (the area badge count), so this LIST and
+     * that COUNT can never disagree (AC13).
      *
      * <p>Board and category filters are applied only when the respective lists are non-empty.
      * An empty {@code boards} or {@code categories} list means "no filter on that dimension".
      *
-     * @param areaKey    pipe-separated area key (e.g. "IN|KA|Udupi|Manipal")
+     * @param areaKey    pipe-separated curated area key (e.g. "IN|KA|Udupi|Manipal")
      * @param boards     board values to include (empty = all boards)
      * @param categories category values to include (empty = all categories)
      * @param offset     pagination offset
      * @param limit      page size (clamped by caller to [1, 50])
-     * @return schools assigned to this area matching all filters
+     * @return schools whose curated coverage includes this area, matching all filters
      */
-    @Query(value = """
-            SELECT
-                s.id,
-                s.name,
-                s.board_type      AS "boardType",
-                s.board           AS "board",
-                s.latitude,
-                s.longitude,
-                s.address,
-                s.prominence_tier AS "prominenceTier",
-                s.school_category AS "schoolCategory"
-            FROM schools s
-            WHERE s.area_key = :areaKey
-              AND (:#{#boards.isEmpty()} = true  OR upper(s.board) IN :boards)
-              AND (:#{#categories.isEmpty()} = true OR s.school_category IN :categories)
-            ORDER BY s.name ASC, s.id ASC
-            LIMIT :limit OFFSET :offset
-            """, nativeQuery = true)
+    @Query(value = "SELECT s.id, s.name, s.board_type AS \"boardType\", s.board AS \"board\", "
+            + "s.latitude, s.longitude, s.address, s.prominence_tier AS \"prominenceTier\", "
+            + "s.school_category AS \"schoolCategory\" "
+            + "FROM schools s "
+            + "WHERE EXISTS (SELECT 1 FROM school_discover_area_coverage c "
+            + "WHERE c.school_id = s.id AND c.curated_area_key = :areaKey "
+            + "AND c.relationship_type IN " + COUNTED_RELATIONSHIP_TYPES_SQL + ") "
+            + "AND (:#{#boards.isEmpty()} = true  OR upper(s.board) IN :boards) "
+            + "AND (:#{#categories.isEmpty()} = true OR s.school_category IN :categories) "
+            + "ORDER BY s.name ASC, s.id ASC "
+            + "LIMIT :limit OFFSET :offset", nativeQuery = true)
     List<AreaSchoolProjection> findByAreaKey(
             @Param("areaKey") String areaKey,
             @Param("boards") List<String> boards,

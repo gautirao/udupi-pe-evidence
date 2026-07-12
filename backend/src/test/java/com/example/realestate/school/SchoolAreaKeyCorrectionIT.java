@@ -19,6 +19,8 @@ import org.testcontainers.utility.DockerImageName;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -100,6 +102,12 @@ class SchoolAreaKeyCorrectionIT {
     private static final String V109_CLASSPATH_LOCATION =
             "db/migration/V109__correct_bengaluru_school_area_keys.sql";
 
+    // ── #1829 (AC7) — the truthful destination locality Narayana/Bellandur moves to under V112,
+    //    and the curated area it retains `contained` coverage of ────────────────────────────────
+    private static final String V112_CLASSPATH_LOCATION =
+            "db/migration/V112__resolve_thirteen_ambiguous_school_attributions.sql";
+    private static final String FINE_BELLANDUR = "IN|KA|Bengaluru|Bellandur";
+
     /**
      * Loads the REAL {@code V109__correct_bengaluru_school_area_keys.sql} file from the
      * classpath and executes it verbatim against the fixture data, AFTER the coarse pre-fix
@@ -126,6 +134,27 @@ class SchoolAreaKeyCorrectionIT {
                     "Failed to load " + V109_CLASSPATH_LOCATION + " for regression test", e);
         }
         jdbc.execute(sql);
+    }
+
+    /**
+     * Loads and executes the REAL {@code V112__resolve_thirteen_ambiguous_school_attributions.sql}
+     * file from the classpath (#1829, AC7) — never a Java mirror. Used ONLY by
+     * {@link #needsManualSchool_bellandur_isMovedByV112_whileWhitefieldRemainsUnchangedControl()}
+     * to prove that the "NEEDS-MANUAL... unchanged" control this class has asserted since #1737
+     * is updated DELIBERATELY, not silently, once a later PR (#1829) makes a reviewed ruling on
+     * that exact school.
+     */
+    private void applyV112Correction() {
+        jdbc.execute(loadClasspathSql(V112_CLASSPATH_LOCATION));
+    }
+
+    private static String loadClasspathSql(String location) {
+        try {
+            return StreamUtils.copyToString(
+                    new ClassPathResource(location).getInputStream(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to load " + location + " for regression test", e);
+        }
     }
 
     @BeforeEach
@@ -205,11 +234,11 @@ class SchoolAreaKeyCorrectionIT {
         assertThat(areaKeyOf(ORCHIDS_PANATHUR)).isEqualTo(FINE_PANATHUR);
     }
 
-    // ── AC3 (assert_both_directions): NEEDS-MANUAL schools are left UNCHANGED ─────────────────
+    // ── AC3 (assert_both_directions): NEEDS-MANUAL schools are left UNCHANGED BY V109 ─────────
 
     @Test
-    @DisplayName("AC3: EuroSchool Whitefield and Narayana eTechno Bellandur (NEEDS-MANUAL) are UNCHANGED")
-    void needsManualSchools_remainUnchanged_provingNoWholesaleRederivation() {
+    @DisplayName("AC3: EuroSchool Whitefield and Narayana eTechno Bellandur are UNCHANGED by V109 (not in its correction set)")
+    void needsManualSchools_remainUnchanged_byV109_provingNoWholesaleRederivation() {
         applyV109Correction();
 
         assertThat(areaKeyOf(EUROSCHOOL_WHITEFIELD))
@@ -218,6 +247,38 @@ class SchoolAreaKeyCorrectionIT {
         assertThat(areaKeyOf(NARAYANA_BELLANDUR))
                 .as("Narayana eTechno Bellandur must stay Sarjapur Road — not in V109's correction set")
                 .isEqualTo(COARSE_SARJAPUR_ROAD);
+    }
+
+    // ── #1829 AC7 — the control updated DELIBERATELY, not silently ────────────────────────────
+    // Narayana eTechno Bellandur was an "unchanged NEEDS-MANUAL control" for V109 (proving #1737
+    // did not silently re-derive everything). #1829 (V112) makes a reviewed HIGH_CONFIDENCE
+    // ruling on this EXACT school — address and geometry agree on Bellandur — so this control is
+    // updated deliberately to assert the truthful post-V112 end state, while EuroSchool
+    // Whitefield remains completely untouched by EITHER migration, preserving the original guard.
+
+    @Test
+    @DisplayName("#1829 AC7: after V112, Narayana/Bellandur moves to its truthful locality and keeps `contained` coverage of Sarjapur Road; EuroSchool Whitefield remains an unchanged control")
+    void needsManualSchool_bellandur_isMovedByV112_whileWhitefieldRemainsUnchangedControl() {
+        applyV109Correction();
+        applyV112Correction();
+
+        assertThat(areaKeyOf(NARAYANA_BELLANDUR))
+                .as("Narayana/Bellandur's canonical locality is corrected by V112 (#1829, HIGH_CONFIDENCE)")
+                .isEqualTo(FINE_BELLANDUR);
+
+        List<Map<String, Object>> containedAtSarjapurRoad = jdbc.queryForList(
+                "SELECT c.relationship_type, c.source FROM school_discover_area_coverage c "
+                        + "JOIN public.schools s ON s.id = c.school_id "
+                        + "WHERE s.udise_code = ? AND c.curated_area_key = ?",
+                NARAYANA_BELLANDUR, COARSE_SARJAPUR_ROAD);
+        assertThat(containedAtSarjapurRoad)
+                .as("Narayana/Bellandur must retain `contained` coverage of Sarjapur Road — truthful locality without losing the curated badge")
+                .hasSize(1);
+        assertThat(containedAtSarjapurRoad.get(0).get("relationship_type")).isEqualTo("contained");
+
+        assertThat(areaKeyOf(EUROSCHOOL_WHITEFIELD))
+                .as("EuroSchool Whitefield remains completely unchanged by V109 AND V112 — the guard still stands")
+                .isEqualTo(COARSE_MARATHAHALLI);
     }
 
     // ── Mangalore schools are untouched by a Bengaluru-scoped correction ──────────────────────
