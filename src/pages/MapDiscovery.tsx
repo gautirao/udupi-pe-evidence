@@ -42,6 +42,7 @@ import { CityNotSupported } from '@/components/discover/CityNotSupported';
 import { MapStatsBar, MarkersTruncationNotice } from '@/components/discover/MapStatsBar';
 import { MapEmptyGuidance } from '@/components/discover/MapEmptyGuidance';
 import { useDiscoverInteractionState } from '@/features/discover/state/useDiscoverInteractionState';
+import { useReducedMotion } from '@/features/discover/state/useReducedMotion';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
@@ -1237,18 +1238,8 @@ export default function MapDiscovery() {
   }, []);
 
   // Issue #1808 §8 — reduced-motion detection for the guidance ring/nudge.
-  // JS-driven (not CSS-only) so behaviour is deterministically testable; the
-  // CSS @media (prefers-reduced-motion: reduce) fallback in index.css is
-  // defense-in-depth for the same rule.
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setPrefersReducedMotion(mql.matches);
-    const handleChange = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
-    mql.addEventListener('change', handleChange);
-    return () => mql.removeEventListener('change', handleChange);
-  }, []);
+  // Issue #1824 Slice S2a — extracted to useReducedMotion (behaviour-preserving).
+  const prefersReducedMotion = useReducedMotion();
 
   // highlightedAreaKeys now lives in useDiscoverInteractionState above (Issue #1824 S1).
   // Issue #1806 (FIX-5d) — non-splittable area-cluster chip click → highlight the
