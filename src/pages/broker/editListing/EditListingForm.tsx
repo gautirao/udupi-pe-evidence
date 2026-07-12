@@ -75,6 +75,7 @@ import {
   PARKING_CHIP_OPTIONS,
   FLOORS_CHIP_OPTIONS,
 } from './chipGroups';
+import { useAgriFields } from './useAgriFields';
 
 // Issue #1458 + #1459 — derive canonical value lists from shared label maps to avoid duplication.
 // Any future addition to agriFieldLabels.ts is automatically reflected here.
@@ -173,18 +174,18 @@ export function EditListingForm({ listing }: EditListingFormProps) {
   const [securityDepositMonths, setSecurityDepositMonths] = useState('');
   const [lockInMonths, setLockInMonths] = useState('');
 
-  // Agricultural land fields
-  const [waterSource, setWaterSource] = useState('');
-  const [soilType, setSoilType] = useState('');
-  const [roadAccess, setRoadAccess] = useState('');
-  const [cultivationStatus, setCultivationStatus] = useState('');
+  // Agricultural land fields — Issue #1838 slice-5a: 8 agri-only fields extracted
+  // into useAgriFields(). ownershipType is shared with residential and stays here.
+  const agri = useAgriFields();
+  const {
+    waterSource, soilType, roadAccess, cultivationStatus,
+    surveyNumber, landCategory, farmhouseAvailable, fencingDone,
+  } = agri.values;
+  const {
+    setWaterSource, setSoilType, setRoadAccess, setCultivationStatus,
+    setSurveyNumber, setLandCategory, setFarmhouseAvailable, setFencingDone,
+  } = agri.setters;
   const [ownershipType, setOwnershipType] = useState('');
-  const [surveyNumber, setSurveyNumber] = useState('');
-  // Issue #1458 — new structured agri fields
-  const [landCategory, setLandCategory] = useState('');
-  // '' = not specified; 'true'/'false' for Select binding
-  const [farmhouseAvailable, setFarmhouseAvailable] = useState('');
-  const [fencingDone, setFencingDone] = useState('');
   // Agricultural plot boundary — [lat, lng][] coords from DrawControl
   const [boundaryCoords, setBoundaryCoords] = useState<[number, number][]>([]);
 
@@ -268,24 +269,8 @@ export function EditListingForm({ listing }: EditListingFormProps) {
     setMonthlyRent(listing.monthlyRent != null ? String(listing.monthlyRent) : '');
     setSecurityDepositMonths(listing.securityDepositMonths != null ? String(listing.securityDepositMonths) : '');
     setLockInMonths(listing.lockInMonths != null ? String(listing.lockInMonths) : '');
-    setWaterSource(listing.waterSource ?? '');
-    setSoilType(listing.soilType ?? '');
-    setRoadAccess(listing.roadAccess ?? '');
-    setCultivationStatus(listing.cultivationStatus ?? '');
     setOwnershipType(listing.ownershipType ?? '');
-    setSurveyNumber(listing.surveyNumber ?? '');
-    // Issue #1458 — pre-populate new structured agri fields
-    setLandCategory(listing.landCategory ?? '');
-    setFarmhouseAvailable(
-      listing.farmhouseAvailable === true ? 'true'
-        : listing.farmhouseAvailable === false ? 'false'
-        : '',
-    );
-    setFencingDone(
-      listing.fencingDone === true ? 'true'
-        : listing.fencingDone === false ? 'false'
-        : '',
-    );
+    agri.hydrate(listing);
     // Pre-populate boundary coords from existing agri listing
     if (listing.boundary) {
       setBoundaryCoords(fromGeoJsonString(listing.boundary));
@@ -334,7 +319,7 @@ export function EditListingForm({ listing }: EditListingFormProps) {
     setAmenities(listing.amenities ?? []);
     setSpecialLocationViews(listing.specialLocationViews ?? []);
     setPreferredTenants(listing.preferredTenants ?? []);
-  }, [listing]);
+  }, [listing, agri.hydrate]);
 
   // Step 1 is complete when required fields match the submit gate (requiredFieldsComplete).
   // For rent listings: propertyType + monthlyRent + locality. For sale: propertyType + price + locality.
