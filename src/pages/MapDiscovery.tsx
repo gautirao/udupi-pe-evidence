@@ -45,6 +45,7 @@ import { useDiscoverInteractionState } from '@/features/discover/state/useDiscov
 import { useReducedMotion } from '@/features/discover/state/useReducedMotion';
 import { useRegionGuideState } from '@/features/discover/state/useRegionGuideState';
 import { useAreaSearchState } from '@/features/discover/state/useAreaSearchState';
+import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSearchState';
 import { resolveMarkerListings } from '@/features/discover/map/resolveMarkerListings';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
@@ -1083,8 +1084,14 @@ export default function MapDiscovery() {
     urlState.filters.agriWaterSource,
   ]);
 
-  const [searchQuery, setSearchQuery] = useState(() => urlState.q);
-  const [debouncedSearch, setDebouncedSearch] = useState(() => urlState.q);
+  // Issue #1824 Slice S4 — search-keyword state (searchQuery/debouncedSearch,
+  // reverse URL-sync, 250ms debounce, handleSearchChange) now lives in
+  // useDiscoverSearchState. See the hook's header comment for the KNOWN,
+  // INTENTIONAL split-brain (debouncedSearch drives badge+markers here;
+  // urlState.q drives ActiveContextChips) — do NOT unify.
+  const { searchQuery, debouncedSearch, handleSearchChange } =
+    useDiscoverSearchState({ urlQ: urlState.q, setUrlSearch: urlActions.setSearchQuery });
+
   const [nearSchoolOpen, setNearSchoolOpen] = useState(false);
 
   // Issue #1373 — selected agri polygon listing for right-panel stub (#1374 content).
@@ -1287,28 +1294,6 @@ export default function MapDiscovery() {
       if (bboxTimerRef.current) clearTimeout(bboxTimerRef.current);
     };
   }, []);
-
-  // Sync local searchQuery when the URL `q` param changes (e.g. browser back/forward).
-  useEffect(() => {
-    if (urlState.q !== searchQuery) {
-      setSearchQuery(urlState.q);
-    }
-    // Only react to URL changes, not local state changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlState.q]);
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchQuery), 250);
-    return () => clearTimeout(t);
-  }, [searchQuery]);
-
-  const handleSearchChange = useCallback(
-    (q: string) => {
-      setSearchQuery(q);
-      urlActions.setSearchQuery(q);
-    },
-    [urlActions],
-  );
 
   const {
     filters, selectedArea, panToArea, mapZoom, mapReady, showLoader,
@@ -1958,6 +1943,10 @@ export default function MapDiscovery() {
             : schoolListings.length
           : undefined,
         groupListingsCount,
+        // Issue #1824 S4 — KNOWN, INTENTIONAL split-brain: this badge reads
+        // debouncedSearch (local 250ms, from useDiscoverSearchState), NOT
+        // urlState.q (which drives ActiveContextChips). Do NOT unify — see
+        // useDiscoverSearchState's header comment.
         searchQuery: debouncedSearch,
         // Issue #1817 — anon path only: schoolRadiusListings is the FULL radius set
         // BEFORE applyAnonPropertyFilters (schoolListings, above, is the post-filter
@@ -2611,6 +2600,9 @@ export default function MapDiscovery() {
   const activeContextChips = useMemo(
     () => (
       <ActiveContextChips
+        // Issue #1824 S4 — KNOWN, INTENTIONAL split-brain: chips read
+        // urlState.q (URL-side debounce), NOT debouncedSearch (which drives
+        // the badge + map markers via useDiscoverSearchState). Do NOT unify.
         searchQuery={urlState.q}
         onClearSearch={() => urlActions.setSearchQuery('')}
         filters={{
