@@ -44,6 +44,7 @@ import { MapEmptyGuidance } from '@/components/discover/MapEmptyGuidance';
 import { useDiscoverInteractionState } from '@/features/discover/state/useDiscoverInteractionState';
 import { useReducedMotion } from '@/features/discover/state/useReducedMotion';
 import { useRegionGuideState } from '@/features/discover/state/useRegionGuideState';
+import { useAreaSearchState } from '@/features/discover/state/useAreaSearchState';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
@@ -1208,15 +1209,9 @@ export default function MapDiscovery() {
   const { hoveredListingId, hoveredAreaKeyForMap, highlightedAreaKeys } = interactionView;
 
   // Issue #1798 PR-B — panel↔map area-marker plumbing (Unit D).
-  // Live (unsubmitted) area-search query typed into a panel's ScopedSearch. Debounced
-  // before driving searchMatchKeys so keystrokes never directly trigger a bucketing
-  // recompute on every char — purely a marker-promotion signal, never URL/camera state.
-  const [areaSearchQuery, setAreaSearchQuery] = useState('');
-  const [debouncedAreaSearchQuery, setDebouncedAreaSearchQuery] = useState('');
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedAreaSearchQuery(areaSearchQuery), 200);
-    return () => clearTimeout(t);
-  }, [areaSearchQuery]);
+  // areaSearchQuery/debouncedAreaSearchQuery now live in useAreaSearchState
+  // above (Issue #1824 S2c).
+  const { areaSearchQuery, debouncedAreaSearchQuery, setAreaSearchQuery } = useAreaSearchState();
 
   // hoveredAreaKeyForMap now lives in useDiscoverInteractionState above (Issue #1824 S1).
 
