@@ -1,0 +1,23 @@
+=== BATCH discover-tests :: src/components/discover/__tests__ ===
+BATCH discover-tests EXIT 0
+=== BATCH discover-panels :: src/components/discover/panels ===
+BATCH discover-panels EXIT 0
+=== BATCH map :: src/components/map ===
+BATCH map EXIT 0
+=== BATCH broker :: src/components/broker ===
+BATCH broker EXIT 0
+=== BATCH listing :: src/components/listing ===
+BATCH listing EXIT 0
+=== BATCH components-misc :: src/components/area src/components/auth src/components/dealer src/components/insights src/components/layout src/components/notifications src/components/poi src/components/trust src/components/ui ===
+BATCH components-misc EXIT 0
+=== BATCH hooks :: src/hooks ===
+BATCH hooks EXIT 0
+=== BATCH lib :: src/lib ===
+BATCH lib EXIT 0
+=== BATCH pages-tests :: src/pages/__tests__ ===
+BATCH pages-tests EXIT 0
+=== BATCH pages-broker-admin :: src/pages/broker src/pages/admin src/pages/MapDiscovery.test.tsx ===
+BATCH pages-broker-admin EXIT 0
+=== BATCH misc :: src/utils src/__tests__ src/test ===
+BATCH misc EXIT 0
+ALL BATCHES DONE for run-5

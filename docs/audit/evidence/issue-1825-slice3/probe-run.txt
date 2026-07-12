@@ -1,0 +1,19 @@
+
+ RUN  v3.2.4 /Users/gouthamrao/projects/udupi-property-explorer
+
+(node:8169) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Browserslist: browsers data (caniuse-lite) is 13 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+stderr | src/pages/broker/__tests__/EditListing.guard.probe.test.tsx > EditListing role guards (Issue #1632) > allows modern broker role to access EditListing
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/broker/__tests__/EditListing.guard.probe.test.tsx (5 tests) 149ms 70 MB heap used
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  22:46:06
+   Duration  1.51s (transform 355ms, setup 66ms, collect 700ms, tests 149ms, environment 359ms, prepare 58ms)
+

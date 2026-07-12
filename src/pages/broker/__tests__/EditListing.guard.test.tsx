@@ -10,6 +10,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import EditListing from '../EditListing';
 
 const mockRole = vi.hoisted(() => ({ current: 'broker' as string | null }));
+// Stable identity mirrors real TanStack Query's cached `data` reference;
+// a fresh object literal per call would re-trigger EditListing's
+// [listing]-keyed useEffect on every render, causing an unbounded loop.
+const stableListing = vi.hoisted(() => ({ id: '123', status: 'DRAFT', propertyType: 'land' }));
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
@@ -20,7 +24,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 
 vi.mock('@/hooks/useBrokerListings', () => ({
   useGetListing: () => ({
-    data: { id: '123', status: 'DRAFT', propertyType: 'land' },
+    data: stableListing,
     isLoading: false,
     isError: false,
   }),
