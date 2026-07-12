@@ -64,9 +64,13 @@ import {
   OWNERSHIP_TYPE_LABELS,
   LAND_CATEGORY_LABELS,
 } from '@/lib/agriFieldLabels';
-
-const VIDEO_URL_REGEX =
-  /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|instagram\.com\/(reel|p)\/)[^\s]+/;
+import {
+  extractYouTubeId,
+  isInstagramUrl,
+  boolToTriState,
+  triStateToBool,
+  validateVideoUrl,
+} from '@/lib/editListing/valueMappers';
 
 // Issue #1458 + #1459 — derive canonical value lists from shared label maps to avoid duplication.
 // Any future addition to agriFieldLabels.ts is automatically reflected here.
@@ -76,32 +80,6 @@ const KNOWN_ROAD_ACCESS_VALUES = Object.keys(ROAD_ACCESS_LABELS);
 const KNOWN_CULTIVATION_STATUSES = Object.keys(CULTIVATION_STATUS_LABELS);
 const KNOWN_OWNERSHIP_TYPES = Object.keys(OWNERSHIP_TYPE_LABELS);
 const KNOWN_LAND_CATEGORIES = Object.keys(LAND_CATEGORY_LABELS);
-
-function extractYouTubeId(url: string): string | null {
-  const shortMatch = url.match(/youtu\.be\/([^?&\s]+)/);
-  if (shortMatch) return shortMatch[1];
-  const longMatch = url.match(/[?&]v=([^&\s]+)/);
-  return longMatch ? longMatch[1] : null;
-}
-
-function isInstagramUrl(url: string): boolean {
-  return /instagram\.com\/(reel|p)\//.test(url);
-}
-
-/**
- * M38-13A (#1626) — tri-state boolean → Select string, matching the existing
- * farmhouseAvailable/fencingDone convention. `null`/`undefined` (unknown) map to
- * '' (neutral/unset) — distinct from an explicit `false`, which maps to 'false'.
- * Never defaults an unknown value to "No".
- */
-function boolToTriState(value: boolean | null | undefined): string {
-  return value === true ? 'true' : value === false ? 'false' : '';
-}
-
-/** Inverse of boolToTriState for building the update payload. '' → undefined (omit; no change). */
-function triStateToBool(value: string): boolean | undefined {
-  return value === 'true' ? true : value === 'false' ? false : undefined;
-}
 
 // ---------------------------------------------------------------------------
 // M38-13A (#1626) — chip / segmented control affordances (design-spec.md §1).
@@ -757,10 +735,8 @@ export default function EditListing() {
 
   const handleVideoUrlChange = (value: string) => {
     setVideoUrl(value);
-    setVideoUrlError('');
-    if (value && !VIDEO_URL_REGEX.test(value)) {
-      setVideoUrlError('Please enter a YouTube or Instagram Reel URL');
-    }
+    const error = validateVideoUrl(value);
+    setVideoUrlError(error ?? '');
   };
 
   const handleStep2Continue = () => {
