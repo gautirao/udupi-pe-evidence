@@ -81,6 +81,7 @@ vi.mock('@/hooks/useDiscoverUrlState', () => ({
 import { SchoolBrowsePanel } from '../SchoolJourneyPanels';
 import { usePopularSchools } from '@/hooks/usePopularSchools';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
+import { mockUseQueryResult } from '@/test-utils/mockReactQueryResults';
 
 function makeQC() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -107,27 +108,27 @@ describe('SchoolBrowsePanel — popular schools error state (Issue #1144 AC3)', 
     mockPopularRefetch.mockReset();
     mockAreasRefetch.mockReset();
     // Default: no errors, no data
-    vi.mocked(usePopularSchools).mockReturnValue({
+    vi.mocked(usePopularSchools).mockReturnValue(mockUseQueryResult({
       data: undefined,
       isLoading: false,
       isError: false,
       refetch: mockPopularRefetch,
-    } as ReturnType<typeof usePopularSchools>);
-    vi.mocked(useDiscoverAreas).mockReturnValue({
+    }));
+    vi.mocked(useDiscoverAreas).mockReturnValue(mockUseQueryResult({
       data: undefined,
       isLoading: false,
       isError: false,
       refetch: mockAreasRefetch,
-    } as ReturnType<typeof useDiscoverAreas>);
+    }));
   });
 
   it('AC3: renders popular-schools inline error when popularSchoolsResult.isError is true', () => {
-    vi.mocked(usePopularSchools).mockReturnValue({
+    vi.mocked(usePopularSchools).mockReturnValue(mockUseQueryResult({
       data: undefined,
       isLoading: false,
       isError: true,
       refetch: mockPopularRefetch,
-    } as ReturnType<typeof usePopularSchools>);
+    }));
 
     renderPanel();
     expect(screen.getByTestId('popular-schools-error-state')).toBeInTheDocument();
@@ -135,12 +136,12 @@ describe('SchoolBrowsePanel — popular schools error state (Issue #1144 AC3)', 
   });
 
   it('AC3: popular-schools error state has a Retry button that calls refetch', () => {
-    vi.mocked(usePopularSchools).mockReturnValue({
+    vi.mocked(usePopularSchools).mockReturnValue(mockUseQueryResult({
       data: undefined,
       isLoading: false,
       isError: true,
       refetch: mockPopularRefetch,
-    } as ReturnType<typeof usePopularSchools>);
+    }));
 
     renderPanel();
     fireEvent.click(screen.getByTestId('popular-schools-error-retry'));
@@ -148,7 +149,7 @@ describe('SchoolBrowsePanel — popular schools error state (Issue #1144 AC3)', 
   });
 
   it('AC4: popular-schools section renders normally when not errored and has data', () => {
-    vi.mocked(usePopularSchools).mockReturnValue({
+    vi.mocked(usePopularSchools).mockReturnValue(mockUseQueryResult({
       data: [
         {
           id: 'sch-1', name: 'Manipal Public School', board: 'CBSE', boardType: null,
@@ -159,7 +160,7 @@ describe('SchoolBrowsePanel — popular schools error state (Issue #1144 AC3)', 
       isLoading: false,
       isError: false,
       refetch: mockPopularRefetch,
-    } as ReturnType<typeof usePopularSchools>);
+    }));
 
     renderPanel();
     expect(screen.queryByTestId('popular-schools-error-state')).not.toBeInTheDocument();
@@ -171,27 +172,27 @@ describe('SchoolBrowsePanel — discover areas error state (Issue #1144 AC3)', (
   beforeEach(() => {
     mockPopularRefetch.mockReset();
     mockAreasRefetch.mockReset();
-    vi.mocked(usePopularSchools).mockReturnValue({
+    vi.mocked(usePopularSchools).mockReturnValue(mockUseQueryResult({
       data: undefined,
       isLoading: false,
       isError: false,
       refetch: mockPopularRefetch,
-    } as ReturnType<typeof usePopularSchools>);
-    vi.mocked(useDiscoverAreas).mockReturnValue({
+    }));
+    vi.mocked(useDiscoverAreas).mockReturnValue(mockUseQueryResult({
       data: undefined,
       isLoading: false,
       isError: false,
       refetch: mockAreasRefetch,
-    } as ReturnType<typeof useDiscoverAreas>);
+    }));
   });
 
   it('AC3: renders areas inline error when discoverAreasResult.isError is true', () => {
-    vi.mocked(useDiscoverAreas).mockReturnValue({
+    vi.mocked(useDiscoverAreas).mockReturnValue(mockUseQueryResult({
       data: undefined,
       isLoading: false,
       isError: true,
       refetch: mockAreasRefetch,
-    } as ReturnType<typeof useDiscoverAreas>);
+    }));
 
     renderPanel();
     expect(screen.getByTestId('discover-areas-error-state')).toBeInTheDocument();
@@ -199,12 +200,12 @@ describe('SchoolBrowsePanel — discover areas error state (Issue #1144 AC3)', (
   });
 
   it('AC3: areas error state has a Retry button that calls refetch', () => {
-    vi.mocked(useDiscoverAreas).mockReturnValue({
+    vi.mocked(useDiscoverAreas).mockReturnValue(mockUseQueryResult({
       data: undefined,
       isLoading: false,
       isError: true,
       refetch: mockAreasRefetch,
-    } as ReturnType<typeof useDiscoverAreas>);
+    }));
 
     renderPanel();
     fireEvent.click(screen.getByTestId('discover-areas-error-retry'));
@@ -212,7 +213,7 @@ describe('SchoolBrowsePanel — discover areas error state (Issue #1144 AC3)', (
   });
 
   it('AC4: areas section renders normally when not errored and has data', () => {
-    vi.mocked(useDiscoverAreas).mockReturnValue({
+    vi.mocked(useDiscoverAreas).mockReturnValue(mockUseQueryResult({
       data: {
         city: 'udupi',
         areas: [
@@ -226,7 +227,7 @@ describe('SchoolBrowsePanel — discover areas error state (Issue #1144 AC3)', (
       isLoading: false,
       isError: false,
       refetch: mockAreasRefetch,
-    } as ReturnType<typeof useDiscoverAreas>);
+    }));
 
     renderPanel();
     expect(screen.queryByTestId('discover-areas-error-state')).not.toBeInTheDocument();
@@ -234,12 +235,12 @@ describe('SchoolBrowsePanel — discover areas error state (Issue #1144 AC3)', (
   });
 
   it('AC3: both error states render independently when both hooks error', () => {
-    vi.mocked(usePopularSchools).mockReturnValue({
+    vi.mocked(usePopularSchools).mockReturnValue(mockUseQueryResult({
       data: undefined, isLoading: false, isError: true, refetch: mockPopularRefetch,
-    } as ReturnType<typeof usePopularSchools>);
-    vi.mocked(useDiscoverAreas).mockReturnValue({
+    }));
+    vi.mocked(useDiscoverAreas).mockReturnValue(mockUseQueryResult({
       data: undefined, isLoading: false, isError: true, refetch: mockAreasRefetch,
-    } as ReturnType<typeof useDiscoverAreas>);
+    }));
 
     renderPanel();
     expect(screen.getByTestId('popular-schools-error-state')).toBeInTheDocument();

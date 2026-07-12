@@ -1,0 +1,928 @@
+{
+  "total": 121,
+  "uniqueFiles": 45,
+  "byCode": {
+    "TS2352": 19,
+    "TS2353": 9,
+    "TS2345": 15,
+    "TS2556": 20,
+    "TS2561": 1,
+    "TS2307": 2,
+    "TS2322": 15,
+    "TS2769": 5,
+    "TS2740": 7,
+    "TS2367": 1,
+    "TS2554": 7,
+    "TS2589": 2,
+    "TS2339": 18
+  },
+  "byArea": {
+    "src:broker": 1,
+    "test:discover": 23,
+    "src:discover": 6,
+    "test:map": 28,
+    "src:map": 4,
+    "test:hooks": 7,
+    "src:hooks": 20,
+    "src:lib": 1,
+    "test:pages": 2,
+    "test:MapDiscovery-pages": 19,
+    "src:pages-admin": 10
+  },
+  "byFile": {
+    "src/components/broker/AddressPicker.tsx": 1,
+    "src/components/discover/__tests__/AreaIndicatorOverlay.test.tsx": 3,
+    "src/components/discover/__tests__/DiscoverRightPanel.agri.ac11.test.tsx": 2,
+    "src/components/discover/__tests__/DiscoverRightPanel.test.tsx": 2,
+    "src/components/discover/__tests__/SchoolsInAreaPanel.issue1067.test.tsx": 1,
+    "src/components/discover/panels/__tests__/AreaSelectedPanel.test.tsx": 2,
+    "src/components/discover/panels/__tests__/SchoolBrowsePanel.error-states.test.tsx": 12,
+    "src/components/discover/panels/AreaGroupSelectedPanel.tsx": 1,
+    "src/components/discover/panels/AreaGroupsLandingPanel.tsx": 1,
+    "src/components/discover/panels/AreaSelectedPanel.tsx": 4,
+    "src/components/discover/panels/SchoolsInAreaPanel.test.tsx": 1,
+    "src/components/map/__tests__/MapFilters.test.tsx": 5,
+    "src/components/map/__tests__/PropertyMap.agri.test.tsx": 9,
+    "src/components/map/__tests__/PropertyMap.agriPolygon.test.tsx": 10,
+    "src/components/map/__tests__/PropertyMap.areaPanner.test.tsx": 2,
+    "src/components/map/AreaMarkerLayer.tsx": 1,
+    "src/components/map/PropertyMap.tsx": 3,
+    "src/components/map/SchoolMarkerLayer.test.tsx": 2,
+    "src/hooks/__tests__/useListingImages.test.ts": 7,
+    "src/hooks/useDiscoverMapData.ts": 1,
+    "src/hooks/useDuplicateManagement.ts": 2,
+    "src/hooks/useListingSearch.ts": 1,
+    "src/hooks/usePropertyListings.ts": 13,
+    "src/hooks/useSimilarListings.ts": 3,
+    "src/lib/discoverMappers.ts": 1,
+    "src/pages/__tests__/Index.invalidCity.test.tsx": 1,
+    "src/pages/__tests__/ListingDetail.cachekey.test.tsx": 1,
+    "src/pages/__tests__/MapDiscovery.issue1064.test.tsx": 1,
+    "src/pages/__tests__/MapDiscovery.issue1067.test.tsx": 1,
+    "src/pages/__tests__/MapDiscovery.issue1069.test.tsx": 1,
+    "src/pages/__tests__/MapDiscovery.issue1175.test.ts": 1,
+    "src/pages/__tests__/MapDiscovery.issue1178.test.tsx": 1,
+    "src/pages/__tests__/MapDiscovery.issue1186.test.tsx": 1,
+    "src/pages/__tests__/MapDiscovery.issue1370.test.tsx": 1,
+    "src/pages/__tests__/MapDiscovery.issue1745-batchB-overviewClick.test.tsx": 2,
+    "src/pages/__tests__/MapDiscovery.issue1798.markerPopup.test.tsx": 1,
+    "src/pages/__tests__/MapDiscovery.issue1798.test.tsx": 1,
+    "src/pages/__tests__/MapDiscovery.issue1808.regionGuidance.test.tsx": 2,
+    "src/pages/__tests__/MapDiscovery.issue1815.r3b.test.tsx": 1,
+    "src/pages/__tests__/MapDiscovery.issue1815.test.tsx": 1,
+    "src/pages/__tests__/MapDiscovery.issue1821.test.tsx": 1,
+    "src/pages/__tests__/MapDiscovery.school-deep-link.test.tsx": 2,
+    "src/pages/__tests__/MapDiscovery.startOver-chip.test.tsx": 1,
+    "src/pages/admin/Listings.tsx": 9,
+    "src/pages/admin/PendingListings.tsx": 1
+  },
+  "rows": [
+    {
+      "file": "src/components/broker/AddressPicker.tsx",
+      "line": 19,
+      "col": 9,
+      "code": "TS2352",
+      "msg": "Conversion of type 'Default' to type 'Record<string, unknown>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/discover/__tests__/AreaIndicatorOverlay.test.tsx",
+      "line": 11,
+      "col": 3,
+      "code": "TS2353",
+      "msg": "Object literal may only specify known properties, and 'lat' does not exist in type 'AreaPoint'."
+    },
+    {
+      "file": "src/components/discover/__tests__/AreaIndicatorOverlay.test.tsx",
+      "line": 21,
+      "col": 3,
+      "code": "TS2353",
+      "msg": "Object literal may only specify known properties, and 'city' does not exist in type 'AreaGroup'."
+    },
+    {
+      "file": "src/components/discover/__tests__/AreaIndicatorOverlay.test.tsx",
+      "line": 29,
+      "col": 3,
+      "code": "TS2353",
+      "msg": "Object literal may only specify known properties, and 'city' does not exist in type 'AreaGroup'."
+    },
+    {
+      "file": "src/components/discover/__tests__/DiscoverRightPanel.agri.ac11.test.tsx",
+      "line": 289,
+      "col": 16,
+      "code": "TS2345",
+      "msg": "Argument of type '{ city: string; areas: { areaKey: string; name: string; geoCenterLat: number; geoCenterLon: number; listingCount: number; schoolCount: number; }[]; }' is not assignable to parameter of type '{ city: string; areas: { areaKey: string; name: string; geoCenterLat: number; geoCenterLon: number; listingCount: number; schoolCount: number; agriAcreage: number; }[]; }'."
+    },
+    {
+      "file": "src/components/discover/__tests__/DiscoverRightPanel.agri.ac11.test.tsx",
+      "line": 299,
+      "col": 16,
+      "code": "TS2345",
+      "msg": "Argument of type '{ city: string; areas: { areaKey: string; name: string; geoCenterLat: number; geoCenterLon: number; listingCount: number; schoolCount: number; }[]; }' is not assignable to parameter of type '{ city: string; areas: { areaKey: string; name: string; geoCenterLat: number; geoCenterLon: number; listingCount: number; schoolCount: number; agriAcreage: number; }[]; }'."
+    },
+    {
+      "file": "src/components/discover/__tests__/DiscoverRightPanel.test.tsx",
+      "line": 584,
+      "col": 13,
+      "code": "TS2353",
+      "msg": "Object literal may only specify known properties, and 'area_count' does not exist in type 'AreaGroup'."
+    },
+    {
+      "file": "src/components/discover/__tests__/DiscoverRightPanel.test.tsx",
+      "line": 599,
+      "col": 13,
+      "code": "TS2353",
+      "msg": "Object literal may only specify known properties, and 'area_count' does not exist in type 'AreaGroup'."
+    },
+    {
+      "file": "src/components/discover/__tests__/SchoolsInAreaPanel.issue1067.test.tsx",
+      "line": 38,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/components/discover/panels/__tests__/AreaSelectedPanel.test.tsx",
+      "line": 12,
+      "col": 3,
+      "code": "TS2353",
+      "msg": "Object literal may only specify known properties, and 'lat' does not exist in type 'AreaPoint'."
+    },
+    {
+      "file": "src/components/discover/panels/__tests__/AreaSelectedPanel.test.tsx",
+      "line": 19,
+      "col": 3,
+      "code": "TS2561",
+      "msg": "Object literal may only specify known properties, but 'property_type' does not exist in type 'DiscoverCityListingItem'. Did you mean to write 'propertyType'?"
+    },
+    {
+      "file": "src/components/discover/panels/__tests__/SchoolBrowsePanel.error-states.test.tsx",
+      "line": 110,
+      "col": 50,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ data: undefined; isLoading: false; isError: false; refetch: Mock<Procedure>; }' to type 'UseQueryResult<SchoolResult[], Error>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/discover/panels/__tests__/SchoolBrowsePanel.error-states.test.tsx",
+      "line": 116,
+      "col": 49,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ data: undefined; isLoading: false; isError: false; refetch: Mock<Procedure>; }' to type 'UseQueryResult<DiscoverAreasResponse, Error>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/discover/panels/__tests__/SchoolBrowsePanel.error-states.test.tsx",
+      "line": 125,
+      "col": 50,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ data: undefined; isLoading: false; isError: true; refetch: Mock<Procedure>; }' to type 'UseQueryResult<SchoolResult[], Error>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/discover/panels/__tests__/SchoolBrowsePanel.error-states.test.tsx",
+      "line": 138,
+      "col": 50,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ data: undefined; isLoading: false; isError: true; refetch: Mock<Procedure>; }' to type 'UseQueryResult<SchoolResult[], Error>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/discover/panels/__tests__/SchoolBrowsePanel.error-states.test.tsx",
+      "line": 151,
+      "col": 50,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ data: { id: string; name: string; board: string; boardType: null; address: string; latitude: number; longitude: number; distanceKm: number; areaKey: string; }[]; isLoading: false; isError: false; refetch: Mock<...>; }' to type 'UseQueryResult<SchoolResult[], Error>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/discover/panels/__tests__/SchoolBrowsePanel.error-states.test.tsx",
+      "line": 174,
+      "col": 50,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ data: undefined; isLoading: false; isError: false; refetch: Mock<Procedure>; }' to type 'UseQueryResult<SchoolResult[], Error>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/discover/panels/__tests__/SchoolBrowsePanel.error-states.test.tsx",
+      "line": 180,
+      "col": 49,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ data: undefined; isLoading: false; isError: false; refetch: Mock<Procedure>; }' to type 'UseQueryResult<DiscoverAreasResponse, Error>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/discover/panels/__tests__/SchoolBrowsePanel.error-states.test.tsx",
+      "line": 189,
+      "col": 49,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ data: undefined; isLoading: false; isError: true; refetch: Mock<Procedure>; }' to type 'UseQueryResult<DiscoverAreasResponse, Error>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/discover/panels/__tests__/SchoolBrowsePanel.error-states.test.tsx",
+      "line": 202,
+      "col": 49,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ data: undefined; isLoading: false; isError: true; refetch: Mock<Procedure>; }' to type 'UseQueryResult<DiscoverAreasResponse, Error>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/discover/panels/__tests__/SchoolBrowsePanel.error-states.test.tsx",
+      "line": 215,
+      "col": 49,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ data: { city: string; areas: { areaKey: string; name: string; schoolCount: number; listingCount: number; geoCenterLat: number; geoCenterLon: number; }[]; }; isLoading: false; isError: false; refetch: Mock<...>; }' to type 'UseQueryResult<DiscoverAreasResponse, Error>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/discover/panels/__tests__/SchoolBrowsePanel.error-states.test.tsx",
+      "line": 237,
+      "col": 50,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ data: undefined; isLoading: false; isError: true; refetch: Mock<Procedure>; }' to type 'UseQueryResult<SchoolResult[], Error>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/discover/panels/__tests__/SchoolBrowsePanel.error-states.test.tsx",
+      "line": 240,
+      "col": 49,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ data: undefined; isLoading: false; isError: true; refetch: Mock<Procedure>; }' to type 'UseQueryResult<DiscoverAreasResponse, Error>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/discover/panels/AreaGroupSelectedPanel.tsx",
+      "line": 7,
+      "col": 38,
+      "code": "TS2307",
+      "msg": "Cannot find module '@/types/discover' or its corresponding type declarations."
+    },
+    {
+      "file": "src/components/discover/panels/AreaGroupsLandingPanel.tsx",
+      "line": 12,
+      "col": 38,
+      "code": "TS2307",
+      "msg": "Cannot find module '@/types/discover' or its corresponding type declarations."
+    },
+    {
+      "file": "src/components/discover/panels/AreaSelectedPanel.tsx",
+      "line": 188,
+      "col": 47,
+      "code": "TS2345",
+      "msg": "Argument of type 'string' is not assignable to parameter of type 'PropertyType'."
+    },
+    {
+      "file": "src/components/discover/panels/AreaSelectedPanel.tsx",
+      "line": 191,
+      "col": 37,
+      "code": "TS2322",
+      "msg": "Type 'string[]' is not assignable to type 'PropertyType[]'."
+    },
+    {
+      "file": "src/components/discover/panels/AreaSelectedPanel.tsx",
+      "line": 393,
+      "col": 47,
+      "code": "TS2345",
+      "msg": "Argument of type '\"land\" | \"apartment\" | \"villa\"' is not assignable to parameter of type 'PropertyType'."
+    },
+    {
+      "file": "src/components/discover/panels/AreaSelectedPanel.tsx",
+      "line": 399,
+      "col": 59,
+      "code": "TS2345",
+      "msg": "Argument of type '\"land\" | \"apartment\" | \"villa\"' is not assignable to parameter of type 'PropertyType'."
+    },
+    {
+      "file": "src/components/discover/panels/SchoolsInAreaPanel.test.tsx",
+      "line": 110,
+      "col": 47,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ data: undefined; isLoading: false; isError: false; refetch: Mock<Procedure>; fetchNextPage: Mock<Procedure>; hasNextPage: false; isFetchingNextPage: false; }' to type 'UseInfiniteQueryResult<InfiniteData<SchoolsByAreaResponse, unknown>, Error>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/map/__tests__/MapFilters.test.tsx",
+      "line": 101,
+      "col": 58,
+      "code": "TS2769",
+      "msg": "No overload matches this call."
+    },
+    {
+      "file": "src/components/map/__tests__/MapFilters.test.tsx",
+      "line": 124,
+      "col": 52,
+      "code": "TS2769",
+      "msg": "No overload matches this call."
+    },
+    {
+      "file": "src/components/map/__tests__/MapFilters.test.tsx",
+      "line": 125,
+      "col": 52,
+      "code": "TS2769",
+      "msg": "No overload matches this call."
+    },
+    {
+      "file": "src/components/map/__tests__/MapFilters.test.tsx",
+      "line": 126,
+      "col": 52,
+      "code": "TS2769",
+      "msg": "No overload matches this call."
+    },
+    {
+      "file": "src/components/map/__tests__/MapFilters.test.tsx",
+      "line": 127,
+      "col": 53,
+      "code": "TS2769",
+      "msg": "No overload matches this call."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "line": 145,
+      "col": 36,
+      "code": "TS2740",
+      "msg": "Type '{ id: string; title: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; price: number; status: \"LIVE\"; locality: string; created_at: string; updated_at: string; }' is missing the following properties from type 'PropertyListingWithImages': price_unit, land_area, land_area_unit, built_area, and 27 more."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "line": 162,
+      "col": 14,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ addLayer: Mock<Procedure>; }' to type 'MarkerClusterGroup' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "line": 165,
+      "col": 36,
+      "code": "TS2740",
+      "msg": "Type '{ id: string; title: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; price: number; status: \"LIVE\"; locality: string; created_at: string; updated_at: string; }' is missing the following properties from type 'PropertyListingWithImages': price_unit, land_area, land_area_unit, built_area, and 27 more."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "line": 190,
+      "col": 14,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ addLayer: Mock<Procedure>; }' to type 'MarkerClusterGroup' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "line": 193,
+      "col": 36,
+      "code": "TS2740",
+      "msg": "Type '{ id: string; title: string; property_type: \"house\"; latitude: number; longitude: number; price: number; status: \"LIVE\"; locality: string; created_at: string; updated_at: string; }' is missing the following properties from type 'PropertyListingWithImages': price_unit, land_area, land_area_unit, built_area, and 27 more."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "line": 213,
+      "col": 14,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ addLayer: Mock<Procedure>; }' to type 'MarkerClusterGroup' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "line": 217,
+      "col": 36,
+      "code": "TS2740",
+      "msg": "Type '{ id: string; title: string; property_type: \"house\"; latitude: number; longitude: number; price: number; status: \"LIVE\"; locality: string; created_at: string; updated_at: string; }' is missing the following properties from type 'PropertyListingWithImages': price_unit, land_area, land_area_unit, built_area, and 27 more."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "line": 240,
+      "col": 36,
+      "code": "TS2740",
+      "msg": "Type '{ id: string; title: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; price: number; status: \"LIVE\"; locality: string; created_at: string; updated_at: string; }' is missing the following properties from type 'PropertyListingWithImages': price_unit, land_area, land_area_unit, built_area, and 27 more."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "line": 251,
+      "col": 20,
+      "code": "TS2740",
+      "msg": "Type '{ id: string; title: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; price: number; status: \"LIVE\"; locality: string; created_at: string; updated_at: string; }' is missing the following properties from type 'PropertyListingWithImages': price_unit, land_area, land_area_unit, built_area, and 27 more."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agriPolygon.test.tsx",
+      "line": 191,
+      "col": 20,
+      "code": "TS2322",
+      "msg": "Type '{ id: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; title: any; price: any; price_unit: any; land_area: any; land_area_unit: any; built_area: any; built_area_unit: any; ... 30 more ...; boundary_geojson: string; }' is not assignable to type 'PropertyListingWithImages'."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agriPolygon.test.tsx",
+      "line": 220,
+      "col": 20,
+      "code": "TS2322",
+      "msg": "Type '{ id: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; title: any; price: any; price_unit: any; land_area: any; land_area_unit: any; built_area: any; built_area_unit: any; ... 30 more ...; boundary_geojson: string; }' is not assignable to type 'PropertyListingWithImages'."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agriPolygon.test.tsx",
+      "line": 234,
+      "col": 20,
+      "code": "TS2322",
+      "msg": "Type '{ id: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; title: any; price: any; price_unit: any; land_area: any; land_area_unit: any; built_area: any; built_area_unit: any; ... 30 more ...; boundary_geojson: string; }' is not assignable to type 'PropertyListingWithImages'."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agriPolygon.test.tsx",
+      "line": 248,
+      "col": 20,
+      "code": "TS2322",
+      "msg": "Type '{ id: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; title: any; price: any; price_unit: any; land_area: any; land_area_unit: any; built_area: any; built_area_unit: any; ... 30 more ...; boundary_geojson: string; }' is not assignable to type 'PropertyListingWithImages'."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agriPolygon.test.tsx",
+      "line": 268,
+      "col": 20,
+      "code": "TS2322",
+      "msg": "Type '{ id: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; title: any; price: any; price_unit: any; land_area: any; land_area_unit: any; built_area: any; built_area_unit: any; ... 30 more ...; boundary_geojson: string; }' is not assignable to type 'PropertyListingWithImages'."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agriPolygon.test.tsx",
+      "line": 282,
+      "col": 20,
+      "code": "TS2322",
+      "msg": "Type '{ id: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; title: any; price: any; price_unit: any; land_area: any; land_area_unit: any; built_area: any; built_area_unit: any; ... 30 more ...; boundary_geojson: string; }' is not assignable to type 'PropertyListingWithImages'."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agriPolygon.test.tsx",
+      "line": 304,
+      "col": 20,
+      "code": "TS2322",
+      "msg": "Type '{ id: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; title: any; price: any; price_unit: any; land_area: any; land_area_unit: any; built_area: any; built_area_unit: any; ... 30 more ...; boundary_geojson: string; }' is not assignable to type 'PropertyListingWithImages'."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agriPolygon.test.tsx",
+      "line": 329,
+      "col": 20,
+      "code": "TS2322",
+      "msg": "Type '{ id: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; title: any; price: any; price_unit: any; land_area: any; land_area_unit: any; built_area: any; built_area_unit: any; ... 30 more ...; boundary_geojson: string; }' is not assignable to type 'PropertyListingWithImages'."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agriPolygon.test.tsx",
+      "line": 332,
+      "col": 9,
+      "code": "TS2322",
+      "msg": "Type '{ id: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; title: any; price: any; price_unit: any; land_area: any; land_area_unit: any; built_area: any; built_area_unit: any; ... 30 more ...; boundary_geojson: string; }' is not assignable to type 'PropertyListingWithImages'."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.agriPolygon.test.tsx",
+      "line": 346,
+      "col": 20,
+      "code": "TS2322",
+      "msg": "Type '{ id: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; title: any; price: any; price_unit: any; land_area: any; land_area_unit: any; built_area: any; built_area_unit: any; ... 30 more ...; boundary_geojson: string; }' is not assignable to type 'PropertyListingWithImages'."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.areaPanner.test.tsx",
+      "line": 220,
+      "col": 39,
+      "code": "TS2345",
+      "msg": "Argument of type '{ getNorth: () => number; getSouth: () => number; getEast: () => number; getWest: () => number; }' is not assignable to parameter of type '{ getNorth: () => 14; getSouth: () => 13; getEast: () => 75; getWest: () => 74; }'."
+    },
+    {
+      "file": "src/components/map/__tests__/PropertyMap.areaPanner.test.tsx",
+      "line": 257,
+      "col": 39,
+      "code": "TS2345",
+      "msg": "Argument of type '{ getNorth: () => number; getSouth: () => number; getEast: () => number; getWest: () => number; }' is not assignable to parameter of type '{ getNorth: () => 14; getSouth: () => 13; getEast: () => 75; getWest: () => 74; }'."
+    },
+    {
+      "file": "src/components/map/AreaMarkerLayer.tsx",
+      "line": 627,
+      "col": 39,
+      "code": "TS2345",
+      "msg": "Argument of type 'LatLngBoundsExpression' is not assignable to parameter of type 'LatLngExpression[]'."
+    },
+    {
+      "file": "src/components/map/PropertyMap.tsx",
+      "line": 62,
+      "col": 9,
+      "code": "TS2352",
+      "msg": "Conversion of type 'Default' to type 'Record<string, unknown>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/components/map/PropertyMap.tsx",
+      "line": 514,
+      "col": 45,
+      "code": "TS2740",
+      "msg": "Type '{ id: string; property_type: PropertyType; title: string; locality: string; price: number; price_unit: null; land_area: number; land_area_unit: string; built_area: null; built_area_unit: null; ... 19 more ...; boundary_geojson: string; }' is missing the following properties from type 'PropertyListingWithImages': carpet_area, carpet_area_unit, floor_number, total_floors, and 10 more."
+    },
+    {
+      "file": "src/components/map/PropertyMap.tsx",
+      "line": 1438,
+      "col": 12,
+      "code": "TS2367",
+      "msg": "This comparison appears to be unintentional because the types 'PropertyType' and '\"agricultural_land\"' have no overlap."
+    },
+    {
+      "file": "src/components/map/SchoolMarkerLayer.test.tsx",
+      "line": 36,
+      "col": 5,
+      "code": "TS2353",
+      "msg": "Object literal may only specify known properties, and 'category' does not exist in type 'SchoolResult'."
+    },
+    {
+      "file": "src/components/map/SchoolMarkerLayer.test.tsx",
+      "line": 44,
+      "col": 5,
+      "code": "TS2353",
+      "msg": "Object literal may only specify known properties, and 'category' does not exist in type 'SchoolResult'."
+    },
+    {
+      "file": "src/hooks/__tests__/useListingImages.test.ts",
+      "line": 204,
+      "col": 41,
+      "code": "TS2554",
+      "msg": "Expected 3 arguments, but got 2."
+    },
+    {
+      "file": "src/hooks/__tests__/useListingImages.test.ts",
+      "line": 240,
+      "col": 41,
+      "code": "TS2554",
+      "msg": "Expected 3 arguments, but got 2."
+    },
+    {
+      "file": "src/hooks/__tests__/useListingImages.test.ts",
+      "line": 268,
+      "col": 41,
+      "code": "TS2554",
+      "msg": "Expected 3 arguments, but got 2."
+    },
+    {
+      "file": "src/hooks/__tests__/useListingImages.test.ts",
+      "line": 297,
+      "col": 41,
+      "code": "TS2554",
+      "msg": "Expected 3 arguments, but got 2."
+    },
+    {
+      "file": "src/hooks/__tests__/useListingImages.test.ts",
+      "line": 346,
+      "col": 32,
+      "code": "TS2554",
+      "msg": "Expected 3 arguments, but got 2."
+    },
+    {
+      "file": "src/hooks/__tests__/useListingImages.test.ts",
+      "line": 393,
+      "col": 32,
+      "code": "TS2554",
+      "msg": "Expected 3 arguments, but got 2."
+    },
+    {
+      "file": "src/hooks/__tests__/useListingImages.test.ts",
+      "line": 424,
+      "col": 41,
+      "code": "TS2554",
+      "msg": "Expected 3 arguments, but got 2."
+    },
+    {
+      "file": "src/hooks/useDiscoverMapData.ts",
+      "line": 248,
+      "col": 9,
+      "code": "TS2322",
+      "msg": "Type 'PropertyFilters | { propertyTypes: (\"land\" | \"house\" | \"commercial\" | \"apartment\" | \"villa\" | \"commercial_building\" | \"warehouse\" | \"commercial_land\" | \"agricultural_land\" | \"residential_plot\")[]; ... 18 more ...; categoryFilters?: string[]; }' is not assignable to type 'PropertyFilters'."
+    },
+    {
+      "file": "src/hooks/useDuplicateManagement.ts",
+      "line": 61,
+      "col": 43,
+      "code": "TS2345",
+      "msg": "Argument of type 'PropertyType' is not assignable to parameter of type 'NonNullable<\"land\" | \"house\" | \"commercial\" | \"other\" | \"apartment\">'."
+    },
+    {
+      "file": "src/hooks/useDuplicateManagement.ts",
+      "line": 159,
+      "col": 19,
+      "code": "TS2345",
+      "msg": "Argument of type 'Partial<PropertyListing>' is not assignable to parameter of type '{ bathrooms?: number; bedrooms?: number; built_area?: number; built_area_unit?: string; confidence_score?: number; contact_info?: string; contact_phone?: string; created_at?: string; description?: string; ... 16 more ...; updated_by?: string; }'."
+    },
+    {
+      "file": "src/hooks/useListingSearch.ts",
+      "line": 20,
+      "col": 3,
+      "code": "TS2322",
+      "msg": "Type '{ id: string; property_type: PropertyListing[\"property_type\"]; title: string; locality: string; price: number; price_unit: string; land_area: null; land_area_unit: null; built_area: null; built_area_unit: null; ... 16 more ...; images: []; }' is not assignable to type 'PropertyListing & { images: []; }'."
+    },
+    {
+      "file": "src/hooks/usePropertyListings.ts",
+      "line": 298,
+      "col": 43,
+      "code": "TS2345",
+      "msg": "Argument of type 'PropertyType[]' is not assignable to parameter of type 'readonly (\"land\" | \"house\" | \"commercial\" | \"other\" | \"apartment\")[]'."
+    },
+    {
+      "file": "src/hooks/usePropertyListings.ts",
+      "line": 322,
+      "col": 17,
+      "code": "TS2589",
+      "msg": "Type instantiation is excessively deep and possibly infinite."
+    },
+    {
+      "file": "src/hooks/usePropertyListings.ts",
+      "line": 424,
+      "col": 18,
+      "code": "TS2339",
+      "msg": "Property 'area_key' does not exist on type 'SelectQueryError<\"column 'area_key' does not exist on 'property_listings'.\">'."
+    },
+    {
+      "file": "src/hooks/usePropertyListings.ts",
+      "line": 425,
+      "col": 27,
+      "code": "TS2339",
+      "msg": "Property 'area_key' does not exist on type 'SelectQueryError<\"column 'area_key' does not exist on 'property_listings'.\">'."
+    },
+    {
+      "file": "src/hooks/usePropertyListings.ts",
+      "line": 438,
+      "col": 16,
+      "code": "TS2339",
+      "msg": "Property 'locality' does not exist on type 'SelectQueryError<\"column 'area_key' does not exist on 'property_listings'.\">'."
+    },
+    {
+      "file": "src/hooks/usePropertyListings.ts",
+      "line": 439,
+      "col": 25,
+      "code": "TS2339",
+      "msg": "Property 'locality' does not exist on type 'SelectQueryError<\"column 'area_key' does not exist on 'property_listings'.\">'."
+    },
+    {
+      "file": "src/hooks/usePropertyListings.ts",
+      "line": 440,
+      "col": 22,
+      "code": "TS2339",
+      "msg": "Property 'locality' does not exist on type 'SelectQueryError<\"column 'area_key' does not exist on 'property_listings'.\">'."
+    },
+    {
+      "file": "src/hooks/usePropertyListings.ts",
+      "line": 440,
+      "col": 34,
+      "code": "TS2339",
+      "msg": "Property 'area_key' does not exist on type 'SelectQueryError<\"column 'area_key' does not exist on 'property_listings'.\">'."
+    },
+    {
+      "file": "src/hooks/usePropertyListings.ts",
+      "line": 441,
+      "col": 31,
+      "code": "TS2339",
+      "msg": "Property 'locality' does not exist on type 'SelectQueryError<\"column 'area_key' does not exist on 'property_listings'.\">'."
+    },
+    {
+      "file": "src/hooks/usePropertyListings.ts",
+      "line": 441,
+      "col": 55,
+      "code": "TS2339",
+      "msg": "Property 'area_key' does not exist on type 'SelectQueryError<\"column 'area_key' does not exist on 'property_listings'.\">'."
+    },
+    {
+      "file": "src/hooks/usePropertyListings.ts",
+      "line": 442,
+      "col": 22,
+      "code": "TS2339",
+      "msg": "Property 'locality' does not exist on type 'SelectQueryError<\"column 'area_key' does not exist on 'property_listings'.\">'."
+    },
+    {
+      "file": "src/hooks/usePropertyListings.ts",
+      "line": 442,
+      "col": 34,
+      "code": "TS2339",
+      "msg": "Property 'area_key' does not exist on type 'SelectQueryError<\"column 'area_key' does not exist on 'property_listings'.\">'."
+    },
+    {
+      "file": "src/hooks/usePropertyListings.ts",
+      "line": 488,
+      "col": 17,
+      "code": "TS2345",
+      "msg": "Argument of type 'Partial<PropertyListing>' is not assignable to parameter of type '{ bathrooms?: number; bedrooms?: number; built_area?: number; built_area_unit?: string; confidence_score?: number; contact_info?: string; contact_phone?: string; created_at?: string; description?: string; ... 16 more ...; updated_by?: string; }'."
+    },
+    {
+      "file": "src/hooks/useSimilarListings.ts",
+      "line": 21,
+      "col": 30,
+      "code": "TS2345",
+      "msg": "Argument of type 'string' is not assignable to parameter of type 'NonNullable<\"land\" | \"house\" | \"commercial\" | \"other\" | \"apartment\">'."
+    },
+    {
+      "file": "src/hooks/useSimilarListings.ts",
+      "line": 32,
+      "col": 15,
+      "code": "TS2322",
+      "msg": "Type 'Json[]' is not assignable to type 'PropertyImage[]'."
+    },
+    {
+      "file": "src/hooks/useSimilarListings.ts",
+      "line": 33,
+      "col": 16,
+      "code": "TS2352",
+      "msg": "Conversion of type '{ images: PropertyImage[]; bathrooms: number | null; bedrooms: number | null; built_area: number | null; built_area_unit: string | null; confidence_score: number | null; ... 21 more ...; raw_posts: { ...; }; }' to type 'SimilarListing' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "file": "src/lib/discoverMappers.ts",
+      "line": 107,
+      "col": 5,
+      "code": "TS2322",
+      "msg": "Type 'string' is not assignable to type '\"dealer\" | \"broker\" | \"owner\" | \"builder\"'."
+    },
+    {
+      "file": "src/pages/__tests__/Index.invalidCity.test.tsx",
+      "line": 45,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/ListingDetail.cachekey.test.tsx",
+      "line": 200,
+      "col": 27,
+      "code": "TS2339",
+      "msg": "Property 'staleTime' does not exist on type 'QueryOptions<unknown, Error, unknown, readonly unknown[], never>'."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1064.test.tsx",
+      "line": 31,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1067.test.tsx",
+      "line": 32,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1069.test.tsx",
+      "line": 31,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1175.test.ts",
+      "line": 130,
+      "col": 20,
+      "code": "TS2353",
+      "msg": "Object literal may only specify known properties, and 'schoolLat' does not exist in type '{ propertyTypes?: unknown[]; bedrooms?: unknown[]; priceMin?: number; priceMax?: number; sellerTypes?: string[]; dateFrom?: Date; dateTo?: Date; backOnMarket?: boolean; newToMarket?: boolean; reraRegistered?: boolean; readyToMove?: boolean; }'."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1178.test.tsx",
+      "line": 29,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1186.test.tsx",
+      "line": 33,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1370.test.tsx",
+      "line": 30,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1745-batchB-overviewClick.test.tsx",
+      "line": 44,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1745-batchB-overviewClick.test.tsx",
+      "line": 171,
+      "col": 60,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1798.markerPopup.test.tsx",
+      "line": 45,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1798.test.tsx",
+      "line": 27,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1808.regionGuidance.test.tsx",
+      "line": 39,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1808.regionGuidance.test.tsx",
+      "line": 183,
+      "col": 60,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1815.r3b.test.tsx",
+      "line": 45,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1815.test.tsx",
+      "line": 52,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.issue1821.test.tsx",
+      "line": 89,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.school-deep-link.test.tsx",
+      "line": 37,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.school-deep-link.test.tsx",
+      "line": 46,
+      "col": 60,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/__tests__/MapDiscovery.startOver-chip.test.tsx",
+      "line": 30,
+      "col": 48,
+      "code": "TS2556",
+      "msg": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "file": "src/pages/admin/Listings.tsx",
+      "line": 184,
+      "col": 43,
+      "code": "TS2339",
+      "msg": "Property 'status' does not exist on type '{ bathrooms: number; bedrooms: number; built_area: number; built_area_unit: string; confidence_score: number; contact_info: string; contact_phone: string; created_at: string; description: string; ... 17 more ...; raw_posts: { ...; }; }'."
+    },
+    {
+      "file": "src/pages/admin/Listings.tsx",
+      "line": 385,
+      "col": 54,
+      "code": "TS2339",
+      "msg": "Property 'status' does not exist on type '{ bathrooms: number; bedrooms: number; built_area: number; built_area_unit: string; confidence_score: number; contact_info: string; contact_phone: string; created_at: string; description: string; ... 17 more ...; raw_posts: { ...; }; }'."
+    },
+    {
+      "file": "src/pages/admin/Listings.tsx",
+      "line": 386,
+      "col": 34,
+      "code": "TS2339",
+      "msg": "Property 'rera_number' does not exist on type '{ bathrooms: number; bedrooms: number; built_area: number; built_area_unit: string; confidence_score: number; contact_info: string; contact_phone: string; created_at: string; description: string; ... 17 more ...; raw_posts: { ...; }; }'."
+    },
+    {
+      "file": "src/pages/admin/Listings.tsx",
+      "line": 386,
+      "col": 65,
+      "code": "TS2339",
+      "msg": "Property 'rera_number' does not exist on type '{ bathrooms: number; bedrooms: number; built_area: number; built_area_unit: string; confidence_score: number; contact_info: string; contact_phone: string; created_at: string; description: string; ... 17 more ...; raw_posts: { ...; }; }'."
+    },
+    {
+      "file": "src/pages/admin/Listings.tsx",
+      "line": 386,
+      "col": 95,
+      "code": "TS2339",
+      "msg": "Property 'reraValid' does not exist on type '{ bathrooms: number; bedrooms: number; built_area: number; built_area_unit: string; confidence_score: number; contact_info: string; contact_phone: string; created_at: string; description: string; ... 17 more ...; raw_posts: { ...; }; }'."
+    },
+    {
+      "file": "src/pages/admin/Listings.tsx",
+      "line": 409,
+      "col": 66,
+      "code": "TS2345",
+      "msg": "Argument of type '{ bathrooms: number; bedrooms: number; built_area: number; built_area_unit: string; confidence_score: number; contact_info: string; contact_phone: string; created_at: string; description: string; ... 17 more ...; raw_posts: { ...; }; }' is not assignable to parameter of type 'PropertyListing'."
+    },
+    {
+      "file": "src/pages/admin/Listings.tsx",
+      "line": 422,
+      "col": 113,
+      "code": "TS2345",
+      "msg": "Argument of type '{ bathrooms: number; bedrooms: number; built_area: number; built_area_unit: string; confidence_score: number; contact_info: string; contact_phone: string; created_at: string; description: string; ... 17 more ...; raw_posts: { ...; }; }' is not assignable to parameter of type 'PropertyListing'."
+    },
+    {
+      "file": "src/pages/admin/Listings.tsx",
+      "line": 425,
+      "col": 34,
+      "code": "TS2339",
+      "msg": "Property 'status' does not exist on type '{ bathrooms: number; bedrooms: number; built_area: number; built_area_unit: string; confidence_score: number; contact_info: string; contact_phone: string; created_at: string; description: string; ... 17 more ...; raw_posts: { ...; }; }'."
+    },
+    {
+      "file": "src/pages/admin/Listings.tsx",
+      "line": 441,
+      "col": 34,
+      "code": "TS2339",
+      "msg": "Property 'status' does not exist on type '{ bathrooms: number; bedrooms: number; built_area: number; built_area_unit: string; confidence_score: number; contact_info: string; contact_phone: string; created_at: string; description: string; ... 17 more ...; raw_posts: { ...; }; }'."
+    },
+    {
+      "file": "src/pages/admin/PendingListings.tsx",
+      "line": 73,
+      "col": 37,
+      "code": "TS2589",
+      "msg": "Type instantiation is excessively deep and possibly infinite."
+    }
+  ]
+}

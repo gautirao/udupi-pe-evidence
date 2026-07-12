@@ -9,7 +9,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, InfiniteData } from '@tanstack/react-query';
 
 // --- Mocks (vi.hoisted ensures they are lifted before vi.mock calls) ---
 
@@ -91,7 +91,10 @@ vi.mock('@/hooks/useDiscoverAreas', () => ({
 // PanelHeader is a real component; no need to stub it for these tests.
 
 import { SchoolsInAreaPanel } from './SchoolsInAreaPanel';
-import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
+import { useSchoolsByArea, SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
+import { mockUseInfiniteQueryResult } from '@/test-utils/mockReactQueryResults';
+
+type SchoolsByAreaQueryData = InfiniteData<SchoolsByAreaResponse>;
 
 function makeQC() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -105,32 +108,53 @@ function renderPanel() {
   );
 }
 
-// Helper to override the hook mock for a single test
-const mockSchoolsHook = (overrides: Record<string, unknown>) => {
-  vi.mocked(useSchoolsByArea).mockReturnValue({
-    data: undefined,
-    isLoading: false,
-    isError: false,
-    refetch: mockRefetch,
-    fetchNextPage: vi.fn(),
-    hasNextPage: false,
-    isFetchingNextPage: false,
-    ...overrides,
-  } as ReturnType<typeof useSchoolsByArea>);
+// Helper to override the hook mock for a single test.
+// NOTE: `isError` and `data` are branched explicitly (rather than forwarded as
+// plain `boolean`/`T | undefined` locals) so each branch's object literal keeps
+// its discriminant fields as literal types — required for TS to match one
+// member of the UseInfiniteQueryResult discriminated union (see
+// src/test-utils/mockReactQueryResults.ts).
+const mockSchoolsHook = (overrides: {
+  data?: SchoolsByAreaQueryData;
+  isError?: boolean;
+}) => {
+  const isError = overrides.isError ?? false;
+  const data = overrides.data;
+  if (isError) {
+    vi.mocked(useSchoolsByArea).mockReturnValue(mockUseInfiniteQueryResult<SchoolsByAreaQueryData>({
+      data,
+      isLoading: false,
+      isError: true,
+      refetch: mockRefetch,
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+    }));
+  } else {
+    vi.mocked(useSchoolsByArea).mockReturnValue(mockUseInfiniteQueryResult<SchoolsByAreaQueryData>({
+      data,
+      isLoading: false,
+      isError: false,
+      refetch: mockRefetch,
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+    }));
+  }
 };
 
 describe('SchoolsInAreaPanel — error and retry states (Issue #1144)', () => {
   beforeEach(() => {
     mockRefetch.mockReset();
     // Reset to default non-error state
-    vi.mocked(useSchoolsByArea).mockReturnValue({
-      data: { pages: [] },
+    vi.mocked(useSchoolsByArea).mockReturnValue(mockUseInfiniteQueryResult<SchoolsByAreaQueryData>({
+      data: { pages: [], pageParams: [] },
       isLoading: false,
       isError: false,
       refetch: mockRefetch,
       fetchNextPage: vi.fn(),
       hasNextPage: false,
-    } as any);
+    }));
   });
 
   it('AC1: renders named error state when hook isError is true', () => {
@@ -225,14 +249,14 @@ describe('SchoolsInAreaPanel — filter preservation (Issue #1138)', () => {
   beforeEach(() => {
     mockSetFiltersLive.mockReset();
     // Reset hook to default (non-error, empty) state for filter tests
-    vi.mocked(useSchoolsByArea).mockReturnValue({
-      data: { pages: [] },
+    vi.mocked(useSchoolsByArea).mockReturnValue(mockUseInfiniteQueryResult<SchoolsByAreaQueryData>({
+      data: { pages: [], pageParams: [] },
       isLoading: false,
       isError: false,
       refetch: mockRefetch,
       fetchNextPage: vi.fn(),
       hasNextPage: false,
-    } as any);
+    }));
   });
 
   it('AC5: board chip toggle preserves dateFrom and dateTo', () => {
