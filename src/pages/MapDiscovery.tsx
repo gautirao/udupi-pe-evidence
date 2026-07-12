@@ -43,6 +43,7 @@ import { MapStatsBar, MarkersTruncationNotice } from '@/components/discover/MapS
 import { MapEmptyGuidance } from '@/components/discover/MapEmptyGuidance';
 import { useDiscoverInteractionState } from '@/features/discover/state/useDiscoverInteractionState';
 import { useReducedMotion } from '@/features/discover/state/useReducedMotion';
+import { useRegionGuideState } from '@/features/discover/state/useRegionGuideState';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
@@ -1219,23 +1220,11 @@ export default function MapDiscovery() {
 
   // hoveredAreaKeyForMap now lives in useDiscoverInteractionState above (Issue #1824 S1).
 
-  // Issue #1808 — transient, NON-URL region-selection-source signal for the
-  // region-overview guidance (map guidance card + region legend + panel
-  // attention ring). Mirrors hoveredListingId/hoveredAreaKeyForMap above:
-  // ephemeral React state only, never written to the URL, never persisted.
-  // Defaults to 'deeplink' so a fresh load with `?scope=` already in the URL
-  // never fires the one-shot pulse (design §5/§9) — the source only flips to
-  // 'map'/'panel' via an explicit click (armRegionSelect below).
-  const [regionSelectSource, setRegionSelectSource] = useState<'map' | 'panel' | 'deeplink'>('deeplink');
-  const [regionSelectNonce, setRegionSelectNonce] = useState(0);
-  // Card dismissal is local UI state only (no storage/backend writes) and
-  // resets on the next region selection (design §5) — see armRegionSelect.
-  const [regionGuideDismissed, setRegionGuideDismissed] = useState(false);
-  const armRegionSelect = useCallback((source: 'map' | 'panel') => {
-    setRegionSelectSource(source);
-    setRegionSelectNonce((n) => n + 1);
-    setRegionGuideDismissed(false);
-  }, []);
+  // regionSelectSource/regionSelectNonce/regionGuideDismissed/armRegionSelect
+  // now live in useRegionGuideState above (Issue #1824 S2b).
+  const { view: regionGuideView, commands: regionGuideCommands } = useRegionGuideState();
+  const { regionSelectSource, regionSelectNonce, regionGuideDismissed } = regionGuideView;
+  const { armRegionSelect, dismissRegionGuide } = regionGuideCommands;
 
   // Issue #1808 §8 — reduced-motion detection for the guidance ring/nudge.
   // Issue #1824 Slice S2a — extracted to useReducedMotion (behaviour-preserving).
@@ -3641,7 +3630,7 @@ export default function MapDiscovery() {
               markerKind={regionOverviewMarkerKind}
               pulseEligible={regionGuideRingActive}
               prefersReducedMotion={prefersReducedMotion}
-              onDismiss={() => setRegionGuideDismissed(true)}
+              onDismiss={dismissRegionGuide}
             />
           )}
 
