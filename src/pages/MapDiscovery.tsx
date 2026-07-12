@@ -41,6 +41,7 @@ import { CitySelect } from '@/components/discover/CitySelect';
 import { CityNotSupported } from '@/components/discover/CityNotSupported';
 import { MapStatsBar, MarkersTruncationNotice } from '@/components/discover/MapStatsBar';
 import { MapEmptyGuidance } from '@/components/discover/MapEmptyGuidance';
+import { useDiscoverInteractionState } from '@/features/discover/state/useDiscoverInteractionState';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
@@ -1196,11 +1197,13 @@ export default function MapDiscovery() {
   // detects any net increase and triggers the flyTo(cityCenter, cityZoom).
   const [startOverTick, setStartOverTick] = useState(0);
 
-  // Issue #1547 — ephemeral hover/focus id for card→marker highlight.
-  // Lives in component state only — never written to URL. Resets to null on
-  // mouseleave/blur and naturally on journey switch (component re-mounts / panel
-  // unmounts). School-first intentionally NOT wired (RISK-3: 3-tier desynced markers).
-  const [hoveredListingId, setHoveredListingId] = useState<string | null>(null);
+  // Issue #1824 Slice S1 — ephemeral hover/emphasis cluster extracted to a
+  // leaf state hook (hoveredListingId, hoveredAreaKeyForMap,
+  // highlightedAreaKeys). See useDiscoverInteractionState for full history
+  // (Issues #1547, #1798 PR-B, #1806 FIX-5d) — none of this is ever written
+  // to the URL.
+  const { view: interactionView, commands: interactionCommands } = useDiscoverInteractionState();
+  const { hoveredListingId, hoveredAreaKeyForMap, highlightedAreaKeys } = interactionView;
 
   // Issue #1798 PR-B — panel↔map area-marker plumbing (Unit D).
   // Live (unsubmitted) area-search query typed into a panel's ScopedSearch. Debounced
@@ -1213,10 +1216,7 @@ export default function MapDiscovery() {
     return () => clearTimeout(t);
   }, [areaSearchQuery]);
 
-  // Ephemeral hover/focus signal from a panel locality row → map marker emphasis.
-  // NOT persisted to URL; resets on mouse-leave/blur. Mirrors hoveredListingId above.
-  // Never drives any camera movement (no panner ticks are keyed on this state).
-  const [hoveredAreaKeyForMap, setHoveredAreaKeyForMap] = useState<string | null>(null);
+  // hoveredAreaKeyForMap now lives in useDiscoverInteractionState above (Issue #1824 S1).
 
   // Issue #1808 — transient, NON-URL region-selection-source signal for the
   // region-overview guidance (map guidance card + region legend + panel
@@ -1250,15 +1250,13 @@ export default function MapDiscovery() {
     return () => mql.removeEventListener('change', handleChange);
   }, []);
 
-  // Issue #1806 (FIX-5d) — ephemeral highlight signal from a non-splittable
-  // area-cluster chip click → the panel's member-area rows. NOT persisted to
-  // URL; mirrors hoveredAreaKeyForMap's ephemeral-state pattern above. Never
-  // drives any camera movement (the camera intentionally holds still for a
-  // non-splittable cluster click — see handleAreaClusterClick below).
-  const [highlightedAreaKeys, setHighlightedAreaKeys] = useState<string[]>([]);
+  // highlightedAreaKeys now lives in useDiscoverInteractionState above (Issue #1824 S1).
+  // Issue #1806 (FIX-5d) — non-splittable area-cluster chip click → highlight the
+  // panel's member-area rows. Never drives any camera movement (the camera
+  // intentionally holds still for a non-splittable cluster click).
   const handleAreaClusterClick = useCallback((cluster: AreaMarkerClusterInfo) => {
-    setHighlightedAreaKeys(cluster.areas.map((a) => a.areaKey));
-  }, []);
+    interactionCommands.setHighlightedAreas(cluster.areas.map((a) => a.areaKey));
+  }, [interactionCommands]);
 
   // "Showing X of N areas on the map" — sourced from AreaMarkerLayer's own
   // onMarkersComputed callback (never fetched/fabricated independently).
@@ -4112,11 +4110,11 @@ export default function MapDiscovery() {
           // Issue #1547 — ephemeral hover/focus signal for card→marker highlight.
           // hoveredListingId is ephemeral useState (NOT URL); resets to null on mouseleave/blur
           // and naturally on journey switch. School-first NOT wired (RISK-3 unsafe tier sources).
-          onHoverResultListing={setHoveredListingId}
+          onHoverResultListing={interactionCommands.hoverListing}
           // Issue #1798 PR-B (Unit D/F) — panel↔map area-marker plumbing. Mirrors the
           // onHoverResultListing pattern above: purely ephemeral state, no camera move.
           onAreaSearchQueryChange={setAreaSearchQuery}
-          onAreaHover={setHoveredAreaKeyForMap}
+          onAreaHover={interactionCommands.hoverArea}
           shownAreaCount={areaMarkerCounts.shown}
           totalAreaMarkerCount={areaMarkerCounts.total}
           // Issue #1806 (FIX-5d) — non-splittable cluster click highlight signal.
