@@ -98,7 +98,7 @@ describe('MapFilters — property type checkboxes', () => {
   it('renders checkboxes for all 5 types', () => {
     renderFilters();
     for (const label of ['Land', 'House', 'Apartment', 'Commercial', 'Other']) {
-      expect(screen.getByRole('checkbox', { name: label, exact: true })).toBeInTheDocument();
+      expect(screen.getByRole('checkbox', { name: label })).toBeInTheDocument();
     }
   });
 
@@ -121,10 +121,10 @@ describe('MapFilters — BHK buttons (PR-11/12 regression)', () => {
     // Label is present
     expect(screen.getByText('Bedrooms (BHK)')).toBeInTheDocument();
     // Buttons with exact labels
-    expect(screen.getByRole('button', { name: '1', exact: true })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '2', exact: true })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '3', exact: true })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '4+', exact: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '3' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '4+' })).toBeInTheDocument();
   });
 });
 

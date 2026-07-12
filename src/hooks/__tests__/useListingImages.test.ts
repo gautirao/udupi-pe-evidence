@@ -201,7 +201,7 @@ describe('useListingImages', () => {
   describe('upload-url 403 non-owner', () => {
     it('surfaces error, does not PUT to any signed URL, does not call register', async () => {
       mockApiGet.mockResolvedValue([]);
-      mockApiPost.mockRejectedValueOnce(new ApiError('Forbidden', 403));
+      mockApiPost.mockRejectedValueOnce(new ApiError('Forbidden', 403, null));
 
       const { result } = renderHook(() => useListingImages('listing-1'), {
         wrapper: createWrapper(),
@@ -237,7 +237,7 @@ describe('useListingImages', () => {
   describe('upload-url 400 bad request', () => {
     it('surfaces error, no PUT, no register', async () => {
       mockApiGet.mockResolvedValue([]);
-      mockApiPost.mockRejectedValueOnce(new ApiError('Bad content type', 400));
+      mockApiPost.mockRejectedValueOnce(new ApiError('Bad content type', 400, null));
 
       const { result } = renderHook(() => useListingImages('listing-1'), {
         wrapper: createWrapper(),
@@ -265,7 +265,7 @@ describe('useListingImages', () => {
   describe('upload-url 503 storage disabled', () => {
     it('surfaces error gracefully, no PUT', async () => {
       mockApiGet.mockResolvedValue([]);
-      mockApiPost.mockRejectedValueOnce(new ApiError('Storage unavailable', 503));
+      mockApiPost.mockRejectedValueOnce(new ApiError('Storage unavailable', 503, null));
 
       const { result } = renderHook(() => useListingImages('listing-1'), {
         wrapper: createWrapper(),
@@ -294,7 +294,7 @@ describe('useListingImages', () => {
       mockApiGet.mockResolvedValue([]);
 
       // First attempt: upload-url fails
-      mockApiPost.mockRejectedValueOnce(new ApiError('Service error', 503));
+      mockApiPost.mockRejectedValueOnce(new ApiError('Service error', 503, null));
 
       const { result } = renderHook(() => useListingImages('listing-1'), {
         wrapper: createWrapper(),
@@ -343,7 +343,7 @@ describe('useListingImages', () => {
       // upload-url succeeds, then register fails
       mockApiPost
         .mockResolvedValueOnce(urlResp)
-        .mockRejectedValueOnce(new ApiError('Bad request', 400));
+        .mockRejectedValueOnce(new ApiError('Bad request', 400, null));
 
       const { result } = renderHook(() => useListingImages('listing-1'), {
         wrapper: createWrapper(),
@@ -390,7 +390,7 @@ describe('useListingImages', () => {
 
       mockApiPost
         .mockResolvedValueOnce(fakeUploadUrlResponse())
-        .mockRejectedValueOnce(new ApiError('Conflict', 409));
+        .mockRejectedValueOnce(new ApiError('Conflict', 409, null));
 
       const { result } = renderHook(() => useListingImages('listing-1'), {
         wrapper: createWrapper(),
@@ -421,7 +421,7 @@ describe('useListingImages', () => {
     it('removes entry from uploads state', async () => {
       mockApiGet.mockResolvedValue([]);
       // upload-url fails → error entry
-      mockApiPost.mockRejectedValueOnce(new ApiError('Forbidden', 403));
+      mockApiPost.mockRejectedValueOnce(new ApiError('Forbidden', 403, null));
 
       const { result } = renderHook(() => useListingImages('listing-1'), {
         wrapper: createWrapper(),

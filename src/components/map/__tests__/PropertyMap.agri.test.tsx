@@ -159,7 +159,7 @@ describe('PropertyMap — AgriMarkerClusterLayer (Issue #1372)', () => {
       if (opts?.iconCreateFunction) {
         capturedIconCreateFn = opts.iconCreateFunction as typeof capturedIconCreateFn;
       }
-      return { addLayer: mockClusterGroupAddLayer } as ReturnType<typeof L.markerClusterGroup>;
+      return { addLayer: mockClusterGroupAddLayer } as unknown as ReturnType<typeof L.markerClusterGroup>;
     });
 
     render(<PropertyMap listings={[agriListing]} isAgriMode={true} />);
@@ -187,7 +187,7 @@ describe('PropertyMap — AgriMarkerClusterLayer (Issue #1372)', () => {
       if (opts?.iconCreateFunction) {
         capturedIconCreateFn = opts.iconCreateFunction as typeof capturedIconCreateFn;
       }
-      return { addLayer: mockClusterGroupAddLayer } as ReturnType<typeof L.markerClusterGroup>;
+      return { addLayer: mockClusterGroupAddLayer } as unknown as ReturnType<typeof L.markerClusterGroup>;
     });
 
     render(<PropertyMap listings={[houseListing]} isAgriMode={false} />);
@@ -210,7 +210,7 @@ describe('PropertyMap — AgriMarkerClusterLayer (Issue #1372)', () => {
       if (opts?.iconCreateFunction) {
         capturedIconCreateFn = opts.iconCreateFunction as typeof capturedIconCreateFn;
       }
-      return { addLayer: mockClusterGroupAddLayer } as ReturnType<typeof L.markerClusterGroup>;
+      return { addLayer: mockClusterGroupAddLayer } as unknown as ReturnType<typeof L.markerClusterGroup>;
     });
 
     // No isAgriMode prop → defaults to false
