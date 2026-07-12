@@ -63,7 +63,6 @@ import {
 import {
   extractYouTubeId,
   isInstagramUrl,
-  boolToTriState,
   validateVideoUrl,
 } from '@/lib/editListing/valueMappers';
 import {
@@ -78,6 +77,7 @@ import {
 import { useAgriFields } from './useAgriFields';
 import { useCommercialFields } from './useCommercialFields';
 import { useRentFields } from './useRentFields';
+import { useResidentialFields } from './useResidentialFields';
 
 // Issue #1458 + #1459 — derive canonical value lists from shared label maps to avoid duplication.
 // Any future addition to agriFieldLabels.ts is automatically reflected here.
@@ -208,46 +208,38 @@ export function EditListingForm({ listing }: EditListingFormProps) {
   // Tri-state booleans use '' = not specified / 'true' / 'false' (same convention as
   // farmhouseAvailable/fencingDone above) so an unset value is never conflated with
   // an explicit "No" on prefill.
-  const [bathrooms, setBathrooms] = useState('');
-  const [balconies, setBalconies] = useState('');
   const [facing, setFacing] = useState('');
-  const [availabilityTimeline, setAvailabilityTimeline] = useState('');
-  const [superBuiltArea, setSuperBuiltArea] = useState<number | null>(null);
-  const [superBuiltAreaUnit, setSuperBuiltAreaUnit] = useState('SQ_FT');
-  const [propertyAge, setPropertyAge] = useState('');
-  const [residentialWaterSource, setResidentialWaterSource] = useState('');
-  const [parking2wCount, setParking2wCount] = useState('');
-  const [parking4wCount, setParking4wCount] = useState('');
-  const [roadWidthFt, setRoadWidthFt] = useState('');
-  const [plotDimensions, setPlotDimensions] = useState('');
-  const [conversionStatus, setConversionStatus] = useState('');
-  const [khataNumber, setKhataNumber] = useState('');
-  const [propertyTaxPid, setPropertyTaxPid] = useState('');
-  const [approvingAuthority, setApprovingAuthority] = useState('');
-  const [projectName, setProjectName] = useState('');
-  const [builderName, setBuilderName] = useState('');
-  const [maintenancePaise, setMaintenancePaise] = useState('');
-  const [maintenanceIncluded, setMaintenanceIncluded] = useState('');
-  const [possessionStatus, setPossessionStatus] = useState('');
-  const [priceNegotiable, setPriceNegotiable] = useState('');
-  const [rentNegotiable, setRentNegotiable] = useState('');
-  const [petsAllowed, setPetsAllowed] = useState('');
-  const [hasLift, setHasLift] = useState('');
-  const [hasPowerBackup, setHasPowerBackup] = useState('');
-  const [isGated, setIsGated] = useState('');
-  const [hasGarden, setHasGarden] = useState('');
-  const [hasTerrace, setHasTerrace] = useState('');
-  const [hasCompound, setHasCompound] = useState('');
-  const [hasServantRoom, setHasServantRoom] = useState('');
-  const [isCornerPlot, setIsCornerPlot] = useState('');
-  const [hasBoundaryWall, setHasBoundaryWall] = useState('');
-  const [isGatedLayout, setIsGatedLayout] = useState('');
-  const [hasWaterConnection, setHasWaterConnection] = useState('');
-  const [hasElectricityConnection, setHasElectricityConnection] = useState('');
-  const [hasDrainage, setHasDrainage] = useState('');
-  const [amenities, setAmenities] = useState<string[]>([]);
-  const [specialLocationViews, setSpecialLocationViews] = useState<string[]>([]);
-  const [preferredTenants, setPreferredTenants] = useState<string[]>([]);
+
+  // Residential-exclusive fields — Issue #1838 slice-5d: ~39 residential-only
+  // fields (including the 5 dual-gated fields maintenanceIncluded/
+  // rentNegotiable/petsAllowed/availabilityTimeline/preferredTenants, which
+  // hydrate unconditionally here — their isRent gating stays in
+  // buildUpdatePayload.ts + the JSX below) extracted into useResidentialFields().
+  // facing/ownershipType/surveyNumber/carpetArea/floorNumber/totalFloors/
+  // furnishingStatus/bedrooms/builtArea/landArea are shared with agri/commercial
+  // or are base fields and stay component-owned.
+  const residential = useResidentialFields();
+  const {
+    bathrooms, balconies, parking2wCount, parking4wCount, roadWidthFt, maintenancePaise,
+    propertyAge, residentialWaterSource, plotDimensions, conversionStatus, khataNumber,
+    propertyTaxPid, approvingAuthority, projectName, builderName, possessionStatus,
+    availabilityTimeline, priceNegotiable, hasLift, hasPowerBackup, isGated, hasGarden,
+    hasTerrace, hasCompound, hasServantRoom, isCornerPlot, hasBoundaryWall, isGatedLayout,
+    hasWaterConnection, hasElectricityConnection, hasDrainage, maintenanceIncluded,
+    rentNegotiable, petsAllowed, amenities, specialLocationViews, preferredTenants,
+    superBuiltArea, superBuiltAreaUnit,
+  } = residential.values;
+  const {
+    setBathrooms, setBalconies, setParking2wCount, setParking4wCount, setRoadWidthFt,
+    setMaintenancePaise, setPropertyAge, setResidentialWaterSource, setPlotDimensions,
+    setConversionStatus, setKhataNumber, setPropertyTaxPid, setApprovingAuthority,
+    setProjectName, setBuilderName, setPossessionStatus, setAvailabilityTimeline,
+    setPriceNegotiable, setHasLift, setHasPowerBackup, setIsGated, setHasGarden,
+    setHasTerrace, setHasCompound, setHasServantRoom, setIsCornerPlot, setHasBoundaryWall,
+    setIsGatedLayout, setHasWaterConnection, setHasElectricityConnection, setHasDrainage,
+    setMaintenanceIncluded, setRentNegotiable, setPetsAllowed, setAmenities,
+    setSpecialLocationViews, setPreferredTenants, setSuperBuiltArea, setSuperBuiltAreaUnit,
+  } = residential.setters;
 
   // Images for thumbnail strip in step 4 review
   const { images: listingImages } = useListingImages(id);
@@ -288,47 +280,9 @@ export function EditListingForm({ listing }: EditListingFormProps) {
     // M38-13A (#1626) — residential typed-listing field prefill. All new columns are
     // nullable (legacy pre-V103 rows and non-residential types read null); nulls stay
     // '' / [] (neutral), never fabricated as a default value.
-    setBathrooms(listing.bathrooms != null ? String(listing.bathrooms) : '');
-    setBalconies(listing.balconies != null ? String(listing.balconies) : '');
     setFacing(listing.facing ?? '');
-    setAvailabilityTimeline(listing.availabilityTimeline ?? '');
-    setSuperBuiltArea(listing.superBuiltArea ?? null);
-    setSuperBuiltAreaUnit(listing.superBuiltAreaUnit ?? 'SQ_FT');
-    setPropertyAge(listing.propertyAge ?? '');
-    setResidentialWaterSource(listing.residentialWaterSource ?? '');
-    setParking2wCount(listing.parking2wCount != null ? String(listing.parking2wCount) : '');
-    setParking4wCount(listing.parking4wCount != null ? String(listing.parking4wCount) : '');
-    setRoadWidthFt(listing.roadWidthFt != null ? String(listing.roadWidthFt) : '');
-    setPlotDimensions(listing.plotDimensions ?? '');
-    setConversionStatus(listing.conversionStatus ?? '');
-    setKhataNumber(listing.khataNumber ?? '');
-    setPropertyTaxPid(listing.propertyTaxPid ?? '');
-    setApprovingAuthority(listing.approvingAuthority ?? '');
-    setProjectName(listing.projectName ?? '');
-    setBuilderName(listing.builderName ?? '');
-    setMaintenancePaise(listing.maintenancePaise != null ? String(listing.maintenancePaise) : '');
-    setPossessionStatus(listing.possessionStatus ?? '');
-    setMaintenanceIncluded(boolToTriState(listing.maintenanceIncluded));
-    setPriceNegotiable(boolToTriState(listing.priceNegotiable));
-    setRentNegotiable(boolToTriState(listing.rentNegotiable));
-    setPetsAllowed(boolToTriState(listing.petsAllowed));
-    setHasLift(boolToTriState(listing.hasLift));
-    setHasPowerBackup(boolToTriState(listing.hasPowerBackup));
-    setIsGated(boolToTriState(listing.isGated));
-    setHasGarden(boolToTriState(listing.hasGarden));
-    setHasTerrace(boolToTriState(listing.hasTerrace));
-    setHasCompound(boolToTriState(listing.hasCompound));
-    setHasServantRoom(boolToTriState(listing.hasServantRoom));
-    setIsCornerPlot(boolToTriState(listing.isCornerPlot));
-    setHasBoundaryWall(boolToTriState(listing.hasBoundaryWall));
-    setIsGatedLayout(boolToTriState(listing.isGatedLayout));
-    setHasWaterConnection(boolToTriState(listing.hasWaterConnection));
-    setHasElectricityConnection(boolToTriState(listing.hasElectricityConnection));
-    setHasDrainage(boolToTriState(listing.hasDrainage));
-    setAmenities(listing.amenities ?? []);
-    setSpecialLocationViews(listing.specialLocationViews ?? []);
-    setPreferredTenants(listing.preferredTenants ?? []);
-  }, [listing, agri.hydrate, commercial.hydrate, rent.hydrate]);
+    residential.hydrate(listing);
+  }, [listing, agri.hydrate, commercial.hydrate, rent.hydrate, residential.hydrate]);
 
   // Step 1 is complete when required fields match the submit gate (requiredFieldsComplete).
   // For rent listings: propertyType + monthlyRent + locality. For sale: propertyType + price + locality.
