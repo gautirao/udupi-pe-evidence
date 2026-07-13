@@ -47,6 +47,7 @@ import { useRegionGuideState } from '@/features/discover/state/useRegionGuideSta
 import { useAreaSearchState } from '@/features/discover/state/useAreaSearchState';
 import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSearchState';
 import { useMarkerSelection } from '@/features/discover/state/useMarkerSelection';
+import { useDiscoverJourneyTransitions } from '@/features/discover/state/useDiscoverJourneyTransitions';
 import { resolveMarkerListings } from '@/features/discover/map/resolveMarkerListings';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
@@ -1128,15 +1129,17 @@ export default function MapDiscovery() {
   // user action (bounded-search CTA). Default false so the query does not auto-fire on
   // school select. Reset to false on every path that changes or clears the selected school
   // or radius (see reset calls below) to ensure the CTA re-appears on each new selection.
+  //
+  // Issue #1824 Slice S6 — kept HERE (page-level, not moved into
+  // useDiscoverJourneyTransitions) as a documented deviation from the S6 plan: the
+  // raw useState pair must stay declared before useDiscoverMapData below, which reads
+  // boundedSearchTriggered synchronously in its markersEnabled param. Moving it into
+  // the journey hook would create a circular dependency, since that hook's own moved
+  // effects need useDiscoverMapData's OUTPUTS (discoverAreas/areasLoading/schoolById/
+  // schoolByIdError). See useDiscoverJourneyTransitions.ts's file-header "Deviation 2"
+  // comment for the full rationale. Every WRITE SITE for this flag still lives in the
+  // journey hook's commands (injected setter) — only the useState call itself is here.
   const [boundedSearchTriggered, setBoundedSearchTriggered] = useState(false);
-
-  // Issue #1064 AC2 — Start Over must reset the map viewport to city center/zoom.
-  // useDiscoverPageState owns `resetMapTick` (incremented by handleAreaBack); we need a
-  // second source of truth that increments on Start Over without modifying that hook
-  // (out of scope per scope-lock). We compose both into a single number passed to
-  // PropertyMap.resetMapTick; MapController's handledTickRef-based guard correctly
-  // detects any net increase and triggers the flyTo(cityCenter, cityZoom).
-  const [startOverTick, setStartOverTick] = useState(0);
 
   // Issue #1824 Slice S1 — ephemeral hover/emphasis cluster extracted to a
   // leaf state hook (hoveredListingId, hoveredAreaKeyForMap,
@@ -1195,13 +1198,8 @@ export default function MapDiscovery() {
   // the dep array. ViewportWatcher does not write to this tick.
   const [schoolMarkerFocusTick, setSchoolMarkerFocusTick] = useState(0);
 
-  // Issue #1160 GAP 2 — Back restoration ticks.
-  // areaRestoreTick: incremented when Back is pressed from school-selected (level 2 → 1),
-  //   only when areaKey is set (so AreaRestorePanner has a valid area to fly to).
-  // cityRestoreTick: incremented when Back is pressed from schools-in-area (level 1 → 0).
-  // Neither is incremented from handleStartOver (Start Over uses composedResetMapTick).
-  const [areaRestoreTick, setAreaRestoreTick] = useState(0);
-  const [cityRestoreTick, setCityRestoreTick] = useState(0);
+  // Issue #1160 GAP 2 — Back restoration ticks (areaRestoreTick, cityRestoreTick) now
+  // live in useDiscoverJourneyTransitions (Issue #1824 Slice S6) — see journeyView below.
 
   // Transient map bbox — not stored in URL. Updated on pan/zoom via onBoundsChange.
   // Stored as a ref for the debounce timer and as state to trigger re-renders/refetches.
@@ -1256,42 +1254,11 @@ export default function MapDiscovery() {
     [rawSummaryRegions, areaGroupsList, discoverSummaryData?.totalActiveListings]
   );
 
-  // Issue #1064 AC2 — composed tick + Start Over handler (see startOverTick declaration above).
-  const composedResetMapTick = resetMapTick + startOverTick;
-  const handleStartOver = useCallback(() => {
-    urlActions.startOver();
-    setStartOverTick((t) => t + 1);
-    // Issue #1142 — Start Over must also clear local state that mirrors URL
-    // school/area context. Without these, a competing effect re-writes schoolId
-    // and radiusKm via handleFiltersChange → setSchoolParams, leaving stale params
-    // in the URL after Start Over.
-    setSelectedSchool(null);
-    setSelectedArea(null);
-    setPanToArea(null);
-    // Issue #1153 — clear ALL local filter state, not just school params.
-    // The previous partial-delete left bedrooms/propertyTypes/etc in local state,
-    // causing ActiveContextChips to keep rendering stale chips after Start Over.
-    setFilters({});
-    setSchoolBoardFilter([]);
-    // Issue #1115 — reset bounded-search gate so the CTA reappears on next school select.
-    setBoundedSearchTriggered(false);
-  }, [urlActions, setSelectedSchool, setSelectedArea, setPanToArea, setFilters, setSchoolBoardFilter]);
-
-  // Issue #1817 (AC8) — after Start Over, move focus to the panel's h1 (city hero) so
-  // keyboard users land somewhere sensible (design §8). Start Over always lands on the
-  // guided-entry city landing (bare ?city=...), whose h1 carries id="discover-panel-h1"
-  // (GuidedEntryPanel). Runs on the next paint after startOverTick changes, since the
-  // panel tree must re-render to guided-entry (and mount the new h1) before it can be
-  // focused; a plain synchronous focus() call would target the about-to-unmount node.
-  const prevStartOverTickRef = useRef(startOverTick);
-  useEffect(() => {
-    if (startOverTick === prevStartOverTickRef.current) return;
-    prevStartOverTickRef.current = startOverTick;
-    const raf = requestAnimationFrame(() => {
-      document.getElementById('discover-panel-h1')?.focus();
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [startOverTick]);
+  // Issue #1824 Slice S6 — composedResetMapTick + handleStartOver now live in
+  // useDiscoverJourneyTransitions; see journeyView/journeyCommands below (declared
+  // after useDiscoverMapData + schools, which the hook needs as injected deps).
+  // The Start-Over a11y focus effect (#1817 AC8) is also declared there — it reads
+  // journeyView.startOverTick and must run after the hook call is in scope.
 
   // Reset bbox when city changes — the previous city's viewport is out-of-bounds for the new city.
   useEffect(() => {
@@ -1475,39 +1442,9 @@ export default function MapDiscovery() {
     listingPurpose: intentListingPurpose,
   });
 
-  // Debug: expose areaListings and related data to window.__debug for Playwright tests
-  useEffect(() => {
-    (window as Window & { __debug?: Record<string, unknown> }).__debug = {
-      ...(window as Window & { __debug?: Record<string, unknown> }).__debug,
-      propertyMapListings: {
-        areaListings,
-        areaMarkerListings,
-        areaLen: areaListings.length,
-        areaMarkerLen: areaMarkerListings.length,
-        markerListings,
-        markerLen: markerListings.length,
-        selectedArea,
-      },
-      mapState: {
-        zoom: mapZoom,
-        city,
-        // Issue #1160 — expose school centre for E2E viewport assertions.
-        // SchoolFocusPanner pans the Leaflet map imperatively (no URL write),
-        // so E2E must read the map centre from this debug object rather than
-        // from URL params.
-        schoolCenter: selectedSchool
-          ? { lat: selectedSchool.latitude, lon: selectedSchool.longitude }
-          : null,
-        // Issue #1160 GAP 1+2 — expose restoration ticks for E2E assertability.
-        // MF-6 asserts schoolMarkerFocusTick > 0 after listings settle.
-        // MF-7 asserts areaRestoreTick incremented on Back from school-selected.
-        // MF-8 asserts cityRestoreTick incremented on Back from schools-in-area.
-        schoolMarkerFocusTick,
-        areaRestoreTick,
-        cityRestoreTick,
-      },
-    };
-  }, [areaListings, areaMarkerListings, markerListings, selectedArea, mapZoom, city, selectedSchool, schoolMarkerFocusTick, areaRestoreTick, cityRestoreTick]);
+  // Issue #1824 Slice S6 — the window.__debug.mapState effect (Playwright E2E contract)
+  // moved a few lines down (after useDiscoverJourneyTransitions), because it now reads
+  // journeyView.areaRestoreTick/cityRestoreTick. The object SHAPE is byte-identical.
 
   // Schools for SchoolMarkerLayer — fetched only in school-first journey when an area is selected.
   // Single owner: MapDiscovery fetches once and passes down to both SchoolMarkerLayer and
@@ -1547,18 +1484,9 @@ export default function MapDiscovery() {
     [schoolsQuery.data?.pages],
   );
 
-  // Sync URL → local schoolBoardFilter (which drives the chip UI inside NearSchoolSheet).
-  // The URL is the source of truth; local state mirrors it so chip-toggle UI reads the
-  // active set without re-parsing the URL. Both arrays are compared via JSON to avoid an
-  // infinite loop when the array identity changes but the contents are equal.
-  const urlBoardKey = urlBoardFilters.join('|');
-  useEffect(() => {
-    if (schoolBoardFilter.join('|') !== urlBoardKey) {
-      setSchoolBoardFilter(urlBoardFilters);
-    }
-    // urlBoardKey alone captures the contents; setSchoolBoardFilter is stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlBoardKey]);
+  // Issue #1824 Slice S6 — the board-filter URL→local sync effect (incl. its
+  // lint suppression + single-dep [urlBoardKey] array) moved into
+  // useDiscoverJourneyTransitions below.
 
   // Single setter consumed by chip UI: updates URL (canonical) and local state (mirror).
   // Always uses REPLACE semantics (urlActions.setBoardFilters is REPLACE-only).
@@ -1582,67 +1510,102 @@ export default function MapDiscovery() {
     });
   }, [allSchools, urlBoardFilters]);
 
-  // Handler: selecting a school by ID from either the map marker click (Path A) or the
-  // right-panel school card click (Path B — SchoolsInAreaPanel).
-  //
-  // Issue #1109 root cause: previously both paths called only urlActions.setSchoolParams,
-  // which set urlState.schoolId without touching filters.schoolLat/schoolLon/schoolRadiusKm.
-  // That caused useDiscoverFilteredMarkers to immediately fire a refetch (markersEnabled
-  // became true) with NO school coordinates, producing a settled-state response with
-  // wrong/empty markers. The school coords were only applied later when useSchoolById
-  // resolved asynchronously — too late to prevent the settled-state disappearance.
-  //
-  // Fix: look up the school in the already-loaded schools[] array and immediately set
-  // selectedSchool + filters.schoolLat/Lon/RadiusKm in the same synchronous batch.
-  // This ensures useDiscoverFilteredMarkers always fires with correct school params,
-  // so both the intermediate and settled-state responses contain the proximity markers.
-  const handleSelectSchoolById = useCallback(
-    (schoolId: string) => {
-      const radiusKm = DEFAULT_SCHOOL_RADIUS_KM;
-      // Look up the school from the already-loaded schools[] (from useSchoolsByArea)
-      // or from React Query cache (e.g. ScopedSearch click, another mount, or deep-link prefetch).
-      const school =
-        schools.find((s) => s.id === schoolId) ??
-        queryClient.getQueryData<SchoolResult>(['school-by-id', schoolId]) ??
-        null;
+  // Issue #1824 Slice S6 — journey-transition orchestration (R10) extracted to
+  // useDiscoverJourneyTransitions: startOverTick/areaRestoreTick/cityRestoreTick +
+  // composedResetMapTick, handleStartOver, handleSelectSchoolById, handleRadiusChange,
+  // the school-first Back ladder (handleSchoolFirstBackLevel2/1/0 + schoolFirstOnBack),
+  // onClearSchool/onClearArea, the handleSchoolSelect wrapper, the board-filter sync
+  // effect, the schoolById restore/error effect, and the deferred areaKey hydration
+  // effect. See docs/audit/evidence/issue-1824-map-discovery-decomposition/slice-s6-design.md.
+  // Called here (after useDiscoverMapData + schools) because its injected deps
+  // (discoverAreas, areasLoading, schoolById, schoolByIdError, schools) are outputs of
+  // those two. boundedSearchTriggered/setBoundedSearchTriggered stay page-local (see
+  // their useState declaration above) — injected here rather than owned by the hook;
+  // see useDiscoverJourneyTransitions.ts's "Deviation 2" header comment for why.
+  const { view: journeyView, commands: journeyCommands } = useDiscoverJourneyTransitions({
+    urlState,
+    urlActions,
+    selectedSchool,
+    filters,
+    setSelectedArea,
+    setSelectedSchool,
+    setFilters,
+    setSchoolBoardFilter,
+    setPanToArea,
+    resetMapTick,
+    pendingAreaKeyRef,
+    initialViewportRef,
+    initialViewportWasBareAreaRef,
+    resolveSignal,
+    handleSchoolSelect,
+    schools,
+    queryClient,
+    schoolById,
+    schoolByIdError,
+    discoverAreas,
+    areasLoading,
+    urlBoardFilters,
+    schoolBoardFilter,
+    panelContent,
+    city,
+    toast,
+    boundedSearchTriggered,
+    setBoundedSearchTriggered,
+  });
 
-      if (urlState.journey !== 'school-first' && !urlState.areaKey) {
-        // If no area is selected, selecting a school flips the journey to school-first
-        // (e.g. searching for a school from the area-first landing page via ScopedSearch).
-        urlActions.setSchoolJourney({
-          schoolId,
-          radiusKm,
-          lat: school?.latitude ?? urlState.viewport?.lat ?? 12.9716,
-          lon: school?.longitude ?? urlState.viewport?.lon ?? 77.5946,
-          zoom: urlState.viewport?.zoom ?? 14,
-          areaKey: school?.areaKey ?? null,
-        });
-      } else {
-        urlActions.setSchoolParams({ schoolId, radiusKm });
-      }
+  // Issue #1817 (AC8) — after Start Over, move focus to the panel's h1 (city hero) so
+  // keyboard users land somewhere sensible (design §8). Start Over always lands on the
+  // guided-entry city landing (bare ?city=...), whose h1 carries id="discover-panel-h1"
+  // (GuidedEntryPanel). Runs on the next paint after startOverTick changes, since the
+  // panel tree must re-render to guided-entry (and mount the new h1) before it can be
+  // focused; a plain synchronous focus() call would target the about-to-unmount node.
+  // Issue #1824 Slice S6 — reads journeyView.startOverTick (moved-tick owner).
+  const prevStartOverTickRef = useRef(journeyView.startOverTick);
+  useEffect(() => {
+    if (journeyView.startOverTick === prevStartOverTickRef.current) return;
+    prevStartOverTickRef.current = journeyView.startOverTick;
+    const raf = requestAnimationFrame(() => {
+      document.getElementById('discover-panel-h1')?.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [journeyView.startOverTick]);
 
-      if (school) {
-        setSelectedSchool(school);
-        setFilters((prev) => ({
-          ...prev,
-          schoolLat: school.latitude,
-          schoolLon: school.longitude,
-          schoolRadiusKm: radiusKm,
-        }));
-        // Issue #1115 — new school selected; reset so the CTA reappears.
-        // Must come AFTER the coord-sync batch above (#1109 regression guard).
-        setBoundedSearchTriggered(false);
-        return;
-      }
-
-      // If neither path resolves, fall through to the existing useSchoolById async
-      // restore effect which will set state once the fetch resolves. The placeholderData
-      // in useDiscoverFilteredMarkers bridges the visual gap.
-      // Issue #1115 — reset on fall-through too (coords will be set by the async effect).
-      setBoundedSearchTriggered(false);
-    },
-    [urlActions, schools, setSelectedSchool, setFilters, queryClient, urlState.journey, urlState.areaKey, urlState.viewport],
-  );
+  // Debug: expose areaListings and related data to window.__debug for Playwright tests.
+  // Issue #1824 Slice S6 — schoolMarkerFocusTick still sourced from the page (S7 owns
+  // it); areaRestoreTick/cityRestoreTick now read from journeyView (S6 owns them). The
+  // object SHAPE is byte-identical (E2E contract, AC4).
+  useEffect(() => {
+    (window as Window & { __debug?: Record<string, unknown> }).__debug = {
+      ...(window as Window & { __debug?: Record<string, unknown> }).__debug,
+      propertyMapListings: {
+        areaListings,
+        areaMarkerListings,
+        areaLen: areaListings.length,
+        areaMarkerLen: areaMarkerListings.length,
+        markerListings,
+        markerLen: markerListings.length,
+        selectedArea,
+      },
+      mapState: {
+        zoom: mapZoom,
+        city,
+        // Issue #1160 — expose school centre for E2E viewport assertions.
+        // SchoolFocusPanner pans the Leaflet map imperatively (no URL write),
+        // so E2E must read the map centre from this debug object rather than
+        // from URL params.
+        schoolCenter: selectedSchool
+          ? { lat: selectedSchool.latitude, lon: selectedSchool.longitude }
+          : null,
+        // Issue #1160 GAP 1+2 — expose restoration ticks for E2E assertability.
+        // MF-6 asserts schoolMarkerFocusTick > 0 after listings settle.
+        // MF-7 asserts areaRestoreTick incremented on Back from school-selected.
+        // MF-8 asserts cityRestoreTick incremented on Back from schools-in-area.
+        schoolMarkerFocusTick,
+        areaRestoreTick: journeyView.areaRestoreTick,
+        cityRestoreTick: journeyView.cityRestoreTick,
+      },
+    };
+  }, [areaListings, areaMarkerListings, markerListings, selectedArea, mapZoom, city, selectedSchool, schoolMarkerFocusTick, journeyView.areaRestoreTick, journeyView.cityRestoreTick]);
 
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).
   const isLoading =
@@ -1979,127 +1942,11 @@ export default function MapDiscovery() {
     setSchoolMarkerFocusTick((t) => t + 1);
   }, [listingsReadyKey]);
 
-  // Radius change handler for SchoolSelectedPanel — uses REPLACE (not PUSH) per AC1.
-  const handleRadiusChange = useCallback(
-    (newRadiusKm: number) => {
-      if (!urlState.schoolId) return;
-      // Issue #1210: clamp so a 0 km (or sub-minimum) request never reaches URL/state.
-      const radiusKm = clampSchoolRadiusKm(newRadiusKm);
-      urlActions.setSchoolParams({ schoolId: urlState.schoolId, radiusKm });
-      setFilters((prev) => ({ ...prev, schoolRadiusKm: radiusKm }));
-      // Issue #1115 — radius change re-gates the search; CTA must reappear so the user
-      // explicitly triggers a new bounded search for the updated radius.
-      setBoundedSearchTriggered(false);
-    },
-    [urlState.schoolId, urlActions, setFilters],
-  );
-
-  // Issue #1143 — in-page Back for school-first journey levels.
-  //
-  // Level 2 (school-selected): clears schoolId + radiusKm, preserves areaKey.
-  //   clearSchoolSelection is REPLACE — does not add a history entry.
-  //   Local school state mirrors are cleared to keep filters consistent.
-  //
-  // Level 1 (schools-in-area): clears areaKey, preserves journey.
-  //   clearAreaSelection is REPLACE.
-  //   Local selectedArea is cleared so the map re-centres to city level.
-  //
-  // Level 0 (school-browse): no Back — onBack undefined, PanelHeader hides button.
-  const handleSchoolFirstBackLevel2 = useCallback(() => {
-    // Issue #1160 GAP 2: if areaKey is set, increment areaRestoreTick so AreaRestorePanner
-    // re-fits the map to the area bounds after the school context is cleared.
-    // Read urlState.areaKey at call-time (stable closure — urlState is re-derived each render).
-    // Do NOT increment from handleStartOver (Start Over uses composedResetMapTick instead).
-    //
-    // Issue #1160 v3 Bug B: when areaKey is null (top-level school-selected deep-link with
-    // no area context), there is no area to restore to — instead fly back to city center
-    // via CityRestorePanner.
-    if (urlState.areaKey != null) {
-      setAreaRestoreTick((t) => t + 1);
-    } else {
-      setCityRestoreTick((t) => t + 1);
-    }
-    urlActions.clearSchoolSelection();
-    setSelectedSchool(null);
-    setFilters((prev) => {
-      const next = { ...prev };
-      delete next.schoolLat;
-      delete next.schoolLon;
-      delete next.schoolRadiusKm;
-      return next;
-    });
-    // Issue #1115 — school cleared; reset so CTA reappears on next school select.
-    setBoundedSearchTriggered(false);
-  }, [urlState.areaKey, urlActions, setSelectedSchool, setFilters]);
-
-  const handleSchoolFirstBackLevel1 = useCallback(() => {
-    // Issue #1160 GAP 2: increment cityRestoreTick so CityRestorePanner re-flies
-    // the map to city center/zoom after the area context is cleared.
-    // Only fires in school-first journey (this handler is only called from schoolFirstOnBack).
-    // Do NOT increment from handleStartOver.
-    //
-    // Issue #1485 — when returning from schools-in-area (Level 3) to school-group-areas
-    // (Level 2), we clear areaKey but KEEP groupId. The existing cityRestoreTick increment
-    // is correct: after clearing areaKey the group fitBounds effect (L1360-1396) will
-    // re-trigger on the still-set groupId and fit to the group bounds.
-    setCityRestoreTick((t) => t + 1);
-    urlActions.clearAreaSelection();
-    setSelectedArea(null);
-    setPanToArea(null);
-  }, [urlActions, setSelectedArea, setPanToArea]);
-
-  // Issue #1485 — Level 0 Back for school-group-areas → school-browse.
-  // Clears groupId (PUSH from selectGroup(null)); areaKey and schoolId are already absent
-  // at this level. The cityRestoreTick increment returns the map to city-center view.
-  const handleSchoolFirstBackLevel0 = useCallback(() => {
-    setCityRestoreTick((t) => t + 1);
-    urlActions.selectGroup(null);
-  }, [urlActions]);
-
-  // schoolFirstOnBack: the correct in-page Back handler for the current school-first
-  // panel level, or undefined when Back should be hidden (Level 0/browse or non-school journey).
-  //
-  // Issue #1485 — 4-level ladder (new levels L0 + L1 added):
-  //   L3 school-selected / area-school-combined → handleSchoolFirstBackLevel2 (clear schoolId)
-  //   L2 schools-in-area                        → handleSchoolFirstBackLevel1 (clear areaKey, keep groupId)
-  //   L1 school-group-areas                     → handleSchoolFirstBackLevel0 (clear groupId)
-  //   L0 school-browse                          → undefined (no Back)
-  const schoolFirstOnBack: (() => void) | undefined =
-    urlState.journey !== 'school-first'
-      ? undefined
-      : panelContent === 'school-selected' || panelContent === 'area-school-combined'
-        ? handleSchoolFirstBackLevel2
-        : panelContent === 'schools-in-area'
-          ? handleSchoolFirstBackLevel1
-          : panelContent === 'school-group-areas'
-            ? handleSchoolFirstBackLevel0
-            : undefined;
-
-  // Clear handlers for AreaSchoolCombinedPanel — stable references so the panel does
-  // not re-render on every map pan/zoom that re-runs the MapDiscovery render.
-  const onClearSchool = useCallback(() => {
-    // Single atomic URL mutation: removes schoolId + radiusKm. Preserves areaKey,
-    // journey, board/category filters. Local selectedSchool state and proximity
-    // fields in PropertyFilters are cleared separately (no URL mutation).
-    urlActions.clearSchoolContext();
-    setSelectedSchool(null);
-    setFilters((prev) => {
-      const next = { ...prev };
-      delete next.schoolLat;
-      delete next.schoolLon;
-      delete next.schoolRadiusKm;
-      return next;
-    });
-    // Issue #1115 — school cleared; reset so CTA reappears on next school select.
-    setBoundedSearchTriggered(false);
-  }, [urlActions, setSelectedSchool, setFilters]);
-
-  const onClearArea = useCallback(() => {
-    // Removes areaKey from URL (REPLACE). Preserves schoolId, radiusKm,
-    // board/category filters, property filters, and viewport.
-    urlActions.clearAreaContext();
-    setSelectedArea(null);
-  }, [urlActions, setSelectedArea]);
+  // Issue #1824 Slice S6 — handleRadiusChange, the school-first Back ladder
+  // (handleSchoolFirstBackLevel2/1/0 + schoolFirstOnBack derivation), and
+  // onClearSchool/onClearArea moved into useDiscoverJourneyTransitions above
+  // (journeyCommands.changeRadius/backLevel2/backLevel1/backLevel0/clearSchool/
+  // clearArea; journeyView.schoolFirstOnBack).
 
   // Issue #1157 rev-5 DEFECT A — gate for mounting the school-marker layer.
   // school-first keeps markers (first OR term). Additionally surface markers in the
@@ -2178,115 +2025,10 @@ export default function MapDiscovery() {
     return () => clearTimeout(t);
   }, [isLoading, setShowLoader]);
 
-  // School restore on cold-load — runs once schoolById resolves (exact ID lookup, not substring search).
-  const urlSchoolId = urlState.schoolId;
-  const urlRadiusKm = urlState.radiusKm;
-
-  // Keep urlActions in a ref so the cleanup effect below doesn't need it in its dep array,
-  // avoiding a potential stale-closure/infinite-loop when the actions object identity changes.
-  const urlActionsRef = useRef(urlActions);
-  urlActionsRef.current = urlActions;
-
-  useEffect(() => {
-    // Issue #1160 v5 — outer guard change: fire when selectedSchool is missing OR when
-    // filters.schoolLat is not yet set. The original `!selectedSchool` guard was too
-    // strict: in the top-level cold-cache path, handleSelectSchoolById falls through
-    // without setting selectedSchool or filters.schoolLat. If selectedSchool was
-    // subsequently set by another path (e.g. a prior in-session selection that was not
-    // fully cleared) while filters.schoolLat remained null, the !selectedSchool guard
-    // would skip the entire effect body — markersEnabled stays false permanently because
-    // markersEnabled requires filters.schoolLat != null.
-    // Fix: also enter the body when filters.schoolLat is not yet synced, regardless of
-    // selectedSchool state. The inner dedup guard below prevents redundant setFilters
-    // calls when coords are already in sync.
-    if (urlSchoolId && schoolById && (!selectedSchool || filters.schoolLat == null)) {
-      // Dedup guard: when coords are already in sync (e.g. Bug A1 sync injection already
-      // applied them), skip redundant setFilters to avoid an extra render. Still ensure
-      // selectedSchool is set so downstream effects (SchoolFocusPanner, panel routing)
-      // observe a non-null school.
-      if (filters.schoolLat === schoolById.latitude && filters.schoolLon === schoolById.longitude) {
-        if (!selectedSchool) setSelectedSchool(schoolById);
-        return;
-      }
-      // Issue #1210: clamp on cold-load/restore so a `?radiusKm=0` deep-link (or a 0
-      // reintroduced by browser Back) never lands in runtime state as 0.
-      const radius = urlRadiusKm != null ? clampSchoolRadiusKm(urlRadiusKm) : DEFAULT_SCHOOL_RADIUS_KM;
-      setSelectedSchool(schoolById);
-      setFilters((prev) => ({ ...prev, schoolLat: schoolById.latitude, schoolLon: schoolById.longitude, schoolRadiusKm: radius }));
-      // Issue #1146 — AC4: When radiusKm was absent from the URL (hand-crafted link,
-      // old app version), backfill the default into the URL so it becomes honest.
-      // Issue #1210: also rewrite when the URL carried a sub-minimum value (e.g. 0) so
-      // the address bar reflects the clamped effective radius after restore.
-      // Uses replace:true — this is housekeeping on cold-load mount, not a user
-      // navigation event. A push here would create a phantom history entry that
-      // breaks browser Back (Issue #1146 cycle-2 blocking fix / BN-4 contract).
-      // Note: urlSchoolId is guaranteed non-null by the outer if-block; the
-      // redundant `&& urlSchoolId` guard that was here has been removed.
-      if (urlRadiusKm == null || urlRadiusKm !== radius) {
-        urlActionsRef.current.setSchoolParams({ schoolId: urlSchoolId, radiusKm: radius }, { replace: true });
-      }
-    }
-    // filters.schoolLat/schoolLon are read inside the guard above to detect prior sync injection,
-    // so they belong in the dep array. selectedSchool is already listed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlSchoolId, urlRadiusKm, schoolById, selectedSchool, filters.schoolLat, filters.schoolLon, setSelectedSchool, setFilters]);
-
-  // Error cleanup — if the school lookup fails, clear the URL param and inform the user.
-  // 404: silently drop (school no longer exists, no need to alarm the user).
-  // Non-404 ApiError or network error (TypeError): clear param + show recoverable toast so the
-  // user knows what happened and can search again.
-  useEffect(() => {
-    if (!urlSchoolId || !schoolByIdError) return;
-    // Issue #1115 — school lookup failed; reset so CTA reappears on next school select.
-    setBoundedSearchTriggered(false);
-    if (schoolByIdError instanceof ApiError && schoolByIdError.status === 404) {
-      urlActionsRef.current.setSchoolParams(null);
-    } else {
-      // Non-404 server errors and network failures (TypeError from fetch rejection).
-      urlActionsRef.current.setSchoolParams(null);
-      toast({
-        title: 'School details unavailable',
-        description: 'Could not load the selected school. Please search again.',
-        variant: 'destructive',
-      });
-    }
-  }, [urlSchoolId, schoolByIdError, toast]);
-
-  // Refs kept current every render so the resolution effect can read them without
-  // adding unstable objects to its dep array.
-  const cityRef = useRef(city);
-  cityRef.current = city;
-  const urlCityRef = useRef(urlState.city ?? city);
-  urlCityRef.current = urlState.city ?? city;
-
-  // Deferred areaKey hydration — resolve once area data loads (Rule 2).
-  // Lives here because it references refs from useDiscoverPageState AND data from useDiscoverMapData.
-  const { deselectArea } = urlActions;
-  useEffect(() => {
-    if (areasLoading) return;
-    const pending = pendingAreaKeyRef.current;
-    if (!pending) return;
-    pendingAreaKeyRef.current = null;
-    const match = discoverAreas.find((a) => a.areaKey === pending);
-    if (match) {
-      setSelectedArea(match);
-      // Issue #1821 — only trust an inherited viewport (skip the area-specific fit)
-      // when the mount-time URL was a bare area-only deep link (no groupId/scope).
-      // When a group/region drill-down was present at mount, any inherited viewport
-      // is presumptively the group's/region's own fit, not a genuinely restored
-      // area-specific one, so always fit fresh to the resolved area's own bounds.
-      if (!initialViewportRef.current || !initialViewportWasBareAreaRef.current) {
-        setPanToArea(match);
-      }
-    } else if (cityRef.current !== urlCityRef.current) {
-      // Local city (drives the areas query) hasn't synced with the URL city yet —
-      // discoverAreas may be stale. Re-arm and wait for the re-fetch to complete.
-      pendingAreaKeyRef.current = pending;
-    } else {
-      deselectArea();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [areasLoading, discoverAreas, deselectArea, resolveSignal]);
+  // Issue #1824 Slice S6 — the schoolById restore/error effects, the cityRef/urlCityRef
+  // refs (FLAG-1), and the deferred areaKey hydration effect all moved into
+  // useDiscoverJourneyTransitions above (called earlier in this render, right after
+  // useDiscoverMapData + schools).
 
   // ── Group-focused map behaviour (A3 #993) ────────────────────────────────────
   //
@@ -2492,17 +2234,8 @@ export default function MapDiscovery() {
     ]);
   }, [selectedRegion, selectedMaxKm, agriMapListingsData, cityCenter, urlState.selectedLocality]);
 
-  // Issue #1115 — wrap handleSchoolSelect (from useDiscoverPageState, forbidden to edit)
-  // so that selecting a school via MapFilters or NearSchoolSheet also resets the
-  // bounded-search gate. useDiscoverPageState.ts is not modified; reset is composed here
-  // at the call-site where the handler is passed down.
-  // useCallback is declared before the isCityValid early return (React hooks must always
-  // be called on every render path). It closes over stable references only:
-  // handleSchoolSelect never changes identity; setBoundedSearchTriggered is a stable setter.
-  const wrappedHandleSchoolSelect = useCallback<typeof handleSchoolSelect>((school) => {
-    setBoundedSearchTriggered(false);
-    handleSchoolSelect(school);
-  }, [handleSchoolSelect, setBoundedSearchTriggered]);
+  // Issue #1824 Slice S6 — the handleSchoolSelect wrapper moved into
+  // useDiscoverJourneyTransitions (journeyCommands.wrappedSchoolSelect).
 
   // Issue #1115 — stable callback for the bounded-search CTA. Declared before the early
   // return so useCallback is called unconditionally (Rules of Hooks). The undefined branch
@@ -2628,7 +2361,7 @@ export default function MapDiscovery() {
   const filtersContent = (
     <MapFilters
       filters={filters} onFiltersChange={handleFiltersChange}
-      selectedSchool={selectedSchool} onSchoolSelect={wrappedHandleSchoolSelect}
+      selectedSchool={selectedSchool} onSchoolSelect={journeyCommands.wrappedSchoolSelect}
       schoolBoardFilter={schoolBoardFilter} onSchoolBoardFilterChange={handleBoardFilterChange}
       city={city}
       trendsAreaKeys={selectedArea ? [selectedArea.areaKey] : trendsAreaKeys}
@@ -3306,13 +3039,13 @@ export default function MapDiscovery() {
               onViewportChange={urlActions.reportViewport}
               onBoundsChange={handleBoundsChange}
               panToArea={panToArea}
-              resetMapTick={composedResetMapTick}
+              resetMapTick={journeyView.composedResetMapTick}
               onReady={() => setMapReady(true)}
               journey={urlState.journey}
               selectedSchool={selectedSchool}
               schools={schools}
               showSchoolMarkers={showSchoolMarkers}
-              onSelectSchool={handleSelectSchoolById}
+              onSelectSchool={journeyCommands.selectSchoolById}
               schoolsIsLoading={schoolsQuery.isLoading}
               schoolsIsError={schoolsQuery.isError}
               schoolsError={schoolsQuery.error}
@@ -3326,7 +3059,7 @@ export default function MapDiscovery() {
               })()}
               schoolMarkerFocusTick={schoolMarkerFocusTick}
               schoolMarkerPositions={schoolMarkerPositions}
-              areaRestoreTick={areaRestoreTick}
+              areaRestoreTick={journeyView.areaRestoreTick}
               areaRestoreLat={areaRestoreArea?.geoCenterLat}
               areaRestoreLon={areaRestoreArea?.geoCenterLon}
               areaRestoreBbox={
@@ -3337,7 +3070,7 @@ export default function MapDiscovery() {
                   ? [[areaRestoreArea.minLat, areaRestoreArea.minLon], [areaRestoreArea.maxLat, areaRestoreArea.maxLon]]
                   : undefined
               }
-              cityRestoreTick={cityRestoreTick}
+              cityRestoreTick={journeyView.cityRestoreTick}
               cityRestoreCenter={cityCenter}
               cityRestoreZoom={cityZoom}
               isAgriMode={isAgriJourney}
@@ -3795,8 +3528,8 @@ export default function MapDiscovery() {
           // schoolFirstOnBack is undefined when panelContent is not 'school-browse' or
           // 'school-selected' (i.e. Level 0), so Back correctly hides at Level 0.
           // 'school-selected' panelContent is only reachable in the school-first journey.
-          onBack={urlState.journey === 'school-first' ? schoolFirstOnBack : handleAreaFirstBack}
-          onStartOver={handleStartOver}
+          onBack={urlState.journey === 'school-first' ? journeyView.schoolFirstOnBack : handleAreaFirstBack}
+          onStartOver={journeyCommands.startOver}
           isLoadingAreas={areasLoading}
           agriAreasData={agriAreasData}
           isLoadingAgriAreas={isLoadingAgriAreas}
@@ -3880,7 +3613,7 @@ export default function MapDiscovery() {
               urlActions.selectArea(areaKey);
             }
           }}
-          onSelectSchool={handleSelectSchoolById}
+          onSelectSchool={journeyCommands.selectSchoolById}
           onAddSchool={urlActions.enterSchoolPicking}
           filtersContent={filtersContent}
           trendsHref={trendsHref}
@@ -3902,12 +3635,12 @@ export default function MapDiscovery() {
           schoolListings={schoolListings}
           schoolListingsLoading={listingDataLoading}
           radiusKm={urlState.radiusKm}
-          onRadiusChange={handleRadiusChange}
-          onClearSchool={onClearSchool}
-          onClearArea={onClearArea}
+          onRadiusChange={journeyCommands.changeRadius}
+          onClearSchool={journeyCommands.clearSchool}
+          onClearArea={journeyCommands.clearArea}
           // Issue #1115 — bounded-search CTA wiring.
           onBoundedSearch={isAuthenticated ? handleBoundedSearch : undefined}
-          boundedSearchTriggered={boundedSearchTriggered}
+          boundedSearchTriggered={journeyView.boundedSearchTriggered}
           // Issue #1547 — shared card↔marker selection (URL/parent-derived via the
           // `listing` param). selectedListingId drives the copper selected card frame +
           // scroll-into-view. The selection DRIVER is the map marker (marker→URL, see
@@ -4008,7 +3741,7 @@ export default function MapDiscovery() {
           open={nearSchoolOpen}
           onOpenChange={setNearSchoolOpen}
           selectedSchool={selectedSchool}
-          onSchoolSelect={wrappedHandleSchoolSelect}
+          onSchoolSelect={journeyCommands.wrappedSchoolSelect}
           radiusKm={filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM}
           onRadiusChange={(km) => handleFiltersChange({ ...filters, schoolRadiusKm: km })}
           boardFilter={schoolBoardFilter}
