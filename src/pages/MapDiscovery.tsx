@@ -1,11 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PublicDiscoverLayout } from '@/components/layout/PublicDiscoverLayout';
-import { RegionGuidanceCard } from '@/components/map/RegionGuidanceCard';
-import { PropertyMap, PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { computeZoneLabelPoints } from '@/lib/schoolZoneLabels';
 import type { ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
 import type { AreaPoint, AreaMarkerClusterInfo } from '@/components/map/AreaMarkerLayer';
@@ -15,11 +12,6 @@ import {
   isSchoolRadiusOverlayState,
   prettifyZoneSlug,
 } from '@/components/discover/SchoolRadiusMapOverlay';
-import { DiscoverMapContextOverlay } from '@/components/discover/DiscoverMapContextOverlay';
-import { DiscoverMapLegend } from '@/components/discover/DiscoverMapLegend';
-import { DiscoverMapCountBadge } from '@/components/discover/DiscoverMapCountBadge';
-import { DiscoverMapMarkerPopover } from '@/components/discover/DiscoverMapMarkerPopover';
-import { DiscoverMapStatusHints } from '@/components/discover/DiscoverMapStatusHints';
 import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
 import { resolveScopeKeyFromLabel, aggregateMacroRegions } from '@/utils/macroRegionResolver';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
@@ -31,10 +23,7 @@ import {
   resolveDiscoverGroupForAreaKey,
   type DiscoverMapLayerKind,
 } from '@/utils/discoverLayerRegistry';
-import { CitySelect } from '@/components/discover/CitySelect';
 import { CityNotSupported } from '@/components/discover/CityNotSupported';
-import { MapStatsBar, MarkersTruncationNotice } from '@/components/discover/MapStatsBar';
-import { MapEmptyGuidance } from '@/components/discover/MapEmptyGuidance';
 import { useDiscoverInteractionState } from '@/features/discover/state/useDiscoverInteractionState';
 import { useReducedMotion } from '@/features/discover/state/useReducedMotion';
 import { useRegionGuideState } from '@/features/discover/state/useRegionGuideState';
@@ -67,12 +56,10 @@ import { clampSchoolRadiusKm, PropertyListing, PropertyImage, PropertyFilters } 
 import { cityListingToPropertyListing, filteredMarkerToPropertyListing } from '@/lib/discoverMappers';
 import { ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { NearSchoolSheet } from '@/components/map/NearSchoolSheet';
-import { DiscoverConsentBanner } from '@/components/discover/DiscoverConsentBanner';
-import { DiscoverPrivacyToggle } from '@/components/discover/DiscoverPrivacyToggle';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { DiscoverMapCanvas } from '@/features/discover/views/DiscoverMapCanvas';
+import { DiscoverOverlaySheets } from '@/features/discover/views/DiscoverOverlaySheets';
 // S9a — relocated to src/features/discover/presentation/ (discoverBadge.ts,
 // schoolFirstCounts.ts, anonPropertyFilters.ts). Imported here for the component
 // body's own calls, and re-exported below so existing '@/pages/MapDiscovery'
@@ -1847,326 +1834,108 @@ export default function MapDiscovery() {
         {/* a3 — mapContainerRef wraps the full map half-panel for MarkerPopoverCard bounds clamp.
             R-C — warm map gutter background (#EDEBE6) so the gutter between the map tile and
             panel edge is warm off-white, not default grey. */}
-        <div ref={mapContainerRef} className="lg:w-1/2 h-64 lg:h-full relative order-1 lg:order-1" style={{ background: 'hsl(var(--map-bg))' }} onClick={
-          // a3 — background click dismisses the marker popover. stopPropagation is applied
-          // inside the card itself so clicks inside the card do not trigger this.
-          markerPixelPos != null ? handlePopoverDismiss : undefined
-        }>
-          {/* Issue #1824 Slice S8 — loader overlay extracted to DiscoverMapStatusHints.
-              The error-card branch below is DELIBERATELY left inline: it is the
-              false-branch alternative of PropertyMap in this same ternary, and
-              PropertyMap is a forbidden/already-wired child that must stay
-              page-owned verbatim (see the component's docstring for the full
-              rationale). */}
-          <DiscoverMapStatusHints showLoader={showLoader} />
-          {error ? (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Card className="p-6 text-center max-w-sm">
-                <p className="text-destructive font-medium">Failed to load listings</p>
-                <p className="text-sm text-muted-foreground mt-1">Please try again later</p>
-              </Card>
-            </div>
-          ) : (
-            <PropertyMap
-              listings={currentMapMarkerListings}
-              focusBounds={agriGroupFocusBounds ?? activeFocusBounds}
-              agriGroupListings={(selectedRegion && selectedMaxKm != null) ? filteredAgriListings : null}
-              polygon={filters.polygon}
-              // Issue #1588 — hide the polygon draw tool on the public landing
-              // (guided-entry). PropertyMap only mounts DrawControl when BOTH handlers
-              // are present, so passing undefined here removes the control on the landing
-              // while preserving area-draw search in every drill-down state.
-              onPolygonDrawn={isLandingState ? undefined : handlePolygonDrawn}
-              onPolygonCleared={isLandingState ? undefined : handlePolygonCleared}
-              schoolCircle={selectedSchool ? {
-                lat: selectedSchool.latitude, lon: selectedSchool.longitude,
-                // Issue #1210: clamp so the drawn circle reflects the effective (>=1 km) radius.
-                radiusKm: clampSchoolRadiusKm(filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM), name: selectedSchool.name,
-              } : undefined}
-              initialCenter={memoizedInitialCenter}
-              initialZoom={urlState.viewport?.zoom}
-              cityCenter={cityCenter}
-              cityZoom={cityZoom}
-              areas={overviewAreas}
-              onAreaClick={handleOverviewAreaClick}
-              // Issue #1801 — camera-navigation intent path. AreaMarkerLayer's
-              // full-pin click handlers fire this synchronously (never the
-              // dots/cluster handlers); publishCameraIntent derives the
-              // CameraIntent and MapController is the sole consumer/camera
-              // owner. Independent of handleOverviewAreaClick's scope-change
-              // branching below — every area-pin click used to move the
-              // camera before this issue, regardless of which branch fires.
-              onAreaCameraIntent={publishCameraIntent}
-              cameraIntent={cameraIntent}
-              focusedGroupAreas={mapZoom <= AREA_LAYER_MAX_ZOOM ? focusedGroupAreas : undefined}
-              // Issue #1798 PR-B — area-marker density degradation. Gated on the SAME
-              // condition as focusedGroupAreas above (a dense group of member areas is
-              // focused, at/below the area-marker zoom cutoff) — this is the shared
-              // area-first/school-first "dense group selected" seam per Stage-A evidence
-              // (focusedGroupAreas is derived from urlState.groupId alone, journey-agnostic).
-              enableAreaMarkerDegradation={mapZoom <= AREA_LAYER_MAX_ZOOM && !!focusedGroupAreas}
-              selectedAreaKey={selectedArea?.areaKey ?? urlState.areaKey ?? null}
-              // Issue #1798 PR-B (Unit D) — panel↔map plumbing. areaSearchMatchKeys forces
-              // matching areas to full labelled pins as the user types (no camera move —
-              // this only affects AreaMarkerLayer's bucketing, never a panner tick).
-              // hoveredAreaKey mirrors hoveredListingId's ephemeral-state pattern above.
-              // onAreaMarkersComputed feeds the panel's "Showing X of N areas" note.
-              areaSearchMatchKeys={areaSearchMatchKeys}
-              hoveredAreaKey={hoveredAreaKeyForMap}
-              // Issue #1806 (FIX-4/FIX-5) — area-cluster click wiring. Previously
-              // onAreaClusterClick was threaded PropertyMap → AreaMarkerLayer but
-              // never wired here, so a cluster click's payload was silently
-              // dropped and the layer's own direct map.fitBounds(maxZoom:16) was
-              // the ONLY thing that happened — landing the user above
-              // AREA_LAYER_MAX_ZOOM and producing the reported empty map.
-              // onAreaClusterCameraIntent routes a splittable click's camera
-              // move through the SAME cameraIntent stream as onAreaCameraIntent
-              // (shared seq ref, always framing='overview', maxZoom 12 via
-              // MapController's unmodified 'overview' branch — never the
-              // removed maxZoom:16 fit). onAreaClusterClick highlights + scrolls
-              // the member rows in the panel for BOTH splittable and
-              // non-splittable clicks (the panel note is harmless when the
-              // camera also moved); the camera itself never moves for a
-              // non-splittable click.
-              onAreaClusterCameraIntent={publishClusterCameraIntent}
-              onAreaClusterClick={handleAreaClusterClick}
-              onAreaMarkersComputed={handleAreaMarkersComputed}
-              schoolZoneLabels={schoolZoneLabels}
-              onSelectZone={(groupId) => urlActions.selectGroup(groupId)}
-              onZoomChange={setMapZoom}
-              onViewportChange={urlActions.reportViewport}
-              onBoundsChange={handleBoundsChange}
-              panToArea={panToArea}
-              resetMapTick={journeyView.composedResetMapTick}
-              onReady={() => setMapReady(true)}
-              journey={urlState.journey}
-              selectedSchool={selectedSchool}
-              schools={schools}
-              showSchoolMarkers={showSchoolMarkers}
-              onSelectSchool={journeyCommands.selectSchoolById}
-              schoolsIsLoading={schoolsQuery.isLoading}
-              schoolsIsError={schoolsQuery.isError}
-              schoolsError={schoolsQuery.error}
-              schoolFocusTick={schoolFocusTick}
-              schoolFocusLat={selectedSchoolLat}
-              schoolFocusLon={selectedSchoolLon}
-              schoolFocusRadiusKm={(() => {
-                // Issue #1210: clamp so the auto-zoom fits the effective (>=1 km) circle.
-                const r = urlState.radiusKm ?? filters.schoolRadiusKm;
-                return r != null ? clampSchoolRadiusKm(r) : r;
-              })()}
-              schoolMarkerFocusTick={schoolMarkerFocusTick}
-              schoolMarkerPositions={schoolMarkerPositions}
-              areaRestoreTick={journeyView.areaRestoreTick}
-              areaRestoreLat={areaRestoreArea?.geoCenterLat}
-              areaRestoreLon={areaRestoreArea?.geoCenterLon}
-              areaRestoreBbox={
-                areaRestoreArea?.minLat != null &&
-                areaRestoreArea?.minLon != null &&
-                areaRestoreArea?.maxLat != null &&
-                areaRestoreArea?.maxLon != null
-                  ? [[areaRestoreArea.minLat, areaRestoreArea.minLon], [areaRestoreArea.maxLat, areaRestoreArea.maxLon]]
-                  : undefined
-              }
-              cityRestoreTick={journeyView.cityRestoreTick}
-              cityRestoreCenter={cityCenter}
-              cityRestoreZoom={cityZoom}
-              isAgriMode={isAgriJourney}
-              selectedPolygonListing={selectedMarkerListing}
-              onSelectListing={handleSelectMarkerListing}
-              mapZoom={mapZoom}
-              // Issue #1429 — sector overlay: only shown when both region + maxKm are set
-              // and journey is agri-first. PropertyMap gates on sectorOverlay presence.
-              sectorOverlay={
-                isAgriJourney && selectedRegion && selectedMaxKm != null
-                  ? {
-                      directionCode: selectedRegion,
-                      maxKm: selectedMaxKm,
-                    }
-                  : null
-              }
-              // Issue #1547 — copper selected-marker (URL-driven) + ephemeral hover highlight.
-              // selectedListingId = URL param (persistent selection from marker click).
-              // hoveredListingId = ephemeral React state (resets on mouseleave/blur, never URL).
-              // Both flow only to MarkerClusterLayer visual — never to MapController (no flyTo).
-              selectedListingId={urlState.selectedListing}
-              hoveredListingId={hoveredListingId}
-              onMarkerClickWithPosition={handleMarkerClickWithPosition}
-            />
-          )}
-
-          {/* Top-left context overlay. For school-first drill-down states (zone / area /
-              school selected), show the progressively-resolved journey breadcrumb
-              (City › Zone › Area › School); otherwise the generic area indicator.
-              Rendering one OR the other avoids a duplicate breadcrumb.
-              Issue #1824 Slice S8 — extracted to DiscoverMapContextOverlay. */}
-          <DiscoverMapContextOverlay
-            isAreaFirstCityLanding={isAreaFirstCityLanding}
-            showSchoolBreadcrumb={showSchoolBreadcrumb}
-            areaJourneySegments={areaJourneySegments}
-            schoolJourneySegments={schoolJourneySegments}
-            selectedArea={selectedArea}
-            focusedGroup={focusedGroup}
-            city={city}
-          />
-
-          {/* Radius legend — bottom-left, raised above the Leaflet zoom control (bottomleft).
-              Only the selected-school radius state; swatches match the real map markers/ring.
-              Issue #1824 Slice S8 — extracted to DiscoverMapLegend (chrome call). */}
-          <DiscoverMapLegend schoolRadiusChrome={schoolRadiusOverlay ? { schoolRadiusKm: filters.schoolRadiusKm } : null} />
-
-          {/* City select — top-right. Issue #1588 — hidden on the public landing
-              (guided-entry), where the city control lives in the right-panel hero
-              controls card; restored for every drill-down state. Issue #1595 — also
-              hidden on the area-first selected-group step (not part of the approved
-              mock); city remains switchable from the landing via Start over. Issue #1607 —
-              also hidden on the area-first city landing, where the city switcher now lives
-              in the right-panel controls card (mock parity). Issue #1606 — also hidden on the
-              area-first selected-AREA results, where City + Looking-to move into the in-panel
-              controls card (mock parity, no duplicate control). */}
-          {resolvedPanelContent !== 'guided-entry' && !isSelectedGroupState && !isAreaFirstCityLanding && resolvedPanelContent !== 'area-selected' && (
-            <div className="absolute top-4 right-4 z-[1000] w-44">
-              <CitySelect value={city} onChange={handleCityChange} className="bg-card shadow-sm" />
-            </div>
-          )}
-
-          {/* Issue #1808 — region-overview map guidance card. Region-overview
-              is a sub-state of 'guided-entry' (scope set, journey null), so
-              CitySelect above is already hidden here — no collision. Never
-              covers the map centre or the CitySelect control (top-right
-              desktop / top-of-map mobile, below the breadcrumb). Presentational
-              only — no camera/URL writes. Card + legend render for every
-              source (map/panel/deeplink, AC5); only the ring/nudge are gated
-              to a real map/panel pick via regionGuideRingActive. */}
-          {regionGuideVisible && resolvedRegionLabel && (
-            <RegionGuidanceCard
-              key={regionSelectNonce}
-              regionName={resolvedRegionLabel}
-              markerKind={regionOverviewMarkerKind}
-              pulseEligible={regionGuideRingActive}
-              prefersReducedMotion={prefersReducedMotion}
-              onDismiss={dismissRegionGuide}
-            />
-          )}
-
-          {/* Issue #1824 Slice S8 — the 7-variant legend switch (area-count,
-              region-aware, marker-meaning, selected-group, city-landing, agri,
-              school) extracted to DiscoverMapLegend (variants call). */}
-          <DiscoverMapLegend
-            variants={{
-              schoolRadiusOverlay,
-              resolvedPanelContent,
-              overviewAreas,
-              isRegionOverview,
-              regionGuideVisible,
-              regionOverviewShortLabel,
-              regionOverviewMarkerKind,
-              isAreaFirstSelectedAreaState,
-              areaMarkerListings,
-              isSelectedGroupState,
-              isAreaFirstCityLanding,
-              journey: urlState.journey,
-              selectedLocality: urlState.selectedLocality,
-              selectedRegion,
-            }}
-          />
-
-          {/* "Near a school" quick-filter button removed (Figma polish) — the school
-              journey is reachable via the "Search by school area" card in the right panel.
-              NearSchoolSheet stays mounted below but is no longer triggered from here. */}
-
-          {/* Issue #1817 (AC11) — visually-hidden, debounced, polite mirror of the result
-              count. Separate from the visible pill(s) below so the visible number can
-              update immediately (never flash-hidden) while the announcement itself is
-              debounced ~500ms and only fires once the fetch settles. */}
-          <div className="sr-only" aria-live="polite" data-testid="discover-badge-announce">
-            {announcedBadgeText}
-          </div>
-
-          {/* City / area listing count — bottom-right (Issue #1152). Issue #1588 — on the
-              public landing this is replaced by the centered city-wide summary pill below;
-              kept bottom-right for contextual (area/school/group) drill-down counts.
-              Issue #1824 Slice S8 — both pills extracted to DiscoverMapCountBadge. */}
-          <DiscoverMapCountBadge
-            resolvedPanelContent={resolvedPanelContent}
-            isAreaFirstCityLanding={isAreaFirstCityLanding}
-            discoverBadge={discoverBadge}
-            isSelectedGroupState={isSelectedGroupState}
-            isAreaFirstSelectedAreaState={isAreaFirstSelectedAreaState}
-            selectedArea={selectedArea}
-            focusedGroup={focusedGroup}
-            areaResultSummaryText={areaResultSummaryText}
-            groupSelectedBadgeCopy={groupSelectedBadgeCopy}
-            fallbackBadgeCopy={fallbackBadgeCopy}
-            journey={urlState.journey}
-            schoolRadiusActive={schoolRadiusActive}
-            schoolRadiusPillNoun={schoolRadiusPillNoun}
-            schoolFirstAreaSchoolCount={schoolFirstAreaSchoolCount}
-            schoolFirstZoneSchoolCount={schoolFirstZoneSchoolCount}
-            schoolFirstLandingSchoolCount={schoolFirstLandingSchoolCount}
-            cityTotal={cityTotal}
-            city={city}
-          />
-
-          {/* Issue #1261 — non-blocking "showing first N" hint for the anonymous
-              school-radius result. The public endpoint returns a single page (size=50)
-              with no total count; hasMore signals more listings exist beyond it.
-              DECISION-2: no load-more UI in this slice — only this advisory hint.
-              FINDING 1: hasMore reflects the UNFILTERED server probe but the shown
-              count is post-filter; when any client-side PropertyFilter is active the
-              extra server rows may not match, so suppress the hint to avoid promising
-              more *matching* homes than exist (AC8 truthfulness).
-              Issue #1824 Slice S8 — extracted to DiscoverMapStatusHints. */}
-          <DiscoverMapStatusHints
-            schoolRadiusHint={{
-              isAuthenticated,
-              schoolRadiusActive,
-              schoolRadiusHasMore,
-              schoolListingsCount: schoolListings.length,
-              hasActiveAnonFilter,
-            }}
-          />
-
-          {isAuthenticated && filters.polygon && (
-            <MapStatsBar
-              filters={filters}
-              onPolygonClear={handlePolygonCleared}
-            />
-          )}
-
-          <MarkersTruncationNotice
-            truncated={markersTruncated}
-            returnedElements={markersReturnedElements}
-            totalFilteredElements={markersTotalFilteredElements}
-          />
-
-          <MapEmptyGuidance
-            cityTotal={cityTotal}
-            filters={filters} city={city} isLoading={isLoading}
-            isAuthenticated={isAuthenticated}
-            mapZoom={mapZoom}
-            hasAreaSelected={!!selectedArea}
-            areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
-          />
-
-          {/* a3 — Marker popover mini card. Gated to listing-marker clicks via
-              isMarkerPopoverEligible (Issue #1798 PR-C) — see the derivation's
-              header comment above for the full eligibility-gate history.
-              Issue #1824 Slice S8 — extracted to DiscoverMapMarkerPopover; the
-              eligibility gate + markerPopoverStepper derivation stay page-owned. */}
-          <DiscoverMapMarkerPopover
-            isMarkerPopoverEligible={isMarkerPopoverEligible}
-            selectedMarkerListing={selectedMarkerListing}
-            markerPixelPos={markerPixelPos}
-            mapContainerRef={mapContainerRef}
-            isAuthenticated={isAuthenticated}
-            handlePopoverDismiss={handlePopoverDismiss}
-            navigate={navigate}
-            markerPopoverStepper={markerPopoverStepper}
-            handleStepMarkerListing={handleStepMarkerListing}
-            showMarkerInList={showMarkerInList}
-          />
-        </div>
+        <DiscoverMapCanvas
+          mapContainerRef={mapContainerRef}
+          markerPixelPos={markerPixelPos}
+          handlePopoverDismiss={handlePopoverDismiss}
+          showLoader={showLoader}
+          error={error}
+          currentMapMarkerListings={currentMapMarkerListings}
+          agriGroupFocusBounds={agriGroupFocusBounds}
+          activeFocusBounds={activeFocusBounds}
+          selectedRegion={selectedRegion}
+          selectedMaxKm={selectedMaxKm}
+          filteredAgriListings={filteredAgriListings}
+          filters={filters}
+          isLandingState={isLandingState}
+          handlePolygonDrawn={handlePolygonDrawn}
+          handlePolygonCleared={handlePolygonCleared}
+          selectedSchool={selectedSchool}
+          memoizedInitialCenter={memoizedInitialCenter}
+          urlState={urlState}
+          cityCenter={cityCenter}
+          cityZoom={cityZoom}
+          overviewAreas={overviewAreas}
+          handleOverviewAreaClick={handleOverviewAreaClick}
+          publishCameraIntent={publishCameraIntent}
+          cameraIntent={cameraIntent}
+          focusedGroupAreas={focusedGroupAreas}
+          areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
+          selectedArea={selectedArea}
+          areaSearchMatchKeys={areaSearchMatchKeys}
+          hoveredAreaKeyForMap={hoveredAreaKeyForMap}
+          publishClusterCameraIntent={publishClusterCameraIntent}
+          handleAreaClusterClick={handleAreaClusterClick}
+          handleAreaMarkersComputed={handleAreaMarkersComputed}
+          schoolZoneLabels={schoolZoneLabels}
+          urlActions={urlActions}
+          setMapZoom={setMapZoom}
+          handleBoundsChange={handleBoundsChange}
+          panToArea={panToArea}
+          journeyView={journeyView}
+          setMapReady={setMapReady}
+          schools={schools}
+          showSchoolMarkers={showSchoolMarkers}
+          journeyCommands={journeyCommands}
+          schoolsQuery={schoolsQuery}
+          schoolFocusTick={schoolFocusTick}
+          selectedSchoolLat={selectedSchoolLat}
+          selectedSchoolLon={selectedSchoolLon}
+          schoolMarkerFocusTick={schoolMarkerFocusTick}
+          schoolMarkerPositions={schoolMarkerPositions}
+          areaRestoreArea={areaRestoreArea}
+          isAgriJourney={isAgriJourney}
+          selectedMarkerListing={selectedMarkerListing}
+          handleSelectMarkerListing={handleSelectMarkerListing}
+          hoveredListingId={hoveredListingId}
+          handleMarkerClickWithPosition={handleMarkerClickWithPosition}
+          isAreaFirstCityLanding={isAreaFirstCityLanding}
+          showSchoolBreadcrumb={showSchoolBreadcrumb}
+          areaJourneySegments={areaJourneySegments}
+          schoolJourneySegments={schoolJourneySegments}
+          focusedGroup={focusedGroup}
+          city={city}
+          schoolRadiusOverlay={schoolRadiusOverlay}
+          resolvedPanelContent={resolvedPanelContent}
+          isSelectedGroupState={isSelectedGroupState}
+          handleCityChange={handleCityChange}
+          regionGuideVisible={regionGuideVisible}
+          resolvedRegionLabel={resolvedRegionLabel}
+          regionSelectNonce={regionSelectNonce}
+          regionOverviewMarkerKind={regionOverviewMarkerKind}
+          regionGuideRingActive={regionGuideRingActive}
+          prefersReducedMotion={prefersReducedMotion}
+          dismissRegionGuide={dismissRegionGuide}
+          isRegionOverview={isRegionOverview}
+          regionOverviewShortLabel={regionOverviewShortLabel}
+          areaMarkerListings={areaMarkerListings}
+          announcedBadgeText={announcedBadgeText}
+          discoverBadge={discoverBadge}
+          areaResultSummaryText={areaResultSummaryText}
+          groupSelectedBadgeCopy={groupSelectedBadgeCopy}
+          fallbackBadgeCopy={fallbackBadgeCopy}
+          isAreaFirstSelectedAreaState={isAreaFirstSelectedAreaState}
+          schoolRadiusActive={schoolRadiusActive}
+          schoolRadiusPillNoun={schoolRadiusPillNoun}
+          schoolFirstAreaSchoolCount={schoolFirstAreaSchoolCount}
+          schoolFirstZoneSchoolCount={schoolFirstZoneSchoolCount}
+          schoolFirstLandingSchoolCount={schoolFirstLandingSchoolCount}
+          cityTotal={cityTotal}
+          isAuthenticated={isAuthenticated}
+          schoolRadiusHasMore={schoolRadiusHasMore}
+          schoolListings={schoolListings}
+          hasActiveAnonFilter={hasActiveAnonFilter}
+          markersTruncated={markersTruncated}
+          markersReturnedElements={markersReturnedElements}
+          markersTotalFilteredElements={markersTotalFilteredElements}
+          isLoading={isLoading}
+          mapZoom={mapZoom}
+          isMarkerPopoverEligible={isMarkerPopoverEligible}
+          markerPopoverStepper={markerPopoverStepper}
+          navigate={navigate}
+          handleStepMarkerListing={handleStepMarkerListing}
+          showMarkerInList={showMarkerInList}
+        />
 
         <DiscoverRightPanel
           panelContent={resolvedPanelContent}
@@ -2394,28 +2163,19 @@ export default function MapDiscovery() {
           ) : null}
         />
       </div>
-      {/* NearSchoolSheet — not mounted in the agri-first journey (MVP2): structurally
-          prevents the sheet (which calls setSchoolJourney on select) from flipping
-          agri-first to school-first. */}
-      {!isAgriJourney && (
-        <NearSchoolSheet
-          open={nearSchoolOpen}
-          onOpenChange={setNearSchoolOpen}
-          selectedSchool={selectedSchool}
-          onSchoolSelect={journeyCommands.wrappedSchoolSelect}
-          radiusKm={filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM}
-          onRadiusChange={(km) => handleFiltersChange({ ...filters, schoolRadiusKm: km })}
-          boardFilter={schoolBoardFilter}
-          onBoardFilterChange={handleBoardFilterChange}
-          city={isCityValid ? city : null}
-        />
-      )}
-      {/* Issue #1576 — telemetry consent banner (first-visit, undecided state only) */}
-      <DiscoverConsentBanner />
-      {/* Issue #1576 — persistent privacy toggle so users can revoke consent later */}
-      <div className="fixed bottom-4 right-4 z-40">
-        <DiscoverPrivacyToggle />
-      </div>
+      <DiscoverOverlaySheets
+        isAgriJourney={isAgriJourney}
+        nearSchoolOpen={nearSchoolOpen}
+        setNearSchoolOpen={setNearSchoolOpen}
+        selectedSchool={selectedSchool}
+        journeyCommands={journeyCommands}
+        filters={filters}
+        handleFiltersChange={handleFiltersChange}
+        schoolBoardFilter={schoolBoardFilter}
+        handleBoardFilterChange={handleBoardFilterChange}
+        isCityValid={isCityValid}
+        city={city}
+      />
     </PublicDiscoverLayout>
   );
 }
