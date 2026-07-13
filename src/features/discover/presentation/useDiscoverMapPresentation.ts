@@ -1,13 +1,19 @@
 import { useMemo } from 'react';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
+import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
 import type { DiscoverMapLayerKind } from '@/utils/discoverLayerRegistry';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { CorridorGroupData } from '@/hooks/useRegionalAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { DiscoverSummaryRegion } from '@/hooks/useDiscoverSummary';
 import type { DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
+import type { SchoolResult } from '@/hooks/useSchoolSearch';
+import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
+import { type DiscoverMapCrumb } from '@/components/discover/DiscoverMapBreadcrumb';
+import { prettifyZoneSlug, areaKeyToLabel } from '@/components/discover/SchoolRadiusMapOverlay';
 import { matchesMacroRegion, labelToSlug } from '@/utils/macroRegionResolver';
 import { computeGroupBounds } from '@/utils/discoverGroupBounds';
+import { CITY_CONFIG } from '@/lib/localityUtils';
 
 export interface UseDiscoverMapPresentationParams {
   mapLayerKind: DiscoverMapLayerKind;
@@ -25,11 +31,26 @@ export interface UseDiscoverMapPresentationParams {
   cityCenter: [number, number] | undefined;
   focusedGroup: AreaGroup | null;
   debouncedAreaSearchQuery: string;
+  // Issue #1824 Slice S9b2 — optional (not required) so the frozen S9b1
+  // renderHook fixture (useDiscoverMapPresentation.overviewAreas.test.ts,
+  // which predates the region/breadcrumb cluster and must not be edited)
+  // keeps type-checking without supplying them; the real MapDiscovery.tsx
+  // call site always passes concrete values.
+  city?: string;
+  selectedArea?: AreaPoint | null;
+  selectedSchool?: SchoolResult | null;
+  selectedMarkerListing?: PropertyListingWithImages | null;
 }
 
 export interface UseDiscoverMapPresentationResult {
   overviewAreas: AreaPoint[];
   areaSearchMatchKeys: string[] | undefined;
+  resolvedRegionLabel: string | null;
+  isRegionOverview: boolean;
+  regionOverviewMarkerKind: RegionOverviewMarkerKind;
+  regionOverviewShortLabel: string | null;
+  areaJourneySegments: DiscoverMapCrumb[];
+  schoolJourneySegments: DiscoverMapCrumb[];
 }
 
 /**
@@ -58,6 +79,10 @@ export function useDiscoverMapPresentation({
   cityCenter,
   focusedGroup,
   debouncedAreaSearchQuery,
+  city = '',
+  selectedArea = null,
+  selectedSchool = null,
+  selectedMarkerListing = null,
 }: UseDiscoverMapPresentationParams): UseDiscoverMapPresentationResult {
   const overviewAreas = useMemo((): AreaPoint[] => {
     if (mapLayerKind === 'zoom-gated' || mapLayerKind === 'agri-drilldown') return [];
@@ -327,5 +352,120 @@ export function useDiscoverMapPresentation({
     return matches.length > 0 ? matches : undefined;
   }, [debouncedAreaSearchQuery, discoverAreas]);
 
-  return { overviewAreas, areaSearchMatchKeys };
+  // Issue #1808 — region-overview predicate (AC2-AC12): scope set, journey
+  // null, no narrower selection. Deliberately independent of resolvedPanelContent
+  // (derivePanelContent does not read `scope` — see discoverPanelState.ts —
+  // so this state still resolves to panelContent 'guided-entry', rendering
+  // GuidedEntryPanel; the guidance ring/helper are wired into GuidedEntryPanel's
+  // existing JourneySwitcher section, NOT AreaGroupsLandingPanel, which is only
+  // reachable once journey is set and is never mounted at this state).
+  const isRegionOverview =
+    urlState.scope != null &&
+    urlState.journey == null &&
+    !urlState.groupId &&
+    !urlState.areaKey &&
+    !urlState.schoolId &&
+    selectedMarkerListing == null;
+
+  // Issue #1798 PR-B1 — unified region/scope resolution for map breadcrumb hierarchy.
+  const resolvedRegionLabel =
+    (urlState.scope
+      ? summaryRegions.find((r) => r.regionKey.toLowerCase() === urlState.scope?.toLowerCase())?.regionLabel ?? prettifyZoneSlug(urlState.scope)
+      : focusedGroup?.region_label) ?? null;
+
+  const resolvedScopeKeyForHref =
+    urlState.scope ??
+    (focusedGroup?.region_label
+      ? summaryRegions.find((r) => r.regionLabel.toLowerCase() === focusedGroup.region_label!.toLowerCase())?.regionKey ?? focusedGroup.region_label.toLowerCase().replace(/\s+/g, '-')
+      : null);
+
+  // Issue #1808 q1 — marker-accurate variant derived from the ACTUAL resolved
+  // overview markers (never a curated/withheld preview). `overviewAreas` items
+  // carry `isGroup: true` only for the zone/group-bubble branch of the
+  // region-zone-areas layer (see the useMemo above); the direct-group-match
+  // branch returns member AREA points with no `isGroup` flag.
+  const regionOverviewMarkerKind: RegionOverviewMarkerKind =
+    isRegionOverview && mapLayerKind === 'region-zone-areas' && overviewAreas.length > 0
+      ? (overviewAreas.some((a) => a.isGroup) ? 'zones' : 'areas')
+      : null;
+
+  // Issue #1808 — short region label for the map legend line 1 (e.g. "East"
+  // from "East Bangalore"). Presentational formatting only, no new data source.
+  const regionOverviewShortLabel = resolvedRegionLabel
+    ? (() => {
+        const cityLabel = CITY_CONFIG[city]?.label ?? city;
+        const stripped = resolvedRegionLabel.replace(new RegExp(`\\s*${cityLabel}$`, 'i'), '').trim();
+        return stripped.length > 0 ? stripped : resolvedRegionLabel;
+      })()
+    : null;
+
+  const areaJourneySegmentsRaw: { key: string; label: string | null | undefined; emphasis?: DiscoverMapCrumb['emphasis']; maxWidthClass?: string; href?: string }[] = [
+    {
+      key: 'city',
+      label: CITY_CONFIG[city]?.label ?? city,
+      href: (resolvedRegionLabel || focusedGroup || selectedArea || urlState.groupId || urlState.areaKey) ? `/discover?city=${encodeURIComponent(city)}&journey=${encodeURIComponent(urlState.journey || 'area-first')}` : undefined,
+    },
+    {
+      key: 'region',
+      label: resolvedRegionLabel,
+      href: (focusedGroup || selectedArea || urlState.groupId || urlState.areaKey) && resolvedScopeKeyForHref ? `/discover?city=${encodeURIComponent(city)}&journey=${encodeURIComponent(urlState.journey || 'area-first')}&scope=${encodeURIComponent(resolvedScopeKeyForHref)}` : undefined,
+      maxWidthClass: 'max-w-[140px]',
+      emphasis: (focusedGroup || selectedArea || urlState.groupId || urlState.areaKey) ? ('muted' as const) : ('strong' as const),
+    },
+    {
+      key: 'group',
+      label: focusedGroup?.name ?? (urlState.groupId ? prettifyZoneSlug(urlState.groupId) : null),
+      href: (selectedArea || urlState.areaKey) && (focusedGroup?.id || urlState.groupId) ? `/discover?city=${encodeURIComponent(city)}&journey=${encodeURIComponent(urlState.journey || 'area-first')}&groupId=${encodeURIComponent(focusedGroup?.id ?? urlState.groupId!)}` : undefined,
+      maxWidthClass: 'max-w-[160px]',
+      emphasis: (selectedArea || urlState.areaKey) ? ('muted' as const) : ('strong' as const),
+    },
+    {
+      key: 'area',
+      label: selectedArea?.areaLabel ?? areaKeyToLabel(urlState.areaKey),
+      maxWidthClass: 'max-w-[160px]',
+      emphasis: 'strong' as const,
+    },
+  ];
+  const areaJourneySegments: DiscoverMapCrumb[] = areaJourneySegmentsRaw
+    .filter((s): s is { key: string; label: string; emphasis?: DiscoverMapCrumb['emphasis']; maxWidthClass?: string; href?: string } =>
+      typeof s.label === 'string' && s.label.trim().length > 0)
+    .map((s) => ({ key: s.key, label: s.label, emphasis: s.emphasis, maxWidthClass: s.maxWidthClass, href: s.href }));
+
+  // Issue #1745 P4 — resolved City › Zone › Area › School segments for the school-journey
+  // map breadcrumb (DiscoverMapBreadcrumb). Built here (not inside the shared component,
+  // which never filters/fabricates) so any segment whose label hasn't resolved yet is
+  // dropped — a zone-only context reads "Udupi › University Belt", an area context reads
+  // "Udupi › University Belt › Manipal". The school segment only appears once a schoolId is
+  // actually in the URL (guards against a stale selectedSchool lagging a back navigation).
+  // Not memoized: this component already has pre-existing conditionally-invoked hooks
+  // further down (rules-of-hooks violations predating #1745 P4 — out of scope here), so a
+  // useMemo placed after them would itself become conditional. The computation below is a
+  // handful of string comparisons — cheap enough to run on every render without memoizing.
+  const schoolJourneySegmentsRaw: { key: string; label: string | null | undefined; emphasis?: DiscoverMapCrumb['emphasis']; maxWidthClass?: string }[] = [
+    { key: 'city', label: CITY_CONFIG[city]?.label ?? city },
+    { key: 'region', label: resolvedRegionLabel, maxWidthClass: 'max-w-[140px]' },
+    { key: 'zone', label: focusedGroup?.name ?? prettifyZoneSlug(urlState.groupId) },
+    { key: 'area', label: selectedArea?.areaLabel ?? areaKeyToLabel(urlState.areaKey) },
+    {
+      key: 'school',
+      label: urlState.schoolId ? (selectedSchool?.name ?? null) : null,
+      emphasis: 'school',
+      maxWidthClass: 'max-w-[180px]',
+    },
+  ];
+  const schoolJourneySegments: DiscoverMapCrumb[] = schoolJourneySegmentsRaw
+    .filter((s): s is { key: string; label: string; emphasis?: DiscoverMapCrumb['emphasis']; maxWidthClass?: string } =>
+      typeof s.label === 'string' && s.label.trim().length > 0)
+    .map((s) => ({ key: s.key, label: s.label, emphasis: s.emphasis, maxWidthClass: s.maxWidthClass }));
+
+  return {
+    overviewAreas,
+    areaSearchMatchKeys,
+    resolvedRegionLabel,
+    isRegionOverview,
+    regionOverviewMarkerKind,
+    regionOverviewShortLabel,
+    areaJourneySegments,
+    schoolJourneySegments,
+  };
 }
