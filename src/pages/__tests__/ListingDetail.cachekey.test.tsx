@@ -197,7 +197,7 @@ describe('ListingDetail — useListingById cache key contract (Issue #1462)', ()
     const entry = queryClient.getQueryCache().find({
       queryKey: listingKeys.public(LISTING_ID, true),
     });
-    expect(entry?.options.staleTime).toBe(5 * 60 * 1000);
+    expect(entry?.observers[0]?.options.staleTime).toBe(5 * 60 * 1000);
 
     unmount();
   });

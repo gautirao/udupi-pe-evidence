@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState, useCallback } from 'react';
+import type { Json, Tables } from '@/integrations/supabase/types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8085';
 
@@ -298,12 +299,35 @@ export function useResetPostForReprocessing() {
 }
 
 // Admin Listings Hook (shows all including invalid)
+/**
+ * `property_listings` row joined with `raw_posts(images)`, plus the
+ * backend-computed `reraValid` field (see PropertyListing.reraValid in
+ * usePropertyListings.ts) that is never persisted as a DB column, so it can
+ * never appear in `Tables<'property_listings'>`.
+ *
+ * NOTE (issue #1850 Slice 6): `seller_type` here is intentionally left as the
+ * DB-generated `string` (not narrowed to PropertyListing's `'owner' | 'dealer' |
+ * 'broker' | 'builder' | null`). Narrowing it — even only within this local
+ * type — requires an unsafe cast at the `return data` statement below, because
+ * the actual query result's `seller_type` is genuinely typed `string`. A
+ * shared-level narrow (in types.ts) was also tried and rejected: it breaks
+ * usePropertyListings.ts:322's `.in('seller_type', filters.sellerTypes)` call
+ * (a forbidden, read-only file) by requiring `filters.sellerTypes` to be
+ * `('owner' | 'dealer' | 'builder')[]` instead of `string[]`. See the Slice 6
+ * report for the full analysis; Listings.tsx:409/422 remain unresolved as a
+ * result — flagged as a STOP condition rather than forced with `as`.
+ */
+type AdminListingRow = Tables<'property_listings'> & {
+  raw_posts: { images: Json | null } | null;
+  reraValid?: boolean;
+};
+
 export function useAdminListings(limit = 100) {
   const { isAdmin } = useAuth();
 
   return useQuery({
     queryKey: ['admin-listings', limit],
-    queryFn: async () => {
+    queryFn: async (): Promise<AdminListingRow[]> => {
       const { data, error } = await supabase
         .from('property_listings')
         .select('*, raw_posts(images)')

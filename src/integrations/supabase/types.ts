@@ -160,11 +160,16 @@ export type Database = {
           bedrooms: number | null
           built_area: number | null
           built_area_unit: string | null
+          carpet_area: number | null
+          carpet_area_unit: string | null
+          commercial_usage: string | null
           confidence_score: number | null
           contact_info: string | null
           contact_phone: string | null
           created_at: string
           description: string | null
+          floor_number: number | null
+          furnishing_status: string | null
           id: string
           is_duplicate: boolean
           is_valid: boolean
@@ -172,27 +177,45 @@ export type Database = {
           land_area_unit: string | null
           language_detected: string | null
           latitude: number | null
+          listing_purpose: string
           locality: string | null
+          lock_in_months: number | null
           longitude: number | null
+          monthly_rent: number | null
+          number_of_units: number | null
+          parking_count: number | null
           parsed_data: Json | null
           price: number | null
+          price_per_cent_paise: number | null
           price_unit: string | null
           property_type: Database["public"]["Enums"]["property_type"]
           raw_post_id: string | null
+          road_frontage_ft: number | null
+          rera_number: string | null
+          security_deposit_months: number | null
+          seller_type: string
+          status: string
           title: string | null
+          total_floors: number | null
           updated_at: string
           updated_by: string | null
+          washrooms: number | null
         }
         Insert: {
           bathrooms?: number | null
           bedrooms?: number | null
           built_area?: number | null
           built_area_unit?: string | null
+          carpet_area?: number | null
+          carpet_area_unit?: string | null
+          commercial_usage?: string | null
           confidence_score?: number | null
           contact_info?: string | null
           contact_phone?: string | null
           created_at?: string
           description?: string | null
+          floor_number?: number | null
+          furnishing_status?: string | null
           id?: string
           is_duplicate?: boolean
           is_valid?: boolean
@@ -200,27 +223,45 @@ export type Database = {
           land_area_unit?: string | null
           language_detected?: string | null
           latitude?: number | null
+          listing_purpose?: string
           locality?: string | null
+          lock_in_months?: number | null
           longitude?: number | null
+          monthly_rent?: number | null
+          number_of_units?: number | null
+          parking_count?: number | null
           parsed_data?: Json | null
           price?: number | null
+          price_per_cent_paise?: number | null
           price_unit?: string | null
           property_type?: Database["public"]["Enums"]["property_type"]
           raw_post_id?: string | null
+          road_frontage_ft?: number | null
+          rera_number?: string | null
+          security_deposit_months?: number | null
+          seller_type?: string
+          status?: string
           title?: string | null
+          total_floors?: number | null
           updated_at?: string
           updated_by?: string | null
+          washrooms?: number | null
         }
         Update: {
           bathrooms?: number | null
           bedrooms?: number | null
           built_area?: number | null
           built_area_unit?: string | null
+          carpet_area?: number | null
+          carpet_area_unit?: string | null
+          commercial_usage?: string | null
           confidence_score?: number | null
           contact_info?: string | null
           contact_phone?: string | null
           created_at?: string
           description?: string | null
+          floor_number?: number | null
+          furnishing_status?: string | null
           id?: string
           is_duplicate?: boolean
           is_valid?: boolean
@@ -228,16 +269,29 @@ export type Database = {
           land_area_unit?: string | null
           language_detected?: string | null
           latitude?: number | null
+          listing_purpose?: string
           locality?: string | null
+          lock_in_months?: number | null
           longitude?: number | null
+          monthly_rent?: number | null
+          number_of_units?: number | null
+          parking_count?: number | null
           parsed_data?: Json | null
           price?: number | null
+          price_per_cent_paise?: number | null
           price_unit?: string | null
           property_type?: Database["public"]["Enums"]["property_type"]
           raw_post_id?: string | null
+          road_frontage_ft?: number | null
+          rera_number?: string | null
+          security_deposit_months?: number | null
+          seller_type?: string
+          status?: string
           title?: string | null
+          total_floors?: number | null
           updated_at?: string
           updated_by?: string | null
+          washrooms?: number | null
         }
         Relationships: [
           {

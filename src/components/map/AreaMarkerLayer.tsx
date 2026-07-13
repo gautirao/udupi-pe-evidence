@@ -378,7 +378,7 @@ function makeLeaderIcon(offset: { dx: number; dy: number }, color: string): L.Di
 }
 
 /** Union bbox of a set of AreaPoints, falling back to their geo centers when bbox is null. */
-function unionBounds(areas: AreaPoint[]): L.LatLngBoundsExpression {
+function unionBounds(areas: AreaPoint[]): L.LatLngExpression[] {
   const points: [number, number][] = [];
   for (const a of areas) {
     if (a.bbox) {

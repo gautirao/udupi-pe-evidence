@@ -18,12 +18,20 @@ import {
   deriveDiscoverBadge,
   type DiscoverBadgeInput,
 } from '../MapDiscovery';
+import type { PropertyFilters } from '@/hooks/usePropertyListings';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const NO_FILTERS: DiscoverBadgeInput['filters'] = {};
 
-function makeInput(overrides: Partial<DiscoverBadgeInput>): DiscoverBadgeInput {
+// `filters` is widened to `Partial<PropertyFilters>` so tests can pass the
+// full school-proximity shape (schoolLat/schoolLon/schoolRadiusKm — declared
+// on PropertyFilters, usePropertyListings.ts:139-144) that DiscoverBadgeInput's
+// own narrower `filters` type doesn't list. deriveDiscoverBadge only reads
+// schoolListingsCount, so the extra fields are inert to every assertion here.
+function makeInput(
+  overrides: Partial<Omit<DiscoverBadgeInput, 'filters'>> & { filters?: Partial<PropertyFilters> },
+): DiscoverBadgeInput {
   return {
     selectedArea: null,
     filters: NO_FILTERS,

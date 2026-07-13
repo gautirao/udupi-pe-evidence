@@ -18,6 +18,18 @@ import {
   GROUP_BOUNDS_SYNTHETIC_KEY,
 } from '@/utils/discoverGroupBounds';
 
+// Shape of the Leaflet LatLngBounds stub returned by mapStub.getBounds(). Declared
+// explicitly (rather than left to inference) so getBounds' factory return type widens
+// to `number`, not the literal `14 | 13 | 75 | 74` TS would otherwise infer from the
+// vi.fn() initializer — that literal-narrowed inference is what previously broke
+// `mapStub.getBounds.mockReturnValue(wideViewport)` below (TS2345).
+type LatLngBoundsStub = {
+  getNorth: () => number;
+  getSouth: () => number;
+  getEast: () => number;
+  getWest: () => number;
+};
+
 // ─── Hoisted stubs ─────────────────────────────────────────────
 const mapStub = vi.hoisted(() => ({
   fitBounds: vi.fn(),
@@ -25,12 +37,14 @@ const mapStub = vi.hoisted(() => ({
   addLayer: vi.fn(),
   removeLayer: vi.fn(),
   getZoom: vi.fn(() => 11),
-  getBounds: vi.fn(() => ({
-    getNorth: () => 14,
-    getSouth: () => 13,
-    getEast: () => 75,
-    getWest: () => 74,
-  })),
+  getBounds: vi.fn(
+    (): LatLngBoundsStub => ({
+      getNorth: () => 14,
+      getSouth: () => 13,
+      getEast: () => 75,
+      getWest: () => 74,
+    }),
+  ),
   getContainer: vi.fn(() => document.body),
   on: vi.fn(),
   off: vi.fn(),
@@ -176,13 +190,13 @@ const SCHOOL_LON = 74.5;
 
 // 3 km circle around (13.5, 74.5): deltaLat ≈ 0.027, deltaLon ≈ 0.028.
 // "Wide" viewport (S13/W74/N14/E75) contains it comfortably; "tight" clips it.
-const wideViewport = {
+const wideViewport: LatLngBoundsStub = {
   getNorth: () => 14,
   getSouth: () => 13,
   getEast: () => 75,
   getWest: () => 74,
 };
-const tightViewport = {
+const tightViewport: LatLngBoundsStub = {
   getNorth: () => 13.505,
   getSouth: () => 13.495,
   getEast: () => 74.505,
