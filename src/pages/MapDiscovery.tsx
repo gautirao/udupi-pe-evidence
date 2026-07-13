@@ -43,7 +43,7 @@ import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSea
 import { useMarkerSelection } from '@/features/discover/state/useMarkerSelection';
 import { useDiscoverJourneyTransitions } from '@/features/discover/state/useDiscoverJourneyTransitions';
 import { useDiscoverCameraOrchestration } from '@/features/discover/state/useDiscoverCameraOrchestration';
-import { resolveMarkerListings } from '@/features/discover/map/resolveMarkerListings';
+import { resolveMarkerPopover } from '@/features/discover/map/resolveMarkerPopover';
 import { useDiscoverMapPresentation } from '@/features/discover/presentation/useDiscoverMapPresentation';
 import { useDiscoverBadgeAnnounce } from '@/features/discover/presentation/useDiscoverBadgeAnnounce';
 import { useAuth } from '@/contexts/AuthContext';
@@ -1780,16 +1780,14 @@ export default function MapDiscovery() {
 
   if (!isCityValid) return <CityNotSupported city={city} />;
 
-  // Issue #1810 (Stage 2A, MODEL A) — the single ordered listing-marker array
-  // that feeds PropertyMap's markers AND doubles as the popup stepper's
-  // ratified panel-scope set (user-locked model, see approved-plan.toml
-  // [user_decision]). Extracted from the inline IIFE previously passed
-  // directly as PropertyMap's `listings` prop so the stepper below reads the
-  // EXACT same array PropertyMap renders — no separate marker-set plumbing,
-  // no new camera-intent types, no PropertyMap changes. Not a hook (plain
-  // const), so it is safe to declare after the early return above; every
-  // variable it closes over is already declared earlier in this component.
-  const currentMapMarkerListings = resolveMarkerListings({
+  // Issue #1824 Slice S10b — the marker-resolve + stepper cluster (Issue
+  // #1810 Stage 2A, MODEL A user-locked model, see approved-plan.toml
+  // [user_decision]) is extracted verbatim into the pure resolveMarkerPopover
+  // module. Not a hook (plain const), so it is safe to declare after the
+  // early return above; every field it closes over is already declared
+  // earlier in this component. See
+  // docs/audit/evidence/issue-1824-map-discovery-decomposition/slice-s10b-design.md.
+  const { currentMapMarkerListings, markerPopoverStepper } = resolveMarkerPopover({
     mapLayerCategory,
     selectedArea,
     isGroupResultsState,
@@ -1805,22 +1803,9 @@ export default function MapDiscovery() {
     isLoadingAreaListings,
     isErrorAreaListings,
     markersLoading,
+    isMarkerPopoverEligible,
+    selectedMarkerListing,
   });
-
-  // Issue #1810 (Stage 2A) — MODEL A stepper set: the clicked listing's 1-based
-  // position within currentMapMarkerListings (the SAME array feeding the map +
-  // in-scope with the results panel). null when ineligible, the listing isn't
-  // found in the set (defensive), or the set has <=1 member — the popup then
-  // renders no stepper at all (AC8). Deliberately NOT a hook: cheap, recomputed
-  // every render, no camera side effects of any kind.
-  const markerPopoverStepper =
-    isMarkerPopoverEligible && selectedMarkerListing != null
-      ? (() => {
-          const idx = currentMapMarkerListings.findIndex((l) => l.id === selectedMarkerListing.id);
-          if (idx === -1 || currentMapMarkerListings.length <= 1) return null;
-          return { index: idx, total: currentMapMarkerListings.length };
-        })()
-      : null;
 
   // Issue #1810 (Stage 2A) — steps the popup to the sibling at index±1 within
   // the ratified MODEL A set. Updates selectedMarkerListing + the shared
