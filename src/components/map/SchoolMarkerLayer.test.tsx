@@ -33,16 +33,20 @@ const mockSchools: SchoolResult[] = [
     name: 'Test School 1',
     latitude: 13.34,
     longitude: 74.74,
-    category: 'primary',
     board: 'ICSE',
+    boardType: null,
+    address: 'Test Address 1',
+    distanceKm: 0.5,
   },
   {
     id: 'school-2',
     name: 'Test School 2',
     latitude: 13.35,
     longitude: 74.75,
-    category: 'secondary',
     board: 'CBSE',
+    boardType: null,
+    address: 'Test Address 2',
+    distanceKm: 1.2,
   },
 ];
 

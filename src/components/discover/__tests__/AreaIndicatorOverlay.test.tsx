@@ -8,8 +8,9 @@ import type { AreaGroup } from '@/hooks/useAreaGroups';
 const mockArea: AreaPoint = {
   areaKey: 'manipal|udupi|udupi-manipal',
   areaLabel: 'Manipal',
-  lat: 13.35,
-  lon: 74.79,
+  geo_center_lat: 13.35,
+  geo_center_lon: 74.79,
+  bbox: null,
   listingCount: 5,
 };
 
@@ -17,16 +18,18 @@ const mockGroup: AreaGroup = {
   id: 'group-1',
   name: 'Central Udupi',
   subtitle: 'Near city centre',
+  region_label: null,
+  school_count: 0,
   area_keys: ['manipal|udupi|udupi-manipal'],
-  city: 'udupi-manipal',
 };
 
 const mockGroupNoSubtitle: AreaGroup = {
   id: 'group-2',
   name: 'North Belt',
   subtitle: null,
+  region_label: null,
+  school_count: 0,
   area_keys: [],
-  city: 'udupi-manipal',
 };
 
 describe('AreaIndicatorOverlay', () => {

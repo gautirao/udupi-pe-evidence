@@ -9,18 +9,17 @@ import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 const mockArea: AreaPoint = {
   areaKey: 'test-area|city|udupi',
   areaLabel: 'Test Area',
-  lat: 13.5,
-  lng: 74.5,
-  zoom: 14,
+  geo_center_lat: 13.5,
+  geo_center_lon: 74.5,
+  bbox: null,
 };
 
 const mockListing: DiscoverCityListingItem = {
   id: '1',
-  property_type: 'apartment',
+  propertyType: 'apartment',
   title: 'Test Listing',
   locality: 'Test Area',
-  price: 5000000,
-  price_unit: 'total',
+  pricePaise: 5000000,
   bedrooms: 2,
   bathrooms: 1,
 };
