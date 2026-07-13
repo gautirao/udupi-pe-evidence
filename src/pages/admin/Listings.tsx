@@ -55,7 +55,10 @@ import { cn } from '@/lib/utils';
 
 const propertyTypeColors: Record<PropertyType, string> = {
   land: 'bg-green-500/10 text-green-600',
+  agricultural_land: 'bg-lime-500/10 text-lime-700',
   house: 'bg-orange-500/10 text-orange-600',
+  villa: 'bg-pink-500/10 text-pink-600',
+  residential_plot: 'bg-emerald-500/10 text-emerald-700',
   apartment: 'bg-violet-500/10 text-violet-600',
   commercial: 'bg-blue-500/10 text-blue-600',
   commercial_building: 'bg-blue-600/10 text-blue-700',

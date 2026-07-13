@@ -25,7 +25,10 @@ interface PropertyDetailModalProps {
 
 const propertyConfig: Record<PropertyType, { label: string; bgClass: string }> = {
   land: { label: 'Land', bgClass: 'bg-green-500' },
+  agricultural_land: { label: 'Agricultural Land', bgClass: 'bg-lime-600' },
   house: { label: 'House', bgClass: 'bg-orange-500' },
+  villa: { label: 'Villa', bgClass: 'bg-pink-500' },
+  residential_plot: { label: 'Residential Plot', bgClass: 'bg-emerald-500' },
   apartment: { label: 'Apartment', bgClass: 'bg-violet-500' },
   commercial: { label: 'Commercial', bgClass: 'bg-blue-500' },
   commercial_building: { label: 'Comm. Building', bgClass: 'bg-blue-600' },

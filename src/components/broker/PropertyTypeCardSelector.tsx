@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Building, Building2, Home, LandPlot, Map, Sprout, Store, Warehouse } from 'lucide-react';
+import { Building, Building2, Home, HelpCircle, LandPlot, Map, Sprout, Store, Warehouse } from 'lucide-react';
 import { PROPERTY_TYPES } from '@/lib/listing-constants';
 import type { PropertyType } from '@/lib/listing-constants';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,9 @@ const PROPERTY_TYPE_ICONS: Record<PropertyType, LucideIcon> = {
   commercial_building: Building,
   warehouse: Warehouse,
   commercial_land: LandPlot,
+  // Type-only superset member (DB CHECK allows it); not in PROPERTY_TYPES, so
+  // this card never actually renders — present only to satisfy exhaustiveness.
+  other: HelpCircle,
 };
 
 /** M38-13A (#1626) — the four residential subtypes shown by the residential-only variant. */

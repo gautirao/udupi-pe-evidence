@@ -26,7 +26,8 @@ export function clampSchoolRadiusKm(radiusKm: number): number {
     : MIN_SCHOOL_RADIUS_KM;
 }
 
-export type PropertyType = 'land' | 'house' | 'apartment' | 'commercial' | 'commercial_building' | 'warehouse' | 'commercial_land' | 'other';
+import type { PropertyType } from '@/lib/listing-constants';
+export type { PropertyType };
 
 export interface PropertyImage {
   url: string;

@@ -383,6 +383,12 @@ const CONFIG_MAP: Record<PropertyType, ListingFieldConfig> = {
       ...COMMERCIAL_ALL_FIELDS,
     ]),
   },
+
+  // Type-only superset member (DB CHECK allows it); not in PROPERTY_TYPES, so
+  // it is never user-selectable. Minimal fallback mirroring 'land'.
+  other: {
+    visibleFields: new Set<ListingFieldKey>(['landArea']),
+  },
 };
 
 // ---------------------------------------------------------------------------

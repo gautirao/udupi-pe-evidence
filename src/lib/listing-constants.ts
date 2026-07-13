@@ -12,7 +12,7 @@ export const PROPERTY_TYPES = [
   { value: 'commercial_land', label: 'Commercial Land' },
 ] as const;
 
-export type PropertyType = (typeof PROPERTY_TYPES)[number]['value'];
+export type PropertyType = (typeof PROPERTY_TYPES)[number]['value'] | 'other';
 
 /**
  * Canonical property-type token for agricultural land. Single source for the
