@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useUpdateListing, useSubmitListing } from '@/hooks/useBrokerListings';
 import type { ListingResponse } from '@/hooks/useBrokerListings';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,7 @@ import { useCommercialFields } from './useCommercialFields';
 import { useRentFields } from './useRentFields';
 import { useResidentialFields } from './useResidentialFields';
 import { useSharedFields } from './useSharedFields';
+import { useEditListingNavigation } from './useEditListingNavigation';
 import { DescribeStep } from './steps/DescribeStep';
 import { PhotosStep } from './steps/PhotosStep';
 import { LocationStep } from './steps/LocationStep';
@@ -30,16 +31,12 @@ import { ReviewStep } from './steps/ReviewStep';
 
 const SUBMITTABLE_STATUSES = ['DRAFT', 'REJECTED'];
 
-const BASE_STEPS = ['Describe', 'Add Photos', 'Pin Location', 'Review & Submit'] as const;
-const AGRI_STEPS = ['Describe', 'Add Photos', 'Pin Location', 'Draw Boundary', 'Review & Submit'] as const;
-
 interface EditListingFormProps {
   listing: ListingResponse;
 }
 
 export function EditListingForm({ listing }: EditListingFormProps) {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -51,22 +48,16 @@ export function EditListingForm({ listing }: EditListingFormProps) {
   const [priceRupees, setPriceRupees] = useState<number | null>(null);
   const [propertyType, setPropertyType] = useState<PropertyType | ''>('');
 
-  // Dynamic wizard steps: agri listings get an extra "Draw Boundary" step (step 4).
-  // NOTE: propertyType state starts as '' and is populated by the useEffect below once
-  // the listing loads. The step count may change on first render, but useState captures
-  // the initial value at mount — the clamp is re-applied in the steps array below.
-  const isAgriListing = propertyType === 'agricultural_land';
-  const WIZARD_STEPS = isAgriListing ? AGRI_STEPS : BASE_STEPS;
-  const reviewStep = WIZARD_STEPS.length; // step number of the final "Review & Submit" step
-  const boundaryStep = isAgriListing ? AGRI_STEPS.indexOf('Draw Boundary') + 1 : 0;
-
-  // Step routing: read initial step from ?step= query param (1-based, default 1).
-  // Guard against non-numeric values (e.g. ?step=abc → NaN) and clamp to [1, WIZARD_STEPS.length].
-  const stepParam = searchParams.get('step');
-  const initialStep = stepParam ? (Math.max(1, Math.min(WIZARD_STEPS.length, parseInt(stepParam, 10) || 1))) : 1;
-  const [currentStep, setCurrentStep] = useState(initialStep);
-  // When true: after saving a step, return to step 4 instead of advancing sequentially
-  const [cameFromReview, setCameFromReview] = useState(false);
+  // Issue #1838 slice-7 — wizard step-navigation state (currentStep,
+  // cameFromReview, wizardSteps, reviewStep, boundaryStep, isAgriListing,
+  // advanceAfterSave) extracted into useEditListingNavigation(). listingPurpose
+  // is not passed — wizardSteps/reviewStep/boundaryStep depend only on
+  // propertyType, so it would be a dead parameter.
+  const nav = useEditListingNavigation(propertyType);
+  const {
+    currentStep, setCurrentStep, cameFromReview, setCameFromReview,
+    wizardSteps: WIZARD_STEPS, reviewStep, boundaryStep, isAgriListing, advanceAfterSave,
+  } = nav;
   const [locality, setLocality] = useState('');
   const [landArea, setLandArea] = useState<number | null>(null);
   // Unit for land area; default 'cent' (dominant Udupi/Karnataka unit).
@@ -366,12 +357,7 @@ export function EditListingForm({ listing }: EditListingFormProps) {
     updateListing.mutate(payload, {
       onSuccess: () => {
         toast({ title: 'Listing updated', description: 'Your listing has been saved.' });
-        if (cameFromReview) {
-          setCameFromReview(false);
-          setCurrentStep(reviewStep);
-        } else {
-          setCurrentStep(2);
-        }
+        advanceAfterSave(2);
       },
     });
   };
@@ -388,12 +374,7 @@ export function EditListingForm({ listing }: EditListingFormProps) {
       { videoUrl: videoUrl.trim() || null, applyVideoUrl: true },
       {
         onSuccess: () => {
-          if (cameFromReview) {
-            setCameFromReview(false);
-            setCurrentStep(reviewStep);
-          } else {
-            setCurrentStep(3);
-          }
+          advanceAfterSave(3);
         },
       },
     );
