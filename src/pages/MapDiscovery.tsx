@@ -4,27 +4,24 @@ import { useQueryClient } from '@tanstack/react-query';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PublicDiscoverLayout } from '@/components/layout/PublicDiscoverLayout';
-import { MapAreaLegend } from '@/components/discover/MapAreaLegend';
-import { MapRegionOverviewLegend } from '@/components/discover/MapRegionOverviewLegend';
 import { RegionGuidanceCard, type RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
-import { MapAgriLegend } from '@/components/discover/MapAgriLegend';
-import { MapSchoolLegend, type SchoolLegendStage } from '@/components/discover/MapSchoolLegend';
-import { MapMarkerLegend } from '@/components/discover/MapMarkerLegend';
-import { MarkerPopoverCard } from '@/components/discover/MarkerPopoverCard';
 import { PropertyMap, PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { computeZoneLabelPoints } from '@/lib/schoolZoneLabels';
 import type { ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
 import type { AreaPoint, AreaMarkerClusterInfo } from '@/components/map/AreaMarkerLayer';
 import { MapFilters } from '@/components/map/MapFilters';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
-import { AreaIndicatorOverlay } from '@/components/discover/AreaIndicatorOverlay';
-import { DiscoverMapBreadcrumb, type DiscoverMapCrumb } from '@/components/discover/DiscoverMapBreadcrumb';
+import { type DiscoverMapCrumb } from '@/components/discover/DiscoverMapBreadcrumb';
 import {
-  SchoolRadiusLegend,
   isSchoolRadiusOverlayState,
   prettifyZoneSlug,
   areaKeyToLabel,
 } from '@/components/discover/SchoolRadiusMapOverlay';
+import { DiscoverMapContextOverlay } from '@/components/discover/DiscoverMapContextOverlay';
+import { DiscoverMapLegend } from '@/components/discover/DiscoverMapLegend';
+import { DiscoverMapCountBadge } from '@/components/discover/DiscoverMapCountBadge';
+import { DiscoverMapMarkerPopover } from '@/components/discover/DiscoverMapMarkerPopover';
+import { DiscoverMapStatusHints } from '@/components/discover/DiscoverMapStatusHints';
 import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
 import { resolveScopeKeyFromLabel, matchesMacroRegion, labelToSlug, aggregateMacroRegions } from '@/utils/macroRegionResolver';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
@@ -77,7 +74,7 @@ import { DiscoverConsentBanner } from '@/components/discover/DiscoverConsentBann
 import { DiscoverPrivacyToggle } from '@/components/discover/DiscoverPrivacyToggle';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, MapPin, GraduationCap, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Re-exported so existing test imports from '@/pages/MapDiscovery' continue to resolve.
 export { isNew } from '@/lib/isNew';
@@ -2743,6 +2740,28 @@ export default function MapDiscovery() {
     selectMarkerSibling(sibling);
   };
 
+  // Issue #1824 Slice S8 — the DiscoverMapCountBadge/DiscoverMapStatusHints
+  // copy-fork guard (AC4): the SAME formatDiscoverBadgeCopy()/
+  // deriveSchoolRadiusPillNoun()/hasActiveAnonPropertyFilter() calls that
+  // previously lived inline in the JSX below, now computed once here and
+  // passed by prop — the extracted components never import these page-owned
+  // helpers, so the copy contract cannot fork (slice-s8-design.md FLAG-A/B).
+  const groupSelectedBadgeCopy = formatDiscoverBadgeCopy(discoverBadge, {
+    scopeLabel: focusedGroup?.name ?? '',
+    noun: 'verified properties',
+    searchQuery: urlState.q,
+  });
+  const fallbackBadgeCopy = formatDiscoverBadgeCopy(discoverBadge, {
+    scopeLabel:
+      selectedArea?.areaLabel ??
+      focusedGroup?.name ??
+      (CITY_CONFIG[city]?.label ?? city),
+    noun: selectedArea ? 'homes' : 'properties',
+    searchQuery: urlState.q,
+  });
+  const schoolRadiusPillNoun = deriveSchoolRadiusPillNoun(urlState.intent);
+  const hasActiveAnonFilter = hasActiveAnonPropertyFilter(filters);
+
   return (
     <PublicDiscoverLayout>
       <div className="h-full flex flex-col lg:flex-row relative">
@@ -2754,14 +2773,13 @@ export default function MapDiscovery() {
           // inside the card itself so clicks inside the card do not trigger this.
           markerPixelPos != null ? handlePopoverDismiss : undefined
         }>
-          {showLoader && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/50 z-10">
-              <div className="flex flex-col items-center gap-3">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Loading map...</p>
-              </div>
-            </div>
-          )}
+          {/* Issue #1824 Slice S8 — loader overlay extracted to DiscoverMapStatusHints.
+              The error-card branch below is DELIBERATELY left inline: it is the
+              false-branch alternative of PropertyMap in this same ternary, and
+              PropertyMap is a forbidden/already-wired child that must stay
+              page-owned verbatim (see the component's docstring for the full
+              rationale). */}
+          <DiscoverMapStatusHints showLoader={showLoader} />
           {error ? (
             <div className="absolute inset-0 flex items-center justify-center">
               <Card className="p-6 text-center max-w-sm">
@@ -2901,66 +2919,22 @@ export default function MapDiscovery() {
           {/* Top-left context overlay. For school-first drill-down states (zone / area /
               school selected), show the progressively-resolved journey breadcrumb
               (City › Zone › Area › School); otherwise the generic area indicator.
-              Rendering one OR the other avoids a duplicate breadcrumb. */}
-          <div className="absolute top-4 left-4 z-[1000]">
-            {isAreaFirstCityLanding ? (
-              // Issue #1607 — the area-first city-level landing shows the
-              // "Home › City › Areas" breadcrumb (mock placement). Home and the city
-              // crumb route progressively; "Areas" is the terminal (current) page.
-              <DiscoverMapBreadcrumb
-                testId="area-first-landing-breadcrumb"
-                containerClassName="px-3.5 shadow-md"
-                leadingIcon={MapPin}
-                leadingIconClassName="text-[hsl(var(--copper))]"
-                segments={[
-                  { key: 'home', label: 'Home', href: '/' },
-                  {
-                    key: 'city',
-                    label: CITY_CONFIG[city]?.label ?? city,
-                    href: `/discover?city=${encodeURIComponent(city)}`,
-                    maxWidthClass: 'max-w-[140px]',
-                  },
-                  { key: 'areas', label: 'Areas', current: true, emphasis: 'strong' },
-                ]}
-              />
-            ) : showSchoolBreadcrumb ? (
-              <DiscoverMapBreadcrumb
-                ariaLabel="Journey breadcrumb"
-                testId="school-journey-breadcrumb"
-                density="compact"
-                containerClassName="max-w-[min(88vw,520px)] border-border/60 py-1.5 shadow-md"
-                separatorClassName="text-muted-foreground/50"
-                leadingIcon={GraduationCap}
-                leadingIconClassName="text-[hsl(var(--plum))]"
-                segments={schoolJourneySegments}
-              />
-            ) : areaJourneySegments.length > 1 ? (
-              // Issue #1595 / Issue #1606 / Issue #1798 PR-B1 — unified City › Region › Group › Area
-              // map breadcrumb across all area-first drill-down and return states.
-              <DiscoverMapBreadcrumb
-                testId="map-group-breadcrumb"
-                leadingIcon={MapPin}
-                leadingIconClassName="text-[hsl(var(--copper))]"
-                segments={areaJourneySegments}
-              />
-            ) : (
-              <AreaIndicatorOverlay
-                cityLabel={CITY_CONFIG[city]?.label ?? city}
-                focusedGroup={focusedGroup}
-                selectedArea={selectedArea}
-              />
-            )}
-          </div>
+              Rendering one OR the other avoids a duplicate breadcrumb.
+              Issue #1824 Slice S8 — extracted to DiscoverMapContextOverlay. */}
+          <DiscoverMapContextOverlay
+            isAreaFirstCityLanding={isAreaFirstCityLanding}
+            showSchoolBreadcrumb={showSchoolBreadcrumb}
+            areaJourneySegments={areaJourneySegments}
+            schoolJourneySegments={schoolJourneySegments}
+            selectedArea={selectedArea}
+            focusedGroup={focusedGroup}
+            city={city}
+          />
 
           {/* Radius legend — bottom-left, raised above the Leaflet zoom control (bottomleft).
-              Only the selected-school radius state; swatches match the real map markers/ring. */}
-          {schoolRadiusOverlay && (
-            <div className="absolute bottom-24 left-4 z-[1000]">
-              <SchoolRadiusLegend
-                radiusKm={clampSchoolRadiusKm(filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM)}
-              />
-            </div>
-          )}
+              Only the selected-school radius state; swatches match the real map markers/ring.
+              Issue #1824 Slice S8 — extracted to DiscoverMapLegend (chrome call). */}
+          <DiscoverMapLegend schoolRadiusChrome={schoolRadiusOverlay ? { schoolRadiusKm: filters.schoolRadiusKm } : null} />
 
           {/* City select — top-right. Issue #1588 — hidden on the public landing
               (guided-entry), where the city control lives in the right-panel hero
@@ -2996,94 +2970,27 @@ export default function MapDiscovery() {
             />
           )}
 
-          {/* Area-count legend — bottom-left, public landing only. Shown ONLY when there
-              are actual area markers on the map (hidden entirely on empty cities), and
-              never over the school-radius legend. All landing markers are areas with
-              properties, so only the "Areas with properties" row is shown (Issue #1588).
-              Issue #1808 — excluded at region-overview (scope set), which now shows the
-              marker-accurate MapRegionOverviewLegend below instead; the city-landing
-              (scope=null) rendering here is otherwise unchanged. */}
-          {resolvedPanelContent === 'guided-entry' && !schoolRadiusOverlay && overviewAreas.length > 0 && !isRegionOverview && (
-            <div className="absolute bottom-10 left-4 z-[1000]">
-              <MapAreaLegend showZeroRow={false} />
-            </div>
-          )}
-
-          {/* Issue #1808 — region-aware legend variant, region-overview only.
-              Gated on regionGuideVisible (not the raw isRegionOverview) so the
-              legend note clears together with the card + ring on dismiss (AC6). */}
-          {regionGuideVisible && !schoolRadiusOverlay && regionOverviewShortLabel && (
-            <div className="absolute bottom-10 left-4 z-[1000]">
-              <MapRegionOverviewLegend
-                regionShortLabel={regionOverviewShortLabel}
-                markerKind={regionOverviewMarkerKind}
-              />
-            </div>
-          )}
-
-          {/* a2 — Marker-meaning legend for the area-first selected-area results state.
-              Shown only when there is at least one area marker and we are in area-selected.
-              Does not render on guided-entry / selected-group (those keep MapAreaLegend).
-              Does not clash with badge (bottom-16 right-4), zoom (bottom-right), or attribution. */}
-          {isAreaFirstSelectedAreaState && !schoolRadiusOverlay && areaMarkerListings.length > 0 && (
-            <div className="absolute bottom-10 left-4 z-[1000]">
-              <MapMarkerLegend listings={areaMarkerListings} />
-            </div>
-          )}
-
-          {/* Issue #1595 — the area-first selected-group drill-down shows the same
-              "Areas" legend, since its map surfaces member-area markers with counts. */}
-          {isSelectedGroupState && !schoolRadiusOverlay && (
-            <div className="absolute bottom-10 left-4 z-[1000]">
-              <MapAreaLegend showZeroRow={false} />
-            </div>
-          )}
-
-          {/* Issue #1607 — the area-first city landing shows only areas WITH properties
-              (zero-listing areas are hidden, mirroring the guided-entry landing), so the
-              legend carries just the "Areas with properties" row. */}
-          {isAreaFirstCityLanding && !schoolRadiusOverlay && overviewAreas.length > 0 && (
-            <div className="absolute bottom-10 left-4 z-[1000]">
-              <MapAreaLegend showZeroRow={false} />
-            </div>
-          )}
-
-          {/* Issue #1771 — Agri-first journey map legend, contextual per drill-down stage:
-              landing → Corridors; corridor selected → Corridors + Village clusters;
-              locality selected → Parcels. */}
-          {urlState.journey === 'agri-first' && !schoolRadiusOverlay && (
-            <div className="absolute bottom-10 left-4 z-[1000]">
-              <MapAgriLegend
-                stage={
-                  urlState.selectedLocality
-                    ? 'locality'
-                    : selectedRegion
-                      ? 'corridor'
-                      : 'landing'
-                }
-              />
-            </div>
-          )}
-
-          {/* School-first journey map legend, contextual per drill-down stage (mirrors
-              the #1771 MapAgriLegend pattern): school-browse → School zones;
-              school-group-areas → Areas; schools-in-area → Schools. Once a specific
-              school is selected the existing SchoolRadiusLegend (above) already covers
-              the school marker + radius-circle swatches, so this legend is gated off via
-              !schoolRadiusOverlay to avoid a redundant/competing bottom-left legend. */}
-          {urlState.journey === 'school-first' && !schoolRadiusOverlay && (
-            <div className="absolute bottom-10 left-4 z-[1000]">
-              <MapSchoolLegend
-                stage={
-                  ((): SchoolLegendStage => {
-                    if (resolvedPanelContent === 'schools-in-area') return 'area';
-                    if (resolvedPanelContent === 'school-group-areas') return 'zone';
-                    return 'landing';
-                  })()
-                }
-              />
-            </div>
-          )}
+          {/* Issue #1824 Slice S8 — the 7-variant legend switch (area-count,
+              region-aware, marker-meaning, selected-group, city-landing, agri,
+              school) extracted to DiscoverMapLegend (variants call). */}
+          <DiscoverMapLegend
+            variants={{
+              schoolRadiusOverlay,
+              resolvedPanelContent,
+              overviewAreas,
+              isRegionOverview,
+              regionGuideVisible,
+              regionOverviewShortLabel,
+              regionOverviewMarkerKind,
+              isAreaFirstSelectedAreaState,
+              areaMarkerListings,
+              isSelectedGroupState,
+              isAreaFirstCityLanding,
+              journey: urlState.journey,
+              selectedLocality: urlState.selectedLocality,
+              selectedRegion,
+            }}
+          />
 
           {/* "Near a school" quick-filter button removed (Figma polish) — the school
               journey is reachable via the "Search by school area" card in the right panel.
@@ -3099,134 +3006,28 @@ export default function MapDiscovery() {
 
           {/* City / area listing count — bottom-right (Issue #1152). Issue #1588 — on the
               public landing this is replaced by the centered city-wide summary pill below;
-              kept bottom-right for contextual (area/school/group) drill-down counts. */}
-          {resolvedPanelContent !== 'guided-entry' && !isAreaFirstCityLanding && discoverBadge.visible && (discoverBadge.count != null || discoverBadge.state === 'stale') && (
-            <div
-              className={
-                // Issue #1595 — on the selected-group step the pill is centred at the bottom.
-                // Issue #1606 — area-first selected-area step also centres the pill (bottom-8
-                // for clearance above attribution; clear of zoom bottom-right + legend bottom-left).
-                // Every other drill-down context keeps the compact bottom-right placement.
-                isSelectedGroupState || isAreaFirstSelectedAreaState
-                  ? 'absolute bottom-8 left-1/2 z-[1000] -translate-x-1/2'
-                  : 'absolute bottom-16 right-4 z-[1000]'
-              }
-              data-testid="discover-badge"
-            >
-              <div
-                className="flex items-center gap-2 whitespace-nowrap rounded-full border border-border bg-card/95 px-4 py-2 text-sm text-muted-foreground shadow-sm backdrop-blur-sm"
-                aria-busy={discoverBadge.loading}
-              >
-                <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                {/* Issue #1595 — in the selected-group drill-down the footer pill names the
-                    group and marks the count as verified ("Showing 8 verified properties in
-                    University Belt").
-                    Issue #1606 — in the area-first selected-area state the pill reads
-                    "Showing N verified properties in {areaLabel}". Every other context keeps
-                    the plain "N properties".
-                    Issue #1817 — the 'stale' state (count-contract unreliable, e.g. authed
-                    school-radius + filters) is checked FIRST, before any of the specific
-                    journey branches below, because those branches assume a non-null count. */}
-                {discoverBadge.state === 'stale' ? (
-                  <span data-testid="discover-badge-stale">Filtered results</span>
-                ) : resolvedPanelContent === 'area-groups-landing' && focusedGroup && !selectedArea ? (
-                  // Issue #1817 (code-review follow-up) — routed through the shared copy
-                  // contract so filters/search active here render `M of N match ... in
-                  // {Group}` (design §6 "Area group selected + filters") instead of always
-                  // showing the plain verified-properties form.
-                  <span>
-                    {formatDiscoverBadgeCopy(discoverBadge, {
-                      scopeLabel: focusedGroup.name,
-                      noun: 'verified properties',
-                      searchQuery: urlState.q,
-                    })}
-                  </span>
-                ) : isAreaFirstSelectedAreaState && selectedArea ? (
-                  // Issue #1817 (code-review follow-up) — same fix for the area-first
-                  // selected-area state (design §6 "Area selected + filters" → `5 of 18
-                  // match in Whitefield"). Reuses areaResultSummaryText — the SAME
-                  // computed string the AreaSelectedPanel stat renders — so the two
-                  // surfaces can never diverge.
-                  <span>{areaResultSummaryText}</span>
-                ) : urlState.journey === 'school-first' && schoolRadiusActive ? (
-                  // School-first, school selected — the badge count IS the school-radius
-                  // listing count (schoolListingsCount, threaded above), so "homes"/"rentals"
-                  // is an honest label here (mock parity: "Showing X homes").
-                  <span>
-                    Showing{' '}
-                    <strong className="font-semibold tabular-nums text-foreground">
-                      {discoverBadge.count.toLocaleString()}
-                    </strong>
-                    {' '}{deriveSchoolRadiusPillNoun(urlState.intent)}
-                  </span>
-                ) : urlState.journey === 'school-first' && !schoolRadiusActive && selectedArea && schoolFirstAreaSchoolCount != null ? (
-                  // School-first, area selected, no school picked yet — mock parity:
-                  // "Showing X schools" using the same schoolCount the area-selected hero
-                  // displays (selectedArea.schoolCount), not the generic listings total.
-                  <span>
-                    Showing{' '}
-                    <strong className="font-semibold tabular-nums text-foreground">
-                      {schoolFirstAreaSchoolCount.toLocaleString()}
-                    </strong>
-                    {' '}school{schoolFirstAreaSchoolCount === 1 ? '' : 's'}
-                  </span>
-                ) : urlState.journey === 'school-first' && !schoolRadiusActive && !selectedArea && focusedGroup && schoolFirstZoneSchoolCount != null ? (
-                  // School-first, zone selected, no area picked yet — mock parity:
-                  // "Showing X schools" using the same member-area schoolCount sum the
-                  // zone-selected hero displays.
-                  <span>
-                    Showing{' '}
-                    <strong className="font-semibold tabular-nums text-foreground">
-                      {schoolFirstZoneSchoolCount.toLocaleString()}
-                    </strong>
-                    {' '}school{schoolFirstZoneSchoolCount === 1 ? '' : 's'}
-                  </span>
-                ) : urlState.journey === 'school-first' && !schoolRadiusActive && !selectedArea && !focusedGroup && schoolFirstLandingSchoolCount != null ? (
-                  // School-first landing (no zone/area/school selected yet) — mock parity:
-                  // "Showing X schools" across the city scope currently on the map.
-                  <span>
-                    Showing{' '}
-                    <strong className="font-semibold tabular-nums text-foreground">
-                      {schoolFirstLandingSchoolCount.toLocaleString()}
-                    </strong>
-                    {' '}school{schoolFirstLandingSchoolCount === 1 ? '' : 's'}
-                  </span>
-                ) : (
-                  // Issue #1817 — generic fallback (city / group / area outside the
-                  // special-cased journeys above): render via the shared copy contract
-                  // so this pill and the panel header stat can never diverge (AC4/AC5).
-                  <span>
-                    {formatDiscoverBadgeCopy(discoverBadge, {
-                      scopeLabel:
-                        selectedArea?.areaLabel ??
-                        focusedGroup?.name ??
-                        (CITY_CONFIG[city]?.label ?? city),
-                      noun: selectedArea ? 'homes' : 'properties',
-                      searchQuery: urlState.q,
-                    })}
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Public-landing summary pill — bottom-center, city-wide verified total (Issue #1588).
-              Issue #1607 — the area-first city landing reuses the same centred pill so the
-              card "properties" stat, the map markers, and this pill all report one figure. */}
-          {(resolvedPanelContent === 'guided-entry' || isAreaFirstCityLanding) && cityTotal > 0 && (
-            <div className="absolute bottom-5 left-1/2 z-[1000] -translate-x-1/2" data-testid="discover-badge">
-              <div className="flex items-center gap-2 whitespace-nowrap rounded-full border border-border bg-card px-4 py-2 text-[13px] font-semibold text-muted-foreground shadow-md">
-                <MapPin className="h-[15px] w-[15px] shrink-0 text-[hsl(var(--copper))]" aria-hidden="true" />
-                <span>
-                  Showing{' '}
-                  <strong className="font-mono font-bold tabular-nums text-foreground">
-                    {cityTotal.toLocaleString()}
-                  </strong>
-                  {' '}verified properties across {CITY_CONFIG[city]?.label ?? city}
-                </span>
-              </div>
-            </div>
-          )}
+              kept bottom-right for contextual (area/school/group) drill-down counts.
+              Issue #1824 Slice S8 — both pills extracted to DiscoverMapCountBadge. */}
+          <DiscoverMapCountBadge
+            resolvedPanelContent={resolvedPanelContent}
+            isAreaFirstCityLanding={isAreaFirstCityLanding}
+            discoverBadge={discoverBadge}
+            isSelectedGroupState={isSelectedGroupState}
+            isAreaFirstSelectedAreaState={isAreaFirstSelectedAreaState}
+            selectedArea={selectedArea}
+            focusedGroup={focusedGroup}
+            areaResultSummaryText={areaResultSummaryText}
+            groupSelectedBadgeCopy={groupSelectedBadgeCopy}
+            fallbackBadgeCopy={fallbackBadgeCopy}
+            journey={urlState.journey}
+            schoolRadiusActive={schoolRadiusActive}
+            schoolRadiusPillNoun={schoolRadiusPillNoun}
+            schoolFirstAreaSchoolCount={schoolFirstAreaSchoolCount}
+            schoolFirstZoneSchoolCount={schoolFirstZoneSchoolCount}
+            schoolFirstLandingSchoolCount={schoolFirstLandingSchoolCount}
+            cityTotal={cityTotal}
+            city={city}
+          />
 
           {/* Issue #1261 — non-blocking "showing first N" hint for the anonymous
               school-radius result. The public endpoint returns a single page (size=50)
@@ -3235,20 +3036,17 @@ export default function MapDiscovery() {
               FINDING 1: hasMore reflects the UNFILTERED server probe but the shown
               count is post-filter; when any client-side PropertyFilter is active the
               extra server rows may not match, so suppress the hint to avoid promising
-              more *matching* homes than exist (AC8 truthfulness). */}
-          {!isAuthenticated &&
-            schoolRadiusActive &&
-            schoolRadiusHasMore &&
-            !hasActiveAnonPropertyFilter(filters) && (
-            <div className="absolute bottom-28 right-4 z-[1000]" data-testid="school-radius-more-hint">
-              <div
-                className="bg-card/95 rounded-lg px-4 py-2 shadow-sm text-xs text-muted-foreground border border-border max-w-[16rem]"
-                aria-live="polite"
-              >
-                Showing the first {schoolListings.length} homes near this school. Zoom or refine your search to narrow results.
-              </div>
-            </div>
-          )}
+              more *matching* homes than exist (AC8 truthfulness).
+              Issue #1824 Slice S8 — extracted to DiscoverMapStatusHints. */}
+          <DiscoverMapStatusHints
+            schoolRadiusHint={{
+              isAuthenticated,
+              schoolRadiusActive,
+              schoolRadiusHasMore,
+              schoolListingsCount: schoolListings.length,
+              hasActiveAnonFilter,
+            }}
+          />
 
           {isAuthenticated && filters.polygon && (
             <MapStatsBar
@@ -3273,39 +3071,22 @@ export default function MapDiscovery() {
           />
 
           {/* a3 — Marker popover mini card. Gated to listing-marker clicks via
-              isMarkerPopoverEligible (Issue #1798 PR-C): journey !== agri-first,
-              areaKey set, and (no school selected OR journey === area-first) — the
-              same condition used by the click-capture gates that populate
-              markerPixelPos/selectedMarkerListing, so render eligibility can never
-              drift from capture eligibility again. School-first (3 desynced marker
-              tiers) and agri-first (own peek/panel) are intentionally excluded.
-              Area/cluster/count marker clicks never populate markerPixelPos, so they
-              stay popup-free regardless. ONE popover at a time; clicking a new marker
-              replaces it. Dismiss: X button (inside card), Escape key, map-background
-              click (onClick on this container div). */}
-          {isMarkerPopoverEligible &&
-            selectedMarkerListing != null &&
-            markerPixelPos != null && (
-              <MarkerPopoverCard
-                listing={selectedMarkerListing}
-                isAuthenticated={isAuthenticated}
-                markerPixelPos={markerPixelPos}
-                mapContainerRef={mapContainerRef}
-                onDismiss={handlePopoverDismiss}
-                onViewDetails={(id) => navigate(`/listing/${id}`)}
-                stepper={
-                  markerPopoverStepper != null
-                    ? {
-                        index: markerPopoverStepper.index,
-                        total: markerPopoverStepper.total,
-                        onPrev: () => handleStepMarkerListing(-1),
-                        onNext: () => handleStepMarkerListing(1),
-                      }
-                    : null
-                }
-                onShowInList={showMarkerInList}
-              />
-            )}
+              isMarkerPopoverEligible (Issue #1798 PR-C) — see the derivation's
+              header comment above for the full eligibility-gate history.
+              Issue #1824 Slice S8 — extracted to DiscoverMapMarkerPopover; the
+              eligibility gate + markerPopoverStepper derivation stay page-owned. */}
+          <DiscoverMapMarkerPopover
+            isMarkerPopoverEligible={isMarkerPopoverEligible}
+            selectedMarkerListing={selectedMarkerListing}
+            markerPixelPos={markerPixelPos}
+            mapContainerRef={mapContainerRef}
+            isAuthenticated={isAuthenticated}
+            handlePopoverDismiss={handlePopoverDismiss}
+            navigate={navigate}
+            markerPopoverStepper={markerPopoverStepper}
+            handleStepMarkerListing={handleStepMarkerListing}
+            showMarkerInList={showMarkerInList}
+          />
         </div>
 
         <DiscoverRightPanel
