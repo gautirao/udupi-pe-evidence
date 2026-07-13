@@ -9,11 +9,17 @@
  * ever mounted in this suite.
  */
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LocationStep } from '../LocationStep';
 import type { ListingResponse } from '@/hooks/useBrokerListings';
+
+// Issue #1838 slice 8 — module-scope mount-tracking spies. Stable across
+// rerenders so the "mounts exactly once, never remounts on nav away+back"
+// assertions can observe cumulative call counts.
+const mountSpy = vi.fn();
+const unmountSpy = vi.fn();
 
 vi.mock('@/components/broker/AddressPicker', () => ({
   AddressPicker: (props: {
@@ -22,20 +28,28 @@ vi.mock('@/components/broker/AddressPicker', () => ({
     onConfirm: (addr: { lat: number; lng: number }) => void;
     onUnconfirm: () => void;
     onLocalityConfirmed: (locality: string, lat: number, lng: number) => void;
-  }) => (
-    <div data-testid="address-picker-stub">
-      <span data-testid="address-picker-lat">{props.initialLatitude}</span>
-      <button type="button" onClick={() => props.onConfirm({ lat: 13.35, lng: 74.75 })}>
-        confirm-pin
-      </button>
-      <button type="button" onClick={() => props.onUnconfirm()}>
-        unconfirm-pin
-      </button>
-      <button type="button" onClick={() => props.onLocalityConfirmed('Manipal, Udupi', 13.35, 74.75)}>
-        confirm-locality
-      </button>
-    </div>
-  ),
+  }) => {
+    React.useEffect(() => {
+      mountSpy();
+      return () => {
+        unmountSpy();
+      };
+    }, []);
+    return (
+      <div data-testid="address-picker-stub">
+        <span data-testid="address-picker-lat">{props.initialLatitude}</span>
+        <button type="button" onClick={() => props.onConfirm({ lat: 13.35, lng: 74.75 })}>
+          confirm-pin
+        </button>
+        <button type="button" onClick={() => props.onUnconfirm()}>
+          unconfirm-pin
+        </button>
+        <button type="button" onClick={() => props.onLocalityConfirmed('Manipal, Udupi', 13.35, 74.75)}>
+          confirm-locality
+        </button>
+      </div>
+    );
+  },
 }));
 
 function makeListing(overrides: Partial<ListingResponse> = {}): ListingResponse {
@@ -96,11 +110,18 @@ function baseProps(overrides: Partial<React.ComponentProps<typeof LocationStep>>
     updateListing: { mutate: vi.fn(), isPending: false } as unknown as React.ComponentProps<typeof LocationStep>['updateListing'],
     handleLocalityConfirmed: vi.fn(),
     handleStep3Continue: vi.fn(),
+    currentStep: 3,
     ...overrides,
   };
 }
 
 describe('LocationStep', () => {
+  beforeEach(() => {
+    mountSpy.mockClear();
+    unmountSpy.mockClear();
+  });
+
+
   it('renders AddressPicker wired to the listing coordinates', () => {
     render(<LocationStep {...baseProps()} />);
     expect(screen.getByTestId('address-picker-stub')).toBeInTheDocument();
@@ -150,5 +171,49 @@ describe('LocationStep', () => {
   it('renders nothing when isSubmittable is false', () => {
     render(<LocationStep {...baseProps({ isSubmittable: false })} />);
     expect(screen.queryByTestId('address-picker-stub')).not.toBeInTheDocument();
+  });
+
+  describe('Issue #1838 slice 8 — mount-on-first-visit latch', () => {
+    it('is not mounted before the first step-3 visit', () => {
+      render(<LocationStep {...baseProps({ currentStep: 1 })} />);
+      expect(screen.queryByTestId('address-picker-stub')).not.toBeInTheDocument();
+      expect(mountSpy).not.toHaveBeenCalled();
+      expect(screen.getByText(/visit the location step/i)).toBeInTheDocument();
+    });
+
+    it('mounts exactly once on the first step-3 visit', () => {
+      const { rerender } = render(<LocationStep {...baseProps({ currentStep: 1 })} />);
+      rerender(<LocationStep {...baseProps({ currentStep: 3 })} />);
+      expect(screen.getByTestId('address-picker-stub')).toBeInTheDocument();
+      expect(mountSpy).toHaveBeenCalledOnce();
+      expect(unmountSpy).not.toHaveBeenCalled();
+    });
+
+    it('stays mounted across navigation away and back (primary proof of Option C)', () => {
+      const { rerender } = render(<LocationStep {...baseProps({ currentStep: 1 })} />);
+      rerender(<LocationStep {...baseProps({ currentStep: 3 })} />);
+      expect(mountSpy).toHaveBeenCalledOnce();
+
+      // Navigate away from step 3
+      rerender(<LocationStep {...baseProps({ currentStep: 1 })} />);
+      expect(unmountSpy).not.toHaveBeenCalled();
+      expect(screen.getByTestId('address-picker-stub')).toBeInTheDocument();
+
+      // Navigate back to step 3
+      rerender(<LocationStep {...baseProps({ currentStep: 3 })} />);
+      expect(mountSpy).toHaveBeenCalledOnce();
+      expect(unmountSpy).not.toHaveBeenCalled();
+      expect(screen.getByTestId('address-picker-stub')).toBeInTheDocument();
+    });
+
+    it('reflects the listing-derived initial coordinates once mounted', () => {
+      const { rerender } = render(
+        <LocationStep {...baseProps({ currentStep: 1, listing: makeListing({ latitude: 13.99 }) })} />,
+      );
+      rerender(
+        <LocationStep {...baseProps({ currentStep: 3, listing: makeListing({ latitude: 13.99 }) })} />,
+      );
+      expect(screen.getByTestId('address-picker-lat')).toHaveTextContent('13.99');
+    });
   });
 });

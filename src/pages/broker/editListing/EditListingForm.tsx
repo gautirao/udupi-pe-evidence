@@ -588,6 +588,7 @@ export function EditListingForm({ listing }: EditListingFormProps) {
           updateListing={updateListing}
           handleLocalityConfirmed={handleLocalityConfirmed}
           handleStep3Continue={handleStep3Continue}
+          currentStep={currentStep}
         />
       </div>
 
