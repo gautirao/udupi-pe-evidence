@@ -78,6 +78,7 @@ import { useAgriFields } from './useAgriFields';
 import { useCommercialFields } from './useCommercialFields';
 import { useRentFields } from './useRentFields';
 import { useResidentialFields } from './useResidentialFields';
+import { useSharedFields } from './useSharedFields';
 
 // Issue #1458 + #1459 — derive canonical value lists from shared label maps to avoid duplication.
 // Any future addition to agriFieldLabels.ts is automatically reflected here.
@@ -159,12 +160,18 @@ export function EditListingForm({ listing }: EditListingFormProps) {
   // Listing purpose
   const [listingPurpose, setListingPurpose] = useState<'sale' | 'rent'>('sale');
 
-  // Commercial-specific fields
-  const [carpetArea, setCarpetArea] = useState<number | null>(null);
-  const [carpetAreaUnit, setCarpetAreaUnit] = useState('sqft');
-  const [floorNumber, setFloorNumber] = useState('');
-  const [totalFloors, setTotalFloors] = useState('');
-  const [furnishingStatus, setFurnishingStatus] = useState('');
+  // Shared fields — Issue #1838 slice-5e: 7 fields shared across two or more
+  // domains (carpetArea/carpetAreaUnit/floorNumber/totalFloors/
+  // furnishingStatus shared between residential/apartment and commercial;
+  // facing/ownershipType shared between residential and agri) extracted into
+  // useSharedFields().
+  const shared = useSharedFields();
+  const {
+    carpetArea, carpetAreaUnit, floorNumber, totalFloors, furnishingStatus, facing, ownershipType,
+  } = shared.values;
+  const {
+    setCarpetArea, setCarpetAreaUnit, setFloorNumber, setTotalFloors, setFurnishingStatus, setFacing, setOwnershipType,
+  } = shared.setters;
 
   // Commercial-exclusive fields — Issue #1838 slice-5b: 5 commercial-only
   // fields extracted into useCommercialFields(). carpetArea/carpetAreaUnit/
@@ -200,15 +207,12 @@ export function EditListingForm({ listing }: EditListingFormProps) {
     setWaterSource, setSoilType, setRoadAccess, setCultivationStatus,
     setSurveyNumber, setLandCategory, setFarmhouseAvailable, setFencingDone,
   } = agri.setters;
-  const [ownershipType, setOwnershipType] = useState('');
+  // ownershipType is shared with residential — see useSharedFields() above.
   // Agricultural plot boundary — [lat, lng][] coords from DrawControl
   const [boundaryCoords, setBoundaryCoords] = useState<[number, number][]>([]);
 
   // M38-13A (#1626) — residential typed-listing fields.
-  // Tri-state booleans use '' = not specified / 'true' / 'false' (same convention as
-  // farmhouseAvailable/fencingDone above) so an unset value is never conflated with
-  // an explicit "No" on prefill.
-  const [facing, setFacing] = useState('');
+  // facing is shared with agri — see useSharedFields() above.
 
   // Residential-exclusive fields — Issue #1838 slice-5d: ~39 residential-only
   // fields (including the 5 dual-gated fields maintenanceIncluded/
@@ -263,14 +267,9 @@ export function EditListingForm({ listing }: EditListingFormProps) {
     setVideoUrl(listing.videoUrl ?? '');
     setReraNumber(listing.reraNumber ?? '');
     setListingPurpose((listing.listingPurpose as 'sale' | 'rent') ?? 'sale');
-    setCarpetArea(listing.carpetArea);
-    setCarpetAreaUnit(listing.carpetAreaUnit ?? 'sqft');
-    setFloorNumber(listing.floorNumber != null ? String(listing.floorNumber) : '');
-    setTotalFloors(listing.totalFloors != null ? String(listing.totalFloors) : '');
-    setFurnishingStatus(listing.furnishingStatus ?? '');
+    shared.hydrate(listing);
     commercial.hydrate(listing);
     rent.hydrate(listing);
-    setOwnershipType(listing.ownershipType ?? '');
     agri.hydrate(listing);
     // Pre-populate boundary coords from existing agri listing
     if (listing.boundary) {
@@ -280,9 +279,8 @@ export function EditListingForm({ listing }: EditListingFormProps) {
     // M38-13A (#1626) — residential typed-listing field prefill. All new columns are
     // nullable (legacy pre-V103 rows and non-residential types read null); nulls stay
     // '' / [] (neutral), never fabricated as a default value.
-    setFacing(listing.facing ?? '');
     residential.hydrate(listing);
-  }, [listing, agri.hydrate, commercial.hydrate, rent.hydrate, residential.hydrate]);
+  }, [listing, agri.hydrate, commercial.hydrate, rent.hydrate, residential.hydrate, shared.hydrate]);
 
   // Step 1 is complete when required fields match the submit gate (requiredFieldsComplete).
   // For rent listings: propertyType + monthlyRent + locality. For sale: propertyType + price + locality.
