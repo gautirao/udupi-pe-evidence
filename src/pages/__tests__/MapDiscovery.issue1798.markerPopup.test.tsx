@@ -42,7 +42,7 @@ let capturedOnSelectListing: ((listing: PropertyListingWithImages | null) => voi
 let capturedOnMarkerClickWithPosition: ((pos: { x: number; y: number }) => void) | undefined;
 
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: (...args: unknown[]) => mockUseAuth(...args),
+  useAuth: (...args: Parameters<typeof mockUseAuth>) => mockUseAuth(...args),
 }));
 
 vi.mock('@/components/map/PropertyMap', () => ({

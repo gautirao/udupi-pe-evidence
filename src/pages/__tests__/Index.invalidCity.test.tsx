@@ -42,7 +42,7 @@ vi.mock('@/hooks/useSchoolRadiusListings', () => ({
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: (...args: unknown[]) => mockUseAuth(...args),
+  useAuth: (...args: Parameters<typeof mockUseAuth>) => mockUseAuth(...args),
 }));
 
 vi.mock('@/hooks/useDiscoverAreas', () => ({

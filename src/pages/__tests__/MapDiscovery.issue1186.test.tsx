@@ -30,7 +30,7 @@ const mockUseAuth = vi.hoisted(() =>
 
 // ─── Mocks ──────────────────────────────────────────────────────
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: (...args: unknown[]) => mockUseAuth(...args),
+  useAuth: (...args: Parameters<typeof mockUseAuth>) => mockUseAuth(...args),
 }));
 
 vi.mock('@/components/map/PropertyMap', () => ({

@@ -41,7 +41,7 @@ const propertyMapProps = vi.hoisted(() => ({
 
 // ─── Mocks ──────────────────────────────────────────────────────
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: (...args: unknown[]) => mockUseAuth(...args),
+  useAuth: (...args: Parameters<typeof mockUseAuth>) => mockUseAuth(...args),
 }));
 
 vi.mock('@/components/map/PropertyMap', () => ({
@@ -168,7 +168,7 @@ const mockUseAreaGroups = vi.hoisted(() =>
 );
 
 vi.mock('@/hooks/useAreaGroups', () => ({
-  useAreaGroups: (...args: unknown[]) => mockUseAreaGroups(...args),
+  useAreaGroups: (...args: Parameters<typeof mockUseAreaGroups>) => mockUseAreaGroups(...args),
 }));
 
 vi.mock('react-leaflet', () => ({

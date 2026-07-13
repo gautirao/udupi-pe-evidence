@@ -34,7 +34,7 @@ const capturedSearchParams = vi.hoisted(() => ({ value: '' }));
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: (...args: unknown[]) => mockUseAuth(...args),
+  useAuth: (...args: Parameters<typeof mockUseAuth>) => mockUseAuth(...args),
 }));
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -43,7 +43,7 @@ vi.mock('@/hooks/use-toast', () => ({
 
 vi.mock('@/hooks/useSchoolSearch', () => ({
   useSchoolSearch: vi.fn(() => ({ data: undefined })),
-  useSchoolById: (...args: unknown[]) => mockUseSchoolById(...args),
+  useSchoolById: (...args: Parameters<typeof mockUseSchoolById>) => mockUseSchoolById(...args),
 }));
 
 vi.mock('@/components/map/PropertyMap', () => ({
