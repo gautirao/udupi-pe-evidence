@@ -45,6 +45,7 @@ import { useDiscoverJourneyTransitions } from '@/features/discover/state/useDisc
 import { useDiscoverCameraOrchestration } from '@/features/discover/state/useDiscoverCameraOrchestration';
 import { resolveMarkerListings } from '@/features/discover/map/resolveMarkerListings';
 import { useDiscoverMapPresentation } from '@/features/discover/presentation/useDiscoverMapPresentation';
+import { useDiscoverBadgeAnnounce } from '@/features/discover/presentation/useDiscoverBadgeAnnounce';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
@@ -1262,27 +1263,15 @@ export default function MapDiscovery() {
   // so screen-reader users hear one announcement per fetch settle — never per keystroke,
   // never mid-refetch. Uses the same shared copy contract as the generic map-badge branch
   // (formatDiscoverBadgeCopy) for an honest, if not always verbatim, summary of every scope.
-  const [announcedBadgeText, setAnnouncedBadgeText] = useState('');
-  const badgeAnnounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (discoverBadge.loading) return; // never announce mid-refetch
-    if (badgeAnnounceTimer.current) clearTimeout(badgeAnnounceTimer.current);
-    badgeAnnounceTimer.current = setTimeout(() => {
-      const text = !discoverBadge.visible
-        ? ''
-        : formatDiscoverBadgeCopy(discoverBadge, {
-            scopeLabel:
-              selectedArea?.areaLabel ?? focusedGroup?.name ?? (CITY_CONFIG[city]?.label ?? city),
-            noun: selectedArea ? 'homes' : 'properties',
-            searchQuery: urlState.q,
-          });
-      setAnnouncedBadgeText(text);
-    }, 500);
-    return () => {
-      if (badgeAnnounceTimer.current) clearTimeout(badgeAnnounceTimer.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discoverBadge, selectedArea, focusedGroup, city, urlState.q]);
+  // Issue #1824 Slice S10a — the debounced state/effect body extracted to
+  // useDiscoverBadgeAnnounce (verbatim; only urlState.q → urlStateQ rename).
+  const announcedBadgeText = useDiscoverBadgeAnnounce({
+    discoverBadge,
+    selectedArea,
+    focusedGroup,
+    city,
+    urlStateQ: urlState.q,
+  });
 
   // Issue #1824 Slice S7 — camera panner/tick orchestration (R9): schoolFocusTick +
   // schoolMarkerFocusTick (+ the #1547 fit-once listingsReadyKey guard) + the
