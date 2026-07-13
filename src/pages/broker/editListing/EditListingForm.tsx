@@ -15,19 +15,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Check, MapPin, X, Link, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { ImageUploader } from '@/components/broker/ImageUploader';
 import { useListingImages } from '@/hooks/useListingImages';
 import { PriceField } from '@/components/broker/PriceField';
 import { AreaField } from '@/components/broker/AreaField';
-import { AddressPicker } from '@/components/broker/AddressPicker';
-import { PoiManager } from '@/components/poi/PoiManager';
 import { StepIndicator } from '@/components/broker/StepIndicator';
 import { SectionCard } from '@/components/broker/SectionCard';
 import { ListingPurposeToggle } from '@/components/broker/ListingPurposeToggle';
 import { PropertyTypeCardSelector } from '@/components/broker/PropertyTypeCardSelector';
-import { BoundaryDrawStep } from '@/components/dealer/BoundaryDrawStep';
 import { ApiError } from '@/lib/api';
 import { formatListingId } from '@/lib/listing-id';
 import { buildListingUpdatePayload } from '@/lib/editListing/buildUpdatePayload';
@@ -60,11 +56,7 @@ import {
   OWNERSHIP_TYPE_LABELS,
   LAND_CATEGORY_LABELS,
 } from '@/lib/agriFieldLabels';
-import {
-  extractYouTubeId,
-  isInstagramUrl,
-  validateVideoUrl,
-} from '@/lib/editListing/valueMappers';
+import { validateVideoUrl } from '@/lib/editListing/valueMappers';
 import {
   SingleChipGroup,
   MultiChipGroup,
@@ -79,6 +71,10 @@ import { useCommercialFields } from './useCommercialFields';
 import { useRentFields } from './useRentFields';
 import { useResidentialFields } from './useResidentialFields';
 import { useSharedFields } from './useSharedFields';
+import { PhotosStep } from './steps/PhotosStep';
+import { LocationStep } from './steps/LocationStep';
+import { BoundaryStep } from './steps/BoundaryStep';
+import { ReviewStep } from './steps/ReviewStep';
 
 // Issue #1458 + #1459 — derive canonical value lists from shared label maps to avoid duplication.
 // Any future addition to agriFieldLabels.ts is automatically reflected here.
@@ -1558,399 +1554,73 @@ export function EditListingForm({ listing }: EditListingFormProps) {
       </div>
 
       {/* ── Step 2: Add Photos ── */}
+      {/* CRITICAL: always-mounted (display:none toggle, not conditional currentStep===2 &&)
+          so ImageUploader's in-flight upload state survives step navigation. Issue #1838
+          slice 6a — see steps/PhotosStep.tsx. */}
       <div data-testid="step-2-panel" style={{ display: currentStep === 2 ? 'block' : 'none' }}>
-        {isSubmittable && (
-          <div className="space-y-6">
-            <SectionCard
-              title="Listing images"
-              description="A great set of photos helps buyers understand the property better."
-            >
-              {/* ImageUploader is always mounted (CSS visibility) so upload state is preserved */}
-              <ImageUploader listingId={id!} onCanSubmitChange={setCanSubmitImages} />
-            </SectionCard>
-
-            <SectionCard
-              title="Property video"
-              description="Optional — add a YouTube or Instagram Reel link to give buyers a walkthrough."
-            >
-              <div className="space-y-2">
-                <Label htmlFor="videoUrl" className="sr-only">Property video link</Label>
-                <Input
-                  id="videoUrl"
-                  type="url"
-                  inputMode="url"
-                  autoComplete="off"
-                  placeholder="https://www.youtube.com/watch?v=..."
-                  value={videoUrl}
-                  onChange={(e) => handleVideoUrlChange(e.target.value)}
-                />
-                {videoUrlError && (
-                  <p className="text-sm text-destructive">{videoUrlError}</p>
-                )}
-                {/* YouTube thumbnail preview */}
-                {videoUrl && !videoUrlError && extractYouTubeId(videoUrl) && (
-                  <img
-                    src={`https://img.youtube.com/vi/${extractYouTubeId(videoUrl)}/mqdefault.jpg`}
-                    alt="Video thumbnail"
-                    className="rounded-md w-48 h-auto border"
-                  />
-                )}
-                {/* Instagram confirmed state */}
-                {videoUrl && !videoUrlError && isInstagramUrl(videoUrl) && (
-                  <div className="flex items-center gap-2 text-sm text-green-600">
-                    <Link className="h-4 w-4" />
-                    <span>instagram.com</span>
-                  </div>
-                )}
-              </div>
-            </SectionCard>
-
-            <div className="flex flex-col items-end gap-1">
-              <Button
-                type="button"
-                onClick={handleStep2Continue}
-                disabled={!canSubmitImages}
-              >
-                Save & Continue
-              </Button>
-              {!canSubmitImages && (
-                <p className="text-sm text-muted-foreground">
-                  Add at least 3 photos to continue.
-                </p>
-              )}
-            </div>
-          </div>
-        )}
+        <PhotosStep
+          id={id}
+          isSubmittable={isSubmittable}
+          videoUrl={videoUrl}
+          videoUrlError={videoUrlError}
+          canSubmitImages={canSubmitImages}
+          setCanSubmitImages={setCanSubmitImages}
+          handleVideoUrlChange={handleVideoUrlChange}
+          handleStep2Continue={handleStep2Continue}
+        />
       </div>
 
       {/* ── Step 3: Pin Location ── */}
+      {/* CRITICAL: always-mounted (display:none toggle, not conditional currentStep===3 &&)
+          so AddressPicker's in-flight map state survives step navigation. Issue #1838
+          slice 6a — see steps/LocationStep.tsx. */}
       <div data-testid="step-3-panel" style={{ display: currentStep === 3 ? 'block' : 'none' }}>
-        {isSubmittable && (
-          <div className="space-y-6">
-            <SectionCard
-              title="Confirm location"
-              description="Search for your listing's address, drag the pin to the exact spot, then confirm."
-            >
-              <AddressPicker
-                initialLatitude={listing.latitude}
-                initialLongitude={listing.longitude}
-                initialLocality={listing.locality}
-                initialConfirmed={listing.addressConfirmed}
-                onConfirm={(addr) => {
-                  if (!updateListing.isPending) {
-                    updateListing.mutate({ latitude: addr.lat, longitude: addr.lng, addressConfirmed: true });
-                  }
-                }}
-                onUnconfirm={() => {
-                  if (!updateListing.isPending) {
-                    updateListing.mutate({ addressConfirmed: false });
-                  }
-                }}
-                onLocalityConfirmed={handleLocalityConfirmed}
-              />
-            </SectionCard>
-
-            <div className="flex flex-col items-end gap-1">
-              <Button
-                type="button"
-                onClick={handleStep3Continue}
-                disabled={!listing.addressConfirmed}
-              >
-                Save & Continue
-              </Button>
-              {!listing.addressConfirmed && (
-                <p className="text-sm text-muted-foreground">
-                  Confirm your pin location on the map to continue.
-                </p>
-              )}
-            </div>
-          </div>
-        )}
+        <LocationStep
+          isSubmittable={isSubmittable}
+          listing={listing}
+          updateListing={updateListing}
+          handleLocalityConfirmed={handleLocalityConfirmed}
+          handleStep3Continue={handleStep3Continue}
+        />
       </div>
 
       {/* ── Step 4: Draw Boundary (agricultural_land only) ── */}
       {currentStep === 4 && isAgriListing && (
         <div data-testid="step-4-panel">
-          <SectionCard
-            title="Draw plot boundary"
-            description="Optionally draw the boundary of your agricultural plot on the map."
-          >
-            <BoundaryDrawStep
-              initialCoords={boundaryCoords}
-              center={[listing.latitude ?? 13.3442, listing.longitude ?? 74.7451]}
-              onSave={handleStep4Continue}
-              onSkip={handleStep4Skip}
-              declaredArea={listing.landArea}
-              declaredUnit={listing.landAreaUnit}
-              computedAreaAcres={listing.computedAreaAcres}
-            />
-          </SectionCard>
+          <BoundaryStep
+            boundaryCoords={boundaryCoords}
+            listing={listing}
+            handleStep4Continue={handleStep4Continue}
+            handleStep4Skip={handleStep4Skip}
+          />
         </div>
       )}
 
       {/* ── Step 4 (non-agri) / Step 5 (agri): Review & Submit ── */}
       {currentStep === reviewStep && (
       <div data-testid="step-review-panel">
-
-        {/* D1 hybrid — Title/locality consistency banner (non-dismissible) */}
-        {showTitleLocalityWarning && (
-          <div
-            role="alert"
-            data-testid="title-locality-warning"
-            className="mb-4 flex items-start gap-3 rounded-md border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-900"
-          >
-            <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-yellow-600" />
-            <div className="flex-1">
-              <p className="font-medium">Title doesn't reflect the selected area</p>
-              <p className="text-yellow-800 mt-0.5">
-                Your title doesn't mention the confirmed location ({confirmedLocality.split(',')[0].trim()}).
-                Update your title or click below to reset it.
-              </p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="flex-shrink-0 border-yellow-400 text-yellow-900 hover:bg-yellow-100"
-              onClick={() => {
-                const shortLocality = confirmedLocality.split(',')[0].trim();
-                if (shortLocality) {
-                  setTitle(`Property in ${shortLocality}`);
-                  setTitleManuallyEdited(false);
-                }
-              }}
-            >
-              Update title
-            </Button>
-          </div>
-        )}
-
-        {/* Review summary */}
-        <SectionCard
-          className="mb-4"
-          title="Review your listing"
-          description="Check the details below before submitting for admin review."
-          contentClassName="space-y-4"
-        >
-            {/* Property Details row */}
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium">Property Details</p>
-                <p className="text-sm text-muted-foreground">
-                  {listing.propertyType || '—'} · {listing.title || '—'}
-                  {listing.listingPurpose === 'rent' && ' · For Rent'}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {listing.listingPurpose === 'rent'
-                    ? listing.monthlyRent != null
-                      ? `₹${listing.monthlyRent.toLocaleString('en-IN')}/mo`
-                      : '—'
-                    : listing.price != null
-                      ? `₹${listing.price.toLocaleString('en-IN')}`
-                      : '—'}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => { setCameFromReview(true); setCurrentStep(1); }}
-              >
-                Edit
-              </Button>
-            </div>
-
-            <div className="border-t" />
-
-            {/* Photos row */}
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">Photos</p>
-                {listingImages.length > 0 && (
-                  <div className="flex gap-1.5 mt-1.5 overflow-x-auto pb-1">
-                    {listingImages.slice(0, 5).map((img, i) => (
-                      <img
-                        key={img.id}
-                        src={img.url}
-                        alt={`Photo ${i + 1}`}
-                        className="h-12 w-12 object-cover rounded-md flex-shrink-0"
-                      />
-                    ))}
-                    {listingImages.length > 5 && (
-                      <div className="h-12 w-12 flex-shrink-0 rounded-md bg-muted flex items-center justify-center text-xs text-muted-foreground font-medium">
-                        +{listingImages.length - 5}
-                      </div>
-                    )}
-                  </div>
-                )}
-                <p className="text-sm text-muted-foreground mt-1">
-                  {canSubmitImages ? 'Minimum 3 photos uploaded' : 'Fewer than 3 photos — add more before submitting'}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => { setCameFromReview(true); setCurrentStep(2); }}
-              >
-                Edit
-              </Button>
-            </div>
-
-            <div className="border-t" />
-
-            {/* Location row */}
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium">Location</p>
-                <p className="text-sm text-muted-foreground">
-                  {listing.addressConfirmed
-                    ? `Confirmed · ${listing.locality || 'pin set'}`
-                    : 'Not yet confirmed'}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => { setCameFromReview(true); setCurrentStep(3); }}
-              >
-                Edit
-              </Button>
-            </div>
-        </SectionCard>
-
-        {/* Boundary review — shown for agri listings when a boundary has been drawn */}
-        {isAgriListing && (
-          <SectionCard className="mb-4" title="Plot boundary" contentClassName="space-y-3">
-              {boundaryCoords.length > 0 ? (
-                <>
-                  <div
-                    className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
-                    role="note"
-                    data-testid="boundary-disclaimer-review"
-                  >
-                    <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-600" aria-hidden="true" />
-                    <p>
-                      The boundary drawn on the map is approximate and should be legally verified
-                      before purchase.
-                    </p>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Boundary saved ({boundaryCoords.length} vertices).
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">No boundary drawn (optional).</p>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => { setCameFromReview(false); setCurrentStep(boundaryStep); }}
-                data-testid="boundary-review-edit-btn"
-              >
-                {boundaryCoords.length > 0 ? 'Edit Boundary' : 'Draw Boundary'}
-              </Button>
-          </SectionCard>
-        )}
-
-        {/* POIs — shown when address is confirmed */}
-        {listing.addressConfirmed ? (
-          <PoiManager listingId={id!} propertyType={listing.propertyType} />
-        ) : (
-          <SectionCard className="mb-4" title="Nearby points of interest">
-              <div className="flex flex-col items-center gap-2 py-6 text-center">
-                <MapPin className="h-8 w-8 text-muted-foreground" />
-                <p className="text-sm font-medium">Location not yet confirmed</p>
-                <p className="text-sm text-muted-foreground">
-                  Confirm your listing's address in step 3 to enable POI suggestions.
-                </p>
-              </div>
-          </SectionCard>
-        )}
-
-        {/* Submit for Review (isSubmittable only) */}
-        {isSubmittable && (
-          <SectionCard
-            title={(
-              <span className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
-                Ready to submit?
-              </span>
-            )}
-            description="All requirements must be met before submitting for admin review."
-            contentClassName="space-y-4"
-          >
-              <div className="space-y-3">
-                {[
-                  {
-                    label: 'Listing photos',
-                    met: canSubmitImages,
-                    detail: canSubmitImages
-                      ? 'Minimum 3 photos uploaded'
-                      : 'At least 3 photos required',
-                    step: 2,
-                  },
-                  {
-                    label: 'Location confirmed',
-                    met: !!listing.addressConfirmed,
-                    detail: listing.addressConfirmed
-                      ? 'Pin position confirmed on map'
-                      : 'Confirm your pin location in step 3',
-                    step: 3,
-                  },
-                  {
-                    label: 'Required fields',
-                    met: requiredFieldsComplete,
-                    detail: requiredFieldsComplete
-                      ? 'All required fields filled in'
-                      : isRent
-                        ? 'Monthly rent, property type, and locality required'
-                        : 'Price, property type, and locality required',
-                    step: 1,
-                  },
-                ].map(({ label, met, detail, step }) => (
-                  <div
-                    key={label}
-                    className={`flex items-start gap-3 rounded-md transition-colors ${
-                      !met ? 'cursor-pointer hover:bg-accent/60 px-2 py-1 -mx-2' : ''
-                    }`}
-                    onClick={!met ? () => { setCameFromReview(true); setCurrentStep(step); } : undefined}
-                    role={!met ? 'button' : undefined}
-                    tabIndex={!met ? 0 : undefined}
-                    onKeyDown={!met ? (e) => {
-                      if (e.key === 'Enter' || e.key === ' ') { setCameFromReview(true); setCurrentStep(step); }
-                    } : undefined}
-                  >
-                    {met
-                      ? <Check className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
-                      : <X className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />}
-                    <div>
-                      <p className="text-sm font-medium">{label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {detail}
-                        {!met && <span className="ml-1 text-primary font-medium">→ Fix now</span>}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="pt-3 border-t">
-                <Button
-                  type="button"
-                  className="w-full"
-                  disabled={submitListing.isPending || updateListing.isPending || !allConditionsMet}
-                  onClick={handleSubmitForReview}
-                >
-                  {submitListing.isPending
-                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting…</>
-                    : 'Submit for Review'}
-                </Button>
-                {listing.status === 'REJECTED' && (
-                  <p className="text-xs text-muted-foreground text-center mt-2">
-                    Previously rejected — review the feedback before resubmitting.
-                  </p>
-                )}
-              </div>
-          </SectionCard>
-        )}
+        <ReviewStep
+          showTitleLocalityWarning={showTitleLocalityWarning}
+          confirmedLocality={confirmedLocality}
+          setTitle={setTitle}
+          setTitleManuallyEdited={setTitleManuallyEdited}
+          listing={listing}
+          listingImages={listingImages}
+          canSubmitImages={canSubmitImages}
+          setCameFromReview={setCameFromReview}
+          setCurrentStep={setCurrentStep}
+          isAgriListing={isAgriListing}
+          boundaryCoords={boundaryCoords}
+          boundaryStep={boundaryStep}
+          id={id}
+          isSubmittable={isSubmittable}
+          requiredFieldsComplete={requiredFieldsComplete}
+          isRent={isRent}
+          submitListing={submitListing}
+          updateListing={updateListing}
+          allConditionsMet={allConditionsMet}
+          handleSubmitForReview={handleSubmitForReview}
+        />
       </div>
       )}
 
