@@ -48,6 +48,7 @@ import { useAreaSearchState } from '@/features/discover/state/useAreaSearchState
 import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSearchState';
 import { useMarkerSelection } from '@/features/discover/state/useMarkerSelection';
 import { useDiscoverJourneyTransitions } from '@/features/discover/state/useDiscoverJourneyTransitions';
+import { useDiscoverCameraOrchestration } from '@/features/discover/state/useDiscoverCameraOrchestration';
 import { resolveMarkerListings } from '@/features/discover/map/resolveMarkerListings';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
@@ -67,7 +68,6 @@ import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
 import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { slugifyFromAreaKey } from '@/lib/areaSlug';
-import { getSectorBounds } from '@/lib/geo';
 import { clampSchoolRadiusKm, PropertyListing, PropertyImage, PropertyFilters } from '@/hooks/usePropertyListings';
 import { cityListingToPropertyListing, filteredMarkerToPropertyListing } from '@/lib/discoverMappers';
 import { ApiError } from '@/lib/api';
@@ -1184,19 +1184,10 @@ export default function MapDiscovery() {
     setAreaMarkerCounts((prev) => (prev.shown === shown && prev.total === total ? prev : { shown, total }));
   }, []);
 
-  // Issue #1160 — school-focus tick for SchoolFocusPanner in PropertyMap.
-  // Incremented when the selected school changes (new school ID) or when radiusKm
-  // changes while a school is selected in school-first journey. The tick pattern
-  // mirrors resetMapTick/startOverTick so SchoolFocusPanner fires exactly once per
-  // increment without creating a feedback loop with ViewportWatcher.
-  const [schoolFocusTick, setSchoolFocusTick] = useState(0);
-
-  // Issue #1160 GAP 1 — SchoolMarkerFocusPanner: fires fitBounds after listings settle.
-  // schoolMarkerFocusTick is incremented when listings are ready (non-empty, query settled).
-  // Feedback-loop safety: the tick is only incremented by the listingsReadyKey effect, which
-  // gates on a primitive string (not array identity). schoolMarkerFocusTick itself is NOT in
-  // the dep array. ViewportWatcher does not write to this tick.
-  const [schoolMarkerFocusTick, setSchoolMarkerFocusTick] = useState(0);
+  // Issue #1824 Slice S7 — schoolFocusTick + schoolMarkerFocusTick now live in
+  // useDiscoverCameraOrchestration; see cameraView below (called after
+  // useDiscoverMapData + schoolListings + focusedGroup, which the hook needs
+  // as injected deps).
 
   // Issue #1160 GAP 2 — Back restoration ticks (areaRestoreTick, cityRestoreTick) now
   // live in useDiscoverJourneyTransitions (Issue #1824 Slice S6) — see journeyView below.
@@ -1265,30 +1256,8 @@ export default function MapDiscovery() {
     setMapBbox(null);
   }, [city]);
 
-  // Issue #1160 — increment schoolFocusTick when the selected school changes or when
-  // radiusKm changes while a school is selected in the school-first journey.
-  //
-  // Guards:
-  //   1. journey === 'school-first': area-first journey must not be affected.
-  //   2. selectedSchool with lat/lon present: SchoolFocusPanner requires hydrated coords.
-  //      This handles the hydration-race edge case — the tick is not incremented until
-  //      the school object (with latitude/longitude) is actually available.
-  //   3. Dependency array contains selectedSchool?.id and urlState.radiusKm so the
-  //      effect fires once per school change and once per radius change — NOT on every
-  //      map-move event. schoolFocusTick itself is NOT in the dep array (would loop).
-  //
-  // Feedback-loop safety: SchoolFocusPanner reads schoolFocusTick and uses a
-  // handledTickRef guard to act at most once per increment. ViewportWatcher fires
-  // reportViewport on moveend/zoomend, but that only updates URL viewport params —
-  // it does NOT write to schoolFocusTick, so no loop can form.
-  const selectedSchoolId = selectedSchool?.id;
-  const selectedSchoolLat = selectedSchool?.latitude;
-  const selectedSchoolLon = selectedSchool?.longitude;
-  useEffect(() => {
-    if (urlState.journey !== 'school-first') return;
-    if (selectedSchoolLat == null || selectedSchoolLon == null) return;
-    setSchoolFocusTick((t) => t + 1);
-  }, [selectedSchoolId, urlState.radiusKm, urlState.journey, selectedSchoolLat, selectedSchoolLon]);
+  // Issue #1824 Slice S7 — schoolFocusTick's writer effect now lives in
+  // useDiscoverCameraOrchestration (reads selectedSchool injected below).
 
   const isCityValid = city in CITY_CONFIG;
 
@@ -1570,42 +1539,11 @@ export default function MapDiscovery() {
     return () => cancelAnimationFrame(raf);
   }, [journeyView.startOverTick]);
 
-  // Debug: expose areaListings and related data to window.__debug for Playwright tests.
-  // Issue #1824 Slice S6 — schoolMarkerFocusTick still sourced from the page (S7 owns
-  // it); areaRestoreTick/cityRestoreTick now read from journeyView (S6 owns them). The
-  // object SHAPE is byte-identical (E2E contract, AC4).
-  useEffect(() => {
-    (window as Window & { __debug?: Record<string, unknown> }).__debug = {
-      ...(window as Window & { __debug?: Record<string, unknown> }).__debug,
-      propertyMapListings: {
-        areaListings,
-        areaMarkerListings,
-        areaLen: areaListings.length,
-        areaMarkerLen: areaMarkerListings.length,
-        markerListings,
-        markerLen: markerListings.length,
-        selectedArea,
-      },
-      mapState: {
-        zoom: mapZoom,
-        city,
-        // Issue #1160 — expose school centre for E2E viewport assertions.
-        // SchoolFocusPanner pans the Leaflet map imperatively (no URL write),
-        // so E2E must read the map centre from this debug object rather than
-        // from URL params.
-        schoolCenter: selectedSchool
-          ? { lat: selectedSchool.latitude, lon: selectedSchool.longitude }
-          : null,
-        // Issue #1160 GAP 1+2 — expose restoration ticks for E2E assertability.
-        // MF-6 asserts schoolMarkerFocusTick > 0 after listings settle.
-        // MF-7 asserts areaRestoreTick incremented on Back from school-selected.
-        // MF-8 asserts cityRestoreTick incremented on Back from schools-in-area.
-        schoolMarkerFocusTick,
-        areaRestoreTick: journeyView.areaRestoreTick,
-        cityRestoreTick: journeyView.cityRestoreTick,
-      },
-    };
-  }, [areaListings, areaMarkerListings, markerListings, selectedArea, mapZoom, city, selectedSchool, schoolMarkerFocusTick, journeyView.areaRestoreTick, journeyView.cityRestoreTick]);
+  // Issue #1824 Slice S7 — the window.__debug.mapState effect (Playwright E2E
+  // contract) moved a few lines down (after useDiscoverCameraOrchestration),
+  // because it now reads cameraView-derived schoolMarkerFocusTick (S7 owns
+  // it; declared via the destructure above). The object SHAPE is
+  // byte-identical (AC4).
 
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).
   const isLoading =
@@ -1906,41 +1844,80 @@ export default function MapDiscovery() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discoverBadge, selectedArea, focusedGroup, city, urlState.q]);
 
-  // Issue #1160 GAP 1 — listingsReadyKey: a stable primitive string that changes only when
-  // all three conditions are true simultaneously:
-  //   1. a school is selected (selectedSchoolId non-null)
-  //   2. the area listings query has settled (!isLoadingAreaListings — boolean, not array identity)
-  //   3. at least one listing is within the school radius (schoolListings.length > 0 — a number)
-  // When null, SchoolMarkerFocusPanner does not fire. schoolListings.length is a number
-  // (primitive) so it does not cause spurious identity changes; only isLoadingAreaListings
-  // is guarded to prevent the array-identity concern flagged in qa-fast risk (b).
-  const listingsReadyKey = useMemo((): string | null => {
-    if (selectedSchoolId == null) return null;
-    if (isLoadingAreaListings) return null;
-    if (schoolListings.length === 0) return null;
-    return `${selectedSchoolId}_${urlState.radiusKm ?? 0}_ready`;
-  }, [selectedSchoolId, isLoadingAreaListings, schoolListings.length, urlState.radiusKm]);
+  // Issue #1824 Slice S7 — camera panner/tick orchestration (R9): schoolFocusTick +
+  // schoolMarkerFocusTick (+ the #1547 fit-once listingsReadyKey guard) + the
+  // group/scope/agri fitBounds effects extracted to useDiscoverCameraOrchestration.
+  // Called here (after useDiscoverMapData + schoolListings + focusedGroup +
+  // summaryRegions, which the hook needs as injected deps). focusedGroup and
+  // summaryRegions are injected as the SAME page useMemo references (OQ2) — the
+  // hook does NOT recompute them, so the group/scope one-shot dep arrays keep
+  // their exact identity-stability behaviour. mapBbox/bboxTimerRef/
+  // handleBoundsChange/their cleanup effect/the city-change bbox-reset effect
+  // stay page-local (see useDiscoverCameraOrchestration.ts's file-header
+  // "DEVIATION" comment for why — mapBbox is a plain in-scope JS variable read
+  // by the useDiscoverMapData call above, so it cannot live in a hook that must
+  // itself be called after useDiscoverMapData).
+  const {
+    schoolFocusTick,
+    schoolMarkerFocusTick,
+    schoolFocusLat: selectedSchoolLat,
+    schoolFocusLon: selectedSchoolLon,
+    agriGroupFocusBounds,
+  } = useDiscoverCameraOrchestration({
+    urlState,
+    selectedSchool,
+    setPanToArea,
+    isLoadingAreaListings,
+    discoverAreas,
+    areasLoading,
+    areaGroupsData,
+    isLoadingAreaGroups,
+    agriMapListingsData,
+    cityCenter,
+    focusedGroup,
+    summaryRegions,
+    selectedRegion,
+    selectedMaxKm,
+    schoolListings,
+  });
 
-  // Increment schoolMarkerFocusTick when listingsReadyKey transitions to a NEW non-null value.
-  // listingsReadyKey is null when listings are empty or query not settled → Phase-1 SchoolFocusPanner
-  // still fires first (handles the school-center focus); this only fires when markers are present.
-  //
-  // Issue #1547 ITEM 6 FIX — bbox-refetch zoom-reset bug:
-  // The original code incremented on every non-null dep-change. listingsReadyKey encodes
-  // `${schoolId}_${radiusKm}_ready`, which is a CONSTANT for a given school+radius selection.
-  // A user zoom-in triggers a bbox refetch → isLoadingAreaListings toggles true → false → the
-  // listingsReadyKey transitions null→same-string again → the tick incremented → SchoolMarkerFocusPanner
-  // re-fired fitBounds(maxZoom=13) and snapped the map back. Fix: track the last KEY that
-  // caused an increment in a ref; only increment when the key is DIFFERENT from the last handled.
-  // This means a new school selection (different schoolId or radiusKm → new key string) still
-  // triggers a fresh fit, but a bbox-driven loading-toggle to the SAME key is a no-op.
-  const lastFittedListingsKeyRef = useRef<string | null>(null);
+  // Debug: expose areaListings and related data to window.__debug for Playwright tests.
+  // Issue #1824 Slice S7 — schoolMarkerFocusTick now sourced from
+  // useDiscoverCameraOrchestration (destructured above); areaRestoreTick/
+  // cityRestoreTick still read from journeyView (S6 owns them). The object
+  // SHAPE is byte-identical (E2E contract, AC4).
   useEffect(() => {
-    if (listingsReadyKey == null) return;
-    if (listingsReadyKey === lastFittedListingsKeyRef.current) return;
-    lastFittedListingsKeyRef.current = listingsReadyKey;
-    setSchoolMarkerFocusTick((t) => t + 1);
-  }, [listingsReadyKey]);
+    (window as Window & { __debug?: Record<string, unknown> }).__debug = {
+      ...(window as Window & { __debug?: Record<string, unknown> }).__debug,
+      propertyMapListings: {
+        areaListings,
+        areaMarkerListings,
+        areaLen: areaListings.length,
+        areaMarkerLen: areaMarkerListings.length,
+        markerListings,
+        markerLen: markerListings.length,
+        selectedArea,
+      },
+      mapState: {
+        zoom: mapZoom,
+        city,
+        // Issue #1160 — expose school centre for E2E viewport assertions.
+        // SchoolFocusPanner pans the Leaflet map imperatively (no URL write),
+        // so E2E must read the map centre from this debug object rather than
+        // from URL params.
+        schoolCenter: selectedSchool
+          ? { lat: selectedSchool.latitude, lon: selectedSchool.longitude }
+          : null,
+        // Issue #1160 GAP 1+2 — expose restoration ticks for E2E assertability.
+        // MF-6 asserts schoolMarkerFocusTick > 0 after listings settle.
+        // MF-7 asserts areaRestoreTick incremented on Back from school-selected.
+        // MF-8 asserts cityRestoreTick incremented on Back from schools-in-area.
+        schoolMarkerFocusTick,
+        areaRestoreTick: journeyView.areaRestoreTick,
+        cityRestoreTick: journeyView.cityRestoreTick,
+      },
+    };
+  }, [areaListings, areaMarkerListings, markerListings, selectedArea, mapZoom, city, selectedSchool, schoolMarkerFocusTick, journeyView.areaRestoreTick, journeyView.cityRestoreTick]);
 
   // Issue #1824 Slice S6 — handleRadiusChange, the school-first Back ladder
   // (handleSchoolFirstBackLevel2/1/0 + schoolFirstOnBack derivation), and
@@ -2052,187 +2029,11 @@ export default function MapDiscovery() {
     [urlState.groupId, areaGroupsData],
   );
 
-  // Effect: when groupId changes and there is no areaKey, fitBounds to the group members.
-  // When areaKey is set, the area-level fitBounds (existing logic) takes precedence.
-  // When areaKey clears while groupId remains (user navigates back), re-trigger group bounds.
-  const prevGroupIdRef = useRef<string | null>(null);
-  const prevAreaKeyRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    // Guard: wait for area data AND group-membership data before computing
-    // bounds. This must run BEFORE updating refs — on cold load with
-    // ?groupId= the effect fires while areasLoading=true, and if refs were
-    // updated here the transition check would see groupChanged=false on the
-    // second fire (when data has loaded) and skip fitBounds.
-    //
-    // Issue #1815 live-e2e follow-up: areasLoading alone is not sufficient.
-    // `discoverAreas` (gated by areasLoading) and `areaGroupsData` (gated by
-    // isLoadingAreaGroups, used the same way two effects below at ~L2234)
-    // are two INDEPENDENT async fetches. If discoverAreas happened to
-    // resolve first, this effect would previously fall through with
-    // areaGroupsData/focusedGroup still unresolved, compute an empty
-    // groupAreaKeys => null bounds => never call setPanToArea — but still
-    // unconditionally advance prevGroupIdRef/prevAreaKeyRef below, burning
-    // the one-shot "group changed" transition signal. When areaGroupsData
-    // then resolved moments later, groupChanged was already false and the
-    // group-framing camera fit silently never fired again for that page
-    // load — the root cause of the reported bimodal pill-count race
-    // (settling to a demote-heavy ~1 representative because the camera was
-    // stuck at the pre-fit overview zoom). Gating on isLoadingAreaGroups too
-    // ensures focusedGroup.area_keys is actually resolved before the refs
-    // (and thus the one-shot signal) ever advance.
-    if (!urlState.groupId) return;
-    if (areasLoading) return;
-    if (isLoadingAreaGroups) return;
-
-    // Now that data is ready, compare against the previous stable values and advance refs.
-    const groupChanged = urlState.groupId !== prevGroupIdRef.current;
-    const areaKeyCleared =
-      prevAreaKeyRef.current !== null && urlState.areaKey === null;
-
-    prevGroupIdRef.current = urlState.groupId;
-    prevAreaKeyRef.current = urlState.areaKey;
-
-    // Only act when no area is selected
-    if (urlState.areaKey !== null) return;
-    // Act on group change OR when areaKey was just cleared (back navigation)
-    if (!groupChanged && !areaKeyCleared) return;
-
-    // Resolve member areas — filter discoverAreas to the group's area_keys.
-    // Areas not in discoverAreas (partial membership) are silently dropped.
-    const groupAreaKeys = focusedGroup?.area_keys ?? [];
-    const memberAreas = discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
-    const bounds = computeGroupBounds(memberAreas);
-    if (bounds) {
-      setPanToArea(bounds);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlState.groupId, urlState.areaKey, areasLoading, isLoadingAreaGroups, discoverAreas, areaGroupsData]);
-
-  // Issue #1745 Bug 2 — fitBounds to member areas when a macro-region scope is selected
-  // so the user does not need to manually zoom out to see corridors in that macro region.
-  const prevScopeRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!urlState.scope) return;
-    if (areasLoading || isLoadingAreaGroups) return;
-
-    const scopeChanged = urlState.scope !== prevScopeRef.current;
-    prevScopeRef.current = urlState.scope;
-
-    if (urlState.groupId !== null || urlState.areaKey !== null) return;
-    if (!scopeChanged) return;
-
-    const groups = areaGroupsData?.groups ?? [];
-    const targetGroups = groups.filter(
-      (g) =>
-        g.id === urlState.scope ||
-        g.name.toLowerCase() === urlState.scope?.toLowerCase() ||
-        labelToSlug(g.name) === urlState.scope ||
-        matchesMacroRegion(g.region_label, urlState.scope, summaryRegions)
-    );
-
-    let memberAreas: typeof discoverAreas = [];
-    if (targetGroups.length > 0) {
-      const groupAreaKeys = targetGroups.flatMap((g) => g.area_keys ?? []);
-      memberAreas = discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
-    } else if (urlState.scope === 'other' || urlState.scope === 'unmapped') {
-      const allGroupAreaKeys = new Set(groups.flatMap((g) => g.area_keys ?? []));
-      memberAreas = discoverAreas.filter((a) => !allGroupAreaKeys.has(a.areaKey));
-    }
-
-    const bounds = computeGroupBounds(memberAreas);
-    if (bounds) {
-      setPanToArea(bounds);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlState.scope, urlState.groupId, urlState.areaKey, areasLoading, isLoadingAreaGroups, discoverAreas, areaGroupsData, summaryRegions]);
-
-  // Issue #1410 (B3) — viewport-fit when agri group listings arrive.
-  // Uses a state variable fed into PropertyMap's focusBounds so it's consistent with how
-  // all other fitBounds effects work in this page (no direct mapRef access).
-  const [agriGroupFocusBounds, setAgriGroupFocusBounds] = useState<[[number, number], [number, number]] | null>(null);
-
-  useEffect(() => {
-    // Issue #1429/#1447 — use selectedRegion + selectedMaxKm (corridor-first cumulative model)
-    if (!selectedRegion || selectedMaxKm == null) {
-      setAgriGroupFocusBounds(null);
-      return;
-    }
-
-    // Issue #1480 — when a locality/town is selected, frame only that town's listings.
-    // Locality branch takes priority over corridor framing; early-return prevents overwrite.
-    const selectedLocality = urlState.selectedLocality ?? null;
-    if (selectedLocality) {
-      const localityListings = (agriMapListingsData?.listings ?? []).filter(
-        (l) =>
-          l.latitude != null &&
-          l.longitude != null &&
-          (l.locality ?? l.areaKey) === selectedLocality,
-      );
-      if (localityListings.length > 0) {
-        const lats = localityListings.map((l) => l.latitude as number);
-        const lons = localityListings.map((l) => l.longitude as number);
-        setAgriGroupFocusBounds([
-          [Math.min(...lats), Math.min(...lons)],
-          [Math.max(...lats), Math.max(...lons)],
-        ]);
-      } else {
-        // Locality matched no listings with valid coords — fall back to sector framing.
-        const sectorBounds = cityCenter
-          ? getSectorBounds(cityCenter[0], cityCenter[1], selectedRegion, selectedMaxKm)
-          : null;
-        setAgriGroupFocusBounds(sectorBounds);
-      }
-      return;
-    }
-
-    // Issue #1447 — include sector geometry in map fit so the directional cone is
-    // always fully framed, even when listings are sparse or clustered near the centroid.
-    const sectorBounds = cityCenter
-      ? getSectorBounds(cityCenter[0], cityCenter[1], selectedRegion, selectedMaxKm)
-      : null;
-
-    // Filter out listings with null/undefined lat/lon before spreading into Math.min/max.
-    // AgriMapListingItem declares latitude/longitude as number, but the server can return null
-    // when the DB column is null; Math.min/max(undefined) = NaN which corrupts Leaflet fitBounds.
-    const validListings = (agriMapListingsData?.listings ?? []).filter(
-      l => l.latitude != null && l.longitude != null
-    );
-
-    let listingBounds: [[number, number], [number, number]] | null = null;
-    if (validListings.length) {
-      const lats = validListings.map(l => l.latitude as number);
-      const lons = validListings.map(l => l.longitude as number);
-      listingBounds = [
-        [Math.min(...lats), Math.min(...lons)],
-        [Math.max(...lats), Math.max(...lons)],
-      ];
-    }
-
-    if (!sectorBounds && !listingBounds) {
-      setAgriGroupFocusBounds(null);
-      return;
-    }
-
-    if (!sectorBounds) {
-      // cityCenter unavailable (unknown city slug) — fall back to listing-only bounds
-      setAgriGroupFocusBounds(listingBounds);
-      return;
-    }
-
-    if (!listingBounds) {
-      // No valid listings — frame the sector cone alone
-      setAgriGroupFocusBounds(sectorBounds);
-      return;
-    }
-
-    // Union: expand to contain both the sector geometry and visible listings
-    setAgriGroupFocusBounds([
-      [Math.min(sectorBounds[0][0], listingBounds[0][0]), Math.min(sectorBounds[0][1], listingBounds[0][1])],
-      [Math.max(sectorBounds[1][0], listingBounds[1][0]), Math.max(sectorBounds[1][1], listingBounds[1][1])],
-    ]);
-  }, [selectedRegion, selectedMaxKm, agriMapListingsData, cityCenter, urlState.selectedLocality]);
+  // Issue #1824 Slice S7 — the group-fit effect (prevGroupIdRef/prevAreaKeyRef),
+  // the scope-fit effect (prevScopeRef), and the agri-fit effect
+  // (agriGroupFocusBounds) all moved into useDiscoverCameraOrchestration
+  // (called above, right after schoolListings/focusedGroup/summaryRegions
+  // become available).
 
   // Issue #1824 Slice S6 — the handleSchoolSelect wrapper moved into
   // useDiscoverJourneyTransitions (journeyCommands.wrappedSchoolSelect).
