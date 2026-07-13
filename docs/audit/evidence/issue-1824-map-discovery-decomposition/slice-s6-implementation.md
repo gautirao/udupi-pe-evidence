@@ -36,3 +36,13 @@ Stage B execution record. Branch `issue-1824-s6-journey-transitions` off `origin
 ## Phase 7A
 
 REQUIRED GENUINE LIVE on port 5174 — run by the Main Agent AFTER this workdone-candidate (gate order Phase 6 → 7A → 7C). Covers: school-first 3-level Back ladder (BN-1..BN-5), restore-tick increments (MF-7/8/10), Start Over dual-tick, #1821 cold-load fit vs bare-viewport no-override. Journeys/URLs in the handoff `[browser_validation_7a]`.
+
+**Result: PASS**, with one finding. Live on real Udupi (Manipal school data) + Bangalore (Devanahalli) data via `window.__debug.mapState` before/after reads at each interaction:
+- L2→L1 Back (school-selected → area): `areaRestoreTick` 0→1, `cityRestoreTick` unchanged — PASS (BN-1/MF-7).
+- L1→L0-equivalent Back (schools-in-area → zone): `areaRestoreTick` unchanged, `cityRestoreTick` 0→1 — PASS (BN-2/3/MF-8).
+- Bug-B (top-level school-selected, no `areaKey`): `cityRestoreTick` 0→1 only — PASS (MF-10).
+- Start Over: full URL reset, both restore ticks left untouched — PASS.
+- #1821 AC1 (tight fit, different prior viewport) + AC2 (bare-viewport preserved, no override) — both PASS on Bangalore/Devanahalli.
+- Console clean (only pre-existing React Router v7 future-flag advisories).
+
+**Finding (pre-existing, not an S6 regression):** the school-group-areas "Back to school zones" button does not fire `cityRestoreTick` live. Traced to `SchoolGroupAreasPanel`'s Back button being wired to `DiscoverRightPanel.tsx`'s hardcoded `onClearGroup={() => urlActions.selectGroup(null)}` prop instead of `journeyView.schoolFirstOnBack`/`backLevel0`. Confirmed via `git show 830abaa6:src/pages/MapDiscovery.tsx` that the responsible line is byte-identical to the pre-S6 baseline — `DiscoverRightPanel.tsx` is outside S6's `allowed_file_globs`. Filed separately as **[#1864](https://github.com/gautirao/udupi-property-explorer/issues/1864)**, kept out of PR #1861's scope per the user's explicit direction. Full record: `.claude/handoffs/issue-1824/product-verification.toml`.
