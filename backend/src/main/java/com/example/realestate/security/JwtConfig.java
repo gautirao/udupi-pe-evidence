@@ -109,6 +109,8 @@ public class JwtConfig {
                         .requestMatchers(HttpMethod.GET, "/api/discover/cities/*/listings").permitAll()
                         // Public school-radius listings endpoint — no auth required (#1239)
                         .requestMatchers(HttpMethod.GET, "/api/discover/cities/*/school-radius-listings").permitAll()
+                        // Public region-summary endpoint — no auth required (#1882)
+                        .requestMatchers(HttpMethod.GET, "/api/discover/cities/*/regions").permitAll()
                         // Public area groups endpoint — no auth required (#988)
                         .requestMatchers(HttpMethod.GET, "/api/discover/area-groups").permitAll()
                         // Public regional area groups endpoint — no auth required (#1408)
