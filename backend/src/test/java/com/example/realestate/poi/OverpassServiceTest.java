@@ -3,9 +3,14 @@ package com.example.realestate.poi;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +21,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -452,5 +459,44 @@ class OverpassServiceTest {
                 .map(ListingPoi::getName)
                 .toList();
         assertThat(names).containsExactly("H1", "H2", "H3");
+    }
+
+    // ===== 11. InterruptedException handling (SonarQube java:S2142) =====
+    //
+    // The catch site under test lives inside the lambda built by the production @Autowired
+    // constructor (OverpassService(ListingPoiRepository)) — the test-only constructor used by
+    // every test above bypasses that lambda entirely. To exercise the real production code
+    // without any real network call, HttpClient.newBuilder() is intercepted via mockStatic so
+    // the internal "realClient" the lambda closes over is a Mockito mock whose send() throws
+    // InterruptedException directly.
+
+    @Test
+    void productionHttpClient_interrupted_restoresFlagAndReturnsEmpty() throws Exception {
+        HttpClient.Builder mockBuilder = mock(HttpClient.Builder.class);
+        HttpClient mockClient = mock(HttpClient.class);
+        when(mockBuilder.connectTimeout(any())).thenReturn(mockBuilder);
+        when(mockBuilder.build()).thenReturn(mockClient);
+        when(mockClient.send(any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenThrow(new InterruptedException("simulated interrupt"));
+
+        OverpassService service;
+        try (MockedStatic<HttpClient> mockedStatic = mockStatic(HttpClient.class)) {
+            mockedStatic.when(HttpClient::newBuilder).thenReturn(mockBuilder);
+            service = new OverpassService(repository);
+        }
+
+        var field = OverpassService.class.getDeclaredField("httpClient");
+        field.setAccessible(true);
+        OverpassHttpClient seam = (OverpassHttpClient) field.get(service);
+
+        try {
+            Optional<String> result = seam.post("https://overpass-api.de/api/interpreter", "query");
+
+            assertThat(result).isEmpty();
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+        } finally {
+            Thread.interrupted(); // clear flag so later tests aren't contaminated
+        }
     }
 }

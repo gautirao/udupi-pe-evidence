@@ -65,6 +65,11 @@ public class AdminGeocodingController {
         executor.submit(() -> {
             try {
                 runBatch(emitter, effectiveBatch);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("Batch geocoding cancelled/interrupted adminId={}", caller.userId(), e);
+                sendEvent(emitter, "error", "Batch cancelled");
+                emitter.completeWithError(e);
             } catch (Exception e) {
                 log.error("Geocode batch failed", e);
                 sendEvent(emitter, "error", "Batch failed: " + e.getMessage());

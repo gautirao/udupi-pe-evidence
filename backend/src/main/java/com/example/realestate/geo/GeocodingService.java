@@ -169,6 +169,10 @@ public class GeocodingService implements GeocodingPort {
             }
             log.debug("Nominatim search query={} results={}", query, places.size());
             return places;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Interrupted while searching places for query={}", query, e);
+            return Collections.emptyList();
         } catch (Exception e) {
             log.warn("Nominatim search error for query={}: {}", query, e.getMessage());
             return Collections.emptyList();
@@ -205,6 +209,10 @@ public class GeocodingService implements GeocodingPort {
                     node.path("lon").asDouble(),
                     node.path("display_name").asText(""),
                     parseAddressNode(node.path("address")));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Interrupted while reverse geocoding lat={} lon={}", lat, lon, e);
+            return null;
         } catch (Exception e) {
             log.warn("Nominatim reverse error lat={} lon={}: {}", lat, lon, e.getMessage());
             return null;
@@ -257,6 +265,10 @@ public class GeocodingService implements GeocodingPort {
             log.debug("Nominatim success term={} lat={} lon={}", term, lat, lon);
             return new double[]{lat, lon};
 
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Interrupted while querying Nominatim for term={}", term, e);
+            return null;
         } catch (Exception e) {
             log.warn("Nominatim error for term={}: {}", term, e.getMessage());
             return null;

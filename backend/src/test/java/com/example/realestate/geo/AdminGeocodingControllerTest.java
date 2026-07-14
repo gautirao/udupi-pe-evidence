@@ -1,10 +1,12 @@
 package com.example.realestate.geo;
 
+import com.example.realestate.security.CallerInfo;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedConstruction;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
@@ -20,11 +22,16 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -232,5 +239,76 @@ class AdminGeocodingControllerTest {
 
         // jdbc called with clamped value of 50, not 999
         verify(jdbc).queryForList(anyString(), eq(50));
+    }
+
+    // ===== InterruptedException handling (SonarQube java:S2142) =====
+
+    /**
+     * Simulates an interrupt (e.g. app shutdown) arriving mid-batch: the mocked
+     * geocodingService.geocode() call sets the worker thread's interrupt flag as a side
+     * effect, so the subsequent Nominatim rate-limit {@code Thread.sleep()} in runBatch()
+     * throws InterruptedException immediately (JDK-guaranteed — no real sleep, no race).
+     *
+     * <p>This test drives {@link AdminGeocodingController#geocodeMissing} directly with plain
+     * Mockito mocks (bypassing MockMvc/DispatcherServlet) rather than reusing the
+     * {@code @WebMvcTest} harness above — setting the real JVM thread's interrupt flag mid-flight
+     * inside a servlet-container-managed async SSE write is itself timing/transport sensitive.
+     * {@link SseEmitter}'s own {@code onError}/{@code onCompletion} callbacks additionally never
+     * fire unless the emitter has been {@code initialize()}d by a real DispatcherServlet async
+     * dispatch (confirmed empirically), so construction is intercepted via
+     * {@code mockConstruction} to observe {@code completeWithError} directly and to signal a
+     * latch — giving a fully deterministic, non-servlet-dependent synchronization point while
+     * still exercising the real production {@code catch (InterruptedException e)} block
+     * end-to-end via the same {@code executor.submit(...)} pipeline used in production.
+     */
+    @Test
+    void geocodeMissing_interruptedDuringRateLimit_stopsBatchAndRestoresInterruptFlag() throws Exception {
+        GeocodingService geocodingServiceMock = mock(GeocodingService.class);
+        JdbcTemplate jdbcMock = mock(JdbcTemplate.class);
+        AdminGeocodingController controller = new AdminGeocodingController(geocodingServiceMock, jdbcMock);
+
+        String id1 = UUID.randomUUID().toString();
+        String id2 = UUID.randomUUID().toString();
+        when(jdbcMock.queryForList(anyString(), any(Object[].class))).thenReturn(
+                List.of(Map.of("id", id1, "locality", "Manipal"),
+                        Map.of("id", id2, "locality", "Udupi")));
+
+        AtomicInteger geocodeCalls = new AtomicInteger(0);
+        AtomicReference<Thread> workerThread = new AtomicReference<>();
+        when(geocodingServiceMock.geocode(anyString())).thenAnswer(inv -> {
+            geocodeCalls.incrementAndGet();
+            workerThread.set(Thread.currentThread());
+            Thread.currentThread().interrupt();
+            return new GeocodingService.GeoResult(13.3528, 74.7906, "Manipal, Karnataka",
+                    "India", "Karnataka", "Manipal", "Manipal", null);
+        });
+        when(jdbcMock.update(anyString(), any(Object[].class))).thenReturn(1);
+
+        CallerInfo caller = new CallerInfo(ADMIN_ID, "ROLE_ADMIN", true);
+        CountDownLatch completedWithErrorLatch = new CountDownLatch(1);
+
+        try (MockedConstruction<SseEmitter> mockedEmitter = mockConstruction(SseEmitter.class,
+                (mock, context) -> doAnswer(inv -> {
+                    completedWithErrorLatch.countDown();
+                    return null;
+                }).when(mock).completeWithError(any()))) {
+
+            SseEmitter emitter = controller.geocodeMissing(caller, 20);
+
+            assertThat(completedWithErrorLatch.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                    .as("batch task should call completeWithError within timeout")
+                    .isTrue();
+
+            // Same completion mechanism as the pre-existing general-Exception fallback path,
+            // carrying the InterruptedException.
+            verify(emitter).completeWithError(org.mockito.ArgumentMatchers.isA(InterruptedException.class));
+            verify(emitter, never()).complete();
+        }
+
+        // Batch must stop immediately after the interruption — the second row is never reached.
+        assertThat(geocodeCalls.get()).isEqualTo(1);
+        // The worker thread's interrupt status must be restored (not silently swallowed).
+        assertThat(workerThread.get()).isNotNull();
+        assertThat(workerThread.get().isInterrupted()).isTrue();
     }
 }

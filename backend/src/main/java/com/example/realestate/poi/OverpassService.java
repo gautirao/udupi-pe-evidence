@@ -94,6 +94,10 @@ public class OverpassService {
                     return Optional.empty();
                 }
                 return Optional.of(response.body());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("Overpass request interrupted url={}", url, e);
+                return Optional.empty();
             } catch (Exception e) {
                 log.warn("Overpass request failed url={}: {}", url, e.getMessage());
                 return Optional.empty();
