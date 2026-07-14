@@ -16,10 +16,8 @@ import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import {
   computeDiscoverLayer,
   toLayerInput,
-  selectDiscoverMapLayer,
   resolveActiveDiscoverGroup,
   resolveDiscoverGroupForAreaKey,
-  type DiscoverMapLayerKind,
 } from '@/utils/discoverLayerRegistry';
 import { CityNotSupported } from '@/components/discover/CityNotSupported';
 import { useDiscoverInteractionState } from '@/features/discover/state/useDiscoverInteractionState';
@@ -32,6 +30,7 @@ import { useDiscoverJourneyTransitions } from '@/features/discover/state/useDisc
 import { useDiscoverCameraOrchestration } from '@/features/discover/state/useDiscoverCameraOrchestration';
 import { resolveMarkerPopover } from '@/features/discover/map/resolveMarkerPopover';
 import { useDiscoverMapPresentation } from '@/features/discover/presentation/useDiscoverMapPresentation';
+import { useDiscoverJourneyPredicates } from '@/features/discover/presentation/useDiscoverJourneyPredicates';
 import { useDiscoverBadgeAnnounce } from '@/features/discover/presentation/useDiscoverBadgeAnnounce';
 import { useDiscoverGroupResults } from '@/features/discover/presentation/useDiscoverGroupResults';
 import { useFilteredAgriListings } from '@/features/discover/presentation/useFilteredAgriListings';
@@ -1353,54 +1352,32 @@ export default function MapDiscovery() {
   // so a city with no live properties (e.g. Bangalore) renders no area markers at all.
   // Drill-down states keep the full area set (unchanged).
   const isLandingState = resolvedPanelContent === 'guided-entry';
-  // Issue #1607 — the area-first CITY-LEVEL landing (group cards shown, no group or
-  // area resolved yet). Treated like the public guided-entry landing for map chrome:
-  // only areas WITH live properties get a marker (zero-listing areas — including any
-  // seed/test areas — never render as misleading pins), plus the "Home › City › Areas"
-  // breadcrumb, the Areas legend, and the centred city-wide summary pill. Zero areas
-  // stay fully discoverable through the right-panel group/area lists.
-  const isAreaFirstCityLanding =
-    resolvedPanelContent === 'area-groups-landing' && !focusedGroup && !selectedArea;
-  const liveAreas = discoverAreas.filter((a) => (a.listingCount ?? 0) > 0);
-  // Issue #1588 follow-up — the selected city has finished loading and has zero live
-  // properties. Gated on !areasLoading so the empty-state notice never flashes during
-  // the load window (when cityTotal is transiently 0). City-scoped: discoverAreas comes
-  // from /api/discover/areas for the current city, so this is true only for the real
-  // selected city, never leaked from another city's data.
-  const cityHasNoListings = !areasLoading && cityTotal === 0;
 
-  const isTopGroupedAreaOrSchool =
-    (urlState.journey === 'area-first' || urlState.journey === 'school-first') &&
-    !urlState.groupId &&
-    !urlState.areaKey &&
-    !selectedArea &&
-    !urlState.schoolId &&
-    !selectedSchool;
-
-  const isTopGroupedAgri =
-    isAgriJourney &&
-    !urlState.selectedRegion &&
-    !urlState.areaKey &&
-    !selectedArea &&
-    !urlState.selectedLocality &&
-    !urlState.selectedGroup;
-
-  // Issue #1745 Batch B map-hierarchy fix — single derivation rule deciding WHICH
-  // family of map markers `overviewAreas` (below) and the `listings` prop selection
-  // (in the PropertyMap render further down) should use for the current URL state.
-  // `mapLayerCategory` is the URL-driven category IGNORING the current zoom (bucket
-  // forced to 'overview') — used wherever a decision must NOT flip with manual
-  // zooming (e.g. suppressing raw listing markers at a grouped/landing state).
-  // `mapLayerKind` additionally folds in the REAL current zoom bucket — used for the
-  // area-marker layer itself, which already always hid above AREA_LAYER_MAX_ZOOM.
-  // Composes with `computeDiscoverLayer`/`derivePanelContent` for the panel axis
-  // (see discoverLayerRegistry.ts); does not duplicate journey-precedence routing.
-  const discoverLayerInput = toLayerInput(urlState);
-  const mapLayerCategory: DiscoverMapLayerKind = selectDiscoverMapLayer(discoverLayerInput, 'overview');
-  const mapLayerKind: DiscoverMapLayerKind = selectDiscoverMapLayer(
-    discoverLayerInput,
-    mapZoom > AREA_LAYER_MAX_ZOOM ? 'detail' : 'overview',
-  );
+  // Issue #1824 Slice S11d — pre-layer "C1" predicate cluster (area-first city
+  // landing, live areas, empty-city gate, top-grouped area/school/agri gates,
+  // and the mapLayerKind/mapLayerCategory derivation) extracted verbatim into
+  // useDiscoverJourneyPredicates. See
+  // docs/audit/evidence/issue-1824-map-discovery-decomposition/slice-s11d-implementation.md.
+  const {
+    mapLayerKind,
+    mapLayerCategory,
+    isAreaFirstCityLanding,
+    liveAreas,
+    cityHasNoListings,
+    isTopGroupedAreaOrSchool,
+    isTopGroupedAgri,
+  } = useDiscoverJourneyPredicates({
+    resolvedPanelContent,
+    focusedGroup,
+    selectedArea,
+    selectedSchool,
+    discoverAreas,
+    areasLoading,
+    cityTotal,
+    urlState,
+    isAgriJourney,
+    mapZoom,
+  });
 
   // Issue #1824 Slice S9b1 — overviewAreas + areaSearchMatchKeys now live in
   // useDiscoverMapPresentation (src/features/discover/presentation/); see
