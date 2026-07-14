@@ -11,7 +11,7 @@ import {
   prettifyZoneSlug,
 } from '@/components/discover/SchoolRadiusMapOverlay';
 import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
-import { aggregateMacroRegions } from '@/utils/macroRegionResolver';
+import { AREA_LAYER_MAX_ZOOM, shouldShowMarkers } from '@/lib/map/zoomPolicy';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import {
   computeDiscoverLayer,
@@ -43,7 +43,8 @@ import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { useAreaGroups } from '@/hooks/useAreaGroups';
 import { useRegionalAreaGroups } from '@/hooks/useRegionalAreaGroups';
-import { useDiscoverSummary, type DiscoverSummaryListingPurpose } from '@/hooks/useDiscoverSummary';
+import type { DiscoverSummaryRegion } from '@/hooks/useDiscoverSummary';
+import { useDiscoverRegionSummary } from '@/hooks/useDiscoverRegionSummary';
 import { useAgriMapListings } from '@/hooks/useAgriMapListings';
 import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import { useDiscoverListings } from '@/hooks/useDiscoverListings';
@@ -88,9 +89,6 @@ import {
 
 // Re-exported so existing test imports from '@/pages/MapDiscovery' continue to resolve.
 export { isNew } from '@/lib/isNew';
-
-/** Zoom-band threshold: area overview rings show at zoom ≤ this; individual listing clusters show above it. */
-const AREA_LAYER_MAX_ZOOM = 12;
 
 // S9a re-export shim — keeps '@/pages/MapDiscovery' importers (5 unit test files +
 // DiscoverMapCountBadge.tsx) resolving unchanged. See slice-s9-design.md OQ1.
@@ -504,23 +502,29 @@ export default function MapDiscovery() {
     page, setPage,
   } = useDiscoverPageState({ urlState, urlActions });
 
-  // Issue #1745 Batch B map-hierarchy fix — backend-owned region counts for the
-  // journeyless-landing macro-region bubbles (see overviewAreas below). Called with the
-  // SAME { city, listingPurpose } shape GuidedEntryPanel uses (city, listingPurpose only —
-  // no propertyType/groupBy/hotspotLimit — so groupBy defaults to 'area_group' and
-  // hotspotLimit defaults to 8 identically), so the query key matches exactly and this
-  // hits the React Query cache the right panel already populated — zero extra fetch.
-  const summaryListingPurpose: DiscoverSummaryListingPurpose =
-    urlState.intent === 'rent' ? 'rent' : 'sale';
-  const { data: discoverSummaryData } = useDiscoverSummary({
-    city,
-    listingPurpose: summaryListingPurpose,
-  });
-  const rawSummaryRegions = discoverSummaryData?.regions;
-  const areaGroupsList = areaGroupsData?.groups;
-  const summaryRegions = useMemo(
-    () => aggregateMacroRegions(rawSummaryRegions, areaGroupsList, discoverSummaryData?.totalActiveListings),
-    [rawSummaryRegions, areaGroupsList, discoverSummaryData?.totalActiveListings]
+  // Issue #1882 (Track A PR2 Slice S2c) — backend-owned region summary for the
+  // journeyless-landing macro-region bubbles (see overviewAreas below), sourced
+  // from the PUBLIC GET /api/discover/cities/{citySlug}/regions rollup (PR1).
+  // Called with the SAME city GuidedEntryPanel uses, so the query key matches
+  // exactly and this hits the React Query cache the right panel already
+  // populated — zero extra fetch. REPLACES the client-side aggregateMacroRegions
+  // derivation (which inferred macro-regions from /api/discover/summary +
+  // area-group region_label string matching) — summaryRegions below is now a
+  // 1:1 map of the backend response with NO client-side aggregation.
+  // ADVISORY-1 rework — reuse the EXISTING intentListingPurpose mapping
+  // (declared above, urlState.intent 'rent'→'rent' else 'sale') rather than
+  // inventing a new one; threading it here closes the data-accuracy gap
+  // where region listingCount lost buy/rent purpose scoping after the
+  // cutover to this endpoint.
+  const { data: regionSummaryData } = useDiscoverRegionSummary(city, intentListingPurpose);
+  const summaryRegions: DiscoverSummaryRegion[] = useMemo(
+    () =>
+      (regionSummaryData?.regions ?? []).map((r) => ({
+        regionKey: r.key,
+        regionLabel: r.label,
+        listingCount: r.listingCount,
+      })),
+    [regionSummaryData],
   );
 
   // Issue #1824 Slice S6 — composedResetMapTick + handleStartOver now live in
@@ -676,7 +680,13 @@ export default function MapDiscovery() {
           filters.schoolLat != null &&
           filters.schoolLon != null &&
           boundedSearchTriggered)) &&
-      mapZoom > AREA_LAYER_MAX_ZOOM,
+      // Issue #1882 (Track A PR2 Slice S1/S3) — consumes the shared
+      // zoomPolicy.shouldShowMarkers gate (same threshold as before:
+      // zoom > AREA_LAYER_MAX_ZOOM). This live gate is the tested equivalent
+      // of deriveScopeAwareMarkersEnabled (useDiscoverMapData.ts), which
+      // covers the scope.kind==='group'||'area' && shouldShowMarkers(zoom)
+      // contract in isolation (scopeAwareMarkers.test.tsx).
+      shouldShowMarkers(mapZoom),
     // Issue #1655 — suppress the paginated listings fetch at grouped overview level.
     // At top-grouped states the right panel shows groups/zones, not individual listings,
     // so there is no consumer for this data. Drilling down into a group/area/school
@@ -826,7 +836,7 @@ export default function MapDiscovery() {
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).
   const isLoading =
     authLoading || !mapReady || areasLoading || listingDataLoading
-    || (isAuthenticated && mapZoom > AREA_LAYER_MAX_ZOOM && markersLoading);
+    || (isAuthenticated && shouldShowMarkers(mapZoom) && markersLoading);
 
   // Discover count source of truth: /api/discover/areas (public, no auth).
   // cityTotal is the sum of per-area listingCount (live LIVE+not-archived+not-duplicate).

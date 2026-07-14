@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Read model for GET /api/discover/cities/{citySlug}/regions (#1882 Track A PR1).
@@ -36,11 +37,27 @@ import java.util.List;
  *
  * <p>#1882 consumes existing canonical areas and their bounds. Completeness of the city area
  * catalogue and correction of missing bounds belong to #1887.
+ *
+ * <p>{@code listingPurpose} (#1882 rework, ADVISORY-1) is an independent optional filter applied
+ * ONLY to {@code listingCount} — {@code "sale"}/{@code "rent"} — passed to the shared
+ * {@link DiscoverListingPredicateBuilder}'s {@code listingPurpose} predicate exactly as
+ * {@link DiscoverSummaryService} does. See {@link #normalizeListingPurpose(String)}: this
+ * mirrors {@link DiscoverSummaryService}'s allowed-set validation and blank/invalid fallback
+ * verbatim (same {@code Set.of("sale", "rent")}, same blended-fallback behaviour) — reused, not
+ * reinvented. Region geometry/membership/ordering/{@code boundsStatus} are entirely unaffected;
+ * only the {@code pl} JOIN predicate (and therefore {@code listing_count}) changes.
  */
 @Service
 public class RegionSummaryService {
 
     private static final Logger log = LoggerFactory.getLogger(RegionSummaryService.class);
+
+    /**
+     * Allowed {@code listingPurpose} values (#1882 rework) — mirrors
+     * {@link DiscoverSummaryService#ALLOWED_LISTING_PURPOSES} exactly (same DB values, same
+     * {@code chk_listing_purpose} CHECK constraint from V32).
+     */
+    private static final Set<String> ALLOWED_LISTING_PURPOSES = Set.of("sale", "rent");
 
     private final JdbcOperations jdbcOperations;
 
@@ -48,8 +65,19 @@ public class RegionSummaryService {
         this.jdbcOperations = jdbcOperations;
     }
 
+    /**
+     * Backward-compatible overload — omitted {@code listingPurpose} = current (blended)
+     * behaviour. Keeps every pre-#1882-rework caller (e.g. {@code
+     * CityRegionOnboardingRegenerationIT}, a PR1 file out of this rework's scope) source- and
+     * behaviour-compatible without modification.
+     */
     @Transactional(readOnly = true)
     public RegionSummaryResponse getRegions(String citySlug) {
+        return getRegions(citySlug, null);
+    }
+
+    @Transactional(readOnly = true)
+    public RegionSummaryResponse getRegions(String citySlug, String listingPurpose) {
         Integer cityId = jdbcOperations.query(
                 "SELECT id FROM cities WHERE slug = ?",
                 rs -> rs.next() ? rs.getInt("id") : null,
@@ -60,11 +88,14 @@ public class RegionSummaryService {
             return new RegionSummaryResponse(null, citySlug, List.of());
         }
 
+        String normalizedPurpose = normalizeListingPurpose(listingPurpose);
+        log.debug("getRegions citySlug={} listingPurpose={}", citySlug, normalizedPurpose);
+
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 citySlug, null, null, null, null, null, null, null,
                 null, null, null, null, null,
                 null, null, null,
-                null, null, null, null, null
+                null, null, normalizedPurpose, null, null
         );
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(filters);
 
@@ -133,5 +164,21 @@ public class RegionSummaryService {
 
     private static Double nullableDouble(Object val) {
         return val == null ? null : ((Number) val).doubleValue();
+    }
+
+    /**
+     * Normalises {@code listingPurpose} (#1882 rework) — mirrors
+     * {@link DiscoverSummaryService}'s {@code normalizeListingPurpose} verbatim: blank/whitespace-
+     * only values and any value outside {@link #ALLOWED_LISTING_PURPOSES} fall back to
+     * {@code null} (blended, all-purposes) — preserving current behaviour for every existing
+     * caller that omits the param, and matching the repo's established invalid-purpose handling
+     * (silently ignored, not a 400) rather than inventing a new validation rule.
+     */
+    private static String normalizeListingPurpose(String listingPurpose) {
+        if (listingPurpose == null) {
+            return null;
+        }
+        String trimmed = listingPurpose.trim();
+        return ALLOWED_LISTING_PURPOSES.contains(trimmed) ? trimmed : null;
     }
 }

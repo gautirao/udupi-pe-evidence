@@ -241,7 +241,10 @@ describe('useDiscoverCameraOrchestration', () => {
   describe('scope-fit', () => {
     it('calls setPanToArea once for a macro-region scope, does not re-fire on a background refetch, and yields when groupId is set', () => {
       const setPanToArea = vi.fn();
-      const group = makeGroup({ region_label: 'North Udupi' });
+      // Issue #1882 (Track A PR2 Slice S2c) — scope-fit now matches groups by
+      // the backend-derived region_key (strict equality), not a
+      // region_label/direction heuristic, so the fixture carries region_key.
+      const group = makeGroup({ region_label: 'North Udupi', region_key: 'north' });
       const area = makeArea();
       const params = makeParams({
         urlState: { journey: null, radiusKm: null, groupId: null, areaKey: null, scope: 'north', selectedLocality: null },

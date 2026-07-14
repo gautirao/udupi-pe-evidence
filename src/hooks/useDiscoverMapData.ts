@@ -12,6 +12,7 @@ import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { computeFocusBounds } from '@/lib/mapUtils';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { AGRICULTURAL_LAND_PROPERTY_TYPE } from '@/lib/listing-constants';
+import { shouldShowMarkers } from '@/lib/map/zoomPolicy';
 import {
   filteredMarkerToPropertyListing,
   discoverListingToPropertyListing,
@@ -38,6 +39,174 @@ export interface CameraIntent {
   center: [number, number];
   /** 'overview' for macro-region/group pins (maxZoom 12); 'leaf' for a real area (zoom clamped to [13,16]). */
   framing: 'overview' | 'leaf';
+  /**
+   * Issue #1882 (Track A PR2 Slice S4; corrected in the camera-padding
+   * rework) — responsive fitBounds padding as a Leaflet-native
+   * `[horizontalPx, verticalPx]` tuple (matches Leaflet's own Point/padding
+   * contract — `L.point(x, y)` and `fitBounds({ padding: [x, y] })`).
+   * Optional and defaulted to the pre-existing `[40, 40]` by MapController
+   * (PropertyMap.tsx) when absent, so every pre-#1882 CameraIntent literal
+   * (tests included) keeps behaving exactly as before. See
+   * `computeCameraPadding`.
+   */
+  padding?: CameraPadding;
+}
+
+/**
+ * Issue #1882 (Track A PR2 Slice S4; corrected in the camera-padding rework)
+ * — responsive fitBounds padding, Leaflet-native `[horizontalPx, verticalPx]`
+ * order (Leaflet's Point/padding contract is `[x, y]` = `[horizontal,
+ * vertical]` — NOT `[vertical, horizontal]`, which the original S4 cut
+ * mistakenly used).
+ *
+ * Layout finding (verified against the actual JSX, not assumed): the
+ * Discover map and right panel are FLEX ROW SIBLINGS at the `lg:` breakpoint
+ * (`<div className="h-full flex flex-col lg:flex-row relative">` in
+ * MapDiscovery.tsx, wrapping DiscoverMapCanvas's `lg:w-1/2` map container and
+ * DiscoverRightPanelContainer's `lg:w-1/2` panel) — the panel never overlays
+ * the map at any supported breakpoint; below `lg:` they stack vertically
+ * (`flex-col`, map at a fixed `h-64`). So the extra desktop horizontal
+ * padding is genuinely just breathing room for the narrower half-width map
+ * viewport at desktop widths — NOT occlusion avoidance — and symmetric
+ * Leaflet `padding` (rather than asymmetric paddingTopLeft/paddingBottomRight)
+ * is the correct tool here.
+ *
+ * `viewportWidthPx` is optional (omitted in non-browser/test contexts or when
+ * the caller has no viewport signal) — undefined degrades to the desktop
+ * padding, matching the pre-#1882 default. The breakpoint (1024px) matches
+ * the app's existing Tailwind `lg:` breakpoint that actually governs this
+ * layout split (DiscoverRightPanel.tsx/DiscoverMapCanvas.tsx's `lg:w-1/2`) —
+ * reused here rather than the unrelated 768px `useIsMobile` (src/hooks/
+ * use-mobile.tsx) breakpoint, which governs an unrelated sidebar concern.
+ */
+export type CameraPadding = [horizontalPx: number, verticalPx: number];
+const DESKTOP_BREAKPOINT_PX = 1024;
+const MOBILE_CAMERA_PADDING: CameraPadding = [40, 40];
+const DESKTOP_CAMERA_PADDING: CameraPadding = [120, 40];
+
+export function computeCameraPadding(viewportWidthPx?: number): CameraPadding {
+  if (viewportWidthPx != null && viewportWidthPx < DESKTOP_BREAKPOINT_PX) {
+    return MOBILE_CAMERA_PADDING;
+  }
+  return DESKTOP_CAMERA_PADDING;
+}
+
+/**
+ * Real viewport width for camera-padding selection, read at the moment a
+ * camera intent is published (inside publishCameraIntent/
+ * publishClusterCameraIntent below) rather than threaded in as a manual
+ * argument — so the public callback shapes ((area: AreaPoint) => void,
+ * (bounds, center) => void) stay unchanged at every consumer layer
+ * (AreaMarkerLayer → DiscoverMapCanvas → MapDiscovery all keep their
+ * existing prop types). Returns undefined in non-browser contexts (SSR/
+ * some test environments), which computeCameraPadding treats as desktop.
+ */
+function getViewportWidthPx(): number | undefined {
+  return typeof window !== 'undefined' ? window.innerWidth : undefined;
+}
+
+/**
+ * Issue #1882 (Track A PR2 Slice S4) — the region/group/area camera
+ * fallback chain: valid bbox → synthetic pad around a valid centroid → city
+ * bounds → city centre (bounds null; caller flyTo's to `center`).
+ *
+ * A bbox is treated as unfit-able ("degenerate") when its corners coincide
+ * (min === max) — e.g. the real Basavanagudi single-area-group case, where
+ * the backend reports `boundsStatus: 'APPROXIMATE'` for a group with no real
+ * spatial spread. A degenerate bbox is NEVER passed through as `bounds` —
+ * MapController's existing null-bounds branch already flies to `center`
+ * instead of fitting, so routing a degenerate/missing bbox to `bounds: null`
+ * here reuses that behaviour rather than inventing a synthetic fitBounds box.
+ */
+export interface CameraFramingInput {
+  /** Region canonical bounds / group union bbox / area bbox — the primary candidate. */
+  bbox: [[number, number], [number, number]] | null;
+  /** Region centre / group focus point / area geo-center — used when bbox is null or degenerate. */
+  centroid: [number, number] | null;
+  /** City-level fallback bounds (union of all areas), used when neither bbox nor centroid resolve. */
+  cityBounds?: [[number, number], [number, number]] | null;
+  /** City centre — last-resort fallback when nothing else resolves. */
+  cityCentre?: [number, number];
+}
+
+export interface ResolvedCameraFraming {
+  /** Bounds to fitBounds, or null — caller should flyTo `center` instead. */
+  bounds: [[number, number], [number, number]] | null;
+  center: [number, number];
+  /** True when the centroid fallback was used (bbox missing or degenerate) rather than fitting a real bbox. */
+  usedCentroidFallback: boolean;
+}
+
+function isDegenerateBbox(bbox: [[number, number], [number, number]] | null): boolean {
+  if (!bbox) return true;
+  const [[s, w], [n, e]] = bbox;
+  return s === n && w === e;
+}
+
+function centroidOfBbox(bbox: [[number, number], [number, number]]): [number, number] {
+  const [[s, w], [n, e]] = bbox;
+  return [(s + n) / 2, (w + e) / 2];
+}
+
+export function resolveCameraFraming(input: CameraFramingInput): ResolvedCameraFraming {
+  const { bbox, centroid, cityBounds, cityCentre } = input;
+
+  // 1. Valid, non-degenerate bbox — fit it directly.
+  if (bbox && !isDegenerateBbox(bbox)) {
+    return { bounds: bbox, center: centroidOfBbox(bbox), usedCentroidFallback: false };
+  }
+
+  // 2. Centroid fallback — covers a null bbox AND a degenerate/point-only
+  //    bbox (e.g. Basavanagudi). bounds stays null so the caller flies to
+  //    `center` instead of fitting a meaningless zero-area box.
+  const centre = centroid ?? (bbox ? bbox[0] : null);
+  if (centre) {
+    return { bounds: null, center: centre, usedCentroidFallback: true };
+  }
+
+  // 3. City bounds.
+  if (cityBounds && !isDegenerateBbox(cityBounds)) {
+    return { bounds: cityBounds, center: centroidOfBbox(cityBounds), usedCentroidFallback: false };
+  }
+
+  // 4. City centre + default zoom — bounds null; caller flyTo's to `center`.
+  return { bounds: null, center: cityCentre ?? [0, 0], usedCentroidFallback: false };
+}
+
+/**
+ * Issue #1882 (Track A PR2 Slice S3) — scope-aware marker gating.
+ *
+ * Region and city scopes stay aggregated (they show the next hierarchy
+ * level — groups/areas — never raw city-wide listing markers). Only
+ * group/area scopes fetch individual listing markers, and only once the
+ * map is zoomed in past the area-overview band.
+ */
+export type DiscoverScopeKind = 'city' | 'region' | 'group' | 'area';
+
+export interface DiscoverScopeInput {
+  /** Set once a specific area is selected/drilled into. */
+  areaKey?: string | null;
+  /** Set once a group is selected/drilled into (and no more specific area yet). */
+  groupId?: string | null;
+  /** URL macro-region scope (set at the region-overview level, no group/area yet). */
+  scope?: string | null;
+}
+
+/** Derives the current Discover scope granularity from URL/selection state. */
+export function deriveDiscoverScopeKind({ areaKey, groupId, scope }: DiscoverScopeInput): DiscoverScopeKind {
+  if (areaKey) return 'area';
+  if (groupId) return 'group';
+  if (scope) return 'region';
+  return 'city';
+}
+
+/**
+ * markersEnabled = (scope.kind === 'group' || scope.kind === 'area') &&
+ * zoomPolicy.shouldShowMarkers(zoom). City/region scopes never fetch raw
+ * city-wide markers — they render the next hierarchy level instead.
+ */
+export function deriveScopeAwareMarkersEnabled(scopeKind: DiscoverScopeKind, zoom: number): boolean {
+  return (scopeKind === 'group' || scopeKind === 'area') && shouldShowMarkers(zoom);
 }
 
 export interface UseDiscoverMapDataParams {
@@ -177,6 +346,12 @@ export interface UseDiscoverMapDataResult {
    * Issue #1801 — publishes a new CameraIntent derived from an AreaPoint. Call
    * SYNCHRONOUSLY from the area-marker click path (AreaMarkerLayer's
    * onAreaCameraIntent) — never from a delayed effect or post-fetch callback.
+   * Issue #1882 (Slice S4; camera-padding rework) — internally selects
+   * responsive fitBounds padding via `computeCameraPadding` +
+   * `window.innerWidth`, read at call time (see `getViewportWidthPx`). This
+   * keeps the public signature identical to the pre-#1882 callback shape —
+   * no viewportWidthPx argument is threaded through AreaMarkerLayer/
+   * DiscoverMapCanvas/MapDiscovery.
    */
   publishCameraIntent: (area: AreaPoint) => void;
   /**
@@ -186,7 +361,10 @@ export interface UseDiscoverMapDataResult {
    * (a fresh click always wins over a stale one, regardless of which producer
    * published it). Always framing='overview' — a cluster is never a 'leaf'.
    * Caller passes the cluster's union bounds and center; this does NOT
-   * recompute or validate them.
+   * recompute or validate them (the fallback chain is still applied for a
+   * missing/degenerate bounds — see `resolveCameraFraming`). Selects
+   * responsive padding the same way publishCameraIntent does (see above) —
+   * no viewportWidthPx argument here either.
    */
   publishClusterCameraIntent: (
     bounds: CameraIntent['bounds'],
@@ -458,15 +636,33 @@ export function useDiscoverMapData({
   // publishing never itself triggers a re-render beyond the setCameraIntent below.
   const cameraIntentSeqRef = useRef(0);
   const [cameraIntent, setCameraIntent] = useState<CameraIntent | null>(null);
-  const publishCameraIntent = useCallback((area: AreaPoint) => {
-    cameraIntentSeqRef.current += 1;
-    setCameraIntent({
-      seq: cameraIntentSeqRef.current,
-      bounds: area.bbox,
-      center: [area.geo_center_lat, area.geo_center_lon],
-      framing: area.isMacroRegion || area.isGroup ? 'overview' : 'leaf',
-    });
-  }, []);
+  const publishCameraIntent = useCallback(
+    (area: AreaPoint) => {
+      // Issue #1882 (Track A PR2 Slice S4) — route the area's bbox/centroid
+      // through the fallback chain (valid bbox → synthetic pad around a
+      // valid centroid → city bounds → city centre) rather than passing
+      // area.bbox straight through. Covers missing bounds AND a degenerate
+      // (point-only) bbox — e.g. the real Basavanagudi case — without ever
+      // fitting a zero-area box.
+      const framed = resolveCameraFraming({
+        bbox: area.bbox,
+        centroid: [area.geo_center_lat, area.geo_center_lon],
+        cityCentre: cityCenter,
+      });
+      cameraIntentSeqRef.current += 1;
+      setCameraIntent({
+        seq: cameraIntentSeqRef.current,
+        bounds: framed.bounds,
+        center: framed.center,
+        framing: area.isMacroRegion || area.isGroup ? 'overview' : 'leaf',
+        // Read the real viewport width HERE (not threaded in as a manual
+        // argument) — see getViewportWidthPx's doc comment. This keeps the
+        // public (area: AreaPoint) => void shape unchanged at every layer.
+        padding: computeCameraPadding(getViewportWidthPx()),
+      });
+    },
+    [cityCenter],
+  );
 
   // Issue #1806 (FIX-4) — sibling producer for an area-CLUSTER chip click.
   // Shares cameraIntentSeqRef with publishCameraIntent above so MapController's
@@ -477,15 +673,26 @@ export function useDiscoverMapData({
   // suppression with no correlated consumer, and drill past AREA_LAYER_MAX_ZOOM).
   const publishClusterCameraIntent = useCallback(
     (bounds: CameraIntent['bounds'], center: [number, number]) => {
+      // Issue #1882 (Slice S4) — same fallback chain as publishCameraIntent,
+      // so a cluster's union bounds degrading to a point never fits a
+      // degenerate box either.
+      const framed = resolveCameraFraming({
+        bbox: bounds,
+        centroid: center,
+        cityCentre: cityCenter,
+      });
       cameraIntentSeqRef.current += 1;
       setCameraIntent({
         seq: cameraIntentSeqRef.current,
-        bounds,
-        center,
+        bounds: framed.bounds,
+        center: framed.center,
         framing: 'overview',
+        // Read the real viewport width HERE — see getViewportWidthPx's doc
+        // comment on publishCameraIntent above.
+        padding: computeCameraPadding(getViewportWidthPx()),
       });
     },
-    [],
+    [cityCenter],
   );
 
   // ── Derived: locality → areaKey map ──────────────────────────────────────

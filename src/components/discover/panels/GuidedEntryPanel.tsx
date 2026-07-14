@@ -7,9 +7,7 @@ import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
-import { useDiscoverSummary } from '@/hooks/useDiscoverSummary';
-import { useAreaGroups } from '@/hooks/useAreaGroups';
-import { aggregateMacroRegions } from '@/utils/macroRegionResolver';
+import { useDiscoverRegionSummary } from '@/hooks/useDiscoverRegionSummary';
 import { cn } from '@/lib/utils';
 import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
 import { TrustStrip } from './_shared';
@@ -104,20 +102,31 @@ export function GuidedEntryPanel({
   const [urlState, urlActions] = useDiscoverUrlState();
   const selectedScope = urlState.scope ?? null;
 
+  // Issue #1882 (Track A PR2 Slice S2c) — region cards now sourced directly
+  // from the backend-owned region-summary rollup (GET
+  // /api/discover/cities/{citySlug}/regions), REPLACING the client-side
+  // aggregateMacroRegions derivation (summary regions + area-group
+  // region_label string matching). No client-side aggregation remains.
+  //
+  // ADVISORY-1 rework — reuse the SAME intent→listingPurpose mapping this
+  // panel already used for the old useDiscoverSummary call ('buy' maps to
+  // 'sale'; never sent as 'buy'), so region cards display purpose-filtered
+  // totals instead of the combined buy+rent count.
   const listingPurpose = intent === 'rent' ? 'rent' : 'sale';
   const {
-    data: summaryData,
-    isLoading: isSummaryLoadingRaw,
+    data: regionSummaryData,
+    isLoading: isSummaryLoading,
     isError: isSummaryError,
-  } = useDiscoverSummary({ city, listingPurpose });
-  const { data: areaGroupsData, isLoading: isGroupsLoading } = useAreaGroups(city);
-  const rawRegions = summaryData?.regions;
-  const areaGroups = areaGroupsData?.groups;
+  } = useDiscoverRegionSummary(city, listingPurpose);
   const regions = React.useMemo(
-    () => aggregateMacroRegions(rawRegions, areaGroups, summaryData?.totalActiveListings),
-    [rawRegions, areaGroups, summaryData?.totalActiveListings]
+    () =>
+      (regionSummaryData?.regions ?? []).map((r) => ({
+        regionKey: r.key,
+        regionLabel: r.label,
+        listingCount: r.listingCount,
+      })),
+    [regionSummaryData],
   );
-  const isSummaryLoading = isSummaryLoadingRaw || isGroupsLoading;
 
   const handleRegionClick = (regionKey: string) => {
     const isDeselecting = selectedScope === regionKey;

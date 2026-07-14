@@ -86,7 +86,7 @@ class RegionSummaryControllerSecurityIT {
 
     @Test
     void regionsEndpoint_noAuthHeader_returns200() throws Exception {
-        when(regionSummaryService.getRegions("udupi"))
+        when(regionSummaryService.getRegions("udupi", null))
                 .thenReturn(new RegionSummaryResponse(3, "udupi", List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/regions"))

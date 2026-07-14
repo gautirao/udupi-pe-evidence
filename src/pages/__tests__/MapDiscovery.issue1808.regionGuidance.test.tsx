@@ -81,6 +81,9 @@ const NORTH_ZONE_A = {
   area_keys: [NORTH_AREA_A],
   focus_lat: 13.42,
   focus_lon: 74.75,
+  // Issue #1882 (Track A PR2 Slice S2c) — region-scope matching now compares
+  // the backend-derived region_key with strict equality.
+  region_key: 'north',
 };
 const NORTH_ZONE_B = {
   id: 'north-zone-b',
@@ -91,6 +94,7 @@ const NORTH_ZONE_B = {
   area_keys: [NORTH_AREA_B],
   focus_lat: 13.45,
   focus_lon: 74.76,
+  region_key: 'north',
 };
 
 const AREAS_RESPONSE = {
@@ -131,17 +135,18 @@ const AREAS_RESPONSE = {
   ],
 };
 
-const SUMMARY_RESPONSE = {
-  city: 'udupi',
-  propertyType: null,
-  groupBy: 'area_group',
-  totalActiveListings: 14,
+// Issue #1882 (Track A PR2 Slice S2c) — MapDiscovery.tsx now sources
+// summaryRegions from useDiscoverRegionSummary (GET
+// /api/discover/cities/{citySlug}/regions), REPLACING the client-side
+// aggregateMacroRegions derivation over useDiscoverSummary's regions. Mocked
+// accordingly below.
+const REGION_SUMMARY_RESPONSE = {
+  cityId: 1,
+  citySlug: 'udupi',
   regions: [
-    { regionKey: COASTAL_GROUP_ID, regionLabel: 'Coastal Homes', listingCount: 6 },
-    { regionKey: 'north', regionLabel: 'North Udupi', listingCount: 8 },
+    { key: COASTAL_GROUP_ID, label: 'Coastal Homes', listingCount: 6 },
+    { key: 'north', label: 'North Udupi', listingCount: 8 },
   ],
-  hotspots: [],
-  generatedAt: new Date().toISOString(),
 };
 
 vi.mock('@/hooks/useDiscoverAreas', () => ({
@@ -156,8 +161,8 @@ vi.mock('@/hooks/useDiscoverListings', () => ({
 vi.mock('@/hooks/useDiscoverFilteredMarkers', () => ({
   useDiscoverFilteredMarkers: vi.fn(() => ({ data: undefined, isLoading: false, isFetching: false })),
 }));
-vi.mock('@/hooks/useDiscoverSummary', () => ({
-  useDiscoverSummary: vi.fn(() => ({ data: SUMMARY_RESPONSE, isLoading: false, isError: false })),
+vi.mock('@/hooks/useDiscoverRegionSummary', () => ({
+  useDiscoverRegionSummary: vi.fn(() => ({ data: REGION_SUMMARY_RESPONSE, isLoading: false, isError: false })),
 }));
 vi.mock('@/hooks/useTrendsOptions', () => ({
   useTrendsOptions: vi.fn(() => ({ data: undefined })),

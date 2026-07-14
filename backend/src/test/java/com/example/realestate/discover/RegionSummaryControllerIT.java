@@ -116,7 +116,7 @@ class RegionSummaryControllerIT {
         resolveNonUnifiedGroups(bangaloreCityId);
         onboardingService.apply(bangaloreCityId);
 
-        RegionSummaryResponse response = controller.getRegions("bangalore");
+        RegionSummaryResponse response = controller.getRegions("bangalore", null);
 
         assertThat(response.citySlug()).isEqualTo("bangalore");
         assertThat(response.cityId()).isEqualTo(bangaloreCityId);
@@ -145,7 +145,7 @@ class RegionSummaryControllerIT {
                 "SELECT region_key FROM city_region_memberships WHERE city_id = ? AND area_key = ?",
                 String.class, udupiCityId, MANIPAL);
 
-        RegionSummaryResponse response = controller.getRegions("udupi");
+        RegionSummaryResponse response = controller.getRegions("udupi", null);
         RegionSummaryResponse.Region region = response.regions().stream()
                 .filter(r -> manipalRegion.equals(r.key()))
                 .findFirst()
@@ -158,7 +158,7 @@ class RegionSummaryControllerIT {
     @Test
     @DisplayName("unknown citySlug returns 200-shaped empty response, not a 404/exception")
     void unknownCitySlugReturns200EmptyNot404() {
-        RegionSummaryResponse response = controller.getRegions("nowhere-city");
+        RegionSummaryResponse response = controller.getRegions("nowhere-city", null);
 
         assertThat(response.cityId()).isNull();
         assertThat(response.citySlug()).isEqualTo("nowhere-city");
@@ -172,7 +172,7 @@ class RegionSummaryControllerIT {
         onboardingService.apply(bangaloreCityId);
         // No property_listings inserted at all — every region must still be present.
 
-        RegionSummaryResponse response = controller.getRegions("bangalore");
+        RegionSummaryResponse response = controller.getRegions("bangalore", null);
 
         assertThat(response.regions()).isNotEmpty();
         assertThat(response.regions()).allSatisfy(r -> assertThat(r.listingCount()).isEqualTo(0L));
@@ -188,7 +188,7 @@ class RegionSummaryControllerIT {
         onboardingService.apply(udupiCityId);
         insertLiveListing(MANIPAL);
 
-        RegionSummaryResponse before = controller.getRegions("udupi");
+        RegionSummaryResponse before = controller.getRegions("udupi", null);
         long totalAreasBefore = before.regions().stream().mapToLong(RegionSummaryResponse.Region::areaCount).sum();
         long totalListingsBefore = before.regions().stream().mapToLong(RegionSummaryResponse.Region::listingCount).sum();
 
@@ -196,7 +196,7 @@ class RegionSummaryControllerIT {
         // the result. It must not, because the read serves from city_region_memberships.
         jdbcTemplate.update("DELETE FROM regional_area_classifications WHERE city_key = 'udupi'");
 
-        RegionSummaryResponse after = controller.getRegions("udupi");
+        RegionSummaryResponse after = controller.getRegions("udupi", null);
         long totalAreasAfter = after.regions().stream().mapToLong(RegionSummaryResponse.Region::areaCount).sum();
         long totalListingsAfter = after.regions().stream().mapToLong(RegionSummaryResponse.Region::listingCount).sum();
 
@@ -214,7 +214,7 @@ class RegionSummaryControllerIT {
         resolveNonUnifiedGroups(udupiCityId);
         onboardingService.apply(udupiCityId);
 
-        RegionSummaryResponse response = controller.getRegions("udupi");
+        RegionSummaryResponse response = controller.getRegions("udupi", null);
         assertThat(response.regions()).isNotEmpty();
         assertThat(response.regions()).allSatisfy(r -> {
             assertThat(r.boundsStatus()).as("region %s", r.key()).isEqualTo("COMPLETE");
@@ -263,7 +263,7 @@ class RegionSummaryControllerIT {
                 "SELECT region_key FROM city_region_memberships WHERE city_id = ? AND area_key = ?",
                 String.class, udupiCityId, MANIPAL);
 
-        RegionSummaryResponse response = controller.getRegions("udupi");
+        RegionSummaryResponse response = controller.getRegions("udupi", null);
         RegionSummaryResponse.Region region = response.regions().stream()
                 .filter(r -> manipalRegion.equals(r.key()))
                 .findFirst()
@@ -321,7 +321,7 @@ class RegionSummaryControllerIT {
         jdbcTemplate.update("DELETE FROM city_regions WHERE city_id = ?", udupiCityId);
         onboardingService.apply(udupiCityId);
 
-        RegionSummaryResponse response = controller.getRegions("udupi");
+        RegionSummaryResponse response = controller.getRegions("udupi", null);
         RegionSummaryResponse.Region region = response.regions().stream()
                 .filter(r -> populousRegionKey.equals(r.key()))
                 .findFirst()
@@ -359,7 +359,7 @@ class RegionSummaryControllerIT {
                         + "VALUES (?, 'CENTRAL', 'Central Udupi', 0, NULL, NULL, NULL, NULL, NULL, NULL, 'qa-fingerprint', now())",
                 udupiCityId);
 
-        RegionSummaryResponse response = controller.getRegions("udupi");
+        RegionSummaryResponse response = controller.getRegions("udupi", null);
         RegionSummaryResponse.Region centralRegion = response.regions().stream()
                 .filter(r -> "CENTRAL".equals(r.key()))
                 .findFirst()

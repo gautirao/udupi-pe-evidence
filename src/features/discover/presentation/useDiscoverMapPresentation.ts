@@ -11,7 +11,7 @@ import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { type DiscoverMapCrumb } from '@/components/discover/DiscoverMapBreadcrumb';
 import { prettifyZoneSlug, areaKeyToLabel } from '@/components/discover/SchoolRadiusMapOverlay';
-import { matchesMacroRegion, labelToSlug } from '@/utils/macroRegionResolver';
+import { labelToSlug } from '@/utils/macroRegionResolver';
 import { computeGroupBounds } from '@/utils/discoverGroupBounds';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 
@@ -99,7 +99,7 @@ export function useDiscoverMapPresentation({
             g.id === activeScope ||
             g.name.toLowerCase() === activeScope.toLowerCase() ||
             labelToSlug(g.name) === activeScope ||
-            matchesMacroRegion(g.region_label, activeScope, summaryRegions)
+            g.region_key === activeScope
         );
         if (targetGroups.length === 0) return [];
 
@@ -165,8 +165,7 @@ export function useDiscoverMapPresentation({
             (g) =>
               g.id === region.regionKey ||
               g.name.toLowerCase() === region.regionLabel.toLowerCase() ||
-              matchesMacroRegion(g.region_label, region.regionKey, summaryRegions) ||
-              matchesMacroRegion(g.region_label, region.regionLabel, summaryRegions)
+              g.region_key === region.regionKey
           );
 
           const groupAreaKeys = matchingGroups.flatMap((g) => g.area_keys ?? []);
@@ -229,7 +228,7 @@ export function useDiscoverMapPresentation({
             listingCount: region.listingCount,
             schoolCount: undefined,
             isMacroRegion: true,
-            isSelected: urlState.scope === region.regionKey || labelToSlug(region.regionLabel) === urlState.scope,
+            isSelected: region.regionKey === urlState.scope,
           };
         })
         .filter((a): a is AreaPoint => a !== null);

@@ -70,6 +70,7 @@ class AreaGroupsControllerTest {
         AreaGroupResponse group = new AreaGroupResponse(
                 "tech-corridor", "Tech Corridor", "IT hubs", "East Bangalore", 1,
                 List.of("IN|KA|Bengaluru|Whitefield", "IN|KA|Bengaluru|Marathahalli"),
+                null,
                 12.9645, 77.7000, 12.9000, 77.6200, 13.0000, 77.7800, null
         );
         when(areaGroupsService.getGroupsByCity("bangalore"))
@@ -111,6 +112,7 @@ class AreaGroupsControllerTest {
         AreaGroupResponse group = new AreaGroupResponse(
                 "city-centre", "City Centre", null, null, 3,
                 List.of("IN|KA|Udupi|Udupi"),
+                null,
                 null, null, null, null, null, null, null
         );
         when(areaGroupsService.getGroupsByCity("udupi"))
@@ -137,7 +139,7 @@ class AreaGroupsControllerTest {
         );
         AreaGroupResponse group = new AreaGroupResponse(
                 "city-centre", "City Centre", "Core urban", "Central Udupi", 3,
-                orderedKeys, 13.3409, 74.7421, null, null, null, null, null
+                orderedKeys, null, 13.3409, 74.7421, null, null, null, null, null
         );
         when(areaGroupsService.getGroupsByCity("udupi"))
                 .thenReturn(new AreaGroupsResponse("udupi", List.of(group)));
@@ -155,11 +157,11 @@ class AreaGroupsControllerTest {
     void getAreaGroups_multipleGroups_displayOrderPreserved() throws Exception {
         AreaGroupResponse g1 = new AreaGroupResponse(
                 "university-belt", "University Belt", null, null, 1,
-                List.of("IN|KA|Udupi|Manipal"), null, null, null, null, null, null, null
+                List.of("IN|KA|Udupi|Manipal"), null, null, null, null, null, null, null, null
         );
         AreaGroupResponse g2 = new AreaGroupResponse(
                 "coastal-strip", "Coastal Strip", null, null, 2,
-                List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null
+                List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null
         );
         when(areaGroupsService.getGroupsByCity("udupi"))
                 .thenReturn(new AreaGroupsResponse("udupi", List.of(g1, g2)));

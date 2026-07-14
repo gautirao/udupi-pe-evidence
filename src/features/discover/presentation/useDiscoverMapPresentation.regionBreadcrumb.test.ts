@@ -210,6 +210,9 @@ describe('useDiscoverMapPresentation — isRegionOverview', () => {
 });
 
 describe('useDiscoverMapPresentation — regionOverviewMarkerKind', () => {
+  // Issue #1882 (Track A PR2 Slice S2c) — region-scope matching now compares
+  // the backend-derived region_key with strict equality (not a region_label/
+  // direction heuristic), so this fixture carries region_key explicitly.
   const group: AreaGroup = {
     id: 'group-1',
     name: 'Zone A',
@@ -217,6 +220,7 @@ describe('useDiscoverMapPresentation — regionOverviewMarkerKind', () => {
     region_label: 'North Udupi',
     school_count: 0,
     area_keys: ['area-1'],
+    region_key: 'north-udupi',
   };
 
   it("is 'zones' when region-overview + region-zone-areas layer + overviewAreas has an isGroup item", () => {

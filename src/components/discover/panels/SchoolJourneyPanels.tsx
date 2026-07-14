@@ -13,7 +13,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PanelHeader } from '../PanelHeader';
 import { SchoolJourneyHero } from './SchoolJourneyHero';
-import { matchesMacroRegion, getGroupMacroRegionLabel, type SummaryRegionRef } from '@/utils/macroRegionResolver';
+import { getGroupMacroRegionLabel, type SummaryRegionRef } from '@/utils/macroRegionResolver';
 import { PropertyCard } from '../PropertyCard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -716,12 +716,13 @@ export function SchoolBrowsePanel({
     [discoverAreas],
   );
 
+  // Issue #1882 (Track A PR2 Slice S2c) — region-scope filtering now compares
+  // the group's backend-derived region_key against scope with strict
+  // equality. REPLACES matchesMacroRegion (label/direction heuristic).
   const scopedGroups = React.useMemo(() => {
     if (!scope) return areaGroups;
-    return areaGroups.filter((g) =>
-      matchesMacroRegion(g.region_label, scope, summaryRegions),
-    );
-  }, [areaGroups, scope, summaryRegions]);
+    return areaGroups.filter((g) => g.region_key === scope);
+  }, [areaGroups, scope]);
 
   const activeScopeLabel = React.useMemo(() => {
     if (!scope) return null;
@@ -794,15 +795,15 @@ export function SchoolBrowsePanel({
     : city.charAt(0).toUpperCase() + city.slice(1);
 
   // Total school count across visible (scoped or unscoped) zones for the intro card stat.
+  // Issue #1882 (Slice S2c) — reuses scopedGroups (region_key equality) rather
+  // than re-deriving via the deleted matchesMacroRegion.
   const totalSchoolCount = React.useMemo(() => {
-    const groups = scope
-      ? areaGroups.filter((g) => matchesMacroRegion(g.region_label, scope, summaryRegions))
-      : areaGroups;
+    const groups = scope ? scopedGroups : areaGroups;
     return groups.reduce((sum, g) => {
       const memberAreas = discoverAreas.filter((a) => g.area_keys.includes(a.areaKey));
       return sum + memberAreas.reduce((s, a) => s + a.schoolCount, 0);
     }, 0);
-  }, [areaGroups, discoverAreas, scope, summaryRegions]);
+  }, [areaGroups, discoverAreas, scope, scopedGroups]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

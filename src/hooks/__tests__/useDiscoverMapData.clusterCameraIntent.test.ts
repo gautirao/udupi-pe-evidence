@@ -15,7 +15,7 @@
  * regression test) — publishClusterCameraIntent always produces
  * framing='overview', so those tests apply unchanged (T18).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
@@ -145,5 +145,90 @@ describe('useDiscoverMapData — publishClusterCameraIntent (Issue #1806 FIX-4, 
     const second = result.current.cameraIntent?.seq as number;
 
     expect(second).toBeGreaterThan(first);
+  });
+});
+
+// ─── Camera-padding rework — real producer path derives viewport width itself ──
+//
+// Issue #1882 camera-padding rework (PR #1894 held): the ORIGINAL S4 cut
+// declared an optional viewportWidthPx PARAMETER on publishCameraIntent/
+// publishClusterCameraIntent, but the real consumer-boundary prop type
+// (DiscoverMapCanvas.tsx's publishCameraIntent: (area: AreaPoint) => void)
+// strips it — every real browser click called computeCameraPadding(undefined),
+// always selecting desktop padding regardless of device. These tests exercise
+// the REAL producer signature (no manually-supplied width argument — it no
+// longer exists) with window.innerWidth set directly, proving the fix reads
+// the actual viewport at call time.
+describe('useDiscoverMapData — responsive camera padding derives window.innerWidth internally (camera-padding rework)', () => {
+  const ORIGINAL_INNER_WIDTH = window.innerWidth;
+
+  afterEach(() => {
+    // MUST restore — window.innerWidth is a shared jsdom global; leaking a
+    // stubbed value would silently break unrelated tests run later in the
+    // same file/process (test-order pollution).
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: ORIGINAL_INNER_WIDTH,
+    });
+  });
+
+  function setViewportWidth(width: number) {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: width });
+  }
+
+  it('publishCameraIntent on a mobile viewport (< 1024px) emits padding [40, 40] — real signature, no manual width arg', () => {
+    setViewportWidth(390);
+    const { result } = renderHook(() => useDiscoverMapData(BASE_PARAMS), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.publishCameraIntent(AREA);
+    });
+
+    expect(result.current.cameraIntent?.padding).toEqual([40, 40]);
+  });
+
+  it('publishCameraIntent on a desktop viewport (>= 1024px) emits padding [120, 40] (Leaflet-native [horizontal, vertical]) — real signature, no manual width arg', () => {
+    setViewportWidth(1440);
+    const { result } = renderHook(() => useDiscoverMapData(BASE_PARAMS), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.publishCameraIntent(AREA);
+    });
+
+    expect(result.current.cameraIntent?.padding).toEqual([120, 40]);
+  });
+
+  it('publishClusterCameraIntent on a mobile viewport emits padding [40, 40] — real signature, no manual width arg', () => {
+    setViewportWidth(390);
+    const { result } = renderHook(() => useDiscoverMapData(BASE_PARAMS), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.publishClusterCameraIntent([[13.0, 77.5], [13.1, 77.7]], [13.05, 77.6]);
+    });
+
+    expect(result.current.cameraIntent?.padding).toEqual([40, 40]);
+  });
+
+  it('publishClusterCameraIntent on a desktop viewport emits padding [120, 40] — real signature, no manual width arg', () => {
+    setViewportWidth(1440);
+    const { result } = renderHook(() => useDiscoverMapData(BASE_PARAMS), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.publishClusterCameraIntent([[13.0, 77.5], [13.1, 77.7]], [13.05, 77.6]);
+    });
+
+    expect(result.current.cameraIntent?.padding).toEqual([120, 40]);
+  });
+
+  it('a viewport exactly at the 1024px breakpoint is treated as desktop (matches the app\'s existing Tailwind lg: cutoff, which is inclusive)', () => {
+    setViewportWidth(1024);
+    const { result } = renderHook(() => useDiscoverMapData(BASE_PARAMS), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.publishCameraIntent(AREA);
+    });
+
+    expect(result.current.cameraIntent?.padding).toEqual([120, 40]);
   });
 });

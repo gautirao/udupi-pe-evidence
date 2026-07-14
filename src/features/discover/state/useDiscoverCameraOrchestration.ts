@@ -8,7 +8,7 @@ import type { DiscoverSummaryRegion } from '@/hooks/useDiscoverSummary';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { computeGroupBounds } from '@/utils/discoverGroupBounds';
 import { getSectorBounds } from '@/lib/geo';
-import { matchesMacroRegion, labelToSlug } from '@/utils/macroRegionResolver';
+import { labelToSlug } from '@/utils/macroRegionResolver';
 
 /**
  * Issue #1824 Slice S7 — camera panner/tick orchestration (R9) extracted
@@ -262,12 +262,15 @@ export function useDiscoverCameraOrchestration({
     if (!scopeChanged) return;
 
     const groups = areaGroupsData?.groups ?? [];
+    // Issue #1882 (Track A PR2 Slice S2c) — region-scope match now compares
+    // the group's backend-derived region_key against scope with strict
+    // equality. REPLACES matchesMacroRegion (label/direction heuristic).
     const targetGroups = groups.filter(
       (g) =>
         g.id === urlState.scope ||
         g.name.toLowerCase() === urlState.scope?.toLowerCase() ||
         labelToSlug(g.name) === urlState.scope ||
-        matchesMacroRegion(g.region_label, urlState.scope, summaryRegions)
+        g.region_key === urlState.scope
     );
 
     let memberAreas: typeof discoverAreas = [];

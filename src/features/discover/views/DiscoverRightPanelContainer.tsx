@@ -3,7 +3,6 @@ import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { CITY_CONFIG } from '@/lib/localityUtils';
-import { resolveScopeKeyFromLabel } from '@/utils/macroRegionResolver';
 import type { SummaryRegionRef } from '@/utils/macroRegionResolver';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
@@ -253,7 +252,12 @@ export function DiscoverRightPanelContainer({
       onRegionSelectFromPanel={() => armRegionSelect('panel')}
       summaryRegions={summaryRegions}
       onBackToRegion={(regionLabel) => {
-        const targetScope = resolveScopeKeyFromLabel(regionLabel, summaryRegions);
+        // Issue #1882 (Track A PR2 Slice S2c) — resolve the target scope key
+        // via an exact label lookup against the backend region-summary list
+        // (REPLACES resolveScopeKeyFromLabel's slug/direction-prefix
+        // heuristics). Only a label is available at this call site; when no
+        // region matches, no scope change is made.
+        const targetScope = summaryRegions.find((r) => r.regionLabel === regionLabel)?.regionKey ?? null;
         if (targetScope) {
           urlActions.setScope(targetScope);
         }

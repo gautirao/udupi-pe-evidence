@@ -28,23 +28,31 @@ vi.mock('@/hooks/useDiscoverUrlState', () => ({
   useDiscoverUrlState: () => mockUseDiscoverUrlState(),
 }));
 
-vi.mock('@/hooks/useDiscoverSummary', () => ({
-  useDiscoverSummary: () => ({
-    data: {
-      regions: [
-        { regionKey: 'north', regionLabel: 'North Bangalore', listingCount: 12 },
-        { regionKey: 'south', regionLabel: 'South Bangalore', listingCount: 8 },
-      ],
-      totalActiveListings: 20,
-    },
-    isLoading: false,
-    isError: false,
-  }),
+// ADVISORY-1 rework — hoisted spy so tests can assert the (city, listingPurpose)
+// args GuidedEntryPanel calls the hook with, and vary the mocked response per
+// purpose to prove region cards display the purpose-filtered count.
+const mockUseDiscoverRegionSummary = vi.hoisted(() => vi.fn());
+
+vi.mock('@/hooks/useDiscoverRegionSummary', () => ({
+  useDiscoverRegionSummary: (...args: unknown[]) => mockUseDiscoverRegionSummary(...args),
 }));
 
-vi.mock('@/hooks/useAreaGroups', () => ({
-  useAreaGroups: () => ({ data: { groups: [] }, isLoading: false }),
-}));
+const SALE_REGIONS = {
+  cityId: 1,
+  citySlug: 'bangalore',
+  regions: [
+    { key: 'north', label: 'North Bangalore', listingCount: 12 },
+    { key: 'south', label: 'South Bangalore', listingCount: 8 },
+  ],
+};
+const RENT_REGIONS = {
+  cityId: 1,
+  citySlug: 'bangalore',
+  regions: [
+    { key: 'north', label: 'North Bangalore', listingCount: 5 },
+    { key: 'south', label: 'South Bangalore', listingCount: 3 },
+  ],
+};
 
 function makeQueryClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -76,6 +84,12 @@ describe('GuidedEntryPanel — Issue #1808 region-overview guidance', () => {
       { scope: null },
       { setScope: mockSetScope },
     ]);
+    mockUseDiscoverRegionSummary.mockReset();
+    mockUseDiscoverRegionSummary.mockReturnValue({
+      data: SALE_REGIONS,
+      isLoading: false,
+      isError: false,
+    });
   });
 
   it('decision q2 — the ring target is the EXISTING JourneySwitcher section; no new journey-choice row/component exists', () => {
@@ -169,5 +183,40 @@ describe('GuidedEntryPanel — Issue #1808 region-overview guidance', () => {
     const regionButton = screen.getByRole('button', { name: /North Bangalore/i });
     await user.click(regionButton);
     expect(document.activeElement).toBe(regionButton);
+  });
+});
+
+// ─── ADVISORY-1 rework — buy/rent purpose scoping ──────────────────────────
+describe('GuidedEntryPanel — purpose-scoped region counts (ADVISORY-1)', () => {
+  beforeEach(() => {
+    mockUseDiscoverUrlState.mockReturnValue([{ scope: null }, { setScope: mockSetScope }]);
+    mockUseDiscoverRegionSummary.mockReset();
+  });
+
+  it('reuses the existing intent→listingPurpose mapping — intent="buy" calls the hook with listingPurpose="sale"', () => {
+    mockUseDiscoverRegionSummary.mockReturnValue({ data: SALE_REGIONS, isLoading: false, isError: false });
+    renderPanel({ intent: 'buy' });
+    expect(mockUseDiscoverRegionSummary).toHaveBeenCalledWith('bangalore', 'sale');
+  });
+
+  it('intent="rent" calls the hook with listingPurpose="rent"', () => {
+    mockUseDiscoverRegionSummary.mockReturnValue({ data: RENT_REGIONS, isLoading: false, isError: false });
+    renderPanel({ intent: 'rent' });
+    expect(mockUseDiscoverRegionSummary).toHaveBeenCalledWith('bangalore', 'rent');
+  });
+
+  it('region cards display the selected-purpose count (sale)', () => {
+    mockUseDiscoverRegionSummary.mockReturnValue({ data: SALE_REGIONS, isLoading: false, isError: false });
+    renderPanel({ intent: 'buy' });
+    expect(screen.getByText('12')).toBeInTheDocument();
+    expect(screen.getByText('8')).toBeInTheDocument();
+  });
+
+  it('region cards display the selected-purpose count (rent) — a different total than sale, proving purpose scoping is applied', () => {
+    mockUseDiscoverRegionSummary.mockReturnValue({ data: RENT_REGIONS, isLoading: false, isError: false });
+    renderPanel({ intent: 'rent' });
+    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.queryByText('12')).not.toBeInTheDocument();
   });
 });

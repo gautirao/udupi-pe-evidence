@@ -3,7 +3,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { AREA_LAYER_MAX_ZOOM, clusterCanSplit, hasSpatialSpread } from '../areaClusterSplit';
+import { clusterCanSplit, hasSpatialSpread } from '../areaClusterSplit';
+import { AREA_LAYER_MAX_ZOOM } from '../zoomPolicy';
 
 describe('hasSpatialSpread', () => {
   it('identical southWest/northEast → false (coincident member centres)', () => {
@@ -34,14 +35,17 @@ describe('clusterCanSplit', () => {
   });
 });
 
-// Issue #1806 R2/DIRECTIVE 2 — drift guard. The predicate's zoom cap,
-// MapController's 'overview' branch maxZoom (PropertyMap.tsx, literal
-// `maxZoom: 12` passed to map.fitBounds), and MapDiscovery.tsx's private
-// AREA_LAYER_MAX_ZOOM (=12) must all agree. If they ever diverge, a cluster
-// click can drill the camera past the area-marker degradation layer and
-// reproduce the "empty map after clicking +N areas" bug even after this fix.
+// Issue #1806 R2/DIRECTIVE 2 — drift guard, re-anchored to the canonical
+// src/lib/map/zoomPolicy.ts source (Issue #1882 Track A PR2 Slice S1).
+// MapController's 'overview' branch (PropertyMap.tsx) and MapDiscovery.tsx
+// now both import AREA_LAYER_MAX_ZOOM from zoomPolicy directly instead of
+// each keeping a private copy, so this guard's job is now to pin the shared
+// value itself: if it ever changes without an explicit, deliberate update
+// here, a cluster click could drill the camera past the area-marker
+// degradation layer and reproduce the "empty map after clicking +N areas"
+// bug (#1806) even after this fix.
 describe('AREA_LAYER_MAX_ZOOM drift guard', () => {
-  it('equals 12 — the same maxZoom MapController.overview and MapDiscovery.AREA_LAYER_MAX_ZOOM use', () => {
+  it('equals 12 — the same value MapController.overview and MapDiscovery import from zoomPolicy', () => {
     expect(AREA_LAYER_MAX_ZOOM).toBe(12);
   });
 });

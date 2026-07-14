@@ -19,6 +19,7 @@ describe('normalizeAreaGroupResponse', () => {
           minLon: 74.5,
           maxLat: 13.5,
           maxLon: 75.0,
+          regionKey: 'coastal',
         },
       ],
     };
@@ -37,7 +38,55 @@ describe('normalizeAreaGroupResponse', () => {
       focus_lat: 13.35,
       focus_lon: 74.79,
       description: null,
+      region_key: 'coastal',
+      min_lat: 13.0,
+      min_lon: 74.5,
+      max_lat: 13.5,
+      max_lon: 75.0,
     });
+  });
+
+  it('surfaces regionKey and the group bbox (min/max lat/lon) — Issue #1882 Slice S2b', () => {
+    const backendResponse = {
+      groups: [
+        {
+          slug: 'university-belt',
+          name: 'University Belt',
+          areaKeys: ['a1'],
+          minLat: 13.34,
+          minLon: 74.74,
+          maxLat: 13.36,
+          maxLon: 74.76,
+          regionKey: 'central',
+        },
+      ],
+    };
+
+    const result = normalizeAreaGroupResponse(backendResponse);
+    expect(result.groups[0].region_key).toBe('central');
+    expect(result.groups[0].min_lat).toBe(13.34);
+    expect(result.groups[0].min_lon).toBe(74.74);
+    expect(result.groups[0].max_lat).toBe(13.36);
+    expect(result.groups[0].max_lon).toBe(74.76);
+  });
+
+  it('defaults region_key and bbox fields to null when the backend omits them (degenerate/unclassified group)', () => {
+    const backendResponse = {
+      groups: [
+        {
+          slug: 'unclassified',
+          name: 'Unclassified Group',
+          areaKeys: [],
+        },
+      ],
+    };
+
+    const result = normalizeAreaGroupResponse(backendResponse);
+    expect(result.groups[0].region_key).toBeNull();
+    expect(result.groups[0].min_lat).toBeNull();
+    expect(result.groups[0].min_lon).toBeNull();
+    expect(result.groups[0].max_lat).toBeNull();
+    expect(result.groups[0].max_lon).toBeNull();
   });
 
   it('handles null/missing subtitle and regionLabel', () => {
@@ -65,6 +114,11 @@ describe('normalizeAreaGroupResponse', () => {
       focus_lat: null,
       focus_lon: null,
       description: null,
+      region_key: null,
+      min_lat: null,
+      min_lon: null,
+      max_lat: null,
+      max_lon: null,
     });
   });
 
@@ -235,6 +289,11 @@ describe('normalizeAreaGroupResponse', () => {
       focus_lat: null,
       focus_lon: null,
       description: null,
+      region_key: null,
+      min_lat: null,
+      min_lon: null,
+      max_lat: null,
+      max_lon: null,
     });
 
     expect(result.groups[1]).toEqual({
@@ -247,6 +306,11 @@ describe('normalizeAreaGroupResponse', () => {
       focus_lat: null,
       focus_lon: null,
       description: null,
+      region_key: null,
+      min_lat: null,
+      min_lon: null,
+      max_lat: null,
+      max_lon: null,
     });
 
     expect(result.groups[2]).toEqual({
@@ -259,6 +323,11 @@ describe('normalizeAreaGroupResponse', () => {
       focus_lat: null,
       focus_lon: null,
       description: null,
+      region_key: null,
+      min_lat: null,
+      min_lon: null,
+      max_lat: null,
+      max_lon: null,
     });
   });
 

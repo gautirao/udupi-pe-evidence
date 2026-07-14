@@ -104,14 +104,14 @@ const AREAS_RESPONSE = {
   ],
 };
 
-const SUMMARY_RESPONSE = {
-  city: 'udupi',
-  propertyType: null,
-  groupBy: 'area_group',
-  totalActiveListings: 6,
-  regions: [{ regionKey: COASTAL_GROUP_ID, regionLabel: 'Coastal Homes', listingCount: 6 }],
-  hotspots: [],
-  generatedAt: new Date().toISOString(),
+// Issue #1882 (Track A PR2 Slice S2c) — MapDiscovery.tsx now sources
+// summaryRegions from useDiscoverRegionSummary (GET
+// /api/discover/cities/{citySlug}/regions), REPLACING the client-side
+// aggregateMacroRegions derivation over useDiscoverSummary's regions.
+const REGION_SUMMARY_RESPONSE = {
+  cityId: 1,
+  citySlug: 'udupi',
+  regions: [{ key: COASTAL_GROUP_ID, label: 'Coastal Homes', listingCount: 6 }],
 };
 
 vi.mock('@/hooks/useDiscoverAreas', () => ({
@@ -134,8 +134,8 @@ vi.mock('@/hooks/useDiscoverFilteredMarkers', () => ({
   })),
 }));
 
-vi.mock('@/hooks/useDiscoverSummary', () => ({
-  useDiscoverSummary: vi.fn(() => ({ data: SUMMARY_RESPONSE, isLoading: false, isError: false })),
+vi.mock('@/hooks/useDiscoverRegionSummary', () => ({
+  useDiscoverRegionSummary: vi.fn(() => ({ data: REGION_SUMMARY_RESPONSE, isLoading: false, isError: false })),
 }));
 
 vi.mock('@/hooks/useTrendsOptions', () => ({

@@ -167,8 +167,11 @@ describe('AreaGroupsLandingPanel — Level-1 (no valid groupId) group card list'
 
   it('filters groups by scope and shows clear filter banner when scope is provided', () => {
     const onClearScope = vi.fn();
-    const northGroup = makeGroup({ id: 'north-1', name: 'North Belt', region_label: 'North Bangalore' });
-    const southGroup = makeGroup({ id: 'south-1', name: 'South Belt', region_label: 'South Bangalore' });
+    // Issue #1882 (Track A PR2 Slice S2c) — scope filtering now compares the
+    // backend-derived region_key with strict equality (not a region_label/
+    // direction heuristic), so the fixtures carry region_key explicitly.
+    const northGroup = makeGroup({ id: 'north-1', name: 'North Belt', region_label: 'North Bangalore', region_key: 'north' });
+    const southGroup = makeGroup({ id: 'south-1', name: 'South Belt', region_label: 'South Bangalore', region_key: 'south' });
     renderPanel(
       <AreaGroupsLandingPanel
         {...baseProps}

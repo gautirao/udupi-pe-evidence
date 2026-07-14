@@ -10,7 +10,6 @@ import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { DiscoverIntent, DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import {
-  matchesMacroRegion,
   getGroupMacroRegionLabel,
   type SummaryRegionRef,
 } from '@/utils/macroRegionResolver';
@@ -496,10 +495,13 @@ export function AreaGroupsLandingPanel({
   const activeScope = scope ?? null;
   const handleClearScope = onClearScope ?? (() => {});
 
+  // Issue #1882 (Track A PR2 Slice S2c) — region-scope filtering now compares
+  // the group's backend-derived region_key against the active scope with
+  // strict equality. REPLACES matchesMacroRegion (label/direction heuristic).
   const scopedGroups = React.useMemo(() => {
     if (!activeScope) return groups;
-    return groups.filter((g) => matchesMacroRegion(g.region_label, activeScope, summaryRegions));
-  }, [activeScope, groups, summaryRegions]);
+    return groups.filter((g) => g.region_key === activeScope);
+  }, [activeScope, groups]);
 
   const displayGroups = activeScope ? scopedGroups : groups;
 

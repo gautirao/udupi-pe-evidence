@@ -13,21 +13,12 @@
 /**
  * Maximum zoom at which the area-overview marker layer remains visible.
  *
- * Mirrors the canonical `AREA_LAYER_MAX_ZOOM` private constant in
- * src/pages/MapDiscovery.tsx (~line 76, =12) and the LITERAL `maxZoom: 12`
- * that MapController's 'overview' branch passes to map.fitBounds
- * (src/components/map/PropertyMap.tsx, MapController's cameraIntent effect).
- *
- * These three copies cannot share a single import without a circular module
- * dependency (MapDiscovery → PropertyMap → AreaMarkerLayer → this file), so —
- * mirroring the existing AREA_PANNER_GROUP_MAX_ZOOM precedent in
- * PropertyMap.tsx — they are kept in sync by a drift-guard test instead
- * (areaClusterSplit.test.ts). If this value ever diverges from either of the
- * other two, a cluster click can drill the camera past the area-marker
- * degradation layer and reproduce the "empty map after clicking +N areas"
- * bug (#1806) even after this fix.
+ * Issue #1882 (Track A PR2 Slice S1) — re-exported here (rather than
+ * duplicated) from the canonical `src/lib/map/zoomPolicy.ts`, which is now
+ * the SOLE Discover area/cluster/marker zoom-band source. Consumers of this
+ * module continue to import `AREA_LAYER_MAX_ZOOM` from here unchanged.
  */
-export const AREA_LAYER_MAX_ZOOM = 12;
+export { AREA_LAYER_MAX_ZOOM } from './zoomPolicy';
 
 /**
  * True when a cluster's union bounds cover more than a single point — i.e.

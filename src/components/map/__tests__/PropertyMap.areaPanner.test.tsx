@@ -156,23 +156,18 @@ describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
 });
 
 // ─── Drift-guard ───────────────────────────────────────────────
-// AREA_LAYER_MAX_ZOOM (canonical) is defined in MapDiscovery.tsx but is not
-// exported (importing it from PropertyMap would close an import cycle).
-// We re-read the source file and assert the two constants stay in sync.
-import fs from 'node:fs';
-import path from 'node:path';
+// Issue #1882 (Track A PR2 Slice S1) — re-anchored to the canonical
+// src/lib/map/zoomPolicy.ts source. MapDiscovery.tsx no longer declares a
+// private AREA_LAYER_MAX_ZOOM const (it now imports the shared constant), so
+// the previous regex-scan-of-MapDiscovery's-source mechanism can no longer
+// find a match. Importing the canonical constant directly is strictly
+// stronger (a real reference, not a textual heuristic) and does not weaken
+// the guard: AREA_PANNER_GROUP_MAX_ZOOM must still equal the shared value.
+import { AREA_LAYER_MAX_ZOOM } from '@/lib/map/zoomPolicy';
 
 describe('Issue #1069 drift-guard — AREA_PANNER_GROUP_MAX_ZOOM matches AREA_LAYER_MAX_ZOOM', () => {
-  it('PropertyMap clamp constant matches MapDiscovery threshold', () => {
-    const mapDiscoveryPath = path.resolve(
-      __dirname,
-      '../../../pages/MapDiscovery.tsx',
-    );
-    const src = fs.readFileSync(mapDiscoveryPath, 'utf-8');
-    const match = src.match(/const\s+AREA_LAYER_MAX_ZOOM\s*=\s*(\d+)\s*;/);
-    expect(match, 'AREA_LAYER_MAX_ZOOM declaration not found in MapDiscovery.tsx').not.toBeNull();
-    const canonical = Number(match![1]);
-    expect(canonical).toBe(AREA_PANNER_GROUP_MAX_ZOOM);
+  it('PropertyMap clamp constant matches the canonical zoomPolicy threshold', () => {
+    expect(AREA_LAYER_MAX_ZOOM).toBe(AREA_PANNER_GROUP_MAX_ZOOM);
   });
 });
 

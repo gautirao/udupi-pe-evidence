@@ -19,21 +19,24 @@ import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { GROUP_BOUNDS_SYNTHETIC_KEY } from '@/utils/discoverGroupBounds';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 import { SectorOverlay } from '@/components/map/SectorOverlay';
+import { AREA_LAYER_MAX_ZOOM } from '@/lib/map/zoomPolicy';
 
 /**
  * Maximum zoom at which the area-overview marker layer remains visible.
  *
- * Mirrors the canonical `AREA_LAYER_MAX_ZOOM` in `src/pages/MapDiscovery.tsx`
- * (importing from MapDiscovery would create a circular module dependency,
- * since MapDiscovery imports PropertyMap). A drift-guard test in
- * `PropertyMap.areaPanner.test.tsx` asserts both constants stay in sync.
+ * Issue #1882 (Track A PR2 Slice S1) — re-exported here (rather than
+ * duplicated) from the canonical `src/lib/map/zoomPolicy.ts`, which is now
+ * the SOLE Discover area/cluster/marker zoom-band source. Consumers of this
+ * name (AreaPanner below, and the drift-guard test in
+ * `PropertyMap.areaPanner.test.tsx`) continue to import it from here
+ * unchanged.
  *
  * Used by AreaPanner: when fitBounds receives a synthetic group-bounds
  * AreaPoint (areaKey === GROUP_BOUNDS_SYNTHETIC_KEY), clamping maxZoom to
  * this value keeps narrow groups (e.g. University Belt) within the zoom
  * band where the area-overview markers are still rendered (issue #1069).
  */
-export const AREA_PANNER_GROUP_MAX_ZOOM = 12;
+export const AREA_PANNER_GROUP_MAX_ZOOM = AREA_LAYER_MAX_ZOOM;
 
 /**
  * Max zoom for SchoolMarkerFocusPanner fitBounds (issue #1240).
@@ -1096,13 +1099,23 @@ function MapController({
       suppressArmedAtRef.current = Date.now();
     }
 
+    // Issue #1882 (Track A PR2 Slice S4; corrected in the camera-padding
+    // rework) — cameraIntent.padding is optional (responsive fitBounds
+    // padding — see computeCameraPadding in useDiscoverMapData.ts), a
+    // Leaflet-native [horizontalPx, verticalPx] tuple (matches L.point(x, y)
+    // / fitBounds({ padding: [x, y] })). Defaults to the pre-#1882 symmetric
+    // [40, 40] when absent so every pre-existing CameraIntent
+    // producer/literal keeps behaving exactly as before.
+    const [paddingX, paddingY] = cameraIntent.padding ?? [40, 40];
+
     if (cameraIntent.framing === 'overview') {
       // Macro-region / group pin — same framing the removed AreaMarkerLayer
-      // code used to apply: fitBounds capped at zoom 12, or flyTo(center, 12).
+      // code used to apply: fitBounds capped at the area-overview zoom band,
+      // or flyTo(center, AREA_LAYER_MAX_ZOOM).
       if (cameraIntent.bounds) {
-        map.fitBounds(cameraIntent.bounds, { padding: [40, 40], maxZoom: 12 });
+        map.fitBounds(cameraIntent.bounds, { padding: [paddingX, paddingY], maxZoom: AREA_LAYER_MAX_ZOOM });
       } else {
-        map.flyTo(cameraIntent.center, 12);
+        map.flyTo(cameraIntent.center, AREA_LAYER_MAX_ZOOM);
       }
     } else {
       // Real-area ("leaf") pin — land directly in the [13,16] listing-marker
@@ -1110,7 +1123,7 @@ function MapController({
       // correction: instead of fitting then correcting after the animation
       // settles, the target zoom is computed and clamped up-front.
       if (cameraIntent.bounds) {
-        const rawZoom = map.getBoundsZoom(cameraIntent.bounds, false, L.point(40, 40));
+        const rawZoom = map.getBoundsZoom(cameraIntent.bounds, false, L.point(paddingX, paddingY));
         const clampedZoom = Math.min(16, Math.max(13, rawZoom));
         const center = L.latLngBounds(cameraIntent.bounds).getCenter();
         map.setView(center, clampedZoom, { animate: true });

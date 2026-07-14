@@ -575,6 +575,9 @@ describe('DiscoverRightPanel — 4-level residential hierarchy (Issue #1745)', (
         panelContent="area-groups-landing"
         areas={[]}
         areaGroups={[
+          // Issue #1882 (Track A PR2 Slice S2c) — scope filtering now
+          // compares the backend-derived region_key with strict equality,
+          // so these fixtures carry region_key explicitly.
           {
             id: 'north-zone',
             name: 'North Zone',
@@ -584,6 +587,7 @@ describe('DiscoverRightPanel — 4-level residential hierarchy (Issue #1745)', (
             school_count: 0,
             focus_lat: null,
             focus_lon: null,
+            region_key: 'north',
           },
           {
             id: 'south-zone',
@@ -594,6 +598,7 @@ describe('DiscoverRightPanel — 4-level residential hierarchy (Issue #1745)', (
             school_count: 0,
             focus_lat: null,
             focus_lon: null,
+            region_key: 'south',
           },
         ]}
         scope="north"

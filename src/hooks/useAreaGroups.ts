@@ -25,6 +25,25 @@ export interface AreaGroup {
    * discoverGroupContent adapter when this is null/undefined.
    */
   description?: string | null;
+  /**
+   * Issue #1882 (Track A PR2 Slice S2b) — nullable, derived-at-read backend
+   * region-scope key for this group (backend `regionKey`). Null for
+   * degenerate/unclassified groups. This is the canonical region-scope
+   * signal — callers filtering groups by region scope compare this field
+   * with strict equality against a region's `key`, never a label/direction
+   * heuristic (see src/utils/macroRegionResolver.ts).
+   */
+  region_key?: string | null;
+  /**
+   * Group bbox — union of member-area bboxes, already returned by
+   * /api/discover/area-groups (same precedent as focus_lat/focus_lon).
+   * Any of the four may be null when the backend could not derive bounds
+   * for this group.
+   */
+  min_lat?: number | null;
+  min_lon?: number | null;
+  max_lat?: number | null;
+  max_lon?: number | null;
 }
 
 interface AreaGroupsResponse {
@@ -48,6 +67,8 @@ interface AreaGroupDTO {
   minLon?: number | null;
   maxLat?: number | null;
   maxLon?: number | null;
+  /** Issue #1882 (Track A PR2) — nullable derived-at-read region-scope key. */
+  regionKey?: string | null;
 }
 
 interface AreaGroupsDTOResponse {
@@ -85,6 +106,14 @@ export function normalizeAreaGroupResponse(dto: AreaGroupsDTOResponse): AreaGrou
         // Surface the (already-returned) focus point for map-label placement.
         const focusLat = typeof item.focusLat === 'number' ? item.focusLat : null;
         const focusLon = typeof item.focusLon === 'number' ? item.focusLon : null;
+        // Issue #1882 (Slice S2b) — surface the group bbox (union of member-area
+        // bboxes), already returned by the backend but previously dropped here.
+        const minLat = typeof item.minLat === 'number' ? item.minLat : null;
+        const minLon = typeof item.minLon === 'number' ? item.minLon : null;
+        const maxLat = typeof item.maxLat === 'number' ? item.maxLat : null;
+        const maxLon = typeof item.maxLon === 'number' ? item.maxLon : null;
+        // Issue #1882 (Slice S2b) — nullable derived-at-read region-scope key.
+        const regionKey = typeof item.regionKey === 'string' ? item.regionKey : null;
 
         // Require at least name or slug to be present
         if (!name && !slug) {
@@ -104,6 +133,11 @@ export function normalizeAreaGroupResponse(dto: AreaGroupsDTOResponse): AreaGrou
           focus_lat: focusLat,
           focus_lon: focusLon,
           description,
+          region_key: regionKey,
+          min_lat: minLat,
+          min_lon: minLon,
+          max_lat: maxLat,
+          max_lon: maxLon,
         };
       })
       .filter((group): group is AreaGroup => group !== null),
