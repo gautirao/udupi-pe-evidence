@@ -3,24 +3,23 @@ package com.example.realestate.geo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
-import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.web.util.UriComponents;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -136,17 +135,6 @@ class GeocodingServiceTest {
         }
     }
 
-    /**
-     * NOTE: callNominatim() builds its query URI via
-     * {@code UriComponentsBuilder...build(true).toUri()} — the {@code true} (already-encoded)
-     * flag means Spring does NOT encode the unencoded ", Karnataka, India" suffix that
-     * callNominatim always appends to the term, so this line throws
-     * {@code IllegalArgumentException: Invalid character ' ' for QUERY_PARAM} for ANY term,
-     * before ever reaching the try/catch this test targets. This is a pre-existing,
-     * unrelated defect (confirmed via `git diff origin/main` — untouched by this change) and
-     * out of scope for the S2142 fix. UriComponentsBuilder is stubbed here purely to route
-     * around it so this test can isolate the InterruptedException catch block.
-     */
     @Test
     void callNominatim_interrupted_restoresFlagAndReturnsNull() throws Exception {
         HttpClient mockHttpClient = mock(HttpClient.class);
@@ -155,17 +143,8 @@ class GeocodingServiceTest {
                 .thenThrow(new InterruptedException("simulated interrupt"));
         injectHttpClient(mockHttpClient);
 
-        UriComponentsBuilder mockBuilder = mock(UriComponentsBuilder.class, RETURNS_SELF);
-        UriComponents mockComponents = mock(UriComponents.class);
-        when(mockBuilder.build(true)).thenReturn(mockComponents);
-        when(mockComponents.toUri()).thenReturn(URI.create("https://nominatim.openstreetmap.org/search"));
-
-        try (MockedStatic<UriComponentsBuilder> mockedStatic = mockStatic(UriComponentsBuilder.class)) {
-            mockedStatic.when(() -> UriComponentsBuilder.fromHttpUrl(anyString())).thenReturn(mockBuilder);
-
-            var method = GeocodingService.class.getDeclaredMethod("callNominatim", String.class);
-            method.setAccessible(true);
-            double[] result = (double[]) method.invoke(service, "Manipal");
+        try {
+            double[] result = invokeCallNominatim("Manipal");
 
             assertThat(result).isNull();
             assertThat(Thread.currentThread().isInterrupted()).isTrue();
@@ -174,7 +153,270 @@ class GeocodingServiceTest {
         }
     }
 
+    // ===== searchPlaces URI encoding (issue #1892 scope extension) =====
+    //
+    // searchPlaces() had the identical defect as callNominatim(): build(false).toUri() without
+    // .encode() leaves reserved characters like `&` and `=` inside a query param VALUE as
+    // literal, unescaped delimiters. Fixed to build(false).encode().toUri(), and the URI
+    // construction was moved inside the existing try block (matching the corrected
+    // callNominatim pattern) so construction failures are handled by the same general
+    // catch (Exception e) path. Unlike callNominatim, searchPlaces does NOT append a
+    // ", Karnataka, India" suffix — the raw query argument is used as-is for `q`.
+
+    @Test
+    void searchPlaces_termWithAmpersand_doesNotSplitQueryParam() throws Exception {
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        HttpResponse<String> mockResponse = mockOkResponse("[]");
+        when(mockHttpClient.send(any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(mockResponse);
+        injectHttpClient(mockHttpClient);
+
+        List<GeocodingService.PlaceResult> result = service.searchPlaces("A&B Layout", 5);
+
+        assertThat(result).isEmpty(); // empty results array
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(mockHttpClient).send(captor.capture(), ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        URI capturedUri = captor.getValue().uri();
+        String rawQuery = capturedUri.getRawQuery();
+
+        // Proves the `&` inside the value was actually percent-escaped, not left as a raw
+        // delimiter.
+        assertThat(rawQuery).contains("%26");
+
+        Map<String, String> params = parseRawQueryParams(rawQuery);
+        assertThat(params).hasSize(7);
+        assertThat(params.keySet()).containsExactlyInAnyOrder(
+                "q", "format", "addressdetails", "limit", "countrycodes", "viewbox", "bounded");
+        assertThat(params.get("q")).isEqualTo("A&B Layout");
+        assertThat(params).doesNotContainKey("B Layout");
+        assertThat(params.keySet()).noneMatch(key -> key.startsWith("B Layout"));
+    }
+
+    @Test
+    void searchPlaces_termWithEquals_doesNotCorruptQueryParam() throws Exception {
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        HttpResponse<String> mockResponse = mockOkResponse("[]");
+        when(mockHttpClient.send(any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(mockResponse);
+        injectHttpClient(mockHttpClient);
+
+        List<GeocodingService.PlaceResult> result = service.searchPlaces("Phase=2 Layout", 5);
+
+        assertThat(result).isEmpty();
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(mockHttpClient).send(captor.capture(), ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        URI capturedUri = captor.getValue().uri();
+        String rawQuery = capturedUri.getRawQuery();
+
+        assertThat(rawQuery).contains("%3D");
+
+        Map<String, String> params = parseRawQueryParams(rawQuery);
+        assertThat(params).hasSize(7);
+        assertThat(params.keySet()).containsExactlyInAnyOrder(
+                "q", "format", "addressdetails", "limit", "countrycodes", "viewbox", "bounded");
+        assertThat(params.get("q")).isEqualTo("Phase=2 Layout");
+    }
+
+    // ===== callNominatim URI encoding (issue #1892) =====
+    //
+    // callNominatim() previously built its query URI via
+    // UriComponentsBuilder...build(true).toUri() — the `true` (already-encoded) flag meant
+    // Spring did NOT encode the raw spaces/commas/ampersands in the search term, throwing
+    // IllegalArgumentException for any real-world term before the HTTP call was ever made.
+    // Fixed to use build(false).encode(), matching the proven searchPlaces() approach.
+    // build(false) alone is NOT sufficient: it leaves reserved characters like `&` and `=`
+    // inside a query param VALUE as literal, unescaped delimiters, which corrupts the query
+    // structure (see callNominatim_termWithAmpersand_doesNotSplitQueryParam and
+    // callNominatim_termWithEquals_doesNotCorruptQueryParam below — both assert on the actual
+    // parsed parameter structure, not just substring containment of a whole-query decode,
+    // since whole-query URLDecoder.decode cannot distinguish "& used as delimiter" from
+    // "%26 decoded back to &"). These tests exercise the real (unmocked) UriComponentsBuilder
+    // to prove the fix.
+
+    @Test
+    void callNominatim_simpleTerm_buildsValidUriAndReachesSend() throws Exception {
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        HttpResponse<String> mockResponse = mockOkResponse("[]");
+        when(mockHttpClient.send(any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(mockResponse);
+        injectHttpClient(mockHttpClient);
+
+        double[] result = invokeCallNominatim("Manipal");
+
+        assertThat(result).isNull(); // empty results array
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(mockHttpClient).send(captor.capture(), ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        URI capturedUri = captor.getValue().uri();
+        assertThat(capturedUri.toString()).doesNotContain(" ");
+        String decodedQuery = java.net.URLDecoder.decode(capturedUri.getRawQuery(), java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(decodedQuery).contains("q=Manipal, Karnataka, India");
+    }
+
+    @Test
+    void callNominatim_termWithPeriodsAndSpaces_buildsValidUriAndReachesSend() throws Exception {
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        HttpResponse<String> mockResponse = mockOkResponse("[]");
+        when(mockHttpClient.send(any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(mockResponse);
+        injectHttpClient(mockHttpClient);
+
+        double[] result = invokeCallNominatim("J. P. Nagar");
+
+        assertThat(result).isNull();
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(mockHttpClient).send(captor.capture(), ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        URI capturedUri = captor.getValue().uri();
+        String decodedQuery = java.net.URLDecoder.decode(capturedUri.getRawQuery(), java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(decodedQuery).contains("q=J. P. Nagar, Karnataka, India");
+    }
+
+    @Test
+    void callNominatim_termWithAmpersand_doesNotSplitQueryParam() throws Exception {
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        HttpResponse<String> mockResponse = mockOkResponse("[]");
+        when(mockHttpClient.send(any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(mockResponse);
+        injectHttpClient(mockHttpClient);
+
+        double[] result = invokeCallNominatim("A&B Layout");
+
+        assertThat(result).isNull();
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(mockHttpClient).send(captor.capture(), ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        URI capturedUri = captor.getValue().uri();
+        String rawQuery = capturedUri.getRawQuery();
+
+        // Proves the `&` inside the value was actually percent-escaped, not left as a raw
+        // delimiter (a whole-query URLDecoder.decode cannot distinguish the two cases).
+        assertThat(rawQuery).contains("%26");
+
+        // Split on the actual, unescaped `&` characters in the raw string — exactly the naive
+        // parsing a real HTTP server / query-string parser would perform — and confirm the
+        // value's `&` did NOT introduce a bogus extra parameter.
+        Map<String, String> params = parseRawQueryParams(rawQuery);
+        assertThat(params).hasSize(4);
+        assertThat(params.keySet()).containsExactlyInAnyOrder("q", "format", "limit", "countrycodes");
+        assertThat(params.get("q")).isEqualTo("A&B Layout, Karnataka, India");
+        assertThat(params.get("format")).isEqualTo("json");
+        assertThat(params.get("limit")).isEqualTo("1");
+        assertThat(params.get("countrycodes")).isEqualTo("in");
+        assertThat(params).doesNotContainKey("B Layout, Karnataka, India");
+        assertThat(params.keySet()).noneMatch(key -> key.startsWith("B Layout"));
+    }
+
+    @Test
+    void callNominatim_termWithEquals_doesNotCorruptQueryParam() throws Exception {
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        HttpResponse<String> mockResponse = mockOkResponse("[]");
+        when(mockHttpClient.send(any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(mockResponse);
+        injectHttpClient(mockHttpClient);
+
+        double[] result = invokeCallNominatim("Phase=2 Layout");
+
+        assertThat(result).isNull();
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(mockHttpClient).send(captor.capture(), ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        URI capturedUri = captor.getValue().uri();
+        String rawQuery = capturedUri.getRawQuery();
+
+        Map<String, String> params = parseRawQueryParams(rawQuery);
+        assertThat(params).hasSize(4);
+        assertThat(params.keySet()).containsExactlyInAnyOrder("q", "format", "limit", "countrycodes");
+        assertThat(params.get("q")).isEqualTo("Phase=2 Layout, Karnataka, India");
+    }
+
+    @Test
+    void callNominatim_nonAsciiTerm_buildsValidUriAndReachesSend() throws Exception {
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        HttpResponse<String> mockResponse = mockOkResponse("[]");
+        when(mockHttpClient.send(any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(mockResponse);
+        injectHttpClient(mockHttpClient);
+
+        double[] result = invokeCallNominatim("ಉಡುಪಿ ಬೀಚ್");
+
+        assertThat(result).isNull();
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(mockHttpClient).send(captor.capture(), ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        URI capturedUri = captor.getValue().uri();
+        String decodedQuery = java.net.URLDecoder.decode(capturedUri.getRawQuery(), java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(decodedQuery).contains("q=ಉಡುಪಿ ಬೀಚ್, Karnataka, India");
+    }
+
+    @Test
+    void callNominatim_httpClientThrowsIOException_returnsNullWithoutCrashing() throws Exception {
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        when(mockHttpClient.send(any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenThrow(new java.io.IOException("simulated network failure"));
+        injectHttpClient(mockHttpClient);
+
+        double[] result = invokeCallNominatim("Manipal");
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void callNominatim_httpNon200Status_returnsNull() throws Exception {
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        @SuppressWarnings("unchecked")
+        HttpResponse<String> mockResponse = mock(HttpResponse.class);
+        when(mockResponse.statusCode()).thenReturn(503);
+        when(mockHttpClient.send(any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(mockResponse);
+        injectHttpClient(mockHttpClient);
+
+        double[] result = invokeCallNominatim("Manipal");
+
+        assertThat(result).isNull();
+    }
+
     // ===== Private helpers =====
+
+    /**
+     * Parses a raw (percent-encoded) query string exactly the way a naive/vulnerable HTTP
+     * server or query-string parser would: split on literal, unescaped {@code &} characters
+     * first, then split each resulting pair on the first literal {@code =}, then URL-decode
+     * the name and value independently. This is deliberately NOT a single whole-string
+     * URLDecoder.decode() — that approach cannot distinguish a literal (delimiter) `&`/`=`
+     * from a percent-encoded `%26`/`%3D` that decodes back to the same character, which is
+     * exactly the gap that let the pre-fix bug hide behind a passing test.
+     */
+    private static Map<String, String> parseRawQueryParams(String rawQuery) {
+        Map<String, String> params = new LinkedHashMap<>();
+        for (String pair : rawQuery.split("&")) {
+            int eq = pair.indexOf('=');
+            String rawName = eq >= 0 ? pair.substring(0, eq) : pair;
+            String rawValue = eq >= 0 ? pair.substring(eq + 1) : "";
+            String name = java.net.URLDecoder.decode(rawName, java.nio.charset.StandardCharsets.UTF_8);
+            String value = java.net.URLDecoder.decode(rawValue, java.nio.charset.StandardCharsets.UTF_8);
+            params.put(name, value);
+        }
+        return params;
+    }
+
+    private double[] invokeCallNominatim(String term) throws Exception {
+        var method = GeocodingService.class.getDeclaredMethod("callNominatim", String.class);
+        method.setAccessible(true);
+        return (double[]) method.invoke(service, term);
+    }
+
+    @SuppressWarnings("unchecked")
+    private HttpResponse<String> mockOkResponse(String body) {
+        HttpResponse<String> mockResponse = mock(HttpResponse.class);
+        when(mockResponse.statusCode()).thenReturn(200);
+        when(mockResponse.body()).thenReturn(body);
+        return mockResponse;
+    }
 
     private void setId(GeocodeCache cache) {
         try {

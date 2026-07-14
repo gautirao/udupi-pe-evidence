@@ -137,17 +137,17 @@ public class GeocodingService implements GeocodingPort {
     public List<PlaceResult> searchPlaces(String query, int limit) {
         if (query == null || query.isBlank()) return Collections.emptyList();
 
-        URI uri = UriComponentsBuilder.fromHttpUrl(NOMINATIM_SEARCH)
-                .queryParam("q", query)
-                .queryParam("format", "json")
-                .queryParam("addressdetails", "1")
-                .queryParam("limit", Math.min(Math.max(limit, 1), 10))
-                .queryParam("countrycodes", "in")
-                .queryParam("viewbox", "74.5,13.0,75.1,13.7")
-                .queryParam("bounded", "0")
-                .build(false).toUri();
-
         try {
+            URI uri = UriComponentsBuilder.fromHttpUrl(NOMINATIM_SEARCH)
+                    .queryParam("q", query)
+                    .queryParam("format", "json")
+                    .queryParam("addressdetails", "1")
+                    .queryParam("limit", Math.min(Math.max(limit, 1), 10))
+                    .queryParam("countrycodes", "in")
+                    .queryParam("viewbox", "74.5,13.0,75.1,13.7")
+                    .queryParam("bounded", "0")
+                    .build(false).encode().toUri();
+
             HttpRequest request = HttpRequest.newBuilder(uri)
                     .header("User-Agent", USER_AGENT)
                     .header("Accept-Language", "en")
@@ -234,14 +234,15 @@ public class GeocodingService implements GeocodingPort {
 
     private double[] callNominatim(String term) {
         String searchQuery = term + ", Karnataka, India";
-        URI uri = UriComponentsBuilder.fromHttpUrl(NOMINATIM_BASE)
-                .queryParam("q", searchQuery)
-                .queryParam("format", "json")
-                .queryParam("limit", "1")
-                .queryParam("countrycodes", "in")
-                .build(true).toUri();
 
         try {
+            URI uri = UriComponentsBuilder.fromHttpUrl(NOMINATIM_BASE)
+                    .queryParam("q", searchQuery)
+                    .queryParam("format", "json")
+                    .queryParam("limit", "1")
+                    .queryParam("countrycodes", "in")
+                    .build(false).encode().toUri();
+
             HttpRequest request = HttpRequest.newBuilder(uri)
                     .header("User-Agent", USER_AGENT)
                     .GET()
