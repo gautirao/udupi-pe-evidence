@@ -19,7 +19,13 @@ import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { GROUP_BOUNDS_SYNTHETIC_KEY } from '@/utils/discoverGroupBounds';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 import { SectorOverlay } from '@/components/map/SectorOverlay';
-import { AREA_LAYER_MAX_ZOOM } from '@/lib/map/zoomPolicy';
+import {
+  AREA_LAYER_MAX_ZOOM,
+  CLUSTER_DISABLE_AT_ZOOM,
+  CLUSTER_MAX_RADIUS_PX,
+  selectPrimaryMapLayer,
+} from '@/lib/map/zoomPolicy';
+import { useZoomBand } from '@/hooks/useZoomBand';
 
 /**
  * Maximum zoom at which the area-overview marker layer remains visible.
@@ -1228,8 +1234,8 @@ function MarkerClusterLayer({
       spiderfyOnMaxZoom: true,
       showCoverageOnHover: false,
       zoomToBoundsOnClick: true,
-      maxClusterRadius: 50,
-      disableClusteringAtZoom: 16,
+      maxClusterRadius: CLUSTER_MAX_RADIUS_PX,
+      disableClusteringAtZoom: CLUSTER_DISABLE_AT_ZOOM,
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
         let size: 'small' | 'medium' | 'large' = 'small';
@@ -1349,8 +1355,8 @@ function AgriMarkerClusterLayer({
       spiderfyOnMaxZoom: true,
       showCoverageOnHover: false,
       zoomToBoundsOnClick: true,
-      maxClusterRadius: 50,
-      disableClusteringAtZoom: 16,
+      maxClusterRadius: CLUSTER_MAX_RADIUS_PX,
+      disableClusteringAtZoom: CLUSTER_DISABLE_AT_ZOOM,
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
         let size: 'small' | 'medium' | 'large' = 'small';
@@ -1592,6 +1598,23 @@ export function PropertyMap({
   // Derive the selected school ID for SchoolMarkerLayer focus mode.
   const selectedSchoolId = selectedSchool?.id ?? null;
 
+  // Issue #1882 (Track A PR3, Slice S2/S3) — committed zoom band + the
+  // one-primary-layer selector. useZoomBand is called HERE (inside
+  // PropertyMap, against its existing `mapZoom` prop) rather than in
+  // MapDiscovery, because PropertyMap does not unmount across zoom/pan
+  // changes — the ref it holds internally persists correctly for the
+  // lifetime of a single Discover map session. Falls back to DEFAULT_ZOOM
+  // (the overview band) when `mapZoom` hasn't been supplied yet (e.g. before
+  // the first ZoomWatcher zoomend, or in tests that don't pass it) — this
+  // matches AreaMarkerLayer's pre-existing implicit "areas render whenever
+  // present" default for that case.
+  const committedZoomBand = useZoomBand(mapZoom ?? DEFAULT_ZOOM);
+  const primaryMapLayer = selectPrimaryMapLayer({
+    band: committedZoomBand,
+    isAgriMode,
+    hasAreas: areas.length > 0,
+  });
+
   return (
     <div className="w-full h-full relative">
       <MapContainer
@@ -1664,15 +1687,28 @@ export function PropertyMap({
             />
           </>
         ) : (
-          <MarkerClusterLayer
-            listings={listings}
-            onSelectListing={onSelectListing}
-            selectedListingId={selectedListingId}
-            hoveredListingId={hoveredListingId}
-            onMarkerClickWithPosition={onMarkerClickWithPosition}
-          />
+          // Issue #1882 (Track A PR3, Slice S3) — the residential cluster layer
+          // is the ONE primary layer opposite AreaMarkerLayer; primaryMapLayer
+          // suppresses it while the committed zoom band is 'overview' AND areas
+          // are present, eliminating the transient 12<->13 boundary double-mount.
+          // When areas is empty, selectPrimaryMapLayer always returns
+          // 'residentialMarkers' (no conflict to resolve), so this reproduces
+          // the pre-#1882 unconditional-render behaviour exactly.
+          primaryMapLayer === 'residentialMarkers' && (
+            <MarkerClusterLayer
+              listings={listings}
+              onSelectListing={onSelectListing}
+              selectedListingId={selectedListingId}
+              hoveredListingId={hoveredListingId}
+              onMarkerClickWithPosition={onMarkerClickWithPosition}
+            />
+          )
         )}
-        {areas.length > 0 && (
+        {/* Issue #1882 (Track A PR3, Slice S3) — AreaMarkerLayer renders when it's
+            the selected primary layer ('area') OR when agri mode intentionally
+            coexists with it ('agriCoexist', unchanged pre-#1882 behaviour) —
+            never when the residential cluster layer won the exclusivity check. */}
+        {areas.length > 0 && (primaryMapLayer === 'area' || primaryMapLayer === 'agriCoexist') && (
           <AreaMarkerLayer
             areas={areas}
             onAreaClick={onAreaClick}
