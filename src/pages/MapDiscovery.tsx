@@ -4,7 +4,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PublicDiscoverLayout } from '@/components/layout/PublicDiscoverLayout';
 import { computeZoneLabelPoints } from '@/lib/schoolZoneLabels';
-import type { ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
 import type { AreaPoint, AreaMarkerClusterInfo } from '@/components/map/AreaMarkerLayer';
 import { MapFilters } from '@/components/map/MapFilters';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
@@ -35,6 +34,10 @@ import { useDiscoverCameraOrchestration } from '@/features/discover/state/useDis
 import { resolveMarkerPopover } from '@/features/discover/map/resolveMarkerPopover';
 import { useDiscoverMapPresentation } from '@/features/discover/presentation/useDiscoverMapPresentation';
 import { useDiscoverBadgeAnnounce } from '@/features/discover/presentation/useDiscoverBadgeAnnounce';
+import { useDiscoverGroupResults } from '@/features/discover/presentation/useDiscoverGroupResults';
+import { useFilteredAgriListings } from '@/features/discover/presentation/useFilteredAgriListings';
+import { useSchoolListings } from '@/features/discover/presentation/useSchoolListings';
+import { useSchoolFirstCounts } from '@/features/discover/presentation/useSchoolFirstCounts';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
@@ -46,14 +49,11 @@ import { useDiscoverSummary, type DiscoverSummaryListingPurpose } from '@/hooks/
 import { useAgriMapListings } from '@/hooks/useAgriMapListings';
 import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import { useDiscoverListings } from '@/hooks/useDiscoverListings';
-import type { DiscoverListingItem } from '@/hooks/useDiscoverListings';
 import { useDiscoverFilteredMarkers } from '@/hooks/useDiscoverFilteredMarkers';
 import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
-import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { slugifyFromAreaKey } from '@/lib/areaSlug';
-import { clampSchoolRadiusKm, PropertyListing, PropertyImage, PropertyFilters } from '@/hooks/usePropertyListings';
-import { cityListingToPropertyListing, filteredMarkerToPropertyListing } from '@/lib/discoverMappers';
+import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -87,7 +87,6 @@ import {
   applyAnonPropertyFilters,
   deriveAnonSchoolRadiusMarkers,
   hasActiveAnonPropertyFilter,
-  rupeesToPaise,
 } from '@/features/discover/presentation/anonPropertyFilters';
 
 // Re-exported so existing test imports from '@/pages/MapDiscovery' continue to resolve.
@@ -324,128 +323,30 @@ export default function MapDiscovery() {
     listingPurpose: intentListingPurpose,
   });
 
-  // ── Anon teaser filter audit ───────────────────────────────────────────────
-  // applyAnonPropertyFilters reads these fields from each listing item.
-  // Fields are checked against DiscoverCityListingItem (the public endpoint shape):
-  //
-  //   SUPPORTED — field present on DiscoverCityListingItem; safe to apply:
-  //     propertyTypes  → l.propertyType      ✓ present
-  //     bedrooms       → l.bedrooms           ✓ present
-  //     priceMin/Max   → l.pricePaise         ✓ present
-  //     dateFrom/dateTo → l.createdAt         ✓ present
-  //
-  //   STRIPPED — field ABSENT from DiscoverCityListingItem; would false-empty the teaser:
-  //     backOnMarket   → l.backOnMarket       ✗ absent (SchoolRadiusListingItem extension only)
-  //     newToMarket    → l.daysOnMarket       ✗ absent (SchoolRadiusListingItem extension only)
-  //     readyToMove    → l.possessionStatus   ✗ absent (SchoolRadiusListingItem extension only)
-  //
-  //   NOT READ by applyAnonPropertyFilters — these may remain on the spread filter object but
-  //   the helper never reads them, so they cannot affect the anon result (no false-empty):
-  //     reraRegistered, sellerTypes, categoryFilters (school-journey only)
-  //
-  // This is the documented anon teaser limitation: the anon path is a reduced experience.
-  // The authed full path (useDiscoverListings + useDiscoverFilteredMarkers) applies ALL filters
-  // server-side and is unaffected by this stripping.
-
-  // Flatten the multi-area response into a single list for rendering.
-  // Strip the three unsupported flags before delegating to applyAnonPropertyFilters so no
-  // active URL flag can silently zero the anon teaser.
-  const groupResultsAnonRaw: DiscoverCityListingItem[] = useMemo(() => {
-    if (!isGroupResultsState || isAuthenticated) return [];
-    const raw = (groupResultsAnonData?.areas ?? []).flatMap((a) => a.listings);
-    // Strip STRIPPED flags (see audit above) via destructuring so they are not forwarded to
-    // applyAnonPropertyFilters (the public DiscoverCityListingItem shape lacks their backing fields).
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { backOnMarket: _bom, newToMarket: _ntm, readyToMove: _rtm, ...supportedFilters } =
-      anonGroupFilters;
-    return applyAnonPropertyFilters(
-      raw as Parameters<typeof applyAnonPropertyFilters>[0],
-      supportedFilters,
-    ) as DiscoverCityListingItem[];
-  }, [isGroupResultsState, isAuthenticated, groupResultsAnonData, anonGroupFilters]);
-
-  // Normalise anon city-listing items to DiscoverListingItem shape so the unified surface
-  // is correctly typed without unsafe casts. Fields absent from the public endpoint default
-  // to null/0/false — values the panel already guards against (null-checks, optional renders).
-  // heroImageUrl ← primaryImageUrl (different field name between the two response shapes).
-  const groupResultsAnonListings: DiscoverListingItem[] = useMemo(
-    () =>
-      groupResultsAnonRaw.map((l): DiscoverListingItem => ({
-        id: l.id,
-        listingNumber: null,
-        propertyType: l.propertyType ?? '',
-        title: l.title ?? null,
-        locality: l.locality ?? null,
-        areaKey: null,
-        pricePaise: l.pricePaise ?? null,
-        landArea: l.landArea ?? null,
-        landAreaUnit: l.landAreaUnit ?? null,
-        builtArea: l.builtArea ?? null,
-        builtAreaUnit: l.builtAreaUnit ?? null,
-        bedrooms: l.bedrooms ?? null,
-        latitude: l.lat ?? l.latitude ?? null,
-        longitude: l.lon ?? l.longitude ?? null,
-        heroImageUrl: l.primaryImageUrl ?? null,
-        createdAt: l.createdAt ?? new Date(0).toISOString(),
-        updatedAt: null,
-        firstPublishedAt: null,
-        lastUpdatedAt: null,
-        daysOnMarket: 0,
-        backOnMarket: false,
-        reraNumber: null,
-        reraValid: false,
-        trustBadge: l.trustBadge ?? null,
-        possessionStatus: null,
-        sellerType: null,
-        listingPurpose: l.listingPurpose ?? null,
-        status: 'active',
-      })),
-    [groupResultsAnonRaw],
-  );
-
-  // ── Unified group-results surface (authed or anon) ──
-  // The right panel and map always read from these unified variables so downstream code
-  // (DiscoverRightPanel props, groupResultsMarkers) is unaffected by the auth split.
-  const groupResultsListings: DiscoverListingItem[] = isAuthenticated
-    ? (groupResultsAuthedData?.content ?? [])
-    : groupResultsAnonListings;
-  const groupResultsTotalElements = isAuthenticated
-    ? groupResultsAuthedData?.totalElements
-    : groupResultsAnonListings.length;
-  const isLoadingGroupResults = isAuthenticated ? isLoadingGroupResultsAuthed : isLoadingGroupResultsAnon;
-  const isGroupResultsError = isAuthenticated ? isGroupResultsErrorAuthed : isGroupResultsErrorAnon;
-  const refetchGroupResults = isAuthenticated ? refetchGroupResultsAuthed : refetchGroupResultsAnon;
-
-  // Issue #1597 — convert group-filtered markers to PropertyListingWithImages[] for PropertyMap.
-  // Auth path: filteredMarkerToPropertyListing from /api/discover/markers (full predicate).
-  // Anon path: cityListingToPropertyListing derived from groupResultsAnonListings (same recipe
-  // as areaMarkerListings — filter null coords then reuse the city-listing mapper).
-  // Returns [] when:
-  //   - Not in the group-results state (no-op for all other panel states)
-  //   - areaGroupsData is still loading (resolvedGroupAreaKeys is empty → hook disabled → data undefined)
-  //   - The query is still in-flight
-  // This ensures NO unfiltered markers leak to the map while the query is pending.
-  const groupResultsMarkers = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
-    if (!isGroupResultsState) return [];
-    if (isAuthenticated) {
-      if (!groupResultsMarkersData?.markers) return [];
-      const now = new Date().toISOString();
-      return groupResultsMarkersData.markers.map((m) => filteredMarkerToPropertyListing(m, now));
-    }
-    // Anon: derive markers from the same filtered city listings already shown in the panel.
-    // Uses groupResultsAnonRaw (DiscoverCityListingItem[], has lat/lon fields from the
-    // public endpoint) rather than the normalized DiscoverListingItem[] shape, because
-    // cityListingToPropertyListing expects the raw city-listing shape.
-    // Filters null/undefined coords so Leaflet never receives NaN lat/lon.
-    if (groupResultsAnonRaw.length === 0) return [];
-    const now = new Date().toISOString();
-    return groupResultsAnonRaw
-      .filter((l) => l.lat != null && l.lon != null)
-      .map((l) => cityListingToPropertyListing(
-        { ...l, lat: l.lat as number, lon: l.lon as number },
-        now,
-      ));
-  }, [isGroupResultsState, isAuthenticated, groupResultsMarkersData, groupResultsAnonRaw]);
+  // Issue #1824 Slice S11b (C2) — anon/auth group-results derivation lifted into
+  // useDiscoverGroupResults (see the hook's header comment for the moved-cluster
+  // audit notes + the internal-only groupResultsAnonRaw/groupResultsAnonListings).
+  const {
+    groupResultsListings,
+    groupResultsTotalElements,
+    isLoadingGroupResults,
+    isGroupResultsError,
+    refetchGroupResults,
+    groupResultsMarkers,
+  } = useDiscoverGroupResults({
+    isGroupResultsState,
+    isAuthenticated,
+    groupResultsAuthedData,
+    isLoadingGroupResultsAuthed,
+    isGroupResultsErrorAuthed,
+    refetchGroupResultsAuthed,
+    groupResultsMarkersData,
+    groupResultsAnonData,
+    isLoadingGroupResultsAnon,
+    isGroupResultsErrorAnon,
+    refetchGroupResultsAnon,
+    anonGroupFilters,
+  });
 
   // Issue #1430 — derive the AgriMapListingItem for the selected listing peek.
   // Finds the matching item from the already-loaded agri map listings.
@@ -458,61 +359,13 @@ export default function MapDiscovery() {
     [urlState.selectedListing, agriMapListingsData?.listings],
   );
 
-  // Issue #1457 — client-side filtered agri listings (acreage always, price only when authed).
-  // Single source of truth passed to both PropertyMap (markers) and DiscoverRightPanel (list).
-  const filteredAgriListings = useMemo(() => {
-    if (!agriMapListingsData?.listings) return null;
-    const acresMin = urlState.filters.agriAcresMin;
-    const acresMax = urlState.filters.agriAcresMax;
-    const priceMinPaise = isAuthenticated && urlState.filters.agriPriceMin != null
-      ? rupeesToPaise(urlState.filters.agriPriceMin)
-      : null;
-    const priceMaxPaise = isAuthenticated && urlState.filters.agriPriceMax != null
-      ? rupeesToPaise(urlState.filters.agriPriceMax)
-      : null;
-    return agriMapListingsData.listings.filter((l) => {
-      // Acreage filter: null computedAreaAcres excluded when filter is active
-      if (acresMin != null || acresMax != null) {
-        if (l.computedAreaAcres == null) return false;
-        if (acresMin != null && l.computedAreaAcres < acresMin) return false;
-        if (acresMax != null && l.computedAreaAcres > acresMax) return false;
-      }
-      // Price filter: only for authenticated users
-      if (priceMinPaise != null || priceMaxPaise != null) {
-        if (l.pricePaise == null) return false;
-        if (priceMinPaise != null && l.pricePaise < priceMinPaise) return false;
-        if (priceMaxPaise != null && l.pricePaise > priceMaxPaise) return false;
-      }
-      // Issue #1458 — categorical field filters (exact match; null = no filter = include all)
-      if (urlState.filters.agriLandCategory != null) {
-        if (l.landCategory !== urlState.filters.agriLandCategory) return false;
-      }
-      // Boolean tri-state: null = no filter; true/false = exact match.
-      // null listing field is NOT the same as false — we only exclude on exact inequality.
-      if (urlState.filters.agriFarmhouseAvailable != null) {
-        if (l.farmhouseAvailable !== urlState.filters.agriFarmhouseAvailable) return false;
-      }
-      if (urlState.filters.agriFencingDone != null) {
-        if (l.fencingDone !== urlState.filters.agriFencingDone) return false;
-      }
-      // Water source: exact string match. 'NOT_AVAILABLE' matches only 'NOT_AVAILABLE' rows (not null).
-      if (urlState.filters.agriWaterSource != null) {
-        if (l.waterSource !== urlState.filters.agriWaterSource) return false;
-      }
-      return true;
-    });
-  }, [
+  // Issue #1824 Slice S11b (C4) — client-side filtered agri listings lifted into
+  // useFilteredAgriListings (see the hook's header comment).
+  const filteredAgriListings = useFilteredAgriListings({
     agriMapListingsData,
-    urlState.filters.agriAcresMin,
-    urlState.filters.agriAcresMax,
+    filters: urlState.filters,
     isAuthenticated,
-    urlState.filters.agriPriceMin,
-    urlState.filters.agriPriceMax,
-    urlState.filters.agriLandCategory,
-    urlState.filters.agriFarmhouseAvailable,
-    urlState.filters.agriFencingDone,
-    urlState.filters.agriWaterSource,
-  ]);
+  });
 
   // Issue #1824 Slice S4 — search-keyword state (searchQuery/debouncedSearch,
   // reverse URL-sync, 250ms debounce, handleSearchChange) now lives in
@@ -1003,94 +856,19 @@ export default function MapDiscovery() {
   // DECISION-1 parity: callers pass the post-applyAnonPropertyFilters set so map/panel/
   // badge all reflect the same filtered universe.
 
-  // Convert filteredListings (PropertyListing[]) to DiscoverCityListingItem[] for
-  // SchoolSelectedPanel card list. filteredListings is the school-proximity-filtered
-  // set when schoolLat/Lon/RadiusKm filters are active.
-  //
-  // Issue #1122 — anonymous school-first path: filteredListings is always [] for anon
-  // users because useDiscoverListings / useDiscoverFilteredMarkers are auth-gated.
-  // Fall back to areaListings (from the public /api/discover/cities/{city}/listings
-  // endpoint) so SchoolSelectedPanel cards are populated with full listing data.
-  // areaListings is already typed as DiscoverCityListingItem[] — no mapping needed.
-  //
-  // Issue #1175 v2 — schoolListings is declared BEFORE discoverBadge so its .length
-  // can be passed as schoolListingsCount into deriveDiscoverBadge without a second scan.
-  const schoolListings = useMemo(
-    (): DiscoverCityListingItem[] => {
-      if (!isAuthenticated) {
-        const sLat = filters.schoolLat;
-        const sLon = filters.schoolLon;
-        // Issue #1210: clamp so a 0 km radius does not silently filter out every
-        // listing; the anon path mirrors the auth haversine filter's clamp.
-        const radius = filters.schoolRadiusKm != null ? clampSchoolRadiusKm(filters.schoolRadiusKm) : null;
-        if (sLat != null && sLon != null && radius != null) {
-          // Issue #1261 — anon school-radius now sources from the PUBLIC
-          // /school-radius-listings endpoint (cross-area, server-side ST_DWithin),
-          // replacing the old single-area haversine over areaListings. The radius
-          // circle now matches the listing set across area boundaries.
-          //
-          // DECISION-1 (Option A): the active PropertyFilters are NOT sent to this
-          // endpoint (it has no filter params), so apply them CLIENT-SIDE here for
-          // parity with the auth path. Only filters whose backing fields exist in the
-          // 20-field anon contract are honoured. reraRegistered and sellerTypes rely on
-          // server-EXCLUDED fields (reraNumber/sellerType) and are intentionally NOT
-          // applied — anon never sees those fields (AC6).
-          return applyAnonPropertyFilters(schoolRadiusListings, filters);
-        }
-        // No active school radius — fall back to area-scoped public browse.
-        return areaListings;
-      }
-      // Authenticated path: map proximity-filtered listings (unchanged behaviour).
-      return filteredListings.map((l) => ({
-        id: l.id,
-        propertyType: l.property_type,
-        title: l.title,
-        locality: l.locality,
-        pricePaise: l.price != null ? l.price * 100 : undefined,
-        primaryImageUrl: l.images?.[0]?.url ?? null,
-        listingPurpose: l.listing_purpose,
-        bedrooms: l.bedrooms,
-        bathrooms: l.bathrooms,
-        builtArea: l.built_area,
-        builtAreaUnit: l.built_area_unit,
-        landArea: l.land_area,
-        landAreaUnit: l.land_area_unit,
-        totalFloors: l.total_floors,
-        parkingCount: l.parking_count,
-        furnishingStatus: l.furnishing_status,
-        createdAt: l.created_at,
-        // l.trustTier here is the DEALER contract's raw internal letter grade
-        // (A/B/C/D — see usePropertyListings.ts), not the public-safe badge word.
-        // DiscoverCityListingItem.trustBadge is public vocabulary only
-        // ("verified"/"trusted"/"listed"); the letter-to-word mapping is a backend-only
-        // concern (TrustBadge.java) and must never be replicated client-side (#1567/#1616).
-        // The dealer endpoint does not (yet) expose a public-safe badge field, so there is
-        // no honest value to pass through here — null (no badge) is correct, not a regression.
-        trustBadge: null,
-        lat: l.latitude,
-        lon: l.longitude,
-      }));
-    },
-    [isAuthenticated, areaListings, schoolRadiusListings, filteredListings, filters],
-  );
-
-  // Issue #1261 rev2 (AC11) — radius-filtered marker pins from the PUBLIC school-radius
-  // endpoint for both auth and anon users. For anon: always the primary marker source
-  // (auth marker endpoint is disabled). For auth: serves as marker fallback BEFORE the
-  // #1115 bounded-search CTA is triggered (markersEnabled=false → schoolRadiusEnabled=true
-  // in the hook, so schoolRadiusListings is populated). Once CTA fires, markersEnabled
-  // becomes true, schoolRadiusEnabled becomes false, schoolRadiusListings drains, and the
-  // IIFE below switches to the richer auth markerListings instead.
-  // Derives from schoolRadiusListings (public endpoint, server-side ST_DWithin — genuinely
-  // radius-filtered) rather than schoolListings (which for auth users = city-wide
-  // filteredListings — NOT radius-filtered, wrong source for marker pins).
-  const schoolRadiusFallbackMarkers = useMemo(
-    () =>
-      urlState.journey === 'school-first' && urlState.schoolId
-        ? deriveAnonSchoolRadiusMarkers(schoolRadiusListings)
-        : [],
-    [urlState.journey, urlState.schoolId, schoolRadiusListings],
-  );
+  // Issue #1824 Slice S11b (C3) — school-listings + school-radius-fallback-markers
+  // derivation lifted into useSchoolListings (see the hook's header comment). MUST
+  // stay called BEFORE the page-local discoverBadge useMemo below, which reads
+  // schoolListings.length (Issue #1175 v2 / #1152).
+  const { schoolListings, schoolRadiusFallbackMarkers } = useSchoolListings({
+    isAuthenticated,
+    filters,
+    areaListings,
+    schoolRadiusListings,
+    filteredListings,
+    journey: urlState.journey,
+    schoolId: urlState.schoolId,
+  });
 
   // Issue #1175 v3 / Issue #1798 PR-B1 — focusedGroup is resolved from both groupId (by ID
   // or exact slug match) and automatically derived from urlState.areaKey if needed.
@@ -1113,56 +891,22 @@ export default function MapDiscovery() {
       .reduce((sum, a) => sum + (a.listingCount ?? 0), 0);
   }, [urlState.groupId, focusedGroup, discoverAreas]);
 
-  // Visual-parity polish (cycle 3/4) — school-first "Showing X schools" status-pill
-  // counts. Reuses discoverAreas/focusedGroup/selectedArea already computed above
-  // (same data the school-first panels/hero already display) — no new fetch.
-  // Derivations are pure exported helpers (mirrors deriveDiscoverBadge) so they can
-  // be unit-tested without mounting the page — see
-  // src/pages/__tests__/MapDiscovery.school-pill.test.tsx.
-  // null = not applicable to the current state (falls through to the generic
-  // properties-count pill below), the source data hasn't resolved yet, OR
-  // areasLoading is still true — gated exactly like schoolListingsCount above so the
-  // pill never flashes "Showing 0 schools" mid-load.
-  const schoolFirstLandingSchoolCount = useMemo(
-    () =>
-      deriveSchoolFirstLandingSchoolCount({
-        journey: urlState.journey,
-        groupId: urlState.groupId,
-        selectedArea,
-        areasLoading,
-        discoverAreas,
-      }),
-    [urlState.journey, urlState.groupId, selectedArea, areasLoading, discoverAreas],
-  );
-
-  const schoolFirstZoneSchoolCount = useMemo(
-    () =>
-      deriveSchoolFirstZoneSchoolCount({
-        journey: urlState.journey,
-        groupId: urlState.groupId,
-        selectedArea,
-        focusedGroup,
-        areasLoading,
-        discoverAreas,
-      }),
-    [urlState.journey, urlState.groupId, selectedArea, focusedGroup, areasLoading, discoverAreas],
-  );
-
-  const schoolFirstAreaSchoolCount = deriveSchoolFirstAreaSchoolCount({
+  // Issue #1824 Slice S11b (C5) — school-first status-pill count derivations
+  // lifted into useSchoolFirstCounts (see the hook's header comment). Called
+  // AFTER focusedGroup (above) since schoolFirstZoneSchoolCount depends on it.
+  const {
+    schoolFirstLandingSchoolCount,
+    schoolFirstZoneSchoolCount,
+    schoolFirstAreaSchoolCount,
+    schoolZoneLabels,
+  } = useSchoolFirstCounts({
     journey: urlState.journey,
+    groupId: urlState.groupId,
     selectedArea,
+    focusedGroup,
     areasLoading,
+    discoverAreas,
   });
-
-  // School-first overview: dark zone/group label pills positioned truthfully
-  // (group focus point, else member-area bounds-centre; groups with neither are
-  // dropped). Shown ONLY in the school-first browse/landing state (no group/area/
-  // school selected) and only at overview zoom, so they never clutter drill-down
-  // states or other journeys. onSelectZone reuses the existing selectGroup action.
-  const schoolZoneLabels = useMemo<ZoneLabelPoint[]>(() => {
-    // Issue #1655 — unified group listing pins replace legacy schoolZoneLabels pills at Level 0.
-    return [];
-  }, []);
 
   // Issue #1152 — derive the correct badge count given area/filter/loading context.
   // Uses raw filters, not effectiveFilters: the bbox polygon injected by effectiveFilters is system-managed; badge takes the area path when selectedArea != null regardless.
