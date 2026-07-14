@@ -24,6 +24,10 @@ public record DiscoverListingResponse(
         OffsetDateTime updatedAt,
         OffsetDateTime firstPublishedAt,
         OffsetDateTime lastUpdatedAt,
+        // #1794 Phase 1: set to the transition timestamp every time the listing enters LIVE
+        // (publish or reconfirm). Null when never confirmed since this column was introduced —
+        // honest absence, never backfilled/fabricated.
+        OffsetDateTime confirmedAt,
         Integer daysOnMarket,
         Boolean backOnMarket,
         String reraNumber,

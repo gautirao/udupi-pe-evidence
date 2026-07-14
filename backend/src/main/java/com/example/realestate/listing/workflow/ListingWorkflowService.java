@@ -645,6 +645,9 @@ public class ListingWorkflowService {
         listing.setStatus(ListingStatus.LIVE.toDbValue());
         listing.setArchivedAt(null);
         listing.setLastLiveAt(nowOdt);
+        // #1794 Phase 1: set directly here (not via applyLiveTransitionTimestamps) because this
+        // path bypasses that shared helper on purpose — see the IMPORTANT note above it.
+        listing.setLastConfirmedAt(nowOdt);
         // firstPublishedAt is write-once — preserved (never overwritten)
         listing.setStatusChangedAt(now);
         listing.setStatusChangedByActorType(ActorType.BROKER);
@@ -1298,5 +1301,8 @@ public class ListingWorkflowService {
             listing.setFirstPublishedAt(nowOdt);
         }
         listing.setLastLiveAt(nowOdt);
+        // #1794 Phase 1: lastConfirmedAt is refreshed on every LIVE transition, like lastLiveAt —
+        // never write-once, never backfilled.
+        listing.setLastConfirmedAt(nowOdt);
     }
 }

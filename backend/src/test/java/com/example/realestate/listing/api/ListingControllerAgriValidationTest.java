@@ -140,7 +140,7 @@ class ListingControllerAgriValidationTest {
                     l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
                     l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
                     l.getSellerType(), 0, false, l.getUpdatedAt(),
-                    l.getFirstPublishedAt(), l.getPossessionStatus(),
+                    l.getFirstPublishedAt(), l.getLastConfirmedAt(), l.getPossessionStatus(),
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), false, 0,
                     l.getTrustTier(), null, l.getAreaKey(), List.of(),
                     null, null, null, null, null, null, null, null, null,

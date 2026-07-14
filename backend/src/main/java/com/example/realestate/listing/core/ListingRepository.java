@@ -420,6 +420,39 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             nativeQuery = true)
     Page<Listing> findAllLiveListings(Pageable pageable);
 
+    // ===== Freshness / reconfirmation (#1794 Phase 1) =====
+
+    /**
+     * Returns LIVE listings that have not been confirmed within the given threshold.
+     *
+     * <p>A NULL {@code last_confirmed_at} counts as stale (never confirmed since the column
+     * was introduced — honest absence, not "recently confirmed"). The boundary is strictly
+     * {@code <} the threshold: a listing confirmed exactly at the threshold is NOT stale.
+     *
+     * <p>Sorted oldest-confirmed-first (NULLS FIRST) so the most overdue listings surface first
+     * for admin review. Phase 1 read-only visibility only — no automation acts on this query.
+     *
+     * @param threshold cutoff timestamp (typically {@code now() - N days}); listings confirmed
+     *                  before this are stale
+     * @param pageable  pagination parameters
+     * @return page of stale LIVE listings, oldest-confirmed (or never-confirmed) first
+     */
+    @Query(value = """
+            SELECT * FROM property_listings
+            WHERE status = 'LIVE'
+              AND (last_confirmed_at IS NULL OR last_confirmed_at < :threshold)
+            ORDER BY last_confirmed_at ASC NULLS FIRST
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM property_listings
+            WHERE status = 'LIVE'
+              AND (last_confirmed_at IS NULL OR last_confirmed_at < :threshold)
+            """,
+            nativeQuery = true)
+    Page<Listing> findLiveListingsNotConfirmedSince(
+            @Param("threshold") OffsetDateTime threshold,
+            Pageable pageable);
+
     // ===== Locality normalizer queries =====
 
     @Query(value = """

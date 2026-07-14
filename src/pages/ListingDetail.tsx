@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PropertyImage, PropertyType } from '@/hooks/usePropertyListings';
 import { ListingResponse } from '@/hooks/useBrokerListings';
 import { PriceHistoryEntry } from '@/components/listing/ListingTransparencyCard';
+import { formatRelativeDate } from '@/lib/formatters';
 import { AlertTriangle, ArrowLeft, Share2, Check, Heart, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -79,6 +80,13 @@ export interface PublicListingDetail extends Partial<ListingResponse> {
    * When non-null, convert to rupees: Math.round(pricePaise / 100).
    */
   pricePaise?: number | null;
+  /**
+   * Issue #1794 Phase 1 — timestamp the listing was last confirmed/reconfirmed as LIVE.
+   * Null for listings never confirmed. Never faked or defaulted from lastUpdatedAt/createdAt —
+   * a null value must render as honest absence (fall back to the existing lastUpdatedAt/
+   * createdAt "Updated"/"Listed" display).
+   */
+  confirmedAt?: string | null;
 }
 
 function useListingById(id: string | undefined, isPreview: boolean) {
@@ -188,7 +196,15 @@ export default function ListingDetail() {
 
   // Gallery overlay chips — rendered only when truthfully derivable.
   const hasTrustBadge = (trustData?.badges?.length ?? 0) > 0;
+  // Issue #1794 Phase 1: prefer the honest "Confirmed {date}" signal when the backend
+  // supplied confirmedAt. When confirmedAt is null/absent, fall back unchanged to the
+  // existing lastUpdatedAt-derived "Updated today" chip — never relabel lastUpdatedAt
+  // as a confirmation.
+  const confirmedChipLabel = listing.confirmedAt
+    ? `Confirmed ${formatRelativeDate(listing.confirmedAt)}`
+    : null;
   const isUpdatedToday = (() => {
+    if (listing.confirmedAt) return false;
     const ts = listing.lastUpdatedAt;
     if (!ts) return false;
     return new Date(ts).toDateString() === new Date().toDateString();
@@ -341,7 +357,7 @@ export default function ListingDetail() {
           <div className="lg:col-span-2 space-y-6">
             {/* Hero gallery with share + save overlay (mirrors agri detail) */}
             <div className="relative">
-              {(hasTrustBadge || isUpdatedToday) && (
+              {(hasTrustBadge || confirmedChipLabel || isUpdatedToday) && (
                 <div className="absolute left-3 top-3 z-20 flex flex-wrap gap-2">
                   {hasTrustBadge && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-card/95 px-2.5 py-1 text-xs font-medium text-evergreen shadow-sm backdrop-blur">
@@ -349,11 +365,15 @@ export default function ListingDetail() {
                       Trusted listing
                     </span>
                   )}
-                  {isUpdatedToday && (
+                  {confirmedChipLabel ? (
+                    <span className="inline-flex items-center rounded-full bg-card/95 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur">
+                      {confirmedChipLabel}
+                    </span>
+                  ) : isUpdatedToday ? (
                     <span className="inline-flex items-center rounded-full bg-card/95 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur">
                       Updated today
                     </span>
-                  )}
+                  ) : null}
                 </div>
               )}
               <div className="absolute right-3 top-3 z-20 flex gap-2">

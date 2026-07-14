@@ -124,6 +124,7 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                         pl.updated_at,
                         pl.first_published_at,
                         pl.last_updated_at,
+                        pl.last_confirmed_at,
                         pl.back_to_market_at,
                         pl.rera_number,
                         pl.trust_tier,
@@ -147,12 +148,14 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                 Timestamp updatedTs = rs.getTimestamp("updated_at");
                 Timestamp firstPublishedTs = rs.getTimestamp("first_published_at");
                 Timestamp lastUpdatedTs = rs.getTimestamp("last_updated_at");
+                Timestamp confirmedTs = rs.getTimestamp("last_confirmed_at");
                 Timestamp backToMarketTs = rs.getTimestamp("back_to_market_at");
 
                 OffsetDateTime createdAt = toOffsetDateTime(createdTs);
                 OffsetDateTime updatedAt = toOffsetDateTime(updatedTs);
                 OffsetDateTime firstPublishedAt = toOffsetDateTime(firstPublishedTs);
                 OffsetDateTime lastUpdatedAt = toOffsetDateTime(lastUpdatedTs);
+                OffsetDateTime confirmedAt = toOffsetDateTime(confirmedTs);
 
                 // daysOnMarket: days since first publish; fall back to createdAt
                 LocalDate referenceDate = firstPublishedAt != null
@@ -185,6 +188,7 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                         updatedAt,
                         firstPublishedAt,
                         lastUpdatedAt,
+                        confirmedAt,
                         daysOnMarket,
                         backOnMarket,
                         rs.getString("rera_number"),
@@ -276,14 +280,15 @@ public class DiscoverListingsService implements DiscoverListingsPort {
             String areaKey, Long pricePaise, Double landArea, String landAreaUnit,
             Double builtArea, String builtAreaUnit, Integer bedrooms, Double latitude, Double longitude,
             String heroImageUrl, OffsetDateTime createdAt, OffsetDateTime updatedAt,
-            OffsetDateTime firstPublishedAt, OffsetDateTime lastUpdatedAt, int daysOnMarket,
+            OffsetDateTime firstPublishedAt, OffsetDateTime lastUpdatedAt, OffsetDateTime confirmedAt,
+            int daysOnMarket,
             boolean backOnMarket, String reraNumber, boolean reraValid, String rawTrustTier,
             String possessionStatus, String sellerType, String listingPurpose, String status) {
         return new DiscoverListingResponse(
                 id, listingNumber, propertyType, title, locality, areaKey, pricePaise,
                 landArea, landAreaUnit, builtArea, builtAreaUnit, bedrooms,
                 GeoCoarsener.coarsen(latitude), GeoCoarsener.coarsen(longitude),
-                heroImageUrl, createdAt, updatedAt, firstPublishedAt, lastUpdatedAt,
+                heroImageUrl, createdAt, updatedAt, firstPublishedAt, lastUpdatedAt, confirmedAt,
                 daysOnMarket, backOnMarket, reraNumber, reraValid, TrustBadge.publicBadge(rawTrustTier),
                 possessionStatus, sellerType, listingPurpose, status);
     }

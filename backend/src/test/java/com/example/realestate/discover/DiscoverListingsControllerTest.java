@@ -79,7 +79,7 @@ class DiscoverListingsControllerTest {
         DiscoverListingResponse listing = new DiscoverListingResponse(
                 "abc", "L-001", "house", "Test title", "Malpe", "IN|KA|Udupi|Malpe",
                 5_000_000L, null, null, 100.0, "sq m", 3, 13.3, 74.7,
-                null, OffsetDateTime.now(), null, null, null,
+                null, OffsetDateTime.now(), null, null, null, null,
                 5, false, null, null, "A", null, "OWNER", "sale", "LIVE"
         );
         DiscoverListingsPage page = new DiscoverListingsPage(

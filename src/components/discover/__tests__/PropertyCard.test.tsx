@@ -5,6 +5,7 @@ import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { PropertyCard } from '../PropertyCard';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import { formatRelativeDate } from '@/lib/formatters';
 
 // ─── Issue #1566 — saved-homes mocks ────────────────────────────────────────
 // PropertyCard's heart is now server-backed (useSavedListingIds/useSaveListing/
@@ -890,6 +891,47 @@ describe('PropertyCard', () => {
       expect(screen.queryByText('Verified')).not.toBeInTheDocument();
       expect(screen.queryByText('Trusted')).not.toBeInTheDocument();
       expect(screen.queryByText('Listed')).not.toBeInTheDocument();
+    });
+  });
+
+  // ── Issue #1794 Phase 1 — "Confirmed {date}" freshness signal ──────────────
+  // confirmedAt is a nullable backend timestamp: last confirmed/reconfirmed as LIVE.
+  // Must never be faked/defaulted — a null value falls back to the existing
+  // honest createdAt display, and the two timestamps never render together.
+  describe('confirmedAt freshness signal (Issue #1794 Phase 1)', () => {
+    it('confirmedAt present → shows "Confirmed {date}" and NOT the plain created timestamp', () => {
+      const confirmedDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+      const createdDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      renderCard({
+        listing: makeListing({ confirmedAt: confirmedDate, createdAt: createdDate }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.getByText(`Confirmed ${formatRelativeDate(confirmedDate)}`)).toBeInTheDocument();
+      // The plain created-date text (without "Confirmed" prefix) must not appear separately.
+      expect(screen.queryByText(formatRelativeDate(createdDate))).not.toBeInTheDocument();
+    });
+
+    it('confirmedAt null/absent → shows the existing created timestamp, no "Confirmed" text (honest absence)', () => {
+      const createdDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+      renderCard({
+        listing: makeListing({ confirmedAt: null, createdAt: createdDate }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.getByText(formatRelativeDate(createdDate))).toBeInTheDocument();
+      expect(screen.queryByText(/^Confirmed/)).not.toBeInTheDocument();
+    });
+
+    it('confirmedAt undefined (field omitted by backend) → falls back to created timestamp, no "Confirmed" text', () => {
+      const createdDate = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+      renderCard({
+        listing: makeListing({ confirmedAt: undefined, createdAt: createdDate }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.getByText(formatRelativeDate(createdDate))).toBeInTheDocument();
+      expect(screen.queryByText(/^Confirmed/)).not.toBeInTheDocument();
     });
   });
 

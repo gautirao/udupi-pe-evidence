@@ -2,6 +2,7 @@ package com.example.realestate.listing.api;
 
 import com.example.realestate.listing.audit.AdminAuditService;
 import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.exception.ListingNotArchivedException;
 import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingStatusException;
@@ -11,17 +12,26 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -39,15 +49,18 @@ public class AdminListingController {
     private final ListingResponseMapper listingResponseMapper;
     private final AdminAuditService adminAuditService;
     private final ObjectMapper objectMapper;
+    private final ListingRepository listingRepository;
 
     public AdminListingController(ListingWorkflowService listingWorkflowService,
                                   ListingResponseMapper listingResponseMapper,
                                   AdminAuditService adminAuditService,
-                                  ObjectMapper objectMapper) {
+                                  ObjectMapper objectMapper,
+                                  ListingRepository listingRepository) {
         this.listingWorkflowService = listingWorkflowService;
         this.listingResponseMapper = listingResponseMapper;
         this.adminAuditService = adminAuditService;
         this.objectMapper = objectMapper;
+        this.listingRepository = listingRepository;
     }
 
     @PreAuthorize("#caller.isAdmin()")
@@ -64,6 +77,38 @@ public class AdminListingController {
         } catch (ListingStatusException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
+    }
+
+    /**
+     * Admin-only visibility into LIVE listings that have not been confirmed recently
+     * (#1794 Phase 1 — read-only signal; no automation acts on this list).
+     *
+     * <p>A listing is "stale" when {@code last_confirmed_at} is NULL (never confirmed since
+     * the column was introduced) or older than {@code days} days ago. The boundary is strictly
+     * {@code <} the threshold — a listing confirmed exactly {@code days} days ago is NOT stale.
+     */
+    @PreAuthorize("#caller.isAdmin()")
+    @GetMapping("/stale")
+    public ResponseEntity<Page<ListingResponse>> stale(
+            CallerInfo caller,
+            @RequestParam(name = "days", required = false, defaultValue = "14") int days,
+            @PageableDefault(size = 20) Pageable pageable) {
+        int effectiveDays = Math.max(1, days);
+        OffsetDateTime threshold = OffsetDateTime.now().minusDays(effectiveDays);
+
+        // The staleness worklist has a fixed oldest-confirmed-first ordering baked into the
+        // native @Query's own ORDER BY; strip any caller-supplied Sort (@PageableDefault only
+        // sets the default, it does not cap what a ?sort= param can override) so it can never
+        // reach the native query and retrigger the Spring-Data native-query + Sort conflict.
+        Pageable unsorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        Page<Listing> staleListings = listingRepository.findLiveListingsNotConfirmedSince(threshold, unsorted);
+
+        log.debug("GET /api/admin/listings/stale?days={} -> {} results adminId={}",
+                effectiveDays, staleListings.getTotalElements(), caller.userId());
+
+        List<ListingResponse> content = listingResponseMapper.toResponseList(staleListings.getContent());
+        Page<ListingResponse> response = new PageImpl<>(content, staleListings.getPageable(), staleListings.getTotalElements());
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/{id}/restore")

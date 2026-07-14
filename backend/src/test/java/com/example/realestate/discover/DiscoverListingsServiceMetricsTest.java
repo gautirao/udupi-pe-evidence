@@ -171,7 +171,7 @@ class DiscoverListingsServiceMetricsTest {
                 "IN|KA|Udupi|Malpe", 5_000_000L,
                 null, null, 100.0, "sq m", 3,
                 13.3, 74.7, null,
-                null, null, null, null,
+                null, null, null, null, null,
                 5, false,
                 null, false,
                 "A", "READY", "owner", "sale", "LIVE"

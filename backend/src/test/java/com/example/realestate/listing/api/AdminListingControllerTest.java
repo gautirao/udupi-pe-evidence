@@ -40,6 +40,7 @@ import static org.mockito.Mockito.*;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -86,6 +87,9 @@ class AdminListingControllerTest {
     @MockitoBean
     private AdminAuditService adminAuditService;
 
+    @MockitoBean
+    private com.example.realestate.listing.core.ListingRepository listingRepository;
+
     /**
      * Satisfies DbRoleJwtAuthenticationConverter's constructor dependency in the @WebMvcTest
      * security slice. No stubs needed — jwt().authorities(...) bypasses the converter entirely.
@@ -95,7 +99,7 @@ class AdminListingControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(listingWorkflowService, listingResponseMapper, adminAuditService);
+        reset(listingWorkflowService, listingResponseMapper, adminAuditService, listingRepository);
         // Delegate mapper to a minimal implementation so existing response-field assertions keep working.
         when(listingResponseMapper.toResponse(any(Listing.class))).thenAnswer(inv -> {
             Listing l = inv.getArgument(0);
@@ -120,7 +124,7 @@ class AdminListingControllerTest {
                     l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
                     l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
                     l.getSellerType(), 0, false, lastUpdatedAt,
-                    l.getFirstPublishedAt(), l.getPossessionStatus(),
+                    l.getFirstPublishedAt(), l.getLastConfirmedAt(), l.getPossessionStatus(),
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0,
                     l.getTrustTier(), null, l.getAreaKey(), java.util.List.of(),
                     null, null, null, null, null, null,
@@ -149,6 +153,12 @@ class AdminListingControllerTest {
                     l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
                     java.util.List.of(), java.util.List.of());
         });
+        // #1794 Phase 1: GET /stale maps a batch via toResponseList — delegate to the
+        // already-stubbed single-item toResponse so list-endpoint assertions keep working.
+        when(listingResponseMapper.toResponseList(anyList())).thenAnswer(inv -> {
+            java.util.List<Listing> listings = inv.getArgument(0);
+            return listings.stream().map(listingResponseMapper::toResponse).toList();
+        });
     }
 
     // ==================== Test 1: Approve -> 200, LIVE ====================
@@ -168,6 +178,48 @@ Listing approved = buildListing(LISTING_ID, "LIVE", "land", "Plot in Manipal",
                 .andExpect(jsonPath("$.status").value("LIVE"));
 
         verify(listingWorkflowService).approveListing(LISTING_ID, ADMIN_ID);
+    }
+
+    // ==================== #1794 Phase 2: Admin reconfirms via re-approval ====================
+    // Real supported "reconfirm" path (corrected doc): a Founder/Admin records a reconfirmation
+    // by re-running the SAME approve endpoint on a listing that has left LIVE and returned to
+    // PENDING_REVIEW (e.g. resubmitted), not by re-approving an already-LIVE listing — the
+    // transition policy rejects LIVE->LIVE self-transitions (see ListingTransitionPolicy#validate).
+    // This mirrors ListingWorkflowServiceTest#approveListing_secondApproval_preservesFirstPublishedAtAndUpdatesLastLiveAt,
+    // exercised here at the controller/HTTP layer.
+
+    @Test
+    void approve_reapprovalAfterResubmission_returns200WithRefreshedConfirmedAt() throws Exception {
+        OffsetDateTime originalFirstPublished = OffsetDateTime.now().minusDays(10);
+        OffsetDateTime refreshedConfirmedAt = OffsetDateTime.now();
+
+        Listing reapproved = buildListing(LISTING_ID, "LIVE", "house", "House in Udupi",
+                "Udupi", new BigDecimal("8000000"), "A house");
+        reapproved.setFirstPublishedAt(originalFirstPublished);
+        reapproved.setLastConfirmedAt(refreshedConfirmedAt);
+        reapproved.setReviewedAt(refreshedConfirmedAt);
+        reapproved.setReviewedBy(ADMIN_ID);
+        when(listingWorkflowService.approveListing(LISTING_ID, ADMIN_ID)).thenReturn(reapproved);
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("LIVE"))
+                .andExpect(jsonPath("$.firstPublishedAt").exists())
+                .andExpect(jsonPath("$.confirmedAt").exists());
+
+        verify(listingWorkflowService).approveListing(LISTING_ID, ADMIN_ID);
+    }
+
+    @Test
+    void approve_reapprovalPath_withDealerRole_returns403() throws Exception {
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Requires admin role"));
+
+        verify(listingWorkflowService, never()).approveListing(any(), any());
     }
 
     // ==================== Test 2: Reject with reason -> 200, REJECTED ====================
@@ -811,6 +863,59 @@ String specialNote = "Override: \"admin\" approved\ttab and backslash\\done";
                 new TypeReference<>() {});
         assertThat(parsed).containsEntry("status", "LIVE");
         assertThat(parsed).containsEntry("note", specialNote);
+    }
+
+    // ==================== #1794 Phase 1: GET /stale ====================
+
+    @Test
+    void stale_withAdminRole_returns200WithPagedResults() throws Exception {
+        Listing staleListing = buildListing(LISTING_ID, "LIVE", "house", "Old Plot",
+                "Manipal", new BigDecimal("5000000"), "Never confirmed");
+        org.springframework.data.domain.Page<Listing> page = new org.springframework.data.domain.PageImpl<>(
+                java.util.List.of(staleListing),
+                org.springframework.data.domain.PageRequest.of(0, 20), 1L);
+        when(listingRepository.findLiveListingsNotConfirmedSince(any(OffsetDateTime.class), any()))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/admin/listings/stale")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.content.length()").value(1));
+
+        org.mockito.ArgumentCaptor<OffsetDateTime> thresholdCaptor = org.mockito.ArgumentCaptor.forClass(OffsetDateTime.class);
+        verify(listingRepository).findLiveListingsNotConfirmedSince(thresholdCaptor.capture(), any());
+        // Default days=14 — threshold should be ~14 days ago (allow a few seconds of test-run slack)
+        OffsetDateTime expectedThreshold = OffsetDateTime.now().minusDays(14);
+        assertThat(thresholdCaptor.getValue()).isCloseTo(expectedThreshold,
+                org.assertj.core.api.Assertions.within(10, java.time.temporal.ChronoUnit.SECONDS));
+    }
+
+    @Test
+    void stale_customDaysParam_computesThresholdFromDays() throws Exception {
+        org.springframework.data.domain.Page<Listing> emptyPage = new org.springframework.data.domain.PageImpl<>(
+                java.util.List.of(), org.springframework.data.domain.PageRequest.of(0, 20), 0L);
+        when(listingRepository.findLiveListingsNotConfirmedSince(any(OffsetDateTime.class), any()))
+                .thenReturn(emptyPage);
+
+        mockMvc.perform(get("/api/admin/listings/stale").param("days", "30")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isOk());
+
+        org.mockito.ArgumentCaptor<OffsetDateTime> thresholdCaptor = org.mockito.ArgumentCaptor.forClass(OffsetDateTime.class);
+        verify(listingRepository).findLiveListingsNotConfirmedSince(thresholdCaptor.capture(), any());
+        OffsetDateTime expectedThreshold = OffsetDateTime.now().minusDays(30);
+        assertThat(thresholdCaptor.getValue()).isCloseTo(expectedThreshold,
+                org.assertj.core.api.Assertions.within(10, java.time.temporal.ChronoUnit.SECONDS));
+    }
+
+    @Test
+    void stale_withoutAdminRole_returns403() throws Exception {
+        mockMvc.perform(get("/api/admin/listings/stale")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
+                .andExpect(status().isForbidden());
+
+        verify(listingRepository, never()).findLiveListingsNotConfirmedSince(any(), any());
     }
 
     // ==================== Helper ====================

@@ -142,7 +142,7 @@ class PublicListingControllerTest {
                     l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
                     l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
                     l.getSellerType(), daysOnMarket, false, lastUpdatedAt,
-                    l.getFirstPublishedAt(), l.getPossessionStatus(),
+                    l.getFirstPublishedAt(), l.getLastConfirmedAt(), l.getPossessionStatus(),
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0,
                     // #1786: mirror real mapper's publicProjection=true behaviour — raw trustTier is
                     // always null on the public path; trustBadge is the ONLY projected badge word,

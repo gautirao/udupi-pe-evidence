@@ -362,6 +362,7 @@ public class ListingResponseMapper {
                 l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
                 l.getSellerType(),
                 daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt(),
+                l.getLastConfirmedAt(),
                 l.getPossessionStatus(), l.getExpectedPossessionDate(),
                 l.getApprovalsDeclared(), reraValid, earnedBadgeCount,
                 trustTier, trustBadge, l.getAreaKey(), gallery,

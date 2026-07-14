@@ -301,6 +301,13 @@ export function ListingDetailMainContent({
         const updatedToday = lastUpdated
           ? new Date(lastUpdated).toDateString() === new Date().toDateString()
           : false;
+        // Issue #1794 Phase 1 — prefer the honest "Confirmed {date}" signal when the
+        // backend supplied confirmedAt. Null/absent confirmedAt falls back unchanged
+        // to the existing lastUpdatedAt/createdAt "Last updated" display — never
+        // relabel lastUpdatedAt/createdAt as a confirmation.
+        const confirmedLabel = listing.confirmedAt
+          ? `Confirmed ${formatRelativeDate(listing.confirmedAt)}`
+          : null;
 
         return (
           <DetailSection title="Why trust this listing?" icon={<ShieldCheck className="h-5 w-5 text-primary" />}>
@@ -339,12 +346,17 @@ export function ListingDetailMainContent({
             )}
 
             <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border pt-4 text-xs text-muted-foreground">
-              {lastUpdated && (
+              {confirmedLabel ? (
+                <span className="inline-flex items-center gap-1">
+                  <Calendar className="h-3.5 w-3.5" />
+                  {confirmedLabel}
+                </span>
+              ) : lastUpdated ? (
                 <span className="inline-flex items-center gap-1">
                   <Calendar className="h-3.5 w-3.5" />
                   Last updated {updatedToday ? 'today' : formatRelativeDate(lastUpdated)}
                 </span>
-              )}
+              ) : null}
               {listing.sellerType && (
                 <span className="inline-flex items-center gap-1">
                   <ShieldCheck className="h-3.5 w-3.5" />

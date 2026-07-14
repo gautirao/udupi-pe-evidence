@@ -144,7 +144,7 @@ class ListingControllerTest {
                     l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
                     l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
                     l.getSellerType(), daysOnMarket, false, lastUpdatedAt,
-                    l.getFirstPublishedAt(), l.getPossessionStatus(),
+                    l.getFirstPublishedAt(), l.getLastConfirmedAt(), l.getPossessionStatus(),
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0,
                     l.getTrustTier(), null, l.getAreaKey(), java.util.List.of(),
                     null, null, null, null, null, null, null, null, null, l.getBoundaryGeoJson(), null,

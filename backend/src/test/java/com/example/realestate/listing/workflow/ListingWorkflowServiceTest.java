@@ -306,6 +306,8 @@ class ListingWorkflowServiceTest {
         assertThat(saved.getStatusChangedByActorId()).isEqualTo(adminId);
         // Backward compat: rejectionReason still set
         assertThat(saved.getRejectionReason()).isEqualTo("Incomplete info");
+        // #1794 Phase 1: rejectListing is a non-LIVE transition — lastConfirmedAt must NOT be touched
+        assertThat(saved.getLastConfirmedAt()).isNull();
     }
 
     @Test
@@ -387,6 +389,9 @@ class ListingWorkflowServiceTest {
         assertThat(saved.getLastLiveAt()).isNotNull();
         // Both should be set on first approval; values should be very close
         assertThat(saved.getFirstPublishedAt()).isEqualTo(saved.getLastLiveAt());
+        // #1794 Phase 1: lastConfirmedAt is set on every LIVE transition, incl. first approval
+        assertThat(saved.getLastConfirmedAt()).isNotNull();
+        assertThat(saved.getLastConfirmedAt()).isEqualTo(saved.getLastLiveAt());
     }
 
     @Test
@@ -419,6 +424,9 @@ class ListingWorkflowServiceTest {
         // lastLiveAt must be updated to now
         assertThat(saved.getLastLiveAt()).isNotNull();
         assertThat(saved.getLastLiveAt()).isAfter(originalFirstPublished);
+        // #1794 Phase 1: lastConfirmedAt refreshes on every LIVE transition, including re-approval
+        assertThat(saved.getLastConfirmedAt()).isNotNull();
+        assertThat(saved.getLastConfirmedAt()).isEqualTo(saved.getLastLiveAt());
     }
 
     // ===== restoreListing =====
@@ -1081,6 +1089,10 @@ class ListingWorkflowServiceTest {
         assertThat(saved.getArchivedAt()).isNull(); // cleared
         assertThat(saved.getLastLiveAt()).isNotNull(); // refreshed
         assertThat(saved.getFirstPublishedAt()).isEqualTo(originalFirstPublished); // preserved (write-once)
+        // #1794 Phase 1: lastConfirmedAt is set on this manual set-point (bypasses the shared
+        // helper); firstPublishedAt must remain untouched (asserted above).
+        assertThat(saved.getLastConfirmedAt()).isNotNull();
+        assertThat(saved.getLastConfirmedAt()).isEqualTo(saved.getLastLiveAt());
     }
 
     @Test
@@ -1714,6 +1726,9 @@ class ListingWorkflowServiceTest {
         assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.ADMIN);
         assertThat(saved.getStatusChangedByActorId()).isEqualTo(adminId);
         assertThat(saved.getUpdatedAt()).isNotNull();
+        // #1794 Phase 1: lastConfirmedAt is set on every LIVE transition, incl. approveScrapedListing
+        assertThat(saved.getLastConfirmedAt()).isNotNull();
+        assertThat(saved.getLastConfirmedAt()).isEqualTo(saved.getLastLiveAt());
     }
 
     @Test
@@ -1979,6 +1994,9 @@ class ListingWorkflowServiceTest {
         assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.ADMIN);
         assertThat(saved.getStatusChangedByActorId()).isEqualTo(adminId);
         assertThat(saved.getUpdatedAt()).isNotNull();
+        // #1794 Phase 1: lastConfirmedAt is set on every LIVE transition, incl. restoreRejectedListing
+        assertThat(saved.getLastConfirmedAt()).isNotNull();
+        assertThat(saved.getLastConfirmedAt()).isEqualTo(saved.getLastLiveAt());
     }
 
     @Test

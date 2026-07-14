@@ -163,6 +163,40 @@ class ListingResponseMapperTest {
         assertThat(response.daysOnMarket()).isEqualTo(7);
     }
 
+    // ==================== #1794 Phase 1: confirmedAt mapped from lastConfirmedAt ====================
+
+    @Test
+    void toResponse_confirmedAt_mappedFromLastConfirmedAt() {
+        Listing l = buildListing("LIVE");
+        OffsetDateTime confirmedAt = OffsetDateTime.now().minusDays(3);
+        l.setLastConfirmedAt(confirmedAt);
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.confirmedAt()).isEqualTo(confirmedAt);
+    }
+
+    @Test
+    void toResponse_confirmedAt_nullWhenEntityNeverConfirmed_honestAbsence() {
+        Listing l = buildListing("DRAFT");
+        // lastConfirmedAt left unset (null) — never confirmed
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.confirmedAt()).isNull();
+    }
+
+    @Test
+    void toPublicResponse_confirmedAt_alsoMappedFromLastConfirmedAt() {
+        Listing l = buildListing("LIVE");
+        OffsetDateTime confirmedAt = OffsetDateTime.now().minusDays(1);
+        l.setLastConfirmedAt(confirmedAt);
+
+        ListingResponse response = mapper.toPublicResponse(l, true);
+
+        assertThat(response.confirmedAt()).isEqualTo(confirmedAt);
+    }
+
     // ==================== core fields are mapped ====================
 
     @Test

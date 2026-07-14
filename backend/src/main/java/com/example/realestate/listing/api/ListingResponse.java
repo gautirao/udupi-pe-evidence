@@ -54,6 +54,12 @@ public record ListingResponse(
         boolean backOnMarket,
         OffsetDateTime lastUpdatedAt,
         OffsetDateTime firstPublishedAt,
+        /**
+         * #1794 Phase 1: set to the transition timestamp every time the listing enters LIVE
+         * (publish or reconfirm). Null when the listing has never been confirmed since this
+         * column was introduced — honest absence, never backfilled/fabricated.
+         */
+        OffsetDateTime confirmedAt,
         // RERA & possession fields (RE-99)
         String possessionStatus,
         LocalDate expectedPossessionDate,

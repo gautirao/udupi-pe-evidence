@@ -338,8 +338,11 @@ export function PropertyCard({
           </div>
         )}
 
-        {/* Purpose + listed date */}
-        {(purpose || listing.createdAt) && (
+        {/* Purpose + listed/confirmed date. Issue #1794 Phase 1: prefer the honest
+            "Confirmed {date}" signal when confirmedAt is present; never render both
+            confirmed and created timestamps together, and never relabel createdAt as
+            "Confirmed" when confirmedAt is null/absent. */}
+        {(purpose || listing.createdAt || listing.confirmedAt) && (
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             {purpose && (
               listing.listingPurpose === 'sale' ? (
@@ -353,12 +356,17 @@ export function PropertyCard({
                 </span>
               )
             )}
-            {listing.createdAt && (
+            {listing.confirmedAt ? (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Calendar className="h-3 w-3" />
+                Confirmed {formatRelativeDate(listing.confirmedAt)}
+              </span>
+            ) : listing.createdAt ? (
               <span className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Calendar className="h-3 w-3" />
                 {formatRelativeDate(listing.createdAt)}
               </span>
-            )}
+            ) : null}
           </div>
         )}
 

@@ -594,6 +594,14 @@ public class Listing {
     private OffsetDateTime lastLiveAt;
 
     /**
+     * Set to the transition timestamp every time the listing enters LIVE status (publish or
+     * reconfirm). NULL until first confirmed after this column was introduced — never
+     * backfilled for pre-existing rows (#1794 Phase 1).
+     */
+    @Column(name = "last_confirmed_at")
+    private OffsetDateTime lastConfirmedAt;
+
+    /**
      * Set when the listing returns to LIVE after having been non-LIVE (future lifecycle PR).
      * NULL until that workflow is implemented.
      */
@@ -1083,6 +1091,14 @@ public class Listing {
 
     public void setLastLiveAt(OffsetDateTime lastLiveAt) {
         this.lastLiveAt = lastLiveAt;
+    }
+
+    public OffsetDateTime getLastConfirmedAt() {
+        return lastConfirmedAt;
+    }
+
+    public void setLastConfirmedAt(OffsetDateTime lastConfirmedAt) {
+        this.lastConfirmedAt = lastConfirmedAt;
     }
 
     public OffsetDateTime getBackToMarketAt() {

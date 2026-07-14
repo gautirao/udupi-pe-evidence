@@ -96,6 +96,10 @@ final class OpenSearchHitMapper {
         OffsetDateTime updatedAt = parseOffsetDateTime(string(source, "updated_at"));
         OffsetDateTime firstPublishedAt = parseOffsetDateTime(string(source, "first_published_at"));
         OffsetDateTime lastUpdatedAt = parseOffsetDateTime(string(source, "last_updated_at"));
+        // #1794 Phase 1: last_confirmed_at is not currently indexed into OpenSearch documents
+        // (this backend is dormant — discover.opensearch.enabled). Parses to null when absent,
+        // which is honest — never fabricated.
+        OffsetDateTime confirmedAt = parseOffsetDateTime(string(source, "last_confirmed_at"));
         OffsetDateTime backToMarketAt = parseOffsetDateTime(string(source, "back_to_market_at"));
 
         // daysOnMarket: days since first_published_at; fall back to created_at
@@ -144,6 +148,7 @@ final class OpenSearchHitMapper {
                 updatedAt,
                 firstPublishedAt,
                 lastUpdatedAt,
+                confirmedAt,
                 daysOnMarket,
                 backOnMarket,
                 reraNumber,

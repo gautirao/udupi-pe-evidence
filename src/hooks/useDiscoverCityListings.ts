@@ -27,6 +27,12 @@ export interface DiscoverCityListingItem {
   furnishingStatus?: string | null;
   createdAt?: string | null;
   /**
+   * Issue #1794 Phase 1 — timestamp the listing was last confirmed/reconfirmed as LIVE.
+   * Null for listings never confirmed. Never faked or defaulted from createdAt/lastUpdatedAt —
+   * a null value must render as honest absence (fall back to createdAt display).
+   */
+  confirmedAt?: string | null;
+  /**
    * Issue #1567 — public-safe trust badge word ("verified"/"trusted"/"listed"), or
    * null/absent when the listing has no badge (D tier, legacy rows, or unknown grade).
    * Never the raw internal letter grade — the backend never sends A/B/C/D on this field.
