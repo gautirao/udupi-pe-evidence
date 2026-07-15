@@ -1,0 +1,187 @@
+{
+  "city": "udupi",
+  "total_candidates": 4796,
+  "by_place_type": {
+    "village": 134,
+    "city": 2,
+    "town": 5,
+    "locality": 9,
+    "suburb": 14,
+    "hamlet": 21,
+    "state": 1,
+    "neighbourhood": 25,
+    "quarter": 33
+  },
+  "by_admin_level": {
+    "5": 173,
+    "2": 3,
+    "4": 14,
+    "9": 1507,
+    "8": 12,
+    "6": 1924,
+    "7": 2,
+    "10": 942,
+    "11": 1
+  },
+  "by_osm_type": {
+    "node": 145,
+    "way": 2,
+    "relation": 4649
+  },
+  "geometry_polygon_or_way_count": 4651,
+  "geometry_point_only_count": 145,
+  "pct_polygon_or_way": 97.0,
+  "pct_point_only": 3.0,
+  "pct_with_kannada_name": 23.0,
+  "pct_with_name": 99.8,
+  "pct_with_postal_code": 0.6,
+  "pct_with_wikidata": 44.6,
+  "duplicate_name_count": 330,
+  "duplicate_name_samples": [
+    "udupi",
+    "kukkikatte",
+    "santuru",
+    "puducherry",
+    "tirunelveli",
+    "thiruvananthapuram",
+    "virudhunagar",
+    "dindigul",
+    "idukki",
+    "madurai",
+    "theni",
+    "erode",
+    "karur",
+    "namakkal",
+    "palakkad"
+  ],
+  "sample_locality_report": [
+    {
+      "target": "Udupi",
+      "found": true,
+      "match_count": 2,
+      "matches": [
+        {
+          "osm_type": "node",
+          "osm_id": 245620117,
+          "place": "city",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": false,
+          "centroid": [
+            74.7473232,
+            13.3419169
+          ],
+          "postal_code": "576101"
+        },
+        {
+          "osm_type": "relation",
+          "osm_id": 2020529,
+          "place": null,
+          "boundary": "administrative",
+          "admin_level": "5",
+          "has_polygon": true,
+          "centroid": null,
+          "postal_code": null
+        }
+      ]
+    },
+    {
+      "target": "Manipal",
+      "found": true,
+      "match_count": 1,
+      "matches": [
+        {
+          "osm_type": "node",
+          "osm_id": 1351009057,
+          "place": "town",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": false,
+          "centroid": [
+            74.7870308,
+            13.3519723
+          ],
+          "postal_code": null
+        }
+      ]
+    },
+    {
+      "target": "Brahmavar",
+      "found": false,
+      "match_count": 0,
+      "matches": []
+    },
+    {
+      "target": "Kapu",
+      "found": true,
+      "match_count": 1,
+      "matches": [
+        {
+          "osm_type": "node",
+          "osm_id": 867155742,
+          "place": "village",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": false,
+          "centroid": [
+            74.7484014,
+            13.2306764
+          ],
+          "postal_code": null
+        }
+      ]
+    },
+    {
+      "target": "Malpe",
+      "found": true,
+      "match_count": 1,
+      "matches": [
+        {
+          "osm_type": "node",
+          "osm_id": 672742464,
+          "place": "suburb",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": false,
+          "centroid": [
+            74.7036914,
+            13.3507423
+          ],
+          "postal_code": null
+        }
+      ]
+    },
+    {
+      "target": "Santhekatte",
+      "found": false,
+      "match_count": 0,
+      "matches": []
+    },
+    {
+      "target": "Parkala",
+      "found": true,
+      "match_count": 1,
+      "matches": [
+        {
+          "osm_type": "node",
+          "osm_id": 672742555,
+          "place": "village",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": false,
+          "centroid": [
+            74.8068364,
+            13.355273
+          ],
+          "postal_code": null
+        }
+      ]
+    },
+    {
+      "target": "Kunjibettu",
+      "found": false,
+      "match_count": 0,
+      "matches": []
+    }
+  ]
+}

@@ -1,0 +1,272 @@
+{
+  "city": "bangalore",
+  "total_candidates": 6483,
+  "by_place_type": {
+    "town": 10,
+    "suburb": 114,
+    "village": 472,
+    "quarter": 234,
+    "neighbourhood": 915,
+    "locality": 40,
+    "hamlet": 136,
+    "city": 2,
+    "state": 1
+  },
+  "by_admin_level": {
+    "11": 2,
+    "5": 177,
+    "2": 3,
+    "4": 14,
+    "9": 1507,
+    "8": 12,
+    "6": 1924,
+    "7": 2,
+    "10": 942
+  },
+  "by_osm_type": {
+    "node": 1762,
+    "way": 72,
+    "relation": 4649
+  },
+  "geometry_polygon_or_way_count": 4721,
+  "geometry_point_only_count": 1762,
+  "pct_polygon_or_way": 72.8,
+  "pct_point_only": 27.2,
+  "pct_with_kannada_name": 36.6,
+  "pct_with_name": 99.4,
+  "pct_with_postal_code": 0.6,
+  "pct_with_wikidata": 33.9,
+  "duplicate_name_count": 711,
+  "duplicate_name_samples": [
+    "sarjapura",
+    "vidyaranyapura",
+    "kannuru",
+    "kodihalli",
+    "whitefield",
+    "honnenahalli",
+    "kothanur",
+    "geddalahalli",
+    "anagalapura",
+    "bande bommasandra",
+    "byrathi",
+    "seshadripuram",
+    "sampangirama nagar",
+    "shivajinagar",
+    "gandhinagar"
+  ],
+  "sample_locality_report": [
+    {
+      "target": "Hebbal",
+      "found": true,
+      "match_count": 2,
+      "matches": [
+        {
+          "osm_type": "node",
+          "osm_id": 529277252,
+          "place": "suburb",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": false,
+          "centroid": [
+            77.5919,
+            13.0382184
+          ],
+          "postal_code": null
+        },
+        {
+          "osm_type": "relation",
+          "osm_id": 19883365,
+          "place": null,
+          "boundary": "administrative",
+          "admin_level": "10",
+          "has_polygon": true,
+          "centroid": null,
+          "postal_code": null
+        }
+      ]
+    },
+    {
+      "target": "Yelahanka",
+      "found": true,
+      "match_count": 1,
+      "matches": [
+        {
+          "osm_type": "node",
+          "osm_id": 430143744,
+          "place": "suburb",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": false,
+          "centroid": [
+            77.5963454,
+            13.1006982
+          ],
+          "postal_code": null
+        }
+      ]
+    },
+    {
+      "target": "JP Nagar",
+      "found": true,
+      "match_count": 2,
+      "matches": [
+        {
+          "osm_type": "node",
+          "osm_id": 429853335,
+          "place": "suburb",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": false,
+          "centroid": [
+            77.5866067,
+            12.9096941
+          ],
+          "postal_code": null
+        },
+        {
+          "osm_type": "relation",
+          "osm_id": 17205864,
+          "place": "suburb",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": true,
+          "centroid": null,
+          "postal_code": null
+        }
+      ]
+    },
+    {
+      "target": "Jayanagar",
+      "found": true,
+      "match_count": 1,
+      "matches": [
+        {
+          "osm_type": "node",
+          "osm_id": 429853334,
+          "place": "suburb",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": false,
+          "centroid": [
+            77.5824229,
+            12.9292731
+          ],
+          "postal_code": null
+        }
+      ]
+    },
+    {
+      "target": "Whitefield",
+      "found": true,
+      "match_count": 2,
+      "matches": [
+        {
+          "osm_type": "node",
+          "osm_id": 377219489,
+          "place": "suburb",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": false,
+          "centroid": [
+            77.7497448,
+            12.9696365
+          ],
+          "postal_code": null
+        },
+        {
+          "osm_type": "relation",
+          "osm_id": 19883364,
+          "place": null,
+          "boundary": "administrative",
+          "admin_level": "10",
+          "has_polygon": true,
+          "centroid": null,
+          "postal_code": null
+        }
+      ]
+    },
+    {
+      "target": "Electronic City",
+      "found": true,
+      "match_count": 1,
+      "matches": [
+        {
+          "osm_type": "node",
+          "osm_id": 12123440858,
+          "place": "town",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": false,
+          "centroid": [
+            77.6686835,
+            12.8436448
+          ],
+          "postal_code": null
+        }
+      ]
+    },
+    {
+      "target": "Koramangala",
+      "found": true,
+      "match_count": 1,
+      "matches": [
+        {
+          "osm_type": "node",
+          "osm_id": 429918282,
+          "place": "suburb",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": false,
+          "centroid": [
+            77.624081,
+            12.9357366
+          ],
+          "postal_code": null
+        }
+      ]
+    },
+    {
+      "target": "Indiranagar",
+      "found": true,
+      "match_count": 3,
+      "matches": [
+        {
+          "osm_type": "node",
+          "osm_id": 448991617,
+          "place": "suburb",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": false,
+          "centroid": [
+            77.6404672,
+            12.9732913
+          ],
+          "postal_code": null
+        },
+        {
+          "osm_type": "node",
+          "osm_id": 7413376559,
+          "place": "neighbourhood",
+          "boundary": null,
+          "admin_level": null,
+          "has_polygon": false,
+          "centroid": [
+            77.5452778,
+            12.9962979
+          ],
+          "postal_code": null
+        },
+        {
+          "osm_type": "relation",
+          "osm_id": 19883335,
+          "place": null,
+          "boundary": "administrative",
+          "admin_level": "10",
+          "has_polygon": true,
+          "centroid": null,
+          "postal_code": null
+        }
+      ]
+    }
+  ]
+}
