@@ -1,0 +1,19 @@
+# scripts/geography/requirements.txt — Python dependencies for the
+# offline city-geography preparation pipeline (issue #1900).
+#
+# Install: pip install -r scripts/geography/requirements.txt
+# For dev: pip install -r scripts/geography/requirements.txt pytest
+#
+# osmium + shapely are EXTRACTION-ONLY dependencies (used by
+# extract_osm_candidates.py). All other scripts (area_key.py,
+# geometry_trust.py, city_config.py, build_review_csv.py,
+# build_batch_json.py) are pure stdlib and never import osmium/shapely.
+
+# OSM PBF/XML reader (extraction step only)
+osmium>=3.6
+
+# Geometry (way polygon centroid/bbox derivation, extraction step only)
+shapely>=2.0
+
+# Test runner
+pytest>=7.0

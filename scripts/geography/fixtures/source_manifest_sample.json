@@ -1,0 +1,20 @@
+{
+  "provider": "OSM",
+  "sourceArtifact": "southern-zone-latest.osm.pbf",
+  "sourceArtifactSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "sourceDownloadUrl": "https://download.geofabrik.de/asia/india/southern-zone-latest.osm.pbf",
+  "sourceDownloadedAt": "2026-07-14T00:00:00+00:00",
+  "sourceExtractedAt": "2026-07-15T00:00:00Z",
+  "licence": {
+    "id": "ODbL-1.0",
+    "name": "Open Database Licence 1.0",
+    "url": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "attribution": "Contains data from OpenStreetMap, licensed under the Open Database Licence (ODbL) 1.0. (c) OpenStreetMap contributors. https://www.openstreetmap.org/copyright"
+  },
+  "cityConfig": {
+    "slug": "udupi",
+    "stateCode": "KA",
+    "bbox": [74.60, 13.15, 74.90, 13.50]
+  },
+  "extractionToolVersion": "extract_osm_candidates.py@issue-1900-rework"
+}

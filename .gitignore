@@ -87,3 +87,21 @@ screenshots/
 .claude/scheduled_tasks.lock
 .claude/reports/
 
+# City geography preparation pipeline (issue #1900) — never commit the large
+# Geofabrik OSM extract or any raw/full city output; only tiny fixtures,
+# checksums, and the one small compat-IT sample batch under
+# backend/src/test/resources/area-onboarding/ are committed.
+*.osm.pbf
+southern-zone*
+scripts/geography/output/
+scripts/geography/**/__pycache__/
+scripts/geography/**/*.pyc
+# User-correction rework (--source-manifest / --canonical-area-inventory):
+# an operator's REAL local source manifest (which embeds a real local PBF
+# path) or a real canonical-area-inventory export from production is never
+# committed — only the tiny *_sample.json fixtures under
+# scripts/geography/fixtures/ are. Operators should name local drafts with
+# a *.local.json suffix to keep them out of git by convention.
+scripts/geography/*.source-manifest.local.json
+scripts/geography/*.canonical-area-inventory.local.*
+

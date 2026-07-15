@@ -1,0 +1,22 @@
+{
+  "datasetId": "osm-udupi-alias-merge-sample",
+  "datasetVersion": "v1",
+  "artifactChecksum": "dc288d534c7d8ecaf43145b3632c4ce4642baf49944bffe76f322f6b8d4c3820",
+  "provider": "OSM",
+  "inputSchemaVersion": "1",
+  "sourceExtractedAt": "2026-07-15T00:00:00Z",
+  "candidates": [
+    {
+      "areaKey": "IN|KA|Udupi|Kalyanpur",
+      "name": "Kalyanpur",
+      "geoCenterLat": 13.32,
+      "geoCenterLon": 74.75,
+      "minLat": null,
+      "minLon": null,
+      "maxLat": null,
+      "maxLon": null,
+      "geometrySource": "OSM",
+      "externalSourceId": "node/500000001"
+    }
+  ]
+}

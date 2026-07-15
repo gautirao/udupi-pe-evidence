@@ -1,0 +1,93 @@
+{
+  "manifestSchemaVersion": "1",
+  "datasetId": "issue-1900-udupi-compat-sample",
+  "datasetVersion": "v1",
+  "provider": "OSM",
+  "licence": {
+    "id": "ODbL-1.0",
+    "name": "Open Database Licence 1.0",
+    "url": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "attribution": "Contains data from OpenStreetMap, licensed under the Open Database Licence (ODbL) 1.0. (c) OpenStreetMap contributors. https://www.openstreetmap.org/copyright"
+  },
+  "source": {
+    "sourceArtifact": "southern-zone-latest.osm.pbf",
+    "sourceArtifactSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "rawCandidateJsonlSha256": "b516c467d567af560c74231787f6626b8ecc3898c0818a0c78e0ffec85225c6f",
+    "reviewedCsvSha256": "f63ddbf339b308599a403a550de1bd90714a073c9862ef4a2edc720e16cbf4ae",
+    "sourceDownloadUrl": "https://download.geofabrik.de/asia/india/southern-zone-latest.osm.pbf",
+    "sourceDownloadedAt": "2026-07-14T00:00:00+00:00",
+    "sourceExtractedAt": "2026-07-15T00:00:00Z",
+    "extractionToolVersion": "extract_osm_candidates.py@issue-1900-rework"
+  },
+  "cityConfig": {
+    "slug": "udupi",
+    "stateCode": "KA",
+    "bbox": [
+      74.6,
+      13.15,
+      74.9,
+      13.5
+    ]
+  },
+  "reviewSummary": {
+    "totalRows": 3,
+    "includeCount": 3,
+    "excludeCount": 0,
+    "mergeCount": 0,
+    "renameCount": 0,
+    "aliasCount": 0,
+    "emittedCount": 3
+  },
+  "reviewedRows": [
+    {
+      "osmType": "node",
+      "osmId": "459838242",
+      "externalSourceId": "node/459838242",
+      "rawName": "Ambagilu",
+      "decision": "INCLUDE",
+      "canonicalAreaKey": "IN|KA|Udupi|Ambagilu1900Sample",
+      "canonicalName": "Ambagilu",
+      "mergeTargetKey": null,
+      "aliases": [],
+      "reviewer": "test-reviewer",
+      "reviewedAt": "2026-07-15T00:00:00+00:00",
+      "reviewReason": "real Udupi-district OSM village node — inside Udupi city bbox — no name collision with seeded V71 areas — sample for #1900 compat IT",
+      "emittedToBatch": true
+    },
+    {
+      "osmType": "node",
+      "osmId": "459839034",
+      "externalSourceId": "node/459839034",
+      "rawName": "Mabukala",
+      "decision": "INCLUDE",
+      "canonicalAreaKey": "IN|KA|Udupi|Mabukala1900Sample",
+      "canonicalName": "Mabukala",
+      "mergeTargetKey": null,
+      "aliases": [],
+      "reviewer": "test-reviewer",
+      "reviewedAt": "2026-07-15T00:00:00+00:00",
+      "reviewReason": "real Udupi-district OSM locality node — inside Udupi city bbox — no name collision with seeded V71 areas — sample for #1900 compat IT",
+      "emittedToBatch": true
+    },
+    {
+      "osmType": "node",
+      "osmId": "870914109",
+      "externalSourceId": "node/870914109",
+      "rawName": "Mundkina Jaddu",
+      "decision": "INCLUDE",
+      "canonicalAreaKey": "IN|KA|Udupi|MundkinaJaddu1900Sample",
+      "canonicalName": "Mundkina Jaddu",
+      "mergeTargetKey": null,
+      "aliases": [],
+      "reviewer": "test-reviewer",
+      "reviewedAt": "2026-07-15T00:00:00+00:00",
+      "reviewReason": "real Udupi-district OSM village node — inside Udupi city bbox — no name collision with seeded V71 areas — sample for #1900 compat IT",
+      "emittedToBatch": true
+    }
+  ],
+  "emittedBatch": {
+    "candidateCount": 3,
+    "candidatePayloadChecksum": "d90ec270f2e62588b52eb41468ba122cb1266bfdc7a20793905eac508cb5a01a"
+  },
+  "reviewArtifactChecksum": "6d7a6eb2926912dd4704bdee1e2530417fa98c49ade79a09adcec0f8513433af"
+}

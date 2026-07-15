@@ -1,0 +1,46 @@
+{
+  "datasetId": "issue-1900-udupi-compat-sample",
+  "datasetVersion": "v1",
+  "artifactChecksum": "d90ec270f2e62588b52eb41468ba122cb1266bfdc7a20793905eac508cb5a01a",
+  "provider": "OSM",
+  "inputSchemaVersion": "1",
+  "sourceExtractedAt": "2026-07-15T00:00:00Z",
+  "candidates": [
+    {
+      "areaKey": "IN|KA|Udupi|Ambagilu1900Sample",
+      "name": "Ambagilu",
+      "geoCenterLat": 13.3710379,
+      "geoCenterLon": 74.7464615,
+      "minLat": null,
+      "minLon": null,
+      "maxLat": null,
+      "maxLon": null,
+      "geometrySource": "OSM",
+      "externalSourceId": "node/459838242"
+    },
+    {
+      "areaKey": "IN|KA|Udupi|Mabukala1900Sample",
+      "name": "Mabukala",
+      "geoCenterLat": 13.4557039,
+      "geoCenterLon": 74.7114236,
+      "minLat": null,
+      "minLon": null,
+      "maxLat": null,
+      "maxLon": null,
+      "geometrySource": "OSM",
+      "externalSourceId": "node/459839034"
+    },
+    {
+      "areaKey": "IN|KA|Udupi|MundkinaJaddu1900Sample",
+      "name": "Mundkina Jaddu",
+      "geoCenterLat": 13.4208736,
+      "geoCenterLon": 74.8069551,
+      "minLat": null,
+      "minLon": null,
+      "maxLat": null,
+      "maxLon": null,
+      "geometrySource": "OSM",
+      "externalSourceId": "node/870914109"
+    }
+  ]
+}

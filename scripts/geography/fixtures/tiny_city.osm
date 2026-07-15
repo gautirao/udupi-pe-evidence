@@ -1,0 +1,88 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!--
+  Tiny hand-authored OSM XML fixture for scripts/geography tests (issue #1900).
+  NOT real extracted data — coordinates are illustrative, within a small test
+  bbox modelled loosely on the Udupi area for realism.
+
+  Contains data from OpenStreetMap, licensed under the Open Database Licence
+  (ODbL) 1.0. (c) OpenStreetMap contributors.
+  https://www.openstreetmap.org/copyright
+
+  7 place=* nodes (6 inside the test bbox 74.70,13.30,74.80,13.40 used by
+  tests/test_extract_osm_candidates.py; 1 deliberately OUTSIDE it to prove
+  the bbox filter works) + 1 simple closed place=neighbourhood way built
+  from 4 plain geometry nodes.
+-->
+<osm version="0.6" generator="issue-1900-fixture">
+  <node id="1001" lat="13.34" lon="74.75" version="1">
+    <tag k="place" v="city"/>
+    <tag k="name" v="TestCity"/>
+    <tag k="name:kn" v="ಟೆಸ್ಟ್ ಸಿಟಿ"/>
+  </node>
+  <node id="1002" lat="13.32" lon="74.72" version="1">
+    <tag k="place" v="town"/>
+    <tag k="name" v="TestTown"/>
+  </node>
+  <node id="1003" lat="13.36" lon="74.78" version="1">
+    <tag k="place" v="village"/>
+    <tag k="name" v="TestVillage1"/>
+  </node>
+  <node id="1004" lat="13.31" lon="74.71" version="1">
+    <tag k="place" v="village"/>
+    <tag k="name" v="TestVillage2"/>
+  </node>
+  <node id="1005" lat="13.39" lon="74.79" version="1">
+    <tag k="place" v="hamlet"/>
+    <tag k="name" v="TestHamlet"/>
+  </node>
+  <node id="1006" lat="13.33" lon="74.76" version="1">
+    <tag k="place" v="suburb"/>
+    <tag k="name" v="TestSuburb"/>
+  </node>
+  <node id="1007" lat="14.00" lon="75.50" version="1">
+    <tag k="place" v="city"/>
+    <tag k="name" v="OutsideBboxCity"/>
+  </node>
+  <node id="3001" lat="13.345" lon="74.755" version="1"/>
+  <node id="3002" lat="13.345" lon="74.760" version="1"/>
+  <node id="3003" lat="13.340" lon="74.760" version="1"/>
+  <node id="3004" lat="13.340" lon="74.755" version="1"/>
+  <way id="2001" version="1">
+    <nd ref="3001"/>
+    <nd ref="3002"/>
+    <nd ref="3003"/>
+    <nd ref="3004"/>
+    <nd ref="3001"/>
+    <tag k="place" v="neighbourhood"/>
+    <tag k="name" v="TestNeighbourhood"/>
+  </way>
+  <!-- ADDITIONAL (rework, geometry validity): a self-intersecting "bowtie"
+       ring (corners taken in crossed order) — Polygon(ring.coords) is
+       is_valid=False; must be skipped and counted, not emitted. -->
+  <node id="3005" lat="13.360" lon="74.780" version="1"/>
+  <node id="3006" lat="13.361" lon="74.781" version="1"/>
+  <node id="3007" lat="13.360" lon="74.781" version="1"/>
+  <node id="3008" lat="13.361" lon="74.780" version="1"/>
+  <way id="2002" version="1">
+    <nd ref="3005"/>
+    <nd ref="3006"/>
+    <nd ref="3007"/>
+    <nd ref="3008"/>
+    <nd ref="3005"/>
+    <tag k="place" v="neighbourhood"/>
+    <tag k="name" v="BowtieInvalidWay"/>
+  </way>
+  <!-- ADDITIONAL (rework, geometry validity): a degenerate, zero-area
+       (collinear) ring — must be skipped and counted, not emitted. -->
+  <node id="3009" lat="13.370" lon="74.790" version="1"/>
+  <node id="3010" lat="13.370" lon="74.791" version="1"/>
+  <node id="3011" lat="13.370" lon="74.792" version="1"/>
+  <way id="2003" version="1">
+    <nd ref="3009"/>
+    <nd ref="3010"/>
+    <nd ref="3011"/>
+    <nd ref="3009"/>
+    <tag k="place" v="neighbourhood"/>
+    <tag k="name" v="DegenerateZeroAreaWay"/>
+  </way>
+</osm>

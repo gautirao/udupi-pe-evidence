@@ -1,0 +1,104 @@
+{
+  "manifestSchemaVersion": "1",
+  "datasetId": "osm-udupi-alias-merge-sample",
+  "datasetVersion": "v1",
+  "provider": "OSM",
+  "licence": {
+    "id": "ODbL-1.0",
+    "name": "Open Database Licence 1.0",
+    "url": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "attribution": "Contains data from OpenStreetMap, licensed under the Open Database Licence (ODbL) 1.0. (c) OpenStreetMap contributors. https://www.openstreetmap.org/copyright"
+  },
+  "source": {
+    "sourceArtifact": "southern-zone-latest.osm.pbf",
+    "sourceArtifactSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "rawCandidateJsonlSha256": "43f2b38a7fb8def7e194db8618ab038a3bf06ee6117802196cf39b182e1cca17",
+    "reviewedCsvSha256": "3c4f42d71116df77d442e28e15d4c3d1baa76014b2e2900ac42bb053cc64522e",
+    "sourceDownloadUrl": "https://download.geofabrik.de/asia/india/southern-zone-latest.osm.pbf",
+    "sourceDownloadedAt": "2026-07-14T00:00:00+00:00",
+    "sourceExtractedAt": "2026-07-15T00:00:00Z",
+    "extractionToolVersion": "extract_osm_candidates.py@issue-1900-rework"
+  },
+  "cityConfig": {
+    "slug": "udupi",
+    "stateCode": "KA",
+    "bbox": [
+      74.6,
+      13.15,
+      74.9,
+      13.5
+    ]
+  },
+  "reviewSummary": {
+    "totalRows": 3,
+    "includeCount": 1,
+    "excludeCount": 0,
+    "mergeCount": 1,
+    "renameCount": 0,
+    "aliasCount": 1,
+    "emittedCount": 1
+  },
+  "reviewedRows": [
+    {
+      "osmType": "node",
+      "osmId": "500000001",
+      "externalSourceId": "node/500000001",
+      "rawName": "Kalyanpur",
+      "decision": "INCLUDE",
+      "canonicalAreaKey": "IN|KA|Udupi|Kalyanpur",
+      "canonicalName": "Kalyanpur",
+      "mergeTargetKey": null,
+      "aliases": [
+        {
+          "value": "Kalyanpura",
+          "lang": null,
+          "source": "manual"
+        },
+        {
+          "value": "ಕಲ್ಯಾಣಪುರ",
+          "lang": "kn",
+          "source": "osm"
+        }
+      ],
+      "reviewer": "test-reviewer",
+      "reviewedAt": "2026-07-15T09:00:00+00:00",
+      "reviewReason": "primary settlement — keeping as canonical",
+      "emittedToBatch": true
+    },
+    {
+      "osmType": "node",
+      "osmId": "500000002",
+      "externalSourceId": "node/500000002",
+      "rawName": "SubArea",
+      "decision": "MERGE",
+      "canonicalAreaKey": null,
+      "canonicalName": null,
+      "mergeTargetKey": "IN|KA|Udupi|Kalyanpur",
+      "aliases": [],
+      "reviewer": "test-reviewer",
+      "reviewedAt": "2026-07-15T09:05:00+00:00",
+      "reviewReason": "duplicate of Kalyanpur — merging rather than onboarding separately",
+      "emittedToBatch": false
+    },
+    {
+      "osmType": "node",
+      "osmId": "500000003",
+      "externalSourceId": "node/500000003",
+      "rawName": "AltName",
+      "decision": "ALIAS",
+      "canonicalAreaKey": null,
+      "canonicalName": null,
+      "mergeTargetKey": "IN|KA|Udupi|Kalyanpur",
+      "aliases": [],
+      "reviewer": "test-reviewer",
+      "reviewedAt": "2026-07-15T09:10:00+00:00",
+      "reviewReason": "this OSM element is an alternate name of Kalyanpur — not a distinct area",
+      "emittedToBatch": false
+    }
+  ],
+  "emittedBatch": {
+    "candidateCount": 1,
+    "candidatePayloadChecksum": "dc288d534c7d8ecaf43145b3632c4ce4642baf49944bffe76f322f6b8d4c3820"
+  },
+  "reviewArtifactChecksum": "72d33b1a25fe650fa052ade818e0f79657faeb9c914d2966e33b736d4df5a168"
+}
