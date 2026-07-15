@@ -191,6 +191,48 @@ else
   echo "⚠️  Backend not running, skipping API endpoint tests"
 fi
 
+# 6b. Discover City-Region Backfill (#1907)
+# Externally-configured allow-list of city slugs that have actually been onboarded
+# (city_regions populated) in this environment. Set via the REGION_ENABLED_CITIES env var
+# (comma-separated slugs, e.g. REGION_ENABLED_CITIES=bangalore,udupi) — the release
+# pipeline sets this per-environment as cities are onboarded via
+# docs/ops/city-region-onboarding-recovery.md, so this script never needs a code change
+# to gate the check per-city. Leave unset/empty to skip this section entirely (the
+# default — as of #1907 no city has completed onboarding anywhere, city_regions is
+# empty even though city_region_policy is seeded for bangalore/udupi via V113).
+REGION_ENABLED_CITIES="${REGION_ENABLED_CITIES:-}"
+IFS=',' read -ra region_enabled_cities <<< "$REGION_ENABLED_CITIES"
+
+print_header "6b. Discover City-Region Backfill"
+
+if [ -z "$REGION_ENABLED_CITIES" ]; then
+  echo "ℹ️  REGION_ENABLED_CITIES is unset/empty — no region-enabled cities configured, skipping."
+elif curl -f -s -o /dev/null http://localhost:8080/actuator/health 2>/dev/null; then
+  for city_slug in "${region_enabled_cities[@]}"; do
+    [ -z "$city_slug" ] && continue
+    print_test "GET /api/discover/cities/$city_slug/regions returns non-empty regions"
+    REGIONS_STATUS=$(curl -s -o /tmp/regions-response.json -w "%{http_code}" --max-time 10 "http://localhost:8080/api/discover/cities/$city_slug/regions")
+    REGIONS_RESPONSE=$(cat /tmp/regions-response.json 2>/dev/null)
+    if [ "$REGIONS_STATUS" != "200" ]; then
+      print_fail "GET /api/discover/cities/$city_slug/regions - HTTP $REGIONS_STATUS (expected 200)"
+      continue
+    fi
+    if ! echo "$REGIONS_RESPONSE" | node -e "JSON.parse(require('fs').readFileSync(0,'utf8'))" > /dev/null 2>&1; then
+      print_fail "GET /api/discover/cities/$city_slug/regions - invalid JSON response"
+      continue
+    fi
+    # "regions" field is an array of Region objects with a "key" field (RegionSummaryResponse.Region.key).
+    REGIONS_COUNT=$(echo "$REGIONS_RESPONSE" | grep -o '"key"' | wc -l | tr -d ' ')
+    if [ "$REGIONS_COUNT" -gt 0 ] 2>/dev/null; then
+      print_pass "GET /api/discover/cities/$city_slug/regions - $REGIONS_COUNT region(s)"
+    else
+      print_fail "GET /api/discover/cities/$city_slug/regions - empty regions array (expected onboarded city)"
+    fi
+  done
+else
+  echo "⚠️  Backend not running, skipping city-region backfill checks"
+fi
+
 # 7. Database Migration Check
 print_header "7. Database Migration Check"
 print_test "Checking Flyway migration status"

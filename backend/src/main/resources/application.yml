@@ -105,6 +105,13 @@ management:
   endpoint:
     health:
       show-details: never
+      group:
+        # #1907: scoped detail visibility for the city-region backfill readiness indicator only —
+        # does NOT change the app-wide show-details: never default above. See
+        # CityRegionBackfillReadinessHealthIndicator for why this indicator always reports UP.
+        cityRegionBackfill:
+          include: cityRegionBackfillReadiness
+          show-details: always
 
   metrics:
     tags:
