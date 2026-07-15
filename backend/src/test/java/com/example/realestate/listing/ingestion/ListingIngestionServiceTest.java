@@ -2,6 +2,7 @@ package com.example.realestate.listing.ingestion;
 
 import com.example.realestate.ai.ClassificationResult;
 import com.example.realestate.ai.PropertyType;
+import com.example.realestate.discover.AreaResolutionService;
 import com.example.realestate.geo.GeocodingPort;
 import com.example.realestate.geo.GeocodingService;
 import com.example.realestate.ingestion.RawPost;
@@ -11,6 +12,7 @@ import com.example.realestate.listing.core.ListingDeduplicationService;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.quality.QualityRecomputeService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.jdbc.core.JdbcOperations;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -49,14 +52,24 @@ class ListingIngestionServiceTest {
     @Mock
     private QualityRecomputeService qualityRecomputeService;
 
+    @Mock
+    private AreaResolutionService areaResolutionService;
+
+    @Mock
+    private JdbcOperations jdbcOperations;
+
     private ListingIngestionService listingIngestionService;
 
     @BeforeEach
     void setUp() {
+        // jdbcOperations is unstubbed by default (Mockito returns null for the "SELECT id FROM
+        // cities" lookup), so #1887 PR3's area-resolution step is a no-op in every pre-existing
+        // test here — cityId resolves to null, resolution is skipped, and areaKey/areaLabel keep
+        // their pre-#1887 geocoded values exactly as asserted below.
         listingIngestionService = new ListingIngestionService(
                 listingRepository, rawPostRepository, geocodingPort,
                 new ObjectMapper(), applicationEventPublisher, listingDeduplicationService,
-                qualityRecomputeService);
+                qualityRecomputeService, areaResolutionService, jdbcOperations, new SimpleMeterRegistry());
     }
 
     private RawPost makePost() {

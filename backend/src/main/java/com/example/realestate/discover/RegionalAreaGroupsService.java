@@ -298,6 +298,11 @@ public class RegionalAreaGroupsService {
      * <p>Live-listing guards mirror AreaSummaryService exactly:
      *   status = 'LIVE' AND archived_at IS NULL AND is_duplicate = false
      *   AND LOWER(property_type) = LOWER(?) AND array_length(string_to_array(area_key,'|'),1) = 4
+     *
+     * <p>#1887 PR3 (OQ3): also requires {@code area_resolution_status = 'RESOLVED'} so a listing
+     * whose geocoded area could not be matched to a canonical area cannot inflate a canonical
+     * area's corridor listing count. {@code AGRI_AREA_LAND_SQL} below carries the same guard so
+     * the acreage set stays identical to the counted set.
      */
     private static final String REGIONAL_GROUPS_SQL = """
             SELECT
@@ -317,6 +322,7 @@ public class RegionalAreaGroupsService {
                 WHERE pl.status = 'LIVE'
                   AND pl.archived_at IS NULL
                   AND pl.is_duplicate = false
+                  AND pl.area_resolution_status = 'RESOLVED'
                   AND LOWER(pl.property_type) = LOWER(?)
                   AND array_length(string_to_array(pl.area_key, '|'), 1) = 4
                 GROUP BY pl.area_key
@@ -340,6 +346,7 @@ public class RegionalAreaGroupsService {
             WHERE pl.status = 'LIVE'
               AND pl.archived_at IS NULL
               AND pl.is_duplicate = false
+              AND pl.area_resolution_status = 'RESOLVED'
               AND LOWER(pl.property_type) = LOWER(?)
               AND c.slug = ?
               AND array_length(string_to_array(pl.area_key, '|'), 1) = 4

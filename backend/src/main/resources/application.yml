@@ -261,3 +261,19 @@ search:
     # Override via SEARCH_OUTBOX_MAX_RETRY_ATTEMPTS / SEARCH_OUTBOX_RETRY_DELAY_SECONDS.
     max-retry-attempts: ${SEARCH_OUTBOX_MAX_RETRY_ATTEMPTS:3}
     retry-delay-seconds: ${SEARCH_OUTBOX_RETRY_DELAY_SECONDS:60}
+
+# Area region-reclassification outbox consumer (#1887 PR3) — a DISTINCT namespace/table from the
+# search indexer above: never reuses search.indexer.enabled and never touches
+# listing_search_outbox. Disabled by default; set AREA_REGION_RECLASS_ENABLED=true to activate the
+# poller, which drains area_region_reclass_outbox (enqueued by AreaOnboardingApplyService in PR2)
+# and calls CityRegionOnboardingService.apply(cityId) — never synchronously from an apply/ingest
+# transaction.
+area:
+  region-reclass:
+    enabled: ${AREA_REGION_RECLASS_ENABLED:false}
+    poll-interval-seconds: 30
+    batch-size: 50
+    max-retry-attempts: 3
+    retry-delay-seconds: 60
+    max-backoff-seconds: 3600
+    min-event-age-seconds: 0

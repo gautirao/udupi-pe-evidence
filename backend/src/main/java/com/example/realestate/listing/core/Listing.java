@@ -142,6 +142,24 @@ public class Listing {
     @Column(name = "area_label")
     private String areaLabel;
 
+    /**
+     * Whether this listing's {@link #areaKey} was resolved against canonical areas/area_alias at
+     * ingestion time (#1887 PR3). Defaults to {@code "RESOLVED"} to match the V117 DB default —
+     * every pre-existing row and any listing whose geocoded area matched a canonical area.
+     * {@code "UNRESOLVED"} means the geocoded area_key was kept as-is because no canonical match
+     * was found. Written only by {@code ListingIngestionService} via {@code AreaResolutionService}.
+     */
+    @Column(name = "area_resolution_status", nullable = false, length = 20)
+    private String areaResolutionStatus = "RESOLVED";
+
+    /**
+     * Which resolution step produced a RESOLVED {@link #areaResolutionStatus}: one of
+     * {@code PROVIDER_ID}, {@code CANONICAL_KEY}, {@code ALIAS}. Null when
+     * {@link #areaResolutionStatus} is {@code UNRESOLVED}, or for pre-existing rows.
+     */
+    @Column(name = "area_resolution_method", length = 20)
+    private String areaResolutionMethod;
+
     @Column(name = "confidence_score")
     private int confidenceScore = 0;
 
@@ -853,6 +871,22 @@ public class Listing {
 
     public void setAreaLabel(String areaLabel) {
         this.areaLabel = areaLabel;
+    }
+
+    public String getAreaResolutionStatus() {
+        return areaResolutionStatus;
+    }
+
+    public void setAreaResolutionStatus(String areaResolutionStatus) {
+        this.areaResolutionStatus = areaResolutionStatus;
+    }
+
+    public String getAreaResolutionMethod() {
+        return areaResolutionMethod;
+    }
+
+    public void setAreaResolutionMethod(String areaResolutionMethod) {
+        this.areaResolutionMethod = areaResolutionMethod;
     }
 
     public int getConfidenceScore() {

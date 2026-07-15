@@ -3,6 +3,8 @@ package com.example.realestate.listing.ingestion;
 import com.example.realestate.ai.ClassificationResult;
 import com.example.realestate.ai.PromptRegistry;
 import com.example.realestate.ai.PropertyType;
+import com.example.realestate.discover.AreaResolution;
+import com.example.realestate.discover.AreaResolutionService;
 import com.example.realestate.geo.GeocodingPort;
 import com.example.realestate.geo.GeocodingService;
 import com.example.realestate.ingestion.RawPost;
@@ -16,9 +18,12 @@ import com.example.realestate.quality.QualityRecomputeService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +45,9 @@ public class ListingIngestionService {
     private final ApplicationEventPublisher applicationEventPublisher;
     private final ListingDeduplicationService listingDeduplicationService;
     private final QualityRecomputeService qualityRecomputeService;
+    private final AreaResolutionService areaResolutionService;
+    private final JdbcOperations jdbcOperations;
+    private final Counter areaUnresolvedCounter;
 
     public ListingIngestionService(
             ListingRepository listingRepository,
@@ -48,7 +56,10 @@ public class ListingIngestionService {
             ObjectMapper objectMapper,
             ApplicationEventPublisher applicationEventPublisher,
             ListingDeduplicationService listingDeduplicationService,
-            QualityRecomputeService qualityRecomputeService) {
+            QualityRecomputeService qualityRecomputeService,
+            AreaResolutionService areaResolutionService,
+            JdbcOperations jdbcOperations,
+            MeterRegistry meterRegistry) {
         this.listingRepository = listingRepository;
         this.rawPostRepository = rawPostRepository;
         this.geocodingPort = geocodingPort;
@@ -56,6 +67,12 @@ public class ListingIngestionService {
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingDeduplicationService = listingDeduplicationService;
         this.qualityRecomputeService = qualityRecomputeService;
+        this.areaResolutionService = areaResolutionService;
+        this.jdbcOperations = jdbcOperations;
+        this.areaUnresolvedCounter = Counter.builder("listing.ingestion.area_unresolved")
+                .description("Ingested listings whose geocoded area could not be resolved to a canonical area "
+                        + "(#1887 PR3) — area_key kept as the raw geocoded value.")
+                .register(meterRegistry);
     }
 
     /**
@@ -135,6 +152,13 @@ public class ListingIngestionService {
                     log.debug("Geocoded locality={} to lat={} lng={} areaKey={} areaLabel={}",
                             result.locality(), geoResult.latitude(), geoResult.longitude(),
                             listing.getAreaKey(), listing.getAreaLabel());
+
+                    // #1887 PR3: resolve the geocoded area against canonical areas/area_alias
+                    // before persisting. RawPost ingestion has no provider/external-source-id
+                    // concept (organic scraped posts, not a curated onboarding batch) — the
+                    // PROVIDER_ID resolution step is therefore always a no-op here (both args
+                    // null) and resolution falls through to CANONICAL_KEY then ALIAS.
+                    applyAreaResolution(listing, geoResult, result.locality());
                 } else {
                     log.debug("Geocoding returned null for locality={}", result.locality());
                 }
@@ -210,6 +234,78 @@ public class ListingIngestionService {
             log.warn("Failed to serialize parsed_data, storing empty object", e);
             return "{}";
         }
+    }
+
+    /**
+     * Resolves {@code listing}'s geocoded area against canonical areas/area_alias (#1887 PR3) and
+     * stamps {@code areaResolutionStatus}/{@code areaResolutionMethod} accordingly. On RESOLVED,
+     * overwrites {@code areaKey} with the canonical key (areaLabel is left as the human-readable
+     * geocode-derived display value). On UNRESOLVED, keeps the geocoded areaKey, emits a
+     * structured WARN, and increments {@link #areaUnresolvedCounter}. Never throws — a city that
+     * cannot be resolved to an id cannot be scoped for ALIAS lookup, so resolution is skipped and
+     * the listing is stamped UNRESOLVED (same terminal state as an exhausted PROVIDER_ID/
+     * CANONICAL_KEY/ALIAS search) rather than silently defaulting to the entity's RESOLVED default
+     * — the geocoded area_key is still kept as-is.
+     */
+    private void applyAreaResolution(Listing listing, GeocodingService.GeoResult geoResult, String locality) {
+        Integer cityId = resolveCityId(geoResult);
+        if (cityId == null) {
+            listing.setAreaResolutionStatus("UNRESOLVED");
+            listing.setAreaResolutionMethod(null);
+            areaUnresolvedCounter.increment();
+            log.warn("AreaResolution: UNRESOLVED (no cities row for geocoded city) city={} "
+                    + "geocodedAreaKey={} locality={}", geoResult.city(), listing.getAreaKey(), locality);
+            return;
+        }
+
+        AreaResolution resolution = areaResolutionService.resolve(
+                cityId, /* provider */ null, /* externalSourceId */ null, listing.getAreaKey(), locality);
+
+        if (resolution.isResolved()) {
+            listing.setAreaKey(resolution.canonicalAreaKey());
+            listing.setAreaResolutionStatus("RESOLVED");
+            listing.setAreaResolutionMethod(resolution.method().name());
+        } else {
+            listing.setAreaResolutionStatus("UNRESOLVED");
+            listing.setAreaResolutionMethod(null);
+            areaUnresolvedCounter.increment();
+            log.warn("AreaResolution: UNRESOLVED cityId={} geocodedAreaKey={} locality={}",
+                    cityId, listing.getAreaKey(), locality);
+        }
+    }
+
+    /**
+     * Derives the listing's {@code cities.id} from the geocoded city name, for scoping the ALIAS
+     * resolution step. {@code cities.slug} (V71) uses the APP-CITY vocabulary — {@code bangalore},
+     * {@code mangalore}, {@code udupi}, {@code kundapur} — which is a DIFFERENT vocabulary from
+     * the ADMINISTRATIVE DISTRICT segment normalised by {@code AreaKeyFormat
+     * .normaliseDistrictToken} (e.g. Kundapur's areas carry district {@code "Udupi"} but city
+     * slug {@code "kundapur"} — see V71's header comment). {@link #normalizeCityToSlug} is
+     * therefore an INDEPENDENT, smaller alias set mapping common geocoded-city-name variants to
+     * the actual {@code cities.slug} values, not a reuse of the district-normalisation rules.
+     *
+     * @return the matching {@code cities.id}, or null if no city row matches.
+     */
+    private Integer resolveCityId(GeocodingService.GeoResult geoResult) {
+        if (geoResult == null || geoResult.city() == null || geoResult.city().isBlank()) {
+            return null;
+        }
+        String citySlug = normalizeCityToSlug(geoResult.city());
+        return jdbcOperations.query(
+                "SELECT id FROM cities WHERE slug = ?",
+                rs -> rs.next() ? rs.getInt("id") : null,
+                citySlug);
+    }
+
+    /** See {@link #resolveCityId}'s javadoc for why this is a distinct alias set. */
+    private static String normalizeCityToSlug(String rawCity) {
+        String normalised = rawCity.trim().toLowerCase().replaceAll("\\s+", "-").replaceAll("[^a-z0-9\\-]", "");
+        return switch (normalised) {
+            case "bengaluru", "bengaluru-urban" -> "bangalore";
+            case "mangaluru", "dakshina-kannada" -> "mangalore";
+            case "kundapura" -> "kundapur";
+            default -> normalised;
+        };
     }
 
     /**

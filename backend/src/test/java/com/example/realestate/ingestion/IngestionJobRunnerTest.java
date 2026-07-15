@@ -4,6 +4,7 @@ import com.example.realestate.ai.AiClientPort;
 import com.example.realestate.ai.ClassificationResult;
 import com.example.realestate.ai.ClassificationService;
 import com.example.realestate.ai.PropertyType;
+import com.example.realestate.discover.AreaResolutionService;
 import com.example.realestate.geo.GeocodingPort;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingDeduplicationService;
@@ -11,12 +12,14 @@ import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.ingestion.ListingIngestionService;
 import com.example.realestate.quality.QualityRecomputeService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.jdbc.core.JdbcOperations;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -47,6 +50,12 @@ class IngestionJobRunnerTest {
     @Mock
     private QualityRecomputeService qualityRecomputeService;
 
+    @Mock
+    private AreaResolutionService areaResolutionService;
+
+    @Mock
+    private JdbcOperations jdbcOperations;
+
     private RawPostService rawPostService;
     private ClassificationService classificationService;
     private ListingIngestionService listingIngestionService;
@@ -61,7 +70,8 @@ class IngestionJobRunnerTest {
         listingIngestionService = new ListingIngestionService(
                 listingRepository, rawPostRepository, geocodingPort,
                 new ObjectMapper(), applicationEventPublisher,
-                deduplicationService, qualityRecomputeService);
+                deduplicationService, qualityRecomputeService,
+                areaResolutionService, jdbcOperations, new SimpleMeterRegistry());
         jobRunner = new IngestionJobRunner(rawPostService, classificationService, listingIngestionService, 10);
     }
 
