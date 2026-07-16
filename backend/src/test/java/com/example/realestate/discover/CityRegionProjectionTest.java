@@ -99,4 +99,49 @@ class CityRegionProjectionTest {
 
         assertThrows(IllegalArgumentException.class, () -> CityRegionProjection.displayOrder("BOGUS"));
     }
+
+    // ── hasCompleteValidBbox (#1910 PR1 review finding: strengthen beyond null-completeness) ────
+
+    @Test
+    void hasCompleteValidBbox_trueForAGenuinelyValidNonDegenerateBox() {
+        assertEquals(true, CityRegionProjection.hasCompleteValidBbox(13.00, 13.10, 74.00, 74.10));
+    }
+
+    @Test
+    void hasCompleteValidBbox_falseWhenAnyCoordinateIsNull() {
+        assertEquals(false, CityRegionProjection.hasCompleteValidBbox(null, 13.10, 74.00, 74.10));
+        assertEquals(false, CityRegionProjection.hasCompleteValidBbox(13.00, null, 74.00, 74.10));
+        assertEquals(false, CityRegionProjection.hasCompleteValidBbox(13.00, 13.10, null, 74.10));
+        assertEquals(false, CityRegionProjection.hasCompleteValidBbox(13.00, 13.10, 74.00, null));
+    }
+
+    @Test
+    void hasCompleteValidBbox_falseWhenAnyCoordinateIsNonFinite() {
+        assertEquals(false, CityRegionProjection.hasCompleteValidBbox(Double.NaN, 13.10, 74.00, 74.10));
+        assertEquals(false,
+                CityRegionProjection.hasCompleteValidBbox(13.00, Double.POSITIVE_INFINITY, 74.00, 74.10));
+        assertEquals(false,
+                CityRegionProjection.hasCompleteValidBbox(13.00, 13.10, Double.NEGATIVE_INFINITY, 74.10));
+        assertEquals(false, CityRegionProjection.hasCompleteValidBbox(13.00, 13.10, 74.00, Double.NaN));
+    }
+
+    @Test
+    void hasCompleteValidBbox_falseWhenAnyCoordinateIsOutOfGeographicRange() {
+        // lat=95 (> 90) — e.g. a corrupt/mis-geocoded row.
+        assertEquals(false, CityRegionProjection.hasCompleteValidBbox(13.00, 95.0, 74.00, 74.10));
+        assertEquals(false, CityRegionProjection.hasCompleteValidBbox(-95.0, 13.10, 74.00, 74.10));
+        // lon=185 (> 180)
+        assertEquals(false, CityRegionProjection.hasCompleteValidBbox(13.00, 13.10, 74.00, 185.0));
+        assertEquals(false, CityRegionProjection.hasCompleteValidBbox(13.00, 13.10, -185.0, 74.10));
+    }
+
+    @Test
+    void hasCompleteValidBbox_falseWhenSwappedOrDegenerate() {
+        // Swapped: minLat > maxLat (e.g. a bad seed row with lat/lon swapped).
+        assertEquals(false, CityRegionProjection.hasCompleteValidBbox(13.10, 13.00, 74.00, 74.10));
+        assertEquals(false, CityRegionProjection.hasCompleteValidBbox(13.00, 13.10, 74.10, 74.00));
+        // Degenerate: minLat == maxLat (zero-area box) must NOT count as complete.
+        assertEquals(false, CityRegionProjection.hasCompleteValidBbox(13.00, 13.00, 74.00, 74.10));
+        assertEquals(false, CityRegionProjection.hasCompleteValidBbox(13.00, 13.10, 74.00, 74.00));
+    }
 }

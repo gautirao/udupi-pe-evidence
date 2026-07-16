@@ -62,7 +62,10 @@ class RegionSummaryControllerIT {
     @BeforeEach
     void setUp() {
         RegionSummaryService regionSummaryService = new RegionSummaryService(jdbcTemplate);
-        controller = new RegionSummaryController(regionSummaryService);
+        // RegionSummaryController now also depends on AreaGroupsService (#1910 PR1, region-scoped
+        // groups endpoint) — constructed here purely to satisfy the constructor; this file's
+        // tests only exercise getRegions(), never the new region-scoped groups method.
+        controller = new RegionSummaryController(regionSummaryService, new AreaGroupsService(jdbcTemplate));
         onboardingService = new CityRegionOnboardingService(jdbcTemplate);
         backfillService = new RegionalClassificationBackfillService(jdbcTemplate);
 

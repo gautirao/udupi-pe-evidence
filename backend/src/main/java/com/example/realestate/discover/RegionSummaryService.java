@@ -173,8 +173,13 @@ public class RegionSummaryService {
      * {@code null} (blended, all-purposes) — preserving current behaviour for every existing
      * caller that omits the param, and matching the repo's established invalid-purpose handling
      * (silently ignored, not a 400) rather than inventing a new validation rule.
+     *
+     * <p>Package-private (not {@code private}) so {@link AreaGroupsService} (#1910 PR1) can reuse
+     * this exact validation for its region-scoped groups endpoint's {@code listingPurpose} param
+     * without reimplementing it — this is a pure visibility change, zero behaviour change; the
+     * method body and every existing caller/behaviour are untouched.
      */
-    private static String normalizeListingPurpose(String listingPurpose) {
+    static String normalizeListingPurpose(String listingPurpose) {
         if (listingPurpose == null) {
             return null;
         }

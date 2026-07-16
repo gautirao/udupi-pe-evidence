@@ -68,6 +68,12 @@ class RegionSummaryControllerSecurityIT {
     @MockitoBean
     private RegionSummaryService regionSummaryService;
 
+    // RegionSummaryController now also depends on AreaGroupsService (#1910 PR1, region-scoped
+    // groups endpoint) — mocked here purely to satisfy the controller's constructor; not
+    // exercised by this file's two tests, which only touch /regions and /api/dashboard/listings.
+    @MockitoBean
+    private AreaGroupsService areaGroupsService;
+
     @MockitoBean
     private UserRoleService userRoleService;
 

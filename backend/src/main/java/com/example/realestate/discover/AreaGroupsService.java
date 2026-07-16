@@ -108,6 +108,227 @@ public class AreaGroupsService {
         return new AreaGroupsResponse(normalizedCity, groups);
     }
 
+    /**
+     * Region-scoped area-group projections (#1910 PR1) —
+     * {@code GET /api/discover/cities/{citySlug}/regions/{regionKey}/groups}.
+     *
+     * <p>For each {@code area_groups} row with &ge;1 member classified into {@code regionKey}
+     * (via {@code city_region_memberships}), returns a {@link RegionScopedAreaGroup} carrying
+     * ONLY that region's subset of member {@code area_keys} — never the group's full unscoped
+     * membership, bounds, or listing count (contrast with {@link #getGroupsByCity}). Groups with
+     * zero members in {@code regionKey} are excluded entirely (the INNER JOIN on
+     * {@code city_region_memberships} below drops them before they ever reach the fold).
+     *
+     * <p>One bounded SQL query, no N+1: {@code area_groups} → {@code area_group_members} →
+     * {@code city_region_memberships} (filtered {@code region_key = ?}) → {@code areas} (bbox
+     * columns, PK join) → {@code LEFT JOIN property_listings} guarded by
+     * {@link DiscoverListingPredicateBuilder}. Grouped by {@code (group, area)} — NOT
+     * {@code (group)} alone — so {@code COUNT(DISTINCT pl.id)} is computed per-area first, then
+     * summed per group in Java; because {@code area_group_members} only guarantees
+     * {@code UNIQUE(area_group_id, area_key)} (not exclusivity of an area to one group, V77), an
+     * area shared by two groups legitimately contributes its listings to BOTH groups' sums — by
+     * design, not a double-counting bug — while listings within a single area are never
+     * double-counted because each area's own {@code COUNT(DISTINCT pl.id)} is computed once.
+     *
+     * <p>Unknown {@code citySlug} or {@code regionKey} (or a region with no groups) naturally
+     * yields zero SQL rows — via the {@code JOIN cities c ON ... WHERE c.slug = ?} and
+     * {@code JOIN city_region_memberships crm ON ... AND crm.region_key = ?} filters — and
+     * therefore an empty {@code groups} list, 200 OK, never a 404/500.
+     *
+     * <p>{@code boundsStatus} is computed per group from ONLY the region-subset's valid-bbox
+     * members (via {@link CityRegionProjection#hasCompleteValidBbox}) — never falling back to an
+     * area's centroid the way {@link RegionSummaryService} does — because a member area with no
+     * bbox contributes nothing to this projection's bounds union at all:
+     * COMPLETE (every subset member has a complete bbox) / APPROXIMATE (some do, bounds computed
+     * from the valid subset only) / UNAVAILABLE (zero do — all six coordinate fields null, never
+     * a fabricated (0,0) or degenerate point).
+     */
+    @Transactional(readOnly = true)
+    public RegionScopedAreaGroup.Response getRegionScopedGroupsByCity(
+            String citySlug, String regionKey, String listingPurpose) {
+        String normalizedPurpose = RegionSummaryService.normalizeListingPurpose(listingPurpose);
+        log.debug("getRegionScopedGroupsByCity citySlug={} regionKey={} listingPurpose={}",
+                citySlug, regionKey, normalizedPurpose);
+
+        DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
+                citySlug, null, null, null, null, null, null, null,
+                null, null, null, null, null,
+                null, null, null,
+                null, null, normalizedPurpose, null, null
+        );
+        DiscoverListingPredicateBuilder.Sql predicate = DiscoverListingPredicateBuilder.build(filters);
+
+        String sql = REGION_SCOPED_GROUPS_SQL.replace("__PREDICATE__", predicate.whereFragment());
+
+        List<Object> params = new ArrayList<>();
+        params.add(regionKey);
+        params.addAll(predicate.params());
+        params.add(citySlug);
+
+        List<RegionScopedGroupRow> rows = jdbcOperations.query(
+                sql,
+                (rs, rowNum) -> new RegionScopedGroupRow(
+                        rs.getString("group_slug"),
+                        rs.getString("group_name"),
+                        rs.getString("group_subtitle"),
+                        rs.getInt("region_display_order"),
+                        rs.getString("area_key"),
+                        nullableDouble(rs.getObject("area_min_lat")),
+                        nullableDouble(rs.getObject("area_min_lon")),
+                        nullableDouble(rs.getObject("area_max_lat")),
+                        nullableDouble(rs.getObject("area_max_lon")),
+                        rs.getLong("area_listing_count")
+                ),
+                params.toArray()
+        );
+
+        // Fold (group, area) rows into per-group accumulators — mirrors getGroupsByCity()'s
+        // fold-into-record pattern. LinkedHashMap + the SQL's ORDER BY ag.display_order, ag.slug,
+        // agm.display_order, agm.area_key together guarantee deterministic, repeatable
+        // group/areaKey ordering. ag.slug is the GROUP-level tie-breaker (applied right after
+        // ag.display_order, before any member-level column) so it can never be influenced by a
+        // group's own members' display_order values; agm.area_key is the separate MEMBER-level
+        // tie-breaker for agm.display_order within a group. Two groups or two members sharing a
+        // display_order never yield nondeterministic ordering across runs/replicas (PR #1912
+        // review finding).
+        Map<String, RegionScopedAccumulator> accumulators = new LinkedHashMap<>();
+        for (RegionScopedGroupRow row : rows) {
+            RegionScopedAccumulator acc = accumulators.computeIfAbsent(
+                    row.groupSlug(),
+                    k -> new RegionScopedAccumulator(
+                            row.groupSlug(), row.groupName(), row.groupSubtitle(), row.regionDisplayOrder())
+            );
+            acc.areaKeys.add(row.areaKey());
+            acc.listingCount += row.areaListingCount();
+            if (CityRegionProjection.hasCompleteValidBbox(
+                    row.areaMinLat(), row.areaMaxLat(), row.areaMinLon(), row.areaMaxLon())) {
+                acc.validMemberCount++;
+                acc.minLat = acc.minLat == null ? row.areaMinLat() : Math.min(acc.minLat, row.areaMinLat());
+                acc.maxLat = acc.maxLat == null ? row.areaMaxLat() : Math.max(acc.maxLat, row.areaMaxLat());
+                acc.minLon = acc.minLon == null ? row.areaMinLon() : Math.min(acc.minLon, row.areaMinLon());
+                acc.maxLon = acc.maxLon == null ? row.areaMaxLon() : Math.max(acc.maxLon, row.areaMaxLon());
+            }
+        }
+
+        List<RegionScopedAreaGroup> groups = accumulators.values().stream()
+                .map(acc -> acc.toResponse(regionKey))
+                .toList();
+
+        log.debug("getRegionScopedGroupsByCity citySlug={} regionKey={} returned {} groups",
+                citySlug, regionKey, groups.size());
+        return new RegionScopedAreaGroup.Response(citySlug, regionKey, groups);
+    }
+
+    // Raw row returned from JDBC for getRegionScopedGroupsByCity — one per (group, area) pair,
+    // already listing-count-aggregated for that single area by the SQL's GROUP BY.
+    private record RegionScopedGroupRow(
+            String groupSlug,
+            String groupName,
+            String groupSubtitle,
+            int regionDisplayOrder,
+            String areaKey,
+            Double areaMinLat,
+            Double areaMinLon,
+            Double areaMaxLat,
+            Double areaMaxLon,
+            long areaListingCount
+    ) {}
+
+    // Mutable per-group accumulator for getRegionScopedGroupsByCity's fold.
+    private static final class RegionScopedAccumulator {
+        private final String slug;
+        private final String name;
+        private final String subtitle;
+        private final int regionDisplayOrder;
+        private final List<String> areaKeys = new ArrayList<>();
+        private long listingCount = 0;
+        private int validMemberCount = 0;
+        private Double minLat;
+        private Double minLon;
+        private Double maxLat;
+        private Double maxLon;
+
+        RegionScopedAccumulator(String slug, String name, String subtitle, int regionDisplayOrder) {
+            this.slug = slug;
+            this.name = name;
+            this.subtitle = subtitle;
+            this.regionDisplayOrder = regionDisplayOrder;
+        }
+
+        RegionScopedAreaGroup toResponse(String scopingRegionKey) {
+            String boundsStatus;
+            Double focusLat = null;
+            Double focusLon = null;
+            Double outMinLat = null;
+            Double outMinLon = null;
+            Double outMaxLat = null;
+            Double outMaxLon = null;
+            if (validMemberCount == 0) {
+                boundsStatus = RegionScopedAreaGroup.BOUNDS_UNAVAILABLE;
+            } else {
+                boundsStatus = validMemberCount == areaKeys.size()
+                        ? RegionScopedAreaGroup.BOUNDS_COMPLETE
+                        : RegionScopedAreaGroup.BOUNDS_APPROXIMATE;
+                outMinLat = minLat;
+                outMinLon = minLon;
+                outMaxLat = maxLat;
+                outMaxLon = maxLon;
+                focusLat = (minLat + maxLat) / 2.0;
+                focusLon = (minLon + maxLon) / 2.0;
+            }
+            return new RegionScopedAreaGroup(
+                    slug, name, subtitle, scopingRegionKey, regionDisplayOrder,
+                    List.copyOf(areaKeys), listingCount,
+                    focusLat, focusLon,
+                    outMinLat, outMinLon, outMaxLat, outMaxLon,
+                    boundsStatus
+            );
+        }
+    }
+
+    // Single query, no N+1: area_groups -> area_group_members -> city_region_memberships
+    // (filtered to the requested region_key, INNER JOIN so groups with zero members in that
+    // region never appear in the result at all) -> city_regions (region's display_order) ->
+    // areas (PK join on area_key, bbox columns, no fan-out) -> LEFT JOIN property_listings
+    // guarded by the DiscoverListingPredicateBuilder fragment substituted at __PREDICATE__.
+    // Grouped by (group, area) so COUNT(DISTINCT pl.id) is a per-area distinct count; the Java
+    // fold above sums these per group, which is intentionally NOT the same as a single
+    // group-level COUNT(DISTINCT pl.id) across a UNION of all group rows — see this method's
+    // javadoc for why a shared area between two groups must legitimately count in both.
+    // ag.id is grouped on (area_groups' actual primary key) alongside the plain columns selected
+    // from ag, so every (group, area) combination collapses to exactly one row.
+    private static final String REGION_SCOPED_GROUPS_SQL = """
+            SELECT
+                ag.slug AS group_slug,
+                ag.name AS group_name,
+                ag.subtitle AS group_subtitle,
+                cr.display_order AS region_display_order,
+                agm.area_key AS area_key,
+                a.min_lat AS area_min_lat,
+                a.min_lon AS area_min_lon,
+                a.max_lat AS area_max_lat,
+                a.max_lon AS area_max_lon,
+                COUNT(DISTINCT pl.id) AS area_listing_count
+            FROM area_groups ag
+            JOIN cities c ON c.id = ag.city_id
+            JOIN area_group_members agm
+                ON agm.area_group_id = ag.id
+            JOIN city_region_memberships crm
+                ON crm.city_id = ag.city_id AND crm.area_key = agm.area_key AND crm.region_key = ?
+            JOIN city_regions cr
+                ON cr.city_id = crm.city_id AND cr.region_key = crm.region_key
+            JOIN areas a
+                ON a.area_key = agm.area_key
+            LEFT JOIN property_listings pl
+                ON pl.area_key = agm.area_key
+               AND __PREDICATE__
+            WHERE c.slug = ?
+              AND ag.is_active = true
+            GROUP BY ag.id, ag.slug, ag.name, ag.subtitle, ag.display_order, cr.display_order,
+                     agm.area_key, agm.display_order, a.min_lat, a.min_lon, a.max_lat, a.max_lon
+            ORDER BY ag.display_order, ag.slug, agm.display_order, agm.area_key
+            """;
+
     // ── regionKey derivation ─────────────────────────────────────────────────
     //
     // Reuses CityRegionOnboardingReport.GroupCategorization's UNIFIED/SPLIT/DEGENERATE

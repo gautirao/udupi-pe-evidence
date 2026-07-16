@@ -117,21 +117,48 @@ final class CityRegionProjection {
     /**
      * True iff an area's bbox is complete enough to be used as-is (no centroid fallback for
      * any of its 4 corners) — i.e. {@code minLat}, {@code maxLat}, {@code minLon}, and
-     * {@code maxLon} are all non-null.
+     * {@code maxLon} are all non-null AND together describe a genuinely valid, non-degenerate
+     * rectangle (#1910 PR1 review finding).
      *
      * <p>Mirrors, field-for-field, the per-coordinate null-coalescing fallback in
      * {@code CityRegionOnboardingService#upsertCityRegions} (each of
      * {@code m.minLat() != null ? m.minLat() : m.geoCenterLat()}, and likewise for
      * {@code maxLat}/{@code minLon}/{@code maxLon}): that method already falls back to the
      * area's centroid independently per coordinate whenever a given field is {@code null}, so
-     * "all 4 present" is exactly the condition under which an area contributes zero centroid
-     * fallbacks to a region's bounds union. This method does not check for a degenerate box
-     * (e.g. {@code minLat >= maxLat}) because {@code upsertCityRegions} does not test for that
-     * either — degenerate/malformed bboxes are a separate, currently-undetected data-quality
-     * concern (see #1887), not part of this null-based completeness predicate.
+     * "all 4 present" is a necessary (but, as of #1910 PR1, no longer sufficient) condition for
+     * an area to contribute zero centroid fallbacks to a region's bounds union.
+     *
+     * <p>Beyond null-completeness, this method additionally rejects corrupt/malformed geometry
+     * that would otherwise slip through as a false "complete" bbox — e.g. a bad seed row with
+     * swapped lat/lon, or a NaN from a degenerate upstream computation:
+     * <ul>
+     *   <li>all four coordinates must be finite ({@link Double#isFinite}) — not {@code NaN},
+     *       not {@code Infinity}/{@code -Infinity};</li>
+     *   <li>all four coordinates must lie within valid geographic range
+     *       ({@code -90 <= lat <= 90}, {@code -180 <= lon <= 180});</li>
+     *   <li>the box must be non-degenerate: {@code minLat < maxLat} and
+     *       {@code minLon < maxLon}, strictly — a zero-area box where {@code min == max} does
+     *       NOT count as complete.</li>
+     * </ul>
+     * Callers folding per-area bounds into a region/group union (e.g.
+     * {@link AreaGroupsService#getRegionScopedGroupsByCity}) treat a {@code false} result here
+     * exactly like a null-incomplete bbox: the area is excluded from the union and the
+     * enclosing result degrades to {@code APPROXIMATE} (if some other member is still valid) or
+     * {@code UNAVAILABLE} (if none are) — never silently accepted as {@code COMPLETE}.
      */
     static boolean hasCompleteValidBbox(Double minLat, Double maxLat, Double minLon, Double maxLon) {
-        return minLat != null && maxLat != null && minLon != null && maxLon != null;
+        if (minLat == null || maxLat == null || minLon == null || maxLon == null) {
+            return false;
+        }
+        if (!Double.isFinite(minLat) || !Double.isFinite(maxLat)
+                || !Double.isFinite(minLon) || !Double.isFinite(maxLon)) {
+            return false;
+        }
+        if (minLat < -90 || minLat > 90 || maxLat < -90 || maxLat > 90
+                || minLon < -180 || minLon > 180 || maxLon < -180 || maxLon > 180) {
+            return false;
+        }
+        return minLat < maxLat && minLon < maxLon;
     }
 
     private static void requireValidModel(String regionModel) {
