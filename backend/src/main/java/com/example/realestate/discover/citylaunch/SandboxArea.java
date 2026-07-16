@@ -75,7 +75,8 @@ public class SandboxArea {
     public SandboxArea(Long revisionId, String areaKey, String name, String district,
                         Double geoCenterLat, Double geoCenterLon,
                         Double minLat, Double minLon, Double maxLat, Double maxLon,
-                        String geometrySource, String osmElementType, Long osmElementId) {
+                        String geometrySource, String osmElementType, Long osmElementId,
+                        String lifecycleStatus) {
         this.revisionId = revisionId;
         this.areaKey = areaKey;
         this.name = name;
@@ -89,6 +90,22 @@ public class SandboxArea {
         this.geometrySource = geometrySource;
         this.osmElementType = osmElementType;
         this.osmElementId = osmElementId;
+        this.lifecycleStatus = lifecycleStatus;
+    }
+
+    /**
+     * Backward-compatible overload for existing call sites (outside this rework's scope) that
+     * predate the explicit {@code lifecycleStatus} parameter — defaults to {@code "ACTIVE"}, the
+     * same value the field's declaration previously hardcoded unconditionally. The one call site
+     * that matters for real data correctness ({@link CityLaunchGraphWriter}) uses the explicit
+     * overload above, passing the canonical source's true {@code lifecycle_status} through.
+     */
+    public SandboxArea(Long revisionId, String areaKey, String name, String district,
+                        Double geoCenterLat, Double geoCenterLon,
+                        Double minLat, Double minLon, Double maxLat, Double maxLon,
+                        String geometrySource, String osmElementType, Long osmElementId) {
+        this(revisionId, areaKey, name, district, geoCenterLat, geoCenterLon,
+                minLat, minLon, maxLat, maxLon, geometrySource, osmElementType, osmElementId, "ACTIVE");
     }
 
     // ── Getters ──────────────────────────────────────────────────────────────────────────────

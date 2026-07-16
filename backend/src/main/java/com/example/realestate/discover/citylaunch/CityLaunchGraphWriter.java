@@ -1,0 +1,278 @@
+package com.example.realestate.discover.citylaunch;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
+import static com.example.realestate.discover.citylaunch.config.CityLaunchAsyncConfig.EXECUTOR_NAME;
+
+/**
+ * Background offline-prep pipeline: reads a city's canonical geography and writes it into the
+ * {@code sandbox_*} graph for one {@link CityLaunchRevision} (#1911 PR2).
+ *
+ * <p>A SEPARATE bean from {@link CityLaunchPreparationService} on purpose — {@code @Async}
+ * self-invocation (calling an {@code @Async} method on {@code this} from within the same bean) is
+ * a documented Spring AOP proxy limitation and silently runs synchronously. Injecting this bean
+ * into {@link CityLaunchPreparationService} and calling through the injected reference goes
+ * through the real proxy, so {@link #writeGraphAsync} genuinely dispatches to
+ * {@value CityLaunchAsyncConfig#EXECUTOR_NAME}.
+ *
+ * <h3>Failure isolation</h3>
+ * {@link #writeGraphAsync} wraps the entire graph write in try/catch. On ANY exception —
+ * validation failure (AC4, thrown before any INSERT) or a mid-write DB constraint violation — the
+ * {@code @Transactional} {@link #writeGraphTransactional} rolls back, leaving ZERO sandbox rows
+ * for the revision. {@link #markFailed} then runs in a SEPARATE
+ * {@code @Transactional(propagation = REQUIRES_NEW)} transaction to record the FAILED state; if
+ * this were not REQUIRES_NEW it would roll back together with the graph-write transaction and the
+ * FAILED marker would be lost, leaving the revision stuck in PREPARING forever.
+ */
+@Component
+public class CityLaunchGraphWriter {
+
+    private static final Logger log = LoggerFactory.getLogger(CityLaunchGraphWriter.class);
+
+    private final CityLaunchRevisionRepository revisionRepository;
+    private final CanonicalGeographyReader geographyReader;
+    private final SandboxAreaRepository sandboxAreaRepository;
+    private final SandboxAreaAliasRepository sandboxAreaAliasRepository;
+    private final SandboxCityRegionRepository sandboxCityRegionRepository;
+    private final SandboxCityRegionMembershipRepository sandboxCityRegionMembershipRepository;
+    private final SandboxAreaGroupRepository sandboxAreaGroupRepository;
+    private final SandboxAreaGroupMemberRepository sandboxAreaGroupMemberRepository;
+
+    /**
+     * Self-reference to the Spring-proxied instance of this very bean, injected lazily.
+     *
+     * <p>{@link #writeGraphAsync} must invoke {@link #writeGraphTransactional} THROUGH the proxy
+     * (via {@code self.writeGraphTransactional(...)}), never via a bare {@code this.} call —
+     * {@code @Transactional} advice is proxy-based, so a same-class ("self-invocation") call
+     * bypasses the interceptor entirely and the method would silently run with NO transaction,
+     * defeating the "mid-write failure rolls back to zero rows" guarantee. {@code @Lazy} breaks
+     * the constructor circular-dependency this self-injection would otherwise create.
+     */
+    private final CityLaunchGraphWriter self;
+
+    public CityLaunchGraphWriter(
+            CityLaunchRevisionRepository revisionRepository,
+            CanonicalGeographyReader geographyReader,
+            SandboxAreaRepository sandboxAreaRepository,
+            SandboxAreaAliasRepository sandboxAreaAliasRepository,
+            SandboxCityRegionRepository sandboxCityRegionRepository,
+            SandboxCityRegionMembershipRepository sandboxCityRegionMembershipRepository,
+            SandboxAreaGroupRepository sandboxAreaGroupRepository,
+            SandboxAreaGroupMemberRepository sandboxAreaGroupMemberRepository,
+            @Lazy CityLaunchGraphWriter self) {
+        this.revisionRepository = revisionRepository;
+        this.geographyReader = geographyReader;
+        this.sandboxAreaRepository = sandboxAreaRepository;
+        this.sandboxAreaAliasRepository = sandboxAreaAliasRepository;
+        this.sandboxCityRegionRepository = sandboxCityRegionRepository;
+        this.sandboxCityRegionMembershipRepository = sandboxCityRegionMembershipRepository;
+        this.sandboxAreaGroupRepository = sandboxAreaGroupRepository;
+        this.sandboxAreaGroupMemberRepository = sandboxAreaGroupMemberRepository;
+        this.self = self;
+    }
+
+    /**
+     * Entry point invoked by {@link CityLaunchPreparationService} AFTER the admission transaction
+     * has committed (via a {@code TransactionSynchronization#afterCommit} callback), so the
+     * revision row created by admission is guaranteed visible to this method's own transaction —
+     * no cross-thread visibility race against an uncommitted admission write.
+     */
+    @Async(EXECUTOR_NAME)
+    public void writeGraphAsync(Long revisionId, Integer cityId) {
+        short[] stageReached = {0};
+        try {
+            self.writeGraphTransactional(revisionId, cityId, stageReached);
+        } catch (Exception e) {
+            log.error("City launch graph write failed revisionId={} cityId={} stageReached={}",
+                    revisionId, cityId, stageReached[0], e);
+            self.markFailed(revisionId, sanitizedFailureReason(e), stageReached[0]);
+        }
+    }
+
+    /**
+     * Loads canonical geography, validates it UP FRONT (AC4 — before any INSERT), then writes the
+     * six sandbox tables in FK-safe order: areas -> aliases -> city_regions -> memberships ->
+     * area_groups -> group_members, advancing {@code prep_stage} 1..6 as each stage completes.
+     * {@code stageReached} is a plain in-memory (non-persisted) marker so a caught exception can
+     * report how far the write got even though the DB transaction itself rolls back.
+     */
+    @Transactional
+    public void writeGraphTransactional(Long revisionId, Integer cityId, short[] stageReached) {
+        CityLaunchRevision revision = revisionRepository.findByIdForUpdate(revisionId)
+                .orElseThrow(() -> new IllegalStateException("Revision not found: " + revisionId));
+
+        CanonicalGeographyReader.CanonicalGeography geography = geographyReader.loadGeography(cityId);
+        validate(geography);
+
+        Map<String, Long> sandboxAreaIdByKey = new HashMap<>();
+        for (CanonicalGeographyReader.CanonicalArea area : geography.areas()) {
+            SandboxArea saved = sandboxAreaRepository.save(new SandboxArea(
+                    revisionId, area.areaKey(), area.name(), area.district(),
+                    area.geoCenterLat(), area.geoCenterLon(),
+                    area.minLat(), area.minLon(), area.maxLat(), area.maxLon(),
+                    area.geometrySource(), area.osmElementType(), area.osmElementId(),
+                    area.lifecycleStatus()));
+            sandboxAreaIdByKey.put(area.areaKey(), saved.getId());
+        }
+        revision.setPrepStage((short) 1);
+        stageReached[0] = 1;
+
+        for (CanonicalGeographyReader.CanonicalAreaAlias alias : geography.aliases()) {
+            Long sandboxAreaId = sandboxAreaIdByKey.get(alias.areaKey());
+            if (sandboxAreaId == null) {
+                continue; // unreachable post-validate(); defensive against a future validate() gap
+            }
+            sandboxAreaAliasRepository.save(new SandboxAreaAlias(
+                    revisionId, sandboxAreaId, alias.alias(), alias.aliasNormalised()));
+        }
+        revision.setPrepStage((short) 2);
+        stageReached[0] = 2;
+
+        for (CanonicalGeographyReader.CanonicalCityRegion region : geography.regions()) {
+            sandboxCityRegionRepository.save(new SandboxCityRegion(
+                    revisionId, region.regionKey(), region.displayLabel(), region.displayOrder(),
+                    region.centreLat(), region.centreLon(),
+                    region.minLat(), region.minLon(), region.maxLat(), region.maxLon(),
+                    region.policyFingerprint()));
+        }
+        revision.setPrepStage((short) 3);
+        stageReached[0] = 3;
+
+        for (CanonicalGeographyReader.CanonicalCityRegionMembership membership : geography.memberships()) {
+            Long sandboxAreaId = sandboxAreaIdByKey.get(membership.areaKey());
+            if (sandboxAreaId == null) {
+                continue; // unreachable post-validate()
+            }
+            sandboxCityRegionMembershipRepository.save(new SandboxCityRegionMembership(
+                    revisionId, sandboxAreaId, membership.regionKey(),
+                    AssignmentSource.valueOf(membership.assignmentSource())));
+        }
+        revision.setPrepStage((short) 4);
+        stageReached[0] = 4;
+
+        Map<String, Long> sandboxGroupIdBySlug = new HashMap<>();
+        for (CanonicalGeographyReader.CanonicalAreaGroup group : geography.groups()) {
+            SandboxAreaGroup saved = sandboxAreaGroupRepository.save(new SandboxAreaGroup(
+                    revisionId, group.slug(), group.name(), group.subtitle(), group.regionLabel(),
+                    group.displayOrder(), group.active(),
+                    group.focusLat(), group.focusLon(),
+                    group.minLat(), group.minLon(), group.maxLat(), group.maxLon()));
+            sandboxGroupIdBySlug.put(group.slug(), saved.getId());
+        }
+        revision.setPrepStage((short) 5);
+        stageReached[0] = 5;
+
+        for (CanonicalGeographyReader.CanonicalAreaGroupMember member : geography.groupMembers()) {
+            Long sandboxGroupId = sandboxGroupIdBySlug.get(member.groupSlug());
+            Long sandboxAreaId = sandboxAreaIdByKey.get(member.areaKey());
+            if (sandboxGroupId == null || sandboxAreaId == null) {
+                continue; // unreachable post-validate()
+            }
+            sandboxAreaGroupMemberRepository.save(new SandboxAreaGroupMember(
+                    revisionId, sandboxGroupId, sandboxAreaId, member.displayOrder()));
+        }
+        revision.setPrepStage((short) 6);
+        stageReached[0] = 6;
+
+        revision.setLifecycleStatus(LifecycleStatus.PREPARED);
+        revision.setPrepState(PrepState.DONE);
+        revision.setPreparedAt(Instant.now());
+    }
+
+    /**
+     * AC4: mandatory identifier validation, run BEFORE any sandbox_* INSERT.
+     *
+     * <p>{@code public.areas.lifecycle_status} (V116) is read by {@link CanonicalGeographyReader}
+     * and carried through to {@link CanonicalGeographyReader.CanonicalArea#lifecycleStatus()} — the
+     * "ACTIVE area" AC4 requires is a SOURCE-truth check against that value, not a check against
+     * every loaded area row (which would be trivially satisfied even by a city whose areas are all
+     * MERGED/INACTIVE, since {@link SandboxArea} no longer defaults to ACTIVE).
+     */
+    private void validate(CanonicalGeographyReader.CanonicalGeography geography) {
+        if (geography.areas().isEmpty()) {
+            throw new GeographyValidationException("City has zero ACTIVE areas");
+        }
+        boolean hasActiveArea = geography.areas().stream()
+                .anyMatch(area -> "ACTIVE".equals(area.lifecycleStatus()));
+        if (!hasActiveArea) {
+            throw new GeographyValidationException("City has zero ACTIVE areas");
+        }
+        Set<String> areaKeys = new HashSet<>();
+        for (CanonicalGeographyReader.CanonicalArea area : geography.areas()) {
+            if (area.areaKey() == null || area.areaKey().isBlank()) {
+                throw new GeographyValidationException("An area is missing its area_key");
+            }
+            if (area.geoCenterLat() == null || area.geoCenterLon() == null) {
+                throw new GeographyValidationException(
+                        "Area " + area.areaKey() + " is missing its interior point (geo_center_lat/lon)");
+            }
+            areaKeys.add(area.areaKey());
+        }
+
+        if (geography.regions().isEmpty()) {
+            throw new GeographyValidationException("City has zero city_regions rows");
+        }
+        Set<String> regionKeys = new HashSet<>();
+        for (CanonicalGeographyReader.CanonicalCityRegion region : geography.regions()) {
+            regionKeys.add(region.regionKey());
+        }
+
+        for (CanonicalGeographyReader.CanonicalCityRegionMembership membership : geography.memberships()) {
+            if (!areaKeys.contains(membership.areaKey())) {
+                throw new GeographyValidationException(
+                        "city_region_memberships references unknown area_key " + membership.areaKey());
+            }
+            if (!regionKeys.contains(membership.regionKey())) {
+                throw new GeographyValidationException(
+                        "city_region_memberships references unknown region_key " + membership.regionKey());
+            }
+        }
+
+        for (CanonicalGeographyReader.CanonicalAreaGroupMember member : geography.groupMembers()) {
+            if (!areaKeys.contains(member.areaKey())) {
+                throw new GeographyValidationException(
+                        "area_group_members references unknown area_key " + member.areaKey());
+            }
+        }
+    }
+
+    /**
+     * Records a FAILED revision in its OWN transaction, independent of (and after) the rolled-back
+     * graph-write transaction. Public + REQUIRES_NEW so a caller (either this class's own
+     * {@link #writeGraphAsync} catch block, or {@link CityLaunchPreparationService} reacting to a
+     * saturated executor rejection) can mark FAILED even when the graph-write transaction never
+     * started or already rolled back.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markFailed(Long revisionId, String reason, short stageReached) {
+        revisionRepository.findByIdForUpdate(revisionId).ifPresentOrElse(revision -> {
+            revision.setLifecycleStatus(LifecycleStatus.FAILED);
+            revision.setPrepState(PrepState.FAILED);
+            revision.setFailureReason(reason);
+            revision.setPrepStage(stageReached);
+        }, () -> log.warn("markFailed: revision {} not found (already deleted?)", revisionId));
+    }
+
+    // Never leaks the raw exception class name / message to a persisted column that a preview UI
+    // might render verbatim — keeps failure_reason short and free of stack-trace-shaped text. The
+    // raw exception (class name, message, stack trace) is still available server-side via the
+    // log.error(...) call in writeGraphAsync's catch block, which logs it before this method runs.
+    private static String sanitizedFailureReason(Exception e) {
+        if (e instanceof GeographyValidationException) {
+            return "Geography validation failed: " + e.getMessage();
+        }
+        return "City launch graph write failed";
+    }
+}

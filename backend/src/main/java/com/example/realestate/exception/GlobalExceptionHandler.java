@@ -1,6 +1,8 @@
 package com.example.realestate.exception;
 
 import com.example.realestate.area.AreaNotFoundException;
+import com.example.realestate.discover.citylaunch.CityPreparationConflictException;
+import com.example.realestate.discover.citylaunch.GeographyValidationException;
 import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.trust.AuthorityAlreadyVerifiedException;
@@ -90,6 +92,24 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ResponseEntity<Map<String, String>> handleBadgeNotFound(BadgeNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("error", "BADGE_NOT_FOUND"));
+    }
+
+    // ===== CityPreparationConflictException → 409 =====
+
+    @ExceptionHandler(CityPreparationConflictException.class)
+    public ResponseEntity<Map<String, String>> handleCityPreparationConflict(CityPreparationConflictException ex) {
+        log.warn("City preparation conflict: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", "PREPARATION_IN_PROGRESS"));
+    }
+
+    // ===== GeographyValidationException → 422 =====
+
+    @ExceptionHandler(GeographyValidationException.class)
+    public ResponseEntity<Map<String, String>> handleGeographyValidation(GeographyValidationException ex) {
+        log.warn("Geography validation failed: {}", ex.getMessage());
+        return ResponseEntity.unprocessableEntity()
+                .body(Map.of("error", "GEOGRAPHY_VALIDATION_FAILED"));
     }
 
     // ===== IllegalArgumentException → 400 =====

@@ -61,6 +61,8 @@ const LocalityNormalizer = lazy(() => import("./pages/admin/LocalityNormalizer")
 const AuditLog = lazy(() => import("./pages/admin/AuditLog"));
 const TrustReviewQueue = lazy(() => import("./pages/admin/TrustReviewQueue"));
 const Intelligence = lazy(() => import("./pages/admin/Intelligence"));
+// Issue #1911 PR2 — admin City Launch & Preview workflow, Select City slice
+const CityLaunch = lazy(() => import("./pages/admin/CityLaunch"));
 
 const queryClient = new QueryClient();
 
@@ -337,6 +339,14 @@ const App = () => (
                 element={
                   <ProtectedRoute requireAdmin>
                     <Intelligence />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/city-launch"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <CityLaunch />
                   </ProtectedRoute>
                 }
               />
