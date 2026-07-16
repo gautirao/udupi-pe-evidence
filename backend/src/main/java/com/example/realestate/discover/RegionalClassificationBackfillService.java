@@ -3,6 +3,7 @@ package com.example.realestate.discover;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcOperations;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,25 +42,41 @@ public class RegionalClassificationBackfillService {
     }
 
     /**
-     * Runs the full backfill across all cities and their associated areas.
+     * Runs the full backfill across all active cities and their associated areas.
      * Logs a summary on completion.
      *
      * @return number of rows upserted
      */
     @Transactional
     public int runBackfill() {
-        log.info("RegionalClassificationBackfill: starting backfill");
+        return runBackfill(null);
+    }
 
-        List<CityRow> cities = jdbcOperations.query(
-                CITIES_SQL,
-                (rs, rowNum) -> new CityRow(
-                        rs.getString("slug"),
-                        rs.getDouble("geo_center_lat"),
-                        rs.getDouble("geo_center_lon")
-                )
-        );
+    /**
+     * Runs the backfill, optionally scoped to a single city.
+     *
+     * <p>When {@code citySlug} is blank/null, behaves exactly like {@link #runBackfill()} —
+     * all active cities are processed. When non-blank, only the city matching that slug
+     * is processed (via a parameterized query — the slug is always passed as a bound
+     * argument, never string-concatenated into SQL).
+     *
+     * @param citySlug optional city slug to scope the run to; blank/null = all active cities
+     * @return number of rows upserted
+     */
+    @Transactional
+    public int runBackfill(String citySlug) {
+        boolean scoped = citySlug != null && !citySlug.isBlank();
 
-        log.info("RegionalClassificationBackfill: found {} cities", cities.size());
+        List<CityRow> cities;
+        if (scoped) {
+            log.info("RegionalClassificationBackfill: starting backfill scoped to city={}", citySlug);
+            cities = jdbcOperations.query(CITIES_SQL_SCOPED, CITY_ROW_MAPPER, citySlug);
+            log.info("RegionalClassificationBackfill: scoped to city={} matched {} city", citySlug, cities.size());
+        } else {
+            log.info("RegionalClassificationBackfill: starting backfill for all active cities");
+            cities = jdbcOperations.query(CITIES_SQL, CITY_ROW_MAPPER);
+            log.info("RegionalClassificationBackfill: processing {} active cities", cities.size());
+        }
 
         int totalUpserted = 0;
         int totalErrors = 0;
@@ -112,6 +129,12 @@ public class RegionalClassificationBackfillService {
 
     private record AreaRow(String areaKey, double lat, double lon) {}
 
+    private static final RowMapper<CityRow> CITY_ROW_MAPPER = (rs, rowNum) -> new CityRow(
+            rs.getString("slug"),
+            rs.getDouble("geo_center_lat"),
+            rs.getDouble("geo_center_lon")
+    );
+
     // ── SQL ───────────────────────────────────────────────────────────────────
 
     private static final String CITIES_SQL = """
@@ -122,7 +145,19 @@ public class RegionalClassificationBackfillService {
             """;
 
     /**
-     * Fetch all 4-segment locality areas for a city via city slug.
+     * Fetch a single active city by slug. Bound args: [city_slug].
+     * The slug is always bound as a query parameter — never string-concatenated.
+     */
+    private static final String CITIES_SQL_SCOPED = """
+            SELECT slug, geo_center_lat, geo_center_lon
+            FROM cities
+            WHERE is_active = true AND slug = ?
+            ORDER BY slug
+            """;
+
+    /**
+     * Fetch all 4-segment locality areas for a city via city slug, excluding
+     * non-active (INACTIVE/MERGED) areas and areas missing geo-center coordinates.
      * Bound args: [city_slug].
      */
     private static final String AREAS_FOR_CITY_SQL = """
@@ -131,6 +166,9 @@ public class RegionalClassificationBackfillService {
             JOIN cities c ON c.id = a.city_id
             WHERE c.slug = ?
               AND array_length(string_to_array(a.area_key, '|'), 1) = 4
+              AND a.lifecycle_status = 'ACTIVE'
+              AND a.geo_center_lat IS NOT NULL
+              AND a.geo_center_lon IS NOT NULL
             ORDER BY a.area_key
             """;
 

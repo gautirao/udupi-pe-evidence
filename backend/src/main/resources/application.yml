@@ -62,6 +62,7 @@ app:
 
   regional-classification:
     backfill-enabled: false  # Set to true on a single deployment to populate regional_area_classifications
+    city-slug: ""  # Optional: scope the backfill to one city (e.g. "bangalore"). Blank = all active cities.
 
   # Public discover GET anti-abuse rate limit (#1671). Per-IP in-memory Bucket4j guard for the
   # unauthenticated discover GET family (see DiscoverRateLimitFilter). Does NOT apply to

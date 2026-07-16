@@ -17,6 +17,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -175,6 +177,73 @@ class RegionalClassificationBackfillServiceTest {
         assertThat(cities).containsExactlyInAnyOrder("udupi", "mangalore");
     }
 
+    // ── city-slug scoping (#1899) ─────────────────────────────────────────────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void runBackfill_scopedToCitySlug_onlyThatCitysAreasUpserted() throws SQLException {
+        stubCitiesQueryScoped("bangalore", List.of(city("bangalore", 12.9716, 77.5946)));
+        stubAreasQuery(List.of(
+                area("IN|KA|Bangalore|Whitefield", 12.9698, 77.7500),
+                area("IN|KA|Bangalore|Indiranagar", 12.9784, 77.6408)
+        ));
+        when(jdbcOperations.update(anyString(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(1);
+
+        int count = service.runBackfill("bangalore");
+
+        assertThat(count).isEqualTo(2);
+        // Scoped cities query bound with the city slug — never the unscoped all-cities query.
+        verify(jdbcOperations, times(1))
+                .query(argThat((String sql) -> sql.contains("FROM cities") && sql.contains("slug = ?")),
+                        any(RowMapper.class), eq("bangalore"));
+        verify(jdbcOperations, never()).query(argThat((String sql) -> sql.contains("FROM cities")), any(RowMapper.class));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void runBackfill_blankCitySlug_preservesAllCitiesBehavior() throws SQLException {
+        stubCitiesQuery(List.of(
+                city("udupi", 13.3409, 74.7421),
+                city("mangalore", 12.9141, 74.8560)
+        ));
+        stubAreasQuery(List.of(area("IN|KA|Udupi|Kundapur", 13.6218, 74.6943)));
+        when(jdbcOperations.update(anyString(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(1);
+
+        int count = service.runBackfill("");
+
+        assertThat(count).isEqualTo(2); // same as runBackfill() with two cities
+        verify(jdbcOperations, never())
+                .query(argThat((String sql) -> sql.contains("FROM cities") && sql.contains("slug = ?")),
+                        any(RowMapper.class), any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void runBackfill_nullCitySlug_preservesAllCitiesBehavior() throws SQLException {
+        stubCitiesQuery(List.of(city("udupi", 13.3409, 74.7421)));
+        stubAreasQuery(List.of(area("IN|KA|Udupi|Kundapur", 13.6218, 74.6943)));
+        when(jdbcOperations.update(anyString(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(1);
+
+        int count = service.runBackfill(null);
+
+        assertThat(count).isEqualTo(1);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void runBackfill_unknownCitySlug_zeroUpsertsNoError() throws SQLException {
+        stubCitiesQueryScoped("nonexistent-city", List.of());
+
+        int count = service.runBackfill("nonexistent-city");
+
+        assertThat(count).isEqualTo(0);
+        verify(jdbcOperations, never())
+                .update(anyString(), any(), any(), any(), any(), any(), any());
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     /** Stubs the no-arg cities query (RowMapper, no bound params). */
@@ -195,10 +264,42 @@ class RegionalClassificationBackfillServiceTest {
                 });
     }
 
-    /** Stubs the areas-for-city query (RowMapper with one bound param). */
+    /**
+     * Stubs the city-slug-scoped cities query (RowMapper, one bound String param).
+     * Matches only on SQL containing "FROM cities" so it does not collide with the
+     * areas-for-city stub, which uses the same (String, RowMapper, Object) overload.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void stubCitiesQueryScoped(String expectedSlug, List<CityData> cityData) throws SQLException {
+        when(jdbcOperations.query(
+                argThat((String sql) -> sql != null && sql.contains("FROM cities")),
+                any(RowMapper.class),
+                eq(expectedSlug)))
+                .thenAnswer(inv -> {
+                    RowMapper rm = inv.getArgument(1);
+                    List<Object> rows = new java.util.ArrayList<>();
+                    for (CityData cd : cityData) {
+                        ResultSet rs = mock(ResultSet.class);
+                        when(rs.getString("slug")).thenReturn(cd.slug());
+                        when(rs.getDouble("geo_center_lat")).thenReturn(cd.lat());
+                        when(rs.getDouble("geo_center_lon")).thenReturn(cd.lon());
+                        rows.add(rm.mapRow(rs, rows.size()));
+                    }
+                    return rows;
+                });
+    }
+
+    /**
+     * Stubs the areas-for-city query (RowMapper with one bound param).
+     * Matches only on SQL containing "FROM areas" so it does not collide with the
+     * city-slug-scoped cities stub.
+     */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void stubAreasQuery(List<AreaData> areaData) throws SQLException {
-        when(jdbcOperations.query(anyString(), any(RowMapper.class), any()))
+        when(jdbcOperations.query(
+                argThat((String sql) -> sql != null && sql.contains("FROM areas")),
+                any(RowMapper.class),
+                any()))
                 .thenAnswer(inv -> {
                     RowMapper rm = inv.getArgument(1);
                     List<Object> rows = new java.util.ArrayList<>();
