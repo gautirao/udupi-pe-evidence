@@ -8,6 +8,7 @@ import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
+import type { RegionScopedAreaGroup } from '@/hooks/useRegionScopedAreaGroups';
 import type { CorridorGroupData } from '@/hooks/useRegionalAreaGroups';
 import type { AgriMapListingItem, AgriMapListingsResponse } from '@/hooks/useAgriMapListings';
 import type { AgriFilterValues } from '@/components/discover/panels/AgriFiltersPanel';
@@ -25,6 +26,7 @@ import type {
 } from '@/features/discover/state/useDiscoverJourneyTransitions';
 import type { DiscoverInteractionCommands } from '@/features/discover/state/useDiscoverInteractionState';
 import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
+import type { ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
 
 /**
  * Issue #1824 Slice S11c — the DiscoverRightPanel call-site region, lifted
@@ -70,6 +72,25 @@ export interface DiscoverRightPanelContainerProps {
   /** AreaGroupsResponse's shape ({ groups: AreaGroup[] }) — that response type itself is not exported by useAreaGroups.ts. */
   areaGroupsData: { groups: AreaGroup[] } | undefined;
   isLoadingAreaGroups: boolean;
+  /** Issue #1910 (PR2) — region-scoped area-group projection for the currently active region scope. */
+  regionScopedGroups: RegionScopedAreaGroup[] | undefined;
+  isLoadingRegionScopedGroups: boolean;
+  /**
+   * Issue #1910 (PR2 review fix, Finding 3) — true when the region-scoped
+   * projection fetch failed. Forwarded to AreaGroupsLandingPanel so a real
+   * backend failure renders an honest error+retry state instead of being
+   * indistinguishable from "this region legitimately has zero groups".
+   */
+  isRegionScopedGroupsError: boolean;
+  refetchRegionScopedGroups: () => void;
+  /**
+   * Issue #1910 (PR2 review fix, Finding 2) — the single source-of-truth,
+   * alias-aware scope namespaces built once in MapDiscovery (includes
+   * groupNameSlugs), forwarded so AreaGroupsLandingPanel's own resolveScope
+   * call classifies the active scope identically to every other call site
+   * instead of rebuilding a reduced local namespace.
+   */
+  scopeNamespaces: ScopeNamespaces;
   armRegionSelect: (source: 'map' | 'panel') => void;
   regionGuideRingActive: boolean;
   regionOverviewMarkerKind: RegionOverviewMarkerKind;
@@ -147,6 +168,11 @@ export function DiscoverRightPanelContainer({
   isLoadingAgriAreas,
   areaGroupsData,
   isLoadingAreaGroups,
+  regionScopedGroups,
+  isLoadingRegionScopedGroups,
+  isRegionScopedGroupsError,
+  refetchRegionScopedGroups,
+  scopeNamespaces,
   armRegionSelect,
   regionGuideRingActive,
   regionOverviewMarkerKind,
@@ -231,6 +257,15 @@ export function DiscoverRightPanelContainer({
       onSelectJourney={(j) => urlActions.setJourney(j)}
       areaGroups={areaGroupsData?.groups ?? []}
       isLoadingAreaGroups={isLoadingAreaGroups}
+      // Issue #1910 (PR2) — region-scoped area-group projection, forwarded to
+      // every AreaGroupsLandingPanel render site in DiscoverRightPanel.
+      regionScopedGroups={regionScopedGroups}
+      isLoadingRegionScopedGroups={isLoadingRegionScopedGroups}
+      // Issue #1910 (PR2 review fix, Findings 2 & 3) — real error state +
+      // retry for the projection, plus the alias-aware scope namespaces.
+      isRegionScopedGroupsError={isRegionScopedGroupsError}
+      onRetryRegionScopedGroups={refetchRegionScopedGroups}
+      scopeNamespaces={scopeNamespaces}
       // Issue #1178 — forward the active groupId so AreaGroupsLandingPanel can
       // highlight the deep-linked group card / show a non-alarming notice when
       // the groupId matches no loaded group. Prop wiring only — no routing change.

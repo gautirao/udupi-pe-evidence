@@ -23,6 +23,16 @@ import { api } from '@/lib/api';
  * behaviour exactly (backward compatible). `listingPurpose` is included in
  * the query key so switching buy<->rent always triggers a fresh fetch —
  * it can never silently reuse a stale count from the previous purpose.
+ *
+ * Issue #1910 (PR2 review fix) — a genuine backend failure (500/network
+ * error/timeout) now surfaces as a real `isError`/`error` on the returned
+ * query result instead of being swallowed into a fake-success
+ * `{ regions: [] }`. Swallowing made a real failure visually IDENTICAL to
+ * "this city legitimately has zero regions", which GuidedEntryPanel's
+ * `isSummaryError` branch (and any future caller) needs to be able to tell
+ * apart. `retry: false` mirrors `useRegionScopedAreaGroups`'s established
+ * error-surfacing convention so a failure resolves to `isError: true`
+ * promptly rather than after React Query's default retry backoff.
  */
 
 export interface RegionSummaryBounds {
@@ -87,20 +97,14 @@ export function useDiscoverRegionSummary(
     // useDiscoverSummary convention this hook replaces).
     queryKey: [...DISCOVER_REGION_SUMMARY_QUERY_KEY_BASE, citySlug, listingPurpose ?? null],
     queryFn: async () => {
-      try {
-        const query = listingPurpose ? `?listingPurpose=${encodeURIComponent(listingPurpose)}` : '';
-        return await api.get<RegionSummaryResponse>(
-          `/api/discover/cities/${encodeURIComponent(citySlug)}/regions${query}`,
-          { skipAuth: true },
-        );
-      } catch {
-        // On any network/API error, degrade to an empty region list rather
-        // than surfacing a hard error — mirrors useAreaGroups' fallback so
-        // region-dependent panels can still render their Browse-all state.
-        return { cityId: null, citySlug, regions: [] };
-      }
+      const query = listingPurpose ? `?listingPurpose=${encodeURIComponent(listingPurpose)}` : '';
+      return await api.get<RegionSummaryResponse>(
+        `/api/discover/cities/${encodeURIComponent(citySlug)}/regions${query}`,
+        { skipAuth: true },
+      );
     },
     enabled: citySlug.length > 0,
     staleTime: 60_000,
+    retry: false,
   });
 }

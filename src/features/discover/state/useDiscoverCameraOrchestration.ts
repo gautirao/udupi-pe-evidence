@@ -9,6 +9,8 @@ import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { computeGroupBounds } from '@/utils/discoverGroupBounds';
 import { getSectorBounds } from '@/lib/geo';
 import { labelToSlug } from '@/utils/macroRegionResolver';
+import { resolveScope, type ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
+import type { RegionScopedAreaGroup } from '@/hooks/useRegionScopedAreaGroups';
 
 /**
  * Issue #1824 Slice S7 — camera panner/tick orchestration (R9) extracted
@@ -91,6 +93,40 @@ export interface UseDiscoverCameraOrchestrationParams {
   selectedMaxKm: 10 | 25 | 50 | 100 | null;
   /** Page-derived — #1547 fit-once keys off selectedSchoolId + this array's length. */
   schoolListings: DiscoverCityListingItem[];
+  /**
+   * Issue #1910 (PR2 fix-up, Finding 2) — the SAME shared region/group
+   * namespaces MapDiscovery.tsx builds for `useDiscoverMapPresentation`
+   * (single source of truth for `resolveScope` classification — see that
+   * hook's `scopeNamespaces` JSDoc). Optional — when omitted, this hook
+   * derives an equivalent namespace internally from `summaryRegions`/
+   * `areaGroupsData` so the existing (pre-#1910) test fixture, which does
+   * not supply this prop, keeps working unchanged.
+   */
+  scopeNamespaces?: ScopeNamespaces;
+  /**
+   * Issue #1910 (PR2 fix-up, Finding 2) — the region-scoped area-group
+   * projection for the CURRENTLY resolved region scope (from
+   * `useRegionScopedAreaGroups`), the SAME data `useDiscoverMapPresentation`
+   * already consumes. Undefined/not-yet-loaded falls back to the legacy
+   * `region_key`-filtered member set (Resolution A) rather than panning to
+   * nothing.
+   */
+  regionScopedGroups?: RegionScopedAreaGroup[];
+  /**
+   * Issue #1910 (PR2, code-review fix-up) — whether `regionScopedGroups`'s
+   * underlying `useRegionScopedAreaGroups` query is still in flight. This is
+   * an INDEPENDENT async fetch from `areasLoading`/`isLoadingAreaGroups` (it
+   * is not coordinated with them) — on a deep link that lands with a region
+   * scope already in the URL, `areasLoading`/`isLoadingAreaGroups` can settle
+   * to false before this query resolves. The scope-fit effect below gates on
+   * this flag (mirroring the existing areasLoading/isLoadingAreaGroups gate)
+   * so it waits for the Resolution-B projection instead of firing once on
+   * the Resolution-A fallback and then never re-firing (see the effect's
+   * prevScopeRef comment for why a stale one-shot advance would defeat the
+   * whole migration). Optional — omitted callers behave as before (undefined
+   * is falsy, so the gate never blocks unless there's a caller that opts in).
+   */
+  isLoadingRegionScopedGroups?: boolean;
 }
 
 export interface UseDiscoverCameraOrchestrationResult {
@@ -117,7 +153,31 @@ export function useDiscoverCameraOrchestration({
   selectedRegion,
   selectedMaxKm,
   schoolListings,
+  scopeNamespaces,
+  regionScopedGroups,
+  isLoadingRegionScopedGroups,
 }: UseDiscoverCameraOrchestrationParams): UseDiscoverCameraOrchestrationResult {
+  // Issue #1910 (PR2 fix-up, Finding 2) — fall back to a locally-derived
+  // namespace when the caller doesn't supply one (mirrors
+  // useDiscoverMapPresentation's identical fallback). Includes the
+  // groupNameSlugs alias map so a legacy/malformed scope value that matched
+  // the pre-#1910 ad-hoc `g.name`/`labelToSlug(g.name)` clauses still
+  // resolves the same way here as it does in useDiscoverMapPresentation.
+  const resolvedScopeNamespaces: ScopeNamespaces = useMemo(() => {
+    if (scopeNamespaces) return scopeNamespaces;
+    const groups = areaGroupsData?.groups ?? [];
+    const groupNameSlugs = new Map<string, string>();
+    for (const g of groups) {
+      groupNameSlugs.set(labelToSlug(g.name), g.id);
+      groupNameSlugs.set(g.name.toLowerCase(), g.id);
+    }
+    return {
+      regionKeys: new Set(summaryRegions.map((r) => r.regionKey)),
+      groupSlugs: new Set(groups.map((g) => g.id)),
+      groupNameSlugs,
+    };
+  }, [scopeNamespaces, summaryRegions, areaGroupsData]);
+
   // Issue #1160 — school-focus tick for SchoolFocusPanner in PropertyMap.
   // Incremented when the selected school changes (new school ID) or when radiusKm
   // changes while a school is selected in school-first journey. The tick pattern
@@ -249,11 +309,63 @@ export function useDiscoverCameraOrchestration({
 
   // Issue #1745 Bug 2 — fitBounds to member areas when a macro-region scope is selected
   // so the user does not need to manually zoom out to see corridors in that macro region.
+  //
+  // prevScopeRef one-shot pattern — COORDINATION REQUIREMENT (Issue #1910 PR2
+  // code-review fix-up): this effect only does its pan-to-bounds work when
+  // urlState.scope has CHANGED since the last time it ran, then advances
+  // prevScopeRef.current so it will not re-fire for the same scope value
+  // again. That means EVERY async data source this effect depends on for its
+  // bounds computation (discoverAreas/areaGroupsData today, regionScopedGroups
+  // as of this fix) MUST be included in the "is it still loading" gate below
+  // BEFORE prevScopeRef.current is advanced. If a future data source is added
+  // to the bounds computation without also adding its loading flag to this
+  // gate, the effect can advance prevScopeRef.current on stale/incomplete
+  // data while that source is still in flight, and then permanently skip the
+  // correct re-fire when the source resolves (urlState.scope itself never
+  // changes again for that page load) — this is the exact bug class fixed
+  // here for regionScopedGroups/isLoadingRegionScopedGroups.
   const prevScopeRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!urlState.scope) return;
     if (areasLoading || isLoadingAreaGroups) return;
+
+    // Issue #1910 (PR2 fix-up, Finding 2) — resolveScope-based classification
+    // REPLACES the old ad-hoc id/name/slug/region_key OR-match, consistent
+    // with the same migration already applied to useDiscoverMapPresentation's
+    // two marker-bucketing sites. Previously this effect kept computing its
+    // pan-to bounds from the OLD Resolution-A member set (groups filtered by
+    // `region_key === scope`, i.e. only each group's PLURALITY region), even
+    // after the panel/map markers moved to Resolution B — so a group spanning
+    // two regions could show correctly on the map for its non-plurality
+    // region while the camera still panned to the incomplete Resolution-A
+    // bounds. Preferring `regionScopedGroups` (Resolution B) here fixes that.
+    //
+    // Resolved BEFORE the scopeChanged/prevScopeRef advance below (code
+    // review fix-up) — `regionScopedGroups` is an INDEPENDENT async fetch
+    // from areasLoading/isLoadingAreaGroups (not coordinated with them). On a
+    // deep link with a region scope already in the URL, areasLoading/
+    // isLoadingAreaGroups can settle to false before regionScopedGroups has
+    // loaded; without this gate the effect would advance prevScopeRef.current
+    // on the incomplete Resolution-A fallback and then bail at the
+    // `!scopeChanged` guard forever once the projection actually arrives
+    // (urlState.scope itself never changes again for that page load).
+    //
+    // Review fix (#1910 PR2) — gating on `isLoadingRegionScopedGroups` alone
+    // covered the pending state but NOT a genuine fetch failure:
+    // `isLoadingRegionScopedGroups` becomes false once the fetch errors
+    // (React Query settles isLoading→false on error, not just success), so
+    // the effect used to fall through, commit prevScopeRef.current on the
+    // WRONG Resolution-A fallback bounds, and then never re-fire once a
+    // user-triggered retry actually succeeded (`scopeChanged` is false for
+    // the rest of that page load — the scope value itself never changes).
+    // `regionScopedGroups` (the raw `data`) is `undefined` in BOTH the
+    // pending AND error states of the query — React Query only ever
+    // populates it on genuine success — so gating on that alone covers both
+    // without needing a separate error flag, and guarantees the ref only
+    // ever advances once real Resolution-B bounds are available to pan to.
+    const resolved = resolveScope(urlState.scope, resolvedScopeNamespaces);
+    if (resolved.kind === 'region' && regionScopedGroups === undefined) return;
 
     const scopeChanged = urlState.scope !== prevScopeRef.current;
     prevScopeRef.current = urlState.scope;
@@ -262,20 +374,16 @@ export function useDiscoverCameraOrchestration({
     if (!scopeChanged) return;
 
     const groups = areaGroupsData?.groups ?? [];
-    // Issue #1882 (Track A PR2 Slice S2c) — region-scope match now compares
-    // the group's backend-derived region_key against scope with strict
-    // equality. REPLACES matchesMacroRegion (label/direction heuristic).
-    const targetGroups = groups.filter(
-      (g) =>
-        g.id === urlState.scope ||
-        g.name.toLowerCase() === urlState.scope?.toLowerCase() ||
-        labelToSlug(g.name) === urlState.scope ||
-        g.region_key === urlState.scope
-    );
 
     let memberAreas: typeof discoverAreas = [];
-    if (targetGroups.length > 0) {
-      const groupAreaKeys = targetGroups.flatMap((g) => g.area_keys ?? []);
+    if (resolved.kind === 'region') {
+      // regionScopedGroups is guaranteed defined here — the gate above
+      // returns early for both the pending and error states.
+      const regionAreaKeys = (regionScopedGroups ?? []).flatMap((g) => g.areaKeys ?? []);
+      memberAreas = discoverAreas.filter((a) => regionAreaKeys.includes(a.areaKey));
+    } else if (resolved.kind === 'group') {
+      const targetGroup = groups.find((g) => g.id === resolved.groupSlug);
+      const groupAreaKeys = targetGroup?.area_keys ?? [];
       memberAreas = discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
     } else if (urlState.scope === 'other' || urlState.scope === 'unmapped') {
       const allGroupAreaKeys = new Set(groups.flatMap((g) => g.area_keys ?? []));
@@ -287,7 +395,7 @@ export function useDiscoverCameraOrchestration({
       setPanToArea(bounds);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlState.scope, urlState.groupId, urlState.areaKey, areasLoading, isLoadingAreaGroups, discoverAreas, areaGroupsData, summaryRegions]);
+  }, [urlState.scope, urlState.groupId, urlState.areaKey, areasLoading, isLoadingAreaGroups, discoverAreas, areaGroupsData, summaryRegions, resolvedScopeNamespaces, regionScopedGroups, isLoadingRegionScopedGroups]);
 
   // Issue #1410 (B3) — viewport-fit when agri group listings arrive.
   // Uses a state variable fed into PropertyMap's focusBounds so it's consistent with how

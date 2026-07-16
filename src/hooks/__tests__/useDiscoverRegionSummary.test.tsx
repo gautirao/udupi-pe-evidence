@@ -7,7 +7,8 @@
  * 2. response is surfaced 1:1 — no client-side aggregation of regions
  * 3. empty-city (unknown city, backend 200 { regions: [] }) is handled gracefully
  * 4. hook is disabled (no fetch) when citySlug is an empty string
- * 5. network/API error degrades to an empty region list, not a thrown error
+ * 5. network/API error surfaces as a real isError (Issue #1910 PR2 review
+ *    fix — no longer swallowed into a fake-success empty region list)
  *
  * ADVISORY-1 rework (5 required purpose-scoping scenarios):
  * 6. the request includes the selected listingPurpose as a query param
@@ -127,15 +128,15 @@ describe('useDiscoverRegionSummary', () => {
     expect(result.current.fetchStatus).toBe('idle');
   });
 
-  it('degrades to an empty region list on network/API error rather than throwing', async () => {
+  it('surfaces a network/API error as a real isError — never swallowed into a fake-success empty region list', async () => {
     mockGet.mockRejectedValueOnce(new Error('network down'));
     const { result } = renderHook(() => useDiscoverRegionSummary('bangalore'), {
       wrapper: makeWrapper(),
     });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.regions).toEqual([]);
-    expect(result.current.isError).toBe(false);
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.data).toBeUndefined();
+    expect(result.current.isSuccess).toBe(false);
   });
 });
 

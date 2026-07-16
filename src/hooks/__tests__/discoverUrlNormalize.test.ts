@@ -15,6 +15,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   VALID_DIRECTIONS,
+  VALID_SCOPES,
+  VALID_REGION_KEYS,
+  isValidScope,
+  coerceScope,
   extractLegacyGroupDirection,
   mapJourneyAlias,
   normalizeDiscoverSearchParams,
@@ -86,6 +90,54 @@ describe('extractLegacyGroupDirection', () => {
 
   it('returns null for a no-colon non-direction string', () => {
     expect(extractLegacyGroupDirection('N10_25')).toBeNull();
+  });
+});
+
+// Issue #1910 (PR2 review fix, canonical region aliases) — the backend's
+// CENTRAL_CARDINAL_4/_8 region models materialize a 'CENTRAL' region_key
+// (CityRegionProjection.CENTRAL) alongside the 8 VALID_DIRECTIONS codes.
+// isValidScope previously accepted all 8 direction codes but rejected the
+// uppercase canonical 'CENTRAL' token — only the lowercase legacy 'central'
+// (VALID_SCOPES) passed — silently stripping a real `?scope=CENTRAL` deep
+// link before it ever reached resolveScope's classification layer.
+describe('isValidScope / coerceScope — canonical region keys (Issue #1910 review fix)', () => {
+  it('accepts all 8 direction codes (pre-existing)', () => {
+    for (const dir of VALID_DIRECTIONS) {
+      expect(isValidScope(dir)).toBe(true);
+    }
+  });
+
+  it('accepts the uppercase canonical "CENTRAL" region key', () => {
+    expect(isValidScope('CENTRAL')).toBe(true);
+    expect(coerceScope('CENTRAL')).toBe('CENTRAL');
+  });
+
+  it('VALID_REGION_KEYS is exactly VALID_DIRECTIONS plus CENTRAL', () => {
+    expect(VALID_REGION_KEYS.size).toBe(VALID_DIRECTIONS.size + 1);
+    expect(VALID_REGION_KEYS.has('CENTRAL')).toBe(true);
+    for (const dir of VALID_DIRECTIONS) {
+      expect(VALID_REGION_KEYS.has(dir)).toBe(true);
+    }
+  });
+
+  it('still accepts the lowercase legacy 5-token vocabulary unchanged (backward compatible)', () => {
+    for (const legacy of VALID_SCOPES) {
+      expect(isValidScope(legacy)).toBe(true);
+    }
+  });
+
+  it('does not accept a lowercase "central" as a false match for the uppercase canonical set (they are two distinct, both-valid tokens)', () => {
+    // Both pass isValidScope (VALID_SCOPES has lowercase 'central';
+    // VALID_REGION_KEYS has uppercase 'CENTRAL') but via different sets —
+    // asserting neither set alone accepts the other's casing keeps that
+    // distinction explicit and regression-guarded.
+    expect(VALID_SCOPES.has('CENTRAL')).toBe(false);
+    expect(VALID_REGION_KEYS.has('central')).toBe(false);
+  });
+
+  it('rejects a bare unhyphenated non-canonical word (unchanged pre-existing behaviour)', () => {
+    expect(isValidScope('northeast')).toBe(false);
+    expect(coerceScope('northeast')).toBeNull();
   });
 });
 

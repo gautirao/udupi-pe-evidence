@@ -167,6 +167,12 @@ function baseProps(
     isLoadingAgriAreas: false,
     areaGroupsData: undefined,
     isLoadingAreaGroups: false,
+    regionScopedGroups: undefined,
+    isLoadingRegionScopedGroups: false,
+    // Issue #1910 (PR2 review fix, Findings 2 & 3)
+    isRegionScopedGroupsError: false,
+    refetchRegionScopedGroups: vi.fn(),
+    scopeNamespaces: { regionKeys: new Set(), groupSlugs: new Set() },
     armRegionSelect: vi.fn(),
     regionGuideRingActive: false,
     regionOverviewMarkerKind: null,

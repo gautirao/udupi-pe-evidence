@@ -11,9 +11,11 @@ import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { type DiscoverMapCrumb } from '@/components/discover/DiscoverMapBreadcrumb';
 import { prettifyZoneSlug, areaKeyToLabel } from '@/components/discover/SchoolRadiusMapOverlay';
-import { labelToSlug } from '@/utils/macroRegionResolver';
 import { computeGroupBounds } from '@/utils/discoverGroupBounds';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { labelToSlug } from '@/utils/macroRegionResolver';
+import { resolveScope, type ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
+import type { RegionScopedAreaGroup } from '@/hooks/useRegionScopedAreaGroups';
 
 export interface UseDiscoverMapPresentationParams {
   mapLayerKind: DiscoverMapLayerKind;
@@ -40,6 +42,24 @@ export interface UseDiscoverMapPresentationParams {
   selectedArea?: AreaPoint | null;
   selectedSchool?: SchoolResult | null;
   selectedMarkerListing?: PropertyListingWithImages | null;
+  /**
+   * Issue #1910 (PR2) — the single source-of-truth region/group namespaces
+   * used to classify `urlState.scope` via `resolveScope`, built once by the
+   * caller (MapDiscovery.tsx) from `summaryRegions`/`areaGroupsData` and
+   * reused across this hook, `handleOverviewAreaClick`, and
+   * `AreaGroupsLandingPanel`. Optional — when omitted, this hook derives an
+   * equivalent namespace internally from `summaryRegions`/`areaGroupsData`
+   * so the frozen S9b1 fixture (which predates #1910 and does not supply
+   * this prop) keeps working unchanged.
+   */
+  scopeNamespaces?: ScopeNamespaces;
+  /**
+   * Issue #1910 (PR2) — the region-scoped area-group projection for the
+   * CURRENTLY resolved region scope (from `useRegionScopedAreaGroups`).
+   * Undefined/not-yet-loaded falls back to the legacy `region_key`-filtered
+   * marker set (Resolution A) rather than showing nothing.
+   */
+  regionScopedGroups?: RegionScopedAreaGroup[];
 }
 
 export interface UseDiscoverMapPresentationResult {
@@ -83,7 +103,31 @@ export function useDiscoverMapPresentation({
   selectedArea = null,
   selectedSchool = null,
   selectedMarkerListing = null,
+  scopeNamespaces,
+  regionScopedGroups,
 }: UseDiscoverMapPresentationParams): UseDiscoverMapPresentationResult {
+  // Issue #1910 (PR2) — fall back to a locally-derived namespace when the
+  // caller doesn't supply one (see the scopeNamespaces JSDoc above).
+  const resolvedScopeNamespaces: ScopeNamespaces = useMemo(() => {
+    if (scopeNamespaces) return scopeNamespaces;
+    const groups = areaGroupsData?.groups ?? [];
+    // Issue #1910 (PR2 fix-up, Finding 1) — restores the pre-#1910 ad-hoc
+    // name/label fallback (see ScopeNamespaces.groupNameSlugs JSDoc) for the
+    // internal namespace this hook derives when no shared `scopeNamespaces`
+    // prop is supplied (only the frozen S9b1 fixture hits this path in
+    // practice — MapDiscovery.tsx always passes scopeNamespaces).
+    const groupNameSlugs = new Map<string, string>();
+    for (const g of groups) {
+      groupNameSlugs.set(labelToSlug(g.name), g.id);
+      groupNameSlugs.set(g.name.toLowerCase(), g.id);
+    }
+    return {
+      regionKeys: new Set(summaryRegions.map((r) => r.regionKey)),
+      groupSlugs: new Set(groups.map((g) => g.id)),
+      groupNameSlugs,
+    };
+  }, [scopeNamespaces, summaryRegions, areaGroupsData]);
+
   const overviewAreas = useMemo((): AreaPoint[] => {
     if (mapLayerKind === 'zoom-gated' || mapLayerKind === 'agri-drilldown') return [];
 
@@ -92,60 +136,135 @@ export function useDiscoverMapPresentation({
       const groups = areaGroupsData?.groups ?? [];
       const activeScope = urlState.scope ?? null;
 
-      let targetGroups = groups;
-      if (activeScope) {
-        targetGroups = groups.filter(
-          (g) =>
-            g.id === activeScope ||
-            g.name.toLowerCase() === activeScope.toLowerCase() ||
-            labelToSlug(g.name) === activeScope ||
-            g.region_key === activeScope
-        );
-        if (targetGroups.length === 0) return [];
+      // Issue #1910 (PR2) — group→AreaPoint mapper, reused by the no-scope
+      // and region-fallback (projection-not-yet-loaded) branches below.
+      // Byte-for-byte the original per-group bubble derivation.
+      const buildGroupAreaPoint = (group: AreaGroup): AreaPoint | null => {
+        const groupAreaKeys = group.area_keys ?? [];
+        const memberAreas = discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
+        const totalListings = memberAreas.reduce((sum, a) => sum + (a.listingCount ?? 0), 0);
 
-        // If the matched scope is itself a single area group (e.g. Udupi 3-level where scope="south-udupi" is group.id),
-        // there are no sub-zones inside it, so return its member areas directly.
-        const isDirectGroupMatch =
-          targetGroups.length === 1 &&
-          (targetGroups[0].id === activeScope || labelToSlug(targetGroups[0].name) === activeScope);
-        if (isDirectGroupMatch) {
-          const groupAreaKeys = targetGroups[0].area_keys ?? [];
+        let lat = group.focus_lat != null ? group.focus_lat : null;
+        let lon = group.focus_lon != null ? group.focus_lon : null;
+        if (lat == null || lon == null) {
+          const coords = memberAreas.filter((a) => a.geo_center_lat != null && a.geo_center_lon != null);
+          if (coords.length > 0) {
+            lat = coords.reduce((sum, a) => sum + a.geo_center_lat, 0) / coords.length;
+            lon = coords.reduce((sum, a) => sum + a.geo_center_lon, 0) / coords.length;
+          }
+        }
+        if (lat == null || lon == null) return null;
+
+        const unionBbox = computeGroupBounds(memberAreas)?.bbox ?? null;
+
+        return {
+          areaKey: group.id,
+          areaLabel: group.name,
+          geo_center_lat: lat,
+          geo_center_lon: lon,
+          bbox: unionBbox,
+          listingCount: totalListings,
+          schoolCount: undefined,
+          isGroup: true,
+        };
+      };
+
+      if (activeScope) {
+        // Issue #1910 (PR2) — resolveScope-based classification REPLACES the
+        // old ad-hoc id/name/slug/region_key OR-match (see resolveScope.ts).
+        const resolved = resolveScope(activeScope, resolvedScopeNamespaces);
+
+        if (resolved.kind === 'region') {
+          // "Group posing as region" (pre-#1910 pattern, e.g. Udupi's
+          // simplified city hierarchy where a single group IS the
+          // region-summary entry — resolvedScopeNamespaces.regionKeys then
+          // legitimately contains that group's own id). This is checked
+          // BEFORE the projection query-state gate below and does NOT wait
+          // on regionScopedGroups at all: the real region-scoped-groups
+          // endpoint only ever has data for genuine city_regions.region_key
+          // values (N/E/S/W/CENTRAL/...), never for an arbitrary group id
+          // used as a pseudo-region key, so waiting on that fetch here would
+          // never resolve to anything useful. The V119 disjointness trigger
+          // guarantees a REAL region_key can never equal an active group's
+          // slug, so this only ever fires for this specific legacy pattern.
+          const directGroupMatch = groups.find((g) => g.id === activeScope);
+          if (directGroupMatch) {
+            const groupAreaKeys = directGroupMatch.area_keys ?? [];
+            return discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
+          }
+
+          // Review fix (#1910 PR2) — one shared query-state gate with the
+          // panel (AreaGroupsLandingPanel) and camera
+          // (useDiscoverCameraOrchestration): `regionScopedGroups` is
+          // `undefined` in BOTH the pending and error states of the
+          // projection fetch (React Query only ever populates `data` on a
+          // genuine success), and only ever a real (possibly empty) array on
+          // success. Previously an undefined projection — whether still
+          // loading OR having genuinely failed — fell back to the legacy
+          // Resolution-A `region_key` filter, rendering markers built from
+          // group data known to be wrong for a spanning group (the whole
+          // reason Resolution B exists). Now: no markers at all until the
+          // projection actually succeeds — pending/error render nothing
+          // rather than briefly-wrong markers, matching the panel's
+          // loading-skeleton / error-retry states with no fallback markers
+          // underneath them.
+          if (!regionScopedGroups) {
+            return [];
+          }
+
+          // Prefer the region-scoped projection (Resolution A→B, #1910): a
+          // group whose plurality region_key is some OTHER region can still
+          // have real members in this region, and must still appear here.
+          return regionScopedGroups
+            .map((g): AreaPoint | null => {
+              // boundsStatus === 'UNAVAILABLE' means zero usable geometry
+              // for this subset — omit from the map entirely rather than
+              // ever fabricating a marker position (#1910).
+              if (g.boundsStatus === 'UNAVAILABLE') return null;
+              if (g.focusLat == null || g.focusLon == null) return null;
+              // 'APPROXIMATE' bounds are real data from a valid-bbox
+              // subset — safe to render directly, same as 'COMPLETE'.
+              const bbox: [[number, number], [number, number]] | null =
+                g.minLat != null && g.minLon != null && g.maxLat != null && g.maxLon != null
+                  ? [[g.minLat, g.minLon], [g.maxLat, g.maxLon]]
+                  : null;
+              return {
+                areaKey: g.groupSlug,
+                areaLabel: g.name,
+                geo_center_lat: g.focusLat,
+                geo_center_lon: g.focusLon,
+                bbox,
+                listingCount: g.listingCount,
+                schoolCount: undefined,
+                isGroup: true,
+              };
+            })
+            .filter((a): a is AreaPoint => a !== null && (a.listingCount ?? 0) > 0);
+        }
+
+        if (resolved.kind === 'group') {
+          // The matched scope is itself a single area group (e.g. Udupi
+          // 3-level where scope="south-udupi" is group.id) — there are no
+          // sub-zones inside it, so return its member areas directly.
+          const targetGroup = groups.find((g) => g.id === resolved.groupSlug);
+          if (!targetGroup) return [];
+          const groupAreaKeys = targetGroup.area_keys ?? [];
           return discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
         }
-      } else if (groups.length === 0) {
+
+        // resolved.kind === 'none' (or 'area', not applicable at this
+        // layer) — the scope matched no known region/group; preserves the
+        // original empty-target-groups behaviour (no silent fallback to
+        // the full group list).
+        return [];
+      }
+
+      if (groups.length === 0) {
         return isLandingState || isAreaFirstCityLanding ? liveAreas : discoverAreas;
       }
 
-      return targetGroups
-        .map((group): AreaPoint | null => {
-          const groupAreaKeys = group.area_keys ?? [];
-          const memberAreas = discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
-          const totalListings = memberAreas.reduce((sum, a) => sum + (a.listingCount ?? 0), 0);
-
-          let lat = group.focus_lat != null ? group.focus_lat : null;
-          let lon = group.focus_lon != null ? group.focus_lon : null;
-          if (lat == null || lon == null) {
-            const coords = memberAreas.filter((a) => a.geo_center_lat != null && a.geo_center_lon != null);
-            if (coords.length > 0) {
-              lat = coords.reduce((sum, a) => sum + a.geo_center_lat, 0) / coords.length;
-              lon = coords.reduce((sum, a) => sum + a.geo_center_lon, 0) / coords.length;
-            }
-          }
-          if (lat == null || lon == null) return null;
-
-          const unionBbox = computeGroupBounds(memberAreas)?.bbox ?? null;
-
-          return {
-            areaKey: group.id,
-            areaLabel: group.name,
-            geo_center_lat: lat,
-            geo_center_lon: lon,
-            bbox: unionBbox,
-            listingCount: totalListings,
-            schoolCount: undefined,
-            isGroup: true,
-          };
-        })
+      return groups
+        .map(buildGroupAreaPoint)
         .filter((a): a is AreaPoint => a !== null && (a.listingCount ?? 0) > 0);
     }
 
@@ -161,12 +280,31 @@ export function useDiscoverMapPresentation({
         .map((region): AreaPoint | null => {
           if (region.listingCount == null || region.listingCount === 0) return null;
 
-          const matchingGroups = groups.filter(
-            (g) =>
-              g.id === region.regionKey ||
-              g.name.toLowerCase() === region.regionLabel.toLowerCase() ||
-              g.region_key === region.regionKey
-          );
+          // Issue #1910 (PR2) — resolveScope-based classification REPLACES
+          // the old ad-hoc id/region_key OR-match. A group whose OWN id
+          // resolves (via the shared namespaces) to this very region key
+          // covers the "group posing as a region" edge case (e.g. a 3-level
+          // city hierarchy); g.region_key === region.regionKey covers the
+          // normal derived-at-read region-scope signal.
+          //
+          // Issue #1910 (PR2 fix-up, Finding 1) — the third original clause,
+          // `g.name.toLowerCase() === region.regionLabel.toLowerCase()`, is
+          // restored below AS-IS rather than routed through resolveScope: it
+          // is not a raw-`urlState.scope`-string classification (resolveScope's
+          // contract) at all — it's an independent group⇄region equivalence
+          // check comparing two DATA FIELDS (a group's own display name vs. a
+          // region's display label), relevant when a group's region_key is
+          // still null (e.g. AreaGroupsService.deriveRegionKey's DEGENERATE
+          // case — no member yet classified into any region) but the group's
+          // name already textually matches the region it conceptually belongs
+          // to (e.g. a simplified city hierarchy pre-region-onboarding).
+          const matchingGroups = groups.filter((g) => {
+            const resolvedGroupId = resolveScope(g.id, resolvedScopeNamespaces);
+            const isGroupItselfThisRegion =
+              resolvedGroupId.kind === 'region' && resolvedGroupId.regionKey === region.regionKey;
+            const isNameLabelMatch = g.name.toLowerCase() === region.regionLabel.toLowerCase();
+            return isGroupItselfThisRegion || isNameLabelMatch || g.region_key === region.regionKey;
+          });
 
           const groupAreaKeys = matchingGroups.flatMap((g) => g.area_keys ?? []);
           const memberAreas = discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
@@ -319,6 +457,8 @@ export function useDiscoverMapPresentation({
     cityCenter,
     urlState.areaKey,
     focusedGroup,
+    resolvedScopeNamespaces,
+    regionScopedGroups,
   ]);
 
   // Issue #1815 (R3b/R6) — a panel search match must promote that area to a

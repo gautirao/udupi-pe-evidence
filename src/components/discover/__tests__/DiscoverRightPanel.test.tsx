@@ -578,6 +578,15 @@ describe('DiscoverRightPanel — 4-level residential hierarchy (Issue #1745)', (
           // Issue #1882 (Track A PR2 Slice S2c) — scope filtering now
           // compares the backend-derived region_key with strict equality,
           // so these fixtures carry region_key explicitly.
+          //
+          // Issue #1910 (PR2 review fix, round 3, code-review follow-up) —
+          // renamed from bare 'north'/'south' to 'north-belt'/'south-belt':
+          // round 2 of this review added canonical region-key ALIASES
+          // (resolveScope.ts) that classify the exact words 'north'/'south'
+          // as a REGION scope, which this round's `isRegionScopeUnresolved`
+          // guard now correctly suppresses (this test never wires
+          // regionScopedGroups, simulating the pre-#1910 legacy Resolution-A
+          // filter path this test is actually about).
           {
             id: 'north-zone',
             name: 'North Zone',
@@ -587,7 +596,7 @@ describe('DiscoverRightPanel — 4-level residential hierarchy (Issue #1745)', (
             school_count: 0,
             focus_lat: null,
             focus_lon: null,
-            region_key: 'north',
+            region_key: 'north-belt',
           },
           {
             id: 'south-zone',
@@ -598,10 +607,10 @@ describe('DiscoverRightPanel — 4-level residential hierarchy (Issue #1745)', (
             school_count: 0,
             focus_lat: null,
             focus_lon: null,
-            region_key: 'south',
+            region_key: 'south-belt',
           },
         ]}
-        scope="north"
+        scope="north-belt"
         onClearScope={onClearScope}
       />,
     );

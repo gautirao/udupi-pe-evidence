@@ -188,6 +188,51 @@ vi.mock('@/hooks/useAreaGroups', () => ({
   useAreaGroups: (...args: Parameters<typeof mockUseAreaGroups>) => mockUseAreaGroups(...args),
 }));
 
+// Issue #1910 (PR2 review fix) — the region branch of overviewAreas
+// (useDiscoverMapPresentation) and the scope-fit camera effect now require
+// a genuinely-succeeded useRegionScopedAreaGroups fetch before rendering any
+// "zones" markers/copy for a multi-group region (Resolution B). This suite
+// has no network-layer mock, so without stubbing this hook the real query
+// would settle to an error (no fetch mock, retry:false) and
+// regionScopedGroups would stay undefined forever — the "north" (multi-zone)
+// scenarios below need real success data to exercise the 'zones' copy
+// variant. 'coastal-homes' (single-group) doesn't need this — it resolves
+// via the direct-group-match branch, which never waits on this fetch.
+const mockUseRegionScopedAreaGroups = vi.hoisted(() =>
+  vi.fn((_citySlug: string, regionKey: string | null | undefined) => {
+    if (regionKey === 'north') {
+      return {
+        data: {
+          citySlug: 'udupi',
+          regionKey: 'north',
+          groups: [
+            {
+              groupSlug: 'north-zone-a', name: 'North Zone A', subtitle: null,
+              scopingRegionKey: 'north', regionDisplayOrder: 1, areaKeys: [NORTH_AREA_A],
+              listingCount: 3, focusLat: 13.42, focusLon: 74.75,
+              minLat: 13.41, minLon: 74.74, maxLat: 13.43, maxLon: 74.76,
+              boundsStatus: 'COMPLETE',
+            },
+            {
+              groupSlug: 'north-zone-b', name: 'North Zone B', subtitle: null,
+              scopingRegionKey: 'north', regionDisplayOrder: 1, areaKeys: [NORTH_AREA_B],
+              listingCount: 5, focusLat: 13.45, focusLon: 74.76,
+              minLat: 13.44, minLon: 74.75, maxLat: 13.46, maxLon: 74.77,
+              boundsStatus: 'COMPLETE',
+            },
+          ],
+        },
+        isLoading: false, isError: false, error: null, refetch: vi.fn(),
+      };
+    }
+    return { data: undefined, isLoading: false, isError: false, error: null, refetch: vi.fn() };
+  }),
+);
+vi.mock('@/hooks/useRegionScopedAreaGroups', () => ({
+  useRegionScopedAreaGroups: (...args: Parameters<typeof mockUseRegionScopedAreaGroups>) =>
+    mockUseRegionScopedAreaGroups(...args),
+}));
+
 vi.mock('react-leaflet', () => ({
   MapContainer: () => null,
   TileLayer: () => null,

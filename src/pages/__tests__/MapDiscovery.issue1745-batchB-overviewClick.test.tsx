@@ -171,6 +171,22 @@ vi.mock('@/hooks/useAreaGroups', () => ({
   useAreaGroups: (...args: Parameters<typeof mockUseAreaGroups>) => mockUseAreaGroups(...args),
 }));
 
+// Issue #1910 (PR2) — region-scoped projection hook, mocked to a deterministic
+// "not loaded" no-op so this pre-#1910 fixture (which models a Udupi-style
+// "group posing as region" collision — COASTAL_GROUP_ID appears as BOTH a
+// region-summary key AND an area-group id) exercises the useDiscoverMapPresentation
+// legacy-fallback path rather than a real network call.
+const mockUseRegionScopedAreaGroups = vi.hoisted(() =>
+  vi.fn((_citySlug: string, _regionKey: string | null | undefined, _listingPurpose?: string | null) => ({
+    data: undefined as { citySlug: string; regionKey: string; groups: unknown[] } | undefined,
+    isLoading: false,
+  })),
+);
+vi.mock('@/hooks/useRegionScopedAreaGroups', () => ({
+  useRegionScopedAreaGroups: (...args: Parameters<typeof mockUseRegionScopedAreaGroups>) =>
+    mockUseRegionScopedAreaGroups(...args),
+}));
+
 vi.mock('react-leaflet', () => ({
   MapContainer: () => null,
   TileLayer: () => null,
@@ -218,6 +234,8 @@ describe('Issue #1745 Batch B — handleOverviewAreaClick routing (code-review B
     mockUseAuth.mockReturnValue({ user: null, isLoading: false, isAdmin: false, isDealer: false });
     mockUseAreaGroups.mockReset();
     mockUseAreaGroups.mockReturnValue({ data: { groups: [COASTAL_GROUP] }, isLoading: false });
+    mockUseRegionScopedAreaGroups.mockReset();
+    mockUseRegionScopedAreaGroups.mockReturnValue({ data: undefined, isLoading: false });
   });
 
   it('macro-region bubble click (journeyless landing, scope=null) sets scope=<groupId>, NOT areaKey', async () => {
@@ -313,5 +331,77 @@ describe('Issue #1745 Batch B — handleOverviewAreaClick routing (code-review B
     const cityArgsUsed = mockUseAreaGroups.mock.calls.map((call) => call[0]);
     expect(cityArgsUsed).toContain('udupi');
     expect(cityArgsUsed).not.toContain('');
+  });
+
+  // ─── Issue #1910 (PR2) — resolveScope-based routing ──────────────────────
+
+  it('region-bubble click still routes through setScope when resolveScope classifies it as region/group (mapLayerKind gate unaffected)', async () => {
+    // Re-run of the first scenario, but explicitly proving the NEW
+    // resolveScope-based handleOverviewAreaClick still fires setScope for a
+    // macro-region-bubbles click, regardless of whether COASTAL_GROUP_ID
+    // resolves to kind:'region' or kind:'group' (both are non-'none', which
+    // is all the macro-region-bubbles branch requires).
+    renderAt('/discover?city=udupi');
+
+    await waitFor(() => {
+      expect(propertyMapProps.current?.onAreaClick).toBeTypeOf('function');
+    });
+    const bubbles = propertyMapProps.current!.areas;
+    act(() => {
+      propertyMapProps.current!.onAreaClick!(bubbles[0]);
+    });
+
+    await waitFor(() => {
+      const probe = screen.getByTestId('location-probe');
+      expect(probe).toHaveTextContent(`scope=${COASTAL_GROUP_ID}`);
+    });
+  });
+
+  it('a real area click at a non-region-bubbles layer resolves to kind:none and routes through handleAreaClick (not selectGroup/setScope)', async () => {
+    renderAt(`/discover?city=udupi&scope=${COASTAL_GROUP_ID}`);
+
+    await waitFor(() => {
+      expect(propertyMapProps.current?.onAreaClick).toBeTypeOf('function');
+    });
+    const pills = propertyMapProps.current!.areas;
+    const malpe = pills.find((a) => a.areaKey === AREA_KEY_A)!;
+
+    act(() => {
+      propertyMapProps.current!.onAreaClick!(malpe);
+    });
+
+    await waitFor(() => {
+      const probe = screen.getByTestId('location-probe');
+      expect(probe).toHaveTextContent(`areaKey=${encodeURIComponent(AREA_KEY_A)}`);
+    });
+    const probe = screen.getByTestId('location-probe');
+    // A real area key must never be routed through setScope/selectGroup.
+    expect(probe.textContent).not.toContain(`scope=${AREA_KEY_A}`);
+    expect(probe.textContent).not.toContain(`groupId=${AREA_KEY_A}`);
+  });
+
+  it('useRegionScopedAreaGroups is invoked (query hook wired) once a region scope is active, proving MapDiscovery threads the projection through', async () => {
+    renderAt(`/discover?city=udupi&scope=${COASTAL_GROUP_ID}`);
+    await waitFor(() => {
+      expect(mockUseRegionScopedAreaGroups).toHaveBeenCalled();
+    });
+    // Called with (city, regionKeyOrNull, listingPurpose) — asserts the hook
+    // is wired into MapDiscovery's render tree, not that it necessarily fetches
+    // (the hook's own enabled guard, covered by useRegionScopedAreaGroups.test.ts,
+    // decides whether a request actually fires).
+    expect(mockUseRegionScopedAreaGroups).toHaveBeenCalledWith('udupi', expect.anything(), expect.anything());
+  });
+
+  it('Udupi non-regression: useRegionScopedAreaGroups is called with a null regionKey (no active region scope) at the journeyless city landing', async () => {
+    // scope=null (plain /discover?city=udupi) — resolveScope has nothing to
+    // classify as a region, so the hook must be called with a null/undefined
+    // regionKey, which its own `enabled` guard (useRegionScopedAreaGroups.test.ts)
+    // turns into zero network requests.
+    renderAt('/discover?city=udupi');
+    await waitFor(() => {
+      expect(mockUseRegionScopedAreaGroups).toHaveBeenCalled();
+    });
+    const regionKeyArgsUsed = mockUseRegionScopedAreaGroups.mock.calls.map((call) => call[1]);
+    expect(regionKeyArgsUsed.every((k) => k == null)).toBe(true);
   });
 });

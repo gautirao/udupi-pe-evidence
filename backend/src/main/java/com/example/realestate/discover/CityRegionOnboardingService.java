@@ -40,6 +40,13 @@ import java.util.stream.Collectors;
  * to a single effective region. If not, it throws {@link RegionOnboardingBlockedException} and
  * the transaction rolls back — never silently picking a region by first-member, majority, or
  * group focus point.
+ *
+ * <h2>Region key / area_group slug namespace (#1910)</h2>
+ * {@link #apply(int)} also refuses to materialize {@code city_regions} if any region_key about
+ * to be written collides with an active {@code area_groups.slug} for the same city — the two
+ * identifier spaces must stay disjoint. This is checked here, the single choke point where
+ * region keys are ever persisted, so a colliding key can never reach the database in the first
+ * place.
  */
 @Service
 public class CityRegionOnboardingService {
@@ -80,6 +87,20 @@ public class CityRegionOnboardingService {
                     RegionOnboardingBlockedException.Reason.MISSING_CLASSIFICATIONS,
                     "No regional_area_classifications rows for city_id=" + cityId
                             + " (slug=" + report.citySlug() + ") — run RegionalClassificationBackfillService first.");
+        }
+
+        Set<String> regionKeys = new LinkedHashSet<>(CityRegionProjection.canonicalRegionOrder(report.regionModel()));
+        Set<String> activeGroupSlugs = new LinkedHashSet<>(loadActiveAreaGroupSlugs(cityId));
+        Set<String> namespaceCollisions = new LinkedHashSet<>(regionKeys);
+        namespaceCollisions.retainAll(activeGroupSlugs);
+        if (!namespaceCollisions.isEmpty()) {
+            throw new RegionOnboardingBlockedException(
+                    RegionOnboardingBlockedException.Reason.NAMESPACE_COLLISION,
+                    "city_id=" + cityId + " (slug=" + report.citySlug() + ") has active area_groups.slug "
+                            + "value(s) colliding with region_model=" + report.regionModel() + " region keys: "
+                            + String.join(", ", namespaceCollisions) + " — region keys and area_group slugs "
+                            + "must be disjoint; rename the colliding area_group(s) or choose a different "
+                            + "region_model. Refusing to silently let one namespace win.");
         }
 
         Map<String, String> overrides = loadOverrides(cityId);
@@ -268,6 +289,10 @@ public class CityRegionOnboardingService {
     }
 
     // ── apply() helpers ───────────────────────────────────────────────────────
+
+    private List<String> loadActiveAreaGroupSlugs(int cityId) {
+        return jdbcOperations.queryForList(AREA_GROUP_SLUGS_SQL, String.class, cityId);
+    }
 
     private Map<String, String> loadOverrides(int cityId) {
         return jdbcOperations.query(OVERRIDES_SQL,
@@ -578,6 +603,10 @@ public class CityRegionOnboardingService {
 
     private static final String OVERRIDES_SQL =
             "SELECT area_key, forced_region_key FROM regional_area_overrides WHERE city_id = ?";
+
+    /** #1910: namespace-collision guard input — active area_group slugs, mirrors AREA_GROUPS_SQL's filter. */
+    private static final String AREA_GROUP_SLUGS_SQL =
+            "SELECT slug FROM area_groups WHERE city_id = ? AND is_active = true";
 
     private static final String UPSERT_CITY_REGION_SQL = """
             INSERT INTO city_regions

@@ -34,6 +34,16 @@
 // own copy, so the two can never drift.
 export const VALID_DIRECTIONS = new Set(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']);
 
+// Issue #1910 (PR2 review fix) — the backend's CENTRAL_CARDINAL_4/_8 region
+// models materialize a 'CENTRAL' region_key (see CityRegionProjection.CENTRAL
+// / FULL_CANONICAL_ORDER), a real region key a deep link can legitimately
+// carry (`?scope=CENTRAL`) alongside the 8 VALID_DIRECTIONS codes above.
+// isValidScope previously rejected it — only the lowercase legacy token
+// 'central' (VALID_SCOPES) passed structural validation, so an uppercase
+// canonical `scope=CENTRAL` deep link was silently stripped before it ever
+// reached resolveScope's classification layer.
+export const VALID_REGION_KEYS: Set<string> = new Set([...VALID_DIRECTIONS, 'CENTRAL']);
+
 // Issue #1745 P2 — VALID_SCOPES is the single source of truth for the original
 // 5 fixed-direction scope tokens. This is DISTINCT from the agri-first `region`
 // corridor param above: `region` is an agri-only cumulative-distance corridor
@@ -65,7 +75,7 @@ const SCOPE_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)+$/;
  * it does not, and must not, drive any downstream area/school/agri panel filtering.
  */
 export function isValidScope(value: string): boolean {
-  return VALID_SCOPES.has(value) || VALID_DIRECTIONS.has(value) || SCOPE_SLUG_PATTERN.test(value);
+  return VALID_SCOPES.has(value) || VALID_REGION_KEYS.has(value) || SCOPE_SLUG_PATTERN.test(value);
 }
 
 /**

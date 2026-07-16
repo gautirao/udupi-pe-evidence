@@ -42,7 +42,10 @@ import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { useAreaGroups } from '@/hooks/useAreaGroups';
+import { useRegionScopedAreaGroups } from '@/hooks/useRegionScopedAreaGroups';
 import { useRegionalAreaGroups } from '@/hooks/useRegionalAreaGroups';
+import { resolveScope, type ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
+import { labelToSlug } from '@/utils/macroRegionResolver';
 import type { DiscoverSummaryRegion } from '@/hooks/useDiscoverSummary';
 import { useDiscoverRegionSummary } from '@/hooks/useDiscoverRegionSummary';
 import { useAgriMapListings } from '@/hooks/useAgriMapListings';
@@ -526,6 +529,51 @@ export default function MapDiscovery() {
       })),
     [regionSummaryData],
   );
+
+  // Issue #1910 (PR2) — single source-of-truth region/group namespaces for
+  // resolveScope, built ONCE here and reused by handleOverviewAreaClick,
+  // useDiscoverMapPresentation, and (via DiscoverRightPanelContainer)
+  // AreaGroupsLandingPanel — so scope classification can never drift
+  // between call sites.
+  const scopeNamespaces: ScopeNamespaces = useMemo(() => {
+    const groups = areaGroupsData?.groups ?? [];
+    // Issue #1910 (PR2 fix-up, Finding 1) — restores the pre-#1910 ad-hoc
+    // `g.name.toLowerCase() === activeScope.toLowerCase()` /
+    // `labelToSlug(g.name) === activeScope` fallback (see
+    // ScopeNamespaces.groupNameSlugs JSDoc) that plain `groupSlugs`
+    // membership does not reproduce, since a group's `id` (DB `slug`) is not
+    // always literally `labelToSlug(name)` — e.g. `kr-puram-belt` for
+    // "K R Puram Belt" (V106__seed_bangalore_macro_region_mapping.sql).
+    const groupNameSlugs = new Map<string, string>();
+    for (const g of groups) {
+      groupNameSlugs.set(labelToSlug(g.name), g.id);
+      groupNameSlugs.set(g.name.toLowerCase(), g.id);
+    }
+    return {
+      regionKeys: new Set(summaryRegions.map((r) => r.regionKey)),
+      groupSlugs: new Set(groups.map((g) => g.id)),
+      groupNameSlugs,
+    };
+  }, [summaryRegions, areaGroupsData]);
+
+  // Issue #1910 (PR2) — region-scoped area-group projection (PR1 endpoint),
+  // enabled ONLY when the active urlState.scope resolves to a REGION (never
+  // fires for Udupi's non-region-scoped views, or a direct group/area
+  // scope) — see useRegionScopedAreaGroups's `enabled` guard.
+  const resolvedUrlScope = useMemo(
+    () => resolveScope(urlState.scope ?? null, scopeNamespaces),
+    [urlState.scope, scopeNamespaces],
+  );
+  const regionScopeKeyForFetch = resolvedUrlScope.kind === 'region' ? resolvedUrlScope.regionKey : null;
+  const {
+    data: regionScopedGroupsData,
+    isLoading: isLoadingRegionScopedGroups,
+    // Issue #1910 (PR2 review fix, Finding 3) — surface the real fetch-error
+    // state so AreaGroupsLandingPanel can show an honest error+retry UI
+    // instead of a misleading "0 zones found" empty state.
+    isError: isRegionScopedGroupsError,
+    refetch: refetchRegionScopedGroups,
+  } = useRegionScopedAreaGroups(urlState.city || DEFAULT_CITY, regionScopeKeyForFetch, intentListingPurpose);
 
   // Issue #1824 Slice S6 — composedResetMapTick + handleStartOver now live in
   // useDiscoverJourneyTransitions; see journeyView/journeyCommands below (declared
@@ -1046,6 +1094,9 @@ export default function MapDiscovery() {
     selectedRegion,
     selectedMaxKm,
     schoolListings,
+    scopeNamespaces,
+    regionScopedGroups: regionScopedGroupsData?.groups,
+    isLoadingRegionScopedGroups,
   });
 
   // Debug: expose areaListings and related data to window.__debug for Playwright tests.
@@ -1423,30 +1474,33 @@ export default function MapDiscovery() {
     selectedArea,
     selectedSchool,
     selectedMarkerListing,
+    scopeNamespaces,
+    regionScopedGroups: regionScopedGroupsData?.groups,
   });
 
+  // Issue #1910 (PR2) — resolveScope-based classification REPLACES the old
+  // ad-hoc region-vs-group-vs-area OR-match, reusing the SAME scopeNamespaces
+  // built once above (single source of truth with useDiscoverMapPresentation
+  // and AreaGroupsLandingPanel).
   const handleOverviewAreaClick = useCallback((area: AreaPoint) => {
     if (isTopGroupedAgri && corridorGroups.some((c) => c.directionCode === area.areaKey)) {
       urlActions.setRegionWithMaxKm(area.areaKey);
       return;
     }
-    if (
-      mapLayerKind === 'macro-region-bubbles' &&
-      (summaryRegions.some((r) => r.regionKey === area.areaKey) ||
-        (areaGroupsData?.groups ?? []).some((g) => g.id === area.areaKey))
-    ) {
+    const resolvedAreaKeyScope = resolveScope(area.areaKey, scopeNamespaces);
+    if (mapLayerKind === 'macro-region-bubbles' && resolvedAreaKeyScope.kind !== 'none') {
       urlActions.setScope(area.areaKey);
       // Issue #1808 — arm the region-overview guidance one-shot pulse. Does
       // NOT change the setScope call above (regression-guarded state contract).
       armRegionSelect('map');
       return;
     }
-    if ((areaGroupsData?.groups ?? []).some((g) => g.id === area.areaKey)) {
+    if (resolvedAreaKeyScope.kind === 'group') {
       urlActions.selectGroup(area.areaKey);
       return;
     }
     handleAreaClick(area);
-  }, [isTopGroupedAgri, corridorGroups, areaGroupsData, mapLayerKind, urlActions, handleAreaClick, summaryRegions, armRegionSelect]);
+  }, [isTopGroupedAgri, corridorGroups, scopeNamespaces, mapLayerKind, urlActions, handleAreaClick, armRegionSelect]);
 
   // Issue #1595 — the area-first selected-group drill-down state (a group is focused,
   // no specific area selected yet). Drives the mock-aligned map chrome for this step:
@@ -1689,6 +1743,11 @@ export default function MapDiscovery() {
           isLoadingAgriAreas={isLoadingAgriAreas}
           areaGroupsData={areaGroupsData}
           isLoadingAreaGroups={isLoadingAreaGroups}
+          regionScopedGroups={regionScopedGroupsData?.groups}
+          isLoadingRegionScopedGroups={isLoadingRegionScopedGroups}
+          isRegionScopedGroupsError={isRegionScopedGroupsError}
+          refetchRegionScopedGroups={refetchRegionScopedGroups}
+          scopeNamespaces={scopeNamespaces}
           armRegionSelect={armRegionSelect}
           regionGuideRingActive={regionGuideRingActive}
           regionOverviewMarkerKind={regionOverviewMarkerKind}

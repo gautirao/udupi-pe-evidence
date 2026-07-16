@@ -164,8 +164,18 @@ const KATAPADI = {
   listingCount: 0, schoolCount: 0, trendDirection: 'stable',
 };
 
+// Issue #1910 (PR2 review fix, canonical region aliases) — id is a
+// realistic descriptive kebab-case slug, NOT the bare direction word
+// 'north': resolveScope now recognizes 'north' as a built-in alias for the
+// canonical region key 'N' regardless of any namespace, so a group literally
+// id'd 'north' would (correctly, per that fix) now resolve as a REGION
+// scope, not a group scope — no longer isolating this fixture's actual
+// intent (a "group posing as region" pattern, Udupi's simplified hierarchy
+// where a single group IS the region-summary entry, matched by exact group
+// id — see COASTAL_GROUP_ID in MapDiscovery.issue1808.regionGuidance.test.tsx
+// for the same convention using a real, non-colliding descriptive slug).
 const NORTH_GROUP = {
-  id: 'north',
+  id: 'north-belt',
   name: 'North Belt',
   subtitle: 'North Udupi areas',
   region_label: 'North Udupi',
@@ -405,10 +415,11 @@ describe('Issue #1824 S7 — camera orchestration (schoolFocusTick, #1547 fit-on
 
   describe('scope fit one-shot', () => {
     it('scope fit one-shot: macro-region scope sets panToArea once, does NOT re-fire on background refetch, and yields to groupId/areaKey', async () => {
-      // (i) scope='north', groupId/areaKey null, areas+groups loaded -> setPanToArea
-      // called exactly ONCE with the macro-region synthetic bounds.
+      // (i) scope='north-belt' (NORTH_GROUP's own id — the "group posing as
+      // region" pattern), groupId/areaKey null, areas+groups loaded ->
+      // setPanToArea called exactly ONCE with the macro-region synthetic bounds.
       mockUseDiscoverUrlState.mockReturnValue([
-        makeUrlState({ scope: 'north' }),
+        makeUrlState({ scope: 'north-belt' }),
         makeDefaultActions(),
       ]);
 
@@ -430,7 +441,7 @@ describe('Issue #1824 S7 — camera orchestration (schoolFocusTick, #1547 fit-on
       // group-fit effect itself computes no bounds and adds no calls of its own —
       // isolating the assertion to the scope-fit's own yield/one-shot behaviour).
       mockUseDiscoverUrlState.mockReturnValue([
-        makeUrlState({ scope: 'north', groupId: 'unresolvable-group' }),
+        makeUrlState({ scope: 'north-belt', groupId: 'unresolvable-group' }),
         makeDefaultActions(),
       ]);
       rerenderTree(rerender);

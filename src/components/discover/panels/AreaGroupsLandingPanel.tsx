@@ -1,6 +1,7 @@
 import React from 'react';
-import { ArrowRight, Building, ChevronRight, Layers, MapPin, X } from 'lucide-react';
+import { AlertCircle, ArrowRight, Building, ChevronRight, Layers, MapPin, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CitySelect } from '../CitySelect';
 import { IntentSelector } from '../IntentSelector';
@@ -9,6 +10,8 @@ import { ScopedSearch } from '../ScopedSearch';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { DiscoverIntent, DiscoverJourney } from '@/hooks/useDiscoverUrlState';
+import type { RegionScopedAreaGroup } from '@/hooks/useRegionScopedAreaGroups';
+import { resolveScope, type ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
 import {
   getGroupMacroRegionLabel,
   type SummaryRegionRef,
@@ -69,8 +72,17 @@ export type AreaGroupsLandingPanelProps = {
   /**
    * Issue #1745 4-level hierarchy — summary regions from /api/discover/summary for safe
    * scope-to-regionLabel matching without hardcoded city names.
+   *
+   * Issue #1910 (PR2 review fix, Finding 1) — the real runtime objects passed
+   * here are `DiscoverSummaryRegion` (src/hooks/useDiscoverSummary.ts), a
+   * superset of `SummaryRegionRef` that also carries a genuine region-level
+   * `listingCount` (a backend `COUNT(DISTINCT ...)` via the shared
+   * `DiscoverListingPredicateBuilder` — NOT summed from groups). The optional
+   * `listingCount` below lets this panel use that trustworthy per-region
+   * total for the region-projection headline figure instead of re-deriving
+   * it from `regionScopedGroups` (see `totalForSale`).
    */
-  summaryRegions?: SummaryRegionRef[];
+  summaryRegions?: (SummaryRegionRef & { listingCount?: number })[];
   /**
    * Issue #1745 4-level hierarchy — navigate back to a macro region from Level-2.
    */
@@ -112,6 +124,39 @@ export type AreaGroupsLandingPanelProps = {
    * click on the map. Forwarded unchanged; not applicable at Level-1.
    */
   highlightedAreaKeys?: string[];
+  /**
+   * Issue #1910 (PR2) — the region-scoped area-group projection for the
+   * CURRENTLY active region scope (from `useRegionScopedAreaGroups`).
+   * When the active `scope` resolves to a REGION (via `resolveScope`) and
+   * this is supplied, the Level-1 zone list is built from this projection
+   * instead of filtering the unscoped `groups` list by `region_key`
+   * ("Resolution A") — fixing the bug where a group spanning multiple
+   * macro regions silently vanished from a non-plurality region's list.
+   */
+  regionScopedGroups?: RegionScopedAreaGroup[];
+  /** Issue #1910 (PR2) — true while the region-scoped projection above is in flight. */
+  isLoadingRegionScopedGroups?: boolean;
+  /**
+   * Issue #1910 (PR2 review fix, Finding 3) — true when the region-scoped
+   * projection fetch genuinely failed (network/5xx/timeout). Distinguishes a
+   * real backend failure from "this region legitimately has zero groups" —
+   * when true (and a region scope is active) the panel renders an
+   * error+retry state instead of the empty-groups message.
+   */
+  isRegionScopedGroupsError?: boolean;
+  /** Issue #1910 (PR2 review fix, Finding 3) — retries the region-scoped projection fetch. */
+  onRetryRegionScopedGroups?: () => void;
+  /**
+   * Issue #1910 (PR2 review fix, Finding 2) — the single source-of-truth,
+   * alias-aware scope namespaces (built once in MapDiscovery, includes
+   * `groupNameSlugs` so a legacy/malformed scope value like `k-r-puram-belt`
+   * still resolves to the canonical `kr-puram-belt` group). When supplied,
+   * this panel's own `resolveScope` call uses it directly instead of
+   * rebuilding a reduced local namespace that lacks `groupNameSlugs`. When
+   * omitted (e.g. tests that don't wire it), falls back to the local
+   * reconstruction below so existing callers/tests keep working.
+   */
+  scopeNamespaces?: ScopeNamespaces;
 } & (
   | { fallbackAreas: DiscoverArea[]; onSelectArea: (areaKey: string) => void }
   | { fallbackAreas?: never; onSelectArea?: never }
@@ -484,6 +529,11 @@ export function AreaGroupsLandingPanel({
   totalAreaMarkerCount,
   onAreaHover,
   highlightedAreaKeys,
+  regionScopedGroups,
+  isLoadingRegionScopedGroups = false,
+  isRegionScopedGroupsError = false,
+  onRetryRegionScopedGroups,
+  scopeNamespaces: scopeNamespacesProp,
 }: AreaGroupsLandingPanelProps) {
   // Issue #1178 — a groupId is "active" only when it is a non-blank string.
   // Trim guards against whitespace-only deep links (e.g. `?groupId=%20`), which
@@ -498,12 +548,36 @@ export function AreaGroupsLandingPanel({
   // Issue #1882 (Track A PR2 Slice S2c) — region-scope filtering now compares
   // the group's backend-derived region_key against the active scope with
   // strict equality. REPLACES matchesMacroRegion (label/direction heuristic).
+  // Issue #1910 (PR2) — this is now ONLY the fallback path, used when the
+  // region-scoped projection (regionScopedGroups) hasn't been supplied/
+  // loaded yet. It is "Resolution A" (see module comment on regionScopedGroups
+  // above) and silently drops a group whose plurality region_key differs
+  // from activeScope even if it has real members in this region — the
+  // region-projection branch below ("Resolution B") is the fix.
   const scopedGroups = React.useMemo(() => {
     if (!activeScope) return groups;
     return groups.filter((g) => g.region_key === activeScope);
   }, [activeScope, groups]);
 
-  const displayGroups = activeScope ? scopedGroups : groups;
+  // Issue #1910 (PR2 review fix, Finding 2) — a reduced LOCAL fallback
+  // namespace built from this panel's own `groups`/`summaryRegions` props.
+  // It intentionally does NOT include `groupNameSlugs` (the alias-fallback
+  // map), so it must never be preferred over an injected `scopeNamespacesProp`
+  // when one is supplied — see the JSDoc on `scopeNamespaces` in
+  // AreaGroupsLandingPanelProps. Kept only so callers/tests that don't wire
+  // the prop (e.g. this file's own unit tests) keep working unchanged.
+  const localScopeNamespaces: ScopeNamespaces = React.useMemo(
+    () => ({
+      regionKeys: new Set((summaryRegions ?? []).map((r) => r.regionKey)),
+      groupSlugs: new Set(groups.map((g) => g.id)),
+    }),
+    [summaryRegions, groups],
+  );
+  const scopeNamespaces: ScopeNamespaces = scopeNamespacesProp ?? localScopeNamespaces;
+  const resolvedScope = React.useMemo(
+    () => resolveScope(activeScope, scopeNamespaces),
+    [activeScope, scopeNamespaces],
+  );
 
   const activeScopeLabel = React.useMemo(() => {
     if (!activeScope) return null;
@@ -515,6 +589,69 @@ export function AreaGroupsLandingPanel({
     if (groupMatch) return groupMatch;
     return activeScope.charAt(0).toUpperCase() + activeScope.slice(1);
   }, [activeScope, summaryRegions, scopedGroups]);
+
+  // Issue #1910 (PR2) — "Resolution B": when the active scope resolves to a
+  // REGION and the region-scoped projection has been supplied, build the
+  // Level-1 zone list from the projection's OWN groups/listingCount instead
+  // of the region_key-filtered `scopedGroups` above. Level-2 drill-down
+  // (an already-selected group's full unscoped member-area list) is
+  // untouched — this only narrows the TOP-LEVEL landing list.
+  const useRegionProjection = resolvedScope.kind === 'region' && regionScopedGroups !== undefined;
+
+  // Issue #1910 (PR2 review fix, Finding 3) — whether a REGION scope is
+  // active at all, independent of whether the projection array has arrived
+  // yet. Unlike `useRegionProjection`, this stays true while the fetch is
+  // failing (regionScopedGroups never populates on error), so the error+retry
+  // state below can render even though `useRegionProjection` is false.
+  const isRegionScopeActive = resolvedScope.kind === 'region';
+
+  // Issue #1910 (PR2 review fix, round 3) — true while a region scope is
+  // active but the projection has not resolved yet (pending fetch OR a
+  // genuine fetch error). In this window `displayGroups` (and everything
+  // derived from it — `totalAreaCount`, `totalForSale`) still falls back to
+  // the Resolution-A `scopedGroups` list (see the `displayGroups` comment
+  // below) — an untrustworthy dataset that must never be surfaced as the
+  // group/area/property counts while the loading skeleton or error+retry UI
+  // is showing.
+  const isRegionScopeUnresolved = isRegionScopeActive && !useRegionProjection;
+
+  const regionProjectionGroups: AreaGroup[] = React.useMemo(() => {
+    if (!useRegionProjection) return [];
+    return (regionScopedGroups ?? []).map((g) => ({
+      id: g.groupSlug,
+      name: g.name,
+      subtitle: g.subtitle,
+      region_label: activeScopeLabel,
+      school_count: 0,
+      area_keys: g.areaKeys,
+      focus_lat: g.focusLat,
+      focus_lon: g.focusLon,
+      region_key: g.scopingRegionKey,
+      min_lat: g.minLat,
+      min_lon: g.minLon,
+      max_lat: g.maxLat,
+      max_lon: g.maxLon,
+    }));
+  }, [useRegionProjection, regionScopedGroups, activeScopeLabel]);
+
+  // Issue #1910 (PR2) — per-group listingCount from the region-scoped
+  // projection (already de-duplicated server-side), keyed by group slug.
+  // Used instead of the client-side area-sum join for region-projection
+  // group cards, so the figure can never double-count/mis-total against the
+  // region-scoped source of truth.
+  const regionProjectionListingCountByGroup = React.useMemo(() => {
+    const map = new Map<string, number>();
+    if (useRegionProjection) {
+      for (const g of regionScopedGroups ?? []) map.set(g.groupSlug, g.listingCount);
+    }
+    return map;
+  }, [useRegionProjection, regionScopedGroups]);
+
+  const displayGroups = useRegionProjection
+    ? regionProjectionGroups
+    : activeScope
+      ? scopedGroups
+      : groups;
 
   const macroRegionSections = React.useMemo(() => {
     if (activeScope) return [];
@@ -580,10 +717,44 @@ export function AreaGroupsLandingPanel({
     return set;
   }, [displayGroups]);
   const totalAreaCount = distinctAreaKeys.size;
-  const totalForSale = React.useMemo(
-    () => forSaleForKeys([...distinctAreaKeys], listingIndex),
-    [distinctAreaKeys, listingIndex],
-  );
+  // Issue #1910 (PR2 review fix, Finding 1) — the active region's key, only
+  // meaningful when resolvedScope.kind === 'region' (which useRegionProjection
+  // already requires). Hoisted out of the totalForSale memo so its dependency
+  // is a plain string, not the whole ResolvedScope union.
+  const activeRegionKey = isRegionScopeActive && resolvedScope.kind === 'region' ? resolvedScope.regionKey : null;
+  // Issue #1910 (PR2 review fix) — for the region-projection case, prefer the
+  // matching entry in `summaryRegions` for the headline total.
+  // `area_group_members` has no uniqueness constraint, so a listing whose
+  // area belongs to TWO groups that both appear in this region would be
+  // double-counted by summing each group's own (per-group de-duplicated)
+  // listingCount. summaryRegions' entry for this region is instead a genuine
+  // region-level `COUNT(DISTINCT ...)` computed server-side by
+  // RegionSummaryService via the shared DiscoverListingPredicateBuilder (NOT
+  // summed from groups), so it is the trustworthy headline figure — when it
+  // is unavailable, the total is hidden (returns null) rather than ever
+  // falling back to the known-double-counting group-sum.
+  const totalForSale = React.useMemo(() => {
+    if (useRegionProjection) {
+      const regionMatch = activeRegionKey != null
+        ? summaryRegions?.find((r) => r.regionKey === activeRegionKey)
+        : undefined;
+      if (regionMatch && typeof regionMatch.listingCount === 'number') {
+        return regionMatch.listingCount;
+      }
+      // Review fix (#1910 PR2) — a missing/stale summaryRegions entry
+      // previously fell back to summing each group's own (per-group
+      // de-duplicated) listingCount, which the comment above already
+      // documents as double-counting whenever a listing's area belongs to
+      // two groups active in this region. Knowingly displaying a wrong
+      // number is worse than displaying none: return null so
+      // AreaGroupsIntro hides the "properties" stat tile entirely (it
+      // already treats forSaleCount == null as "no trustworthy total to
+      // show" — see its `forSaleCount != null &&` guard) rather than ever
+      // rendering a figure known to be inflated.
+      return null;
+    }
+    return forSaleForKeys([...distinctAreaKeys], listingIndex);
+  }, [useRegionProjection, activeRegionKey, summaryRegions, distinctAreaKeys, listingIndex]);
 
   // Issue #1659 — area name index for member area summary on each group card.
   // Built once per fallbackAreas change; O(n) where n = city area count (< 100).
@@ -736,13 +907,22 @@ export function AreaGroupsLandingPanel({
               </div>
             )}
 
-            <AreaGroupsIntro
-              groupCount={displayGroups.length}
-              areaCount={totalAreaCount}
-              forSaleCount={totalForSale}
-              cityLabel={cityLabel}
-              activeScopeLabel={activeScopeLabel}
-            />
+            {/* Issue #1910 (PR2 review fix, round 3) — while a region scope is
+                active but the projection hasn't resolved (pending or error),
+                these stats would otherwise fall back to the Resolution-A
+                `scopedGroups`/`distinctAreaKeys` figures (see
+                `isRegionScopeUnresolved`). Suppress the intro entirely rather
+                than show an untrustworthy count; it renders again once the
+                projection resolves. */}
+            {!isRegionScopeUnresolved && (
+              <AreaGroupsIntro
+                groupCount={displayGroups.length}
+                areaCount={totalAreaCount}
+                forSaleCount={totalForSale}
+                cityLabel={cityLabel}
+                activeScopeLabel={activeScopeLabel}
+              />
+            )}
 
             {activeScope && (
               <div
@@ -776,12 +956,81 @@ export function AreaGroupsLandingPanel({
                       Zones in {activeScopeLabel}
                     </p>
                   </div>
-                  <span className="font-mono text-[11.5px] font-semibold text-muted-foreground">
-                    {displayGroups.length} group{displayGroups.length === 1 ? '' : 's'}
-                  </span>
+                  {/* Same Resolution-A leakage guard as the intro above — the
+                      badge count reads `displayGroups.length` directly, so it
+                      must also be suppressed while the region projection is
+                      pending/erroring. */}
+                  {!isRegionScopeUnresolved && (
+                    <span className="font-mono text-[11.5px] font-semibold text-muted-foreground">
+                      {displayGroups.length} group{displayGroups.length === 1 ? '' : 's'}
+                    </span>
+                  )}
                 </div>
 
-                {displayGroups.length === 0 ? (
+                {isRegionScopeActive && isLoadingRegionScopedGroups ? (
+                  // Issue #1910 (PR2 review fix) — gated on isRegionScopeActive
+                  // (not useRegionProjection, which additionally requires
+                  // regionScopedGroups to already be a defined array — never
+                  // true on the FIRST load of a region scope). The original
+                  // `useRegionProjection && isLoadingRegionScopedGroups` gate
+                  // never showed a skeleton on initial load: regionScopedGroups
+                  // starts undefined, so useRegionProjection was false and the
+                  // panel fell straight through to the Resolution-A
+                  // (`scopedGroups`) fallback list — briefly showing WRONG
+                  // plurality-filtered zones instead of a loading state. This
+                  // gate now covers both "never fetched yet" and "refetching
+                  // after a previous success" uniformly.
+                  <div className="space-y-3.5" data-testid="region-scoped-groups-loading">
+                    <GroupCardSkeleton />
+                    <GroupCardSkeleton />
+                  </div>
+                ) : isRegionScopeActive && isRegionScopedGroupsError ? (
+                  // Issue #1910 (PR2 review fix, Finding 3) — a genuine
+                  // projection fetch failure. Gated on `isRegionScopeActive`
+                  // (not `useRegionProjection`, which requires regionScopedGroups
+                  // to already be a defined array — never true after an error)
+                  // so a failed fetch never silently falls through to the
+                  // Resolution-A fallback list or the "0 zones" empty message.
+                  <div
+                    className="rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center shadow-sm"
+                    data-testid="region-scoped-groups-error"
+                    role="alert"
+                  >
+                    <AlertCircle className="mx-auto mb-3 h-8 w-8 text-destructive" aria-hidden="true" />
+                    <p className="text-sm font-medium text-foreground">Couldn't load zones for this region</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Something went wrong. Please try again.
+                    </p>
+                    {onRetryRegionScopedGroups && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-4"
+                        onClick={onRetryRegionScopedGroups}
+                        data-testid="region-scoped-groups-retry-btn"
+                      >
+                        Try again
+                      </Button>
+                    )}
+                  </div>
+                ) : isRegionScopeUnresolved ? (
+                  // Issue #1910 (PR2 review fix, round 3) — catches the
+                  // remaining ambiguous window between the two branches above:
+                  // a region scope is active and the projection genuinely
+                  // hasn't resolved (regionScopedGroups still undefined), but
+                  // neither `isLoadingRegionScopedGroups` nor
+                  // `isRegionScopedGroupsError` is set yet (e.g. the query's
+                  // fetch hasn't been observed as in-flight on this render).
+                  // Without this branch the ternary would otherwise fall
+                  // through to `displayGroups` — the Resolution-A fallback —
+                  // and render wrong group CARDS (not just wrong counts),
+                  // reintroducing the same leakage this round was meant to
+                  // close.
+                  <div className="space-y-3.5" data-testid="region-scoped-groups-loading">
+                    <GroupCardSkeleton />
+                    <GroupCardSkeleton />
+                  </div>
+                ) : displayGroups.length === 0 ? (
                   <div className="rounded-xl border border-border/60 bg-muted/20 p-8 text-center text-sm text-muted-foreground shadow-sm">
                     {activeScope === 'other' || activeScope === 'unmapped'
                       ? 'These properties belong to localities across the city that are not currently grouped into a named corridor or zone.'
@@ -794,7 +1043,11 @@ export function AreaGroupsLandingPanel({
                       group={group}
                       onSelect={onSelectGroup}
                       isSelected={group.id === focusedGroup?.id}
-                      forSale={forSaleForKeys(group.area_keys, listingIndex)}
+                      forSale={
+                        useRegionProjection
+                          ? regionProjectionListingCountByGroup.get(group.id) ?? null
+                          : forSaleForKeys(group.area_keys, listingIndex)
+                      }
                       areaNameSummary={formatMemberAreaSummary(group.area_keys, areaNameIndex)}
                       intent={intent}
                     />

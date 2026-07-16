@@ -29,6 +29,8 @@ import { IntentSelector } from './IntentSelector';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
+import type { RegionScopedAreaGroup } from '@/hooks/useRegionScopedAreaGroups';
+import type { ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
 import type { CorridorGroupData, CumulativeDistanceTier } from '@/hooks/useRegionalAreaGroups';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PanelHeader } from './PanelHeader';
@@ -536,6 +538,30 @@ export interface DiscoverRightPanelProps {
   areaGroups?: AreaGroup[];
   /** True while area groups are loading. */
   isLoadingAreaGroups?: boolean;
+  /**
+   * Issue #1910 (PR2) — the region-scoped area-group projection for the
+   * currently active region scope. Forwarded unchanged to every
+   * AreaGroupsLandingPanel render site in this file.
+   */
+  regionScopedGroups?: RegionScopedAreaGroup[];
+  /** Issue #1910 (PR2) — true while regionScopedGroups is in flight. */
+  isLoadingRegionScopedGroups?: boolean;
+  /**
+   * Issue #1910 (PR2 review fix, Finding 3) — true when the region-scoped
+   * projection fetch failed. Forwarded unchanged to every
+   * AreaGroupsLandingPanel render site so a genuine backend failure renders
+   * an error+retry state instead of a misleading empty state.
+   */
+  isRegionScopedGroupsError?: boolean;
+  onRetryRegionScopedGroups?: () => void;
+  /**
+   * Issue #1910 (PR2 review fix, Finding 2) — the single source-of-truth,
+   * alias-aware scope namespaces (built once in MapDiscovery, includes
+   * groupNameSlugs). Forwarded unchanged to every AreaGroupsLandingPanel
+   * render site so its internal resolveScope call never drifts from the
+   * page-level classification.
+   */
+  scopeNamespaces?: ScopeNamespaces;
   /** Called when the user selects a group from the landing panel. */
   onSelectGroup?: (groupId: string) => void;
   /**
@@ -905,6 +931,11 @@ export function DiscoverRightPanel({
   journey,
   areaGroups = [],
   isLoadingAreaGroups = false,
+  regionScopedGroups,
+  isLoadingRegionScopedGroups = false,
+  isRegionScopedGroupsError = false,
+  onRetryRegionScopedGroups,
+  scopeNamespaces,
   onSelectGroup,
   groupId = null,
   onClearGroup,
@@ -1367,6 +1398,11 @@ export function DiscoverRightPanel({
             <AreaGroupsLandingPanel
               groups={areaGroups}
               isLoading={isLoadingAreaGroups}
+              regionScopedGroups={regionScopedGroups}
+              isLoadingRegionScopedGroups={isLoadingRegionScopedGroups}
+              isRegionScopedGroupsError={isRegionScopedGroupsError}
+              onRetryRegionScopedGroups={onRetryRegionScopedGroups}
+              scopeNamespaces={scopeNamespaces}
               onSelectGroup={onSelectGroup ?? (() => undefined)}
               onStartOver={onStartOver}
               groupId={groupId}
@@ -1397,6 +1433,11 @@ export function DiscoverRightPanel({
           <AreaGroupsLandingPanel
             groups={areaGroups}
             isLoading={isLoadingAreaGroups}
+            regionScopedGroups={regionScopedGroups}
+            isLoadingRegionScopedGroups={isLoadingRegionScopedGroups}
+            isRegionScopedGroupsError={isRegionScopedGroupsError}
+            onRetryRegionScopedGroups={onRetryRegionScopedGroups}
+            scopeNamespaces={scopeNamespaces}
             onSelectGroup={onSelectGroup ?? (() => undefined)}
             onStartOver={onStartOver}
             groupId={groupId}
@@ -1433,6 +1474,11 @@ export function DiscoverRightPanel({
               <AreaGroupsLandingPanel
                 groups={areaGroups}
                 isLoading={isLoadingAreaGroups}
+                regionScopedGroups={regionScopedGroups}
+                isLoadingRegionScopedGroups={isLoadingRegionScopedGroups}
+                isRegionScopedGroupsError={isRegionScopedGroupsError}
+                onRetryRegionScopedGroups={onRetryRegionScopedGroups}
+                scopeNamespaces={scopeNamespaces}
                 onSelectGroup={onSelectGroup ?? (() => undefined)}
                 onStartOver={onStartOver}
                 groupId={groupId}
@@ -1459,6 +1505,11 @@ export function DiscoverRightPanel({
             <AreaGroupsLandingPanel
               groups={areaGroups}
               isLoading={isLoadingAreaGroups}
+              regionScopedGroups={regionScopedGroups}
+              isLoadingRegionScopedGroups={isLoadingRegionScopedGroups}
+              isRegionScopedGroupsError={isRegionScopedGroupsError}
+              onRetryRegionScopedGroups={onRetryRegionScopedGroups}
+              scopeNamespaces={scopeNamespaces}
               onSelectGroup={onSelectGroup ?? (() => undefined)}
               onStartOver={onStartOver}
               groupId={groupId}

@@ -19,6 +19,17 @@ package com.example.realestate.discover;
  *       explicit override, never by silent first-member/majority/focus-point fallback.</li>
  *   <li>{@link Reason#ASSIGNMENT_INTEGRITY_BREACH} — internal invariant failure: an eligible
  *       area ended up assigned to zero or more than one region in the computed membership set.</li>
+ *   <li>{@link Reason#NAMESPACE_COLLISION} — a region_key about to be materialized for this city
+ *       (per its {@code region_model}) collides with an active {@code area_groups.slug} for the
+ *       same city (#1910). Region keys and area_group slugs must be disjoint — never silently
+ *       resolved by a "region wins" tie-break. This is the friendly, apply()-time check; the
+ *       {@code fn_reject_area_group_region_key_collision}/
+ *       {@code fn_reject_city_region_area_group_collision} database triggers added in
+ *       {@code V119__enforce_area_group_region_key_disjointness.sql} (#1910 PR2 review follow-up)
+ *       back it up at the database level, rejecting the same collision on any non-concurrent write
+ *       to either table — a later migration adding a colliding {@code area_group}, not just a
+ *       re-run of {@code apply()} itself. (Concurrent-write locking is a tracked follow-up, not
+ *       solved by these triggers.)</li>
  * </ul>
  */
 class RegionOnboardingBlockedException extends RuntimeException {
@@ -27,7 +38,8 @@ class RegionOnboardingBlockedException extends RuntimeException {
         MISSING_POLICY,
         MISSING_CLASSIFICATIONS,
         UNRESOLVED_SPLIT_OR_DEGENERATE,
-        ASSIGNMENT_INTEGRITY_BREACH
+        ASSIGNMENT_INTEGRITY_BREACH,
+        NAMESPACE_COLLISION
     }
 
     private final Reason reason;

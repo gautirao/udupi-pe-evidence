@@ -18,6 +18,7 @@ import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
+import type { RegionScopedAreaGroup } from '@/hooks/useRegionScopedAreaGroups';
 
 const AREA_1: AreaPoint = {
   areaKey: 'area-1',
@@ -224,12 +225,34 @@ describe('useDiscoverMapPresentation — regionOverviewMarkerKind', () => {
   };
 
   it("is 'zones' when region-overview + region-zone-areas layer + overviewAreas has an isGroup item", () => {
+    // Issue #1910 (PR2 review fix) — the region branch's overviewAreas now
+    // require a genuinely-succeeded regionScopedGroups projection (not just
+    // an unscoped `groups` list filtered by region_key) to render an
+    // isGroup marker at all; supply the matching projection so this
+    // pre-#1910 test still exercises the 'zones' marker-kind derivation.
+    const projection: RegionScopedAreaGroup = {
+      groupSlug: 'group-1',
+      name: 'Zone A',
+      subtitle: null,
+      scopingRegionKey: 'north-udupi',
+      regionDisplayOrder: 1,
+      areaKeys: ['area-1'],
+      listingCount: 5,
+      focusLat: 13.35,
+      focusLon: 74.75,
+      minLat: 13.34,
+      minLon: 74.74,
+      maxLat: 13.36,
+      maxLon: 74.76,
+      boundsStatus: 'COMPLETE',
+    };
     const { result } = renderHook((p: UseDiscoverMapPresentationParams) => useDiscoverMapPresentation(p), {
       initialProps: baseProps({
         mapLayerKind: 'region-zone-areas',
         areaGroupsData: { groups: [group] },
         urlState: { ...BASE_URL_STATE, scope: 'north-udupi' },
         summaryRegions: [{ regionKey: 'north-udupi', regionLabel: 'North Udupi', listingCount: 5 }],
+        regionScopedGroups: [projection],
       }),
     });
     expect(result.current.regionOverviewMarkerKind).toBe('zones');
