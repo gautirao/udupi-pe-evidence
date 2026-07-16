@@ -22,9 +22,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Testcontainers integration test proving {@link CityRegionOnboardingService}'s safety
- * invariants (#1882 Track A PR1): {@code dryRun} never writes, {@code apply} refuses to guess a
- * region for a SPLIT/DEGENERATE {@code area_group} via first-member/majority/focus-point
- * fallback, and a blocked {@code apply} rolls back with zero partial writes.
+ * invariants (#1882 Track A PR1, corrected by #1899 for #1910 compatibility): {@code dryRun}
+ * never writes; a genuine SPLIT {@code area_group} (members spanning 2+ regions) proceeds through
+ * {@code apply} with each member keeping its own independently-resolved region_key, never
+ * collapsed via first-member/majority/focus-point fallback; only a DEGENERATE {@code area_group}
+ * (no eligible or overridden member) blocks {@code apply} and rolls back with zero partial
+ * writes.
  *
  * <h2>Deterministic SPLIT/DEGENERATE construction</h2>
  * Rather than relying on Udupi's real seed geometry happening to produce a SPLIT or DEGENERATE
@@ -156,40 +159,50 @@ class CityRegionOnboardingSafetyIT {
     }
 
     @Test
-    @DisplayName("apply() is blocked with UNRESOLVED_SPLIT_OR_DEGENERATE when university-belt "
-            + "SPLIT has no resolving override")
-    void applyBlockedForUnresolvedSplitGroup() {
-        assertThatThrownBy(() -> onboardingService.apply(udupiCityId))
-                .isInstanceOf(RegionOnboardingBlockedException.class)
-                .satisfies(ex -> assertThat(((RegionOnboardingBlockedException) ex).reason())
-                        .isEqualTo(RegionOnboardingBlockedException.Reason.UNRESOLVED_SPLIT_OR_DEGENERATE))
-                .hasMessageContaining("university-belt");
+    @DisplayName("apply() succeeds for a genuine SPLIT group (university-belt) left unresolved, "
+            + "once the unrelated DEGENERATE group (coastal-strip) is resolved — each member "
+            + "keeps its own distinct region_key, never collapsed to one region")
+    void applySucceedsForSplitGroup_membersRetainDistinctRegions() {
+        // Resolve only the DEGENERATE group (coastal-strip). university-belt (SPLIT) is
+        // deliberately left unresolved — post-#1899, a genuine SPLIT group needs no override to
+        // proceed; #1910's region-scoped projection renders it under each of its regions.
+        jdbcTemplate.update(
+                "INSERT INTO regional_area_overrides (city_id, area_key, forced_region_key, reason, author) "
+                        + "VALUES (?, ?, 'N', 'resolve-degenerate', 'qa')", udupiCityId, MALPE);
+        jdbcTemplate.update(
+                "INSERT INTO regional_area_overrides (city_id, area_key, forced_region_key, reason, author) "
+                        + "VALUES (?, ?, 'N', 'resolve-degenerate', 'qa')", udupiCityId, KAUP);
 
-        Integer regionRows = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM city_regions WHERE city_id = ?", Integer.class, udupiCityId);
-        Integer membershipRows = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM city_region_memberships WHERE city_id = ?", Integer.class, udupiCityId);
-        assertThat(regionRows).isEqualTo(0);
-        assertThat(membershipRows).isEqualTo(0);
+        onboardingService.apply(udupiCityId);
+
+        Map<String, Object> manipalRow = jdbcTemplate.queryForMap(
+                "SELECT region_key, assignment_source FROM city_region_memberships WHERE city_id = ? AND area_key = ?",
+                udupiCityId, MANIPAL);
+        Map<String, Object> katapadiRow = jdbcTemplate.queryForMap(
+                "SELECT region_key, assignment_source FROM city_region_memberships WHERE city_id = ? AND area_key = ?",
+                udupiCityId, KATAPADI);
+
+        assertThat(manipalRow.get("region_key")).as("Manipal keeps its own raw-projected region").isEqualTo("N");
+        assertThat(manipalRow.get("assignment_source")).isEqualTo("AUTO");
+        assertThat(katapadiRow.get("region_key")).as("Katapadi keeps its own raw-projected region, "
+                + "not collapsed onto Manipal's").isEqualTo("S");
+        assertThat(katapadiRow.get("assignment_source")).isEqualTo("AUTO");
     }
 
     @Test
-    @DisplayName("apply() is blocked with UNRESOLVED_SPLIT_OR_DEGENERATE when coastal-strip "
-            + "DEGENERATE group blocks even after the SPLIT group is resolved")
+    @DisplayName("apply() is blocked with DEGENERATE_GROUP when coastal-strip has no eligible or "
+            + "overridden member — even though university-belt's SPLIT is left unresolved (SPLIT "
+            + "no longer requires resolution post-#1899)")
     void applyBlockedForDegenerateGroup() {
-        // Resolve the SPLIT group only — coastal-strip (DEGENERATE) remains unresolved.
-        jdbcTemplate.update(
-                "INSERT INTO regional_area_overrides (city_id, area_key, forced_region_key, reason, author) "
-                        + "VALUES (?, ?, 'N', 'resolve-split', 'qa')", udupiCityId, MANIPAL);
-        jdbcTemplate.update(
-                "INSERT INTO regional_area_overrides (city_id, area_key, forced_region_key, reason, author) "
-                        + "VALUES (?, ?, 'N', 'resolve-split', 'qa')", udupiCityId, KATAPADI);
-
         assertThatThrownBy(() -> onboardingService.apply(udupiCityId))
                 .isInstanceOf(RegionOnboardingBlockedException.class)
-                .satisfies(ex -> assertThat(((RegionOnboardingBlockedException) ex).reason())
-                        .isEqualTo(RegionOnboardingBlockedException.Reason.UNRESOLVED_SPLIT_OR_DEGENERATE))
-                .hasMessageContaining("coastal-strip");
+                .satisfies(ex -> {
+                    assertThat(((RegionOnboardingBlockedException) ex).reason())
+                            .isEqualTo(RegionOnboardingBlockedException.Reason.DEGENERATE_GROUP);
+                    assertThat(ex.getMessage()).contains("coastal-strip");
+                    assertThat(ex.getMessage()).as("university-belt is SPLIT, not DEGENERATE — must not be "
+                            + "listed as a blocking group").doesNotContain("university-belt");
+                });
 
         Integer regionRows = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM city_regions WHERE city_id = ?", Integer.class, udupiCityId);
@@ -197,11 +210,14 @@ class CityRegionOnboardingSafetyIT {
     }
 
     @Test
-    @DisplayName("blocked apply() never silently assigns a SPLIT group's areas via "
-            + "first-member/majority fallback — no membership row is written for them")
+    @DisplayName("apply() blocked by the unrelated DEGENERATE group (coastal-strip) never "
+            + "silently assigns the SPLIT group's areas via first-member/majority fallback — no "
+            + "membership row is written for them either, since the whole apply() rolls back")
     void noSilentFirstMemberOrMajorityAssignment() {
         assertThatThrownBy(() -> onboardingService.apply(udupiCityId))
-                .isInstanceOf(RegionOnboardingBlockedException.class);
+                .isInstanceOf(RegionOnboardingBlockedException.class)
+                .satisfies(ex -> assertThat(((RegionOnboardingBlockedException) ex).reason())
+                        .isEqualTo(RegionOnboardingBlockedException.Reason.DEGENERATE_GROUP));
 
         List<Map<String, Object>> manipalRows = jdbcTemplate.queryForList(
                 "SELECT * FROM city_region_memberships WHERE city_id = ? AND area_key = ?", udupiCityId, MANIPAL);
@@ -213,11 +229,14 @@ class CityRegionOnboardingSafetyIT {
     }
 
     @Test
-    @DisplayName("a blocked apply() rolls back entirely — even area_groups that would have "
-            + "applied cleanly (city-centre, south-udupi, north-udupi) get zero rows")
+    @DisplayName("a blocked apply() (due to the DEGENERATE coastal-strip group) rolls back "
+            + "entirely — even area_groups that would have applied cleanly (city-centre, "
+            + "south-udupi, north-udupi, and the otherwise-fine SPLIT university-belt) get zero rows")
     void validationFailureRollsBackEntireApply_noPartialRows() {
         assertThatThrownBy(() -> onboardingService.apply(udupiCityId))
-                .isInstanceOf(RegionOnboardingBlockedException.class);
+                .isInstanceOf(RegionOnboardingBlockedException.class)
+                .satisfies(ex -> assertThat(((RegionOnboardingBlockedException) ex).reason())
+                        .isEqualTo(RegionOnboardingBlockedException.Reason.DEGENERATE_GROUP));
 
         Integer regionRows = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM city_regions WHERE city_id = ?", Integer.class, udupiCityId);
@@ -226,7 +245,7 @@ class CityRegionOnboardingSafetyIT {
         assertThat(regionRows).as("no city_regions rows, not even for clean groups").isEqualTo(0);
         assertThat(membershipRows).as("no city_region_memberships rows, not even for clean groups").isEqualTo(0);
 
-        for (String cleanAreaKey : List.of(UDUPI_TOWN, KUNJIBETTU, AMOGHAPURA, SHIRVA, PADUBIDRI)) {
+        for (String cleanAreaKey : List.of(UDUPI_TOWN, KUNJIBETTU, AMOGHAPURA, SHIRVA, PADUBIDRI, MANIPAL, KATAPADI)) {
             List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                     "SELECT * FROM city_region_memberships WHERE city_id = ? AND area_key = ?", udupiCityId, cleanAreaKey);
             assertThat(rows).as("no partial row for otherwise-clean area %s", cleanAreaKey).isEmpty();

@@ -36,10 +36,15 @@ import java.util.stream.Collectors;
  * projection.
  *
  * <p>{@link #apply(int)} re-derives the same report inside its own transaction, then
- * additionally checks whether {@code regional_area_overrides} resolves every non-UNIFIED group
- * to a single effective region. If not, it throws {@link RegionOnboardingBlockedException} and
- * the transaction rolls back — never silently picking a region by first-member, majority, or
- * group focus point.
+ * additionally checks that every non-UNIFIED group has at least one effective region across its
+ * members (after applying {@code regional_area_overrides}). A genuine SPLIT group — one whose
+ * members legitimately project to two or more regions — is expected and supported (#1910's
+ * {@code RegionScopedAreaGroup} projection renders such a group under each of its regions,
+ * showing only that region's member subset) and proceeds with each member keeping its own
+ * independently-resolved region_key. Only a DEGENERATE group — one where no member has any
+ * projected region and no override resolves one either — throws
+ * {@link RegionOnboardingBlockedException} and rolls back the transaction — never silently
+ * picking a region by first-member, majority, or group focus point.
  *
  * <h2>Region key / area_group slug namespace (#1910)</h2>
  * {@link #apply(int)} also refuses to materialize {@code city_regions} if any region_key about
@@ -70,7 +75,9 @@ public class CityRegionOnboardingService {
     /**
      * Materializes {@code city_regions} + {@code city_region_memberships} for a city.
      * Rolls back with {@link RegionOnboardingBlockedException} if prerequisites are missing
-     * or any area_group is SPLIT/DEGENERATE without a resolving override.
+     * or any area_group is DEGENERATE (no eligible/overridden member) — a SPLIT area_group
+     * (members spanning 2+ regions) is expected and proceeds, each member keeping its own
+     * independently-resolved region_key (#1910).
      */
     @Transactional
     public void apply(int cityId) {
@@ -106,20 +113,22 @@ public class CityRegionOnboardingService {
         Map<String, String> overrides = loadOverrides(cityId);
         validateOverrideRegionKeys(overrides, report.regionModel());
 
-        List<CityRegionOnboardingReport.GroupCategorization> unresolved = report.groupCategorizations().stream()
+        List<CityRegionOnboardingReport.GroupCategorization> degenerate = report.groupCategorizations().stream()
                 .filter(g -> g.category() != CityRegionOnboardingReport.GroupCategory.UNIFIED)
-                .filter(g -> !isResolvedByOverrides(g, report, overrides))
+                .filter(g -> !hasEffectiveRegion(g, report, overrides))
                 .toList();
 
-        if (!unresolved.isEmpty()) {
-            String groupList = unresolved.stream()
+        if (!degenerate.isEmpty()) {
+            String groupList = degenerate.stream()
                     .map(g -> g.groupSlug() + "(" + g.category() + ")")
                     .collect(Collectors.joining(", "));
             throw new RegionOnboardingBlockedException(
-                    RegionOnboardingBlockedException.Reason.UNRESOLVED_SPLIT_OR_DEGENERATE,
-                    "city_id=" + cityId + " (slug=" + report.citySlug() + ") has unresolved area_groups: "
-                            + groupList + " — add regional_area_overrides rows to resolve, or fix the underlying "
-                            + "curated grouping. Refusing to guess via first-member/majority/focus fallback.");
+                    RegionOnboardingBlockedException.Reason.DEGENERATE_GROUP,
+                    "city_id=" + cityId + " (slug=" + report.citySlug() + ") has degenerate area_groups (no "
+                            + "eligible or overridden member): " + groupList + " — add regional_area_overrides "
+                            + "rows to resolve, or fix the underlying curated grouping. SPLIT groups (members "
+                            + "spanning 2+ regions) are expected and are not blocked here. Refusing to guess via "
+                            + "first-member/majority/focus fallback.");
         }
 
         // Effective per-area assignment: override wins over the raw projection.
@@ -259,14 +268,18 @@ public class CityRegionOnboardingService {
     }
 
     /**
-     * A non-UNIFIED group is resolved iff, after overriding each member's region with any
-     * matching {@code regional_area_overrides} row (falling back to its raw projection), the
-     * group's effective member set is non-empty and maps to exactly one region.
+     * A non-UNIFIED group is non-degenerate (does not block {@link #apply(int)}) iff, after
+     * overriding each member's region with any matching {@code regional_area_overrides} row
+     * (falling back to its raw projection), the group's effective member set is non-empty —
+     * i.e. at least one member has a projected or overridden region.
      *
-     * <p>This is deliberately stricter than "add one override somewhere" — every member's
-     * effective region must agree, so a partially-resolved SPLIT group still blocks.
+     * <p>A group with 2+ distinct effective regions is a genuine SPLIT and is intentionally
+     * allowed through: #1910's region-scoped group projection renders such a group under each
+     * of its regions, showing only that region's member subset, so members are never forced to
+     * collapse onto a single region here. Only an empty effective region set (DEGENERATE) is
+     * blocking.
      */
-    private boolean isResolvedByOverrides(
+    private boolean hasEffectiveRegion(
             CityRegionOnboardingReport.GroupCategorization group,
             CityRegionOnboardingReport report,
             Map<String, String> overrides) {
@@ -277,15 +290,14 @@ public class CityRegionOnboardingService {
                         CityRegionOnboardingReport.AreaProjection::regionKey,
                         (a, b) -> a));
 
-        Set<String> effectiveRegions = new LinkedHashSet<>();
         for (String areaKey : group.memberAreaKeys()) {
             String forced = overrides.get(areaKey);
             String effectiveRegion = forced != null ? forced : regionByArea.get(areaKey);
             if (effectiveRegion != null) {
-                effectiveRegions.add(effectiveRegion);
+                return true;
             }
         }
-        return effectiveRegions.size() == 1;
+        return false;
     }
 
     // ── apply() helpers ───────────────────────────────────────────────────────

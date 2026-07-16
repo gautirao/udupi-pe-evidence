@@ -25,17 +25,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>{@code city_region_memberships} is populated exclusively via the real onboarding path
  * ({@link RegionalClassificationBackfillService#runBackfill()} then
- * {@link CityRegionOnboardingService#apply(int)}) — never fabricated directly. Bangalore's real
- * curated {@code area_groups} are, by {@code apply()}'s own design, always resolved to a single
- * effective region per group before a run can succeed (see {@code
- * CityRegionOnboardingService#isResolvedByOverrides}) — so a genuinely SPLIT-at-read group can
- * only arise from an area_group DEFINITION that post-dates onboarding (exactly the real-world
- * scenario {@code regionKey} exists to handle: area_group membership can drift out of sync with
- * the last onboarding run). This test therefore builds its UNIFIED/SPLIT/DEGENERATE fixture
- * groups from real, already-materialized {@code city_region_memberships} rows (or, for
- * DEGENERATE, a real area that {@code apply(bangaloreCityId)} never classifies) — only the
- * {@code area_groups}/{@code area_group_members} *definitions* are test-authored, matching how
- * every other {@code AreaGroupsService} test in this codebase seeds its fixtures.
+ * {@link CityRegionOnboardingService#apply(int)}) — never fabricated directly. Since #1899,
+ * {@code apply()} allows a genuine SPLIT area_group (members classifying into 2+ regions) to
+ * pass through a normal run (see {@code CityRegionOnboardingService#hasEffectiveRegion}) — only a
+ * DEGENERATE group (zero effective/classified/overridden members) blocks. So a SPLIT-at-read
+ * group can now arise either directly from a normal onboarding run, or from an area_group
+ * DEFINITION that post-dates onboarding (area_group membership drifting out of sync with the last
+ * onboarding run — the scenario {@code regionKey} originally exists to handle). This test builds
+ * its UNIFIED/SPLIT/DEGENERATE fixture groups from real, already-materialized {@code
+ * city_region_memberships} rows (or, for DEGENERATE, a real area that {@code
+ * apply(bangaloreCityId)} never classifies) — only the {@code area_groups}/{@code
+ * area_group_members} *definitions* are test-authored, matching how every other {@code
+ * AreaGroupsService} test in this codebase seeds its fixtures.
  */
 @DataJpaTest
 @Testcontainers(disabledWithoutDocker = true)

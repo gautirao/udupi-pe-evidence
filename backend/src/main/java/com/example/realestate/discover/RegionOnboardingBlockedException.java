@@ -11,12 +11,19 @@ package com.example.realestate.discover;
  *       city has not been assigned a region_model yet.</li>
  *   <li>{@link Reason#MISSING_CLASSIFICATIONS} — {@code regional_area_classifications} has no
  *       rows for the city; {@code RegionalClassificationBackfillService} must run first.</li>
- *   <li>{@link Reason#UNRESOLVED_SPLIT_OR_DEGENERATE} — at least one active {@code area_group}
- *       projects to more than one region (SPLIT) or has no eligible/overridden member
- *       (DEGENERATE), and no {@code regional_area_overrides} row resolves it. This is a
- *       correctness gate, not a bug — some cities' curated groups may legitimately span
- *       multiple auto-projected regions under a given policy; that must be resolved by an
- *       explicit override, never by silent first-member/majority/focus-point fallback.</li>
+ *   <li>{@link Reason#DEGENERATE_GROUP} — at least one active {@code area_group} has no
+ *       eligible/overridden member: no member area has a projected region (per the city's
+ *       {@code regional_area_classifications}) and no {@code regional_area_overrides} row
+ *       resolves one either. This is a correctness gate, not a bug — such a group has zero
+ *       information about where it belongs and must be resolved by an explicit override or by
+ *       fixing the underlying curated grouping, never by silent first-member/majority/focus-point
+ *       fallback.
+ *
+ *       <p>A SPLIT area_group — one whose members legitimately project to two or more distinct
+ *       regions — is <em>not</em> blocked by this reason (corrected post-#1910): {@code
+ *       RegionScopedAreaGroup} renders such a group under each of its regions, showing only that
+ *       region's member subset, so each member keeps its own independently-resolved
+ *       {@code region_key} rather than being forced to collapse onto one region.</li>
  *   <li>{@link Reason#ASSIGNMENT_INTEGRITY_BREACH} — internal invariant failure: an eligible
  *       area ended up assigned to zero or more than one region in the computed membership set.</li>
  *   <li>{@link Reason#NAMESPACE_COLLISION} — a region_key about to be materialized for this city
@@ -37,7 +44,7 @@ class RegionOnboardingBlockedException extends RuntimeException {
     enum Reason {
         MISSING_POLICY,
         MISSING_CLASSIFICATIONS,
-        UNRESOLVED_SPLIT_OR_DEGENERATE,
+        DEGENERATE_GROUP,
         ASSIGNMENT_INTEGRITY_BREACH,
         NAMESPACE_COLLISION
     }

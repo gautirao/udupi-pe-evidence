@@ -71,25 +71,38 @@ app.city-region-onboarding.city-slug=<slug>
 ```
 
 On startup, `CityRegionOnboardingRunner` logs a dry-run report. Inspect it —
-especially any `WARN` lines for `SPLIT`/`DEGENERATE` group categories:
+especially any `WARN` lines for the `DEGENERATE` group category:
 
 ```
 CityRegionOnboardingRunner: dry-run group=<slug> category=SPLIT regions=[...]
 CityRegionOnboardingRunner: dry-run group=<slug> category=DEGENERATE regions=[...]
 ```
 
-**Investigate every `SPLIT`/`DEGENERATE` line before proceeding to Apply —
-re-running `apply` does not fix these.** They mean an `area_group`'s member
-areas project to more than one region (`SPLIT`) or to none (`DEGENERATE`)
-under the city's current policy, and `apply()` refuses to guess a resolution
-for them. Resolve each one by inserting a `regional_area_overrides` row
-(author, reason, and the `forced_region_key` you want that area assigned to)
-before moving on. `UNIFIED` groups need no action.
+**`SPLIT` is expected and informational — no operator action is required.**
+A `SPLIT` group is one whose member areas legitimately project to more than
+one region under the city's current policy (e.g. a curated area_group that
+spans two directions). This is a supported shape (#1910): the region-scoped
+groups endpoint renders such a group under each of its regions, showing only
+that region's member subset, and `apply()` lets each member keep its own
+independently-resolved region — it is never collapsed onto one region. You
+only need to add a `regional_area_overrides` row for a `SPLIT` group if you
+specifically want to force one or more of its members onto a different
+region than their raw projection.
+
+**Investigate every `DEGENERATE` line before proceeding to Apply —
+re-running `apply` does not fix these.** `DEGENERATE` means an `area_group`'s
+member areas project to no region at all under the city's current policy
+(e.g. missing classification rows), and `apply()` refuses to guess a
+resolution for them — this still blocks the whole apply and rolls back.
+Resolve each one by inserting a `regional_area_overrides` row (author,
+reason, and the `forced_region_key` you want that area assigned to) before
+moving on. `UNIFIED` groups need no action.
 
 ## 3. Apply
 
-Once every `SPLIT`/`DEGENERATE` group is resolved (or accepted as-is via an
-override), flip the mode — keep `enabled=true` and `city-slug` set:
+Once every `DEGENERATE` group is resolved (or accepted as-is via an
+override) — `SPLIT` groups need no resolution — flip the mode — keep
+`enabled=true` and `city-slug` set:
 
 ```
 app.city-region-onboarding.enabled=true
@@ -142,9 +155,10 @@ than a standing background job.
 
 `CityRegionOnboardingRunner` is disabled-by-default and dry-run-by-default by
 design (see its Javadoc). Onboarding a city is a one-off action that
-requires a human to read the dry-run report and resolve any `SPLIT`/
-`DEGENERATE` groups — it is not safe to run unattended on every deploy, and
-there is deliberately no HTTP endpoint or automatic trigger for it.
+requires a human to read the dry-run report and resolve any `DEGENERATE`
+groups (`SPLIT` groups need no resolution — see Step 2) — it is not safe to
+run unattended on every deploy, and there is deliberately no HTTP endpoint or
+automatic trigger for it.
 
 `CityRegionBackfillReadinessHealthIndicator` and
 `CityRegionBackfillReadinessScheduler` (#1907) exist purely for **detection**
