@@ -261,13 +261,32 @@ function makeAreaCard(
   } else if (area.isGroup) {
     const sel = area.isSelected;
     const bg = sel ? '#0F172A' : 'rgba(27,42,69,0.95)';
-    const count = (area.listingCount ?? 0).toLocaleString();
+    const count = area.listingCount ?? 0;
+    const countText = count.toLocaleString();
+    const noun = count === 1 ? 'property' : 'properties';
+    const nounUpper = count === 1 ? 'PROPERTY' : 'PROPERTIES';
+    const ariaLabel = escapeHtml(
+      `${area.areaLabel}, ${countText} ${noun}. Activate to zoom into this area group.`,
+    );
 
-    html = `<div data-testid="area-marker" class="group-pill-marker" style="transform:translate(-50%,-50%);font-family:inherit;opacity:${opacity};pointer-events:auto;cursor:pointer;">
-      <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:9999px;background:${bg};color:#fff;box-shadow:0 8px 20px rgba(17,24,39,0.25);border:2px solid rgba(255,255,255,0.6);transform:scale(${sel ? 1.06 : 1});transition:all .15s cubic-bezier(.4,0,.2,1);white-space:nowrap;">
-        <span style="font-size:12.5px;font-weight:700;color:rgba(255,255,255,0.95);">${label}</span>
-        <span style="font-family:${MONO};font-size:12px;font-weight:700;color:#fff;background:rgba(255,255,255,0.15);padding:1px 6px;border-radius:9999px;">${count}</span>
+    // Discover map marker redesign — area-group "map card" (compact vertical
+    // dark card: wrapped group name, prominent mono count) with a "Tap to
+    // zoom in ›" pill revealed on hover/keyboard-focus, matching the
+    // macro-region bubble's .dp-region-cap pattern exactly (index.css
+    // .area-group-cap rules). .area-group-card is the anchor wrapper (base
+    // transform: translate(-50%,-50%), never scaled — mirrors .dp-region for
+    // macro regions above); hover/focus/selected emphasis applies to the
+    // inner .area-group-card-core only, so the anchor point never shifts.
+    // tabindex/role/aria-label make the card a real keyboard-operable
+    // control — Leaflet's marker click listener is bound to this element's
+    // subtree and bubbles normally.
+    html = `<div data-testid="area-marker" class="area-group-card" tabindex="0" role="button" aria-label="${ariaLabel}" style="position:relative;transform:translate(-50%,-50%);font-family:inherit;opacity:${opacity};pointer-events:auto;cursor:pointer;">
+      <div class="area-group-card-core" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:100px;max-width:140px;padding:10px 12px;border-radius:12px;background:${bg};color:#fff;box-shadow:0 8px 20px rgba(17,24,39,0.25);border:${sel ? '2px' : '1.5px'} solid rgba(255,255,255,${sel ? '0.92' : '0.6'});transform:scale(${sel ? 1.04 : 1});transition:transform .15s cubic-bezier(.4,0,.2,1),box-shadow .15s,border-color .15s;">
+        <span style="font-size:13.5px;font-weight:700;line-height:1.25;text-align:center;color:rgba(255,255,255,0.97);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${label}</span>
+        <span style="font-family:${MONO};font-size:16px;font-weight:700;line-height:1;color:#fff;margin-top:2px;">${countText}</span>
+        <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,0.8);">${nounUpper}</span>
       </div>
+      <div class="area-group-cap" aria-hidden="true" style="position:absolute;top:100%;left:50%;margin-top:6px;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:9999px;background:${C_PAPER};box-shadow:${PILL_SHADOW};font-size:10.5px;font-weight:700;color:${C_COPPER_HOVER};white-space:nowrap;pointer-events:none;">Tap to zoom in <span style="font-size:12px;line-height:1;">&#8250;</span></div>
     </div>`;
   } else if (isZero) {
     // Quiet muted variant — dashed ring, no tail, de-emphasised.
@@ -527,6 +546,19 @@ export function AreaMarkerLayer({
           }
         });
       }
+
+      // Area-group "map card" markers carry the same tabindex/role="button"
+      // keyboard-operable contract as the macro-region bubble above — bridge
+      // Enter/Space into the marker's own 'click' handler here too.
+      if (area.isGroup) {
+        const el = marker.getElement()?.querySelector<HTMLElement>('.area-group-card');
+        el?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            el.click();
+          }
+        });
+      }
     }
 
     return () => {
@@ -664,6 +696,19 @@ export function AreaMarkerLayer({
       });
       marker.addTo(map);
       markers.push(marker);
+
+      // Same Enter/Space→click keyboard bridge as the legacy loop, for the
+      // rare case an area-group marker is promoted into this degraded
+      // representatives loop (e.g. via forced-always selection).
+      if (area.isGroup) {
+        const el = marker.getElement()?.querySelector<HTMLElement>('.area-group-card');
+        el?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            el.click();
+          }
+        });
+      }
     }
 
     // Dots — demoted low-priority areas. Hover/focus reveals the full label

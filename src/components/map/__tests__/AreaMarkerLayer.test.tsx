@@ -23,6 +23,14 @@ type CapturedMarker = {
   handlers: Record<string, (...args: unknown[]) => void>;
   setIcon: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
+  /**
+   * The marker's real DOM node (mirrors marker.getElement() in production),
+   * built from the divIcon HTML the marker was constructed with. Lets tests
+   * exercise the real Enter/Space keydown→click keyboard bridge end-to-end
+   * (AreaMarkerLayer.tsx's `.dp-region`/`.area-group-card` querySelector +
+   * addEventListener wiring), the same way a real browser would.
+   */
+  element: HTMLElement;
 };
 const capturedMarkers: CapturedMarker[] = [];
 
@@ -62,8 +70,24 @@ vi.mock('leaflet', () => ({
     }),
     point: vi.fn((x: number, y: number) => ({ x, y })),
     latLngBounds: vi.fn((expr: [number, number][]) => boundsFromExpression(expr)),
-    marker: vi.fn(() => {
+    marker: vi.fn((_latlng: [number, number], options?: { icon?: { options?: DivIconOpts } }) => {
       const handlers: Record<string, (...args: unknown[]) => void> = {};
+      // Build the marker's real DOM node from the divIcon HTML it was
+      // constructed with, mirroring how Leaflet sets marker._icon.innerHTML
+      // in a real browser — lets the keyboard-bridge keydown wiring in
+      // AreaMarkerLayer.tsx (marker.getElement()?.querySelector(...)) attach
+      // to and dispatch on genuine DOM nodes.
+      const element = document.createElement('div');
+      if (options?.icon?.options?.html) {
+        element.innerHTML = options.icon.options.html;
+      }
+      // Real Leaflet attaches its 'click' DOM listener to marker._icon
+      // (== marker.getElement()); a native click on any descendant (e.g. the
+      // inner `.dp-region`/`.area-group-card` div the keyboard bridge calls
+      // `.click()` on) bubbles up to it, firing the registered handler.
+      element.addEventListener('click', () => {
+        handlers.click?.();
+      });
       const instance: Record<string, unknown> = {
         on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
           handlers[event] = cb;
@@ -72,11 +96,13 @@ vi.mock('leaflet', () => ({
         addTo: vi.fn().mockReturnThis(),
         remove: vi.fn(),
         setIcon: vi.fn(),
+        getElement: vi.fn(() => element),
       };
       capturedMarkers.push({
         handlers,
         setIcon: instance.setIcon as ReturnType<typeof vi.fn>,
         remove: instance.remove as ReturnType<typeof vi.fn>,
+        element,
       });
       return instance;
     }),
@@ -114,6 +140,14 @@ const mapStub = vi.hoisted(() => ({
   off: vi.fn(),
   getSize: vi.fn(() => ({ x: 1200, y: 800 })),
   latLngToContainerPoint: vi.fn(([lat, lon]: [number, number]) => projectLatLon(lat, lon)),
+  // The macro-region compass-layout recompute effect (gated on hasMacroRegions)
+  // observes the map container via ResizeObserver — needed once this file's
+  // new isGroup-redesign tests render an isMacroRegion area alongside a group.
+  getContainer: vi.fn(() => document.createElement('div')),
+  containerPointToLatLng: vi.fn(({ x, y }: { x: number; y: number }) => ({
+    lat: 13.5 - y / 10000,
+    lng: x / 10000 + 74.5,
+  })),
 }));
 
 vi.mock('react-leaflet', () => ({
@@ -126,6 +160,7 @@ vi.mock('leaflet/dist/leaflet.css', () => ({}));
 
 import React from 'react';
 import { render } from '@testing-library/react';
+import L from 'leaflet';
 import { AreaMarkerLayer } from '../AreaMarkerLayer';
 import type { AreaPoint } from '../AreaMarkerLayer';
 
@@ -1175,6 +1210,200 @@ describe('AreaMarkerLayer — Issue #1815 representative collision/demote pass',
 // mouseover/mouseout, never a prop-change effect) — this suite proves that
 // contract holds for both the panel-hover path (hoveredAreaKey prop change)
 // and the native marker mouseover-reveal path.
+// ─── Area-group "map card" redesign (isGroup branch) ─────────────────────────
+//
+// Replaces the old horizontal navy pill (`.group-pill-marker`) with a compact
+// dark vertical card: wrapped group name, prominent mono count +
+// PROPERTY/PROPERTIES noun, and a "Tap to zoom in ›" pill revealed on
+// hover/focus (matching the macro-region bubble's .dp-region-cap contract).
+// Scoped strictly to the `area.isGroup` branch of makeAreaCard —
+// macro-region (`.dp-region`) and ordinary area markers are covered by their
+// own describe blocks above and are asserted here to be unaffected.
+describe('AreaMarkerLayer — area-group "map card" redesign (isGroup)', () => {
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+    capturedMarkers.length = 0;
+  });
+
+  function makeGroupArea(overrides: Partial<AreaPoint> = {}): AreaPoint {
+    return makeArea('airport-belt', {
+      areaLabel: 'Airport Belt',
+      listingCount: 20,
+      isGroup: true,
+      ...overrides,
+    });
+  }
+
+  it('renders the new vertical card structure (area-group-card wrapper + area-group-card-core inner), not the old pill', () => {
+    render(<AreaMarkerLayer areas={[makeGroupArea()]} />);
+    expect(capturedDivIconCalls).toHaveLength(1);
+    const html = capturedDivIconCalls[0].html;
+    expect(html).toContain('data-testid="area-marker"');
+    expect(html).toContain('class="area-group-card"');
+    expect(html).toContain('class="area-group-card-core"');
+  });
+
+  it('old horizontal pill markup (group-pill-marker class / capsule count-chip) is absent from the new output', () => {
+    render(<AreaMarkerLayer areas={[makeGroupArea()]} />);
+    const html = capturedDivIconCalls[0].html;
+    expect(html).not.toContain('group-pill-marker');
+    // The old design's capsule count chip: mono count text inside its own
+    // fully-rounded background pill, distinct from the new plain-flow count.
+    expect(html).not.toMatch(/background:rgba\(255,255,255,0\.15\);padding:1px 6px;border-radius:9999px;/);
+  });
+
+  it('does not render an "AREA GROUP" eyebrow — name and count are sufficient', () => {
+    render(<AreaMarkerLayer areas={[makeGroupArea()]} />);
+    const html = capturedDivIconCalls[0].html;
+    expect(html).not.toContain('AREA GROUP');
+  });
+
+  it('reveals a "Tap to zoom in ›" caption on hover/focus, matching the macro-region bubble contract', () => {
+    render(<AreaMarkerLayer areas={[makeGroupArea()]} />);
+    const html = capturedDivIconCalls[0].html;
+    expect(html).toContain('class="area-group-cap"');
+    expect(html).toContain('Tap to zoom in');
+    // The caption is a sibling of the scaling inner core, anchored to the
+    // outer (never-scaled) wrapper — position:relative on the outer wrapper,
+    // position:absolute on the caption, matching .dp-region/.dp-region-cap.
+    expect(html).toMatch(/class="area-group-card"[^>]*style="position:relative;/);
+  });
+
+  it('group name is HTML-escaped and displayed', () => {
+    const area = makeGroupArea({ areaLabel: '<script>alert(1)</script> & Belt' });
+    render(<AreaMarkerLayer areas={[area]} />);
+    const html = capturedDivIconCalls[0].html;
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt; &amp; Belt');
+  });
+
+  it('count renders as "20 PROPERTIES" (plural) for listingCount=20', () => {
+    render(<AreaMarkerLayer areas={[makeGroupArea({ listingCount: 20 })]} />);
+    const html = capturedDivIconCalls[0].html;
+    expect(html).toContain('>20<');
+    expect(html).toContain('>PROPERTIES<');
+    expect(html).not.toContain('>PROPERTY<');
+  });
+
+  it('count renders as "1 PROPERTY" (singular) for listingCount=1', () => {
+    render(<AreaMarkerLayer areas={[makeGroupArea({ listingCount: 1 })]} />);
+    const html = capturedDivIconCalls[0].html;
+    expect(html).toContain('>1<');
+    expect(html).toContain('>PROPERTY<');
+    expect(html).not.toContain('>PROPERTIES<');
+  });
+
+  it('zero-count groups render truthfully as "0 PROPERTIES" (never special-cased)', () => {
+    render(<AreaMarkerLayer areas={[makeGroupArea({ listingCount: 0 })]} />);
+    const html = capturedDivIconCalls[0].html;
+    expect(html).toContain('>0<');
+    expect(html).toContain('>PROPERTIES<');
+  });
+
+  it('selected state (isSelected: true) gets a stronger border and scale on the inner core', () => {
+    render(<AreaMarkerLayer areas={[makeGroupArea({ isSelected: false })]} />);
+    const unselectedHtml = capturedDivIconCalls[0].html;
+    expect(unselectedHtml).toContain('scale(1)');
+    expect(unselectedHtml).toContain('1.5px solid rgba(255,255,255,0.6)');
+
+    capturedDivIconCalls.length = 0;
+    render(<AreaMarkerLayer areas={[makeGroupArea({ isSelected: true })]} />);
+    const selectedHtml = capturedDivIconCalls[0].html;
+    expect(selectedHtml).toContain('scale(1.04)');
+    expect(selectedHtml).toContain('2px solid rgba(255,255,255,0.92)');
+    // Selected emphasis lives on the inner core, never the outer anchor —
+    // the outer wrapper's own transform stays the fixed centring translate.
+    expect(selectedHtml).toMatch(
+      /class="area-group-card"[^>]*style="position:relative;transform:translate\(-50%,-50%\);/,
+    );
+  });
+
+  it('has role="button", tabindex="0", and an aria-label with the exact singular/plural count text', () => {
+    render(<AreaMarkerLayer areas={[makeGroupArea({ areaLabel: 'Airport Belt', listingCount: 20 })]} />);
+    const html = capturedDivIconCalls[0].html;
+    expect(html).toContain('role="button"');
+    expect(html).toContain('tabindex="0"');
+    expect(html).toContain(
+      'aria-label="Airport Belt, 20 properties. Activate to zoom into this area group."',
+    );
+  });
+
+  it('aria-label uses singular "property" wording when listingCount=1', () => {
+    render(<AreaMarkerLayer areas={[makeGroupArea({ areaLabel: 'Airport Belt', listingCount: 1 })]} />);
+    const html = capturedDivIconCalls[0].html;
+    expect(html).toContain(
+      'aria-label="Airport Belt, 1 property. Activate to zoom into this area group."',
+    );
+  });
+
+  it('Enter keydown on the marker element triggers the same onAreaClick/onAreaCameraIntent handler as a real click', () => {
+    const onAreaClick = vi.fn();
+    const onAreaCameraIntent = vi.fn();
+    const area = makeGroupArea();
+    render(
+      <AreaMarkerLayer
+        areas={[area]}
+        onAreaClick={onAreaClick}
+        onAreaCameraIntent={onAreaCameraIntent}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+    const cardEl = capturedMarkers[0].element.querySelector<HTMLElement>('.area-group-card');
+    expect(cardEl).not.toBeNull();
+    cardEl!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    expect(onAreaClick).toHaveBeenCalledTimes(1);
+    expect(onAreaClick).toHaveBeenCalledWith(area);
+    expect(onAreaCameraIntent).toHaveBeenCalledTimes(1);
+    expect(onAreaCameraIntent).toHaveBeenCalledWith(area);
+  });
+
+  it('Space keydown on the marker element triggers the same onAreaClick/onAreaCameraIntent handler as a real click', () => {
+    const onAreaClick = vi.fn();
+    const onAreaCameraIntent = vi.fn();
+    const area = makeGroupArea();
+    render(
+      <AreaMarkerLayer
+        areas={[area]}
+        onAreaClick={onAreaClick}
+        onAreaCameraIntent={onAreaCameraIntent}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+    const cardEl = capturedMarkers[0].element.querySelector<HTMLElement>('.area-group-card');
+    expect(cardEl).not.toBeNull();
+    cardEl!.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+
+    expect(onAreaClick).toHaveBeenCalledTimes(1);
+    expect(onAreaClick).toHaveBeenCalledWith(area);
+    expect(onAreaCameraIntent).toHaveBeenCalledTimes(1);
+    expect(onAreaCameraIntent).toHaveBeenCalledWith(area);
+  });
+
+  it('macro-region markers are unaffected by the isGroup redesign', () => {
+    const region = makeArea('N', { areaLabel: 'North Bangalore', isMacroRegion: true, listingCount: 40 });
+    render(<AreaMarkerLayer areas={[region]} />);
+    const html = capturedDivIconCalls[0].html;
+    expect(html).toContain('class="macro-region-bubble dp-region"');
+    expect(html).not.toContain('area-group-card');
+  });
+
+  it('ordinary (non-group, non-macro-region) area markers are unaffected by the isGroup redesign', () => {
+    render(<AreaMarkerLayer areas={[AREA_A]} />);
+    const html = capturedDivIconCalls[0].html;
+    expect(html).not.toContain('area-group-card');
+    expect(html).toContain('area-marker-card');
+  });
+
+  it('group markers use area.geo_center_lat/geo_center_lon (real coordinates), never compass-layout math', () => {
+    const area = makeGroupArea({ geo_center_lat: 13.198, geo_center_lon: 74.831 });
+    render(<AreaMarkerLayer areas={[area]} />);
+    const markerMock = vi.mocked(L.marker);
+    const [latlng] = markerMock.mock.calls[markerMock.mock.calls.length - 1];
+    expect(latlng).toEqual([13.198, 74.831]);
+  });
+});
+
 describe('AreaMarkerLayer — Issue #1815 hover never publishes onAreaCameraIntent', () => {
   beforeEach(() => {
     capturedDivIconCalls.length = 0;

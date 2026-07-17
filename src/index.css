@@ -310,6 +310,55 @@
     }
   }
 
+  /* Discover map marker redesign — area-group "map card" (Airport Belt,
+     Thanisandra-Hennur Belt, etc.). .area-group-card is the anchor wrapper
+     (base transform: translate(-50%,-50%), never scaled — see
+     AreaMarkerLayer.tsx makeAreaCard's isGroup branch). Hover/focus emphasis
+     applies to the inner .area-group-card-core only, so the anchor point
+     never shifts (mirrors the .dp-region/.dp-region-core split above). */
+  .area-group-card:hover .area-group-card-core,
+  .area-group-card:focus-visible .area-group-card-core {
+    border-color: rgba(255, 255, 255, 0.92) !important;
+    box-shadow: 0 14px 32px rgba(18, 24, 38, 0.42) !important;
+    transform: scale(1.06) !important;
+  }
+
+  .area-group-card:focus {
+    outline: none;
+  }
+
+  .area-group-card:focus-visible .area-group-card-core {
+    box-shadow:
+      0 14px 32px rgba(18, 24, 38, 0.42),
+      0 0 0 3px hsl(var(--background)),
+      0 0 0 6px hsl(var(--copper)) !important;
+  }
+
+  /* "Tap to zoom in ›" caption below the card, revealed on hover/focus —
+     identical reveal contract to .dp-region-cap above (macro-region
+     bubbles), just anchored under the rectangular card instead of a circle. */
+  .area-group-cap {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-3px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+
+  .area-group-card:hover .area-group-cap,
+  .area-group-card:focus-visible .area-group-cap {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .area-group-card-core {
+      transition: none;
+    }
+
+    .area-group-cap {
+      transition: none;
+    }
+  }
+
   @keyframes cluster-pulse {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.05); }
