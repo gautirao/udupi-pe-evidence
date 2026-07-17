@@ -1053,14 +1053,17 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
             coverImageUrl={coverImageUrl}
             locationConfirmed={addressConfirmed}
           />
+          {/* Issue #1727 — exactly ONE Listing strength widget at a time.
+              Pre-draft (no listingId): the legacy pre-draft meter is the only widget.
+              Post-draft (listingId): the newer StrengthMeter is authoritative and the
+              legacy meter must not render — the two must never co-render. */}
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
-            <ListingStrengthMeter checklist={checklist} />
-          </div>
-          {listingId && (
-            <div className="rounded-2xl border bg-card p-4 shadow-sm">
+            {listingId ? (
               <StrengthMeter result={strengthResult} variant="sidebar" />
-            </div>
-          )}
+            ) : (
+              <ListingStrengthMeter checklist={checklist} />
+            )}
+          </div>
         </div>
       </div>
 

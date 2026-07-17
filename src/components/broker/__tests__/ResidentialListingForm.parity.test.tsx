@@ -182,6 +182,46 @@ describe('ResidentialListingForm — honest copy', () => {
   });
 });
 
+describe('ResidentialListingForm — single Listing strength widget (issue #1727)', () => {
+  it('pre-draft: renders exactly one Listing strength widget (legacy meter only)', () => {
+    renderForm();
+
+    // Before any draft/listingId exists the legacy pre-draft meter is the only widget.
+    expect(screen.getByTestId('listing-strength-meter')).toBeInTheDocument();
+    expect(screen.queryByTestId('strength-meter-sidebar')).not.toBeInTheDocument();
+    // The two widgets must never co-render → exactly one "Listing strength" heading.
+    expect(screen.getAllByText('Listing strength')).toHaveLength(1);
+  });
+
+  it('post-draft: renders exactly one Listing strength widget (authoritative StrengthMeter only)', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    const user = userEvent.setup();
+    renderForm();
+
+    await fillCoreFields(user);
+    await user.click(screen.getAllByRole('button', { name: /save draft/i })[0]);
+
+    // Once a draft/listingId exists the newer StrengthMeter is authoritative and the
+    // legacy ListingStrengthMeter must not render — the two never co-render.
+    expect(await screen.findByTestId('strength-meter-sidebar')).toBeInTheDocument();
+    expect(screen.queryByTestId('listing-strength-meter')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Listing strength')).toHaveLength(1);
+  });
+
+  it('post-draft: preserves the "Location entered" vs "Map pin confirmed" distinction', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    const user = userEvent.setup();
+    renderForm();
+
+    await fillCoreFields(user);
+    await user.click(screen.getAllByRole('button', { name: /save draft/i })[0]);
+
+    const sidebar = await screen.findByTestId('strength-meter-sidebar');
+    expect(within(sidebar).getByText(/location entered/i)).toBeInTheDocument();
+    expect(within(sidebar).getByText(/map pin confirmed/i)).toBeInTheDocument();
+  });
+});
+
 describe('ResidentialListingForm — review + submit gating', () => {
   it('moves to review mode after "Review" and shows "Submit for review", disabled until gates pass', async () => {
     mockCreateSucceedsWithAddressConfirmed();
