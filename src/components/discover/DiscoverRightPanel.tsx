@@ -1688,7 +1688,13 @@ export function DiscoverRightPanel({
             group={resolvedGroup}
             discoverAreas={discoverAreas}
             isLoading={isLoadingAreaGroupsForSchool}
-            onBack={onClearGroup ?? (() => undefined)}
+            // Issue #1864 — use the journey-transition hook's schoolFirstOnBack
+            // command (threaded in as `onBack`), not the shared onClearGroup prop.
+            // onClearGroup is a bare urlActions.selectGroup(null) with no tick
+            // increment; schoolFirstOnBack resolves to handleSchoolFirstBackLevel0,
+            // which increments cityRestoreTick before clearing groupId, matching
+            // the other two school-first Back ladder levels.
+            onBack={onBack ?? (() => undefined)}
             onSelectAreaKey={onSelectAreaKey ?? (() => undefined)}
             onStartOver={onStartOver}
             journey={journey}

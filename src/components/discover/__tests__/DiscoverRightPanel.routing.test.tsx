@@ -1075,7 +1075,12 @@ describe('DiscoverRightPanel — school-first + groupId → school-group-areas (
     expect(onSelectAreaKey).toHaveBeenCalledWith('IN|KA|Udupi|Manipal');
   });
 
-  it('AC5 Back: Back button calls onClearGroup (clears groupId)', async () => {
+  it('AC5 Back / Issue #1864: Back button calls onBack (the schoolFirstOnBack command), not onClearGroup', async () => {
+    // Issue #1864 — SchoolGroupAreasPanel's Back must go through the journey-transition
+    // hook's schoolFirstOnBack command (threaded in via `onBack`) so cityRestoreTick
+    // increments, same as the other school-first Back ladder levels. The shared
+    // onClearGroup prop (bare urlActions.selectGroup(null)) must NOT be called here.
+    const onBack = vi.fn();
     const onClearGroup = vi.fn();
     renderPanel(
       <DiscoverRightPanel
@@ -1087,11 +1092,13 @@ describe('DiscoverRightPanel — school-first + groupId → school-group-areas (
         isLoadingAreaGroupsForSchool={false}
         discoverAreas={schoolDiscoverAreas}
         onSelectAreaKey={vi.fn()}
+        onBack={onBack}
         onClearGroup={onClearGroup}
       />,
     );
     await userEvent.click(screen.getByTestId('school-group-areas-back-btn'));
-    expect(onClearGroup).toHaveBeenCalledTimes(1);
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(onClearGroup).not.toHaveBeenCalled();
   });
 
   it('AC8: invalid groupId (not in areaGroups) falls back to school-browse gracefully', () => {

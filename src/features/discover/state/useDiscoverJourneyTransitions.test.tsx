@@ -500,5 +500,27 @@ describe('useDiscoverJourneyTransitions', () => {
       const { result } = renderHook(() => useDiscoverJourneyTransitions(params));
       expect(result.current.view.schoolFirstOnBack).toBeUndefined();
     });
+
+    // Issue #1864 — school-group-areas (Level 1) must resolve to backLevel0 so its
+    // Back button (wired via DiscoverRightPanel's `onBack` prop, not the shared
+    // onClearGroup prop) increments cityRestoreTick and clears groupId, matching
+    // the other two school-first Back ladder levels above.
+    it('resolves to backLevel0 for school-group-areas: increments cityRestoreTick + clears groupId', () => {
+      const selectGroup = vi.fn();
+      const params = makeParams({
+        urlState: makeUrlState({ journey: 'school-first' }),
+        panelContent: 'school-group-areas',
+        urlActions: makeUrlActions({ selectGroup }),
+      });
+      const { result } = renderHook(() => useDiscoverJourneyTransitions(params));
+      expect(result.current.view.schoolFirstOnBack).toBeDefined();
+
+      act(() => {
+        result.current.view.schoolFirstOnBack?.();
+      });
+
+      expect(result.current.view.cityRestoreTick).toBe(1);
+      expect(selectGroup).toHaveBeenCalledWith(null);
+    });
   });
 });
