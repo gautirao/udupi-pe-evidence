@@ -623,4 +623,111 @@ class CityLaunchPreparationServiceIT {
         assertThat(oldRowAfter.getFailureReason()).isEqualTo(failedSnapshot.getFailureReason());
         assertThat(oldRowAfter.getRevisionNumber()).isEqualTo(failedSnapshot.getRevisionNumber());
     }
+
+    // =========================================================================================
+    // AC4 — rerun a PREPARED revision -> new max+1 PREPARING revision, graph write kicked,
+    // old revision SUPERSEDED with the back-link set (#1911 PR4)
+    // =========================================================================================
+
+    @Test
+    @DisplayName("AC4: rerunSuperseding on a PREPARED revision supersedes it and admits a new "
+            + "max+1 PREPARING revision that reaches PREPARED via the SAME reused graph-write kick")
+    void ac4_rerunSuperseding_supersedesOld_admitsNewRevision_reachesPrepared() {
+        int cityId = seedFullValidGeography("r4");
+
+        PrepareResponse first = preparationService.prepare(cityId, ADMIN_ID);
+        pollUntil(() ->
+                assertThat(revisionRepository.findById(first.revisionId()).orElseThrow().getLifecycleStatus())
+                        .isEqualTo(LifecycleStatus.PREPARED));
+        CityLaunchRevision firstRevision = revisionRepository.findById(first.revisionId()).orElseThrow();
+
+        PrepareResponse rerun = preparationService.rerunSuperseding(cityId, first.revisionId(), ADMIN_ID);
+        assertThat(rerun.status()).isEqualTo("preparing");
+        assertThat(rerun.revisionId()).isNotEqualTo(first.revisionId());
+
+        CityLaunchRevision oldAfter = revisionRepository.findById(first.revisionId()).orElseThrow();
+        assertThat(oldAfter.getLifecycleStatus()).isEqualTo(LifecycleStatus.SUPERSEDED);
+        assertThat(oldAfter.getSupersededBy()).isEqualTo(rerun.revisionId());
+
+        CityLaunchRevision newRevisionImmediate = revisionRepository.findById(rerun.revisionId()).orElseThrow();
+        assertThat(newRevisionImmediate.getRevisionNumber()).isEqualTo(firstRevision.getRevisionNumber() + 1);
+
+        pollUntil(() ->
+                assertThat(revisionRepository.findById(rerun.revisionId()).orElseThrow().getLifecycleStatus())
+                        .isEqualTo(LifecycleStatus.PREPARED));
+        assertThat(sandboxAreaRepository.findByRevisionId(rerun.revisionId())).hasSize(2);
+    }
+
+    // =========================================================================================
+    // AC5 (KEY) — two REAL threads rerun the SAME PREPARED revision concurrently: exactly one
+    // succeeds, one 409s; exactly one new PREPARING revision; old SUPERSEDED with back-link set;
+    // no uq_clr_inflight 500; no orphaned SUPERSEDED-without-backlink (#1911 PR4)
+    // =========================================================================================
+
+    @Test
+    @DisplayName("AC5: two concurrent rerunSuperseding calls for the SAME PREPARED revision -> exactly "
+            + "one 202 + one CityPreparationConflictException; exactly one new PREPARING revision; the "
+            + "old revision is SUPERSEDED with superseded_by set to the winner (no orphan, no 500)")
+    void ac5_concurrentRerun_sameRevision_exactlyOneSucceedsOneConflicts_noOrphanBacklink() throws Exception {
+        int cityId = seedFullValidGeography("r5");
+
+        PrepareResponse first = preparationService.prepare(cityId, ADMIN_ID);
+        pollUntil(() ->
+                assertThat(revisionRepository.findById(first.revisionId()).orElseThrow().getLifecycleStatus())
+                        .isEqualTo(LifecycleStatus.PREPARED));
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch startGate = new CountDownLatch(1);
+        try {
+            List<Future<PrepareResponse>> futures = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                futures.add(pool.submit(() -> {
+                    startGate.await();
+                    return preparationService.rerunSuperseding(cityId, first.revisionId(), ADMIN_ID);
+                }));
+            }
+            startGate.countDown();
+
+            AtomicInteger successes = new AtomicInteger();
+            AtomicInteger conflicts = new AtomicInteger();
+            PrepareResponse winner = null;
+            for (Future<PrepareResponse> future : futures) {
+                try {
+                    PrepareResponse response = future.get(15, TimeUnit.SECONDS);
+                    successes.incrementAndGet();
+                    winner = response;
+                } catch (java.util.concurrent.ExecutionException e) {
+                    if (e.getCause() instanceof CityPreparationConflictException) {
+                        conflicts.incrementAndGet();
+                    } else {
+                        throw e;
+                    }
+                }
+            }
+            assertThat(successes.get()).isEqualTo(1);
+            assertThat(conflicts.get()).isEqualTo(1);
+            assertThat(winner).isNotNull();
+
+            // Exactly one new PREPARING/PREPARED revision descends from the old one.
+            List<CityLaunchRevision> allForCity = revisionRepository.findByCityId(cityId);
+            assertThat(allForCity).hasSize(2);
+
+            CityLaunchRevision oldAfter = revisionRepository.findById(first.revisionId()).orElseThrow();
+            assertThat(oldAfter.getLifecycleStatus()).isEqualTo(LifecycleStatus.SUPERSEDED);
+            assertThat(oldAfter.getSupersededBy()).isEqualTo(winner.revisionId());
+
+            CityLaunchRevision newRevision = revisionRepository.findById(winner.revisionId()).orElseThrow();
+            assertThat(newRevision.getRevisionNumber()).isGreaterThan(
+                    allForCity.stream()
+                            .filter(r -> r.getId().equals(first.revisionId()))
+                            .findFirst().orElseThrow().getRevisionNumber() - 1);
+
+            PrepareResponse winnerResponse = winner;
+            pollUntil(() ->
+                    assertThat(revisionRepository.findById(winnerResponse.revisionId()).orElseThrow().getLifecycleStatus())
+                            .isEqualTo(LifecycleStatus.PREPARED));
+        } finally {
+            pool.shutdownNow();
+        }
+    }
 }

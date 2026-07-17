@@ -18,6 +18,8 @@ import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import CityLaunchPreview from '../CityLaunchPreview';
 import { useDiscoverSource, useDiscoverActionsEnabled } from '@/features/discover/state/DiscoverDataSourceContext';
+import { api } from '@/lib/api';
+import type { ValidationStateDto } from '@/hooks/useCityLaunchValidation';
 
 vi.mock('@/pages/MapDiscovery', () => ({
   default: function MockMapDiscovery() {
@@ -59,7 +61,7 @@ vi.mock('@/pages/MapDiscovery', () => ({
 // vi.hoisted — vi.mock('@/lib/api', ...) below is hoisted above plain const
 // declarations, so these fixtures (referenced inside that factory) must be
 // registered via vi.hoisted to avoid a temporal-dead-zone ReferenceError.
-const { PREVIEW_AREA_GROUPS_DTO, LIVE_ONLY_AREA_GROUPS_DTO } = vi.hoisted(() => ({
+const { PREVIEW_AREA_GROUPS_DTO, LIVE_ONLY_AREA_GROUPS_DTO, DEFAULT_VALIDATION_STATE_DTO } = vi.hoisted(() => ({
   PREVIEW_AREA_GROUPS_DTO: {
     groups: [
       { slug: 'preview-only-group', name: 'Preview Only Group', areaKeys: ['IN|KA|Udupi|Manipal'] },
@@ -71,6 +73,23 @@ const { PREVIEW_AREA_GROUPS_DTO, LIVE_ONLY_AREA_GROUPS_DTO } = vi.hoisted(() => 
     groups: [
       { slug: 'live-only-group', name: 'Live Only Group', areaKeys: ['IN|KA|Udupi|LiveOnlyArea'] },
     ],
+  },
+  // Issue #1911 PR4 — default GET .../validation fixture: editable, nothing
+  // ticked yet. Every test that doesn't care about the validation rail's
+  // exact contents (all the PR3 tests above/below) still gets a well-formed
+  // ValidationStateDto so CityLaunchPreview's useValidationState() call
+  // doesn't crash rendering the checklist.
+  DEFAULT_VALIDATION_STATE_DTO: {
+    revisionId: 42,
+    cityId: 7,
+    revisionNumber: 1,
+    lifecycleStatus: 'PREPARED',
+    checks: { landing: false, regions: false, areaGroups: false, areas: false, listing: false },
+    allValidated: false,
+    editable: true,
+    preparedAt: '2026-07-01T00:00:00Z',
+    validatedAt: null,
+    supersededBy: null,
   },
 }));
 
@@ -192,6 +211,9 @@ vi.mock('@/lib/api', () => ({
         // The LIVE area-groups endpoint — must never be hit while previewing.
         return LIVE_ONLY_AREA_GROUPS_DTO;
       }
+      if (path.startsWith('/api/admin/city-launch') && path.endsWith('/validation')) {
+        return DEFAULT_VALIDATION_STATE_DTO;
+      }
       return {
         regions: [], groups: [], areas: [], markers: [], listings: [],
         content: [], totalElements: 0, cityId: null, citySlug: '',
@@ -206,13 +228,16 @@ vi.mock('@/lib/api', () => ({
 }));
 
 function renderAtPreviewRoute(cityId: string, revisionId: string) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter initialEntries={[`/admin/city-launch/${cityId}/preview/${revisionId}`]}>
-      <Routes>
-        <Route path="/admin/city-launch/:cityId/preview/:revisionId" element={<CityLaunchPreview />} />
-        <Route path="/listing/:id" element={<div data-testid="real-listing-page">Real listing page</div>} />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[`/admin/city-launch/${cityId}/preview/${revisionId}`]}>
+        <Routes>
+          <Route path="/admin/city-launch/:cityId/preview/:revisionId" element={<CityLaunchPreview />} />
+          <Route path="/listing/:id" element={<div data-testid="real-listing-page">Real listing page</div>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -251,6 +276,235 @@ describe('CityLaunchPreview', () => {
     renderAtPreviewRoute('7', '0');
     expect(screen.getByRole('alert')).toHaveTextContent(/invalid preview link/i);
     expect(screen.queryByTestId('map-discovery-stub')).not.toBeInTheDocument();
+  });
+});
+
+// ─── Issue #1911 PR4 — validation rail: exercises the REAL
+// useCityLaunchValidation hooks (GET/PUT/POST) against the mocked
+// '@/lib/api' declared above. MapDiscovery stays mocked (frozen PR3 concern,
+// out of scope here).
+describe('CityLaunchPreview — validation rail (Issue #1911 PR4)', () => {
+  const CITY_ID = 7;
+  const REVISION_ID = 42;
+
+  function validationState(overrides: Partial<ValidationStateDto> = {}): ValidationStateDto {
+    return {
+      revisionId: REVISION_ID,
+      cityId: CITY_ID,
+      revisionNumber: 1,
+      lifecycleStatus: 'PREPARED',
+      checks: { landing: false, regions: false, areaGroups: false, areas: false, listing: false },
+      allValidated: false,
+      editable: true,
+      preparedAt: '2026-07-01T00:00:00Z',
+      validatedAt: null,
+      supersededBy: null,
+      ...overrides,
+    };
+  }
+
+  const validationPath = `/api/admin/city-launch/cities/${CITY_ID}/revisions/${REVISION_ID}/validation`;
+
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.put).mockReset();
+    vi.mocked(api.post).mockReset();
+  });
+
+  it('renders the 5 validation checkboxes driven by GET /validation', async () => {
+    vi.mocked(api.get).mockImplementation(async (path: string) =>
+      path.endsWith('/validation') ? validationState() : DEFAULT_VALIDATION_STATE_DTO,
+    );
+
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('checkbox')).toHaveLength(5);
+    });
+    expect(screen.getByRole('checkbox', { name: 'Landing' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Regions' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Area Groups' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Areas' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Listing' })).not.toBeChecked();
+  });
+
+  it('ticking a checkbox calls PUT /validation/checks/{checkKey}', async () => {
+    vi.mocked(api.get).mockImplementation(async (path: string) =>
+      path.endsWith('/validation') ? validationState() : DEFAULT_VALIDATION_STATE_DTO,
+    );
+    vi.mocked(api.put).mockResolvedValue(
+      validationState({ checks: { landing: true, regions: false, areaGroups: false, areas: false, listing: false } }),
+    );
+
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Landing' })).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Landing' }));
+
+    await waitFor(() => {
+      expect(api.put).toHaveBeenCalledWith(`${validationPath}/checks/landing`, { value: true });
+    });
+  });
+
+  it('"Mark preview validated" is disabled until all five checks are ticked', async () => {
+    vi.mocked(api.get).mockImplementation(async (path: string) =>
+      path.endsWith('/validation') ? validationState() : DEFAULT_VALIDATION_STATE_DTO,
+    );
+
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /mark preview validated/i })).toBeDisabled();
+    });
+  });
+
+  it('"Mark preview validated" is enabled once allValidated is true', async () => {
+    vi.mocked(api.get).mockImplementation(async (path: string) =>
+      path.endsWith('/validation')
+        ? validationState({
+            checks: { landing: true, regions: true, areaGroups: true, areas: true, listing: true },
+            allValidated: true,
+          })
+        : DEFAULT_VALIDATION_STATE_DTO,
+    );
+
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /mark preview validated/i })).not.toBeDisabled();
+    });
+  });
+
+  it('"Preview not ready" calls POST /rerun', async () => {
+    vi.mocked(api.get).mockImplementation(async (path: string) =>
+      path.endsWith('/validation') ? validationState() : DEFAULT_VALIDATION_STATE_DTO,
+    );
+    vi.mocked(api.post).mockResolvedValue({ revisionId: 43, status: 'preparing' });
+
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+    await waitFor(() => expect(screen.getByRole('button', { name: /preview not ready/i })).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /preview not ready/i }));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith(
+        `/api/admin/city-launch/cities/${CITY_ID}/revisions/${REVISION_ID}/rerun`,
+      );
+    });
+  });
+
+  it('editable:false (superseded) disables all checkboxes/buttons and shows the not-current banner', async () => {
+    vi.mocked(api.get).mockImplementation(async (path: string) =>
+      path.endsWith('/validation')
+        ? validationState({ editable: false, supersededBy: 99 })
+        : DEFAULT_VALIDATION_STATE_DTO,
+    );
+
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('superseded-banner')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('superseded-banner')).toHaveTextContent(/no longer current/i);
+    for (const checkbox of screen.getAllByRole('checkbox')) {
+      expect(checkbox).toBeDisabled();
+    }
+    expect(screen.getByRole('button', { name: /mark preview validated/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /preview not ready/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /reset validation/i })).toBeDisabled();
+  });
+});
+
+// ─── Issue #1911 PR4 code-review cycle 1 — WIRE CONTRACT test.
+//
+// Every other GET /validation mock in this file goes through
+// validationState()/DEFAULT_VALIDATION_STATE_DTO, which are themselves
+// hand-authored fixtures — if those fixtures and the real backend DTO drift
+// apart, every "shape" assertion below would still pass against the WRONG
+// shape and never catch it. This block instead inlines the response as a
+// raw object literal transcribed directly from the backend's documented
+// wire payload (nested `checks{}`, revisionId/cityId/revisionNumber/
+// lifecycleStatus/allValidated/editable/preparedAt/validatedAt/
+// supersededBy) with no shared helper in between, so a future flat-vs-nested
+// (or field-renamed) regression on either side fails this test even if the
+// local fixtures were "fixed" to match the old broken shape.
+describe('CityLaunchPreview — validation rail wire contract (Issue #1911 PR4, review cycle 1)', () => {
+  const CITY_ID = 7;
+  const REVISION_ID = 42;
+  const validationPath = `/api/admin/city-launch/cities/${CITY_ID}/revisions/${REVISION_ID}/validation`;
+
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.put).mockReset();
+    vi.mocked(api.post).mockReset();
+  });
+
+  it('renders correct ticked/unticked state from the real (nested checks) backend JSON', async () => {
+    vi.mocked(api.get).mockImplementation(async (path: string) => {
+      if (!path.endsWith('/validation')) return DEFAULT_VALIDATION_STATE_DTO;
+      // Transcribed verbatim from the backend contract — do not route this
+      // through makeState()/validationState() helpers.
+      return {
+        revisionId: 42,
+        cityId: 7,
+        revisionNumber: 3,
+        lifecycleStatus: 'PREPARED',
+        checks: {
+          landing: true,
+          regions: false,
+          areaGroups: true,
+          areas: false,
+          listing: false,
+        },
+        allValidated: false,
+        editable: true,
+        preparedAt: '2026-07-15T10:00:00Z',
+        validatedAt: null,
+        supersededBy: null,
+      };
+    });
+
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('checkbox')).toHaveLength(5);
+    });
+    expect(screen.getByRole('checkbox', { name: 'Landing' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Regions' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Area Groups' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Areas' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Listing' })).not.toBeChecked();
+    expect(api.get).toHaveBeenCalledWith(validationPath);
+  });
+
+  it('a superseded (editable:false) real-shape response disables the rail and shows the banner', async () => {
+    vi.mocked(api.get).mockImplementation(async (path: string) => {
+      if (!path.endsWith('/validation')) return DEFAULT_VALIDATION_STATE_DTO;
+      return {
+        revisionId: 42,
+        cityId: 7,
+        revisionNumber: 3,
+        lifecycleStatus: 'SUPERSEDED',
+        checks: { landing: true, regions: true, areaGroups: true, areas: true, listing: true },
+        allValidated: true,
+        editable: false,
+        preparedAt: '2026-07-15T10:00:00Z',
+        validatedAt: '2026-07-15T11:00:00Z',
+        supersededBy: 99,
+      };
+    });
+
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('superseded-banner')).toBeInTheDocument();
+    });
+    for (const checkbox of screen.getAllByRole('checkbox')) {
+      expect(checkbox).toBeDisabled();
+    }
+    expect(screen.getByRole('button', { name: /mark preview validated/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /preview not ready/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /reset validation/i })).toBeDisabled();
   });
 });
 

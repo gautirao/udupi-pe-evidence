@@ -64,4 +64,19 @@ public class AdminCityLaunchController {
         log.debug("GET /api/admin/city-launch/cities/{}/prepare adminId={}", cityId, caller.userId());
         return readService.getProgress(cityId);
     }
+
+    /**
+     * POST .../cities/{cityId}/revisions/{revisionId}/rerun — 202 Accepted; atomically supersedes
+     * {@code revisionId} (must currently be PREPARED or VALIDATED) and starts a fresh preparation
+     * run (#1911 PR4). 409 if {@code revisionId} is not currently in-flight (already superseded,
+     * or a concurrent caller superseded it first).
+     */
+    @IsAdmin
+    @PostMapping("/cities/{cityId}/revisions/{revisionId}/rerun")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public PrepareResponse rerun(@PathVariable int cityId, @PathVariable long revisionId, CallerInfo caller) {
+        log.info("POST /api/admin/city-launch/cities/{}/revisions/{}/rerun adminId={}",
+                cityId, revisionId, caller.userId());
+        return preparationService.rerunSuperseding(cityId, revisionId, caller.userId());
+    }
 }

@@ -92,6 +92,28 @@ public class CityLaunchRevision {
     @Column(name = "superseded_by")
     private Long supersededBy;
 
+    // ── Validation checklist (V120, #1911 PR4) ──────────────────────────────────────────────────
+    // Written ONLY via CityLaunchRevisionRepository's guarded @Modifying queries — never via
+    // save() — so these fields intentionally have NO public setters (see class javadoc).
+
+    @Column(name = "landing_validated", nullable = false)
+    private boolean landingValidated;
+
+    @Column(name = "regions_validated", nullable = false)
+    private boolean regionsValidated;
+
+    @Column(name = "area_groups_validated", nullable = false)
+    private boolean areaGroupsValidated;
+
+    @Column(name = "areas_validated", nullable = false)
+    private boolean areasValidated;
+
+    @Column(name = "listing_validated", nullable = false)
+    private boolean listingValidated;
+
+    @Column(name = "validated_at")
+    private Instant validatedAt;
+
     // ── Constructors ─────────────────────────────────────────────────────────────────────────
 
     protected CityLaunchRevision() {}
@@ -125,6 +147,12 @@ public class CityLaunchRevision {
     public Instant getPromotedAt() { return promotedAt; }
     public String getFailureReason() { return failureReason; }
     public Long getSupersededBy() { return supersededBy; }
+    public boolean isLandingValidated() { return landingValidated; }
+    public boolean isRegionsValidated() { return regionsValidated; }
+    public boolean isAreaGroupsValidated() { return areaGroupsValidated; }
+    public boolean isAreasValidated() { return areasValidated; }
+    public boolean isListingValidated() { return listingValidated; }
+    public Instant getValidatedAt() { return validatedAt; }
 
     // ── Setters (in-memory only; PR1 has no persisted UPDATE path via save()) ──────────────────
 
