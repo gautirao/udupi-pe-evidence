@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 
 /**
  * useDiscoverRegionSummary — Issue #1882 (Track A PR2 Slice S2a; purpose
@@ -90,18 +91,27 @@ export function useDiscoverRegionSummary(
   citySlug: string,
   listingPurpose?: string | null,
 ) {
+  // Issue #1911 PR3 — reads the active DiscoverDataSource from context.
+  // Default (no provider in the tree, i.e. every existing live call site)
+  // is {mode:'live'}, so discoverPath/discoverKey are no-ops below and this
+  // hook's live behaviour is byte-identical to pre-PR3.
+  const source = useDiscoverSource();
+
   return useQuery<RegionSummaryResponse>({
     // listingPurpose is part of the key — switching buy<->rent produces a
     // distinct cache entry, so it can never reuse a stale count from the
     // previous purpose (it always triggers a fresh fetch, matching the
-    // useDiscoverSummary convention this hook replaces).
-    queryKey: [...DISCOVER_REGION_SUMMARY_QUERY_KEY_BASE, citySlug, listingPurpose ?? null],
+    // useDiscoverSummary convention this hook replaces). In preview mode,
+    // discoverKey additionally prepends the ['preview', cityId, revisionId]
+    // triple so preview data can never collide with the live cache entry.
+    queryKey: discoverKey(source, ...DISCOVER_REGION_SUMMARY_QUERY_KEY_BASE, citySlug, listingPurpose ?? null),
     queryFn: async () => {
       const query = listingPurpose ? `?listingPurpose=${encodeURIComponent(listingPurpose)}` : '';
-      return await api.get<RegionSummaryResponse>(
-        `/api/discover/cities/${encodeURIComponent(citySlug)}/regions${query}`,
-        { skipAuth: true },
-      );
+      const livePath = `/api/discover/cities/${encodeURIComponent(citySlug)}/regions${query}`;
+      const path = discoverPath(source, livePath, { kind: 'regions' });
+      // Preview endpoints are admin-authed — skipAuth must be false so the
+      // admin JWT is attached. Live mode keeps skipAuth:true (unchanged).
+      return await api.get<RegionSummaryResponse>(path, { skipAuth: source.mode === 'live' });
     },
     enabled: citySlug.length > 0,
     staleTime: 60_000,

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 
 // ─── Frontend Types ───────────────────────────────────────────────────────────
 
@@ -153,16 +154,32 @@ export function normalizeAreaGroupResponse(dto: AreaGroupsDTOResponse): AreaGrou
  * Returns { groups: [] } on fetch failure so the panel can render the Browse-all fallback.
  *
  * Backend response is normalized to frontend AreaGroup shape (camelCase → snake_case mapping).
+ *
+ * Issue #1911 PR3 rework — threaded through DiscoverDataSourceContext (the
+ * 6th Discover hook, alongside regions/regionGroups/areas/markers/listings).
+ * MapDiscovery calls this hook UNSCOPED (`useAreaGroups(urlState.city ||
+ * DEFAULT_CITY)`); before this rework it always hit the live
+ * /api/discover/area-groups endpoint even when MapDiscovery was mounted
+ * inside CityLaunchPreview's preview DiscoverDataSourceProvider, mixing live
+ * area_groups into an otherwise-sandboxed preview render. In live mode
+ * (the default context value, i.e. every existing call site today)
+ * discoverPath/discoverKey are no-ops and this hook's behaviour/queryKey/
+ * skipAuth are byte-identical to pre-rework.
  */
 export function useAreaGroups(city: string) {
+  const source = useDiscoverSource();
+
   return useQuery<AreaGroupsResponse>({
-    queryKey: [...AREA_GROUPS_QUERY_KEY_BASE, city],
+    queryKey: discoverKey(source, ...AREA_GROUPS_QUERY_KEY_BASE, city),
     queryFn: async () => {
       try {
-        const rawResponse = await api.get<AreaGroupsDTOResponse>(
-          `/api/discover/area-groups?city=${encodeURIComponent(city)}`,
-          { skipAuth: true },
-        );
+        const livePath = `/api/discover/area-groups?city=${encodeURIComponent(city)}`;
+        const path = discoverPath(source, livePath, { kind: 'areaGroups' });
+        // Preview endpoints are admin-authed — skipAuth must be false so the
+        // admin JWT is attached. Live mode keeps skipAuth:true (unchanged).
+        const rawResponse = await api.get<AreaGroupsDTOResponse>(path, {
+          skipAuth: source.mode === 'live',
+        });
         return normalizeAreaGroupResponse(rawResponse);
       } catch {
         // On any network/API error, return empty groups so the panel renders

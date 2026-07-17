@@ -3,6 +3,7 @@ import { api } from '@/lib/api';
 import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { snapBbox } from '@/lib/bboxUtils';
 import { buildDiscoverSearchParams } from '@/lib/discoverSearchParams';
+import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 
 export interface DiscoverFilteredMarker {
   id: string;
@@ -59,6 +60,10 @@ export function useDiscoverFilteredMarkers(
    */
   areaKeys?: string[],
 ) {
+  // Issue #1911 PR3 — see useDiscoverRegionSummary.ts for the default-context
+  // ({mode:'live'}) byte-identical-live-behaviour rationale.
+  const source = useDiscoverSource();
+
   // Snap bbox to grid for cache efficiency; null when not provided or contains non-finite values.
   const snapped: [number, number, number, number] | null =
     bbox != null && bbox.every(Number.isFinite) ? snapBbox(bbox) : null;
@@ -71,7 +76,10 @@ export function useDiscoverFilteredMarkers(
   const areaKeysEmpty = sortedAreaKeys !== null && sortedAreaKeys.length === 0;
 
   return useQuery<DiscoverFilteredMarkersResponse>({
-    queryKey: ['discover-filtered-markers', city, filters, snapped, trimmedQ, listingPurpose ?? null, excludePropertyType ?? null, sortedAreaKeys],
+    queryKey: discoverKey(
+      source,
+      'discover-filtered-markers', city, filters, snapped, trimmedQ, listingPurpose ?? null, excludePropertyType ?? null, sortedAreaKeys,
+    ),
     queryFn: ({ signal }) => {
       const params = buildDiscoverSearchParams({
         city,
@@ -83,7 +91,21 @@ export function useDiscoverFilteredMarkers(
         excludePropertyType,
       });
 
-      return api.get<DiscoverFilteredMarkersResponse>(`/api/discover/markers?${params.toString()}`, { signal });
+      const livePath = `/api/discover/markers?${params.toString()}`;
+      let path = discoverPath(source, livePath, { kind: 'markers' });
+      // Preview's /markers endpoint (E4) only understands ?areaKeys= — city,
+      // filters, listingPurpose etc. have no meaning against a revision's
+      // sandbox graph, so they are intentionally NOT forwarded in preview
+      // mode (discoverPath already dropped them by discarding livePath).
+      if (source.mode === 'preview' && sortedAreaKeys && sortedAreaKeys.length > 0) {
+        const previewParams = new URLSearchParams();
+        sortedAreaKeys.forEach((k) => previewParams.append('areaKeys', k));
+        path = `${path}?${previewParams.toString()}`;
+      }
+      // This endpoint is auth-gated in BOTH modes — no skipAuth override
+      // (default false), unchanged from pre-PR3. Preview additionally
+      // requires the admin JWT, which the default (no skipAuth) already sends.
+      return api.get<DiscoverFilteredMarkersResponse>(path, { signal });
     },
     enabled: enabled && city.length > 0 && !areaKeysEmpty,
     staleTime: 60_000,

@@ -1,5 +1,33 @@
-import { describe, it, expect } from 'vitest';
-import { normalizeAreaGroupResponse, type AreaGroup } from '../useAreaGroups';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
+import { normalizeAreaGroupResponse, useAreaGroups, AREA_GROUPS_QUERY_KEY_BASE, type AreaGroup } from '../useAreaGroups';
+import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
+
+// ─── Hoisted capture state (used by the useAreaGroups threading tests below) ──
+
+const { capturedOptions } = vi.hoisted(() => ({
+  capturedOptions: { queryKey: undefined as unknown, enabled: undefined as unknown },
+}));
+
+vi.mock('@tanstack/react-query', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@tanstack/react-query')>();
+  return {
+    ...real,
+    useQuery: vi.fn((options: Parameters<typeof real.useQuery>[0]) => {
+      capturedOptions.queryKey = options.queryKey;
+      capturedOptions.enabled = options.enabled;
+      return real.useQuery(options);
+    }),
+  };
+});
+
+vi.mock('@/lib/api', () => ({
+  api: {
+    get: vi.fn(),
+  },
+}));
 
 describe('normalizeAreaGroupResponse', () => {
   it('maps backend camelCase to frontend snake_case fields', () => {
@@ -345,5 +373,109 @@ describe('normalizeAreaGroupResponse', () => {
     const result = normalizeAreaGroupResponse(backendResponse);
     // Should preserve all values as-is, even empty strings
     expect(result.groups[0].area_keys).toEqual(['IN|KA|Udupi|Area1', 'IN|KA|Udupi|Area2', '']);
+  });
+});
+
+// ─── Issue #1911 PR3 rework — useAreaGroups threaded through
+// DiscoverDataSourceContext (closes the area-groups isolation gap: before
+// this rework, MapDiscovery's unscoped useAreaGroups(city) call always hit
+// the LIVE /api/discover/area-groups endpoint even when mounted inside
+// CityLaunchPreview's preview provider) ─────────────────────────────────────
+
+function makeWrapper(client: QueryClient) {
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(QueryClientProvider, { client }, children);
+  };
+}
+
+function makePreviewWrapper(client: QueryClient, cityId: number, revisionId: number) {
+  return function PreviewWrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(
+      QueryClientProvider,
+      { client },
+      React.createElement(
+        DiscoverDataSourceProvider,
+        { value: { mode: 'preview', cityId, revisionId } },
+        children,
+      ),
+    );
+  };
+}
+
+function freshClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
+
+beforeEach(() => {
+  capturedOptions.queryKey = undefined;
+  capturedOptions.enabled = undefined;
+});
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('useAreaGroups — live mode is byte-identical to pre-rework (Issue #1911 PR3)', () => {
+  it('live queryKey is unchanged (no preview triple)', () => {
+    const client = freshClient();
+    renderHook(() => useAreaGroups('udupi'), { wrapper: makeWrapper(client) });
+    expect(capturedOptions.queryKey).toEqual([...AREA_GROUPS_QUERY_KEY_BASE, 'udupi']);
+  });
+
+  it('live mode requests the unchanged live path with skipAuth:true', async () => {
+    const { api } = await import('@/lib/api');
+    vi.mocked(api.get).mockResolvedValue({ groups: [] });
+    const client = freshClient();
+    const { result } = renderHook(() => useAreaGroups('udupi'), { wrapper: makeWrapper(client) });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(vi.mocked(api.get)).toHaveBeenCalledOnce();
+    const [path, options] = vi.mocked(api.get).mock.calls[0];
+    expect(path).toBe('/api/discover/area-groups?city=udupi');
+    expect(options).toEqual({ skipAuth: true });
+  });
+});
+
+describe('useAreaGroups — preview mode threading (Issue #1911 PR3)', () => {
+  it('preview queryKey prepends [preview, cityId, revisionId] to the live key', () => {
+    const client = freshClient();
+    renderHook(() => useAreaGroups('udupi'), { wrapper: makePreviewWrapper(client, 7, 42) });
+    expect(capturedOptions.queryKey).toEqual([
+      'preview',
+      7,
+      42,
+      ...AREA_GROUPS_QUERY_KEY_BASE,
+      'udupi',
+    ]);
+  });
+
+  it('preview mode requests the admin preview area-groups path and sends skipAuth:false', async () => {
+    const { api } = await import('@/lib/api');
+    vi.mocked(api.get).mockResolvedValue({ groups: [] });
+    const client = freshClient();
+    const { result } = renderHook(() => useAreaGroups('udupi'), {
+      wrapper: makePreviewWrapper(client, 7, 42),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(vi.mocked(api.get)).toHaveBeenCalledOnce();
+    const [path, options] = vi.mocked(api.get).mock.calls[0];
+    expect(path).toBe('/api/admin/city-launch/cities/7/revisions/42/preview/area-groups');
+    expect(options).toEqual({ skipAuth: false });
+  });
+
+  it('two different revisionIds produce two different preview queryKeys (no cross-revision cache collision)', () => {
+    const client = freshClient();
+    renderHook(() => useAreaGroups('udupi'), { wrapper: makePreviewWrapper(client, 7, 42) });
+    const revision42Key = capturedOptions.queryKey;
+
+    renderHook(() => useAreaGroups('udupi'), { wrapper: makePreviewWrapper(client, 7, 99) });
+    const revision99Key = capturedOptions.queryKey;
+
+    expect(revision42Key).not.toEqual(revision99Key);
+    expect(revision42Key).toEqual(['preview', 7, 42, ...AREA_GROUPS_QUERY_KEY_BASE, 'udupi']);
+    expect(revision99Key).toEqual(['preview', 7, 99, ...AREA_GROUPS_QUERY_KEY_BASE, 'udupi']);
   });
 });

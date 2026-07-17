@@ -18,6 +18,7 @@ import {
   useRegionScopedAreaGroups,
   REGION_SCOPED_AREA_GROUPS_QUERY_KEY_BASE,
 } from './useRegionScopedAreaGroups';
+import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
 
 // ─── Hoisted capture state ────────────────────────────────────────────────
 
@@ -48,6 +49,21 @@ vi.mock('@/lib/api', () => ({
 function makeWrapper(client: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return React.createElement(QueryClientProvider, { client }, children);
+  };
+}
+
+// Issue #1911 PR3 — wraps the same tree in a preview DiscoverDataSource.
+function makePreviewWrapper(client: QueryClient, cityId: number, revisionId: number) {
+  return function PreviewWrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(
+      QueryClientProvider,
+      { client },
+      React.createElement(
+        DiscoverDataSourceProvider,
+        { value: { mode: 'preview', cityId, revisionId } },
+        children,
+      ),
+    );
   };
 }
 
@@ -267,5 +283,56 @@ describe('useRegionScopedAreaGroups — error handling (Issue #1910)', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.groups).toEqual([group]);
+  });
+});
+
+// ─── Issue #1911 PR3 — preview-mode threading (AC10 cache-key isolation) ──
+
+describe('useRegionScopedAreaGroups — preview mode (Issue #1911 PR3)', () => {
+  it('preview queryKey prepends [preview, cityId, revisionId] to the live key', () => {
+    const client = freshClient();
+    renderHook(() => useRegionScopedAreaGroups('bangalore', 'east', 'rent'), {
+      wrapper: makePreviewWrapper(client, 7, 42),
+    });
+    expect(capturedOptions.queryKey).toEqual([
+      'preview',
+      7,
+      42,
+      ...REGION_SCOPED_AREA_GROUPS_QUERY_KEY_BASE,
+      'bangalore',
+      'east',
+      'rent',
+    ]);
+  });
+
+  it('live queryKey is unchanged (no preview triple) — cache isolation proof', () => {
+    const client = freshClient();
+    renderHook(() => useRegionScopedAreaGroups('bangalore', 'east', 'rent'), {
+      wrapper: makeWrapper(client),
+    });
+    expect(capturedOptions.queryKey).toEqual([
+      ...REGION_SCOPED_AREA_GROUPS_QUERY_KEY_BASE,
+      'bangalore',
+      'east',
+      'rent',
+    ]);
+  });
+
+  it('preview mode requests the admin preview path and sends skipAuth:false', async () => {
+    const { api } = await import('@/lib/api');
+    vi.mocked(api.get).mockResolvedValue({ citySlug: 'bangalore', regionKey: 'east', groups: [] });
+    const client = freshClient();
+    const { result } = renderHook(
+      () => useRegionScopedAreaGroups('bangalore', 'east', 'rent'),
+      { wrapper: makePreviewWrapper(client, 7, 42) },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(vi.mocked(api.get)).toHaveBeenCalledOnce();
+    const [path, options] = vi.mocked(api.get).mock.calls[0];
+    // No listingPurpose query — preview's E2 endpoint accepts none.
+    expect(path).toBe('/api/admin/city-launch/cities/7/revisions/42/preview/regions/east/groups');
+    expect(options).toEqual({ skipAuth: false });
   });
 });

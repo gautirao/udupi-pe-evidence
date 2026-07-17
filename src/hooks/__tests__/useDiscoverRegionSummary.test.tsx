@@ -30,7 +30,8 @@ vi.mock('@/lib/api', () => ({
   api: { get: mockGet },
 }));
 
-import { useDiscoverRegionSummary } from '../useDiscoverRegionSummary';
+import { useDiscoverRegionSummary, DISCOVER_REGION_SUMMARY_QUERY_KEY_BASE } from '../useDiscoverRegionSummary';
+import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
 
 function makeWrapper() {
   const queryClient = new QueryClient({
@@ -38,6 +39,23 @@ function makeWrapper() {
   });
   return ({ children }: { children: React.ReactNode }) =>
     React.createElement(QueryClientProvider, { client: queryClient }, children);
+}
+
+// Issue #1911 PR3 — wraps the same tree in a preview DiscoverDataSource.
+function makePreviewWrapper(cityId: number, revisionId: number) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      React.createElement(
+        DiscoverDataSourceProvider,
+        { value: { mode: 'preview', cityId, revisionId } },
+        children,
+      ),
+    );
 }
 
 const REGION_SUMMARY_RESPONSE = {
@@ -240,5 +258,60 @@ describe('useDiscoverRegionSummary — purpose scoping (ADVISORY-1)', () => {
     expect(SALE_RESPONSE.regions[0].boundsStatus).toBe(RENT_RESPONSE.regions[0].boundsStatus);
     expect(SALE_RESPONSE.regions[0].areaCount).toBe(RENT_RESPONSE.regions[0].areaCount);
     expect(SALE_RESPONSE.regions[0].listingCount).not.toBe(RENT_RESPONSE.regions[0].listingCount);
+  });
+});
+
+// ─── Issue #1911 PR3 — preview-mode threading (AC10 cache-key isolation) ──
+
+describe('useDiscoverRegionSummary — preview mode (Issue #1911 PR3)', () => {
+  it('preview queryKey prepends [preview, cityId, revisionId] to the live key', async () => {
+    mockGet.mockResolvedValueOnce(REGION_SUMMARY_RESPONSE);
+    const { result } = renderHook(() => useDiscoverRegionSummary('bangalore', 'sale'), {
+      wrapper: makePreviewWrapper(7, 42),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockGet).toHaveBeenCalledWith(
+      '/api/admin/city-launch/cities/7/revisions/42/preview/regions',
+      { skipAuth: false },
+    );
+  });
+
+  it('live queryKey is unchanged — cache isolation proof (AC10)', async () => {
+    mockGet.mockResolvedValueOnce(REGION_SUMMARY_RESPONSE);
+    const { result } = renderHook(() => useDiscoverRegionSummary('bangalore', 'sale'), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockGet).toHaveBeenCalledWith(
+      '/api/discover/cities/bangalore/regions?listingPurpose=sale',
+      { skipAuth: true },
+    );
+  });
+
+  it('two distinct revisions do not cross-serve each other\'s cache', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapperFor = (cityId: number, revisionId: number) => ({ children }: { children: React.ReactNode }) =>
+      React.createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        React.createElement(
+          DiscoverDataSourceProvider,
+          { value: { mode: 'preview' as const, cityId, revisionId } },
+          children,
+        ),
+      );
+
+    mockGet.mockResolvedValueOnce({ ...REGION_SUMMARY_RESPONSE, regions: [{ ...REGION_SUMMARY_RESPONSE.regions[0], listingCount: 1 }] });
+    renderHook(() => useDiscoverRegionSummary('bangalore'), { wrapper: wrapperFor(1, 10) });
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+
+    mockGet.mockResolvedValueOnce({ ...REGION_SUMMARY_RESPONSE, regions: [{ ...REGION_SUMMARY_RESPONSE.regions[0], listingCount: 2 }] });
+    renderHook(() => useDiscoverRegionSummary('bangalore'), { wrapper: wrapperFor(1, 11) });
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+
+    expect(queryClient.getQueryData(['preview', 1, 10, ...DISCOVER_REGION_SUMMARY_QUERY_KEY_BASE, 'bangalore', null])).toBeDefined();
+    expect(queryClient.getQueryData(['preview', 1, 11, ...DISCOVER_REGION_SUMMARY_QUERY_KEY_BASE, 'bangalore', null])).toBeDefined();
   });
 });

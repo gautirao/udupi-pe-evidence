@@ -33,6 +33,7 @@ vi.mock('@/lib/api', () => ({
 
 // ─── Import hook AFTER mocks ───────────────────────────────────
 import { useDiscoverAreas } from '../useDiscoverAreas';
+import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -42,6 +43,23 @@ function makeWrapper() {
   });
   return ({ children }: { children: React.ReactNode }) =>
     React.createElement(QueryClientProvider, { client: queryClient }, children);
+}
+
+// Issue #1911 PR3 — wraps the same tree in a preview DiscoverDataSource.
+function makePreviewWrapper(cityId: number, revisionId: number) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      React.createElement(
+        DiscoverDataSourceProvider,
+        { value: { mode: 'preview', cityId, revisionId } },
+        children,
+      ),
+    );
 }
 
 const BLENDED_RESPONSE = {
@@ -245,5 +263,57 @@ describe('useDiscoverAreas — filtered (with propertyType)', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.areas[0].agriAcreage).toBeUndefined();
+  });
+});
+
+// ─── Issue #1911 PR3 — preview-mode threading (AC10 cache-key isolation) ──
+
+describe('useDiscoverAreas — preview mode (Issue #1911 PR3)', () => {
+  it('preview queryKey prepends [preview, cityId, revisionId] to the live key', async () => {
+    mockGet.mockResolvedValue(BLENDED_RESPONSE);
+    const { result } = renderHook(() => useDiscoverAreas('udupi'), {
+      wrapper: makePreviewWrapper(7, 42),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [path, options] = mockGet.mock.calls[0] as [string, unknown];
+    expect(path).toBe('/api/admin/city-launch/cities/7/revisions/42/preview/areas');
+    expect(options).toEqual({ skipAuth: false });
+  });
+
+  it('live queryKey is unchanged — cache isolation proof (AC10)', async () => {
+    mockGet.mockResolvedValue(BLENDED_RESPONSE);
+    const { result } = renderHook(() => useDiscoverAreas('udupi'), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [path, options] = mockGet.mock.calls[0] as [string, unknown];
+    expect(path).toBe('/api/discover/areas?city=udupi');
+    expect(options).toEqual({ skipAuth: true });
+  });
+
+  it('preview and live cache entries for the same city are distinct — no cross-serve', () => {
+    mockGet.mockResolvedValue(BLENDED_RESPONSE);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const liveWrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+    const previewWrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(
+        QueryClientProvider,
+        { client: qc },
+        React.createElement(
+          DiscoverDataSourceProvider,
+          { value: { mode: 'preview' as const, cityId: 7, revisionId: 42 } },
+          children,
+        ),
+      );
+
+    renderHook(() => useDiscoverAreas('udupi'), { wrapper: liveWrapper });
+    renderHook(() => useDiscoverAreas('udupi'), { wrapper: previewWrapper });
+
+    const keys = qc.getQueryCache().getAll().map((q) => q.queryKey);
+    expect(keys).toContainEqual(['discover-areas', 'udupi']);
+    expect(keys).toContainEqual(['preview', 7, 42, 'discover-areas', 'udupi']);
   });
 });

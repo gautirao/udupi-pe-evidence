@@ -317,3 +317,71 @@ describe('useDiscoverCityListings', () => {
     expect(composedKey).toBeDefined();
   });
 });
+
+// ─── Issue #1911 PR3 — preview-mode threading (AC10 cache-key isolation) ──
+
+import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
+
+function makePreviewWrapper(cityId: number, revisionId: number) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      React.createElement(
+        DiscoverDataSourceProvider,
+        { value: { mode: 'preview', cityId, revisionId } },
+        children,
+      ),
+    );
+}
+
+describe('useDiscoverCityListings — preview mode (Issue #1911 PR3)', () => {
+  it('preview mode requests the admin preview /listings path with only ?areaKeys=', async () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+    const { result } = renderHook(
+      () =>
+        useDiscoverCityListings({
+          city: 'udupi',
+          areaKeys: ['udupi|manipal'],
+          limitPerArea: 5,
+          minPrice: 5000000,
+        }),
+      { wrapper: makePreviewWrapper(7, 42) },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [path, options] = mockGet.mock.calls[0] as [string, unknown];
+    expect(path).toBe('/api/admin/city-launch/cities/7/revisions/42/preview/listings?areaKeys=udupi%7Cmanipal');
+    expect(options).toEqual({ skipAuth: false });
+  });
+
+  it('preview and live cache entries for the same params are distinct — no cross-serve (AC10)', () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const liveWrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+    const previewWrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(
+        QueryClientProvider,
+        { client: qc },
+        React.createElement(
+          DiscoverDataSourceProvider,
+          { value: { mode: 'preview' as const, cityId: 7, revisionId: 42 } },
+          children,
+        ),
+      );
+
+    renderHook(() => useDiscoverCityListings({ city: 'udupi', areaKeys: ['udupi|manipal'] }), { wrapper: liveWrapper });
+    renderHook(() => useDiscoverCityListings({ city: 'udupi', areaKeys: ['udupi|manipal'] }), { wrapper: previewWrapper });
+
+    const keys = qc.getQueryCache().getAll().map((q) => q.queryKey);
+    const liveKey = keys.find((k) => k[0] === 'discover-city-listings');
+    const previewKey = keys.find((k) => k[0] === 'preview');
+    expect(liveKey).toBeDefined();
+    expect(previewKey).toBeDefined();
+    expect(previewKey).toEqual(['preview', 7, 42, ...(liveKey as unknown[])]);
+  });
+});

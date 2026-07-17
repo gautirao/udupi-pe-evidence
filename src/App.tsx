@@ -63,6 +63,8 @@ const TrustReviewQueue = lazy(() => import("./pages/admin/TrustReviewQueue"));
 const Intelligence = lazy(() => import("./pages/admin/Intelligence"));
 // Issue #1911 PR2 — admin City Launch & Preview workflow, Select City slice
 const CityLaunch = lazy(() => import("./pages/admin/CityLaunch"));
+// Issue #1911 PR3 — admin city-launch revision preview (Complete Discover preview)
+const CityLaunchPreview = lazy(() => import("./pages/admin/CityLaunchPreview"));
 
 const queryClient = new QueryClient();
 
@@ -347,6 +349,14 @@ const App = () => (
                 element={
                   <ProtectedRoute requireAdmin>
                     <CityLaunch />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/city-launch/:cityId/preview/:revisionId"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <CityLaunchPreview />
                   </ProtectedRoute>
                 }
               />

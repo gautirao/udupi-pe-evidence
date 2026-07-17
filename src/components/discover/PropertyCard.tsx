@@ -1,14 +1,44 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   BedDouble, Bath, Ruler, Calendar, ShieldCheck, Shield, Building2, MapPin, Heart, Navigation, ChevronRight,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { useSavedListingIds, useSaveListing, useUnsaveListing } from '@/hooks/useSavedListings';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { getPropertyTypeVisual } from '@/lib/propertyTypeConfig';
+import { api } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
+import {
+  useDiscoverSource,
+  useDiscoverActionsEnabled,
+  discoverPath,
+  discoverKey,
+} from '@/features/discover/state/DiscoverDataSourceContext';
+
+/**
+ * Issue #1911 PR3 — shape of the admin city-launch preview's single
+ * simulated-listing endpoint (E6, `DiscoverListingResponse` on the backend).
+ * Only the fields the inline preview drawer renders are typed here; the
+ * endpoint is preview-only (never fetched in live mode).
+ */
+interface PreviewListingDetail {
+  id: string;
+  title: string | null;
+  propertyType: string | null;
+  locality: string | null;
+  pricePaise: number | null;
+  bedrooms: number | null;
+  builtArea: number | null;
+  builtAreaUnit: string | null;
+  landArea: number | null;
+  landAreaUnit: string | null;
+  heroImageUrl: string | null;
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -121,7 +151,20 @@ export function PropertyCard({
   const isSaveMutating = saveListing.isPending || unsaveListing.isPending;
   const { openAuthModal } = useAuthModal();
 
+  // Issue #1911 PR3 — the single mutation seam: listing actions are
+  // disabled whenever the card is rendered inside an admin city-launch
+  // preview (useDiscoverActionsEnabled() returns false only in that mode;
+  // true — unchanged — everywhere else).
+  const actionsEnabled = useDiscoverActionsEnabled();
+  const source = useDiscoverSource();
+  const { toast } = useToast();
+  const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
+
   const handleToggleSave = () => {
+    if (!actionsEnabled) {
+      toast({ title: 'Disabled in preview', description: 'Listing actions are disabled while previewing a sandbox revision.' });
+      return;
+    }
     if (!isAuthenticated) {
       openAuthModal();
       return;
@@ -136,8 +179,32 @@ export function PropertyCard({
 
   const handleActivate = () => {
     onSelect?.(listing.id);
+    if (!actionsEnabled) {
+      // Preview mode: open the simulated in-card drawer instead of firing
+      // the caller's onNavigate (which would route to /listing/{preview:...}
+      // — a real-listing route this synthetic id can never resolve).
+      setPreviewDrawerOpen(true);
+      return;
+    }
     onNavigate();
   };
+
+  // Issue #1911 PR3 — E6 simulated-listing fetch for the preview drawer.
+  // listing.id is `preview:{revisionId}:{areaKey}` for every preview-mode
+  // listing (the FE-derived discriminator — no new field on the shared DTO).
+  // Only ever enabled while the drawer is open in preview mode.
+  const previewAreaKey = listing.id.startsWith('preview:')
+    ? listing.id.split(':').slice(2).join(':')
+    : null;
+  const previewDetailQuery = useQuery<PreviewListingDetail>({
+    queryKey: discoverKey(source, 'property-card-preview-listing-detail', listing.id),
+    queryFn: () =>
+      api.get<PreviewListingDetail>(
+        discoverPath(source, '', { kind: 'listingDetail', areaKey: previewAreaKey ?? '' }),
+      ),
+    enabled: previewDrawerOpen && source.mode === 'preview' && !!previewAreaKey,
+    staleTime: 60_000,
+  });
 
   const fallbackTitle = listing.propertyType
     ? `${capitalize(listing.propertyType)} ${purposeLabel(listing.listingPurpose)}`
@@ -392,6 +459,48 @@ export function PropertyCard({
           <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         </Button>
       </div>
+
+      {/* Issue #1911 PR3 — simulated preview drawer. Only ever opened in
+          preview mode (handleActivate never sets previewDrawerOpen when
+          actionsEnabled); renders the E6 simulated-listing fetch inline
+          instead of navigating to a real /listing/{id} route. */}
+      <Sheet open={previewDrawerOpen} onOpenChange={setPreviewDrawerOpen}>
+        <SheetContent
+          data-testid="simulated-listing-drawer"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <SheetHeader>
+            <SheetTitle>
+              {previewDetailQuery.data?.title || fallbackTitle}
+            </SheetTitle>
+            <SheetDescription>Simulated preview — not a real listing.</SheetDescription>
+          </SheetHeader>
+          {previewDetailQuery.isLoading && (
+            <p className="mt-4 text-sm text-muted-foreground">Loading simulated listing…</p>
+          )}
+          {previewDetailQuery.isError && (
+            <p className="mt-4 text-sm text-destructive">Unable to load this simulated listing.</p>
+          )}
+          {previewDetailQuery.data && (
+            <div className="mt-4 space-y-2 text-sm">
+              {previewDetailQuery.data.pricePaise != null && (
+                <p className="text-lg font-semibold">
+                  {formatPrice(Math.round(previewDetailQuery.data.pricePaise / 100), 'INR')}
+                </p>
+              )}
+              {previewDetailQuery.data.locality && (
+                <p className="flex items-center gap-1 text-muted-foreground">
+                  <MapPin className="h-3.5 w-3.5" />
+                  {previewDetailQuery.data.locality}
+                </p>
+              )}
+              {previewDetailQuery.data.bedrooms != null && (
+                <p>{previewDetailQuery.data.bedrooms} BHK</p>
+              )}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

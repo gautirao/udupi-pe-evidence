@@ -1,5 +1,6 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 
 export interface DiscoverCityListingItem {
   id: string;
@@ -103,10 +104,14 @@ export function useDiscoverCityListings({
   listingPurpose,
   isAuthenticated = false,
 }: DiscoverCityListingsParams) {
+  // Issue #1911 PR3 — see useDiscoverRegionSummary.ts for the default-context
+  // ({mode:'live'}) byte-identical-live-behaviour rationale.
+  const source = useDiscoverSource();
   const sortedKeys = [...areaKeys].sort();
 
   return useQuery<DiscoverCityListingsResponse>({
-    queryKey: [
+    queryKey: discoverKey(
+      source,
       'discover-city-listings',
       city,
       ...sortedKeys,
@@ -121,8 +126,21 @@ export function useDiscoverCityListings({
       // Anon callers receive priceBand; authed callers receive pricePaise — they must not
       // share a cache entry or a stale band response would be served post-login.
       isAuthenticated,
-    ],
+    ),
     queryFn: () => {
+      // Preview's /listings endpoint (E5) only understands ?areaKeys= — city,
+      // price/bedroom/propertyType filters etc. have no meaning against a
+      // revision's sandbox graph, so they are intentionally NOT forwarded in
+      // preview mode.
+      if (source.mode === 'preview') {
+        const previewParams = new URLSearchParams();
+        sortedKeys.forEach((k) => previewParams.append('areaKeys', k));
+        const path = discoverPath(source, '', { kind: 'listings' });
+        return api.get<DiscoverCityListingsResponse>(`${path}?${previewParams.toString()}`, {
+          skipAuth: false,
+        });
+      }
+
       const params = new URLSearchParams();
       sortedKeys.forEach((k) => params.append('areaKeys', k));
       params.set('limitPerArea', String(limitPerArea));

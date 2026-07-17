@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 
 export interface DiscoverArea {
   areaKey: string;
@@ -38,15 +39,21 @@ export interface DiscoverAreasResponse {
  *   Omitting it preserves byte-identical behaviour + queryKey vs. the prior signature.
  */
 export function useDiscoverAreas(city: string, propertyType?: string) {
+  // Issue #1911 PR3 — see useDiscoverRegionSummary.ts for the default-context
+  // ({mode:'live'}) byte-identical-live-behaviour rationale.
+  const source = useDiscoverSource();
+
   return useQuery<DiscoverAreasResponse>({
-    queryKey: propertyType
-      ? ['discover-areas', city, propertyType]
-      : ['discover-areas', city],
+    queryKey: discoverKey(
+      source,
+      ...(propertyType ? ['discover-areas', city, propertyType] : ['discover-areas', city]),
+    ),
     queryFn: () => {
-      const url = propertyType
+      const livePath = propertyType
         ? `/api/discover/areas?city=${encodeURIComponent(city)}&propertyType=${encodeURIComponent(propertyType)}`
         : `/api/discover/areas?city=${encodeURIComponent(city)}`;
-      return api.get<DiscoverAreasResponse>(url, { skipAuth: true });
+      const path = discoverPath(source, livePath, { kind: 'areas' });
+      return api.get<DiscoverAreasResponse>(path, { skipAuth: source.mode === 'live' });
     },
     enabled: city.length > 0,
     staleTime: 300_000,

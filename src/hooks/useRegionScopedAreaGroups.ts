@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 
 /**
  * Issue #1910 (PR2) — frontend consumer of the new additive endpoint
@@ -84,21 +85,27 @@ export function useRegionScopedAreaGroups(
   regionKey: string | null | undefined,
   listingPurpose?: string | null,
 ) {
+  // Issue #1911 PR3 — see useDiscoverRegionSummary.ts for the default-context
+  // ({mode:'live'}) byte-identical-live-behaviour rationale.
+  const source = useDiscoverSource();
   const normalizedRegionKey = regionKey ?? '';
   return useQuery<RegionScopedAreaGroupsResponse>({
-    queryKey: [
+    queryKey: discoverKey(
+      source,
       ...REGION_SCOPED_AREA_GROUPS_QUERY_KEY_BASE,
       citySlug,
       normalizedRegionKey,
       listingPurpose ?? null,
-    ],
+    ),
     queryFn: async () => {
       const params = new URLSearchParams();
       if (listingPurpose) params.set('listingPurpose', listingPurpose);
       const qs = params.toString();
+      const livePath = `/api/discover/cities/${encodeURIComponent(citySlug)}/regions/${encodeURIComponent(normalizedRegionKey)}/groups${qs ? `?${qs}` : ''}`;
+      const path = discoverPath(source, livePath, { kind: 'regionGroups', regionKey: normalizedRegionKey });
       const rawResponse = await api.get<RegionScopedAreaGroupsDTOResponse>(
-        `/api/discover/cities/${encodeURIComponent(citySlug)}/regions/${encodeURIComponent(normalizedRegionKey)}/groups${qs ? `?${qs}` : ''}`,
-        { skipAuth: true },
+        path,
+        { skipAuth: source.mode === 'live' },
       );
       return {
         citySlug: rawResponse.citySlug ?? citySlug,

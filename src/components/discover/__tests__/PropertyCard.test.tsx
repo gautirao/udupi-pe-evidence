@@ -3,9 +3,11 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PropertyCard } from '../PropertyCard';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { formatRelativeDate } from '@/lib/formatters';
+import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
 
 // ─── Issue #1566 — saved-homes mocks ────────────────────────────────────────
 // PropertyCard's heart is now server-backed (useSavedListingIds/useSaveListing/
@@ -30,6 +32,18 @@ vi.mock('@/contexts/AuthModalContext', () => ({
   useAuthModal: () => ({ isOpen: false, openAuthModal: mockOpenAuthModal, closeAuthModal: vi.fn() }),
 }));
 
+// ─── Issue #1911 PR3 — preview mutation-guard mocks ────────────────────────
+const mockApiGet = vi.hoisted(() => vi.fn());
+const mockToast = vi.hoisted(() => vi.fn());
+
+vi.mock('@/lib/api', () => ({
+  api: { get: mockApiGet },
+}));
+
+vi.mock('@/hooks/use-toast', () => ({
+  useToast: () => ({ toast: mockToast }),
+}));
+
 const makeListing = (overrides: Partial<DiscoverCityListingItem> = {}): DiscoverCityListingItem => ({
   id: 'l1',
   title: 'Green View Apartment',
@@ -52,8 +66,32 @@ const makeListing = (overrides: Partial<DiscoverCityListingItem> = {}): Discover
   ...overrides,
 });
 
+// Issue #1911 PR3 — PropertyCard now calls useQuery internally (the preview
+// simulated-listing drawer fetch), so every render needs an ambient
+// QueryClient even though that query is disabled outside preview mode.
+// One QueryClient per test (reset in beforeEach) keeps rerender() calls on
+// the same provider tree.
+let testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
 const renderCard = (props: React.ComponentProps<typeof PropertyCard>) =>
-  render(<MemoryRouter>{<PropertyCard {...props} />}</MemoryRouter>);
+  render(
+    <QueryClientProvider client={testQueryClient}>
+      <MemoryRouter>{<PropertyCard {...props} />}</MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+// Issue #1911 PR3 — renders PropertyCard under a preview DiscoverDataSource
+// so useDiscoverActionsEnabled()/useDiscoverSource() resolve to preview mode.
+const renderCardInPreview = (props: React.ComponentProps<typeof PropertyCard>) =>
+  render(
+    <QueryClientProvider client={testQueryClient}>
+      <MemoryRouter>
+        <DiscoverDataSourceProvider value={{ mode: 'preview', cityId: 7, revisionId: 42 }}>
+          <PropertyCard {...props} />
+        </DiscoverDataSourceProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
 
 describe('PropertyCard', () => {
   beforeEach(() => {
@@ -63,6 +101,9 @@ describe('PropertyCard', () => {
     mockSavePending.current = false;
     mockUnsavePending.current = false;
     mockOpenAuthModal.mockReset();
+    mockApiGet.mockReset();
+    mockToast.mockReset();
+    testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   });
 
   it('renders the listing-card testid', () => {
@@ -280,13 +321,15 @@ describe('PropertyCard', () => {
     });
     expect(screen.queryByText('Sign in to view price')).not.toBeInTheDocument();
     rerender(
-      <MemoryRouter>
-        <PropertyCard
-          listing={makeListing({ pricePaise: 5000000 * 100 })}
-          isAuthenticated={true}
-          onNavigate={vi.fn()}
-        />
-      </MemoryRouter>,
+      <QueryClientProvider client={testQueryClient}>
+        <MemoryRouter>
+          <PropertyCard
+            listing={makeListing({ pricePaise: 5000000 * 100 })}
+            isAuthenticated={true}
+            onNavigate={vi.fn()}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
     expect(screen.queryByText('Sign in to view price')).not.toBeInTheDocument();
   });
@@ -335,13 +378,15 @@ describe('PropertyCard', () => {
     });
     expect(screen.getByText('House')).toBeInTheDocument();
     rerender(
-      <MemoryRouter>
-        <PropertyCard
-          listing={makeListing({ title: 'X', propertyType: null, listingPurpose: null })}
-          isAuthenticated
-          onNavigate={vi.fn()}
-        />
-      </MemoryRouter>,
+      <QueryClientProvider client={testQueryClient}>
+        <MemoryRouter>
+          <PropertyCard
+            listing={makeListing({ title: 'X', propertyType: null, listingPurpose: null })}
+            isAuthenticated
+            onNavigate={vi.fn()}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
     expect(screen.queryByText('House')).not.toBeInTheDocument();
   });
@@ -1019,6 +1064,77 @@ describe('PropertyCard', () => {
       await userEvent.keyboard('{Enter}');
 
       expect(mockSaveMutate).toHaveBeenCalledWith('l1');
+    });
+  });
+
+  // ── Issue #1911 PR3 — preview mutation guard (the single seam) ────────────
+  describe('preview mode — mutation guard (useDiscoverActionsEnabled)', () => {
+    it('clicking the save button in preview mode shows a "Disabled in preview" toast and never mutates', async () => {
+      mockSavedIds.current = new Set<string>();
+      renderCardInPreview({ listing: makeListing({ id: 'l1' }), isAuthenticated: true, onNavigate: vi.fn() });
+
+      await userEvent.click(screen.getByTestId('listing-save-button'));
+
+      expect(mockSaveMutate).not.toHaveBeenCalled();
+      expect(mockUnsaveMutate).not.toHaveBeenCalled();
+      expect(mockOpenAuthModal).not.toHaveBeenCalled();
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Disabled in preview' }),
+      );
+    });
+
+    it('"View details" in preview mode never calls onNavigate — opens the simulated drawer instead', async () => {
+      mockApiGet.mockResolvedValue({
+        id: 'preview:42:IN|KA|Udupi|Manipal',
+        title: 'Simulated Villa',
+        propertyType: 'villa',
+        locality: 'Manipal',
+        pricePaise: 5000000 * 100,
+        bedrooms: 3,
+        builtArea: null,
+        builtAreaUnit: null,
+        landArea: null,
+        landAreaUnit: null,
+        heroImageUrl: null,
+      });
+      const onNavigate = vi.fn();
+      renderCardInPreview({
+        listing: makeListing({ id: 'preview:42:IN|KA|Udupi|Manipal' }),
+        isAuthenticated: true,
+        onNavigate,
+      });
+
+      await userEvent.click(screen.getByTestId('listing-view-details'));
+
+      expect(onNavigate).not.toHaveBeenCalled();
+      expect(screen.getByTestId('simulated-listing-drawer')).toBeInTheDocument();
+    });
+
+    it('clicking the card in preview mode never calls onNavigate', async () => {
+      const onNavigate = vi.fn();
+      renderCardInPreview({
+        listing: makeListing({ id: 'preview:42:IN|KA|Udupi|Manipal' }),
+        isAuthenticated: true,
+        onNavigate,
+      });
+
+      await userEvent.click(screen.getByTestId('listing-card'));
+
+      expect(onNavigate).not.toHaveBeenCalled();
+    });
+
+    it('live mode (default context) is unaffected — save + navigate behave exactly as before', async () => {
+      mockSavedIds.current = new Set<string>();
+      const onNavigate = vi.fn();
+      renderCard({ listing: makeListing({ id: 'l1' }), isAuthenticated: true, onNavigate });
+
+      await userEvent.click(screen.getByTestId('listing-save-button'));
+      expect(mockSaveMutate).toHaveBeenCalledWith('l1');
+      expect(mockToast).not.toHaveBeenCalled();
+
+      await userEvent.click(screen.getByTestId('listing-view-details'));
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('simulated-listing-drawer')).not.toBeInTheDocument();
     });
   });
 });
