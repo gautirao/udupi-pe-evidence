@@ -1,60 +1,43 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuItem,
-} from '@/components/ui/dropdown-menu';
 import {
   Loader2,
   MapPin,
   TrendingUp,
-  Bookmark,
-  GraduationCap,
-  Sprout,
-  Shield,
-  ShieldCheck,
-  CheckCircle2,
+  Handshake,
+  ClipboardCheck,
+  FileText,
+  Sparkles,
   ArrowRight,
   Search,
-  LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTrendingAreas } from '@/hooks/useTrendingAreas';
+import { useDiscoverSummary } from '@/hooks/useDiscoverSummary';
 import { formatPrice } from '@/lib/formatters';
-import { DISTRICT_TO_CITY_SLUG, DEFAULT_CITY } from '@/lib/localityUtils';
-import { getDiscoverRoute, getTrendsRoute, getSavedRoute } from '@/lib/navUtils';
+import { districtToCitySlug, DEFAULT_CITY, CITY_CONFIG } from '@/lib/localityUtils';
+import { getDiscoverRoute } from '@/lib/navUtils';
 import { CITIES } from '@/constants/cities';
 import { RoleAwareHeader } from '@/components/layout/AppLayout';
 
 // ────────────────────────────────────────────────────────────────────────────
-// Static marketing content. These mirror the ReTrends mock exactly. The
-// Trending Localities section prefers live data from useTrendingAreas and only
-// falls back to this static set when no live areas are available. The Trust
-// Badges and Area Overview sections are static marketing content by design.
+// Honest curated early-access marketing content (Issue #1792).
+//
+// Guiding rule: nothing on this page may state a number or a verification claim
+// the platform cannot substantiate at render time. Listing/area counts come
+// live from GET /api/discover/summary; when that is loading, errored, or zero,
+// the page falls back to non-numeric early-access copy — never a fabricated or
+// placeholder number, and never a "verified" claim the data cannot back.
+//
+// The Trending Localities section prefers live data from useTrendingAreas and,
+// when no live areas are available, shows a non-numeric early-access note — it
+// never renders hardcoded (e.g. Bangalore) fallback localities.
 // ────────────────────────────────────────────────────────────────────────────
-
-interface StaticLocality {
-  name: string;
-  city: string;
-  price: string;
-  properties: string;
-}
-
-const STATIC_TRENDING: StaticLocality[] = [
-  { name: 'Koramangala', city: 'Bangalore', price: '₹1.15 Cr', properties: '342+' },
-  { name: 'Indiranagar', city: 'Bangalore', price: '₹1.02 Cr', properties: '287+' },
-  { name: 'HSR Layout', city: 'Bangalore', price: '₹1.28 Cr', properties: '398+' },
-];
 
 interface FeatureItem {
   icon: React.ReactNode;
@@ -72,46 +55,50 @@ const FEATURES: FeatureItem[] = [
       "Explore properties by locality on an interactive map. Select up to 3 areas and see what's available instantly.",
   },
   {
-    icon: <Shield className="h-6 w-6 text-green-600" />,
+    icon: <Handshake className="h-6 w-6 text-green-600" />,
     iconWrap: 'bg-green-50',
-    title: 'Trust Signals',
+    title: 'Honest Curation',
     description:
-      'Every listing shows verification status. Verified properties have checked documents, RERA registration, and broker credentials.',
+      'Our founding team personally onboards each broker and keeps a close eye on the listings we publish during early access.',
   },
   {
     icon: <TrendingUp className="h-6 w-6 text-purple-600" />,
     iconWrap: 'bg-purple-50',
     title: 'Market Insights',
     description:
-      'Understand price trends, demand patterns, and locality dynamics before you decide. Data you can trust.',
+      'Understand price trends, demand patterns, and locality dynamics before you decide, using the market data we do have.',
   },
 ];
 
-interface TrustBadge {
+interface PracticeCard {
   icon: React.ReactNode;
   iconWrap: string;
   title: string;
   description: string;
 }
 
-const TRUST_BADGES: TrustBadge[] = [
+// Describes what we actually do today — no "verified"/badge claims the data
+// cannot back (all current listings are trust tier D, so no badge renders).
+const CURATION_PRACTICES: PracticeCard[] = [
   {
-    icon: <CheckCircle2 className="h-5 w-5 text-green-600" />,
+    icon: <Handshake className="h-5 w-5 text-green-600" />,
     iconWrap: 'bg-green-100',
-    title: 'Verified',
-    description: 'Documents verified, RERA registered, broker credentials confirmed',
+    title: 'Personally onboarded brokers',
+    description: 'We meet and onboard each founding broker ourselves during early access.',
   },
   {
-    icon: <ShieldCheck className="h-5 w-5 text-blue-600" />,
+    icon: <ClipboardCheck className="h-5 w-5 text-blue-600" />,
     iconWrap: 'bg-blue-100',
-    title: 'Trusted',
-    description: 'From verified brokers with proven track record',
+    title: 'Founder-managed listings',
+    description:
+      'Our small founding team personally manages and keeps an eye on the listings we publish during early access.',
   },
   {
-    icon: <MapPin className="h-5 w-5 text-slate-500" />,
+    icon: <FileText className="h-5 w-5 text-slate-500" />,
     iconWrap: 'bg-slate-100',
-    title: 'Listed',
-    description: 'Standard listing, verification in progress',
+    title: 'RERA number provided by seller',
+    description:
+      'Where a RERA number is available, we show the one the seller provided for you to check yourself.',
   },
 ];
 
@@ -122,9 +109,11 @@ interface AreaOverviewCard {
   description: string;
 }
 
+// Explains the trends data-availability tiers (a real product concept). Uses
+// coastal-Karnataka localities and carries no fabricated listing counts.
 const AREA_OVERVIEWS: AreaOverviewCard[] = [
   {
-    name: 'Koramangala',
+    name: 'Manipal',
     badge: 'Full Data',
     badgeClass: 'bg-green-100 text-green-700',
     description: 'Comprehensive market data with trends and activity metrics',
@@ -136,18 +125,12 @@ const AREA_OVERVIEWS: AreaOverviewCard[] = [
     description: 'Useful insights with cautious interpretation',
   },
   {
-    name: 'Tiny Village',
+    name: 'New localities',
     badge: 'Fallback Data',
     badgeClass: 'bg-blue-100 text-blue-700',
-    description: 'District-level price context for new areas',
+    description: 'District-level price context while an area builds up its own history',
   },
 ];
-
-const AREA_OVERVIEW_META: Record<string, string> = {
-  Koramangala: '42 listings',
-  Katapadi: '9 listings',
-  'Tiny Village': '<5 listings',
-};
 
 // ────────────────────────────────────────────────────────────────────────────
 // Header
@@ -158,30 +141,87 @@ function SiteHeader({ selectedCity }: { selectedCity?: string }) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Trending Localities (live data with static fallback)
+// Hero stats — live counts from the Discover summary API, with a non-numeric
+// early-access fallback. Never renders a fabricated or placeholder number.
+// ────────────────────────────────────────────────────────────────────────────
+
+function HeroStats({ city }: { city: string }) {
+  const { data, isLoading, isError } = useDiscoverSummary({ city });
+
+  // Only the backend-owned total is a real, substantiated count. `hotspots` is a
+  // capped, limit-driven sample — not the true locality total — so we never derive
+  // an implied "across N localities" figure from it (Issue #1792 review).
+  const listingCount = data?.totalActiveListings ?? 0;
+  const hasRealCounts = !isLoading && !isError && listingCount > 0;
+
+  if (!hasRealCounts) {
+    // Loading, errored, or zero data → honest, non-numeric early-access copy.
+    return (
+      <div
+        data-testid="hero-stats"
+        className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground"
+      >
+        <span className="flex items-center gap-1.5">
+          <Sparkles className="h-4 w-4 text-amber-500" />
+          Curated early access
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Handshake className="h-4 w-4 text-green-600" />
+          Personally onboarded brokers
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-testid="hero-stats"
+      className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground"
+    >
+      <span className="flex items-center gap-1.5">
+        <MapPin className="h-4 w-4 text-blue-600" />
+        {listingCount.toLocaleString('en-IN')} curated{' '}
+        {listingCount === 1 ? 'listing' : 'listings'}
+      </span>
+      <span className="flex items-center gap-1.5">
+        <Handshake className="h-4 w-4 text-green-600" />
+        Personally onboarded brokers
+      </span>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Trending Localities (live data only — no hardcoded fallback localities)
 // ────────────────────────────────────────────────────────────────────────────
 
 function TrendingLocalitiesSection({ selectedCity }: { selectedCity: string }) {
   const { areas, isLoading } = useTrendingAreas();
+  const cityLabel = CITY_CONFIG[selectedCity]?.label ?? 'coastal Karnataka';
 
+  // The trending endpoint is global, but this section's heading is presented as
+  // city-specific — so filter derived cards to the selected city before rendering.
+  // When nothing remains, fall through to the honest empty state below (Issue #1792
+  // review). We never render the wrong city's localities under a city-specific title.
   const liveCards =
     !isLoading && areas.length > 0
-      ? areas.slice(0, 3).map((area) => {
-          const districtSegment = area.areaKey.split('|')[2] ?? '';
-          const cardCity =
-            DISTRICT_TO_CITY_SLUG[districtSegment] ?? (districtSegment.toLowerCase() || 'udupi');
-          return {
-            name: area.areaLabel,
-            city: area.districtLabel ?? cardCity,
-            price: area.medianPricePaise != null ? formatPrice(area.medianPricePaise / 100) : '—',
-            properties: `${area.listingCount90d}+`,
-            href: `/discover?city=${encodeURIComponent(cardCity)}&areaKey=${encodeURIComponent(area.areaKey)}`,
-          };
-        })
-      : STATIC_TRENDING.map((l) => ({
-          ...l,
-          href: `/discover?city=${encodeURIComponent(l.city.toLowerCase())}`,
-        }));
+      ? areas
+          .map((area) => {
+            const districtSegment = area.areaKey.split('|')[2] ?? '';
+            const cardCity =
+              districtToCitySlug(districtSegment) ?? (districtSegment.toLowerCase() || 'udupi');
+            return {
+              name: area.areaLabel,
+              city: area.districtLabel ?? cardCity,
+              cardCity,
+              price: area.medianPricePaise != null ? formatPrice(area.medianPricePaise / 100) : '—',
+              properties: `${area.listingCount90d}`,
+              href: `/discover?city=${encodeURIComponent(cardCity)}&areaKey=${encodeURIComponent(area.areaKey)}`,
+            };
+          })
+          .filter((card) => card.cardCity === selectedCity)
+          .slice(0, 3)
+      : [];
 
   return (
     <section className="bg-slate-50/80 py-20">
@@ -189,9 +229,11 @@ function TrendingLocalitiesSection({ selectedCity }: { selectedCity: string }) {
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-              Trending Localities in Bangalore
+              Localities in {cityLabel}
             </h2>
-            <p className="mt-2 text-muted-foreground">High demand areas with verified listings</p>
+            <p className="mt-2 text-muted-foreground">
+              Areas where we&apos;re onboarding brokers and adding listings
+            </p>
           </div>
           <Button asChild variant="outline" size="sm" className="self-start">
             <Link to={`/trends?city=${encodeURIComponent(selectedCity)}`}>
@@ -201,42 +243,65 @@ function TrendingLocalitiesSection({ selectedCity }: { selectedCity: string }) {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {liveCards.map((card) => (
-            <Card key={card.name} className="border-border/80 transition-shadow hover:shadow-md">
-              <CardContent className="flex flex-col p-6">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-lg font-semibold text-foreground">{card.name}</h3>
-                    <p className="text-sm text-muted-foreground">{card.city}</p>
+        {liveCards.length > 0 ? (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            {liveCards.map((card) => (
+              <Card key={card.name} className="border-border/80 transition-shadow hover:shadow-md">
+                <CardContent className="flex flex-col p-6">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">{card.name}</h3>
+                      <p className="text-sm text-muted-foreground">{card.city}</p>
+                    </div>
+                    <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700">
+                      Trending
+                    </span>
                   </div>
-                  <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700">
-                    Trending
-                  </span>
-                </div>
 
-                <div className="mt-5 space-y-2 border-t border-border/70 pt-4">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Avg. Price</span>
-                    <span className="font-semibold text-foreground">{card.price}</span>
+                  <div className="mt-5 space-y-2 border-t border-border/70 pt-4">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Median price</span>
+                      <span className="font-semibold text-foreground">{card.price}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Listings (90d)</span>
+                      <span className="font-semibold text-foreground">{card.properties}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Properties</span>
-                    <span className="font-semibold text-foreground">{card.properties}</span>
-                  </div>
-                </div>
 
-                <Link
-                  to={card.href}
-                  className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline"
-                >
-                  Explore Area
-                  <ArrowRight className="h-4 w-4" />
+                  <Link
+                    to={card.href}
+                    className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline"
+                  >
+                    Explore Area
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card className="border-border/80">
+            <CardContent className="flex flex-col items-start gap-3 p-8">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
+                <MapPin className="h-5 w-5 text-blue-600" />
+              </span>
+              <h3 className="text-lg font-semibold text-foreground">
+                New localities are being added
+              </h3>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                We&apos;re onboarding founding brokers across {cityLabel} during early access. Open
+                the map to explore what&apos;s live today.
+              </p>
+              <Button asChild size="sm" className="mt-1 bg-slate-900 text-white hover:bg-slate-800">
+                <Link to={`/discover?city=${encodeURIComponent(selectedCity)}`}>
+                  Explore on Map
+                  <ArrowRight className="ml-1.5 h-4 w-4" />
                 </Link>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </section>
   );
@@ -292,17 +357,18 @@ export default function LandingPage() {
           {/* Left column */}
           <div>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
-              <TrendingUp className="h-3.5 w-3.5" />
-              Discover smarter with verified insights
+              <Sparkles className="h-3.5 w-3.5" />
+              Curated early access · Coastal Karnataka
             </span>
 
             <h1 className="mt-5 text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-              Find Your Perfect Home with <span className="text-blue-600">Trust &amp; Clarity</span>
+              Coastal Karnataka homes, <span className="text-blue-600">honestly curated</span>
             </h1>
 
             <p className="mt-5 max-w-xl text-lg text-muted-foreground">
-              Explore properties through interactive maps, discover localities with real market
-              trends, and buy with confidence from verified listings.
+              Explore Udupi and Manipal on an interactive map, see the market trends we have, and
+              talk to founding brokers we&apos;ve personally onboarded. We&apos;re early — and our
+              founding team manages the listings we publish by hand.
             </p>
 
             {/* Search card */}
@@ -358,36 +424,27 @@ export default function LandingPage() {
               </CardContent>
             </Card>
 
-            {/* Trust stats */}
-            <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                500+ Verified Listings
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                Trusted Brokers
-              </span>
-            </div>
+            {/* Trust stats — live counts with non-numeric early-access fallback */}
+            <HeroStats city={selectedCity} />
           </div>
 
           {/* Right column — hero image with overlay card */}
           <div className="relative">
             <div className="overflow-hidden rounded-2xl shadow-xl">
               <img
-                src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&h=600&fit=crop"
-                alt="Verified property with house keys"
+                src="/hero-coastal-karnataka.svg"
+                alt="Coastal Karnataka homes at sunset over the Arabian Sea"
                 className="h-[280px] w-full object-cover sm:h-[360px] lg:h-[400px]"
                 loading="eager"
               />
             </div>
             <div className="absolute inset-x-4 bottom-4 rounded-xl bg-slate-900/55 p-4 text-white backdrop-blur-sm sm:inset-x-6 sm:bottom-6">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-green-400" />
-                <span className="font-semibold">Verified Property</span>
+                <Sparkles className="h-5 w-5 text-amber-300" />
+                <span className="font-semibold">Curated early access</span>
               </div>
               <p className="mt-1 text-sm text-white/85">
-                All documents checked, RERA registered, ready to view
+                Founding brokers, personally onboarded and managed by our founding team.
               </p>
             </div>
           </div>
@@ -403,8 +460,8 @@ export default function LandingPage() {
             Why Choose ReTrends?
           </h2>
           <p className="mt-3 text-muted-foreground">
-            We're not another listings portal. We help you make informed decisions with verified
-            data and market insights.
+            We&apos;re not another listings portal. We help you make informed decisions with a
+            curated, current set of listings and the market insights we have.
           </p>
         </div>
 
@@ -427,26 +484,26 @@ export default function LandingPage() {
       <TrendingLocalitiesSection selectedCity={selectedCity} />
 
       {/* ──────────────────────────────────────────────────────────────── */}
-      {/* Understanding Trust Badges */}
+      {/* How we keep listings honest */}
       {/* ──────────────────────────────────────────────────────────────── */}
       <section className="container mx-auto max-w-7xl px-4 py-20">
         <div className="mx-auto max-w-4xl rounded-2xl bg-gradient-to-br from-blue-50 to-green-50 p-8 sm:p-10">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
-              <Shield className="h-5 w-5 text-blue-600" />
+              <Handshake className="h-5 w-5 text-blue-600" />
             </span>
             <div>
               <h2 className="text-xl font-bold text-foreground sm:text-2xl">
-                Understanding Trust Badges
+                How we keep listings honest
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                We verify every listing to help you buy with confidence
+                Curated early access — here&apos;s exactly what that means today
               </p>
             </div>
           </div>
 
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {TRUST_BADGES.map((b) => (
+            {CURATION_PRACTICES.map((b) => (
               <div key={b.title} className="rounded-xl bg-white p-5 shadow-sm">
                 <span className={cn('flex h-9 w-9 items-center justify-center rounded-lg', b.iconWrap)}>
                   {b.icon}
@@ -469,7 +526,7 @@ export default function LandingPage() {
               Area Overview Pages
             </h2>
             <p className="mt-3 text-muted-foreground">
-              Explore detailed insights for different localities based on available data
+              Explore detailed insights for different localities based on the data we have
             </p>
           </div>
 
@@ -483,9 +540,7 @@ export default function LandingPage() {
                       {a.badge}
                     </span>
                   </div>
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    {AREA_OVERVIEW_META[a.name]} · {a.description}
-                  </p>
+                  <p className="mt-3 text-sm text-muted-foreground">{a.description}</p>
                   <Link
                     to={`/trends?city=${encodeURIComponent(selectedCity)}`}
                     className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline"
@@ -509,7 +564,7 @@ export default function LandingPage() {
             Ready to Find Your Perfect Home?
           </h2>
           <p className="mt-3 text-blue-100">
-            Start exploring verified properties in your preferred localities
+            Start exploring our curated listings in your preferred localities
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button asChild size="lg" className="bg-white text-blue-700 hover:bg-blue-50">

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { render, screen, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -26,6 +28,15 @@ vi.mock('@/hooks/useTrendingAreas', () => ({
   })),
 }));
 
+// Default: no data yet (loading/undefined) → non-numeric early-access fallback.
+vi.mock('@/hooks/useDiscoverSummary', () => ({
+  useDiscoverSummary: vi.fn(() => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+  })),
+}));
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return { ...actual, useNavigate: () => mockNavigate };
@@ -46,8 +57,22 @@ function renderPage(initialPath = '/') {
   );
 }
 
+async function mockSummary(value: {
+  data?: unknown;
+  isLoading?: boolean;
+  isError?: boolean;
+}) {
+  const { useDiscoverSummary } = await import('@/hooks/useDiscoverSummary');
+  vi.mocked(useDiscoverSummary).mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    ...value,
+  } as ReturnType<typeof useDiscoverSummary>);
+}
+
 // ─── Tests ────────────────────────────────────────────────────
-describe('LandingPage (ReTrends redesign)', () => {
+describe('LandingPage (honest curated early-access — Issue #1792)', () => {
   beforeEach(() => {
     mockIsLoading = false;
     mockUser = null;
@@ -55,10 +80,10 @@ describe('LandingPage (ReTrends redesign)', () => {
     mockSignOut.mockReset();
   });
 
-  it('renders the hero with the main heading', () => {
+  it('renders the hero with the honest curated heading', () => {
     renderPage();
     expect(
-      screen.getByRole('heading', { name: /Find Your Perfect Home with Trust/i }),
+      screen.getByRole('heading', { name: /Coastal Karnataka homes, honestly curated/i }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('hero')).toBeInTheDocument();
   });
@@ -68,7 +93,6 @@ describe('LandingPage (ReTrends redesign)', () => {
     try {
       mockIsLoading = true;
       renderPage();
-      // Advance past the 200 ms delayed-show threshold and flush the React state update
       await act(() => {
         vi.advanceTimersByTime(201);
       });
@@ -131,19 +155,15 @@ describe('LandingPage (ReTrends redesign)', () => {
 
   describe('SiteHeader — auth state', () => {
     it('unauthenticated: renders Sign In button, no avatar', () => {
-      // mockUser is null from beforeEach
       renderPage();
       expect(screen.getByRole('link', { name: /Sign In/i })).toBeInTheDocument();
-      // No avatar trigger (ghost button with initials)
       expect(screen.queryByRole('button', { name: /^[A-Z]{2}$/i })).not.toBeInTheDocument();
     });
 
     it('authenticated: renders avatar, hides Sign In button', () => {
       mockUser = { email: 'test@example.com' };
       renderPage();
-      // Sign In link must not be present
       expect(screen.queryByRole('link', { name: /Sign In/i })).not.toBeInTheDocument();
-      // Avatar initials button is present (first 2 chars of "test" → "TE")
       expect(screen.getByRole('button', { name: /^TE$/i })).toBeInTheDocument();
     });
 
@@ -166,8 +186,6 @@ describe('LandingPage (ReTrends redesign)', () => {
 
     it('loading: renders neither Sign In nor avatar', async () => {
       mockIsLoading = true;
-      // Do not advance timers — isLoading=true but showAuthLoader hasn't fired yet,
-      // so the header renders with isLoading=true → null from SiteHeader
       renderPage();
       expect(screen.queryByRole('link', { name: /Sign In/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^[A-Z]{2}$/i })).not.toBeInTheDocument();
@@ -186,7 +204,6 @@ describe('LandingPage (ReTrends redesign)', () => {
       const signInLink = screen.getByRole('link', { name: /Sign In/i });
       const href = signInLink.getAttribute('href') ?? '';
       expect(href).toContain('returnTo');
-      // The encoded value must contain the path portion
       expect(href).toContain('%2Fdiscover');
     });
   });
@@ -211,72 +228,155 @@ describe('LandingPage (ReTrends redesign)', () => {
       expect(mockNavigate).toHaveBeenCalledWith('/discover?city=udupi');
       expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringContaining('journey=area-first'));
     });
+  });
 
-    it('renders the trust stats row', () => {
+  describe('Hero stats — live counts with honest non-numeric fallback', () => {
+    it('renders only the real totalActiveListings count (no derived locality figure)', async () => {
+      await mockSummary({
+        data: {
+          city: 'udupi',
+          totalActiveListings: 27,
+          regions: [],
+          // hotspots is a capped sample, not the true locality total — the hero
+          // stats must NOT surface it as an "across N localities" figure.
+          hotspots: [
+            { areaKey: 'a1', name: 'Manipal', listingCount: 10, geoCenterLat: 0, geoCenterLon: 0 },
+            { areaKey: 'a2', name: 'Katapadi', listingCount: 8, geoCenterLat: 0, geoCenterLon: 0 },
+            { areaKey: 'a3', name: 'Malpe', listingCount: 6, geoCenterLat: 0, geoCenterLon: 0 },
+            { areaKey: 'a4', name: 'Kaup', listingCount: 3, geoCenterLat: 0, geoCenterLon: 0 },
+          ],
+        },
+      });
       renderPage();
-      expect(screen.getByText(/500\+ Verified Listings/i)).toBeInTheDocument();
-      expect(screen.getByText(/Trusted Brokers/i)).toBeInTheDocument();
+      const stats = within(screen.getByTestId('hero-stats'));
+      expect(stats.getByText(/27 curated listings/i)).toBeInTheDocument();
+      // No derived/implied locality count from the capped hotspots sample.
+      expect(stats.queryByText(/localit/i)).not.toBeInTheDocument();
+      expect(stats.queryByText(/across/i)).not.toBeInTheDocument();
+      // Fallback early-access copy must NOT appear in the stats row when real counts are present.
+      expect(stats.queryByText(/early access/i)).not.toBeInTheDocument();
+    });
+
+    it('renders truthful non-numeric copy when the summary API errors (no fabricated numbers)', async () => {
+      await mockSummary({ isError: true });
+      renderPage();
+      const stats = within(screen.getByTestId('hero-stats'));
+      expect(stats.getByText(/Curated early access/i)).toBeInTheDocument();
+      expect(stats.getByText(/Personally onboarded brokers/i)).toBeInTheDocument();
+      // No fabricated "N ... listings" number in the stats row.
+      expect(stats.queryByText(/\d+\s+curated listings/i)).not.toBeInTheDocument();
+    });
+
+    it('does not fabricate marketing numbers when counts are zero', async () => {
+      await mockSummary({
+        data: {
+          city: 'udupi',
+          totalActiveListings: 0,
+          regions: [],
+          hotspots: [],
+        },
+      });
+      renderPage();
+      const stats = within(screen.getByTestId('hero-stats'));
+      expect(stats.getByText(/Curated early access/i)).toBeInTheDocument();
+      expect(stats.queryByText(/0 curated/i)).not.toBeInTheDocument();
+      expect(stats.queryByText(/500\+/)).not.toBeInTheDocument();
+    });
+
+    it('shows the non-numeric fallback while the summary is still loading', async () => {
+      await mockSummary({ isLoading: true });
+      renderPage();
+      const stats = within(screen.getByTestId('hero-stats'));
+      expect(stats.getByText(/Curated early access/i)).toBeInTheDocument();
+      expect(stats.queryByText(/\d+\s+curated listings/i)).not.toBeInTheDocument();
     });
   });
 
   describe('Hero image', () => {
-    it('uses the required Unsplash hero image', () => {
+    it('uses a repository-owned local hero asset (no remote stock URL)', () => {
       renderPage();
-      const img = screen.getByRole('img', { name: /Verified property/i });
-      expect(img).toHaveAttribute(
-        'src',
-        'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&h=600&fit=crop',
-      );
+      const img = screen.getByRole('img', { name: /Coastal Karnataka homes/i });
+      expect(img).toHaveAttribute('src', '/hero-coastal-karnataka.svg');
+      expect(img.getAttribute('src') ?? '').not.toMatch(/unsplash|https?:\/\//i);
     });
 
-    it('renders the Verified Property overlay card', () => {
+    it('renders the curated early-access overlay card', () => {
       renderPage();
-      expect(screen.getByText('Verified Property')).toBeInTheDocument();
+      expect(screen.getAllByText(/Curated early access/i).length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('Honesty guarantees', () => {
+    it('contains no unsupported verification wording anywhere on the page', () => {
+      const { container } = renderPage();
+      const text = container.textContent ?? '';
+      expect(text).not.toMatch(/verified/i);
+      expect(text).not.toMatch(/personally verified/i);
+      expect(text).not.toMatch(/credential checked/i);
+      expect(text).not.toMatch(/RERA verified/i);
+      expect(text).not.toMatch(/documents? checked/i);
+    });
+
+    it('shows no Bangalore fallback localities', () => {
+      const { container } = renderPage();
+      const text = container.textContent ?? '';
+      expect(text).not.toMatch(/Koramangala/i);
+      expect(text).not.toMatch(/Indiranagar/i);
+      expect(text).not.toMatch(/HSR Layout/i);
+      expect(text).not.toMatch(/Bangalore/i);
+    });
+
+    it('uses honest founder-managed wording, not guarantee-style freshness claims', () => {
+      const { container } = renderPage();
+      const text = container.textContent ?? '';
+      // No wording implying a dedicated automated/systematic reconfirmation workflow.
+      expect(text).not.toMatch(/no stale listings/i);
+      expect(text).not.toMatch(/unconfirmed listings are removed/i);
+      expect(text).not.toMatch(/real and current/i);
+      // Positive assertion: founder-operated process wording is present.
+      expect(text).toMatch(/founding team/i);
     });
   });
 
   describe('Major sections', () => {
-    it('renders the Why Choose ReTrends section with three features', () => {
+    it('renders the Why Choose ReTrends section with the honest curation feature', () => {
       renderPage();
-      expect(
-        screen.getByRole('heading', { name: /Why Choose ReTrends\?/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Why Choose ReTrends\?/i })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: /Map-First Discovery/i })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: /Trust Signals/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Honest Curation/i })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: /Market Insights/i })).toBeInTheDocument();
     });
 
-    it('renders the Trending Localities section (static fallback when no live data)', () => {
+    it('renders the Trending Localities section with a non-numeric note when no live data', () => {
       renderPage();
+      expect(screen.getByRole('heading', { name: /Localities in Udupi/i })).toBeInTheDocument();
       expect(
-        screen.getByRole('heading', { name: /Trending Localities in Bangalore/i }),
+        screen.getByRole('heading', { name: /New localities are being added/i }),
       ).toBeInTheDocument();
-      // Koramangala appears in both Trending and Area Overview sections (static fallback)
-      expect(screen.getAllByRole('heading', { name: /Koramangala/i }).length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByRole('heading', { name: /Indiranagar/i })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: /HSR Layout/i })).toBeInTheDocument();
-      // View All Trends link routes to /trends
       expect(screen.getByRole('link', { name: /View All Trends/i })).toHaveAttribute(
         'href',
         expect.stringContaining('/trends'),
       );
     });
 
-    it('renders the Trust Badges section with Verified, Trusted, Listed', () => {
+    it('renders the honest curation-practices section', () => {
       renderPage();
       expect(
-        screen.getByRole('heading', { name: /Understanding Trust Badges/i }),
+        screen.getByRole('heading', { name: /How we keep listings honest/i }),
       ).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: /^Verified$/i })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: /^Trusted$/i })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: /^Listed$/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: /Personally onboarded brokers/i }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Founder-managed listings/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: /RERA number provided by seller/i }),
+      ).toBeInTheDocument();
     });
 
-    it('renders the Area Overview Pages section with three cards', () => {
+    it('renders the Area Overview Pages section with coastal localities and no fabricated counts', () => {
       renderPage();
-      expect(
-        screen.getByRole('heading', { name: /Area Overview Pages/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Area Overview Pages/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /^Manipal$/i })).toBeInTheDocument();
       expect(screen.getByText(/Full Data/i)).toBeInTheDocument();
       expect(screen.getByText(/Limited Data/i)).toBeInTheDocument();
       expect(screen.getByText(/Fallback Data/i)).toBeInTheDocument();
@@ -292,10 +392,7 @@ describe('LandingPage (ReTrends redesign)', () => {
         'href',
         expect.stringContaining('/discover'),
       );
-      expect(screen.getByRole('link', { name: /Explore Trends/i })).toHaveAttribute(
-        'href',
-        '/trends',
-      );
+      expect(screen.getByRole('link', { name: /Explore Trends/i })).toHaveAttribute('href', '/trends');
     });
   });
 
@@ -317,9 +414,105 @@ describe('LandingPage (ReTrends redesign)', () => {
       } as ReturnType<typeof useTrendingAreas>);
 
       renderPage();
-      expect(screen.getByRole('heading', { name: /^Manipal$/i })).toBeInTheDocument();
-      // static fallback should NOT render when live data is present
-      expect(screen.queryByRole('heading', { name: /Indiranagar/i })).not.toBeInTheDocument();
+      // Manipal appears in both the live Trending card and the Area Overview section.
+      expect(screen.getAllByRole('heading', { name: /^Manipal$/i }).length).toBeGreaterThanOrEqual(1);
+      // The non-numeric "being added" note must NOT render when live data is present.
+      expect(
+        screen.queryByRole('heading', { name: /New localities are being added/i }),
+      ).not.toBeInTheDocument();
     });
+
+    it('filters trending cards to the selected city, excluding other-city areas', async () => {
+      const { useTrendingAreas } = await import('@/hooks/useTrendingAreas');
+      // Mixed source data: one Udupi area and one Bangalore area. Selected city is
+      // the default (udupi) → only the Udupi card may render under the city-specific
+      // heading; the Bangalore area must be excluded, not silently shown.
+      vi.mocked(useTrendingAreas).mockReturnValue({
+        areas: [
+          {
+            areaKey: 'area|manipal|Udupi',
+            areaLabel: 'Manipal',
+            districtLabel: 'Udupi',
+            medianPricePaise: 1_500_000_000,
+            listingCount90d: 12,
+          },
+          {
+            areaKey: 'area|koramangala|Bengaluru',
+            areaLabel: 'Koramangala',
+            districtLabel: 'Bengaluru',
+            medianPricePaise: 9_000_000_000,
+            listingCount90d: 88,
+          },
+        ],
+        isLoading: false,
+        isError: false,
+      } as ReturnType<typeof useTrendingAreas>);
+
+      renderPage();
+      // Udupi area renders; Bangalore area is excluded entirely (not in any card).
+      expect(screen.getAllByRole('heading', { name: /^Manipal$/i }).length).toBeGreaterThanOrEqual(1);
+      expect(screen.queryByRole('heading', { name: /Koramangala/i })).not.toBeInTheDocument();
+      expect(screen.queryByText(/Bengaluru/i)).not.toBeInTheDocument();
+    });
+
+    it('shows the honest empty state when no live area matches the selected city', async () => {
+      const { useTrendingAreas } = await import('@/hooks/useTrendingAreas');
+      // All live areas belong to a different city than the selected default (udupi).
+      vi.mocked(useTrendingAreas).mockReturnValue({
+        areas: [
+          {
+            areaKey: 'area|koramangala|Bengaluru',
+            areaLabel: 'Koramangala',
+            districtLabel: 'Bengaluru',
+            medianPricePaise: 9_000_000_000,
+            listingCount90d: 88,
+          },
+        ],
+        isLoading: false,
+        isError: false,
+      } as ReturnType<typeof useTrendingAreas>);
+
+      renderPage();
+      // No fabricated/wrong-city cards; the existing honest empty state renders.
+      expect(
+        screen.getByRole('heading', { name: /New localities are being added/i }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: /Koramangala/i })).not.toBeInTheDocument();
+    });
+  });
+});
+
+// ─── index.html metadata (real product branding, no Lovable placeholders) ───
+describe('index.html metadata', () => {
+  const html = readFileSync(resolve(process.cwd(), 'index.html'), 'utf-8');
+
+  it('uses real ReTrends branding in the title and description', () => {
+    expect(html).toMatch(/<title>[^<]*ReTrends[^<]*<\/title>/i);
+    expect(html).toMatch(/name="description"[^>]*content="[^"]*coastal Karnataka/i);
+  });
+
+  it('has no Lovable placeholder metadata', () => {
+    expect(html).not.toMatch(/Lovable/i);
+    expect(html).not.toMatch(/lovable\.dev/i);
+  });
+
+  it('uses real OG and Twitter branding with an absolute raster social image', () => {
+    expect(html).toMatch(/property="og:title"[^>]*content="[^"]*ReTrends/i);
+    // Social scrapers require an absolute (https) raster URL, not a relative path or SVG.
+    expect(html).toMatch(
+      /property="og:image"[^>]*content="https:\/\/propertysignal\.in\/og-card\.png"/i,
+    );
+    expect(html).toMatch(
+      /name="twitter:image"[^>]*content="https:\/\/propertysignal\.in\/og-card\.png"/i,
+    );
+    // Declared at the OG-standard 1200x630 raster dimensions.
+    expect(html).toMatch(/property="og:image:width"[^>]*content="1200"/i);
+    expect(html).toMatch(/property="og:image:height"[^>]*content="630"/i);
+    // og:image must not point at a relative path or an SVG.
+    expect(html).not.toMatch(/property="og:image"[^>]*content="\/[^"]*"/i);
+    expect(html).not.toMatch(/property="og:image"[^>]*content="[^"]*\.svg"/i);
+    // Uses the real production origin, not the CI/deploy-default domain.
+    expect(html).toMatch(/property="og:url"[^>]*content="https:\/\/propertysignal\.in\//i);
+    expect(html).not.toMatch(/pages\.dev/i);
   });
 });

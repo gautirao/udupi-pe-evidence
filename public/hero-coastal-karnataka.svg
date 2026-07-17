@@ -1,0 +1,68 @@
+<svg width="800" height="600" viewBox="0 0 800 600" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Coastal Karnataka homes at sunset over the Arabian Sea">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#eff6ff"/>
+      <stop offset="0.55" stop-color="#dbeafe"/>
+      <stop offset="1" stop-color="#fde7c7"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#93c5fd"/>
+      <stop offset="1" stop-color="#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="sand" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fde9c8"/>
+      <stop offset="1" stop-color="#f5d7a3"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="800" height="600" fill="url(#sky)"/>
+
+  <!-- Sun -->
+  <circle cx="560" cy="180" r="70" fill="#fbbf24" opacity="0.85"/>
+
+  <!-- Distant hills -->
+  <path d="M0 300 Q160 240 320 290 T640 280 T800 300 V360 H0 Z" fill="#86b58a" opacity="0.6"/>
+
+  <!-- Sea -->
+  <rect x="0" y="330" width="800" height="120" fill="url(#sea)"/>
+  <g fill="#ffffff" opacity="0.35">
+    <path d="M40 380 q30 -12 60 0 t60 0 t60 0" stroke="#ffffff" stroke-width="3" fill="none"/>
+    <path d="M420 410 q30 -12 60 0 t60 0 t60 0" stroke="#ffffff" stroke-width="3" fill="none"/>
+  </g>
+
+  <!-- Beach -->
+  <path d="M0 430 Q400 400 800 445 V600 H0 Z" fill="url(#sand)"/>
+
+  <!-- Palm trees -->
+  <g stroke="#4d7c4f" stroke-width="8" stroke-linecap="round" fill="none">
+    <path d="M120 470 q10 -70 6 -120"/>
+    <path d="M126 350 q-40 -18 -70 -6"/>
+    <path d="M126 350 q40 -20 74 -4"/>
+    <path d="M126 350 q-16 -40 -44 -54"/>
+    <path d="M126 350 q22 -38 56 -46"/>
+  </g>
+
+  <!-- Coastal homes -->
+  <g>
+    <!-- House 1 -->
+    <rect x="300" y="360" width="120" height="90" rx="4" fill="#ffffff"/>
+    <path d="M292 362 L360 316 L428 362 Z" fill="#e2795b"/>
+    <rect x="322" y="392" width="26" height="26" rx="2" fill="#bfdbfe"/>
+    <rect x="372" y="392" width="26" height="40" fill="#8ba3c7"/>
+
+    <!-- House 2 -->
+    <rect x="452" y="378" width="150" height="80" rx="4" fill="#f8fafc"/>
+    <path d="M444 380 L527 336 L610 380 Z" fill="#c2603f"/>
+    <rect x="472" y="404" width="30" height="30" rx="2" fill="#bfdbfe"/>
+    <rect x="552" y="404" width="30" height="30" rx="2" fill="#bfdbfe"/>
+  </g>
+
+  <!-- Foreground palm -->
+  <g stroke="#3f6b41" stroke-width="10" stroke-linecap="round" fill="none">
+    <path d="M690 600 q6 -140 -6 -230"/>
+    <path d="M684 372 q-56 -26 -100 -8"/>
+    <path d="M684 372 q56 -28 104 -6"/>
+    <path d="M684 372 q-24 -56 -62 -76"/>
+    <path d="M684 372 q30 -52 78 -62"/>
+  </g>
+</svg>
