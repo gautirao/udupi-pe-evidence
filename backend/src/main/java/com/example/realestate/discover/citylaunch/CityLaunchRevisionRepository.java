@@ -226,4 +226,36 @@ public interface CityLaunchRevisionRepository extends JpaRepository<CityLaunchRe
             + "WHERE r.id = :oldRevisionId "
             + "AND r.lifecycleStatus = com.example.realestate.discover.citylaunch.LifecycleStatus.SUPERSEDED")
     int backLinkSuperseded(@Param("oldRevisionId") Long oldRevisionId, @Param("newRevisionId") Long newRevisionId);
+
+    // ── Guarded promotion CAS transitions (V118, #1911 PR5) ─────────────────────────────────────
+    //
+    // The FIRST statement of CityLaunchPromotionService.launch is transitionValidatedToPromoting —
+    // its SQL WHERE clause (id + city_id scoped, superseded_by IS NULL, lifecycle_status =
+    // 'VALIDATED') is the SOLE authority for "may this revision be promoted right now", exactly
+    // like PR4's markValidated. 0 rows affected means the service writes NOTHING and instead reads
+    // the current lifecycle_status to shape a 200-idempotent-noop / 409-conflict / 404 response —
+    // never a redundant Java pre-check that could race against a concurrent launch.
+
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query(value = "UPDATE public.city_launch_revision SET lifecycle_status = 'PROMOTING' "
+            + "WHERE id = :id AND city_id = :cityId AND lifecycle_status = 'VALIDATED' "
+            + "AND superseded_by IS NULL", nativeQuery = true)
+    int transitionValidatedToPromoting(@Param("id") Long id, @Param("cityId") Integer cityId);
+
+    /**
+     * Final CAS of the promotion transaction: PROMOTING -&gt; PROMOTED, stamping {@code
+     * promoted_at} and {@code applied_revision_checksum} EXACTLY ONCE in the same UPDATE. Must
+     * affect exactly 1 row (the caller itself set this row to PROMOTING moments earlier, in the
+     * same transaction) — 0 rows here is an unreachable-in-practice defensive signal, never
+     * silently tolerated.
+     */
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query(value = "UPDATE public.city_launch_revision SET lifecycle_status = 'PROMOTED', "
+            + "promoted_at = :promotedAt, applied_revision_checksum = :appliedChecksum "
+            + "WHERE id = :id AND city_id = :cityId AND lifecycle_status = 'PROMOTING'", nativeQuery = true)
+    int transitionPromotingToPromoted(@Param("id") Long id, @Param("cityId") Integer cityId,
+                                       @Param("promotedAt") Instant promotedAt,
+                                       @Param("appliedChecksum") String appliedChecksum);
 }

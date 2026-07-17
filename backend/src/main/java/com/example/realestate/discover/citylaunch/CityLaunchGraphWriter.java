@@ -9,8 +9,10 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -117,6 +119,7 @@ public class CityLaunchGraphWriter {
         validate(geography);
 
         Map<String, Long> sandboxAreaIdByKey = new HashMap<>();
+        List<SandboxArea> savedAreas = new ArrayList<>();
         for (CanonicalGeographyReader.CanonicalArea area : geography.areas()) {
             SandboxArea saved = sandboxAreaRepository.save(new SandboxArea(
                     revisionId, area.areaKey(), area.name(), area.district(),
@@ -125,44 +128,49 @@ public class CityLaunchGraphWriter {
                     area.geometrySource(), area.osmElementType(), area.osmElementId(),
                     area.lifecycleStatus()));
             sandboxAreaIdByKey.put(area.areaKey(), saved.getId());
+            savedAreas.add(saved);
         }
         revision.setPrepStage((short) 1);
         stageReached[0] = 1;
 
+        List<SandboxAreaAlias> savedAliases = new ArrayList<>();
         for (CanonicalGeographyReader.CanonicalAreaAlias alias : geography.aliases()) {
             Long sandboxAreaId = sandboxAreaIdByKey.get(alias.areaKey());
             if (sandboxAreaId == null) {
                 continue; // unreachable post-validate(); defensive against a future validate() gap
             }
-            sandboxAreaAliasRepository.save(new SandboxAreaAlias(
-                    revisionId, sandboxAreaId, alias.alias(), alias.aliasNormalised()));
+            savedAliases.add(sandboxAreaAliasRepository.save(new SandboxAreaAlias(
+                    revisionId, sandboxAreaId, alias.alias(), alias.aliasNormalised())));
         }
         revision.setPrepStage((short) 2);
         stageReached[0] = 2;
 
+        List<SandboxCityRegion> savedRegions = new ArrayList<>();
         for (CanonicalGeographyReader.CanonicalCityRegion region : geography.regions()) {
-            sandboxCityRegionRepository.save(new SandboxCityRegion(
+            savedRegions.add(sandboxCityRegionRepository.save(new SandboxCityRegion(
                     revisionId, region.regionKey(), region.displayLabel(), region.displayOrder(),
                     region.centreLat(), region.centreLon(),
                     region.minLat(), region.minLon(), region.maxLat(), region.maxLon(),
-                    region.policyFingerprint()));
+                    region.policyFingerprint())));
         }
         revision.setPrepStage((short) 3);
         stageReached[0] = 3;
 
+        List<SandboxCityRegionMembership> savedMemberships = new ArrayList<>();
         for (CanonicalGeographyReader.CanonicalCityRegionMembership membership : geography.memberships()) {
             Long sandboxAreaId = sandboxAreaIdByKey.get(membership.areaKey());
             if (sandboxAreaId == null) {
                 continue; // unreachable post-validate()
             }
-            sandboxCityRegionMembershipRepository.save(new SandboxCityRegionMembership(
+            savedMemberships.add(sandboxCityRegionMembershipRepository.save(new SandboxCityRegionMembership(
                     revisionId, sandboxAreaId, membership.regionKey(),
-                    AssignmentSource.valueOf(membership.assignmentSource())));
+                    AssignmentSource.valueOf(membership.assignmentSource()))));
         }
         revision.setPrepStage((short) 4);
         stageReached[0] = 4;
 
         Map<String, Long> sandboxGroupIdBySlug = new HashMap<>();
+        List<SandboxAreaGroup> savedGroups = new ArrayList<>();
         for (CanonicalGeographyReader.CanonicalAreaGroup group : geography.groups()) {
             SandboxAreaGroup saved = sandboxAreaGroupRepository.save(new SandboxAreaGroup(
                     revisionId, group.slug(), group.name(), group.subtitle(), group.regionLabel(),
@@ -170,21 +178,30 @@ public class CityLaunchGraphWriter {
                     group.focusLat(), group.focusLon(),
                     group.minLat(), group.minLon(), group.maxLat(), group.maxLon()));
             sandboxGroupIdBySlug.put(group.slug(), saved.getId());
+            savedGroups.add(saved);
         }
         revision.setPrepStage((short) 5);
         stageReached[0] = 5;
 
+        List<SandboxAreaGroupMember> savedGroupMembers = new ArrayList<>();
         for (CanonicalGeographyReader.CanonicalAreaGroupMember member : geography.groupMembers()) {
             Long sandboxGroupId = sandboxGroupIdBySlug.get(member.groupSlug());
             Long sandboxAreaId = sandboxAreaIdByKey.get(member.areaKey());
             if (sandboxGroupId == null || sandboxAreaId == null) {
                 continue; // unreachable post-validate()
             }
-            sandboxAreaGroupMemberRepository.save(new SandboxAreaGroupMember(
-                    revisionId, sandboxGroupId, sandboxAreaId, member.displayOrder()));
+            savedGroupMembers.add(sandboxAreaGroupMemberRepository.save(new SandboxAreaGroupMember(
+                    revisionId, sandboxGroupId, sandboxAreaId, member.displayOrder())));
         }
         revision.setPrepStage((short) 6);
         stageReached[0] = 6;
+
+        // #1911 PR5: compute + persist the "before" checksum anchor over the row set just written,
+        // via the SAME RevisionChecksum routine CityLaunchPromotionService recomputes at launch
+        // time — a match is guaranteed by construction in the happy path; a mismatch at launch
+        // means genuine out-of-band sandbox mutation between prep completion and promotion.
+        revision.setPersistedRevisionChecksum(RevisionChecksum.compute(
+                savedAreas, savedAliases, savedRegions, savedMemberships, savedGroups, savedGroupMembers));
 
         revision.setLifecycleStatus(LifecycleStatus.PREPARED);
         revision.setPrepState(PrepState.DONE);
