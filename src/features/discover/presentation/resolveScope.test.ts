@@ -192,3 +192,44 @@ describe('resolveScope — legacy region-name aliases (Issue #1910 review fix)',
     expect(resolveScope('N', emptyNs)).toEqual({ kind: 'region', regionKey: 'N' });
   });
 });
+
+// Issue #1915 — hyphenated diagonal forms (e.g. `?scope=north-east`) and
+// lowercase abbreviations (`ne`/`nw`/`se`/`sw`) were both legacy variants a
+// deep link could carry that fell through resolveScope to kind:'none':
+// hyphenated forms had no REGION_KEY_ALIASES entry despite passing
+// isValidScope's SCOPE_SLUG_PATTERN; abbreviations were rejected by
+// isValidScope entirely before ever reaching this module.
+describe('resolveScope — legacy diagonal alias variants (Issue #1915)', () => {
+  const emptyNs: ScopeNamespaces = {
+    regionKeys: new Set(),
+    groupSlugs: new Set(),
+  };
+
+  it.each([
+    ['north-east', 'NE'],
+    ['south-east', 'SE'],
+    ['south-west', 'SW'],
+    ['north-west', 'NW'],
+  ])('resolves hyphenated diagonal "%s" to canonical region_key "%s"', (alias, canonical) => {
+    expect(resolveScope(alias, emptyNs)).toEqual({ kind: 'region', regionKey: canonical });
+  });
+
+  it.each([
+    ['ne', 'NE'],
+    ['nw', 'NW'],
+    ['se', 'SE'],
+    ['sw', 'SW'],
+  ])('resolves lowercase abbreviation "%s" to canonical region_key "%s"', (alias, canonical) => {
+    expect(resolveScope(alias, emptyNs)).toEqual({ kind: 'region', regionKey: canonical });
+  });
+
+  it('hyphenated diagonal alias matching is case-insensitive on the raw value', () => {
+    expect(resolveScope('North-East', emptyNs)).toEqual({ kind: 'region', regionKey: 'NE' });
+    expect(resolveScope('NORTH-EAST', emptyNs)).toEqual({ kind: 'region', regionKey: 'NE' });
+  });
+
+  it('lowercase abbreviation alias matching is case-insensitive on the raw value', () => {
+    expect(resolveScope('Ne', emptyNs)).toEqual({ kind: 'region', regionKey: 'NE' });
+    expect(resolveScope('Sw', emptyNs)).toEqual({ kind: 'region', regionKey: 'SW' });
+  });
+});

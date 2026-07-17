@@ -55,6 +55,14 @@ export const VALID_SCOPES: Set<string> = new Set(
   ['north', 'south', 'east', 'west', 'central'] as const,
 );
 
+// Issue #1915 — legacy lowercase diagonal abbreviations. Unlike the full-word
+// diagonal aliases (northeast/southeast/...), these are only 2 characters and
+// contain no hyphen, so they never match SCOPE_SLUG_PATTERN below and would
+// otherwise be rejected outright by isValidScope before ever reaching
+// resolveScope's REGION_KEY_ALIASES table. Explicit whitelist, not a pattern
+// change — SCOPE_SLUG_PATTERN's "must contain a hyphen" behavior is preserved.
+const VALID_LEGACY_ABBREVIATIONS: Set<string> = new Set(['ne', 'nw', 'se', 'sw']);
+
 // Issue #1745 Batch A scope-change (AC2 plan-completeness fix) — real `scope=`
 // values written by the Discover landing macro-region cards are backend `regionKey`
 // values (see useDiscoverSummary), which are NOT restricted to the 5 tokens above:
@@ -69,13 +77,19 @@ const SCOPE_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)+$/;
 /**
  * Structural validity check for a `scope=` URL param value. Accepts:
  *  - the original 5 fixed direction/central tokens (VALID_SCOPES),
- *  - corridor direction codes (VALID_DIRECTIONS), and
- *  - kebab-case area-group slugs (2+ hyphen-separated segments).
+ *  - corridor direction codes (VALID_DIRECTIONS),
+ *  - kebab-case area-group slugs (2+ hyphen-separated segments), and
+ *  - legacy lowercase diagonal abbreviations (Issue #1915 — ne/nw/se/sw).
  * This is landing-level validation only (does it look like a real scope value) —
  * it does not, and must not, drive any downstream area/school/agri panel filtering.
  */
 export function isValidScope(value: string): boolean {
-  return VALID_SCOPES.has(value) || VALID_REGION_KEYS.has(value) || SCOPE_SLUG_PATTERN.test(value);
+  return (
+    VALID_SCOPES.has(value) ||
+    VALID_REGION_KEYS.has(value) ||
+    VALID_LEGACY_ABBREVIATIONS.has(value) ||
+    SCOPE_SLUG_PATTERN.test(value)
+  );
 }
 
 /**

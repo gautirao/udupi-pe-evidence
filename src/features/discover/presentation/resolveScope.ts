@@ -74,6 +74,23 @@ export const REGION_KEY_ALIASES: ReadonlyMap<string, string> = new Map([
   ['southeast', 'SE'],
   ['southwest', 'SW'],
   ['northwest', 'NW'],
+  // Issue #1915 — legacy hyphenated diagonal forms (e.g. `?scope=north-east`)
+  // pass isValidScope's SCOPE_SLUG_PATTERN (kebab-case, 2+ segments) but had
+  // no entry here, so they silently resolved to kind:'none' instead of the
+  // correct diagonal region. Same canonical targets as their non-hyphenated
+  // counterparts above.
+  ['north-east', 'NE'],
+  ['south-east', 'SE'],
+  ['south-west', 'SW'],
+  ['north-west', 'NW'],
+  // Issue #1915 — legacy lowercase abbreviations. These also require a
+  // corresponding isValidScope allowance in discoverUrlNormalize.ts (they
+  // don't match SCOPE_SLUG_PATTERN, which requires a hyphen), otherwise they
+  // never reach this map.
+  ['ne', 'NE'],
+  ['nw', 'NW'],
+  ['se', 'SE'],
+  ['sw', 'SW'],
 ]);
 
 export interface ScopeNamespaces {

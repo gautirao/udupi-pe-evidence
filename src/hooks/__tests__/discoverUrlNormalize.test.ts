@@ -141,6 +141,27 @@ describe('isValidScope / coerceScope — canonical region keys (Issue #1910 revi
   });
 });
 
+// Issue #1915 — legacy lowercase diagonal abbreviations (ne/nw/se/sw). These
+// are 2-character, hyphen-less tokens, so they fail SCOPE_SLUG_PATTERN and
+// are absent from VALID_SCOPES/VALID_REGION_KEYS — without an explicit
+// whitelist entry they are rejected before ever reaching resolveScope's
+// REGION_KEY_ALIASES table (same silent-drop failure mode as Gap A).
+describe('isValidScope / coerceScope — legacy lowercase abbreviations (Issue #1915)', () => {
+  it.each(['ne', 'nw', 'se', 'sw'])('accepts the lowercase abbreviation "%s"', (abbrev) => {
+    expect(isValidScope(abbrev)).toBe(true);
+    expect(coerceScope(abbrev)).toBe(abbrev);
+  });
+
+  it('does not accept uppercase abbreviations via this whitelist (they already pass via VALID_REGION_KEYS)', () => {
+    expect(VALID_REGION_KEYS.has('NE')).toBe(true);
+    expect(isValidScope('NE')).toBe(true);
+  });
+
+  it('rejects a hyphenated diagonal that is not one of the abbreviations (still gated by SCOPE_SLUG_PATTERN)', () => {
+    expect(isValidScope('north-east')).toBe(true); // matches SCOPE_SLUG_PATTERN, unrelated to this whitelist
+  });
+});
+
 describe('normalizeDiscoverSearchParams — journey alias matrix', () => {
   it('resolves journey=area to region=area-first (full alias matrix)', () => {
     const result = normalizeDiscoverSearchParams(paramsOf('journey=area'));
