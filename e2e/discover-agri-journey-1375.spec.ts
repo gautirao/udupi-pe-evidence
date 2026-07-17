@@ -4,9 +4,13 @@
  * Phase 7A E2E coverage for issue #1375:
  * "test(discover-agri): add E2E coverage for agriculture discovery journey"
  *
- * ACs verified (all 12):
- *   AC1  — journey-card-agri-first visible + click → agri-landing-panel
- *   AC2  — agri-landing-panel shows 'Search agricultural land' CTA copy
+ * ACs covered by this spec (all 12):
+ *   AC1  — journey-card-agri-first visible + click → enters journey=agri-first
+ *   AC2  — agri-first landing renders the corridor-first CorridorLandingPanel
+ *          (corridor-landing-list + AgriLandingIntro hero, Issue #1429/#1771).
+ *          UPDATED (#1423): the legacy static agri-landing-panel testid + the
+ *          'Search agricultural land' CTA copy were removed by the corridor-first
+ *          redesign; this test asserts the current supported affordance.
  *   AC3  — agri-selected-summary visible after area selection; agri-count populated
  *   AC4  — agri-acreage shown when agriAcreage > 0 in stub response
  *   AC5  — agri-listings-list + agri-listing-card present; agri-land-area when landArea present
@@ -237,6 +241,40 @@ const AGRI_LISTING_DETAIL_FIXTURE = {
   status: 'LIVE',
 };
 
+/**
+ * Corridor groups fixture for the agri-first landing panel (Issue #1429 cumulative
+ * corridor model). Served by GET /api/discover/regional-area-groups.
+ * A non-empty groups[] makes CorridorLandingPanel render the corridor list
+ * (data-testid="corridor-landing-list") + AgriLandingIntro hero, deterministically.
+ * maxKm values MUST be in {10,25,50,100} (useRegionalAreaGroups skips others).
+ */
+const AGRI_CORRIDOR_GROUPS_FIXTURE = {
+  city: CITY,
+  groups: [
+    {
+      directionCode: 'N',
+      groupName: 'North towards Kundapur',
+      availableMaxDistances: [
+        {
+          maxKm: 10,
+          distanceLabel: 'Within 10 km',
+          includedBandCodes: ['0_10'],
+          listingCount: 3,
+          agriAcreage: 45.5,
+          areaKeys: [AREA_KEY],
+        },
+        {
+          maxKm: 25,
+          distanceLabel: 'Up to 25 km',
+          includedBandCodes: ['0_10', '10_25'],
+          listingCount: 7,
+          areaKeys: [AREA_KEY, 'IN|KA|Udupi|Brahmavar'],
+        },
+      ],
+    },
+  ],
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -360,30 +398,47 @@ async function navigateAgriAndZoom(
 test.describe('@integration-ui 1375 — Agriculture Discover journey (Phase 7A)', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
-  // ── TEST 1 — AC1 + AC2: Journey entry point (JourneySwitcher) ────────────
+  // ── TEST 1 — AC1 + AC2: Journey entry point (JourneySwitcher → corridor landing) ──
+  // #1423: the agri-first landing is the corridor-first CorridorLandingPanel
+  // (Issue #1429 cumulative-distance model + ReTrends hero card #1771/#1798), NOT the
+  // legacy static "agri-landing-panel" with a "Search agricultural land" CTA. The journey
+  // card itself is unchanged; only the panel contract evolved. This asserts the current
+  // supported affordance via the real click journey — no skip, no arbitrary wait.
 
   test(
-    'AC1+AC2: journey-card-agri-first visible; click navigates to agri-landing-panel with CTA copy',
+    'AC1+AC2: journey-card-agri-first visible; click enters journey=agri-first and renders corridor landing panel',
     async ({ page }) => {
       await stubCommonRoutes(page);
+
+      // Corridor-first landing fetches GET /api/discover/regional-area-groups.
+      // Stub it so CorridorLandingPanel deterministically renders the corridor list.
+      await page.route('**/api/discover/regional-area-groups**', (r) =>
+        fulfillJson(r, 200, AGRI_CORRIDOR_GROUPS_FIXTURE),
+      );
 
       // Navigate to /discover without journey param — guided entry shows JourneySwitcher
       await page.goto(`/discover?city=${CITY}`);
       await page.waitForLoadState('domcontentloaded');
 
-      // AC1: journey card is visible
+      // AC1: journey card is visible and actionable
       const agriCard = page.locator('[data-testid="journey-card-agri-first"]');
       await expect(agriCard).toBeVisible({ timeout: 10_000 });
 
-      // AC1: clicking it transitions to agri-landing-panel
+      // AC1: clicking it enters the agri-first journey
       await agriCard.click();
 
-      // AC2: agri-landing-panel shown with recognisable CTA copy
-      const landingPanel = page.locator('[data-testid="agri-landing-panel"]');
+      // AC2 (canonical journey state): URL carries journey=agri-first
+      await expect(page).toHaveURL(/journey=agri-first/, { timeout: 8_000 });
+
+      // AC2 (current panel contract): corridor-first landing panel renders
+      const landingPanel = page.locator('[data-testid="corridor-landing-list"]');
       await expect(landingPanel).toBeVisible({ timeout: 8_000 });
 
-      // AC2: the panel contains the 'Search agricultural land' CTA text (case-insensitive)
-      await expect(landingPanel).toContainText(/search agricultural land/i);
+      // AC2: ReTrends agri hero intro present with the corridor-model framing copy
+      const intro = page.locator('[data-testid="agri-landing-intro"]');
+      await expect(intro).toBeVisible({ timeout: 5_000 });
+      await expect(intro).toContainText(/agricultural land near/i);
+      await expect(landingPanel).toContainText(/searched by corridor, direction and distance/i);
     },
   );
 
