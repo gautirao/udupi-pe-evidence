@@ -41,12 +41,18 @@ vi.mock('@/components/layout/AppLayout', () => ({
 vi.mock('@/components/broker/CommercialListingForm', () => ({
   CommercialListingForm: ({
     initialPropertyType,
+    initialListingPurpose,
     onSwitchToGenericFlow,
   }: {
     initialPropertyType: string;
+    initialListingPurpose?: string;
     onSwitchToGenericFlow: () => void;
   }) => (
-    <div data-testid="commercial-listing-form" data-initial-property-type={initialPropertyType}>
+    <div
+      data-testid="commercial-listing-form"
+      data-initial-property-type={initialPropertyType}
+      data-initial-listing-purpose={initialListingPurpose ?? ''}
+    >
       <button type="button" onClick={onSwitchToGenericFlow}>
         Switch flow
       </button>
@@ -57,9 +63,9 @@ vi.mock('@/components/broker/CommercialListingForm', () => ({
 // Import AFTER mocks are registered.
 import CommercialNewListingPage from '../CommercialNewListingPage';
 
-function renderPage() {
+function renderPage(entry = '/broker/listings/new/commercial') {
   return render(
-    <MemoryRouter initialEntries={['/broker/listings/new/commercial']}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/broker/listings/new/commercial" element={<CommercialNewListingPage />} />
         <Route path="/" element={<div data-testid="home-page">Home Redirect</div>} />
@@ -116,5 +122,33 @@ describe('CommercialNewListingPage (#1741 follow-up)', () => {
     renderPage();
     expect(screen.getByTestId('home-page')).toBeInTheDocument();
     expect(screen.queryByTestId('commercial-listing-form')).not.toBeInTheDocument();
+  });
+});
+
+describe('CommercialNewListingPage demand-gap prefill (Issue #1748)', () => {
+  it('seeds a valid commercial type and listingPurpose from forwarded prefill params', () => {
+    mockRole.current = 'broker';
+    renderPage('/broker/listings/new/commercial?areaKey=kaup&propertyType=warehouse&listingPurpose=rent');
+    const form = screen.getByTestId('commercial-listing-form');
+    expect(form.getAttribute('data-initial-property-type')).toBe('warehouse');
+    expect(form.getAttribute('data-initial-listing-purpose')).toBe('rent');
+  });
+
+  it('ignores an incompatible propertyType (residential) — keeps the commercial default', () => {
+    mockRole.current = 'broker';
+    renderPage('/broker/listings/new/commercial?propertyType=apartment&listingPurpose=sale');
+    const form = screen.getByTestId('commercial-listing-form');
+    expect(form.getAttribute('data-initial-property-type')).toBe('commercial');
+    expect(form.getAttribute('data-initial-listing-purpose')).toBe('sale');
+  });
+
+  it('Switch flow returns to the selector WITH the prefill context preserved (areaKey/propertyType/listingPurpose)', async () => {
+    mockRole.current = 'broker';
+    renderPage('/broker/listings/new/commercial?areaKey=kaup&propertyType=warehouse&listingPurpose=rent');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Switch flow' }));
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/broker/listings/new?areaKey=kaup&propertyType=warehouse&listingPurpose=rent',
+    );
   });
 });

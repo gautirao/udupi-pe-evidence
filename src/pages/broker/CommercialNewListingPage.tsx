@@ -1,8 +1,9 @@
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { canAccessRoute } from '@/lib/routeAccess';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { CommercialListingForm } from '@/components/broker/CommercialListingForm';
+import { parseDemandPrefill, buildPrefillSearch, commercialTypeFromPropertyType } from '@/lib/demandPrefill';
 import { Loader2 } from 'lucide-react';
 
 /**
@@ -20,7 +21,17 @@ import { Loader2 } from 'lucide-react';
 export default function CommercialNewListingPage() {
   const { userRole, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const role = userRole as string | null;
+
+  // #1748 — seed supported fields from demand-gap prefill forwarded by the
+  // journey selector. Only a valid commercial type overrides the default;
+  // an incompatible/unknown propertyType is ignored (keeps 'commercial').
+  const prefill = parseDemandPrefill(searchParams);
+  const initialPropertyType = commercialTypeFromPropertyType(prefill.propertyType) ?? 'commercial';
+  // #1748 — "Switch flow" returns to the selector; carry the prefill context back
+  // so the selector keeps its recommendation/params (parity with browser Back).
+  const prefillSearch = buildPrefillSearch(prefill);
 
   if (authLoading) {
     return (
@@ -39,8 +50,9 @@ export default function CommercialNewListingPage() {
   return (
     <AppLayout>
       <CommercialListingForm
-        initialPropertyType="commercial"
-        onSwitchToGenericFlow={() => navigate('/broker/listings/new')}
+        initialPropertyType={initialPropertyType}
+        initialListingPurpose={prefill.listingPurpose}
+        onSwitchToGenericFlow={() => navigate(`/broker/listings/new${prefillSearch}`)}
         navigate={navigate}
       />
     </AppLayout>

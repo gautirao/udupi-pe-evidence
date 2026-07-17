@@ -10,8 +10,8 @@
  *  - the grid collapses to a single column on mobile (grid-cols-1 base class)
  */
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -32,13 +32,17 @@ vi.mock('@/components/layout/AppLayout', () => ({
 // Import AFTER mocks are registered.
 import NewListingJourneySelector from '../NewListingJourneySelector';
 
-function renderSelector() {
+function renderSelector(entry = '/broker/listings/new') {
   return render(
-    <MemoryRouter initialEntries={['/broker/listings/new']}>
+    <MemoryRouter initialEntries={[entry]}>
       <NewListingJourneySelector />
     </MemoryRouter>,
   );
 }
+
+beforeEach(() => {
+  mockNavigate.mockClear();
+});
 
 describe('NewListingJourneySelector (Issue #1719)', () => {
   it('renders exactly three journey cards with the expected labels', () => {
@@ -113,5 +117,55 @@ describe('NewListingJourneySelector (Issue #1719)', () => {
     expect(grid).not.toBeNull();
     expect(grid?.className).toContain('grid-cols-1');
     expect(grid?.className).toContain('md:grid-cols-3');
+  });
+});
+
+describe('NewListingJourneySelector demand-gap prefill (Issue #1748)', () => {
+  const RESIDENTIAL_PREFILL = '/broker/listings/new?areaKey=brahmavar&propertyType=apartment&listingPurpose=sale';
+
+  it('recommends the journey matching the demand-gap propertyType', () => {
+    renderSelector('/broker/listings/new?propertyType=commercial_land');
+    const commercialCard = screen.getByRole('button', { name: 'Create commercial listing' });
+    expect(within(commercialCard).getByText('Recommended')).toBeInTheDocument();
+    // exactly one journey is highlighted
+    expect(screen.getAllByText('Recommended')).toHaveLength(1);
+  });
+
+  it('recommends no journey for an ambiguous / unknown propertyType (never the wrong one)', () => {
+    renderSelector('/broker/listings/new?propertyType=land');
+    expect(screen.queryByText('Recommended')).not.toBeInTheDocument();
+  });
+
+  it('renders no recommendation for direct navigation without prefill (unchanged behaviour)', () => {
+    renderSelector();
+    expect(screen.queryByText('Recommended')).not.toBeInTheDocument();
+  });
+
+  it('forwards the prefill params onto the selected typed create route', async () => {
+    renderSelector(RESIDENTIAL_PREFILL);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Create residential listing' }));
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/broker/listings/new/residential?areaKey=brahmavar&propertyType=apartment&listingPurpose=sale',
+    );
+  });
+
+  it('forwards prefill even when a different (incompatible) journey is chosen — typed page ignores it safely', async () => {
+    renderSelector(RESIDENTIAL_PREFILL);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Create agricultural listing' }));
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/broker/listings/new/agricultural?areaKey=brahmavar&propertyType=apartment&listingPurpose=sale',
+    );
+  });
+
+  it('drops junk params and keeps only the sanitised prefill triple', async () => {
+    renderSelector('/broker/listings/new?areaKey=kaup&propertyType=WAREHOUSE&listingPurpose=lease&foo=bar');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Create commercial listing' }));
+    // propertyType normalised to lowercase, invalid listingPurpose (lease) dropped, foo dropped
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/broker/listings/new/commercial?areaKey=kaup&propertyType=warehouse',
+    );
   });
 });

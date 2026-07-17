@@ -218,11 +218,13 @@ function CarpetAreaInput({ initialArea, initialUnit, onChange }: CarpetAreaInput
 
 interface ResidentialListingFormProps {
   initialPropertyType: ResidentialPropertyType;
+  /** #1748 — optional demand-gap prefill; defaults to 'sale' when absent. */
+  initialListingPurpose?: 'sale' | 'rent';
   onSwitchToGenericFlow: () => void;
   navigate: NavigateFunction;
 }
 
-export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericFlow, navigate }: ResidentialListingFormProps) {
+export function ResidentialListingForm({ initialPropertyType, initialListingPurpose, onSwitchToGenericFlow, navigate }: ResidentialListingFormProps) {
   const createListing = useCreateListing();
   const { toast } = useToast();
 
@@ -246,7 +248,7 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
   const addressConfirmed = draftListing?.addressConfirmed ?? false;
 
   const [propertyType, setPropertyType] = useState<ResidentialPropertyType>(initialPropertyType);
-  const [listingPurpose, setListingPurpose] = useState<'sale' | 'rent'>('sale');
+  const [listingPurpose, setListingPurpose] = useState<'sale' | 'rent'>(initialListingPurpose ?? 'sale');
   const [hasAttempted, setHasAttempted] = useState(false);
   const [moreDetailsOpen, setMoreDetailsOpen] = useState(false);
 

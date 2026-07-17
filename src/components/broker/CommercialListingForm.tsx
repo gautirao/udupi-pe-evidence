@@ -200,11 +200,14 @@ function hubTypeOptionsFor(subtype: CommercialSubtype | undefined) {
 
 interface CommercialListingFormProps {
   initialPropertyType: CommercialPropertyType;
+  /** #1748 — optional demand-gap prefill; only the shared 'sale'|'rent' vocabulary
+   *  is forwarded (never 'lease'). Defaults to 'sale' when absent. */
+  initialListingPurpose?: 'sale' | 'rent';
   onSwitchToGenericFlow: () => void;
   navigate: NavigateFunction;
 }
 
-export function CommercialListingForm({ initialPropertyType, onSwitchToGenericFlow, navigate }: CommercialListingFormProps) {
+export function CommercialListingForm({ initialPropertyType, initialListingPurpose, onSwitchToGenericFlow, navigate }: CommercialListingFormProps) {
   const createListing = useCreateListing();
   const { toast } = useToast();
 
@@ -222,7 +225,7 @@ export function CommercialListingForm({ initialPropertyType, onSwitchToGenericFl
 
   const [propertyType, setPropertyType] = useState<CommercialPropertyType>(initialPropertyType);
   const [explicitSubtype, setExplicitSubtype] = useState<ExplicitSubtype>('');
-  const [listingPurpose, setListingPurpose] = useState<CommercialPurpose>('sale');
+  const [listingPurpose, setListingPurpose] = useState<CommercialPurpose>(initialListingPurpose ?? 'sale');
   const [hasAttempted, setHasAttempted] = useState(false);
   const [moreDetailsOpen, setMoreDetailsOpen] = useState(false);
 

@@ -42,12 +42,18 @@ vi.mock('@/components/layout/AppLayout', () => ({
 vi.mock('@/components/broker/ResidentialListingForm', () => ({
   ResidentialListingForm: ({
     initialPropertyType,
+    initialListingPurpose,
     onSwitchToGenericFlow,
   }: {
     initialPropertyType: string;
+    initialListingPurpose?: string;
     onSwitchToGenericFlow: () => void;
   }) => (
-    <div data-testid="residential-listing-form" data-initial-property-type={initialPropertyType}>
+    <div
+      data-testid="residential-listing-form"
+      data-initial-property-type={initialPropertyType}
+      data-initial-listing-purpose={initialListingPurpose ?? ''}
+    >
       <button type="button" onClick={onSwitchToGenericFlow}>
         Switch flow
       </button>
@@ -58,9 +64,9 @@ vi.mock('@/components/broker/ResidentialListingForm', () => ({
 // Import AFTER mocks are registered.
 import ResidentialNewListingPage from '../ResidentialNewListingPage';
 
-function renderPage() {
+function renderPage(entry = '/broker/listings/new/residential') {
   return render(
-    <MemoryRouter initialEntries={['/broker/listings/new/residential']}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/broker/listings/new/residential" element={<ResidentialNewListingPage />} />
         <Route path="/" element={<div data-testid="home-page">Home Redirect</div>} />
@@ -117,5 +123,41 @@ describe('ResidentialNewListingPage (Issue #1719)', () => {
     renderPage();
     expect(screen.getByTestId('home-page')).toBeInTheDocument();
     expect(screen.queryByTestId('residential-listing-form')).not.toBeInTheDocument();
+  });
+});
+
+describe('ResidentialNewListingPage demand-gap prefill (Issue #1748)', () => {
+  it('seeds a valid residential subtype and listingPurpose from forwarded prefill params', () => {
+    mockRole.current = 'broker';
+    renderPage('/broker/listings/new/residential?areaKey=brahmavar&propertyType=villa&listingPurpose=rent');
+    const form = screen.getByTestId('residential-listing-form');
+    expect(form.getAttribute('data-initial-property-type')).toBe('villa');
+    expect(form.getAttribute('data-initial-listing-purpose')).toBe('rent');
+  });
+
+  it('ignores an incompatible propertyType (commercial) — keeps the apartment default', () => {
+    mockRole.current = 'broker';
+    renderPage('/broker/listings/new/residential?propertyType=commercial_land&listingPurpose=sale');
+    const form = screen.getByTestId('residential-listing-form');
+    expect(form.getAttribute('data-initial-property-type')).toBe('apartment');
+    expect(form.getAttribute('data-initial-listing-purpose')).toBe('sale');
+  });
+
+  it('ignores an invalid listingPurpose (lease) — leaves the form default (no purpose forwarded)', () => {
+    mockRole.current = 'broker';
+    renderPage('/broker/listings/new/residential?propertyType=house&listingPurpose=lease');
+    const form = screen.getByTestId('residential-listing-form');
+    expect(form.getAttribute('data-initial-property-type')).toBe('house');
+    expect(form.getAttribute('data-initial-listing-purpose')).toBe('');
+  });
+
+  it('Switch flow returns to the selector WITH the prefill context preserved (areaKey/propertyType/listingPurpose)', async () => {
+    mockRole.current = 'broker';
+    renderPage('/broker/listings/new/residential?areaKey=brahmavar&propertyType=villa&listingPurpose=rent');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Switch flow' }));
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/broker/listings/new?areaKey=brahmavar&propertyType=villa&listingPurpose=rent',
+    );
   });
 });

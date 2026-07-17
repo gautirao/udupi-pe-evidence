@@ -1,7 +1,8 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { cn } from '@/lib/utils';
 import { Home, Building2, Sprout, ArrowRight, ChevronRight, HelpCircle, type LucideIcon } from 'lucide-react';
+import { parseDemandPrefill, recommendJourney, buildPrefillSearch, type JourneyKey } from '@/lib/demandPrefill';
 
 /**
  * Issue #1719 — first screen after "New listing". Replaces the old default
@@ -67,9 +68,11 @@ const LIFECYCLE_STEPS = ['Create listing', 'Save draft', 'Submit for review', 'P
 interface JourneyCardProps {
   journey: Journey;
   onSelect: (path: string) => void;
+  /** #1748 — when this journey matches the demand-gap propertyType, highlight it. */
+  recommended?: boolean;
 }
 
-function JourneyCard({ journey, onSelect }: JourneyCardProps) {
+function JourneyCard({ journey, onSelect, recommended = false }: JourneyCardProps) {
   const Icon = journey.icon;
 
   const activate = () => onSelect(journey.path);
@@ -87,11 +90,18 @@ function JourneyCard({ journey, onSelect }: JourneyCardProps) {
         }
       }}
       className={cn(
-        'flex flex-col gap-4 rounded-xl border border-border bg-card p-6 text-left cursor-pointer',
+        'relative flex flex-col gap-4 rounded-xl border bg-card p-6 text-left cursor-pointer',
         'transition-all hover:border-primary/50 hover:shadow-md',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        recommended ? 'border-primary ring-1 ring-primary/40 shadow-sm' : 'border-border',
       )}
     >
+      {recommended && (
+        <span className="absolute right-4 top-4 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+          Recommended
+        </span>
+      )}
+
       <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
         <Icon className="h-6 w-6 text-primary" aria-hidden="true" />
       </span>
@@ -135,6 +145,18 @@ function JourneyCard({ journey, onSelect }: JourneyCardProps) {
 
 export default function NewListingJourneySelector() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // #1748 — TopGapCards forwards demand-gap context (areaKey / propertyType /
+  // listingPurpose) here. The params stay in the URL while the selector is shown
+  // (so browser Back preserves context); propertyType only RECOMMENDS a journey.
+  const prefill = parseDemandPrefill(searchParams);
+  const recommended: JourneyKey | null = recommendJourney(prefill.propertyType);
+  const prefillSearch = buildPrefillSearch(prefill);
+
+  const selectJourney = (path: string) => {
+    void navigate(`${path}${prefillSearch}`);
+  };
 
   return (
     <AppLayout>
@@ -150,7 +172,12 @@ export default function NewListingJourneySelector() {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {JOURNEYS.map((journey) => (
-            <JourneyCard key={journey.key} journey={journey} onSelect={navigate} />
+            <JourneyCard
+              key={journey.key}
+              journey={journey}
+              onSelect={selectJourney}
+              recommended={recommended === journey.key}
+            />
           ))}
         </div>
 

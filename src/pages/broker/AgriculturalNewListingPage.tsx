@@ -1,8 +1,9 @@
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { canAccessRoute } from '@/lib/routeAccess';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AgriculturalListingForm } from '@/components/broker/AgriculturalListingForm';
+import { parseDemandPrefill, buildPrefillSearch } from '@/lib/demandPrefill';
 import { Loader2 } from 'lucide-react';
 
 /**
@@ -18,7 +19,13 @@ import { Loader2 } from 'lucide-react';
 export default function AgriculturalNewListingPage() {
   const { userRole, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const role = userRole as string | null;
+
+  // #1748 — Agricultural itself seeds no fields (fixed type, sale-only), but
+  // "Switch flow" must still carry the demand-gap prefill back to the selector so
+  // its recommendation/params survive switching away and back (parity with Back).
+  const prefillSearch = buildPrefillSearch(parseDemandPrefill(searchParams));
 
   if (authLoading) {
     return (
@@ -37,7 +44,7 @@ export default function AgriculturalNewListingPage() {
   return (
     <AppLayout>
       <AgriculturalListingForm
-        onSwitchToGenericFlow={() => navigate('/broker/listings/new')}
+        onSwitchToGenericFlow={() => navigate(`/broker/listings/new${prefillSearch}`)}
         navigate={navigate}
       />
     </AppLayout>
