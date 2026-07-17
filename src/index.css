@@ -208,24 +208,109 @@
     @apply bg-card;
   }
 
+  /* Listing-cluster marker redesign — compact dark-navy circular badge
+     (count on top, "HOMES" label below), matching the area-group/macro-region
+     dark-card palette (#0F172A / rgba(27,42,69,0.95), white text) rather than
+     the old --pin-cluster teal token (kept defined for any other consumer,
+     just unused here — see PropertyMap.tsx iconCreateFunction). Static (no
+     pulse) per the reference screenshot; hover/focus emphasis + the
+     "Tap to zoom in ›" caption mirror .dp-region/.area-group-card exactly
+     (AreaMarkerLayer.tsx), just anchored on this circular badge instead of a
+     split anchor/core wrapper — Leaflet positions the parent
+     .leaflet-marker-icon, never this div, so scaling it directly on
+     hover/focus is safe. */
   .custom-marker-cluster {
-    background-color: hsl(var(--pin-cluster) / 0.9);
-    color: hsl(var(--pin-cluster-foreground));
-    border-color: hsl(var(--pin-cluster-foreground) / 0.3);
-    @apply rounded-full flex items-center justify-center font-semibold shadow-lg border-2;
-    animation: cluster-pulse 2s ease-in-out infinite;
+    position: relative;
+    background-color: #0F172A;
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.6);
+    @apply rounded-full flex flex-col items-center justify-center shadow-lg border-2;
+    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s, border-color 0.15s;
   }
 
-  .custom-marker-cluster-small {
-    @apply text-sm;
+  .custom-marker-cluster:hover,
+  .custom-marker-cluster:focus-visible {
+    border-color: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 14px 32px rgba(18, 24, 38, 0.42);
+    transform: scale(1.06);
   }
 
-  .custom-marker-cluster-medium {
-    @apply text-base;
+  .custom-marker-cluster:focus {
+    outline: none;
   }
 
-  .custom-marker-cluster-large {
-    @apply text-lg;
+  .custom-marker-cluster:focus-visible {
+    box-shadow:
+      0 14px 32px rgba(18, 24, 38, 0.42),
+      0 0 0 3px hsl(var(--background)),
+      0 0 0 6px hsl(var(--copper));
+  }
+
+  .custom-marker-cluster-count {
+    font-family: 'Geist Mono', ui-monospace, 'SF Mono', monospace;
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .custom-marker-cluster-label {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    opacity: 0.82;
+    margin-top: 1px;
+  }
+
+  /* .custom-marker-cluster-small/-medium/-large carry no CSS rules — per
+     the ReTrends design source (clusterBubble() in PortalMap.jsx), disc
+     DIAMETER scales with count via PropertyMap.tsx's iconCreateFunction
+     sizeNum, but count/label typography stays constant across tiers
+     (-count/-label/-cap all have their own explicit font-size above). The
+     class names are still applied in PropertyMap.tsx and selected on by
+     existing E2E specs — only their (now unneeded) font-size cascade was
+     removed. */
+
+  /* "Tap to zoom in ›" caption — identical reveal contract + wording to
+     .dp-region-cap / .area-group-cap (AreaMarkerLayer.tsx / index.css above). */
+  .custom-marker-cluster-cap {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-top: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    background: #ffffff;
+    box-shadow: 0 4px 10px rgba(17, 24, 39, 0.1), 0 2px 4px rgba(17, 24, 39, 0.05);
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #934b2d;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateX(-50%) translateY(-3px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+
+  .custom-marker-cluster-cap-arrow {
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .custom-marker-cluster:hover .custom-marker-cluster-cap,
+  .custom-marker-cluster:focus-visible .custom-marker-cluster-cap {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .custom-marker-cluster,
+    .custom-marker-cluster-cap {
+      transition: none;
+    }
   }
 
   .agri-cluster {
@@ -357,11 +442,6 @@
     .area-group-cap {
       transition: none;
     }
-  }
-
-  @keyframes cluster-pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
   }
 
   .property-popup .leaflet-popup-content-wrapper {

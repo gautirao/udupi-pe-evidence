@@ -1239,18 +1239,47 @@ function MarkerClusterLayer({
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
         let size: 'small' | 'medium' | 'large' = 'small';
-        let sizeNum = 36;
+        // Sized with real padding around the 17px count + 8px "HOMES" label
+        // (0.05em letter-spacing) so the label never crowds/overflows the
+        // circle edge — the prior 38/42/48px tiers left almost no margin
+        // once the circle's width/height were actually enforced.
+        let sizeNum = 46;
 
         if (count > 50) {
           size = 'large';
-          sizeNum = 52;
+          sizeNum = 62;
         } else if (count > 10) {
           size = 'medium';
-          sizeNum = 44;
+          sizeNum = 54;
         }
 
+        // Listing-cluster marker redesign — compact dark-navy circular badge
+        // (count on top, "HOMES" label below), matching the reference
+        // screenshot. Keyboard/hover contract mirrors AreaMarkerLayer's
+        // .dp-region / .area-group-card bubbles exactly: tabindex/role="button"/
+        // aria-label make the marker a real control, and a "Tap to zoom in ›"
+        // caption (index.css .custom-marker-cluster-cap) reveals on hover/focus
+        // using the SAME wording as those other marker tiers. The outer
+        // .custom-marker-cluster class name is preserved unchanged — several
+        // E2E specs select on it for presence/visibility only.
+        const noun = count === 1 ? 'home' : 'homes';
+        const ariaLabel = escapeHtml(
+          `${count} ${noun} in this cluster. Activate to zoom in.`,
+        );
+
         return L.divIcon({
-          html: `<div class="custom-marker-cluster custom-marker-cluster-${size}">${count}</div>`,
+          // Leaflet's divIcon sets iconSize on the OUTER wrapper it creates
+          // around this html string, not on this inner div — without an
+          // explicit width/height here, .custom-marker-cluster (a flex
+          // container with no padding) collapses to hug its content instead
+          // of filling that allocated circle, producing a cramped, padding-
+          // less badge. Setting width/height explicitly (matching sizeNum,
+          // the same value passed to iconSize below) fixes that.
+          html: `<div class="custom-marker-cluster custom-marker-cluster-${size}" style="width:${sizeNum}px;height:${sizeNum}px;" tabindex="0" role="button" aria-label="${ariaLabel}">
+            <span class="custom-marker-cluster-count">${count}</span>
+            <span class="custom-marker-cluster-label">HOMES</span>
+            <span class="custom-marker-cluster-cap" aria-hidden="true">Tap to zoom in <span class="custom-marker-cluster-cap-arrow">&#8250;</span></span>
+          </div>`,
           className: '',
           iconSize: L.point(sizeNum, sizeNum),
         });
@@ -1290,8 +1319,30 @@ function MarkerClusterLayer({
 
     map.addLayer(clusterGroup);
 
+    // Listing-cluster keyboard bridge. Leaflet.markercluster regenerates
+    // cluster icons on every zoom/pan (unlike AreaMarkerLayer's static area
+    // markers), so per-icon listener attachment on 'add' would need constant
+    // re-wiring against an untyped plugin event. Delegate once on the map
+    // container instead: Enter/Space on a focused .custom-marker-cluster
+    // bubbles up here and is forwarded to a native .click() on the element,
+    // which triggers Leaflet.markercluster's own click handling
+    // (zoomToBoundsOnClick) — this makes the existing click path keyboard-
+    // reachable without touching clustering/camera behaviour at all.
+    const container = map.getContainer();
+    const handleClusterKeydown = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const clusterEl = target.closest<HTMLElement>('.custom-marker-cluster');
+      if (!clusterEl) return;
+      e.preventDefault();
+      clusterEl.click();
+    };
+    container.addEventListener('keydown', handleClusterKeydown);
+
     return () => {
       map.removeLayer(clusterGroup);
+      container.removeEventListener('keydown', handleClusterKeydown);
     };
   }, [listings, map, onSelectListing, selectedListingId, hoveredListingId, onMarkerClickWithPosition]);
 
