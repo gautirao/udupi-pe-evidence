@@ -6,6 +6,7 @@ import { DiscoverMapContextOverlay } from '@/components/discover/DiscoverMapCont
 import { DiscoverMapLegend } from '@/components/discover/DiscoverMapLegend';
 import { CitySelect } from '@/components/discover/CitySelect';
 import { RegionGuidanceCard, type RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
+import { ExploreMapPanel } from '@/components/map/ExploreMapPanel';
 import { DiscoverMapCountBadge } from '@/components/discover/DiscoverMapCountBadge';
 import { MapStatsBar, MarkersTruncationNotice } from '@/components/discover/MapStatsBar';
 import { MapEmptyGuidance } from '@/components/discover/MapEmptyGuidance';
@@ -458,6 +459,13 @@ export function DiscoverMapCanvas({
         focusedGroup={focusedGroup}
         city={city}
       />
+
+      {/* Discover map marker redesign — "EXPLORE THE MAP" guidance card, shown
+          only at the bare city landing (5 macro-region bubbles: no scope and
+          no journey picked yet). Sits beneath the top-left city chip rendered
+          by DiscoverMapContextOverlay just above. Never shown once a region
+          is picked (RegionGuidanceCard takes over) or a journey is chosen. */}
+      {isLandingState && !urlState.scope && !urlState.journey && <ExploreMapPanel />}
 
       {/* Radius legend — bottom-left, raised above the Leaflet zoom control (bottomleft).
           Only the selected-school radius state; swatches match the real map markers/ring.

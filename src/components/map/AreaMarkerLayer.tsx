@@ -11,6 +11,7 @@ import {
   type ClusterChipPlacement,
 } from '@/lib/map/areaMarkerBucketing';
 import { AREA_LAYER_MAX_ZOOM, clusterCanSplit, hasSpatialSpread } from '@/lib/map/areaClusterSplit';
+import { compassPointFor, computeCompassLayout } from '@/lib/map/regionCompassLayout';
 import type { CameraIntent } from '@/hooks/useDiscoverMapData';
 
 /**
@@ -233,14 +234,29 @@ function makeAreaCard(
   if (area.isMacroRegion) {
     const sel = area.isSelected;
     const bg = sel ? '#0F172A' : 'rgba(27,42,69,0.95)';
-    const count = (area.listingCount ?? 0).toLocaleString();
+    const count = area.listingCount ?? 0;
+    const countText = count.toLocaleString();
+    const noun = count === 1 ? 'property' : 'properties';
     const shortLabel = getShortRegionLabel(area.areaLabel);
+    const ariaLabel = escapeHtml(
+      `${area.areaLabel}, ${countText} ${noun}. Activate to zoom into the region.`,
+    );
 
-    html = `<div data-testid="area-marker" class="macro-region-bubble" style="transform:translate(-50%,-50%);font-family:inherit;opacity:${opacity};pointer-events:auto;cursor:pointer;">
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:86px;height:86px;border-radius:9999px;background:${bg};color:#fff;box-shadow:0 10px 25px rgba(17,24,39,0.25);border:2px solid rgba(255,255,255,0.6);transform:scale(${sel ? 1.06 : 1});transition:all .15s cubic-bezier(.4,0,.2,1);">
-        <span style="font-family:${MONO};font-size:19px;font-weight:700;line-height:1;color:#fff;">${count}</span>
-        <span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.95);white-space:nowrap;max-width:74px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(shortLabel)}</span>
+    // Discover map marker redesign — circular region bubble (short name +
+    // large mono count + properties label) with a "Tap to zoom in ›" pill
+    // revealed on hover/keyboard-focus (index.css .dp-region rules). The
+    // outer .dp-region wrapper is the anchor (translate(-50%,-50%), never
+    // scaled); only .dp-region-core scales on hover/focus so the caption
+    // below it never shifts. tabindex/role/aria-label make the bubble a
+    // real keyboard-operable control — Leaflet's marker click listener is
+    // bound to this element's subtree and bubbles normally.
+    html = `<div data-testid="area-marker" class="macro-region-bubble dp-region" tabindex="0" role="button" aria-label="${ariaLabel}" style="position:relative;width:92px;height:92px;transform:translate(-50%,-50%);font-family:inherit;opacity:${opacity};pointer-events:auto;cursor:pointer;">
+      <div class="dp-region-core" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:92px;height:92px;border-radius:9999px;background:${bg};color:#fff;box-shadow:0 10px 25px rgba(17,24,39,0.25);border:2px solid rgba(255,255,255,${sel ? '0.92' : '0.6'});transform:scale(${sel ? 1.06 : 1});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s cubic-bezier(.4,0,.2,1),border-color .18s;">
+        <span style="font-size:13px;font-weight:700;letter-spacing:-0.01em;line-height:1.1;color:rgba(255,255,255,0.95);white-space:nowrap;max-width:76px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(shortLabel)}</span>
+        <span style="font-family:${MONO};font-size:18px;font-weight:700;line-height:1;color:#fff;margin-top:1px;">${countText}</span>
+        <span style="font-size:8px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;opacity:.82;color:#fff;">${noun}</span>
       </div>
+      <div class="dp-region-cap" aria-hidden="true" style="position:absolute;top:100%;left:50%;margin-top:6px;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:9999px;background:${C_PAPER};box-shadow:${PILL_SHADOW};font-size:10.5px;font-weight:700;color:${C_COPPER_HOVER};white-space:nowrap;pointer-events:none;">Tap to zoom in <span style="font-size:12px;line-height:1;">&#8250;</span></div>
     </div>`;
   } else if (area.isGroup) {
     const sel = area.isSelected;
@@ -407,6 +423,35 @@ export function AreaMarkerLayer({
 }: AreaMarkerLayerProps) {
   const map = useMap();
 
+  // ── Region compass-layout recompute trigger ────────────────────────────────
+  // Macro-region markers (city landing) are positioned on a synthetic compass
+  // circle (regionCompassLayout.ts), computed from the map container's pixel
+  // size — this must be recalculated whenever that size or the zoom-driven
+  // container-point projection changes (design requirement: resize, browser
+  // width change, initial layout settle, overview zoom change). Scoped to a
+  // no-op listener when no macro-region markers are present, so every other
+  // (non-landing) call site is unaffected.
+  const [regionLayoutTick, setRegionLayoutTick] = useState(0);
+  const hasMacroRegions = areas.some((a) => a.isMacroRegion);
+  useEffect(() => {
+    if (!hasMacroRegions) return;
+    const recompute = () => setRegionLayoutTick((t) => t + 1);
+    map.on('zoomend', recompute);
+    map.on('resize', recompute);
+    // Leaflet's own 'resize' event only fires after map.invalidateSize() runs
+    // (wired elsewhere via a ResizeObserver on the map container); observe the
+    // container directly here too so a layout-only resize (no invalidateSize
+    // call) still recomputes the compass circle.
+    const container = map.getContainer();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(recompute) : null;
+    ro?.observe(container);
+    return () => {
+      map.off('zoomend', recompute);
+      map.off('resize', recompute);
+      ro?.disconnect();
+    };
+  }, [map, hasMacroRegions]);
+
   // ── Legacy path (default) — renders exactly as before this issue. Every
   // area passed in gets its own full labelled pin; no density degradation.
   useEffect(() => {
@@ -415,14 +460,39 @@ export function AreaMarkerLayer({
     // Recompute inside the effect so the closure captures the current focusedGroupAreas.
     const effectFocusedSet = focusedGroupAreas ? new Set(focusedGroupAreas) : null;
 
+    // Shared compass-circle layout for macro-region markers only (city
+    // landing). Computed once per effect run from the CURRENT container size,
+    // not memoized outside the effect, since it must reflect the container's
+    // pixel dimensions at the moment markers are (re)built.
+    const mapSize = map.getSize();
+    const compassLayout = computeCompassLayout(mapSize.x, mapSize.y);
+
     for (const area of areas) {
       // Issue #1595 — when a group is focused, render ONLY its member areas. Non-member
       // areas are hidden entirely (previously dimmed to 0.3), so the map stays focused on
       // the selected group's context with no confusing ghost/shadow markers for unrelated
       // areas. Members always render at full opacity.
       if (effectFocusedSet && !effectFocusedSet.has(area.areaKey)) continue;
+
+      // Region cluster markers (city landing) are navigational compass
+      // selectors, not geographic centroid pins — their DRAWN position comes
+      // from the shared compass-circle layout (regionCompassLayout.ts),
+      // keyed on the region's stable backend region_key (area.areaKey for
+      // these entries — see useDiscoverMapPresentation.ts's
+      // `areaKey: region.regionKey`), never from the aggregated/approximate
+      // geo_center_lat/lon. The `area` object passed to onAreaClick/
+      // onAreaCameraIntent below is untouched — its real geo_center_lat/lon
+      // and bbox still drive click navigation and camera fitting.
+      const [markerLat, markerLon] = area.isMacroRegion
+        ? (() => {
+            const point = compassPointFor(area.areaKey, compassLayout);
+            const latLng = map.containerPointToLatLng([point.x, point.y]);
+            return [latLng.lat, latLng.lng] as const;
+          })()
+        : ([area.geo_center_lat, area.geo_center_lon] as const);
+
       const marker = L.marker(
-        [area.geo_center_lat, area.geo_center_lon],
+        [markerLat, markerLon],
         { icon: makeAreaCard(area, 1.0, journey, selectedSchool) }
       );
 
@@ -442,6 +512,21 @@ export function AreaMarkerLayer({
 
       marker.addTo(map);
       markers.push(marker);
+
+      // Region cluster markers (city landing) carry tabindex/role="button" in
+      // their divIcon HTML (makeAreaCard) so they're reachable via Tab, but a
+      // plain div doesn't natively translate an Enter/Space keydown into a
+      // click the way <button> does — bridge it here so the marker's own
+      // 'click' handler above also fires from the keyboard.
+      if (area.isMacroRegion) {
+        const el = marker.getElement()?.querySelector<HTMLElement>('.dp-region');
+        el?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            el.click();
+          }
+        });
+      }
     }
 
     return () => {
@@ -450,7 +535,11 @@ export function AreaMarkerLayer({
   // focusedGroupAreas is an array reference — it changes identity when the group
   // changes, which is correct: re-render recreates markers with new opacity values.
   // journey and selectedSchool change the badge content so must also be deps.
-  }, [areas, map, onAreaClick, onAreaCameraIntent, focusedGroupAreas, journey, selectedSchool, enableDegradation]);
+  // regionLayoutTick is the deliberate resize/zoom recompute trigger for the
+  // macro-region compass layout — bumping it rebuilds every marker (cheap:
+  // this path only ever renders a handful of navigation markers) with fresh
+  // container-point projections.
+  }, [areas, map, onAreaClick, onAreaCameraIntent, focusedGroupAreas, journey, selectedSchool, enableDegradation, regionLayoutTick]);
 
   // ── Degraded path (Issue #1798 PR-B, opt-in) ───────────────────────────────
   // Tracks the current zoom so bucketing recomputes on zoom only (pan-invariant,

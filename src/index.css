@@ -269,6 +269,47 @@
     box-shadow: 0 12px 28px rgba(17, 24, 39, 0.18), 0 4px 10px rgba(17, 24, 39, 0.08);
   }
 
+  /* Discover map marker redesign — macro-region cluster bubble (city landing).
+     .dp-region is the anchor wrapper (base transform: translate(-50%,-50%),
+     never scaled — see AreaMarkerLayer.tsx makeAreaCard). Hover/focus scale
+     and border/shadow emphasis apply to the inner .dp-region-core only, so
+     the "Tap to zoom in ›" caption below stays put with no jitter. */
+  .dp-region-cap {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-3px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+
+  .dp-region:hover .dp-region-cap,
+  .dp-region:focus-visible .dp-region-cap {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  .dp-region:hover .dp-region-core,
+  .dp-region:focus-visible .dp-region-core {
+    border-color: rgba(255, 255, 255, 0.92) !important;
+    box-shadow: 0 14px 32px rgba(18, 24, 38, 0.42) !important;
+    transform: scale(1.07) !important;
+  }
+
+  .dp-region:focus {
+    outline: none;
+  }
+
+  .dp-region:focus-visible .dp-region-core {
+    box-shadow:
+      0 14px 32px rgba(18, 24, 38, 0.42),
+      0 0 0 3px hsl(var(--background)),
+      0 0 0 6px hsl(var(--copper)) !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dp-region-cap {
+      transition: none;
+    }
+  }
+
   @keyframes cluster-pulse {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.05); }
