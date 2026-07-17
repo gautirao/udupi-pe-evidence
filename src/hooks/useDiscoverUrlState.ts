@@ -273,6 +273,12 @@ export interface DiscoverUrlActions {
   clearAreaSelection: () => void;
   /** Set the free-text search query — debounced replace. Empty string removes the param. */
   setSearchQuery: (q: string) => void;
+  /**
+   * "Clear all" — atomically clears every filter key AND `q` in a single REPLACE.
+   * Cancels any pending setFiltersLive/setSearchQuery debounce timers first so a
+   * stale-snapshot write cannot race in afterward and revive the old `q` (Issue #1854).
+   */
+  clearAllFiltersAndSearch: () => void;
   /** Set the active journey — pushes a new history entry. Null removes the journey param. */
   setJourney: (journey: DiscoverJourney | null) => void;
   /** Select an area group — pushes a new history entry. Null removes the groupId param. */
@@ -1060,6 +1066,46 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     [setUrlParams],
   );
 
+  // Issue #1854 — "Clear all" must be ONE atomic URL write, not several racing debounced
+  // ones. setUrlParams (react-router's useSearchParams setter) closes over the
+  // `searchParams` snapshot from the render in which it was created — it is NOT a
+  // React-style functional-setState queue. A caller that fires setFiltersLive (300 ms
+  // debounce), setSearchQuery('') (0 ms debounce), and/or reportViewport (300 ms debounce)
+  // back-to-back schedules timers that all close over that SAME stale snapshot. A 0 ms
+  // `q` clear can land first, trigger a re-render, and a previously-scheduled 300 ms
+  // filters or viewport write then fires against its stale pre-click snapshot (which
+  // still has the old `q`/filters), silently reviving them. Cancelling all three pending
+  // timers (filters, search, viewport) and writing filters + `q` in a single setUrlParams
+  // call removes the race entirely. Regression-tested (243/243 passing) for all three
+  // timer sources, including the viewport-debounce case added after initial review.
+  const clearAllFiltersAndSearch = useCallback(() => {
+    if (filtersLiveTimer.current) {
+      clearTimeout(filtersLiveTimer.current);
+      filtersLiveTimer.current = null;
+    }
+    if (searchTimer.current) {
+      clearTimeout(searchTimer.current);
+      searchTimer.current = null;
+    }
+    // Cancel any pending viewport debounce too: a reportViewport timer closes over the
+    // pre-clear snapshot (still carrying old q + filters) and would fire ~300 ms later,
+    // reviving them alongside its lat/lon/zoom write — the same stale-snapshot race as
+    // the filters/search timers, via the third timer originally missed (Issue #1854).
+    if (viewportTimer.current) {
+      clearTimeout(viewportTimer.current);
+      viewportTimer.current = null;
+    }
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        serializeFilters(next, {});
+        next.delete('q');
+        return next;
+      },
+      { replace: true }, // REPLACE — clearing filters/search is not a history destination
+    );
+  }, [setUrlParams]);
+
   /**
    * Atomic city switch — single PUSH, clears journey, groupId, areaKey, and viewport.
    * Property filters (type, beds, price, seller, booleans, dates) are preserved.
@@ -1623,6 +1669,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     setFiltersCommitted,
     setSchoolParams,
     setSearchQuery,
+    clearAllFiltersAndSearch,
     setJourney,
     setSchoolJourney,
     selectGroup,

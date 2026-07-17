@@ -1266,18 +1266,22 @@ export default function MapDiscovery() {
   // activeContextChips is memoised so its identity only changes when a relevant
   // dimension actually changes — prevents unnecessary re-renders of DiscoverRightPanel.
   // Hoisted above the isCityValid early return to satisfy Rules of Hooks.
-  // Issue #1817 (AC10) — "Clear all" composes the two existing, already-tested atomic
-  // primitives (handleFiltersChange + setSearchQuery) rather than a new URL action:
-  // handleFiltersChange({}) serialises every DiscoverUrlFilters key as absent (see
-  // serializeFilters — a key not present in the payload is explicitly deleted from the
-  // URL, not just skipped), which clears type/beds/price/seller/board/category/booleans/
-  // dates via a single REPLACE. setSearchQuery('') separately clears `q`. Journey, scope,
-  // areaKey/schoolId, and the map camera are untouched by either call (design §9: "Clear
-  // all drops all filter+q keys but keeps city, journey, and scope keys").
+  // Issue #1854 — "Clear all" previously composed handleFiltersChange({}) (which
+  // schedules a 300 ms-debounced setFiltersLive URL write) with a separate immediate
+  // setSearchQuery('') write. Both writes close over the SAME pre-click URL snapshot
+  // (react-router's useSearchParams setter is not a functional-setState queue), so the
+  // immediate `q` clear lands first, then the still-pending debounced filters write
+  // fires ~300 ms later against its stale snapshot and silently revives the old `q`.
+  // urlActions.clearAllFiltersAndSearch() does both in a single atomic REPLACE, and
+  // cancels any in-flight setFiltersLive/setSearchQuery timers first so nothing can
+  // race in afterward. Local `filters` state is cleared directly (not via
+  // handleFiltersChange, which would re-arm the debounced URL write). Journey, scope,
+  // areaKey/schoolId, and the map camera are untouched (design §9: "Clear all drops all
+  // filter+q keys but keeps city, journey, and scope keys").
   const handleClearAllFiltersAndSearch = useCallback(() => {
-    handleFiltersChange({});
-    urlActions.setSearchQuery('');
-  }, [handleFiltersChange, urlActions]);
+    setFilters({});
+    urlActions.clearAllFiltersAndSearch();
+  }, [setFilters, urlActions]);
 
   const activeContextChips = useMemo(
     () => (

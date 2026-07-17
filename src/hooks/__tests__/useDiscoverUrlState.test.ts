@@ -3580,3 +3580,123 @@ describe('useDiscoverUrlState — OD-1 group migration still routes through hist
     }
   });
 });
+
+describe('useDiscoverUrlState — clearAllFiltersAndSearch (Issue #1854 atomicity)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('clears filters and q immediately', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&type=apartment&q=manipal'),
+    });
+
+    act(() => {
+      result.current[1].clearAllFiltersAndSearch();
+    });
+
+    expect(result.current[0].q).toBe('');
+    expect(result.current[0].filters.propertyTypes).toBeUndefined();
+  });
+
+  it('does not let a stale in-flight setFiltersLive debounce revive `q` after the flush (regression for #1854)', () => {
+    // Reproduces the original bug's shape: a debounced filters write (setFiltersLive,
+    // 300ms) is scheduled — closing over the URL snapshot at that moment, which still
+    // has q=manipal — mirroring what handleFiltersChange({}) used to schedule as half
+    // of the old two-call "Clear all" composition. Before that debounce timer has had
+    // a chance to fire, clearAllFiltersAndSearch() runs (the second half of the old
+    // composition was setSearchQuery('') firing near-immediately). The fix requires
+    // clearAllFiltersAndSearch to cancel the pending setFiltersLive timer; without that
+    // cancellation, the stale-snapshot write fires ~300ms later and silently reinstates
+    // q=manipal — exactly the "briefly cleared, then bounces back" bug report.
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&type=apartment&q=manipal'),
+    });
+
+    act(() => {
+      result.current[1].setFiltersLive({ propertyTypes: ['house'] });
+    });
+
+    act(() => {
+      result.current[1].clearAllFiltersAndSearch();
+    });
+
+    // Bounce-back symptom check #1 — cleared right after the click.
+    expect(result.current[0].q).toBe('');
+
+    // Flush every pending timer, including the setFiltersLive debounce scheduled above.
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    // Bounce-back symptom check #2 — must STILL be cleared after the flush. This is
+    // the assertion that fails on the pre-fix two-call composition.
+    expect(result.current[0].q).toBe('');
+    expect(result.current[0].filters.propertyTypes).toBeUndefined();
+  });
+
+  it('does not let a stale in-flight setSearchQuery debounce revive `q` after the flush', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&q=manipal'),
+    });
+
+    act(() => {
+      // User was mid-typing a new search term (debounced 300ms) when Clear All fired.
+      result.current[1].setSearchQuery('surathkal');
+    });
+
+    act(() => {
+      result.current[1].clearAllFiltersAndSearch();
+    });
+
+    expect(result.current[0].q).toBe('');
+
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(result.current[0].q).toBe('');
+  });
+
+  it('cancels the pending reportViewport debounce so no stale viewport write lands after Clear All', () => {
+    // A reportViewport write (300ms debounce) is scheduled while the user was panning,
+    // then Clear All fires before it lands. clearAllFiltersAndSearch must cancel the
+    // pending viewportTimer (the third debounce timer, alongside filters/search) so the
+    // stale-snapshot write cannot fire afterward (#1854 follow-up). The observable proof
+    // the timer was cancelled: no lat/lon/zoom get written on flush — viewport stays null
+    // for a URL that started without one. (The `q`/filters assertions guard the reviewer's
+    // stated bounce-back concern; the viewport assertion is what fails without the fix,
+    // since react-router's functional updater otherwise still emits the stale coords.)
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&type=apartment&q=manipal'),
+    });
+
+    act(() => {
+      result.current[1].reportViewport({ lat: 13.34, lon: 74.74, zoom: 14 });
+    });
+
+    act(() => {
+      result.current[1].clearAllFiltersAndSearch();
+    });
+
+    expect(result.current[0].q).toBe('');
+    expect(result.current[0].filters.propertyTypes).toBeUndefined();
+
+    // Flush every pending timer, including the reportViewport debounce scheduled above.
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    // Bounce-back symptom check — q and filters must STILL be cleared after the flush.
+    // Without the viewportTimer cancellation, the stale reportViewport write fires here
+    // and revives q=manipal (+type=apartment) alongside its lat/lon/zoom write.
+    expect(result.current[0].q).toBe('');
+    expect(result.current[0].filters.propertyTypes).toBeUndefined();
+    // And no stale viewport coords should have landed (URL started without lat/lon/zoom).
+    expect(result.current[0].viewport).toBeNull();
+  });
+});
