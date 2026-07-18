@@ -32,11 +32,17 @@ class ResolveAreaServiceTest {
     @Mock
     private JdbcOperations jdbcOperations;
 
+    @Mock
+    private com.example.realestate.discover.CityActivationGuard cityActivationGuard;
+
     private BuyerAreaIntelligenceService service;
 
     @BeforeEach
     void setUp() {
-        service = new BuyerAreaIntelligenceService(repository, jdbcOperations);
+        // #1935: resolveArea(citySlug, areaSlug) under test in this file queries "areas JOIN
+        // cities ... AND c.is_active = true" inline — it never calls cityActivationGuard. The
+        // mock is required only to satisfy the constructor signature.
+        service = new BuyerAreaIntelligenceService(repository, jdbcOperations, cityActivationGuard);
     }
 
     @Test

@@ -36,11 +36,19 @@ class RegionalAreaGroupsServiceTest {
     @Mock
     private JdbcOperations jdbcOperations;
 
+    @Mock
+    private CityActivationGuard cityActivationGuard;
+
     private RegionalAreaGroupsService service;
 
     @BeforeEach
     void setUp() {
-        service = new RegionalAreaGroupsService(jdbcOperations);
+        // #1935: getRegionalGroups(city, propertyType) short-circuits to an empty response when
+        // cityActivationGuard.isActiveCitySlug(city) is false. Every test in this file exercises
+        // "udupi" expecting the query pipeline to actually run, so stub the guard true to
+        // preserve pre-#1935 behaviour.
+        when(cityActivationGuard.isActiveCitySlug(anyString())).thenReturn(true);
+        service = new RegionalAreaGroupsService(jdbcOperations, cityActivationGuard);
     }
 
     // ── Corridor-first shape ──────────────────────────────────────────────────

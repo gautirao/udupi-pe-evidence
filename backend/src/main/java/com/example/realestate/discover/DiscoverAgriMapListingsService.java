@@ -70,6 +70,7 @@ public class DiscoverAgriMapListingsService {
             JOIN areas a ON a.area_key = pl.area_key
             JOIN cities c ON c.id = a.city_id
             WHERE c.slug = ?
+              AND c.is_active = true
               AND LOWER(pl.property_type) = 'agricultural_land'
               AND pl.status = 'LIVE'
               AND pl.archived_at IS NULL

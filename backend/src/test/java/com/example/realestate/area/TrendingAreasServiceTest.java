@@ -40,11 +40,17 @@ class TrendingAreasServiceTest {
     @Mock
     private com.example.realestate.school.SchoolService schoolService;
 
+    @Mock
+    private com.example.realestate.discover.CityActivationGuard cityActivationGuard;
+
     private AreaOverviewService service;
 
     @BeforeEach
     void setUp() {
-        service = new AreaOverviewService(jdbcOperations, namedJdbcTemplate, schoolService, new ObjectMapper());
+        // #1935: getTrending(int) under test here has no city parameter and never calls the
+        // guard — the mock is required only to satisfy the constructor signature.
+        service = new AreaOverviewService(
+                jdbcOperations, namedJdbcTemplate, schoolService, new ObjectMapper(), cityActivationGuard);
     }
 
     // ==================== limit clamping ====================

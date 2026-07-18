@@ -95,7 +95,7 @@ class DiscoverSummaryServiceIT {
 
     @BeforeEach
     void setUp() {
-        service = new DiscoverSummaryService(jdbcTemplate);
+        service = new DiscoverSummaryService(jdbcTemplate, new CityActivationGuard(jdbcTemplate));
         areaSummaryService = new AreaSummaryService(jdbcTemplate);
         backfillService = new RegionalClassificationBackfillService(jdbcTemplate);
         areaGroupsService = new AreaGroupsService(jdbcTemplate);

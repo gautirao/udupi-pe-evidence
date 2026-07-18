@@ -50,9 +50,11 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
     private static final Set<String> ALLOWED_LISTING_PURPOSES = Set.of("sale", "rent");
 
     private final JdbcOperations jdbcOperations;
+    private final CityActivationGuard cityActivationGuard;
 
-    public DiscoverSummaryService(JdbcOperations jdbcOperations) {
+    public DiscoverSummaryService(JdbcOperations jdbcOperations, CityActivationGuard cityActivationGuard) {
         this.jdbcOperations = jdbcOperations;
+        this.cityActivationGuard = cityActivationGuard;
     }
 
     @Override
@@ -162,6 +164,7 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
         sb.append("""
 
                 WHERE c.slug = ?
+                  AND c.is_active = true
                   AND ag.is_active = true
                 GROUP BY ag.slug, ag.name
                 ORDER BY listing_count DESC, ag.name ASC
@@ -181,6 +184,16 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
 
     private List<DiscoverSummaryResponse.RegionCount> queryCorridorRegions(
             String city, DiscoverListingPredicateBuilder.Sql sql, String normalizedType) {
+
+        // #1935: regional_area_classifications.city_key stores the city SLUG (see
+        // RegionalClassificationBackfillService.UPSERT_SQL) but has NO FK/join to cities —
+        // an inactive city's rows would otherwise still be readable via rac.city_key = ?.
+        // Short-circuit BEFORE the denormalized classification table so an inactive city
+        // yields the exact same empty regions list an unknown city yields.
+        if (!cityActivationGuard.isActiveCitySlug(city)) {
+            log.debug("queryCorridorRegions city={} — inactive or unknown city", city);
+            return List.of();
+        }
 
         List<Object> params = new ArrayList<>();
         params.add(city); // l.city_key

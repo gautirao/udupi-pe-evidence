@@ -57,7 +57,7 @@ class RegionalClassificationBackfillIT {
     @BeforeEach
     void setUp() {
         backfillService = new RegionalClassificationBackfillService(jdbcTemplate);
-        regionalAreaGroupsService = new RegionalAreaGroupsService(jdbcTemplate);
+        regionalAreaGroupsService = new RegionalAreaGroupsService(jdbcTemplate, new CityActivationGuard(jdbcTemplate));
         jdbcTemplate.update("DELETE FROM property_listings");
     }
 

@@ -1,5 +1,6 @@
 package com.example.realestate.area;
 
+import com.example.realestate.discover.CityActivationGuard;
 import com.example.realestate.school.SchoolResponse;
 import com.example.realestate.school.SchoolService;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -44,15 +45,18 @@ public class AreaOverviewService {
     private final NamedParameterJdbcTemplate namedJdbcTemplate;
     private final SchoolService schoolService;
     private final ObjectMapper objectMapper;
+    private final CityActivationGuard cityActivationGuard;
 
     public AreaOverviewService(JdbcOperations jdbcOperations,
                                NamedParameterJdbcTemplate namedJdbcTemplate,
                                SchoolService schoolService,
-                               ObjectMapper objectMapper) {
+                               ObjectMapper objectMapper,
+                               CityActivationGuard cityActivationGuard) {
         this.jdbcOperations = jdbcOperations;
         this.namedJdbcTemplate = namedJdbcTemplate;
         this.schoolService = schoolService;
         this.objectMapper = objectMapper;
+        this.cityActivationGuard = cityActivationGuard;
     }
 
     /**
@@ -64,6 +68,15 @@ public class AreaOverviewService {
      */
     @Transactional(readOnly = true)
     public AreaOverviewResponse assembleResponse(String areaKey) {
+        // #1935: area_overview_stats has no FK/join to cities — gate via CityActivationGuard
+        // BEFORE reading the denormalized snapshot so an inactive city's area throws the SAME
+        // AreaNotFoundException (404) an unknown areaKey throws, never leaking that the city
+        // once existed.
+        if (!cityActivationGuard.isActiveForAreaKey(areaKey)) {
+            log.debug("assembleResponse: areaKey={} — inactive or unknown city", areaKey);
+            throw new AreaNotFoundException(areaKey);
+        }
+
         // 1. Look up the area row
         AreaRow row = queryAreaRow(areaKey);
         if (row == null) {
@@ -142,14 +155,22 @@ public class AreaOverviewService {
         int clampedLimit = Math.max(1, Math.min(TRENDING_MAX_LIMIT, limit));
         log.debug("getTrending: limit={} (clamped={})", limit, clampedLimit);
 
+        // #1935: area_overview_stats has no direct is_active gate — INNER JOIN through
+        // areas -> cities so an inactive city's high-ranking area cannot leak into the
+        // global trending feed (was previously reading area_overview_stats directly with
+        // no city join at all). Column names/aliases are unchanged so the row mapper below
+        // (and therefore the response DTO) is untouched.
         List<TrendingAreasResponse.TrendingAreaDto> areas = jdbcOperations.query(
                 """
-                SELECT area_key, listing_count_90d, median_price_paise,
-                       district_area_key
-                FROM area_overview_stats
-                WHERE listing_count_90d IS NOT NULL
-                  AND listing_count_90d > 0
-                ORDER BY listing_count_90d DESC
+                SELECT aos.area_key, aos.listing_count_90d, aos.median_price_paise,
+                       aos.district_area_key
+                FROM area_overview_stats aos
+                JOIN areas a ON a.area_key = aos.area_key
+                JOIN cities c ON c.id = a.city_id
+                WHERE c.is_active = true
+                  AND aos.listing_count_90d IS NOT NULL
+                  AND aos.listing_count_90d > 0
+                ORDER BY aos.listing_count_90d DESC
                 LIMIT ?
                 """,
                 (rs, rowNum) -> {
@@ -212,6 +233,14 @@ public class AreaOverviewService {
     public TrendsOptionsResponse getOptions(String city, int limit) {
         int clampedLimit = Math.max(1, Math.min(OPTIONS_MAX_LIMIT, limit));
         log.debug("getOptions: city={}, limit={} (clamped={})", city, limit, clampedLimit);
+
+        // #1935: area_overview_stats has no FK/join to cities — gate via CityActivationGuard
+        // BEFORE reading the denormalized snapshot so an inactive city yields the SAME empty
+        // options response an unknown city yields.
+        if (!cityActivationGuard.isActiveCitySlug(city)) {
+            log.debug("getOptions: city={} — inactive or unknown city", city);
+            return new TrendsOptionsResponse(city, List.of());
+        }
 
         List<TrendsOptionsResponse.TrendsOptionDto> areas = jdbcOperations.query(
                 """

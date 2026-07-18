@@ -83,7 +83,7 @@ class DiscoverSummaryScaleIT {
 
     @BeforeEach
     void setUp() {
-        service = new DiscoverSummaryService(jdbcTemplate);
+        service = new DiscoverSummaryService(jdbcTemplate, new CityActivationGuard(jdbcTemplate));
         jdbcTemplate.update("DELETE FROM property_listings");
     }
 

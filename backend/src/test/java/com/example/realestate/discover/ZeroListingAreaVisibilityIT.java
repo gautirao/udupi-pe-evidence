@@ -103,7 +103,8 @@ class ZeroListingAreaVisibilityIT {
     @DisplayName("documented: the zero-listing area is intentionally ABSENT from "
             + "RegionalAreaGroupsService.getRegionalGroups (unconditional density filter, unchanged by #1887 PR3)")
     void zeroListingArea_absentFromRegionalAreaGroups() {
-        RegionalAreaGroupsService regionalAreaGroupsService = new RegionalAreaGroupsService(jdbcTemplate);
+        RegionalAreaGroupsService regionalAreaGroupsService =
+                new RegionalAreaGroupsService(jdbcTemplate, new CityActivationGuard(jdbcTemplate));
 
         RegionalAreaGroupsResponse response = regionalAreaGroupsService.getRegionalGroups("udupi", "house");
 

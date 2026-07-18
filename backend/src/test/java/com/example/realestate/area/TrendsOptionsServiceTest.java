@@ -37,11 +37,20 @@ class TrendsOptionsServiceTest {
     @Mock
     private com.example.realestate.school.SchoolService schoolService;
 
+    @Mock
+    private com.example.realestate.discover.CityActivationGuard cityActivationGuard;
+
     private AreaOverviewService service;
 
     @BeforeEach
     void setUp() {
-        service = new AreaOverviewService(jdbcOperations, namedJdbcTemplate, schoolService, new ObjectMapper());
+        // #1935: getOptions(city, limit) gates on cityActivationGuard.isActiveCitySlug(city)
+        // before querying area_overview_stats. Every existing test in this file exercises a
+        // "real" city (udupi/mangalore) expecting the query to actually run, so the guard must
+        // return true here to preserve pre-#1935 behaviour for this test file.
+        when(cityActivationGuard.isActiveCitySlug(anyString())).thenReturn(true);
+        service = new AreaOverviewService(
+                jdbcOperations, namedJdbcTemplate, schoolService, new ObjectMapper(), cityActivationGuard);
     }
 
     // ==================== limit clamping ====================

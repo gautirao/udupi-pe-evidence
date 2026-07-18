@@ -323,6 +323,7 @@ public class AreaGroupsService {
                 ON pl.area_key = agm.area_key
                AND __PREDICATE__
             WHERE c.slug = ?
+              AND c.is_active = true
               AND ag.is_active = true
             GROUP BY ag.id, ag.slug, ag.name, ag.subtitle, ag.display_order, cr.display_order,
                      agm.area_key, agm.display_order, a.min_lat, a.min_lon, a.max_lat, a.max_lon
@@ -482,6 +483,7 @@ public class AreaGroupsService {
             LEFT JOIN city_regions cr
                 ON cr.city_id = crm.city_id AND cr.region_key = crm.region_key
             WHERE c.slug = ?
+              AND c.is_active = true
               AND ag.is_active = true
             ORDER BY ag.display_order, agm.display_order
             """;

@@ -398,6 +398,50 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             @Param("polygonWkt") String polygonWkt,
             Pageable pageable);
 
+    /**
+     * #1935: same predicate as {@link #findLiveListingsWithinPolygon} plus an INNER JOIN through
+     * {@code areas} -> {@code cities} requiring {@code c.is_active = true} — identical fail-closed
+     * pattern to {@link #findByIdWithActiveCity} / {@link #findAllLiveListingsWithActiveCity}. An
+     * orphan LIVE listing inside the polygon (area_key not resolvable to a canonical area) is
+     * excluded too, so an inactive city's listings are absent from polygon search results exactly
+     * as if they never existed.
+     */
+    @Query(value = """
+            SELECT pl.* FROM public.property_listings pl
+            INNER JOIN areas a ON a.area_key = pl.area_key
+            INNER JOIN cities c ON c.id = a.city_id
+            WHERE pl.status = 'LIVE'
+              AND pl.archived_at IS NULL
+              AND pl.is_duplicate = false
+              AND c.is_active = true
+              AND pl.latitude IS NOT NULL
+              AND pl.longitude IS NOT NULL
+              AND ST_Contains(
+                    ST_GeomFromText(:polygonWkt, 4326),
+                    ST_SetSRID(ST_Point(pl.longitude, pl.latitude), 4326)
+              )
+            ORDER BY pl.trust_tier ASC, pl.ranking_score DESC, pl.created_at DESC, pl.id DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM public.property_listings pl
+            INNER JOIN areas a ON a.area_key = pl.area_key
+            INNER JOIN cities c ON c.id = a.city_id
+            WHERE pl.status = 'LIVE'
+              AND pl.archived_at IS NULL
+              AND pl.is_duplicate = false
+              AND c.is_active = true
+              AND pl.latitude IS NOT NULL
+              AND pl.longitude IS NOT NULL
+              AND ST_Contains(
+                    ST_GeomFromText(:polygonWkt, 4326),
+                    ST_SetSRID(ST_Point(pl.longitude, pl.latitude), 4326)
+              )
+            """,
+            nativeQuery = true)
+    Page<Listing> findLiveListingsWithinPolygonWithActiveCity(
+            @Param("polygonWkt") String polygonWkt,
+            Pageable pageable);
+
     // ===== Discovery feed =====
 
     /**
@@ -419,6 +463,55 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             """,
             nativeQuery = true)
     Page<Listing> findAllLiveListings(Pageable pageable);
+
+    /**
+     * #1935: id-scoped lookup of a LIVE listing whose area belongs to an ACTIVE city.
+     *
+     * <p>INNER JOIN (not LEFT JOIN) through {@code areas} -> {@code cities} — an orphan LIVE
+     * listing whose {@code area_key} does not resolve to a canonical {@code areas} row is
+     * intentionally excluded too (fail-closed by construction, not a special case). This makes an
+     * inactive city's listing return empty here exactly like an unknown listing id does, so
+     * {@code PublicListingController.getById} cannot distinguish "belongs to an inactive city"
+     * from "does not exist" — both hit the same 404 branch. Status/archived/duplicate filtering
+     * is unchanged: this query narrows by id + active-city only; the caller still applies its
+     * existing {@code status == LIVE} check.
+     */
+    @Query(nativeQuery = true,
+           value = "SELECT pl.* FROM property_listings pl "
+                   + "INNER JOIN areas a ON a.area_key = pl.area_key "
+                   + "INNER JOIN cities c ON c.id = a.city_id "
+                   + "WHERE pl.id = :id AND c.is_active = true")
+    Optional<Listing> findByIdWithActiveCity(@Param("id") UUID id);
+
+    /**
+     * #1935: same predicate as {@link #findAllLiveListings(Pageable)} plus an INNER JOIN through
+     * {@code areas} -> {@code cities} requiring {@code c.is_active = true}. An orphan LIVE listing
+     * (area_key not resolvable to a canonical area) is excluded here too — same fail-closed
+     * rationale as {@link #findByIdWithActiveCity}. Used by the anonymous discovery feed
+     * (GET /api/public/listings/discovery) so an inactive city's listings are indistinguishable
+     * from listings that simply do not exist.
+     */
+    @Query(value = """
+            SELECT pl.* FROM property_listings pl
+            INNER JOIN areas a ON a.area_key = pl.area_key
+            INNER JOIN cities c ON c.id = a.city_id
+            WHERE pl.status = 'LIVE'
+              AND pl.archived_at IS NULL
+              AND pl.is_duplicate = false
+              AND c.is_active = true
+            ORDER BY pl.trust_tier ASC, pl.ranking_score DESC, pl.created_at DESC, pl.id DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM property_listings pl
+            INNER JOIN areas a ON a.area_key = pl.area_key
+            INNER JOIN cities c ON c.id = a.city_id
+            WHERE pl.status = 'LIVE'
+              AND pl.archived_at IS NULL
+              AND pl.is_duplicate = false
+              AND c.is_active = true
+            """,
+            nativeQuery = true)
+    Page<Listing> findAllLiveListingsWithActiveCity(Pageable pageable);
 
     // ===== Freshness / reconfirmation (#1794 Phase 1) =====
 

@@ -79,7 +79,7 @@ public class RegionSummaryService {
     @Transactional(readOnly = true)
     public RegionSummaryResponse getRegions(String citySlug, String listingPurpose) {
         Integer cityId = jdbcOperations.query(
-                "SELECT id FROM cities WHERE slug = ?",
+                "SELECT id FROM cities WHERE slug = ? AND is_active = true",
                 rs -> rs.next() ? rs.getInt("id") : null,
                 citySlug);
 

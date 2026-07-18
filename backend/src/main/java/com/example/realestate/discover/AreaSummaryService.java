@@ -219,6 +219,7 @@ public class AreaSummaryService {
                 GROUP BY area_key
             ) pl ON pl.area_key = a.area_key
             WHERE c.slug = ?
+              AND c.is_active = true
               AND array_length(string_to_array(a.area_key, '|'), 1) = 4
             ORDER BY COALESCE(pl.listing_count, 0) DESC, a.name
             """).formatted(PropertyType.AGRICULTURAL_LAND.getValue());
@@ -268,6 +269,7 @@ public class AreaSummaryService {
                 GROUP BY pl.area_key
             ) pl ON pl.area_key = a.area_key
             WHERE c.slug = ?
+              AND c.is_active = true
               AND array_length(string_to_array(a.area_key, '|'), 1) = 4
             ORDER BY COALESCE(pl.listing_count, 0) DESC, a.name
             """;
@@ -288,6 +290,7 @@ public class AreaSummaryService {
               AND pl.is_duplicate = false
               AND LOWER(pl.property_type) = LOWER(?)
               AND c.slug = ?
+              AND c.is_active = true
               AND array_length(string_to_array(pl.area_key, '|'), 1) = 4
             """;
 }

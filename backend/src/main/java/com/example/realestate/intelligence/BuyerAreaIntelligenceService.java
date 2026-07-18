@@ -1,5 +1,6 @@
 package com.example.realestate.intelligence;
 
+import com.example.realestate.discover.CityActivationGuard;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -46,12 +47,15 @@ public class BuyerAreaIntelligenceService {
 
     private final AreaIntelligenceSnapshotRepository repository;
     private final JdbcOperations jdbcOperations;
+    private final CityActivationGuard cityActivationGuard;
 
     public BuyerAreaIntelligenceService(
             AreaIntelligenceSnapshotRepository repository,
-            JdbcOperations jdbcOperations) {
+            JdbcOperations jdbcOperations,
+            CityActivationGuard cityActivationGuard) {
         this.repository = repository;
         this.jdbcOperations = jdbcOperations;
+        this.cityActivationGuard = cityActivationGuard;
     }
 
     /**
@@ -66,6 +70,14 @@ public class BuyerAreaIntelligenceService {
      */
     @Transactional(readOnly = true)
     public BuyerAreaIntelligenceResponse getAreaIntelligence(String citySlug, String areaKey) {
+        // #1935: area_intelligence_snapshot.city_slug is a plain string column — no FK to
+        // cities — so gate via CityActivationGuard BEFORE the snapshot read. An inactive city
+        // yields the SAME coherent UNAVAILABLE response an unknown/no-row snapshot yields.
+        if (!cityActivationGuard.isActiveCitySlug(citySlug)) {
+            log.debug("getAreaIntelligence: city={} — inactive or unknown city", citySlug);
+            return buildUnavailableResponse(citySlug, areaKey);
+        }
+
         Optional<AreaIntelligenceSnapshot> optional =
                 repository.findById(new AreaIntelligenceSnapshotId(citySlug, areaKey));
 
@@ -98,7 +110,8 @@ public class BuyerAreaIntelligenceService {
     public ResolveAreaResponse resolveArea(String citySlug, String areaSlug) {
         // Look up in static areas and cities tables for this city and area slug.
         List<StaticAreaRow> staticAreas = jdbcOperations.query(
-                "SELECT a.area_key, a.name FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = ? AND a.area_slug = ?",
+                "SELECT a.area_key, a.name FROM areas a JOIN cities c ON c.id = a.city_id "
+                        + "WHERE c.slug = ? AND a.area_slug = ? AND c.is_active = true",
                 (rs, rowNum) -> new StaticAreaRow(rs.getString("area_key"), rs.getString("name")),
                 citySlug,
                 areaSlug

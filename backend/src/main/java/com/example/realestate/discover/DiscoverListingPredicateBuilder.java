@@ -65,7 +65,7 @@ public class DiscoverListingPredicateBuilder {
         sb.append("pl.status = 'LIVE' AND pl.archived_at IS NULL AND pl.is_duplicate = false");
 
         // city — property_listings has no city column; resolve via areas→cities join
-        sb.append(" AND pl.area_key IN (SELECT a.area_key FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = ?)");
+        sb.append(" AND pl.area_key IN (SELECT a.area_key FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = ? AND c.is_active = true)");
         params.add(f.city());
 
         // propertyTypes

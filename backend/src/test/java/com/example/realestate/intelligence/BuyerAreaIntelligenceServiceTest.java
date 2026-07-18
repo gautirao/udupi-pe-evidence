@@ -52,6 +52,9 @@ class BuyerAreaIntelligenceServiceTest {
     @Mock
     private JdbcOperations jdbcOperations;
 
+    @Mock
+    private com.example.realestate.discover.CityActivationGuard cityActivationGuard;
+
     private BuyerAreaIntelligenceService service;
 
     /** Shared Jackson mapper for T7 JSON serialisation tests. */
@@ -59,7 +62,14 @@ class BuyerAreaIntelligenceServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new BuyerAreaIntelligenceService(repository, jdbcOperations);
+        // #1935: getAreaIntelligence(citySlug, areaKey) short-circuits to the UNAVAILABLE
+        // response when cityActivationGuard.isActiveCitySlug(citySlug) is false, before ever
+        // calling repository.findById. Every test in this file exercises "udupi"/"mangalore"
+        // expecting the repository lookup to actually run, so stub the guard true to preserve
+        // pre-#1935 behaviour.
+        org.mockito.Mockito.lenient().when(cityActivationGuard.isActiveCitySlug(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(true);
+        service = new BuyerAreaIntelligenceService(repository, jdbcOperations, cityActivationGuard);
     }
 
     // ── T1: Full-confidence snapshot ──────────────────────────────────────────

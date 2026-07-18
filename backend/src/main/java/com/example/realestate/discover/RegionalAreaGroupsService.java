@@ -66,9 +66,11 @@ public class RegionalAreaGroupsService {
     );
 
     private final JdbcOperations jdbcOperations;
+    private final CityActivationGuard cityActivationGuard;
 
-    public RegionalAreaGroupsService(JdbcOperations jdbcOperations) {
+    public RegionalAreaGroupsService(JdbcOperations jdbcOperations, CityActivationGuard cityActivationGuard) {
         this.jdbcOperations = jdbcOperations;
+        this.cityActivationGuard = cityActivationGuard;
     }
 
     /**
@@ -83,6 +85,16 @@ public class RegionalAreaGroupsService {
         String normalizedCity = city.toLowerCase();
         String normalizedType = propertyType == null ? "" : propertyType.trim().toLowerCase();
         log.debug("getRegionalGroups city={} propertyType={}", normalizedCity, normalizedType);
+
+        // #1935: regional_area_classifications.city_key stores the city SLUG (see
+        // RegionalClassificationBackfillService.UPSERT_SQL, bound from CityRow.slug()) but has
+        // NO FK/join to cities — an inactive city's rows would otherwise still be readable here.
+        // Short-circuit BEFORE hitting the denormalized classification table so an inactive city
+        // yields the exact same empty response an unknown city yields.
+        if (!cityActivationGuard.isActiveCitySlug(normalizedCity)) {
+            log.debug("getRegionalGroups city={} — inactive or unknown city", normalizedCity);
+            return new RegionalAreaGroupsResponse(normalizedCity, List.of());
+        }
 
         // ── Step 1: fetch classification rows joined with band/direction metadata
         //    and live agri listing counts per area_key.
@@ -349,6 +361,7 @@ public class RegionalAreaGroupsService {
               AND pl.area_resolution_status = 'RESOLVED'
               AND LOWER(pl.property_type) = LOWER(?)
               AND c.slug = ?
+              AND c.is_active = true
               AND array_length(string_to_array(pl.area_key, '|'), 1) = 4
             """;
 

@@ -87,7 +87,10 @@ public class PublicListingController {
      */
     @GetMapping("/{id}")
     public ResponseEntity<?> getById(@PathVariable UUID id) {
-        Listing listing = listingRepository.findById(id).orElse(null);
+        // #1935: findByIdWithActiveCity INNER JOINs areas -> cities (c.is_active = true) and
+        // fail-closed excludes an orphan listing whose area_key has no canonical areas row —
+        // an inactive-city listing is indistinguishable from an unknown id, both hit notFound().
+        Listing listing = listingRepository.findByIdWithActiveCity(id).orElse(null);
         if (listing == null || !ListingStatus.LIVE.toDbValue().equals(listing.getStatus())) {
             return notFound();
         }
@@ -151,7 +154,8 @@ public class PublicListingController {
      */
     @GetMapping("/{id}/price-history")
     public ResponseEntity<?> getPriceHistory(@PathVariable UUID id) {
-        Listing listing = listingRepository.findById(id).orElse(null);
+        // #1935: same active-city gate as getById — see findByIdWithActiveCity javadoc.
+        Listing listing = listingRepository.findByIdWithActiveCity(id).orElse(null);
         if (listing == null || !ListingStatus.LIVE.toDbValue().equals(listing.getStatus())) {
             return notFound();
         }
@@ -203,7 +207,10 @@ public class PublicListingController {
         log.debug("GET /api/public/listings/within-polygon — {} vertices, page={}, size={}",
                 coordinates.size(), page, clampedSize);
 
-        Page<Listing> results = listingRepository.findLiveListingsWithinPolygon(
+        // #1935: findLiveListingsWithinPolygonWithActiveCity INNER JOINs areas -> cities
+        // (c.is_active = true) and fail-closed excludes orphan listings — same rationale as
+        // getById/getDiscovery.
+        Page<Listing> results = listingRepository.findLiveListingsWithinPolygonWithActiveCity(
                 wkt, PageRequest.of(page, clampedSize));
 
         List<ListingTeaserResponse> content = listingResponseMapper.toTeaserResponseList(results.getContent());
@@ -226,7 +233,10 @@ public class PublicListingController {
 
         log.debug("GET /api/public/listings/discovery page={}, size={}", page, clampedSize);
 
-        Page<Listing> results = listingRepository.findAllLiveListings(PageRequest.of(page, clampedSize));
+        // #1935: findAllLiveListingsWithActiveCity INNER JOINs areas -> cities
+        // (c.is_active = true) and fail-closed excludes orphan listings — an inactive city's
+        // listings are simply absent from the feed, same as if they never existed.
+        Page<Listing> results = listingRepository.findAllLiveListingsWithActiveCity(PageRequest.of(page, clampedSize));
         List<ListingTeaserResponse> content = listingResponseMapper.toTeaserResponseList(results.getContent());
 
         return ResponseEntity.ok(PagedResponse.of(results, content));
@@ -246,7 +256,8 @@ public class PublicListingController {
             @PathVariable UUID id,
             @RequestParam(defaultValue = "2") double radiusKm) {
 
-        Listing listing = listingRepository.findById(id).orElse(null);
+        // #1935: same active-city gate as getById — see findByIdWithActiveCity javadoc.
+        Listing listing = listingRepository.findByIdWithActiveCity(id).orElse(null);
         if (listing == null || !ListingStatus.LIVE.toDbValue().equals(listing.getStatus())) {
             return notFound();
         }

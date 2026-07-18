@@ -88,9 +88,10 @@ public class CityAreaListingsService {
         String normPurpose = (listingPurpose != null && !listingPurpose.isBlank())
                 ? listingPurpose.trim() : null;
 
-        // Validate city exists
+        // Validate city exists and is active — an inactive city must be indistinguishable
+        // from an unknown one (#1935).
         Integer cityCount = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM cities WHERE slug = ?",
+                "SELECT COUNT(*) FROM cities WHERE slug = ? AND is_active = true",
                 Integer.class,
                 city.toLowerCase());
         if (cityCount == null || cityCount == 0) {
