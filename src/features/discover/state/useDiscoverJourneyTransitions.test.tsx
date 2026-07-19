@@ -523,4 +523,292 @@ describe('useDiscoverJourneyTransitions', () => {
       expect(selectGroup).toHaveBeenCalledWith(null);
     });
   });
+
+  // Issue #1940 — journey-change teardown for stale school-first map overlays.
+  describe('journey-change teardown (Issue #1940)', () => {
+    it('(1) school-first -> agri-first clears selectedSchool AND filters.schoolLat/Lon/RadiusKm', () => {
+      const setSelectedSchool = vi.fn();
+      const setFilters = vi.fn();
+      const school = makeSchool();
+      const params = makeParams({
+        urlState: makeUrlState({ journey: 'school-first', schoolId: 'sch-1', areaKey: 'IN|KA|Udupi|Manipal' }),
+        selectedSchool: school,
+        filters: { schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 } as PropertyFilters,
+        setSelectedSchool,
+        setFilters,
+      });
+      const { rerender } = renderHook(
+        (p: UseDiscoverJourneyTransitionsParams) => useDiscoverJourneyTransitions(p),
+        { initialProps: params },
+      );
+
+      // No teardown yet — still school-first.
+      expect(setSelectedSchool).not.toHaveBeenCalled();
+
+      act(() => {
+        rerender(
+          makeParams({
+            urlState: makeUrlState({ journey: 'agri-first', schoolId: null, areaKey: null }),
+            selectedSchool: school,
+            filters: { schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 } as PropertyFilters,
+            setSelectedSchool,
+            setFilters,
+          }),
+        );
+      });
+
+      expect(setSelectedSchool).toHaveBeenCalledWith(null);
+      expect(setFilters).toHaveBeenCalledTimes(1);
+      const updater = setFilters.mock.calls[0][0] as (prev: PropertyFilters) => PropertyFilters;
+      const next = updater({ schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 } as PropertyFilters);
+      expect(next.schoolLat).toBeUndefined();
+      expect(next.schoolLon).toBeUndefined();
+      expect(next.schoolRadiusKm).toBeUndefined();
+    });
+
+    it('(2) school-first -> area-first likewise clears selectedSchool + school filter fields (AC2 generalization)', () => {
+      const setSelectedSchool = vi.fn();
+      const setFilters = vi.fn();
+      const school = makeSchool();
+      const initialParams = makeParams({
+        urlState: makeUrlState({ journey: 'school-first' }),
+        selectedSchool: school,
+        filters: { schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 } as PropertyFilters,
+        setSelectedSchool,
+        setFilters,
+      });
+      const { rerender } = renderHook(
+        (p: UseDiscoverJourneyTransitionsParams) => useDiscoverJourneyTransitions(p),
+        { initialProps: initialParams },
+      );
+
+      act(() => {
+        rerender(
+          makeParams({
+            urlState: makeUrlState({ journey: 'area-first' }),
+            selectedSchool: school,
+            filters: { schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 } as PropertyFilters,
+            setSelectedSchool,
+            setFilters,
+          }),
+        );
+      });
+
+      expect(setSelectedSchool).toHaveBeenCalledWith(null);
+      expect(setFilters).toHaveBeenCalledTimes(1);
+    });
+
+    it('(3) DENYLIST: teardown does NOT clear selected city, Buy/Rent intent, or area-first areaKey', () => {
+      const setSelectedSchool = vi.fn();
+      const setFilters = vi.fn();
+      const setSelectedArea = vi.fn();
+      const school = makeSchool();
+      const initialParams = makeParams({
+        urlState: makeUrlState({ journey: 'school-first', city: 'udupi', intent: 'rent' }),
+        selectedSchool: school,
+        filters: { schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 } as PropertyFilters,
+        setSelectedSchool,
+        setFilters,
+        setSelectedArea,
+      });
+      const { rerender } = renderHook(
+        (p: UseDiscoverJourneyTransitionsParams) => useDiscoverJourneyTransitions(p),
+        { initialProps: initialParams },
+      );
+
+      act(() => {
+        rerender(
+          makeParams({
+            // Same city/intent carried forward, plus area-first's OWN areaKey now set —
+            // the teardown must not touch any of these.
+            urlState: makeUrlState({
+              journey: 'area-first',
+              city: 'udupi',
+              intent: 'rent',
+              areaKey: 'IN|KA|Udupi|Manipal',
+            }),
+            selectedSchool: school,
+            filters: { schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 } as PropertyFilters,
+            setSelectedSchool,
+            setFilters,
+            setSelectedArea,
+          }),
+        );
+      });
+
+      // The teardown clears only selectedSchool + the three school filter fields —
+      // it never calls setSelectedArea (area-first's own areaKey/selectedArea) and
+      // has no city/intent setters to call in the first place (those are URL-owned,
+      // untouched by this hook).
+      expect(setSelectedArea).not.toHaveBeenCalled();
+      expect(setSelectedSchool).toHaveBeenCalledTimes(1);
+      expect(setSelectedSchool).toHaveBeenCalledWith(null);
+    });
+
+    it('(4) re-entering school-first (schoolId+radiusKm set again) does not re-trigger teardown / no regression', () => {
+      const setSelectedSchool = vi.fn();
+      const setFilters = vi.fn();
+      const school = makeSchool();
+      const initialParams = makeParams({
+        urlState: makeUrlState({ journey: 'agri-first' }),
+        selectedSchool: null,
+        filters: {} as PropertyFilters,
+        setSelectedSchool,
+        setFilters,
+      });
+      const { rerender } = renderHook(
+        (p: UseDiscoverJourneyTransitionsParams) => useDiscoverJourneyTransitions(p),
+        { initialProps: initialParams },
+      );
+
+      act(() => {
+        rerender(
+          makeParams({
+            urlState: makeUrlState({ journey: 'school-first', schoolId: 'sch-1', radiusKm: 2 }),
+            selectedSchool: school,
+            filters: { schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 } as PropertyFilters,
+            setSelectedSchool,
+            setFilters,
+          }),
+        );
+      });
+
+      // Teardown only fires leaving school-first, not entering it.
+      expect(setSelectedSchool).not.toHaveBeenCalled();
+      expect(setFilters).not.toHaveBeenCalled();
+    });
+
+    it('idempotent no-op setFilters updater when filter fields are already clear (selectedSchool still active)', () => {
+      // Overlay-active still true (selectedSchool populated) so the teardown fires, but the
+      // filter fields are already clear — exercises the inner idempotent no-op branch of the
+      // setFilters updater (as opposed to the outer schoolOverlayActive guard skipping firing
+      // entirely, covered by required_test_1/required_test_2 below).
+      const setSelectedSchool = vi.fn();
+      const setFilters = vi.fn();
+      const school = makeSchool();
+      const initialParams = makeParams({
+        urlState: makeUrlState({ journey: 'school-first' }),
+        selectedSchool: school,
+        filters: {} as PropertyFilters,
+        setSelectedSchool,
+        setFilters,
+      });
+      const { rerender } = renderHook(
+        (p: UseDiscoverJourneyTransitionsParams) => useDiscoverJourneyTransitions(p),
+        { initialProps: initialParams },
+      );
+
+      act(() => {
+        rerender(
+          makeParams({
+            urlState: makeUrlState({ journey: 'agri-first' }),
+            selectedSchool: school,
+            filters: {} as PropertyFilters,
+            setSelectedSchool,
+            setFilters,
+          }),
+        );
+      });
+
+      expect(setSelectedSchool).toHaveBeenCalledWith(null);
+      expect(setFilters).toHaveBeenCalledTimes(1);
+      const updater = setFilters.mock.calls[0][0] as (prev: PropertyFilters) => PropertyFilters;
+      const prev = {} as PropertyFilters;
+      expect(updater(prev)).toBe(prev); // same reference — genuine no-op
+    });
+
+    // F1 rework (#1940 PR #1947 code review) — the original guard only tore down when the
+    // SOURCE journey was literally 'school-first'. The combined area-first+school flow
+    // (journey stays 'area-first', schoolId set via setSchoolParams) leaked the school
+    // overlay into a subsequent journey switch because prevJourney was 'area-first', not
+    // 'school-first'. required_test_1 covers this new leak path.
+    it('required_test_1: area-first combined area+school overlay -> agri-first tears down the leaked overlay', () => {
+      const setSelectedSchool = vi.fn();
+      const setFilters = vi.fn();
+      const school = makeSchool();
+      const initialParams = makeParams({
+        urlState: makeUrlState({
+          journey: 'area-first',
+          areaKey: 'IN|KA|Udupi|Manipal',
+          schoolId: 'sch-1',
+        }),
+        selectedSchool: school,
+        filters: { schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 } as PropertyFilters,
+        setSelectedSchool,
+        setFilters,
+      });
+      const { rerender } = renderHook(
+        (p: UseDiscoverJourneyTransitionsParams) => useDiscoverJourneyTransitions(p),
+        { initialProps: initialParams },
+      );
+
+      expect(setSelectedSchool).not.toHaveBeenCalled();
+
+      act(() => {
+        rerender(
+          makeParams({
+            urlState: makeUrlState({ journey: 'agri-first', areaKey: null, schoolId: null }),
+            selectedSchool: school,
+            filters: { schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 } as PropertyFilters,
+            setSelectedSchool,
+            setFilters,
+          }),
+        );
+      });
+
+      expect(setSelectedSchool).toHaveBeenCalledWith(null);
+      expect(setFilters).toHaveBeenCalledTimes(1);
+      const updater = setFilters.mock.calls[0][0] as (prev: PropertyFilters) => PropertyFilters;
+      const next = updater({ schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 } as PropertyFilters);
+      expect(next.schoolLat).toBeUndefined();
+      expect(next.schoolLon).toBeUndefined();
+      expect(next.schoolRadiusKm).toBeUndefined();
+    });
+
+    // required_test_2 — over-fire regression guard (qa-fast risk scan). A legitimate
+    // combined area-first+school state (schoolId present in the URL) must NOT be torn down
+    // on an ordinary rerender with unchanged journey/schoolId — only a genuine transition
+    // where the URL stops owning the school triggers cleanup.
+    it('required_test_2: legitimate area-first+school combined state persists across an ordinary rerender (no over-fire)', () => {
+      const setSelectedSchool = vi.fn();
+      const setFilters = vi.fn();
+      const school = makeSchool();
+      const combinedParams = makeParams({
+        urlState: makeUrlState({
+          journey: 'area-first',
+          areaKey: 'IN|KA|Udupi|Manipal',
+          schoolId: 'sch-1',
+        }),
+        selectedSchool: school,
+        filters: { schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 } as PropertyFilters,
+        setSelectedSchool,
+        setFilters,
+      });
+      const { rerender } = renderHook(
+        (p: UseDiscoverJourneyTransitionsParams) => useDiscoverJourneyTransitions(p),
+        { initialProps: combinedParams },
+      );
+
+      // Ordinary rerender: same journey, same schoolId, same overlay state (e.g. an
+      // unrelated prop like resolveSignal or panelContent changed elsewhere in the page).
+      act(() => {
+        rerender(
+          makeParams({
+            urlState: makeUrlState({
+              journey: 'area-first',
+              areaKey: 'IN|KA|Udupi|Manipal',
+              schoolId: 'sch-1',
+            }),
+            selectedSchool: school,
+            filters: { schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 } as PropertyFilters,
+            setSelectedSchool,
+            setFilters,
+          }),
+        );
+      });
+
+      expect(setSelectedSchool).not.toHaveBeenCalledWith(null);
+      expect(setFilters).not.toHaveBeenCalled();
+    });
+  });
 });

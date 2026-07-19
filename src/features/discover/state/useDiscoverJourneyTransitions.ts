@@ -552,6 +552,90 @@ export function useDiscoverJourneyTransitions({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areasLoading, discoverAreas, deselectArea, resolveSignal]);
 
+  // Issue #1940 — journey-change teardown for stale school overlays (school-first AND
+  // combined area-first+school paths).
+  //
+  // Root cause: switching journeys via the top nav (e.g. Schools -> Agricultural land)
+  // correctly drops the school URL params (schoolId/radiusKm/areaKey) via urlActions, but
+  // NEVER clears the local state that mirrors them (selectedSchool, filters.schoolLat/Lon/
+  // RadiusKm). Those local fields are what PropertyMap's schoolCircle / the "Showing the
+  // first N homes near this school" banner (schoolRadiusActive, MapDiscovery.tsx) actually
+  // key off — not the URL — so the school-radius circle, its center marker, and the banner
+  // stayed rendered on top of the new journey's empty state.
+  //
+  // F1 REWORK (#1940 PR #1947 code review): the original guard only fired when the SOURCE
+  // journey was literally 'school-first'. The repo also supports a COMBINED area-first +
+  // school flow — journey stays 'area-first' (areaKey set) while a school is selected via
+  // handleSelectSchoolById's `urlActions.setSchoolParams` branch (line ~255 above), which
+  // sets urlState.schoolId without changing urlState.journey. So `area-first (with an active
+  // school/radius) -> agri-first` had prevJourney === 'area-first', the old guard returned
+  // early, and the school overlay leaked into agri-first too — the same class of bug via a
+  // second path.
+  //
+  // Generalized fix: stop keying off the SOURCE journey literal and key off whether the
+  // DESTINATION state still legitimately owns a school overlay. The authoritative signal is
+  // urlState.schoolId: a legitimate combined area-first+school state carries a non-null
+  // schoolId (set by setSchoolParams, journey stays 'area-first'), while a stale leaked state
+  // (after a journey switch dropped the school URL params) has selectedSchool/filters.school*
+  // still populated locally but urlState.schoolId is null. Tear down when all of:
+  //   1. urlState.journey !== 'school-first' (re-entering/staying in school-first is handled
+  //      by the cold-load/restore effect above, not here), AND
+  //   2. urlState.schoolId == null (URL no longer owns a school — covers both the plain
+  //      school-first exit and the combined area-first+school exit), AND
+  //   3. a school overlay is currently active LOCALLY (selectedSchool set, or any of
+  //      filters.schoolLat/schoolLon/schoolRadiusKm set) — i.e. there is actually something
+  //      stale to clear.
+  // A legitimate combined area-first+school state has urlState.schoolId non-null, so this
+  // predicate never tears it down on an ordinary rerender (over-fire guard).
+  //
+  // Note: SchoolMarkerLayer's `showSchoolMarkers` gate (MapDiscovery.tsx deriveShowSchoolMarkers)
+  // and PropertyMap's `selectedSchoolId` (= selectedSchool?.id) are BOTH pure derivations —
+  // one off urlState.journey/areaKey/schoolPicking/schoolId (already dropped by urlActions on
+  // journey switch), the other off selectedSchool (cleared below) — so neither needs its own
+  // clear here; clearing selectedSchool below is sufficient for selectedSchoolId to fall back
+  // to null, and showSchoolMarkers is already false once urlState.journey !== 'school-first'.
+  //
+  // This is a SEPARATE effect from handleStartOver/applyCityChangeReset — it fires only on a
+  // genuine "school just left the URL" transition, not on Start Over (already clears this same
+  // state via handleStartOver) and not on re-entering/remaining in school-first (handled by the
+  // cold-load/restore effect above). Keyed on [urlState.journey, urlState.schoolId] via refs
+  // (not on selectedSchool/filters in the dep array) so it reads the CURRENT local overlay
+  // state at fire-time without re-running on every local state write / mid-animation rerender.
+  const prevJourneyRef = useRef(urlState.journey);
+  const prevSchoolIdRef = useRef(urlState.schoolId);
+  useEffect(() => {
+    const prevJourney = prevJourneyRef.current;
+    const prevSchoolId = prevSchoolIdRef.current;
+    prevJourneyRef.current = urlState.journey;
+    prevSchoolIdRef.current = urlState.schoolId;
+
+    if (urlState.journey === 'school-first' || urlState.schoolId != null) return;
+    // Nothing changed on the school-ownership front (e.g. an unrelated rerender while
+    // already outside school-first with no school) — skip.
+    if (prevJourney === urlState.journey && prevSchoolId === urlState.schoolId) return;
+
+    const schoolOverlayActive =
+      selectedSchool != null ||
+      filters.schoolLat != null ||
+      filters.schoolLon != null ||
+      filters.schoolRadiusKm != null;
+    if (!schoolOverlayActive) return;
+
+    setSelectedSchool(null);
+    setFilters((prev) => {
+      if (prev.schoolLat == null && prev.schoolLon == null && prev.schoolRadiusKm == null) {
+        // Idempotent no-op — avoid a redundant setState when already clear.
+        return prev;
+      }
+      const next = { ...prev };
+      delete next.schoolLat;
+      delete next.schoolLon;
+      delete next.schoolRadiusKm;
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlState.journey, urlState.schoolId, setSelectedSchool, setFilters]);
+
   const commands = useMemo<DiscoverJourneyTransitionsCommands>(
     () => ({
       startOver: handleStartOver,
