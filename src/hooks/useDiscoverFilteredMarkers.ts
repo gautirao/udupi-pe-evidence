@@ -15,6 +15,14 @@ export interface DiscoverFilteredMarker {
   propertyType?: string | null;
   /** Issue #1373 — GeoJSON Polygon string for agri listings with a saved boundary. Absent for non-agri + agri-no-boundary. */
   boundary?: string | null;
+  /**
+   * Issue #1941 — coarse price band string (e.g. "₹1–2Cr") for anonymous residential
+   * callers, mutually exclusive with pricePaise. Currently this endpoint is auth-gated
+   * in both live and preview modes (see useDiscoverFilteredMarkers below), so the
+   * backend does not populate this today; declared for forward-compatibility and so
+   * filteredMarkerToPropertyListing can thread it through without a cast.
+   */
+  priceBand?: string | null;
 }
 
 export interface DiscoverFilteredMarkersResponse {

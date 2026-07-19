@@ -20,11 +20,23 @@ import java.util.UUID;
  * <p>IC-2 contract (issue #1407): boundary is full-precision PostGIS geometry (non-approximate).
  * Frontend rendering (#1406) MUST always display the legal-verification disclaimer alongside boundary.
  *
+ * <p>#1941: anonymous callers never receive an exact price on this DTO — {@code price} and
+ * {@code pricePaise} are always {@code null} for every property type (agri already withheld
+ * exact price; residential/commercial now do too). {@code priceBand} carries a coarse,
+ * non-reversible price bucket (see {@link com.example.realestate.discover.PriceBand}) for
+ * non-agri listings with a positive price; it is {@code null} for agri (agri stays fully
+ * price-silent — no band either) and for listings with no usable price (never fabricated).
+ *
  * @param id                 listing UUID
  * @param primaryImageUrl    URL of the first image, or null if no images
  * @param imageCount         total number of images (including those behind auth gate)
- * @param price              listing price in rupees (deprecated column), or null
- * @param pricePaise         listing price in paise (source of truth); null for rows that predate migration
+ * @param price              listing price in rupees (deprecated column); always null on this
+ *                           anon-only DTO (#1941) — kept in the record for JSON shape stability
+ * @param pricePaise         listing price in paise (source of truth); always null on this
+ *                           anon-only DTO (#1941) — kept in the record for JSON shape stability
+ * @param priceBand          coarse price bucket for anon callers (#1941), or null; never
+ *                           fabricated — null when pricePaise is null/non-positive or the
+ *                           listing is agricultural_land (agri stays fully price-silent)
  * @param propertyType       e.g. "house", "land", "apartment", "agricultural_land"
  * @param locality           locality/city name (spec label: "city")
  * @param listingPurpose     e.g. "SALE", "RENT", or null
@@ -48,6 +60,7 @@ public record ListingTeaserResponse(
         int imageCount,
         BigDecimal price,
         Long pricePaise,
+        String priceBand,
         String propertyType,
         String locality,
         String listingPurpose,

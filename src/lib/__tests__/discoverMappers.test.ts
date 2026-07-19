@@ -34,6 +34,32 @@ describe('filteredMarkerToPropertyListing', () => {
     expect(result.latitude).toBeTypeOf('number');
     expect(result.longitude).toBeTypeOf('number');
   });
+
+  // Issue #1941 — thread priceBand from the marker into PropertyListing.
+  it('copies priceBand from DiscoverFilteredMarker when present', () => {
+    const marker: DiscoverFilteredMarker = {
+      id: 'band1',
+      lat: 13.3498,
+      lon: 74.7852,
+      pricePaise: null,
+      locality: 'Katapadi',
+      priceBand: '₹1–2Cr',
+    };
+    const result = filteredMarkerToPropertyListing(marker, now);
+    expect(result.priceBand).toBe('₹1–2Cr');
+  });
+
+  it('sets priceBand to null when absent on DiscoverFilteredMarker', () => {
+    const marker: DiscoverFilteredMarker = {
+      id: 'band2',
+      lat: 13.3498,
+      lon: 74.7852,
+      pricePaise: 5000000,
+      locality: 'Katapadi',
+    };
+    const result = filteredMarkerToPropertyListing(marker, now);
+    expect(result.priceBand).toBeNull();
+  });
 });
 
 // ── cityListingToPropertyListing (a3 mapper dependency — PR #1606) ────────────
@@ -110,5 +136,22 @@ describe('cityListingToPropertyListing — a3 mapper (PR #1606)', () => {
     );
     expect(result.latitude).toBe(13.3409);
     expect(result.longitude).toBe(74.7421);
+  });
+
+  // Issue #1941 — thread priceBand from DiscoverCityListingItem (anon /cities response).
+  it('copies priceBand when present', () => {
+    const result = cityListingToPropertyListing(
+      makeCityListing({ priceBand: '₹1–2Cr' }),
+      now,
+    );
+    expect(result.priceBand).toBe('₹1–2Cr');
+  });
+
+  it('sets priceBand to null when absent', () => {
+    const result = cityListingToPropertyListing(
+      makeCityListing({ priceBand: undefined }),
+      now,
+    );
+    expect(result.priceBand).toBeNull();
   });
 });

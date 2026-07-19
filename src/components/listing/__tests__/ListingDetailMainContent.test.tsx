@@ -76,3 +76,25 @@ describe('ListingDetailMainContent — confirmedAt freshness signal (Issue #1794
     expect(screen.queryByText(/^Confirmed/)).not.toBeInTheDocument();
   });
 });
+
+// ─── Issue #1941 — anon residential price-band fallback ───────────────────────
+describe('ListingDetailMainContent — priceBand fallback (Issue #1941)', () => {
+  it('authed exact price present → renders the exact formatted price, ignores priceBand', () => {
+    renderMainContent(makeListing({ price: 5000000, priceBand: '₹40L–60L' }));
+
+    expect(screen.getByText('₹50 L')).toBeInTheDocument();
+    expect(screen.queryByText('₹40L–60L')).not.toBeInTheDocument();
+  });
+
+  it('anon: price absent + priceBand present → renders the band string', () => {
+    renderMainContent(makeListing({ price: null, priceBand: '₹1–2Cr' }));
+
+    expect(screen.getByText('₹1–2Cr')).toBeInTheDocument();
+  });
+
+  it('neither price nor priceBand → honest absence, no fabricated value rendered', () => {
+    renderMainContent(makeListing({ price: null, priceBand: null }));
+
+    expect(screen.queryByText(/₹/)).not.toBeInTheDocument();
+  });
+});

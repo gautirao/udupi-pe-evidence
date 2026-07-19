@@ -265,7 +265,11 @@ export function MarkerPopoverCard({
         {/* Price or auth-gated message */}
         <p className="text-sm font-semibold text-foreground leading-tight" data-testid="popover-price">
           {!isAuthenticated ? (
-            <span className="text-muted-foreground text-xs italic">Sign in to view price</span>
+            listing.priceBand ? (
+              <span data-testid="popover-price-band">{listing.priceBand}</span>
+            ) : (
+              <span className="text-muted-foreground text-xs italic">Sign in to view price</span>
+            )
           ) : !hasPrice ? (
             <span className="text-muted-foreground text-xs italic">Price not available</span>
           ) : (

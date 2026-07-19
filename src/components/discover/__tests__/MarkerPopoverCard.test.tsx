@@ -143,6 +143,36 @@ describe('MarkerPopoverCard — price gate (THREE cases)', () => {
   });
 });
 
+describe('MarkerPopoverCard — anon priceBand fallback (Issue #1941)', () => {
+  it('anon + priceBand present → renders the band string instead of "Sign in to view price"', () => {
+    renderCard({
+      isAuthenticated: false,
+      listing: makeListing({ price: null, priceBand: '₹1–2Cr' }),
+    });
+    const priceEl = screen.getByTestId('popover-price');
+    expect(priceEl).toHaveTextContent('₹1–2Cr');
+    expect(priceEl).not.toHaveTextContent('Sign in to view price');
+  });
+
+  it('anon + no priceBand → keeps the existing "Sign in to view price" copy', () => {
+    renderCard({
+      isAuthenticated: false,
+      listing: makeListing({ price: null, priceBand: null }),
+    });
+    expect(screen.getByTestId('popover-price')).toHaveTextContent('Sign in to view price');
+  });
+
+  it('authed + exact price present → renders the exact price, ignores priceBand', () => {
+    renderCard({
+      isAuthenticated: true,
+      listing: makeListing({ price: 13_500_000, priceBand: '₹1–2Cr' }),
+    });
+    const priceEl = screen.getByTestId('popover-price');
+    expect(priceEl).toHaveTextContent('₹1.35 Cr');
+    expect(priceEl).not.toHaveTextContent('₹1–2Cr');
+  });
+});
+
 describe('MarkerPopoverCard — content rendering', () => {
   it('renders the listing title', () => {
     renderCard({ listing: makeListing({ title: 'Ocean View Villa' }) });

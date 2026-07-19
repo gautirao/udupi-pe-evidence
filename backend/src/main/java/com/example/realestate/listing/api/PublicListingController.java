@@ -146,11 +146,11 @@ public class PublicListingController {
      * (DRAFT, PENDING_REVIEW, REJECTED, ARCHIVED) — consistent with the detail endpoint.
      * Returns an empty array when no price changes have been recorded for the listing.
      *
-     * <p>JWT-aware: anonymous callers on agricultural listings receive an empty array
-     * (200), mirroring the price/pricePaise gate applied in {@link #getById} →
-     * {@code toTeaserResponse}. This prevents the price-history endpoint from acting as a
-     * side-channel that leaks agri price data the teaser response withholds. Authenticated
-     * callers and all non-agricultural listings are unaffected.
+     * <p>JWT-aware: anonymous callers receive an empty array (200) for every property family
+     * — agri was already gated; #1941 extends the same gate to residential/commercial. This
+     * prevents the price-history endpoint from acting as a side-channel that leaks exact price
+     * data the anon teaser response withholds (#1941: the teaser never carries an exact price
+     * for any family). Authenticated callers are unaffected.
      */
     @GetMapping("/{id}/price-history")
     public ResponseEntity<?> getPriceHistory(@PathVariable UUID id) {
@@ -160,14 +160,14 @@ public class PublicListingController {
             return notFound();
         }
 
-        // Anonymous callers on agricultural listings receive no price-history
-        // (mirrors the price/pricePaise gate in getById → toTeaserResponse).
+        // #1941: anonymous callers receive no price-history for ANY property family (mirrors
+        // the price/pricePaise gate in getById → toTeaserResponse, which now withholds exact
+        // price from anon callers across agri and non-agri alike).
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         boolean isAuthenticated = auth != null
                 && auth.isAuthenticated()
                 && !(auth instanceof AnonymousAuthenticationToken);
-        boolean isAgri = "agricultural_land".equals(listing.getPropertyType());
-        if (!isAuthenticated && isAgri) {
+        if (!isAuthenticated) {
             return ResponseEntity.ok(List.of());
         }
 

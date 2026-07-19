@@ -178,11 +178,17 @@ class PublicListingControllerTest {
                     java.util.List.of(), java.util.List.of());
         });
 
-        // Teaser mapper — single listing (15 agri fields null for non-agri fixtures in setUp)
+        // Teaser mapper — single listing (15 agri fields null for non-agri fixtures in setUp).
+        // #1941: mirrors the real mapper's anon contract — price/pricePaise always null;
+        // priceBand derived from the fixture's pricePaise (null when pricePaise is null/<=0).
         when(listingResponseMapper.toTeaserResponse(any(Listing.class))).thenAnswer(inv -> {
             Listing l = inv.getArgument(0);
+            boolean isAgri = "agricultural_land".equals(l.getPropertyType());
+            String priceBand = (!isAgri && l.getPricePaise() != null && l.getPricePaise() > 0)
+                    ? com.example.realestate.discover.PriceBand.of(l.getPricePaise())
+                    : null;
             return new ListingTeaserResponse(
-                    l.getId(), null, 0, l.getPrice(), l.getPricePaise(),
+                    l.getId(), null, 0, null, null, priceBand,
                     l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
                     null, null, null, null, null, null, null, null, null, null, null, null,
                     null, null, null);
@@ -192,11 +198,17 @@ class PublicListingControllerTest {
         when(listingResponseMapper.toTeaserResponseList(anyList())).thenAnswer(inv -> {
             List<Listing> listings = inv.getArgument(0);
             return listings.stream()
-                    .map(l -> new ListingTeaserResponse(
-                            l.getId(), null, 0, l.getPrice(), l.getPricePaise(),
-                            l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
-                            null, null, null, null, null, null, null, null, null, null, null, null,
-                            null, null, null))
+                    .map(l -> {
+                        boolean isAgri = "agricultural_land".equals(l.getPropertyType());
+                        String priceBand = (!isAgri && l.getPricePaise() != null && l.getPricePaise() > 0)
+                                ? com.example.realestate.discover.PriceBand.of(l.getPricePaise())
+                                : null;
+                        return new ListingTeaserResponse(
+                                l.getId(), null, 0, null, null, priceBand,
+                                l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
+                                null, null, null, null, null, null, null, null, null, null, null, null,
+                                null, null, null);
+                    })
                     .toList();
         });
     }
@@ -215,13 +227,17 @@ class PublicListingControllerTest {
         listing.setListingPurpose("SALE");
         listing.setFirstPublishedAt(OffsetDateTime.now().minusDays(5));
 
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         // No authentication in SecurityContext → teaser path
+        // #1941: exact price is withheld from the anon teaser; fixture has no pricePaise set
+        // so priceBand is also absent here (dedicated band coverage lives in
+        // getById_anonResidential_priceBandPresent_noExactPrice below).
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
-                .andExpect(jsonPath("$.price").value(15000000))
+                .andExpect(jsonPath("$.price").doesNotExist())
+                .andExpect(jsonPath("$.pricePaise").doesNotExist())
                 .andExpect(jsonPath("$.propertyType").value("house"))
                 .andExpect(jsonPath("$.locality").value("Udupi"))
                 .andExpect(jsonPath("$.listingPurpose").value("SALE"))
@@ -232,6 +248,59 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.latitude").doesNotExist())
                 .andExpect(jsonPath("$.longitude").doesNotExist())
                 .andExpect(jsonPath("$.description").doesNotExist());
+    }
+
+    // ==================== #1941: anon residential — priceBand present, exact price absent ====================
+
+    @Test
+    void getById_anonResidential_priceBandPresent_noExactPrice() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
+                "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
+        listing.setListingPurpose("SALE");
+        listing.setPricePaise(75_000_000L); // ₹7.5 L -> non-null band via setUp()'s stub
+
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.priceBand").exists())
+                .andExpect(jsonPath("$.price").doesNotExist())
+                .andExpect(jsonPath("$.pricePaise").doesNotExist());
+    }
+
+    @Test
+    void getById_anonAgri_priceFieldsAllAbsent() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "agricultural_land",
+                "Farm Plot", "Udupi", new BigDecimal("5000000"), "Fertile land");
+        listing.setListingPurpose("SALE");
+        listing.setPricePaise(75_000_000L); // positive — must still be fully absent for agri
+
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.price").doesNotExist())
+                .andExpect(jsonPath("$.pricePaise").doesNotExist())
+                .andExpect(jsonPath("$.priceBand").doesNotExist());
+    }
+
+    @Test
+    void getById_authedResidential_exactPricePresent_noPriceBand() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
+                "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
+        listing.setPricePaise(75_000_000L);
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        var authToken = new UsernamePasswordAuthenticationToken(
+                "user@example.com", null,
+                List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.getContext().setAuthentication(authToken);
+
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.price").value(15000000))
+                .andExpect(jsonPath("$.pricePaise").value(75_000_000))
+                .andExpect(jsonPath("$.priceBand").doesNotExist());
     }
 
     // ==================== GET /{id} — authenticated caller → full ListingResponse ====================
@@ -245,7 +314,7 @@ class PublicListingControllerTest {
         // projected badge word may appear.
         listing.setTrustTier("A");
 
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         // Populate security context with an authenticated principal (not AnonymousAuthenticationToken)
         var authToken = new UsernamePasswordAuthenticationToken(
@@ -291,7 +360,7 @@ class PublicListingControllerTest {
         listing.setCreatedBy(UUID.randomUUID()); // owned by someone else
         // #1786: raw grade must never reach an authenticated non-owner buyer's public JSON.
         listing.setTrustTier("B");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         // Not the owner, not an admin -> guard denies exact pin
         when(listingOwnershipGuard.canAccessExactPin(any(Listing.class), any(), eq(false)))
@@ -324,7 +393,7 @@ class PublicListingControllerTest {
         listing.setLatitude(13.34091);
         listing.setLongitude(74.74215);
         listing.setCreatedBy(ownerId);
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         // Owner -> guard grants exact pin
         when(listingOwnershipGuard.canAccessExactPin(any(Listing.class), eq(ownerId), eq(false)))
@@ -353,7 +422,7 @@ class PublicListingControllerTest {
         listing.setLatitude(13.34091);
         listing.setLongitude(74.74215);
         listing.setCreatedBy(ownerId);
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         // Admin, non-owner -> guard still grants exact pin (isAdmin=true)
         when(listingOwnershipGuard.canAccessExactPin(any(Listing.class), eq(adminId), eq(true)))
@@ -381,7 +450,7 @@ class PublicListingControllerTest {
     void getById_anonymous_ownershipGuardNeverInvoked() throws Exception {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
                 "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         // SecurityContextHolder cleared in @BeforeEach -> anonymous teaser path
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
@@ -398,7 +467,7 @@ class PublicListingControllerTest {
         Listing listing = buildListing(LISTING_ID, ListingStatus.DRAFT.toDbValue(), "land",
                 "Draft plot", "Manipal", new BigDecimal("3000000"), "A draft");
 
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
                 .andExpect(status().isNotFound())
@@ -409,7 +478,7 @@ class PublicListingControllerTest {
 
     @Test
     void getById_unknownId_returns404() throws Exception {
-        when(listingRepository.findById(UNKNOWN_ID)).thenReturn(Optional.empty());
+        when(listingRepository.findByIdWithActiveCity(UNKNOWN_ID)).thenReturn(Optional.empty());
 
         mockMvc.perform(get("/api/public/listings/" + UNKNOWN_ID))
                 .andExpect(status().isNotFound())
@@ -422,7 +491,7 @@ class PublicListingControllerTest {
     void getPriceHistory_noChanges_returnsEmptyList() throws Exception {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
                 "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
         when(priceChangeLogRepository.findByListingIdOrderByChangedAtAsc(LISTING_ID))
                 .thenReturn(List.of());
 
@@ -437,7 +506,7 @@ class PublicListingControllerTest {
     void getPriceHistory_withChanges_returnsCorrectDeltas() throws Exception {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
                 "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         OffsetDateTime t1 = OffsetDateTime.now().minusDays(10);
         OffsetDateTime t2 = OffsetDateTime.now().minusDays(5);
@@ -449,6 +518,13 @@ class PublicListingControllerTest {
 
         when(priceChangeLogRepository.findByListingIdOrderByChangedAtAsc(LISTING_ID))
                 .thenReturn(List.of(entry1, entry2));
+
+        // #1941: price-history is now authenticated-only for every family (this test asserts
+        // delta computation correctness, orthogonal to the anon gate — authenticate to exercise it).
+        var authToken = new UsernamePasswordAuthenticationToken(
+                "user@example.com", null,
+                List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.getContext().setAuthentication(authToken);
 
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID + "/price-history"))
                 .andExpect(status().isOk())
@@ -465,7 +541,7 @@ class PublicListingControllerTest {
 
     @Test
     void getPriceHistory_unknownListing_returns404() throws Exception {
-        when(listingRepository.findById(UNKNOWN_ID)).thenReturn(Optional.empty());
+        when(listingRepository.findByIdWithActiveCity(UNKNOWN_ID)).thenReturn(Optional.empty());
 
         mockMvc.perform(get("/api/public/listings/" + UNKNOWN_ID + "/price-history"))
                 .andExpect(status().isNotFound())
@@ -478,7 +554,7 @@ class PublicListingControllerTest {
     void getPriceHistory_archivedListing_returns404() throws Exception {
         Listing listing = buildListing(LISTING_ID, ListingStatus.ARCHIVED.toDbValue(), "house",
                 "Old Villa", "Udupi", new BigDecimal("15000000"), "Archived");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID + "/price-history"))
                 .andExpect(status().isNotFound())
@@ -496,7 +572,7 @@ class PublicListingControllerTest {
     void getPriceHistory_anonymousAgri_withPriceChanges_returnsEmptyList() throws Exception {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "agricultural_land",
                 "Farm Plot", "Udupi", new BigDecimal("5000000"), "Fertile land");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         // Non-empty logs: the gate must suppress them for anonymous agri callers.
         PriceChangeLog log = buildPriceChangeLog(
@@ -517,7 +593,7 @@ class PublicListingControllerTest {
     void getPriceHistory_authenticatedAgri_returnsHistory() throws Exception {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "agricultural_land",
                 "Farm Plot", "Udupi", new BigDecimal("5000000"), "Fertile land");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         PriceChangeLog log = buildPriceChangeLog(
                 LISTING_ID, 500_000_000L, 600_000_000L, OffsetDateTime.now().minusDays(5));
@@ -536,21 +612,47 @@ class PublicListingControllerTest {
     }
 
     /**
-     * Non-agricultural listings are unaffected by the gate — anonymous callers
-     * still receive price history.
+     * #1941: residential listings are now gated identically to agri — anonymous callers
+     * receive an empty array even when price-change rows exist (side-channel fix).
      */
     @Test
-    void getPriceHistory_anonymousResidential_returnsHistory() throws Exception {
+    void getPriceHistory_anonymousResidential_returnsEmptyList() throws Exception {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
                 "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
+        // Non-empty logs: the gate must suppress them for anonymous residential callers too.
         PriceChangeLog log = buildPriceChangeLog(
                 LISTING_ID, 500_000_000L, 600_000_000L, OffsetDateTime.now().minusDays(5));
         when(priceChangeLogRepository.findByListingIdOrderByChangedAtAsc(LISTING_ID))
                 .thenReturn(List.of(log));
 
         // SecurityContextHolder cleared in @BeforeEach → anonymous
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID + "/price-history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    /**
+     * #1941: authenticated callers on residential listings are NOT gated — price history is
+     * returned in full, unchanged from pre-#1941 behaviour.
+     */
+    @Test
+    void getPriceHistory_authenticatedResidential_returnsFullHistory() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
+                "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        PriceChangeLog log = buildPriceChangeLog(
+                LISTING_ID, 500_000_000L, 600_000_000L, OffsetDateTime.now().minusDays(5));
+        when(priceChangeLogRepository.findByListingIdOrderByChangedAtAsc(LISTING_ID))
+                .thenReturn(List.of(log));
+
+        var authToken = new UsernamePasswordAuthenticationToken(
+                "user@example.com", null,
+                List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.getContext().setAuthentication(authToken);
+
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID + "/price-history"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
@@ -562,7 +664,7 @@ class PublicListingControllerTest {
     void getListing_pendingReviewListing_returns404() throws Exception {
         Listing listing = buildListing(LISTING_ID, ListingStatus.PENDING_REVIEW.toDbValue(), "land",
                 "Pending plot", "Manipal", new BigDecimal("3000000"), "Awaiting review");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
                 .andExpect(status().isNotFound())
@@ -575,7 +677,7 @@ class PublicListingControllerTest {
     void getListing_archivedListing_returns404() throws Exception {
         Listing listing = buildListing(LISTING_ID, ListingStatus.ARCHIVED.toDbValue(), "house",
                 "Archived Villa", "Udupi", new BigDecimal("15000000"), "Old listing");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
                 .andExpect(status().isNotFound())
@@ -589,7 +691,7 @@ class PublicListingControllerTest {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
                 "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
         listing.setRejectionReason("Internal moderator note — not for public");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
                 .andExpect(status().isOk())
@@ -601,7 +703,7 @@ class PublicListingControllerTest {
     @Test
     void withinPolygon_validPolygon_returns200WithPaginatedResponse() throws Exception {
         Page<Listing> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 50), 0);
-        when(listingRepository.findLiveListingsWithinPolygon(anyString(), any(PageRequest.class)))
+        when(listingRepository.findLiveListingsWithinPolygonWithActiveCity(anyString(), any(PageRequest.class)))
                 .thenReturn(emptyPage);
 
         mockMvc.perform(get("/api/public/listings/within-polygon")
@@ -623,7 +725,7 @@ class PublicListingControllerTest {
                 "Polygon Villa", "Udupi", new BigDecimal("15000000"), "Inside polygon");
         listing.setListingPurpose("SALE");
         Page<Listing> page = new PageImpl<>(List.of(listing), PageRequest.of(0, 50), 1);
-        when(listingRepository.findLiveListingsWithinPolygon(anyString(), any(PageRequest.class)))
+        when(listingRepository.findLiveListingsWithinPolygonWithActiveCity(anyString(), any(PageRequest.class)))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/public/listings/within-polygon")
@@ -649,7 +751,7 @@ class PublicListingControllerTest {
     @Test
     void discovery_noListings_returns200WithEmptyContent() throws Exception {
         Page<Listing> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 50), 0);
-        when(listingRepository.findAllLiveListings(any(PageRequest.class))).thenReturn(emptyPage);
+        when(listingRepository.findAllLiveListingsWithActiveCity(any(PageRequest.class))).thenReturn(emptyPage);
 
         mockMvc.perform(get("/api/public/listings/discovery"))
                 .andExpect(status().isOk())
@@ -668,7 +770,7 @@ class PublicListingControllerTest {
                 "Discovery Plot", "Manipal", new BigDecimal("3000000"), "A plot");
         listing.setListingPurpose("SALE");
         Page<Listing> page = new PageImpl<>(List.of(listing), PageRequest.of(0, 50), 1);
-        when(listingRepository.findAllLiveListings(any(PageRequest.class))).thenReturn(page);
+        when(listingRepository.findAllLiveListingsWithActiveCity(any(PageRequest.class))).thenReturn(page);
 
         mockMvc.perform(get("/api/public/listings/discovery"))
                 .andExpect(status().isOk())
@@ -680,11 +782,51 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.items[0].locality").value("Manipal"))
                 .andExpect(jsonPath("$.items[0].propertyType").value("land"))
                 .andExpect(jsonPath("$.items[0].listingPurpose").value("SALE"))
-                .andExpect(jsonPath("$.items[0].price").value(3000000))
+                // #1941: exact price withheld from anon discovery teaser (fixture has no
+                // pricePaise set, so no band either — dedicated band coverage lives in
+                // discovery_anonResidential_priceBandPresent below).
+                .andExpect(jsonPath("$.items[0].price").doesNotExist())
+                .andExpect(jsonPath("$.items[0].pricePaise").doesNotExist())
                 // sensitive fields absent
                 .andExpect(jsonPath("$.items[0].latitude").doesNotExist())
                 .andExpect(jsonPath("$.items[0].title").doesNotExist())
                 .andExpect(jsonPath("$.items[0].description").doesNotExist());
+    }
+
+    // ==================== #1941: discovery / within-polygon anon residential priceBand ====================
+
+    @Test
+    void discovery_anonResidential_priceBandPresent_noExactPrice() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "land",
+                "Discovery Plot", "Manipal", new BigDecimal("3000000"), "A plot");
+        listing.setListingPurpose("SALE");
+        listing.setPricePaise(75_000_000L);
+        Page<Listing> page = new PageImpl<>(List.of(listing), PageRequest.of(0, 50), 1);
+        when(listingRepository.findAllLiveListingsWithActiveCity(any(PageRequest.class))).thenReturn(page);
+
+        mockMvc.perform(get("/api/public/listings/discovery"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].priceBand").exists())
+                .andExpect(jsonPath("$.items[0].price").doesNotExist())
+                .andExpect(jsonPath("$.items[0].pricePaise").doesNotExist());
+    }
+
+    @Test
+    void withinPolygon_anonResidential_priceBandPresent_noExactPrice() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
+                "Polygon Villa", "Udupi", new BigDecimal("15000000"), "Inside polygon");
+        listing.setListingPurpose("SALE");
+        listing.setPricePaise(75_000_000L);
+        Page<Listing> page = new PageImpl<>(List.of(listing), PageRequest.of(0, 50), 1);
+        when(listingRepository.findLiveListingsWithinPolygonWithActiveCity(anyString(), any(PageRequest.class)))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/public/listings/within-polygon")
+                        .param("polygon", "[[13.35,74.79],[13.36,74.80],[13.34,74.80]]"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].priceBand").exists())
+                .andExpect(jsonPath("$.items[0].price").doesNotExist())
+                .andExpect(jsonPath("$.items[0].pricePaise").doesNotExist());
     }
 
     // ==================== GET /discovery — JSON shape validation ====================
@@ -695,7 +837,7 @@ class PublicListingControllerTest {
                 "Discovery Plot", "Manipal", new BigDecimal("3000000"), "A plot");
         listing.setListingPurpose("SALE");
         Page<Listing> page = new PageImpl<>(List.of(listing), PageRequest.of(0, 50), 1);
-        when(listingRepository.findAllLiveListings(any(PageRequest.class))).thenReturn(page);
+        when(listingRepository.findAllLiveListingsWithActiveCity(any(PageRequest.class))).thenReturn(page);
 
         mockMvc.perform(get("/api/public/listings/discovery"))
                 .andExpect(status().isOk())
@@ -785,13 +927,15 @@ class PublicListingControllerTest {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "agricultural_land",
                 "Farm Plot", "Udupi", new BigDecimal("5000000"), "Fertile land");
         listing.setListingPurpose("SALE");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         // Mock toTeaserResponse to return a teaser with all 12 agri-only D1 fields populated
+        // #1941: agri stays fully price-silent — price/pricePaise/priceBand all null.
         when(listingResponseMapper.toTeaserResponse(any(Listing.class))).thenReturn(
                 new ListingTeaserResponse(
                         LISTING_ID, "https://cdn.example.com/farm.jpg", 1,
-                        new BigDecimal("5000000"), null /* pricePaise */, "agricultural_land", "Udupi", "SALE",
+                        null /* price */, null /* pricePaise */, null /* priceBand */,
+                        "agricultural_land", "Udupi", "SALE",
                         "{\"type\":\"Polygon\",\"coordinates\":[]}",
                         13.3409, 74.7421,
                         new BigDecimal("2.50"), "acres",
@@ -826,7 +970,7 @@ class PublicListingControllerTest {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
                 "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
         listing.setListingPurpose("SALE");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         // setUp() already stubs toTeaserResponse to return 7-field teaser with 12 agri fields null
         // @JsonInclude(NON_NULL) on the record ensures they are omitted from JSON
@@ -859,7 +1003,7 @@ class PublicListingControllerTest {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "agricultural_land",
                 "Farm Plot", "Udupi", new BigDecimal("5000000"), "Fertile land");
         listing.setFirstPublishedAt(OffsetDateTime.now().minusDays(3));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         // Populate security context — authenticated path calls toPublicResponse, not toTeaserResponse
         var authToken = new UsernamePasswordAuthenticationToken(
@@ -886,13 +1030,15 @@ class PublicListingControllerTest {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "agricultural_land",
                 "Farm Plot", "Udupi", new BigDecimal("5000000"), "Fertile land");
         listing.setListingPurpose("SALE");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         // Return agri teaser with D1 fields but without any PII fields
+        // #1941: agri stays fully price-silent — price/pricePaise/priceBand all null.
         when(listingResponseMapper.toTeaserResponse(any(Listing.class))).thenReturn(
                 new ListingTeaserResponse(
                         LISTING_ID, null, 0,
-                        new BigDecimal("5000000"), null /* pricePaise */, "agricultural_land", "Udupi", "SALE",
+                        null /* price */, null /* pricePaise */, null /* priceBand */,
+                        "agricultural_land", "Udupi", "SALE",
                         "{\"type\":\"Polygon\",\"coordinates\":[]}", 13.3409, 74.7421,
                         new BigDecimal("2.50"), "acres", new BigDecimal("2.47"),
                         "Borewell", "Red laterite", "Tar road",
@@ -916,7 +1062,7 @@ class PublicListingControllerTest {
     void getById_anonymousNonAgri_boundaryAbsent() throws Exception {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
                 "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+        when(listingRepository.findByIdWithActiveCity(LISTING_ID)).thenReturn(Optional.of(listing));
 
         // setUp() stubs toTeaserResponse with all 12 agri fields null; @JsonInclude(NON_NULL) omits them
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID))

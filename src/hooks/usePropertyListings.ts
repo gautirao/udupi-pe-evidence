@@ -98,6 +98,13 @@ export interface PropertyListing {
   trustTier?: string | null;
   /** Composite area key e.g. "IN|KA|Udupi|Manipal". Added in PR #745. */
   areaKey?: string | null;
+  /**
+   * Issue #1941 — coarse price band string (e.g. "₹1–2Cr") returned for ANONYMOUS
+   * residential callers in place of the exact price. Null/absent for authed callers
+   * (who get exact `price`) and for listings with no price. Never fabricated —
+   * mirrors the backend's priceBand contract (see DiscoverCityListingItem #1616).
+   */
+  priceBand?: string | null;
 }
 
 export interface PropertyFilters {

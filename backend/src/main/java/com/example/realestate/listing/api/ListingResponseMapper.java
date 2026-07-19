@@ -1,5 +1,6 @@
 package com.example.realestate.listing.api;
 
+import com.example.realestate.discover.PriceBand;
 import com.example.realestate.discover.TrustBadge;
 import com.example.realestate.geo.GeoCoarsener;
 import com.example.realestate.listing.area.AreaNormalizer;
@@ -142,11 +143,16 @@ public class ListingResponseMapper {
         // or EXACT location for agricultural land. This teaser path is the anonymous-only
         // variant (authenticated callers go through toPublicResponse/build, which is untouched),
         // so masking here gates anon agri without affecting authed/dealer/admin responses.
-        // Residential/non-agri pricing is preserved: price/pricePaise are nulled ONLY for agri.
-        BigDecimal price = isAgri ? null : l.getPrice();
-        Long pricePaise = isAgri ? null : l.getPricePaise();
+        // #1941: exact price is now withheld from ALL anon teaser callers, agri and non-agri
+        // alike — price/pricePaise are always null on this DTO. EVERY property family except
+        // agricultural_land instead receives a coarse priceBand (never fabricated: null when
+        // the underlying price is null/non-positive) — see anonBandFor for the policy boundary.
+        // Agri stays fully price-silent — no band either (its own dedicated hide-gate policy).
+        BigDecimal price = null;
+        Long pricePaise = null;
+        String priceBand = anonBandFor(l);
         return new ListingTeaserResponse(
-                l.getId(), primaryImageUrl, images.size(), price, pricePaise,
+                l.getId(), primaryImageUrl, images.size(), price, pricePaise, priceBand,
                 l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
                 boundary,
                 // #1454: anon agri receives COARSENED lat/lng (~1.1 km, 2 dp) — not exact, not null.
@@ -191,15 +197,19 @@ public class ListingResponseMapper {
 
         return listings.stream()
                 .map(l -> {
-                    // #1454: anon agri price gating on the batch teaser path too — null price/pricePaise
-                    // for agri rows; residential/non-agri pricing unchanged.
+                    // #1454/#1941: anon price gating on the batch teaser path too — price/pricePaise
+                    // are always null (agri and non-agri alike); every property family except
+                    // agricultural_land gets a coarse priceBand instead (never fabricated) — see
+                    // anonBandFor for the policy boundary. Agri stays fully price-silent (no band).
                     boolean isAgri = "agricultural_land".equals(l.getPropertyType());
+                    String priceBand = anonBandFor(l);
                     return new ListingTeaserResponse(
                             l.getId(),
                             firstImageByListing.get(l.getId()),
                             imageCountByListing.getOrDefault(l.getId(), 0L).intValue(),
-                            isAgri ? null : l.getPrice(),
-                            isAgri ? null : l.getPricePaise(),
+                            null,
+                            null,
+                            priceBand,
                             l.getPropertyType(),
                             l.getLocality(),
                             l.getListingPurpose(),
@@ -207,6 +217,40 @@ public class ListingResponseMapper {
                             null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
                 })
                 .toList();
+    }
+
+    /**
+     * #1941 (F2 clarity rework): derives the anon teaser {@code priceBand} for a listing,
+     * making the policy boundary explicit and self-documenting instead of an implicit
+     * boolean negation of isAgri.
+     *
+     * <p>FIRM DECISION: the anon coarse price band applies to EVERY property family EXCEPT
+     * {@code agricultural_land}. agricultural_land is the ONLY family with its own dedicated
+     * hard-gate policy (fully price-silent on the anon teaser — "Sign in to view price", no
+     * band). This is a pure rename/extraction: the set of listings that get a band vs stay
+     * agri-gated is byte-for-byte unchanged from the prior {@code isAgri ? null : bandFor(...)}
+     * expression.
+     */
+    private static String anonBandFor(Listing l) {
+        // IC-3: literal-on-left null-safe check (#1407).
+        if ("agricultural_land".equals(l.getPropertyType())) {
+            return null;
+        }
+        return bandFor(l.getPricePaise());
+    }
+
+    /**
+     * #1941: derives the anon teaser {@code priceBand} for a given pricePaise value.
+     * FIRM DECISION: null or non-positive pricePaise always yields a null band — an honest
+     * "no price" rather than a fabricated bucket (e.g. a listing with pricePaise=0 must never
+     * display as "₹0–25L"). Never call this for agricultural_land — agri stays fully
+     * price-silent on the anon teaser (no band, matching the existing price/pricePaise mask).
+     */
+    private static String bandFor(Long pricePaise) {
+        if (pricePaise == null || pricePaise <= 0) {
+            return null;
+        }
+        return PriceBand.of(pricePaise);
     }
 
     private List<ListingResponse> toBatchResponseList(List<Listing> listings, boolean includeRejectionReason,

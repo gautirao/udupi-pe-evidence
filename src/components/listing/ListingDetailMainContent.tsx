@@ -140,6 +140,10 @@ export function ListingDetailMainContent({
               <p className="font-serif text-2xl md:text-3xl font-bold text-foreground">
                 {formatPrice(listing.price, listing.price_unit ?? null)}
               </p>
+            ) : listing.priceBand ? (
+              <p className="font-serif text-2xl md:text-3xl font-bold text-foreground">
+                {listing.priceBand}
+              </p>
             ) : null}
             {listing.propertyType === 'land' && listing.price_per_cent_paise ? (
               <p className="text-sm text-muted-foreground mt-0.5">

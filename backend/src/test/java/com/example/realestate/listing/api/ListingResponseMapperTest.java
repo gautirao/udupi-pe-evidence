@@ -609,12 +609,15 @@ class ListingResponseMapperTest {
         assertThat(teaser.id()).isEqualTo(l.getId());
         assertThat(teaser.primaryImageUrl()).isNull(); // no images set up
         assertThat(teaser.imageCount()).isEqualTo(0);  // no images set up
-        assertThat(teaser.price()).isEqualTo(l.getPrice());
+        // #1941: exact price is withheld from all anon teaser callers; buildListing() sets a
+        // positive price, so priceBand must be populated instead (see dedicated band tests below).
+        assertThat(teaser.price()).isNull();
+        assertThat(teaser.pricePaise()).isNull();
         assertThat(teaser.propertyType()).isEqualTo(l.getPropertyType());
         assertThat(teaser.locality()).isEqualTo(l.getLocality());
         assertThat(teaser.listingPurpose()).isEqualTo("SALE");
-        // #1452/#1458: record now has 23 components (8 base + 15 agri-only); pricePaise added in #1452, landCategory/farmhouseAvailable/fencingDone added in #1458
-        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(23);
+        // #1452/#1458/#1941: record now has 24 components (9 base + 15 agri-only); priceBand added in #1941
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(24);
     }
 
     @Test
@@ -623,14 +626,15 @@ class ListingResponseMapperTest {
 
         ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
 
-        // #1452: record now has 23 components (8 base + 15 agri-only fields); pricePaise added
-        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(23);
+        // #1452/#1941: record now has 24 components (9 base + 15 agri-only fields); priceBand added in #1941
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(24);
         var componentNames = java.util.Arrays.stream(ListingTeaserResponse.class.getRecordComponents())
                 .map(java.lang.reflect.RecordComponent::getName)
                 .toList();
-        // Base 8 fields always present (pricePaise added in #1452)
+        // Base 9 fields always present (pricePaise added in #1452, priceBand added in #1941)
         assertThat(componentNames).contains(
-                "id", "primaryImageUrl", "imageCount", "price", "pricePaise", "propertyType", "locality", "listingPurpose");
+                "id", "primaryImageUrl", "imageCount", "price", "pricePaise", "priceBand",
+                "propertyType", "locality", "listingPurpose");
         // 15 agri-only fields present in record definition (null for non-agri via @JsonInclude(NON_NULL))
         assertThat(componentNames).contains(
                 "boundary", "latitude", "longitude", "landArea", "landAreaUnit",
@@ -1025,16 +1029,17 @@ class ListingResponseMapperTest {
     }
 
     @Test
-    @org.junit.jupiter.api.DisplayName("#1454 BE-TC4: residential anon teaser keeps price+pricePaise (mask scoped to agri)")
-    void toTeaserResponse_residentialAnon_priceUnchanged() {
+    @org.junit.jupiter.api.DisplayName("#1941: residential anon teaser masks exact price and emits a priceBand instead")
+    void toTeaserResponse_residentialAnon_priceMaskedBandEmitted() {
         Listing l = buildListing("LIVE"); // propertyType = "land" (non-agri)
         l.setPrice(new BigDecimal("750000"));
-        l.setPricePaise(75000000L);
+        l.setPricePaise(75000000L); // ₹7.5 L -> "₹0–25L" band
 
         ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
 
-        assertThat(teaser.price()).isEqualByComparingTo(new BigDecimal("750000"));
-        assertThat(teaser.pricePaise()).isEqualTo(75000000L);
+        assertThat(teaser.price()).isNull();
+        assertThat(teaser.pricePaise()).isNull();
+        assertThat(teaser.priceBand()).isEqualTo(com.example.realestate.discover.PriceBand.of(75000000L));
     }
 
     @Test
@@ -1129,6 +1134,145 @@ class ListingResponseMapperTest {
 
         assertThat(response.latitude()).isEqualTo(13.34091);
         assertThat(response.longitude()).isEqualTo(74.74215);
+    }
+
+    // ==================== #1941: anon residential priceBand (single-listing teaser) ====================
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1941: anon residential with positive pricePaise -> priceBand set, price/pricePaise null")
+    void toTeaserResponse_anonResidential_pricePresent_bandSetNoExactPrice() {
+        Listing l = buildListing("LIVE"); // propertyType = "land" (non-agri)
+        l.setPricePaise(75_000_000L); // ₹7.5 L
+
+        ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
+
+        assertThat(teaser.priceBand()).isEqualTo(com.example.realestate.discover.PriceBand.of(75_000_000L));
+        assertThat(teaser.price()).isNull();
+        assertThat(teaser.pricePaise()).isNull();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1941: anon residential with pricePaise=0 -> priceBand null (no fabricated band)")
+    void toTeaserResponse_anonResidential_priceZero_bandNullNotFabricated() {
+        Listing l = buildListing("LIVE");
+        l.setPricePaise(0L);
+
+        ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
+
+        assertThat(teaser.priceBand()).isNull();
+        assertThat(teaser.price()).isNull();
+        assertThat(teaser.pricePaise()).isNull();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1941: anon residential with null pricePaise -> price/pricePaise/priceBand all null")
+    void toTeaserResponse_anonResidential_priceNull_allThreeNull() {
+        Listing l = buildListing("LIVE");
+        l.setPricePaise(null);
+
+        ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
+
+        assertThat(teaser.priceBand()).isNull();
+        assertThat(teaser.price()).isNull();
+        assertThat(teaser.pricePaise()).isNull();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1941: anon residential pricePaise exactly at a PriceBand boundary lands in the upper bucket")
+    void toTeaserResponse_anonResidential_atBandBoundary_landsInUpperBucket() {
+        Listing l = buildListing("LIVE");
+        // PriceBand.BAND_25L_PAISE boundary: exactly ₹25L must land in the "₹25–50L" bucket
+        // (PriceBand.of uses strict `<`, so the boundary value itself is NOT in the lower bucket).
+        l.setPricePaise(2_500_000_00L);
+
+        ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
+
+        assertThat(teaser.priceBand()).isEqualTo(com.example.realestate.discover.PriceBand.of(2_500_000_00L));
+        assertThat(teaser.priceBand()).isEqualTo("₹25–50L");
+        assertThat(teaser.price()).isNull();
+        assertThat(teaser.pricePaise()).isNull();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1941: anon agri teaser byte-identical — price/pricePaise/priceBand all null, agri fields unaffected")
+    void toTeaserResponse_anonAgri_byteIdentical_noBandEitherEvenWithPositivePrice() {
+        Listing l = buildAgriListing("LIVE");
+        l.setPricePaise(75_000_000L); // positive price — must still yield a null band for agri
+        l.setWaterSource("Borewell");
+
+        ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
+
+        assertThat(teaser.price()).isNull();
+        assertThat(teaser.pricePaise()).isNull();
+        assertThat(teaser.priceBand()).as("agri stays fully price-silent — no band either").isNull();
+        // Agri-context fields untouched by the #1941 change.
+        assertThat(teaser.waterSource()).isEqualTo("Borewell");
+    }
+
+    // ==================== #1941: anon residential priceBand (BATCH teaser) ====================
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1941: toTeaserResponseList — mixed batch, band/no-exact-price/agri-null all correct per-row")
+    void toTeaserResponseList_mixedBatch_perRowPriceBandCorrect() {
+        Listing residentialWithPrice = buildListing("LIVE");
+        residentialWithPrice.setPricePaise(75_000_000L); // ₹7.5L
+        Listing residentialNullPrice = buildListing("LIVE");
+        residentialNullPrice.setPricePaise(null);
+        Listing agri = buildAgriListing("LIVE");
+        agri.setPricePaise(75_000_000L); // positive — must still be masked with no band
+
+        when(listingImageRepository.findByListingIdInOrderByListingIdAscPositionAsc(anyList()))
+                .thenReturn(List.of());
+
+        List<ListingTeaserResponse> results = mapper.toTeaserResponseList(
+                List.of(residentialWithPrice, residentialNullPrice, agri));
+
+        ListingTeaserResponse r1 = results.stream()
+                .filter(r -> r.id().equals(residentialWithPrice.getId())).findFirst().orElseThrow();
+        assertThat(r1.price()).isNull();
+        assertThat(r1.pricePaise()).isNull();
+        assertThat(r1.priceBand()).isEqualTo(com.example.realestate.discover.PriceBand.of(75_000_000L));
+
+        ListingTeaserResponse r2 = results.stream()
+                .filter(r -> r.id().equals(residentialNullPrice.getId())).findFirst().orElseThrow();
+        assertThat(r2.price()).isNull();
+        assertThat(r2.pricePaise()).isNull();
+        assertThat(r2.priceBand()).isNull();
+
+        ListingTeaserResponse r3 = results.stream()
+                .filter(r -> r.id().equals(agri.getId())).findFirst().orElseThrow();
+        assertThat(r3.price()).isNull();
+        assertThat(r3.pricePaise()).isNull();
+        assertThat(r3.priceBand()).as("agri batch row stays fully price-silent — no band either").isNull();
+    }
+
+    // ==================== #1941 F2: anon band coverage is "every family except agri", not residential-only ====================
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1941 F2: commercial_building anon teaser gets the same priceBand treatment as residential (not agri-negation-by-accident)")
+    void toTeaserResponse_commercialBuilding_getsBandSameAsResidential_priceAbsent() {
+        Listing commercial = buildListing("LIVE");
+        commercial.setPropertyType("commercial_building");
+        commercial.setPricePaise(75_000_000L); // ₹7.5L
+
+        Listing residential = buildListing("LIVE");
+        residential.setPropertyType("apartment");
+        residential.setPricePaise(75_000_000L); // same price -> must yield the same band
+
+        ListingTeaserResponse commercialTeaser = mapper.toTeaserResponse(commercial);
+        ListingTeaserResponse residentialTeaser = mapper.toTeaserResponse(residential);
+
+        // Non-agri commercial family gets a real band, never a fabricated exact price.
+        assertThat(commercialTeaser.priceBand())
+                .as("commercial_building must receive an anon priceBand like any other non-agri family")
+                .isEqualTo(com.example.realestate.discover.PriceBand.of(75_000_000L));
+        assertThat(commercialTeaser.price()).isNull();
+        assertThat(commercialTeaser.pricePaise()).isNull();
+
+        // Parity: same pricePaise on commercial_building and a residential type yields the SAME
+        // band value — proving the coverage is a deliberate "every family except agri" policy,
+        // not a residential-only accident of the old isAgri negation.
+        assertThat(commercialTeaser.priceBand()).isEqualTo(residentialTeaser.priceBand());
     }
 
     // ==================== Helper ====================

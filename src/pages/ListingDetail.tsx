@@ -87,6 +87,13 @@ export interface PublicListingDetail extends Partial<ListingResponse> {
    * createdAt "Updated"/"Listed" display).
    */
   confirmedAt?: string | null;
+  /**
+   * Issue #1941 — anonymous residential callers receive a coarse price band
+   * (e.g. "₹1–2Cr") instead of the exact price/pricePaise. Authed callers get
+   * exact price/pricePaise and no priceBand. Agri never sets this. Null/absent
+   * when the listing has no price — never fabricate a band.
+   */
+  priceBand?: string | null;
 }
 
 function useListingById(id: string | undefined, isPreview: boolean) {
