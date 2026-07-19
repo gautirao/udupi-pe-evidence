@@ -393,7 +393,9 @@ export default function MapDiscovery() {
     selectMarkerSibling,
     showMarkerInList,
     clearSelectedMarkerListing,
-  } = useMarkerSelection({ urlActions, urlState });
+    clearMarkerPopoverFromUrl,
+    hydrateSelectedMarkerFromUrl,
+  } = useMarkerSelection({ urlActions, urlState, mapContainerRef });
 
   // Issue #1374 — override panelContent to 'agri-detail' while an agri polygon is
   // selected. Confined to 'agri-selected' (not 'agri-landing') so a stale
@@ -1540,27 +1542,18 @@ export default function MapDiscovery() {
     urlState.areaKey != null &&
     (urlState.schoolId == null || urlState.journey === 'area-first');
 
-  // Issue #1606 — resolved group display name for the area-first breadcrumb. Prefers the
-  // backend group name, falls back to a prettified slug so a deep-linked groupId that has
-  // not yet hydrated still reads as a human label (e.g. "University Belt"). Null when no
-  // group context exists — the breadcrumb then omits the group crumb.
-  const selectedGroupName =
-    focusedGroup?.name ?? (urlState.groupId ? prettifyZoneSlug(urlState.groupId) : null);
-
-  // Issue #1808 — the ring/helper (not the card/legend) fire only on an actual
-  // map/panel pick, never on deep-link/refresh (design §5/§9, AC5).
-  const regionGuideVisible = isRegionOverview && !regionGuideDismissed;
-  const regionGuideRingActive = regionGuideVisible && regionSelectSource !== 'deeplink';
-
-  if (!isCityValid) return <CityNotSupported city={city} />;
-
   // Issue #1824 Slice S10b — the marker-resolve + stepper cluster (Issue
   // #1810 Stage 2A, MODEL A user-locked model, see approved-plan.toml
   // [user_decision]) is extracted verbatim into the pure resolveMarkerPopover
-  // module. Not a hook (plain const), so it is safe to declare after the
-  // early return above; every field it closes over is already declared
-  // earlier in this component. See
-  // docs/audit/evidence/issue-1824-map-discovery-decomposition/slice-s10b-design.md.
+  // module. Issue #1939 — RELOCATED from just after the isCityValid early
+  // return below (its original S10b position) to HERE, immediately after
+  // isMarkerPopoverEligible. Still a plain const, not a hook, so this move
+  // changes nothing about the computed value — only WHEN it is available.
+  // It has to move because the new URL-hydration useEffect right below DOES
+  // need currentMapMarkerListings as a real reactive dependency, and a
+  // useEffect cannot be declared after a conditional return (Rules of
+  // Hooks). Every field this call closes over was already available earlier
+  // in the component before this move (per the original S10b comment).
   const { currentMapMarkerListings, markerPopoverStepper } = resolveMarkerPopover({
     mapLayerCategory,
     selectedArea,
@@ -1580,6 +1573,133 @@ export default function MapDiscovery() {
     isMarkerPopoverEligible,
     selectedMarkerListing,
   });
+
+  // Issue #1939 — resolves the URL `listing` param against the SAME ordered
+  // marker set PropertyMap renders (currentMapMarkerListings) and the panel
+  // scroll/stepper already trust (Issue #1810 MODEL A). null whenever the id
+  // is absent, not (yet) present in the loaded set, or filtered off the map
+  // — the hydration effect below treats all of those as LEAVE_PARAM_NO_POPOVER
+  // (safe no-op), never an error/toast. Gives the effect a stable,
+  // identity-comparable dependency instead of the raw currentMapMarkerListings
+  // array, which re-allocates on every filter/journey/area change (qa-fast
+  // risk register item 3) — recomputing this memo on those changes is cheap
+  // (an O(n) find over a small array); the EFFECT below only re-runs when the
+  // *resolved result* actually changes.
+  const urlHydratedMarkerListing = useMemo(
+    () =>
+      urlState.selectedListing
+        ? (currentMapMarkerListings.find((l) => l.id === urlState.selectedListing) ?? null)
+        : null,
+    [urlState.selectedListing, currentMapMarkerListings],
+  );
+
+  // Issue #1939 — URL → popover restore (Back/Forward/hard-refresh/deep-link).
+  // The click/sibling/show-in-list handlers (useMarkerSelection) only ever
+  // SET selectedMarkerListing/markerPixelPos from a user gesture; nothing
+  // hydrated them from urlState.selectedListing on mount or on a later
+  // data/map-ready transition, so a deep-linked/refreshed `?listing=<uuid>`
+  // restored the marker highlight (URL-driven — DiscoverMapCanvas passes
+  // urlState.selectedListing straight through to PropertyMap's
+  // selectedListingId prop, no local state involved) but never the popover
+  // card itself (gated on the two local states above).
+  //
+  // Reactive by construction: fires again whenever urlHydratedMarkerListing
+  // (marker-data availability), isMarkerPopoverEligible (atomic journey
+  // gate — school/agri-first never call hydrateSelectedMarkerFromUrl, so
+  // neither local state is ever set for them), or mapReady flips — so a cold
+  // hard-refresh where markers/area data resolve a render or two after mount
+  // still restores the card once they do, instead of only checking once on
+  // mount. hydrateSelectedMarkerFromUrl itself is idempotent (no-op if
+  // already selected) and PERSISTENTLY suppressed (not just for one cycle)
+  // right after showMarkerInList closes the card for the same id — including
+  // across repeated re-fires of this effect caused by resolveMarkerPopover's
+  // deliberately non-memoized currentMapMarkerListings — until
+  // urlState.selectedListing genuinely changes away from that id. See
+  // useMarkerSelection's listTransitionSuppressIdRef for the full contract.
+  //
+  // Issue #1939 code-review F1 — REVERSE sync. When the URL genuinely no
+  // longer carries a `listing` id (urlState.selectedListing == null — e.g.
+  // Back navigation past the point the id was pushed), the popover must
+  // close even though nothing here ever called handlePopoverDismiss (which
+  // owns the FORWARD direction: local state → URL). Deliberately keyed off
+  // urlState.selectedListing, not urlHydratedMarkerListing, so a same-id
+  // marker that's momentarily absent from currentMapMarkerListings (e.g.
+  // mid-filter-recompute) does NOT close a popover the URL still claims —
+  // that transient-miss case is instead covered by
+  // hydrateSelectedMarkerFromUrl's own bounded rAF retry (F2) for the DOM
+  // node not being painted yet. Cannot race the click path: a marker click
+  // sets selectedMarkerListing and (whenever isMarkerPopoverEligible is
+  // true) writes the URL `listing` param in the very same handler
+  // invocation, so React 18 batches both into one render — there is no
+  // intermediate render where urlState.selectedListing is null while
+  // selectedMarkerListing is already set to the new listing.
+  //
+  // Issue #1939 rework F3 — third reconciliation branch: the URL names a
+  // listing id (urlState.selectedListing != null) that is NOT (yet)
+  // resolvable against the current marker set (urlHydratedMarkerListing ==
+  // null), AND a DIFFERENT listing's popover is currently showing locally
+  // (selectedMarkerListing != null && selectedMarkerListing.id !==
+  // urlState.selectedListing). Without this branch the effect did nothing
+  // in this state, leaving the screen showing the OLD listing's popover
+  // while the URL/selection had already moved to a new, unresolvable one.
+  //
+  // The `selectedMarkerListing?.id !== urlState.selectedListing`
+  // discriminator is what separates this (F3: a genuinely DIFFERENT id,
+  // stale) from F2's bounded rAF retry (SAME id, still resolving/painting —
+  // must be left alone to keep polling). Two sub-cases both correctly fall
+  // out of requiring selectedMarkerListing to be non-null AND mismatched:
+  //   - Same id mid-retry (F2): selectedMarkerListing is either still null
+  //     (nothing painted yet) or already equals the target id once F2
+  //     succeeds — this branch's `!= null` guard or id-equality guard skips
+  //     it either way, so F2's retry is never torn down here.
+  //   - Fresh deep-link to an unresolvable id with no popover open yet:
+  //     selectedMarkerListing is null, so `selectedMarkerListing != null`
+  //     is false and this branch is a no-op — it must NOT cancel a
+  //     legitimately in-flight F2 retry for that same fresh id.
+  // Only when a DIFFERENT listing is genuinely still displayed does this
+  // branch fire, clearing it via clearMarkerPopoverFromUrl (which itself
+  // cancels any in-flight retry for the OLD id FIRST, then clears local
+  // state — see that method's JSDoc) while deliberately leaving the URL's
+  // `listing` param untouched (no clearSelectedListing call) so that once
+  // the new id resolves (urlHydratedMarkerListing becomes non-null on a
+  // later render), the existing happy-path branch above hydrates it
+  // normally, with its own F2 retry if needed.
+  useEffect(() => {
+    if (!isMarkerPopoverEligible || !mapReady) return;
+    if (urlHydratedMarkerListing) {
+      hydrateSelectedMarkerFromUrl(urlHydratedMarkerListing);
+      return;
+    }
+    if (urlState.selectedListing == null) {
+      clearMarkerPopoverFromUrl();
+      return;
+    }
+    if (selectedMarkerListing != null && selectedMarkerListing.id !== urlState.selectedListing) {
+      clearMarkerPopoverFromUrl();
+    }
+  }, [
+    isMarkerPopoverEligible,
+    mapReady,
+    urlHydratedMarkerListing,
+    hydrateSelectedMarkerFromUrl,
+    urlState.selectedListing,
+    clearMarkerPopoverFromUrl,
+    selectedMarkerListing,
+  ]);
+
+  // Issue #1606 — resolved group display name for the area-first breadcrumb. Prefers the
+  // backend group name, falls back to a prettified slug so a deep-linked groupId that has
+  // not yet hydrated still reads as a human label (e.g. "University Belt"). Null when no
+  // group context exists — the breadcrumb then omits the group crumb.
+  const selectedGroupName =
+    focusedGroup?.name ?? (urlState.groupId ? prettifyZoneSlug(urlState.groupId) : null);
+
+  // Issue #1808 — the ring/helper (not the card/legend) fire only on an actual
+  // map/panel pick, never on deep-link/refresh (design §5/§9, AC5).
+  const regionGuideVisible = isRegionOverview && !regionGuideDismissed;
+  const regionGuideRingActive = regionGuideVisible && regionSelectSource !== 'deeplink';
+
+  if (!isCityValid) return <CityNotSupported city={city} />;
 
   // Issue #1810 (Stage 2A) — steps the popup to the sibling at index±1 within
   // the ratified MODEL A set. Updates selectedMarkerListing + the shared

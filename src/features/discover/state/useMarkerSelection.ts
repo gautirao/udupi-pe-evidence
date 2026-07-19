@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 import type { DiscoverUrlActions, DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 
@@ -57,6 +57,19 @@ import type { DiscoverUrlActions, DiscoverUrlState } from '@/hooks/useDiscoverUr
 export interface UseMarkerSelectionParams {
   urlActions: DiscoverUrlActions;
   urlState: DiscoverUrlState;
+  /**
+   * Issue #1939 — the SAME map-half container ref MapDiscovery passes to
+   * DiscoverMapCanvas/DiscoverMapMarkerPopover for popover positioning/clamp.
+   * Used ONLY by hydrateSelectedMarkerFromUrl below to locate the target
+   * marker's DOM node (data-listing-id attribute, set by MarkerClusterLayer
+   * in PropertyMap.tsx) and derive its on-screen pixel position. No Leaflet
+   * map-instance/projection access is available at this layer — PropertyMap
+   * does not expose one — so this deliberately reads the DOM instead of
+   * calling latLngToContainerPoint. Optional so existing callers/tests that
+   * predate #1939 (no map-container ref, no hydration need) keep compiling
+   * unchanged — hydrateSelectedMarkerFromUrl safely no-ops without it.
+   */
+  mapContainerRef?: RefObject<HTMLDivElement | null>;
 }
 
 export interface UseMarkerSelectionResult {
@@ -77,11 +90,42 @@ export interface UseMarkerSelectionResult {
    * no longer exposed to the page.
    */
   clearSelectedMarkerListing: () => void;
+  /**
+   * Issue #1939 code-review F1 — local-state-only popover close for the
+   * URL→UI REVERSE sync (Back navigation, or any other transition that
+   * removes `listing` from the URL). Clears BOTH selectedMarkerListing and
+   * markerPixelPos WITHOUT writing the URL — unlike handlePopoverDismiss,
+   * which also clears the URL `listing` param, this is called precisely
+   * because the URL has already lost the param (via history navigation), so
+   * writing it again would be redundant at best and fight an in-flight
+   * Back/Forward transition at worst. Idempotent: calling it when both are
+   * already null costs a bailed-out setState (React skips the re-render).
+   *
+   * Issue #1939 rework F3 — ALSO cancels any in-flight hydration retry
+   * (see cancelHydrationRetry in the implementation) before clearing local
+   * state, so MapDiscovery's third URL-reconciliation branch (URL moved to
+   * a different, currently-unresolvable id while a DIFFERENT listing's
+   * popover is still showing) can call this single method to both stop a
+   * stale retry for the OLD id and close the stale popover, atomically.
+   */
+  clearMarkerPopoverFromUrl: () => void;
+  /**
+   * Issue #1939 — URL → popover restore. Call with the listing already
+   * resolved (by the caller) from urlState.selectedListing against the same
+   * ordered marker set PropertyMap renders (currentMapMarkerListings). Safe
+   * to call repeatedly / on every eligible render — idempotent (no-op if
+   * this listing is already selected) and PERSISTENTLY suppressed (not just
+   * for one cycle) for as long as urlState.selectedListing stays equal to
+   * the id showMarkerInList most recently dismissed-to-list. See the
+   * function body for the full LEAVE_PARAM_NO_POPOVER contract.
+   */
+  hydrateSelectedMarkerFromUrl: (listing: PropertyListingWithImages) => void;
 }
 
 export function useMarkerSelection({
   urlActions,
   urlState,
+  mapContainerRef,
 }: UseMarkerSelectionParams): UseMarkerSelectionResult {
   // Issue #1373 — selected agri polygon listing for right-panel stub (#1374 content).
   const [selectedMarkerListing, setSelectedMarkerListing] =
@@ -185,6 +229,47 @@ export function useMarkerSelection({
     ctxRef.current.urlActions.setSelectedListing(listing.id);
   }, []);
 
+  // Issue #1939 (fix-up, code-review finding) — PERSISTENT id suppression
+  // written by showMarkerInList below and consumed by
+  // hydrateSelectedMarkerFromUrl further down. Originally one-shot (cleared
+  // itself on the very next hydration check), which was NOT enough:
+  // resolveMarkerPopover/currentMapMarkerListings intentionally returns a
+  // fresh array/object on every render (never memoized), so a background
+  // refetch/mapZoom/filter recompute after showMarkerInList produces a new
+  // urlHydratedMarkerListing object for the SAME id and re-fires the
+  // hydration effect a second (or Nth) time — by then the one-shot flag had
+  // already been spent, so the popover the user just dismissed via "Show in
+  // list" would silently reopen. Now this ref stays armed for the id across
+  // any number of re-fires, and is only cleared/re-armed by the effect below
+  // when urlState.selectedListing genuinely changes away from that id (a
+  // real navigation to another marker, or a clear) — see that effect's
+  // comment. Because the ref resets to null on every fresh mount (useRef's
+  // initial value), a hard refresh or deep link to `?listing=<id>` is
+  // unaffected: there is no dismissed-to-list memory to suppress it.
+  const listTransitionSuppressIdRef = useRef<string | null>(null);
+
+  // Issue #1939 (fix-up) — re-arms hydration once the URL's `listing` id
+  // genuinely moves away from the one showMarkerInList suppressed. Runs on
+  // every urlState.selectedListing change (a real user navigation — clicking
+  // a different marker/sibling, or handlePopoverDismiss clearing the param —
+  // never a same-id re-render, since the effect dep is the scalar id, not an
+  // object). Deliberately does NOT gate on the current ref value having
+  // matched the new id — it always re-syncs to null unless the incoming id is
+  // still the suppressed one, so Back/Forward navigation that lands back on
+  // the SAME dismissed-to-list id via a genuinely different history entry
+  // still re-arms nothing (id unchanged → suppression correctly holds), while
+  // navigating to a different id (or clearing) always clears it, letting a
+  // later return to that id (fresh navigation, deep link, or Back/Forward)
+  // open normally.
+  useEffect(() => {
+    if (
+      listTransitionSuppressIdRef.current != null &&
+      listTransitionSuppressIdRef.current !== urlState.selectedListing
+    ) {
+      listTransitionSuppressIdRef.current = null;
+    }
+  }, [urlState.selectedListing]);
+
   // Issue #1810 (Stage 2A) — "Show in list": re-drives setSelectedListing(id)
   // (idempotent re-scroll+highlight, consumed by AreaSelectedPanel) and closes
   // ONLY the popup overlay (clearing local markerPixelPos/selectedMarkerListing
@@ -194,12 +279,187 @@ export function useMarkerSelection({
   const showMarkerInList = useCallback((id: string) => {
     setMarkerPixelPos(null);
     setSelectedMarkerListing(null);
+    // Issue #1939 — persistent suppression (see listTransitionSuppressIdRef's
+    // declaration above) so the URL-hydration effect (driven from
+    // MapDiscovery) does not re-open the card this call is intentionally
+    // closing, no matter how many times it re-fires while this same id
+    // remains the URL's `listing` param. setSelectedListing(id) below
+    // re-drives the SAME id already in the URL for the panel highlight/scroll
+    // (see the JSDoc above).
+    listTransitionSuppressIdRef.current = id;
     ctxRef.current.urlActions.setSelectedListing(id);
   }, []);
 
   const clearSelectedMarkerListing = useCallback(() => {
     setSelectedMarkerListing(null);
   }, []);
+
+  // Issue #1939 code-review F2 — bounded rAF-based readiness retry state for
+  // hydrateSelectedMarkerFromUrl below. A single requestAnimationFrame id
+  // (never more than one in flight) plus the listing id it is polling for,
+  // so a fresh call to hydrateSelectedMarkerFromUrl (new id, or a re-fire
+  // for the same id) can always cancel any stale attempt before starting.
+  // Declared HERE, ahead of clearMarkerPopoverFromUrl, because the F3 rework
+  // below folds cancelHydrationRetry into clearMarkerPopoverFromUrl's own
+  // useCallback dependency array — that array is evaluated at declaration
+  // time, so cancelHydrationRetry must already exist by then.
+  const hydrationRetryRef = useRef<{ rafId: number; listingId: string } | null>(null);
+
+  const cancelHydrationRetry = useCallback(() => {
+    if (hydrationRetryRef.current != null) {
+      cancelAnimationFrame(hydrationRetryRef.current.rafId);
+      hydrationRetryRef.current = null;
+    }
+  }, []);
+
+  // Issue #1939 code-review F2 — cancel any pending retry on unmount so a
+  // late rAF callback never calls setState after the hook's owning
+  // component has gone away.
+  useEffect(() => {
+    return () => {
+      cancelHydrationRetry();
+    };
+  }, [cancelHydrationRetry]);
+
+  // Issue #1939 code-review F1 — see clearMarkerPopoverFromUrl's JSDoc above.
+  // Does NOT touch listTransitionSuppressIdRef: that ref is owned entirely
+  // by the urlState.selectedListing-keyed effect above, which already nulls
+  // it out whenever the id changes away (including a genuine id → null
+  // transition), so a later Forward navigation back to the same id is not
+  // left stuck suppressed by this call.
+  //
+  // Issue #1939 rework F3 — also cancels any in-flight hydration retry
+  // (cancelHydrationRetry, BEFORE clearing local state below). This method
+  // is only ever called when the caller wants NO popover showing for the
+  // CURRENT local id, so a retry still polling for that id (or a stale one
+  // left over from a prior id) must never be allowed to survive and later
+  // reopen a popover this call just closed. Folding the cancel in here
+  // (rather than exposing the raw hydrationRetryRef/cancelHydrationRetry up
+  // to MapDiscovery) keeps retry-cancellation entirely hook-owned:
+  // MapDiscovery's F3 reconciliation branch calls this one method — the
+  // same one F1 already uses for the reverse-sync clear — so cancel + clear
+  // always happen together, atomically, with no way for a caller to invoke
+  // one without the other.
+  const clearMarkerPopoverFromUrl = useCallback(() => {
+    cancelHydrationRetry();
+    setMarkerPixelPos(null);
+    setSelectedMarkerListing(null);
+  }, [cancelHydrationRetry]);
+
+  // Issue #1939 — URL-driven hydration for Back/Forward/hard-refresh/deep-link
+  // restore of the marker popover (the marker HIGHLIGHT already restores on
+  // its own — DiscoverMapCanvas passes urlState.selectedListing straight
+  // through to PropertyMap's selectedListingId prop, no local state involved
+  // — only the popover card was missing this path). The caller (MapDiscovery)
+  // resolves the target listing from currentMapMarkerListings and calls this
+  // only when isMarkerPopoverEligible && mapReady, so the atomic
+  // journey-gate (never set one state without the other, never set either
+  // when ineligible) is enforced by the caller never invoking this function
+  // in the ineligible case, rather than by a check duplicated in here.
+  //
+  // markerPixelPos is derived from the DOM, not Leaflet's latLngToContainerPoint:
+  // no Leaflet map instance is reachable from this hook (or from MapDiscovery)
+  // — PropertyMap/MarkerClusterLayer are the only components inside the
+  // react-leaflet MapContainer context (useMap()), and neither exposes the
+  // instance upward. Every residential marker's DOM element already carries a
+  // data-listing-id attribute (MarkerClusterLayer's marker.on('add', ...) in
+  // PropertyMap.tsx, added for E2E selectors) — reused here as the lookup
+  // key. getBoundingClientRect() of that element, relative to the SAME
+  // mapContainerRef DiscoverMapMarkerPopover clamps against, gives the same
+  // "pixel position relative to the map container" contract the click path's
+  // e.containerPoint produces.
+  // Issue #1939 code-review F2 — bounded readiness-retry cap. ~30 rAF
+  // frames ≈ 500ms at 60fps; a hard ceiling, not a timer-based timeout, so
+  // slow/throttled frames just take longer wall-clock time rather than
+  // firing extra checks.
+  const MAX_HYDRATION_RETRY_FRAMES = 30;
+
+  const hydrateSelectedMarkerFromUrl = useCallback(
+    (listing: PropertyListingWithImages) => {
+      // Issue #1939 code-review (rework, advisory fix) — cancel any
+      // in-flight retry from a prior call FIRST, before any early-return
+      // guard below. A stale rAF retry left running past an early return
+      // (e.g. this call bails on the idempotent check because a click
+      // handler already selected this exact listing) could later fire and
+      // call setMarkerPixelPos with a DOM-rect-derived position, overwriting
+      // the more precise click-computed position — the exact flicker the
+      // idempotent check exists to prevent. Unconditional placement here
+      // guarantees at most one retry loop is ever in flight regardless of
+      // which branch below this call takes.
+      cancelHydrationRetry();
+
+      // Issue #1939 (fix-up) — PERSISTENT suppression, not one-shot. Stays a
+      // no-op for every re-fire (fresh currentMapMarkerListings reference on
+      // background refetch/mapZoom/filter recompute included) for as long as
+      // listTransitionSuppressIdRef holds this exact id. Do NOT clear the ref
+      // here — clearing/re-arming is owned entirely by the
+      // urlState.selectedListing-keyed effect above, which only fires on a
+      // genuine URL change (real navigation away from this id, or a clear),
+      // never on an object-identity-only re-render.
+      if (listTransitionSuppressIdRef.current === listing.id) {
+        return;
+      }
+      // Idempotent — a click/sibling-step handler may already have set this
+      // exact listing selected (same render or a prior one). Re-deriving
+      // markerPixelPos from a DOM query here would fight that: a slightly
+      // different pixel value than the click's own e.containerPoint,
+      // producing a visible flicker/jump for zero benefit.
+      if (selectedMarkerListing?.id === listing.id) return;
+      const container = mapContainerRef?.current;
+      if (!container) return; // not mounted yet — LEAVE_PARAM_NO_POPOVER
+
+      const attemptHydration = (framesLeft: number) => {
+        // Issue #1939 code-review F2(a) — abort if the URL's target id moved
+        // on mid-retry (Back/Forward, a new marker click, a sibling step) —
+        // never hydrate a listing the URL no longer names.
+        if (ctxRef.current.urlState.selectedListing !== listing.id) {
+          hydrationRetryRef.current = null;
+          return;
+        }
+        // Issue #1939 code-review F2(e) — a dismissed/suppressed id must not
+        // be reopened by a retry that was already in flight when
+        // showMarkerInList armed suppression for it.
+        if (listTransitionSuppressIdRef.current === listing.id) {
+          hydrationRetryRef.current = null;
+          return;
+        }
+        const el = mapContainerRef?.current;
+        if (!el) {
+          hydrationRetryRef.current = null;
+          return; // unmounted mid-retry — LEAVE_PARAM_NO_POPOVER
+        }
+        const markerEl = el.querySelector<HTMLElement>(
+          `[data-listing-id="${CSS.escape(listing.id)}"]`,
+        );
+        if (markerEl) {
+          const markerRect = markerEl.getBoundingClientRect();
+          const containerRect = el.getBoundingClientRect();
+          setSelectedMarkerListing(listing);
+          setMarkerPixelPos({
+            x: markerRect.left - containerRect.left + markerRect.width / 2,
+            y: markerRect.top - containerRect.top + markerRect.height / 2,
+          });
+          hydrationRetryRef.current = null;
+          return;
+        }
+        // LEAVE_PARAM_NO_POPOVER — marker not (yet) painted by Leaflet's own
+        // effect-driven render pass, currently clustered/spiderfied away, or
+        // filtered off the map. Never throws, never clears the URL
+        // `listing` param, never toasts; the URL/panel highlight are
+        // unaffected. Issue #1939 code-review F2(d) — once framesLeft is
+        // exhausted, stop silently instead of retrying forever.
+        if (framesLeft <= 0) {
+          hydrationRetryRef.current = null;
+          return;
+        }
+        const rafId = requestAnimationFrame(() => attemptHydration(framesLeft - 1));
+        hydrationRetryRef.current = { rafId, listingId: listing.id };
+      };
+
+      attemptHydration(MAX_HYDRATION_RETRY_FRAMES);
+    },
+    [selectedMarkerListing, mapContainerRef, cancelHydrationRetry],
+  );
 
   return {
     selectedMarkerListing,
@@ -210,5 +470,7 @@ export function useMarkerSelection({
     selectMarkerSibling,
     showMarkerInList,
     clearSelectedMarkerListing,
+    clearMarkerPopoverFromUrl,
+    hydrateSelectedMarkerFromUrl,
   };
 }
