@@ -76,10 +76,19 @@ class ListingPurposeOpenSearchIT {
     // Tests
     // -----------------------------------------------------------------------
 
+    // Compile/wiring fix only (#1945): DiscoverQueryDsl.buildMarkersQuery now requires the
+    // caller-resolved active-area_key allow-list as an explicit parameter (always applied, even
+    // when the underlying Filters carries no city). This IT seeds both docs under the SAME
+    // area_key and passes that area_key back as the "active" set so the pre-existing
+    // listing_purpose assertions below keep exercising real OpenSearch filtering behaviour
+    // unchanged — the docs are not accidentally gated to empty by the new area_key clause.
+    private static final String TEST_AREA_KEY = "qa-listing-purpose-area";
+    private static final List<String> ACTIVE_AREA_KEYS = List.of(TEST_AREA_KEY);
+
     @Test
     void saleFilter_returnsOnlySaleDoc() throws Exception {
         DiscoverListingPredicateBuilder.Filters saleFilters = filters("sale");
-        Map<String, Object> query = DiscoverQueryDsl.buildMarkersQuery(saleFilters);
+        Map<String, Object> query = DiscoverQueryDsl.buildMarkersQuery(saleFilters, ACTIVE_AREA_KEYS);
 
         int hits = countHits(query);
 
@@ -89,7 +98,7 @@ class ListingPurposeOpenSearchIT {
     @Test
     void rentFilter_returnsOnlyRentDoc() throws Exception {
         DiscoverListingPredicateBuilder.Filters rentFilters = filters("rent");
-        Map<String, Object> query = DiscoverQueryDsl.buildMarkersQuery(rentFilters);
+        Map<String, Object> query = DiscoverQueryDsl.buildMarkersQuery(rentFilters, ACTIVE_AREA_KEYS);
 
         int hits = countHits(query);
 
@@ -99,7 +108,7 @@ class ListingPurposeOpenSearchIT {
     @Test
     void noFilter_returnsBothDocs() throws Exception {
         DiscoverListingPredicateBuilder.Filters noFilters = filters(null);
-        Map<String, Object> query = DiscoverQueryDsl.buildMarkersQuery(noFilters);
+        Map<String, Object> query = DiscoverQueryDsl.buildMarkersQuery(noFilters, ACTIVE_AREA_KEYS);
 
         int hits = countHits(query);
 
@@ -125,6 +134,7 @@ class ListingPurposeOpenSearchIT {
         properties.put("listing_purpose", Map.of("type", "keyword"));
         properties.put("status", Map.of("type", "keyword"));
         properties.put("city_slug", Map.of("type", "keyword"));
+        properties.put("area_key", Map.of("type", "keyword"));
         // buildMarkersQuery and buildListingsQuery both sort on created_at desc — must be mapped
         properties.put("created_at", Map.of("type", "date"));
 
@@ -140,12 +150,14 @@ class ListingPurposeOpenSearchIT {
         Map<String, Object> saleDoc = Map.of(
                 "id", "test-sale-1",
                 "status", "LIVE",
-                "listing_purpose", "sale"
+                "listing_purpose", "sale",
+                "area_key", TEST_AREA_KEY
         );
         Map<String, Object> rentDoc = Map.of(
                 "id", "test-rent-1",
                 "status", "LIVE",
-                "listing_purpose", "rent"
+                "listing_purpose", "rent",
+                "area_key", TEST_AREA_KEY
         );
         put(baseUrl + "/" + INDEX + "/_doc/test-sale-1", MAPPER.writeValueAsString(saleDoc));
         put(baseUrl + "/" + INDEX + "/_doc/test-rent-1", MAPPER.writeValueAsString(rentDoc));

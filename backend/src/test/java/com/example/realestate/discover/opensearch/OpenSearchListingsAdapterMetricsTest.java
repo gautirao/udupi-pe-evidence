@@ -1,5 +1,6 @@
 package com.example.realestate.discover.opensearch;
 
+import com.example.realestate.discover.CityActivationGuard;
 import com.example.realestate.discover.DiscoverListingsPage;
 import com.example.realestate.discover.DiscoverListingsQuery;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,6 +9,7 @@ import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -71,7 +73,13 @@ class OpenSearchListingsAdapterMetricsTest {
 
         OpenSearchProperties props = new OpenSearchProperties(
                 true, BASE_URL, ALIAS, 500, 1000, "", "", "", false, 500, 1.0, 10);
-        adapter = new OpenSearchListingsAdapter(restClient, props, new ObjectMapper(), queryMetrics);
+        // Compile/wiring fix only (#1945) — stubs a non-empty active-area_key set (matching the
+        // "udupi-core" area_key on the canned response docs above) so these pre-existing metrics
+        // tests keep exercising the real OpenSearch round-trip rather than short-circuiting empty.
+        CityActivationGuard cityActivationGuard = Mockito.mock(CityActivationGuard.class);
+        Mockito.when(cityActivationGuard.activeAreaKeysForCity(Mockito.anyString()))
+                .thenReturn(Set.of("udupi-core"));
+        adapter = new OpenSearchListingsAdapter(restClient, props, new ObjectMapper(), queryMetrics, cityActivationGuard);
     }
 
     private String searchUrl() {

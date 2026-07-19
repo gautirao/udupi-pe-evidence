@@ -1,5 +1,6 @@
 package com.example.realestate.discover.opensearch;
 
+import com.example.realestate.discover.CityActivationGuard;
 import com.example.realestate.discover.DiscoverListingResponse;
 import com.example.realestate.discover.DiscoverListingsAggregates;
 import com.example.realestate.discover.DiscoverListingsPage;
@@ -17,6 +18,7 @@ import org.springframework.web.client.RestClient;
 
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -38,15 +40,18 @@ public class OpenSearchListingsAdapter implements DiscoverListingsPort {
     private final OpenSearchProperties props;
     private final ObjectMapper objectMapper;
     private final OpenSearchQueryMetrics queryMetrics;
+    private final CityActivationGuard cityActivationGuard;
 
     public OpenSearchListingsAdapter(RestClient discoverOpenSearchRestClient,
                                      OpenSearchProperties props,
                                      ObjectMapper objectMapper,
-                                     OpenSearchQueryMetrics queryMetrics) {
+                                     OpenSearchQueryMetrics queryMetrics,
+                                     CityActivationGuard cityActivationGuard) {
         this.restClient = discoverOpenSearchRestClient;
         this.props = props;
         this.objectMapper = objectMapper;
         this.queryMetrics = queryMetrics;
+        this.cityActivationGuard = cityActivationGuard;
     }
 
     @Override
@@ -54,7 +59,21 @@ public class OpenSearchListingsAdapter implements DiscoverListingsPort {
         OpenSearchQueryMetrics.QueryType queryType = resolveQueryType(query);
         Timer.Sample sample = queryMetrics.startSample();
         try {
-            Map<String, Object> queryBody = DiscoverQueryDsl.buildListingsQuery(query);
+            // Resolve the requested city's active area_key allow-list ONCE per request (#1945).
+            // A DataAccessException here is intentionally NOT caught — it propagates to the
+            // catch(Exception) block below and from there to RoutingDiscoverListingsService,
+            // which falls back to the (independently gated) Postgres path. Returning empty is
+            // reserved for the semantic "no active areas / unknown city" case, never for a DB
+            // failure.
+            Collection<String> activeAreaKeys = cityActivationGuard.activeAreaKeysForCity(query.city());
+            if (activeAreaKeys.isEmpty()) {
+                // Defense-in-depth: no active areas for the requested city means no OpenSearch
+                // round-trip can return anything — short-circuit without hitting the cluster.
+                queryMetrics.recordListingsQuery(queryType, OpenSearchQueryMetrics.ResultStatus.EMPTY, sample);
+                return emptyPage(query);
+            }
+
+            Map<String, Object> queryBody = DiscoverQueryDsl.buildListingsQuery(query, activeAreaKeys);
 
             String responseBody = restClient.post()
                     .uri("/" + props.indexAlias() + "/_search")
@@ -111,6 +130,18 @@ public class OpenSearchListingsAdapter implements DiscoverListingsPort {
             queryMetrics.recordFallback(OpenSearchQueryMetrics.FallbackReason.ERROR);
             throw e;
         }
+    }
+
+    /**
+     * Empty-result page returned by the active-city short-circuit (#1945) — same shape an
+     * unknown/blank city yields via the normal query path, so the response is indistinguishable
+     * from a query that legitimately matched zero documents.
+     */
+    private static DiscoverListingsPage emptyPage(DiscoverListingsQuery query) {
+        DiscoverListingsAggregates aggregates = query.includeAggregates()
+                ? new DiscoverListingsAggregates(List.of())
+                : null;
+        return new DiscoverListingsPage(List.of(), query.page(), query.size(), 0L, 0, aggregates);
     }
 
     /**

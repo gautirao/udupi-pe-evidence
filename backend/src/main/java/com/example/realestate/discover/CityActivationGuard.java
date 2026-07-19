@@ -3,6 +3,11 @@ package com.example.realestate.discover;
 import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
 /**
  * Shared active-city gate for read paths that have NO existing {@code cities} join to piggyback
  * a {@code c.is_active = true} predicate on (#1935).
@@ -57,5 +62,35 @@ public class CityActivationGuard {
                 Boolean.class,
                 areaKey);
         return Boolean.TRUE.equals(result);
+    }
+
+    /**
+     * Returns the immutable set of {@code area_key} values belonging to active areas of the
+     * city identified by {@code citySlug} — the OpenSearch-path equivalent of the {@code
+     * areas -> cities} subselect in {@link DiscoverListingPredicateBuilder#build}, mirrored
+     * EXACTLY so both read paths enforce the identical active-city invariant keyed on the
+     * same (always-populated) field.
+     *
+     * <p>Null/blank {@code citySlug} returns an empty immutable set without querying the
+     * database — mirrors the Postgres builder, which requires a city and yields nothing
+     * without one.
+     *
+     * <p>This is a LIVE, uncached read executed once per request. A {@link
+     * org.springframework.dao.DataAccessException} thrown by the JDBC call is NOT caught here —
+     * it propagates to the caller so the OpenSearch adapter's existing failure handling falls
+     * back to the (independently gated) Postgres path, rather than silently returning an
+     * empty/all-docs result that would mask a DB failure as a legitimate "no active areas"
+     * answer.
+     */
+    public Set<String> activeAreaKeysForCity(String citySlug) {
+        if (citySlug == null || citySlug.isBlank()) {
+            return Collections.emptySet();
+        }
+        List<String> areaKeys = jdbcOperations.queryForList(
+                "SELECT a.area_key FROM areas a JOIN cities c ON c.id = a.city_id "
+                        + "WHERE c.slug = ? AND c.is_active = true",
+                String.class,
+                citySlug);
+        return Collections.unmodifiableSet(new LinkedHashSet<>(areaKeys));
     }
 }

@@ -88,10 +88,19 @@ class MarkersExcludePropertyTypeIT {
      * <p>Before #1541 this would return 2 (no exclusion) because the un-lowercased mixed-case
      * term would not match the lowercase-stored doc — the exact adapter divergence #1541 closes.
      */
+    // Compile/wiring fix only (#1945): DiscoverQueryDsl.buildMarkersQuery now requires the
+    // caller-resolved active-area_key allow-list as an explicit parameter (always applied, even
+    // when the underlying Filters carries no city). This IT seeds both docs under the SAME
+    // area_key and passes that area_key back as the "active" set so the pre-existing
+    // excludePropertyTypes assertions below keep exercising real OpenSearch filtering behaviour
+    // unchanged — the docs are not accidentally gated to empty by the new area_key clause.
+    private static final String TEST_AREA_KEY = "qa-excl-property-type-area";
+    private static final List<String> ACTIVE_AREA_KEYS = List.of(TEST_AREA_KEY);
+
     @Test
     void excludeAgriLand_mixedCaseInput_returnsOnlyNonAgriDoc() throws Exception {
         DiscoverListingPredicateBuilder.Filters filters = filters(List.of("Agricultural_Land"));
-        Map<String, Object> query = DiscoverQueryDsl.buildMarkersQuery(filters);
+        Map<String, Object> query = DiscoverQueryDsl.buildMarkersQuery(filters, ACTIVE_AREA_KEYS);
 
         int hits = countHits(query);
 
@@ -104,7 +113,7 @@ class MarkersExcludePropertyTypeIT {
     @Test
     void noExclusion_returnsBothDocs() throws Exception {
         DiscoverListingPredicateBuilder.Filters filters = filters(null);
-        Map<String, Object> query = DiscoverQueryDsl.buildMarkersQuery(filters);
+        Map<String, Object> query = DiscoverQueryDsl.buildMarkersQuery(filters, ACTIVE_AREA_KEYS);
 
         int hits = countHits(query);
 
@@ -130,6 +139,7 @@ class MarkersExcludePropertyTypeIT {
         properties.put("property_type", Map.of("type", "keyword"));
         properties.put("status", Map.of("type", "keyword"));
         properties.put("city_slug", Map.of("type", "keyword"));
+        properties.put("area_key", Map.of("type", "keyword"));
         properties.put("created_at", Map.of("type", "date"));
 
         Map<String, Object> mapping = Map.of(
@@ -152,12 +162,14 @@ class MarkersExcludePropertyTypeIT {
         Map<String, Object> agriDoc = Map.of(
                 "id", "test-agri-1",
                 "status", "LIVE",
-                "property_type", "agricultural_land"
+                "property_type", "agricultural_land",
+                "area_key", TEST_AREA_KEY
         );
         Map<String, Object> houseDoc = Map.of(
                 "id", "test-house-1",
                 "status", "LIVE",
-                "property_type", "house"
+                "property_type", "house",
+                "area_key", TEST_AREA_KEY
         );
         put(baseUrl + "/" + INDEX + "/_doc/test-agri-1", MAPPER.writeValueAsString(agriDoc));
         put(baseUrl + "/" + INDEX + "/_doc/test-house-1", MAPPER.writeValueAsString(houseDoc));

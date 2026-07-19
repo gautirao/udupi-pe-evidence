@@ -1,5 +1,6 @@
 package com.example.realestate.discover.opensearch;
 
+import com.example.realestate.discover.CityActivationGuard;
 import com.example.realestate.discover.DiscoverListingPredicateBuilder;
 import com.example.realestate.discover.DiscoverMarker;
 import com.example.realestate.discover.DiscoverMarkersPort;
@@ -16,6 +17,7 @@ import org.springframework.web.client.RestClient;
 
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -41,15 +43,18 @@ public class OpenSearchMarkersAdapter implements DiscoverMarkersPort {
     private final OpenSearchProperties props;
     private final ObjectMapper objectMapper;
     private final OpenSearchQueryMetrics queryMetrics;
+    private final CityActivationGuard cityActivationGuard;
 
     public OpenSearchMarkersAdapter(RestClient discoverOpenSearchRestClient,
                                     OpenSearchProperties props,
                                     ObjectMapper objectMapper,
-                                    OpenSearchQueryMetrics queryMetrics) {
+                                    OpenSearchQueryMetrics queryMetrics,
+                                    CityActivationGuard cityActivationGuard) {
         this.restClient = discoverOpenSearchRestClient;
         this.props = props;
         this.objectMapper = objectMapper;
         this.queryMetrics = queryMetrics;
+        this.cityActivationGuard = cityActivationGuard;
     }
 
     @Override
@@ -58,7 +63,20 @@ public class OpenSearchMarkersAdapter implements DiscoverMarkersPort {
         // Default to ERROR so the finally block records even on unexpected paths.
         OpenSearchQueryMetrics.ResultStatus resultStatus = OpenSearchQueryMetrics.ResultStatus.ERROR;
         try {
-            Map<String, Object> queryBody = DiscoverQueryDsl.buildMarkersQuery(filters);
+            // Resolve the requested city's active area_key allow-list ONCE per request (#1945),
+            // reused for both the hits query and the count re-query below so they can never
+            // drift. A DataAccessException here is intentionally NOT caught — it propagates to
+            // the catch(Exception) block below and from there to RoutingDiscoverMarkersService,
+            // which falls back to the (independently gated) Postgres path.
+            Collection<String> activeAreaKeys = cityActivationGuard.activeAreaKeysForCity(filters.city());
+            if (activeAreaKeys.isEmpty()) {
+                // Defense-in-depth: no active areas for the requested city means no OpenSearch
+                // round-trip can return anything — short-circuit without hitting the cluster.
+                resultStatus = OpenSearchQueryMetrics.ResultStatus.EMPTY;
+                return emptyMarkersResponse(filters);
+            }
+
+            Map<String, Object> queryBody = DiscoverQueryDsl.buildMarkersQuery(filters, activeAreaKeys);
             boolean boundsApplied = filters.bbox() != null;
 
             String responseBody = restClient.post()
@@ -95,8 +113,10 @@ public class OpenSearchMarkersAdapter implements DiscoverMarkersPort {
 
             long totalFilteredElements;
             if (truncated) {
-                // Run a _count query with the same DSL to get the true total
-                totalFilteredElements = runCountQuery(filters);
+                // Run a _count query with the same DSL AND the same activeAreaKeys set to get
+                // the true total — using a different (or no) set here would over/under-report
+                // totalFilteredElements relative to the gated hits (#1945 AC5/EC17).
+                totalFilteredElements = runCountQuery(filters, activeAreaKeys);
                 log.debug("OpenSearch markers city={} truncated, totalFilteredElements={}", filters.city(), totalFilteredElements);
             } else {
                 totalFilteredElements = rawHitCount;
@@ -139,8 +159,24 @@ public class OpenSearchMarkersAdapter implements DiscoverMarkersPort {
         }
     }
 
-    private long runCountQuery(DiscoverListingPredicateBuilder.Filters filters) {
-        Map<String, Object> queryBody = DiscoverQueryDsl.buildMarkersQuery(filters);
+    /**
+     * Empty-result response returned by the active-city short-circuit (#1945) — same shape an
+     * unknown/blank city yields via the normal query path.
+     */
+    private static DiscoverMarkersResponse emptyMarkersResponse(DiscoverListingPredicateBuilder.Filters filters) {
+        return new DiscoverMarkersResponse(
+                filters.city(),
+                List.of(),
+                false,
+                0,
+                0L,
+                CAP,
+                filters.bbox() != null
+        );
+    }
+
+    private long runCountQuery(DiscoverListingPredicateBuilder.Filters filters, Collection<String> activeAreaKeys) {
+        Map<String, Object> queryBody = DiscoverQueryDsl.buildMarkersQuery(filters, activeAreaKeys);
         // Use only the query portion for _count
         Map<String, Object> countBody = Map.of("query", queryBody.get("query"));
 

@@ -4,6 +4,7 @@ import com.example.realestate.discover.DiscoverListingPredicateBuilder;
 import com.example.realestate.discover.DiscoverListingsQuery;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +20,9 @@ import java.util.Map;
  *   <li>FTS: only adds a {@code multi_match} must clause when {@code q} is non-blank.</li>
  *   <li>bedrooms=4 means "4+" (range gte:4). Mixed lists use a {@code should} with terms
  *       for exact values &lt; 4 and range for ≥ 4, with {@code minimum_should_match: 1}.</li>
- *   <li>city: {@code term} on {@code city_slug}.</li>
+ *   <li>city: active-city allow-list — {@code terms} on {@code area_key}, ALWAYS applied
+ *       (never omitted, even when empty), sourced live from {@code CityActivationGuard}
+ *       (#1945). {@code city_slug} is a dead field on the write path and is never filtered on.</li>
  *   <li>backOnMarket: {@code exists(back_to_market_at)} + {@code range(back_to_market_at ≥ now-30d)}.</li>
  *   <li>newToMarket: {@code range} on first_published_at or (should-fallback to) created_at.</li>
  *   <li>reraRegistered: {@code exists(rera_number)} — Java post-fetch validates the regex pattern.</li>
@@ -58,13 +61,17 @@ public final class DiscoverQueryDsl {
      * Builds the query body for the markers endpoint.
      *
      * @param filters validated filters from the controller
+     * @param activeAreaKeys the requested city's active {@code area_key} allow-list (from
+     *                       {@link com.example.realestate.discover.CityActivationGuard#activeAreaKeysForCity});
+     *                       always applied, even when empty
      * @return query body as a Map suitable for Jackson serialization
      */
-    public static Map<String, Object> buildMarkersQuery(DiscoverListingPredicateBuilder.Filters filters) {
+    public static Map<String, Object> buildMarkersQuery(DiscoverListingPredicateBuilder.Filters filters,
+                                                         Collection<String> activeAreaKeys) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("_source", SOURCE_FIELDS);
         body.put("size", MARKERS_FETCH_LIMIT);
-        body.put("query", buildBoolQuery(filters));
+        body.put("query", buildBoolQuery(filters, activeAreaKeys));
         body.put("sort", List.of(Map.of("created_at", Map.of("order", "desc"))));
         return body;
     }
@@ -73,9 +80,13 @@ public final class DiscoverQueryDsl {
      * Builds the query body for the listings endpoint, including pagination and optional aggregations.
      *
      * @param query validated query from the controller
+     * @param activeAreaKeys the requested city's active {@code area_key} allow-list (from
+     *                       {@link com.example.realestate.discover.CityActivationGuard#activeAreaKeysForCity});
+     *                       always applied, even when empty
      * @return query body as a Map suitable for Jackson serialization
      */
-    public static Map<String, Object> buildListingsQuery(DiscoverListingsQuery query) {
+    public static Map<String, Object> buildListingsQuery(DiscoverListingsQuery query,
+                                                          Collection<String> activeAreaKeys) {
         DiscoverListingPredicateBuilder.Filters filters = toFilters(query);
 
         Map<String, Object> body = new LinkedHashMap<>();
@@ -83,7 +94,7 @@ public final class DiscoverQueryDsl {
         body.put("size", query.size());
         body.put("from", (long) query.page() * query.size());
         body.put("track_total_hits", true);
-        body.put("query", buildBoolQuery(filters));
+        body.put("query", buildBoolQuery(filters, activeAreaKeys));
         body.put("sort", List.of(Map.of("created_at", Map.of("order", "desc"))));
 
         if (query.includeAggregates()) {
@@ -127,7 +138,8 @@ public final class DiscoverQueryDsl {
         );
     }
 
-    private static Map<String, Object> buildBoolQuery(DiscoverListingPredicateBuilder.Filters f) {
+    private static Map<String, Object> buildBoolQuery(DiscoverListingPredicateBuilder.Filters f,
+                                                        Collection<String> activeAreaKeys) {
         // Polygon filter is not supported in the OpenSearch path. Throwing here causes the
         // routing service to catch and fall back to Postgres, which handles ST_Contains natively.
         if (f.polygon() != null && !f.polygon().isEmpty()) {
@@ -141,10 +153,14 @@ public final class DiscoverQueryDsl {
         // Always: status = LIVE
         filter.add(term("status", "LIVE"));
 
-        // city_slug filter
-        if (f.city() != null && !f.city().isBlank()) {
-            filter.add(term("city_slug", f.city()));
-        }
+        // Active-city allow-list (#1945): keyed on area_key (always populated), NOT city_slug
+        // (a dead field — the Java indexer hardcodes it null). Mirrors the Postgres invariant
+        // in DiscoverListingPredicateBuilder.build exactly: the requested city's active areas,
+        // resolved LIVE per request via CityActivationGuard.activeAreaKeysForCity. ALWAYS
+        // applied — including when the set is empty (terms(area_key, []) — matches nothing,
+        // never omitted — so a blank/unknown/inactive city fails closed instead of falling
+        // through to an all-cities result.
+        filter.add(terms("area_key", List.copyOf(activeAreaKeys)));
 
         // FTS: only when q is non-blank
         String normQ = (f.q() != null && !f.q().isBlank()) ? f.q().trim() : null;

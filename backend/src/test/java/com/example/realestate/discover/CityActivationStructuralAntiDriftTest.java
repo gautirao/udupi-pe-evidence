@@ -138,6 +138,22 @@ class CityActivationStructuralAntiDriftTest {
                             + "source; behavioural proof in "
                             + "CityActiveGating1935IT.guardIsActiveForAreaKey_canonicalJoin_notStringHeuristic()."),
             new Allowance(
+                    "com/example/realestate/discover/CityActivationGuard.java",
+                    "SELECT a.area_key FROM areas a JOIN cities c ON c.id = a.city_id ",
+                    "activeAreaKeysForCity(citySlug) (#1945, OpenSearch active-city gating) is built via "
+                            + "TWO adjacent string-literal concatenation: \"SELECT a.area_key FROM areas a "
+                            + "JOIN cities c ON c.id = a.city_id \" + \"WHERE c.slug = ? AND c.is_active = "
+                            + "true\" — this scanner matches each literal independently, so it sees only the "
+                            + "first half (no is_active, matched here) and misses the is_active clause in "
+                            + "the concatenated second half, which also contains no SQL keyword (SELECT/"
+                            + "INSERT/UPDATE/DELETE) so it is never even considered a candidate on its own. "
+                            + "Same scanner blind spot as this file's isActiveForAreaKey() entry above. This "
+                            + "query IS the active-city gate itself — c.is_active = true is enforced inline "
+                            + "on the areas/cities join, mirroring DiscoverListingPredicateBuilder's active-"
+                            + "city subselect (L68) so the OpenSearch read path enforces the identical "
+                            + "invariant as the Postgres path. Verified inline gated by reading the actual "
+                            + "concatenated source."),
+            new Allowance(
                     "com/example/realestate/discover/CityAreaListingsService.java",
                     "JOIN cities c ON c.id = a.city_id",
                     "getAreaListings()'s per-listing query (this literal) runs only AFTER the method's "
