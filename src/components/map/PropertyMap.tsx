@@ -92,24 +92,44 @@ const iconCache = new Map<string, L.DivIcon>();
 
 /**
  * Derive the price text shown inside the marker pill.
- * Returns `{ label, isPricePill }` where `isPricePill` is true ONLY when a real
- * price is present (price != null && price > 0). The discriminant is kept identical
- * to the price-availability condition so a hypothetical 1-char formatted price would
- * never be misclassified as a no-price marker.
  *
- * NULL/zero price → neutral '—' (type disc + glyph still render for distinguishability).
+ * Precedence (Issue #1942):
+ *   1. Exact price (price != null && price > 0) → formatted price, `isBand: false`.
+ *      This branch is BYTE-IDENTICAL to the pre-#1942 authed control flow — price
+ *      === 0 does NOT satisfy `price > 0` and falls through to the band/residual
+ *      branches below (0 is never treated as an exact price).
+ *   2. Coarse `priceBand` (trimmed, non-empty) → the band string itself, `isBand: true`.
+ *      Anonymous residential callers get `priceBand` in place of `price` (#1941);
+ *      this is the fix for #1942 — anon pins previously showed a bare '—' because
+ *      the icon builders only ever read `price`.
+ *   3. Neither present → neutral '—' residual (type disc + glyph still render for
+ *      distinguishability). Also covers price===0 with no band, and the agri path
+ *      (agri never has a priceBand — always falls through to this residual).
+ *
+ * Returns `{ label, isPricePill, isBand }`. `isPricePill` is true whenever the pill
+ * carries a real (non-residual) label — exact OR band — kept as the pre-existing
+ * discriminant name; `isBand` further distinguishes an approximate band label from
+ * an exact price so callers can pick the right aria-label copy.
  */
 function deriveMarkerLabel(
   propertyType: string,
   price: number | null | undefined,
-): { label: string; isPricePill: boolean } {
+  priceBand?: string | null,
+): { label: string; isPricePill: boolean; isBand: boolean } {
   if (price != null && price > 0) {
-    return { label: formatPrice(price, 'INR'), isPricePill: true };
+    return { label: formatPrice(price, 'INR'), isPricePill: true, isBand: false };
+  }
+  const trimmedBand = priceBand != null ? priceBand.trim() : '';
+  if (trimmedBand !== '') {
+    return { label: trimmedBand, isPricePill: true, isBand: true };
   }
   // Preserve the isPricePill discriminant — used by callers that need to distinguish
   // a real formatted price from a null/zero fallback without inspecting label content.
-  return { label: '—', isPricePill: false };
+  return { label: '—', isPricePill: false, isBand: false };
 }
+
+// Exported for unit testing; not part of the public component API.
+export { deriveMarkerLabel };
 
 /**
  * Build the inline SVG markup for a glyph disc.
@@ -135,10 +155,16 @@ function buildDiscSvg(glyphPath: string, discColour: string): string {
  * Cache key includes type colour so two different types with the same formatted price
  * are never cache-collided (R1 invariant).
  */
-const createMarkerIcon = (propertyType: string, price: number | null | undefined): L.DivIcon => {
-  const { label } = deriveMarkerLabel(propertyType, price);
+const createMarkerIcon = (
+  propertyType: string,
+  price: number | null | undefined,
+  priceBand?: string | null,
+): L.DivIcon => {
+  const { label, isBand } = deriveMarkerLabel(propertyType, price, priceBand);
   const visual = getPropertyTypeVisual(propertyType);
   // R1: key on colour (not just type) so that types sharing the same label get distinct icons.
+  // The label now encodes exact price / band / '—' residual, so distinct bands (or a band
+  // vs. an exact price sharing the same text) still produce distinct cache keys.
   const cacheKey = `${propertyType}|${visual.colour}|${label}|default`;
   const cached = iconCache.get(cacheKey);
   if (cached) return cached;
@@ -146,11 +172,21 @@ const createMarkerIcon = (propertyType: string, price: number | null | undefined
   const glyphPath = GLYPH_SVG_PATHS[visual.glyph];
   const discSvg = buildDiscSvg(glyphPath, visual.colour);
   const safeLabel = escapeHtml(label);
+  // Issue #1942 — aria-label for the pill: residual → neutral "Price unavailable"
+  // (under #1941's contract, anon responses always carry priceBand when a price
+  // exists, so reaching residual means no price data exists — a sign-in prompt
+  // would be a false promise); band → approximate-price copy; exact price → the
+  // visible price text is itself the accessible name (no aria-label needed).
+  const ariaLabel = isBand
+    ? `aria-label="${escapeHtml(`Approximate price ${label}`)}"`
+    : label === '—'
+      ? `aria-label="${escapeHtml('Price unavailable')}"`
+      : '';
 
   // Pill dimensions: disc (22px) + gap (7px) + text (~60px max) + h-padding (5+12=17px)
   // Width estimated; Leaflet will clip if too narrow — use auto width via transform.
   const pillHtml = `
-    <div data-testid="property-marker" style="
+    <div data-testid="property-marker" ${ariaLabel} style="
       background:#FFFFFF;
       border:1px solid rgba(0,0,0,0.12);
       border-radius:9999px;
@@ -202,10 +238,15 @@ const COPPER_COLOR = '#B05C3A';
  * R1 cache: keyed by `${propertyType}|${colour}|${label}|selected` — distinct from
  * the default variant AND from any other type that might share the same formatted price.
  */
-const createSelectedMarkerIcon = (propertyType: string, price: number | null | undefined): L.DivIcon => {
-  const { label } = deriveMarkerLabel(propertyType, price);
+const createSelectedMarkerIcon = (
+  propertyType: string,
+  price: number | null | undefined,
+  priceBand?: string | null,
+): L.DivIcon => {
+  const { label, isBand } = deriveMarkerLabel(propertyType, price, priceBand);
   const visual = getPropertyTypeVisual(propertyType);
   // R1: include colour in key so types sharing the same price label are not collided.
+  // The label encodes exact price / band / '—' residual — distinct bands get distinct keys.
   const cacheKey = `${propertyType}|${visual.colour}|${label}|selected`;
   const cached = iconCache.get(cacheKey);
   if (cached) return cached;
@@ -214,10 +255,17 @@ const createSelectedMarkerIcon = (propertyType: string, price: number | null | u
   // SELECTED: disc = semi-transparent white on the navy pill background
   const discSvg = buildDiscSvg(glyphPath, 'rgba(255,255,255,0.18)');
   const safeLabel = escapeHtml(label);
+  // Issue #1942 — same aria-label contract as createMarkerIcon (R5: selected-marker
+  // parity); residual reads "Price unavailable", not a sign-in prompt.
+  const ariaLabel = isBand
+    ? `aria-label="${escapeHtml(`Approximate price ${label}`)}"`
+    : label === '—'
+      ? `aria-label="${escapeHtml('Price unavailable')}"`
+      : '';
 
   // Navy pill — #1B2A45 = hsl(219 44% 19%) = --primary
   const pillHtml = `
-    <div data-testid="property-marker" data-selected="true" style="
+    <div data-testid="property-marker" data-selected="true" ${ariaLabel} style="
       background:#1B2A45;
       border:1px solid rgba(0,0,0,0.15);
       border-radius:9999px;
@@ -253,6 +301,10 @@ const createSelectedMarkerIcon = (propertyType: string, price: number | null | u
   iconCache.set(cacheKey, icon);
   return icon;
 };
+
+// Issue #1942 — exported for unit testing (icon HTML/escaping/aria-label assertions);
+// not part of the public component API. Additive: no existing export changed.
+export { createMarkerIcon, createSelectedMarkerIcon };
 
 export interface SchoolCircle {
   lat: number;
@@ -1294,9 +1346,11 @@ function MarkerClusterLayer({
       // no flyTo / camera movement occurs for either path.
       const isHighlighted =
         listing.id === selectedListingId || listing.id === hoveredListingId;
+      // Issue #1942 — thread priceBand (anon coarse price, #1941) into both icon
+      // builders so anon individual pins show the band instead of a bare '—'.
       const icon = isHighlighted
-        ? createSelectedMarkerIcon(listing.property_type, listing.price)
-        : createMarkerIcon(listing.property_type, listing.price);
+        ? createSelectedMarkerIcon(listing.property_type, listing.price, listing.priceBand)
+        : createMarkerIcon(listing.property_type, listing.price, listing.priceBand);
       const marker = L.marker([listing.latitude!, listing.longitude!], { icon });
 
       // Attach listing-id to the marker element for E2E selectors.
@@ -1435,9 +1489,12 @@ function AgriMarkerClusterLayer({
     validListings.forEach((listing) => {
       const isHighlighted =
         listing.id === selectedListingId || listing.id === hoveredListingId;
+      // Issue #1942 — pass priceBand for signature consistency with MarkerClusterLayer.
+      // Agri listings never carry a priceBand (null), so this branch stays byte-identical
+      // '—' — the same shared helper is just called with an always-absent 3rd arg here.
       const icon = isHighlighted
-        ? createSelectedMarkerIcon(listing.property_type, listing.price)
-        : createMarkerIcon(listing.property_type, listing.price);
+        ? createSelectedMarkerIcon(listing.property_type, listing.price, listing.priceBand)
+        : createMarkerIcon(listing.property_type, listing.price, listing.priceBand);
       const marker = L.marker([listing.latitude!, listing.longitude!], { icon });
 
       // Attach listing-id to the marker element for E2E selectors.
