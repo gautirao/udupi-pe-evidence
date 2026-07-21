@@ -127,8 +127,9 @@ function SkelCard({ compact }) {
   );
 }
 
-function UPTJourneyPanel({ mode, setMode, city, setCity, selected, setSelected, onHover, total, groupsCount, areasCount, loading, compact }) {
+function UPTJourneyPanel({ mode, setMode, city, setCity, selected, setSelected, onHover, total, groupsCount, areasCount, loading, compact, cityName }) {
   const D = window.UPT_AREA_DATA;
+  const CITY = cityName || "Udupi";
   const journeys = [
     {
       key: "area", primary: true, title: "Explore by area",
@@ -171,7 +172,7 @@ function UPTJourneyPanel({ mode, setMode, city, setCity, selected, setSelected, 
         {/* Eyebrow */}
         <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "14px" }}>
           <PanelIcon name="map-pin" size={15} color="var(--accent)" />
-          <span style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", whiteSpace: "nowrap" }}>Discover Udupi</span>
+          <span style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", whiteSpace: "nowrap" }}>Discover {CITY}</span>
         </div>
 
         {/* Hero */}
@@ -186,7 +187,7 @@ function UPTJourneyPanel({ mode, setMode, city, setCity, selected, setSelected, 
             <h1 style={{
               margin: "0 0 14px", fontFamily: "var(--font-serif)", fontWeight: 600,
               fontSize: compact ? "30px" : "40px", lineHeight: 1.1, letterSpacing: "-0.02em", color: "var(--text-strong)",
-            }}>Find your place in Udupi, your way.</h1>
+            }}>Find your place in {CITY}, your way.</h1>
             <p style={{ margin: "0 0 26px", fontSize: compact ? "15px" : "16.5px", lineHeight: 1.55, color: "var(--text-body)", maxWidth: "46ch" }}>
               Browse verified properties across coastal Karnataka. Pick how you'd like to start — by neighbourhood, by school, or by farmland.
             </p>

@@ -85,6 +85,12 @@ function DiscoverPortal() {
   const [focusArea, setFocusArea] = React.useState(null); // { id, n }
   const focusN = React.useRef(0);
   const onAreaHover = React.useCallback((id, src) => setHoverArea(id ? { id, src: src || "panel" } : null), []);
+  // City-landing region-marker ↔ region-row hover/focus sync (mirrors onAreaHover).
+  const [hoverRegion, setHoverRegion] = React.useState(null); // { id, src: 'panel'|'map' }
+  const onRegionHover = React.useCallback((id, src) => setHoverRegion(id ? { id, src: src || "panel" } : null), []);
+  // Group / zone / corridor marker ↔ list-row hover/focus sync (mirrors onRegionHover).
+  const [hoverNav, setHoverNav] = React.useState(null); // { id, src: 'panel'|'map' }
+  const onNavHover = React.useCallback((id, src) => setHoverNav(id ? { id, src: src || "panel" } : null), []);
   const showAreaOnMap = React.useCallback((id) => setFocusArea({ id, n: ++focusN.current }), []);
   const onAreasShown = React.useCallback((ids) => {
     setMapShownIds((prev) => (prev.length === ids.length && prev.every((x, i) => x === ids[i])) ? prev : ids);
@@ -108,6 +114,12 @@ function DiscoverPortal() {
   React.useEffect(() => {
     if (layer !== "area-areas" && layer !== "school-areas") { setHoverArea(null); setMapShownIds([]); setFocusArea(null); }
   }, [layer]);
+
+  // Clear region hover when leaving the city landing.
+  React.useEffect(() => { if (layer !== "region-bubbles") setHoverRegion(null); }, [layer]);
+
+  // Clear group/zone/corridor hover when leaving a mid-level picker.
+  React.useEffect(() => { if (!("area-groups school-zones agri-corridors".includes(layer))) setHoverNav(null); }, [layer]);
 
   // ---- navigation ----
   const toggleSave = (id) => setSaved((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
@@ -259,6 +271,8 @@ function DiscoverPortal() {
     areaListings, areaListingsRaw, schoolHomes, parcels, parcelsRaw,
     saved, toggleSave, active, setActive, setMode,
     hoverAreaId: hoverArea ? hoverArea.id : null, hoverAreaSrc: hoverArea ? hoverArea.src : null, onAreaHover, mapShownIds, showAreaOnMap, isMobile,
+    hoverRegionId: hoverRegion ? hoverRegion.id : null, hoverRegionSrc: hoverRegion ? hoverRegion.src : null, onRegionHover,
+    hoverNavId: hoverNav ? hoverNav.id : null, hoverNavSrc: hoverNav ? hoverNav.src : null, onNavHover,
     pickRegion, setJourney, pickGroup, pickZone, pickArea, pickSchool, pickCorridor, pickCluster,
     back, reset, changeRegion, changeCity, setCity, cities: ["Bangalore", "Udupi", "Mangaluru"],
   };
@@ -277,6 +291,8 @@ function DiscoverPortal() {
           onPickZone={pickZone} onPickCorridor={pickCorridor} onPickCluster={pickCluster}
           hoverAreaId={hoverArea ? hoverArea.id : null} hoverSrc={hoverArea ? hoverArea.src : null}
           onAreaHover={onAreaHover} onAreasShown={onAreasShown} focusArea={focusArea}
+          hoverRegionId={hoverRegion ? hoverRegion.id : null} hoverRegionSrc={hoverRegion ? hoverRegion.src : null} onRegionHover={onRegionHover}
+          hoverNavId={hoverNav ? hoverNav.id : null} hoverNavSrc={hoverNav ? hoverNav.src : null} onNavHover={onNavHover}
           regionGuide={regionGuide} guideDismissed={guideDismissed} onDismissGuide={dismissGuide} isMobile={isMobile}
         />
       </div>

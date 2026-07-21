@@ -71,22 +71,27 @@ function areaCompactHTML(a, active) {
   </div>`;
 }
 
-function UPTDiscoverMap({ areas, listings, total, dataState, loading, onPickArea, compact }) {
+function UPTDiscoverMap({ areas, listings, total, dataState, loading, onPickArea, compact, city, cityLabel, emptyAreas, fitAreas, simListing, onSimClick, guide, guideKey }) {
   const elRef = React.useRef(null);
   const mapRef = React.useRef(null);
   const layerRef = React.useRef(null);
   const [hoverArea, setHoverArea] = React.useState(null);
   const [pickedArea, setPickedArea] = React.useState(null);
+  // Preview reuse: defaults keep the built-in Udupi geography. Callers such as
+  // the City-Launch preview pass a different revision's areas/city/labels — the
+  // component itself is otherwise unchanged.
+  const EMPTY = emptyAreas || UPT_EMPTY_AREAS;
+  const LABEL = cityLabel || "Udupi";
 
   // Build the locality set for the current state.
   const markerSet = React.useMemo(() => {
     if (dataState === "low") {
       // Simulate an emerging market: most localities still empty, a couple live.
       const sparse = areas.map((a, i) => (i < 2 ? a : { ...a, homes: 0 }));
-      return sparse.concat(UPT_EMPTY_AREAS);
+      return sparse.concat(EMPTY);
     }
-    return areas.concat(UPT_EMPTY_AREAS);
-  }, [areas, dataState]);
+    return areas.concat(EMPTY);
+  }, [areas, dataState, EMPTY]);
 
   const shownHomes = markerSet.reduce((s, a) => s + a.homes, 0);
   const emptyCount = markerSet.filter((a) => a.homes === 0).length;
@@ -109,9 +114,9 @@ function UPTDiscoverMap({ areas, listings, total, dataState, loading, onPickArea
 
   React.useEffect(() => {
     if (mapRef.current || !window.L) return;
-    const D = window.UPT_AREA_DATA;
+    const cc = city || window.UPT_AREA_DATA.city;
     const map = window.L.map(elRef.current, {
-      center: [D.city.lat, D.city.lon], zoom: compact ? 10 : 11,
+      center: [cc.lat, cc.lon], zoom: compact ? 10 : 11,
       zoomControl: false, attributionControl: true, scrollWheelZoom: false,
     });
     window.L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
@@ -123,7 +128,7 @@ function UPTDiscoverMap({ areas, listings, total, dataState, loading, onPickArea
     layerRef.current = window.L.layerGroup().addTo(map);
     // Frame all localities on first paint.
     try {
-      const pts = areas.concat(UPT_EMPTY_AREAS).filter((a) => a.lon < 74.85).map((a) => [a.lat, a.lon]);
+      const pts = (fitAreas || areas.concat(UPT_EMPTY_AREAS).filter((a) => a.lon < 74.85)).map((a) => [a.lat, a.lon]);
       map.fitBounds(pts, { padding: compact ? [36, 36] : [70, 70], maxZoom: compact ? 10 : 12 });
     } catch (e) { /* keep default view */ }
     setTimeout(() => map.invalidateSize(), 80);
@@ -134,6 +139,18 @@ function UPTDiscoverMap({ areas, listings, total, dataState, loading, onPickArea
   React.useEffect(() => {
     if (mapRef.current) setTimeout(() => mapRef.current.invalidateSize(), 80);
   }, [compact]);
+
+  // Guided-preview camera: fly to the object the operator is validating. Only
+  // active when a `guide` is supplied (City-Launch preview); Discover is unaffected.
+  React.useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !guide) return;
+    try {
+      if (guide.bounds) map.flyToBounds(guide.bounds, { padding: compact ? [40, 40] : [80, 80], maxZoom: 14, duration: 1.1 });
+      else if (guide.center) map.flyTo(guide.center, guide.zoom || 13, { duration: 1.1 });
+    } catch (e) { /* ignore */ }
+    // eslint-disable-next-line
+  }, [guideKey]);
 
   React.useEffect(() => { redraw(); });
 
@@ -146,18 +163,41 @@ function UPTDiscoverMap({ areas, listings, total, dataState, loading, onPickArea
     if (!map || !group) return;
     group.clearLayers();
     if (loading) return;
+    const hiSet = (guide && guide.highlightAreaIds) || null;
+    const dim = !!(guide && guide.dim);
     markerSet.forEach((a) => {
-      const active = hoverArea === a.id;
+      const isHi = hiSet ? hiSet.indexOf(a.id) >= 0 : false;
+      const active = hoverArea === a.id || isHi;
       const selected = pickedArea === a.id && a.homes > 0;
-      const z = (selected ? 2000 : active ? 1500 : 0) + (a.homes > 0 ? 800 : 100);
+      const z = (selected ? 2000 : active ? 1500 : 0) + (a.homes > 0 ? 800 : 100) + (isHi ? 1200 : 0);
       const useCompact = a.homes > 0 && compactIds.has(a.id) && !active && !selected;
-      const html = useCompact ? areaCompactHTML(a, active) : areaPillHTML(a, active, selected);
+      let html = useCompact ? areaCompactHTML(a, active) : areaPillHTML(a, active, selected);
+      const op = dim && !isHi ? 0.28 : 1;
+      if (op !== 1) html = `<div style="opacity:${op};transition:opacity .4s ease;">${html}</div>`;
       window.L.marker([a.lat, a.lon], { icon: makeIcon(html), zIndexOffset: z, riseOnHover: true })
         .on("mouseover", () => setHoverArea(a.id))
         .on("mouseout", () => setHoverArea(null))
         .on("click", () => { if (a.homes > 0) { setPickedArea(a.id); onPickArea && onPickArea(a.id); } })
         .addTo(group);
     });
+    // Optional simulated first-listing marker (City-Launch preview only).
+    if (simListing) {
+      const emph = !!(guide && guide.highlightSim);
+      const simOp = dim && !emph ? 0.4 : 1;
+      const ring = emph ? "box-shadow:var(--shadow-lg),0 0 0 4px rgba(176,92,58,0.35);" : "box-shadow:var(--shadow-lg);";
+      const simHTML = `
+      <div style="transform:translate(-50%,-118%) scale(${emph ? 1.12 : 1});opacity:${simOp};transition:transform .4s ease,opacity .4s ease;font-family:var(--font-sans);">
+        <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:var(--radius-full);
+          background:var(--copper-500);color:#fff;${ring}white-space:nowrap;
+          font-size:11.5px;font-weight:700;letter-spacing:-0.01em;cursor:pointer;">
+          ${PIN_SVG("#fff")}Simulated listing
+        </div>
+        <div style="width:8px;height:8px;background:var(--copper-500);transform:rotate(45deg);margin:-5px auto 0;box-shadow:var(--shadow-md);"></div>
+      </div>`;
+      window.L.marker([simListing.lat, simListing.lon], { icon: makeIcon(simHTML), zIndexOffset: 6000, riseOnHover: true })
+        .on("click", () => onSimClick && onSimClick())
+        .addTo(group);
+    }
   }
 
   return (
@@ -172,7 +212,7 @@ function UPTDiscoverMap({ areas, listings, total, dataState, loading, onPickArea
         boxShadow: "var(--shadow-md)", border: "1px solid var(--border)",
         fontFamily: "var(--font-sans)", fontSize: "13.5px", fontWeight: 700, color: "var(--text-strong)",
       }}>
-        <MapIcon name="map-pin" size={16} color="var(--accent)" />Udupi
+        <MapIcon name="map-pin" size={16} color="var(--accent)" />{LABEL}
       </div>
 
       {/* Legend — explains the area-count markers */}
@@ -209,7 +249,7 @@ function UPTDiscoverMap({ areas, listings, total, dataState, loading, onPickArea
           fontFamily: "var(--font-sans)", fontSize: "12.5px", fontWeight: 600, color: "var(--ochre-600)", whiteSpace: "nowrap",
         }}>
           <MapIcon name="map-pin" size={14} color="var(--ochre-600)" />
-          {emptyCount} areas have no listings yet — we add more across Udupi weekly
+          {emptyCount} areas have no listings yet — we add more across {LABEL} weekly
         </div>
       )}
 
@@ -223,7 +263,7 @@ function UPTDiscoverMap({ areas, listings, total, dataState, loading, onPickArea
           fontFamily: "var(--font-sans)", fontSize: "13px", fontWeight: 600, color: "var(--text-body)", whiteSpace: "nowrap",
         }}>
           <MapIcon name="map-pin" size={15} color="var(--accent)" />
-          Showing <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-strong)" }}>{shownHomes}</span> verified properties across Udupi
+          Showing <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-strong)" }}>{shownHomes}</span> verified properties across {LABEL}
         </div>
       )}
 

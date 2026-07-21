@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discover V2 — Engineering Handoff Index</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  :root { --plum-600:#5E5286; --evergreen-700:#1F694A; }
+  html,body{margin:0;background:var(--background);font-family:var(--font-sans);color:var(--text-strong)}
+  *{box-sizing:border-box}
+  a{color:var(--accent);text-decoration:none}a:hover{color:var(--accent-hover)}
+  .wrap{max-width:1080px;margin:0 auto;padding:48px 32px 80px}
+  header.doc{border-bottom:1px solid var(--border);padding-bottom:28px;margin-bottom:36px}
+  .kicker{font-size:11px;font-weight:700;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+  h1{font-family:var(--font-serif);font-size:34px;font-weight:600;letter-spacing:-0.02em;margin:0 0 12px}
+  .lede{font-size:15px;line-height:1.6;color:var(--text-body);max-width:70ch;margin:0}
+  .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+  .meta a{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface-card);box-shadow:var(--shadow-xs);font-size:13px;font-weight:600;color:var(--text-strong)}
+  .meta a:hover{border-color:var(--border-strong)}
+  .note{margin-top:22px;padding:14px 18px;background:var(--surface-subtle);border:1px solid var(--border);border-radius:var(--radius-lg);font-size:13px;line-height:1.55;color:var(--text-body)}
+  .note strong{color:var(--text-strong)}
+  section.grp{margin-top:44px}
+  .grphead{display:flex;align-items:baseline;gap:12px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid var(--border)}
+  .grphead h2{font-size:19px;font-weight:700;letter-spacing:-0.01em;margin:0}
+  .grphead .cnt{font-family:var(--font-mono);font-size:13px;color:var(--text-muted)}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  @media(max-width:720px){.grid{grid-template-columns:1fr}.wrap{padding:32px 20px 60px}}
+  .card{display:flex;flex-direction:column;gap:8px;padding:16px 18px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-xs);transition:box-shadow var(--dur-normal) var(--ease-standard),transform var(--dur-normal) var(--ease-standard),border-color var(--dur-fast)}
+  .card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px);border-color:var(--border-strong)}
+  .card .top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .card h3{font-size:15px;font-weight:700;letter-spacing:-0.01em;margin:0;line-height:1.25}
+  .vp{flex:none;font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--text-muted);padding:2px 8px;border-radius:var(--radius-full);background:var(--surface-subtle);white-space:nowrap}
+  .sid{font-family:var(--font-mono);font-size:11.5px;color:var(--text-muted)}
+  .card p{font-size:12.5px;line-height:1.5;color:var(--text-body);margin:0}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:2px}
+  .open{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--accent)}
+  .open:hover{color:var(--accent-hover)}
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:var(--radius-full)}
+  .b-areas{background:var(--accent-tint);color:var(--copper-600)}
+  .b-schools{background:#F1EDF7;color:var(--plum-600)}
+  .b-agri{background:var(--evergreen-50);color:var(--evergreen-700)}
+  .b-shell{background:var(--navy-100);color:var(--navy-800)}
+  .warn{margin-top:4px;padding:8px 11px;background:var(--ochre-50);border:1px solid rgba(169,116,28,.35);border-radius:var(--radius-md);font-size:11.5px;line-height:1.45;color:var(--ochre-600)}
+  .warn strong{color:var(--ochre-600)}
+  .inter{margin-top:4px;padding:8px 11px;background:var(--surface-subtle);border:1px solid var(--border);border-radius:var(--radius-md);font-size:11.5px;line-height:1.45;color:var(--text-body)}
+  .inter strong{color:var(--text-strong)}
+  .undes{margin-top:44px;padding:22px 24px;background:var(--surface-card);border:1px dashed var(--border-strong);border-radius:var(--radius-xl)}
+  .undes h2{font-size:17px;font-weight:700;margin:0 0 6px}
+  .undes p.sub{font-size:12.5px;color:var(--text-muted);margin:0 0 14px}
+  .undes ul{margin:0;padding-left:20px}
+  .undes li{font-size:13px;line-height:1.6;color:var(--text-body)}
+  footer.doc{margin-top:48px;padding-top:24px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="doc">
+    <div class="kicker">Discover V2 · Design-frozen</div>
+    <h1>Engineering Handoff Index</h1>
+    <p class="lede">Every designed state of the Discover V2 experience, grouped by journey. Each entry opens the exported design at that state. This is documentation, not a product screen — the approved screens live in <code>index.html</code> and are unchanged.</p>
+    <div class="meta">
+      <a href="DESIGN_INTENT.md">DESIGN_INTENT.md</a>
+      <a href="VISUAL_RULES.md">VISUAL_RULES.md</a>
+      <a href="DESIGN_STATE_MANIFEST.json">DESIGN_STATE_MANIFEST.json</a>
+      <a href="index.html">Open the design ↗</a>
+    </div>
+    <div class="note"><strong>How states are reached.</strong> Discover V2 is a single-page app; each link opens the one design file at a URL hash (hash keys are reference-only, not a prescribed API). Navigation-level states (region, area, school, corridor, town, distance band) are genuinely restored by their hash. <strong>Overlay, within-results search and filter states are interaction-only</strong> — the prototype does not encode them in the URL, so their link opens the nearest <em>base</em> state and the card shows the exact interaction needed to reach the documented state. The app root carries <code>data-design-screen="&lt;state id&gt;"</code> and major components carry <code>data-design-component</code> matching VISUAL_RULES.md. The build is Bangalore-only; other cities are coming-soon placeholders.</div>
+  </header>
+  <div id="groups"></div>
+  <div class="undes">
+    <h2>Undefined states</h2>
+    <p class="sub">Not designed in this export — raise with the product/design owner before building; do not invent.</p>
+    <ul id="undes-list"></ul>
+  </div>
+  <footer class="doc">Discover V2 remains design-frozen. Generated as a static index over DESIGN_STATE_MANIFEST.json — keep the two consistent when states change.</footer>
+</div>
+<script>
+  const GROUPS = ["Global shell","Areas","Schools","Agricultural","Results","Mobile"];
+  const BADGE = { areas:"b-areas", schools:"b-schools", agricultural:"b-agri", shell:"b-shell" };
+  const STATES = [
+    { id:"shell-city-switcher-open", group:"Global shell", journey:"shell", name:"City switcher open", hash:"#", vp:"1366×768", desc:"Overlay listbox: Bangalore live + Mumbai/Pune/Hyderabad coming-soon. Sits on any screen.", interaction:"click the city name in the control bar to open the switcher overlay.", warn:"NOT DESIGNED: switching to a second live city." },
+    { id:"shell-area-autocomplete-open", group:"Global shell", journey:"shell", name:"Area autocomplete open", hash:"#", vp:"1366×768", desc:"Up to 6 mode-aware results; action label and result set adapt to the active mode. Resolves to the same canonical state as guided drill-down.", interaction:"type any area name into the control-bar search to open the autocomplete." },
+    { id:"areas-city-default", group:"Areas", journey:"areas", name:"City overview — Areas", hash:"#", vp:"1366×768", desc:"Default landing. Five directional regions as compass markers + panel rows; trust strip. All five directions visible without scrolling." },
+    { id:"areas-region-clusters", group:"Areas", journey:"areas", name:"Region → directional clusters", hash:"#r=north", vp:"1366×768", desc:"Dense region (North) splits into generated directional clusters labelled by representative area names. Recurses before reaching areas." },
+    { id:"areas-region-areas", group:"Areas", journey:"areas", name:"Region → areas (shallow)", hash:"#r=south", vp:"1366×768", desc:"Shallow region (South) skips the optional cluster level and shows areas directly on real coordinates." },
+    { id:"schools-city-default", group:"Schools", journey:"schools", name:"City overview — Schools", hash:"#m=schools", vp:"1366×768", desc:"Same compass layout, filtered to regions with schools; plum accent. Switching from Areas keeps context where possible." },
+    { id:"schools-region-areas", group:"Schools", journey:"schools", name:"Region → areas with schools", hash:"#m=schools&r=north", vp:"1366×768", desc:"Areas that contain schools. With current data Schools skips clusters.", warn:"NOT DESIGNED (data-dependent): a Schools cluster level — code path exists but is unreachable in this build." },
+    { id:"schools-area-schools", group:"Schools", journey:"schools", name:"Schools within an area", hash:"#m=schools&a=hebbal", vp:"1366×768", desc:"Selected area retained. School search + board/level filters; area homes also shown beneath the school controls." },
+    { id:"schools-school-search", group:"Schools", journey:"schools", name:"School search / filters active", hash:"#m=schools&a=hebbal", vp:"1366×768", desc:"Filtered school subset; empty subset shows the designed 'No schools match' state.", interaction:"type a school name or toggle Board / Level chips." },
+    { id:"schools-homes-near", group:"Schools", journey:"schools", name:"Homes near a selected school", hash:"#m=schools&a=hebbal&s=s-vidyaniketan", vp:"1366×768", desc:"Radius 3/5/10 km with live counts; dashed plum radius circle; homes sorted by distance with distance chips." },
+    { id:"agri-city-default", group:"Agricultural", journey:"agricultural", name:"Overview — city origin", hash:"#m=agri", vp:"1366×768", desc:"Origin = city centre. Four outbound direction cards positioned by bearing; evergreen accent. All four directions visible." },
+    { id:"agri-area-origin", group:"Agricultural", journey:"agricultural", name:"Overview — area origin", hash:"#m=agri&ao=hebbal", vp:"1366×768", desc:"An area becomes the origin; directions and distances reframed relative to it. Reset returns to city centre. Breadcrumb never implies farmland belongs to the origin area." },
+    { id:"agri-corridor-towns", group:"Agricultural", journey:"agricultural", name:"Direction → towns by distance", hash:"#m=agri&c=n-doddaballapur", vp:"1366×768", desc:"Translucent search sector (wedge + cumulative distance arcs, scope not boundary); distance bands 10/25/50/100 km are cumulative; town rows + discs." },
+    { id:"agri-town-parcels", group:"Agricultural", journey:"agricultural", name:"Town → parcel results", hash:"#m=agri&c=n-doddaballapur&cl=t-doddaballapur", vp:"1366×768", desc:"Parcel cards + parcel search + agri filters (size, price, soil, road, water)." },
+    { id:"areas-area-listings", group:"Results", journey:"areas", name:"Area results — listings", hash:"#a=hebbal", vp:"1366×768", desc:"Results workspace: compact header, within-area property search, essential filter chips, school-shortcut, listing grid." },
+    { id:"areas-listings-query-active", group:"Results", journey:"areas", name:"Area results — search active", hash:"#a=hebbal", vp:"1366×768", desc:"Within-area property search applied; header shows 'N of M' with Reset. Distinct from the global autocomplete.", interaction:"type a term in the within-area property search and submit." },
+    { id:"areas-listings-filters-active", group:"Results", journey:"areas", name:"Area results — filters active", hash:"#a=hebbal", vp:"1366×768", desc:"Type / Beds / Verified-only chips applied; empty subset shows the designed 'No homes match' state.", interaction:"toggle Type / Beds / Verified-only chips." },
+    { id:"areas-browse-all", group:"Results", journey:"areas", name:"Browse all listings", hash:"#b=1", vp:"1366×768", desc:"Flat filterable list of every verified home in scope; no area selected." },
+    { id:"areas-city-default-mobile", group:"Mobile", journey:"areas", name:"City overview — Areas (mobile)", hash:"#", vp:"390×844", desc:"Stacked layout ≤820px: map top band (~42%, min 260px), panel slides up as a rounded sheet; controls wrap." },
+    { id:"areas-area-listings-mobile", group:"Mobile", journey:"areas", name:"Area results (mobile)", hash:"#a=hebbal", vp:"390×844", desc:"Same components as desktop area results; listing grid collapses to a single column (<560px)." }
+  ];
+  const UNDES = [
+    "Loading / skeleton states for any journey.",
+    "Hard-error screens (network / server failure).",
+    "Deep link to unavailable data (suggested intent: fall back to nearest valid ancestor level).",
+    "Map-tile failure while panel data is available (panel is usable without the map).",
+    "Listing / school / parcel DETAIL pages (cards link out; the detail view is out of scope for this export).",
+    "Switching to a second live city (only Bangalore is designed).",
+    "A Schools directional-cluster level (data-dependent; code path exists, unreachable in this build)."
+  ];
+  const root = document.getElementById("groups");
+  GROUPS.forEach(g => {
+    const items = STATES.filter(s => s.group === g);
+    if (!items.length) return;
+    const sec = document.createElement("section");
+    sec.className = "grp";
+    sec.innerHTML = `<div class="grphead"><h2>${g}</h2><span class="cnt">${items.length} state${items.length>1?"s":""}</span></div>`;
+    const grid = document.createElement("div");
+    grid.className = "grid";
+    items.forEach(s => {
+      const card = document.createElement("a");
+      card.className = "card";
+      card.href = "index.html" + (s.hash || "#");
+      card.innerHTML =
+        `<div class="top"><h3>${s.name}</h3><span class="vp">${s.vp}</span></div>`+
+        `<span class="sid">${s.id}</span>`+
+        `<span class="badge ${BADGE[s.journey]}">${s.journey}</span>`+
+        `<p>${s.desc}</p>`+
+        (s.warn ? `<div class="warn"><strong>⚠ ${s.warn}</strong></div>` : "")+
+        (s.interaction ? `<div class="inter"><strong>Interaction-only:</strong> opens the base state — then ${s.interaction}</div>` : "")+
+        `<div class="row"><span class="sid">Hash: ${s.hash || "#"}</span><span class="open">${s.interaction ? "Open base state" : "Open state"} ↗</span></div>`;
+      grid.appendChild(card);
+    });
+    sec.appendChild(grid);
+    root.appendChild(sec);
+  });
+  const ul = document.getElementById("undes-list");
+  UNDES.forEach(t => { const li = document.createElement("li"); li.textContent = t; ul.appendChild(li); });
+</script>
+</body>
+</html>

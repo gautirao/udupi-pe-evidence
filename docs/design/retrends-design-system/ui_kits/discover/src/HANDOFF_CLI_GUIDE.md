@@ -26,9 +26,9 @@ git log --oneline -5          # no app-source commits from this work
 ## Read in this order
 
 1. **`ACTIVE_CONTEXT_AND_COUNT_BADGE_DESIGN.md`** — start at §1 (Problem & principle). The whole design collapses to two sentences at the end of §1:
-    - *Scope lives in the breadcrumb. Filters and search live in chips.*
-    - *The count always names its scope and shows `M of N` when filtered.*
-      Then §3 (chip taxonomy table), §6 (badge state table), §8 (Start over), §13 (engineering handoff).
+   - *Scope lives in the breadcrumb. Filters and search live in chips.*
+   - *The count always names its scope and shows `M of N` when filtered.*
+   Then §3 (chip taxonomy table), §6 (badge state table), §8 (Start over), §13 (engineering handoff).
 2. **`ACTIVE_CONTEXT_wireframes.html`** — render it (`open` it, or serve the project root and browse to the file) to see the seven states the spec describes. It links `../../../styles.css` for the ReTrends tokens.
 
 ---
@@ -38,16 +38,16 @@ git log --oneline -5          # no app-source commits from this work
 The spec references real files. To see the *current* behaviour the design changes, read these (do not modify them — design handoff only):
 
 - `ui_kits/discover/src/DiscoverPortal.jsx`
-    - state model — `filters` / `setFilters`, `DP_DEFAULT_FILTERS` (line ~70): today only `{ budget, ptype, beds, verified }`. The design extends this with `sellerType`, `dateRange`, `backOnMarket`, `newToMarket`, `reraRegistered`, `readyToMove`, and `q`.
-    - `reset()` (line ~115): the current Start-over. Already a clean slate (Option A); the design promotes it to a labelled button + conditional confirm.
-    - `summary` / `crumbMap` (line ~209): what feeds the map badge today.
+  - state model — `filters` / `setFilters`, `DP_DEFAULT_FILTERS` (line ~70): today only `{ budget, ptype, beds, verified }`. The design extends this with `sellerType`, `dateRange`, `backOnMarket`, `newToMarket`, `reraRegistered`, `readyToMove`, and `q`.
+  - `reset()` (line ~115): the current Start-over. Already a clean slate (Option A); the design promotes it to a labelled button + conditional confirm.
+  - `summary` / `crumbMap` (line ~209): what feeds the map badge today.
 - `ui_kits/discover/src/PortalMap.jsx`
-    - the bottom-center **"Showing X {noun}"** pill (search `Showing`, ~line 895) — the badge the design re-specifies (§6).
-    - the top-left crumb chip (~line 840) — the breadcrumb the design keeps as the home of *scope*.
+  - the bottom-center **"Showing X {noun}"** pill (search `Showing`, ~line 895) — the badge the design re-specifies (§6).
+  - the top-left crumb chip (~line 840) — the breadcrumb the design keeps as the home of *scope*.
 - `ui_kits/discover/src/components/shared.jsx`
-    - `DPHeaderBand` (crumb + stats) and `DPFilterBar` / `DP_DEFAULT_FILTERS` — where the new `DPActiveContextBar` + `DPChip` + extended filter model would live.
+  - `DPHeaderBand` (crumb + stats) and `DPFilterBar` / `DP_DEFAULT_FILTERS` — where the new `DPActiveContextBar` + `DPChip` + extended filter model would live.
 - `ui_kits/discover/src/DiscoverPanel.jsx`
-    - per-layer panel bodies + the `DPEmpty` empty states (§7 routes these by cause).
+  - per-layer panel bodies + the `DPEmpty` empty states (§7 routes these by cause).
 
 Prior related handoffs in the same folder give house style and precedent:
 `REGION_SELECTION_GUIDANCE.md`, `ISSUE_1808_COMMENT.md`, `PR_B_IMPLEMENTATION.md`, `AREA_MARKER_UX.md`, `MAP_PANEL_ALIGNMENT.md`.

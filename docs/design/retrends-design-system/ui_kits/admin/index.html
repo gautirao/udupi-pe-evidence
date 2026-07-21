@@ -1,0 +1,108 @@
+<!-- @dsCard group="Admin" viewport="1320x840" name="City Launch wizard" subtitle="Admin-only launch wizard — Select · Prepare · Preview & validate (reuses Discover) · Launch. Persistent preview banner, guided validation checklist, guarded launch. Mock data." -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReTrends Admin — City Launch</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  html, body { margin: 0; height: 100%; background: var(--background); }
+  body { font-family: var(--font-sans); color: var(--text-strong); }
+  * { box-sizing: border-box; }
+  ::selection { background: var(--accent); color: #fff; }
+  .upt-pin { background: transparent !important; border: none !important; }
+  .leaflet-container { font-family: var(--font-sans); background: #EDEBE6; }
+  .leaflet-bar a { color: var(--navy-800); }
+  .leaflet-control-attribution { font-size: 10px; background: rgba(255,255,255,0.7) !important; }
+  .upt-scroll::-webkit-scrollbar { width: 10px; }
+  .upt-scroll::-webkit-scrollbar-thumb { background: var(--stone-400); border-radius: 999px; border: 3px solid var(--background); }
+  @keyframes uptShimmer { 0% { background-position: -420px 0; } 100% { background-position: 420px 0; } }
+  .upt-shimmer { background-image: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.65) 50%, transparent 70%); background-size: 420px 100%; background-repeat: no-repeat; animation: uptShimmer 1.25s ease-in-out infinite; }
+  @keyframes uptSpin { to { transform: rotate(360deg); } }
+  .upt-spin { animation: uptSpin .8s linear infinite; }
+  @keyframes rtaSlideIn { from { transform: translateX(102%); } to { transform: translateX(0); } }
+  @keyframes rtaFade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes rtaPop { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+  button { font-family: inherit; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<!-- REAL Discover data + hierarchical map (source of truth), reused unchanged -->
+<script src="../discover/src/data.js"></script>
+<!-- admin mock data (guided review path + wizard) -->
+<script src="admin-data.js"></script>
+<script type="text/babel" src="../discover/src/PortalMap.jsx"></script>
+<!-- admin wizard screens -->
+<script type="text/babel" src="AdminChrome.jsx"></script>
+<script type="text/babel" src="SelectCityScreen.jsx"></script>
+<script type="text/babel" src="PrepareCityScreen.jsx"></script>
+<script type="text/babel" src="PreviewValidateScreen.jsx"></script>
+<script type="text/babel" src="LaunchScreen.jsx"></script>
+<script type="text/babel">
+  const STEP_IDX = { select: 0, prepare: 1, preview: 2, launch: 3 };
+
+  function App() {
+    const [cities, setCities] = React.useState(() =>
+      window.RTA_CITIES.map((c) => ({ ...c, validation: { ...c.validation }, prep: { ...c.prep } }))
+    );
+    const [route, setRoute] = React.useState("select");
+    const [cityId, setCityId] = React.useState(null);
+    const [launched, setLaunched] = React.useState(false);
+    const city = cities.find((c) => c.id === cityId) || null;
+
+    const patchCity = (id, patch) => setCities((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+
+    const openCity = (c, target) => {
+      // Starting preparation on a not-yet-started city: simulate it running.
+      if (target === "prepare" && c.prep.state === "none") {
+        patchCity(c.id, { status: "preparing", geoPct: 12, rev: (c.rev || 1), prep: { ...c.prep, state: "running", current: 1 } });
+      }
+      setCityId(c.id); setLaunched(false); setRoute(target);
+    };
+
+    const toggleValid = (key) => city && patchCity(city.id, { validation: { ...city.validation, [key]: !city.validation[key] } });
+    const resetValid = () => city && patchCity(city.id, { validation: { landing: false, regions: false, areaGroups: false, areas: false, listing: false } });
+    const doLaunch = () => { if (city) { patchCity(city.id, { status: "ready-launch", preview: "validated" }); setLaunched(true); } };
+
+    const onJump = (key) => {
+      if (STEP_IDX[key] > STEP_IDX[route]) return;      // forward jumps disabled
+      if (key === "select") { setRoute("select"); return; }
+      if (city) setRoute(key);
+    };
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", height: "100vh", minHeight: 0 }}>
+        <window.RTA_Header />
+        <window.RTA_Stepper step={route} maxReached={STEP_IDX[route]} onJump={onJump} />
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          {route === "preview" && city ? (
+            <window.RTA_PreviewValidate
+              city={city} validation={city.validation}
+              onToggle={toggleValid} onReset={resetValid} onExit={() => setRoute("select")} onGoLaunch={() => setRoute("launch")}
+            />
+          ) : (
+            <window.RTA_Page>
+              {route === "select" && <window.RTA_SelectCity cities={cities} onSelect={openCity} />}
+              {route === "prepare" && city && <window.RTA_PrepareCity city={city} onContinue={() => setRoute("preview")} onBack={() => setRoute("select")} />}
+              {route === "launch" && city && <window.RTA_Launch city={city} validation={city.validation} onBack={() => setRoute("preview")} onLaunch={doLaunch} launched={launched} />}
+              {route !== "select" && !city && <div style={{ padding: "40px", color: "var(--text-muted)" }}>Select a city to continue.</div>}
+            </window.RTA_Page>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

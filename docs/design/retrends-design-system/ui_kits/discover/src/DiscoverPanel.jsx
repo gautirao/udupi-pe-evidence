@@ -213,13 +213,16 @@ function DiscoverPanelBody({ ctx }) {
             chips={["By corridor & direction", "Farmland only"]} cta="Search farmland" onClick={() => ctx.setJourney("agri")} />
         </ColStack>
 
-        {/* C. Macro regions — secondary "or start with a region" */}
+        {/* C. Macro regions — a first-class parallel to the map's region markers */}
         <div style={{ height: "1px", background: "var(--border)", margin: "30px 0 26px" }} />
-        <window.DPSection icon="map-pin" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{D.regions.length} regions</span>}>Or start with a region</window.DPSection>
-        <p style={{ margin: "-4px 0 14px", fontSize: "13px", lineHeight: 1.5, color: "var(--text-muted)", textWrap: "pretty" }}>
-          Prefer to narrow by part of the city first? Pick a region to scope the map, then choose how to search inside it.
+        <window.DPSection icon="map-pin" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{D.regions.length} regions</span>}>Start with a region</window.DPSection>
+        <p style={{ margin: "-4px 0 14px", fontSize: "13px", lineHeight: 1.5, color: "var(--text-body)", textWrap: "pretty" }}>
+          Select a region on the map or choose one below — either way the map zooms in and opens that region, where you pick how to search.
         </p>
-        <ColStack>{D.regions.map((r) => <window.DPRegionCard key={r.id} region={r} onView={ctx.pickRegion} />)}</ColStack>
+        <ColStack>{D.regions.map((r) => (
+          <window.DPRegionCard key={r.id} region={r} onView={ctx.pickRegion}
+            highlighted={ctx.hoverRegionId === r.id && ctx.hoverRegionSrc !== "panel"} onHover={ctx.onRegionHover} />
+        ))}</ColStack>
 
         {/* D. Trust note */}
         <div style={{ display: "flex", alignItems: "center", gap: "11px", marginTop: "26px", paddingTop: "20px", borderTop: "1px solid var(--border)" }}>
@@ -277,9 +280,10 @@ function DiscoverPanelBody({ ctx }) {
           sub="Pick a group to narrow to its areas, or jump straight to an area with search." crumb={ctx.scope ? [`Discover ${city}`, regionObj.name, "Search by area"] : [`Discover ${city}`, "Search by area"]}
           stats={[{ value: ctx.scope ? CO.homesRegion(ctx.scope) : CO.totalHomes, label: noun(mode, ctx.scope ? CO.homesRegion(ctx.scope) : CO.totalHomes) }]} actions={changeRegionBtn} />
         <SearchRow ctx={ctx} />
-        <MapGuide>Tap a marker on the map or choose from the list below.</MapGuide>
+        <MapGuide>Select a marker on the map or choose from the list below.</MapGuide>
         <window.DPSection icon="layers" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{groups.length} groups</span>}>Area groups</window.DPSection>
-        <ColStack>{groups.map((g) => <window.DPGroupCard key={g.id} group={g} mode={mode} onView={ctx.pickGroup} />)}</ColStack>
+        <ColStack>{groups.map((g) => <window.DPGroupCard key={g.id} group={g} mode={mode} onView={ctx.pickGroup}
+          highlighted={ctx.hoverNavId === g.id && ctx.hoverNavSrc !== "panel"} onHover={ctx.onNavHover} />)}</ColStack>
       </>
     );
   }
@@ -296,7 +300,7 @@ function DiscoverPanelBody({ ctx }) {
           stats={[{ value: areas.length, label: "areas" }, { value: CO.homesGroup(ctx.groupId), label: noun(mode, CO.homesGroup(ctx.groupId)) }]} />
         <SearchRow ctx={ctx} />
         <MapGuide>
-          Tap a marker on the map or choose from the list below.
+          Select a marker on the map or choose from the list below.
           {partial && <> Showing <strong style={{ color: "var(--text-strong)", fontFamily: "var(--font-mono)" }}>{shownN}</strong> of {areas.length} areas on the map &mdash; all {areas.length} are listed below.</>}
         </MapGuide>
         <window.DPSection icon="map-pin" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{areas.length} areas</span>}>Areas inside {groupObj.name}</window.DPSection>
@@ -317,7 +321,7 @@ function DiscoverPanelBody({ ctx }) {
         <window.DPHeaderBand eyebrow={isAll ? "All listings" : "Selected area"} title={heading} sub={isAll ? "Every residential listing in scope — narrow with the filters below." : areaObj.blurb}
           crumb={crumb} stats={[{ value: listings.length, label: noun(mode, listings.length) }]} actions={isAll && ctx.scope ? changeRegionBtn : null} />
         <window.DPFilterBar f={ctx.filters} setF={ctx.setFilters} onClear={() => ctx.setFilters(window.DP_DEFAULT_FILTERS)} />
-        <MapGuide>Tap markers to preview, or choose from the list.</MapGuide>
+        <MapGuide>Select markers to preview, or choose from the list.</MapGuide>
         {listings.length === 0 ? (
           <window.DPEmpty icon="sliders-horizontal" title="No homes match these filters" body="Widen the budget or bedrooms, turn off Verified only, or switch Buy/Rent."
             actions={<><NButton variant="primary" size="md" onClick={() => ctx.setFilters(window.DP_DEFAULT_FILTERS)}>Clear filters</NButton><NButton variant="outline" size="md" onClick={() => ctx.setMode(mode === "Rent" ? "Buy" : "Rent")}>Switch to {mode === "Rent" ? "Buy" : "Rent"}</NButton></>} />
@@ -341,9 +345,10 @@ function DiscoverPanelBody({ ctx }) {
           sub="Search a school or area directly, or pick a zone below." crumb={ctx.scope ? [`Discover ${city}`, regionObj.name, "Search near school"] : [`Discover ${city}`, "Search near school"]}
           stats={[{ value: ctx.scope ? CO.schoolsRegion(ctx.scope) : CO.totalSchools, label: "schools" }]} actions={changeRegionBtn} />
         <SearchRow ctx={ctx} />
-        <MapGuide accent="plum">Tap a marker on the map or choose from the list below.</MapGuide>
+        <MapGuide accent="plum">Select a marker on the map or choose from the list below.</MapGuide>
         <window.DPSection icon="layers" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{zones.length} zones</span>}>School zones</window.DPSection>
-        <ColStack>{zones.map((z) => <window.DPZoneCard key={z.id} zone={z} onView={ctx.pickZone} />)}</ColStack>
+        <ColStack>{zones.map((z) => <window.DPZoneCard key={z.id} zone={z} onView={ctx.pickZone}
+          highlighted={ctx.hoverNavId === z.id && ctx.hoverNavSrc !== "panel"} onHover={ctx.onNavHover} />)}</ColStack>
       </>
     );
   }
@@ -360,7 +365,7 @@ function DiscoverPanelBody({ ctx }) {
           stats={[{ value: CO.schoolsZone(ctx.zoneId), label: "schools" }, { value: CO.homesZone(ctx.zoneId), label: "nearby homes" }]} />
         <SearchRow ctx={ctx} />
         <MapGuide accent="plum">
-          Tap a marker on the map or choose from the list below.
+          Select a marker on the map or choose from the list below.
           {partial && <> Showing <strong style={{ color: "var(--text-strong)", fontFamily: "var(--font-mono)" }}>{shownN}</strong> of {areas.length} areas on the map &mdash; all {areas.length} are listed below.</>}
         </MapGuide>
         <window.DPSection icon="map-pin" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{areas.length} areas</span>}>Areas in {zoneObj.name}</window.DPSection>
@@ -378,7 +383,7 @@ function DiscoverPanelBody({ ctx }) {
         <window.DPHeaderBand eyebrow="Schools in area" accent="plum" icon="map-pin" title={`Schools in ${areaObj.name}`} sub="Choose a school to see homes within 3, 5 or 10 km."
           crumb={[`Discover ${city}`, regionObj.name, areaObj.name]} stats={[{ value: CO.schoolsArea(ctx.areaId), label: "schools" }, { value: CO.homesArea(ctx.areaId), label: "nearby homes" }]} />
         <SearchRow ctx={ctx} />
-        <MapGuide accent="plum">Tap a school pin on the map or choose from the list below.</MapGuide>
+        <MapGuide accent="plum">Select a school pin on the map or choose from the list below.</MapGuide>
         <window.DPSection icon="building" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{schools.length} schools</span>}>Schools in {areaObj.name}</window.DPSection>
         {schools.length === 0 ? (
           <window.DPEmpty accent="plum" icon="building" title="No schools mapped here yet" body="Try a nearby area in this zone." actions={<NButton variant="primary" size="md" onClick={ctx.back}>Back to areas</NButton>} />
@@ -398,7 +403,7 @@ function DiscoverPanelBody({ ctx }) {
           stats={[{ value: homes.length, label: noun(mode, homes.length) }, { value: `${ctx.radiusKm} km`, label: "radius" }]}
           actions={<window.DPGhostBtn onClick={ctx.back}>Change school</window.DPGhostBtn>} />
         <window.DPRadius value={ctx.radiusKm} onChange={ctx.setRadiusKm} school={schoolObj} />
-        <MapGuide accent="plum">Tap markers to preview, or choose from the list.</MapGuide>
+        <MapGuide accent="plum">Select markers to preview, or choose from the list.</MapGuide>
         {homes.length === 0 ? (
           <window.DPEmpty accent="plum" icon="route" title={`No homes within ${ctx.radiusKm} km`} body={`No ${mode === "Rent" ? "rentals" : "homes"} within ${ctx.radiusKm} km of ${schoolObj.name.split(",")[0]}. Try a wider radius or change the school.`}
             actions={<>{ctx.radiusKm < 10 && <NButton variant="primary" size="md" onClick={() => ctx.setRadiusKm(ctx.radiusKm === 3 ? 5 : 10)}>Try {ctx.radiusKm === 3 ? 5 : 10} km</NButton>}<NButton variant="outline" size="md" onClick={ctx.back}>Change school</NButton></>} />
@@ -426,7 +431,8 @@ function DiscoverPanelBody({ ctx }) {
           Agricultural land is a separate model — parcels, corridors and distances, kept apart from residential counts and neighbourhoods.
         </div>
         <window.DPSection icon="layers" right={<span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{corridors.length} corridors</span>}>Direction / corridor</window.DPSection>
-        <ColStack>{corridors.map((c) => <window.DPCorridorCard key={c.id} corridor={c} onView={ctx.pickCorridor} />)}</ColStack>
+        <ColStack>{corridors.map((c) => <window.DPCorridorCard key={c.id} corridor={c} onView={ctx.pickCorridor}
+          highlighted={ctx.hoverNavId === c.id && ctx.hoverNavSrc !== "panel"} onHover={ctx.onNavHover} />)}</ColStack>
       </>
     );
   }

@@ -36,54 +36,203 @@ function leaderHTML(dx, dy, tone) {
 // visible chip shifts. Entries are placed in PRIORITY order (selected > count > rest);
 // higher-priority chips move less (they claim their spot first). `dir` locks the shift
 // direction (used to preserve N/S/E/W meaning for region bubbles).
-function declutterPoints(entries) {
-  const out = [];
+function declutterPoints(entries, opts) {
+  opts = opts || {};
+  const out = (opts.obstacles || []).map((rect) => ({ rect, obstacle: true }));
+  const nOb = out.length;
+  const bd = opts.bounds; // {minX,minY,maxX,maxY} — clamp each rect fully inside
   const rectAt = (p, e) => ({ x: p.x - e.w / 2, y: p.y - e.h / 2, w: e.w, h: e.h });
+  const clamp = (p, e) => {
+    if (!bd) return p;
+    let x = p.x, y = p.y;
+    x = Math.max(bd.minX + e.w / 2, Math.min(bd.maxX - e.w / 2, x));
+    y = Math.max(bd.minY + e.h / 2, Math.min(bd.maxY - e.h / 2, y));
+    return window.L.point(x, y);
+  };
   const overlap = (a, b) => a.x - 8 < b.x + b.w && b.x - 8 < a.x + a.w && a.y - 8 < b.y + b.h && b.y - 8 < a.y + a.h;
+  const overlapArea = (r) => {
+    let s = 0;
+    out.forEach((o) => {
+      const ix = Math.max(0, Math.min(r.x + r.w, o.rect.x + o.rect.w) - Math.max(r.x, o.rect.x));
+      const iy = Math.max(0, Math.min(r.y + r.h, o.rect.y + o.rect.h) - Math.max(r.y, o.rect.y));
+      s += ix * iy;
+    });
+    return s;
+  };
   entries.slice().sort((a, b) => b.pri - a.pri).forEach((e) => {
-    let p = e.pt, guard = 0;
-    while (guard++ < 26) {
-      const hit = out.find((o) => overlap(rectAt(p, e), o.rect));
-      if (!hit) break;
-      let vx, vy;
-      if (e.dir) { vx = e.dir[0]; vy = e.dir[1]; }
-      else {
-        vx = p.x - (hit.rect.x + hit.rect.w / 2); vy = p.y - (hit.rect.y + hit.rect.h / 2);
-        const n = Math.hypot(vx, vy);
-        if (n < 0.5) { vx = 0; vy = 1; } else { vx /= n; vy /= n; }
-      }
-      p = window.L.point(p.x + vx * 14, p.y + vy * 14);
+    // Try the true anchor, then an expanding golden-angle spiral of candidates around it
+    // (deterministic). Coincident anchors separate because the radius GROWS each step — a
+    // fixed-radius nudge could orbit forever and let two cards stack fully.
+    let best = null, bestOv = Infinity;
+    for (let k = 0; k < 90; k++) {
+      const ang = k * 2.399963;                  // golden angle
+      const rad = k === 0 ? 0 : 12 + k * 6;       // px, grows outward
+      const cand = clamp(window.L.point(e.pt.x + Math.cos(ang) * rad, e.pt.y + Math.sin(ang) * rad), e);
+      const rect = rectAt(cand, e);
+      if (!out.some((o) => overlap(rect, o.rect))) { best = cand; break; }
+      const ov = overlapArea(rect);
+      if (ov < bestOv) { bestOv = ov; best = cand; }
     }
-    out.push({ e, p, rect: rectAt(p, e) });
+    out.push({ e, p: best, rect: rectAt(best, e) });
   });
+  return out.slice(nOb);
+}
+// --- Navigational (viewport-anchored) layout for the UPPER hierarchy -----------
+// Region / area-group / zone markers are NAVIGATION controls, not geographic pins. In
+// "Guided" mode we ignore centroids and arrange children in a deliberate pattern chosen by
+// CHILD COUNT, inside a safe rect that clears the breadcrumb + instruction card (top-left),
+// the legend + summary pill (bottom), and the panel edge. No leader lines — nothing pretends
+// to sit on a real coordinate. Deterministic; recomputed on zoom/move/resize only.
+// Spread a set of angles (radians) so no two are closer than minGap, moving each as little
+// as possible while preserving their circular ORDER — lets navigation markers keep their real
+// compass bearing when there's room, and fan out evenly only where bearings crowd. Deterministic.
+function spreadAngles(raw, minGap) {
+  const n = raw.length;
+  if (n < 2) return raw.slice();
+  const TWO = Math.PI * 2, gap = Math.min(minGap, TWO / n);
+  const idx = raw.map((a, i) => ({ a: ((a % TWO) + TWO) % TWO, i })).sort((p, q) => p.a - q.a);
+  const a = idx.map((o) => o.a);
+  for (let k = 1; k < n; k++) if (a[k] < a[k - 1] + gap) a[k] = a[k - 1] + gap;
+  if (a[0] + TWO - a[n - 1] < gap) { const start = a[0]; for (let k = 0; k < n; k++) a[k] = start + k * (TWO / n); }
+  const out = new Array(n);
+  idx.forEach((o, k) => { out[o.i] = a[k]; });
   return out;
 }
-function regionBubble(r, count, sel, leader) {
-  const bg = sel ? "var(--navy-900)" : "rgba(27,42,69,0.95)";
-  return `<div class="dp-nav" style="position:relative;width:130px;margin-left:-65px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;">
-    ${leader || ""}
-    <div class="dp-pulse" style="display:inline-block;border-radius:var(--radius-full);">
-    <div class="dp-navcore" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:86px;height:86px;border-radius:var(--radius-full);background:${bg};color:#fff;box-shadow:var(--shadow-lg);border:2px solid rgba(255,255,255,0.5);transform:scale(${sel ? 1.06 : 1});transition:all .18s cubic-bezier(.4,0,.2,1);">
-      <span style="font-family:var(--font-mono);font-size:19px;font-weight:700;line-height:1;">${count}</span>
-      <span style="font-size:11px;font-weight:700;">${r.short}</span>
-    </div></div>
-    <div class="dp-hint-cap" style="margin-top:4px;padding:2px 8px;border-radius:var(--radius-full);background:var(--paper);box-shadow:var(--shadow-sm);font-size:10px;font-weight:700;color:var(--text-muted);white-space:nowrap;">Tap to explore</div></div>`;
+function navSafeRect(map, isMobile) {
+  const s = map.getSize();
+  const topPad = isMobile ? 150 : 182;   // breadcrumb + persistent instruction card
+  const botPad = isMobile ? 118 : 128;   // legend + centre summary pill
+  const side = Math.max(72, Math.min(120, s.x * 0.13));
+  return { x0: side, y0: topPad, x1: s.x - side, y1: s.y - botPad };
 }
-function bubblePill(name, count, sel, accent, leader) {
-  const bg = sel ? "var(--navy-900)" : "rgba(27,42,69,0.95)";
-  const svg = accent === "agri"
-    ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M5 8c4 0 7-3 7-6 0 3 3 6 7 6"/></svg>`
-    : accent === "school"
-    ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>`
-    : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/></svg>`;
-  return `<div class="dp-nav" style="position:relative;width:300px;margin-left:-150px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;">
+function navPoints(entries, map, isMobile) {
+  const r = navSafeRect(map, isMobile);
+  const cx = (r.x0 + r.x1) / 2, cy = (r.y0 + r.y1) / 2;
+  const halfW = Math.max(60, (r.x1 - r.x0) / 2), halfH = Math.max(60, (r.y1 - r.y0) / 2);
+  const P = (x, y) => window.L.point(x, y);
+  const out = new Map();
+  const n = entries.length;
+  // Regions carry a compass direction → a stable plus-shaped layout (N up, S down, E/W sides,
+  // Central in the middle) so the map still reads as a rough mental map of the city.
+  if (entries.some((e) => e.compass)) {
+    // Five region cards on a small (split-view) map can't sit in a strict plus — side cards would
+    // clip or collide with the centre. Distribute them across 5 EVENLY-spaced rows (N,E,Central,
+    // W,S top→bottom) so each owns its row (no vertical overlap), with E/W nudged to their sides
+    // by a width-clamped amount (never off-screen) to keep the compass reading. North's row starts
+    // below the instruction card. Everything derives from the live map size → adapts to any width.
+    const s = map.getSize();
+    const top = isMobile ? 152 : 178, bot = s.y - (isMobile ? 104 : 92);
+    const rowY = (i) => top + (bot - top) * (i / 4);
+    const rx = Math.max(64, Math.min(halfW * 0.72, s.x / 2 - 100));
+    const row = { north: 0, northeast: 1, east: 1, southeast: 1, central: 2, northwest: 3, west: 3, southwest: 3, south: 4 };
+    const xo = { northeast: rx, east: rx, southeast: rx, northwest: -rx, west: -rx, southwest: -rx };
+    entries.forEach((e) => { const k = e.compass; out.set(e.id, P(cx + (xo[k] || 0), rowY(row[k] != null ? row[k] : 2))); });
+    return out;
+  }
+  if (n === 1) { out.set(entries[0].id, P(cx, cy)); return out; }                       // one child, centred
+  // Directional layout: children carry a real screen bearing from the parent centre. Keep that
+  // bearing where there's room (so N-of-parent stays up, E stays right), fan out on an ellipse
+  // only where bearings crowd — readable + collision-free while preserving approximate compass.
+  if (entries.some((e) => typeof e.bearing === "number")) {
+    if (n === 2) { const dx = Math.min(halfW * 0.6, 240); out.set(entries[0].id, P(cx - dx, cy)); out.set(entries[1].id, P(cx + dx, cy)); return out; }
+    // Row-stagger (same approach that keeps the 5 region cards clean): cap the on-map set (entries
+    // arrive ranked by count), order it north→south by the bearing's vertical component, give each
+    // card its own evenly-spaced row (guarantees no vertical overlap on any height) and offset x by
+    // the east/west component so the compass still reads. Dense levels let the panel carry the rest.
+    const use = entries.slice(0, Math.min(n, 6));
+    const ord = use.map((e) => e).sort((a, b) => Math.sin(a.bearing) - Math.sin(b.bearing));
+    const s = map.getSize();
+    const top = isMobile ? 150 : 172, bot = s.y - (isMobile ? 104 : 96);
+    const rxMax = Math.max(48, Math.min(halfW * 0.7, s.x / 2 - 96));
+    const m = ord.length;
+    // With ≤4 cards there's room to honour each real east/west offset. With 5–6 the rows pack
+    // close, so alternate sides in a clean zig-zag ladder — adjacent rows are always separated
+    // horizontally, guaranteeing no overlap while still descending north→south.
+    const zig = m >= 5;
+    ord.forEach((e, k) => {
+      const yy = m === 1 ? cy : top + (bot - top) * (k / (m - 1));
+      const xo = zig ? (k % 2 ? rxMax : -rxMax) : Math.cos(e.bearing) * rxMax;
+      out.set(e.id, P(cx + xo, yy));
+    });
+    return out;
+  }
+  if (n === 2) { const dx = Math.min(halfW * 0.58, 230); out.set(entries[0].id, P(cx - dx, cy)); out.set(entries[1].id, P(cx + dx, cy)); return out; } // balanced pair
+  if (n <= 6) {                                                                         // radial ring
+    const rx = Math.min(halfW * 0.8, 320), ry = Math.max(84, Math.min(halfH * 0.82, 220));
+    entries.forEach((e, i) => { const a = -Math.PI / 2 + i * (2 * Math.PI / n); out.set(e.id, P(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry)); });
+    return out;
+  }
+  // 7–12 → two concentric ellipse rings (outer holds ~60%). Beyond 12 the on-map set caps and
+  // the panel list carries the remainder (panel-assisted selection).
+  const cap = Math.min(n, 12);
+  const outerN = Math.ceil(cap * 0.6), innerN = Math.max(1, cap - outerN);
+  const ring = (ids, rx, ry, phase) => ids.forEach((e, i) => { const a = -Math.PI / 2 + phase + i * (2 * Math.PI / ids.length); out.set(e.id, P(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry)); });
+  ring(entries.slice(0, outerN), Math.min(halfW * 0.86, 340), Math.min(halfH * 0.82, 240), 0);
+  ring(entries.slice(outerN, cap), Math.min(halfW * 0.44, 175), Math.min(halfH * 0.42, 120), Math.PI / innerN);
+  return out;
+}
+// City-landing region marker. Reads NAME first, then the property count with an
+// explicit "properties" label so the number is self-explanatory. One hover/focus-
+// revealed "Select to zoom in" caption (never persistent per-marker text). Emphasis
+// and the caption are driven by the .dp-region-on class + CSS (see index.html) so the
+// panel↔map hover sync never has to recreate the icon (keeps a11y listeners intact).
+function regionBubble(r, count, sel, leader, hovered, sz) {
+  sz = sz || 92;
+  const nameF = sz >= 84 ? 13 : 11.5, cntF = sz >= 84 ? 18 : 15, nounF = sz >= 84 ? 8 : 7.5;
+  const bg = sel ? "var(--navy-900)" : "var(--navy-800)";
+  return `<div class="dp-region dp-nav${hovered ? " dp-region-on" : ""}" style="position:relative;width:154px;margin-left:-77px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;">
     ${leader || ""}
-    <div class="dp-pulse" style="display:inline-block;border-radius:var(--radius-full);">
-    <div class="dp-navcore" style="display:inline-flex;align-items:center;gap:9px;padding:8px 14px;border-radius:var(--radius-full);background:${bg};color:#fff;box-shadow:var(--shadow-lg);white-space:nowrap;border:1.5px solid rgba(255,255,255,0.45);transform:scale(${sel ? 1.06 : 1});transition:all .18s cubic-bezier(.4,0,.2,1);">
-      ${svg}<span style="font-size:13px;font-weight:700;letter-spacing:-0.01em;">${name}</span>
-      <span style="font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,0.7);">${count}</span>
-      <span style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.65);">&#8250;</span>
-    </div></div></div>`;
+    <div class="dp-navcore dp-region-core" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:${sz}px;height:${sz}px;margin:0 auto;border-radius:var(--radius-full);background:${bg};color:#fff;box-shadow:var(--shadow-lg);border:2px solid rgba(255,255,255,${sel ? "0.92" : "0.55"});transform:scale(${sel ? 1.06 : 1});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s cubic-bezier(.4,0,.2,1),border-color .18s;">
+      <span style="font-size:${nameF}px;font-weight:700;letter-spacing:-0.01em;line-height:1.1;">${r.short}</span>
+      <span style="font-family:var(--font-mono);font-size:${cntF}px;font-weight:700;line-height:1;margin-top:1px;">${count}</span>
+      <span style="font-size:${nounF}px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;opacity:.8;">${count === 1 ? "property" : "properties"}</span>
+    </div>
+    <div class="dp-region-cap" style="margin-top:6px;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:var(--radius-full);background:var(--paper);box-shadow:var(--shadow-md);font-size:10.5px;font-weight:700;color:var(--copper-600);white-space:nowrap;">Tap to zoom in <span style="font-size:12px;line-height:1;">&#8250;</span></div>
+  </div>`;
+}
+// City-landing region NAVIGATION card (Guided mode). Leads with representative AREA names
+// (recognisable neighbourhoods) rather than the abstract region label, plus a "+N more" count
+// and the unchanged regional property count. Same stacked hierarchy language as the group cards.
+function regionNavCard(r, count, sel, hovered, shown, more) {
+  const bg = sel ? "var(--navy-900)" : "var(--navy-800)";
+  return `<div class="dp-region dp-nav${hovered ? " dp-region-on" : ""}" style="position:relative;width:192px;margin-left:-96px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;">
+    <div class="dp-navcore dp-region-core" style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;padding:7px 14px 8px;border-radius:var(--radius-md);background:${bg};color:#fff;box-shadow:var(--shadow-lg);border:1.5px solid rgba(255,255,255,${sel ? "0.9" : "0.5"});transform:scale(${sel ? 1.04 : 1});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s cubic-bezier(.4,0,.2,1),border-color .18s;">
+      <span style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;opacity:.66;">${r.short} \u00B7 ${count} ${count === 1 ? "property" : "properties"}</span>
+      <span style="display:inline-flex;align-items:baseline;gap:5px;max-width:160px;"><span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${shown.join(" \u00B7 ")}</span>${more > 0 ? `<span style="font-size:9px;font-weight:700;opacity:.58;white-space:nowrap;">+${more}</span>` : ""}</span>
+    </div>
+    <div class="dp-region-cap" style="margin-top:6px;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:var(--radius-full);background:var(--paper);box-shadow:var(--shadow-md);font-size:10.5px;font-weight:700;color:var(--copper-600);white-space:nowrap;">Tap to zoom in <span style="font-size:12px;line-height:1;">&#8250;</span></div>
+  </div>`;
+}
+// Secondary NAVIGATION marker — one family for area groups, school zones and agri
+// corridors, sharing the region marker's stacked language (eyebrow · name · count ·
+// noun) but a step smaller so the hierarchy reads region > zone/corridor > area. A
+// hover/focus-revealed "Tap to zoom in ›" pill (never persistent) and emphasis are
+// class/CSS-driven (.dp-navcard-on) so panel↔map sync never recreates the icon.
+const NAV_GLYPH = {
+  area: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/></svg>`,
+  school: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>`,
+  agri: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M5 8c4 0 7-3 7-6 0 3 3 6 7 6"/></svg>`,
+};
+function navCard(o) {
+  const agri = o.tone === "agri";
+  const bg = o.sel ? (agri ? "#154834" : "var(--navy-900)") : (agri ? "#1F7A5C" : "var(--navy-800)");
+  const capColor = agri ? "var(--evergreen-700, #1F694A)" : "var(--copper-600)";
+  const noun = (o.count === 1 && o.nounSingular) ? o.nounSingular : o.noun;
+  const cw = o.compact ? 150 : 190, coreMax = o.compact ? 138 : 178, nameMax = o.compact ? 118 : 150;
+  // Dense levels clamp the name to one line (full name stays in the tooltip / aria-label);
+  // roomy levels allow two lines. Either way count + noun always render below.
+  const nameClamp = o.compact
+    ? `white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameMax}px;`
+    : `max-width:${nameMax}px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;`;
+  return `<div class="dp-navcard dp-nav${o.hovered ? " dp-navcard-on" : ""}" style="position:relative;width:${cw}px;margin-left:-${cw / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;">
+    ${o.leader || ""}
+    <div class="dp-navcore dp-navcard-core" style="display:inline-flex;flex-direction:column;align-items:center;gap:1px;max-width:${coreMax}px;padding:8px 15px 9px;border-radius:var(--radius-lg);background:${bg};color:#fff;box-shadow:var(--shadow-lg);border:1.5px solid rgba(255,255,255,${o.sel ? "0.9" : "0.5"});transform:scale(${o.sel ? 1.05 : 1});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s cubic-bezier(.4,0,.2,1),border-color .18s;">
+      <span style="display:inline-flex;align-items:center;gap:4px;opacity:.82;"><span style="display:inline-flex;">${NAV_GLYPH[o.tone] || NAV_GLYPH.area}</span><span style="font-size:8.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;">${o.eyebrow}</span></span>
+      <span style="font-size:13px;font-weight:700;letter-spacing:-0.01em;line-height:1.18;${nameClamp}">${o.name}</span>
+      <span style="display:inline-flex;align-items:baseline;gap:4px;margin-top:1px;"><span style="font-family:var(--font-mono);font-size:16px;font-weight:700;line-height:1;">${o.count}</span><span style="font-size:8px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;opacity:.8;">${noun}</span></span>
+    </div>
+    <div class="dp-navcard-cap" style="margin-top:6px;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:var(--radius-full);background:var(--paper);box-shadow:var(--shadow-md);font-size:10.5px;font-weight:700;color:${capColor};white-space:nowrap;">Tap to zoom in <span style="font-size:12px;line-height:1;">&#8250;</span></div>
+  </div>`;
 }
 function areaPin(name, count, sel, tone, o) {
   o = o || {};
@@ -123,7 +272,7 @@ function areaClusterChip(n, tone, hiName, leader) {
     <div class="dp-acluster-chip" style="display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:var(--radius-full);background:${hiName ? "var(--navy-100)" : "var(--paper)"};border:1.5px dashed ${ring};box-shadow:var(--shadow-md);white-space:nowrap;transition:transform .18s cubic-bezier(.4,0,.2,1);">
       ${glyph}<span style="font-size:12.5px;font-weight:700;color:var(--text-strong);">+${n} nearby areas</span>
     </div>
-    <div style="margin-top:4px;display:inline-block;padding:2px 8px;border-radius:var(--radius-full);background:var(--paper);box-shadow:var(--shadow-sm);font-size:10px;font-weight:700;color:${hiName ? "var(--text-strong)" : "var(--text-muted)"};white-space:nowrap;">${hiName ? `Includes ${hiName}` : "Tap to expand"}</div>
+    <div style="margin-top:4px;display:inline-block;padding:2px 8px;border-radius:var(--radius-full);background:var(--paper);box-shadow:var(--shadow-sm);font-size:10px;font-weight:700;color:${hiName ? "var(--text-strong)" : "var(--text-muted)"};white-space:nowrap;">${hiName ? `Includes ${hiName}` : "Select to expand"}</div>
   </div>`;
 }
 function schoolPin(s, sel) {
@@ -154,7 +303,7 @@ function parcelPin(p, active) {
 
 // ---- cluster bubble (dense leaf markers). Sized by count. The action caption renders
 // only on the LARGEST cluster in view (or on hover — CSS) so a busy map isn't wallpapered
-// with repeated "Tap to zoom in" labels. ----
+// with repeated "Select to zoom in" labels. ----
 function clusterBubble(count, tone, showCap) {
   const bg = tone === "agri" ? "var(--evergreen-600)" : "var(--navy-800)";
   const size = Math.round(42 + Math.min(count, 24) * 0.8);
@@ -164,7 +313,7 @@ function clusterBubble(count, tone, showCap) {
       <span style="font-family:var(--font-mono);font-size:17px;font-weight:700;">${count}</span>
       <span style="font-size:8px;font-weight:700;letter-spacing:.05em;opacity:.82;text-transform:uppercase;">${cap}</span>
     </div>
-    <div class="dp-cluster-cap${showCap ? " on" : ""}" style="margin-top:5px;padding:2px 8px;border-radius:var(--radius-full);background:var(--paper);box-shadow:var(--shadow-sm);font-size:10px;font-weight:700;color:var(--text-muted);white-space:nowrap;">Tap to zoom in</div>
+    <div class="dp-cluster-cap${showCap ? " on" : ""}" style="margin-top:5px;padding:2px 8px;border-radius:var(--radius-full);background:var(--paper);box-shadow:var(--shadow-sm);font-size:10px;font-weight:700;color:var(--text-muted);white-space:nowrap;">Select to zoom in</div>
   </div>`;
 }
 
@@ -233,16 +382,6 @@ function clusterLeaves(items, map, px) {
 }
 
 // ---- agri bubbles (unchanged) ----
-function agriDirBubble(c, count, sel) {
-  const bg = sel ? "#1C5B43" : "#1F7A5C";
-  return `<div style="transform:translate(-50%,-50%);font-family:var(--font-sans);text-align:center;">
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:74px;height:74px;border-radius:var(--radius-full);background:${bg};color:#fff;box-shadow:0 4px 14px rgba(20,50,40,.35);border:3px solid #fff;transform:scale(${sel ? 1.06 : 1});transition:all .18s cubic-bezier(.4,0,.2,1);">
-      <span style="font-family:var(--font-mono);font-size:18px;font-weight:800;line-height:1;">${count}</span>
-      <span style="font-size:10px;font-weight:700;">${c.dir}</span>
-    </div>
-    <div style="margin-top:5px;display:inline-block;padding:3px 9px;border-radius:var(--radius-full);background:#fff;box-shadow:var(--shadow-sm);font-size:11px;font-weight:700;color:var(--text-strong);white-space:nowrap;">${c.short}</div>
-  </div>`;
-}
 function agriTownDisc(name, count, sel) {
   const size = sel ? 52 : 44;
   return `<div style="transform:translate(-50%,-100%);font-family:var(--font-sans);text-align:center;">
@@ -273,7 +412,7 @@ const PAD = { paddingTopLeft: [82, 82], paddingBottomRight: [70, 96] };
 const CAM = { duration: 0.85, easeLinearity: 0.22 };
 const CLUSTER_PX = 46;
 
-function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listings, parcels, crumb, summary, onActivate, onPickRegion, onPickGroup, onPickArea, onPickSchool, onPickZone, onPickCorridor, onPickCluster, hoverAreaId, hoverSrc, onAreaHover, onAreasShown, focusArea, regionGuide, guideDismissed, onDismissGuide, isMobile }) {
+function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listings, parcels, crumb, summary, onActivate, onPickRegion, onPickGroup, onPickArea, onPickSchool, onPickZone, onPickCorridor, onPickCluster, hoverAreaId, hoverSrc, onAreaHover, onAreasShown, focusArea, regionGuide, guideDismissed, onDismissGuide, hoverRegionId, hoverRegionSrc, onRegionHover, hoverNavId, hoverNavSrc, onNavHover, isMobile }) {
   const D = window.BLR_DATA;
   const elRef = React.useRef(null);
   const mapRef = React.useRef(null);
@@ -292,6 +431,10 @@ function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listin
   // Area-marker degradation state (AREA_MARKER_UX.md)
   const areaRef = React.useRef(new Map());      // areaId → { marker, area, count, tone, kind: 'label'|'dot' }
   const chipRef = React.useRef([]);             // area NAVIGATION clusters: { marker, members, tone, count, hi }
+  const regionMarkerRef = React.useRef(new Map()); // city-landing region bubbles: id → { marker, region, count, ldx, ldy }
+  const hoverRegionIdRef = React.useRef(null); hoverRegionIdRef.current = hoverRegionId;
+  const navMarkerRef = React.useRef(new Map());    // group/zone/corridor markers: id → { marker, sel }
+  const hoverNavIdRef = React.useRef(null); hoverNavIdRef.current = hoverNavId;
   const reclusterOnMoveRef = React.useRef(false); // area layers re-place on ANY moveend (no popups to protect)
   const focusAreaRef = React.useRef(null);      // "Show on map" area — force-kept as a label (never a duplicate pin)
   const areaToneRef = React.useRef("copper");
@@ -299,6 +442,10 @@ function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listin
   const areaCountRef = React.useRef(null);
   // First-time helper hint (localStorage-remembered)
   const [hint, setHint] = React.useState(() => { try { return !localStorage.getItem("dp_map_hint_v1"); } catch (e) { return true; } });
+  // Upper-hierarchy layout policy: "Guided" (viewport-anchored navigation controls, default)
+  // vs "Geographic" (centroid + declutter, for comparison). Only affects region/group/zone.
+  const [navMode, setNavMode] = React.useState(() => { try { return localStorage.getItem("dp_geo_nav") !== "1"; } catch (e) { return true; } });
+  React.useEffect(() => { try { localStorage.setItem("dp_geo_nav", navMode ? "0" : "1"); } catch (e) {} }, [navMode]);
   const hintRef = React.useRef(hint); hintRef.current = hint;
   const dismissHint = () => { setHint(false); try { localStorage.setItem("dp_map_hint_v1", "1"); } catch (e) {} };
   const dismissRef = React.useRef(dismissHint); dismissRef.current = dismissHint;
@@ -310,7 +457,7 @@ function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listin
   const sel = selection || {};
 
   // --- stable keys -------------------------------------------------------
-  const cameraKey = [layer, scope, sel.groupId, sel.zoneId, sel.areaId, sel.schoolId, sel.corridorId, sel.clusterId, radiusKm, maxKm].join("|");
+  const cameraKey = [layer, scope, sel.groupId, sel.zoneId, sel.areaId, sel.schoolId, sel.corridorId, sel.clusterId, radiusKm, maxKm, navMode].join("|");
   const listIds = (listings || []).map((l) => l.id).join(",");
   const parcelIds = (parcels || []).map((p) => p.id).join(",");
   const buildKey = cameraKey + "||" + listIds + "||" + parcelIds;
@@ -401,6 +548,30 @@ function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listin
     // eslint-disable-next-line
   }, [hoverAreaId, hoverSrc]);
 
+  // --- panel ↔ marker hover/focus sync for CITY-LANDING region bubbles ---
+  // Toggle a class (never recreate the icon) so keyboard listeners + aria stay intact.
+  // Map-originating hover is left to CSS :hover; only panel-originating hover restyles here.
+  React.useEffect(() => {
+    if (!mapRef.current) return;
+    regionMarkerRef.current.forEach((rec, id) => {
+      const el = rec.marker.getElement();
+      const on = !!hoverRegionId && hoverRegionSrc !== "map" && id === hoverRegionId;
+      if (el) { const node = el.querySelector(".dp-region"); if (node) node.classList.toggle("dp-region-on", on); }
+      rec.marker.setZIndexOffset(id === scope ? 900 : on ? 2000 : 0);
+    });
+  }, [hoverRegionId, hoverRegionSrc, scope]);
+
+  // --- panel ↔ marker hover/focus sync for GROUP / ZONE / CORRIDOR nav markers ---
+  React.useEffect(() => {
+    if (!mapRef.current) return;
+    navMarkerRef.current.forEach((rec, id) => {
+      const el = rec.marker.getElement();
+      const on = !!hoverNavId && hoverNavSrc !== "map" && id === hoverNavId;
+      if (el) { const node = el.querySelector(".dp-navcard"); if (node) node.classList.toggle("dp-navcard-on", on); }
+      rec.marker.setZIndexOffset(rec.sel ? 900 : on ? 2000 : 0);
+    });
+  }, [hoverNavId, hoverNavSrc]);
+
   // --- "Show on map" → force-keep the area as a labeled pin + panInside (never a duplicate marker) ---
   React.useEffect(() => {
     const map = mapRef.current;
@@ -429,12 +600,25 @@ function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listin
 
     const moveCam = cameraKey !== cameraKeyRef.current;
     cameraKeyRef.current = cameraKey;
+    // Guided mode dims the basemap at the three navigation levels so the markers read as a
+    // chooser rather than geography (class hook — see index.html).
+    const navLevel = layer === "region-bubbles" || layer === "area-groups" || layer === "school-zones";
+    if (elRef.current) elRef.current.classList.toggle("dp-navmode", navMode && navLevel);
 
     const add = (lat, lon, html, click, z) => window.L.marker([lat, lon], { icon: icon(html), zIndexOffset: z || 0 }).on("click", (e) => { if (hintRef.current) dismissRef.current(); (click || (() => {}))(e); }).addTo(g);
     const offsetPt = (bearing, km) => { const kLat = 1 / 111, kLon = 1 / (111 * Math.cos(D.city.lat * Math.PI / 180)), b = bearing * Math.PI / 180; return [D.city.lat + km * Math.cos(b) * kLat, D.city.lon + km * Math.sin(b) * kLon]; };
     const drawWedge = (c, km, faint) => { polyRef.current = window.L.polygon(window.BLR_WEDGE(D.city, c.bearing, c.half, km), { color: "#1F7A5C", weight: 2, opacity: faint ? 0.45 : 0.7, dashArray: "5 5", fillColor: "#2E9B74", fillOpacity: faint ? 0.05 : 0.09 }).addTo(map); };
     const fitBounds = (b, cLat, cLon, z) => { try { map.flyToBounds(b, { ...PAD, ...CAM, maxZoom: z || 15 }); } catch (e) { map.flyTo([cLat, cLon], z || 12, CAM); } };
     const fitCity = () => map.flyTo([D.city.lat, D.city.lon], D.city.zoom, CAM);
+    // Fit a set of nav-marker anchors with generous pixel padding so the ~190px-wide
+    // stacked cards clear the top-left instruction card + breadcrumb, the bottom-left
+    // legend, and the right panel edge instead of being clipped at a map edge.
+    const fitNav = (pts, maxZoom) => {
+      try {
+        const b = window.L.latLngBounds(pts.concat([[D.city.lat, D.city.lon]]));
+        map.flyToBounds(b, { paddingTopLeft: [120, 208], paddingBottomRight: [150, 104], duration: 0.85, easeLinearity: 0.22, maxZoom: maxZoom || 12 });
+      } catch (e) { fitCity(); }
+    };
 
     // ------- clustered leaf renderer (listings / homes / parcels) -------
     function mountLeaves(items, kind, tone) {
@@ -679,21 +863,62 @@ function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listin
     // True anchors stay put; colliding pills shift in screen space (priority: selected,
     // then count) with a leader line + anchor dot when offset. Deterministic; recomputed
     // on zoomend/moveend/resize only — never on hover.
-    function mountPills(list, accent, countFn, selId, pickFn) {
+    function mountPills(list, accent, countFn, selId, pickFn, meta) {
+      meta = meta || {};
       reclusterOnMoveRef.current = true;
+      const compact = navMode ? list.length > 6 : list.length > 4;
       const drawPills = () => {
         zoomDrawnRef.current = map.getZoom();
         leaf.clearLayers();
-        const entries = list.map((it) => ({
-          item: it,
-          pt: map.latLngToContainerPoint([it.center.lat, it.center.lon]),
-          w: 8.5 * it.name.length + 110, h: 46,
-          pri: (it.id === selId ? 100000 : countFn(it.id)), dir: null,
-        }));
-        declutterPoints(entries).forEach(({ e, p }) => {
-          const dx = e.pt.x - p.x, dy = e.pt.y - p.y;
-          window.L.marker(map.containerPointToLatLng(p), { icon: icon(bubblePill(e.item.name, countFn(e.item.id), e.item.id === selId, accent, leaderHTML(dx, dy))), zIndexOffset: e.item.id === selId ? 900 : 0 })
-            .on("click", () => { if (hintRef.current) dismissRef.current(); pickFn(e.item.id); }).addTo(leaf);
+        navMarkerRef.current.clear();
+        const ranked = list.slice().sort((a, b) => (b.id === selId ? 1 : 0) - (a.id === selId ? 1 : 0) || countFn(b.id) - countFn(a.id));
+        let placed; // [{ it, p, dx, dy }]
+        if (navMode) {
+          const par = meta.parent;   // {lat,lon} — preserve each child's real bearing from parent
+          const navEntries = ranked.map((it) => {
+            const c = it.center || it;
+            const e = { id: it.id };
+            if (par) e.bearing = Math.atan2(par.lat - c.lat, c.lon - par.lon); // screen: south=+y, east=+x
+            return e;
+          });
+          const pts = navPoints(navEntries, map, isMobile);
+          placed = ranked.map((it) => ({ it, p: pts.get(it.id), dx: 0, dy: 0 }));
+        } else {
+          const entries = ranked.map((it) => ({
+            item: it, pt: map.latLngToContainerPoint([it.center.lat, it.center.lon]),
+            w: compact ? 156 : 184, h: compact ? 84 : 92,
+            pri: (it.id === selId ? 100000 : countFn(it.id)), dir: null,
+          }));
+          const byId = new Map();
+          declutterPoints(entries, {
+            obstacles: [
+              { x: 0, y: 0, w: 360, h: 206 },                          // breadcrumb + instruction card (top-left)
+              { x: 0, y: map.getSize().y - 96, w: 240, h: 96 },        // legend (bottom-left)
+            ],
+            bounds: { minX: 6, minY: 6, maxX: map.getSize().x - 6, maxY: map.getSize().y - 6 },
+          }).forEach(({ e, p }) => byId.set(e.item.id, { it: e.item, p, dx: e.pt.x - p.x, dy: e.pt.y - p.y }));
+          placed = ranked.map((it) => byId.get(it.id)).filter(Boolean);
+        }
+        placed.forEach(({ it, p, dx, dy }) => {
+          if (!p) return;
+          const cnt = countFn(it.id), sel = it.id === selId;
+          const noun = meta.noun || "properties", nounS = meta.nounSingular || noun.replace(/s$/, "");
+          const label = `${it.name}, ${cnt} ${cnt === 1 ? nounS : noun}. Activate to zoom in and explore ${meta.childHint || "its areas"}.`;
+          const hov = it.id === hoverNavIdRef.current;
+          const m = window.L.marker(map.containerPointToLatLng(p), {
+            icon: icon(navCard({ name: it.name, count: cnt, sel, tone: accent, eyebrow: meta.eyebrow || "AREA", noun, nounSingular: nounS, leader: navMode ? "" : leaderHTML(dx, dy), hovered: hov, compact })),
+            zIndexOffset: sel ? 900 : (hov ? 2000 : 0), title: label, keyboard: true, riseOnHover: true,
+          }).addTo(leaf);
+          const pick = () => { if (hintRef.current) dismissRef.current(); pickFn(it.id); };
+          m.on("click", pick);
+          if (onNavHover) { m.on("mouseover", () => onNavHover(it.id, "map")); m.on("mouseout", () => onNavHover(null, "map")); }
+          const el = m.getElement();
+          if (el) {
+            el.setAttribute("aria-label", label);
+            el.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " " || ev.key === "Spacebar") { ev.preventDefault(); pick(); } });
+            if (onNavHover) { el.addEventListener("focus", () => onNavHover(it.id, "map")); el.addEventListener("blur", () => onNavHover(null, "map")); }
+          }
+          navMarkerRef.current.set(it.id, { marker: m, sel });
         });
       };
       reclusterRef.current = drawPills;
@@ -716,13 +941,19 @@ function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listin
       }
       case "area-groups": {
         const groups = D.groups.filter((gr) => !scope || gr.region === scope);
-        mountPills(groups, "area", (id) => CO.homesGroup(id), sel.groupId, onPickGroup);
-        if (moveCam) { if (scope) { const r = region(scope); fitBounds(r.bounds, r.center.lat, r.center.lon, 12); } else fitCity(); }
+        const rg = scope && region(scope);
+        mountPills(groups, "area", (id) => CO.homesGroup(id), sel.groupId, onPickGroup, { eyebrow: "AREA GROUP", noun: "properties", nounSingular: "property", childHint: "its areas and properties", parent: rg ? rg.center : null });
+        if (moveCam) {
+          if (navMode) { if (rg) fitBounds(rg.bounds, rg.center.lat, rg.center.lon, 12.6); else fitCity(); }
+          else fitNav(groups.map((g) => [g.center.lat, g.center.lon]), scope ? 12 : 12.4);
+        }
         return;
       }
       case "area-areas": {
         const gr = D.groups.find((x) => x.id === sel.groupId);
-        mountAreas(D.areas.filter((a) => a.group === sel.groupId), "copper", (id) => CO.homesArea(id), onPickArea);
+        const areas = D.areas.filter((a) => a.group === sel.groupId);
+        if (navMode) mountPills(areas, "area", (id) => CO.homesArea(id), sel.areaId, onPickArea, { eyebrow: "AREA", noun: "properties", nounSingular: "property", childHint: "its listings", parent: gr ? gr.center : null });
+        else mountAreas(areas, "copper", (id) => CO.homesArea(id), onPickArea);
         if (moveCam && gr) fitBounds(gr.bounds, gr.center.lat, gr.center.lon, 14);
         return;
       }
@@ -737,8 +968,12 @@ function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listin
       }
       case "school-zones": {
         const zones = D.zones.filter((z) => !scope || z.region === scope);
-        mountPills(zones, "school", (id) => CO.schoolsZone(id), sel.zoneId, onPickZone);
-        if (moveCam) { if (scope) { const r = region(scope); fitBounds(r.bounds, r.center.lat, r.center.lon, 12); } else fitCity(); }
+        const rgz = scope && region(scope);
+        mountPills(zones, "school", (id) => CO.schoolsZone(id), sel.zoneId, onPickZone, { eyebrow: "SCHOOL ZONE", noun: "schools", nounSingular: "school", childHint: "its areas and schools", parent: rgz ? rgz.center : null });
+        if (moveCam) {
+          if (navMode) { if (rgz) fitBounds(rgz.bounds, rgz.center.lat, rgz.center.lon, 12.6); else fitCity(); }
+          else fitNav(zones.map((z) => [z.center.lat, z.center.lon]), scope ? 12 : 12.4);
+        }
         return;
       }
       case "school-areas": {
@@ -769,11 +1004,45 @@ function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listin
         return;
       }
       case "agri-corridors": {
-        D.agri.corridors.forEach((c) => {
-          const [plat, plon] = offsetPt(c.bearing, Math.max(20, AG.maxTownDist(c.id) * 0.55));
-          add(plat, plon, agriDirBubble(c, AG.dirProps(c.id), c.id === sel.corridorId), () => onPickCorridor(c.id));
-        });
-        if (moveCam) fitCity();
+        const corridorPts = [];
+        const drawCorridors = () => {
+          zoomDrawnRef.current = map.getZoom();
+          leaf.clearLayers();
+          navMarkerRef.current.clear();
+          corridorPts.length = 0;
+          D.agri.corridors.forEach((c) => {
+            const [plat, plon] = offsetPt(c.bearing, Math.max(20, AG.maxTownDist(c.id) * 0.55));
+            corridorPts.push([plat, plon]);
+            const cnt = AG.dirProps(c.id), isSel = c.id === sel.corridorId;
+            const label = `${c.label}, ${cnt} ${cnt === 1 ? "parcel" : "parcels"}. Activate to zoom in and explore properties along this corridor.`;
+            const hov = c.id === hoverNavIdRef.current;
+            const m = window.L.marker([plat, plon], {
+              icon: icon(navCard({ name: c.short, count: cnt, sel: isSel, tone: "agri", eyebrow: "CORRIDOR", noun: "parcels", nounSingular: "parcel", leader: "", hovered: hov })),
+              zIndexOffset: isSel ? 900 : (hov ? 2000 : 0), title: label, keyboard: true, riseOnHover: true,
+            }).addTo(leaf);
+            const pick = () => { if (hintRef.current) dismissRef.current(); onPickCorridor(c.id); };
+            m.on("click", pick);
+            if (onNavHover) { m.on("mouseover", () => onNavHover(c.id, "map")); m.on("mouseout", () => onNavHover(null, "map")); }
+            const el = m.getElement();
+            if (el) {
+              el.setAttribute("aria-label", label);
+              el.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " " || ev.key === "Spacebar") { ev.preventDefault(); pick(); } });
+              if (onNavHover) { el.addEventListener("focus", () => onNavHover(c.id, "map")); el.addEventListener("blur", () => onNavHover(null, "map")); }
+            }
+            navMarkerRef.current.set(c.id, { marker: m, sel: isSel });
+          });
+        };
+        reclusterOnMoveRef.current = false;
+        reclusterRef.current = drawCorridors;
+        drawCorridors();
+        // Fit ALL corridor markers (they sit OUTSIDE the city on each bearing) plus the
+        // city centre, with generous padding so none is clipped at a map edge.
+        if (moveCam) {
+          try {
+            const b = window.L.latLngBounds(corridorPts.concat([[D.city.lat, D.city.lon]]));
+            map.flyToBounds(b, { paddingTopLeft: [70, 150], paddingBottomRight: [70, 96], duration: 0.85, easeLinearity: 0.22, maxZoom: 9 });
+          } catch (e) { fitCity(); }
+        }
         return;
       }
       case "agri-clusters": {
@@ -799,25 +1068,71 @@ function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listin
         // centres) never move — offset bubbles carry a leader line back to the true point.
         reclusterOnMoveRef.current = true;
         const DIRV = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0], central: null };
+        // Representative AREA names + "+N more" for each region card (Guided mode). Aggregates the
+        // region's group example-areas (curated, recognisable), deduped; "more" counts the rest.
+        const regionReps = (id) => {
+          const names = [];
+          D.groups.filter((g) => g.region === id).forEach((g) => (g.exampleAreas || []).forEach((nm) => { if (!names.includes(nm)) names.push(nm); }));
+          const total = D.areas.filter((a) => a.region === id).length;
+          const shown = names.slice(0, 2);
+          return { shown: shown.length ? shown : [region(id).name], more: Math.max(0, total - shown.length) };
+        };
         const drawRegions = () => {
           zoomDrawnRef.current = map.getZoom();
           leaf.clearLayers();
-          const entries = D.regions.map((r) => ({
-            item: r,
-            pt: map.latLngToContainerPoint([r.center.lat, r.center.lon]),
-            w: 104, h: 104,
-            pri: r.id === scope ? 100000 : r.id === "central" ? 50000 : CO.homesRegion(r.id),
-            dir: DIRV[r.id] || null,
-          }));
-          declutterPoints(entries).forEach(({ e, p }) => {
-            const dx = e.pt.x - p.x, dy = e.pt.y - p.y;
-            window.L.marker(map.containerPointToLatLng(p), { icon: icon(regionBubble(e.item, CO.homesRegion(e.item.id), e.item.id === scope, leaderHTML(dx, dy))), zIndexOffset: e.item.id === scope ? 900 : 0 })
-              .on("click", () => { if (hintRef.current) dismissRef.current(); onPickRegion(e.item.id, "map"); }).addTo(leaf);
+          regionMarkerRef.current.clear();
+          let placed; // [{ item, p, dx, dy }]
+          if (navMode) {
+            const pts = navPoints(D.regions.map((r) => ({ id: r.id, compass: r.id })), map, isMobile);
+            placed = D.regions.map((r) => ({ item: r, p: pts.get(r.id), dx: 0, dy: 0 }));
+          } else {
+            const entries = D.regions.map((r) => ({
+              item: r,
+              pt: map.latLngToContainerPoint([r.center.lat, r.center.lon]),
+              w: 104, h: 104,
+              pri: r.id === scope ? 100000 : r.id === "central" ? 50000 : CO.homesRegion(r.id),
+              dir: DIRV[r.id] || null,
+            }));
+            placed = declutterPoints(entries).map(({ e, p }) => ({ item: e.item, p, dx: e.pt.x - p.x, dy: e.pt.y - p.y }));
+          }
+          placed.forEach(({ item: r, p, dx, dy }) => {
+            if (!p) return;
+            const cnt = CO.homesRegion(r.id);
+            const label = `${r.name}, ${cnt} ${cnt === 1 ? "property" : "properties"}. Activate to zoom into the region.`;
+            const hov = r.id === hoverRegionIdRef.current;
+            const reps = navMode ? regionReps(r.id) : null;
+            const m = window.L.marker(map.containerPointToLatLng(p), {
+              icon: icon(navMode ? regionNavCard(r, cnt, r.id === scope, hov, reps.shown, reps.more) : regionBubble(r, cnt, r.id === scope, leaderHTML(dx, dy), hov, 92)),
+              zIndexOffset: r.id === scope ? 900 : (hov ? 2000 : 0), title: label, keyboard: true, riseOnHover: true,
+            }).addTo(leaf);
+            const pick = () => { if (hintRef.current) dismissRef.current(); onPickRegion(r.id, "map"); };
+            m.on("click", pick);
+            if (onRegionHover) {
+              m.on("mouseover", () => onRegionHover(r.id, "map"));
+              m.on("mouseout", () => onRegionHover(null, "map"));
+            }
+            const el = m.getElement();
+            if (el) {
+              el.setAttribute("aria-label", label);
+              el.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " " || ev.key === "Spacebar") { ev.preventDefault(); pick(); } });
+              if (onRegionHover) {
+                el.addEventListener("focus", () => onRegionHover(r.id, "map"));
+                el.addEventListener("blur", () => onRegionHover(null, "map"));
+              }
+            }
+            regionMarkerRef.current.set(r.id, { marker: m, region: r, count: cnt, ldx: dx, ldy: dy });
           });
         };
         reclusterRef.current = drawRegions;
         drawRegions();
-        if (moveCam) fitCity();
+        // Fit all region centres with generous top padding so no bubble crowds the
+        // top edge or sits under the breadcrumb + map-instruction card.
+        if (moveCam) {
+          try {
+            const b = window.L.latLngBounds(D.regions.map((r) => [r.center.lat, r.center.lon]));
+            map.flyToBounds(b, { paddingTopLeft: [72, 150], paddingBottomRight: [60, 112], duration: 0.85, easeLinearity: 0.22, maxZoom: 11 });
+          } catch (e) { fitCity(); }
+        }
       }
     }
   }
@@ -827,11 +1142,25 @@ function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listin
   const crumbColor = isAgri ? "var(--evergreen-600)" : "var(--plum-600)";
   // ---- Region-overview guidance (issue #1808) — only while a region is selected
   //      and no journey has been chosen yet (layer === region-hotspots). ----
+  const navLevelUI = layer === "region-bubbles" || layer === "area-groups" || layer === "school-zones";
   const rObj = scope ? region(scope) : null;
   const rName = rObj ? rObj.name : null;
   const rShort = rObj ? rObj.short : null;
   const showGuide = layer === "region-hotspots" && !!regionGuide && !guideDismissed;
   const guideTitleId = "dp-guide-title";
+
+  // ---- Persistent map instruction, one per navigation level (city → region → zone/
+  //      corridor). Names the entities actually on the map and states that the map and
+  //      the right-hand list are two controls for the same journey. Device-neutral. ----
+  const cityName = ((crumb && crumb[0]) || "").replace(/^Discover\s+/, "") || "the city";
+  const scopeName = rName || cityName;
+  const NAV_INSTR = {
+    "region-bubbles": { eyebrow: "Explore the map", body: "Select a region to zoom in, or choose one from the list — both start the same journey." },
+    "area-groups": { eyebrow: `Explore ${scopeName}`, body: "Tap an area group to zoom in and explore its areas and properties, or choose one from the list — both open the same areas." },
+    "school-zones": { eyebrow: `Explore ${scopeName}`, body: "Tap a zone to zoom in and explore its areas and schools, or choose one from the list — both open the same areas." },
+    "agri-corridors": { eyebrow: "Explore agricultural land", body: "Tap a corridor to zoom in and explore its village clusters and parcels, or choose one from the list — both open the same clusters." },
+  };
+  const navInstr = NAV_INSTR[layer] || null;
 
   return (
     <div style={{ position: "relative", height: "100%", width: "100%" }}>
@@ -846,6 +1175,17 @@ function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listin
           </React.Fragment>
         ))}
       </div>
+      {/* Layout-mode toggle (prototype comparison) — only at the three navigation levels.
+          "Guided" = viewport-anchored navigation controls; "Geographic" = centroid + declutter. */}
+      {navLevelUI && (
+        <div role="group" aria-label="Marker layout mode" style={{ position: "absolute", top: "18px", right: "18px", zIndex: 540, display: "flex", alignItems: "center", gap: "2px", padding: "3px", background: "var(--paper)", borderRadius: "var(--radius-full)", boxShadow: "var(--shadow-md)", border: "1px solid var(--border)", fontFamily: "var(--font-sans)" }}>
+          <span style={{ padding: "0 6px 0 8px", fontSize: "10px", fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text-muted)" }}>Layout</span>
+          {[["nav", "Guided"], ["geo", "Geographic"]].map(([v, l]) => {
+            const on = (v === "nav") === navMode;
+            return <button key={v} aria-pressed={on} onClick={() => setNavMode(v === "nav")} style={{ border: "none", cursor: "pointer", padding: "5px 11px", borderRadius: "var(--radius-full)", fontFamily: "var(--font-sans)", fontSize: "12px", fontWeight: 700, color: on ? "#fff" : "var(--text-muted)", background: on ? "var(--navy-800)" : "transparent", transition: "background var(--dur-fast), color var(--dur-fast)" }}>{l}</button>;
+          })}
+        </div>
+      )}
       {/* Region-overview guidance card (issue #1808). Desktop: right edge, points
           right toward the panel. Mobile: top-centre, points down toward the sheet.
           Not an error state; dismissible; only on the region-overview layer. */}
@@ -865,11 +1205,24 @@ function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listin
           </div>
         </div>
       )}
-      {/* First-time helper hint — dismissible, localStorage-remembered */}
-      {hint && !showGuide && (
+      {/* Persistent map instruction, one per navigation level (region / zone / corridor) —
+          tells a first-time user the markers are selectable and that the map + list are two
+          ways to start the same journey. Device-neutral copy; part of the product, not a tooltip. */}
+      {navInstr && (
+        <div style={{ position: "absolute", top: "66px", left: "18px", zIndex: 520, maxWidth: "min(320px, calc(100% - 36px))", background: "var(--paper)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-md)", border: "1px solid var(--border)", borderLeft: `3px solid ${layer === "agri-corridors" ? "var(--evergreen-600)" : "var(--accent)"}`, padding: "11px 14px", fontFamily: "var(--font-sans)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "3px" }}>
+            <MIcon name="map-pin" size={14} color={layer === "agri-corridors" ? "var(--evergreen-600)" : "var(--accent)"} />
+            <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: layer === "agri-corridors" ? "var(--evergreen-700, #1F694A)" : "var(--accent)" }}>{navInstr.eyebrow}</span>
+          </div>
+          <p style={{ margin: 0, fontSize: "12.5px", lineHeight: 1.45, color: "var(--text-body)", textWrap: "pretty" }}>{navInstr.body}</p>
+        </div>
+      )}
+      {/* First-time helper hint — dismissible, localStorage-remembered (deeper levels only;
+          navigation levels use the persistent instruction above instead) */}
+      {hint && !showGuide && !navInstr && (
         <div style={{ position: "absolute", top: "66px", left: "18px", zIndex: 500, display: "flex", alignItems: "center", gap: "9px", padding: "9px 12px", background: "var(--navy-800)", color: "#fff", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-lg)", fontFamily: "var(--font-sans)", fontSize: "12.5px", fontWeight: 600, maxWidth: "min(300px, calc(100% - 36px))" }}>
           <MIcon name="map-pin" size={15} color="#fff" style={{ flex: "none" }} />
-          Tap map markers to explore
+          Select map markers to explore
           <button onClick={dismissHint} aria-label="Dismiss hint" style={{ marginLeft: "2px", flex: "none", border: "none", background: "rgba(255,255,255,0.16)", color: "#fff", width: "20px", height: "20px", borderRadius: "var(--radius-full)", cursor: "pointer", fontSize: "13px", lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>×</button>
         </div>
       )}
@@ -882,10 +1235,10 @@ function DPMap({ layer, scope, selection, radiusKm, maxKm, activeListing, listin
           <span style={{ paddingLeft: "19px", marginTop: "-3px", fontSize: "11px", color: "var(--text-muted)" }}>Top areas only · not all areas</span>
         )}
         {(layer === "area-areas" || layer === "school-areas") && (
-          <span style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ width: "11px", height: "11px", borderRadius: "var(--radius-full)", border: `1.5px dashed ${layer === "school-areas" ? "var(--plum-600)" : "var(--navy-800)"}`, background: "var(--paper)" }} />&#43;N areas &middot; tap to expand</span>
+          <span style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ width: "11px", height: "11px", borderRadius: "var(--radius-full)", border: `1.5px dashed ${layer === "school-areas" ? "var(--plum-600)" : "var(--navy-800)"}`, background: "var(--paper)" }} />&#43;N areas &middot; select to expand</span>
         )}
         {lg.cluster && (
-          <span style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ width: "11px", height: "11px", borderRadius: "var(--radius-full)", background: isAgri ? "var(--evergreen-600)" : "var(--navy-800)", border: "1.5px solid #fff", boxShadow: "0 0 0 1px var(--border)" }} />Clusters &middot; tap to open</span>
+          <span style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ width: "11px", height: "11px", borderRadius: "var(--radius-full)", background: isAgri ? "var(--evergreen-600)" : "var(--navy-800)", border: "1.5px solid #fff", boxShadow: "0 0 0 1px var(--border)" }} />Clusters &middot; select to open</span>
         )}
         {layer === "school-homes" && (
           <span style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ width: "11px", height: "11px", borderRadius: "var(--radius-full)", border: "1.5px dashed var(--plum-500)", background: "transparent" }} />{radiusKm} km radius</span>

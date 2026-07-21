@@ -20,14 +20,30 @@ function liftStyle(hover, pad) {
 }
 
 // ---------- Region card (city landing) — residential property count ----------
-function RegionCard({ region, onView }) {
+// A first-class parallel to the map's region markers: whole row is selectable,
+// keyboard-operable, and its hover/focus stays in sync with the matching marker
+// (`highlighted` = the map is pointing at this region; `onHover` reports the row's
+// own hover/focus back up so the marker lights up too).
+function RegionCard({ region, onView, highlighted, onHover }) {
   const [h, setH] = React.useState(false);
+  const [f, setF] = React.useState(false);
   const count = CO.homesRegion(region.id);
+  const emph = h || f || highlighted;
+  const enter = () => { setH(true); onHover && onHover(region.id, "panel"); };
+  const leave = () => { setH(false); onHover && onHover(null, "panel"); };
   return (
-    <div onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} onClick={() => onView(region.id)}
-      style={{ ...liftStyle(h, "16px 18px"), display: "flex", gap: "14px", alignItems: "center" }}>
-      <div style={{ flex: "none", width: "44px", height: "44px", borderRadius: "var(--radius-md)", background: "var(--navy-100)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <CIcon name="map-pin" size={21} color="var(--navy-800)" />
+    <div role="button" tabIndex={0}
+      aria-label={`${region.name}, ${count} ${count === 1 ? "property" : "properties"}. Activate to zoom into the region.`}
+      onMouseEnter={enter} onMouseLeave={leave}
+      onFocus={() => { setF(true); onHover && onHover(region.id, "panel"); }}
+      onBlur={() => { setF(false); onHover && onHover(null, "panel"); }}
+      onClick={() => onView(region.id)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onView(region.id); } }}
+      style={{ ...liftStyle(emph, "16px 18px"), display: "flex", gap: "14px", alignItems: "center",
+        borderColor: emph ? "var(--border-strong)" : "var(--border)",
+        outline: (highlighted || f) ? "2px solid var(--accent)" : "2px solid transparent", outlineOffset: "2px" }}>
+      <div style={{ flex: "none", width: "44px", height: "44px", borderRadius: "var(--radius-md)", background: emph ? "var(--navy-800)" : "var(--navy-100)", display: "flex", alignItems: "center", justifyContent: "center", transition: "background var(--dur-fast) var(--ease-standard)" }}>
+        <CIcon name="map-pin" size={21} color={emph ? "#fff" : "var(--navy-800)"} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em" }}>{region.name}</h3>
@@ -37,7 +53,7 @@ function RegionCard({ region, onView }) {
         <div style={{ fontFamily: "var(--font-mono)", fontSize: "18px", fontWeight: 600, color: "var(--text-strong)" }}>{count.toLocaleString("en-IN")}</div>
         <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>properties</div>
       </div>
-      <CIcon name="arrow-right" size={17} color={h ? "var(--accent)" : "var(--grey-400)"} style={{ flex: "none" }} />
+      <CIcon name="arrow-right" size={17} color={emph ? "var(--accent)" : "var(--grey-400)"} style={{ flex: "none" }} />
     </div>
   );
 }
@@ -169,13 +185,19 @@ function CardCTA({ hover, tint, children }) {
 }
 
 // ---------- Area GROUP card (residential area journey) ----------
-function GroupCard({ group, mode, onView }) {
+function GroupCard({ group, mode, onView, highlighted, onHover }) {
   const [h, setH] = React.useState(false);
+  const [f, setF] = React.useState(false);
+  const emph = h || f || highlighted;
   const count = CO.homesGroup(group.id);
   const areaCount = window.BLR_DATA.areas.filter((a) => a.group === group.id).length;
   return (
-    <div onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} onClick={() => onView(group.id)}
-      style={{ ...liftStyle(h, "20px"), display: "flex", flexDirection: "column" }}>
+    <div role="button" tabIndex={0}
+      aria-label={`${group.name}, ${count} ${count === 1 ? "property" : "properties"}. Activate to zoom in and explore its areas.`}
+      onMouseEnter={() => { setH(true); onHover && onHover(group.id, "panel"); }} onMouseLeave={() => { setH(false); onHover && onHover(null, "panel"); }}
+      onFocus={() => { setF(true); onHover && onHover(group.id, "panel"); }} onBlur={() => { setF(false); onHover && onHover(null, "panel"); }}
+      onClick={() => onView(group.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onView(group.id); } }}
+      style={{ ...liftStyle(emph, "20px"), display: "flex", flexDirection: "column", outline: (highlighted || f) ? "2px solid var(--accent)" : "2px solid transparent", outlineOffset: "2px" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
           <div style={{ flex: "none", width: "42px", height: "42px", borderRadius: "var(--radius-md)", background: "var(--navy-100)", display: "flex", alignItems: "center", justifyContent: "center" }}><CIcon name="layers" size={20} color="var(--navy-800)" /></div>
@@ -192,18 +214,24 @@ function GroupCard({ group, mode, onView }) {
         <StatChip icon="map-pin" value={areaCount} label={areaCount === 1 ? "area" : "areas"} />
         <StatChip icon="building" value={count} label={mode === "Rent" ? "to rent" : "for sale"} tint="var(--accent-tint)" ic="var(--copper-600)" />
       </div>
-      <CardCTA hover={h} tint="var(--accent)">Explore group</CardCTA>
+      <CardCTA hover={emph} tint="var(--accent)">Explore group</CardCTA>
     </div>
   );
 }
 
 // ---------- School ZONE card (school journey) ----------
-function ZoneCard({ zone, onView }) {
+function ZoneCard({ zone, onView, highlighted, onHover }) {
   const [h, setH] = React.useState(false);
+  const [f, setF] = React.useState(false);
+  const emph = h || f || highlighted;
   const schools = CO.schoolsZone(zone.id), homes = CO.homesZone(zone.id);
   return (
-    <div onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} onClick={() => onView(zone.id)}
-      style={{ ...liftStyle(h, "20px"), display: "flex", flexDirection: "column" }}>
+    <div role="button" tabIndex={0}
+      aria-label={`${zone.name}, ${schools} ${schools === 1 ? "school" : "schools"}. Activate to zoom in and explore its areas.`}
+      onMouseEnter={() => { setH(true); onHover && onHover(zone.id, "panel"); }} onMouseLeave={() => { setH(false); onHover && onHover(null, "panel"); }}
+      onFocus={() => { setF(true); onHover && onHover(zone.id, "panel"); }} onBlur={() => { setF(false); onHover && onHover(null, "panel"); }}
+      onClick={() => onView(zone.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onView(zone.id); } }}
+      style={{ ...liftStyle(emph, "20px"), display: "flex", flexDirection: "column", outline: (highlighted || f) ? "2px solid var(--plum-500)" : "2px solid transparent", outlineOffset: "2px" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
         <div style={{ flex: "none", width: "42px", height: "42px", borderRadius: "var(--radius-md)", background: "var(--plum-tint)", display: "flex", alignItems: "center", justifyContent: "center" }}><CIcon name="layers" size={20} color="var(--plum-600)" /></div>
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -216,7 +244,7 @@ function ZoneCard({ zone, onView }) {
         <StatChip icon="building" value={schools} label="schools" tint="var(--plum-tint)" ic="var(--plum-600)" />
         <StatChip icon="map-pin" value={homes} label="nearby homes" tint="var(--accent-tint)" ic="var(--copper-600)" />
       </div>
-      <CardCTA hover={h} tint="var(--plum-600)">Explore zone</CardCTA>
+      <CardCTA hover={emph} tint="var(--plum-600)">Explore zone</CardCTA>
     </div>
   );
 }
@@ -333,37 +361,44 @@ function ListingCard({ listing, onHover, onOpen, saved, onToggleSave, distanceKm
 }
 
 // ================= AGRICULTURAL cards (evergreen accent, separate model) =================
-function CorridorCard({ corridor, onView }) {
+function CorridorCard({ corridor, onView, highlighted, onHover, origin }) {
   const [h, setH] = React.useState(false);
+  const [f, setF] = React.useState(false);
+  const emph = h || f || highlighted;
   const count = AG.dirProps(corridor.id);
   const acres = AG.dirAcres(corridor.id);
   const towns = AG.dirGroups(corridor.id);
   const maxKm = AG.maxTownDist(corridor.id);
+  const DIRWORD = { N: "North", E: "East", S: "South", W: "West" };
+  const oDir = origin ? window.BLR_BEARING_DIR(origin, AG.corridorCentroid(corridor.id)) : null;
+  const oRange = origin ? AG.corridorDistRange(corridor.id, origin) : null;
+  const badge = origin ? oDir : corridor.dir;
+  const title = origin ? `${DIRWORD[oDir]} of ${origin.name}` : `${DIRWORD[corridor.dir]} · ${corridor.keyTowns[0]}`;
+  const distTxt = origin ? `${oRange.min}–${oRange.max} km from ${origin.name}` : `Up to ${maxKm} km`;
+  const meta = `${distTxt} · ${acres.toFixed(1)} acres · ${towns} ${towns === 1 ? "town" : "towns"}`;
+  const namesLine = corridor.keyTowns.join(" · ");
   return (
-    <div onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} onClick={() => onView(corridor.id)}
-      style={{ ...liftStyle(h, "18px"), display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
-          <div style={{ flex: "none", width: "44px", height: "44px", borderRadius: "var(--radius-full)", background: "var(--evergreen-600)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: "17px", fontWeight: 700, color: "#fff" }}>{corridor.dir}</div>
-          <div style={{ minWidth: 0 }}>
-            <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em" }}>{corridor.label}</h3>
-            <div style={{ fontSize: "12.5px", color: "var(--text-muted)", marginTop: "2px" }}>Up to {maxKm} km from the city</div>
-          </div>
+    <div role="button" tabIndex={0}
+      aria-label={`${title}, ${count} ${count === 1 ? "parcel" : "parcels"}, ${meta}. Destinations ${corridor.keyTowns.join(", ")}. Activate to zoom in and explore properties along the corridor.`}
+      onMouseEnter={() => { setH(true); onHover && onHover(corridor.id, "panel"); }} onMouseLeave={() => { setH(false); onHover && onHover(null, "panel"); }}
+      onFocus={() => { setF(true); onHover && onHover(corridor.id, "panel"); }} onBlur={() => { setF(false); onHover && onHover(null, "panel"); }}
+      onClick={() => onView(corridor.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onView(corridor.id); } }}
+      style={{ background: "var(--surface-card)", border: "1px solid " + (emph ? "var(--evergreen-600)" : "var(--border)"), borderRadius: "var(--radius-lg)", padding: "12px 14px", cursor: "pointer",
+        boxShadow: emph ? "var(--shadow-md)" : "var(--shadow-xs)", transform: emph ? "translateY(-1px)" : "none", transition: "box-shadow var(--dur-normal), transform var(--dur-normal), border-color var(--dur-fast)",
+        outline: (highlighted || f) ? "2px solid var(--evergreen-600)" : "2px solid transparent", outlineOffset: "2px", display: "flex", alignItems: "center", gap: "12px", fontFamily: "var(--font-sans)" }}>
+      <div style={{ flex: "none", width: "40px", height: "40px", borderRadius: "var(--radius-full)", background: "var(--evergreen-600)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: "16px", fontWeight: 700, color: "#fff" }}>{badge}</div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "10px" }}>
+          <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</h3>
+          <span style={{ flex: "none", display: "inline-flex", alignItems: "baseline", gap: "4px" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "16px", fontWeight: 700, color: "var(--evergreen-700, #1F694A)" }}>{count}</span>
+            <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>{count === 1 ? "parcel" : "parcels"}</span>
+          </span>
         </div>
-        <CBadge tone="neutral" pill style={{ flex: "none" }}>{count} {count === 1 ? "parcel" : "parcels"}</CBadge>
+        <div style={{ fontSize: "12px", color: "var(--text-body)", lineHeight: 1.35, marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{namesLine}</div>
+        <div style={{ fontSize: "11.5px", color: "var(--text-muted)", lineHeight: 1.35, marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{meta}</div>
       </div>
-      <p style={{ margin: "12px 0 0", fontSize: "13.5px", lineHeight: 1.5, color: "var(--text-body)", textWrap: "pretty" }}>{corridor.blurb}</p>
-      <div style={{ display: "flex", gap: "10px", marginTop: "14px" }}>
-        <StatChip icon="map-pin" value={towns} label={towns === 1 ? "town" : "towns"} tint="var(--evergreen-50)" ic="var(--evergreen-600)" />
-        <StatChip icon="maximize" value={acres.toFixed(1)} label="acres" tint="var(--evergreen-50)" ic="var(--evergreen-600)" />
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: "7px", flexWrap: "wrap", margin: "13px 0 0" }}>
-        <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "var(--text-muted)", marginRight: "2px" }}>Towns</span>
-        {corridor.keyTowns.map((t) => (
-          <span key={t} style={{ display: "inline-flex", alignItems: "center", padding: "3px 10px", borderRadius: "var(--radius-full)", border: "1px solid var(--border)", background: "var(--surface-subtle)", fontSize: "11.5px", fontWeight: 600, color: "var(--text-body)" }}>{t}</span>
-        ))}
-      </div>
-      <CardCTA hover={h} tint="var(--evergreen-600)">Explore direction</CardCTA>
+      <CIcon name="chevron-right" size={18} color={emph ? "var(--evergreen-600)" : "var(--grey-400)"} style={{ flex: "none", transition: "color var(--dur-fast)" }} />
     </div>
   );
 }
