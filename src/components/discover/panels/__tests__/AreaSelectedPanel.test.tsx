@@ -403,9 +403,17 @@ describe('AreaSelectedPanel', () => {
   });
 
   describe('F2 — Controls card and property-type filter card (round-3)', () => {
-    it('controls card uses bg-card (white surface), NOT bg-[hsl(var(--input-bg))]', () => {
-      // The controls card only renders when onCityChange or onIntentChange is provided.
-      const { container } = renderWithProviders(
+    // Issue #1953 (product-owner ruling, Buy/Rent single-owner) — the in-panel
+    // "Looking to" controls card (this describe block used to assert its
+    // bg-card styling) was RETIRED along with the Buy/Rent control it existed
+    // solely to hold: City had already been removed from it in build step 6,
+    // and Buy/Rent was its only remaining occupant. The persistent
+    // DiscoverControlBar is now the SOLE Buy/Rent control on /discover.
+    // Replaces the old styling assertion with the stronger single-owner
+    // invariant: no Buy/Rent control (and therefore no now-vestigial "Looking
+    // to" wrapper) renders here even when onIntentChange/intent are supplied.
+    it('renders no Buy/Rent control (the "Looking to" controls card is retired), even when onIntentChange/intent are provided', () => {
+      renderWithProviders(
         <AreaSelectedPanel
           selectedArea={mockArea}
           areaListings={[mockListing]}
@@ -413,22 +421,15 @@ describe('AreaSelectedPanel', () => {
           onFiltersChange={vi.fn()}
           onSelectJourney={vi.fn()}
           onAddSchool={vi.fn()}
+          intent="buy"
           onIntentChange={vi.fn()}
         />,
         { router: 'browser' },
       );
-      // The controls card is the grid div wrapping City/Looking-to controls.
-      // It must carry bg-card and must NOT carry the old --input-bg fill.
-      const controlsCard = container.querySelector('[data-testid="intent-selector"]')?.closest('.bg-card');
-      expect(controlsCard).not.toBeNull();
-      // Also verify the old --input-bg class is NOT on the controls card itself.
-      const inputBgEl = container.querySelector('.bg-\\[hsl\\(var\\(--input-bg\\)\\)\\]');
-      // The CitySelect trigger MAY carry --input-bg; the CONTROLS CARD wrapping div must not.
-      // Issue #1745 Batch B — controls card converged from `grid grid-cols-2` to
-      // `flex flex-wrap` (matches GuidedEntryPanel/AreaGroupsLandingPanel, avoids the
-      // md squeeze); assert the flex wrapper carries bg-card instead of the old grid selector.
-      const flexWrapper = container.querySelector('.flex.flex-wrap.items-end');
-      expect(flexWrapper?.className).toContain('bg-card');
+      expect(screen.queryByTestId('intent-selector')).not.toBeInTheDocument();
+      expect(screen.queryByText('Looking to')).not.toBeInTheDocument();
+      // The intent-aware price helper (a separate, unconditional element) is unaffected.
+      expect(screen.getByTestId('area-intent-helper')).toBeInTheDocument();
     });
 
     it('property-type filter is wrapped in a white card (rounded-xl bg-card)', () => {
@@ -524,10 +525,14 @@ describe('AreaSelectedPanel', () => {
     });
   });
 
-  describe('Controls card — City + Buy/Rent (Issue #1606)', () => {
-    it('renders the in-panel intent selector when onIntentChange provided', () => {
+  describe('Controls card — City + Buy/Rent (Issue #1606, retired in #1953)', () => {
+    // Issue #1953 (product-owner ruling) — the in-panel Buy/Rent control this
+    // describe block used to assert was REMOVED (single-owner: the persistent
+    // DiscoverControlBar is now the SOLE Buy/Rent control on /discover). Both
+    // cases — onIntentChange provided or not — now converge on "never renders".
+    it('never renders the in-panel intent selector, even when onIntentChange is provided', () => {
       renderPanel({ onIntentChange: vi.fn() });
-      expect(screen.getByTestId('intent-selector')).toBeInTheDocument();
+      expect(screen.queryByTestId('intent-selector')).not.toBeInTheDocument();
     });
 
     it('omits the controls card when neither city nor intent handlers are provided', () => {

@@ -51,34 +51,34 @@ vi.mock('@/hooks/useDiscoverAreas', () => ({
   })),
 }));
 
-vi.mock('@/hooks/useDiscoverUrlState', () => ({
-  useDiscoverUrlState: vi.fn(() => [
-    {
-      city: 'udupi',
-      areaKey: null,
-      viewport: null,
-      schoolId: null,
-      radiusKm: null,
-      q: '',
-      journey: 'school-first' as const,
-      groupId: null,
-      filters: {
-        propertyTypes: [],
-        bedrooms: [],
-        priceMin: undefined,
-        priceMax: undefined,
-        sellerTypes: [],
-        boardFilters: [],
-        categoryFilters: [],
-      },
+// Issue #1953 (build step 2) — SchoolBrowsePanel now consumes the
+// DiscoverProvider facade instead of calling useDiscoverUrlState() directly.
+vi.mock('@/features/discover/context/useDiscoverContext', () => ({
+  useDiscoverNav: () => ({
+    city: 'udupi',
+    areaKey: null,
+    schoolId: null,
+    radiusKm: null,
+    q: '',
+    journey: 'school-first' as const,
+    groupId: null,
+    filters: {
+      propertyTypes: [],
+      bedrooms: [],
+      priceMin: undefined,
+      priceMax: undefined,
+      sellerTypes: [],
+      boardFilters: [],
+      categoryFilters: [],
     },
-    {
-      setSchoolJourney: vi.fn(),
-      setSchoolParams: vi.fn(),
-      clearAreaContext: vi.fn(),
-      setFiltersLive: vi.fn(),
-    },
-  ]),
+  }),
+  useDiscoverViewport: () => null,
+  useDiscoverActions: () => ({
+    setSchoolJourney: vi.fn(),
+    setSchoolParams: vi.fn(),
+    clearAreaContext: vi.fn(),
+    setFiltersLive: vi.fn(),
+  }),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

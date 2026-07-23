@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PropertyFilters, clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
 import { SchoolResult } from '@/hooks/useSchoolSearch';
-import { AreaPoint } from '@/components/map/AreaMarkerLayer';
+// Issue #1953 AC12 — `import type`, same defect as useDiscoverMapData.ts. This is the
+// SECOND leaflet-reaching site, found by sweeping the WHOLE eager graph rather than
+// fixing only the one that had been reported.
+import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';

@@ -41,8 +41,8 @@ Every manifest state and every cross-cutting capability is classified as one of:
 | 16 | `agri-area-origin` | NEEDS-REFACTOR | Design treats the selected area as an ORIGIN (bearing/distance recomputed, breadcrumb must not imply containment). Confirmed **already correct** in the frozen export's own hash-based rendering (§01 Phase 2) — production needs to verify/rebuild this exact non-containment semantic, not assume it falls out of existing code. | [01](01-frozen-design-audit.md) Phase 2; [02](02-production-baseline-audit.md) §A.11 |
 | 17 | `agri-corridor-towns` | MISSING-BACKEND (partial) | The sector wedge exists (`SectorOverlay` + `buildSectorPolygon`); cumulative concentric arcs are only PARTIAL (single outer arc today). The Town/Destination step has **no backing entity** — only raw parcels + manually-seeded direction-label strings. | [02](02-production-baseline-audit.md) §B.10, §C.4 |
 | 18 | `agri-town-parcels` | NEEDS-REFACTOR | `AgriListingPanel`'s parcel peek + agri filters exist, but hang off raw parcel listings, not a real Town entity — the town→parcels hierarchy shown in the design is synthetic until §C.4 is resolved. | [02](02-production-baseline-audit.md) §A.11, §C.4 |
-| 19 | `areas-city-default-mobile` | MISSING-FRONTEND | Only a hard `lg=1024px` breakpoint exists; mobile map is a fixed `h-64`. Design wants a `≤820px` proportional `~42%`-height stacking sheet with a grab handle. | [02](02-production-baseline-audit.md) §A.16 |
-| 20 | `areas-area-listings-mobile` | MISSING-FRONTEND | Same `≤820px` stacking-sheet gap, plus the single-column (`<560px`) grid collapse — not built today. | [02](02-production-baseline-audit.md) §A.16 |
+| 19 | `areas-city-default-mobile` | MISSING-FRONTEND | Only a hard `lg=1024px` breakpoint exists; mobile map is a fixed `h-64`. Design wants a `≤820px` proportional `~42%`-height stacking sheet with a grab handle. **`[SUPERSEDED as of #1953 build steps 3–6 — the shipped mobile shell is a List-first Map/List toggle (full-screen map overlay opened on demand, real-unmounted on return to List), not a proportional stacking sheet. See docs/new-discover-v2/06-target-architecture-and-pr-plan.md's "SUPERSEDED — mobile shell design" note for the as-built contract.]`** | [02](02-production-baseline-audit.md) §A.16 |
+| 20 | `areas-area-listings-mobile` | MISSING-FRONTEND | Same `≤820px` stacking-sheet gap, plus the single-column (`<560px`) grid collapse — not built today. **`[SUPERSEDED — same List-first Map/List note as row 19 above]`** | [02](02-production-baseline-audit.md) §A.16 |
 
 ## Part B — Cross-cutting capabilities
 
@@ -61,7 +61,7 @@ Every manifest state and every cross-cutting capability is classified as one of:
 | Favourites / save | ALREADY-BUILT | Heart icon, optimistic mutate, anon → auth-modal all fully wired. | [02](02-production-baseline-audit.md) §A.13 |
 | Listing-detail navigation | ALREADY-BUILT (narrow edge risk) | Plain `navigate()` push to `/listing/:id`; Back-survival **confirmed at runtime** against live data — full panel/breadcrumb/filters/viewport rehydrate correctly on Back. One theoretical edge case remains unhit: a debounced-replace viewport write could in principle drop an in-flight pan at the navigation instant. The detail page itself is DESIGN-NOT-SPECIFIED. | [02](02-production-baseline-audit.md) §A.14; manifest |
 | Map/panel bidirectional sync | ALREADY-BUILT | Hover/focus/select sync confirmed end-to-end. | [02](02-production-baseline-audit.md) §B.7 |
-| Responsive stacking (`≤820px`) | MISSING-FRONTEND | Only a `1024px` hard breakpoint exists today; mobile map is a fixed `h-64`. | [02](02-production-baseline-audit.md) §A.16 |
+| Responsive stacking (`≤820px`) | MISSING-FRONTEND | Only a `1024px` hard breakpoint exists today; mobile map is a fixed `h-64`. **`[SUPERSEDED as of #1953 — shipped as a List-first Map/List toggle, not a stacking sheet; see doc 06's "SUPERSEDED — mobile shell design" note]`** | [02](02-production-baseline-audit.md) §A.16 |
 | Design tokens / mode accents | VISUAL-ONLY-CHANGE | The ReTrends HSL CSS-var system already uses copper/plum/evergreen per mode — already close to the target token language. | [02](02-production-baseline-audit.md) §A.18 |
 | Loading/skeleton states | DESIGN-NOT-SPECIFIED | Listed in the manifest's `undesignedStates`. | [01](01-frozen-design-audit.md) Phase 1 |
 | Hard-error screens | DESIGN-NOT-SPECIFIED | Listed in the manifest's `undesignedStates`. | [01](01-frozen-design-audit.md) Phase 1 |
@@ -94,7 +94,9 @@ Every manifest state and every cross-cutting capability is classified as one of:
 5. **Global cross-scope autocomplete** — genuinely absent today; couples city-switching, mode-aware
    result resolution, and canonical-state routing all in one new component. Central to the shell's
    information architecture.
-6. **`≤820px` responsive stacking sheet** — a fully net-new mobile surface (proportional map band +
+6. **`≤820px` responsive stacking sheet** `[SUPERSEDED as of #1953 build steps 3–6 — shipped as a
+   List-first Map/List toggle instead; see doc 06's "SUPERSEDED — mobile shell design" note for the
+   as-built contract]` — a fully net-new mobile surface (proportional map band +
    grab-handle sheet + single-column grid collapse); no current owner or partial implementation to
    build from.
 7. **Listing-detail Back-survival edge case** — confirmed working at runtime for the normal case;

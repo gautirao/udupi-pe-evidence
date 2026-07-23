@@ -133,6 +133,12 @@ Tailwind (ReTrends HSL design-token system). Frontend root: `src/`.
     mobile band; at ~1562px it renders side-by-side. Below `lg`, the map is a **hard fixed `h-64`
     (256px) band**, not the frozen design's proportional `~42%`-height stacking sheet with a grab
     handle. **The ≤820px proportional stacking sheet must be built from scratch.**
+    **`[SUPERSEDED as of #1953 build steps 3–6 — the shipped mobile shell replaced this
+    fixed-`h-64` band with a List-first Map/List toggle (full-screen map overlay opened on demand,
+    real-unmounted on return to List), not a proportional stacking sheet. This audit finding (a
+    hard `h-64` band existed) is preserved as the pre-#1953 baseline; it no longer describes
+    current production. See docs/new-discover-v2/06-target-architecture-and-pr-plan.md's
+    "SUPERSEDED — mobile shell design" note for the as-built contract.]`**
 17. **Reusable inventory worth knowing about before building V2 components:** `PropertyCard`,
     `MarkerPopoverCard`, `panels/_shared/SummaryBandCard` (a tinted hero band — the single most
     reusable redesign primitive already in the codebase), `ActiveContextChips`, `CityChip`,

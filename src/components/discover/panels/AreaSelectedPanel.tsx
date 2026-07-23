@@ -15,13 +15,11 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AreaPoint } from '@/components/map/AreaMarkerLayer';
-import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
+import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import { PropertyCard } from '../PropertyCard';
 import { AreaFirstBreadcrumb } from '../AreaFirstBreadcrumb';
-import { CitySelect } from '../CitySelect';
-import { IntentSelector } from '../IntentSelector';
 import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -324,28 +322,22 @@ export function AreaSelectedPanel({
           Explore verified listings around {areaLabel}, with map context and area-first filters.
         </p>
 
-        {/* Controls card — City + Buy/Rent (Issue #1606, mock parity) */}
-        {/* F2 — clean WHITE card surface; warm fill moves to the SELECT trigger inside the card */}
-        {(onCityChange || onIntentChange) && (
-          <div className="mt-3.5 flex flex-wrap items-end gap-4 rounded-xl border border-border bg-card p-3.5 shadow-sm">
-            {onCityChange && (
-              <div className="flex min-w-[150px] flex-1 flex-col gap-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                  City
-                </span>
-                <CitySelect value={city ?? ''} onChange={onCityChange} className="h-9 bg-[hsl(var(--input-bg))] border-border" />
-              </div>
-            )}
-            {onIntentChange && (
-              <div className="flex min-w-[150px] flex-1 flex-col gap-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                  Looking to
-                </span>
-                <IntentSelector intent={intent} onIntentChange={onIntentChange} hideLabel fill />
-              </div>
-            )}
-          </div>
-        )}
+        {/* Controls card — REMOVED (product-owner ruling, #1953 follow-up).
+            City was already removed from this card in build step 6, leaving
+            Buy/Rent as its only occupant; now that Buy/Rent is ALSO removed
+            (the persistent DiscoverControlBar is the SOLE Buy/Rent control
+            on /discover, same ownership rationale as the prior city
+            removal), the `onIntentChange &&`-gated card has nothing left to
+            hold and is retired with it — leaving it in place would render
+            an empty bordered "Looking to" box whenever `onIntentChange` is
+            supplied, which is worse than not rendering at all. The intent-
+            aware price helper directly below is UNCHANGED (it was already a
+            separate, unconditional element, not part of this gate).
+            `intent`/`onIntentChange` remain accepted (now JSX-unused) props
+            — kept threaded through unchanged, mirroring the existing
+            `onCityChange` convention already established on this exact
+            component, so no prop-interface churn ripples into
+            DiscoverRightPanel / DiscoverRightPanelContainer for this file. */}
 
         <p className="mt-2.5 text-xs text-muted-foreground" data-testid="area-intent-helper">
           Showing {intentNoun} prices in ₹ for {areaLabel}.

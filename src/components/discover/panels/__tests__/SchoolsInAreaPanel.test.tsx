@@ -39,16 +39,17 @@ const mockUrlState = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@/hooks/useDiscoverUrlState', () => ({
-  useDiscoverUrlState: vi.fn(() => [
-    mockUrlState,
-    {
-      setFiltersLive: mockSetFiltersLive,
-      setSchoolParams: mockSetSchoolParams,
-      setSchoolJourney: mockSetSchoolJourney,
-      clearAreaContext: vi.fn(),
-    },
-  ]),
+// Issue #1953 (build step 2) — SchoolsInAreaPanel now consumes the
+// DiscoverProvider facade instead of calling useDiscoverUrlState() directly.
+vi.mock('@/features/discover/context/useDiscoverContext', () => ({
+  useDiscoverNav: () => mockUrlState,
+  useDiscoverViewport: () => mockUrlState.viewport,
+  useDiscoverActions: () => ({
+    setFiltersLive: mockSetFiltersLive,
+    setSchoolParams: mockSetSchoolParams,
+    setSchoolJourney: mockSetSchoolJourney,
+    clearAreaContext: vi.fn(),
+  }),
 }));
 
 // Internal hook is disabled in prop mode, but it is still called unconditionally

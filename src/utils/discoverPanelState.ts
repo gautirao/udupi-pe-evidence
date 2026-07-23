@@ -22,7 +22,7 @@
  *   area-school-combined  — area selected AND school selected (both present)
  */
 
-import type { DiscoverUrlState } from '../hooks/useDiscoverUrlState';
+import type { DiscoverJourney, DiscoverUrlState } from '../hooks/useDiscoverUrlState';
 
 export type DiscoverPanelContent =
   | 'guided-entry'
@@ -176,4 +176,107 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
   }
 
   return 'guided-entry';
+}
+
+/**
+ * Issue #1953 (density/aria-selected fix) — derives which journey tab (if
+ * any) should read `aria-selected` when the URL's `journey` param itself is
+ * absent but `derivePanelContent` has already inferred a journey from
+ * `areaKey`/`schoolId`/`groupId` alone (the journey-less deep-link/cold-load
+ * URLs constructed by LandingPage, AreaCtaBlock, AreaGuide, AreaGuideHero,
+ * Trends, etc.).
+ *
+ * Callers should prefer the real `journey` URL param when present and only
+ * fall back to this inference — see DiscoverRightPanel:
+ *   `activeJourney={journey ?? inferJourneyFromPanelContent(panelContent)}`
+ *
+ * Product-owner ruling: a valid Discover state may never leave the
+ * persistent mode selector with no active tab — every reachable state must
+ * resolve to exactly one selected journey tab. `guided-entry` (the bare
+ * landing, no journey chosen yet) is the sole, deliberate exception.
+ *
+ * `area-school-combined` — WHY this maps to 'school-first' below, and why
+ * that is narrower than "this state is school-led":
+ *
+ * The underlying state is genuinely MIXED, not school-led. Two subsystems
+ * already reach PAST panelContent to the real `journey` URL param for
+ * exactly this reason, because behaviour genuinely differs by journey even
+ * though panelContent collapses both into the same value:
+ *   - useMarkerSelection.ts (~line 171, Issue #1738): "derivePanelContent
+ *     routes BOTH area-first and school-first area+school selections to the
+ *     same 'area-school-combined' panelContent, so schoolId/panelContent
+ *     alone can't distinguish them" — it checks `journey === 'area-first'`
+ *     explicitly to decide whether to keep writing the shared `listing`
+ *     param (marker/card sync + popover). School-first does NOT get that
+ *     write.
+ *   - useDiscoverJourneyTransitions.ts (~line 376): treats this state as
+ *     school-first Back level L3, but ONLY when `urlState.journey ===
+ *     'school-first'` is true — it does not infer that from panelContent.
+ *
+ * This function is NEVER consulted when `journey` is present (the
+ * `journey ?? …` fallback above short-circuits it). The ONLY reachable path
+ * into this branch for 'area-school-combined' is the journey-less branch at
+ * the bottom of derivePanelContent (a cold-load URL carrying `areaKey` AND
+ * `schoolId` with NO `journey` param). On that specific path, every
+ * observable behaviour THAT KEYS OFF panelContent ALONE already renders as
+ * school-first, and NOTHING on the path behaves as area-first:
+ *   - SchoolRadiusMapOverlay gates the school radius overlay on panelContent
+ *     alone and renders it (isSchoolRadiusOverlayState).
+ *   - MapDiscovery renders that radius legend overlay (`schoolRadiusOverlay`,
+ *     MapDiscovery.tsx:1446) — a legend, not a "pill".
+ *   - useMarkerSelection's own write condition,
+ *     `(schoolId == null || journey === 'area-first')`, is FALSE when
+ *     schoolId is set and journey is absent — so it does NOT write
+ *     `listing` on this path, i.e. it already behaves as school-first.
+ *
+ * Stated precisely rather than conveniently: the journey-GATED affordances are
+ * simply ABSENT here, not school-first. `schoolFirstOnBack`
+ * (useDiscoverJourneyTransitions.ts:377) short-circuits on
+ * `journey !== 'school-first'`, so the school-first Back control does not
+ * render on a journey-less URL — that is neither journey's behaviour. It does
+ * not change the direction of this mapping, since nothing on the path is
+ * area-first, but "every observable behaviour matches school-first" would be
+ * an overstatement and this comment is meant to be trusted.
+ *
+ * So this mapping resolves the JOURNEY-LESS COLD-LOAD CASE ONLY. It does
+ * NOT mean the mixed area+school state is school-led in general, and it
+ * must NOT be read as license to delete the `journey === 'area-first'` /
+ * `journey === 'school-first'` checks in useMarkerSelection.ts or
+ * useDiscoverJourneyTransitions.ts — those exist precisely because
+ * panelContent alone can't distinguish the two journeys once both an area
+ * and a school are selected. Deleting them would reintroduce the #1738 bug.
+ */
+export function inferJourneyFromPanelContent(
+  panelContent: DiscoverPanelContent,
+): DiscoverJourney | null {
+  switch (panelContent) {
+    case 'agri-landing':
+    case 'agri-selected':
+    case 'agri-group-selected':
+    case 'agri-group-peek':
+    case 'agri-group-locality':
+    case 'agri-detail':
+      return 'agri-first';
+    case 'area-groups-landing':
+    case 'area-group-results':
+    case 'area-selection':
+    case 'area-selected':
+      return 'area-first';
+    case 'school-browse':
+    case 'school-group-areas':
+    case 'schools-in-area':
+    case 'school-selected':
+      return 'school-first';
+    case 'area-school-combined':
+      // See the function-level doc comment above: this resolves the
+      // journey-less cold-load case only (area+school, no `journey` param).
+      // Do not generalize this to "school-led" — the state is mixed.
+      return 'school-first';
+    case 'guided-entry':
+      return null;
+    default: {
+      const _exhaustive: never = panelContent;
+      return _exhaustive;
+    }
+  }
 }

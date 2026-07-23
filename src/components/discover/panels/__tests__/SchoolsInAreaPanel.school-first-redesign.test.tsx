@@ -26,8 +26,12 @@ const clearAreaContext = vi.fn();
 
 let mockUrlState: Record<string, unknown> = {};
 
-vi.mock('@/hooks/useDiscoverUrlState', () => ({
-  useDiscoverUrlState: () => [mockUrlState, { setFiltersLive, setSchoolJourney, clearAreaContext }],
+// Issue #1953 (build step 2) — SchoolsInAreaPanel now consumes the
+// DiscoverProvider facade instead of calling useDiscoverUrlState() directly.
+vi.mock('@/features/discover/context/useDiscoverContext', () => ({
+  useDiscoverNav: () => mockUrlState,
+  useDiscoverViewport: () => (mockUrlState as { viewport?: unknown }).viewport ?? null,
+  useDiscoverActions: () => ({ setFiltersLive, setSchoolJourney, clearAreaContext }),
 }));
 
 vi.mock('@/hooks/useDiscoverAreas', () => ({

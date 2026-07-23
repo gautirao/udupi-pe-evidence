@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { derivePanelContent } from '../discoverPanelState';
-import type { DiscoverUrlState } from '../../hooks/useDiscoverUrlState';
+import { derivePanelContent, inferJourneyFromPanelContent } from '../discoverPanelState';
+import type { DiscoverPanelContent } from '../discoverPanelState';
+import type { DiscoverUrlState, DiscoverJourney } from '../../hooks/useDiscoverUrlState';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -780,5 +781,106 @@ describe('derivePanelContent — area-group-results (Issue #1597)', () => {
         makeState({ journey: 'area-first', groupId: 'coastal-homes' }),
       ),
     ).toBe('area-groups-landing');
+  });
+});
+
+describe('inferJourneyFromPanelContent — #1953 aria-selected fix for journey-less inferred states', () => {
+  it('maps every area-first panel state to area-first', () => {
+    for (const content of [
+      'area-groups-landing',
+      'area-group-results',
+      'area-selection',
+      'area-selected',
+    ] as const) {
+      expect(inferJourneyFromPanelContent(content)).toBe('area-first');
+    }
+  });
+
+  it('maps every school-first panel state to school-first', () => {
+    for (const content of [
+      'school-browse',
+      'school-group-areas',
+      'schools-in-area',
+      'school-selected',
+    ] as const) {
+      expect(inferJourneyFromPanelContent(content)).toBe('school-first');
+    }
+  });
+
+  it('maps every agri-first panel state to agri-first', () => {
+    for (const content of [
+      'agri-landing',
+      'agri-selected',
+      'agri-group-selected',
+      'agri-group-peek',
+      'agri-group-locality',
+      'agri-detail',
+    ] as const) {
+      expect(inferJourneyFromPanelContent(content)).toBe('agri-first');
+    }
+  });
+
+  it('returns null for guided-entry (bare landing)', () => {
+    expect(inferJourneyFromPanelContent('guided-entry')).toBeNull();
+  });
+
+  it('resolves area-school-combined to school-first — journey-less cold-load case only, see doc comment', () => {
+    // Product-owner ruling: no valid state may leave the persistent mode
+    // selector with no active tab. The underlying state is genuinely mixed
+    // (see useMarkerSelection.ts #1738 and useDiscoverJourneyTransitions.ts,
+    // which both check the real `journey` param explicitly for this exact
+    // reason), but this function is only ever consulted on the journey-less
+    // path, where every behaviour keyed off panelContent ALONE renders as
+    // school-first and nothing behaves as area-first. The journey-gated
+    // affordances (e.g. schoolFirstOnBack) are simply ABSENT there — neither
+    // journey's behaviour — which is why this resolves the cold-load case only.
+    expect(inferJourneyFromPanelContent('area-school-combined')).toBe('school-first');
+  });
+});
+
+describe('inferJourneyFromPanelContent — invariant: every valid state resolves to exactly one active mode tab', () => {
+  // Compile-time exhaustive map: if a 17th DiscoverPanelContent member is
+  // ever added without a corresponding key here, this is a BUILD ERROR
+  // (missing property under Record<DiscoverPanelContent, true>), not a
+  // silently-skipped test sample. Do not replace this with a sampled array.
+  const ALL_PANEL_CONTENTS_EXHAUSTIVE: Record<DiscoverPanelContent, true> = {
+    'guided-entry': true,
+    'agri-landing': true,
+    'agri-selected': true,
+    'agri-group-selected': true,
+    'agri-group-peek': true,
+    'agri-group-locality': true,
+    'agri-detail': true,
+    'area-groups-landing': true,
+    'area-group-results': true,
+    'area-selection': true,
+    'area-selected': true,
+    'school-browse': true,
+    'school-group-areas': true,
+    'schools-in-area': true,
+    'school-selected': true,
+    'area-school-combined': true,
+  };
+  const ALL_PANEL_CONTENTS = Object.keys(
+    ALL_PANEL_CONTENTS_EXHAUSTIVE,
+  ) as DiscoverPanelContent[];
+  const VALID_JOURNEYS: DiscoverJourney[] = ['agri-first', 'area-first', 'school-first'];
+
+  it('resolves every member except guided-entry to a non-null, valid journey (positive resolution, not absence)', () => {
+    for (const content of ALL_PANEL_CONTENTS) {
+      if (content === 'guided-entry') {
+        continue; // asserted as the sole exception below
+      }
+      const journey = inferJourneyFromPanelContent(content);
+      // Positive assertion: journey must actually BE one of the three real
+      // journeys, not merely "not null". A function that throws or returns
+      // undefined would fail toContain but could slip past a bare
+      // `.not.toBeNull()` check depending on how the failure surfaces.
+      expect(VALID_JOURNEYS).toContain(journey);
+    }
+  });
+
+  it('guided-entry is the sole exception — the landing genuinely has no journey selected', () => {
+    expect(inferJourneyFromPanelContent('guided-entry')).toBeNull();
   });
 });

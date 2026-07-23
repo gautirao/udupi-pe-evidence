@@ -1,4 +1,9 @@
 import type { ReactNode, Dispatch, SetStateAction } from 'react';
+import {
+  useDiscoverActions,
+  useDiscoverNav,
+  useDiscoverShell,
+} from '@/features/discover/context/useDiscoverContext';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -17,9 +22,8 @@ import type { DiscoverListingItem } from '@/hooks/useDiscoverListings';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
 import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
-import { PropertyFilters } from '@/hooks/usePropertyListings';
+import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
-import type { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
 import type {
   DiscoverJourneyTransitionsView,
   DiscoverJourneyTransitionsCommands,
@@ -53,8 +57,6 @@ export interface DiscoverRightPanelContainerProps {
   selectedMarkerListing: PropertyListingWithImages | null;
   clearSelectedMarkerListing: () => void;
   city: string;
-  urlState: DiscoverUrlState;
-  urlActions: DiscoverUrlActions;
   activeContextChips: ReactNode;
   discoverAreas: AreaPoint[];
   selectedArea: AreaPoint | null;
@@ -150,8 +152,6 @@ export function DiscoverRightPanelContainer({
   selectedMarkerListing,
   clearSelectedMarkerListing,
   city,
-  urlState,
-  urlActions,
   activeContextChips,
   discoverAreas,
   selectedArea,
@@ -226,9 +226,23 @@ export function DiscoverRightPanelContainer({
   totalElements,
   setPage,
 }: DiscoverRightPanelContainerProps) {
+  // Issue #1953 (build step 2) — consumes the DiscoverProvider facade
+  // directly rather than receiving urlState/urlActions as props (D2 prop
+  // migration rule: these are the two facade-owned props dropped from the
+  // MapDiscovery call site). This container never touches viewport, so only
+  // nav + actions are needed.
+  const urlState = useDiscoverNav();
+  const urlActions = useDiscoverActions();
+  // Issue #1953 (build step 4, AC28 gap fix) — the mobile shell slice, read
+  // directly from the facade (same pattern as urlState/urlActions above)
+  // rather than threaded down from MapDiscovery, so AreaGroupsLandingPanel's
+  // scroll-preserving hook knows when the Map overlay is covering it.
+  const { isMobileShell, mobileView } = useDiscoverShell();
+  const isMobileMapOpen = isMobileShell && mobileView === 'MAP';
   return (
     <DiscoverRightPanel
       panelContent={resolvedPanelContent}
+      isMobileMapOpen={isMobileMapOpen}
       selectedMarkerListing={selectedMarkerListing}
       onClearAgriSelection={clearSelectedMarkerListing}
       city={city}

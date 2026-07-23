@@ -9,8 +9,20 @@ import { MapPin } from 'lucide-react';
  * tokens: var(--paper)/var(--radius-lg)/var(--shadow-md)/var(--accent) map
  * to bg-card/rounded-lg/shadow-md/hsl(var(--copper)). Sits beneath the
  * top-left city chip (DiscoverMapContextOverlay's AreaIndicatorOverlay "city"
- * variant, at top-4/left-4); never covers the map centre or the top-right
- * CitySelect control. Purely presentational — no URL/camera writes.
+ * variant, at top-4/left-4); never covers the map centre. Purely
+ * presentational — no URL/camera writes.
+ *
+ * Issue #1953 (occlusion sweep) — this docstring previously claimed it
+ * "never covers ... the top-right CitySelect control", written when
+ * CitySelect lived at the top right of the old per-panel layout. #1953
+ * moved city selection into DiscoverControlBar, persistently mounted at the
+ * top LEFT — directly above this panel's anchor point — so that claim no
+ * longer holds geometrically. The panel is allowed to sit under the
+ * control bar's footprint; what must never happen is this panel's static
+ * `z-[1000]` beating an OPEN, portaled control-bar popover in a hit-test.
+ * That invariant is enforced in DiscoverControlBar.tsx, where the
+ * city/area listbox portals are raised to `z-[1100]` specifically to stay
+ * above this and every other map-chrome overlay.
  */
 export function ExploreMapPanel() {
   return (

@@ -1,14 +1,10 @@
 import React from 'react';
-import { MapPin, SearchX, Compass, X } from 'lucide-react';
-import { JourneySwitcher } from '../JourneySwitcher';
-import { CitySelect } from '../CitySelect';
-import { IntentSelector } from '../IntentSelector';
+import { MapPin, SearchX, X } from 'lucide-react';
 import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
-import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
+import { useDiscoverActions, useDiscoverNav } from '@/features/discover/context/useDiscoverContext';
 import { useDiscoverRegionSummary } from '@/hooks/useDiscoverRegionSummary';
-import { cn } from '@/lib/utils';
 import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
 import { TrustStrip } from './_shared';
 
@@ -45,8 +41,6 @@ interface GuidedEntryPanelProps {
   /** Issue #1808 — fired when a region card is selected (not deselected), arming the pulse with source='panel'. */
   onRegionSelectFromPanel?: () => void;
 }
-
-const EYEBROW = 'text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground';
 
 function getMacroRegionCue(regionKey: string, regionLabel: string, cityLabel: string): string {
   const key = regionKey.toLowerCase();
@@ -99,7 +93,11 @@ export function GuidedEntryPanel({
   onRegionSelectFromPanel,
 }: GuidedEntryPanelProps) {
   const cityLabel = CITY_CONFIG[city]?.label ?? CITY_CONFIG[DEFAULT_CITY].label;
-  const [urlState, urlActions] = useDiscoverUrlState();
+  // Issue #1953 (build step 2) — consumes the DiscoverProvider facade
+  // instead of calling useDiscoverUrlState() directly (state plumbing only;
+  // see team-lead-plan.toml decisions.D1_facade.sole_caller).
+  const urlState = useDiscoverNav();
+  const urlActions = useDiscoverActions();
   const selectedScope = urlState.scope ?? null;
 
   // Issue #1882 (Track A PR2 Slice S2c) — region cards now sourced directly
@@ -140,23 +138,15 @@ export function GuidedEntryPanel({
   };
   const handleClearScope = () => urlActions.setScope(null);
 
-  // Issue #1808 — marker-accurate aria-live helper mirroring the map
-  // guidance-card body (user decision q1: literally accurate, never a
-  // withholding phrase). Region label reuses the same `regions` list the
-  // cards below already render from — no new data source.
-  const selectedRegionLabel =
-    regions.find((r) => r.regionKey === selectedScope)?.regionLabel ?? selectedScope ?? '';
-  const regionGuideHelperText =
-    regionGuideMarkerKind === 'zones'
-      ? `${selectedRegionLabel} selected. The map shows this region's zones — choose how you want to continue below.`
-      : regionGuideMarkerKind === 'areas'
-        ? `${selectedRegionLabel} selected. The map shows this region's areas — choose how you want to continue below.`
-        : `${selectedRegionLabel} selected. The map shows an overview of this region — choose how you want to continue below.`;
-  const ringClass = regionGuideRingActive
-    ? prefersReducedMotion
-      ? 'dp-attn-static'
-      : 'dp-attn-on'
-    : undefined;
+  // Issue #1808 helper-text/ring derivation REMOVED in #1953 build step 6 —
+  // moved to JourneySwitcher.tsx (regionGuideHelperText is now computed by
+  // DiscoverRightPanel, the persistent mount's caller) alongside the ring
+  // logic, since the journey-switcher-section this fed no longer renders
+  // here. regionGuideMarkerKind/regionGuideRingActive/regionGuideNonce/
+  // prefersReducedMotion remain unused props on this component now (dead
+  // weight from the relocation) — left in place per this step's "no other
+  // change to GuidedEntryPanel" constraint rather than trimming the prop
+  // surface here.
 
   return (
     <div
@@ -194,21 +184,18 @@ export function GuidedEntryPanel({
             : 'Showing monthly rents in ₹ — same properties, reworded for renting.'}
         </p>
 
-        {/* Controls: city + Buy/Rent */}
-        <div className="mb-8 flex flex-wrap items-end gap-3.5 rounded-xl border border-border bg-card p-4 shadow-sm">
-          <label className="flex min-w-[160px] flex-1 flex-col gap-1.5">
-            <span className={EYEBROW}>City</span>
-            <CitySelect
-              value={city}
-              onChange={onCityChange}
-              className="h-11 w-full rounded-md border-border bg-[hsl(var(--input-bg))] px-3.5 text-sm font-semibold text-foreground"
-            />
-          </label>
-          <div className="flex min-w-[180px] flex-1 flex-col gap-1.5">
-            <span className={EYEBROW}>Looking to</span>
-            <IntentSelector intent={intent} onIntentChange={onIntentChange} hideLabel fill />
-          </div>
-        </div>
+        {/* Controls card — REMOVED (product-owner ruling, #1953 follow-up).
+            City was already removed from this card in build step 6, leaving
+            Buy/Rent as its only occupant; now that Buy/Rent is ALSO removed
+            (the persistent DiscoverControlBar is the SOLE Buy/Rent control
+            on /discover, same ownership rationale as the prior city
+            removal), the card has nothing left to hold and is retired with
+            it rather than left as an empty bordered "Looking to" box.
+            `intent`/`onIntentChange` remain accepted (now JSX-unused) props
+            — kept threaded through unchanged, mirroring the existing
+            `onCityChange` convention on this exact component, so no
+            prop-interface churn ripples into DiscoverRightPanel /
+            DiscoverRightPanelContainer for this file. */}
 
         {/* Empty-state notice */}
         {isCityEmpty && (
@@ -230,43 +217,18 @@ export function GuidedEntryPanel({
           </div>
         )}
 
-        {/* Section B: Journey CTAs — the primary decision.
-            Issue #1808 (decision q2 = RING_EXISTING_SECTION) — this is the
-            EXISTING "choose how to continue" section; the one-shot copper
-            attention ring targets it directly. No new journey-choice row/
-            component is added. `key` remounts on a fresh nonce so the ring
-            animation replays only on a new region pick, never on re-render. */}
-        <div
-          key={regionGuideRingActive ? regionGuideNonce : 'static'}
-          data-testid="journey-switcher-section"
-          className={cn('dp-attn-target', ringClass)}
-        >
-          {/* Issue #1808 — ring + helper fire together, ONLY on an actual
-              map/panel pick (regionGuideRingActive), never on deep-link/
-              refresh. The card + legend (mounted elsewhere in MapDiscovery)
-              still show on every source, per AC5. */}
-          {regionGuideRingActive && (
-            <p
-              aria-live="polite"
-              data-testid="region-guide-helper"
-              className="mb-2.5 text-[13px] font-medium text-[hsl(var(--copper))]"
-            >
-              {regionGuideHelperText}
-            </p>
-          )}
-          <div className="mb-3.5 flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-            <Compass className="h-[15px] w-[15px] text-[hsl(var(--copper))]" aria-hidden="true" />
-            <span>Choose how you want to search</span>
-          </div>
-
-          {/* Journey cards */}
-          <JourneySwitcher
-            onSelectJourney={onSelectJourney}
-            cityLabel={cityLabel}
-            totalProperties={totalProperties}
-            areasCount={areasCount}
-          />
-        </div>
+        {/* Section B: Journey CTAs — REMOVED in #1953 build step 6 (AC27, A1
+            retirement). The rich journey cards (previously duplicated here
+            AND rendered nowhere persistently) now mount ONCE, persistently,
+            in DiscoverRightPanel (see JourneySwitcher.tsx), so mode selection
+            is reachable at every panel state, not just this bare landing.
+            The #1808 attention ring + aria-live helper moved with it, onto
+            the tablist container in JourneySwitcher.tsx — never per-tab. This
+            panel's own regionGuideRingActive/regionGuideMarkerKind/
+            regionGuideNonce/prefersReducedMotion/onRegionSelectFromPanel
+            props are otherwise UNCHANGED (still drive the macro-region cards'
+            onRegionSelectFromPanel wiring below) — no other change to this
+            component. */}
 
         {/* Section C: Macro regions — secondary "or start with a region" */}
         <div className="my-8 h-px w-full bg-border" />

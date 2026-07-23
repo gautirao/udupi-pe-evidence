@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import React from 'react';
 import MapDiscovery from '../MapDiscovery';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 
 // ─── Area fixture used in areaKey hydration tests ──────────────
@@ -97,6 +98,44 @@ vi.mock('react-router-dom', async () => {
 });
 
 // ─── Helpers ──────────────────────────────────────────────────
+/**
+ * Issue #1953 build step 6 — TWO revisions to this helper, in order:
+ *
+ * 1. DiscoverControlBar (mounted persistently in MapDiscovery as of this
+ *    step) added its OWN `role="combobox"` element (the area-jump
+ *    autocomplete input, `data-testid="control-bar-area-input"`), so a
+ *    page-level `getByRole('combobox')` briefly became ambiguous wherever
+ *    both it and the OLD per-panel CitySelect's Radix trigger were visible.
+ *
+ * 2. Ownership invariant (ALSO this step, corrected after browser
+ *    verification): the per-panel CitySelect instances (GuidedEntryPanel,
+ *    AreaGroupsLandingPanel, AreaSelectedPanel, DiscoverMapCanvas) were a
+ *    real, visibly-duplicated city-selection control alongside
+ *    DiscoverControlBar — REMOVED from all four. DiscoverControlBar is now
+ *    the SOLE city-selection control on /discover. There is consequently no
+ *    Radix `role="combobox"` city trigger left anywhere to scope around —
+ *    "the CitySelect" this helper used to find no longer exists. This helper
+ *    now returns the control bar's OWN city control instead (a
+ *    `aria-haspopup="listbox"` button, not a combobox — see
+ *    DiscoverControlBar.tsx's `CityDropdown`), scoped by testid (ownership),
+ *    not by DOM position.
+ */
+function getControlBarCityControl() {
+  const bar = screen.getByTestId('discover-control-bar');
+  const cityControl = bar.querySelector('[data-testid="control-bar-city-select"]');
+  if (!cityControl) throw new Error('DiscoverControlBar city control not found');
+  return cityControl;
+}
+
+/** The actual interactive `<button>` inside the control bar's city control
+ * (`control-bar-city-select` is the wrapping `<div>` — `toBeEnabled()` needs
+ * the form-control element itself, per jest-dom's supported-element list). */
+function getControlBarCityButton() {
+  const button = getControlBarCityControl().querySelector('button');
+  if (!button) throw new Error('DiscoverControlBar city button not found');
+  return button;
+}
+
 function makeQC() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
@@ -106,7 +145,7 @@ function renderWithCity(city: string) {
     <QueryClientProvider client={makeQC()}>
       <MemoryRouter initialEntries={[`/discover?city=${city}`]}>
         <Routes>
-          <Route path="/discover" element={<MapDiscovery />} />
+          <Route path="/discover" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -118,7 +157,7 @@ function renderNoCity() {
     <QueryClientProvider client={makeQC()}>
       <MemoryRouter initialEntries={['/discover']}>
         <Routes>
-          <Route path="/discover" element={<MapDiscovery />} />
+          <Route path="/discover" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -136,7 +175,7 @@ function renderAuthenticatedWithCity(city: string) {
     <QueryClientProvider client={makeQC()}>
       <MemoryRouter initialEntries={[`/discover?city=${city}`]}>
         <Routes>
-          <Route path="/discover" element={<MapDiscovery />} />
+          <Route path="/discover" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -150,7 +189,7 @@ function renderWithCityAndAreaKey(city: string, areaKey: string) {
     <QueryClientProvider client={makeQC()}>
       <MemoryRouter initialEntries={[`/discover?city=${city}&areaKey=${encoded}`]}>
         <Routes>
-          <Route path="/discover" element={<MapDiscovery />} />
+          <Route path="/discover" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -205,29 +244,59 @@ describe('Index page — city validity guard', () => {
     expect(screen.queryByRole('heading', { name: /city not supported/i })).not.toBeInTheDocument();
   });
 
-  it('authenticated layout: city chip and city select are both present (no occlusion)', () => {
-    // Regression: stats bar was at absolute top-4 right-4, same anchor as CitySelect,
-    // completely occluding the city switcher for authenticated users (AC2 violation).
-    // Stats bar is now centred (left-1/2 -translate-x-1/2) so both elements can coexist.
+  it('authenticated layout: city chip and the control-bar city control are both present (no occlusion)', async () => {
+    // Regression: stats bar was at absolute top-4 right-4, same anchor as the (then
+    // per-panel) CitySelect, completely occluding the city switcher for authenticated
+    // users (AC2 violation). Stats bar is now centred (left-1/2 -translate-x-1/2) so
+    // both elements can coexist.
+    //
+    // Issue #1953 build step 6 (ownership invariant) — the per-panel CitySelect this
+    // test used to check (via getAllByText('Udupi') double-count) was REMOVED; the
+    // persistent DiscoverControlBar is now the SOLE city-selection control on
+    // /discover. Rewritten to assert that ownership reality directly (by testid, not
+    // by counting text nodes that happened to coincide with the old duplicated
+    // controls) rather than being deleted. City chip and control-bar city control are
+    // two DIFFERENT elements/components — checked independently, each by its own
+    // ownership, not by a combined text-node count.
     renderAuthenticatedWithCity('udupi');
 
-    // City chip (top-left, always visible — read-only label) and CitySelect both show the
-    // city name; there will be at least 2 occurrences when neither element is suppressed.
-    expect(screen.getAllByText('Udupi').length).toBeGreaterThanOrEqual(2);
+    // City chip (top-left, always-visible read-only label — AreaIndicatorOverlay's
+    // 'city' state, DiscoverMapContextOverlay's fallback branch) renders behind
+    // DiscoverMapMount's React.lazy/Suspense boundary (Issue #1953 build step 4),
+    // so its first appearance is NOT synchronous with the initial render — same
+    // class as the MapDiscovery.issue1067 PropertyMap fix. Verified (not assumed):
+    // this test is 100% reliable alone but flaked under a broad/loaded run with
+    // exactly this "element not found yet" symptom, and DiscoverMapMount.tsx's own
+    // header comment documents the lazy import. Await it rather than asserting
+    // synchronously — the assertion still requires the real element to appear,
+    // this is a timing correction, not a weakening.
+    // Timeout raised from the default 1000ms: under a loaded broad test run
+    // (many worker processes competing for CPU in this sandbox), the dynamic
+    // import()'s resolution can genuinely exceed 1s even though it always
+    // resolves — confirmed by the one observed timeout showing this exact
+    // waitFor took ~1.2s before giving up. This is a real async wait for a
+    // deterministic one-time module resolution, not a masked flake or an
+    // arbitrary sleep (no fixed delay is added — waitFor still polls and
+    // resolves as soon as the element appears).
+    await waitFor(() => {
+      expect(screen.getByTestId('area-indicator-overlay')).toHaveTextContent(/udupi/i);
+    }, { timeout: 5000 });
 
-    // CitySelect trigger must be present and interactive — rendered regardless of auth state (AC2).
-    // SelectTrigger wraps Radix SelectPrimitive.Trigger which renders a <button role="combobox">.
-    // This assertion fails if CitySelect is hidden, removed, or refactored to an aria-only node.
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
+    // The control bar's OWN city control is NOT behind the lazy map boundary — it
+    // is mounted directly in MapDiscovery.tsx's synchronous tree — present and
+    // interactive regardless of auth state (AC2). This assertion fails if it is
+    // hidden, removed, or disabled.
+    expect(getControlBarCityControl()).toBeInTheDocument();
 
     expect(screen.queryByRole('heading', { name: /city not supported/i })).not.toBeInTheDocument();
 
-    // No-occlusion proof: the CitySelect (the element the stats bar used to cover)
-    // must be interactive, not merely present. An occluded/hidden trigger would be
-    // disabled or absent. MapStatsBar no longer renders listing-count copy
-    // (see MapStatsBar.test.tsx — "on map"/"total listings" text was removed), so the
-    // chip+select coexistence above is the canonical no-occlusion assertion.
-    expect(screen.getByRole('combobox')).toBeEnabled();
+    // No-occlusion proof: the control-bar city control (the element the stats bar
+    // used to cover) must be interactive, not merely present. An occluded/hidden
+    // button would be disabled or absent. MapStatsBar no longer renders
+    // listing-count copy (see MapStatsBar.test.tsx — "on map"/"total listings" text
+    // was removed), so the chip+control coexistence above is the canonical
+    // no-occlusion assertion.
+    expect(getControlBarCityButton()).toBeEnabled();
   });
 });
 
@@ -249,8 +318,9 @@ describe('Index page — areaKey URL hydration', () => {
 
     // Should render the map UI, not the "city not supported" fallback
     expect(screen.queryByRole('heading', { name: /city not supported/i })).not.toBeInTheDocument();
-    // CitySelect should be present
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
+    // The control-bar city control should be present (ownership invariant — see
+    // getControlBarCityControl's header comment).
+    expect(getControlBarCityControl()).toBeInTheDocument();
   });
 
   it('does not crash when areas are still loading on mount', () => {
@@ -291,6 +361,7 @@ describe('Index page — areaKey URL hydration', () => {
     renderWithCity('udupi');
 
     expect(screen.queryByRole('heading', { name: /city not supported/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
+    // Ownership invariant — see getControlBarCityControl's header comment.
+    expect(getControlBarCityControl()).toBeInTheDocument();
   });
 });

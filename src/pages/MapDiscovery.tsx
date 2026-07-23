@@ -20,6 +20,7 @@ import {
   resolveDiscoverGroupForAreaKey,
 } from '@/utils/discoverLayerRegistry';
 import { CityNotSupported } from '@/components/discover/CityNotSupported';
+import { DiscoverControlBar } from '@/components/discover/DiscoverControlBar';
 import { useDiscoverInteractionState } from '@/features/discover/state/useDiscoverInteractionState';
 import { useReducedMotion } from '@/features/discover/state/useReducedMotion';
 import { useRegionGuideState } from '@/features/discover/state/useRegionGuideState';
@@ -37,7 +38,13 @@ import { useFilteredAgriListings } from '@/features/discover/presentation/useFil
 import { useSchoolListings } from '@/features/discover/presentation/useSchoolListings';
 import { useSchoolFirstCounts } from '@/features/discover/presentation/useSchoolFirstCounts';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
+import type { DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
+import {
+  useDiscoverActions,
+  useDiscoverNav,
+  useDiscoverShell,
+  useDiscoverViewport,
+} from '@/features/discover/context/useDiscoverContext';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
@@ -55,10 +62,11 @@ import { useDiscoverFilteredMarkers } from '@/hooks/useDiscoverFilteredMarkers';
 import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
 import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { slugifyFromAreaKey } from '@/lib/areaSlug';
-import { PropertyFilters } from '@/hooks/usePropertyListings';
+import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import { ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { DiscoverMapCanvas } from '@/features/discover/views/DiscoverMapCanvas';
+import { DiscoverMapMount } from '@/features/discover/views/DiscoverMapMount';
+import { useMobileMapOverlayShell } from '@/hooks/useMobileMapOverlayShell';
 import { DiscoverOverlaySheets } from '@/features/discover/views/DiscoverOverlaySheets';
 import { DiscoverRightPanelContainer } from '@/features/discover/views/DiscoverRightPanelContainer';
 // S9a — relocated to src/features/discover/presentation/ (discoverBadge.ts,
@@ -121,7 +129,28 @@ export default function MapDiscovery() {
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
-  const [urlState, urlActions] = useDiscoverUrlState();
+  // Issue #1953 (build step 2) — MapDiscovery is no longer a production caller
+  // of useDiscoverUrlState(); it consumes the DiscoverProvider facade instead
+  // (team-lead-plan.toml decisions.D1_facade.sole_caller). urlState/urlActions
+  // are reconstructed here purely so the ~100 existing `urlState.x` /
+  // `urlActions.x` call sites below stay byte-identical — reconstruction is
+  // NOT a second URL writer; nav/viewport/actions are all sourced from the
+  // one provider-owned useDiscoverUrlState() call.
+  const nav = useDiscoverNav();
+  const viewport = useDiscoverViewport();
+  const urlActions = useDiscoverActions();
+  const urlState: DiscoverUrlState = useMemo(() => ({ ...nav, viewport }), [nav, viewport]);
+  // Issue #1953 (build step 3, RH4 narrowed) — mobileView only, to key the
+  // bboxTimerRef clear-on-leave-MAP effect below.
+  // Build step 4 — isMobileShell/setMobileView now also read here, to drive
+  // the mobile List<->Map full-screen-overlay shell around the DiscoverMapMount
+  // call site below.
+  const { mobileView, isMobileShell, setMobileView } = useDiscoverShell();
+  const mobileMapOpen = isMobileShell && mobileView === 'MAP';
+  const { triggerRef: mobileMapTriggerRef } = useMobileMapOverlayShell({
+    isOpen: mobileMapOpen,
+    onClose: () => setMobileView('LIST'),
+  });
   const isAuthenticated = !authLoading && user !== null;
   // Issue #1160 v3 Bug A1 — TanStack Query client used to read cached useSchoolById
   // result synchronously inside handleSelectSchoolById. See that callback for details.
@@ -494,6 +523,19 @@ export default function MapDiscovery() {
       if (bboxTimerRef.current) clearTimeout(bboxTimerRef.current);
     };
   }, []);
+
+  // RH4 (issue #1953, narrowed) — the mobile map view unmounts when switching
+  // from MAP to LIST, but MapDiscovery itself does not unmount then, so the
+  // unmount-only cleanup above never runs for that transition. Without this, a
+  // bboxTimer armed by the last pan/zoom before leaving MAP could still fire
+  // setMapBbox after the map is gone. Keyed on mobileView only, so this fires
+  // on the MAP -> LIST transition, not on every render.
+  useEffect(() => {
+    if (mobileView !== 'MAP' && bboxTimerRef.current) {
+      clearTimeout(bboxTimerRef.current);
+      bboxTimerRef.current = null;
+    }
+  }, [mobileView]);
 
   const {
     filters, selectedArea, panToArea, mapZoom, mapReady, showLoader,
@@ -1737,11 +1779,77 @@ export default function MapDiscovery() {
 
   return (
     <PublicDiscoverLayout>
-      <div className="h-full flex flex-col lg:flex-row relative">
+      <div className="flex h-full flex-col">
+        {/* Issue #1953 (build step 6) — mount the unified control bar (built in
+            step 5, previously rendered nowhere) so city/Buy-Rent/area-jump are
+            actually reachable. Consumes ONLY the DiscoverProvider facade
+            (useDiscoverNav/useDiscoverActions/useDiscoverAreas internally) —
+            no URL state or router props are threaded in from here.
+            Issue #1953 FIX1 (post-launch hit-test defect) — the earlier
+            "own horizontal scroll on narrow viewports" approach traded one
+            unreachability for another: at 390px two of the three controls
+            scrolled off-screen instead of clipping, still unreachable, and
+            the page-level "Map" trigger (below, now removed) was a `fixed`
+            overlay anchored into the SAME top-right space as this row,
+            covering it. DiscoverControlBar.tsx now wraps onto a second line
+            at <lg widths (no overflow-x needed) and owns the mobile Map/List
+            trigger itself as a flex sibling, so the trigger structurally
+            cannot overlap the row's own controls. */}
+        <div
+          className="shrink-0 border-b border-border bg-card px-4 py-2.5"
+          data-testid="discover-control-bar-row"
+        >
+          <DiscoverControlBar
+            mobileMapTrigger={
+              isMobileShell && !mobileMapOpen
+                ? { onOpenMap: () => setMobileView('MAP'), triggerRef: mobileMapTriggerRef }
+                : undefined
+            }
+          />
+        </div>
+        <div className="min-h-0 flex-1 flex flex-col lg:flex-row relative">
+        {/* Issue #1953 (build step 4) — mobile "Map" trigger. Was a
+            page-level `fixed top-20 right-4` button here; moved into
+            DiscoverControlBar (rendered above, as a flex sibling of city/
+            Buy-Rent/area-search) by FIX1 — see the control-bar-row comment
+            above for why. mobileMapTriggerRef / isMobileShell / mobileMapOpen
+            stay defined in this scope; they are threaded into
+            DiscoverControlBar's `mobileMapTrigger` prop instead of used
+            directly here. */}
         {/* a3 — mapContainerRef wraps the full map half-panel for MarkerPopoverCard bounds clamp.
             R-C — warm map gutter background (#EDEBE6) so the gutter between the map tile and
-            panel edge is warm off-white, not default grey. */}
-        <DiscoverMapCanvas
+            panel edge is warm off-white, not default grey.
+            Issue #1953 (build step 4) — DiscoverMapMount owns whether
+            DiscoverMapCanvas mounts at all (real unmount on mobile List — see
+            DiscoverMapMount.tsx). This wrapper only becomes a full-screen
+            overlay on mobile MAP; `contents` keeps it invisible to layout
+            otherwise, so desktop is unaffected. The prop list below passes
+            straight through to DiscoverMapCanvas, unchanged.
+            Issue #1953 (post-step-4 fix) — z-[60], not z-40: RoleAwareHeader
+            (src/components/layout/AppLayout.tsx) is `sticky top-0 z-50` and
+            sits ABOVE the page content in the DOM, so a `z-40` "full-screen"
+            overlay rendered z-40 stacks BELOW the header — the header's
+            "Sign in" link visually and hit-test intercepts clicks meant for
+            the overlay's own "List" close button. z-[60] is a genuine
+            stacking-context comparison against the header's z-50 (both are
+            top-level positioned elements, no intervening stacking context),
+            so raising this above 50 is sufficient and correct — no
+            display:none/visibility trick on the header, true overlay only. */}
+        <div
+          className={
+            mobileMapOpen ? 'fixed inset-0 z-[60] bg-background [&>div]:!h-full' : 'contents'
+          }
+        >
+          {mobileMapOpen && (
+            <button
+              type="button"
+              onClick={() => setMobileView('LIST')}
+              className="absolute right-4 top-4 z-50 rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md"
+            >
+              List
+            </button>
+          )}
+          <DiscoverMapMount
           mapContainerRef={mapContainerRef}
           markerPixelPos={markerPixelPos}
           handlePopoverDismiss={handlePopoverDismiss}
@@ -1759,7 +1867,6 @@ export default function MapDiscovery() {
           handlePolygonCleared={handlePolygonCleared}
           selectedSchool={selectedSchool}
           memoizedInitialCenter={memoizedInitialCenter}
-          urlState={urlState}
           cityCenter={cityCenter}
           cityZoom={cityZoom}
           overviewAreas={overviewAreas}
@@ -1775,7 +1882,6 @@ export default function MapDiscovery() {
           handleAreaClusterClick={handleAreaClusterClick}
           handleAreaMarkersComputed={handleAreaMarkersComputed}
           schoolZoneLabels={schoolZoneLabels}
-          urlActions={urlActions}
           setMapZoom={setMapZoom}
           handleBoundsChange={handleBoundsChange}
           panToArea={panToArea}
@@ -1842,15 +1948,14 @@ export default function MapDiscovery() {
           navigate={navigate}
           handleStepMarkerListing={handleStepMarkerListing}
           showMarkerInList={showMarkerInList}
-        />
+          />
+        </div>
 
         <DiscoverRightPanelContainer
           resolvedPanelContent={resolvedPanelContent}
           selectedMarkerListing={selectedMarkerListing}
           clearSelectedMarkerListing={clearSelectedMarkerListing}
           city={city}
-          urlState={urlState}
-          urlActions={urlActions}
           activeContextChips={activeContextChips}
           discoverAreas={discoverAreas}
           selectedArea={selectedArea}
@@ -1925,6 +2030,7 @@ export default function MapDiscovery() {
           totalElements={totalElements}
           setPage={setPage}
         />
+        </div>
       </div>
       <DiscoverOverlaySheets
         isAgriJourney={isAgriJourney}

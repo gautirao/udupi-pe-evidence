@@ -8,7 +8,13 @@ import { useDiscoverCityListings, DiscoverCityListingItem } from '@/hooks/useDis
 import { useSchoolRadiusListings, mapSchoolRadiusCard, SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
 import { useSchoolById, SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
-import { AreaPoint } from '@/components/map/AreaMarkerLayer';
+// Issue #1953 AC12 — `import type`, NOT a value import. AreaPoint is an exported
+// interface used only in type positions in this file. Under isolatedModules esbuild
+// preserves a value-position import of a pure type, so this ONE line dragged
+// AreaMarkerLayer — and therefore leaflet + react-leaflet — into the EAGER entry graph
+// via MapDiscovery, which must stay eager because it IS the Discover page. A missed
+// site from 009edc9b's sweep in this same PR.
+import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { computeFocusBounds } from '@/lib/mapUtils';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { AGRICULTURAL_LAND_PROPERTY_TYPE } from '@/lib/listing-constants';

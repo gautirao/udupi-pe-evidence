@@ -1372,3 +1372,64 @@ describe('AreaGroupsLandingPanel — Resolution-A count leakage guard (Issue #19
     expect(screen.getByText('1 group')).toBeInTheDocument();
   });
 });
+
+// ─── Controls card render-gate invariant (Issue #1953 follow-up) ──────────
+//
+// The interactive Buy/Rent widget that used to live inside this panel's
+// `showControls`-gated card was removed (product-owner ruling — the
+// persistent DiscoverControlBar is the SOLE Buy/Rent control on /discover).
+// The informational pricing-mode paragraph that shared the same gate was
+// deliberately KEPT, so the gate's observable behaviour — whether that
+// paragraph renders at all — must be UNCHANGED: still driven by the exact
+// same four props (`city`, `onCityChange`, `intent`, `onIntentChange`), and
+// still absent whenever any one of them is missing. This is the coupling
+// the task brief calls out explicitly: dropping any of the four props from
+// being threaded down would silently flip this gate and hide the paragraph
+// too, via a null-check rather than a deliberate layout change.
+describe('AreaGroupsLandingPanel — controls-card render gate is unchanged (Issue #1953)', () => {
+  const controlProps = {
+    city: 'bangalore',
+    onCityChange: vi.fn(),
+    intent: 'buy' as const,
+    onIntentChange: vi.fn(),
+  };
+
+  it('renders the pricing-mode paragraph when all four control props are supplied (prop-present branch)', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel {...baseProps} groups={[makeGroup()]} {...controlProps} />,
+    );
+    expect(screen.getByText('Showing sale prices in ₹ across every area.')).toBeInTheDocument();
+    // The interactive Buy/Rent widget itself is gone — never a surviving duplicate control.
+    expect(screen.queryByTestId('intent-selector')).not.toBeInTheDocument();
+  });
+
+  it('reflects intent=rent copy in the same gated paragraph when all four props are supplied', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel {...baseProps} groups={[makeGroup()]} {...controlProps} intent="rent" />,
+    );
+    expect(
+      screen.getByText('Showing monthly rents — same properties, reworded for renting.'),
+    ).toBeInTheDocument();
+  });
+
+  it('omits the pricing-mode paragraph when any one of the four control props is missing (prop-absent branch)', () => {
+    // Omits onIntentChange only — showControls must still evaluate to false,
+    // exactly as it did before the Buy/Rent widget was removed from inside it.
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[makeGroup()]}
+        city={controlProps.city}
+        onCityChange={controlProps.onCityChange}
+        intent={controlProps.intent}
+      />,
+    );
+    expect(screen.queryByText('Showing sale prices in ₹ across every area.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Showing monthly rents — same properties, reworded for renting.')).not.toBeInTheDocument();
+  });
+
+  it('omits the pricing-mode paragraph when none of the four control props are supplied (default/test omission)', () => {
+    renderPanel(<AreaGroupsLandingPanel {...baseProps} groups={[makeGroup()]} />);
+    expect(screen.queryByText('Showing sale prices in ₹ across every area.')).not.toBeInTheDocument();
+  });
+});

@@ -518,6 +518,98 @@ describe('PropertyMap — reset zoom on area deselection (#894)', () => {
   });
 });
 
+// ─── RH1 remount hardening (issue #1953, build step 3) ───────────────────────
+// resetMapTick (MapController) and cityRestoreTick (CityRestorePanner) are
+// props driven by hooks living in MapDiscovery, which does NOT unmount when
+// the map does (e.g. mobile MAP <-> LIST view toggle). Each tick-guard
+// component's own handledTickRef, by contrast, DOES reset to its initial
+// value on every fresh mount. Before the RH1 fix, a remount with the tick
+// still at its already-handled value (unchanged, because MapDiscovery held
+// steady) would satisfy `tick > handledTickRef` again and spuriously refire
+// flyTo, throwing the camera. The fix is adopt-on-mount seeding: the first
+// effect run after a (re)mount seeds handledTickRef from the incoming tick
+// and returns without acting.
+//
+// This test mounts, advances both ticks (a legitimate first fire), unmounts,
+// and remounts with the SAME tick values (as MapDiscovery would present
+// them across a remount) — proving neither flyTo call recurs on the second
+// mount. Covers both handledTickRef sites: MapController.resetMapTick AND
+// CityRestorePanner.cityRestoreTick — the plan explicitly calls out that
+// fixing only one would leave the sibling defeating the mobile acceptance
+// criterion untested.
+describe('PropertyMap — RH1 remount hardening: no spurious camera throw on second mount', () => {
+  const stableMap = {
+    addLayer: vi.fn(),
+    removeLayer: vi.fn(),
+    flyTo: vi.fn(),
+    fitBounds: vi.fn(),
+    getBounds: vi.fn(() => ({
+      getNorth: vi.fn(() => 14),
+      getSouth: vi.fn(() => 13),
+      getEast: vi.fn(() => 75),
+      getWest: vi.fn(() => 74),
+    })),
+    getCenter: vi.fn(() => ({ lat: 13.34, lng: 74.74 })),
+    getZoom: vi.fn(() => 12),
+    setView: vi.fn().mockReturnThis(),
+    getContainer: vi.fn(() => document.body),
+    on: vi.fn(),
+    off: vi.fn(),
+  };
+
+  beforeEach(async () => {
+    stableMap.flyTo.mockClear();
+    stableMap.fitBounds.mockClear();
+    const reactLeaflet = await import('react-leaflet');
+    (reactLeaflet.useMap as ReturnType<typeof vi.fn>).mockReturnValue(stableMap);
+  });
+
+  it('does not re-fire resetMapTick or cityRestoreTick flyTo on a second mount when the tick values have not advanced', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    const cityCenter: [number, number] = [13.34, 74.74];
+    const cityRestoreCenter: [number, number] = [12.97, 77.59];
+
+    const commonProps = {
+      listings: [],
+      cityCenter,
+      cityZoom: 11,
+      cityRestoreCenter,
+      cityRestoreZoom: 10,
+      panToArea: null,
+    };
+
+    // --- First mount: ticks at 0 (true initial mount). Neither guard fires. ---
+    const { rerender, unmount } = render(
+      <PropertyMap {...commonProps} resetMapTick={0} cityRestoreTick={0} />
+    );
+    expect(stableMap.flyTo).not.toHaveBeenCalled();
+
+    // --- Ticks advance (a legitimate Back-button interaction): both panners fire once. ---
+    rerender(<PropertyMap {...commonProps} resetMapTick={1} cityRestoreTick={1} />);
+
+    const resetCallsAfterFirstFire = stableMap.flyTo.mock.calls.filter(
+      (call) => JSON.stringify(call[0]) === JSON.stringify(cityCenter) && call[2]?.duration === 1,
+    );
+    const restoreCallsAfterFirstFire = stableMap.flyTo.mock.calls.filter(
+      (call) => JSON.stringify(call[0]) === JSON.stringify(cityRestoreCenter),
+    );
+    expect(resetCallsAfterFirstFire).toHaveLength(1);
+    expect(restoreCallsAfterFirstFire).toHaveLength(1);
+
+    // --- Unmount the map (e.g. mobile switch from MAP to LIST). ---
+    unmount();
+    stableMap.flyTo.mockClear();
+
+    // --- Remount with the SAME tick values MapDiscovery would still be
+    // holding (its hooks did not unmount alongside the map). Pre-fix, both
+    // handledTickRef guards would reset to 0 and spuriously refire flyTo here. ---
+    render(<PropertyMap {...commonProps} resetMapTick={1} cityRestoreTick={1} />);
+
+    expect(stableMap.flyTo).not.toHaveBeenCalled();
+  });
+});
+
 // ─── R-A per-type disc colour: two different types → different disc colours in divIcon HTML ─────────
 // PropertyMap now uses getPropertyTypeVisual to colour each marker disc.
 // apartment → navy #26395B, land → evergreen #1F7A5C.

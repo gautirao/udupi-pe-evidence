@@ -132,7 +132,14 @@ describe('Issue #1882 PR3 — school-first no-loop invariant (SchoolMarkerFocusP
   });
 
   it('a mapZoom change with no tick bump (e.g. useZoomBand recompute) does not add a second fitBounds', () => {
-    const { rerender } = render(<PropertyMap {...baseProps} mapZoom={11} schoolMarkerFocusTick={1} />);
+    // Issue #1953 (RH1 adopt-on-mount) — a genuine first mount always sees
+    // schoolMarkerFocusTick=0 (see the test above); mount at 0 then bump to 1
+    // mirrors the real sequence instead of asserting on an unreachable
+    // mount-directly-at-1 state.
+    const { rerender } = render(<PropertyMap {...baseProps} mapZoom={11} schoolMarkerFocusTick={0} />);
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+
+    rerender(<PropertyMap {...baseProps} mapZoom={11} schoolMarkerFocusTick={1} />);
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
 
     rerender(<PropertyMap {...baseProps} mapZoom={13} schoolMarkerFocusTick={1} />);
@@ -143,9 +150,13 @@ describe('Issue #1882 PR3 — school-first no-loop invariant (SchoolMarkerFocusP
   });
 
   it('toggling isAgriMode does not change the school-panner fit count (no cross-trigger)', () => {
+    // Issue #1953 (RH1 adopt-on-mount) — mount at tick=0 first (see rationale above).
     const { rerender } = render(
-      <PropertyMap {...baseProps} schoolMarkerFocusTick={1} isAgriMode={false} />,
+      <PropertyMap {...baseProps} schoolMarkerFocusTick={0} isAgriMode={false} />,
     );
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+
+    rerender(<PropertyMap {...baseProps} schoolMarkerFocusTick={1} isAgriMode={false} />);
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
 
     rerender(<PropertyMap {...baseProps} schoolMarkerFocusTick={1} isAgriMode={true} />);

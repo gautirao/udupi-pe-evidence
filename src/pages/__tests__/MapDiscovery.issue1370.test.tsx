@@ -10,8 +10,11 @@
  *
  * Harness mirrors MapDiscovery.issue1178.test.tsx — only PropertyMap, AppLayout, and
  * react-leaflet are mocked, so the real MapDiscovery chrome renders and can be asserted
- * against the DOM. The always-present Buy/Rent `intent-selector` is used as the mount
- * anchor so button-absence is asserted only after the right-panel chrome has rendered.
+ * against the DOM. The always-present Buy/Rent control now lives SOLELY in the
+ * persistent DiscoverControlBar (Issue #1953 single-owner ruling — the panel-level
+ * `intent-selector` this anchor used to target was removed), so
+ * `control-bar-intent-selector` is used as the mount anchor instead, so button-absence
+ * is asserted only after the right-panel chrome has rendered.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -19,6 +22,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import React from 'react';
 import MapDiscovery from '../MapDiscovery';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 
 // ─── Hoisted handles ───────────────────────────────────────────
 const mockUseAuth = vi.hoisted(() =>
@@ -139,8 +143,8 @@ const renderAt = (url: string) =>
     <QueryClientProvider client={makeQC()}>
       <MemoryRouter initialEntries={[url]}>
         <Routes>
-          <Route path="/discover" element={<MapDiscovery />} />
-          <Route path="*" element={<MapDiscovery />} />
+          <Route path="/discover" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
+          <Route path="*" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -168,7 +172,7 @@ describe('Issue #1370 / Figma polish — "Near a school" button removed from all
     renderAt('/discover?city=udupi&journey=area-first');
 
     // Anchor on the always-present Buy/Rent control so chrome has mounted before asserting.
-    await screen.findByTestId('intent-selector');
+    await screen.findByTestId('control-bar-intent-selector');
     // Exact-match guards the REMOVED map quick-filter button ("Near a school"); it must
     // NOT collide with the public-landing journey card ("Search near a school", #1588).
     expect(screen.queryByRole('button', { name: /^near a school$/i })).toBeNull();
@@ -177,7 +181,7 @@ describe('Issue #1370 / Figma polish — "Near a school" button removed from all
   it('guided-entry (no journey) no longer renders the "Near a school" button (removed in Figma polish)', async () => {
     renderAt('/discover?city=udupi');
 
-    await screen.findByTestId('intent-selector');
+    await screen.findByTestId('control-bar-intent-selector');
     // Exact-match guards the REMOVED map quick-filter button ("Near a school"); it must
     // NOT collide with the public-landing journey card ("Search near a school", #1588).
     expect(screen.queryByRole('button', { name: /^near a school$/i })).toBeNull();

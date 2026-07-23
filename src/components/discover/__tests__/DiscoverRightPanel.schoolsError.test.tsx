@@ -47,26 +47,26 @@ vi.mock('@/integrations/supabase/client', () => ({
 // Inner panel hooks — deterministic. The internal useSchoolsByArea is DISABLED in prop
 // mode (schools !== undefined), so its values must NOT leak into the rendered output;
 // the wired props are the source of truth.
-vi.mock('@/hooks/useDiscoverUrlState', () => ({
-  useDiscoverUrlState: vi.fn(() => [
-    {
-      city: 'udupi',
-      areaKey: 'IN|KA|Udupi|Manipal',
-      viewport: null,
-      schoolId: null,
-      radiusKm: null,
-      q: '',
-      journey: 'school-first' as const,
-      groupId: null,
-      filters: { boardFilters: [] as string[], categoryFilters: [] as string[] },
-    },
-    {
-      setFiltersLive: vi.fn(),
-      setSchoolParams: vi.fn(),
-      setSchoolJourney: vi.fn(),
-      clearAreaContext: vi.fn(),
-    },
-  ]),
+// Issue #1953 (build step 2) — SchoolsInAreaPanel now consumes the
+// DiscoverProvider facade instead of calling useDiscoverUrlState() directly.
+vi.mock('@/features/discover/context/useDiscoverContext', () => ({
+  useDiscoverNav: () => ({
+    city: 'udupi',
+    areaKey: 'IN|KA|Udupi|Manipal',
+    schoolId: null,
+    radiusKm: null,
+    q: '',
+    journey: 'school-first' as const,
+    groupId: null,
+    filters: { boardFilters: [] as string[], categoryFilters: [] as string[] },
+  }),
+  useDiscoverViewport: () => null,
+  useDiscoverActions: () => ({
+    setFiltersLive: vi.fn(),
+    setSchoolParams: vi.fn(),
+    setSchoolJourney: vi.fn(),
+    clearAreaContext: vi.fn(),
+  }),
 }));
 
 vi.mock('@/hooks/useDiscoverAreas', () => ({

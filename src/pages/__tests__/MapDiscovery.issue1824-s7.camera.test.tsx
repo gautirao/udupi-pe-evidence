@@ -75,15 +75,19 @@ vi.mock('@/components/layout/AppLayout', () => ({
   AppLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
-vi.mock('@/hooks/useDiscoverUrlState', async () => {
-  const actual = await vi.importActual<typeof import('@/hooks/useDiscoverUrlState')>(
-    '@/hooks/useDiscoverUrlState',
-  );
-  return {
-    ...actual,
-    useDiscoverUrlState: () => mockUseDiscoverUrlState(),
-  };
-});
+// Issue #1953 (build step 2) — MapDiscovery is no longer a production caller
+// of useDiscoverUrlState(); it consumes the DiscoverProvider facade instead,
+// so this suite mocks the facade module rather than the underlying hook.
+vi.mock('@/features/discover/context/useDiscoverContext', () => ({
+  useDiscoverNav: () => mockUseDiscoverUrlState()[0],
+  useDiscoverViewport: () => mockUseDiscoverUrlState()[0].viewport,
+  useDiscoverActions: () => mockUseDiscoverUrlState()[1],
+  // Issue #1953 (build step 3) — MapDiscovery now also reads useDiscoverShell
+  // (mobileView only, for the RH4 bboxTimerRef clear-on-leave-MAP effect).
+  // This suite doesn't exercise the mobile shell, so a static desktop/LIST
+  // stub is sufficient.
+  useDiscoverShell: () => ({ mobileView: 'LIST', setMobileView: vi.fn(), isMobileShell: false }),
+}));
 
 vi.mock('@/hooks/useSchoolRadiusListings', async () => {
   const actual = await vi.importActual<typeof import('@/hooks/useSchoolRadiusListings')>(

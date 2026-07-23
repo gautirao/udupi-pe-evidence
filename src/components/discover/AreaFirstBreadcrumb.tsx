@@ -39,6 +39,15 @@ interface AreaFirstBreadcrumbProps {
  *
  * Deliberately journey-agnostic in copy: no school-first wording ("Selected school")
  * and no stale generic crumbs that lose the group/area context.
+ *
+ * Issue #1953 build step 6 (AC9) — restyled to the same pill-and-chevron
+ * container pattern as the floating map-overlay breadcrumb
+ * (`DiscoverMapBreadcrumb.tsx`'s `BASE_CONTAINER`): one rounded-full pill
+ * shell, chevron-separated crumbs inside. Renders ONLY hierarchy levels that
+ * exist today (region/group crumbs already conditionally omitted above) —
+ * no cluster-level crumb is added here, since that tier does not exist yet
+ * (Areas Gate 3 is a separate, not-yet-approved feature). Every existing
+ * data-testid, prop, and click-through behaviour is unchanged.
  */
 export function AreaFirstBreadcrumb({
   cityLabel,
@@ -65,7 +74,7 @@ export function AreaFirstBreadcrumb({
       aria-label="Breadcrumb"
       data-testid="area-first-breadcrumb"
       className={cn(
-        'flex select-none items-center gap-1.5 text-[13px]',
+        'flex select-none items-center gap-1.5 rounded-full border border-border bg-card/95 px-3 py-2 text-[13px] shadow-sm',
         className,
       )}
     >

@@ -14,6 +14,7 @@ import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DiscoverRightPanel } from '../DiscoverRightPanel';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 
@@ -46,10 +47,17 @@ const baseProps = {
 const makeQC = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
+// Issue #1953 (build step 2) — SchoolsInAreaPanel (rendered by DiscoverRightPanel
+// for 'schools-in-area'/'area-selected' content) now consumes the DiscoverProvider
+// facade instead of calling useDiscoverUrlState() directly, so the tree needs a
+// real provider above it (inside the Router, since DiscoverProvider itself reads
+// useSearchParams).
 const renderPanel = (ui: React.ReactElement) =>
   render(
     <QueryClientProvider client={makeQC()}>
-      <MemoryRouter>{ui}</MemoryRouter>
+      <MemoryRouter>
+        <DiscoverProvider>{ui}</DiscoverProvider>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 

@@ -21,6 +21,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { SchoolSelectedPanel, AreaSchoolCombinedPanel } from '../SchoolJourneyPanels';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 
@@ -60,14 +61,16 @@ function renderSchoolSelected(
   return render(
     <BrowserRouter>
       <QueryClientProvider client={makeQC()}>
-        <SchoolSelectedPanel
-          school={mockSchool}
-          listings={[]}
-          isLoadingListings={false}
-          radiusKm={props.radiusKm}
-          onRadiusChange={vi.fn()}
-          isAuthenticated={props.isAuthenticated}
-        />
+        <DiscoverProvider>
+          <SchoolSelectedPanel
+            school={mockSchool}
+            listings={[]}
+            isLoadingListings={false}
+            radiusKm={props.radiusKm}
+            onRadiusChange={vi.fn()}
+            isAuthenticated={props.isAuthenticated}
+          />
+        </DiscoverProvider>
       </QueryClientProvider>
     </BrowserRouter>,
   );
@@ -79,17 +82,19 @@ function renderCombined(
   return render(
     <BrowserRouter>
       <QueryClientProvider client={makeQC()}>
-        <AreaSchoolCombinedPanel
-          selectedArea={mockArea}
-          selectedSchool={mockSchool}
-          listings={[]}
-          isLoadingListings={false}
-          radiusKm={props.radiusKm}
-          onRadiusChange={vi.fn()}
-          onClearSchool={vi.fn()}
-          onClearArea={vi.fn()}
-          isAuthenticated={props.isAuthenticated}
-        />
+        <DiscoverProvider>
+          <AreaSchoolCombinedPanel
+            selectedArea={mockArea}
+            selectedSchool={mockSchool}
+            listings={[]}
+            isLoadingListings={false}
+            radiusKm={props.radiusKm}
+            onRadiusChange={vi.fn()}
+            onClearSchool={vi.fn()}
+            onClearArea={vi.fn()}
+            isAuthenticated={props.isAuthenticated}
+          />
+        </DiscoverProvider>
       </QueryClientProvider>
     </BrowserRouter>,
   );

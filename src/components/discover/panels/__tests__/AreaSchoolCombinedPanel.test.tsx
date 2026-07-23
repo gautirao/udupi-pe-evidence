@@ -2,6 +2,7 @@ import React from 'react';
 import { screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { renderWithProviders } from '@/test/renderWithProviders';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { AreaSchoolCombinedPanel } from '../SchoolJourneyPanels';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
@@ -61,8 +62,15 @@ const baseProps = () => ({
   isAuthenticated: false,
 });
 
+// Issue #1953 (build step 2) — AreaSchoolCombinedPanel now consumes the
+// DiscoverProvider facade instead of calling useDiscoverUrlState() directly.
 function renderPanel(props: Partial<React.ComponentProps<typeof AreaSchoolCombinedPanel>> = {}) {
-  return renderWithProviders(<AreaSchoolCombinedPanel {...baseProps()} {...props} />, { router: 'browser' });
+  return renderWithProviders(
+    <DiscoverProvider>
+      <AreaSchoolCombinedPanel {...baseProps()} {...props} />
+    </DiscoverProvider>,
+    { router: 'browser' },
+  );
 }
 
 // ── AC1: ReTrends redesign — title is now "Find homes near a school" ──────────

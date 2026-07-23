@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
+import { useDiscoverActions, useDiscoverNav, useDiscoverViewport } from '@/features/discover/context/useDiscoverContext';
 import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
@@ -753,7 +753,10 @@ export function SchoolBrowsePanel({
   const [searchQuery, setSearchQuery] = useState('');
   // Issue #1160 cycle-2: must call setSchoolJourney (not delegate via onSelectSchool(id))
   // so that areaKey is resolved and written to the URL in the same atomic push.
-  const [urlState, urlActions] = useDiscoverUrlState();
+  // Issue #1953 (build step 2) — consumes the DiscoverProvider facade instead
+  // of calling useDiscoverUrlState() directly (state plumbing only).
+  const viewport = useDiscoverViewport();
+  const urlActions = useDiscoverActions();
 
   const schoolSearchResult = useSchoolSearch(searchQuery, city);
   const popularSchoolsResult = usePopularSchools(city, undefined, 6);
@@ -781,7 +784,7 @@ export function SchoolBrowsePanel({
       lat: school.latitude,
       lon: school.longitude,
       // Use current viewport zoom if available; 14 is a safe school-journey default.
-      zoom: urlState.viewport?.zoom ?? 14,
+      zoom: viewport?.zoom ?? 14,
       areaKey: school.areaKey,
     });
   };
@@ -1359,7 +1362,10 @@ export function SchoolSelectedPanel({
   onHoverListing,
 }: SchoolSelectedPanelProps) {
   const navigate = useNavigate();
-  const [urlState, urlActions] = useDiscoverUrlState();
+  // Issue #1953 (build step 2) — consumes the DiscoverProvider facade instead
+  // of calling useDiscoverUrlState() directly (state plumbing only). Only
+  // nav fields are read in this panel; no actions are called here.
+  const urlState = useDiscoverNav();
 
   // Issue #1547 — scroll selected card into view when selection changes.
   const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
@@ -1689,7 +1695,9 @@ export function AreaSchoolCombinedPanel({
   onHoverListing,
 }: AreaSchoolCombinedPanelProps) {
   const navigate = useNavigate();
-  const [urlState] = useDiscoverUrlState();
+  // Issue #1953 (build step 2) — consumes the DiscoverProvider facade instead
+  // of calling useDiscoverUrlState() directly (state plumbing only; read-only).
+  const urlState = useDiscoverNav();
 
   // Issue #1547 — scroll selected card into view when selection changes.
   const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());

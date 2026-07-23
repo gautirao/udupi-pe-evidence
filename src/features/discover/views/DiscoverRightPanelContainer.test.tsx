@@ -39,66 +39,92 @@ vi.mock('@/components/discover/DiscoverRightPanel', () => ({
   ),
 }));
 
+// Issue #1953 (build step 2) — DiscoverRightPanelContainer now consumes the
+// DiscoverProvider facade (useDiscoverNav/useDiscoverActions) directly
+// instead of receiving urlState/urlActions as props, so this suite mocks the
+// facade module instead of passing those two props. Built inside
+// vi.hoisted() so the vi.mock() factory below (hoisted above all
+// imports/consts by Vitest) can close over real values instead of hitting
+// the TDZ.
+const { BASE_URL_STATE, URL_ACTIONS } = vi.hoisted(() => {
+  const urlState: DiscoverUrlState = {
+    city: 'bangalore',
+    areaKey: null,
+    viewport: null,
+    filters: {},
+    schoolId: null,
+    radiusKm: null,
+    q: '',
+    journey: null,
+    groupId: null,
+    selectedGroup: null,
+    intent: 'buy',
+    scope: null,
+  };
+
+  // Large page-owned interface; every method is a no-op stub — the container only
+  // invokes a handful of these from its moved inline closures.
+  const urlActions: DiscoverUrlActions = {
+    changeCity: vi.fn(),
+    setCity: vi.fn(),
+    selectArea: vi.fn(),
+    deselectArea: vi.fn(),
+    reportViewport: vi.fn(),
+    setFiltersLive: vi.fn(),
+    setFiltersCommitted: vi.fn(),
+    setSchoolParams: vi.fn(),
+    clearSchoolSelection: vi.fn(),
+    clearAreaSelection: vi.fn(),
+    setSearchQuery: vi.fn(),
+    clearAllFiltersAndSearch: vi.fn(),
+    setJourney: vi.fn(),
+    selectGroup: vi.fn(),
+    setBoardFilters: vi.fn(),
+    setCategoryFilters: vi.fn(),
+    clearAreaContext: vi.fn(),
+    clearSchoolContext: vi.fn(),
+    startOver: vi.fn(),
+    enterSchoolPicking: vi.fn(),
+    clearSchoolPicking: vi.fn(),
+    backToSchoolPicking: vi.fn(),
+    enterGroupResults: vi.fn(),
+    clearGroupResults: vi.fn(),
+    selectRegionalGroup: vi.fn(),
+    setRegion: vi.fn(),
+    setScope: vi.fn(),
+    setRegionWithMaxKm: vi.fn(),
+    setMaxKm: vi.fn(),
+    clearRegionAndMaxKm: vi.fn(),
+    setSelectedListing: vi.fn(),
+    clearSelectedListing: vi.fn(),
+    setLocality: vi.fn(),
+    clearLocality: vi.fn(),
+    clearAgriFilters: vi.fn(),
+    setIntent: vi.fn(),
+    setSchoolJourney: vi.fn(),
+  };
+
+  return { BASE_URL_STATE: urlState, URL_ACTIONS: urlActions };
+});
+
+vi.mock('@/features/discover/context/useDiscoverContext', () => ({
+  useDiscoverNav: () => BASE_URL_STATE,
+  useDiscoverActions: () => URL_ACTIONS,
+  // Issue #1953 (build step 4, AC28 gap fix) — the container now also reads
+  // the mobile shell slice directly from the facade; default to the desktop
+  // shape (isMobileShell: false) so existing assertions in this file are
+  // unaffected.
+  useDiscoverShell: () => ({
+    isMobileShell: false,
+    mobileView: 'LIST',
+    setMobileView: vi.fn(),
+  }),
+}));
+
 import {
   DiscoverRightPanelContainer,
   type DiscoverRightPanelContainerProps,
 } from './DiscoverRightPanelContainer';
-
-const BASE_URL_STATE: DiscoverUrlState = {
-  city: 'bangalore',
-  areaKey: null,
-  viewport: null,
-  filters: {},
-  schoolId: null,
-  radiusKm: null,
-  q: '',
-  journey: null,
-  groupId: null,
-  selectedGroup: null,
-  intent: 'buy',
-  scope: null,
-};
-
-// Large page-owned interface; every method is a no-op stub — the container only
-// invokes a handful of these from its moved inline closures.
-const URL_ACTIONS: DiscoverUrlActions = {
-  changeCity: vi.fn(),
-  setCity: vi.fn(),
-  selectArea: vi.fn(),
-  deselectArea: vi.fn(),
-  reportViewport: vi.fn(),
-  setFiltersLive: vi.fn(),
-  setFiltersCommitted: vi.fn(),
-  setSchoolParams: vi.fn(),
-  clearSchoolSelection: vi.fn(),
-  clearAreaSelection: vi.fn(),
-  setSearchQuery: vi.fn(),
-  setJourney: vi.fn(),
-  selectGroup: vi.fn(),
-  setBoardFilters: vi.fn(),
-  setCategoryFilters: vi.fn(),
-  clearAreaContext: vi.fn(),
-  clearSchoolContext: vi.fn(),
-  startOver: vi.fn(),
-  enterSchoolPicking: vi.fn(),
-  clearSchoolPicking: vi.fn(),
-  backToSchoolPicking: vi.fn(),
-  enterGroupResults: vi.fn(),
-  clearGroupResults: vi.fn(),
-  selectRegionalGroup: vi.fn(),
-  setRegion: vi.fn(),
-  setScope: vi.fn(),
-  setRegionWithMaxKm: vi.fn(),
-  setMaxKm: vi.fn(),
-  clearRegionAndMaxKm: vi.fn(),
-  setSelectedListing: vi.fn(),
-  clearSelectedListing: vi.fn(),
-  setLocality: vi.fn(),
-  clearLocality: vi.fn(),
-  clearAgriFilters: vi.fn(),
-  setIntent: vi.fn(),
-  setSchoolJourney: vi.fn(),
-};
 
 const JOURNEY_VIEW: DiscoverJourneyTransitionsView = {
   startOverTick: 0,
@@ -149,8 +175,6 @@ function baseProps(
     selectedMarkerListing: null,
     clearSelectedMarkerListing: vi.fn(),
     city: 'bangalore',
-    urlState: BASE_URL_STATE,
-    urlActions: URL_ACTIONS,
     activeContextChips: null,
     discoverAreas: [],
     selectedArea: null,

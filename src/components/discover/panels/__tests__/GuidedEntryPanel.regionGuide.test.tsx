@@ -24,8 +24,15 @@ const { mockUseDiscoverUrlState } = vi.hoisted(() => ({
   mockUseDiscoverUrlState: vi.fn(),
 }));
 
-vi.mock('@/hooks/useDiscoverUrlState', () => ({
-  useDiscoverUrlState: () => mockUseDiscoverUrlState(),
+// Issue #1953 (build step 2) — GuidedEntryPanel now consumes the
+// DiscoverProvider facade (useDiscoverNav/useDiscoverActions) instead of
+// calling useDiscoverUrlState() directly. Mocking the facade module instead
+// of the underlying hook keeps every existing
+// mockUseDiscoverUrlState.mockReturnValue([state, actions]) call below
+// unchanged.
+vi.mock('@/features/discover/context/useDiscoverContext', () => ({
+  useDiscoverNav: () => mockUseDiscoverUrlState()[0],
+  useDiscoverActions: () => mockUseDiscoverUrlState()[1],
 }));
 
 // ADVISORY-1 rework — hoisted spy so tests can assert the (city, listingPurpose)
@@ -92,44 +99,18 @@ describe('GuidedEntryPanel — Issue #1808 region-overview guidance', () => {
     });
   });
 
-  it('decision q2 — the ring target is the EXISTING JourneySwitcher section; no new journey-choice row/component exists', () => {
-    renderPanel({ regionGuideRingActive: true, regionGuideMarkerKind: 'zones', regionGuideNonce: 1 });
-    const section = screen.getByTestId('journey-switcher-section');
-    expect(section).toHaveClass('dp-attn-target');
-    expect(section).toHaveClass('dp-attn-on');
-    // The section must actually contain the pre-existing journey cards, not a
-    // fresh sibling component.
-    expect(screen.getByTestId('journey-card-area-first')).toBeInTheDocument();
-    // No new journey-choice row/component was added anywhere in the panel.
-    expect(screen.queryByTestId('journey-choice-row')).not.toBeInTheDocument();
-    expect(screen.queryAllByTestId(/journey-choice/)).toHaveLength(0);
-  });
-
-  it('ring is OFF (no dp-attn-on) when regionGuideRingActive=false (e.g. deep-link source)', () => {
-    renderPanel({ regionGuideRingActive: false, regionGuideMarkerKind: 'zones', regionGuideNonce: 1 });
-    const section = screen.getByTestId('journey-switcher-section');
-    expect(section).not.toHaveClass('dp-attn-on');
-    expect(section).not.toHaveClass('dp-attn-static');
-  });
-
-  it('markerKind="zones" — aria-live helper mirrors the map card zones copy', () => {
-    mockUseDiscoverUrlState.mockReturnValue([{ scope: 'north' }, { setScope: mockSetScope }]);
-    renderPanel({ regionGuideRingActive: true, regionGuideMarkerKind: 'zones', regionGuideNonce: 1 });
-    const helper = screen.getByTestId('region-guide-helper');
-    expect(helper).toHaveAttribute('aria-live', 'polite');
-    expect(helper).toHaveTextContent(
-      "North Bangalore selected. The map shows this region's zones — choose how you want to continue below.",
-    );
-  });
-
-  it('markerKind="areas" — aria-live helper mirrors the map card areas copy', () => {
-    mockUseDiscoverUrlState.mockReturnValue([{ scope: 'south' }, { setScope: mockSetScope }]);
-    renderPanel({ regionGuideRingActive: true, regionGuideMarkerKind: 'areas', regionGuideNonce: 1 });
-    const helper = screen.getByTestId('region-guide-helper');
-    expect(helper).toHaveTextContent(
-      "South Bangalore selected. The map shows this region's areas — choose how you want to continue below.",
-    );
-  });
+  // Issue #1953 build step 6 (AC27, A1 retirement) — the ring-target/
+  // ring-off/markerKind-helper-copy/reduced-motion tests that used to live
+  // here (against GuidedEntryPanel's "journey-switcher-section" wrapper)
+  // moved to src/components/discover/__tests__/JourneySwitcher.test.tsx,
+  // since the ring + aria-live helper now render on JourneySwitcher's own
+  // persistent tablist container (mounted once in DiscoverRightPanel, not
+  // per-panel) — GuidedEntryPanel no longer renders that DOM at all. The
+  // "no new journey-choice row" assertion also moved there. This file keeps
+  // only the assertions that are still genuinely GuidedEntryPanel's own
+  // behaviour: the macro-region card click/deselect/focus wiring below, and
+  // the withholding-language guard (still checks this panel's own rendered
+  // strings).
 
   it('no rendered string ever contains withholding language (q1 guard)', () => {
     mockUseDiscoverUrlState.mockReturnValue([{ scope: 'north' }, { setScope: mockSetScope }]);
@@ -139,23 +120,6 @@ describe('GuidedEntryPanel — Issue #1808 region-overview guidance', () => {
       regionGuideNonce: 1,
     });
     expect(container.textContent).not.toMatch(WITHHOLDING_PHRASE);
-  });
-
-  it('helper is absent when the ring is not active (never fires on deep-link)', () => {
-    renderPanel({ regionGuideRingActive: false, regionGuideMarkerKind: 'zones', regionGuideNonce: 0 });
-    expect(screen.queryByTestId('region-guide-helper')).not.toBeInTheDocument();
-  });
-
-  it('prefers-reduced-motion → static ring class, not the animated pulse class', () => {
-    renderPanel({
-      regionGuideRingActive: true,
-      regionGuideMarkerKind: 'zones',
-      regionGuideNonce: 1,
-      prefersReducedMotion: true,
-    });
-    const section = screen.getByTestId('journey-switcher-section');
-    expect(section).toHaveClass('dp-attn-static');
-    expect(section).not.toHaveClass('dp-attn-on');
   });
 
   it('selecting a NEW region calls onRegionSelectFromPanel exactly once (arms the pulse with source=panel)', async () => {

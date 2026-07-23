@@ -11,6 +11,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Loader2 } from "lucide-react";
 import { DISTRICT_TO_CITY_SLUG } from "@/lib/localityUtils";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { DiscoverProvider } from "@/features/discover/context/DiscoverContext";
 
 // Eagerly loaded — these are on the critical path for first paint
 import MapDiscovery from "./pages/MapDiscovery";
@@ -18,10 +19,28 @@ import LandingPage from "./pages/LandingPage";
 import Auth from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
 import NotFound from "./pages/NotFound";
-import ListingDetail from "./pages/ListingDetail";
 
 // Lazily loaded — Trends uses Recharts (~200 KB); load only when navigated to
 const Trends = lazy(() => import("./pages/Trends"));
+// Issue #1953 AC12 — ListingDetail was the ONLY eager route reaching Leaflet, via
+// two real runtime component edges: AgriListingDetail -> ListingDetailBoundaryMap
+// and ListingDetailMainContent -> PoiMiniMap. Lazifying it removes that app-source
+// edge and ~222 kB from the entry chunk. It renders inside the existing Suspense
+// boundary below (the same one every other lazy route uses), so no new boundary is
+// needed. Do not make this eager again; see src/__tests__/App.lazyRoutes.test.ts,
+// which fails if it is.
+//
+// THIS DID NOT REMOVE THE LEAFLET MODULEPRELOAD, and the earlier wording here
+// implied it had. dist/index.html STILL carries a vendor-leaflet modulepreload and
+// still loads the leaflet CSS. That preload was never caused by ListingDetail: it
+// comes from vite.config.ts grouping react-leaflet into vendor-react, so the chain
+//     entry -> vendor-react -> react-leaflet -> vendor-leaflet
+// exists through CHUNK ASSIGNMENT and survives removing every application-source
+// edge. AC12's primary assertion remains NOT_SATISFIED and is deferred by product
+// ruling to a follow-up that must first reproduce or explain the createContext
+// init-order crash the vite.config comment warns about. See the doc comment in
+// src/__tests__/App.lazyRoutes.test.ts, which is the authority on this.
+const ListingDetail = lazy(() => import("./pages/ListingDetail"));
 const TrendsAreaResolved = lazy(() => import("./pages/TrendsAreaResolved"));
 
 // Lazily loaded — Broker routes; not needed for public/admin users
@@ -97,7 +116,14 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/" element={<LandingPage />} />
-              <Route path="/discover" element={<MapDiscovery />} />
+              <Route
+                path="/discover"
+                element={
+                  <DiscoverProvider>
+                    <MapDiscovery />
+                  </DiscoverProvider>
+                }
+              />
               <Route path="/listing/:id" element={<ListingDetail />} />
               <Route path="/trends" element={<AppLayout><Trends /></AppLayout>} />
               <Route path="/trends/:citySlug/areas/:areaSlug" element={<AppLayout><TrendsAreaResolved /></AppLayout>} />

@@ -1,10 +1,10 @@
 import type { RefObject, Dispatch, SetStateAction } from 'react';
+import { useDiscoverActions, useDiscoverNav, useDiscoverViewport } from '@/features/discover/context/useDiscoverContext';
 import { PropertyMap, type PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { Card } from '@/components/ui/card';
 import { DiscoverMapStatusHints } from '@/components/discover/DiscoverMapStatusHints';
 import { DiscoverMapContextOverlay } from '@/components/discover/DiscoverMapContextOverlay';
 import { DiscoverMapLegend } from '@/components/discover/DiscoverMapLegend';
-import { CitySelect } from '@/components/discover/CitySelect';
 import { RegionGuidanceCard, type RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
 import { ExploreMapPanel } from '@/components/map/ExploreMapPanel';
 import { DiscoverMapCountBadge } from '@/components/discover/DiscoverMapCountBadge';
@@ -20,7 +20,6 @@ import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
-import type { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
 import type {
   DiscoverJourneyTransitionsView,
   DiscoverJourneyTransitionsCommands,
@@ -82,7 +81,6 @@ export interface DiscoverMapCanvasProps {
   handlePolygonCleared: () => void;
   selectedSchool: SchoolResult | null;
   memoizedInitialCenter: [number, number] | undefined;
-  urlState: DiscoverUrlState;
   cityCenter: [number, number] | undefined;
   cityZoom: number | undefined;
   overviewAreas: AreaPoint[];
@@ -99,7 +97,6 @@ export interface DiscoverMapCanvasProps {
   handleAreaClusterClick: (cluster: AreaMarkerClusterInfo) => void;
   handleAreaMarkersComputed: (shownCount: number, totalCount: number) => void;
   schoolZoneLabels: ZoneLabelPoint[];
-  urlActions: DiscoverUrlActions;
   setMapZoom: Dispatch<SetStateAction<number>>;
   handleBoundsChange: (bbox: [number, number, number, number]) => void;
   panToArea: AreaPoint | null;
@@ -212,7 +209,6 @@ export function DiscoverMapCanvas({
   handlePolygonCleared,
   selectedSchool,
   memoizedInitialCenter,
-  urlState,
   cityCenter,
   cityZoom,
   overviewAreas,
@@ -228,7 +224,6 @@ export function DiscoverMapCanvas({
   handleAreaClusterClick,
   handleAreaMarkersComputed,
   schoolZoneLabels,
-  urlActions,
   setMapZoom,
   handleBoundsChange,
   panToArea,
@@ -296,6 +291,13 @@ export function DiscoverMapCanvas({
   handleStepMarkerListing,
   showMarkerInList,
 }: DiscoverMapCanvasProps) {
+  // Issue #1953 (build step 2) — consumes the DiscoverProvider facade
+  // directly rather than receiving urlState/urlActions as props (D2 prop
+  // migration rule: these are the two facade-owned props dropped from the
+  // MapDiscovery call site).
+  const nav = useDiscoverNav();
+  const viewport = useDiscoverViewport();
+  const urlActions = useDiscoverActions();
   return (
     <div ref={mapContainerRef} className="lg:w-1/2 h-64 lg:h-full relative order-1 lg:order-1" style={{ background: 'hsl(var(--map-bg))' }} onClick={
       // a3 — background click dismisses the marker popover. stopPropagation is applied
@@ -334,7 +336,7 @@ export function DiscoverMapCanvas({
             radiusKm: clampSchoolRadiusKm(filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM), name: selectedSchool.name,
           } : undefined}
           initialCenter={memoizedInitialCenter}
-          initialZoom={urlState.viewport?.zoom}
+          initialZoom={viewport?.zoom}
           cityCenter={cityCenter}
           cityZoom={cityZoom}
           areas={overviewAreas}
@@ -355,7 +357,7 @@ export function DiscoverMapCanvas({
           // area-first/school-first "dense group selected" seam per Stage-A evidence
           // (focusedGroupAreas is derived from urlState.groupId alone, journey-agnostic).
           enableAreaMarkerDegradation={mapZoom <= areaLayerMaxZoom && !!focusedGroupAreas}
-          selectedAreaKey={selectedArea?.areaKey ?? urlState.areaKey ?? null}
+          selectedAreaKey={selectedArea?.areaKey ?? nav.areaKey ?? null}
           // Issue #1798 PR-B (Unit D) — panel↔map plumbing. areaSearchMatchKeys forces
           // matching areas to full labelled pins as the user types (no camera move —
           // this only affects AreaMarkerLayer's bucketing, never a panner tick).
@@ -389,7 +391,7 @@ export function DiscoverMapCanvas({
           panToArea={panToArea}
           resetMapTick={journeyView.composedResetMapTick}
           onReady={() => setMapReady(true)}
-          journey={urlState.journey}
+          journey={nav.journey}
           selectedSchool={selectedSchool}
           schools={schools}
           showSchoolMarkers={showSchoolMarkers}
@@ -402,7 +404,7 @@ export function DiscoverMapCanvas({
           schoolFocusLon={selectedSchoolLon}
           schoolFocusRadiusKm={(() => {
             // Issue #1210: clamp so the auto-zoom fits the effective (>=1 km) circle.
-            const r = urlState.radiusKm ?? filters.schoolRadiusKm;
+            const r = nav.radiusKm ?? filters.schoolRadiusKm;
             return r != null ? clampSchoolRadiusKm(r) : r;
           })()}
           schoolMarkerFocusTick={schoolMarkerFocusTick}
@@ -439,7 +441,7 @@ export function DiscoverMapCanvas({
           // selectedListingId = URL param (persistent selection from marker click).
           // hoveredListingId = ephemeral React state (resets on mouseleave/blur, never URL).
           // Both flow only to MarkerClusterLayer visual — never to MapController (no flyTo).
-          selectedListingId={urlState.selectedListing}
+          selectedListingId={nav.selectedListing}
           hoveredListingId={hoveredListingId}
           onMarkerClickWithPosition={handleMarkerClickWithPosition}
         />
@@ -465,33 +467,30 @@ export function DiscoverMapCanvas({
           no journey picked yet). Sits beneath the top-left city chip rendered
           by DiscoverMapContextOverlay just above. Never shown once a region
           is picked (RegionGuidanceCard takes over) or a journey is chosen. */}
-      {isLandingState && !urlState.scope && !urlState.journey && <ExploreMapPanel />}
+      {isLandingState && !nav.scope && !nav.journey && <ExploreMapPanel />}
 
       {/* Radius legend — bottom-left, raised above the Leaflet zoom control (bottomleft).
           Only the selected-school radius state; swatches match the real map markers/ring.
           Issue #1824 Slice S8 — extracted to DiscoverMapLegend (chrome call). */}
       <DiscoverMapLegend schoolRadiusChrome={schoolRadiusOverlay ? { schoolRadiusKm: filters.schoolRadiusKm } : null} />
 
-      {/* City select — top-right. Issue #1588 — hidden on the public landing
-          (guided-entry), where the city control lives in the right-panel hero
-          controls card; restored for every drill-down state. Issue #1595 — also
-          hidden on the area-first selected-group step (not part of the approved
-          mock); city remains switchable from the landing via Start over. Issue #1607 —
-          also hidden on the area-first city landing, where the city switcher now lives
-          in the right-panel controls card (mock parity). Issue #1606 — also hidden on the
-          area-first selected-AREA results, where City + Looking-to move into the in-panel
-          controls card (mock parity, no duplicate control). */}
-      {resolvedPanelContent !== 'guided-entry' && !isSelectedGroupState && !isAreaFirstCityLanding && resolvedPanelContent !== 'area-selected' && (
-        <div className="absolute top-4 right-4 z-[1000] w-44">
-          <CitySelect value={city} onChange={handleCityChange} className="bg-card shadow-sm" />
-        </div>
-      )}
+      {/* City select — REMOVED in #1953 build step 6 (ownership invariant).
+          Previously shown top-right for every drill-down state except
+          guided-entry/selected-group/area-first-city-landing/area-selected
+          (Issues #1588/#1595/#1607/#1606). It co-rendered with the persistent
+          DiscoverControlBar in every one of those states — a real visible
+          duplicate city-selection control, not just a test artifact. The
+          persistent control bar is now the SOLE city-selection control on
+          /discover. `handleCityChange` is no longer read by this component's
+          JSX — city changes route through DiscoverControlBar's facade-driven
+          `changeCity`, which reaches the identical end state via the existing
+          urlState-reactive effects in useDiscoverPageState.ts (city-sync +
+          areaKey-clear effects) — confirmed by reading, not assumed; nothing
+          needed to move. */}
 
       {/* Issue #1808 — region-overview map guidance card. Region-overview
-          is a sub-state of 'guided-entry' (scope set, journey null), so
-          CitySelect above is already hidden here — no collision. Never
-          covers the map centre or the CitySelect control (top-right
-          desktop / top-of-map mobile, below the breadcrumb). Presentational
+          is a sub-state of 'guided-entry' (scope set, journey null). Never
+          covers the map centre. Presentational
           only — no camera/URL writes. Card + legend render for every
           source (map/panel/deeplink, AC5); only the ring/nudge are gated
           to a real map/panel pick via regionGuideRingActive. */}
@@ -522,8 +521,8 @@ export function DiscoverMapCanvas({
           areaMarkerListings,
           isSelectedGroupState,
           isAreaFirstCityLanding,
-          journey: urlState.journey,
-          selectedLocality: urlState.selectedLocality,
+          journey: nav.journey,
+          selectedLocality: nav.selectedLocality,
           selectedRegion,
         }}
       />
@@ -555,7 +554,7 @@ export function DiscoverMapCanvas({
         areaResultSummaryText={areaResultSummaryText}
         groupSelectedBadgeCopy={groupSelectedBadgeCopy}
         fallbackBadgeCopy={fallbackBadgeCopy}
-        journey={urlState.journey}
+        journey={nav.journey}
         schoolRadiusActive={schoolRadiusActive}
         schoolRadiusPillNoun={schoolRadiusPillNoun}
         schoolFirstAreaSchoolCount={schoolFirstAreaSchoolCount}

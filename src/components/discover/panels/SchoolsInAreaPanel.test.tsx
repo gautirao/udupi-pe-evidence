@@ -41,15 +41,16 @@ const mockUrlState = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@/hooks/useDiscoverUrlState', () => ({
-  useDiscoverUrlState: vi.fn(() => [
-    mockUrlState,
-    {
-      setFiltersLive: mockSetFiltersLive,
-      setSchoolParams: vi.fn(),
-      clearAreaContext: vi.fn(),
-    },
-  ]),
+// Issue #1953 (build step 2) — SchoolsInAreaPanel now consumes the
+// DiscoverProvider facade instead of calling useDiscoverUrlState() directly.
+vi.mock('@/features/discover/context/useDiscoverContext', () => ({
+  useDiscoverNav: () => mockUrlState,
+  useDiscoverViewport: () => mockUrlState.viewport,
+  useDiscoverActions: () => ({
+    setFiltersLive: mockSetFiltersLive,
+    setSchoolParams: vi.fn(),
+    clearAreaContext: vi.fn(),
+  }),
 }));
 
 const mockRefetch = vi.hoisted(() => vi.fn());
@@ -91,7 +92,7 @@ vi.mock('@/hooks/useDiscoverAreas', () => ({
 // PanelHeader is a real component; no need to stub it for these tests.
 
 import { SchoolsInAreaPanel } from './SchoolsInAreaPanel';
-import { useSchoolsByArea, SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
+import { useSchoolsByArea, type SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
 import { mockUseInfiniteQueryResult } from '@/test-utils/mockReactQueryResults';
 
 type SchoolsByAreaQueryData = InfiniteData<SchoolsByAreaResponse>;

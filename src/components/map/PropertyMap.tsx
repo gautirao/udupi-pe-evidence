@@ -8,9 +8,9 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
-import { PropertyListing, PropertyType, PropertyImage } from '@/hooks/usePropertyListings';
+import type { PropertyListing, PropertyType, PropertyImage } from '@/hooks/usePropertyListings';
 import { DrawControl } from '@/components/map/DrawControl';
-import { AreaMarkerLayer, AreaPoint, type AreaMarkerClusterInfo } from '@/components/map/AreaMarkerLayer';
+import { AreaMarkerLayer, type AreaPoint, type AreaMarkerClusterInfo } from '@/components/map/AreaMarkerLayer';
 import type { CameraIntent } from '@/hooks/useDiscoverMapData';
 import { SchoolMarkerLayer } from '@/components/map/SchoolMarkerLayer';
 import { SchoolZoneLabelLayer, type ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
@@ -782,7 +782,12 @@ function SchoolFocusPanner({
   radiusKm?: number;
 }) {
   const map = useMap();
-  const handledTickRef = useRef(0);
+  // RH1 (issue #1953): number | null — null means "not yet adopted this
+  // mount". A map remount resets this ref to null while schoolFocusTick
+  // (owned by MapDiscovery, which does NOT unmount with the map) keeps its
+  // prior value, so without adopt-on-mount seeding the guard below would
+  // spuriously fire on mount and throw the camera.
+  const handledTickRef = useRef<number | null>(null);
   // Centre we last performed a fit/flyTo for. Lets us tell an initial focus
   // (centre changed / first fit) apart from a radius change for the same school.
   const focusedCenterRef = useRef<{ lat: number; lon: number } | null>(null);
@@ -806,6 +811,13 @@ function SchoolFocusPanner({
     }
 
     const tick = schoolFocusTick ?? 0;
+    if (handledTickRef.current === null) {
+      // RH1 adopt-on-mount: seed from the incoming tick without acting. On a
+      // genuine first mount tick is 0, matching the prior `tick === 0` no-op.
+      // On a remount, this absorbs the persisted tick instead of re-firing.
+      handledTickRef.current = tick;
+      return;
+    }
     // Fire only when tick strictly exceeds the last handled value.
     // This prevents re-firing on every render and eliminates any feedback loop
     // where a fit-triggered moveend (→ ViewportWatcher → reportViewport) would
@@ -899,10 +911,16 @@ function SchoolMarkerFocusPanner({
   markerPositions?: Array<{ lat: number; lon: number }>;
 }) {
   const map = useMap();
-  const handledTickRef = useRef(0);
+  // RH1 (issue #1953): adopt-on-mount — see SchoolFocusPanner above for the
+  // full rationale (identical pattern across all five tick-guard sites).
+  const handledTickRef = useRef<number | null>(null);
 
   useEffect(() => {
     const tick = schoolMarkerFocusTick ?? 0;
+    if (handledTickRef.current === null) {
+      handledTickRef.current = tick;
+      return;
+    }
     if (tick === 0 || tick <= handledTickRef.current) return;
     handledTickRef.current = tick;
 
@@ -975,10 +993,16 @@ function AreaRestorePanner({
   bbox?: [[number, number], [number, number]];
 }) {
   const map = useMap();
-  const handledTickRef = useRef(0);
+  // RH1 (issue #1953): adopt-on-mount — see SchoolFocusPanner above for the
+  // full rationale (identical pattern across all five tick-guard sites).
+  const handledTickRef = useRef<number | null>(null);
 
   useEffect(() => {
     const tick = areaRestoreTick ?? 0;
+    if (handledTickRef.current === null) {
+      handledTickRef.current = tick;
+      return;
+    }
     if (tick === 0 || tick <= handledTickRef.current) return;
     handledTickRef.current = tick;
 
@@ -1013,10 +1037,16 @@ function CityRestorePanner({
   cityZoom?: number;
 }) {
   const map = useMap();
-  const handledTickRef = useRef(0);
+  // RH1 (issue #1953): adopt-on-mount — see SchoolFocusPanner above for the
+  // full rationale (identical pattern across all five tick-guard sites).
+  const handledTickRef = useRef<number | null>(null);
 
   useEffect(() => {
     const tick = cityRestoreTick ?? 0;
+    if (handledTickRef.current === null) {
+      handledTickRef.current = tick;
+      return;
+    }
     if (tick === 0 || tick <= handledTickRef.current) return;
     handledTickRef.current = tick;
 
@@ -1140,7 +1170,24 @@ function MapController({
   //     after arming ALWAYS consumes (clears) the suppression — it either
   //     skips (still within the TTL window) or falls through and fits
   //     (already expired). Either way nothing is left armed afterwards.
-  const lastHandledSeqRef = useRef(0);
+  // RH1 (issue #1953) — SIXTH tick/seq-guard site of the same class as the
+  // five handledTickRef sites converted elsewhere in this file (see
+  // SchoolFocusPanner above for the full rationale). Missed by the original
+  // sweep because that sweep was scoped by IDENTIFIER NAME (`handledTickRef`)
+  // rather than by BEHAVIOUR — `lastHandledSeqRef` guards the exact same
+  // hazard under a different name, so a name-scoped search could never find
+  // it: cameraIntent lives in useDiscoverMapData (ABOVE DiscoverMapMount's
+  // real-unmount boundary) and is never reset after consumption, while this
+  // ref lives BELOW that boundary and was seeded to a fixed 0. On the second
+  // mobile Map open, lastHandledSeqRef resets to 0 while the persisted
+  // cameraIntent.seq is already >= 1, so the `<=` guard below would pass and
+  // spuriously re-fire the last-consumed camera move, discarding whatever
+  // viewport the remounted map had just re-initialised to from the URL — and
+  // (via suppressForSeqRef below) also swallow the next legitimate leaf-click
+  // refit within the TTL window. `null` means "not yet adopted this mount";
+  // adopt-on-mount seeds from the incoming seq without firing, so a remount
+  // absorbs the already-consumed sequence instead of treating it as new.
+  const lastHandledSeqRef = useRef<number | null>(null);
   const suppressForSeqRef = useRef<number | null>(null);
   const suppressArmedAtRef = useRef(0);
   // Generous enough to cover a typical markers/agri refit round-trip after a
@@ -1149,9 +1196,25 @@ function MapController({
   const CAMERA_SUPPRESS_TTL_MS = 8000;
 
   useEffect(() => {
+    // Adopt-on-mount, mirroring the handledTickRef sites exactly: compute the
+    // sentinel-defaulted value BEFORE any early return, and seed on the very
+    // first effect execution for THIS instance regardless of whether
+    // cameraIntent happens to be null yet. useDiscoverMapData's
+    // cameraIntentSeqRef starts at 0 and is incremented to >=1 before the
+    // FIRST ever publish, and cameraIntent itself starts as useState(null)
+    // and is never set before a user click — so a genuine first-ever mount
+    // always observes seq 0 here (cameraIntent null), exactly like the
+    // tick-guard sites always observe tick 0 on a genuine first mount. Only a
+    // remount can observe a non-zero seq on this very first run, and adopting
+    // it silently (instead of re-firing) is precisely the fix.
+    const seq = cameraIntent?.seq ?? 0;
+    if (lastHandledSeqRef.current === null) {
+      lastHandledSeqRef.current = seq;
+      return;
+    }
     if (!cameraIntent) return;
-    if (cameraIntent.seq <= lastHandledSeqRef.current) return;
-    lastHandledSeqRef.current = cameraIntent.seq;
+    if (seq <= lastHandledSeqRef.current) return;
+    lastHandledSeqRef.current = seq;
     if (cameraIntent.framing === 'leaf') {
       suppressForSeqRef.current = cameraIntent.seq;
       suppressArmedAtRef.current = Date.now();
@@ -1243,9 +1306,15 @@ function MapController({
   // handledTickRef tracks the last tick value we acted on so that a city change
   // (which also updates cityCenter/cityZoom deps) does not re-fire when the tick
   // has not changed. Only fires when tick strictly exceeds the last handled value.
-  const handledTickRef = useRef(0);
+  // RH1 (issue #1953): adopt-on-mount — see SchoolFocusPanner above for the
+  // full rationale (identical pattern across all five tick-guard sites).
+  const handledTickRef = useRef<number | null>(null);
   useEffect(() => {
     const tick = resetMapTick ?? 0;
+    if (handledTickRef.current === null) {
+      handledTickRef.current = tick;
+      return;
+    }
     if (tick === 0 || tick <= handledTickRef.current) return;
     handledTickRef.current = tick;
     // Issue #1801 (qa-fast R6) — area deselect/back is a new navigation; drop

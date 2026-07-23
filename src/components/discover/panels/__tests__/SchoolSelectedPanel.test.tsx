@@ -2,6 +2,7 @@ import React from 'react';
 import { screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { renderWithProviders } from '@/test/renderWithProviders';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { SchoolSelectedPanel } from '../SchoolJourneyPanels';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
@@ -50,7 +51,12 @@ describe('SchoolSelectedPanel', () => {
       isAuthenticated: false,
     };
 
-    return renderWithProviders(<SchoolSelectedPanel {...defaultProps} {...props} />, { router: 'browser' });
+    return renderWithProviders(
+      <DiscoverProvider>
+        <SchoolSelectedPanel {...defaultProps} {...props} />
+      </DiscoverProvider>,
+      { router: 'browser' },
+    );
   };
 
   const renderWithReturn = renderPanel;

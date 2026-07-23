@@ -4,8 +4,9 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { DiscoverRightPanel } from '../DiscoverRightPanel';
-import { AreaPoint } from '@/components/map/AreaMarkerLayer';
-import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
+import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
+import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -31,7 +32,12 @@ const baseProps = {
 // Issue #1745 Batch A scope-change fix — GuidedEntryPanel now calls useDiscoverSummary
 // (a useQuery hook), so every render in this file needs a QueryClientProvider ancestor.
 // Matches the shared renderWithProviders() convention (fresh QueryClient per render).
-const renderPanel = (ui: React.ReactElement) => renderWithProviders(ui);
+// Issue #1953 (build step 2) — GuidedEntryPanel/school-journey panels now consume
+// the DiscoverProvider facade instead of calling useDiscoverUrlState() directly,
+// so every render needs a real DiscoverProvider ancestor (inside the Router
+// renderWithProviders already mounts).
+const renderPanel = (ui: React.ReactElement) =>
+  renderWithProviders(<DiscoverProvider>{ui}</DiscoverProvider>);
 
 describe('DiscoverRightPanel', () => {
   it('renders the panel with data-testid', () => {
@@ -139,6 +145,124 @@ describe('DiscoverRightPanel', () => {
     // 'Manipal' appears in both the breadcrumb area crumb and the area heading (a4 redesign).
     expect(screen.getAllByText('Manipal').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByTestId('quick-select-chip')).not.toBeInTheDocument();
+  });
+
+  it('#1953 regression — renders COMPACT journey tabs for a journey-less inferred panel state (areaKey with no journey= param)', () => {
+    // Reproduces a real production URL this app constructs itself:
+    // LandingPage/AreaCtaBlock/AreaGuide/AreaGuideHero/Trends all link to
+    // /discover?...&areaKey=... WITHOUT a journey= param. derivePanelContent
+    // still infers 'area-selected' from areaKey alone (see
+    // discoverPanelState.ts's journey-less inference branches), so `journey`
+    // itself is undefined here — exactly like those deep links.
+    //
+    // Before the fix, JourneySwitcher's density was `activeJourney != null`,
+    // and DiscoverRightPanel passed `activeJourney={journey ?? null}` — so
+    // with `journey` undefined, density fell back to FULL cards (the
+    // "Recommended" badge and "Choose how you want to search" heading would
+    // render) even though the panel is showing area results, not the
+    // landing. This test fails on that old implementation and passes once
+    // density is derived from `panelContent !== 'guided-entry'` instead.
+    const area = makeArea('k1', 'Manipal', 5);
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-selected"
+        areas={[area]}
+        selectedArea={area}
+        areaListings={[]}
+        isLoadingListings={false}
+        // journey intentionally omitted.
+      />,
+    );
+    expect(screen.queryByText('Recommended')).not.toBeInTheDocument();
+    expect(screen.queryByText('Choose how you want to search')).not.toBeInTheDocument();
+    // Task 1's aria-selected decision: a journey-less inferred single-journey
+    // state still marks the equivalent tab selected (inferJourneyFromPanelContent),
+    // rather than inheriting "nothing selected" just because the URL omitted journey=.
+    expect(screen.getByTestId('journey-card-area-first')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('journey-card-school-first')).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('#1953 regression — renders FULL journey cards on the guided-entry landing (the other direction of the density derivation)', () => {
+    // COMPANION TO THE TEST ABOVE, AND IT EXISTS BECAUSE THAT ONE ALONE CANNOT FAIL
+    // IN BOTH DIRECTIONS. The test above pins "non-landing must be compact". On its
+    // own, a hardcoded `compact={true}` — or any change flattening every state to the
+    // compact strip — would satisfy it, and would satisfy every other unit test in this
+    // repository. That is the can't-fail-instrument class this issue has paid for
+    // repeatedly: a canary that could not fail, a roster assertion blind to an
+    // unreachable option, an ownership checker matching the wrong element.
+    //
+    // So this asserts the OPPOSITE direction: the Discover landing must keep the FULL
+    // cards.
+    //
+    // WHAT THIS PAIR DOES AND DOES NOT BUY — corrected after review, because the
+    // original wording here claimed more than the evidence supports and would have
+    // stood as documentation. The two tests BRACKET the density function at its two
+    // endpoints, so neither a blanket-compact nor a blanket-full implementation
+    // survives. They do NOT pin the full derivation: a predicate keyed off
+    // `selectedArea`, off `panelContent === 'area-selected'`, or off
+    // `inferJourneyFromPanelContent(panelContent) != null` passes both endpoints while
+    // breaking other panel states. The `it.each` below NARROWS that gap — it kills the
+    // three predicates named there, and does not claim more. Five samples of a 16-valued
+    // function do not pin it either. Claiming "pins the derivation" from two samples was
+    // exactly the overstatement this file warns about, and "closes that gap" was a second,
+    // smaller instance of the same thing caught by the same reviewer.
+    renderPanel(<DiscoverRightPanel {...baseProps} panelContent="guided-entry" city="udupi" areas={[]} />);
+    expect(screen.getByText('Choose how you want to search')).toBeInTheDocument();
+    // getByText, not getAllByText(...).length >= 1: only one node can match, and getByText
+    // THROWS on multiple matches — so it also catches a resurrected duplicate JourneySwitcher
+    // mount, which is a live risk because build step 6 removed exactly such a second copy.
+    expect(screen.getByText('Recommended')).toBeInTheDocument();
+    // The landing genuinely has no journey selected — no tab may claim otherwise.
+    expect(screen.getByTestId('journey-card-area-first')).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByTestId('journey-card-school-first')).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByTestId('journey-card-agri-first')).toHaveAttribute('aria-selected', 'false');
+  });
+
+  // Sampling the density function beyond its two endpoints. Each state here is one a
+  // WRONG-but-endpoint-passing predicate diverges on:
+  //   - `panelContent === 'area-selected'`                  breaks every journey landing
+  //   - `selectedArea != null`                              breaks states with no selected area
+  //
+  // UPDATE (product-owner mode-tab invariant fix): `inferJourneyFromPanelContent`
+  // now resolves 'area-school-combined' to 'school-first' — see discoverPanelState.ts
+  // for why (the state is genuinely mixed; this only resolves the journey-less
+  // cold-load path, and #1738's journey-explicit checks in useMarkerSelection.ts /
+  // useDiscoverJourneyTransitions.ts remain load-bearing and must not be deleted).
+  // As a result `inferJourneyFromPanelContent(panelContent) != null` is now
+  // BEHAVIOURALLY IDENTICAL to the shipped `panelContent !== 'guided-entry'` —
+  // 'guided-entry' is the sole state either maps to null. It is therefore no
+  // longer a distinguishable wrong implementation at all, and nothing here
+  // kills it: by construction, not by omission. Do not go hunting for the case
+  // that "covers" it; there isn't one and there does not need to be.
+  //
+  // 'area-school-combined' stays in this array because it still exercises
+  // COMPACT-tabs rendering for the mixed area+school state — do not read its
+  // presence here as pinning any null/non-null distinction anymore.
+  it.each([
+    'area-selected',
+    'area-groups-landing',
+    'school-browse',
+    'agri-landing',
+    'area-school-combined',
+  ] as const)('#1953 — panelContent="%s" renders COMPACT tabs, never the full cards', (panelContent) => {
+    renderPanel(
+      <DiscoverRightPanel {...baseProps} panelContent={panelContent} city="udupi" areas={[]} />,
+    );
+    // POSITIVE ANCHOR — LOAD-BEARING, DO NOT REMOVE. The two assertions below are pure
+    // ABSENCE checks, and absence is satisfied trivially by a component that renders
+    // NOTHING. Without this line all five cases pass green against a revert of build
+    // step 6's persistence — i.e. `{panelContent === 'guided-entry' && <JourneySwitcher/>}`
+    // — which is the exact inverse of the behaviour AC27 requires and precisely what that
+    // step churned. That is the "a broken app makes negative assertions pass" class this
+    // repository has been bitten by before, and THIS BLOCK was an instance of it until a
+    // reviewer caught it. Not the whole suite: the journey-less test above already failed
+    // against that revert independently, which is why the control produced 6 failures and
+    // not 5 — a distinction worth keeping, since overstating scope is the thing this file
+    // has now been corrected on three times. Mounted + no heading + no badge => compact.
+    expect(screen.getByTestId('journey-card-area-first')).toBeInTheDocument();
+    expect(screen.queryByText('Choose how you want to search')).not.toBeInTheDocument();
+    expect(screen.queryByText('Recommended')).not.toBeInTheDocument();
   });
 
   it('shows loading skeletons while isLoadingListings', () => {
@@ -483,13 +607,19 @@ describe('DiscoverRightPanel — search input (#952)', () => {
   });
 });
 
-// ─── Buy/Rent intent selector in the right-panel header (Discover Figma polish) ─
-// The Buy/Rent control was moved from a right-aligned bar to the left/content side of
-// the right-panel header, above the journey cards. These tests assert it renders there
-// (visible above the journey cards) and that the Buy/Rent state behaviour is preserved.
-
-describe('DiscoverRightPanel — Buy/Rent intent selector header', () => {
-  it('renders the Buy/Rent control in the header when onIntentChange is provided', () => {
+// ─── Buy/Rent single-owner invariant (product-owner ruling, #1953 follow-up) ─
+// The floating top-strip Buy/Rent control that used to live in this component's
+// header (Issue #1494) was REMOVED entirely: the persistent DiscoverControlBar
+// (a sibling of DiscoverRightPanel, not rendered by it) is now the SOLE Buy/Rent
+// control on /discover. These tests lock in that DiscoverRightPanel itself never
+// renders a Buy/Rent control at any panelContent, even when onIntentChange/intent
+// are supplied — replacing the old "renders it in the header" assertions, which
+// asserted exactly the duplicate this ruling retires. The click→onIntentChange
+// state-behaviour coverage this describe block used to own is not lost: it is
+// still exercised against the real control in DiscoverControlBar.test.tsx
+// ("clicking Rent calls the facade's setIntent action").
+describe('DiscoverRightPanel — Buy/Rent single-owner invariant', () => {
+  it('never renders a Buy/Rent control at guided-entry, even when onIntentChange/intent are provided', () => {
     renderPanel(
       <DiscoverRightPanel
         {...baseProps}
@@ -499,35 +629,42 @@ describe('DiscoverRightPanel — Buy/Rent intent selector header', () => {
         onIntentChange={vi.fn()}
       />,
     );
-    expect(screen.getByTestId('intent-selector')).toBeInTheDocument();
-    expect(screen.getByText('Looking to')).toBeInTheDocument();
-    expect(screen.getByTestId('intent-selector-buy')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('intent-selector-rent')).toHaveAttribute('aria-pressed', 'false');
-    // Journey cards still render below the control.
+    expect(screen.queryByTestId('intent-selector')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('intent-selector-buy')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('intent-selector-rent')).not.toBeInTheDocument();
+    // Journey cards still render (unaffected by the Buy/Rent removal).
     expect(screen.getByTestId('journey-card-area-first')).toBeInTheDocument();
   });
 
-  it('clicking Rent fires onIntentChange("rent") (state behaviour preserved)', async () => {
-    const user = userEvent.setup();
-    const onIntentChange = vi.fn();
+  it('never renders a Buy/Rent control at area-selected, even when onIntentChange/intent are provided', () => {
+    const area = makeArea('k1', 'Manipal', 5);
     renderPanel(
       <DiscoverRightPanel
         {...baseProps}
-        panelContent="guided-entry"
-        areas={[]}
+        panelContent="area-selected"
+        areas={[area]}
+        selectedArea={area}
+        areaListings={[]}
+        isLoadingListings={false}
         intent="buy"
-        onIntentChange={onIntentChange}
+        onIntentChange={vi.fn()}
       />,
     );
-    await user.click(screen.getByTestId('intent-selector-rent'));
-    expect(onIntentChange).toHaveBeenCalledWith('rent');
+    expect(screen.queryByTestId('intent-selector')).not.toBeInTheDocument();
   });
 
-  it('does not render the top-strip intent selector when onIntentChange is absent', () => {
-    // The always-on top-strip Buy/Rent control is gated on onIntentChange. Tested on a
-    // non-landing panel (agri-landing) since the public landing (guided-entry) embeds its
-    // own Buy/Rent control inside the hero controls card per the ReTrends mock (#1588).
-    renderPanel(<DiscoverRightPanel {...baseProps} panelContent="agri-landing" areas={[]} />);
+  it('does not render the removed top-strip intent selector at any other panel state either', () => {
+    // Tested on a non-landing, non-area-selected panel (agri-landing) — this state used
+    // to be exactly where the now-removed floating top-strip control appeared.
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-landing"
+        areas={[]}
+        intent="buy"
+        onIntentChange={vi.fn()}
+      />,
+    );
     expect(screen.queryByTestId('intent-selector')).not.toBeInTheDocument();
   });
 });

@@ -17,6 +17,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import React from 'react';
 import MapDiscovery from '../MapDiscovery';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 
 // ─── Capture helper ──────────────────────────────────────────────────────────
@@ -57,15 +58,19 @@ vi.mock('@/components/layout/AppLayout', () => ({ RoleAwareHeader: () => null,
   AppLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
-vi.mock('@/hooks/useDiscoverUrlState', async () => {
-  const actual = await vi.importActual<typeof import('@/hooks/useDiscoverUrlState')>(
-    '@/hooks/useDiscoverUrlState',
-  );
-  return {
-    ...actual,
-    useDiscoverUrlState: () => mockUseDiscoverUrlState(),
-  };
-});
+// Issue #1953 (build step 2) — MapDiscovery is no longer a production caller
+// of useDiscoverUrlState(); it consumes the DiscoverProvider facade instead,
+// so this suite mocks the facade module rather than the underlying hook.
+vi.mock('@/features/discover/context/useDiscoverContext', () => ({
+  useDiscoverNav: () => mockUseDiscoverUrlState()[0],
+  useDiscoverViewport: () => mockUseDiscoverUrlState()[0].viewport,
+  useDiscoverActions: () => mockUseDiscoverUrlState()[1],
+  // Issue #1953 (build step 3) — MapDiscovery now also reads useDiscoverShell
+  // (mobileView only, for the RH4 bboxTimerRef clear-on-leave-MAP effect).
+  // This suite doesn't exercise the mobile shell, so a static desktop/LIST
+  // stub is sufficient.
+  useDiscoverShell: () => ({ mobileView: 'LIST', setMobileView: vi.fn(), isMobileShell: false }),
+}));
 
 vi.mock('@/hooks/useAgriMapListings', () => ({
   useAgriMapListings: vi.fn(() => ({
@@ -189,8 +194,8 @@ function renderAt(url: string) {
     <QueryClientProvider client={makeQC()}>
       <MemoryRouter initialEntries={[url]}>
         <Routes>
-          <Route path="/discover" element={<MapDiscovery />} />
-          <Route path="*" element={<MapDiscovery />} />
+          <Route path="/discover" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
+          <Route path="*" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -285,8 +290,8 @@ describe('Issue #1447 — agriGroupFocusBounds includes sector geometry', () => 
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
         <MemoryRouter initialEntries={['/discover?city=udupi&journey=agri-first&region=N&maxKm=50']}>
           <Routes>
-            <Route path="/discover" element={<MapDiscovery />} />
-            <Route path="*" element={<MapDiscovery />} />
+            <Route path="/discover" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
+            <Route path="*" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,

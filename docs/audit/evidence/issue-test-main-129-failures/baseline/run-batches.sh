@@ -1,15 +1,32 @@
 #!/usr/bin/env bash
 # Batched vitest baseline runner for issue #1825 (avoids full-suite OOM).
 # Usage: bash run-batches.sh <run-label>   e.g. run-1 | run-2
+#
+# Issue #1953 PV8: this script hardcoded a `cd` to the MAIN repo checkout, so
+# running it unmodified from a worktree silently tested the WRONG TREE and
+# reported green for code that was never executed. REPO_ROOT now overrides
+# the target tree; the default is unchanged, so existing callers (main-repo
+# CI/local runs with no REPO_ROOT set) behave exactly as before.
 set -u
-cd /Users/gouthamrao/projects/udupi-property-explorer || exit 2
+REPO_ROOT="${REPO_ROOT:-/Users/gouthamrao/projects/udupi-property-explorer}"
+cd "$REPO_ROOT" || exit 2
 RUN="${1:-run-1}"
 OUT="docs/audit/evidence/issue-test-main-129-failures/baseline/$RUN"
 mkdir -p "$OUT"
 VITEST="node node_modules/.bin/vitest run"
 
 # Batch name -> paths (each batch kept small to avoid heap OOM)
-names=(discover-tests discover-panels map broker listing components-misc hooks lib pages-tests pages-broker-admin misc)
+# Issue #1953 PV8: added `features-discover` — no prior batch globbed
+# src/features/discover/**, which is where the #1953 context facade (and its
+# unit tests) live; without this batch those tests would silently never run.
+# Issue #1953 F4: added `tests-discover`. Same defect class as PV8 — NO batch
+# matched the top-level tests/ directory, so six files never ran at all:
+#   GuidedEntryPanel.summary.test.tsx, useDiscoverUrlState.scope.test.ts,
+#   panels-parity.test.tsx, map-layer-derivation.test.ts,
+#   marker-popover-1738-gating.test.ts, marker-popover-1798-group-results-gating.test.ts
+# useDiscoverUrlState.scope.test.ts covers the very hook the #1953 facade
+# migration touches and had apparently never been exercised by this runner.
+names=(discover-tests discover-panels map broker listing components-misc hooks lib pages-tests pages-broker-admin misc features-discover tests-discover)
 paths=(
   "src/components/discover/__tests__"
   "src/components/discover/panels"
@@ -22,6 +39,8 @@ paths=(
   "src/pages/__tests__"
   "src/pages/broker src/pages/admin src/pages/MapDiscovery.test.tsx"
   "src/utils src/__tests__ src/test"
+  "src/features/discover"
+  "tests/discover"
 )
 
 SUMMARY="$OUT/_batch-summary.txt"

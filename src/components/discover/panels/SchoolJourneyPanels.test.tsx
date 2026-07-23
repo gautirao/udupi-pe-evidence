@@ -12,6 +12,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { screen, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '@/test/renderWithProviders';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { SchoolSelectedPanel } from './SchoolJourneyPanels';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
@@ -45,19 +46,23 @@ const mockSchool: SchoolResult = {
   distanceKm: 1.5,
 };
 
+// Issue #1953 (build step 2) — SchoolSelectedPanel now consumes the
+// DiscoverProvider facade instead of calling useDiscoverUrlState() directly.
 function renderPanel(props: Partial<React.ComponentProps<typeof SchoolSelectedPanel>> = {}) {
   return renderWithProviders(
-    <SchoolSelectedPanel
-      school={mockSchool}
-      listings={[makeListing('l-1'), makeListing('l-2')]}
-      isLoadingListings={false}
-      radiusKm={2}
-      onRadiusChange={vi.fn()}
-      isAuthenticated={true}
-      onStartOver={vi.fn()}
-      intent="buy"
-      {...props}
-    />,
+    <DiscoverProvider>
+      <SchoolSelectedPanel
+        school={mockSchool}
+        listings={[makeListing('l-1'), makeListing('l-2')]}
+        isLoadingListings={false}
+        radiusKm={2}
+        onRadiusChange={vi.fn()}
+        isAuthenticated={true}
+        onStartOver={vi.fn()}
+        intent="buy"
+        {...props}
+      />
+    </DiscoverProvider>,
   );
 }
 

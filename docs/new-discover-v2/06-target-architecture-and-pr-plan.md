@@ -14,6 +14,71 @@ separate, explicit user go-ahead.
 
 ---
 
+## SUPERSEDED — mobile shell design (as-built update, 2026-07-22)
+
+**Every mention below of a `~42%`-height map band, a grab-handle "stacking sheet", or a hard `h-64`
+mobile map container is superseded.** Issue #1953 (build steps 3–6) shipped a different mobile
+shell than this plan originally scoped: a **List-first Map/List toggle**, not a proportional
+stacking sheet. Where this document still describes the stacking-sheet shape (Feature 1 items 2/3/
+7/11/18, Feature 2 item 11, Feature 3 PR-B item 11, Feature 4 PR-B item 11), that text is retained
+**only** as a historical record of what was originally planned and is marked
+`[SUPERSEDED — see this note]` inline — it does not describe shipped behaviour. The as-built
+contract is:
+
+- **List is the mobile default.** At the `isMobileShell` breakpoint, the right panel renders
+  full-width; there is no permanently-visible map band underneath it.
+- **The map is not mounted, and no tiles are requested, until the user opens Map.** A "Map" trigger
+  switches `mobileView` to `'MAP'`; `DiscoverMapMount` (not a CSS show/hide) owns whether
+  `DiscoverMapCanvas` mounts at all.
+- **Returning to List real-unmounts the map** — `mobileView !== 'MAP'` renders a literal `null` for
+  the map subtree, not a `display:none`/`visibility:hidden` toggle. This is deliberate: it is what
+  makes "no tiles requested until Map opens" true on the way back from Map too, not just on first
+  load.
+- **Map/List is presentation-only UI state.** It lives in `useDiscoverShell()` (component state),
+  never in the URL/history — switching Map↔List does not push or replace a history entry and is not
+  restored on refresh/Back/Forward.
+- **Two stacking constraints a real browser forced during build step 4** (load-bearing; a future
+  change that regresses either will silently break mobile Discover for first-time visitors):
+  - The mobile "Map" trigger must **not** share an anchor with `DiscoverConsentBanner` (#1576). The
+    trigger was originally `fixed bottom-4 left-1/2` at `z-30`, the exact same bottom-center anchor
+    the consent banner uses at `z-50` for every first-time visitor (consent undecided) — the banner
+    sat on top and made the trigger unclickable. Fix: the trigger anchors to a **different** corner
+    (`top-20 right-4`), so the two can never share a hit-test region regardless of z-index.
+  - The full-screen mobile Map overlay must render **above** the sticky site header
+    (`RoleAwareHeader`, `sticky top-0 z-50`). The overlay was originally `z-40`, which stacked below
+    the header in the same stacking context — the header's own content intercepted clicks meant for
+    the overlay's "List" close button. Fix: the overlay renders at `z-[60]`, a genuine
+    stacking-context comparison against the header's `z-50` (both are top-level positioned elements
+    with no intervening stacking context), not a `display:none` on the header.
+
+**Known limitation:** scroll restoration is wired only to `AreaGroupsLandingPanel`'s own scroll
+container. Level-2/results panels and the school/agri panels each own a separate scroll container
+that is **not yet wired** to restore scroll position — do not assume "restores panel scroll
+position" generalizes across every panel; today it is true only for the area-groups landing panel.
+
+---
+
+### Invariant: on mobile List, city identity is carried by the control bar
+
+`AreaIndicatorOverlay` (the city/area chip) is rendered **inside `DiscoverMapCanvas`**, which
+`DiscoverMapMount` unmounts entirely in mobile List. Its absence there is correct — it is a map
+overlay and there is no map — but it means **the unified control bar is the only thing naming the
+current city on mobile List**.
+
+This was verified in a browser at 390x844: with the map unmounted, `area-indicator-overlay` is
+absent and `control-bar-city-select` carries the city label.
+
+**Why this is written down.** Between the lazy-mount commit and the control-bar commit, mobile List
+showed *neither* — no chip and no city label. Nothing failed, because no test covers that
+combination. It closed by sequence rather than by design. If a future change removes the city label
+from the control bar, or moves the control bar off the mobile List view, that regression returns
+silently. This line is what makes it visible.
+
+**Known limitation of the scroll contract.** `useScrollPositionAcrossToggle` is wired only to
+`AreaGroupsLandingPanel`'s scroll container. Level-2 / results panels and the school and agri panels
+own separate scroll containers that are not yet wired, so a Map -> List round trip from those states
+does not preserve scroll position.
+
 ## Core delivery rule
 
 The unit of planning and sign-off is a **complete customer feature**, not a technical layer. A
@@ -204,12 +269,16 @@ state unreachable with current data.
    breadcrumb → switch city (or see "Soon" for unavailable cities) → switch Buy/Rent → type into
    the area-jump autocomplete and land on a canonical state → switch mode (Areas/Schools/Agri) and
    see the breadcrumb reset appropriately → resize/reload the browser and confirm the shell
-   persists → do all of the above on a ≤820px viewport with the stacking sheet.
+   persists → do all of the above on a ≤820px viewport with the stacking sheet
+   `[SUPERSEDED — see "SUPERSEDED — mobile shell design" note above; shipped as a List-first
+   Map/List toggle, not a proportional stacking sheet]`.
 3. **Included frozen-design state IDs.** `shell-city-switcher-open`, `shell-area-autocomplete-open`,
    plus the shared chrome (control bar, mode selector, breadcrumb frame, responsive shell) that
    every other state's screenshot shows but which is *this* feature's surface, not the journeys'.
    `areas-city-default-mobile` and `areas-area-listings-mobile` are included **only** for their
-   shell-infrastructure aspects (the `~42%`-height map band, grab-handle sheet, `<560px` grid
+   shell-infrastructure aspects (the `~42%`-height map band, grab-handle sheet
+   `[SUPERSEDED — see "SUPERSEDED — mobile shell design" note above; shipped as a List-first
+   Map/List toggle]`, `<560px` grid
    collapse mechanism) — the Areas-specific *content* inside that shell is Feature 3's job, and
    Feature 3 re-verifies its own mobile acceptance using this infrastructure. **Acknowledged
    boundary leak (after adversarial review):** because no `≤820px` breakpoint exists in production
@@ -229,7 +298,8 @@ state unreachable with current data.
    autocomplete replacing the disconnected `ScopedSearch`/`CitySelect` pair
    ([03](03-functional-parity-matrix.md) row 9, Part C item 5) per decision D-Shell-1; the `≤820px`
    proportional stacking-sheet shell ([03](03-functional-parity-matrix.md) rows 19–20, Part C item
-   6); `role="tablist"`/`role="tab"` semantics + visible focus rings for the mode selector
+   6) `[SUPERSEDED — see "SUPERSEDED — mobile shell design" note above; shipped as a List-first
+   Map/List toggle, not a proportional stacking sheet]`; `role="tablist"`/`role="tab"` semantics + visible focus rings for the mode selector
    ([01](01-frozen-design-audit.md) Phase 2/3 a11y intent).
 6. **Backend/data changes.** None. This feature is entirely frontend/shell — no endpoint, schema,
    or migration work. (Confirms [03](03-functional-parity-matrix.md)'s classification of the
@@ -246,7 +316,9 @@ state unreachable with current data.
    Bangalore · View schools →" pattern); breadcrumb restyle to the pill+chevron pattern, rendering
    only hierarchy levels that exist **today** (no cluster crumb — that's Feature 3's job once the
    cluster tier exists); mode-selector restyle to `tablist`/`tab` cards with the check-badge
-   selection pattern; the `≤820px` stacking-sheet shell replacing the hard `h-64` mobile band.
+   selection pattern; the `≤820px` stacking-sheet shell replacing the hard `h-64` mobile band
+   `[SUPERSEDED — see "SUPERSEDED — mobile shell design" note above; shipped as a List-first
+   Map/List toggle with real map unmount on List, not a proportional stacking sheet]`.
 8. **Map/geospatial changes.** None beyond what the stacking sheet requires (the map pane resizes
    to `~42%` height on mobile; no new map logic, camera behaviour, or marker layer changes).
 9. **URL and restoration behaviour.** No new params and no changes to push/replace discipline —
@@ -256,7 +328,9 @@ state unreachable with current data.
 10. **Desktop acceptance.** Visually matches `shell-city-switcher-open` / `shell-area-autocomplete-open`
     at 1366×768; control bar, mode selector, and breadcrumb render and behave identically across
     all three modes; autocomplete resolves to the correct canonical URL per mode.
-11. **Mobile acceptance.** At 390×844: `~42%`-height map band with grab-handle sheet, single-column
+11. **Mobile acceptance.** At 390×844: `~42%`-height map band with grab-handle sheet
+    `[SUPERSEDED — see "SUPERSEDED — mobile shell design" note above; shipped as a List-first
+    Map/List full-screen-overlay toggle]`, single-column
     layout below 560px, all shell controls (city/mode/autocomplete/breadcrumb) usable via touch
     with no horizontal scroll or clipped controls.
 12. **Accessibility acceptance.** Mode selector exposes `role="tablist"`/`role="tab"` +
@@ -362,7 +436,9 @@ stack.
    restores the exact selected-school + radius + area state.
 10. **Desktop acceptance.** Matches all 5 Schools states at 1366×768, including the plum
     dashed-circle radius overlay and distance-sorted homes grid.
-11. **Mobile acceptance.** All 5 Schools states re-verified inside Feature 1's stacking-sheet shell
+11. **Mobile acceptance.** All 5 Schools states re-verified inside Feature 1's mobile shell
+    `[SUPERSEDED wording — see "SUPERSEDED — mobile shell design" note above; the shell is a
+    List-first Map/List toggle, not a "stacking sheet"]`
     at 390×844 — this is where Feature 2 proves the shell infrastructure actually works for real
     journey content, not just the empty shell.
 12. **Accessibility acceptance.** Board/level filter chips and radius-selector chips are keyboard
@@ -1189,8 +1265,10 @@ unmodified as a compatibility layer (D-Areas-6); user sign-off to proceed to PR 
     profiles: a zero-cluster-level region, a one-cluster-level region, and a two-cluster-level
     region, all against real Bangalore data (plus a synthetic/seeded shallower city if Bangalore
     alone can't exercise the zero-cluster case).
-11. **Mobile acceptance.** All states re-verified at 390×844 inside Feature 1's stacking-sheet
-    shell, including the single-column (`<560px`) listing-grid collapse and the **long-breadcrumb
+11. **Mobile acceptance.** All states re-verified at 390×844 inside Feature 1's mobile shell
+    `[SUPERSEDED wording — see "SUPERSEDED — mobile shell design" note above; the shell is a
+    List-first Map/List toggle, not a "stacking sheet"]`,
+    including the single-column (`<560px`) listing-grid collapse and the **long-breadcrumb
     mobile treatment**. **Revised collapse pattern (after adversarial review — "first + last two"
     was found to drop the region/direction crumb, the single most orientation-critical level in a
     directional-cluster hierarchy):** collapse to **city + region (always visible) + `…` + current
@@ -1590,8 +1668,9 @@ parcel journey and see it at design parity.
 10. **Desktop acceptance.** All 4 states match at 1366×768 with real town data, all four
     concentric bands rendering correctly (no off-by-one band, correct per-ring fill opacity — the
     specific risk flagged in [03](03-functional-parity-matrix.md) Part C item 8).
-11. **Mobile acceptance.** All 4 states re-verified at 390×844 inside Feature 1's stacking-sheet
-    shell.
+11. **Mobile acceptance.** All 4 states re-verified at 390×844 inside Feature 1's mobile shell
+    `[SUPERSEDED wording — see "SUPERSEDED — mobile shell design" note above; the shell is a
+    List-first Map/List toggle, not a "stacking sheet"]`.
 12. **Accessibility acceptance.** Direction cards, distance-band selector, and town/parcel rows are
     keyboard operable with visible focus; reuses Feature 1's a11y tooling.
 13. **Loading, empty and error handling.** Town/parcel loading, empty (no towns in this

@@ -18,15 +18,14 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AreaPoint } from '@/components/map/AreaMarkerLayer';
+import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
 import { AgriListingPanel } from './panels/AgriListingPanel';
-import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
-import { IntentSelector } from './IntentSelector';
-import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
+import { inferJourneyFromPanelContent, type DiscoverPanelContent } from '@/utils/discoverPanelState';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { RegionScopedAreaGroup } from '@/hooks/useRegionScopedAreaGroups';
@@ -35,6 +34,7 @@ import type { CorridorGroupData, CumulativeDistanceTier } from '@/hooks/useRegio
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PanelHeader } from './PanelHeader';
 import { GuidedEntryPanel } from './panels/GuidedEntryPanel';
+import { JourneySwitcher } from './JourneySwitcher';
 import { AreaSelectionPanel } from './panels/AreaSelectionPanel';
 import { AreaGroupsLandingPanel } from './panels/AreaGroupsLandingPanel';
 import { AreaGroupResultsPanel } from './panels/AreaGroupResultsPanel';
@@ -562,6 +562,14 @@ export interface DiscoverRightPanelProps {
    * page-level classification.
    */
   scopeNamespaces?: ScopeNamespaces;
+  /**
+   * Issue #1953 (build step 4, AC28 gap fix) — true while the mobile Map
+   * overlay is open. Forwarded unchanged to every AreaGroupsLandingPanel
+   * render site so its Level-1 scroll container preserves position across
+   * the List<->Map round trip. Defaults to false (desktop / callers that
+   * don't wire the mobile shell).
+   */
+  isMobileMapOpen?: boolean;
   /** Called when the user selects a group from the landing panel. */
   onSelectGroup?: (groupId: string) => void;
   /**
@@ -936,6 +944,7 @@ export function DiscoverRightPanel({
   isRegionScopedGroupsError = false,
   onRetryRegionScopedGroups,
   scopeNamespaces,
+  isMobileMapOpen = false,
   onSelectGroup,
   groupId = null,
   onClearGroup,
@@ -1403,6 +1412,7 @@ export function DiscoverRightPanel({
               isRegionScopedGroupsError={isRegionScopedGroupsError}
               onRetryRegionScopedGroups={onRetryRegionScopedGroups}
               scopeNamespaces={scopeNamespaces}
+              isMobileMapOpen={isMobileMapOpen}
               onSelectGroup={onSelectGroup ?? (() => undefined)}
               onStartOver={onStartOver}
               groupId={groupId}
@@ -1438,6 +1448,7 @@ export function DiscoverRightPanel({
             isRegionScopedGroupsError={isRegionScopedGroupsError}
             onRetryRegionScopedGroups={onRetryRegionScopedGroups}
             scopeNamespaces={scopeNamespaces}
+            isMobileMapOpen={isMobileMapOpen}
             onSelectGroup={onSelectGroup ?? (() => undefined)}
             onStartOver={onStartOver}
             groupId={groupId}
@@ -1479,6 +1490,7 @@ export function DiscoverRightPanel({
                 isRegionScopedGroupsError={isRegionScopedGroupsError}
                 onRetryRegionScopedGroups={onRetryRegionScopedGroups}
                 scopeNamespaces={scopeNamespaces}
+                isMobileMapOpen={isMobileMapOpen}
                 onSelectGroup={onSelectGroup ?? (() => undefined)}
                 onStartOver={onStartOver}
                 groupId={groupId}
@@ -1510,6 +1522,7 @@ export function DiscoverRightPanel({
               isRegionScopedGroupsError={isRegionScopedGroupsError}
               onRetryRegionScopedGroups={onRetryRegionScopedGroups}
               scopeNamespaces={scopeNamespaces}
+              isMobileMapOpen={isMobileMapOpen}
               onSelectGroup={onSelectGroup ?? (() => undefined)}
               onStartOver={onStartOver}
               groupId={groupId}
@@ -1845,32 +1858,95 @@ export function DiscoverRightPanel({
     activeContextChips != null &&
     !PANELS_WITH_INLINE_CHIPS.has(panelContent);
 
-  // Issue #1607 — the area-first CITY-LEVEL landing (group cards, no resolved group)
-  // carries its own city + Buy/Rent controls card inside the panel (mock parity), so
-  // the floating top-strip Buy/Rent is suppressed there to avoid a duplicate control.
-  // The selected-group drill-down (Level 2) keeps the top-strip control unchanged.
-  const isAreaFirstLandingControls =
-    panelContent === 'area-groups-landing' &&
-    !(groupId?.trim() && areaGroups.some((g) => g.id === groupId.trim()));
+  // Issue #1808, relocated in #1953 build step 6 — the region-guide helper
+  // copy used to be computed inside GuidedEntryPanel from its own
+  // useDiscoverRegionSummary() call. Now that the ring/helper live on the
+  // PERSISTENT JourneySwitcher mount (below, not just at guided-entry),
+  // compute the same copy here from `summaryRegions`/`scope` — data this
+  // component already receives as props (sourced from the identical backend
+  // region-summary rollup MapDiscovery fetches once) — rather than
+  // introducing a second useDiscoverRegionSummary() call.
+  const regionGuideSelectedRegionLabel =
+    summaryRegions.find((r) => r.regionKey === scope)?.regionLabel ?? scope ?? '';
+  const regionGuideHelperText = regionGuideMarkerKind === 'zones'
+    ? `${regionGuideSelectedRegionLabel} selected. The map shows this region's zones — choose how you want to continue below.`
+    : regionGuideMarkerKind === 'areas'
+      ? `${regionGuideSelectedRegionLabel} selected. The map shows this region's areas — choose how you want to continue below.`
+      : `${regionGuideSelectedRegionLabel} selected. The map shows an overview of this region — choose how you want to continue below.`;
 
   return (
     <div
       className="flex flex-col lg:w-1/2 border-l border-border bg-background overflow-hidden order-2 lg:order-2"
       data-testid="discover-right-panel"
     >
-      {/* Issue #1494 — Buy/Rent intent selector, visible at the top of the right panel.
-          Left-aligned (Figma) so it sits on the content side, above the journey cards.
-          Issue #1588 — suppressed on the public landing (guided-entry), where Buy/Rent
-          lives inside the hero controls card instead (avoids a duplicate control).
-          Issue #1607 — also suppressed on the area-first CITY-LEVEL landing, where the
-          Buy/Rent control lives inside the in-panel controls card (no duplicate).
-          Issue #1606 — also suppressed on area-selected, where Buy/Rent moves into the
-          in-panel City + Looking-to controls card (mock parity, no duplicate control). */}
-      {onIntentChange && panelContent !== 'guided-entry' && panelContent !== 'area-selected' && !isAreaFirstLandingControls && (
-        <div className="flex items-center justify-start gap-3 px-4 py-3 border-b border-border/50 shrink-0 bg-background">
-          <IntentSelector intent={intent} onIntentChange={onIntentChange} />
-        </div>
-      )}
+      {/* Issue #1953 build step 6 (AC27, A1 retirement) — the persistent mode
+          tab cards. This is now the SOLE mode-selection control (previously
+          duplicated inside GuidedEntryPanel's landing-only copy, removed in
+          this step) — mounted once here, above the per-panel switch, so it
+          is reachable at every panel state, not just the bare landing. */}
+      <div className="px-4 pt-4 pb-2 border-b border-border shrink-0">
+        <JourneySwitcher
+          // Issue #1953 follow-up fix — density must track the ACTUAL
+          // rendered panel state, not the raw `journey` URL param.
+          // `derivePanelContent` infers area-selected/school-selected/
+          // area-groups-landing (and others) from areaKey/schoolId/groupId
+          // alone when `journey=` is absent from the URL — deep-link/CTA
+          // entry points this app's own code constructs (LandingPage,
+          // AreaCtaBlock, AreaGuide, AreaGuideHero, Trends). Keying density
+          // off `journey` alone left those routes rendering full cards.
+          // `panelContent !== 'guided-entry'` is true for every one of
+          // those non-landing states, so compact activates for all of them
+          // and can never flip transiently mid-navigation from a momentary
+          // null `journey` (panelContent is derived synchronously from the
+          // same URL state on every render — no separate async signal).
+          compact={panelContent !== 'guided-entry'}
+          // `journey` still wins when present (explicit journey=... URLs);
+          // otherwise infer the equivalent journey from panelContent so the
+          // matching tab still reports aria-selected=true on a journey-less
+          // deep link.
+          //
+          // area-school-combined reached with NO explicit journey resolves to
+          // school-first. Product-owner ruling: a valid Discover state may not
+          // leave the persistent mode selector with no active tab. This is
+          // NARROWER than "that state is school-led" — see the doc comment on
+          // inferJourneyFromPanelContent for why the state is genuinely MIXED
+          // and why the resolution is safe only on the journey-less path.
+          // guided-entry is now the ONLY state that resolves to no tab, and
+          // that is correct: the bare landing has no journey selected.
+          //
+          // An earlier version of this comment said "no tab is selected there"
+          // and survived the change that made it false. Left alone it would
+          // have invited a reader to "restore consistency" by reverting the
+          // ruling — the same stale-invariant-in-prose failure that made three
+          // city options unclickable earlier in this PR.
+          activeJourney={journey ?? inferJourneyFromPanelContent(panelContent)}
+          onSelectJourney={onSelectJourney}
+          cityLabel={cityLabel ?? city}
+          totalProperties={totalProperties}
+          areasCount={areasCount}
+          regionGuideRingActive={regionGuideRingActive}
+          regionGuideHelperText={regionGuideHelperText}
+          regionGuideNonce={regionGuideNonce}
+          prefersReducedMotion={prefersReducedMotion}
+        />
+      </div>
+      {/* Issue #1494's floating top-strip Buy/Rent selector — REMOVED
+          (product-owner ruling, #1953 follow-up): the persistent
+          DiscoverControlBar is now the SOLE Buy/Rent control on /discover,
+          so this always-mounted-elsewhere strip was a genuine duplicate
+          control at every state where it used to appear (schools, agri,
+          area-group-results, etc.) — not merely a co-located one like the
+          per-panel cards this same ruling also retires. `intent` /
+          `onIntentChange` remain accepted (now JSX-unused here) props —
+          kept threaded through unchanged to every child panel below
+          (DiscoverRightPanelContainer:447 still wires the facade's
+          `setIntent`), matching the same convention already used for
+          `onCityChange` after the earlier CitySelect removal. Verified: no
+          surviving control anywhere still reads the `onIntentChange ??
+          (() => undefined)` no-op fallback below — every remaining
+          `<IntentSelector>` render was removed in this same change, save
+          for DiscoverControlBar's own (which calls `actions.setIntent`
+          directly, never this no-op-defaulted prop). */}
       {showTopChipStrip && (
         <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-border shrink-0">
           {activeContextChips}

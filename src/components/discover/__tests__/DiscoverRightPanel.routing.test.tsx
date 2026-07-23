@@ -74,41 +74,45 @@ vi.mock('@/hooks/useDiscoverAreas', () => ({
   }),
 }));
 
-vi.mock('@/hooks/useDiscoverUrlState', () => ({
-  useDiscoverUrlState: vi.fn(() => [
-    {
-      city: 'udupi',
-      areaKey: 'IN|KA|Udupi|Manipal',
-      boardFilters: [],
-      categoryFilters: [],
-      schoolId: null,
-      radiusKm: null,
-      q: '',
-      journey: 'school-first' as const,
-      groupId: null,
-      viewport: null,
-      filters: {},
-    },
-    {
-      selectArea: vi.fn(),
-      deselectArea: vi.fn(),
-      setSchoolParams: vi.fn(),
-      setFiltersLive: vi.fn(),
-      setFiltersCommitted: vi.fn(),
-      setBoardFilters: vi.fn(),
-      setCategoryFilters: vi.fn(),
-      clearAreaContext: vi.fn(),
-      clearSchoolContext: vi.fn(),
-      startOver: vi.fn(),
-      setJourney: vi.fn(),
-      selectGroup: vi.fn(),
-      setSchoolJourney: mockSetSchoolJourney,
-      setSearchQuery: vi.fn(),
-      reportViewport: vi.fn(),
-      setCity: vi.fn(),
-      changeCity: vi.fn(),
-    },
-  ]),
+// Issue #1953 (build step 2) — GuidedEntryPanel/SchoolBrowsePanel/
+// SchoolSelectedPanel/AreaSchoolCombinedPanel/SchoolsInAreaPanel now consume
+// the DiscoverProvider facade (useDiscoverNav/useDiscoverViewport/
+// useDiscoverActions) instead of calling useDiscoverUrlState() directly, so
+// this suite mocks the facade module instead of the underlying hook.
+vi.mock('@/features/discover/context/useDiscoverContext', () => ({
+  useDiscoverNav: () => ({
+    city: 'udupi',
+    areaKey: 'IN|KA|Udupi|Manipal',
+    boardFilters: [],
+    categoryFilters: [],
+    schoolId: null,
+    radiusKm: null,
+    q: '',
+    journey: 'school-first' as const,
+    groupId: null,
+    filters: {},
+  }),
+  useDiscoverViewport: () => null,
+  useDiscoverActions: () => ({
+    selectArea: vi.fn(),
+    deselectArea: vi.fn(),
+    setSchoolParams: vi.fn(),
+    setFiltersLive: vi.fn(),
+    setFiltersCommitted: vi.fn(),
+    setBoardFilters: vi.fn(),
+    setCategoryFilters: vi.fn(),
+    clearAreaContext: vi.fn(),
+    clearSchoolContext: vi.fn(),
+    startOver: vi.fn(),
+    setJourney: vi.fn(),
+    selectGroup: vi.fn(),
+    setSchoolJourney: mockSetSchoolJourney,
+    setSearchQuery: vi.fn(),
+    reportViewport: vi.fn(),
+    setCity: vi.fn(),
+    changeCity: vi.fn(),
+    setScope: vi.fn(),
+  }),
 }));
 
 vi.mock('@/hooks/useSchoolSearch', () => ({

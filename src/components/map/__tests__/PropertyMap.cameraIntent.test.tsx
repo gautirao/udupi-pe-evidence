@@ -330,3 +330,61 @@ describe('Issue #1801 — PropertyMap cameraIntent → MapController contract', 
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Issue #1953 (RH1, sixth site) — lastHandledSeqRef survives a real DiscoverMapMount unmount/remount', () => {
+  beforeEach(() => {
+    mapStub.fitBounds.mockClear();
+    mapStub.flyTo.mockClear();
+    mapStub.setView.mockClear();
+    mapStub.getBoundsZoom.mockClear();
+    mapStub.getBoundsZoom.mockReturnValue(14);
+  });
+
+  it('a remount with the SAME already-consumed cameraIntent does not re-fire; a genuinely new intent afterwards fires exactly once', () => {
+    const intent = leafIntent(1);
+
+    // Genuine first mount: cameraIntent starts null (useDiscoverMapData's
+    // cameraIntent is useState(null), never pre-populated before a click),
+    // then the user clicks an area marker and cameraIntent becomes seq=1 via
+    // a rerender of this SAME instance — fires once. This mirrors the real
+    // sequence and is what distinguishes a genuine first mount (which can
+    // only ever observe seq 0) from a remount (which can observe a
+    // already-nonzero seq on its very first render).
+    const first = render(<PropertyMap {...baseProps} cameraIntent={null} focusBounds={null} />);
+    expect(totalCameraCalls()).toBe(0);
+    first.rerender(<PropertyMap {...baseProps} cameraIntent={intent} focusBounds={null} />);
+    expect(totalCameraCalls()).toBe(1);
+    mapStub.fitBounds.mockClear();
+    mapStub.flyTo.mockClear();
+    mapStub.setView.mockClear();
+
+    // Real unmount — mirrors DiscoverMapMount returning `null` when the mobile
+    // shell switches to List view (a true unmount, not hidden/display:none).
+    first.unmount();
+
+    // Remount — mirrors tapping Map again. cameraIntent is state owned by
+    // useDiscoverMapData, which lives ABOVE DiscoverMapMount's unmount
+    // boundary and never resets the intent after consumption, so the SAME
+    // already-handled seq=1 object is the prop on the very first render of
+    // this brand-new MapController instance.
+    const second = render(<PropertyMap {...baseProps} cameraIntent={intent} focusBounds={null} />);
+
+    // MUST NOT re-fire. Pre-fix, lastHandledSeqRef is a fresh useRef(0) on
+    // this new instance, so `1 <= 0` is false, the guard does not skip, and
+    // the stale intent's camera move fires again — discarding whatever
+    // viewport the remounted map had just re-initialised to from the URL.
+    // This assertion is the one that fails before the adopt-on-mount fix.
+    expect(totalCameraCalls()).toBe(0);
+
+    // A genuinely NEW intent arriving after the remount must still fire
+    // exactly once — guards against a fix that simply never fires at all.
+    second.rerender(
+      <PropertyMap
+        {...baseProps}
+        cameraIntent={leafIntent(2, [[13.4, 74.9], [13.42, 74.92]])}
+        focusBounds={null}
+      />,
+    );
+    expect(totalCameraCalls()).toBe(1);
+  });
+});

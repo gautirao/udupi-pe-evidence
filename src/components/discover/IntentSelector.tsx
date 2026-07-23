@@ -18,6 +18,27 @@ interface IntentSelectorProps {
   fill?: boolean;
   /** Optional wrapper className. */
   className?: string;
+  /**
+   * Issue #1953 build step 6 — override the wrapper's data-testid. Defaults to
+   * the existing 'intent-selector' so every current call site (DiscoverRightPanel's
+   * top strip, GuidedEntryPanel's controls card, etc.) is unaffected. Needed because
+   * DiscoverControlBar now mounts its OWN persistent IntentSelector alongside these
+   * per-panel ones — without a distinct testid the two collide under the same
+   * data-testid at every panel state, breaking existing single-match test queries.
+   * Child button testids (`intent-selector-{buy,rent}`) are intentionally left
+   * untouched — no existing test queries those per-instance, so no collision there.
+   */
+  testId?: string;
+  /**
+   * Issue #1953 FIX1 — additional className merged onto the "Looking to"
+   * label span (only rendered when hideLabel is false). Lets a consumer
+   * hide the label responsively (e.g. `hidden lg:inline` in
+   * DiscoverControlBar, which needs the label gone at <lg widths to fit
+   * city + Buy/Rent + the mobile map trigger on one line) without a second
+   * hideLabel value per breakpoint. Optional; other call sites are
+   * unaffected when omitted.
+   */
+  labelClassName?: string;
 }
 
 const OPTIONS: { value: DiscoverIntent; label: string }[] = [
@@ -31,16 +52,22 @@ export function IntentSelector({
   hideLabel = false,
   fill = false,
   className,
+  testId = 'intent-selector',
+  labelClassName,
 }: IntentSelectorProps) {
   return (
     <div
       className={cn('flex items-center gap-2.5', fill && 'w-full', className)}
-      data-testid="intent-selector"
+      data-testid={testId}
       role="group"
       aria-label="Looking to"
     >
       {!hideLabel && (
-        <span className="text-xs text-muted-foreground font-medium shrink-0">Looking to</span>
+        <span
+          className={cn('text-xs text-muted-foreground font-medium shrink-0', labelClassName)}
+        >
+          Looking to
+        </span>
       )}
       {/* Segmented control (ReTrends mock): warm bordered track, selected segment lifts
           to a white pill with a soft shadow. */}

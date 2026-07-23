@@ -14,6 +14,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import React from 'react';
 import MapDiscovery from '@/pages/MapDiscovery';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 
 const mockApiGet = vi.hoisted(() => vi.fn());
 
@@ -170,13 +171,16 @@ function makeQC() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
+// Issue #1953 (build step 2) — MapDiscovery is no longer a production caller
+// of useDiscoverUrlState(); it consumes the DiscoverProvider facade instead,
+// so the route element needs a real provider ancestor (inside the Router).
 const renderAt = (url: string) =>
   render(
     <QueryClientProvider client={makeQC()}>
       <MemoryRouter initialEntries={[url]}>
         <Routes>
-          <Route path="/discover" element={<MapDiscovery />} />
-          <Route path="*" element={<MapDiscovery />} />
+          <Route path="/discover" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
+          <Route path="*" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import React from 'react';
 import MapDiscovery from '../MapDiscovery';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { ApiError } from '@/lib/api';
 
 // ─── Hoisted handles ─────────────────────────────────────────────────────────
@@ -140,8 +141,8 @@ function renderAt(url: string) {
     <QueryClientProvider client={makeQC()}>
       <MemoryRouter initialEntries={[url]}>
         <Routes>
-          <Route path="/discover" element={<><MapDiscovery /><LocationCapture /></>} />
-          <Route path="*" element={<><MapDiscovery /><LocationCapture /></>} />
+          <Route path="/discover" element={<DiscoverProvider><MapDiscovery /><LocationCapture /></DiscoverProvider>} />
+          <Route path="*" element={<DiscoverProvider><MapDiscovery /><LocationCapture /></DiscoverProvider>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

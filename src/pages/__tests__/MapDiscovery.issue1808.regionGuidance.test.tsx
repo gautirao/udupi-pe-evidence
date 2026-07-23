@@ -25,6 +25,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import React from 'react';
 import MapDiscovery from '../MapDiscovery';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 
 const mockUseAuth = vi.hoisted(() =>
@@ -266,8 +267,8 @@ const renderAt = (url: string) =>
       <MemoryRouter initialEntries={[url]}>
         <LocationProbe />
         <Routes>
-          <Route path="/discover" element={<MapDiscovery />} />
-          <Route path="*" element={<MapDiscovery />} />
+          <Route path="/discover" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
+          <Route path="*" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

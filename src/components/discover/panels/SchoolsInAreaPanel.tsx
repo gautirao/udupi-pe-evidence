@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { GraduationCap, AlertTriangle, Search, X, MapPin, ChevronRight, ChevronDown, ArrowRight, Home } from 'lucide-react';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
-import { useDiscoverUrlState, type DiscoverIntent } from '@/hooks/useDiscoverUrlState';
+import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
+import { useDiscoverActions, useDiscoverNav, useDiscoverViewport } from '@/features/discover/context/useDiscoverContext';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { PanelHeader } from '../PanelHeader';
 import { PanelColumn } from './_shared';
@@ -120,7 +121,11 @@ const CATEGORY_OPTIONS = [
 ];
 
 export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: schoolsProp, schoolsLoading: schoolsLoadingProp, schoolsError: schoolsErrorProp, onSchoolsRetry, schoolsFetching: schoolsFetchingProp, onSelectSchool, activeContextChips, intent = 'buy', homesCount, footerSlot }: SchoolsInAreaPanelProps) {
-  const [urlState, urlActions] = useDiscoverUrlState();
+  // Issue #1953 (build step 2) — consumes the DiscoverProvider facade instead
+  // of calling useDiscoverUrlState() directly (state plumbing only).
+  const urlState = useDiscoverNav();
+  const viewport = useDiscoverViewport();
+  const urlActions = useDiscoverActions();
   const { data: areasData } = useDiscoverAreas(urlState.city);
   const areas = areasData?.areas ?? [];
 
@@ -313,7 +318,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
       lat: school.latitude,
       lon: school.longitude,
       // Use the current viewport zoom if available; fall back to 14 (school-journey default).
-      zoom: urlState.viewport?.zoom ?? 14,
+      zoom: viewport?.zoom ?? 14,
       areaKey: school.areaKey,
     });
   };

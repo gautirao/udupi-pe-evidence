@@ -3,8 +3,6 @@ import { AlertCircle, ArrowRight, Building, ChevronRight, Layers, MapPin, X } fr
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CitySelect } from '../CitySelect';
-import { IntentSelector } from '../IntentSelector';
 import { AreaGroupSelectedPanel } from './AreaGroupSelectedPanel';
 import { ScopedSearch } from '../ScopedSearch';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
@@ -20,9 +18,7 @@ import { formatMemberAreaSummary, buildAreaNameIndex } from '@/utils/areaNameSum
 import { resolveActiveDiscoverGroup } from '@/utils/discoverLayerRegistry';
 import { TrustStrip } from './_shared';
 import { StartOverButton } from '../StartOverButton';
-
-// Shared uppercase eyebrow for the in-panel control labels (mirrors GuidedEntryPanel).
-const CONTROL_EYEBROW = 'text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground';
+import { useScrollPositionAcrossToggle } from '@/hooks/useScrollPositionAcrossToggle';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -157,6 +153,16 @@ export type AreaGroupsLandingPanelProps = {
    * reconstruction below so existing callers/tests keep working.
    */
   scopeNamespaces?: ScopeNamespaces;
+  /**
+   * Issue #1953 (build step 4, AC28 gap fix) — true while the mobile Map
+   * overlay is open (i.e. this panel's scroll container is hidden, not
+   * unmounted). Drives useScrollPositionAcrossToggle on the Level-1 scroll
+   * container below so the exact scroll position — and therefore the same
+   * visible item — survives a Map -> List round trip. Defaults to false so
+   * existing callers/tests that omit it render unaffected (the hook is a
+   * no-op while this stays false).
+   */
+  isMobileMapOpen?: boolean;
 } & (
   | { fallbackAreas: DiscoverArea[]; onSelectArea: (areaKey: string) => void }
   | { fallbackAreas?: never; onSelectArea?: never }
@@ -534,7 +540,15 @@ export function AreaGroupsLandingPanel({
   isRegionScopedGroupsError = false,
   onRetryRegionScopedGroups,
   scopeNamespaces: scopeNamespacesProp,
+  isMobileMapOpen = false,
 }: AreaGroupsLandingPanelProps) {
+  // Issue #1953 (build step 4, AC28 gap fix) — preserves scroll position
+  // across the mobile List<->Map round trip. Attached to the Level-1 scroll
+  // container below (the measured, real scrollable element:
+  // scrollHeight 4881 / clientHeight 770 at 390x844). No-op when
+  // isMobileMapOpen never flips (desktop, or callers that omit the prop).
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  useScrollPositionAcrossToggle(scrollContainerRef, isMobileMapOpen);
   // Issue #1178 — a groupId is "active" only when it is a non-blank string.
   // Trim guards against whitespace-only deep links (e.g. `?groupId=%20`), which
   // must behave like normal browse (no highlight, no message). Store the trimmed
@@ -814,6 +828,7 @@ export function AreaGroupsLandingPanel({
   // header, so the panel reads like the approved area-first mock.
   return (
     <div
+      ref={scrollContainerRef}
       className="flex-1 overflow-y-auto bg-background px-5 py-7 lg:px-11 lg:py-10"
       aria-busy={isLoading}
       aria-label="Area groups"
@@ -856,34 +871,29 @@ export function AreaGroupsLandingPanel({
           onQueryChange={onSearchQueryChange}
         />
 
-        {/* Controls card: city + Buy/Rent (mock parity, mirrors GuidedEntryPanel) */}
+        {/* Controls card — the interactive Buy/Rent widget was REMOVED here
+            (product-owner ruling, #1953 follow-up): the persistent
+            DiscoverControlBar is the SOLE Buy/Rent control on /discover, so
+            an in-panel selector co-rendered with it would be a real visible
+            duplicate — same ownership rationale as the earlier CitySelect
+            removal from this exact card (build step 6).
+            IMPORTANT (coupling, do not "simplify" away): `showControls`
+            keeps checking all four original props (`city`, `onCityChange`,
+            `intent`, `onIntentChange`) UNCHANGED. Only the interactive
+            bordered card that used to sit inside this gate is gone — the
+            informational pricing-mode paragraph below is kept (it is still
+            true/useful independent of where the toggle lives) and continues
+            to render/hide under the EXACT SAME condition as before. Do not
+            drop any of the four props from being threaded down from
+            DiscoverRightPanel: doing so would silently flip `showControls`
+            and hide this paragraph too — a visibility change arriving
+            through a null-check instead of a deliberate layout decision. */}
         {showControls && (
-          <>
-            <p className="mb-4 text-[13px] text-muted-foreground">
-              {intent === 'rent'
-                ? 'Showing monthly rents — same properties, reworded for renting.'
-                : 'Showing sale prices in ₹ across every area.'}
-            </p>
-            <div className="mb-8 flex flex-wrap items-end gap-3.5 rounded-xl border border-border bg-card p-4 shadow-sm">
-              <label className="flex min-w-[150px] flex-1 flex-col gap-1.5">
-                <span className={CONTROL_EYEBROW}>City</span>
-                <CitySelect
-                  value={city as string}
-                  onChange={onCityChange as (city: string) => void}
-                  className="h-11 w-full rounded-md border-border bg-[hsl(var(--input-bg))] px-3 text-sm font-semibold text-foreground"
-                />
-              </label>
-              <div className="flex min-w-[150px] flex-1 flex-col gap-1.5">
-                <span className={CONTROL_EYEBROW}>Looking to</span>
-                <IntentSelector
-                  intent={intent as DiscoverIntent}
-                  onIntentChange={onIntentChange as (intent: DiscoverIntent) => void}
-                  hideLabel
-                  fill
-                />
-              </div>
-            </div>
-          </>
+          <p className="mb-4 text-[13px] text-muted-foreground">
+            {intent === 'rent'
+              ? 'Showing monthly rents — same properties, reworded for renting.'
+              : 'Showing sale prices in ₹ across every area.'}
+          </p>
         )}
 
         {/* Body: skeletons → group cards → browse-all fallback */}

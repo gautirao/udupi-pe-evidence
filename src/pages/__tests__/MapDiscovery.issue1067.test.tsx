@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import React from 'react';
 import MapDiscovery from '../MapDiscovery';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 
 // ─── Hoisted handles ───────────────────────────────────────────
 const mockUseAuth = vi.hoisted(() =>
@@ -149,8 +150,8 @@ const renderAt = (url: string) =>
     <QueryClientProvider client={makeQC()}>
       <MemoryRouter initialEntries={[url]}>
         <Routes>
-          <Route path="/discover" element={<MapDiscovery />} />
-          <Route path="*" element={<MapDiscovery />} />
+          <Route path="/discover" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
+          <Route path="*" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -173,9 +174,15 @@ describe('Issue #1067 R2 — right-panel area card triggers flyTo', () => {
       expect(rightPanelHandlers.onSelectAreaKey).not.toBeNull();
     });
 
-    // PropertyMap may have null panToArea so far (no selection yet).
+    // PropertyMap may have null panToArea so far (no selection yet). Issue
+    // #1953 (build step 4) — PropertyMap now mounts behind DiscoverMapMount's
+    // React.lazy/Suspense boundary, so its first render is no longer
+    // synchronous with the initial render that captures onSelectAreaKey above;
+    // wait for it before taking the baseline length.
+    await waitFor(() => {
+      expect(propertyMapPropsLog.panToAreas.length).toBeGreaterThan(0);
+    });
     const beforeLen = propertyMapPropsLog.panToAreas.length;
-    expect(beforeLen).toBeGreaterThan(0);
 
     // Simulate user clicking the Padubidri area card.
     act(() => {

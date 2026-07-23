@@ -35,18 +35,51 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import { GuidedEntryPanel } from '@/components/discover/panels/GuidedEntryPanel';
+import { JourneySwitcher } from '@/components/discover/JourneySwitcher';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 
+// Issue #1953 build step 6 — fixture corrected to match the REAL
+// GET /api/discover/cities/{citySlug}/regions response shape
+// (RegionSummaryResponse/RegionSummaryRegion in useDiscoverRegionSummary.ts:
+// `key`/`label`, not the old `/api/discover/summary` shape's
+// `regionKey`/`regionLabel`/`totalActiveListings`/`hotspots`/`generatedAt`).
+// The stale shape silently produced `region.regionKey === undefined`, which
+// crashed `getMacroRegionCue` (GuidedEntryPanel.tsx) on every test below that
+// actually resolved this fixture — a real, previously-undiagnosed bug, not
+// just a "documented pre-existing failure": the crash was an uncaught
+// exception that could bleed into and intermittently fail OTHER, unrelated
+// test files sharing a worker (observed in Index.invalidCity.test.tsx).
+const SUMMARY_BOUNDS = { minLat: 13.2, maxLat: 13.5, minLon: 74.7, maxLon: 74.9 };
+const SUMMARY_CENTRE = { lat: 13.35, lon: 74.8 };
 const SUMMARY_FIXTURE = {
-  city: 'udupi',
-  propertyType: null,
-  groupBy: 'area_group',
-  totalActiveListings: 6,
+  cityId: 1,
+  citySlug: 'udupi',
   regions: [
-    { regionKey: 'north', regionLabel: 'North Udupi', listingCount: 4 },
-    { regionKey: 'south', regionLabel: 'South Udupi', listingCount: 2 },
+    {
+      key: 'north',
+      label: 'North Udupi',
+      displayOrder: 1,
+      bounds: SUMMARY_BOUNDS,
+      centre: SUMMARY_CENTRE,
+      areaCount: 3,
+      listingCount: 4,
+      countStatus: 'OK',
+      boundsStatus: 'COMPLETE' as const,
+      missingBoundsAreaCount: 0,
+    },
+    {
+      key: 'south',
+      label: 'South Udupi',
+      displayOrder: 2,
+      bounds: SUMMARY_BOUNDS,
+      centre: SUMMARY_CENTRE,
+      areaCount: 2,
+      listingCount: 2,
+      countStatus: 'OK',
+      boundsStatus: 'COMPLETE' as const,
+      missingBoundsAreaCount: 0,
+    },
   ],
-  hotspots: [],
-  generatedAt: '2026-07-04T00:00:00Z',
 };
 
 function renderPanel(initialUrl = '/discover?city=udupi', props: Partial<Parameters<typeof GuidedEntryPanel>[0]> = {}) {
@@ -60,6 +93,8 @@ function renderPanel(initialUrl = '/discover?city=udupi', props: Partial<Paramet
     totalProperties: 6,
     areasCount: 2,
   };
+  // Issue #1953 (build step 2) — GuidedEntryPanel now consumes the
+  // DiscoverProvider facade instead of calling useDiscoverUrlState() directly.
   const utils = render(
     React.createElement(
       QueryClientProvider,
@@ -67,7 +102,62 @@ function renderPanel(initialUrl = '/discover?city=udupi', props: Partial<Paramet
       React.createElement(
         MemoryRouter,
         { initialEntries: [initialUrl] },
-        React.createElement(GuidedEntryPanel, { ...baseProps, ...props }),
+        React.createElement(
+          DiscoverProvider,
+          null,
+          React.createElement(GuidedEntryPanel, { ...baseProps, ...props }),
+        ),
+      ),
+    ),
+  );
+  return { ...utils, queryClient };
+}
+
+/**
+ * Issue #1953 build step 6 (F6) — the persistent mode tab cards (previously
+ * GuidedEntryPanel's own "journey-switcher-section") moved to JourneySwitcher,
+ * mounted once in the shared shell (DiscoverRightPanel), not inside
+ * GuidedEntryPanel. The two tests below assert `journey-card-*` presence
+ * alongside GuidedEntryPanel's own summary loading/error states — updated to
+ * mount this SMALLEST REALISTIC WRAPPER (JourneySwitcher + GuidedEntryPanel
+ * side by side, the same composition DiscoverRightPanel uses) rather than
+ * GuidedEntryPanel alone, so the assertion stays real instead of vacuous.
+ */
+function renderShell(initialUrl = '/discover?city=udupi', props: Partial<Parameters<typeof GuidedEntryPanel>[0]> = {}) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const baseProps = {
+    onSelectJourney: vi.fn(),
+    city: 'udupi',
+    onCityChange: vi.fn(),
+    intent: 'buy' as const,
+    onIntentChange: vi.fn(),
+    totalProperties: 6,
+    areasCount: 2,
+  };
+  const merged = { ...baseProps, ...props };
+  const utils = render(
+    React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      React.createElement(
+        MemoryRouter,
+        { initialEntries: [initialUrl] },
+        React.createElement(
+          DiscoverProvider,
+          null,
+          React.createElement(
+            React.Fragment,
+            null,
+            React.createElement(JourneySwitcher, {
+              onSelectJourney: merged.onSelectJourney,
+              cityLabel: merged.city,
+              totalProperties: merged.totalProperties,
+              areasCount: merged.areasCount,
+              activeJourney: null,
+            }),
+            React.createElement(GuidedEntryPanel, merged),
+          ),
+        ),
       ),
     ),
   );
@@ -86,7 +176,10 @@ beforeEach(() => {
 describe('GuidedEntryPanel — macro-region cards (Issue #1745 P7)', () => {
   it('shows a loading skeleton while the summary is in flight, and the journey cards stay usable', async () => {
     mockGet.mockReturnValue(new Promise(() => {})); // never resolves
-    renderPanel();
+    // Issue #1953 (F6) — mounts the smallest realistic wrapper (JourneySwitcher
+    // + GuidedEntryPanel) since the journey cards no longer live inside
+    // GuidedEntryPanel itself; see renderShell's header comment.
+    renderShell();
 
     expect(screen.getByTestId('guided-entry-regions-loading')).toBeInTheDocument();
     expect(screen.getByTestId('journey-card-area-first')).toBeInTheDocument();
@@ -101,13 +194,18 @@ describe('GuidedEntryPanel — macro-region cards (Issue #1745 P7)', () => {
     expect(screen.getByText('North Udupi')).toBeInTheDocument();
     expect(screen.getByText('South Udupi')).toBeInTheDocument();
     // Backend-owned counts rendered verbatim — no client-side aggregation.
-    expect(screen.getByText('4 properties')).toBeInTheDocument();
-    expect(screen.getByText('2 properties')).toBeInTheDocument();
+    // Count and "properties"/"property" label render in adjacent sibling
+    // divs (GuidedEntryPanel.tsx), not one text node — scope by the count's
+    // own class rather than matching a combined "4 properties" string that
+    // doesn't exist as a single DOM text node.
+    expect(screen.getByText('4', { selector: '.font-mono' })).toBeInTheDocument();
+    expect(screen.getByText('2', { selector: '.font-mono' })).toBeInTheDocument();
   });
 
   it('degrades gracefully on error — journey cards remain usable, no crash', async () => {
     mockGet.mockRejectedValue(new Error('network down'));
-    renderPanel();
+    // Issue #1953 (F6) — see renderShell's header comment above.
+    renderShell();
 
     await waitFor(() =>
       expect(screen.getByTestId('guided-entry-regions-error')).toBeInTheDocument(),
@@ -119,11 +217,16 @@ describe('GuidedEntryPanel — macro-region cards (Issue #1745 P7)', () => {
 
   it('renders no region grid (graceful empty state) when the summary returns zero regions', async () => {
     mockGet.mockResolvedValue({ ...SUMMARY_FIXTURE, regions: [] });
-    renderPanel();
+    // Issue #1953 (F6-class) — see renderShell's header comment above; this
+    // test also asserts journey-card-* presence, so it needs the same wrapper.
+    renderShell();
 
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
+    // Wait for the query to actually settle (loading skeleton to clear) before
+    // asserting the empty state — mockGet having been called only proves the
+    // fetch started, not that the resulting re-render has happened yet.
+    await waitFor(() => expect(screen.queryByTestId('guided-entry-regions-loading')).not.toBeInTheDocument());
     expect(screen.queryByTestId('guided-entry-regions-grid')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('guided-entry-regions-loading')).not.toBeInTheDocument();
     expect(screen.getByTestId('journey-card-area-first')).toBeInTheDocument();
   });
 });
@@ -168,7 +271,11 @@ describe('GuidedEntryPanel — listingPurpose separate from propertyType (Issue 
         React.createElement(
           MemoryRouter,
           { initialEntries: ['/discover?city=udupi'] },
-          React.createElement(GuidedEntryPanel, { ...baseProps, intent: 'buy' as const }),
+          React.createElement(
+            DiscoverProvider,
+            null,
+            React.createElement(GuidedEntryPanel, { ...baseProps, intent: 'buy' as const }),
+          ),
         ),
       ),
     );
@@ -182,7 +289,11 @@ describe('GuidedEntryPanel — listingPurpose separate from propertyType (Issue 
         React.createElement(
           MemoryRouter,
           { initialEntries: ['/discover?city=udupi'] },
-          React.createElement(GuidedEntryPanel, { ...baseProps, intent: 'rent' as const }),
+          React.createElement(
+            DiscoverProvider,
+            null,
+            React.createElement(GuidedEntryPanel, { ...baseProps, intent: 'rent' as const }),
+          ),
         ),
       ),
     );
@@ -257,7 +368,9 @@ describe('GuidedEntryPanel — scope selection (Issue #1745 P8, landing-level on
   it('scope selection does not disable or hide the three journey cards', async () => {
     mockGet.mockResolvedValue(SUMMARY_FIXTURE);
     const user = userEvent.setup();
-    renderPanel();
+    // Issue #1953 (F6-class) — see renderShell's header comment above; this
+    // test also asserts journey-card-* presence, so it needs the same wrapper.
+    renderShell();
 
     await waitFor(() => expect(screen.getByTestId('guided-entry-regions-grid')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /North Udupi/ }));

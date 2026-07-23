@@ -206,11 +206,30 @@ const schoolBase = {
   areas: [],
 };
 
+// Issue #1953 (RH1 adopt-on-mount) — a genuine first mount of PropertyMap
+// always sees schoolFocusTick=0: the tick lives in useState(0) inside
+// useDiscoverCameraOrchestration, and the effect that bumps it only runs
+// AFTER the first render (even for a school-first deep link), so tick=1 is
+// only ever OBSERVED on a subsequent render, never as the very first one.
+// Rendering directly at a nonzero tick (as this helper used to do) exercises
+// a state PropertyMap can never actually be mounted into — mount-at-0 then
+// rerender-to-the-requested-tick mirrors the real sequence and is what RH1's
+// adopt-on-mount seeding is designed to distinguish from an actual remount
+// (fresh component instance, same already-handled tick value persisted).
 const renderSchoolFocus = (props: {
   schoolFocusTick: number;
   schoolFocusRadiusKm?: number;
-}) =>
-  render(
+}) => {
+  const utils = render(
+    <PropertyMap
+      {...schoolBase}
+      schoolFocusTick={0}
+      schoolFocusLat={SCHOOL_LAT}
+      schoolFocusLon={SCHOOL_LON}
+      schoolFocusRadiusKm={props.schoolFocusRadiusKm}
+    />,
+  );
+  utils.rerender(
     <PropertyMap
       {...schoolBase}
       schoolFocusTick={props.schoolFocusTick}
@@ -219,6 +238,8 @@ const renderSchoolFocus = (props: {
       schoolFocusRadiusKm={props.schoolFocusRadiusKm}
     />,
   );
+  return utils;
+};
 
 describe('Issue #1173 — SchoolFocusPanner radius-change zoom stability', () => {
   beforeEach(() => {

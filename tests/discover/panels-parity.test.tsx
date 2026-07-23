@@ -63,11 +63,18 @@ const mockUrlState = vi.hoisted(() => ({
   filters: { boardFilters: [] as string[], categoryFilters: [] as string[] },
 }));
 
-vi.mock('@/hooks/useDiscoverUrlState', () => ({
-  useDiscoverUrlState: vi.fn(() => [
-    mockUrlState,
-    { setFiltersLive: mockSetFiltersLive, setSchoolParams: vi.fn(), clearAreaContext: vi.fn(), setSchoolJourney: vi.fn() },
-  ]),
+// Issue #1953 (build step 2) — SchoolsInAreaPanel/SchoolSelectedPanel now
+// consume the DiscoverProvider facade instead of calling
+// useDiscoverUrlState() directly.
+vi.mock('@/features/discover/context/useDiscoverContext', () => ({
+  useDiscoverNav: () => mockUrlState,
+  useDiscoverViewport: () => mockUrlState.viewport,
+  useDiscoverActions: () => ({
+    setFiltersLive: mockSetFiltersLive,
+    setSchoolParams: vi.fn(),
+    clearAreaContext: vi.fn(),
+    setSchoolJourney: vi.fn(),
+  }),
 }));
 
 vi.mock('@/hooks/useSchoolsByArea', () => ({

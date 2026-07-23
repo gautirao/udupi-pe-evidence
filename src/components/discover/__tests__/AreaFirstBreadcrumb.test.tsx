@@ -92,5 +92,27 @@ describe('AreaFirstBreadcrumb', () => {
     fireEvent.click(screen.getByTestId('breadcrumb-region'));
     expect(onRegion).toHaveBeenCalledTimes(1);
   });
+
+  // ─── Issue #1953 build step 6 (AC9) — pill-and-chevron restyle ──────────
+  it('renders as a single rounded pill container (AC9 pill-and-chevron pattern)', () => {
+    render(<AreaFirstBreadcrumb cityLabel="Udupi" groupName="University Belt" areaLabel="Manipal" />);
+    const nav = screen.getByTestId('area-first-breadcrumb');
+    expect(nav).toHaveClass('rounded-full');
+    expect(nav).toHaveClass('border');
+    expect(nav).toHaveClass('bg-card/95');
+  });
+
+  it('never renders a cluster-level crumb (no recursive cluster tier exists yet)', () => {
+    render(
+      <AreaFirstBreadcrumb
+        cityLabel="Bangalore"
+        regionName="North Bangalore"
+        groupName="Airport Belt"
+        areaLabel="Hebbal"
+      />,
+    );
+    expect(screen.queryByTestId('breadcrumb-cluster')).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId(/breadcrumb-cluster/)).toHaveLength(0);
+  });
 });
 

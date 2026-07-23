@@ -24,64 +24,84 @@ vi.mock('@/components/map/PropertyMap', () => ({
   PropertyMap: () => <div data-testid="property-map-mock" />,
 }));
 
+// Issue #1953 (build step 2) — DiscoverMapCanvas now consumes the
+// DiscoverProvider facade (useDiscoverNav/useDiscoverViewport/
+// useDiscoverActions) directly instead of receiving urlState/urlActions as
+// props, so this suite mocks the facade module instead of passing those two
+// props. Built inside vi.hoisted() so the vi.mock() factory below (hoisted
+// above all imports/consts by Vitest) can close over real values instead of
+// hitting the TDZ.
+const { BASE_URL_STATE, BASE_NAV, URL_ACTIONS } = vi.hoisted(() => {
+  const urlState: DiscoverUrlState = {
+    city: 'bangalore',
+    areaKey: null,
+    viewport: null,
+    filters: {},
+    schoolId: null,
+    radiusKm: null,
+    q: '',
+    journey: null,
+    groupId: null,
+    selectedGroup: null,
+    intent: 'buy',
+    scope: null,
+  };
+  // nav mirrors DiscoverNavContextValue (everything except `viewport`, its own context).
+  const { viewport: _viewport, ...nav } = urlState;
+
+  // The URL-actions surface is a large, page-owned interface; every method here is
+  // a no-op stub since the canvas only ever invokes selectGroup/reportViewport from
+  // the moved JSX — the rest exist purely to satisfy the DiscoverUrlActions contract.
+  const urlActions: DiscoverUrlActions = {
+    changeCity: vi.fn(),
+    setCity: vi.fn(),
+    selectArea: vi.fn(),
+    deselectArea: vi.fn(),
+    reportViewport: vi.fn(),
+    setFiltersLive: vi.fn(),
+    setFiltersCommitted: vi.fn(),
+    setSchoolParams: vi.fn(),
+    clearSchoolSelection: vi.fn(),
+    clearAreaSelection: vi.fn(),
+    setSearchQuery: vi.fn(),
+    clearAllFiltersAndSearch: vi.fn(),
+    setJourney: vi.fn(),
+    selectGroup: vi.fn(),
+    setBoardFilters: vi.fn(),
+    setCategoryFilters: vi.fn(),
+    clearAreaContext: vi.fn(),
+    clearSchoolContext: vi.fn(),
+    startOver: vi.fn(),
+    enterSchoolPicking: vi.fn(),
+    clearSchoolPicking: vi.fn(),
+    backToSchoolPicking: vi.fn(),
+    enterGroupResults: vi.fn(),
+    clearGroupResults: vi.fn(),
+    selectRegionalGroup: vi.fn(),
+    setRegion: vi.fn(),
+    setScope: vi.fn(),
+    setRegionWithMaxKm: vi.fn(),
+    setMaxKm: vi.fn(),
+    clearRegionAndMaxKm: vi.fn(),
+    setSelectedListing: vi.fn(),
+    clearSelectedListing: vi.fn(),
+    setLocality: vi.fn(),
+    clearLocality: vi.fn(),
+    clearAgriFilters: vi.fn(),
+    setIntent: vi.fn(),
+    setSchoolJourney: vi.fn(),
+  };
+
+  return { BASE_URL_STATE: urlState, BASE_NAV: nav, URL_ACTIONS: urlActions };
+});
+
+vi.mock('@/features/discover/context/useDiscoverContext', () => ({
+  useDiscoverNav: () => BASE_NAV,
+  useDiscoverViewport: () => BASE_URL_STATE.viewport,
+  useDiscoverActions: () => URL_ACTIONS,
+}));
+
 import { DiscoverMapCanvas, type DiscoverMapCanvasProps } from './DiscoverMapCanvas';
-
-const BASE_URL_STATE: DiscoverUrlState = {
-  city: 'bangalore',
-  areaKey: null,
-  viewport: null,
-  filters: {},
-  schoolId: null,
-  radiusKm: null,
-  q: '',
-  journey: null,
-  groupId: null,
-  selectedGroup: null,
-  intent: 'buy',
-  scope: null,
-};
-
-// The URL-actions surface is a large, page-owned interface; every method here is a
-// no-op stub since the canvas only ever invokes selectGroup/reportViewport from the
-// moved JSX — the rest exist purely to satisfy the DiscoverUrlActions contract.
-const URL_ACTIONS: DiscoverUrlActions = {
-  changeCity: vi.fn(),
-  setCity: vi.fn(),
-  selectArea: vi.fn(),
-  deselectArea: vi.fn(),
-  reportViewport: vi.fn(),
-  setFiltersLive: vi.fn(),
-  setFiltersCommitted: vi.fn(),
-  setSchoolParams: vi.fn(),
-  clearSchoolSelection: vi.fn(),
-  clearAreaSelection: vi.fn(),
-  setSearchQuery: vi.fn(),
-  setJourney: vi.fn(),
-  selectGroup: vi.fn(),
-  setBoardFilters: vi.fn(),
-  setCategoryFilters: vi.fn(),
-  clearAreaContext: vi.fn(),
-  clearSchoolContext: vi.fn(),
-  startOver: vi.fn(),
-  enterSchoolPicking: vi.fn(),
-  clearSchoolPicking: vi.fn(),
-  backToSchoolPicking: vi.fn(),
-  enterGroupResults: vi.fn(),
-  clearGroupResults: vi.fn(),
-  selectRegionalGroup: vi.fn(),
-  setRegion: vi.fn(),
-  setScope: vi.fn(),
-  setRegionWithMaxKm: vi.fn(),
-  setMaxKm: vi.fn(),
-  clearRegionAndMaxKm: vi.fn(),
-  setSelectedListing: vi.fn(),
-  clearSelectedListing: vi.fn(),
-  setLocality: vi.fn(),
-  clearLocality: vi.fn(),
-  clearAgriFilters: vi.fn(),
-  setIntent: vi.fn(),
-  setSchoolJourney: vi.fn(),
-};
 
 const JOURNEY_VIEW: DiscoverJourneyTransitionsView = {
   startOverTick: 0,
@@ -148,7 +168,6 @@ function baseProps(overrides: Partial<DiscoverMapCanvasProps> = {}): DiscoverMap
     handlePolygonCleared: vi.fn(),
     selectedSchool: null,
     memoizedInitialCenter: undefined,
-    urlState: BASE_URL_STATE,
     cityCenter: undefined,
     cityZoom: undefined,
     overviewAreas: [],
@@ -164,7 +183,6 @@ function baseProps(overrides: Partial<DiscoverMapCanvasProps> = {}): DiscoverMap
     handleAreaClusterClick: vi.fn(),
     handleAreaMarkersComputed: vi.fn(),
     schoolZoneLabels: [],
-    urlActions: URL_ACTIONS,
     setMapZoom: vi.fn(),
     handleBoundsChange: vi.fn(),
     panToArea: null,
@@ -251,7 +269,14 @@ describe('DiscoverMapCanvas', () => {
     expect(screen.getByText('Failed to load listings')).toBeInTheDocument();
   });
 
-  it('renders CitySelect when the panel content allows it (drill-down state)', () => {
+  // Issue #1953 build step 6 (ownership invariant) — the map-overlay
+  // CitySelect was REMOVED from DiscoverMapCanvas: it co-rendered with the
+  // persistent DiscoverControlBar in every drill-down state, a real visible
+  // duplicate city-selection control (browser-verified). The persistent
+  // control bar is now the SOLE city-selection control on /discover — these
+  // two tests now assert that reality (never present, in ANY panel state),
+  // rather than being deleted.
+  it('never renders a CitySelect/combobox, in a drill-down state (ownership moved to DiscoverControlBar)', () => {
     render(
       <DiscoverMapCanvas
         {...baseProps({
@@ -261,10 +286,10 @@ describe('DiscoverMapCanvas', () => {
         })}
       />,
     );
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
-  it('hides CitySelect on the guided-entry public landing', () => {
+  it('never renders a CitySelect/combobox on the guided-entry public landing either', () => {
     render(<DiscoverMapCanvas {...baseProps({ resolvedPanelContent: 'guided-entry' })} />);
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
