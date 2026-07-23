@@ -423,6 +423,7 @@ export default function MapDiscovery() {
     showMarkerInList,
     clearSelectedMarkerListing,
     clearMarkerPopoverFromUrl,
+    isMarkerPopoverUrlBacked,
     hydrateSelectedMarkerFromUrl,
   } = useMarkerSelection({ urlActions, urlState, mapContainerRef });
 
@@ -1568,21 +1569,29 @@ export default function MapDiscovery() {
   // Issue #1798 PR-C — canonical listing-marker popover RENDER-eligibility predicate.
   // Previously this gate (formerly isAreaFirstPopoverEligible || isGroupResultsPopoverEligible)
   // required journey === 'area-first' plus specific panelContent values — strictly narrower
-  // than the click-CAPTURE gate below (handleMarkerClickWithPosition / the setSelectedListing
-  // branch of handleSelectMarkerListing), which already permits journeyless and other
-  // non-agri-first states. That drift meant a listing marker click could already write
-  // markerPixelPos/selectedMarkerListing and drive the #1547 right-panel scroll+highlight,
-  // yet the popup itself would silently never render — the reported #1798 "popup missing"
-  // bug. Fixed by reusing the SAME condition as the capture gate so the two can no longer
-  // drift apart. Still excludes agri-first (own peek/panel) and school-first once a school
-  // is selected (3 desynced marker tiers; owns its own tiered/peek flows) — see #1738/#1547.
-  // Area/cluster/count marker clicks are unaffected: they never set markerPixelPos, so the
+  // than the click-CAPTURE gate below (handleMarkerClickWithPosition), which already permits
+  // journeyless and other non-agri-first states. That drift meant a listing marker click
+  // could already write markerPixelPos/selectedMarkerListing and drive the #1547 right-panel
+  // scroll+highlight, yet the popup itself would silently never render — the reported #1798
+  // "popup missing" bug. Fixed by reusing the SAME condition as the capture gate so the two
+  // can no longer drift apart. Still excludes agri-first (own peek/panel flow).
+  //
+  // Issue #1973 — the pure school-first journey (a school + radius selected, no area) is
+  // cross-area: areaKey is null in that state, so the original single-clause predicate
+  // (which required areaKey != null) rejected it even after a naive schoolId/journey
+  // clause flip. Extended to an additive OR: the ORIGINAL area-gated clause is unchanged
+  // (still covers area-first, and area-first area+school combined per #1738), plus a new
+  // areaKey-FREE branch admitting school-first once a school is selected. Area/cluster/count
+  // marker clicks are unaffected: they never set markerPixelPos, so the
   // `selectedMarkerListing != null && markerPixelPos != null` conjunction at the render site
-  // below still keeps them popup-free regardless of this predicate.
+  // below still keeps them popup-free regardless of this predicate. MUST stay byte-identical
+  // to the capture-gate predicate in useMarkerSelection.ts's handleMarkerClickWithPosition —
+  // see that function's comment — or the two can drift apart again (the exact #1798 bug).
   const isMarkerPopoverEligible =
     urlState.journey !== 'agri-first' &&
-    urlState.areaKey != null &&
-    (urlState.schoolId == null || urlState.journey === 'area-first');
+    ((urlState.areaKey != null &&
+      (urlState.schoolId == null || urlState.journey === 'area-first')) ||
+      (urlState.journey === 'school-first' && urlState.schoolId != null));
 
   // Issue #1824 Slice S10b — the marker-resolve + stepper cluster (Issue
   // #1810 Stage 2A, MODEL A user-locked model, see approved-plan.toml
@@ -1669,12 +1678,23 @@ export default function MapDiscovery() {
   // mid-filter-recompute) does NOT close a popover the URL still claims —
   // that transient-miss case is instead covered by
   // hydrateSelectedMarkerFromUrl's own bounded rAF retry (F2) for the DOM
-  // node not being painted yet. Cannot race the click path: a marker click
-  // sets selectedMarkerListing and (whenever isMarkerPopoverEligible is
-  // true) writes the URL `listing` param in the very same handler
-  // invocation, so React 18 batches both into one render — there is no
-  // intermediate render where urlState.selectedListing is null while
-  // selectedMarkerListing is already set to the new listing.
+  // node not being painted yet.
+  //
+  // Issue #1973 rev-2 (A1 fix) — this comment's original "cannot race the
+  // click path" claim was WRONG for pure school-first: handleSelectMarkerListing
+  // deliberately does NOT write the URL `listing` param there (the
+  // #1547-deferred design), so a school-first click sets selectedMarkerListing
+  // while urlState.selectedListing stays null — landing exactly in this
+  // branch and wiping the click-set popover (the reverse-sync clear-race).
+  // The rev-1 gate fix (admitting pure school-first into isMarkerPopoverEligible)
+  // is what made this branch reachable for that state at all; previously the
+  // effect early-returned via the eligibility check above. Fixed by
+  // isMarkerPopoverUrlBacked(): only clear here when the popover currently
+  // tracked is URL-backed (source !== 'click') — i.e. skip the clear ONLY for
+  // a pure click-set popover. Area-first (and agri-first/#1738 combined)
+  // clicks ARE URL-backed (they write `listing`), so this guard does NOT
+  // regress their Back-navigation close — see
+  // MapDiscovery.issue1973.schoolFirstMarkerPopup.test.tsx AC11.
   //
   // Issue #1939 rework F3 — third reconciliation branch: the URL names a
   // listing id (urlState.selectedListing != null) that is NOT (yet)
@@ -1713,7 +1733,13 @@ export default function MapDiscovery() {
       return;
     }
     if (urlState.selectedListing == null) {
-      clearMarkerPopoverFromUrl();
+      // Issue #1973 rev-2 (A1) — skip the clear ONLY for a pure click-set
+      // (school-first) popover, which was never URL-backed to begin with.
+      // A URL-backed popover (area-first/#1738 combined, or a hydrated
+      // deep-link) still closes here, unconditionally.
+      if (isMarkerPopoverUrlBacked()) {
+        clearMarkerPopoverFromUrl();
+      }
       return;
     }
     if (selectedMarkerListing != null && selectedMarkerListing.id !== urlState.selectedListing) {
@@ -1726,6 +1752,7 @@ export default function MapDiscovery() {
     hydrateSelectedMarkerFromUrl,
     urlState.selectedListing,
     clearMarkerPopoverFromUrl,
+    isMarkerPopoverUrlBacked,
     selectedMarkerListing,
   ]);
 

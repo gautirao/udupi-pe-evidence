@@ -99,6 +99,7 @@ describe('useMarkerSelection', () => {
   });
 
   it('(v) handleMarkerClickWithPosition: sets markerPixelPos only when eligible, stays null otherwise', () => {
+    // Eligible: area-first, no school (unchanged baseline).
     const eligibleUrlState = makeUrlState({ journey: 'area-first', areaKey: 'manipal', schoolId: null });
     const { result: eligible } = renderHook(() =>
       useMarkerSelection({ urlActions: makeUrlActions(), urlState: eligibleUrlState }),
@@ -108,15 +109,57 @@ describe('useMarkerSelection', () => {
     });
     expect(eligible.current.markerPixelPos).toEqual({ x: 10, y: 20 });
 
-    // Ineligible: school-first with a school selected.
-    const ineligibleUrlState = makeUrlState({ journey: 'school-first', areaKey: 'manipal', schoolId: 'school-1' });
-    const { result: ineligible } = renderHook(() =>
-      useMarkerSelection({ urlActions: makeUrlActions(), urlState: ineligibleUrlState }),
+    // Issue #1973 (updated — previously pinned ineligible): school-first with a school AND
+    // areaKey selected is NOW eligible via the additive-OR branch.
+    const schoolFirstWithAreaUrlState = makeUrlState({
+      journey: 'school-first',
+      areaKey: 'manipal',
+      schoolId: 'school-1',
+    });
+    const { result: schoolFirstWithArea } = renderHook(() =>
+      useMarkerSelection({ urlActions: makeUrlActions(), urlState: schoolFirstWithAreaUrlState }),
     );
     act(() => {
-      ineligible.current.handleMarkerClickWithPosition({ x: 10, y: 20 });
+      schoolFirstWithArea.current.handleMarkerClickWithPosition({ x: 10, y: 20 });
     });
-    expect(ineligible.current.markerPixelPos).toBeNull();
+    expect(schoolFirstWithArea.current.markerPixelPos).toEqual({ x: 10, y: 20 });
+
+    // Issue #1973 — LOAD-BEARING: pure school-first radius search is cross-area, so
+    // areaKey is null in the live state. Without this explicit areaKey==null fixture, a
+    // naive clause-flip (swapping schoolId==null for schoolId!=null without adding an
+    // areaKey-free OR branch) would still incorrectly report this ineligible.
+    const schoolFirstNoAreaUrlState = makeUrlState({
+      journey: 'school-first',
+      areaKey: null,
+      schoolId: 'school-1',
+    });
+    const { result: schoolFirstNoArea } = renderHook(() =>
+      useMarkerSelection({ urlActions: makeUrlActions(), urlState: schoolFirstNoAreaUrlState }),
+    );
+    act(() => {
+      schoolFirstNoArea.current.handleMarkerClickWithPosition({ x: 10, y: 20 });
+    });
+    expect(schoolFirstNoArea.current.markerPixelPos).toEqual({ x: 10, y: 20 });
+
+    // Ineligible: agri-first (excluded regardless of areaKey/schoolId).
+    const agriUrlState = makeUrlState({ journey: 'agri-first', areaKey: 'manipal', schoolId: null });
+    const { result: agri } = renderHook(() =>
+      useMarkerSelection({ urlActions: makeUrlActions(), urlState: agriUrlState }),
+    );
+    act(() => {
+      agri.current.handleMarkerClickWithPosition({ x: 10, y: 20 });
+    });
+    expect(agri.current.markerPixelPos).toBeNull();
+
+    // Ineligible: no journey, no areaKey, no schoolId — nothing to gate eligibility on.
+    const journeylessNoAreaUrlState = makeUrlState({ journey: null, areaKey: null, schoolId: null });
+    const { result: journeylessNoArea } = renderHook(() =>
+      useMarkerSelection({ urlActions: makeUrlActions(), urlState: journeylessNoAreaUrlState }),
+    );
+    act(() => {
+      journeylessNoArea.current.handleMarkerClickWithPosition({ x: 10, y: 20 });
+    });
+    expect(journeylessNoArea.current.markerPixelPos).toBeNull();
   });
 
   it('(vi) handlePopoverDismiss clears both local states and calls clearSelectedListing', () => {
@@ -439,6 +482,89 @@ describe('useMarkerSelection', () => {
 
       expect(result.current.selectedMarkerListing).toBe(listing);
       expect(result.current.markerPixelPos).toEqual({ x: 60, y: 60 });
+    });
+  });
+
+  describe('isMarkerPopoverUrlBacked (Issue #1973 rev-2 code-review — AC11 all close paths)', () => {
+    // Minimal mapContainerRef fixture (mirrors the one inside the
+    // hydrateSelectedMarkerFromUrl describe block above).
+    function makeMapContainerRef(markerRect: DOMRect) {
+      const containerRect = { left: 100, top: 200, width: 0, height: 0 } as DOMRect;
+      const markerEl = { getBoundingClientRect: () => markerRect } as unknown as HTMLElement;
+      const container = {
+        querySelector: vi.fn(() => markerEl),
+        getBoundingClientRect: () => containerRect,
+      } as unknown as HTMLDivElement;
+      return { current: container };
+    }
+
+    it('(u1) a school-first popover hydrated from the URL is url-backed, and remains clearable by the F1 close path (finding #2)', () => {
+      // school-first + schoolId, deep-linked via `listing` in the URL — the
+      // exact shape reviewer finding #2 asked to be proven closeable.
+      const urlState = makeUrlState({
+        journey: 'school-first',
+        areaKey: null,
+        schoolId: 'school-1',
+        selectedListing: 'school-1-listing',
+      });
+      const markerRect = { left: 150, top: 250, width: 20, height: 20 } as DOMRect;
+      const mapContainerRef = makeMapContainerRef(markerRect);
+      const { result } = renderHook(() =>
+        useMarkerSelection({ urlActions: makeUrlActions(), urlState, mapContainerRef }),
+      );
+
+      const listing = makeListing('school-1-listing');
+      act(() => {
+        result.current.hydrateSelectedMarkerFromUrl(listing);
+      });
+
+      expect(result.current.selectedMarkerListing).toBe(listing);
+      // The hydrated popover is URL-backed — a later Back/Forward that takes
+      // the URL's `listing` param to null MUST be able to close it.
+      expect(result.current.isMarkerPopoverUrlBacked()).toBe(true);
+
+      // Simulate MapDiscovery's F1 reverse-sync clear firing because
+      // isMarkerPopoverUrlBacked() reported true — the close precondition
+      // this test exists to prove.
+      act(() => {
+        result.current.clearMarkerPopoverFromUrl();
+      });
+
+      expect(result.current.selectedMarkerListing).toBeNull();
+      expect(result.current.markerPixelPos).toBeNull();
+      expect(result.current.isMarkerPopoverUrlBacked()).toBe(false);
+    });
+
+    it('(u2) handleSelectMarkerListing: pure school-first click (no URL write) stays NOT url-backed; an area-first click (URL write) IS url-backed (finding #1)', () => {
+      // Pure school-first: journey='school-first', schoolId set, no areaKey —
+      // matches handleSelectMarkerListing's own predicate for "does not write
+      // the URL", so popoverSourceRef must stay 'click'.
+      const schoolFirstUrlState = makeUrlState({
+        journey: 'school-first',
+        areaKey: null,
+        schoolId: 'school-1',
+      });
+      const { result: schoolFirst } = renderHook(() =>
+        useMarkerSelection({ urlActions: makeUrlActions(), urlState: schoolFirstUrlState }),
+      );
+      act(() => {
+        schoolFirst.current.handleSelectMarkerListing(makeListing('school-1-listing'));
+      });
+      expect(schoolFirst.current.isMarkerPopoverUrlBacked()).toBe(false);
+
+      // Area-first: writes the URL, so popoverSourceRef flips to 'url'.
+      const areaFirstUrlState = makeUrlState({
+        journey: 'area-first',
+        areaKey: 'manipal',
+        schoolId: null,
+      });
+      const { result: areaFirst } = renderHook(() =>
+        useMarkerSelection({ urlActions: makeUrlActions(), urlState: areaFirstUrlState }),
+      );
+      act(() => {
+        areaFirst.current.handleSelectMarkerListing(makeListing('area-1'));
+      });
+      expect(areaFirst.current.isMarkerPopoverUrlBacked()).toBe(true);
     });
   });
 

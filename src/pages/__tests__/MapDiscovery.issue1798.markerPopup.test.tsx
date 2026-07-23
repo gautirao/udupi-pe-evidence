@@ -17,8 +17,11 @@
  * - TC1 (must fail pre-fix): journeyless area-selected listing marker click opens the popup.
  * - TC2: a second listing marker click replaces the popup content (still one at a time).
  * - TC3: map background click dismisses the popup (regression — no code change expected here).
- * - TC4: school-first with a school selected → still NO popup (exclusion preserved).
- * - TC5: agri-first → still NO popup (exclusion preserved).
+ * - TC4: school-first with a school (and areaKey) selected → popup OPENS. Updated for
+ *   Issue #1973 — previously pinned NO popup here; the additive-OR predicate fix now
+ *   admits the pure school-first journey (see MapDiscovery.issue1973.schoolFirstMarkerPopup.test.tsx
+ *   for the full school-first eligibility matrix, including the areaKey==null case).
+ * - TC5: agri-first → still NO popup (exclusion preserved, unaffected by #1973).
  * - TC6: area-first (pre-existing eligible state) → popup still renders (no regression).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -302,7 +305,7 @@ describe('Issue #1798 PR-C — marker popup render/capture gate alignment', () =
     });
   });
 
-  it('TC4: school-first with a school selected → still NO popup (exclusion preserved)', async () => {
+  it('TC4 (Issue #1973 — updated): school-first with a school (and areaKey) selected → popup OPENS', async () => {
     renderAt(
       `/discover?city=udupi&lat=13.34000&lon=74.74000&zoom=14&journey=school-first&areaKey=${encodeURIComponent(AREA_KEY)}&schoolId=sch-1`,
     );
@@ -316,11 +319,10 @@ describe('Issue #1798 PR-C — marker popup render/capture gate alignment', () =
       capturedOnMarkerClickWithPosition!({ x: 100, y: 100 });
     });
 
-    // Give any (incorrect) render a chance, then assert absence.
     await waitFor(() => {
-      expect(capturedOnMarkerClickWithPosition).toBeDefined();
+      expect(screen.getByTestId('marker-popover-card')).toBeInTheDocument();
     });
-    expect(screen.queryByTestId('marker-popover-card')).not.toBeInTheDocument();
+    expect(screen.getByText('School First Listing')).toBeInTheDocument();
   });
 
   it('TC5: agri-first → still NO popup (exclusion preserved)', async () => {
