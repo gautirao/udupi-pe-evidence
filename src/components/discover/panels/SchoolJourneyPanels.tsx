@@ -906,10 +906,14 @@ export function SchoolBrowsePanel({
               ))}
             </div>
           ) : (
+            // Issue #1954 (AC10) — no-search-results empty state now carries a real
+            // "Clear search" action (previously inert copy with no way out of the
+            // zero state) so the user can return to the popular-schools/zones view.
             <EmptyState
               icon={<Search size={32} />}
               heading="No schools found"
-              description="Try a different search term."
+              description={`Nothing matches "${searchQuery.trim()}". Try a different search term.`}
+              primaryAction={{ label: 'Clear search', onClick: () => setSearchQuery('') }}
             />
           )
         ) : (

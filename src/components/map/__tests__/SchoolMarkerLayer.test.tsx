@@ -150,3 +150,21 @@ describe('SchoolMarkerLayer — showSchoolMarkers gate (DEFECT A)', () => {
     expect(capturedMarkerCalls).toHaveLength(0);
   });
 });
+
+// ─── Golden color guard (Issue #1954) ─────────────────────────────────────────
+// schoolPinIcon is recolored from blue (#2563eb) to the plum design-system token,
+// matching PropertyMap.tsx's schoolMarkerIcon + SchoolRadiusMapOverlay.tsx's legend
+// swatch. This guards against a future edit silently reintroducing blue.
+describe('SchoolMarkerLayer — schoolPinIcon colour (Issue #1954 golden guard)', () => {
+  it('renders the schoolPinIcon html with the plum token and never the old blue hex', async () => {
+    const L = (await import('leaflet')).default;
+    const divIconMock = L.divIcon as unknown as ReturnType<typeof vi.fn>;
+    const schoolPinCall = divIconMock.mock.calls.find(
+      (call) => (call[0] as { className?: string }).className === 'school-pin',
+    );
+    expect(schoolPinCall).toBeDefined();
+    const html = (schoolPinCall?.[0] as { html: string }).html;
+    expect(html).toContain('hsl(var(--plum))');
+    expect(html).not.toContain('#2563eb');
+  });
+});

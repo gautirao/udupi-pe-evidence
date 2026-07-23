@@ -107,6 +107,12 @@ export function discoverListingToPropertyListing(
     lock_in_months: null,
     seller_type: l.sellerType ?? null,
     raw_post_id: null,
+    // Issue #1954 — carry the public trustBadge word through. DiscoverListingItem
+    // already exposes it (verified/trusted/listed/null); it was previously dropped
+    // here, so authed cards on this path never rendered a badge even when the
+    // backend sent one. Never the raw A-D trustTier — that field is not on
+    // DiscoverListingItem at all.
+    trustBadge: l.trustBadge ?? null,
     images: l.heroImageUrl ? [{ url: l.heroImageUrl }] : undefined,
   };
 }

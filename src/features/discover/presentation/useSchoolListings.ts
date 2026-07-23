@@ -94,14 +94,14 @@ export function useSchoolListings({
         parkingCount: l.parking_count,
         furnishingStatus: l.furnishing_status,
         createdAt: l.created_at,
-        // l.trustTier here is the DEALER contract's raw internal letter grade
-        // (A/B/C/D — see usePropertyListings.ts), not the public-safe badge word.
-        // DiscoverCityListingItem.trustBadge is public vocabulary only
-        // ("verified"/"trusted"/"listed"); the letter-to-word mapping is a backend-only
-        // concern (TrustBadge.java) and must never be replicated client-side (#1567/#1616).
-        // The dealer endpoint does not (yet) expose a public-safe badge field, so there is
-        // no honest value to pass through here — null (no badge) is correct, not a regression.
-        trustBadge: null,
+        // Issue #1954 — l.trustTier (if present) is the DEALER contract's raw internal
+        // letter grade (A/B/C/D — see usePropertyListings.ts) and must NEVER be read or
+        // mapped here; only the public trustBadge word is safe to surface. That word is
+        // now available on the auth discover-listings path (DiscoverListingItem.trustBadge,
+        // threaded through discoverListingToPropertyListing), so pass it through instead of
+        // hardcoding null. The letter-to-word mapping remains a backend-only concern
+        // (TrustBadge.java) and must never be replicated client-side (#1567/#1616).
+        trustBadge: l.trustBadge ?? null,
         lat: l.latitude,
         lon: l.longitude,
       }));

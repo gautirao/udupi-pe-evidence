@@ -1676,13 +1676,17 @@ function AgriPolygonLayer({
   );
 }
 
+// Issue #1954 — school marker recolored from blue (#2563eb) to the plum design-system
+// token, matching the school-first V2 identity used throughout SchoolJourneyPanels
+// (bg-plum-tint / text-plum). Does not touch area/agri marker colours elsewhere in
+// this file (Polygon pathOptions above, AreaMarkerLayer, etc.) — school-only change.
 const schoolMarkerIcon = L.divIcon({
   className: 'school-marker',
   html: `
     <div style="
       width: 36px;
       height: 36px;
-      background-color: #2563eb;
+      background-color: hsl(var(--plum));
       border: 3px solid white;
       border-radius: 50%;
       box-shadow: 0 2px 8px rgba(0,0,0,0.4);
@@ -1940,8 +1944,10 @@ export function PropertyMap({
               center={[schoolCircle.lat, schoolCircle.lon]}
               radius={schoolCircle.radiusKm * 1000}
               pathOptions={{
-                color: '#2563eb',
-                fillColor: '#2563eb',
+                // Issue #1954 — plum dashed radius ring (was blue #2563eb), matching
+                // the plum school marker icon above. dashArray/weight/fillOpacity unchanged.
+                color: 'hsl(var(--plum))',
+                fillColor: 'hsl(var(--plum))',
                 fillOpacity: 0.08,
                 weight: 2,
                 dashArray: '6 4',

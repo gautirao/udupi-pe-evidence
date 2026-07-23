@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { filteredMarkerToPropertyListing, cityListingToPropertyListing } from '../discoverMappers';
+import {
+  filteredMarkerToPropertyListing,
+  cityListingToPropertyListing,
+  discoverListingToPropertyListing,
+} from '../discoverMappers';
 import { DiscoverFilteredMarker } from '@/hooks/useDiscoverFilteredMarkers';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import { DiscoverListingItem } from '@/hooks/useDiscoverListings';
 
 describe('filteredMarkerToPropertyListing', () => {
   const now = '2026-05-27T00:00:00.000Z';
@@ -153,5 +158,75 @@ describe('cityListingToPropertyListing — a3 mapper (PR #1606)', () => {
       now,
     );
     expect(result.priceBand).toBeNull();
+  });
+});
+
+// ── discoverListingToPropertyListing — trustBadge pass-through (Issue #1954) ──
+// The frontend-only fix: DiscoverListingItem already carries the public trustBadge
+// word from the backend; the mapper previously dropped it. Confirms it now carries
+// through, is null-safe when absent, and that no raw internal A-D letter grade can
+// ever leak into the mapped PropertyListing (DiscoverListingItem has no such field).
+
+describe('discoverListingToPropertyListing — trustBadge pass-through (Issue #1954)', () => {
+  const now = '2026-07-23T00:00:00.000Z';
+
+  function makeDiscoverListing(overrides: Partial<DiscoverListingItem> = {}): DiscoverListingItem {
+    return {
+      id: 'listing-1',
+      listingNumber: null,
+      propertyType: 'apartment',
+      title: 'Test Apartment',
+      locality: 'Manipal',
+      areaKey: 'IN|KA|Udupi|Manipal',
+      pricePaise: 5_000_000_00,
+      landArea: null,
+      landAreaUnit: null,
+      builtArea: null,
+      builtAreaUnit: null,
+      bedrooms: 2,
+      latitude: 13.34,
+      longitude: 74.74,
+      heroImageUrl: null,
+      createdAt: now,
+      updatedAt: null,
+      firstPublishedAt: null,
+      lastUpdatedAt: null,
+      daysOnMarket: 0,
+      backOnMarket: false,
+      reraNumber: null,
+      reraValid: false,
+      possessionStatus: null,
+      sellerType: null,
+      listingPurpose: 'sale',
+      status: 'LIVE',
+      ...overrides,
+    };
+  }
+
+  it.each(['verified', 'trusted', 'listed'] as const)(
+    'carries trustBadge "%s" through unchanged',
+    (badge) => {
+      const result = discoverListingToPropertyListing(makeDiscoverListing({ trustBadge: badge }), now);
+      expect(result.trustBadge).toBe(badge);
+    },
+  );
+
+  it('sets trustBadge to null when absent (undefined) on the source item', () => {
+    const result = discoverListingToPropertyListing(makeDiscoverListing({ trustBadge: undefined }), now);
+    expect(result.trustBadge).toBeNull();
+  });
+
+  it('sets trustBadge to null when explicitly null on the source item', () => {
+    const result = discoverListingToPropertyListing(makeDiscoverListing({ trustBadge: null }), now);
+    expect(result.trustBadge).toBeNull();
+  });
+
+  it('never emits a raw A-D letter grade — only the three public words or null', () => {
+    const allowed = new Set(['verified', 'trusted', 'listed', null]);
+    for (const badge of ['verified', 'trusted', 'listed', undefined, null] as const) {
+      const result = discoverListingToPropertyListing(makeDiscoverListing({ trustBadge: badge }), now);
+      expect(allowed.has(result.trustBadge ?? null)).toBe(true);
+      expect(['A', 'B', 'C', 'D']).not.toContain(result.trustBadge);
+    }
   });
 });

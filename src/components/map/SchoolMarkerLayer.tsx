@@ -37,7 +37,9 @@ export interface SchoolMarkerLayerProps {
 }
 
 /**
- * A school marker icon — blue circle with graduation cap.
+ * A school marker icon — plum circle with graduation cap (Issue #1954: recolored
+ * from blue #2563eb to the plum design-system token, matching PropertyMap.tsx's
+ * schoolMarkerIcon + SchoolRadiusMapOverlay.tsx's legend swatch).
  * Defined locally to avoid a cross-dependency with PropertyMap's module-scope
  * `schoolMarkerIcon` (which is not exported).
  */
@@ -47,7 +49,7 @@ const schoolPinIcon = L.divIcon({
     <div style="
       width: 36px;
       height: 36px;
-      background-color: #2563eb;
+      background-color: hsl(var(--plum));
       border: 3px solid white;
       border-radius: 50%;
       box-shadow: 0 2px 8px rgba(0,0,0,0.4);

@@ -94,14 +94,37 @@ describe('useSchoolListings', () => {
     expect(result.current.schoolListings[0].id).toBe('radius-1');
   });
 
-  it('authenticated: maps filteredListings (snake_case PropertyListing) to DiscoverCityListingItem shape, never fabricating trustBadge', () => {
-    const { result } = renderHook(() => useSchoolListings(makeParams({ isAuthenticated: true })));
+  it('authenticated: maps filteredListings (snake_case PropertyListing) to DiscoverCityListingItem shape, passing trustBadge through', () => {
+    const { result } = renderHook(() =>
+      useSchoolListings(
+        makeParams({
+          isAuthenticated: true,
+          filteredListings: [makeFilteredListing({ trustBadge: 'verified' })],
+        }),
+      ),
+    );
     expect(result.current.schoolListings).toHaveLength(1);
     const item = result.current.schoolListings[0];
     expect(item.id).toBe('filtered-1');
     expect(item.propertyType).toBe('house');
     expect(item.pricePaise).toBe(6000000);
-    // Issue #1567/#1616 — must never replicate the internal trust-tier letter grade.
+    // Issue #1954 — the public trustBadge word now flows through from the source
+    // PropertyListing (it is no longer hardcoded to null).
+    expect(item.trustBadge).toBe('verified');
+  });
+
+  it('authenticated: trustBadge is null when absent on the source listing (never fabricated)', () => {
+    const { result } = renderHook(() =>
+      useSchoolListings(
+        makeParams({
+          isAuthenticated: true,
+          filteredListings: [makeFilteredListing({ trustBadge: undefined })],
+        }),
+      ),
+    );
+    const item = result.current.schoolListings[0];
+    // Issue #1567/#1616 — must never replicate the internal trust-tier letter grade;
+    // absent source data yields null, not a fabricated badge.
     expect(item.trustBadge).toBeNull();
   });
 

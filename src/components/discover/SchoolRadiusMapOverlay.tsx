@@ -14,12 +14,16 @@ import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
  * never fabricates names.
  *
  * Swatch colours intentionally MATCH the real Leaflet markers rendered by PropertyMap
- * (school pin + radius ring = #2563eb; the dashed ring uses dashArray '6 4') rather than
- * an idealised palette, so the legend is an honest key for what's actually on the map.
+ * (school pin + radius ring = plum design-system token, hsl(var(--plum)); the dashed
+ * ring uses dashArray '6 4') rather than an idealised palette, so the legend is an
+ * honest key for what's actually on the map.
+ *
+ * Issue #1954 — recoloured from blue (#2563eb) to plum, matching the school-first V2
+ * identity used throughout SchoolJourneyPanels.
  */
 
 /** Map marker / ring colours — kept in sync with PropertyMap.tsx (schoolMarkerIcon + schoolCircle). */
-const SCHOOL_MARKER_COLOR = '#2563eb';
+const SCHOOL_MARKER_COLOR = 'hsl(var(--plum))';
 
 /** Title-case a kebab slug for display (e.g. "university-belt" → "University Belt"). */
 export function prettifyZoneSlug(slug: string | null | undefined): string | null {
@@ -66,7 +70,7 @@ export interface SchoolRadiusLegendProps {
 
 /**
  * Bottom-left map legend for the selected-school radius state. Swatches match the real
- * markers: blue school pin, copper home pins, dashed-blue radius ring. The radius row
+ * markers: plum school pin, copper home pins, dashed-plum radius ring. The radius row
  * reflects the live radius so changing 3 → 5 → 10 km updates the "{n} km radius" text.
  */
 export function SchoolRadiusLegend({ radiusKm, className }: SchoolRadiusLegendProps) {

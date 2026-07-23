@@ -105,6 +105,14 @@ export interface PropertyListing {
    * mirrors the backend's priceBand contract (see DiscoverCityListingItem #1616).
    */
   priceBand?: string | null;
+  /**
+   * Issue #1954 — public trust badge word ("verified"/"trusted"/"listed").
+   * Null/absent when the listing has no badge (D tier, legacy rows, or unknown
+   * grade). Never the raw internal letter grade — the backend never sends
+   * A/B/C/D on this field. Mirrors DiscoverListingItem/DiscoverCityListingItem's
+   * trustBadge contract (#1567/#1616).
+   */
+  trustBadge?: 'verified' | 'trusted' | 'listed' | null;
 }
 
 export interface PropertyFilters {

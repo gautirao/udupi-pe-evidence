@@ -348,4 +348,33 @@ describe('MarkerPopoverCard — no tier/trust badge (Issue #1810 AC10)', () => {
     expect(screen.queryByText(/verified/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/trusted/i)).not.toBeInTheDocument();
   });
+
+  // Issue #1954 (AC8b) — as of this issue, PropertyListing (via discoverMappers)
+  // can now carry a non-null public trustBadge word on the underlying listing
+  // object. MarkerPopoverCard must still render NO badge at all (this component
+  // has no badge UI) — the field being populated upstream must not silently grow
+  // a badge here. Guards against a future regression that reads listing.trustBadge
+  // in this file without a corresponding, deliberate design decision.
+  it('renders no badge even when the listing carries a populated trustBadge word', () => {
+    renderCard({
+      listing: makeListing({ trustBadge: 'verified' }),
+    });
+    expect(screen.queryByTestId(/trust/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(/tier/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(/badge/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/verified/i)).not.toBeInTheDocument();
+  });
+
+  it('renders no raw A-D grade letter anywhere in the card DOM', () => {
+    const { container } = renderCard({
+      listing: makeListing({ trustBadge: 'listed' }),
+    });
+    // Sanity: the card itself rendered (not an empty tree false-positive).
+    expect(screen.getByTestId('marker-popover-card')).toBeInTheDocument();
+    const text = container.textContent ?? '';
+    for (const grade of ['A', 'B', 'C', 'D']) {
+      // Standalone-letter check (avoid false positives from words containing these letters).
+      expect(new RegExp(`(^|\\s)${grade}(\\s|$)`).test(text)).toBe(false);
+    }
+  });
 });

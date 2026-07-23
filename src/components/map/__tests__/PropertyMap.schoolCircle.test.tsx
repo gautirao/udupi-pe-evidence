@@ -132,8 +132,8 @@ describe('PropertyMap — schoolCircle pathOptions (Issue #1940 byte-identical g
     // Byte-identical assertion 3 (issue_1738_regression carry-forward, #1940 AC5) —
     // these five fields must be unchanged by the state-only #1940 teardown fix.
     expect(capturedCircles[0].pathOptions).toEqual({
-      color: '#2563eb',
-      fillColor: '#2563eb',
+      color: 'hsl(var(--plum))',
+      fillColor: 'hsl(var(--plum))',
       fillOpacity: 0.08,
       weight: 2,
       dashArray: '6 4',
