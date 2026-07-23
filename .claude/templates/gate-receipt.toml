@@ -1,0 +1,85 @@
+# TEMPLATE — .claude/templates/gate-receipt.toml
+#
+# Purpose: a per-gate, per-run receipt proving a mandatory Route-and-Run gate
+# (qa-fast, code-reviewer, security-reviewer, qa-verification, ...) actually
+# ran and returned the verdict the orchestrator claims. Introduced for #1961
+# after the aggregate `mandatory_gates_satisfied` boolean was found to be a
+# self-reported, non-verifiable claim — a single receipt-per-gate with a
+# transcript binding closes that gap.
+#
+# --- WHO WRITES THIS, AND WHEN --------------------------------------------
+# The Orchestrator (mode3-orchestrator teammate) writes ONE receipt per
+# mandatory/invoked gate during the Phase-5 specialist loop, immediately
+# AFTER it has persisted the specialist's returned verdict+evidence verbatim
+# to the matching transcript file
+# (`.claude/handoffs/issue-<N>/transcripts/<gate>-<task_id>.md`). The receipt
+# is written only after the transcript exists on disk — never before.
+#
+# --- TRANSCRIPT CONTRACT ---------------------------------------------------
+# The transcript file MUST contain a line matching `^FINAL_VERDICT:\s*<TOKEN>`
+# where TOKEN is one of the verdict enum values below. If more than one such
+# line exists (e.g. a rework re-run appended to the same file), the LAST
+# occurrence is authoritative. `receipt.verdict` MUST equal that transcript
+# verdict — the orchestrator cannot stamp APPROVE over a NEEDS_FIXES/FAIL
+# transcript; verify-mode3-gate-receipts.py enforces this equality.
+#
+# --- receipt_sha256 SELF-EXCLUSION ALGORITHM --------------------------------
+# receipt_sha256 covers the receipt's OWN content so a hand-edit or a
+# copy-pasted receipt from a different run/gate is detectable. Because the
+# hash cannot include itself, both the writer (orchestrator) and the
+# verifier (verify-mode3-gate-receipts.py) compute it the same way:
+#   1. Take this file's raw text.
+#   2. Replace the `receipt_sha256 = "..."` line's VALUE with the empty
+#      string, i.e. the line reads exactly `receipt_sha256 = ""`.
+#   3. sha256() the resulting byte sequence (UTF-8).
+#   4. Write that digest as the final value of `receipt_sha256`.
+# The verifier repeats steps 1-3 on the file as found on disk and compares
+# against the stored value in step 4.
+#
+# --- RE-RUNS (rework) -------------------------------------------------------
+# A rework cycle that re-invokes the same gate does NOT overwrite the
+# original receipt. It appends a new file `<gate>-r<n>.toml` (e.g.
+# `code-reviewer-r1.toml`, `code-reviewer-r2.toml`) in the same directory.
+# The HIGHEST `-r<n>` present for a gate is authoritative; the base
+# `<gate>.toml` (implicitly r0) is authoritative only when no `-r<n>` exists.
+#
+# --- LOCATION ----------------------------------------------------------------
+# Receipts live at `.claude/handoffs/issue-<N>/gates/<gate>.toml` (or
+# `<gate>-r<n>.toml`). Like the rest of `.claude/handoffs/`, these are
+# runtime workflow artefacts, NEVER product code, and are cleaned up per
+# `.claude/mode3/contracts/closeout.md` alongside the other per-run
+# handoff artefacts.
+
+schema_version = 1
+issue = 0                 # int — MUST equal the run's --issue
+run_id = "issue-<N>"       # run slot; MUST match the handoff run (rework attempt suffix allowed)
+gate = "code-reviewer"     # MUST be a name in [executor.specialist_policy].mandatory_gates (or a run-added gate)
+task_id = "T3"             # plan task this gate covered
+agent = "code-reviewer"    # specialist category actually invoked
+started_at = "2026-01-01T00:00:00Z"
+completed_at = "2026-01-01T00:00:00Z"
+
+# enum: APPROVE | PASS | NOT_REQUIRED | NEEDS_FIXES | FAIL | BLOCKED
+# A gate is SATISFIED only when verdict is APPROVE, PASS, or NOT_REQUIRED.
+verdict = "APPROVE"
+
+# REQUIRED (non-empty) only when verdict = "NOT_REQUIRED" — cite the
+# Route-and-Run skip rule (e.g. "ROUTE_AND_RUN.md § code-reviewer skip rule").
+skip_rule = ""
+
+# git rev-parse HEAD at the moment the gate ran — anchors "was this review
+# still fresh when the run finished" (verify-mode3-gate-receipts.py a7 check).
+reviewed_commit = "<40-hex>"
+
+# Files this gate's verdict covers. Used to decide whether a LATER commit
+# stales this receipt (any changed file matching one of these globs = stale).
+# If omitted/empty, the verifier falls back to a CONSERVATIVE rule: ANY
+# file changed after reviewed_commit stales the receipt.
+coverage_globs = ["**/*.py"]
+
+evidence_path = ".claude/handoffs/issue-<N>/transcripts/code-reviewer-T3.md"
+transcript_sha256 = "<64-hex sha256 of evidence_path bytes>"
+
+# sha256 of THIS file with the receipt_sha256 VALUE replaced by "" — see the
+# self-exclusion algorithm above. Leave as a placeholder only until computed.
+receipt_sha256 = "<64-hex>"

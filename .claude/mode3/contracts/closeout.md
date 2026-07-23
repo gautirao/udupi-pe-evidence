@@ -115,7 +115,7 @@ The closeout MUST additionally report current-run artefacts and stale artefacts 
 - **Stale PRs detected but NOT touched:** number/title/age each (see triage report fields).
 - **Stale branches/worktrees detected but NOT touched:** counts by category (merged / unmerged / worktree-agent / unknown).
 - **Dirty/untracked files left untouched** (pre-existing, not produced by this run).
-- **Audit artefacts preserved** (`.claude/handoffs/issue-<N>/*`, `.claude/openai-gates/issue-<N>/*`).
+- **Audit artefacts preserved** (`.claude/handoffs/issue-<N>/*`, `.claude/openai-gates/issue-<N>/*`, including the per-gate receipts under `.claude/handoffs/issue-<N>/gates/` and transcripts under `.claude/handoffs/issue-<N>/transcripts/` — these are cleaned up on the SAME schedule as the rest of the handoff dir, never separately or earlier).
 - An **explicit statement** that no stale PR/branch cleanup, merge, close, rebase, or prune was performed unless the user explicitly approved it (cite the approval if one was given).
 
 ---

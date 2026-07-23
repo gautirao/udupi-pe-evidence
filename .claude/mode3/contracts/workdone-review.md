@@ -6,7 +6,7 @@
 > **Inputs:** `workdone-candidate.toml` or `blocked.toml`, execution log, 7A/7B evidence, validation matrix.
 > **Allowed scope:** integrity/scope/evidence verification, gate packet assembly, gate call.
 > **Forbidden:** authoring fixes (route `NEEDS_FIXES` via Rework routing), invoking WORKDONE_REVIEW on a blocked run or with a failed preflight.
-> **Stop conditions:** sha mismatch, routing-log violation, scope-lock violation, missing/failed QA-E2E or eval-checklist evidence, both terminal artefacts present.
+> **Stop conditions:** sha mismatch, routing-log violation, scope-lock violation, missing/failed QA-E2E or eval-checklist evidence, both terminal artefacts present, gate-receipt reconciliation failure (missing/duplicate/stale/unbound-transcript/verdict-mismatch).
 > **Outputs:** `workdone-review-request.toml` + gate verdict (per `openai_gate.py`: `APPROVED_FOR_PR | NEEDS_FIXES | NEEDS_MORE_EVIDENCE | NEEDS_USER_DECISION`).
 >
 > Semantics unchanged from the original `mode3-run.md`.
@@ -38,19 +38,55 @@ Runs **after** Phase 7A (and 7B if triggered) have PASSed. WORKDONE_REVIEW is th
 
 ### Preflight validation (automated)
 
-Before submitting WORKDONE_REVIEW, run the automated preflight script to verify 4 deterministic checks:
+Before submitting WORKDONE_REVIEW, run the automated preflight scripts, **in this order**, to verify all deterministic checks:
 
 ```bash
+python .claude/scripts/verify-mode3-gate-receipts.py --issue <N> --base origin/main
 python .claude/scripts/verify-mode3-workdone.py --issue <N> --base origin/main
 ```
 
-Output is compact JSON summarizing:
+`verify-mode3-gate-receipts.py` runs FIRST. It reconciles the per-gate receipts
+(`.claude/handoffs/issue-<N>/gates/*.toml`) against the handoff's
+`[executor.specialist_policy].mandatory_gates` roster — see "Gate receipts
+(per-gate reconciliation)" below. **If this script exits non-zero, halt.** Do
+NOT proceed to `verify-mode3-workdone.py` or WORKDONE_REVIEW.
+
+`verify-mode3-workdone.py` then verifies 4 deterministic checks:
 - SHA256 integrity chain (handoff + plan)
 - Routing-decision-log consistency
 - Scope-lock / forbidden-file violations
 - Eval-checklist satisfaction
 
-**If the script exits non-zero, halt.** Do NOT proceed to WORKDONE_REVIEW. The script output is evidence of pre-flight status; OpenAI WORKDONE_REVIEW is the gate decision. Include the script JSON in the workdone-review-request.toml `[preflight_validation]` section.
+**If either script exits non-zero, halt.** Do NOT proceed to WORKDONE_REVIEW. The script output is evidence of pre-flight status; OpenAI WORKDONE_REVIEW is the gate decision. Include both scripts' JSON in the workdone-review-request.toml `[preflight_validation]` section.
+
+### Gate receipts (per-gate reconciliation)
+
+The per-gate `gate_evidence` table (produced by `verify-mode3-gate-receipts.py`
+and carried into `workdone-candidate.toml`) **replaces** the old aggregate
+`mandatory_gates_satisfied` boolean, which was a self-reported claim with no
+independent verification. Each row left-joins one `mandatory_gates` roster
+entry onto its authoritative receipt:
+
+- A **MISSING** row means that gate never ran (or its receipt was never
+  written) — this blocks WORKDONE_REVIEW in `enforce` mode (the handoff's
+  `receipts_contract >= 1`).
+- **STALE** means the gate's `reviewed_commit` no longer covers the current
+  diff (a later commit touched files in — or, absent `coverage_globs`,
+  anywhere in — its coverage) — this blocks WORKDONE_REVIEW.
+- **INVALID** means the receipt itself failed a structural check (bad
+  verdict, hash mismatch, unbound/mismatched transcript, cross-run receipt)
+  — this blocks WORKDONE_REVIEW.
+- Only **SATISFIED** rows for every mandatory gate allow WORKDONE_REVIEW to
+  proceed.
+
+**Bootstrap mode is a VISIBLE downgrade, never a silent pass.** If the
+handoff omits `receipts_contract`, the verifier runs in `mode = "bootstrap"`
+and a MISSING receipt does not fail the run — but `receipts_bootstrap = true`
+is stamped into the output and MUST be carried into
+`workdone-candidate.toml` and acknowledged explicitly in the
+`workdone-review-request.toml` packet (it is not something to quietly pass
+through). A receipt that IS present but structurally invalid still fails
+loudly in bootstrap mode exactly as it would in `enforce` mode.
 
 ---
 

@@ -127,6 +127,14 @@ mandatory_gates = [
   # Add "architect" if architecture gate triggers
 ]
 
+# 1 = receipts required & enforced; omit only for legacy bootstrap runs (a
+# missing/omitted value downgrades verify-mode3-gate-receipts.py to
+# "bootstrap" mode — a VISIBLE, logged downgrade, never a silent pass).
+# Each mandatory gate's receipt (.claude/templates/gate-receipt.toml) should
+# carry `coverage_globs` scoping the files its verdict covers, so a later
+# out-of-scope commit does not falsely stale the gate.
+receipts_contract = 1
+
 # Always-forbidden agent types — Orchestrator refuses to invoke any of these.
 always_forbidden = ["general-purpose", "Plan", "Explore", "explorer-planner", "spec-enricher", "chatgpt-gatekeeper"]
 

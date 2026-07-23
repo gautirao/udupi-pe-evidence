@@ -21,6 +21,36 @@ Executor prohibitions are NOT restated here: the always-loaded dispatcher carrie
 
 ---
 
+## Gate-receipt reconciliation (Main-Agent duty, #1961)
+
+Gate-receipt reconciliation is a **Main-Agent** duty precisely because it is
+a **different-actor** check: the Orchestrator chooses whether/when to invoke
+and skip gates, so the Orchestrator cannot be the sole verifier that those
+gates actually ran with a satisfying verdict. The Main Agent runs:
+
+```bash
+python .claude/scripts/verify-mode3-gate-receipts.py --issue <N> --base origin/main
+```
+
+- **At Phase 7C preflight**, before `verify-mode3-workdone.py` (see
+  `.claude/mode3/contracts/workdone-review.md` → Preflight validation). A
+  non-zero exit halts before WORKDONE_REVIEW is invoked.
+- **Again on 7A rework re-entry.** Per the Rework-routing procedure below, a
+  `NEEDS_FIXES` cycle can introduce intervening commits that stale an
+  already-satisfied gate's receipt (a later commit touching a reviewed
+  gate's `coverage_globs`) even though the gate itself was never re-invoked.
+  The Main Agent re-runs the reconciliation script after each Phase 7A
+  re-validation, consistent with the existing rework-routing text (re-enter
+  Phase 7A → re-submit the gate that emitted the feedback): a stale receipt
+  discovered here routes back through the same resume-then-respawn
+  mechanism, not a Main-Agent-authored fix.
+
+A `receipts_bootstrap = true` result (handoff omitted `receipts_contract`) is
+a visible downgrade the Main Agent must carry forward into the
+WORKDONE_REVIEW packet, not silently accept.
+
+---
+
 ## Notification handling
 
 The Main Agent REACTS to O2M (orchestrator→Main-Agent) notifications received via SendMessage. It does NOT run an open-ended re-inspection loop. Full contract: `.claude/mode3/contracts/notifications.md`.

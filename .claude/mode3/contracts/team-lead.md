@@ -106,6 +106,34 @@ Each specialist prompt MUST be assembled from canonical artefacts. No hidden cha
 
 The `team-lead-execution-log.md` entry for each call records the canonical artefacts cited.
 
+### Gate receipts (verifiable per-gate proof, #1961)
+
+After each specialist returns, the Orchestrator MUST, before invoking the
+next specialist:
+
+1. **Persist the transcript.** Write the specialist's returned verdict +
+   evidence **verbatim** to `.claude/handoffs/issue-<N>/transcripts/<gate>-<task_id>.md`,
+   including a literal `FINAL_VERDICT: <TOKEN>` line (TOKEN ∈ `APPROVE | PASS
+   | NOT_REQUIRED | NEEDS_FIXES | FAIL | BLOCKED`). If the transcript already
+   exists from a prior rework cycle, append — the LAST `FINAL_VERDICT:` line
+   in the file is authoritative.
+2. **Write the receipt.** `.claude/handoffs/issue-<N>/gates/<gate>.toml`
+   (template `.claude/templates/gate-receipt.toml`), with:
+   - `reviewed_commit` = `git rev-parse HEAD` at the moment the gate ran,
+   - `transcript_sha256` = sha256 of the transcript file just written,
+   - `receipt_sha256` = the self-excluded sha256 of the receipt itself (see
+     the algorithm documented in the template's header comment — compute the
+     hash with the `receipt_sha256` value emptied to `""`, then fill it in).
+   A rework re-run of the SAME gate does not overwrite the original receipt —
+   it appends `.claude/handoffs/issue-<N>/gates/<gate>-r<n>.toml` (highest
+   `-r<n>` is authoritative).
+
+Reconciliation (`verify-mode3-gate-receipts.py`) runs at **phase boundaries**
+— Phase 6→7 acceptance, the Phase 7C preflight, and after each Phase 7A
+re-validation on a NEEDS_FIXES rework — **not** on a commit-count tripwire.
+This matters because a later commit outside a gate's `coverage_globs` must
+not stale that gate's receipt, while a commit touching covered files must.
+
 ### Indexed-first navigation (mandatory)
 
 Orchestrator and specialists prefer `mcp__jcodemunch__search_symbols`, `search_text`, `get_file_outline`, `get_symbol_source`, `get_context_bundle` over broad `Read` of large files. Direct read is allowed only as targeted fallback when (a) the file is missing from the index, (b) the index is stale for that file, or (c) the file was newly created/modified and unindexed. Fallback reason MUST be logged in `team-lead-execution-log.md` or the specialist's report.
