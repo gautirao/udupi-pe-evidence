@@ -26,7 +26,7 @@ import {
 const PREVIEW_SOURCE: DiscoverDataSource = { mode: 'preview', cityId: 7, revisionId: 42 };
 
 function previewWrapper({ children }: { children: React.ReactNode }) {
-  return React.createElement(DiscoverDataSourceProvider, { value: PREVIEW_SOURCE }, children);
+  return React.createElement(DiscoverDataSourceProvider, { value: PREVIEW_SOURCE, children });
 }
 
 describe('useDiscoverSource', () => {

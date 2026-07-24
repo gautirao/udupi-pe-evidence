@@ -66,8 +66,7 @@ function makePreviewWrapper() {
       { client: queryClient },
       React.createElement(
         DiscoverDataSourceProvider,
-        { value: { mode: 'preview', cityId: CITY_ID, revisionId: REVISION_ID } },
-        children,
+        { value: { mode: 'preview', cityId: CITY_ID, revisionId: REVISION_ID }, children },
       ),
     );
   return { wrapper, queryClient };

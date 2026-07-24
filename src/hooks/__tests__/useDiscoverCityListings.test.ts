@@ -332,8 +332,7 @@ function makePreviewWrapper(cityId: number, revisionId: number) {
       { client: queryClient },
       React.createElement(
         DiscoverDataSourceProvider,
-        { value: { mode: 'preview', cityId, revisionId } },
-        children,
+        { value: { mode: 'preview', cityId, revisionId }, children },
       ),
     );
 }
@@ -369,8 +368,7 @@ describe('useDiscoverCityListings — preview mode (Issue #1911 PR3)', () => {
         { client: qc },
         React.createElement(
           DiscoverDataSourceProvider,
-          { value: { mode: 'preview' as const, cityId: 7, revisionId: 42 } },
-          children,
+          { value: { mode: 'preview' as const, cityId: 7, revisionId: 42 }, children },
         ),
       );
 
