@@ -87,14 +87,18 @@ export default function MapDiscovery() {
   const { toast } = useToast();
   // Issue #1953 (build step 2) — MapDiscovery is no longer a production caller
   // of useDiscoverUrlState(); it consumes the DiscoverProvider facade instead
-  // (team-lead-plan.toml decisions.D1_facade.sole_caller). urlState/urlActions
-  // are reconstructed here purely so the ~100 existing `urlState.x` /
-  // `urlActions.x` call sites below stay byte-identical — reconstruction is
-  // NOT a second URL writer; nav/viewport/actions are all sourced from the
-  // one provider-owned useDiscoverUrlState() call.
+  // (team-lead-plan.toml decisions.D1_facade.sole_caller). Issue #2003 PR4
+  // (rework) — the former flat urlState/urlActions accessor call sites below
+  // have been migrated to nav / viewport / actions directly. The `urlState`
+  // object (below) is retained only for its remaining whole-object consumers
+  // (useMarkerSelection, useDiscoverPageState, useDiscoverJourneyTransitions,
+  // useDiscoverCameraOrchestration, toLayerInput, etc.) pending the follow-on
+  // shim-deletion PR (PR5) — it is NOT a second URL writer; nav/viewport/
+  // actions are all sourced from the one provider-owned useDiscoverUrlState()
+  // call.
   const nav = useDiscoverNav();
   const viewport = useDiscoverViewport();
-  const urlActions = useDiscoverActions();
+  const actions = useDiscoverActions();
   const urlState: DiscoverUrlState = useMemo(() => ({ ...nav, viewport }), [nav, viewport]);
   // Issue #1953 (build step 3, RH4 narrowed) — mobileView only, to key the
   // bboxTimerRef clear-on-leave-MAP effect below.
@@ -120,11 +124,11 @@ export default function MapDiscovery() {
   // Issue #1597 — early derivation of PropertyFilters from URL state, available before
   // useDiscoverPageState is called. Used by the group-results listings query so it respects
   // active discover filters (propertyTypes, price, bedrooms, etc.).
-  // Mirrors the urlState.filters → PropertyFilters mapping in useDiscoverPageState's useState
+  // Mirrors the nav.filters → PropertyFilters mapping in useDiscoverPageState's useState
   // initializer. dateFrom/dateTo are ISO strings in URL state; PropertyFilters expects Date.
   // schoolLat/schoolLon/polygon are NOT included: group-results is not a school or polygon state.
   const urlDiscoverFilters: PropertyFilters = useMemo(() => {
-    const f = urlState.filters;
+    const f = nav.filters;
     return {
       propertyTypes: f.propertyTypes as PropertyFilters['propertyTypes'],
       bedrooms: f.bedrooms,
@@ -140,59 +144,59 @@ export default function MapDiscovery() {
       dateFrom: f.dateFrom ? new Date(f.dateFrom) : undefined,
       dateTo: f.dateTo ? new Date(f.dateTo) : undefined,
     };
-  // urlState.filters object identity changes on every URL change — use the individual
+  // nav.filters object identity changes on every URL change — use the individual
   // scalar fields as deps so React can skip re-derivation when nothing changed.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    urlState.filters.propertyTypes,
-    urlState.filters.bedrooms,
-    urlState.filters.priceMin,
-    urlState.filters.priceMax,
-    urlState.filters.sellerTypes,
-    urlState.filters.boardFilters,
-    urlState.filters.categoryFilters,
-    urlState.filters.backOnMarket,
-    urlState.filters.newToMarket,
-    urlState.filters.reraRegistered,
-    urlState.filters.readyToMove,
-    urlState.filters.dateFrom,
-    urlState.filters.dateTo,
+    nav.filters.propertyTypes,
+    nav.filters.bedrooms,
+    nav.filters.priceMin,
+    nav.filters.priceMax,
+    nav.filters.sellerTypes,
+    nav.filters.boardFilters,
+    nav.filters.categoryFilters,
+    nav.filters.backOnMarket,
+    nav.filters.newToMarket,
+    nav.filters.reraRegistered,
+    nav.filters.readyToMove,
+    nav.filters.dateFrom,
+    nav.filters.dateTo,
   ]);
 
   // Fetch area groups for the current city.
   // The hook's enabled guard (city.length > 0) prevents fetching on empty city.
   // Issue #1745 Batch B map-hierarchy fix — pass the DEFAULTED city (matching
-  // useDiscoverPageState's `urlState.city || DEFAULT_CITY`), not the raw
-  // urlState.city. At plain /discover (no ?city= param) urlState.city is '',
+  // useDiscoverPageState's `nav.city || DEFAULT_CITY`), not the raw
+  // nav.city. At plain /discover (no ?city= param) nav.city is '',
   // which previously left this hook disabled (no groups) while the panel showed
   // the defaulted city's region cards — a landing-vs-panel mismatch that made
   // macro-region-bubbles fall back to the full liveAreas pill set. Falling back
   // to DEFAULT_CITY here does NOT reintroduce the stale-data window this comment
-  // used to warn about — that contrast was raw urlState.city vs a conditional ''
+  // used to warn about — that contrast was raw nav.city vs a conditional ''
   // placeholder, not vs `|| DEFAULT_CITY`, which resolves to the same city the
   // panel already renders.
   const {
     data: areaGroupsData,
     isLoading: isLoadingAreaGroups,
-  } = useAreaGroups(urlState.city || DEFAULT_CITY);
+  } = useAreaGroups(nav.city || DEFAULT_CITY);
 
   // Issue #1429 (B2) — precomputed corridor groups for the agri-first landing panel.
   // useRegionalAreaGroups returns { groups, isLoading, error } directly (no .data wrapper).
   // Issue #1745 Batch B — same DEFAULT_CITY fallback as useAreaGroups above, for
-  // agri-first city-landing consistency (same bug class: empty urlState.city
+  // agri-first city-landing consistency (same bug class: empty nav.city
   // disabling the hook while the panel shows the defaulted city).
   const {
     groups: corridorGroups,
     isLoading: isLoadingRegionalAreaGroups,
     isError: isRegionalAreaGroupsError,
     refetch: refetchRegionalAreaGroups,
-  } = useRegionalAreaGroups(urlState.city || DEFAULT_CITY);
+  } = useRegionalAreaGroups(nav.city || DEFAULT_CITY);
 
   // Issue #1429 — derive areaKeys from the selected corridor + distance tier to fetch
   // agri map listings. Hook is disabled when selectedRegion + selectedMaxKm are not both set.
   // Look up the corridor by selectedRegion, then find the tier by selectedMaxKm.
-  const selectedRegion = urlState.selectedRegion ?? null;
-  const selectedMaxKm = urlState.selectedMaxKm ?? null;
+  const selectedRegion = nav.selectedRegion ?? null;
+  const selectedMaxKm = nav.selectedMaxKm ?? null;
   const selectedCorridorData = selectedRegion
     ? corridorGroups.find((g) => g.directionCode === selectedRegion) ?? null
     : null;
@@ -202,14 +206,14 @@ export default function MapDiscovery() {
   const selectedGroupAreaKeys = selectedTierData?.areaKeys ?? [];
   // Issue #1494 — map URL intent ('buy'|'rent') to backend listingPurpose ('sale'|'rent').
   // 'buy' is the default; absent/invalid intent → 'sale'. Never send 'buy' to the backend.
-  const intentListingPurpose: string = urlState.intent === 'rent' ? 'rent' : 'sale';
+  const intentListingPurpose: string = nav.intent === 'rent' ? 'rent' : 'sale';
 
   const {
     data: agriMapListingsData,
     isLoading: isLoadingAgriGroupListings,
     isError: isAgriGroupListingsError,
     refetch: refetchAgriGroupListings,
-  } = useAgriMapListings(urlState.city, selectedGroupAreaKeys, intentListingPurpose, isAuthenticated);
+  } = useAgriMapListings(nav.city, selectedGroupAreaKeys, intentListingPurpose, isAuthenticated);
 
   // Issue #1429 — corridor + distance tier label for the agri-group-selected panel header chip.
   // Show "groupName · distanceLabel" when both are selected; fall back to just groupName.
@@ -236,7 +240,7 @@ export default function MapDiscovery() {
   // the useAreaGroups fetch; when areaGroupsData has loaded, the resolved group is present.
   const isGroupResultsState = panelContent === 'area-group-results';
   const resolvedGroupForResults = isGroupResultsState
-    ? resolveActiveDiscoverGroup(areaGroupsData?.groups, urlState.groupId)
+    ? resolveActiveDiscoverGroup(areaGroupsData?.groups, nav.groupId)
     : null;
   const resolvedGroupAreaKeys: string[] = resolvedGroupForResults?.area_keys ?? [];
 
@@ -247,7 +251,7 @@ export default function MapDiscovery() {
     isError: isGroupResultsErrorAuthed,
     refetch: refetchGroupResultsAuthed,
   } = useDiscoverListings({
-    city: urlState.city,
+    city: nav.city,
     page: 0,
     size: 50,
     // Issue #1597 — thread the active URL discover filters (propertyTypes, price, bedrooms,
@@ -268,7 +272,7 @@ export default function MapDiscovery() {
   const {
     data: groupResultsMarkersData,
   } = useDiscoverFilteredMarkers(
-    urlState.city,
+    nav.city,
     urlDiscoverFilters,
     isGroupResultsState && isAuthenticated, // only fire for authenticated users
     null,        // bbox — no viewport clipping for group-results
@@ -294,7 +298,7 @@ export default function MapDiscovery() {
     isError: isGroupResultsErrorAnon,
     refetch: refetchGroupResultsAnon,
   } = useDiscoverCityListings({
-    city: urlState.city,
+    city: nav.city,
     areaKeys: isGroupResultsState && !isAuthenticated ? resolvedGroupAreaKeys : [],
     limitPerArea: 20, // server caps at 20 anyway (MAX_LIMIT in CityAreaListingsService)
     // Forward the first propertyType/bedrooms value; remaining are filtered client-side.
@@ -336,17 +340,17 @@ export default function MapDiscovery() {
   // Returns null when selectedListing is absent or not found (safe fallback).
   const selectedGroupListingItem = useMemo(
     () =>
-      urlState.selectedListing && agriMapListingsData?.listings
-        ? (agriMapListingsData.listings.find((l) => l.id === urlState.selectedListing) ?? null)
+      nav.selectedListing && agriMapListingsData?.listings
+        ? (agriMapListingsData.listings.find((l) => l.id === nav.selectedListing) ?? null)
         : null,
-    [urlState.selectedListing, agriMapListingsData?.listings],
+    [nav.selectedListing, agriMapListingsData?.listings],
   );
 
   // Issue #1824 Slice S11b (C4) — client-side filtered agri listings lifted into
   // useFilteredAgriListings (see the hook's header comment).
   const filteredAgriListings = useFilteredAgriListings({
     agriMapListingsData,
-    filters: urlState.filters,
+    filters: nav.filters,
     isAuthenticated,
   });
 
@@ -354,9 +358,9 @@ export default function MapDiscovery() {
   // reverse URL-sync, 250ms debounce, handleSearchChange) now lives in
   // useDiscoverSearchState. See the hook's header comment for the KNOWN,
   // INTENTIONAL split-brain (debouncedSearch drives badge+markers here;
-  // urlState.q drives ActiveContextChips) — do NOT unify.
+  // nav.q drives ActiveContextChips) — do NOT unify.
   const { searchQuery, debouncedSearch, handleSearchChange } =
-    useDiscoverSearchState({ urlQ: urlState.q, setUrlSearch: urlActions.setSearchQuery });
+    useDiscoverSearchState({ urlQ: nav.q, setUrlSearch: actions.setSearchQuery });
 
   const [nearSchoolOpen, setNearSchoolOpen] = useState(false);
 
@@ -381,7 +385,7 @@ export default function MapDiscovery() {
     clearMarkerPopoverFromUrl,
     isMarkerPopoverUrlBacked,
     hydrateSelectedMarkerFromUrl,
-  } = useMarkerSelection({ urlActions, urlState, mapContainerRef });
+  } = useMarkerSelection({ urlActions: actions, urlState, mapContainerRef });
 
   // Issue #1374 — override panelContent to 'agri-detail' while an agri polygon is
   // selected. Confined to 'agri-selected' (not 'agri-landing') so a stale
@@ -504,7 +508,7 @@ export default function MapDiscovery() {
     handlePolygonDrawn, handlePolygonCleared,
     handleAreaClick, handleAreaSelect, handleAreaBack,
     page, setPage,
-  } = useDiscoverPageState({ urlState, urlActions });
+  } = useDiscoverPageState({ urlState, urlActions: actions });
 
   // Issue #1882 (Track A PR2 Slice S2c) — backend-owned region summary for the
   // journeyless-landing macro-region bubbles (see overviewAreas below), sourced
@@ -516,7 +520,7 @@ export default function MapDiscovery() {
   // area-group region_label string matching) — summaryRegions below is now a
   // 1:1 map of the backend response with NO client-side aggregation.
   // ADVISORY-1 rework — reuse the EXISTING intentListingPurpose mapping
-  // (declared above, urlState.intent 'rent'→'rent' else 'sale') rather than
+  // (declared above, nav.intent 'rent'→'rent' else 'sale') rather than
   // inventing a new one; threading it here closes the data-accuracy gap
   // where region listingCount lost buy/rent purpose scoping after the
   // cutover to this endpoint.
@@ -558,12 +562,12 @@ export default function MapDiscovery() {
   }, [summaryRegions, areaGroupsData]);
 
   // Issue #1910 (PR2) — region-scoped area-group projection (PR1 endpoint),
-  // enabled ONLY when the active urlState.scope resolves to a REGION (never
+  // enabled ONLY when the active nav.scope resolves to a REGION (never
   // fires for Udupi's non-region-scoped views, or a direct group/area
   // scope) — see useRegionScopedAreaGroups's `enabled` guard.
   const resolvedUrlScope = useMemo(
-    () => resolveScope(urlState.scope ?? null, scopeNamespaces),
-    [urlState.scope, scopeNamespaces],
+    () => resolveScope(nav.scope ?? null, scopeNamespaces),
+    [nav.scope, scopeNamespaces],
   );
   const regionScopeKeyForFetch = resolvedUrlScope.kind === 'region' ? resolvedUrlScope.regionKey : null;
   const {
@@ -574,7 +578,7 @@ export default function MapDiscovery() {
     // instead of a misleading "0 zones found" empty state.
     isError: isRegionScopedGroupsError,
     refetch: refetchRegionScopedGroups,
-  } = useRegionScopedAreaGroups(urlState.city || DEFAULT_CITY, regionScopeKeyForFetch, intentListingPurpose);
+  } = useRegionScopedAreaGroups(nav.city || DEFAULT_CITY, regionScopeKeyForFetch, intentListingPurpose);
 
   // Issue #1824 Slice S6 — composedResetMapTick + handleStartOver now live in
   // useDiscoverJourneyTransitions; see journeyView/journeyCommands below (declared
@@ -607,7 +611,7 @@ export default function MapDiscovery() {
   // bbox so the listings request is spatially constrained to the intersection of area
   // bounds AND school proximity.
   //
-  // Guard: !urlState.schoolId restricts injection to combined state only.
+  // Guard: !nav.schoolId restricts injection to combined state only.
   // Without this guard, area-first journey (area selected, no school) would also have
   // the polygon injected, routing the request through the polygon endpoint (capped at 200)
   // and breaking authenticated-user pagination.
@@ -616,11 +620,11 @@ export default function MapDiscovery() {
   // the PropertyFilters.polygon convention used by useDiscoverListings/the backend.
   const effectiveFilters = useMemo((): typeof filters => {
     // Only inject area-bbox polygon in combined state (area + school both present).
-    if (!urlState.schoolId || !selectedArea?.bbox || filters.polygon) return filters;
+    if (!nav.schoolId || !selectedArea?.bbox || filters.polygon) return filters;
     const [[s, w], [n, e]] = selectedArea.bbox;
     const bboxPolygon: [number, number][] = [[s, w], [s, e], [n, e], [n, w], [s, w]];
     return { ...filters, polygon: bboxPolygon };
-  }, [filters, selectedArea, urlState.schoolId]);
+  }, [filters, selectedArea, nav.schoolId]);
 
   // Issue #1655 — top-grouped-level guard: at the grouped overview level, individual
   // property markers and paginated listings should NOT be fetched. Only group/zone
@@ -629,26 +633,26 @@ export default function MapDiscovery() {
   // definitions (line ~2098) but is computed here so it can gate the data hooks.
   const isTopGroupedLevel = (() => {
     if (
-      (urlState.journey === 'area-first' || urlState.journey === 'school-first') &&
-      !urlState.groupId &&
-      !urlState.areaKey &&
+      (nav.journey === 'area-first' || nav.journey === 'school-first') &&
+      !nav.groupId &&
+      !nav.areaKey &&
       !selectedArea &&
-      !urlState.schoolId &&
+      !nav.schoolId &&
       !selectedSchool
     ) return true;
     if (
-      urlState.journey === 'agri-first' &&
-      !urlState.selectedRegion &&
-      !urlState.areaKey &&
+      nav.journey === 'agri-first' &&
+      !nav.selectedRegion &&
+      !nav.areaKey &&
       !selectedArea &&
-      !urlState.selectedLocality &&
-      !urlState.selectedGroup
+      !nav.selectedLocality &&
+      !nav.selectedGroup
     ) return true;
     return false;
   })();
 
   // Issue #1806 (FIX-1) — group-scope the map's marker fetch. The right panel
-  // (AreaGroupSelectedPanel, reached whenever urlState.groupId resolves to a
+  // (AreaGroupSelectedPanel, reached whenever nav.groupId resolves to a
   // real group) already shows only the group's member areas; before this fix
   // the map's marker fetch ignored groupId entirely and showed city-wide
   // markers instead (the reported map/panel scope mismatch).
@@ -658,7 +662,7 @@ export default function MapDiscovery() {
   // declarations used everywhere else on this page (~line 1631/2102, for
   // fitBounds + AreaMarkerLayer opacity/degradation props). Deliberately
   // duplicates that derivation — same resolver (resolveDiscoverGroupForAreaKey),
-  // same inputs (areaGroupsData?.groups, urlState.groupId, urlState.areaKey) —
+  // same inputs (areaGroupsData?.groups, nav.groupId, nav.areaKey) —
   // rather than reordering ~1600 lines of existing hooks to hoist them.
   //
   // Journey/state → groupAreaKeys mapping (DIRECTIVE 5):
@@ -674,11 +678,11 @@ export default function MapDiscovery() {
   //   groupId set AND group resolved                     → group.area_keys
   //     (the scoped fetch this fix exists for).
   const groupAreaKeysForMapData = useMemo((): string[] | undefined => {
-    if (!urlState.groupId) return undefined;
-    if (urlState.journey === 'school-first' && urlState.schoolId) return undefined;
-    const group = resolveDiscoverGroupForAreaKey(areaGroupsData?.groups, urlState.groupId, urlState.areaKey);
+    if (!nav.groupId) return undefined;
+    if (nav.journey === 'school-first' && nav.schoolId) return undefined;
+    const group = resolveDiscoverGroupForAreaKey(areaGroupsData?.groups, nav.groupId, nav.areaKey);
     return group?.area_keys ?? [];
-  }, [urlState.groupId, urlState.journey, urlState.schoolId, urlState.areaKey, areaGroupsData?.groups]);
+  }, [nav.groupId, nav.journey, nav.schoolId, nav.areaKey, areaGroupsData?.groups]);
 
   const {
     areasLoading, listingDataLoading, markersLoading, isLoadingAreaListings,
@@ -694,11 +698,11 @@ export default function MapDiscovery() {
     cameraIntent, publishCameraIntent, publishClusterCameraIntent,
   } = useDiscoverMapData({
     city, selectedArea, filters: effectiveFilters, debouncedSearch,
-    urlSchoolId: urlState.schoolId, isAuthenticated, fitTick,
+    urlSchoolId: nav.schoolId, isAuthenticated, fitTick,
     // Issue #1806 (FIX-1) — see groupAreaKeysForMapData above for the full
     // journey/state → value mapping.
     groupAreaKeys: groupAreaKeysForMapData,
-    // Issue #1118: do NOT include !!urlState.schoolId here. The /api/discover/markers
+    // Issue #1118: do NOT include !!nav.schoolId here. The /api/discover/markers
     // endpoint is auth-gated (returns 401 for anonymous users). Enabling the query for
     // unauthenticated school-first users caused a delayed marker disappearance: placeholderData
     // kept stale markers visible briefly, then the 401 settled and markers vanished while the
@@ -719,13 +723,13 @@ export default function MapDiscovery() {
     markersEnabled:
       !isTopGroupedLevel &&
       isAuthenticated &&
-      (urlState.journey === 'area-first' ||
+      (nav.journey === 'area-first' ||
         // Issue #1372 — agri-first journey must also enable markers so AgriMarkerClusterLayer
         // receives data. Without this, useDiscoverFilteredMarkers is never enabled in
         // agri-first mode and the cluster layer renders empty.
-        urlState.journey === 'agri-first' ||
-        (urlState.journey === 'school-first' &&
-          !!urlState.schoolId &&
+        nav.journey === 'agri-first' ||
+        (nav.journey === 'school-first' &&
+          !!nav.schoolId &&
           filters.schoolLat != null &&
           filters.schoolLon != null &&
           boundedSearchTriggered)) &&
@@ -743,7 +747,7 @@ export default function MapDiscovery() {
     listingsEnabled: !isTopGroupedLevel,
     page,
     bbox: mapBbox,
-    journey: urlState.journey,
+    journey: nav.journey,
     // Issue #1494 — thread buy/rent intent as listingPurpose filter
     listingPurpose: intentListingPurpose,
   });
@@ -756,13 +760,13 @@ export default function MapDiscovery() {
   // Single owner: MapDiscovery fetches once and passes down to both SchoolMarkerLayer and
   // SchoolsInAreaPanel (via DiscoverRightPanel) to avoid duplicate API calls.
   // Issue #1131 — URL-backed board filter for schools. The board filters live in
-  // urlState.filters.boardFilters (parsed from repeated ?board=CBSE&board=ICSE params).
-  // The previous code read `urlState.boardFilters`, which is undefined on the URL state
+  // nav.filters.boardFilters (parsed from repeated ?board=CBSE&board=ICSE params).
+  // The previous code read `nav.boardFilters`, which is undefined on the URL state
   // shape — boardFilters live under `filters`. That bug meant the URL never reached the
   // schools query.
   const urlBoardFilters = useMemo(
-    () => urlState.filters.boardFilters ?? [],
-    [urlState.filters.boardFilters],
+    () => nav.filters.boardFilters ?? [],
+    [nav.filters.boardFilters],
   );
 
   // Issue #1798 — gate on panelContent (derivePanelContent's own routing result,
@@ -777,11 +781,11 @@ export default function MapDiscovery() {
   // journeyless fallback in derivePanelContent). Reusing panelContent keeps this query
   // byte-for-byte in sync with the single source of truth for panel routing.
   const schoolsAreaKey =
-    panelContent === 'schools-in-area' ? (urlState.areaKey ?? undefined) : undefined;
+    panelContent === 'schools-in-area' ? (nav.areaKey ?? undefined) : undefined;
   const schoolsQuery = useSchoolsByArea(
     schoolsAreaKey,
     urlBoardFilters,
-    urlState.filters.categoryFilters ?? [],
+    nav.filters.categoryFilters ?? [],
     20,
   );
   const allSchools = useMemo(
@@ -795,13 +799,13 @@ export default function MapDiscovery() {
   // useDiscoverJourneyTransitions below.
 
   // Single setter consumed by chip UI: updates URL (canonical) and local state (mirror).
-  // Always uses REPLACE semantics (urlActions.setBoardFilters is REPLACE-only).
+  // Always uses REPLACE semantics (actions.setBoardFilters is REPLACE-only).
   const handleBoardFilterChange = useCallback(
     (boards: string[]) => {
       setSchoolBoardFilter(boards);
-      urlActions.setBoardFilters(boards);
+      actions.setBoardFilters(boards);
     },
-    [setSchoolBoardFilter, urlActions],
+    [setSchoolBoardFilter, actions],
   );
 
   // Client-side filter — defends against stale server responses and provides instant
@@ -830,7 +834,7 @@ export default function MapDiscovery() {
   // see useDiscoverJourneyTransitions.ts's "Deviation 2" header comment for why.
   const { view: journeyView, commands: journeyCommands } = useDiscoverJourneyTransitions({
     urlState,
-    urlActions,
+    urlActions: actions,
     selectedSchool,
     filters,
     setSelectedArea,
@@ -922,30 +926,30 @@ export default function MapDiscovery() {
     areaListings,
     schoolRadiusListings,
     filteredListings,
-    journey: urlState.journey,
-    schoolId: urlState.schoolId,
+    journey: nav.journey,
+    schoolId: nav.schoolId,
   });
 
   // Issue #1175 v3 / Issue #1798 PR-B1 — focusedGroup is resolved from both groupId (by ID
-  // or exact slug match) and automatically derived from urlState.areaKey if needed.
+  // or exact slug match) and automatically derived from nav.areaKey if needed.
   // Guarantees right panel, map layer, map markers, and map breadcrumb derive from unified context.
   const focusedGroup = useMemo(() => {
-    return resolveDiscoverGroupForAreaKey(areaGroupsData?.groups, urlState.groupId, urlState.areaKey);
-  }, [areaGroupsData?.groups, urlState.groupId, urlState.areaKey]);
+    return resolveDiscoverGroupForAreaKey(areaGroupsData?.groups, nav.groupId, nav.areaKey);
+  }, [areaGroupsData?.groups, nav.groupId, nav.areaKey]);
 
   // Issue #1175 v3 — group aggregate count for the badge.
   // Only active when groupId is set and no area/school is selected (those take precedence).
   // null  = group metadata still loading (isLoadingAreaGroups=true).
   // O(k) where k = member area count (bounded, typically 2–6).
   const groupListingsCount = useMemo((): number | null | undefined => {
-    if (!urlState.groupId) return undefined;          // no group active
+    if (!nav.groupId) return undefined;          // no group active
     if (!focusedGroup) return null;                   // null when areaGroupsData still loading OR when groupId no longer exists — both intentionally hide the badge
     // Use a Set for O(1) membership checks → overall O(N + k) not O(N·k)
     const memberKeySet = new Set(focusedGroup.area_keys);
     return discoverAreas
       .filter((a) => memberKeySet.has(a.areaKey))
       .reduce((sum, a) => sum + (a.listingCount ?? 0), 0);
-  }, [urlState.groupId, focusedGroup, discoverAreas]);
+  }, [nav.groupId, focusedGroup, discoverAreas]);
 
   // Issue #1824 Slice S11b (C5) — school-first status-pill count derivations
   // lifted into useSchoolFirstCounts (see the hook's header comment). Called
@@ -956,8 +960,8 @@ export default function MapDiscovery() {
     schoolFirstAreaSchoolCount,
     schoolZoneLabels,
   } = useSchoolFirstCounts({
-    journey: urlState.journey,
-    groupId: urlState.groupId,
+    journey: nav.journey,
+    groupId: nav.groupId,
     selectedArea,
     focusedGroup,
     areasLoading,
@@ -1004,7 +1008,7 @@ export default function MapDiscovery() {
         groupListingsCount,
         // Issue #1824 S4 — KNOWN, INTENTIONAL split-brain: this badge reads
         // debouncedSearch (local 250ms, from useDiscoverSearchState), NOT
-        // urlState.q (which drives ActiveContextChips). Do NOT unify — see
+        // nav.q (which drives ActiveContextChips). Do NOT unify — see
         // useDiscoverSearchState's header comment.
         searchQuery: debouncedSearch,
         // Issue #1817 — anon path only: schoolRadiusListings is the FULL radius set
@@ -1039,10 +1043,10 @@ export default function MapDiscovery() {
         ? formatDiscoverBadgeCopy(discoverBadge, {
             scopeLabel: selectedArea.areaLabel,
             noun: 'verified properties',
-            searchQuery: urlState.q,
+            searchQuery: nav.q,
           })
         : null,
-    [selectedArea, discoverBadge, urlState.q],
+    [selectedArea, discoverBadge, nav.q],
   );
 
   // Issue #1817 (AC11) — debounced, polite result-count announcement. A visually-hidden
@@ -1051,13 +1055,13 @@ export default function MapDiscovery() {
   // never mid-refetch. Uses the same shared copy contract as the generic map-badge branch
   // (formatDiscoverBadgeCopy) for an honest, if not always verbatim, summary of every scope.
   // Issue #1824 Slice S10a — the debounced state/effect body extracted to
-  // useDiscoverBadgeAnnounce (verbatim; only urlState.q → urlStateQ rename).
+  // useDiscoverBadgeAnnounce (verbatim; only nav.q → urlStateQ rename).
   const announcedBadgeText = useDiscoverBadgeAnnounce({
     discoverBadge,
     selectedArea,
     focusedGroup,
     city,
-    urlStateQ: urlState.q,
+    urlStateQ: nav.q,
   });
 
   // Issue #1824 Slice S7 — camera panner/tick orchestration (R9): schoolFocusTick +
@@ -1165,17 +1169,17 @@ export default function MapDiscovery() {
   // leaving schools-in-area / school-selected / area-school-combined (all of which
   // resolve an areaKey by construction — see setSchoolJourney) byte-for-byte unchanged.
   const showSchoolMarkers = deriveShowSchoolMarkers({
-    journey: urlState.journey,
-    areaKey: urlState.areaKey,
-    schoolPicking: urlState.schoolPicking,
-    schoolId: urlState.schoolId,
+    journey: nav.journey,
+    areaKey: nav.areaKey,
+    schoolPicking: nav.schoolPicking,
+    schoolId: nav.schoolId,
   });
 
   // MVP2 — in the agri-first journey the school controls are not part of the flow.
   // Hide (do not disable) the "Near a school" trigger button and the NearSchoolSheet
   // mount so a user in agri-first cannot open the school sheet (which would call
   // setSchoolJourney and flip the journey to school-first). Single boolean gate.
-  const isAgriJourney = urlState.journey === 'agri-first';
+  const isAgriJourney = nav.journey === 'agri-first';
 
   // Issue #1157 — area-first Back wrapper. Ordering is significant (DEFECT B):
   //   1. schoolId set (area-school-combined) → backToSchoolPicking: drop schoolId +
@@ -1189,9 +1193,9 @@ export default function MapDiscovery() {
   // area-selected (the rev-4 ladder skipped this rung and fell through to area
   // dismissal without clearing the school).
   const handleAreaFirstBack = useCallback(() => {
-    if (urlState.schoolId) {
+    if (nav.schoolId) {
       // URL: drop schoolId + radiusKm, set schoolPicking=1 (single REPLACE).
-      urlActions.backToSchoolPicking();
+      actions.backToSchoolPicking();
       // Local cleanup (modelled on onClearSchool): without this the cold-load/restore
       // effect would re-inject selectedSchool from a lingering urlSchoolId and the
       // schoolCircle (keyed off local selectedSchool + filters.schoolLat/Lon) would
@@ -1207,12 +1211,12 @@ export default function MapDiscovery() {
       });
       // Issue #1115 — school cleared; reset so CTA reappears on next school select.
       setBoundedSearchTriggered(false);
-    } else if (urlState.schoolPicking) {
-      urlActions.clearSchoolPicking();
+    } else if (nav.schoolPicking) {
+      actions.clearSchoolPicking();
     } else {
       handleAreaBack();
     }
-  }, [urlState.schoolId, urlState.schoolPicking, urlActions, handleAreaBack, setSelectedSchool, setFilters]);
+  }, [nav.schoolId, nav.schoolPicking, actions, handleAreaBack, setSelectedSchool, setFilters]);
 
   // Delayed-show spinner: only show after 200 ms to prevent flicker on fast loads.
   useEffect(() => {
@@ -1245,7 +1249,7 @@ export default function MapDiscovery() {
     // Re-derive only when the selected group or the groups dataset changes.
     // Prevents AreaMarkerLayer from tearing down all markers on every background refetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [urlState.groupId, areaGroupsData],
+    [nav.groupId, areaGroupsData],
   );
 
   // Issue #1824 Slice S7 — the group-fit effect (prevGroupIdRef/prevAreaKeyRef),
@@ -1273,7 +1277,7 @@ export default function MapDiscovery() {
   // (react-router's useSearchParams setter is not a functional-setState queue), so the
   // immediate `q` clear lands first, then the still-pending debounced filters write
   // fires ~300 ms later against its stale snapshot and silently revives the old `q`.
-  // urlActions.clearAllFiltersAndSearch() does both in a single atomic REPLACE, and
+  // actions.clearAllFiltersAndSearch() does both in a single atomic REPLACE, and
   // cancels any in-flight setFiltersLive/setSearchQuery timers first so nothing can
   // race in afterward. Local `filters` state is cleared directly (not via
   // handleFiltersChange, which would re-arm the debounced URL write). Journey, scope,
@@ -1281,27 +1285,27 @@ export default function MapDiscovery() {
   // filter+q keys but keeps city, journey, and scope keys").
   const handleClearAllFiltersAndSearch = useCallback(() => {
     setFilters({});
-    urlActions.clearAllFiltersAndSearch();
-  }, [setFilters, urlActions]);
+    actions.clearAllFiltersAndSearch();
+  }, [setFilters, actions]);
 
   const activeContextChips = useMemo(
     () => (
       <ActiveContextChips
         // Issue #1824 S4 — KNOWN, INTENTIONAL split-brain: chips read
-        // urlState.q (URL-side debounce), NOT debouncedSearch (which drives
+        // nav.q (URL-side debounce), NOT debouncedSearch (which drives
         // the badge + map markers via useDiscoverSearchState). Do NOT unify.
-        searchQuery={urlState.q}
-        onClearSearch={() => urlActions.setSearchQuery('')}
+        searchQuery={nav.q}
+        onClearSearch={() => actions.setSearchQuery('')}
         filters={{
           ...filters,
           // Issue #1132 — board/category filters are written directly to URL by
-          // onClearBoard/onClearCategory (via urlActions) without going through
+          // onClearBoard/onClearCategory (via actions) without going through
           // setFilters, so local `filters` state can lag behind. Always pass the
           // URL-authoritative values here so ActiveContextChips renders the correct
           // chip set without a useEffect sync (which caused an infinite re-render
-          // loop because urlState.filters.boardFilters is a new array ref each render).
-          boardFilters: urlState.filters.boardFilters,
-          categoryFilters: urlState.filters.categoryFilters,
+          // loop because nav.filters.boardFilters is a new array ref each render).
+          boardFilters: nav.filters.boardFilters,
+          categoryFilters: nav.filters.categoryFilters,
           dateFrom: filters.dateFrom
             ? typeof filters.dateFrom === 'string'
               ? filters.dateFrom
@@ -1323,16 +1327,16 @@ export default function MapDiscovery() {
           handleFiltersChange({ ...filters, priceMin: undefined, priceMax: undefined })
         }
         onClearBoard={(board) => {
-          const next = (urlState.filters.boardFilters ?? []).filter(
+          const next = (nav.filters.boardFilters ?? []).filter(
             (b) => b.toLowerCase() !== board.toLowerCase(),
           );
-          urlActions.setBoardFilters(next);
+          actions.setBoardFilters(next);
         }}
         onClearCategory={(category) => {
-          const next = (urlState.filters.categoryFilters ?? []).filter(
+          const next = (nav.filters.categoryFilters ?? []).filter(
             (c) => c.toLowerCase() !== category.toLowerCase(),
           );
-          urlActions.setCategoryFilters(next);
+          actions.setCategoryFilters(next);
         }}
         onClearSeller={() =>
           handleFiltersChange({ ...filters, sellerTypes: undefined })
@@ -1347,14 +1351,14 @@ export default function MapDiscovery() {
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [urlState.q, urlState.filters.boardFilters, urlState.filters.categoryFilters, filters, urlActions, handleClearAllFiltersAndSearch],
+    [nav.q, nav.filters.boardFilters, nav.filters.categoryFilters, filters, actions, handleClearAllFiltersAndSearch],
   );
 
   // Memoize initialCenter to prevent URLViewportController effect re-runs on every parent render.
   // Hoisted above the isCityValid early return to satisfy Rules of Hooks.
   const memoizedInitialCenter = useMemo(
-    () => urlState.viewport ? [urlState.viewport.lat, urlState.viewport.lon] as [number, number] : undefined,
-    [urlState.viewport],
+    () => viewport ? [viewport.lat, viewport.lon] as [number, number] : undefined,
+    [viewport],
   );
 
   // Issue #1160 GAP 2 — derive area coordinates for AreaRestorePanner.
@@ -1363,9 +1367,9 @@ export default function MapDiscovery() {
   // receives null values and skips the restore (no crash).
   // Hoisted above the isCityValid early return to satisfy Rules of Hooks.
   const areaRestoreArea = useMemo(() => {
-    if (!urlState.areaKey) return null;
-    return discoverAreasData?.areas?.find((a) => a.areaKey === urlState.areaKey) ?? null;
-  }, [urlState.areaKey, discoverAreasData]);
+    if (!nav.areaKey) return null;
+    return discoverAreasData?.areas?.find((a) => a.areaKey === nav.areaKey) ?? null;
+  }, [nav.areaKey, discoverAreasData]);
 
   // Issue #1547 ITEM 6 — memoize school marker positions to prevent SchoolMarkerFocusPanner
   // from re-running its useEffect on every render due to inline array recreation.
@@ -1409,8 +1413,8 @@ export default function MapDiscovery() {
   // area context reads "Udupi › University Belt › Manipal". Other journeys (area-first,
   // agri-first) keep the generic AreaIndicatorOverlay.
   const showSchoolBreadcrumb =
-    urlState.journey === 'school-first' &&
-    (!!urlState.groupId || !!urlState.areaKey || !!selectedArea || !!selectedSchool);
+    nav.journey === 'school-first' &&
+    (!!nav.groupId || !!nav.areaKey || !!selectedArea || !!selectedSchool);
 
   // Issue #1588 — public-landing marker set. The public landing shows ONLY areas that
   // have live properties — never muted/transparent 0-property markers. A clean, calm
@@ -1489,23 +1493,23 @@ export default function MapDiscovery() {
   // and AreaGroupsLandingPanel).
   const handleOverviewAreaClick = useCallback((area: AreaPoint) => {
     if (isTopGroupedAgri && corridorGroups.some((c) => c.directionCode === area.areaKey)) {
-      urlActions.setRegionWithMaxKm(area.areaKey);
+      actions.setRegionWithMaxKm(area.areaKey);
       return;
     }
     const resolvedAreaKeyScope = resolveScope(area.areaKey, scopeNamespaces);
     if (mapLayerKind === 'macro-region-bubbles' && resolvedAreaKeyScope.kind !== 'none') {
-      urlActions.setScope(area.areaKey);
+      actions.setScope(area.areaKey);
       // Issue #1808 — arm the region-overview guidance one-shot pulse. Does
       // NOT change the setScope call above (regression-guarded state contract).
       armRegionSelect('map');
       return;
     }
     if (resolvedAreaKeyScope.kind === 'group') {
-      urlActions.selectGroup(area.areaKey);
+      actions.selectGroup(area.areaKey);
       return;
     }
     handleAreaClick(area);
-  }, [isTopGroupedAgri, corridorGroups, scopeNamespaces, mapLayerKind, urlActions, handleAreaClick, armRegionSelect]);
+  }, [isTopGroupedAgri, corridorGroups, scopeNamespaces, mapLayerKind, actions, handleAreaClick, armRegionSelect]);
 
   // Issue #1595 — the area-first selected-group drill-down state (a group is focused,
   // no specific area selected yet). Drives the mock-aligned map chrome for this step:
@@ -1519,7 +1523,7 @@ export default function MapDiscovery() {
   // from isSelectedGroupState (no area yet) — here selectedArea is present.
   const isAreaFirstSelectedAreaState =
     resolvedPanelContent === 'area-selected' &&
-    urlState.journey === 'area-first' &&
+    nav.journey === 'area-first' &&
     !!selectedArea;
 
   // Issue #1798 PR-C — canonical listing-marker popover RENDER-eligibility predicate.
@@ -1544,10 +1548,10 @@ export default function MapDiscovery() {
   // to the capture-gate predicate in useMarkerSelection.ts's handleMarkerClickWithPosition —
   // see that function's comment — or the two can drift apart again (the exact #1798 bug).
   const isMarkerPopoverEligible =
-    urlState.journey !== 'agri-first' &&
-    ((urlState.areaKey != null &&
-      (urlState.schoolId == null || urlState.journey === 'area-first')) ||
-      (urlState.journey === 'school-first' && urlState.schoolId != null));
+    nav.journey !== 'agri-first' &&
+    ((nav.areaKey != null &&
+      (nav.schoolId == null || nav.journey === 'area-first')) ||
+      (nav.journey === 'school-first' && nav.schoolId != null));
 
   // Issue #1824 Slice S10b — the marker-resolve + stepper cluster (Issue
   // #1810 Stage 2A, MODEL A user-locked model, see approved-plan.toml
@@ -1568,8 +1572,8 @@ export default function MapDiscovery() {
     mapZoom,
     areaLayerMaxZoom: AREA_LAYER_MAX_ZOOM,
     isAuthenticated,
-    journey: urlState.journey,
-    schoolId: urlState.schoolId,
+    journey: nav.journey,
+    schoolId: nav.schoolId,
     groupResultsMarkers,
     markerListings,
     areaMarkerListings,
@@ -1594,19 +1598,19 @@ export default function MapDiscovery() {
   // *resolved result* actually changes.
   const urlHydratedMarkerListing = useMemo(
     () =>
-      urlState.selectedListing
-        ? (currentMapMarkerListings.find((l) => l.id === urlState.selectedListing) ?? null)
+      nav.selectedListing
+        ? (currentMapMarkerListings.find((l) => l.id === nav.selectedListing) ?? null)
         : null,
-    [urlState.selectedListing, currentMapMarkerListings],
+    [nav.selectedListing, currentMapMarkerListings],
   );
 
   // Issue #1939 — URL → popover restore (Back/Forward/hard-refresh/deep-link).
   // The click/sibling/show-in-list handlers (useMarkerSelection) only ever
   // SET selectedMarkerListing/markerPixelPos from a user gesture; nothing
-  // hydrated them from urlState.selectedListing on mount or on a later
+  // hydrated them from nav.selectedListing on mount or on a later
   // data/map-ready transition, so a deep-linked/refreshed `?listing=<uuid>`
   // restored the marker highlight (URL-driven — DiscoverMapCanvas passes
-  // urlState.selectedListing straight through to PropertyMap's
+  // nav.selectedListing straight through to PropertyMap's
   // selectedListingId prop, no local state involved) but never the popover
   // card itself (gated on the two local states above).
   //
@@ -1621,15 +1625,15 @@ export default function MapDiscovery() {
   // right after showMarkerInList closes the card for the same id — including
   // across repeated re-fires of this effect caused by resolveMarkerPopover's
   // deliberately non-memoized currentMapMarkerListings — until
-  // urlState.selectedListing genuinely changes away from that id. See
+  // nav.selectedListing genuinely changes away from that id. See
   // useMarkerSelection's listTransitionSuppressIdRef for the full contract.
   //
   // Issue #1939 code-review F1 — REVERSE sync. When the URL genuinely no
-  // longer carries a `listing` id (urlState.selectedListing == null — e.g.
+  // longer carries a `listing` id (nav.selectedListing == null — e.g.
   // Back navigation past the point the id was pushed), the popover must
   // close even though nothing here ever called handlePopoverDismiss (which
   // owns the FORWARD direction: local state → URL). Deliberately keyed off
-  // urlState.selectedListing, not urlHydratedMarkerListing, so a same-id
+  // nav.selectedListing, not urlHydratedMarkerListing, so a same-id
   // marker that's momentarily absent from currentMapMarkerListings (e.g.
   // mid-filter-recompute) does NOT close a popover the URL still claims —
   // that transient-miss case is instead covered by
@@ -1640,7 +1644,7 @@ export default function MapDiscovery() {
   // click path" claim was WRONG for pure school-first: handleSelectMarkerListing
   // deliberately does NOT write the URL `listing` param there (the
   // #1547-deferred design), so a school-first click sets selectedMarkerListing
-  // while urlState.selectedListing stays null — landing exactly in this
+  // while nav.selectedListing stays null — landing exactly in this
   // branch and wiping the click-set popover (the reverse-sync clear-race).
   // The rev-1 gate fix (admitting pure school-first into isMarkerPopoverEligible)
   // is what made this branch reachable for that state at all; previously the
@@ -1653,15 +1657,15 @@ export default function MapDiscovery() {
   // MapDiscovery.issue1973.schoolFirstMarkerPopup.test.tsx AC11.
   //
   // Issue #1939 rework F3 — third reconciliation branch: the URL names a
-  // listing id (urlState.selectedListing != null) that is NOT (yet)
+  // listing id (nav.selectedListing != null) that is NOT (yet)
   // resolvable against the current marker set (urlHydratedMarkerListing ==
   // null), AND a DIFFERENT listing's popover is currently showing locally
   // (selectedMarkerListing != null && selectedMarkerListing.id !==
-  // urlState.selectedListing). Without this branch the effect did nothing
+  // nav.selectedListing). Without this branch the effect did nothing
   // in this state, leaving the screen showing the OLD listing's popover
   // while the URL/selection had already moved to a new, unresolvable one.
   //
-  // The `selectedMarkerListing?.id !== urlState.selectedListing`
+  // The `selectedMarkerListing?.id !== nav.selectedListing`
   // discriminator is what separates this (F3: a genuinely DIFFERENT id,
   // stale) from F2's bounded rAF retry (SAME id, still resolving/painting —
   // must be left alone to keep polling). Two sub-cases both correctly fall
@@ -1688,7 +1692,7 @@ export default function MapDiscovery() {
       hydrateSelectedMarkerFromUrl(urlHydratedMarkerListing);
       return;
     }
-    if (urlState.selectedListing == null) {
+    if (nav.selectedListing == null) {
       // Issue #1973 rev-2 (A1) — skip the clear ONLY for a pure click-set
       // (school-first) popover, which was never URL-backed to begin with.
       // A URL-backed popover (area-first/#1738 combined, or a hydrated
@@ -1698,7 +1702,7 @@ export default function MapDiscovery() {
       }
       return;
     }
-    if (selectedMarkerListing != null && selectedMarkerListing.id !== urlState.selectedListing) {
+    if (selectedMarkerListing != null && selectedMarkerListing.id !== nav.selectedListing) {
       clearMarkerPopoverFromUrl();
     }
   }, [
@@ -1706,7 +1710,7 @@ export default function MapDiscovery() {
     mapReady,
     urlHydratedMarkerListing,
     hydrateSelectedMarkerFromUrl,
-    urlState.selectedListing,
+    nav.selectedListing,
     clearMarkerPopoverFromUrl,
     isMarkerPopoverUrlBacked,
     selectedMarkerListing,
@@ -1717,7 +1721,7 @@ export default function MapDiscovery() {
   // not yet hydrated still reads as a human label (e.g. "University Belt"). Null when no
   // group context exists — the breadcrumb then omits the group crumb.
   const selectedGroupName =
-    focusedGroup?.name ?? (urlState.groupId ? prettifyZoneSlug(urlState.groupId) : null);
+    focusedGroup?.name ?? (nav.groupId ? prettifyZoneSlug(nav.groupId) : null);
 
   // Issue #1808 — the ring/helper (not the card/legend) fire only on an actual
   // map/panel pick, never on deep-link/refresh (design §5/§9, AC5).
@@ -1747,7 +1751,7 @@ export default function MapDiscovery() {
   const groupSelectedBadgeCopy = formatDiscoverBadgeCopy(discoverBadge, {
     scopeLabel: focusedGroup?.name ?? '',
     noun: 'verified properties',
-    searchQuery: urlState.q,
+    searchQuery: nav.q,
   });
   const fallbackBadgeCopy = formatDiscoverBadgeCopy(discoverBadge, {
     scopeLabel:
@@ -1755,9 +1759,9 @@ export default function MapDiscovery() {
       focusedGroup?.name ??
       (CITY_CONFIG[city]?.label ?? city),
     noun: selectedArea ? 'homes' : 'properties',
-    searchQuery: urlState.q,
+    searchQuery: nav.q,
   });
-  const schoolRadiusPillNoun = deriveSchoolRadiusPillNoun(urlState.intent);
+  const schoolRadiusPillNoun = deriveSchoolRadiusPillNoun(nav.intent);
   const hasActiveAnonFilter = hasActiveAnonPropertyFilter(filters);
 
   return (
