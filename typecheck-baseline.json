@@ -1,0 +1,106 @@
+{
+  "entries": [
+    {
+      "fingerprint": "673f4ab352262a8835aca8f8504d9fcdba9dd099",
+      "file": "src/components/discover/__tests__/DiscoverRightPanel.agri.ac11.test.tsx",
+      "code": "TS2345",
+      "message": "Argument of type '{ city: string; areas: { areaKey: string; name: string; geoCenterLat: number; geoCenterLon: number; listingCount: number; schoolCount: number; }[]; }' is not assignable to parameter of type '{ city: string; areas: { areaKey: string; name: string; geoCenterLat: number; geoCenterLon: number; listingCount: number; schoolCount: number; agriAcreage: number; }[]; }'."
+    },
+    {
+      "fingerprint": "2d2a7d0144fb68c20f8baacedd9ab0c6af4048a7",
+      "file": "src/components/discover/panels/AreaSelectedPanel.tsx",
+      "code": "TS2322",
+      "message": "Type 'string[]' is not assignable to type 'PropertyType[]'."
+    },
+    {
+      "fingerprint": "a8b4951355756a3a8843e6877deffcbc757d16da",
+      "file": "src/components/discover/panels/AreaSelectedPanel.tsx",
+      "code": "TS2345",
+      "message": "Argument of type 'string' is not assignable to parameter of type 'PropertyType'."
+    },
+    {
+      "fingerprint": "1c4ab3b5ce1d4a4861c7b12749622db38a8fe771",
+      "file": "src/components/map/PropertyMap.tsx",
+      "code": "TS2740",
+      "message": "Type '{ id: string; property_type: PropertyType; title: string; locality: string; price: number; price_unit: null; land_area: number; land_area_unit: string; built_area: null; built_area_unit: null; ... 19 more ...; boundary_geojson: string; }' is missing the following properties from type 'PropertyListingWithImages': carpet_area, carpet_area_unit, floor_number, total_floors, and 10 more."
+    },
+    {
+      "fingerprint": "36353200747de9dd2f685678c31f2d47aec4b36f",
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "code": "TS2740",
+      "message": "Type '{ id: string; title: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; price: number; status: \"LIVE\"; locality: string; created_at: string; updated_at: string; }' is missing the following properties from type 'PropertyListingWithImages': price_unit, land_area, land_area_unit, built_area, and 27 more."
+    },
+    {
+      "fingerprint": "b856167db713a3e08798da860ce412db87f01354",
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "code": "TS2740",
+      "message": "Type '{ id: string; title: string; property_type: \"house\"; latitude: number; longitude: number; price: number; status: \"LIVE\"; locality: string; created_at: string; updated_at: string; }' is missing the following properties from type 'PropertyListingWithImages': price_unit, land_area, land_area_unit, built_area, and 27 more."
+    },
+    {
+      "fingerprint": "d2b3b00dd292f2816a4216e8f55438c98a1aeb95",
+      "file": "src/hooks/__tests__/useDiscoverPageState.radiusClamp.test.ts",
+      "code": "TS2352",
+      "message": "Conversion of type '{ changeCity: Mock<Procedure>; setCity: Mock<Procedure>; selectArea: Mock<Procedure>; deselectArea: Mock<Procedure>; ... 31 more ...; clearGroupResults: Mock<...>; }' to type 'DiscoverUrlActions' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "fingerprint": "9402b99e58489ef33338a121c34f22a70ff1beaa",
+      "file": "src/hooks/useDuplicateManagement.ts",
+      "code": "TS2345",
+      "message": "Argument of type 'Partial<PropertyListing>' is not assignable to parameter of type '{ bathrooms?: number; bedrooms?: number; built_area?: number; built_area_unit?: string; carpet_area?: number; carpet_area_unit?: string; commercial_usage?: string; confidence_score?: number; contact_info?: string; ... 34 more ...; washrooms?: number; }'."
+    },
+    {
+      "fingerprint": "d46fc025cde24d7c2e3c2e363186dbc69725b953",
+      "file": "src/hooks/useDuplicateManagement.ts",
+      "code": "TS2345",
+      "message": "Argument of type 'PropertyType' is not assignable to parameter of type 'NonNullable<\"land\" | \"house\" | \"commercial\" | \"other\" | \"apartment\">'."
+    },
+    {
+      "fingerprint": "0d528a757515dfe7d54cd6faba34ec2f04ffd5c3",
+      "file": "src/hooks/usePropertyListings.ts",
+      "code": "TS2339",
+      "message": "Property 'area_key' does not exist on type 'SelectQueryError<\"column 'area_key' does not exist on 'property_listings'.\">'."
+    },
+    {
+      "fingerprint": "8d7b8559d9d4d1f4750a70c9f728ac961b35d3f1",
+      "file": "src/hooks/usePropertyListings.ts",
+      "code": "TS2339",
+      "message": "Property 'locality' does not exist on type 'SelectQueryError<\"column 'area_key' does not exist on 'property_listings'.\">'."
+    },
+    {
+      "fingerprint": "940f05831cbc6f6eafd41670b225ddf1583c14b1",
+      "file": "src/hooks/usePropertyListings.ts",
+      "code": "TS2345",
+      "message": "Argument of type 'Partial<PropertyListing>' is not assignable to parameter of type '{ bathrooms?: number; bedrooms?: number; built_area?: number; built_area_unit?: string; carpet_area?: number; carpet_area_unit?: string; commercial_usage?: string; confidence_score?: number; contact_info?: string; ... 34 more ...; washrooms?: number; }'."
+    },
+    {
+      "fingerprint": "8013de8c85d0074e1b7adb8caebffb064689268c",
+      "file": "src/hooks/usePropertyListings.ts",
+      "code": "TS2345",
+      "message": "Argument of type 'PropertyType[]' is not assignable to parameter of type 'readonly (\"land\" | \"house\" | \"commercial\" | \"other\" | \"apartment\")[]'."
+    },
+    {
+      "fingerprint": "080d05554e465a102b6e5b4ac3cf476188548e35",
+      "file": "src/hooks/useSimilarListings.ts",
+      "code": "TS2322",
+      "message": "Type 'Json[]' is not assignable to type 'PropertyImage[]'."
+    },
+    {
+      "fingerprint": "fbcb166d32e20ca2575e12e57bcd3fbec0ce49cb",
+      "file": "src/hooks/useSimilarListings.ts",
+      "code": "TS2345",
+      "message": "Argument of type 'string' is not assignable to parameter of type 'NonNullable<\"land\" | \"house\" | \"commercial\" | \"other\" | \"apartment\">'."
+    },
+    {
+      "fingerprint": "76cec16e723980ec03e79e40399f389a8d840280",
+      "file": "src/lib/discoverMappers.ts",
+      "code": "TS2322",
+      "message": "Type 'string' is not assignable to type '\"dealer\" | \"broker\" | \"owner\" | \"builder\"'."
+    },
+    {
+      "fingerprint": "ef02b40db7ebcc5bcd3b85d3bdd6f4ba0a9d774b",
+      "file": "src/pages/admin/Listings.tsx",
+      "code": "TS2345",
+      "message": "Argument of type 'AdminListingRow' is not assignable to parameter of type 'PropertyListing'."
+    }
+  ]
+}
