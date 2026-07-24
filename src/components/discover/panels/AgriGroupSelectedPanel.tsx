@@ -327,6 +327,7 @@ export function AgriGroupSelectedPanel({
         {/* ── Dark navy corridor hero (mock parity, Issue #1771) ─────────────── */}
         <div
           data-testid="agri-group-summary-band"
+          data-variant="navy-hero"
           className="rounded-xl border border-slate-800 bg-[#0F172A] p-5 shadow-lg text-white"
         >
           <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-400">

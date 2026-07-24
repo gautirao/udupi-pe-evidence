@@ -34,7 +34,12 @@ function parseOrThrow<T>(schema: { parse: (input: unknown) => T }, raw: unknown,
   try {
     return schema.parse(raw);
   } catch (cause) {
-    throw new Error(`Malformed ${what} response from the server`, { cause });
+    // Two-arg `new Error(message, { cause })` needs the ES2022 lib.error.d.ts
+    // overload, which tsconfig.app.json's `lib: ["ES2020", ...]` doesn't
+    // include (TS2554). Attach `cause` post-construction instead — same
+    // runtime `error.cause` result, no lib/tsconfig change needed.
+    const error = new Error(`Malformed ${what} response from the server`);
+    throw Object.assign(error, { cause });
   }
 }
 

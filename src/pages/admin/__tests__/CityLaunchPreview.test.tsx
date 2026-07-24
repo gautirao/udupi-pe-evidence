@@ -521,6 +521,7 @@ describe('CityLaunchPreview — validation rail wire contract (Issue #1911 PR4, 
 // above renderAtPreviewRoute.
 describe('CityLaunchPreview — area-groups isolation with the REAL MapDiscovery (Issue #1911 PR3 rework)', () => {
   let RealCityLaunchPreview: React.ComponentType;
+  let RealDiscoverProvider: React.ComponentType<{ children: React.ReactNode }>;
   let apiGetSpy: ReturnType<typeof vi.fn>;
 
   beforeAll(async () => {
@@ -528,6 +529,14 @@ describe('CityLaunchPreview — area-groups isolation with the REAL MapDiscovery
     vi.resetModules();
     const cityLaunchPreviewModule = await import('../CityLaunchPreview');
     RealCityLaunchPreview = cityLaunchPreviewModule.default;
+    // vi.resetModules() gives the freshly re-imported CityLaunchPreview/
+    // MapDiscovery a DISTINCT DiscoverContext module instance (and therefore
+    // a distinct React Context object identity) from the one the
+    // statically-imported `DiscoverProvider` at the top of this file closes
+    // over. Re-importing DiscoverContext here after the reset picks up the
+    // SAME instance MapDiscovery's useDiscoverNav() will read from.
+    const discoverContextModule = await import('@/features/discover/context/DiscoverContext');
+    RealDiscoverProvider = discoverContextModule.DiscoverProvider;
     const apiModule = await import('@/lib/api');
     apiGetSpy = vi.mocked(apiModule.api.get);
   });
@@ -563,7 +572,11 @@ describe('CityLaunchPreview — area-groups isolation with the REAL MapDiscovery
           <Routes>
             <Route
               path="/admin/city-launch/:cityId/preview/:revisionId"
-              element={<RealCityLaunchPreview />}
+              element={
+                <RealDiscoverProvider>
+                  <RealCityLaunchPreview />
+                </RealDiscoverProvider>
+              }
             />
           </Routes>
         </MemoryRouter>
