@@ -69,61 +69,17 @@ import { DiscoverMapMount } from '@/features/discover/views/DiscoverMapMount';
 import { useMobileMapOverlayShell } from '@/hooks/useMobileMapOverlayShell';
 import { DiscoverOverlaySheets } from '@/features/discover/views/DiscoverOverlaySheets';
 import { DiscoverRightPanelContainer } from '@/features/discover/views/DiscoverRightPanelContainer';
-// S9a — relocated to src/features/discover/presentation/ (discoverBadge.ts,
-// schoolFirstCounts.ts, anonPropertyFilters.ts). Imported here for the component
-// body's own calls, and re-exported below so existing '@/pages/MapDiscovery'
-// importers (unit tests + DiscoverMapCountBadge.tsx's DiscoverBadgeResult type
-// import) continue to resolve unchanged.
 import {
   deriveDiscoverBadge,
   formatDiscoverBadgeCopy,
-  type DiscoverBadgeInput,
-  type DiscoverBadgeState,
-  type DiscoverBadgeResult,
 } from '@/features/discover/presentation/discoverBadge';
 import {
-  deriveSchoolFirstLandingSchoolCount,
-  deriveSchoolFirstZoneSchoolCount,
-  deriveSchoolFirstAreaSchoolCount,
   deriveShowSchoolMarkers,
   deriveSchoolRadiusPillNoun,
-  type SchoolFirstLandingCountInput,
-  type SchoolFirstZoneCountInput,
-  type SchoolFirstAreaCountInput,
-  type ShowSchoolMarkersInput,
 } from '@/features/discover/presentation/schoolFirstCounts';
 import {
-  applyAnonPropertyFilters,
-  deriveAnonSchoolRadiusMarkers,
   hasActiveAnonPropertyFilter,
 } from '@/features/discover/presentation/anonPropertyFilters';
-
-// Re-exported so existing test imports from '@/pages/MapDiscovery' continue to resolve.
-export { isNew } from '@/lib/isNew';
-
-// S9a re-export shim — keeps '@/pages/MapDiscovery' importers (5 unit test files +
-// DiscoverMapCountBadge.tsx) resolving unchanged. See slice-s9-design.md OQ1.
-export {
-  deriveDiscoverBadge,
-  formatDiscoverBadgeCopy,
-  deriveSchoolFirstLandingSchoolCount,
-  deriveSchoolFirstZoneSchoolCount,
-  deriveSchoolFirstAreaSchoolCount,
-  deriveShowSchoolMarkers,
-  deriveSchoolRadiusPillNoun,
-  applyAnonPropertyFilters,
-  deriveAnonSchoolRadiusMarkers,
-  hasActiveAnonPropertyFilter,
-};
-export type {
-  DiscoverBadgeInput,
-  DiscoverBadgeState,
-  DiscoverBadgeResult,
-  SchoolFirstLandingCountInput,
-  SchoolFirstZoneCountInput,
-  SchoolFirstAreaCountInput,
-  ShowSchoolMarkersInput,
-};
 
 export default function MapDiscovery() {
   const navigate = useNavigate();

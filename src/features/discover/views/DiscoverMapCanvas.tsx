@@ -30,11 +30,7 @@ import type { CameraIntent } from '@/hooks/useDiscoverMapData';
 import type { MarkerPopoverStepper } from '@/features/discover/map/resolveMarkerPopover';
 import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
 import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
-// Type-only import from the page — mirrors the same pattern already used by
-// DiscoverMapCountBadge.tsx/DiscoverMapContextOverlay.tsx (S8). Erased at
-// compile time, so this does NOT create a runtime circular dependency with
-// MapDiscovery.tsx's (value) import of DiscoverMapCanvas below.
-import type { DiscoverBadgeResult } from '@/pages/MapDiscovery';
+import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
 
 /**
  * Issue #1824 Slice S11a — the map-half return-tree region (mapContainerRef

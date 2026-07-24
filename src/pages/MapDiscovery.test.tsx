@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { applyAnonPropertyFilters } from './MapDiscovery';
+import { applyAnonPropertyFilters } from '@/features/discover/presentation/anonPropertyFilters';
 import { slugifyFromAreaKey } from '@/lib/areaSlug';
 import type { SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
 

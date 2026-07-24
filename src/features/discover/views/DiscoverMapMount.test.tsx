@@ -16,7 +16,7 @@ import type {
   DiscoverJourneyTransitionsCommands,
 } from '@/features/discover/state/useDiscoverJourneyTransitions';
 import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
-import type { DiscoverBadgeResult } from '@/pages/MapDiscovery';
+import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
 import type { DiscoverShellContextValue } from '@/features/discover/context/types';
 
 // Vitest 3 takes a SINGLE function-type argument. The Vitest-1 two-argument form

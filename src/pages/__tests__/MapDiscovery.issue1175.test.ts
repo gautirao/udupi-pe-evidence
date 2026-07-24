@@ -17,7 +17,7 @@ import { describe, it, expect } from 'vitest';
 import {
   deriveDiscoverBadge,
   type DiscoverBadgeInput,
-} from '../MapDiscovery';
+} from '@/features/discover/presentation/discoverBadge';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

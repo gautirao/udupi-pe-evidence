@@ -46,7 +46,7 @@ const featureBoundaryConfigs = featureNames.map((feature) => {
   return {
     files: [`src/features/${feature}/**/*.{ts,tsx}`],
     rules: {
-      "@typescript-eslint/no-restricted-imports": ["warn", { patterns }],
+      "@typescript-eslint/no-restricted-imports": ["error", { patterns }],
     },
   };
 });
@@ -77,7 +77,7 @@ export default tseslint.config(
     files: ["src/shared/**/*.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-restricted-imports": [
-        "warn",
+        "error",
         {
           patterns: [
             {

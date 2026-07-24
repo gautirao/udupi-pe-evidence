@@ -26,8 +26,8 @@ import {
   deriveSchoolFirstZoneSchoolCount,
   deriveSchoolFirstAreaSchoolCount,
   deriveSchoolRadiusPillNoun,
-  deriveDiscoverBadge,
-} from '../MapDiscovery';
+} from '@/features/discover/presentation/schoolFirstCounts';
+import { deriveDiscoverBadge } from '@/features/discover/presentation/discoverBadge';
 
 // ── deriveShowSchoolMarkers ─────────────────────────────────────────────────────
 

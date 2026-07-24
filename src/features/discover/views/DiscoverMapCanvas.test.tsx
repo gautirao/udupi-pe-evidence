@@ -18,7 +18,7 @@ import type {
   DiscoverJourneyTransitionsCommands,
 } from '@/features/discover/state/useDiscoverJourneyTransitions';
 import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
-import type { DiscoverBadgeResult } from '@/pages/MapDiscovery';
+import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
 
 vi.mock('@/components/map/PropertyMap', () => ({
   PropertyMap: () => <div data-testid="property-map-mock" />,
@@ -330,7 +330,18 @@ describe('DiscoverMapCanvas', () => {
       .split('\n')
       .filter((line) => /^\s*import\b/.test(line))
       .join('\n');
-    expect(importLines).not.toMatch(/features\/discover\/presentation\/discoverBadge/);
+    // Issue #2000 Slice 2 PR1 — DiscoverBadgeResult's canonical home is now
+    // '@/features/discover/presentation/discoverBadge' (previously re-exported via
+    // '@/pages/MapDiscovery'). A TYPE-ONLY import of that interface is not the fork
+    // this guard exists to prevent (the guard is about the VALUE-level copy-generating
+    // functions, called out explicitly below); exclude `import type` lines from the
+    // discoverBadge path check while keeping schoolFirstCounts/anonPropertyFilters
+    // (which this file has no legitimate reason to import, type or value) strict.
+    const valueImportLines = source
+      .split('\n')
+      .filter((line) => /^\s*import\b/.test(line) && !/^\s*import\s+type\b/.test(line))
+      .join('\n');
+    expect(valueImportLines).not.toMatch(/features\/discover\/presentation\/discoverBadge/);
     expect(importLines).not.toMatch(/features\/discover\/presentation\/schoolFirstCounts/);
     expect(importLines).not.toMatch(/features\/discover\/presentation\/anonPropertyFilters/);
     // Belt-and-suspenders: the helper identifiers themselves must never appear as a

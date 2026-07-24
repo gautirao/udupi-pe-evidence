@@ -12,7 +12,7 @@ import {
   deriveDiscoverBadge,
   formatDiscoverBadgeCopy,
   type DiscoverBadgeInput,
-} from '../MapDiscovery';
+} from '@/features/discover/presentation/discoverBadge';
 
 const NO_FILTERS: DiscoverBadgeInput['filters'] = {};
 

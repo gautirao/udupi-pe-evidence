@@ -16,9 +16,9 @@ import { describe, it, expect } from 'vitest';
 import {
   applyAnonPropertyFilters,
   deriveAnonSchoolRadiusMarkers,
-  deriveDiscoverBadge,
   hasActiveAnonPropertyFilter,
-} from '../MapDiscovery';
+} from '@/features/discover/presentation/anonPropertyFilters';
+import { deriveDiscoverBadge } from '@/features/discover/presentation/discoverBadge';
 import type { SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────

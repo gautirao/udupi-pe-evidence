@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import * as discoverPanelState from '../discoverPanelState';
-import { derivePanelContent } from '../discoverPanelState';
+import * as discoverPanelState from '@/features/discover/utils/discoverPanelState';
+import { derivePanelContent } from '@/features/discover/utils/discoverPanelState';
 import type { DiscoverUrlState } from '../../hooks/useDiscoverUrlState';
 import {
   toLayerInput,
@@ -17,7 +17,7 @@ import {
   type DiscoverLayerInput,
   type DiscoverLayerSelection,
   type PanelDerivationField,
-} from '../discoverLayerRegistry';
+} from '@/features/discover/utils/discoverLayerRegistry';
 
 // ─── Structural divergence guard: compile-time typed assertion ────────────────
 //

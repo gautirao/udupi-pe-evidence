@@ -4,7 +4,7 @@ import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
-import type { DiscoverBadgeResult } from '@/pages/MapDiscovery';
+import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
 
 /**
  * Issue #1824 Slice S8 — the drill-down count pill (~L3100-3211) + the

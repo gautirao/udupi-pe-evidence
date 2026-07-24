@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { DiscoverMapCountBadge, type DiscoverMapCountBadgeProps } from './DiscoverMapCountBadge';
-import type { DiscoverBadgeResult } from '@/pages/MapDiscovery';
+import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 
 /**

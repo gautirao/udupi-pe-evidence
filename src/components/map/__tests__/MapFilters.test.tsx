@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MapFilters } from '../MapFilters';
 import { SchoolSearchFilter } from '../SchoolSearchFilter';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
-import { isNew } from '@/pages/MapDiscovery';
+import { isNew } from '@/lib/isNew';
 
 // jsdom doesn't provide ResizeObserver (used by Radix primitives)
 class ResizeObserverStub {
