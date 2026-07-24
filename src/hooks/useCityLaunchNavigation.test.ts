@@ -98,6 +98,7 @@ const VALID_TREE_RESPONSE = {
       representativeAreaKeys: ['manipal'],
       displayOrder: 0,
       descendantAreaCount: 1,
+      bounds: { centreLat: 13.0, centreLon: 74.79, minLat: 12.9, minLon: 74.7, maxLat: 13.1, maxLon: 74.9 },
     },
   ],
 };
