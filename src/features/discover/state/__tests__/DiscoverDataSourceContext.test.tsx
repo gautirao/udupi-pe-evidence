@@ -86,6 +86,42 @@ describe('discoverPath', () => {
       discoverPath(PREVIEW_SOURCE, livePath, { kind: 'listingDetail', areaKey: 'IN|KA|Udupi|Manipal' }),
     ).toBe('/api/admin/city-launch/cities/7/revisions/42/preview/listings/IN%7CKA%7CUdupi%7CManipal');
   });
+
+  // Issue #1955 (Areas PR A) — the 4 navigation hierarchy kinds resolve to
+  // the REVISION base (no `/preview` segment), unlike every kind above.
+  it('preview mode returns .../navigation/tree, NOT under /preview', () => {
+    expect(discoverPath(PREVIEW_SOURCE, livePath, { kind: 'navigationTree' })).toBe(
+      '/api/admin/city-launch/cities/7/revisions/42/navigation/tree',
+    );
+  });
+
+  it('preview mode returns .../navigation/diff?against=BASE', () => {
+    expect(
+      discoverPath(PREVIEW_SOURCE, livePath, { kind: 'navigationDiff', against: 'BASE' }),
+    ).toBe('/api/admin/city-launch/cities/7/revisions/42/navigation/diff?against=BASE');
+  });
+
+  it('preview mode returns .../navigation/diff?against=PREVIOUS_REVISION', () => {
+    expect(
+      discoverPath(PREVIEW_SOURCE, livePath, { kind: 'navigationDiff', against: 'PREVIOUS_REVISION' }),
+    ).toBe('/api/admin/city-launch/cities/7/revisions/42/navigation/diff?against=PREVIOUS_REVISION');
+  });
+
+  it('preview mode returns .../navigation/overrides', () => {
+    expect(discoverPath(PREVIEW_SOURCE, livePath, { kind: 'navigationOverrides' })).toBe(
+      '/api/admin/city-launch/cities/7/revisions/42/navigation/overrides',
+    );
+  });
+
+  it('preview mode returns .../navigation/overrides/{overrideId}', () => {
+    expect(
+      discoverPath(PREVIEW_SOURCE, livePath, { kind: 'navigationOverrideDelete', overrideId: 9 }),
+    ).toBe('/api/admin/city-launch/cities/7/revisions/42/navigation/overrides/9');
+  });
+
+  it('live mode returns livePath unchanged for the navigation kinds too', () => {
+    expect(discoverPath({ mode: 'live' }, livePath, { kind: 'navigationTree' })).toBe(livePath);
+  });
 });
 
 describe('discoverKey', () => {

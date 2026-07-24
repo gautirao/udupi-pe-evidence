@@ -8,6 +8,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { NavigationHierarchyTree } from '@/components/discover/cityLaunchPreview/NavigationHierarchyTree';
+import { NavigationDiffView } from '@/components/discover/cityLaunchPreview/NavigationDiffView';
+import { NavigationOverridesPanel } from '@/components/discover/cityLaunchPreview/NavigationOverridesPanel';
 import {
   useValidationState,
   useToggleCheck,
@@ -48,6 +52,10 @@ export default function CityLaunchPreview() {
     Number.isFinite(cityId) && Number.isFinite(revisionId) && cityId > 0 && revisionId > 0;
 
   const [view, setView] = useState<'preview' | 'readiness'>('preview');
+  // Issue #1955 (Areas PR A) — which sub-view of the preview surface is
+  // showing. Separate from `view` (buyer-preview vs launch-readiness),
+  // which is unaffected by this PR.
+  const [subView, setSubView] = useState<'map' | 'hierarchy' | 'diff' | 'overrides'>('map');
 
   const validationState = useValidationState(cityId, revisionId);
   const toggleCheck = useToggleCheck(cityId, revisionId);
@@ -70,6 +78,11 @@ export default function CityLaunchPreview() {
   const validation = validationState.data;
   const editable = validation?.editable ?? false;
   const superseded = !editable && validation != null;
+  // Issue #1955 (Areas PR A) item 6 — overrides are backend-enforced to
+  // PREPARED revisions only; gated here on lifecycle_status specifically
+  // (distinct from the 5-check `editable` flag above, which tracks the
+  // validation checklist rather than override eligibility).
+  const overridesEditable = validation?.lifecycleStatus === 'PREPARED';
 
   if (view === 'readiness' && validation) {
     return (
@@ -106,7 +119,33 @@ export default function CityLaunchPreview() {
   return (
     <DiscoverDataSourceProvider value={{ mode: 'preview', cityId, revisionId }}>
       <SimulatedPreviewRibbon />
-      <div className="flex min-h-0 flex-1">
+      <Tabs
+        value={subView}
+        onValueChange={(value) => {
+          if (value === 'map' || value === 'hierarchy' || value === 'diff' || value === 'overrides') {
+            setSubView(value);
+          }
+        }}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <TabsList className="mx-4 mt-4 w-fit">
+          <TabsTrigger value="map">Buyer preview</TabsTrigger>
+          <TabsTrigger value="hierarchy">Hierarchy tree</TabsTrigger>
+          <TabsTrigger value="diff">Diff</TabsTrigger>
+          <TabsTrigger value="overrides">Overrides</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="hierarchy" className="min-h-0 flex-1 overflow-y-auto">
+          <NavigationHierarchyTree />
+        </TabsContent>
+        <TabsContent value="diff" className="min-h-0 flex-1 overflow-y-auto">
+          <NavigationDiffView />
+        </TabsContent>
+        <TabsContent value="overrides" className="min-h-0 flex-1 overflow-y-auto">
+          <NavigationOverridesPanel editable={overridesEditable} />
+        </TabsContent>
+
+        <TabsContent value="map" className="flex min-h-0 flex-1" forceMount hidden={subView !== 'map'}>
         <aside
           className="w-80 flex-none overflow-y-auto border-r bg-muted/20 p-4"
           data-testid="validation-rail"
@@ -204,7 +243,8 @@ export default function CityLaunchPreview() {
         <div className="min-w-0 flex-1">
           <MapDiscovery />
         </div>
-      </div>
+        </TabsContent>
+      </Tabs>
     </DiscoverDataSourceProvider>
   );
 }

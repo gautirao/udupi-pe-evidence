@@ -1,5 +1,9 @@
 package com.example.realestate.discover.citylaunch;
 
+import com.example.realestate.discover.navigation.NavigationNode;
+import com.example.realestate.discover.navigation.NavigationNodeRepository;
+import com.example.realestate.discover.navigation.SandboxNavigationNode;
+import com.example.realestate.discover.navigation.SandboxNavigationNodeRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -90,6 +94,10 @@ class CityLaunchPromotionServiceIT {
     @Autowired private SandboxCityRegionMembershipRepository sandboxMembershipRepository;
     @Autowired private SandboxAreaGroupMemberRepository sandboxGroupMemberRepository;
     @Autowired private SandboxAreaAliasRepository sandboxAliasRepository;
+    @Autowired private SandboxCityRegionRepository sandboxCityRegionRepository;
+    @Autowired private SandboxAreaGroupRepository sandboxAreaGroupRepository;
+    @Autowired private SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
+    @Autowired private NavigationNodeRepository navigationNodeRepository;
     @Autowired private JdbcTemplate jdbc;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
@@ -109,6 +117,7 @@ class CityLaunchPromotionServiceIT {
                 continue;
             }
             jdbc.update("DELETE FROM public.city_launch_revision WHERE city_id = ?", cityId);
+            jdbc.update("DELETE FROM public.navigation_nodes WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.area_group_members WHERE area_group_id IN "
                     + "(SELECT id FROM public.area_groups WHERE city_id = ?)", cityId);
             jdbc.update("DELETE FROM public.area_groups WHERE city_id = ?", cityId);
@@ -188,6 +197,65 @@ class CityLaunchPromotionServiceIT {
         jdbc.update(
                 "INSERT INTO public.area_alias (city_id, area_key, alias, alias_normalised) VALUES (?, ?, ?, ?)",
                 cityId, areaKey, alias, aliasNormalised);
+    }
+
+    /** Postgres {@code text[]} literal for an inline-embedded array (test data only — no untrusted
+     *  input, so double-quoting each element is sufficient escaping). */
+    private static String pgTextArray(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return "'{}'::text[]";
+        }
+        StringBuilder sb = new StringBuilder("'{");
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append('"').append(values.get(i).replace("\"", "\\\"")).append('"');
+        }
+        return sb.append("}'::text[]").toString();
+    }
+
+    /** Seeds one {@code sandbox_navigation_nodes} row directly (#1955 Areas PR A, SLICE 2c tests) —
+     *  navigation-tree generation is not wired into the real prepare pipeline yet, so this mirrors
+     *  the other sandbox_* seed helpers' direct-insert pattern rather than driving the (unwired)
+     *  generator service. Returns the generated sandbox row id, for use as a later row's parentId. */
+    private long seedSandboxNavigationNode(
+            long revisionId, String regionKey, String nodeType, Long parentId, String nodeKey, String areaKey,
+            List<String> representativeAreaKeys, String displayLabel, int displayOrder, int depth,
+            List<String> ancestorKeys, int descendantAreaCount, double centreLat, double centreLon,
+            double minLat, double minLon, double maxLat, double maxLon, String policyFingerprint) {
+        return jdbc.queryForObject(
+                "INSERT INTO public.sandbox_navigation_nodes (revision_id, region_key, node_type, "
+                        + "parent_node_id, node_key, area_key, representative_area_keys, display_label, "
+                        + "display_order, depth, ancestor_keys, descendant_area_count, centre_lat, centre_lon, "
+                        + "min_lat, min_lon, max_lat, max_lon, policy_fingerprint, generated_at) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, " + pgTextArray(representativeAreaKeys) + ", ?, ?, ?, "
+                        + pgTextArray(ancestorKeys) + ", ?, ?, ?, ?, ?, ?, ?, ?, now()) RETURNING id",
+                Long.class, revisionId, regionKey, nodeType, parentId, nodeKey, areaKey, displayLabel,
+                displayOrder, depth, descendantAreaCount, centreLat, centreLon, minLat, minLon, maxLat, maxLon,
+                policyFingerprint);
+    }
+
+    /**
+     * Recomputes {@code persisted_revision_checksum} over the revision's CURRENT six geography
+     * lists PLUS its (just-seeded) sandbox_navigation_nodes list, and overwrites the column
+     * directly. Mirrors {@code AdminCityLaunchLaunchControllerIT}'s same pattern: this file's
+     * fixtures never seed a {@code city_region_policy} row, so a real prepare run's generation is
+     * always skipped (SLICE 2e's precondition gate) — these helper-seeded rows let the tests below
+     * exercise the PROMOTION layer's seventh-table handling directly, independent of generation
+     * itself (see {@code CityLaunchPrepareNavigationWiringIT} for the generation-wiring proof).
+     */
+    private void recomputeAndPersistChecksumWithNavigationNodes(long revisionId) {
+        String checksum = RevisionChecksum.compute(
+                sandboxAreaRepository.findByRevisionId(revisionId),
+                sandboxAliasRepository.findByRevisionId(revisionId),
+                sandboxCityRegionRepository.findByRevisionId(revisionId),
+                sandboxMembershipRepository.findByRevisionId(revisionId),
+                sandboxAreaGroupRepository.findByRevisionId(revisionId),
+                sandboxGroupMemberRepository.findByRevisionId(revisionId),
+                sandboxNavigationNodeRepository.findByRevisionId(revisionId));
+        jdbc.update("UPDATE public.city_launch_revision SET persisted_revision_checksum = ? WHERE id = ?",
+                checksum, revisionId);
     }
 
     /**
@@ -309,6 +377,13 @@ class CityLaunchPromotionServiceIT {
         assertThat(report.membershipsPromoted()).isEqualTo(2);
         assertThat(report.groupsPromoted()).isEqualTo(1);
         assertThat(report.groupMembersPromoted()).isEqualTo(2);
+        // AC10 characterization (#1955 Areas PR A, SLICE 2c): `seedCity()` in this test never seeds a
+        // city_region_policy row, so CityLaunchGraphWriter's generation precondition gate (SLICE 2e)
+        // skips navigation-tree generation for this fixture — the seventh table is a genuine
+        // zero-row no-op here and the six-table happy path is otherwise UNCHANGED. A city that DOES
+        // have a policy row generates a real tree at prepare — see
+        // CityLaunchPrepareNavigationWiringIT for that end-to-end proof.
+        assertThat(report.navigationNodesPromoted()).isZero();
         assertThat(report.cityActivated()).isTrue();
 
         CityLaunchRevision revision = revisionRepository.findById(revisionId).orElseThrow();
@@ -742,5 +817,183 @@ class CityLaunchPromotionServiceIT {
                 "SELECT subtitle FROM public.area_groups WHERE city_id = ? AND slug = ?",
                 String.class, cityId, "nn5-belt");
         assertThat(subtitle).isNull();
+    }
+
+    // =========================================================================================
+    // 11 — seventhTablePromotion: verbatim copy + parent remap (#1955 Areas PR A, SLICE 2c)
+    // =========================================================================================
+
+    @Test
+    @DisplayName("seventhTablePromotion: a sandbox nav tree (1 CLUSTER root + 2 AREA leaves) promotes "
+            + "verbatim, with parent_node_id remapped from sandbox surrogate ids to production ids; "
+            + "ancestor_keys copied unchanged")
+    void seventhTablePromotion_verbatimWithParentRemap() {
+        int cityId = seedFullValidGeography("nv7", false);
+        long revisionId = prepareAndValidate(cityId);
+
+        long rootSandboxId = seedSandboxNavigationNode(
+                revisionId, "nv7-north", "CLUSTER", null, "c:nv7-north:nv7|area-1-nv7|area-2", null,
+                List.of("nv7|area-1", "nv7|area-2"), "Nv7 North", 1, 0, List.of(), 2,
+                13.015, 74.715, 13.01, 74.71, 13.02, 74.72, "fp-nv7-root");
+        seedSandboxNavigationNode(
+                revisionId, "nv7-north", "AREA", rootSandboxId, "a:nv7|area-1", "nv7|area-1",
+                List.of("nv7|area-1"), "Area One", 1, 1, List.of("c:nv7-north:nv7|area-1-nv7|area-2"), 1,
+                13.01, 74.71, 13.01, 74.71, 13.01, 74.71, "fp-nv7-leaf");
+        seedSandboxNavigationNode(
+                revisionId, "nv7-north", "AREA", rootSandboxId, "a:nv7|area-2", "nv7|area-2",
+                List.of("nv7|area-2"), "Area Two", 2, 1, List.of("c:nv7-north:nv7|area-1-nv7|area-2"), 1,
+                13.02, 74.72, 13.02, 74.72, 13.02, 74.72, "fp-nv7-leaf");
+        recomputeAndPersistChecksumWithNavigationNodes(revisionId);
+
+        PromotionReport report = promotionService.launch(cityId, revisionId, ADMIN_ID.toString());
+        assertThat(report.idempotentNoop()).isFalse();
+        assertThat(report.navigationNodesPromoted()).isEqualTo(3);
+
+        List<NavigationNode> prodNodes = navigationNodeRepository.findByCityIdOrderByDepthAscDisplayOrderAsc(cityId);
+        assertThat(prodNodes).hasSize(3);
+
+        NavigationNode root = navigationNodeRepository
+                .findByCityIdAndNodeKey(cityId, "c:nv7-north:nv7|area-1-nv7|area-2").orElseThrow();
+        assertThat(root.getParentNodeId()).isNull();
+        assertThat(root.getNodeType()).isEqualTo("CLUSTER");
+        assertThat(root.getAreaKey()).isNull();
+        assertThat(root.getRepresentativeAreaKeys()).containsExactly("nv7|area-1", "nv7|area-2");
+        assertThat(root.getDisplayLabel()).isEqualTo("Nv7 North");
+        assertThat(root.getDescendantAreaCount()).isEqualTo(2);
+        assertThat(root.getPolicyFingerprint()).isEqualTo("fp-nv7-root");
+        assertThat(root.getAncestorKeys()).isEmpty();
+
+        NavigationNode leaf1 = navigationNodeRepository.findByCityIdAndNodeKey(cityId, "a:nv7|area-1").orElseThrow();
+        assertThat(leaf1.getNodeType()).isEqualTo("AREA");
+        assertThat(leaf1.getAreaKey()).isEqualTo("nv7|area-1");
+        // Parent remapped from the sandbox surrogate id to the PRODUCTION surrogate id of the root.
+        assertThat(leaf1.getParentNodeId()).isEqualTo(root.getId());
+        // ancestor_keys are node_keys, copied VERBATIM — never remapped.
+        assertThat(leaf1.getAncestorKeys()).containsExactly("c:nv7-north:nv7|area-1-nv7|area-2");
+        assertThat(leaf1.getDisplayOrder()).isEqualTo(1);
+        assertThat(leaf1.getDepth()).isEqualTo(1);
+
+        NavigationNode leaf2 = navigationNodeRepository.findByCityIdAndNodeKey(cityId, "a:nv7|area-2").orElseThrow();
+        assertThat(leaf2.getParentNodeId()).isEqualTo(root.getId());
+        assertThat(leaf2.getAreaKey()).isEqualTo("nv7|area-2");
+    }
+
+    // =========================================================================================
+    // 12 — seventhTableFailureRollsBackAllSeven
+    // =========================================================================================
+
+    @Test
+    @DisplayName("seventhTableFailureRollsBackAllSeven: an FK-violating nav row (area_key referencing "
+            + "no production area anywhere) fails the LAST table's insert -> the WHOLE transaction "
+            + "(all six already-executed geography inserts included) rolls back; revision stays "
+            + "VALIDATED, zero rows across all seven tables, is_active untouched")
+    void seventhTableFailureRollsBackAllSeven() {
+        int cityId = seedFullValidGeography("rb7", false);
+        long revisionId = prepareAndValidate(cityId);
+
+        // Force genuine INSERTs (not compare-equal no-ops) on all six geography tables, exactly as
+        // throwMidWriteRollbackToValidated does above, so this test proves those six ALSO roll back,
+        // not merely that the seventh table's own row count stays zero.
+        jdbc.update("DELETE FROM public.area_group_members WHERE area_group_id IN "
+                + "(SELECT id FROM public.area_groups WHERE city_id = ?)", cityId);
+        jdbc.update("DELETE FROM public.area_groups WHERE city_id = ?", cityId);
+        jdbc.update("DELETE FROM public.city_region_memberships WHERE city_id = ?", cityId);
+        jdbc.update("DELETE FROM public.city_regions WHERE city_id = ?", cityId);
+        jdbc.update("DELETE FROM public.area_alias WHERE city_id = ?", cityId);
+        jdbc.update("DELETE FROM public.areas WHERE city_id = ?", cityId);
+
+        // A valid root, then an AREA leaf whose area_key references NO area anywhere in production
+        // (not even under another city) -> navigation_nodes.area_key's FK violates on INSERT.
+        long rootSandboxId = seedSandboxNavigationNode(
+                revisionId, "rb7-north", "CLUSTER", null, "c:rb7-north:rb7|area-1", null,
+                List.of("rb7|area-1"), "Rb7 North", 1, 0, List.of(), 1,
+                13.01, 74.71, 13.01, 74.71, 13.01, 74.71, "fp-rb7-root");
+        seedSandboxNavigationNode(
+                revisionId, "rb7-north", "AREA", rootSandboxId, "a:rb7|area-does-not-exist",
+                "rb7|area-does-not-exist", List.of("rb7|area-does-not-exist"), "Ghost Area", 1, 1,
+                List.of("c:rb7-north:rb7|area-1"), 1,
+                13.05, 74.75, 13.05, 74.75, 13.05, 74.75, "fp-rb7-leaf");
+        recomputeAndPersistChecksumWithNavigationNodes(revisionId);
+
+        assertThatThrownBy(() -> promotionService.launch(cityId, revisionId, ADMIN_ID.toString()))
+                .isNotNull();
+
+        CityLaunchRevision revision = revisionRepository.findById(revisionId).orElseThrow();
+        assertThat(revision.getLifecycleStatus()).isEqualTo(LifecycleStatus.VALIDATED);
+        assertThat(revision.getAppliedRevisionChecksum()).isNull();
+
+        Integer areaCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM public.areas WHERE city_id = ?", Integer.class, cityId);
+        assertThat(areaCount).isZero();
+        Integer navNodeCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM public.navigation_nodes WHERE city_id = ?", Integer.class, cityId);
+        assertThat(navNodeCount).isZero();
+        Boolean isActiveAfterFailure = jdbc.queryForObject(
+                "SELECT is_active FROM public.cities WHERE id = ?", Boolean.class, cityId);
+        assertThat(isActiveAfterFailure).isFalse();
+    }
+
+    // =========================================================================================
+    // 13 — relaunchReplacesPriorNavigationTree (replace-discipline)
+    // =========================================================================================
+
+    @Test
+    @DisplayName("relaunchReplacesPriorNavigationTree: a second VALIDATED revision for the SAME city, "
+            + "with a DIFFERENTLY-SHAPED nav tree, clears the first revision's promoted nav rows before "
+            + "inserting its own -- no partial-unique (city_id, area_key) violation, and the prior "
+            + "revision's rows are genuinely gone afterward")
+    void relaunchReplacesPriorNavigationTree() {
+        int cityId = seedFullValidGeography("rp7", false);
+
+        long revision1 = prepareAndValidate(cityId);
+        long root1 = seedSandboxNavigationNode(
+                revision1, "rp7-north", "CLUSTER", null, "c:rp7-north:rp7|area-1-rp7|area-2", null,
+                List.of("rp7|area-1", "rp7|area-2"), "Rp7 North v1", 1, 0, List.of(), 2,
+                13.015, 74.715, 13.01, 74.71, 13.02, 74.72, "fp-rp7-v1-root");
+        seedSandboxNavigationNode(
+                revision1, "rp7-north", "AREA", root1, "a:rp7|area-1", "rp7|area-1",
+                List.of("rp7|area-1"), "Area One", 1, 1, List.of("c:rp7-north:rp7|area-1-rp7|area-2"), 1,
+                13.01, 74.71, 13.01, 74.71, 13.01, 74.71, "fp-rp7-v1-leaf");
+        seedSandboxNavigationNode(
+                revision1, "rp7-north", "AREA", root1, "a:rp7|area-2", "rp7|area-2",
+                List.of("rp7|area-2"), "Area Two", 2, 1, List.of("c:rp7-north:rp7|area-1-rp7|area-2"), 1,
+                13.02, 74.72, 13.02, 74.72, 13.02, 74.72, "fp-rp7-v1-leaf");
+        recomputeAndPersistChecksumWithNavigationNodes(revision1);
+
+        PromotionReport firstReport = promotionService.launch(cityId, revision1, ADMIN_ID.toString());
+        assertThat(firstReport.navigationNodesPromoted()).isEqualTo(3);
+        assertThat(navigationNodeRepository.findByCityIdOrderByDepthAscDisplayOrderAsc(cityId)).hasSize(3);
+
+        // Second revision, same city, SAME canonical geography (unchanged) but a DIFFERENT nav-tree
+        // shape: no CLUSTER this time, just two flat AREA roots directly under the region.
+        long revision2 = prepareAndValidate(cityId);
+        // uq_clr_current_promoted allows only ONE non-superseded PROMOTED row per city; supersede
+        // revision1 (out of this test's scope to exercise the real rerunSuperseding flow, which is
+        // for PREPARED/VALIDATED revisions, not an already-PROMOTED one) so revision2 can promote.
+        jdbc.update("UPDATE public.city_launch_revision SET superseded_by = ? WHERE id = ?", revision2, revision1);
+        seedSandboxNavigationNode(
+                revision2, "rp7-north", "AREA", null, "a:rp7|area-1", "rp7|area-1",
+                List.of("rp7|area-1"), "Area One (flat)", 1, 0, List.of(), 1,
+                13.01, 74.71, 13.01, 74.71, 13.01, 74.71, "fp-rp7-v2-leaf");
+        seedSandboxNavigationNode(
+                revision2, "rp7-north", "AREA", null, "a:rp7|area-2", "rp7|area-2",
+                List.of("rp7|area-2"), "Area Two (flat)", 2, 0, List.of(), 1,
+                13.02, 74.72, 13.02, 74.72, 13.02, 74.72, "fp-rp7-v2-leaf");
+        recomputeAndPersistChecksumWithNavigationNodes(revision2);
+
+        PromotionReport secondReport = promotionService.launch(cityId, revision2, ADMIN_ID.toString());
+        assertThat(secondReport.idempotentNoop()).isFalse();
+        assertThat(secondReport.navigationNodesPromoted()).isEqualTo(2);
+
+        List<NavigationNode> prodNodesAfterRelaunch =
+                navigationNodeRepository.findByCityIdOrderByDepthAscDisplayOrderAsc(cityId);
+        assertThat(prodNodesAfterRelaunch).hasSize(2);
+        assertThat(prodNodesAfterRelaunch).allSatisfy(n -> {
+            assertThat(n.getNodeType()).isEqualTo("AREA");
+            assertThat(n.getParentNodeId()).isNull();
+        });
+        // The first revision's CLUSTER root is genuinely gone -- not just superseded/orphaned.
+        assertThat(navigationNodeRepository.findByCityIdAndNodeKey(
+                cityId, "c:rp7-north:rp7|area-1-rp7|area-2")).isEmpty();
     }
 }

@@ -1,5 +1,6 @@
 package com.example.realestate.discover;
 
+import com.example.realestate.discover.navigation.PostgresAreaCountProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -83,7 +84,8 @@ class DiscoverSummaryScaleIT {
 
     @BeforeEach
     void setUp() {
-        service = new DiscoverSummaryService(jdbcTemplate, new CityActivationGuard(jdbcTemplate));
+        service = new DiscoverSummaryService(
+                jdbcTemplate, new CityActivationGuard(jdbcTemplate), new PostgresAreaCountProvider(jdbcTemplate));
         jdbcTemplate.update("DELETE FROM property_listings");
     }
 

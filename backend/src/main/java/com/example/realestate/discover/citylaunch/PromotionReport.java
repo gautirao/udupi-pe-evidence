@@ -18,6 +18,7 @@ public record PromotionReport(
         int membershipsPromoted,
         int groupsPromoted,
         int groupMembersPromoted,
+        int navigationNodesPromoted,
         boolean cityActivated,
         boolean idempotentNoop) {
 }

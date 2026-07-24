@@ -1,5 +1,8 @@
 package com.example.realestate.discover.citylaunch;
 
+import com.example.realestate.discover.navigation.SandboxNavigationNode;
+import com.example.realestate.discover.navigation.SandboxNavigationOverride;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -37,11 +40,30 @@ import java.util.Map;
  * #appendField} — a length-prefixed encoding where changing any ONE field's value always changes
  * the resulting digest, even across adjacent free-text fields (an area's {@code name} can never be
  * misread as bleeding into {@code district}, etc.).
+ *
+ * <h2>#1955 Areas PR A — seventh-table extension (D2, APPEND-ONLY)</h2>
+ * {@link #compute(List, List, List, List, List, List, List)} appends a SEVENTH, TRAILING section
+ * for {@code sandbox_navigation_nodes} after the original six. The six-arg {@link #compute(List,
+ * List, List, List, List, List)} overload is UNCHANGED — it delegates with an empty navigation-node
+ * list, and an empty list contributes NO characters to the raw string (the trailing section is
+ * only appended when non-empty) — so every pre-#1955 revision's {@code persisted_revision_checksum}
+ * still verifies, byte-for-byte, against the ORIGINAL six-section algorithm. No version bump.
+ *
+ * <h2>#1955 Areas PR A, SLICE 2f+2g — eighth-table extension (APPEND-ONLY)</h2>
+ * {@link #compute(List, List, List, List, List, List, List, List)} appends an EIGHTH, TRAILING
+ * section for {@code sandbox_navigation_override} after the seven above, on the same "empty list
+ * contributes nothing" append-only discipline — so every revision prepared before an override was
+ * ever applied to it still verifies against the seven-section digest. Overrides are covered
+ * DIRECTLY here (not merely indirectly via their effect on {@code sandbox_navigation_nodes})
+ * so the checksum gate can detect a tampered/added/removed override row even in the rare case
+ * its structural effect on the generated tree happens to be a no-op.
  */
 final class RevisionChecksum {
 
     private RevisionChecksum() {}
 
+    /** Pre-#1955 six-table signature, preserved for existing call sites. Delegates with an empty
+     *  navigation-node list, which is a no-op on the raw string (see class javadoc). */
     static String compute(
             List<SandboxArea> areas,
             List<SandboxAreaAlias> aliases,
@@ -49,6 +71,38 @@ final class RevisionChecksum {
             List<SandboxCityRegionMembership> memberships,
             List<SandboxAreaGroup> groups,
             List<SandboxAreaGroupMember> groupMembers) {
+        return compute(areas, aliases, regions, memberships, groups, groupMembers, List.of());
+    }
+
+    /** #1955 Areas PR A seventh-table signature, preserved for existing call sites. Delegates with
+     *  an empty override list, which is a no-op on the raw string (see class javadoc). */
+    static String compute(
+            List<SandboxArea> areas,
+            List<SandboxAreaAlias> aliases,
+            List<SandboxCityRegion> regions,
+            List<SandboxCityRegionMembership> memberships,
+            List<SandboxAreaGroup> groups,
+            List<SandboxAreaGroupMember> groupMembers,
+            List<SandboxNavigationNode> navigationNodes) {
+        return compute(areas, aliases, regions, memberships, groups, groupMembers, navigationNodes, List.of());
+    }
+
+    /**
+     * #1955 Areas PR A, SLICE 2f+2g eighth-table signature — see class javadoc for the
+     * append-only contract. {@code overrides} is appended as an EIGHTH, TRAILING section after
+     * {@code navigationNodes}, only when non-empty, so an empty override list (every revision
+     * that has never had a controlled override applied) leaves the raw string byte-identical to
+     * the seven-section encoding.
+     */
+    static String compute(
+            List<SandboxArea> areas,
+            List<SandboxAreaAlias> aliases,
+            List<SandboxCityRegion> regions,
+            List<SandboxCityRegionMembership> memberships,
+            List<SandboxAreaGroup> groups,
+            List<SandboxAreaGroupMember> groupMembers,
+            List<SandboxNavigationNode> navigationNodes,
+            List<SandboxNavigationOverride> overrides) {
         StringBuilder raw = new StringBuilder();
 
         // Owning-row-identity lookups: membership/groupMember digests must hash the NATURAL key of
@@ -167,6 +221,110 @@ final class RevisionChecksum {
                 });
         raw.append(']');
 
+        // #1955 Areas PR A: seventh, TRAILING section — appended ONLY when non-empty so an empty
+        // navigation-node list (every pre-#1955 revision, and any revision this generator hasn't
+        // run for yet) leaves the raw string byte-identical to the original six-section encoding.
+        if (!navigationNodes.isEmpty()) {
+            Map<Long, String> nodeKeyBySandboxNodeId = new HashMap<>();
+            navigationNodes.forEach(n -> nodeKeyBySandboxNodeId.put(n.getId(), n.getNodeKey()));
+
+            raw.append(";navigationNodes=[");
+            navigationNodes.stream()
+                    .sorted(Comparator.comparing(SandboxNavigationNode::getNodeKey,
+                            Comparator.nullsFirst(Comparator.naturalOrder())))
+                    .forEach(n -> {
+                        raw.append('{');
+                        appendField(raw, n.getNodeKey());
+                        appendField(raw, n.getRegionKey());
+                        appendField(raw, n.getNodeType());
+                        // Parent's NATURAL key (node_key), not the sandbox surrogate id — same
+                        // reassignment-detection contract as resolveAreaKey/resolveGroupSlug above.
+                        appendField(raw, resolveParentNodeKey(n.getParentNodeId(), nodeKeyBySandboxNodeId));
+                        appendField(raw, n.getAreaKey());
+                        appendListField(raw, n.getRepresentativeAreaKeys());
+                        appendField(raw, n.getDisplayLabel());
+                        appendField(raw, n.getDisplayOrder());
+                        appendField(raw, n.getDepth());
+                        appendListField(raw, n.getAncestorKeys());
+                        appendField(raw, n.getDescendantAreaCount());
+                        appendField(raw, n.getCentreLat());
+                        appendField(raw, n.getCentreLon());
+                        appendField(raw, n.getMinLat());
+                        appendField(raw, n.getMinLon());
+                        appendField(raw, n.getMaxLat());
+                        appendField(raw, n.getMaxLon());
+                        appendField(raw, n.getPolicyFingerprint());
+                        raw.append('}');
+                    });
+            raw.append(']');
+        }
+
+        // #1955 Areas PR A, SLICE 2f+2g: eighth, TRAILING section — appended ONLY when non-empty,
+        // same append-only discipline as the seventh (navigationNodes) section above.
+        if (!overrides.isEmpty()) {
+            raw.append(";overrides=[");
+            overrides.stream()
+                    .sorted(Comparator
+                            .comparing((SandboxNavigationOverride o) -> o.getOverrideKind().name())
+                            .thenComparing(SandboxNavigationOverride::getSubjectAreaKey,
+                                    Comparator.nullsFirst(Comparator.naturalOrder()))
+                            .thenComparing(SandboxNavigationOverride::getSubjectNodeKey,
+                                    Comparator.nullsFirst(Comparator.naturalOrder()))
+                            .thenComparing(SandboxNavigationOverride::getApplyOrder))
+                    .forEach(o -> {
+                        raw.append('{');
+                        appendField(raw, o.getOverrideKind().name());
+                        appendField(raw, o.getSubjectAreaKey());
+                        appendField(raw, o.getSubjectNodeKey());
+                        appendField(raw, o.getTargetRegionKey());
+                        appendField(raw, o.getTargetNodeKey());
+                        appendField(raw, o.getNewLabel());
+                        appendListField(raw, o.getNewRepresentativeAreaKeys());
+                        appendField(raw, o.getApplyOrder());
+                        appendField(raw, o.getReason());
+                        appendField(raw, o.getCreatedBy() == null ? null : o.getCreatedBy().toString());
+                        raw.append('}');
+                    });
+            raw.append(']');
+        }
+
+        return sha256Hex(raw.toString());
+    }
+
+    /**
+     * Computed-ON-READ fingerprint of a revision's CURRENT override row set — never persisted,
+     * used only by the preview/diff endpoints ({@code overridesFingerprint} in {@code
+     * NavigationTreeDiffResponse}) so an admin/UI can cheaply tell "did the override set change
+     * since I last looked" without diffing the full tree. {@code null} for an empty override list
+     * (distinct from "some fixed sentinel hash"), matching this class's null-is-meaningful
+     * convention elsewhere.
+     */
+    static String computeOverridesFingerprint(List<SandboxNavigationOverride> overrides) {
+        if (overrides == null || overrides.isEmpty()) {
+            return null;
+        }
+        StringBuilder raw = new StringBuilder("overrides=[");
+        overrides.stream()
+                .sorted(Comparator
+                        .comparing((SandboxNavigationOverride o) -> o.getOverrideKind().name())
+                        .thenComparing(SandboxNavigationOverride::getSubjectAreaKey,
+                                Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(SandboxNavigationOverride::getSubjectNodeKey,
+                                Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(SandboxNavigationOverride::getApplyOrder))
+                .forEach(o -> {
+                    raw.append('{');
+                    appendField(raw, o.getOverrideKind().name());
+                    appendField(raw, o.getSubjectAreaKey());
+                    appendField(raw, o.getSubjectNodeKey());
+                    appendField(raw, o.getTargetRegionKey());
+                    appendField(raw, o.getTargetNodeKey());
+                    appendField(raw, o.getNewLabel());
+                    appendListField(raw, o.getNewRepresentativeAreaKeys());
+                    appendField(raw, o.getApplyOrder());
+                    raw.append('}');
+                });
+        raw.append(']');
         return sha256Hex(raw.toString());
     }
 
@@ -194,6 +352,17 @@ final class RevisionChecksum {
         return slug != null ? slug : "unresolved-group-id:" + sandboxAreaGroupId;
     }
 
+    /** Same fallback contract as {@link #resolveAreaKey}, for a navigation node's parent. A {@code
+     *  null} sandboxParentNodeId (a root node) resolves to {@code null} — distinct from an
+     *  unresolvable non-null id, which resolves to the distinctly-prefixed fallback. */
+    private static String resolveParentNodeKey(Long sandboxParentNodeId, Map<Long, String> nodeKeyBySandboxNodeId) {
+        if (sandboxParentNodeId == null) {
+            return null;
+        }
+        String nodeKey = nodeKeyBySandboxNodeId.get(sandboxParentNodeId);
+        return nodeKey != null ? nodeKey : "unresolved-node-id:" + sandboxParentNodeId;
+    }
+
     /**
      * Length-prefixed, null-distinguishing field encoding — duplicated from {@code
      * AreaOnboardingApplyService#appendField} (String overload only there); overloaded here for the
@@ -209,6 +378,24 @@ final class RevisionChecksum {
 
     private static void appendField(StringBuilder sb, Object value) {
         appendField(sb, value == null ? null : value.toString());
+    }
+
+    /**
+     * #1955 Areas PR A: length-prefixed encoding for an ordered {@code text[]} field (
+     * {@code representative_area_keys}, {@code ancestor_keys}) — element count first, then every
+     * element via {@link #appendField(StringBuilder, String)} so a value containing a delimiter
+     * character can never be misread as spanning two elements, and a {@code null} list is
+     * distinguishable from an empty one.
+     */
+    private static void appendListField(StringBuilder sb, List<String> values) {
+        if (values == null) {
+            sb.append("NL;");
+            return;
+        }
+        sb.append(values.size()).append('#');
+        for (String v : values) {
+            appendField(sb, v);
+        }
     }
 
     /** sha256 hex digest, duplicated (not shared) from {@code AreaOnboardingApplyService#sha256Hex}. */

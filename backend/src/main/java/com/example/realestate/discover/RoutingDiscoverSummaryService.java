@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
 
@@ -28,10 +29,14 @@ import java.net.SocketTimeoutException;
  * future OpenSearch summary adapter + shadow-comparison method can be wired in without changing
  * this class's shape.
  *
- * <p>{@code @Primary} moved to {@link CachingDiscoverSummaryService} (#1760) — this bean is no
- * longer the port's default; it is wired into the caching decorator by concrete type instead.
+ * <p>{@code @Primary} restored here (#1955 Areas PR A, SLICE 2e, D6) — {@code
+ * CachingDiscoverSummaryService}, the whole-response 120s TTL Caffeine decorator that used to hold
+ * {@code @Primary} (#1760), is retired: {@link DiscoverSummaryService}'s region/hotspot queries are
+ * now backed by ONE shared area-level aggregation (see that class's javadoc) rather than three, so
+ * the per-region SQL cost the old cache amortised no longer exists to amortise.
  */
 @Service
+@Primary
 public class RoutingDiscoverSummaryService implements DiscoverSummaryPort {
 
     private static final Logger log = LoggerFactory.getLogger(RoutingDiscoverSummaryService.class);

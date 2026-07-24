@@ -1,0 +1,393 @@
+package com.example.realestate.discover.navigation;
+
+import com.example.realestate.discover.DiscoverListingPredicateBuilder;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.TestPropertySource;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
+
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Testcontainers integration test (real Postgres) — #1955 Areas PR A gap-filling QA suite, items 5
+ * (count-provider parity + EXPLAIN ANALYZE plan) and 6 (representative scale assessment).
+ *
+ * <p>Navigation trees are seeded DIRECTLY into {@code navigation_nodes} via JDBC (the same
+ * established pattern {@code NavigationGraphCacheLifecycleIT#seedSimpleTree} uses) rather than
+ * driven through the full prepare/generate/promote pipeline — this class is testing the COUNTS
+ * layer ({@link PostgresAreaCountProvider}, {@link AreaCountRollupService}) against a real
+ * Postgres-backed {@code property_listings} table, not the generation pipeline (already covered by
+ * {@code EndToEndNavigationPipelineIT}), so a hand-built, validation-satisfying tree is sufficient
+ * and much faster/deterministic than waiting on the async promotion+cache-refresh path.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@Testcontainers(disabledWithoutDocker = true)
+@TestPropertySource(properties = {
+        "spring.flyway.locations=classpath:db/test-stubs,classpath:db/migration",
+        "spring.flyway.mixed=true",
+        "spring.flyway.placeholders.concurrently_keyword=",
+        "spring.datasource.hikari.data-source-properties.ssl=false",
+        "spring.datasource.hikari.data-source-properties.sslmode=disable",
+        "spring.datasource.hikari.data-source-properties.stringtype=unspecified",
+        "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://test.example.com/auth/v1",
+        "AI_API_KEY=test-dummy-not-used-in-count-parity-it",
+        "spring.task.scheduling.enabled=false"
+})
+class NavigationCountParityAndScaleIT {
+
+    private static final Logger log = LoggerFactory.getLogger(NavigationCountParityAndScaleIT.class);
+
+    @Container
+    @ServiceConnection
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(
+            DockerImageName.parse("postgis/postgis:15-3.4-alpine").asCompatibleSubstituteFor("postgres"));
+
+    @TestConfiguration
+    static class TestJwtDecoderConfig {
+        @Bean
+        @Primary
+        public JwtDecoder testJwtDecoder() {
+            return token -> Jwt.withTokenValue(token)
+                    .header("alg", "none")
+                    .subject(token)
+                    .issuedAt(Instant.now())
+                    .expiresAt(Instant.now().plusSeconds(3600))
+                    .build();
+        }
+    }
+
+    @Autowired private JdbcTemplate jdbc;
+    @Autowired private NavigationNodeRepository navigationNodeRepository;
+    @Autowired private PostgresAreaCountProvider postgresProvider;
+    @Autowired private AreaCountRollupService rollupService;
+
+    private final List<String> testCitySlugs = new ArrayList<>();
+
+    @AfterEach
+    void cleanup() {
+        for (String slug : testCitySlugs) {
+            Integer cityId = jdbc.queryForObject("SELECT id FROM public.cities WHERE slug = ?", Integer.class, slug);
+            if (cityId == null) {
+                continue;
+            }
+            jdbc.update("DELETE FROM public.property_listings WHERE area_key LIKE ?", "IN|KA|" + slug + "|%");
+            jdbc.update("DELETE FROM public.navigation_nodes WHERE city_id = ?", cityId);
+            jdbc.update("DELETE FROM public.areas WHERE city_id = ?", cityId);
+            jdbc.update("DELETE FROM public.cities WHERE id = ?", cityId);
+        }
+        testCitySlugs.clear();
+    }
+
+    // ── Fixtures ─────────────────────────────────────────────────────────────────────────────
+
+    private int seedCity(String slug) {
+        testCitySlugs.add(slug);
+        return jdbc.queryForObject(
+                "INSERT INTO public.cities (slug, name, geo_center_lat, geo_center_lon, is_active) "
+                        + "VALUES (?, ?, 13.0, 74.7, true) RETURNING id",
+                Integer.class, slug, slug + "-test-city");
+    }
+
+    private void seedArea(int cityId, String areaKey) {
+        jdbc.update("INSERT INTO public.areas (area_key, city_id, name, geo_center_lat, geo_center_lon) "
+                + "VALUES (?, ?, ?, 13.05, 74.70)", areaKey, cityId, areaKey);
+    }
+
+    private long insertNode(int cityId, String nodeType, Long parentId, String nodeKey, String areaKey,
+                             List<String> representativeAreaKeys, int displayOrder, int depth,
+                             List<String> ancestorKeys, int descendantAreaCount) {
+        return jdbc.queryForObject(
+                "INSERT INTO public.navigation_nodes (city_id, region_key, node_type, parent_node_id, "
+                        + "node_key, area_key, representative_area_keys, display_label, display_order, depth, "
+                        + "ancestor_keys, descendant_area_count, centre_lat, centre_lon, min_lat, min_lon, "
+                        + "max_lat, max_lon, policy_fingerprint, generated_at) "
+                        + "VALUES (?, 'north', ?, ?, ?, ?, ?::text[], ?, ?, ?, ?::text[], ?, "
+                        + "13.05, 74.70, 13.0, 74.6, 13.1, 74.8, 'fp-count-it', now()) RETURNING id",
+                Long.class, cityId, nodeType, parentId, nodeKey, areaKey,
+                pgTextArray(representativeAreaKeys), nodeKey, displayOrder, depth,
+                pgTextArray(ancestorKeys), descendantAreaCount);
+    }
+
+    private static String pgTextArray(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return "{}";
+        }
+        StringBuilder sb = new StringBuilder("{");
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append('"').append(values.get(i).replace("\"", "\\\"")).append('"');
+        }
+        return sb.append('}').toString();
+    }
+
+    /** ROOT CLUSTER -&gt; 2 sub-CLUSTERs -&gt; 2 AREA leaves each (4 areas total, 2-level tree) —
+     *  the smallest shape that lets the no-double-count roll-up assertion span two branch levels. */
+    private NavigationGraph seedTwoLevelTreeWithFourAreas(String slug) {
+        int cityId = seedCity(slug);
+        // area_key MUST be the real 4-pipe-segment convention (country|state|city|area) --
+        // PostgresAreaCountProvider's FOUR_SEGMENT_GUARD silently excludes anything shorter.
+        String a1 = "IN|KA|" + slug + "|area-1";
+        String a2 = "IN|KA|" + slug + "|area-2";
+        String a3 = "IN|KA|" + slug + "|area-3";
+        String a4 = "IN|KA|" + slug + "|area-4";
+        for (String a : List.of(a1, a2, a3, a4)) {
+            seedArea(cityId, a);
+        }
+
+        String rootKey = "c:" + slug + ":root";
+        String leftKey = "c:" + slug + ":left";
+        String rightKey = "c:" + slug + ":right";
+
+        long rootId = insertNode(cityId, "CLUSTER", null, rootKey, null, List.of(a1, a3), 1, 0, List.of(), 4);
+        long leftId = insertNode(cityId, "CLUSTER", rootId, leftKey, null, List.of(a1, a2), 1, 1, List.of(rootKey), 2);
+        long rightId = insertNode(cityId, "CLUSTER", rootId, rightKey, null, List.of(a3, a4), 2, 1, List.of(rootKey), 2);
+        insertNode(cityId, "AREA", leftId, "a:" + a1, a1, List.of(a1), 1, 2, List.of(rootKey, leftKey), 1);
+        insertNode(cityId, "AREA", leftId, "a:" + a2, a2, List.of(a2), 2, 2, List.of(rootKey, leftKey), 1);
+        insertNode(cityId, "AREA", rightId, "a:" + a3, a3, List.of(a3), 1, 2, List.of(rootKey, rightKey), 1);
+        insertNode(cityId, "AREA", rightId, "a:" + a4, a4, List.of(a4), 2, 2, List.of(rootKey, rightKey), 1);
+
+        List<NavigationNode> flat = navigationNodeRepository.findByCityIdOrderByDepthAscDisplayOrderAsc(cityId);
+        return NavigationGraph.build(slug, 1L, flat);
+    }
+
+    private void insertListing(String areaKey, String propertyType, String purpose) {
+        OffsetDateTime now = OffsetDateTime.now();
+        jdbc.update(
+                "INSERT INTO public.property_listings "
+                        + "(id, area_key, status, archived_at, is_duplicate, is_valid, "
+                        + " property_type, listing_purpose, latitude, longitude, created_at, updated_at) "
+                        + "VALUES (?, ?, 'LIVE', NULL, false, true, ?, ?, 13.35, 74.79, ?, ?)",
+                UUID.randomUUID(), areaKey, propertyType, purpose, now, now);
+    }
+
+    // =========================================================================================
+    // 1 — count-provider parity: rollup totals == independent raw-SQL totals; no double counting
+    // =========================================================================================
+
+    @Test
+    @DisplayName("count-provider parity: AreaCountRollupService's node roll-up == an INDEPENDENT raw "
+            + "SQL COUNT over the same node's descendant areas, at every level of a 2-level tree; "
+            + "the root's total is not inflated by any area being counted twice")
+    void rollupTotals_matchIndependentRawSql_noDoubleCounting() {
+        String slug = "cpq1";
+        NavigationGraph graph = seedTwoLevelTreeWithFourAreas(slug);
+
+        String a1 = "IN|KA|" + slug + "|area-1";
+        String a2 = "IN|KA|" + slug + "|area-2";
+        String a3 = "IN|KA|" + slug + "|area-3";
+        String a4 = "IN|KA|" + slug + "|area-4";
+
+        // Distinct, non-uniform listing counts per area so an inflation bug (double-counting one
+        // area) would change the aggregate totals, not just accidentally cancel out.
+        insertListing(a1, "house", "sale");
+        insertListing(a1, "house", "sale");
+        insertListing(a1, "house", "sale");
+        insertListing(a2, "house", "sale");
+        insertListing(a3, "house", "sale");
+        insertListing(a3, "house", "sale");
+        insertListing(a3, "house", "sale");
+        insertListing(a3, "house", "sale");
+        insertListing(a4, "house", "sale");
+        insertListing(a4, "house", "sale");
+        // 3,1,4,2 -> total 10
+
+        AreaCountQuery query = new AreaCountQuery(slug, null, null, "public");
+        Map<String, Long> areaCounts = postgresProvider.countsByAreaKey(query);
+
+        long independentRawTotal = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM public.property_listings WHERE area_key LIKE ? "
+                        + "AND status = 'LIVE' AND archived_at IS NULL AND is_duplicate = false",
+                Long.class, "IN|KA|" + slug + "|%");
+        assertThat(independentRawTotal).isEqualTo(10L);
+
+        NavigationNode root = graph.nodeByKey("c:" + slug + ":root");
+        NavigationNode left = graph.nodeByKey("c:" + slug + ":left");
+        NavigationNode right = graph.nodeByKey("c:" + slug + ":right");
+
+        long rootTotal = rollupService.countForNode(graph, root, areaCounts);
+        long leftTotal = rollupService.countForNode(graph, left, areaCounts);
+        long rightTotal = rollupService.countForNode(graph, right, areaCounts);
+
+        assertThat(rootTotal).as("root roll-up must equal the independent raw-SQL total").isEqualTo(independentRawTotal);
+        assertThat(leftTotal).isEqualTo(3L + 1L);
+        assertThat(rightTotal).isEqualTo(4L + 2L);
+        assertThat(leftTotal + rightTotal)
+                .as("sibling branch totals must sum to the root total exactly once each -- no double count")
+                .isEqualTo(rootTotal);
+
+        // childCounts(root's children) sums to the same total via the public roll-up API.
+        long childCountsSum = rollupService.childCounts(graph, null, areaCounts).stream()
+                .mapToLong(AreaCountRollupService.NodeCount::count).sum();
+        assertThat(childCountsSum).isEqualTo(rootTotal);
+    }
+
+    // =========================================================================================
+    // 2 — Buy/Rent/filter cache-key isolation
+    // =========================================================================================
+
+    @Test
+    @DisplayName("cache-key isolation: sale/rent and house/apartment queries never contaminate each "
+            + "other's cached rolled-up totals for the same city+revision")
+    void cacheKeyIsolation_purposeAndPropertyTypeNeverCrossContaminate() {
+        String slug = "cpq2";
+        NavigationGraph graph = seedTwoLevelTreeWithFourAreas(slug);
+        String a1 = "IN|KA|" + slug + "|area-1";
+        String a2 = "IN|KA|" + slug + "|area-2";
+        insertListing(a1, "house", "sale");
+        insertListing(a1, "house", "sale");
+        insertListing(a2, "apartment", "rent");
+        insertListing(a2, "apartment", "rent");
+        insertListing(a2, "apartment", "rent");
+
+        AreaCountQuery saleHouse = new AreaCountQuery(slug, "sale", "house", "public");
+        AreaCountQuery rentApartment = new AreaCountQuery(slug, "rent", "apartment", "public");
+        AreaCountQuery blended = new AreaCountQuery(slug, null, null, "public");
+
+        Map<String, Long> saleCounts = rollupService.areaCountsForCity(slug, 1L, saleHouse);
+        Map<String, Long> rentCounts = rollupService.areaCountsForCity(slug, 1L, rentApartment);
+        Map<String, Long> blendedCounts = rollupService.areaCountsForCity(slug, 1L, blended);
+
+        assertThat(saleCounts).containsExactlyEntriesOf(Map.of(a1, 2L));
+        assertThat(rentCounts).containsExactlyEntriesOf(Map.of(a2, 3L));
+        assertThat(blendedCounts.values().stream().mapToLong(Long::longValue).sum()).isEqualTo(5L);
+
+        // Re-fetching sale AFTER rent/blended were cached must return the SAME sale-only result --
+        // proves the cache key genuinely separates filter contexts, not just a coincidence of
+        // insertion order.
+        Map<String, Long> saleCountsAgain = rollupService.areaCountsForCity(slug, 1L, saleHouse);
+        assertThat(saleCountsAgain).isEqualTo(saleCounts);
+    }
+
+    // =========================================================================================
+    // 3 — EXPLAIN ANALYZE of the ONE area-level COUNT-by-area query
+    // =========================================================================================
+
+    @Test
+    @DisplayName("EXPLAIN ANALYZE: the area-level GROUP BY count query produces a real aggregation "
+            + "plan (GroupAggregate/HashAggregate) over property_listings, captured as evidence")
+    void explainAnalyze_countByAreaQuery_capturesRealAggregationPlan() {
+        String slug = "cpq3";
+        int cityId = seedCity(slug);
+        for (int i = 1; i <= 3; i++) {
+            String areaKey = "IN|KA|" + slug + "|area-" + i;
+            seedArea(cityId, areaKey);
+            for (int j = 0; j < 50; j++) {
+                insertListing(areaKey, "house", "sale");
+            }
+        }
+
+        DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
+                slug, null, null, null, null, null, null, null,
+                null, null, null, null, null,
+                null, null, null,
+                null, null, null, null, null);
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(filters);
+
+        String sqlText = PostgresAreaCountProvider.COUNT_BY_AREA_SQL_TEMPLATE.formatted(
+                sql.whereFragment(), "array_length(string_to_array(pl.area_key, '|'), 1) = 4", "");
+
+        List<String> planLines = jdbc.queryForList("EXPLAIN ANALYZE " + sqlText, String.class, sql.params().toArray());
+        assertThat(planLines).isNotEmpty();
+        String plan = String.join("\n", planLines);
+        log.info("NavigationCountParityAndScaleIT EXPLAIN ANALYZE plan for COUNT_BY_AREA_SQL_TEMPLATE:\n{}", plan);
+
+        assertThat(plan)
+                .as("the query must actually execute a GROUP BY aggregation, not a per-row scan with "
+                        + "app-side grouping")
+                .containsAnyOf("GroupAggregate", "HashAggregate", "Aggregate");
+        assertThat(plan).contains("property_listings");
+    }
+
+    // =========================================================================================
+    // 4 — Representative scale assessment (honest extrapolation, not exhaustive 500k)
+    // =========================================================================================
+
+    @Test
+    @DisplayName("scale (representative volume): area-level count query cost scales with rows "
+            + "actually scanned/areas, not per-listing app-side work; wall-clock + heap recorded and "
+            + "documented as an honest extrapolation basis, not a substitute for a real 500k load test")
+    void scaleAssessment_representativeVolume_costTrackedForExtrapolation() {
+        String slug = "cpq4";
+        int cityId = seedCity(slug);
+        int areaCount = 25;
+        int listingsPerArea = 800; // 25 * 800 = 20,000 listings -- representative, not 500k.
+        List<String> areaKeys = new ArrayList<>();
+        for (int i = 0; i < areaCount; i++) {
+            String areaKey = "IN|KA|" + slug + "|area-" + i;
+            seedArea(cityId, areaKey);
+            areaKeys.add(areaKey);
+        }
+
+        long insertStart = System.currentTimeMillis();
+        for (String areaKey : areaKeys) {
+            for (int j = 0; j < listingsPerArea; j++) {
+                insertListing(areaKey, j % 2 == 0 ? "house" : "apartment", j % 3 == 0 ? "rent" : "sale");
+            }
+        }
+        long insertMs = System.currentTimeMillis() - insertStart;
+
+        Long totalListings = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM public.property_listings WHERE area_key LIKE ?",
+                Long.class, "IN|KA|" + slug + "|%");
+        assertThat(totalListings).isEqualTo((long) areaCount * listingsPerArea);
+
+        Runtime rt = Runtime.getRuntime();
+        System.gc();
+        long heapBeforeBytes = rt.totalMemory() - rt.freeMemory();
+
+        long queryStart = System.currentTimeMillis();
+        Map<String, Long> counts = postgresProvider.countsByAreaKey(new AreaCountQuery(slug, null, null, "public"));
+        long queryMs = System.currentTimeMillis() - queryStart;
+
+        long heapAfterBytes = rt.totalMemory() - rt.freeMemory();
+
+        assertThat(counts).hasSize(areaCount);
+        assertThat(counts.values().stream().mapToLong(Long::longValue).sum()).isEqualTo(totalListings);
+
+        log.info("NavigationCountParityAndScaleIT scale assessment: {} areas x {} listings = {} rows. "
+                        + "Insert took {}ms; the ONE area-level GROUP BY count query took {}ms "
+                        + "(returns {} rows -- one per area, NOT one per listing). Heap before={}KB "
+                        + "after={}KB (delta={}KB). This is a REPRESENTATIVE 20k-row volume, not the "
+                        + "full 500k budget from the launch plan -- full 500k seeding was judged "
+                        + "infeasible to run reliably inside this Testcontainers session's time/heap "
+                        + "budget. Honest extrapolation: the query is a single indexed/sequential GROUP "
+                        + "BY pass over property_listings filtered by the shared predicate (see the "
+                        + "EXPLAIN ANALYZE evidence in explainAnalyze_countByAreaQuery_capturesRealAggregationPlan) "
+                        + "whose output cardinality is bounded by AREA COUNT, not listing count -- so "
+                        + "response SIZE stays flat as listing volume grows, and query TIME should grow "
+                        + "roughly linearly with rows scanned (not super-linearly), assuming no missing "
+                        + "index regresses the plan to a slower scan at higher volume -- that assumption "
+                        + "is NOT verified at 500k here and should be spot-checked before launch with a "
+                        + "real production-scale load test, not assumed from this extrapolation alone.",
+                areaCount, listingsPerArea, totalListings, insertMs, queryMs, counts.size(),
+                heapBeforeBytes / 1024, heapAfterBytes / 1024, (heapAfterBytes - heapBeforeBytes) / 1024);
+
+        // Loose sanity bound only -- this is a representative-volume smoke, not a perf gate: the
+        // ONE aggregation query over 20k rows must complete well within a request timeout budget.
+        assertThat(queryMs).isLessThan(5_000);
+    }
+}

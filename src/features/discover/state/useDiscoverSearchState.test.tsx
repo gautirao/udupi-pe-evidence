@@ -2,6 +2,22 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useDiscoverSearchState } from './useDiscoverSearchState';
 
+// Issue #1955 Areas PR A — admin City Launch Preview regression guard.
+//
+// This hook must stay a PURE local UI-state debounce (no fetch, no
+// DiscoverDataSourceContext coupling) so it is already preview-safe by
+// construction: debouncedSearch is consumed as a `searchQuery` param by
+// useDiscoverCityListings (which IS preview-aware — see
+// src/hooks/useDiscoverCityListings.ts), this hook never issues its own
+// request. If this hook ever grows a fetch, that fetch would silently bypass
+// DiscoverDataSourceProvider and leak live data into an admin preview
+// (CityLaunchPreview.tsx) — this spy on '@/lib/api' catches that class of
+// regression even though no current code path calls api.get from here.
+vi.mock('@/lib/api', () => ({
+  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+  ApiError: class ApiError extends Error {},
+}));
+
 describe('useDiscoverSearchState', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -150,5 +166,23 @@ describe('useDiscoverSearchState', () => {
         vi.advanceTimersByTime(250);
       });
     }).not.toThrow();
+  });
+
+  it('Issue #1955 — never calls api.get; stays a pure local debounce with no endpoint coupling (preview-safety guard)', async () => {
+    const { api } = await import('@/lib/api');
+    const setUrlSearch = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverSearchState({ urlQ: '', setUrlSearch }),
+    );
+
+    act(() => {
+      result.current.handleSearchChange('manipal');
+    });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(result.current.debouncedSearch).toBe('manipal');
+    expect(api.get).not.toHaveBeenCalled();
   });
 });

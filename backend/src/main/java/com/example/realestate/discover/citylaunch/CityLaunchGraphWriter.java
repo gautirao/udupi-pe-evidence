@@ -1,5 +1,12 @@
 package com.example.realestate.discover.citylaunch;
 
+import com.example.realestate.discover.navigation.NavigationPolicyReader;
+import com.example.realestate.discover.navigation.NavigationTreeGenerationService;
+import com.example.realestate.discover.navigation.NavigationTreeValidationException;
+import com.example.realestate.discover.navigation.SandboxNavigationNode;
+import com.example.realestate.discover.navigation.SandboxNavigationNodeRepository;
+import com.example.realestate.discover.navigation.SandboxNavigationOverride;
+import com.example.realestate.discover.navigation.SandboxNavigationOverrideRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -51,6 +58,10 @@ public class CityLaunchGraphWriter {
     private final SandboxCityRegionMembershipRepository sandboxCityRegionMembershipRepository;
     private final SandboxAreaGroupRepository sandboxAreaGroupRepository;
     private final SandboxAreaGroupMemberRepository sandboxAreaGroupMemberRepository;
+    private final NavigationPolicyReader navigationPolicyReader;
+    private final NavigationTreeGenerationService navigationTreeGenerationService;
+    private final SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
+    private final SandboxNavigationOverrideRepository sandboxNavigationOverrideRepository;
 
     /**
      * Self-reference to the Spring-proxied instance of this very bean, injected lazily.
@@ -73,6 +84,10 @@ public class CityLaunchGraphWriter {
             SandboxCityRegionMembershipRepository sandboxCityRegionMembershipRepository,
             SandboxAreaGroupRepository sandboxAreaGroupRepository,
             SandboxAreaGroupMemberRepository sandboxAreaGroupMemberRepository,
+            NavigationPolicyReader navigationPolicyReader,
+            NavigationTreeGenerationService navigationTreeGenerationService,
+            SandboxNavigationNodeRepository sandboxNavigationNodeRepository,
+            SandboxNavigationOverrideRepository sandboxNavigationOverrideRepository,
             @Lazy CityLaunchGraphWriter self) {
         this.revisionRepository = revisionRepository;
         this.geographyReader = geographyReader;
@@ -82,6 +97,10 @@ public class CityLaunchGraphWriter {
         this.sandboxCityRegionMembershipRepository = sandboxCityRegionMembershipRepository;
         this.sandboxAreaGroupRepository = sandboxAreaGroupRepository;
         this.sandboxAreaGroupMemberRepository = sandboxAreaGroupMemberRepository;
+        this.navigationPolicyReader = navigationPolicyReader;
+        this.navigationTreeGenerationService = navigationTreeGenerationService;
+        this.sandboxNavigationNodeRepository = sandboxNavigationNodeRepository;
+        this.sandboxNavigationOverrideRepository = sandboxNavigationOverrideRepository;
         this.self = self;
     }
 
@@ -196,12 +215,44 @@ public class CityLaunchGraphWriter {
         revision.setPrepStage((short) 6);
         stageReached[0] = 6;
 
-        // #1911 PR5: compute + persist the "before" checksum anchor over the row set just written,
-        // via the SAME RevisionChecksum routine CityLaunchPromotionService recomputes at launch
-        // time — a match is guaranteed by construction in the happy path; a mismatch at launch
-        // means genuine out-of-band sandbox mutation between prep completion and promotion.
+        // #1955 Areas PR A, SLICE 2e (AC5): close the 2c integration seam by generating the
+        // navigation tree as part of prepare, BEFORE the checksum anchor below — so a PREPARED
+        // revision's persisted_revision_checksum already covers sandbox_navigation_nodes via the
+        // SAME seven-arg RevisionChecksum overload CityLaunchPromotionService recomputes at launch.
+        //
+        // Precondition-gated (not exception-swallowed): generation only runs when this city has a
+        // city_region_policy row (V121 seeds one for every pre-existing row, but a city onboarded
+        // before that migration, or a test fixture that only inserts `cities`, legitimately has
+        // none). Without a policy row, this stays a genuine zero-row no-op — the SAME outcome as
+        // before this slice — rather than failing the entire six-table geography prep on a
+        // navigation-tree concern. When a policy row IS present and generation genuinely fails
+        // validation, that exception propagates and fails prepare, exactly like every other
+        // pre-INSERT validation failure in this method.
+        List<SandboxNavigationNode> savedNavigationNodes;
+        if (navigationPolicyReader.findPolicy(cityId).isPresent()) {
+            navigationTreeGenerationService.generateAndStoreForRevision(revisionId, cityId, Instant.now());
+            savedNavigationNodes = sandboxNavigationNodeRepository.findByRevisionId(revisionId);
+        } else {
+            log.info("CityLaunchGraphWriter: no city_region_policy row for cityId={} — skipping "
+                            + "navigation-tree generation for revisionId={} (#1955 Areas PR A, best-effort "
+                            + "at this integration seam)",
+                    cityId, revisionId);
+            savedNavigationNodes = List.of();
+        }
+
+        // #1911 PR5 / #1955 Areas PR A SLICE 2e/2f+2g: compute + persist the "before" checksum
+        // anchor over the row set just written (now eight tables), via the SAME RevisionChecksum
+        // routine CityLaunchPromotionService recomputes at launch time — a match is guaranteed by
+        // construction in the happy path; a mismatch at launch means genuine out-of-band sandbox
+        // mutation between prep completion and promotion. No override row can exist yet at this
+        // point (this revision was just created earlier in this same request), so this list is
+        // always empty here — read via the repository anyway so there is exactly ONE checksum call
+        // shape used everywhere (here, the override endpoints, and CityLaunchPromotionService).
+        List<SandboxNavigationOverride> savedOverrides =
+                sandboxNavigationOverrideRepository.findByRevisionIdOrderByApplyOrderAsc(revisionId);
         revision.setPersistedRevisionChecksum(RevisionChecksum.compute(
-                savedAreas, savedAliases, savedRegions, savedMemberships, savedGroups, savedGroupMembers));
+                savedAreas, savedAliases, savedRegions, savedMemberships, savedGroups, savedGroupMembers,
+                savedNavigationNodes, savedOverrides));
 
         revision.setLifecycleStatus(LifecycleStatus.PREPARED);
         revision.setPrepState(PrepState.DONE);
@@ -289,6 +340,12 @@ public class CityLaunchGraphWriter {
     private static String sanitizedFailureReason(Exception e) {
         if (e instanceof GeographyValidationException) {
             return "Geography validation failed: " + e.getMessage();
+        }
+        if (e instanceof NavigationTreeValidationException) {
+            // #1955 Areas PR A, SLICE 2e — generation only runs when a city_region_policy row is
+            // present (see writeGraphTransactional), so this is a genuine tree-shape problem, not a
+            // missing-policy no-op.
+            return "Navigation tree validation failed";
         }
         return "City launch graph write failed";
     }

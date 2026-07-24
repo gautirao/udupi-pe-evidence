@@ -3,6 +3,7 @@ package com.example.realestate.exception;
 import com.example.realestate.area.AreaNotFoundException;
 import com.example.realestate.discover.citylaunch.CityPreparationConflictException;
 import com.example.realestate.discover.citylaunch.GeographyValidationException;
+import com.example.realestate.discover.navigation.NavigationTreeValidationException;
 import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.trust.AuthorityAlreadyVerifiedException;
@@ -110,6 +111,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.warn("Geography validation failed: {}", ex.getMessage());
         return ResponseEntity.unprocessableEntity()
                 .body(Map.of("error", "GEOGRAPHY_VALIDATION_FAILED"));
+    }
+
+    // ===== NavigationTreeValidationException → 422, body carries the structured ValidationReport =====
+
+    @ExceptionHandler(NavigationTreeValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleNavigationTreeValidation(NavigationTreeValidationException ex) {
+        log.warn("Navigation tree validation failed with {} error(s): {}",
+                ex.report().errors().size(), ex.report().errors());
+        List<Map<String, String>> errors = ex.report().errors().stream()
+                .map(e -> Map.of("code", e.code(), "message", e.message(),
+                        "nodeKey", e.nodeKey() == null ? "" : e.nodeKey()))
+                .toList();
+        return ResponseEntity.unprocessableEntity()
+                .body(Map.of("error", "NAVIGATION_TREE_VALIDATION_FAILED", "errors", errors));
     }
 
     // ===== IllegalArgumentException → 400 =====

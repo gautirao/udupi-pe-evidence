@@ -111,6 +111,11 @@ public class JwtConfig {
                         .requestMatchers(HttpMethod.GET, "/api/discover/cities/*/school-radius-listings").permitAll()
                         // Public region-summary endpoint — no auth required (#1882)
                         .requestMatchers(HttpMethod.GET, "/api/discover/cities/*/regions").permitAll()
+                        // Public navigation-hierarchy structural + counts endpoints — no auth
+                        // required (#1955 Areas PR A, SLICE 2e, AC8/AC8b).
+                        .requestMatchers(HttpMethod.GET, "/api/discover/cities/*/navigation/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/discover/cities/*/navigation/*/counts").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/discover/cities/*/areas/*/navigation-path").permitAll()
                         // Public region-scoped area groups endpoint — no auth required (#1910)
                         .requestMatchers(HttpMethod.GET, "/api/discover/cities/*/regions/*/groups").permitAll()
                         // Public area groups endpoint — no auth required (#988)

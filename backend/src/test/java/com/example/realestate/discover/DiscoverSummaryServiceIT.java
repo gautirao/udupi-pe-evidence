@@ -1,5 +1,6 @@
 package com.example.realestate.discover;
 
+import com.example.realestate.discover.navigation.PostgresAreaCountProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -95,7 +96,8 @@ class DiscoverSummaryServiceIT {
 
     @BeforeEach
     void setUp() {
-        service = new DiscoverSummaryService(jdbcTemplate, new CityActivationGuard(jdbcTemplate));
+        service = new DiscoverSummaryService(
+                jdbcTemplate, new CityActivationGuard(jdbcTemplate), new PostgresAreaCountProvider(jdbcTemplate));
         areaSummaryService = new AreaSummaryService(jdbcTemplate);
         backfillService = new RegionalClassificationBackfillService(jdbcTemplate);
         areaGroupsService = new AreaGroupsService(jdbcTemplate);
@@ -287,6 +289,52 @@ class DiscoverSummaryServiceIT {
 
         assertThat(summaryManipalCount).isEqualTo(areasManipalCount);
         assertThat(summaryManipalCount).isEqualTo(2L);
+    }
+
+    // ── #1955 Areas PR A, SLICE 2e: migration equivalence (AC13) ──────────────
+
+    /**
+     * Runs the PRE-#1955 per-region LEFT-JOIN-aggregate SQL directly (duplicated here, verbatim,
+     * from {@code DiscoverSummaryService} as it existed before SLICE 2e's roll-up rewrite) and
+     * asserts it produces the IDENTICAL region totals as the current (post-rewrite) {@link
+     * DiscoverSummaryService#getSummary}, on the SAME seeded data. Independent proof that the
+     * area-level-aggregation-plus-roll-up rewrite is behaviour-preserving, not just "the existing
+     * fixture assertions still happen to pass".
+     */
+    @Test
+    @DisplayName("migration equivalence: new roll-up area_group totals == legacy per-region LEFT JOIN totals")
+    void migrationEquivalence_areaGroupRegions_matchLegacyPerRegionAggregation() {
+        seedFixture();
+
+        DiscoverSummaryResponse actual = service.getSummary(new SummaryQuery(CITY, "house", "area_group", 20));
+
+        String legacySql = """
+                SELECT ag.slug AS region_key, ag.name AS region_label, COUNT(pl.id) AS listing_count
+                FROM area_groups ag
+                JOIN cities c ON c.id = ag.city_id
+                JOIN area_group_members agm ON agm.area_group_id = ag.id
+                LEFT JOIN property_listings pl
+                       ON pl.area_key = agm.area_key
+                      AND pl.status = 'LIVE' AND pl.archived_at IS NULL AND pl.is_duplicate = false
+                      AND array_length(string_to_array(pl.area_key, '|'), 1) = 4
+                      AND LOWER(pl.property_type) = LOWER(?)
+                WHERE c.slug = ? AND c.is_active = true AND ag.is_active = true
+                GROUP BY ag.slug, ag.name
+                ORDER BY listing_count DESC, ag.name ASC
+                """;
+        List<DiscoverSummaryResponse.RegionCount> legacy = jdbcTemplate.query(legacySql,
+                (rs, rowNum) -> new DiscoverSummaryResponse.RegionCount(
+                        rs.getString("region_key"), rs.getString("region_label"), rs.getLong("listing_count")),
+                "house", CITY);
+
+        assertThat(actual.regions()).hasSameSizeAs(legacy);
+        for (int i = 0; i < legacy.size(); i++) {
+            assertThat(actual.regions().get(i).regionKey()).isEqualTo(legacy.get(i).regionKey());
+            assertThat(actual.regions().get(i).listingCount()).isEqualTo(legacy.get(i).listingCount());
+        }
+
+        long legacyTotal = legacy.stream().mapToLong(DiscoverSummaryResponse.RegionCount::listingCount).sum();
+        assertThat(actual.totalActiveListings()).isEqualTo(legacyTotal);
     }
 
     // ── groupBy=corridor ─────────────────────────────────────────────────────

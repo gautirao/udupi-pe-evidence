@@ -1,7 +1,15 @@
 package com.example.realestate.discover.citylaunch;
 
+import com.example.realestate.discover.navigation.CityNavigationRevisionPromoted;
+import com.example.realestate.discover.navigation.NavigationNode;
+import com.example.realestate.discover.navigation.NavigationNodeRepository;
+import com.example.realestate.discover.navigation.SandboxNavigationNode;
+import com.example.realestate.discover.navigation.SandboxNavigationNodeRepository;
+import com.example.realestate.discover.navigation.SandboxNavigationOverride;
+import com.example.realestate.discover.navigation.SandboxNavigationOverrideRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.stereotype.Service;
@@ -25,15 +33,16 @@ import java.util.Objects;
  * transition + persisted-vs-recomputed checksum verify + {@code SELECT ... FOR UPDATE} ascending-key
  * total order + compare-before-write idempotency) inside this NEW service. Does NOT call {@code
  * AreaOnboardingApplyService.apply()} and does NOT edit that frozen file — {@code apply()} writes
- * ONLY the {@code areas} table and is structurally incapable of the full six-table geography
- * promotion this class performs.
+ * ONLY the {@code areas} table and is structurally incapable of the full geography promotion this
+ * class performs.
  *
  * <h2>Single transaction (AC9)</h2>
  * {@link #launch} is ONE {@code @Transactional} method: the guarded CAS to PROMOTING, the checksum
- * verify, the six-table compare-before-write, the final CAS to PROMOTED, and the city activation
- * flip all commit or roll back together. A crash/exception at any point after the first CAS rolls
- * the whole transaction back — the revision reverts to VALIDATED with ZERO partial geography and no
- * partial city activation.
+ * verify, the seven-table write (six geography tables via compare-before-write, plus {@code
+ * navigation_nodes} via replace-discipline — #1955 Areas PR A, SLICE 2c), the final CAS to
+ * PROMOTED, and the city activation flip all commit or roll back together. A crash/exception at
+ * any point after the first CAS rolls the whole transaction back — the revision reverts to
+ * VALIDATED with ZERO partial geography and no partial city activation.
  *
  * <h2>Guarded CAS is the SOLE authority (AC3)</h2>
  * {@link #launch}'s FIRST statement is {@link CityLaunchRevisionRepository#transitionValidatedToPromoting}
@@ -44,18 +53,29 @@ import java.util.Objects;
  * (any other in-flight/terminal status) response.
  *
  * <h2>Checksum gate (AC5)</h2>
- * {@link RevisionChecksum#compute} is recomputed over the CURRENT {@code sandbox_*} row set and
- * compared to {@code persisted_revision_checksum} (written once, at PREPARED, by {@link
- * CityLaunchGraphWriter}) — the SAME routine, so a match is guaranteed by construction unless the
- * sandbox rows were mutated out-of-band since prep completion. A mismatch throws BEFORE any
- * production write, rolling the PROMOTING transition back to VALIDATED too.
+ * {@link RevisionChecksum#compute(List, List, List, List, List, List, List)} is recomputed over the
+ * CURRENT {@code sandbox_*} row set (now including {@code sandbox_navigation_nodes}) and compared
+ * to {@code persisted_revision_checksum} (written once, at PREPARED, by {@link
+ * CityLaunchGraphWriter} — via the SAME seven-arg overload as of #1955 Areas PR A, SLICE 2e, which
+ * wired navigation-tree generation into the prepare pipeline; see {@link RevisionChecksum} class
+ * javadoc) — the SAME routine, so a match is guaranteed by construction unless the sandbox rows
+ * were mutated out-of-band since prep completion. A mismatch throws BEFORE any production write,
+ * rolling the PROMOTING transition back to VALIDATED too. A revision prepared before this slice (or
+ * for a city with no {@code city_region_policy} row — see {@code CityLaunchGraphWriter}'s
+ * precondition gate) legitimately has an empty {@code sandbox_navigation_nodes} set; the seven-arg
+ * overload is a no-op on an empty seventh section either way (see {@link RevisionChecksum} class
+ * javadoc), so both cases still verify correctly.
  *
  * <h2>Lock order (AC6)</h2>
  * Production {@code areas} rows are locked {@code FOR UPDATE} ascending by {@code area_key} FIRST —
  * IDENTICAL to {@code AreaOnboardingApplyService.apply()}'s order — so a concurrent {@code apply()}
  * and a concurrent {@code launch()} touching an overlapping area set always serialize rather than
- * deadlock. The other five tables are locked ascending by their own natural key afterward; {@code
- * apply()} never touches those five tables, so there is no cross-service lock-order hazard there.
+ * deadlock. The other five geography tables are locked ascending by their own natural key
+ * afterward; {@code apply()} never touches those five tables, so there is no cross-service
+ * lock-order hazard there. {@code navigation_nodes} is promoted LAST of all seven — its {@code
+ * area_key} column FKs {@code public.areas}, so every area it might reference already exists in
+ * production by the time it runs; see {@link #promoteNavigationNodes} javadoc for why it uses
+ * replace-discipline rather than the other six tables' compare-before-write.
  */
 @Service
 public class CityLaunchPromotionService {
@@ -69,7 +89,11 @@ public class CityLaunchPromotionService {
     private final SandboxCityRegionMembershipRepository sandboxCityRegionMembershipRepository;
     private final SandboxAreaGroupRepository sandboxAreaGroupRepository;
     private final SandboxAreaGroupMemberRepository sandboxAreaGroupMemberRepository;
+    private final SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
+    private final SandboxNavigationOverrideRepository sandboxNavigationOverrideRepository;
+    private final NavigationNodeRepository navigationNodeRepository;
     private final JdbcOperations jdbcOperations;
+    private final ApplicationEventPublisher eventPublisher;
 
     public CityLaunchPromotionService(
             CityLaunchRevisionRepository revisionRepository,
@@ -79,7 +103,11 @@ public class CityLaunchPromotionService {
             SandboxCityRegionMembershipRepository sandboxCityRegionMembershipRepository,
             SandboxAreaGroupRepository sandboxAreaGroupRepository,
             SandboxAreaGroupMemberRepository sandboxAreaGroupMemberRepository,
-            JdbcOperations jdbcOperations) {
+            SandboxNavigationNodeRepository sandboxNavigationNodeRepository,
+            SandboxNavigationOverrideRepository sandboxNavigationOverrideRepository,
+            NavigationNodeRepository navigationNodeRepository,
+            JdbcOperations jdbcOperations,
+            ApplicationEventPublisher eventPublisher) {
         this.revisionRepository = revisionRepository;
         this.sandboxAreaRepository = sandboxAreaRepository;
         this.sandboxAreaAliasRepository = sandboxAreaAliasRepository;
@@ -87,7 +115,11 @@ public class CityLaunchPromotionService {
         this.sandboxCityRegionMembershipRepository = sandboxCityRegionMembershipRepository;
         this.sandboxAreaGroupRepository = sandboxAreaGroupRepository;
         this.sandboxAreaGroupMemberRepository = sandboxAreaGroupMemberRepository;
+        this.sandboxNavigationNodeRepository = sandboxNavigationNodeRepository;
+        this.sandboxNavigationOverrideRepository = sandboxNavigationOverrideRepository;
+        this.navigationNodeRepository = navigationNodeRepository;
         this.jdbcOperations = jdbcOperations;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -105,6 +137,10 @@ public class CityLaunchPromotionService {
         List<SandboxAreaGroup> sandboxGroups = sandboxAreaGroupRepository.findByRevisionId(revisionId);
         List<SandboxAreaGroupMember> sandboxGroupMembers =
                 sandboxAreaGroupMemberRepository.findByRevisionId(revisionId);
+        List<SandboxNavigationNode> sandboxNavigationNodes =
+                sandboxNavigationNodeRepository.findByRevisionId(revisionId);
+        List<SandboxNavigationOverride> sandboxNavigationOverrides =
+                sandboxNavigationOverrideRepository.findByRevisionIdOrderByApplyOrderAsc(revisionId);
 
         CityLaunchRevision revision = revisionRepository.findByIdForUpdate(revisionId)
                 .orElseThrow(() -> new IllegalStateException(
@@ -123,7 +159,8 @@ public class CityLaunchPromotionService {
         }
 
         String recomputedChecksum = RevisionChecksum.compute(
-                sandboxAreas, sandboxAliases, sandboxRegions, sandboxMemberships, sandboxGroups, sandboxGroupMembers);
+                sandboxAreas, sandboxAliases, sandboxRegions, sandboxMemberships, sandboxGroups, sandboxGroupMembers,
+                sandboxNavigationNodes, sandboxNavigationOverrides);
         if (!recomputedChecksum.equals(persistedChecksum)) {
             log.warn("City launch checksum mismatch cityId={} revisionId={} recomputed={} persisted={} — "
                     + "rejecting, zero writes", cityId, revisionId, recomputedChecksum, persistedChecksum);
@@ -151,6 +188,13 @@ public class CityLaunchPromotionService {
         int groupMembersPromoted = promoteGroupMembers(
                 cityId, sandboxGroupMembers, groupSlugBySandboxGroupId, areaKeyBySandboxAreaId);
 
+        // ── Seventh table, LAST in lock order (#1955 Areas PR A, SLICE 2c): navigation_nodes.area_key
+        // FKs public.areas, which promoteAreas() above has already ensured exist in production for
+        // this city. Uses REPLACE-discipline (clear then insert), not compare-before-write — see
+        // promoteNavigationNodes() javadoc for why a tree's node set can't use the same natural-key
+        // idempotency as the six geography tables above.
+        int navigationNodesPromoted = promoteNavigationNodes(cityId, sandboxNavigationNodes);
+
         Instant now = Instant.now();
         int finalCasRows = revisionRepository.transitionPromotingToPromoted(revisionId, cityId, now, recomputedChecksum);
         if (finalCasRows != 1) {
@@ -167,12 +211,20 @@ public class CityLaunchPromotionService {
         boolean cityActivated = cityActivatedRows == 1;
 
         log.info("City launch PROMOTED cityId={} revisionId={} adminId={} areas={} aliases={} regions={} "
-                        + "memberships={} groups={} groupMembers={} cityActivated={} checksum={}",
+                        + "memberships={} groups={} groupMembers={} navigationNodes={} cityActivated={} checksum={}",
                 cityId, revisionId, adminId, areasPromoted, aliasesPromoted, regionsPromoted, membershipsPromoted,
-                groupsPromoted, groupMembersPromoted, cityActivated, recomputedChecksum);
+                groupsPromoted, groupMembersPromoted, navigationNodesPromoted, cityActivated, recomputedChecksum);
+
+        // #1955 Areas PR A, SLICE 2d: refresh signal for the navigation-hierarchy cache — published
+        // here (inside the transaction) but only DELIVERED to NavigationGraphRefreshListener
+        // AFTER_COMMIT, so a rollback anywhere above this line never fires a refresh for a
+        // promotion that didn't actually happen. Never published on the idempotent-no-op path in
+        // handleNotPromoting(), since nothing changed there.
+        eventPublisher.publishEvent(new CityNavigationRevisionPromoted(cityId, revisionId));
 
         return new PromotionReport(revisionId, "PROMOTED", now, areasPromoted, aliasesPromoted, regionsPromoted,
-                membershipsPromoted, groupsPromoted, groupMembersPromoted, cityActivated, false);
+                membershipsPromoted, groupsPromoted, groupMembersPromoted, navigationNodesPromoted, cityActivated,
+                false);
     }
 
     // ── CAS-failure disposition (AC3/AC4) ───────────────────────────────────────────────────────
@@ -187,7 +239,7 @@ public class CityLaunchPromotionService {
             log.info("City launch idempotent no-op cityId={} revisionId={} promotedAt={}",
                     cityId, revisionId, revision.getPromotedAt());
             return new PromotionReport(revisionId, "PROMOTED", revision.getPromotedAt(),
-                    0, 0, 0, 0, 0, 0, false, true);
+                    0, 0, 0, 0, 0, 0, 0, false, true);
         }
 
         throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -432,6 +484,66 @@ public class CityLaunchPromotionService {
             } else if (!Objects.equals(existing.displayOrder(), gm.getDisplayOrder())) {
                 throw canonicalDrift("area_group_members", groupSlug + "/" + areaKey);
             }
+            count++;
+        }
+        return count;
+    }
+
+    /**
+     * SEVENTH table, LAST in lock order (#1955 Areas PR A, SLICE 2c): {@code navigation_nodes.area_key}
+     * FKs {@code public.areas}, promoted FIRST above, so every AREA node's referenced area is
+     * guaranteed to already exist in production by the time this runs.
+     *
+     * <p><b>REPLACE-discipline, not compare-before-write.</b> The six tables above compare each
+     * sandbox row against any pre-existing production row sharing its natural key and reject on
+     * drift, which works because their natural keys (area_key, alias_normalised, region_key, slug,
+     * ...) are geography identities that stay stable across revisions. A navigation tree's CLUSTER
+     * shape is different: a re-launch of the SAME city may legitimately re-partition into a
+     * different set of {@code node_key}s (the clustering policy or input geometry changed), so
+     * there is no stable natural key to compare-before-write against. Clearing every prior
+     * production row for this city before inserting the new revision's tree is therefore required
+     * — it is also what keeps the partial unique index {@code uq_navigation_nodes_city_area
+     * (city_id, area_key WHERE node_type='AREA')} from ever seeing a stale prior-revision AREA leaf
+     * collide with this revision's leaf for the same area.
+     *
+     * <p><b>Verbatim copy, never regenerated.</b> Every column is carried across unchanged except
+     * {@code parent_node_id}, which is remapped from the sandbox row's surrogate id to the newly
+     * INSERTed production surrogate id via a {@code node_key}-keyed map built incrementally as rows
+     * are inserted in depth-ascending order (a node's parent always has a strictly smaller depth,
+     * so its production id is always already known). {@code ancestor_keys} are copied VERBATIM
+     * (they are already {@code node_key}s, not surrogate ids — no remap needed).
+     */
+    private int promoteNavigationNodes(int cityId, List<SandboxNavigationNode> sandboxNodes) {
+        navigationNodeRepository.deleteByCityId(cityId);
+
+        Map<Long, Long> productionIdBySandboxId = new HashMap<>();
+        int count = 0;
+        for (SandboxNavigationNode n : sandboxNodes.stream()
+                .sorted(Comparator.comparing(SandboxNavigationNode::getDepth)
+                        .thenComparing(SandboxNavigationNode::getDisplayOrder,
+                                Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(SandboxNavigationNode::getNodeKey, Comparator.nullsFirst(Comparator.naturalOrder())))
+                .toList()) {
+            Long parentProductionId = null;
+            if (n.getParentNodeId() != null) {
+                parentProductionId = productionIdBySandboxId.get(n.getParentNodeId());
+                if (parentProductionId == null) {
+                    // Unreachable given depth-ascending insertion order: every node's parent has a
+                    // strictly smaller depth and was therefore already inserted (and mapped) in an
+                    // earlier iteration of this same loop.
+                    throw new IllegalStateException(
+                            "navigation node parent sandboxId=" + n.getParentNodeId() + " not yet promoted "
+                                    + "(unreachable: depth-ascending insertion order) cityId=" + cityId);
+                }
+            }
+
+            NavigationNode saved = navigationNodeRepository.save(new NavigationNode(
+                    cityId, n.getRegionKey(), n.getNodeType(), parentProductionId, n.getNodeKey(), n.getAreaKey(),
+                    n.getRepresentativeAreaKeys(), n.getDisplayLabel(), n.getDisplayOrder(), n.getDepth(),
+                    n.getAncestorKeys(), n.getDescendantAreaCount(), n.getCentreLat(), n.getCentreLon(),
+                    n.getMinLat(), n.getMinLon(), n.getMaxLat(), n.getMaxLon(), n.getPolicyFingerprint(),
+                    n.getGeneratedAt()));
+            productionIdBySandboxId.put(n.getId(), saved.getId());
             count++;
         }
         return count;

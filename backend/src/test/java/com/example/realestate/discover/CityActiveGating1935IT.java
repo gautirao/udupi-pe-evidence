@@ -9,6 +9,7 @@ import com.example.realestate.intelligence.AreaIntelligenceSnapshotRepository;
 import com.example.realestate.intelligence.BuyerAreaIntelligenceResponse;
 import com.example.realestate.intelligence.BuyerAreaIntelligenceService;
 import com.example.realestate.intelligence.ResolveAreaResponse;
+import com.example.realestate.discover.navigation.PostgresAreaCountProvider;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.school.SchoolRepository;
@@ -706,7 +707,8 @@ class CityActiveGating1935IT {
     @DisplayName("summary groupBy=area_group: inactive city == unknown city (empty regions, byte-identical); "
             + "active city still returns its real region — no regression from the #1935 fix")
     void discoverSummaryAreaGroupRegions_inactiveEqualsUnknownParity_activeNoRegression() {
-        DiscoverSummaryService summaryService = new DiscoverSummaryService(jdbcTemplate, cityActivationGuard);
+        DiscoverSummaryService summaryService = new DiscoverSummaryService(
+                jdbcTemplate, cityActivationGuard, new PostgresAreaCountProvider(jdbcTemplate));
 
         DiscoverSummaryResponse active = summaryService.getSummary(
                 new SummaryQuery(ACTIVE_CITY, null, "area_group", 5, null));
@@ -735,7 +737,8 @@ class CityActiveGating1935IT {
     @DisplayName("summary groupBy=corridor: inactive city == unknown city (empty regions, byte-identical); "
             + "active city still returns its real corridor — no regression from the #1935 fix")
     void discoverSummaryCorridorRegions_inactiveEqualsUnknownParity_activeNoRegression() {
-        DiscoverSummaryService summaryService = new DiscoverSummaryService(jdbcTemplate, cityActivationGuard);
+        DiscoverSummaryService summaryService = new DiscoverSummaryService(
+                jdbcTemplate, cityActivationGuard, new PostgresAreaCountProvider(jdbcTemplate));
 
         DiscoverSummaryResponse active = summaryService.getSummary(
                 new SummaryQuery(ACTIVE_CITY, null, "corridor", 5, null));

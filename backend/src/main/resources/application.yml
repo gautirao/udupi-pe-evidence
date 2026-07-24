@@ -113,6 +113,12 @@ management:
         cityRegionBackfill:
           include: cityRegionBackfillReadiness
           show-details: always
+        # #1955 Areas PR A, SLICE 2d: genuine readiness gate (unlike cityRegionBackfill above, this
+        # ONE contributes real DOWN to the aggregate /actuator/health while the navigation-hierarchy
+        # cache preload is still in flight). See NavigationHierarchyReadinessHealthIndicator.
+        navigationHierarchy:
+          include: navigationHierarchyReadiness
+          show-details: always
 
   metrics:
     tags:
@@ -228,6 +234,34 @@ proximity:
 # The timeout values are intentionally aggressive: OS must respond in 500ms (read)
 # or 1000ms (connect) or the routing service falls back to Postgres.
 discover:
+  # Navigation-hierarchy cache lifecycle (#1955 Areas PR A, SLICE 2d) — Caffeine, in-process only
+  # (no Redis). Eager-preloads every public-active city's navigation graph at startup, refreshes
+  # on promotion (AFTER_COMMIT event) with a load-before-swap + grace-period-eviction contract, and
+  # self-heals via a periodic safety poll. See NavigationCacheProperties for field-level detail.
+  navigation:
+    cache:
+      max-size: ${DISCOVER_NAVIGATION_CACHE_MAX_SIZE:200}
+      ttl-seconds: ${DISCOVER_NAVIGATION_CACHE_TTL_SECONDS:3600}
+      preview-max-size: ${DISCOVER_NAVIGATION_CACHE_PREVIEW_MAX_SIZE:50}
+      preview-ttl-seconds: ${DISCOVER_NAVIGATION_CACHE_PREVIEW_TTL_SECONDS:900}
+      grace-period-seconds: ${DISCOVER_NAVIGATION_CACHE_GRACE_PERIOD_SECONDS:30}
+      preload-timeout-seconds: ${DISCOVER_NAVIGATION_CACHE_PRELOAD_TIMEOUT_SECONDS:60}
+      preload-max-retries: ${DISCOVER_NAVIGATION_CACHE_PRELOAD_MAX_RETRIES:3}
+      preload-retry-backoff-millis: ${DISCOVER_NAVIGATION_CACHE_PRELOAD_RETRY_BACKOFF_MILLIS:200}
+      poll-interval-seconds: ${DISCOVER_NAVIGATION_CACHE_POLL_INTERVAL_SECONDS:45}
+    # Structural node/ancestry HTTP Cache-Control max-age (#1955 Areas PR A, SLICE 2e, AC8) — the
+    # hierarchy only changes on a promotion, so this can be far longer-lived than the counts cache
+    # below; the response ETag (revisionId:checksum) still lets a client revalidate cheaply.
+    structural:
+      cache:
+        max-age-seconds: ${DISCOVER_NAVIGATION_STRUCTURAL_CACHE_MAX_AGE_SECONDS:300}
+    # Short-TTL, revision-aware display-time counts cache (#1955 Areas PR A, SLICE 2e, AC12) —
+    # deliberately much shorter than the structural cache above: live listing volume changes far
+    # more often than the generated hierarchy shape. See AreaCountRollupService.
+    counts:
+      cache:
+        ttl-seconds: ${DISCOVER_NAVIGATION_COUNTS_CACHE_TTL_SECONDS:30}
+        max-size: ${DISCOVER_NAVIGATION_COUNTS_CACHE_MAX_SIZE:500}
   summary:
     cache:
       # Kill switch: set DISCOVER_SUMMARY_CACHE_ENABLED=false to bypass the cache entirely and

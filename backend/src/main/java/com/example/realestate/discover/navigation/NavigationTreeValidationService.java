@@ -1,0 +1,513 @@
+package com.example.realestate.discover.navigation;
+
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+/**
+ * The 13 blocking structural invariants (#1955 AC7) a generated/staged navigation tree must
+ * satisfy BEFORE any DB-constraint enforcement or promotion. This service is a strict SUPERSET of
+ * the V121 DB constraints (partial-unique AREA leaf, AREA-is-leaf trigger) — every DB constraint
+ * has an equivalent or stronger check here, so a bad tree is always caught here first, with a
+ * structured {@link ValidationReport} the future preview/promotion slices consume instead of a
+ * raw SQL exception.
+ *
+ * <p>Operates over the entity-agnostic {@link ValidationNode} view, keyed by {@code node_key}
+ * (not a surrogate id), so the exact same logic runs on an in-memory pre-persistence {@link
+ * GeneratedNode} tree or a persisted revision/city once a future slice adds an id-adapter.
+ *
+ * <h2>The 13 checks (AC7)</h2>
+ * <ol>
+ *   <li>cycles</li>
+ *   <li>orphan nodes</li>
+ *   <li>invalid depth / cross-revision / cross-city parentage</li>
+ *   <li>one-child clusters</li>
+ *   <li>duplicate or missing active area paths</li>
+ *   <li>an area in multiple active leaf paths</li>
+ *   <li>representative areas not members of their cluster</li>
+ *   <li>duplicate sibling identity / invalid ordering</li>
+ *   <li>incorrect structural descendant_area_count</li>
+ *   <li>missing required bounds</li>
+ *   <li>max-depth violations</li>
+ *   <li>orphaned/inconsistent overrides</li>
+ *   <li>direct-search vs guided-navigation ancestry mismatch</li>
+ * </ol>
+ */
+@Service
+public class NavigationTreeValidationService {
+
+    /** Convenience overload: no expected-area universe, no depth ceiling, no overrides. */
+    public ValidationReport validate(List<ValidationNode> nodes) {
+        return validate(nodes, Set.of(), null, List.of());
+    }
+
+    /** Overload preserved for existing call sites that never pass overrides against a region universe. */
+    public ValidationReport validate(
+            List<ValidationNode> nodes, Set<String> expectedAreaKeys, Integer maxSafetyDepth,
+            List<NavigationOverride> overrides) {
+        return validate(nodes, expectedAreaKeys, maxSafetyDepth, overrides, Set.of());
+    }
+
+    /**
+     * Overload preserved for callers with no separate canonical (pre-override) area universe —
+     * {@code expectedAreaKeys} doubles as both check #5's post-exclude "must have a leaf" universe
+     * AND check #12's EXCLUDE_AREA/REASSIGN_AREA_REGION subject-existence universe. Callers whose
+     * {@code expectedAreaKeys} is already POST-exclude (i.e. it does not contain an area an
+     * EXCLUDE_AREA override targets) must use the 6-arg overload instead, or every EXCLUDE_AREA
+     * override will incorrectly report ORPHANED_OVERRIDE against its own subject.
+     */
+    public ValidationReport validate(
+            List<ValidationNode> nodes, Set<String> expectedAreaKeys, Integer maxSafetyDepth,
+            List<NavigationOverride> overrides, Set<String> validRegionKeys) {
+        return validate(nodes, expectedAreaKeys, maxSafetyDepth, overrides, validRegionKeys, expectedAreaKeys);
+    }
+
+    /**
+     * #1955 Areas PR A, SLICE 2f+2g: full-semantics overload. {@code validRegionKeys} is the
+     * revision's known city-region universe, consulted only by check #12's REASSIGN_AREA_REGION
+     * target validation. {@code canonicalAreaKeys} is the revision's ACTIVE-area universe BEFORE
+     * any override is applied — distinct from {@code expectedAreaKeys} (which is POST-exclude, so
+     * check #5 doesn't demand a leaf for an area an EXCLUDE_AREA override legitimately removed) —
+     * used ONLY by check #12 to confirm an EXCLUDE_AREA/REASSIGN_AREA_REGION override's subject was
+     * a real, active area in the first place.
+     */
+    public ValidationReport validate(
+            List<ValidationNode> nodes, Set<String> expectedAreaKeys, Integer maxSafetyDepth,
+            List<NavigationOverride> overrides, Set<String> validRegionKeys, Set<String> canonicalAreaKeys) {
+
+        List<ValidationError> errors = new ArrayList<>();
+
+        Map<String, ValidationNode> byKey = new LinkedHashMap<>();
+        for (ValidationNode n : nodes) {
+            byKey.put(n.nodeKey(), n);
+        }
+        Map<String, List<ValidationNode>> byParent = nodes.stream()
+                .collect(Collectors.groupingBy(
+                        n -> n.parentNodeKey() == null ? "" : n.parentNodeKey(),
+                        LinkedHashMap::new, Collectors.toList()));
+
+        checkOrphans(nodes, byKey, errors);                                  // 2
+        checkCycles(nodes, byKey, errors);                                   // 1
+        checkDepthAndParentage(nodes, byKey, errors);                        // 3
+        checkOneChildClusters(byParent, errors);                             // 4
+        checkDuplicateAndMissingAreaLeaves(nodes, expectedAreaKeys, errors); // 5
+        checkAreaInMultipleLeafPaths(nodes, byKey, errors);                  // 6
+        checkRepresentativesAreMembers(nodes, byParent, errors);            // 7
+        checkSiblingIdentityAndOrdering(byParent, errors);                  // 8
+        checkDescendantAreaCount(nodes, byParent, errors);                  // 9
+        checkMissingBounds(nodes, errors);                                  // 10
+        checkMaxDepth(nodes, maxSafetyDepth, errors);                       // 11
+        checkOverrides(byKey, byParent, overrides, canonicalAreaKeys, validRegionKeys, errors); // 12
+        checkAncestryMismatch(nodes, byKey, errors);                       // 13
+
+        return new ValidationReport(List.copyOf(errors));
+    }
+
+    // 1: cycles — walking parent_node_key from any node must reach a null parent within the
+    // tree's size, never revisiting a node it has already seen.
+    private void checkCycles(List<ValidationNode> nodes, Map<String, ValidationNode> byKey, List<ValidationError> errors) {
+        for (ValidationNode start : nodes) {
+            Set<String> visited = new HashSet<>();
+            ValidationNode cur = start;
+            int hops = 0;
+            while (cur != null && cur.parentNodeKey() != null) {
+                if (!visited.add(cur.nodeKey())) {
+                    errors.add(new ValidationError("CYCLE_DETECTED",
+                            "cycle detected in the parent chain reachable from node " + start.nodeKey(),
+                            start.nodeKey()));
+                    return;
+                }
+                if (++hops > nodes.size()) {
+                    errors.add(new ValidationError("CYCLE_DETECTED",
+                            "parent chain from " + start.nodeKey() + " exceeds tree size — cycle suspected",
+                            start.nodeKey()));
+                    return;
+                }
+                ValidationNode parent = byKey.get(cur.parentNodeKey());
+                if (parent == null) {
+                    break; // reported separately by checkOrphans
+                }
+                cur = parent;
+            }
+        }
+    }
+
+    // 2: orphan nodes — parent_node_key set but not present in this same node set.
+    private void checkOrphans(List<ValidationNode> nodes, Map<String, ValidationNode> byKey, List<ValidationError> errors) {
+        for (ValidationNode n : nodes) {
+            if (n.parentNodeKey() != null && !byKey.containsKey(n.parentNodeKey())) {
+                errors.add(new ValidationError("ORPHAN_NODE",
+                        "node " + n.nodeKey() + " references missing parent " + n.parentNodeKey(), n.nodeKey()));
+            }
+        }
+    }
+
+    // 3: invalid depth / cross-scope (revision or city) parentage.
+    private void checkDepthAndParentage(List<ValidationNode> nodes, Map<String, ValidationNode> byKey, List<ValidationError> errors) {
+        for (ValidationNode n : nodes) {
+            if (n.parentNodeKey() == null) {
+                if (n.depth() != 0) {
+                    errors.add(new ValidationError("INVALID_DEPTH",
+                            "root node " + n.nodeKey() + " has depth=" + n.depth() + ", expected 0", n.nodeKey()));
+                }
+                continue;
+            }
+            ValidationNode parent = byKey.get(n.parentNodeKey());
+            if (parent == null) {
+                continue; // already reported as ORPHAN_NODE
+            }
+            if (!Objects.equals(parent.scopeId(), n.scopeId())) {
+                errors.add(new ValidationError("CROSS_SCOPE_PARENTAGE",
+                        "node " + n.nodeKey() + " (scope=" + n.scopeId() + ") has parent " + parent.nodeKey()
+                                + " in a different scope=" + parent.scopeId(), n.nodeKey()));
+            }
+            if (n.depth() != parent.depth() + 1) {
+                errors.add(new ValidationError("INVALID_DEPTH",
+                        "node " + n.nodeKey() + " has depth=" + n.depth() + ", expected parent depth+1="
+                                + (parent.depth() + 1), n.nodeKey()));
+            }
+        }
+    }
+
+    // 4: one-child clusters — a node with exactly one child.
+    private void checkOneChildClusters(Map<String, List<ValidationNode>> byParent, List<ValidationError> errors) {
+        for (Map.Entry<String, List<ValidationNode>> e : byParent.entrySet()) {
+            if (e.getKey().isEmpty()) {
+                continue; // roots have no CLUSTER parent to check
+            }
+            if (e.getValue().size() == 1) {
+                errors.add(new ValidationError("ONE_CHILD_CLUSTER",
+                        "cluster " + e.getKey() + " has exactly one child: " + e.getValue().get(0).nodeKey(),
+                        e.getKey()));
+            }
+        }
+    }
+
+    // 5: duplicate or missing active area leaves.
+    private void checkDuplicateAndMissingAreaLeaves(
+            List<ValidationNode> nodes, Set<String> expectedAreaKeys, List<ValidationError> errors) {
+        Map<String, List<ValidationNode>> byArea = nodes.stream()
+                .filter(n -> "AREA".equals(n.nodeType()) && n.areaKey() != null)
+                .collect(Collectors.groupingBy(ValidationNode::areaKey));
+
+        for (Map.Entry<String, List<ValidationNode>> e : byArea.entrySet()) {
+            if (e.getValue().size() > 1) {
+                errors.add(new ValidationError("DUPLICATE_AREA_LEAF",
+                        "area_key " + e.getKey() + " has " + e.getValue().size() + " AREA leaves", null));
+            }
+        }
+        if (expectedAreaKeys != null) {
+            for (String expected : expectedAreaKeys) {
+                if (!byArea.containsKey(expected)) {
+                    errors.add(new ValidationError("MISSING_AREA_LEAF",
+                            "expected canonical area " + expected + " has no AREA leaf in the tree", null));
+                }
+            }
+        }
+    }
+
+    // 6: an area in multiple active leaf paths — the same area_key is a representative of two
+    // CLUSTER nodes that are not on the same ancestor/descendant line.
+    private void checkAreaInMultipleLeafPaths(
+            List<ValidationNode> nodes, Map<String, ValidationNode> byKey, List<ValidationError> errors) {
+        Map<String, List<String>> clustersByRepArea = new LinkedHashMap<>();
+        for (ValidationNode n : nodes) {
+            if (!"CLUSTER".equals(n.nodeType()) || n.representativeAreaKeys() == null) {
+                continue;
+            }
+            for (String rep : n.representativeAreaKeys()) {
+                clustersByRepArea.computeIfAbsent(rep, k -> new ArrayList<>()).add(n.nodeKey());
+            }
+        }
+        for (Map.Entry<String, List<String>> e : clustersByRepArea.entrySet()) {
+            List<String> clusterKeys = e.getValue();
+            for (int i = 0; i < clusterKeys.size(); i++) {
+                for (int j = i + 1; j < clusterKeys.size(); j++) {
+                    if (!isAncestorOrDescendant(clusterKeys.get(i), clusterKeys.get(j), byKey)) {
+                        errors.add(new ValidationError("AREA_IN_MULTIPLE_LEAF_PATHS",
+                                "area " + e.getKey() + " is a representative of unrelated clusters "
+                                        + clusterKeys.get(i) + " and " + clusterKeys.get(j), e.getKey()));
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean isAncestorOrDescendant(String keyA, String keyB, Map<String, ValidationNode> byKey) {
+        return isAncestorOf(keyA, keyB, byKey) || isAncestorOf(keyB, keyA, byKey);
+    }
+
+    private boolean isAncestorOf(String ancestorKey, String nodeKey, Map<String, ValidationNode> byKey) {
+        ValidationNode cur = byKey.get(nodeKey);
+        Set<String> visited = new HashSet<>();
+        while (cur != null && cur.parentNodeKey() != null && visited.add(cur.nodeKey())) {
+            if (cur.parentNodeKey().equals(ancestorKey)) {
+                return true;
+            }
+            cur = byKey.get(cur.parentNodeKey());
+        }
+        return false;
+    }
+
+    // 7: representative areas not members of their own cluster's descendant AREA leaves.
+    private void checkRepresentativesAreMembers(
+            List<ValidationNode> nodes, Map<String, List<ValidationNode>> byParent, List<ValidationError> errors) {
+        for (ValidationNode n : nodes) {
+            if (!"CLUSTER".equals(n.nodeType()) || n.representativeAreaKeys() == null) {
+                continue;
+            }
+            Set<String> descendantAreaKeys = collectDescendantAreaKeys(n.nodeKey(), byParent);
+            for (String rep : n.representativeAreaKeys()) {
+                if (!descendantAreaKeys.contains(rep)) {
+                    errors.add(new ValidationError("REPRESENTATIVE_NOT_MEMBER",
+                            "cluster " + n.nodeKey() + " lists representative " + rep
+                                    + " which is not among its descendant areas", n.nodeKey()));
+                }
+            }
+        }
+    }
+
+    private Set<String> collectDescendantAreaKeys(String nodeKey, Map<String, List<ValidationNode>> byParent) {
+        Set<String> result = new LinkedHashSet<>();
+        Deque<String> stack = new ArrayDeque<>();
+        stack.push(nodeKey);
+        Set<String> visited = new HashSet<>();
+        while (!stack.isEmpty()) {
+            String cur = stack.pop();
+            if (!visited.add(cur)) {
+                continue;
+            }
+            for (ValidationNode child : byParent.getOrDefault(cur, List.of())) {
+                if ("AREA".equals(child.nodeType()) && child.areaKey() != null) {
+                    result.add(child.areaKey());
+                } else {
+                    stack.push(child.nodeKey());
+                }
+            }
+        }
+        return result;
+    }
+
+    // 8: duplicate sibling identity / invalid ordering.
+    private void checkSiblingIdentityAndOrdering(Map<String, List<ValidationNode>> byParent, List<ValidationError> errors) {
+        for (Map.Entry<String, List<ValidationNode>> e : byParent.entrySet()) {
+            String parentLabel = e.getKey().isEmpty() ? "<root>" : e.getKey();
+            List<ValidationNode> siblings = e.getValue();
+
+            Set<String> seenKeys = new HashSet<>();
+            for (ValidationNode s : siblings) {
+                if (!seenKeys.add(s.nodeKey())) {
+                    errors.add(new ValidationError("DUPLICATE_SIBLING_IDENTITY",
+                            "duplicate node_key " + s.nodeKey() + " among siblings of parent=" + parentLabel,
+                            s.nodeKey()));
+                }
+            }
+
+            List<Integer> orders = siblings.stream().map(ValidationNode::displayOrder).sorted().toList();
+            Set<Integer> distinctOrders = new HashSet<>(orders);
+            String scopeKey = e.getKey().isEmpty() ? null : e.getKey();
+            if (distinctOrders.size() != orders.size()) {
+                errors.add(new ValidationError("INVALID_SIBLING_ORDERING",
+                        "duplicate display_order values among siblings of parent=" + parentLabel, scopeKey));
+            } else {
+                for (int i = 0; i < orders.size(); i++) {
+                    if (orders.get(i) != i + 1) {
+                        errors.add(new ValidationError("INVALID_SIBLING_ORDERING",
+                                "display_order values among siblings of parent=" + parentLabel
+                                        + " are not a gapless 1.." + orders.size() + " sequence", scopeKey));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // 9: incorrect structural descendant_area_count.
+    private void checkDescendantAreaCount(
+            List<ValidationNode> nodes, Map<String, List<ValidationNode>> byParent, List<ValidationError> errors) {
+        for (ValidationNode n : nodes) {
+            int actual = "AREA".equals(n.nodeType()) ? 1 : collectDescendantAreaKeys(n.nodeKey(), byParent).size();
+            if (actual != n.descendantAreaCount()) {
+                errors.add(new ValidationError("DESCENDANT_COUNT_MISMATCH",
+                        "node " + n.nodeKey() + " stores descendant_area_count=" + n.descendantAreaCount()
+                                + " but structurally has " + actual, n.nodeKey()));
+            }
+        }
+    }
+
+    // 10: missing required bounds.
+    private void checkMissingBounds(List<ValidationNode> nodes, List<ValidationError> errors) {
+        for (ValidationNode n : nodes) {
+            if (n.centreLat() == null || n.centreLon() == null || n.minLat() == null || n.minLon() == null
+                    || n.maxLat() == null || n.maxLon() == null) {
+                errors.add(new ValidationError("MISSING_BOUNDS",
+                        "node " + n.nodeKey() + " is missing one or more required bounds fields", n.nodeKey()));
+            }
+        }
+    }
+
+    // 11: max-depth violations.
+    private void checkMaxDepth(List<ValidationNode> nodes, Integer maxSafetyDepth, List<ValidationError> errors) {
+        if (maxSafetyDepth == null) {
+            return;
+        }
+        for (ValidationNode n : nodes) {
+            if (n.depth() > maxSafetyDepth) {
+                errors.add(new ValidationError("MAX_DEPTH_VIOLATION",
+                        "node " + n.nodeKey() + " has depth=" + n.depth() + " exceeding max_safety_depth="
+                                + maxSafetyDepth, n.nodeKey()));
+            }
+        }
+    }
+
+    // 12: orphaned/inconsistent overrides (#1955 Areas PR A, SLICE 2f+2g full semantics) — a
+    // STRICT SUPERSET of the V122 DB CHECK/UNIQUE constraints (which only enforce per-kind field
+    // shape and per-area/per-node kind uniqueness, never cross-row semantics like "does the target
+    // actually exist as the right node type", "is the subject area still active", or "do two
+    // overrides on the same area conflict").
+    private void checkOverrides(
+            Map<String, ValidationNode> byKey, Map<String, List<ValidationNode>> byParent,
+            List<NavigationOverride> overrides, Set<String> canonicalAreaKeys, Set<String> validRegionKeys,
+            List<ValidationError> errors) {
+        if (overrides == null || overrides.isEmpty()) {
+            return;
+        }
+
+        Set<String> excludedAreas = new HashSet<>();
+        for (NavigationOverride o : overrides) {
+            if ("EXCLUDE_AREA".equals(o.kind()) && o.subjectAreaKey() != null) {
+                excludedAreas.add(o.subjectAreaKey());
+            }
+        }
+
+        for (NavigationOverride o : overrides) {
+            String kind = o.kind();
+            if (kind == null) {
+                errors.add(new ValidationError("ORPHANED_OVERRIDE", "override has a null kind", null));
+                continue;
+            }
+            switch (kind) {
+                case "EXCLUDE_AREA" -> {
+                    if (o.subjectAreaKey() == null
+                            || (canonicalAreaKeys != null && !canonicalAreaKeys.isEmpty()
+                                    && !canonicalAreaKeys.contains(o.subjectAreaKey()))) {
+                        errors.add(new ValidationError("ORPHANED_OVERRIDE",
+                                "EXCLUDE_AREA override references unknown/inactive area "
+                                        + o.subjectAreaKey(), o.subjectAreaKey()));
+                    }
+                }
+                case "REASSIGN_AREA_REGION" -> {
+                    if (o.subjectAreaKey() == null
+                            || (canonicalAreaKeys != null && !canonicalAreaKeys.isEmpty()
+                                    && !canonicalAreaKeys.contains(o.subjectAreaKey()))) {
+                        errors.add(new ValidationError("ORPHANED_OVERRIDE",
+                                "REASSIGN_AREA_REGION override references unknown/inactive area "
+                                        + o.subjectAreaKey(), o.subjectAreaKey()));
+                    }
+                    if (o.targetRegionKey() == null
+                            || (validRegionKeys != null && !validRegionKeys.isEmpty()
+                                    && !validRegionKeys.contains(o.targetRegionKey()))) {
+                        errors.add(new ValidationError("ORPHANED_OVERRIDE",
+                                "REASSIGN_AREA_REGION override targets unknown region "
+                                        + o.targetRegionKey(), o.subjectAreaKey()));
+                    }
+                    if (o.subjectAreaKey() != null && excludedAreas.contains(o.subjectAreaKey())) {
+                        errors.add(new ValidationError("CONFLICTING_OVERRIDE",
+                                "area " + o.subjectAreaKey()
+                                        + " has both an EXCLUDE_AREA and a REASSIGN_AREA_REGION override",
+                                o.subjectAreaKey()));
+                    }
+                }
+                case "MOVE_AREA" -> {
+                    String areaNodeKey = o.subjectAreaKey() == null ? null : NavigationKeys.areaNodeKey(o.subjectAreaKey());
+                    ValidationNode subject = areaNodeKey == null ? null : byKey.get(areaNodeKey);
+                    if (subject == null || !"AREA".equals(subject.nodeType())) {
+                        errors.add(new ValidationError("ORPHANED_OVERRIDE",
+                                "MOVE_AREA override's subject area " + o.subjectAreaKey()
+                                        + " has no AREA leaf in the generated tree", o.subjectAreaKey()));
+                    }
+                    ValidationNode target = o.targetNodeKey() == null ? null : byKey.get(o.targetNodeKey());
+                    if (target == null || !"CLUSTER".equals(target.nodeType())) {
+                        errors.add(new ValidationError("ORPHANED_OVERRIDE",
+                                "MOVE_AREA override's target " + o.targetNodeKey()
+                                        + " is not an existing CLUSTER node", o.targetNodeKey()));
+                    }
+                    if (o.subjectAreaKey() != null && excludedAreas.contains(o.subjectAreaKey())) {
+                        errors.add(new ValidationError("CONFLICTING_OVERRIDE",
+                                "area " + o.subjectAreaKey() + " has both an EXCLUDE_AREA and a MOVE_AREA override",
+                                o.subjectAreaKey()));
+                    }
+                }
+                case "RELABEL" -> {
+                    if (o.subjectNodeKey() == null || !byKey.containsKey(o.subjectNodeKey())) {
+                        errors.add(new ValidationError("ORPHANED_OVERRIDE",
+                                "RELABEL override targets node_key=" + o.subjectNodeKey()
+                                        + " which does not exist in the tree", o.subjectNodeKey()));
+                    }
+                    if (o.newLabel() == null || o.newLabel().isBlank()) {
+                        errors.add(new ValidationError("ORPHANED_OVERRIDE",
+                                "RELABEL override for node_key=" + o.subjectNodeKey() + " has a blank new_label",
+                                o.subjectNodeKey()));
+                    }
+                }
+                case "SET_REPRESENTATIVES" -> {
+                    ValidationNode subject = o.subjectNodeKey() == null ? null : byKey.get(o.subjectNodeKey());
+                    if (subject == null || !"CLUSTER".equals(subject.nodeType())) {
+                        errors.add(new ValidationError("ORPHANED_OVERRIDE",
+                                "SET_REPRESENTATIVES override targets node_key=" + o.subjectNodeKey()
+                                        + " which is not an existing CLUSTER node", o.subjectNodeKey()));
+                    } else {
+                        Set<String> descendantAreaKeys = collectDescendantAreaKeys(o.subjectNodeKey(), byParent);
+                        List<String> reps = o.newRepresentativeAreaKeys() == null ? List.of() : o.newRepresentativeAreaKeys();
+                        for (String rep : reps) {
+                            if (!descendantAreaKeys.contains(rep)) {
+                                errors.add(new ValidationError("ORPHANED_OVERRIDE",
+                                        "SET_REPRESENTATIVES override for " + o.subjectNodeKey()
+                                                + " names " + rep + " which is not a descendant area of that cluster",
+                                        o.subjectNodeKey()));
+                            }
+                        }
+                    }
+                }
+                default -> errors.add(new ValidationError("ORPHANED_OVERRIDE",
+                        "override has an unrecognized kind=" + kind, o.subjectNodeKey() != null
+                                ? o.subjectNodeKey() : o.subjectAreaKey()));
+            }
+        }
+    }
+
+    // 13: direct-search vs guided-navigation ancestry mismatch — a node's stored ancestor_keys
+    // must exactly equal the root->parent chain derived by walking parent_node_key (the guided
+    // breadcrumb trail must always agree with the structural parent chain a direct-search hit
+    // would resolve to).
+    private void checkAncestryMismatch(List<ValidationNode> nodes, Map<String, ValidationNode> byKey, List<ValidationError> errors) {
+        for (ValidationNode n : nodes) {
+            List<String> actual = new ArrayList<>();
+            ValidationNode cur = n;
+            Set<String> visited = new HashSet<>();
+            while (cur.parentNodeKey() != null && visited.add(cur.nodeKey())) {
+                ValidationNode parent = byKey.get(cur.parentNodeKey());
+                if (parent == null) {
+                    break; // already reported as ORPHAN_NODE
+                }
+                actual.add(0, parent.nodeKey());
+                cur = parent;
+            }
+            if (!actual.equals(n.ancestorKeys())) {
+                errors.add(new ValidationError("ANCESTRY_MISMATCH",
+                        "node " + n.nodeKey() + " stores ancestor_keys=" + n.ancestorKeys()
+                                + " but the actual root->parent chain is " + actual, n.nodeKey()));
+            }
+        }
+    }
+}

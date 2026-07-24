@@ -1,5 +1,7 @@
 package com.example.realestate.discover;
 
+import com.example.realestate.discover.navigation.AreaCountQuery;
+import com.example.realestate.discover.navigation.PostgresAreaCountProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcOperations;
@@ -8,16 +10,19 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * Postgres implementation of {@link DiscoverSummaryPort} (#1745 P5).
  *
  * <p>Reuses {@link DiscoverListingPredicateBuilder#build} for the shared LIVE / not-archived /
- * not-duplicate / city core predicate (with {@code propertyTypes = null} — the builder's IN clause
- * is case-sensitive and is NOT used for this endpoint's property-type filter). Two additional
- * guards are applied by this service directly:
+ * not-duplicate / city core predicate for {@link #queryTotal}. Two additional guards are applied
+ * by this service directly:
  * <ol>
  *   <li>the 4-segment {@code area_key} guard (not present in the builder), and</li>
  *   <li>a case-insensitive {@code LOWER(pl.property_type) = LOWER(?)} match, applied ONLY when
@@ -25,13 +30,20 @@ import java.util.Set;
  *       query exactly so per-area/per-region counts reconcile with {@code /api/discover/areas}.</li>
  * </ol>
  *
- * <p>All three query shapes (total, regions, hotspots) share the same guarded predicate so the
- * numbers are internally consistent by construction.
+ * <p><b>#1955 Areas PR A, SLICE 2e (AC13).</b> {@code queryHotspots}/{@code
+ * queryAreaGroupRegions}/{@code queryCorridorRegions} no longer run their own per-region SQL
+ * aggregation. All three are now derived from ONE shared whole-city {@code area_key -> count} map
+ * fetched via {@link PostgresAreaCountProvider#countsByAreaKey} (the same guarded predicate as
+ * before, applied once), then rolled up in memory against each grouping's own membership table
+ * ({@code area_groups}/{@code area_group_members} or {@code regional_area_classifications}) — so
+ * every response field is still internally consistent (regions/hotspots sum to the SAME total) by
+ * construction, now via ONE query instead of three. This also retires the whole-response Caffeine
+ * TTL cache {@code CachingDiscoverSummaryService} (D6, #1760) — the per-region SQL cost this class
+ * previously amortised via that 120s cache no longer exists to amortise.
  *
  * <p>{@code listingPurpose} (#1745 P5-addendum) is a separate, independent optional filter —
- * {@code "sale"}/{@code "rent"} — passed to the shared {@link DiscoverListingPredicateBuilder}'s
- * {@code listingPurpose} predicate (never conflated with {@code propertyType}). See
- * {@link #normalizeListingPurpose(String)}.
+ * {@code "sale"}/{@code "rent"} — passed to the shared predicate builders (never conflated with
+ * {@code propertyType}). See {@link #normalizeListingPurpose(String)}.
  */
 @Service
 public class DiscoverSummaryService implements DiscoverSummaryPort {
@@ -51,10 +63,15 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
 
     private final JdbcOperations jdbcOperations;
     private final CityActivationGuard cityActivationGuard;
+    private final PostgresAreaCountProvider areaCountProvider;
 
-    public DiscoverSummaryService(JdbcOperations jdbcOperations, CityActivationGuard cityActivationGuard) {
+    public DiscoverSummaryService(
+            JdbcOperations jdbcOperations,
+            CityActivationGuard cityActivationGuard,
+            PostgresAreaCountProvider areaCountProvider) {
         this.jdbcOperations = jdbcOperations;
         this.cityActivationGuard = cityActivationGuard;
+        this.areaCountProvider = areaCountProvider;
     }
 
     @Override
@@ -76,12 +93,16 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
 
         long total = queryTotal(sql, normalizedType);
 
-        List<DiscoverSummaryResponse.RegionCount> regions = "corridor".equals(query.groupBy())
-                ? queryCorridorRegions(city, sql, normalizedType)
-                : queryAreaGroupRegions(city, sql, normalizedType);
+        // #1955 Areas PR A, SLICE 2e (AC13): ONE area-level GROUP BY, shared by all three
+        // region/hotspot rollups below — replaces three independent per-region SQL aggregations.
+        Map<String, Long> areaCounts = areaCountProvider.countsByAreaKey(
+                new AreaCountQuery(city, normalizedPurpose, normalizedType, "public"));
 
-        List<DiscoverSummaryResponse.Hotspot> hotspots =
-                queryHotspots(sql, normalizedType, query.hotspotLimit());
+        List<DiscoverSummaryResponse.RegionCount> regions = "corridor".equals(query.groupBy())
+                ? queryCorridorRegions(city, areaCounts)
+                : queryAreaGroupRegions(city, areaCounts);
+
+        List<DiscoverSummaryResponse.Hotspot> hotspots = queryHotspots(areaCounts, query.hotspotLimit());
 
         return new DiscoverSummaryResponse(
                 city, normalizedType, query.groupBy(), total, regions, hotspots, Instant.now());
@@ -102,89 +123,77 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
         return count != null ? count : 0L;
     }
 
-    // ── Hotspots ──────────────────────────────────────────────────────────────
+    // ── Hotspots (#1955 Areas PR A, SLICE 2e: rolled up from the shared area-count map) ────────
 
-    private List<DiscoverSummaryResponse.Hotspot> queryHotspots(
-            DiscoverListingPredicateBuilder.Sql sql, String normalizedType, int hotspotLimit) {
+    private List<DiscoverSummaryResponse.Hotspot> queryHotspots(Map<String, Long> areaCounts, int hotspotLimit) {
+        if (areaCounts.isEmpty()) {
+            return List.of();
+        }
+        Map<String, AreaMeta> metaByAreaKey = loadAreaMeta(areaCounts.keySet());
 
-        StringBuilder sb = new StringBuilder("""
-                SELECT pl.area_key AS area_key, a.name AS name,
-                       a.geo_center_lat AS geo_center_lat, a.geo_center_lon AS geo_center_lon,
-                       COUNT(*) AS listing_count
-                FROM property_listings pl
-                JOIN areas a ON a.area_key = pl.area_key
-                WHERE
-                """)
-                .append(sql.whereFragment())
-                .append(" AND ").append(FOUR_SEGMENT_GUARD);
+        List<DiscoverSummaryResponse.Hotspot> hotspots = new ArrayList<>();
+        for (Map.Entry<String, Long> e : areaCounts.entrySet()) {
+            AreaMeta meta = metaByAreaKey.get(e.getKey());
+            if (meta == null) {
+                continue; // unreachable in practice — every counted area_key resolves via `areas`
+            }
+            hotspots.add(new DiscoverSummaryResponse.Hotspot(e.getKey(), meta.name(), e.getValue(), meta.lat(), meta.lon()));
+        }
 
-        List<Object> params = new ArrayList<>(sql.params());
-        appendTypeFilter(sb, params, normalizedType);
+        hotspots.sort(Comparator
+                .comparingLong(DiscoverSummaryResponse.Hotspot::listingCount).reversed()
+                .thenComparing(DiscoverSummaryResponse.Hotspot::name, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(DiscoverSummaryResponse.Hotspot::areaKey));
 
-        sb.append("""
-
-                GROUP BY pl.area_key, a.name, a.geo_center_lat, a.geo_center_lon
-                ORDER BY listing_count DESC, a.name ASC, pl.area_key ASC
-                LIMIT ?
-                """);
-        params.add(hotspotLimit);
-
-        return jdbcOperations.query(sb.toString(),
-                (rs, rowNum) -> new DiscoverSummaryResponse.Hotspot(
-                        rs.getString("area_key"),
-                        rs.getString("name"),
-                        rs.getLong("listing_count"),
-                        nullableDouble(rs.getObject("geo_center_lat")),
-                        nullableDouble(rs.getObject("geo_center_lon"))
-                ),
-                params.toArray());
+        return hotspots.size() > hotspotLimit ? hotspots.subList(0, hotspotLimit) : hotspots;
     }
 
-    // ── Regions: area_group ──────────────────────────────────────────────────
+    private Map<String, AreaMeta> loadAreaMeta(Set<String> areaKeys) {
+        if (areaKeys.isEmpty()) {
+            return Map.of();
+        }
+        List<String> keys = new ArrayList<>(areaKeys);
+        StringBuilder sb = new StringBuilder(
+                "SELECT area_key, name, geo_center_lat, geo_center_lon FROM areas WHERE area_key IN (");
+        for (int i = 0; i < keys.size(); i++) {
+            sb.append(i == 0 ? "?" : ",?");
+        }
+        sb.append(')');
 
-    private List<DiscoverSummaryResponse.RegionCount> queryAreaGroupRegions(
-            String city, DiscoverListingPredicateBuilder.Sql sql, String normalizedType) {
+        List<AreaMeta> rows = jdbcOperations.query(sb.toString(),
+                (rs, rowNum) -> new AreaMeta(rs.getString("area_key"), rs.getString("name"),
+                        nullableDouble(rs.getObject("geo_center_lat")), nullableDouble(rs.getObject("geo_center_lon"))),
+                keys.toArray());
 
-        StringBuilder sb = new StringBuilder("""
-                SELECT ag.slug AS region_key, ag.name AS region_label,
-                       COUNT(pl.id) AS listing_count
+        Map<String, AreaMeta> map = new HashMap<>();
+        for (AreaMeta m : rows) {
+            map.put(m.areaKey(), m);
+        }
+        return map;
+    }
+
+    private record AreaMeta(String areaKey, String name, Double lat, Double lon) {}
+
+    // ── Regions: area_group (#1955 Areas PR A, SLICE 2e: rolled up from the shared area-count map) ─
+
+    private List<DiscoverSummaryResponse.RegionCount> queryAreaGroupRegions(String city, Map<String, Long> areaCounts) {
+        List<GroupMemberRow> memberRows = jdbcOperations.query("""
+                SELECT ag.slug AS region_key, ag.name AS region_label, agm.area_key AS area_key
                 FROM area_groups ag
                 JOIN cities c ON c.id = ag.city_id
                 JOIN area_group_members agm ON agm.area_group_id = ag.id
-                LEFT JOIN property_listings pl
-                       ON pl.area_key = agm.area_key
-                      AND
-                """)
-                .append(sql.whereFragment())
-                .append(" AND ").append(FOUR_SEGMENT_GUARD);
+                WHERE c.slug = ? AND c.is_active = true AND ag.is_active = true
+                """,
+                (rs, rowNum) -> new GroupMemberRow(
+                        rs.getString("region_key"), rs.getString("region_label"), rs.getString("area_key")),
+                city);
 
-        List<Object> params = new ArrayList<>(sql.params());
-        appendTypeFilter(sb, params, normalizedType);
-
-        sb.append("""
-
-                WHERE c.slug = ?
-                  AND c.is_active = true
-                  AND ag.is_active = true
-                GROUP BY ag.slug, ag.name
-                ORDER BY listing_count DESC, ag.name ASC
-                """);
-        params.add(city);
-
-        return jdbcOperations.query(sb.toString(),
-                (rs, rowNum) -> new DiscoverSummaryResponse.RegionCount(
-                        rs.getString("region_key"),
-                        rs.getString("region_label"),
-                        rs.getLong("listing_count")
-                ),
-                params.toArray());
+        return foldRegions(memberRows, areaCounts);
     }
 
-    // ── Regions: corridor ─────────────────────────────────────────────────────
+    // ── Regions: corridor (#1955 Areas PR A, SLICE 2e: rolled up from the shared area-count map) ──
 
-    private List<DiscoverSummaryResponse.RegionCount> queryCorridorRegions(
-            String city, DiscoverListingPredicateBuilder.Sql sql, String normalizedType) {
-
+    private List<DiscoverSummaryResponse.RegionCount> queryCorridorRegions(String city, Map<String, Long> areaCounts) {
         // #1935: regional_area_classifications.city_key stores the city SLUG (see
         // RegionalClassificationBackfillService.UPSERT_SQL) but has NO FK/join to cities —
         // an inactive city's rows would otherwise still be readable via rac.city_key = ?.
@@ -195,42 +204,44 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
             return List.of();
         }
 
-        List<Object> params = new ArrayList<>();
-        params.add(city); // l.city_key
-
-        StringBuilder sb = new StringBuilder("""
+        List<GroupMemberRow> memberRows = jdbcOperations.query("""
                 SELECT rac.direction_key AS region_key,
                        COALESCE(l.group_name, rac.direction_key) AS region_label,
-                       COUNT(pl.id) AS listing_count
+                       rac.area_key AS area_key
                 FROM regional_area_classifications rac
                 LEFT JOIN city_regional_direction_labels l
                        ON l.direction_code = rac.direction_key AND l.city_key = ?
-                LEFT JOIN property_listings pl
-                       ON pl.area_key = rac.area_key
-                      AND
-                """)
-                .append(sql.whereFragment())
-                .append(" AND ").append(FOUR_SEGMENT_GUARD);
-
-        params.addAll(sql.params());
-        appendTypeFilter(sb, params, normalizedType);
-
-        sb.append("""
-
                 WHERE rac.city_key = ?
-                GROUP BY rac.direction_key, l.group_name
-                ORDER BY listing_count DESC, region_label ASC
-                """);
-        params.add(city);
+                """,
+                (rs, rowNum) -> new GroupMemberRow(
+                        rs.getString("region_key"), rs.getString("region_label"), rs.getString("area_key")),
+                city, city);
 
-        return jdbcOperations.query(sb.toString(),
-                (rs, rowNum) -> new DiscoverSummaryResponse.RegionCount(
-                        rs.getString("region_key"),
-                        rs.getString("region_label"),
-                        rs.getLong("listing_count")
-                ),
-                params.toArray());
+        return foldRegions(memberRows, areaCounts);
     }
+
+    /** Groups {@code memberRows} by {@code regionKey}, summing each member area's count from the
+     *  shared area-count map — a region with member areas but zero matching listings still appears
+     *  (with count 0), mirroring the pre-#1955 LEFT-JOIN-aggregate behaviour exactly. */
+    private List<DiscoverSummaryResponse.RegionCount> foldRegions(List<GroupMemberRow> memberRows, Map<String, Long> areaCounts) {
+        Map<String, String> labelByRegionKey = new LinkedHashMap<>();
+        Map<String, Long> totalByRegionKey = new LinkedHashMap<>();
+        for (GroupMemberRow r : memberRows) {
+            labelByRegionKey.putIfAbsent(r.regionKey(), r.regionLabel());
+            totalByRegionKey.merge(r.regionKey(), areaCounts.getOrDefault(r.areaKey(), 0L), Long::sum);
+        }
+
+        List<DiscoverSummaryResponse.RegionCount> regions = new ArrayList<>();
+        for (Map.Entry<String, Long> e : totalByRegionKey.entrySet()) {
+            regions.add(new DiscoverSummaryResponse.RegionCount(e.getKey(), labelByRegionKey.get(e.getKey()), e.getValue()));
+        }
+        regions.sort(Comparator
+                .comparingLong(DiscoverSummaryResponse.RegionCount::listingCount).reversed()
+                .thenComparing(DiscoverSummaryResponse.RegionCount::regionLabel, Comparator.nullsLast(Comparator.naturalOrder())));
+        return regions;
+    }
+
+    private record GroupMemberRow(String regionKey, String regionLabel, String areaKey) {}
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

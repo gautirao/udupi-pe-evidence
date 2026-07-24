@@ -45,6 +45,18 @@ export function useDiscoverSource(): DiscoverDataSource {
  * hook this PR threads (regions/regionGroups/areas/markers/listings/
  * areaGroups), plus 'listingDetail' (E6) for PropertyCard's inline
  * simulated-listing drawer.
+ *
+ * Issue #1955 (Areas PR A) — 'navigationTree' / 'navigationDiff' /
+ * 'navigationOverrides' / 'navigationOverrideDelete' are admin-only, always
+ * revision-scoped, and have NO live-mode counterpart (there is no public
+ * "live navigation sandbox tree" — the promoted equivalent at
+ * /api/discover/cities/{city}/navigation/{nodeKey} is a different shape and
+ * out of scope here). They are added to this union so
+ * CityLaunchPreview's new hierarchy/diff/overrides views can resolve their
+ * cityId/revisionId via useDiscoverSource() like every other preview-aware
+ * hook, instead of prop-drilling — callers MUST gate `enabled` on
+ * `source.mode === 'preview'` since discoverPath's live branch has nothing
+ * meaningful to return for these kinds (see useCityLaunchNavigation.ts).
  */
 export type DiscoverEndpoint =
   | { kind: 'regions' }
@@ -53,7 +65,11 @@ export type DiscoverEndpoint =
   | { kind: 'markers' }
   | { kind: 'listings' }
   | { kind: 'listingDetail'; areaKey: string }
-  | { kind: 'areaGroups' };
+  | { kind: 'areaGroups' }
+  | { kind: 'navigationTree' }
+  | { kind: 'navigationDiff'; against: 'BASE' | 'PREVIOUS_REVISION' }
+  | { kind: 'navigationOverrides' }
+  | { kind: 'navigationOverrideDelete'; overrideId: number };
 
 /**
  * Resolves the request path for one logical Discover endpoint.
@@ -77,6 +93,10 @@ export function discoverPath(
   if (source.mode === 'live') return livePath;
 
   const base = `/api/admin/city-launch/cities/${source.cityId}/revisions/${source.revisionId}/preview`;
+  // Sibling of `base` (no `/preview` segment) — the navigation tree/diff/
+  // overrides contract lives directly under the revision, not under the
+  // simulated-preview E1-E7 namespace.
+  const revisionBase = `/api/admin/city-launch/cities/${source.cityId}/revisions/${source.revisionId}`;
   switch (endpoint.kind) {
     case 'regions':
       return `${base}/regions`;
@@ -92,6 +112,14 @@ export function discoverPath(
       return `${base}/listings/${encodeURIComponent(endpoint.areaKey)}`;
     case 'areaGroups':
       return `${base}/area-groups`;
+    case 'navigationTree':
+      return `${revisionBase}/navigation/tree`;
+    case 'navigationDiff':
+      return `${revisionBase}/navigation/diff?against=${encodeURIComponent(endpoint.against)}`;
+    case 'navigationOverrides':
+      return `${revisionBase}/navigation/overrides`;
+    case 'navigationOverrideDelete':
+      return `${revisionBase}/navigation/overrides/${encodeURIComponent(String(endpoint.overrideId))}`;
     default: {
       // Exhaustiveness guard — a new DiscoverEndpoint variant must be
       // handled above or this fails to typecheck.

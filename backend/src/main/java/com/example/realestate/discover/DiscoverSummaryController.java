@@ -35,9 +35,11 @@ import java.util.concurrent.TimeUnit;
  * (not 404).
  *
  * <p>{@code Cache-Control: max-age} is derived from {@code discover.summary.cache.ttl-seconds}
- * (#1760) — the SAME property that bounds {@link CachingDiscoverSummaryService}'s in-process TTL
- * — so the advertised HTTP cache lifetime can never drift from the server-side cache staleness
- * window. Default (unset) is 120 seconds, matching pre-#1760 behaviour.
+ * (#1760) — retained as a pure HTTP cache-lifetime hint even though the in-process whole-response
+ * Caffeine cache that property used to also bound ({@code CachingDiscoverSummaryService}) was
+ * retired in #1955 Areas PR A, SLICE 2e (D6): {@link DiscoverSummaryService}'s region/hotspot
+ * queries now share ONE area-level aggregation instead of three, so that per-request cost no
+ * longer needs a response-level cache to amortise. Default (unset) is 120 seconds, unchanged.
  */
 @RestController
 @RequestMapping("/api/discover")
