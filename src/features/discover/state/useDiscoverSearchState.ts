@@ -33,13 +33,16 @@ export function useDiscoverSearchState({ urlQ, setUrlSearch }: UseDiscoverSearch
   const [searchQuery, setSearchQuery] = useState(() => urlQ);
   const [debouncedSearch, setDebouncedSearch] = useState(() => urlQ);
 
-  // Sync local searchQuery when the URL `q` param changes (e.g. browser back/forward).
+  // Trigger key: [urlQ] — only react to URL changes (e.g. browser back/forward), not local
+  // state changes. `searchQuery` is read as an in-body guard (compared against the fresh
+  // `urlQ`) but deliberately excluded from deps: including it would make every local edit
+  // (typed searchQuery change) re-run this effect, which is exactly the reverse-sync loop
+  // this split (searchQuery local vs urlQ URL-owned) is designed to avoid.
   useEffect(() => {
     if (urlQ !== searchQuery) {
       setSearchQuery(urlQ);
     }
-    // Only react to URL changes, not local state changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see trigger-key note above
   }, [urlQ]);
 
   useEffect(() => {

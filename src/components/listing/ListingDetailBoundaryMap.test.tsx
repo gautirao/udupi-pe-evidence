@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 // ─── Mock react-leaflet ───────────────────────────────────────────────────────
@@ -127,5 +127,43 @@ describe('ListingDetailBoundaryMap', () => {
     expect(screen.getByTestId('map-container')).toBeInTheDocument();
     // fromGeoJsonString returns [] on parse error → centre-marker fallback
     expect(screen.getByTestId('centre-marker')).toBeInTheDocument();
+  });
+
+  // ── Issue #2005 (Slice 2 PR6) — Category A: useMountEffect regression ────────
+  // fitBounds must fire once, on mount, using the coords present at that moment —
+  // "after this the user controls the map". A later coords/props change must NOT
+  // re-trigger fitBounds and fight the user's own pan/zoom.
+  it('does not call fitBounds again after a later coords/props change (fires once, on mount, only)', () => {
+    const { rerender } = render(
+      <ListingDetailBoundaryMap
+        boundary={VALID_POLYGON_BOUNDARY}
+        lat={13.2}
+        lng={74.8}
+      />,
+    );
+    expect(mockFitBounds).toHaveBeenCalledOnce();
+
+    const laterBoundary = JSON.stringify({
+      type: 'Polygon',
+      coordinates: [
+        [
+          [75.0, 13.4],
+          [75.01, 13.4],
+          [75.01, 13.41],
+          [75.0, 13.41],
+          [75.0, 13.4],
+        ],
+      ],
+    });
+    rerender(
+      <ListingDetailBoundaryMap
+        boundary={laterBoundary}
+        lat={13.4}
+        lng={75.0}
+      />,
+    );
+
+    // Still only the one, mount-time call — the user now controls the map.
+    expect(mockFitBounds).toHaveBeenCalledOnce();
   });
 });

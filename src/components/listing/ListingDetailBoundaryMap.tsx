@@ -12,10 +12,10 @@
  * Does NOT use Discover's AgriPolygonLayer — standalone, self-contained.
  */
 
-import { useEffect } from 'react';
 import { MapContainer, TileLayer, Polygon, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { fromGeoJsonString } from '@/lib/geoJsonUtils';
+import { useMountEffect } from '@/hooks/useMountEffect';
 
 export interface ListingDetailBoundaryMapProps {
   boundary?: string | null;
@@ -37,11 +37,11 @@ const POLYGON_PATH_OPTIONS = {
 // ─────────────────────────────────────────────────────────────────────────────
 function FitBoundsOnMount({ coords }: { coords: [number, number][] }) {
   const map = useMap();
-  useEffect(() => {
-    // fitBounds once after mount — after this the user controls the map
+  // fitBounds once after mount, using the coords present at that moment —
+  // after this the user controls the map. Fires once per page load.
+  useMountEffect(() => {
     map.fitBounds(coords as L.LatLngBoundsExpression, { padding: [20, 20] });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally run once on mount only
+  });
   return null;
 }
 

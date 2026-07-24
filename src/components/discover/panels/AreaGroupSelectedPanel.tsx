@@ -236,6 +236,8 @@ export function AreaGroupSelectedPanel({
     [highlightedAreaKeys],
   );
 
+  // Trigger key: [highlightedAreaKeys] — only re-run when the highlighted set changes
+  // (a new cluster click). `rowRefs` is a ref (stable, exempt from the deps list).
   useEffect(() => {
     if (!highlightedAreaKeys || highlightedAreaKeys.length === 0) return;
     const firstKey = highlightedAreaKeys[0];
@@ -243,8 +245,6 @@ export function AreaGroupSelectedPanel({
     if (node) {
       node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
-    // Only re-run when the highlighted set changes — a new cluster click.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightedAreaKeys]);
 
   // Truthful aggregates — derived only from live area data (never fabricated).

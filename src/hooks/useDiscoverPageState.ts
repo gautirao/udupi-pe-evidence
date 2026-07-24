@@ -153,32 +153,44 @@ export function useDiscoverPageState({
   // Sync local city state with URL city on browser Back/Forward navigation.
   // handleCityChange keeps them in sync on user-driven changes; this covers popstate
   // so that useDiscoverMapData re-fetches for the correct city after history traversal.
+  //
+  // Trigger key: [urlCity] — extracted from urlState.city so this only re-fires when the
+  // URL's city actually changes. `city` (local state) is read as an in-body guard only;
+  // `setCity`/`setMapZoom`/`setFilters` are stable setters; `CITY_CONFIG` is a module const.
+  const urlCity = urlState.city;
   useEffect(() => {
-    const urlCity = urlState.city || DEFAULT_CITY;
-    if (urlCity !== city) {
-      setCity(urlCity);
-      setMapZoom(CITY_CONFIG[urlCity]?.zoom ?? 11);
+    const resolvedUrlCity = urlCity || DEFAULT_CITY;
+    if (resolvedUrlCity !== city) {
+      setCity(resolvedUrlCity);
+      setMapZoom(CITY_CONFIG[resolvedUrlCity]?.zoom ?? 11);
       // localities is kept for backward compat (backend still accepts it; old URLs may contain it).
       // LocalityChipsBar was removed in #969; this field is no longer user-editable from the
       // Discover UI, but is still forwarded to backend listing queries and must be cleared on city change.
       setFilters((prev) => ({ ...prev, localities: undefined }));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlState.city]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see trigger-key note above
+  }, [urlCity]);
 
   // Sync mapZoom with URL viewport.zoom when it changes (e.g., after initial hydration).
   // This handles the case where viewport hasn't hydrated by mount time, so mapZoom defaults
   // to city zoom (11), then later viewport.zoom becomes available and must update mapZoom.
+  //
+  // Trigger key: [urlZoom] — zoom-only by design; pan/lat/lon are deliberately NOT tracked
+  // here (they don't drive mapZoom).
+  const urlZoom = urlState.viewport?.zoom;
   useEffect(() => {
-    if (urlState.viewport?.zoom != null) {
-      setMapZoom(urlState.viewport.zoom);
+    if (urlZoom != null) {
+      setMapZoom(urlZoom);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlState.viewport?.zoom]);
+  }, [urlZoom]);
 
   // Sync selectedArea with URL areaKey for browser Back/Forward navigation.
   // Back (areaKey removed): clear selectedArea. Forward (areaKey restored): re-arm
   // pendingAreaKeyRef so the Index.tsx resolution effect can re-match it against areas data.
+  //
+  // Trigger key: [urlAreaKey]. `selectedArea` is read as an in-body guard only (compared
+  // against the fresh urlAreaKey); `setSelectedArea`/`setPanToArea`/`setResolveSignal` are
+  // stable setters; `pendingAreaKeyRef` is a ref.
   const urlAreaKey = urlState.areaKey;
   useEffect(() => {
     if (!urlAreaKey) {
@@ -191,7 +203,7 @@ export function useDiscoverPageState({
       pendingAreaKeyRef.current = urlAreaKey;
       setResolveSignal((s) => s + 1);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see trigger-key note above
   }, [urlAreaKey]);
 
   // Reset page to 0 whenever filter set, city, or selected area changes so

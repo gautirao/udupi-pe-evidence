@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useMountEffect } from '@/hooks/useMountEffect';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, MapPin, Activity, Shield, AlertCircle, Info, ArrowRight,
@@ -81,16 +82,18 @@ export default function Trends() {
   // immediately re-write it back from optionsData, which would create an infinite loop.
   const lastRemovedKeyRef = useRef<string>('');
 
-  // Normalize URL on mount: trim >3 areaKeys to canonical 3
-  useEffect(() => {
+  // Normalize URL on mount: trim >3 areaKeys to canonical 3. Mount-only —
+  // normalizes the initial URL before interaction; does not re-fire on later
+  // city nav (city changes are handled by the URL-driven re-renders below,
+  // not by re-running this normalize pass).
+  useMountEffect(() => {
     if (rawAreaKeys.length > 3) {
       const params = new URLSearchParams();
       params.set('city', city);
       urlAreaKeys.forEach(k => params.append('areaKey', k));
       setSearchParams(params, { replace: true });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount-only: normalizes initial URL before interaction
-  }, []);
+  });
 
   // Fetch backend defaults when URL has no areaKeys (for default area resolution) OR when in area
   // guide mode (so CompareNearbyAreas has safe area options — B4 fix).
@@ -101,6 +104,12 @@ export default function Trends() {
   // Keys that were previously removed due to an API error are excluded to prevent a re-fetch loop:
   // if the only backend defaults are the same invalid key that was just removed, we leave the URL
   // empty so the error/empty state renders instead of cycling indefinitely.
+  //
+  // Deliberate trigger keys: [optionsData, city] — the only two inputs that should re-run this
+  // write. `urlAreaKeys` is read as an in-body GUARD only (re-checked fresh on every trigger run,
+  // not itself a trigger) — including it would make this effect re-fire on the very URL write it
+  // just performed (urlAreaKeys flips empty -> non-empty), which is not the intent. `setSearchParams`
+  // (router-stable) and `lastRemovedKeyRef` (ref) are excluded per the standard exemptions.
   useEffect(() => {
     if (urlAreaKeys.length === 0 && optionsData?.defaultAreas && optionsData.defaultAreas.length > 0) {
       const keys = optionsData.defaultAreas
@@ -113,7 +122,8 @@ export default function Trends() {
       keys.forEach(k => params.append('areaKey', k));
       setSearchParams(params, { replace: true });
     }
-  }, [optionsData, city]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see trigger-key note above
+  }, [optionsData, city]);
 
   // ── Area Intelligence hook (AC1) ────────────────────────────────────────────
   // Always called with city + selectedKey. The hook's own enabled guard
@@ -140,6 +150,13 @@ export default function Trends() {
   // When the selected (first) key returns an error, record it in lastRemovedKeyRef so
   // the defaults effect will not re-populate it, then remove it from the URL.
   // Guard: only fires in the non-guide edge case (selectedKey present but not a full pipe key).
+  // Trigger keys: [isError, selectedKey] only. `shouldRenderGuide` is used purely as an
+  // in-body EARLY-RETURN GUARD, not a third trigger — it is `isAreaGuideMode ||
+  // selectedKey === ''` and `isAreaGuideMode` is itself `selectedKey.includes('|')`, so
+  // shouldRenderGuide is a pure function of `selectedKey` alone. Any render where
+  // shouldRenderGuide's value changes is a render where `selectedKey` also changed, which
+  // is already a trigger — so dropping it from the deps array does not change when this
+  // effect fires; it just stops implying a third independent trigger that doesn't exist.
   useEffect(() => {
     if (shouldRenderGuide) return; // guide path handles its own error state
     if (!isError || !selectedKey) return;
@@ -149,9 +166,8 @@ export default function Trends() {
     params.set('city', city);
     remaining.forEach(k => params.append('areaKey', k));
     setSearchParams(params, { replace: true });
-  // Intentional: only fire when the error state or selected key changes.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isError, selectedKey, shouldRenderGuide]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see trigger-key note above (urlAreaKeys/setSearchParams excluded per standard exemptions)
+  }, [isError, selectedKey]);
 
   // ── Default: buyer area-guide for all normal /trends visits ─────────────────
   // noCityAreas: options request settled, city has zero configured areas.

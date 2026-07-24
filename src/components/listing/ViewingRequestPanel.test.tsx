@@ -173,4 +173,46 @@ describe('post-sign-in intent restore', () => {
     // The stored intent is a one-shot value — cleared immediately after restore.
     expect(sessionStorage.getItem(INTENT_KEY)).toBeNull();
   });
+
+  // ── Issue #2005 (Slice 2 PR6) — Category B: [user, listingId] trigger-key regression ──
+  it('re-runs the restore check when user transitions from null to signed-in (the anon -> auth trigger)', () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const iso = tomorrow.toISOString().slice(0, 10);
+    sessionStorage.setItem(INTENT_KEY, JSON.stringify({ date: iso, timeSlot: '11:00-12:00' }));
+
+    const { rerender } = render(<ViewingRequestPanel listingId={LISTING_ID} user={null} />);
+    // Anonymous: the restore effect guards on `!user` and returns early — nothing consumed yet.
+    expect(sessionStorage.getItem(INTENT_KEY)).not.toBeNull();
+    expect(screen.getByTestId('request-viewing-btn')).toBeDisabled();
+
+    // user: null -> MOCK_USER is exactly the [user, listingId] trigger-key change.
+    rerender(<ViewingRequestPanel listingId={LISTING_ID} user={MOCK_USER} />);
+
+    expect(screen.getByTestId('request-viewing-btn')).toBeEnabled();
+    expect(sessionStorage.getItem(INTENT_KEY)).toBeNull();
+  });
+
+  it('does not re-run the restore check on a re-render with the same user/listingId (an excluded-input change)', () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const iso = tomorrow.toISOString().slice(0, 10);
+    sessionStorage.setItem(INTENT_KEY, JSON.stringify({ date: iso, timeSlot: '11:00-12:00' }));
+
+    const { rerender } = render(<ViewingRequestPanel listingId={LISTING_ID} user={MOCK_USER} />);
+    expect(screen.getByTestId('request-viewing-btn')).toBeEnabled();
+    expect(sessionStorage.getItem(INTENT_KEY)).toBeNull();
+
+    // Buyer picks a different date manually after the restore (selecting a new date
+    // resets the time slot pick, so re-pick a time too).
+    const pills = screen.getAllByTestId(/^viewing-date-pill-/);
+    fireEvent.click(pills[pills.length - 1]);
+    fireEvent.click(screen.getByTestId('viewing-time-slot-09:00-10:00'));
+    expect(screen.getByTestId('request-viewing-btn')).toBeEnabled();
+
+    // A benign re-render with the SAME user/listingId (e.g. a parent state update)
+    // must not re-run the restore and clobber the buyer's manual pick.
+    rerender(<ViewingRequestPanel listingId={LISTING_ID} user={MOCK_USER} />);
+    expect(screen.getByTestId('request-viewing-btn')).toBeEnabled();
+  });
 });

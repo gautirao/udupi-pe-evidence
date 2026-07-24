@@ -259,4 +259,50 @@ describe('BoundaryDrawStep', () => {
     expect(screen.getByTestId('boundary-guidance-empty')).toBeInTheDocument();
     expect(screen.queryByTestId('boundary-clear-btn')).not.toBeInTheDocument();
   });
+
+  // ── Issue #2005 (Slice 2 PR6) — Category A: useMountEffect regression ────────
+  // The pre-populate effect must fire once, on mount, using the initialCoords
+  // present at that moment — a later initialCoords prop change (e.g. a parent
+  // re-fetch) must NOT clobber a boundary the broker has since edited/cleared.
+  it('does not re-populate from initialCoords after a later prop change (fires once, on mount, only)', () => {
+    const seedCoords: [number, number][] = [
+      [13.0, 74.0],
+      [13.0, 74.1],
+      [13.1, 74.1],
+    ];
+    const { rerender } = render(
+      <BoundaryDrawStep
+        initialCoords={seedCoords}
+        center={DEFAULT_CENTER}
+        onSave={vi.fn()}
+        onSkip={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('boundary-save-btn')).not.toBeDisabled();
+
+    // Broker clears the pre-populated boundary.
+    fireEvent.click(screen.getByTestId('boundary-clear-btn'));
+    expect(screen.getByTestId('boundary-save-btn')).toBeDisabled();
+
+    // Parent re-renders with a DIFFERENT initialCoords prop (e.g. a refetch).
+    // If the effect re-ran, it would clobber the broker's clear with the new
+    // (or even the old) initialCoords.
+    const laterCoords: [number, number][] = [
+      [14.0, 75.0],
+      [14.0, 75.1],
+      [14.1, 75.1],
+    ];
+    rerender(
+      <BoundaryDrawStep
+        initialCoords={laterCoords}
+        center={DEFAULT_CENTER}
+        onSave={vi.fn()}
+        onSkip={vi.fn()}
+      />,
+    );
+
+    // Still empty — the mount-only effect did not re-fire.
+    expect(screen.getByTestId('boundary-save-btn')).toBeDisabled();
+    expect(screen.getByTestId('boundary-guidance-empty')).toBeInTheDocument();
+  });
 });

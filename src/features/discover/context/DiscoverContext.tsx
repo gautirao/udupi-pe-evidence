@@ -177,10 +177,17 @@ export function DiscoverProvider({ children }: DiscoverProviderProps) {
   navKeyParams.delete('lon');
   navKeyParams.delete('zoom');
   const searchParamsKey = navKeyParams.toString();
+  // LOAD-BEARING: keyed EXCLUSIVELY on searchParamsKey (viewport-stripped URL params), not
+  // on `urlState` itself. `urlState` is read inside the factory (to build `rest`), but is
+  // deliberately excluded from the deps array — its identity is unverified/likely-unstable
+  // across renders, and including it would re-invalidate this memo on every render, including
+  // ones triggered by pan/zoom (debounced viewport commits), which is exactly what this
+  // facade's four-way context split (nav vs viewport vs shell vs actions) exists to prevent.
+  // Byte-for-byte memoisation identity: this recomputes if and only if searchParamsKey changes.
   const nav = useMemo<DiscoverNavContextValue>(() => {
     const { viewport: _viewport, ...rest } = urlState;
     return rest;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see load-bearing note above; searchParamsKey is the sole intended trigger
   }, [searchParamsKey]);
 
   // ─── Viewport ──────────────────────────────────────────────────────────

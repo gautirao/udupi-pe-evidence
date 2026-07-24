@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { MapContainer, TileLayer } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { DrawControl } from '@/components/map/DrawControl';
 import { Button } from '@/components/ui/button';
 import { isValidPolygon } from '@/lib/geoJsonUtils';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { useMountEffect } from '@/hooks/useMountEffect';
 
 interface BoundaryDrawStepProps {
   /** Pre-existing boundary coords (may be empty for a new listing). */
@@ -49,13 +50,13 @@ export function BoundaryDrawStep({
 }: BoundaryDrawStepProps) {
   const [drawnCoords, setDrawnCoords] = useState<[number, number][]>([]);
 
-  // Pre-populate from existing boundary on mount only
-  useEffect(() => {
+  // Pre-populate from existing boundary on mount only — fires once even if
+  // initialCoords changes later via props.
+  useMountEffect(() => {
     if (initialCoords.length > 0) {
       setDrawnCoords(initialCoords);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  });
 
   const hasCoords = drawnCoords.length > 0;
   const valid = isValidPolygon(drawnCoords);

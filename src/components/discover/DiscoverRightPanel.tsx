@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 // Issue #1531 — additive PANEL_OPEN telemetry wiring (fire-and-forget; no existing behaviour changed).
 import { useDiscoverTelemetry } from '@/hooks/useDiscoverTelemetry';
+import { useMountEffect } from '@/hooks/useMountEffect';
 import {
   AlertCircle,
   ArrowDown,
@@ -1066,13 +1067,11 @@ export function DiscoverRightPanel({
   };
 
   // Issue #1531 — PANEL_OPEN telemetry on mount (additive; fire-and-forget; never throws).
-  // Only coarse, non-PII fields. Runs once when the panel first renders.
+  // Only coarse, non-PII fields. Runs once when the panel first renders — never on prop updates.
   const { emitPanelOpen } = useDiscoverTelemetry();
-  useEffect(() => {
+  useMountEffect(() => {
     emitPanelOpen();
-    // Intentionally empty deps: emit only on initial mount, not on prop updates.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  });
 
   // Issue #1064 AC3 — explicit hydration/not-found UIs replace the silent
   // GuidedEntryPanel fall-back when the URL claims an areaKey but `selectedArea`

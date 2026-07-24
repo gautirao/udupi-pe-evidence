@@ -275,6 +275,74 @@ describe('DiscoverProvider — mobileView (D3)', () => {
   });
 });
 
+// Issue #2005 (Slice 2 PR6) — Category B: DiscoverContext.tsx:183 nav memo is
+// LOAD-BEARING, keyed EXCLUSIVELY on searchParamsKey (viewport-stripped). The
+// existing "nav/viewport isolation (AC2)" suite above already proves NavSpy
+// does not re-render across viewport-only updates (identity stability via a
+// memoized consumer). This block adds the direct object-identity assertions:
+// STABLE across a re-render triggered ONLY by a viewport param, and CHANGES
+// (new reference, and different content) when a non-viewport param changes.
+describe('DiscoverProvider — DiscoverContext.tsx:183 nav memo identity (Category B trigger-key)', () => {
+  it('nav object identity is STABLE when only viewport params change', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+    const seenNav: ReturnType<typeof useDiscoverNav>[] = [];
+    let actions: DiscoverActionsContextValue | null = null;
+    function Capture() {
+      actions = useDiscoverActions();
+      const nav = useDiscoverNav();
+      seenNav.push(nav);
+      return null;
+    }
+
+    render(
+      <Wrapper initialUrl="/discover?city=udupi&areaKey=area1">
+        <Capture />
+      </Wrapper>,
+    );
+    const beforeViewport = seenNav[seenNav.length - 1];
+
+    await act(async () => {
+      actions?.reportViewport({ lat: 13.4, lon: 74.8, zoom: 13 });
+      vi.advanceTimersByTime(350); // past the 300ms viewport debounce
+    });
+
+    const afterViewport = seenNav[seenNav.length - 1];
+    expect(afterViewport).toBe(beforeViewport);
+    expect(JSON.stringify(afterViewport)).toBe(JSON.stringify(beforeViewport));
+
+    vi.useRealTimers();
+  });
+
+  it('nav object identity CHANGES (new reference, different content) when a non-viewport param changes', async () => {
+    let actions: DiscoverActionsContextValue | null = null;
+    const seenNav: ReturnType<typeof useDiscoverNav>[] = [];
+    function Capture() {
+      actions = useDiscoverActions();
+      const nav = useDiscoverNav();
+      seenNav.push(nav);
+      return null;
+    }
+
+    render(
+      <Wrapper initialUrl="/discover?city=udupi">
+        <Capture />
+      </Wrapper>,
+    );
+    const beforeCityChange = seenNav[seenNav.length - 1];
+
+    await act(async () => {
+      actions?.changeCity('bangalore');
+    });
+
+    await waitFor(() => expect(seenNav[seenNav.length - 1]).not.toBe(beforeCityChange));
+    const afterCityChange = seenNav[seenNav.length - 1];
+    expect(afterCityChange).not.toBe(beforeCityChange);
+    expect(afterCityChange.city).toBe('bangalore');
+    expect(afterCityChange.city).not.toBe(beforeCityChange.city);
+  });
+});
+
 describe('DiscoverProvider — throws outside a provider', () => {
   it('useDiscoverActions throws a clear error when used without a DiscoverProvider', () => {
     function Bare() {

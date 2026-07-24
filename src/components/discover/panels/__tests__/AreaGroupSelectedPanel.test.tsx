@@ -419,4 +419,31 @@ describe('AreaGroupSelectedPanel — Issue #1806 FIX-5e: highlightedAreaKeys', (
     expect(zeroRow.className).toMatch(/ring-copper/);
     expect(zeroRow).toHaveAttribute('aria-disabled', 'true');
   });
+
+  // ── Issue #2005 (Slice 2 PR6) — Category B: [highlightedAreaKeys] trigger-key regression ──
+  it('re-fires scrollIntoView when highlightedAreaKeys changes (a new cluster click)', () => {
+    const { rerender } = render(
+      <AreaGroupSelectedPanel {...baseProps} highlightedAreaKeys={['IN|KA|Udupi|Manipal']} />,
+    );
+    expect(scrollIntoViewMock).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <AreaGroupSelectedPanel {...baseProps} highlightedAreaKeys={['IN|KA|Udupi|Udyavara']} />,
+    );
+    expect(scrollIntoViewMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not re-fire scrollIntoView on a re-render where highlightedAreaKeys is unchanged (same reference)', () => {
+    const keys = ['IN|KA|Udupi|Manipal'];
+    const { rerender } = render(
+      <AreaGroupSelectedPanel {...baseProps} highlightedAreaKeys={keys} shownCount={5} />,
+    );
+    expect(scrollIntoViewMock).toHaveBeenCalledTimes(1);
+
+    // Unrelated prop (shownCount) changes; highlightedAreaKeys is the SAME array reference.
+    rerender(
+      <AreaGroupSelectedPanel {...baseProps} highlightedAreaKeys={keys} shownCount={9} />,
+    );
+    expect(scrollIntoViewMock).toHaveBeenCalledTimes(1);
+  });
 });

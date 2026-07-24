@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { searchNominatim, reverseGeocode, type NominatimResult } from '@/lib/geocode';
 import { useUpdateListing } from '@/hooks/useBrokerListings';
 import type { AddressPickerValue } from '@/components/broker/AddressPicker';
 import { derivePublicLoc } from '@/components/broker/residential/deriveResolvedLocation';
+import { useMountEffect } from '@/hooks/useMountEffect';
 
 // ---------------------------------------------------------------------------
 // Issue #1722 correction #4 — SINGLE SOURCE OF TRUTH for the residential
@@ -98,24 +99,19 @@ export function useResidentialLocation({
   // pin at mount time, seed local state from it once so "Change"/"Adjust pin"
   // work without waiting for a fresh resolve.
   //
-  // Code-review fix (issue #1722 correction #4): hydratedRef is latched on
-  // the INITIAL effect run REGARDLESS of whether the seed condition was met
-  // — not only inside the seeding branch. Previously, when addressConfirmed
-  // was false at mount (the normal create-flow case), hydratedRef never got
-  // set, so a LATER in-session confirmPin -> useUpdateListing's query
-  // invalidation -> draftListing refetch -> addressConfirmed/lat/lng prop
-  // change re-ran this effect and clobbered the just-set `resolved.formatted`
-  // (the live, detailed geocoded string) with the coarser persisted
-  // `locality` — a one-time cosmetic flicker of the confirmed banner/pin
-  // caption. Latching unconditionally on the first run means this effect can
-  // only ever seed a TRULY pre-existing confirmed draft (data already
-  // present when the hook first mounts), and can never re-fire afterward —
-  // the in-session resolve -> confirm flow is untouched (it never goes
-  // through this effect at all).
-  const hydratedRef = useRef(false);
-  useEffect(() => {
-    if (hydratedRef.current) return;
-    hydratedRef.current = true;
+  // Code-review fix (issue #1722 correction #4): this must run exactly once,
+  // on mount, REGARDLESS of whether the seed condition was met — not only
+  // when the seeding branch is taken. If it re-ran later (e.g. a LATER
+  // in-session confirmPin -> useUpdateListing's query invalidation ->
+  // draftListing refetch -> addressConfirmed/lat/lng prop change), it would
+  // clobber the just-set `resolved.formatted` (the live, detailed geocoded
+  // string) with the coarser persisted `locality` — a one-time cosmetic
+  // flicker of the confirmed banner/pin caption. useMountEffect guarantees
+  // this can only ever seed a TRULY pre-existing confirmed draft (data
+  // already present when the hook first mounts), and can never re-fire
+  // afterward — the in-session resolve -> confirm flow is untouched (it
+  // never goes through this effect at all).
+  useMountEffect(() => {
     if (addressConfirmed && initialLatitude != null && initialLongitude != null) {
       const publicLoc = initialLocality ?? '';
       setState({
@@ -137,11 +133,7 @@ export function useResidentialLocation({
       // onPublicLoc there just re-sets the form's existing `locality` state).
       onPublicLoc(publicLoc);
     }
-    // Deliberately runs once, on mount, using whatever props are present at
-    // that moment — see comment above for why an exhaustive dep list here
-    // would reintroduce the clobber bug.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  });
 
   // Unconfirm the persisted pin — used by both "Change" and query-edit
   // invalidation. Does not touch local resolved/pin state; callers reset

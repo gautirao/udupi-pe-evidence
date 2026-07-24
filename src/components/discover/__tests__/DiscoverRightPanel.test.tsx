@@ -1,8 +1,13 @@
-import { describe, it, expect, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { screen, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
-import { renderWithProviders } from '@/test/renderWithProviders';
+import { MemoryRouter } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { renderWithProviders, makeTestQueryClient } from '@/test/renderWithProviders';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthModalProvider } from '@/contexts/AuthModalContext';
 import { DiscoverRightPanel } from '../DiscoverRightPanel';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
@@ -12,6 +17,17 @@ const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return { ...actual, useNavigate: () => mockNavigate };
+});
+
+// Issue #2005 (Slice 2 PR6) — Category A: spy on emitPanelOpen so the
+// PANEL_OPEN-on-mount-only regression test can assert call count without
+// pulling in the real telemetry consent/localStorage machinery.
+const mockEmitPanelOpen = vi.hoisted(() => vi.fn());
+vi.mock('@/hooks/useDiscoverTelemetry', async () => {
+  const actual = await vi.importActual<typeof import('@/hooks/useDiscoverTelemetry')>(
+    '@/hooks/useDiscoverTelemetry',
+  );
+  return { ...actual, useDiscoverTelemetry: () => ({ ...actual.useDiscoverTelemetry(), emitPanelOpen: mockEmitPanelOpen }) };
 });
 
 const makeArea = (areaKey: string, areaLabel: string, listingCount: number): AreaPoint => ({
@@ -756,5 +772,61 @@ describe('DiscoverRightPanel — 4-level residential hierarchy (Issue #1745)', (
     expect(screen.getByTestId('macro-region-filter-banner')).toBeInTheDocument();
     expect(screen.getByText('North Zone')).toBeInTheDocument();
     expect(screen.queryByText('South Zone')).not.toBeInTheDocument();
+  });
+
+  // ── Issue #2005 (Slice 2 PR6) — Category A: useMountEffect regression ──────
+  // PANEL_OPEN telemetry emits once, on mount, and never again on prop updates.
+  describe('PANEL_OPEN telemetry (Issue #1531) — mount-only', () => {
+    beforeEach(() => {
+      mockEmitPanelOpen.mockClear();
+    });
+
+    it('emits once on mount', () => {
+      renderPanel(<DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} city="udupi" />);
+      expect(mockEmitPanelOpen).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not re-emit when props change on a later re-render', () => {
+      // RTL's `rerender` replaces the WHOLE tree it was given each call, so — unlike
+      // renderPanel()'s one-shot renderWithProviders() — every call here re-supplies
+      // the full provider stack (same instances) so context isn't torn down mid-test.
+      const client = makeTestQueryClient();
+      const fullTree = (ui: React.ReactElement) => (
+        <QueryClientProvider client={client}>
+          <TooltipProvider>
+            <MemoryRouter>
+              <AuthProvider>
+                <AuthModalProvider>
+                  <DiscoverProvider>{ui}</DiscoverProvider>
+                </AuthModalProvider>
+              </AuthProvider>
+            </MemoryRouter>
+          </TooltipProvider>
+        </QueryClientProvider>
+      );
+
+      const { rerender } = render(
+        fullTree(<DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} city="udupi" />),
+      );
+      expect(mockEmitPanelOpen).toHaveBeenCalledTimes(1);
+
+      rerender(
+        fullTree(<DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} city="bangalore" />),
+      );
+      rerender(
+        fullTree(
+          <DiscoverRightPanel
+            {...baseProps}
+            panelContent="area-selected"
+            areas={[makeArea('k1', 'Manipal', 5)]}
+            selectedArea={makeArea('k1', 'Manipal', 5)}
+            areaListings={[]}
+          />,
+        ),
+      );
+
+      // Still just the one mount-time emission — never re-fired on prop updates.
+      expect(mockEmitPanelOpen).toHaveBeenCalledTimes(1);
+    });
   });
 });

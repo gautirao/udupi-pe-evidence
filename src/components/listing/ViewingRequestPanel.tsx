@@ -186,6 +186,14 @@ export function ViewingRequestPanel({ listingId, user }: ViewingRequestPanelProp
   // Restore a previously-picked date/time once the buyer signs in (anon → auth handoff).
   // The stored value contains ONLY date + time slot — no name/email/phone (no PII) — and
   // is removed immediately so it is never replayed twice.
+  //
+  // Trigger keys: [user, listingId] — one-shot restore gated on auth becoming available
+  // for THIS listing. `intentKey`/`minDate`/`maxDate`/`quickIsoSet` are read fresh inside
+  // the effect body (derived from listingId/today's date, recomputed every render) rather
+  // than tracked as separate triggers — including them would re-fire this restore on every
+  // render (quickIsoSet is a brand-new Set each render). `setSelectedDate`/`setSelectedTime`/
+  // `setShowCalendar` are useState setters (stable, exempt). Dep-array/naming only — no
+  // authorization logic changed.
   useEffect(() => {
     if (!user) return;
     try {
@@ -203,8 +211,7 @@ export function ViewingRequestPanel({ listingId, user }: ViewingRequestPanelProp
     } catch {
       // sessionStorage unavailable/corrupt (private mode etc.) — buyer just re-picks.
     }
-    // Intent restore is a one-shot effect gated on auth becoming available for this listing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see trigger-key note above
   }, [user, listingId]);
 
   function selectDate(iso: string) {
