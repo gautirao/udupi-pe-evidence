@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useParams, useSearchParams } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthModalProvider } from "@/contexts/AuthModalContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -12,6 +12,7 @@ import { Loader2 } from "lucide-react";
 import { DISTRICT_TO_CITY_SLUG } from "@/lib/localityUtils";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { DiscoverProvider } from "@/features/discover/context/DiscoverContext";
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 
 // Eagerly loaded — these are on the critical path for first paint
 import MapDiscovery from "./pages/MapDiscovery";
@@ -113,20 +114,26 @@ const App = () => (
             <AppCacheSync />
             <Suspense fallback={<PageLoader />}>
             <Routes>
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/auth/callback" element={<AuthCallback />} />
-              <Route path="/" element={<LandingPage />} />
-              <Route
-                path="/discover"
-                element={
-                  <DiscoverProvider>
-                    <MapDiscovery />
-                  </DiscoverProvider>
-                }
-              />
-              <Route path="/listing/:id" element={<ListingDetail />} />
-              <Route path="/trends" element={<AppLayout><Trends /></AppLayout>} />
-              <Route path="/trends/:citySlug/areas/:areaSlug" element={<AppLayout><TrendsAreaResolved /></AppLayout>} />
+              <Route element={<RouteErrorBoundary group="public"><Outlet /></RouteErrorBoundary>}>
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/listing/:id" element={<ListingDetail />} />
+                <Route path="/trends" element={<AppLayout><Trends /></AppLayout>} />
+                <Route path="/trends/:citySlug/areas/:areaSlug" element={<AppLayout><TrendsAreaResolved /></AppLayout>} />
+                <Route path="/notifications" element={<Navigate to="/" replace />} />
+              </Route>
+              <Route element={<RouteErrorBoundary group="discover"><Outlet /></RouteErrorBoundary>}>
+                <Route
+                  path="/discover"
+                  element={
+                    <DiscoverProvider>
+                      <MapDiscovery />
+                    </DiscoverProvider>
+                  }
+                />
+              </Route>
+              <Route element={<RouteErrorBoundary group="broker"><Outlet /></RouteErrorBoundary>}>
               {/* Onboarding */}
               <Route
                 path="/onboarding"
@@ -272,7 +279,8 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              <Route path="/notifications" element={<Navigate to="/" replace />} />
+              </Route>
+              <Route element={<RouteErrorBoundary group="admin"><Outlet /></RouteErrorBoundary>}>
               {/* Admin Routes */}
               <Route
                 path="/admin/groups"
@@ -386,7 +394,10 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              <Route path="*" element={<NotFound />} />
+              </Route>
+              <Route element={<RouteErrorBoundary group="public"><Outlet /></RouteErrorBoundary>}>
+                <Route path="*" element={<NotFound />} />
+              </Route>
             </Routes>
           </Suspense>
           </AuthModalProvider>
