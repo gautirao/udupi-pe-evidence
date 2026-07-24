@@ -47,6 +47,9 @@ const mapStub = vi.hoisted(() => ({
     getWest: () => 74,
   })),
   getContainer: vi.fn(() => document.body),
+  getSize: vi.fn(() => ({ x: 1024, y: 768 })),
+  containerPointToLatLng: vi.fn(() => ({ lat: 13.355, lng: 74.80 })),
+  latLngToContainerPoint: vi.fn(() => ({ x: 500, y: 400 })),
   on: vi.fn(),
   off: vi.fn(),
   once: vi.fn(),
@@ -71,6 +74,7 @@ vi.mock('leaflet', () => ({
         }),
         addTo: vi.fn(() => markerObj),
         remove: vi.fn(),
+        getElement: vi.fn(() => null),
       };
       return markerObj;
     }),
