@@ -1,0 +1,30 @@
+ESLint: 11 errors, 92 warnings in 54 files
+Top rules:
+  react-refresh/only-export-components (56x)
+  @typescript-eslint/no-explicit-any (11x)
+  react-hooks/exhaustive-deps (8x)
+
+Top files:
+  _ds_bundle.js (13 issues)
+  src/pages/MapDiscovery.tsx (13 issues)
+    react-refresh/only-export-components (11)
+  src/components/auth/__tests__/AuthModalLanding.test.tsx (5 issues)
+    @typescript-eslint/no-explicit-any (5)
+  src/components/map/PropertyMap.tsx (5 issues)
+    react-refresh/only-export-components (5)
+  src/pages/broker/editListing/chipGroups.tsx (5 issues)
+    react-refresh/only-export-components (5)
+  src/features/discover/state/DiscoverDataSourceContext.tsx (4 issues)
+    react-refresh/only-export-components (4)
+  src/components/discover/PropertyCard.tsx (3 issues)
+    react-refresh/only-export-components (3)
+  src/components/discover/SchoolRadiusMapOverlay.tsx (3 issues)
+    react-refresh/only-export-components (3)
+  src/components/broker/ChipGroup.tsx (2 issues)
+    react-refresh/only-export-components (2)
+  src/components/discover/ActiveContextChips.tsx (2 issues)
+    react-hooks/exhaustive-deps (2)
+
+… +44 more files
+  [see remaining: tail -n +11 ~/Library/Application Support/rtk/tee/1784883804_eslint-files.log]
+[full output: ~/Library/Application Support/rtk/tee/1784883804_lint.log]

@@ -4,6 +4,26 @@
 **Baseline:** `main` @ `ce1d6aa1`
 **Date:** 2026-07-23 · **Revised:** 2026-07-24 (rev 2)
 
+> ### ✅ Phase 0 complete (2026-07-24, `main` @ `475785d0`)
+>
+> Phase 0 — audit refresh, baseline stabilisation (merged as **PR #1982**), and the Phase 0B
+> doc-correction pass — is complete. Two preconditions this roadmap was written against have
+> changed and are corrected inline below with dated **"Phase 0B correction"** notes:
+> - **#1955 is merged** (PR #1978, closed #1955). Contrary to the pre-merge inspection in the
+>   audit's §5, the merged PR shipped **~2,500 LOC of frontend**. Every **`AFTER-1955`** item is
+>   now **UNBLOCKED**; the tags are retained as historical record of the sequencing rationale.
+> - **The `ce1d6aa1` baselines have moved** to **31 errors / 10 files** (tsc), **5 failed / 2
+>   files, 4,635 total** (vitest), **103 problems / 54 files** (eslint). PR #1978 introduced a
+>   12-site `DiscoverDataSourceProviderProps` `children`-required test-mock regression that was
+>   initially miscounted as 8 errors and briefly proposed for the accepted baseline — corrected
+>   to its true count of 12 and fixed by **PR #1984** before this baseline was seeded, per the
+>   rule that newly introduced regressions must be fixed first, not absorbed into debt. Full
+>   fingerprints: `docs/audit/evidence/phase0-baseline-stabilisation/README.md`.
+>
+> **Slice order (1A → 1B → 2 → 3 → 4) was re-verified post-merge and holds.** Slice 1A is the next
+> unit of work — start with §1A.1 (minification), then §1A.4 (main is already green against the
+> documented 5-failure baseline).
+
 ## Governing constraints
 
 - **No rewrite.** Every item is an in-place transformation of existing code.
@@ -11,12 +31,20 @@
 - **No feature regressions.** Behaviour is preserved unless a slice explicitly says otherwise.
 - **Every slice is independently mergeable** and independently valuable.
 - **Delete no tests to go green.** Repair assertions; never lower the bar.
-- **🚧 Do not interfere with #1955.** It is **actively being implemented** in a separate session
-  with an **uncommitted working tree**. #1956 is a **planned next milestone issue, not yet
-  started** (verified: no branch, no worktree). #1960 is a **future issue**.
+- **✅ #1955 — RESOLVED 2026-07-24 (merged via PR #1978).** *(Was: "🚧 Do not interfere with
+  #1955 … actively being implemented … uncommitted working tree." That constraint is now
+  satisfied — #1955 is merged, so it no longer blocks anything.)* #1956 is still a **planned next
+  milestone issue, not yet started** (verified at audit time: no branch, no worktree). #1960 is a
+  **future issue**.
 - **♿ Accessibility belongs to #1960.** No accessibility work is scheduled before Slice 4.
 
 ## Sequencing rule (deterministic)
+
+> ### ✅ RESOLVED 2026-07-24 — precondition satisfied
+> **#1955 is committed and merged (PR #1978).** The rule below is now **satisfied**; Slice 2,
+> mass Discover moves, and broad frontend restructuring are **unblocked**. The rule and its
+> rationale are retained **unchanged** — they are methodologically correct and record why
+> sequencing was designed this way; only the precondition has now been met.
 
 ```text
 Do not begin Slice 2, mass Discover moves, or other broad frontend
@@ -53,14 +81,26 @@ fails.
 
 ## Baseline measurements (re-run these to verify each slice)
 
+> **Phase 0B correction (2026-07-24, `main` @ `475785d0`).** The `ce1d6aa1` figures below are
+> superseded by the post-#1978/#1982/#1984 baseline: **31 errors / 10 files** (tsc), **5 failed / 2
+> files, 4,635 total** (vitest), **103 problems / 54 files** (eslint, 11 err / 92 warn). The tsc
+> figure reflects PR #1984's fix of a 12-site `DiscoverDataSourceProviderProps` regression
+> introduced by PR #1978 (initially miscounted as 8 errors and briefly, incorrectly, proposed
+> as accepted baseline debt before being corrected and fixed). Each slice must hold or shrink
+> **that** baseline, not the one below. Full per-error fingerprints and the accepted-failure
+> list: `docs/audit/evidence/phase0-baseline-stabilisation/README.md`.
+
 ```bash
-npx tsc -p tsconfig.app.json --noEmit    # baseline: 42 errors in 17 files
-npx vitest run                            # baseline: 4552 tests, 10 FAILED, 7 suites
-npx eslint .                              # baseline: 97 problems (11 err, 86 warn)
+npx tsc -p tsconfig.app.json --noEmit    # ce1d6aa1: 42 errors in 17 files  →  475785d0: 31 / 10
+npx vitest run                            # ce1d6aa1: 4552 tests, 10 FAILED  →  475785d0: 4635, 5 FAILED / 2 files
+npx eslint .                              # ce1d6aa1: 97 problems (11/86)     →  475785d0: 103 (11/92) / 54 files
 npx vite build                            # baseline: 5.42 MB JS, entry 1529 kB / 298 kB gz
 ```
 
 ## Slice map
+
+*The slice order (1A → 1B → 2 → 3 → 4) was **re-verified after #1955 merged (PR #1978)** during
+Phase 0 and holds unchanged — no resequencing is warranted by the merged diff.*
 
 | Slice | Theme | Business/visual behaviour change | UI change | Effort | Regression risk | Coordination |
 |---|---|---|---|---|---|---|
@@ -125,20 +165,21 @@ is yes, no later slice can be verified. Nothing in 1A touches feature code.*
 | | |
 |---|---|
 | **Problem** | Nothing typechecks this codebase. `npm run build` is `vite build`, which uses esbuild transpile-only. |
-| **Evidence** | `package.json:6-25` contains no `typecheck` script. `npx tsc -p tsconfig.app.json --noEmit` → **42 errors in 17 files** on `main`. Top codes: `TS2769` (11), `TS2345` (10), `TS2339` (10), `TS2740` (7), `TS2322` (3). |
+| **Evidence** | `package.json:6-25` contains no `typecheck` script. `npx tsc -p tsconfig.app.json --noEmit` → **42 errors in 17 files** on `main` at `ce1d6aa1`. Top codes: `TS2769` (11), `TS2345` (10), `TS2339` (10), `TS2740` (7), `TS2322` (3). **Phase 0B correction (`475785d0`): now 31 errors / 10 files**, top codes `TS2339` (10), `TS2345` (10), `TS2740` (7), `TS2322` (3), `TS2352` (1) — PR #1978 introduced a production `useCityLaunchNavigation.ts` TS2554 (fixed by PR #1982) and a 12-site `DiscoverDataSourceProviderProps` `children`-required test-mock regression (initially miscounted as 8 errors and briefly proposed for the accepted baseline before being corrected to 12 and fixed by PR #1984, per the rule that regressions are fixed before a baseline is seeded). Seed the fingerprint baseline from the **31-fingerprint** table in `docs/audit/evidence/phase0-baseline-stabilisation/README.md`. |
 | **Why it matters** | These are not stylistic. `usePropertyListings.ts:504` shows `"agricultural_land"` is not assignable to the accepted `PropertyType` union — for a property family the product actively ships. `usePropertyListings.ts:454-458` shows Supabase generated types have drifted (`column 'area_key' does not exist on 'property_listings'`). These are live correctness risks that no gate can currently see. |
 | **Risk** | Low. Adding a script changes nothing until it is wired into CI. |
 | **Effort** | **1 day** for the gate; **+1 day** for the Supabase drift cluster (see 1A.3). |
 | **Regression risk** | **None to runtime.** Purely additive tooling. |
 | **Benefit** | Restores the single most valuable static gate. Prerequisite for Slice 4. |
-| **Coordination** | **COORDINATE.** The fingerprint tooling is logically independent of #1955 — it reads types, it does not change them. But **wiring it into CI changes what merges**, and #1955 has 19 uncommitted paths that have never been typechecked. Introducing a gate that could block their merge without warning is a coordination failure, not a technical one. Agree the switch-on point with active sessions, and seed the baseline from a commit they have seen. **This audit session must not implement it.** |
+| **Coordination** | **COORDINATE.** The fingerprint tooling is logically independent of #1955 — it reads types, it does not change them. But **wiring it into CI changes what merges**, and #1955 has 19 uncommitted paths that have never been typechecked. Introducing a gate that could block their merge without warning is a coordination failure, not a technical one. Agree the switch-on point with active sessions, and seed the baseline from a commit they have seen. **This audit session must not implement it.** *(Phase 0B: #1955's paths are now merged and typechecked into the `475785d0` baseline, so the specific "block their merge" risk for #1955 is moot; seed from `475785d0`.)* |
 
 #### Use a fingerprint baseline, not an error count
 
 **A count-based ratchet ("fail if > 42") is unsound.** It permits a *newly introduced* type
 error to pass silently whenever an unrelated old error is coincidentally fixed in the same PR:
 the count nets to 42, CI goes green, and a new defect has entered `main`. On a 42-error baseline
-with 17 affected files, that is not a theoretical edge case.
+with 17 affected files (**31 / 10 as of `475785d0` — see the correction above**), that is not a
+theoretical edge case.
 
 **Record a set of stable per-error fingerprints instead.** CI fails on any fingerprint **not
 present in the baseline**, irrespective of the total.
@@ -168,7 +209,8 @@ fingerprint = sha1( relativeFilePath + " " + tsErrorCode + " " + normalisedMessa
 **Migration.**
 1. Add `"typecheck": "tsc -p tsconfig.app.json --noEmit"`.
 2. Add `scripts/typecheck-baseline.mjs` producing/comparing `typecheck-baseline.json`
-   (42 fingerprints), supporting `--update` (explicit, reviewable) and `--prune` (auto-drop fixed).
+   (**31 fingerprints** as of `475785d0`; 42 at `ce1d6aa1`), supporting `--update` (explicit,
+   reviewable) and `--prune` (auto-drop fixed).
 3. CI runs the comparator, not a bare count. **A baseline addition requires a reviewer to
    approve a diff in a committed JSON file** — which is the point: adding debt becomes visible.
 4. Publish the remaining-fingerprint count as a build annotation so the trend is visible.
@@ -189,9 +231,13 @@ build it once here.
 | **Effort** | **1 day** for regeneration; **+1 day** for the `PropertyType` union and its regression tests. |
 | **Regression risk** | **Low** for regeneration. **Medium** for the union change — it is potentially behaviour-affecting. |
 | **Benefit** | Removes the highest-signal cluster of real drift. |
-| **Coordination** | 🚧 **AFTER-1955.** |
+| **Coordination** | 🚧 **AFTER-1955 — ✅ UNBLOCKED 2026-07-24** (#1955 merged via PR #1978). V121 has now landed, so regenerate `types.ts` against the **`475785d0`** schema; the "would go stale on merge" hazard below is now resolved rather than pending. |
 
 ### Why this must wait for #1955
+
+> **✅ Phase 0B: UNBLOCKED.** #1955 is merged and V121 is on `main`. The reasoning below is retained
+> as the rationale for *why* this waited; the precondition (V121 landed) is now met. Regenerate
+> against `475785d0`, not against a pre-#1955 schema.
 
 **#1955 adds database migrations.** Its working tree contains
 `backend/src/main/resources/db/migration/V121__navigation_nodes_and_sandbox.sql`, plus a whole
@@ -233,9 +279,20 @@ differs".
 
 ### 1A.4 — Get `main` green and keep it green
 
+> **✅ Phase 0B correction (2026-07-24, `475785d0`).** The originally-cited failures are
+> **resolved**: PR #1982 fixed both `tests/discover/panels-parity.test.tsx` class-string
+> assertions (cause (a) below) and the four `CityLaunchPreview.test.tsx` tests. `main` is now at a
+> **5-failure / 2-file baseline** (`PropertyMap.jitterDiagnostic` Leaflet-mock cluster + one
+> `useCityLaunchNavigation` zod-validation test — both documented pre-existing debt in
+> `docs/audit/evidence/phase0-baseline-stabilisation/README.md` §2). **The item itself still
+> stands** as an ongoing exit criterion — "keep `main` green" now means *do not regress below the
+> documented 5-failure baseline*, and the two remaining accepted failures are candidates to fix
+> here. Cause (a)'s remediation pattern (semantic over class-string assertions) is still the
+> correct approach for the panel re-skins #1956 will bring.
+
 | | |
 |---|---|
-| **Problem** | 10 unit tests fail on `main`, in 7 suites. |
+| **Problem** | 10 unit tests fail on `main`, in 7 suites. *(Historical — `ce1d6aa1`. Now 5 / 2 files; see correction above.)* |
 | **Evidence** | `npx vitest run` → 4552 tests, **10 failed**, 7 suites. Reproduced: `npx vitest run tests/discover/panels-parity.test.tsx` → **exit 1**, 2 failed / 8 passed. Two distinct causes:<br>**(a)** `tests/discover/panels-parity.test.tsx:259` — `expect(band.className).toContain('bg-card')` fails against actual `'rounded-xl border border-slate-800 bg-[#0F172A] …'`, broken by the intended re-skin in `6ae834cb`.<br>**(b)** `Error: useAuth must be used within an AuthProvider` via `PropertyCard.tsx:147 → useSavedListings.ts:57 → AuthContext.tsx:222` — the suite hand-rolls a render instead of using `src/test/renderWithProviders.tsx`.<br>Plus unhandled `TypeError: map.getSize is not a function` at `AreaMarkerLayer.tsx:486` from an incomplete Leaflet mock. |
 | **Why it matters** | Red-on-`main` is the most corrosive state a suite can be in. Once red is normal, 4,552 tests stop being a gate no matter how many there are. |
 | **Risk** | Low — but there is a real temptation to delete the failing assertions. Do not. |
@@ -260,29 +317,33 @@ differs".
 | **Regression risk** | **Very low.** |
 | **Behaviour** | **No intended business or visual behaviour change** in the success path. It **intentionally changes failure behaviour**: a render error that today blanks the whole application will instead be contained to one route group and surfaced with route attribution in Sentry. That is the point of the change, and it must be described as a change rather than as neutral. |
 | **Benefit** | A crash in Admin no longer takes down Discover. **#1955's City Launch Preview is a natural beneficiary** — a preview-rendering failure against sandbox rows stops blanking the admin app. |
-| **Coordination** | 🚧 **AFTER-1955** — unless the final #1955 diff proves no overlap. |
+| **Coordination** | 🚧 **AFTER-1955 — ✅ UNBLOCKED / moot 2026-07-24.** #1955 is merged and the anticipated `App.tsx` overlap **did not materialize** — `git diff --name-only ce1d6aa1 475785d0` shows `App.tsx` was **not touched** by PR #1978. Safe to schedule in Slice 1A. |
 
-> **Why this is not "certainly disjoint".** Rev 2 called this additive and safe. That was
-> asserted, not verified. **`App.tsx` is a plausible overlap point:** #1955's Definition of Done
-> requires City Launch Preview to support "tree, real journey, direct search, diff, validation",
-> and the existing route
-> `/admin/city-launch/:cityId/preview/:revisionId` (`App.tsx:381-388`) is where that lands.
-> Extending it may well add or restructure routes in the same file this item wraps.
+> **Why this was tagged "not certainly disjoint" — and why the caveat is now spent.** Rev 2 called
+> this additive and safe; that was asserted, not verified, so the item was tagged AFTER-1955
+> because **`App.tsx` was a plausible overlap point**: #1955's Definition of Done required City
+> Launch Preview to support "tree, real journey, direct search, diff, validation" against the
+> existing route `/admin/city-launch/:cityId/preview/:revisionId` (`App.tsx:381-388`).
 >
-> Today's working tree shows `src/` clean, so there is **no current** overlap — but that is a
-> snapshot of work that has not reached its frontend phase. **Schedule after #1955, or after
-> inspecting its final diff and confirming `App.tsx` is untouched.**
+> **✅ Phase 0B outcome: the overlap did not happen.** The merged PR #1978 extended City Launch
+> Preview **without editing `App.tsx`** (verified via `git diff --name-only ce1d6aa1 475785d0 --
+> src/` — no `App.tsx`, and no build/lint/tsconfig files either). The AFTER-1955 tag is kept as
+> historical record of the coordination reasoning, but it is **now moot**: this item is disjoint
+> from the merged #1955 and can proceed in Slice 1A. Re-confirm `App.tsx` at execution time as a
+> matter of hygiene, not because overlap is expected.
 
 **Slice 1A total: ~5 days** (Supabase item now split into regeneration + union work).
 **Business/visual behaviour change: none.** Delivery/runtime characteristics change in §1A.1 and
 failure containment changes in §1A.5, both as explicitly described.
 
 **Coordination summary:** §1A.1 CONFIRM-FIRST · §1A.2 COORDINATE (not this session) ·
-§1A.3 **AFTER-1955** · §1A.4 CONFIRM-FIRST · §1A.5 **AFTER-1955**.
+§1A.3 ~~AFTER-1955~~ **✅ unblocked** · §1A.4 CONFIRM-FIRST · §1A.5 ~~AFTER-1955~~ **✅ unblocked
+(App.tsx untouched by #1978)**. *(Phase 0B: #1955 merged, so both AFTER-1955 items are now clear.)*
 
-**Exit criteria:** `npx vitest run` exits 0 · fingerprint baseline seeded **after #1955 merges**
-and enforced in CI · entry chunk ≤ 210 kB gzipped · route error boundaries in place ·
-`agricultural_land` mapping/filter/query regression tests green.
+**Exit criteria:** `npx vitest run` exits 0 against the documented 5-failure baseline · fingerprint
+baseline seeded **(now that #1955 has merged — seed from `475785d0`)** and enforced in CI · entry
+chunk ≤ 210 kB gzipped · route error boundaries in place · `agricultural_land` mapping/filter/query
+regression tests green.
 
 ---
 
@@ -290,25 +351,41 @@ and enforced in CI · entry chunk ≤ 210 kB gzipped · route error boundaries i
 
 *Valuable, low-risk cleanup. Independent of 1A, and may slip without blocking anything.*
 
-### 1B.1 — Delete verified-dead code (1,376 LOC)
+### 1B.1 — Delete verified-dead code (~298 LOC)
+
+> **⚠️ Phase 0B correction (2026-07-24) — the deliverable dropped from 1,376 LOC to ~298 LOC.**
+> Re-verified importer analysis found **live production importers** for two modules this item
+> previously listed as dead. **They are removed from the deletion list entirely** (see the evidence
+> table below):
+> - `components/discover/panels/SchoolsInAreaPanel.tsx` (710 LOC) — **NOT dead.** Imported live by
+>   `SchoolJourneyPanels.tsx:35` (`import { SchoolsInAreaPanel as RealSchoolsInAreaPanel } from
+>   './SchoolsInAreaPanel'`).
+> - `components/map/filters/*.tsx` (6 files, 312 LOC) — **NOT dead.** All six imported by
+>   `MapFilters.tsx:8-13`, which is imported live by `MapDiscovery.tsx:8`.
+>
+> **This is precisely the failure mode the six-check protocol below exists to catch** — a
+> static-specifier scan on `main` that missed a re-export/aliased import and a page-level chain.
+> The protocol is **validated as effective and must be kept**; it is the deletion *list* that was
+> wrong, not the method.
 
 | | |
 |---|---|
-| **Problem** | Dead and duplicated modules, including two live components sharing one name. |
-| **Evidence** | Importer counts across all 427 production files:<br>• `components/discover/panels/SchoolsInAreaPanel.tsx` — **710 LOC, 0 importers**. Superseded by `SchoolJourneyPanels.tsx`, which exports an identically-named `SchoolsInAreaPanel`.<br>• `components/map/PropertyDetailModal.tsx` — **294 LOC, 0 importers**.<br>• `components/map/filters/*.tsx` — **6 files, 312 LOC, 0 importers each**.<br>• `components/ui/use-toast.ts` — **0 importers** (all 40 consumers use `@/hooks/use-toast`).<br>• `hooks/use-mobile.tsx` (1 importer) vs `hooks/useMediaQuery.ts` (1 importer) — one responsibility, two hooks. |
-| **Why it matters** | Two live components named `SchoolsInAreaPanel` is an active navigation hazard: a developer can spend an afternoon editing the unreachable one. The 7 dead files under `components/map/` sit **directly in the directory #1956 will be working in** — removing them shrinks its search space. |
+| **Problem** | Dead modules — after correction, two confirmed: `PropertyDetailModal` and the `ui/use-toast` alias. |
+| **Evidence** | Importer counts across all 427 production files, **re-verified 2026-07-24**:<br>• `components/map/PropertyDetailModal.tsx` — **294 LOC, 0 importers** (incl. tests). ✅ Confirmed dead.<br>• `components/ui/use-toast.ts` — **4 LOC, 0 importers** (all 40 consumers use `@/hooks/use-toast`). ✅ Confirmed dead.<br>• ~~`components/discover/panels/SchoolsInAreaPanel.tsx`~~ — **REMOVED: live importer `SchoolJourneyPanels.tsx:35`.**<br>• ~~`components/map/filters/*.tsx` (6 files)~~ — **REMOVED: all imported by `MapFilters.tsx:8-13` → `MapDiscovery.tsx:8`.**<br>• `hooks/use-mobile.tsx` (1 importer) vs `hooks/useMediaQuery.ts` (1 importer) — one responsibility, two hooks. **Consolidation candidate, not dead** — out of scope for deletion here, unaffected by the correction. |
+| **Why it matters** | The `SchoolsInAreaPanel` name collision is still a navigation hazard (two live components, same name) — but the fix is renaming/disambiguation, not deletion. Removing `PropertyDetailModal` still shrinks the `components/map/` search space #1956 will work in. |
 | **Risk** | **Low, not zero.** See the accuracy note below. |
-| **Effort** | **1 day.** |
-| **Regression risk** | **Low.** A wrong deletion usually fails typecheck immediately — but not in the dynamic-import or route-registration cases, which is why the protocol below exists. |
-| **Benefit** | −1,376 LOC. Removes the most confusing thing a newcomer will hit. |
-| **Coordination** | **CONFIRM-FIRST** — the six-check protocol below **includes** checking active #1955 changes. |
+| **Effort** | **0.25 day** (two files, not nine). |
+| **Regression risk** | **Low.** A wrong deletion usually fails typecheck immediately — but not in the dynamic-import or route-registration cases, which is why the protocol below exists **and why it just caught two false-dead entries**. |
+| **Benefit** | −~298 LOC, and — more valuable — a demonstrated-effective deletion protocol. |
+| **Coordination** | **CONFIRM-FIRST** — the six-check protocol below **includes** re-verifying #1955 (now merged; re-check against `475785d0`). |
 
-> **Accuracy correction.** Rev 2 claimed "zero importers means zero conflict surface by
-> definition." **That is wrong and is withdrawn.** A static scan of production `from '...'`
-> specifiers establishes **low current reachability risk**, not deadness. It does not see test
-> imports, dynamic `import()`, route registration, code generation, reflection, or — critically —
-> **code on an unmerged branch**. #1955's uncommitted tree is exactly the case a static scan of
-> `main` cannot observe.
+> **Accuracy correction (retained from rev 2, reinforced by Phase 0B).** Rev 2 claimed "zero
+> importers means zero conflict surface by definition." **That is wrong and is withdrawn.** A
+> static scan of production `from '...'` specifiers establishes **low current reachability risk**,
+> not deadness. It does not reliably see aliased re-exports, test imports, dynamic `import()`,
+> route registration, code generation, or reflection. The Phase 0B correction above — two modules
+> mislabelled dead because a `... as ...` re-export and a page-level import chain were missed — is
+> the concrete proof of exactly this gap.
 
 ### Required six-check protocol, per module, before deletion
 
@@ -323,10 +400,11 @@ and enforced in CI · entry chunk ≤ 210 kB gzipped · route error boundaries i
 
 Then: delete → `npm run typecheck` → `npx vitest run` → **one commit per module** for clean revert.
 
-**Highest-attention candidates.** `components/map/filters/*` (6 files) are named like a registry
-group and are exactly the shape that a glob or string-keyed lookup would resolve — check 6
-matters most there. `PropertyDetailModal.tsx` is the shape that a lazy route would reference —
-check 4 matters most there.
+**Highest-attention candidate (post-correction).** `PropertyDetailModal.tsx` is the shape that a
+lazy route would reference — **check 4 matters most there**. *(The `components/map/filters/*` group
+is no longer a deletion candidate — Phase 0B found it live via `MapFilters.tsx`. It stands as the
+cautionary example for checks 1–2: a "registry-shaped" directory that looks glob-resolved but is
+actually a plain named-import chain a `main`-only specifier scan missed.)*
 
 ---
 
@@ -356,7 +434,7 @@ check 4 matters most there.
 | Add `"test:coverage"` script | `@vitest/coverage-v8` is a devDependency with no script invoking it | 0.25 d | **CONFIRM-FIRST** — purely additive script |
 | Point Playwright `baseURL` at localhost by default | `playwright.config.ts:35` defaults to `https://udupi-property-explorer.pages.dev` — a bare `npx playwright test` tests **production**, not the branch | 0.25 d | **COORDINATE or AFTER-1955** — see note below |
 | Add `retries: 1` for E2E | `playwright.config.ts:29` → `retries: 0` on a 686-test suite driving a real map | 0.25 d | **COORDINATE** — changes E2E timing and pass/fail semantics mid-run |
-| Consolidate `tests/` into `src/**/__tests__/` | Two test roots; the failing parity suite lives in the minority one | 1 d | **AFTER-1955** — moves test files; defer while any session may add tests |
+| Consolidate `tests/` into `src/**/__tests__/` | Two test roots; the failing parity suite lives in the minority one | 1 d | ~~AFTER-1955~~ **✅ UNBLOCKED** (#1955 merged) — still CONFIRM-FIRST against any other active session before moving test files |
 | Update `browserslist` data | Build warns: "caniuse-lite is 13 months old" | 0.25 d | **CONFIRM-FIRST** |
 
 > **On the Playwright `baseURL` change.** Rev 2 marked this "safe". It is not purely safe:
@@ -379,8 +457,13 @@ exists · Playwright default announced or deferred.
 
 # SLICE 2 — State, Navigation, URL, and Side-Effect Ownership
 
+> **✅ UNBLOCKED 2026-07-24 — #1955 has merged (PR #1978).** The whole slice was gated **AFTER-1955**;
+> that precondition is now met, so §2.1–§2.4 are cleared to start (after Slice 1A). The AFTER-1955
+> tags on each item below are retained as historical record. The **"completes before #1956 starts"**
+> half of the window is still live — #1956 remains planned/not-started.
+
 > **Depends on Slice 1A** (green suite + typecheck gate are the safety net for everything here).
-> **🚧 Starts only after #1955 merges. Completes before #1956 starts.**
+> **🚧 Starts only after #1955 merges** *(✅ satisfied)* **. Completes before #1956 starts.**
 
 Behaviour-neutral internally: no route, URL parameter, or user-visible state transition changes.
 
@@ -405,6 +488,13 @@ extends prepared seams instead of cutting new ones through a 1,106-line function
 | **Coordination** | 🚧 **AFTER-1955.** See the deterministic rule below. |
 
 ### Why this waits for #1955 — deterministic rule, not an estimate
+
+> **✅ Phase 0B: precondition met (2026-07-24).** #1955 is merged via **PR #1978**, which shipped
+> ~2,500 LOC of frontend (`cityLaunchPreview/*`, `navigationTreeUtils.ts`,
+> `DiscoverDataSourceContext.tsx`, `useCityLaunchNavigation.ts`, `navigationHierarchy.ts`,
+> `CityLaunchPreview.tsx` — audit §5 RESOLVED box). The rule and reasoning below are retained
+> unchanged as the record of *why* Slice 2 waited; the gate is now open. Re-run the mandatory
+> re-measurement (audit §5 / sequencing section) against `475785d0` before the first move.
 
 ```text
 Do not begin Slice 2, mass Discover moves, or other broad frontend
@@ -738,17 +828,26 @@ The highest-value, highest-risk slice. Every item is scoped to one component at 
 
 ## 3.2 — Validate API responses at the boundary ⭐ *foundation — before #1956*
 
+> **✅ Phase 0B correction (2026-07-24).** zod is no longer single-file and this slice is **partially
+> pre-built**. PR #1978 shipped `src/lib/schemas/navigationHierarchy.ts` (563 LOC of Zod schemas)
+> consumed via `useCityLaunchNavigation.ts` — the `getValidated`-style pattern **already exists for
+> the navigation endpoints** (`/navigation/{nodeKey}`, `/areas/{areaKey}/navigation-path`). So this
+> item's **remaining scope shrinks** from "start from zero" to: add the shared `api.getValidated`
+> helper and write schemas for the **other** high-traffic endpoints — **discover listings, area
+> groups, school search, listing detail** — plus fold the navigation schemas into the same helper.
+> Coordination is now **✅ UNBLOCKED** (#1955 merged); land it before #1956 starts.
+
 | | |
 |---|---|
 | **Problem** | Every backend response is trusted and unchecked. |
-| **Evidence** | `src/lib/api.ts:76-78`: `const text = await response.text(); if (!text) return undefined as T; return JSON.parse(text) as T;` — `as T` is an unverifiable assertion. Combined with `strictNullChecks: false`, nothing checks any response shape. `zod@3.25.76` is a **production dependency used in exactly one file**: `src/lib/schemas/auth.ts`. |
+| **Evidence** | `src/lib/api.ts:76-78`: `const text = await response.text(); if (!text) return undefined as T; return JSON.parse(text) as T;` — `as T` is an unverifiable assertion. Combined with `strictNullChecks: false`, nothing checks any response shape. `zod@3.25.76` was a **production dependency used in exactly one file**: `src/lib/schemas/auth.ts` — **now ≥3 files** post-#1978 (see correction above). |
 | **Why it matters** | The only finding whose failure mode is **silent incorrect data** rather than a crash. A backend field rename surfaces as `undefined` deep inside a component, far from its cause. The 10 `TS2339` Supabase-drift errors are this exact class, already occurring. |
 | **Risk** | Low-Medium. A schema stricter than reality turns working requests into errors — so parse permissively and log before enforcing. |
 | **Effort** | **4 days** for the top ~10 endpoints. |
 | **Migration** | 1. Add `api.getValidated<T>(path, schema)` alongside the existing methods — **do not change `api.get`**. 2. Roll out endpoint by endpoint, highest-traffic first (discover listings, area groups, school search, listing detail). 3. **Ship in log-only mode first**: on `safeParse` failure, report to Sentry and return the raw payload. 4. After a soak period with no unexpected reports, promote to throwing. |
 | **Regression risk** | **Low**, given the log-only phase. |
 | **Benefit** | Type assertions become type *guarantees* at the one place it matters. |
-| **Coordination** | 🚧 **AFTER-1955**, and land before #1956 starts. ⭐ #1955 introduces two typed endpoints — `/navigation/{nodeKey}` and `/areas/{areaKey}/navigation-path` — returning nested ancestry, `nextLevelType`, bounds, and merged dynamic counts. That is exactly the nested contract where an unvalidated `as T` fails silently. #1956 consumes them. **Give #1956 `getValidated` and it can define schemas for the new endpoints as it writes them** — far cheaper than retrofitting. Purely additive; conflicts with neither issue. |
+| **Coordination** | ~~AFTER-1955~~ **✅ UNBLOCKED** (#1955 merged); land before #1956 starts. ⭐ #1955's two typed endpoints — `/navigation/{nodeKey}` and `/areas/{areaKey}/navigation-path` — shipped **with Zod schemas already** (`navigationHierarchy.ts`); they are exactly the nested contract where an unvalidated `as T` fails silently. #1956 consumes them, and can reuse those schemas via `getValidated` rather than retrofitting. Purely additive; conflicts with neither issue. |
 
 ---
 
@@ -944,6 +1043,13 @@ Consequences to plan for:
 
 # Roadmap sequencing
 
+> ### ✅ Phase 0B status (2026-07-24): we are now at the "AFTER #1955 MERGES" phase
+> The **NOW** and **AFTER #1955 HAS A COMMITTED IMPLEMENTATION** phases below are **done**: #1955
+> merged via PR #1978, the diff was inspected (~2,500 LOC frontend — audit §5 RESOLVED box), and
+> the affected measurements were re-run into the `475785d0` baseline
+> (`docs/audit/evidence/phase0-baseline-stabilisation/README.md`). The next action is **Slice 1A**.
+> The phase structure below is retained as the record of how this point was reached.
+
 ## The order
 
 ```text
@@ -1010,10 +1116,11 @@ be re-verified before any slice acts on them.
 
 ## Why this order
 
-**#1955 first — by deterministic rule, not by estimate.** Its branch is verified 100% backend
-today (19 changed paths, 0 frontend, 0 commits ahead), so rev 2's merge-conflict argument is
-withdrawn. That evidence establishes only that there is **no current textual overlap** — not that
-concurrent refactoring is safe. What governs instead is the cost asymmetry (§2.1): shims and
+**#1955 first — by deterministic rule, not by estimate.** *(Phase 0B: #1955 has now merged via
+PR #1978, so "first" is satisfied.)* Its **pre-merge** branch was verified 100% backend (19 changed
+paths, 0 frontend, 0 commits ahead), so rev 2's merge-conflict argument was withdrawn — but the
+**merged** PR ultimately shipped ~2,500 LOC of frontend, which is exactly why that snapshot
+established only "no current textual overlap" and never "concurrent refactoring is safe." What governs instead is the cost asymmetry (§2.1): shims and
 mechanical import rewrites make deferred consolidation cheap and recoverable, whereas disrupting
 an active session's **uncommitted** tree is expensive and unrecoverable. **No sequencing decision
 in this roadmap depends on forecasting when #1955's frontend work starts.**

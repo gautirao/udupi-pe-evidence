@@ -16,6 +16,30 @@ it is labelled explicitly.
 > importer analysis actually supports, and corrects the `exhaustive-deps` suppression count
 > from 28 to **29**. Changed sections are listed in §12.
 
+> ### ✅ Phase 0 complete (2026-07-24, `main` @ `475785d0`)
+>
+> **This audit was measured at `ce1d6aa1` and remains valid as the snapshot it declares itself
+> to be.** Phase 0 of the stabilisation effort — audit refresh, baseline stabilisation (merged as
+> **PR #1982**), and the Phase 0B doc-correction pass this note belongs to — is now complete.
+> Two things changed underneath the snapshot and are corrected inline below with dated
+> **"Phase 0B correction"** notes rather than by rewriting the original measurements:
+>
+> 1. **#1955 is now merged.** It closed via **PR #1978** (2026-07-24), which — contrary to the
+>    pre-merge branch inspection recorded in §5 — shipped **~2,500 LOC of frontend code**. Every
+>    `AFTER-1955` sequencing constraint below is now **unblocked** (see §5.1, §6).
+> 2. **The `ce1d6aa1` baselines have moved.** Typecheck is now **31 errors / 10 files**, vitest
+>    **5 failed / 2 files (4,635 total)**, eslint **103 problems (11 err / 92 warn) / 54 files**.
+>    A 12-site `DiscoverDataSourceProviderProps` `children`-required cluster introduced by
+>    PR #1978 was initially miscounted as 8 errors and briefly proposed for the accepted
+>    baseline — on review that was rejected as a genuine regression needing a fix, not debt;
+>    it was corrected to its true count (12) and fixed by **PR #1984** before this baseline
+>    was seeded.
+>
+> **Full itemised baseline evidence with per-error fingerprints:**
+> `docs/audit/evidence/phase0-baseline-stabilisation/README.md`. Slice 1A is the next unit of
+> work — recommended start: §1A.1 (enable minification), then §1A.4 (main is already green
+> against the documented 5-failure baseline).
+
 ---
 
 ## 1. Executive Summary
@@ -212,6 +236,24 @@ Result:  42 errors in 17 files
 Top codes: TS2769 (11), TS2345 (10), TS2339 (10), TS2740 (7), TS2322 (3)
 ```
 
+> **Phase 0B correction (2026-07-24, `main` @ `475785d0`).** The current baseline is **31 errors
+> in 10 files** (top codes TS2339 ×10, TS2345 ×10, TS2740 ×7, TS2322 ×3, TS2352 ×1). PR #1978
+> introduced two regressions on top of the `ce1d6aa1` snapshot: a production `useCityLaunchNavigation.ts`
+> TS2554 (fixed by **PR #1982**), and a **12-site `DiscoverDataSourceProviderProps`
+> `children`-required** test-mock cluster (its `DiscoverDataSourceContext.tsx` change now
+> requires a `children` prop, so mock provider call-sites across 8 hook/context test files no
+> longer typecheck — the cluster was initially miscounted as 8 errors and briefly proposed for
+> the accepted baseline before being corrected to its true count of 12 and fixed by **PR #1984**,
+> since newly introduced regressions must be fixed before a baseline is seeded, not absorbed
+> into it merely because they only affect test files). Note the 31/10 current count is not
+> directly comparable to the 42/17 `ce1d6aa1` figure below by simple subtraction — the two
+> snapshots were taken with different tsc/type-definition state, and the exact per-error overlap
+> between them has not been re-derived line-by-line; both counts are reported as independently
+> measured, dated snapshots rather than a computed delta. The
+> full itemised 31-fingerprint table (and the fingerprint scheme to seed §1A.2 from) is in
+> `docs/audit/evidence/phase0-baseline-stabilisation/README.md`. The 42/17 figure below is the
+> `ce1d6aa1` snapshot and is retained as the historical measurement.
+
 **These 42 errors exist on `main` right now.** They are invisible because `npm run build` is
 `vite build`, which uses esbuild transpile-only and never typechecks. There is **no
 `typecheck` script in `package.json`**.
@@ -290,6 +332,13 @@ Command: npx eslint . -f json
 Result:  97 problems (11 errors, 86 warnings)
 ```
 
+> **Phase 0B correction (2026-07-24, `main` @ `475785d0`).** The current baseline is **103
+> problems — 11 errors, 92 warnings, across 54 files** (+6 warnings, +0 errors), all attributable
+> to new files shipped by PR #1978 (`useCityLaunchNavigation.ts`, `navigationHierarchy.ts`,
+> `cityLaunchPreview/*`) and #1982's test-file changes — not a regression. No lint *errors*
+> changed. See `docs/audit/evidence/phase0-baseline-stabilisation/README.md` §3. The 97-problem
+> figure below is the `ce1d6aa1` snapshot.
+
 | Count | Rule |
 |---|---|
 | 56 | `react-refresh/only-export-components` |
@@ -365,6 +414,16 @@ Command: npx vitest run
 Result:  1361 suites (1354 passed, 7 FAILED)
          4552 tests (4539 passed, 10 FAILED, 3 skipped)
 ```
+
+> **Phase 0B correction (2026-07-24, `main` @ `475785d0`).** The current baseline is **5 failed
+> tests / 2 failed files, out of 4,635 tests total** (309/311 files passing). The total test count
+> grew (4,552 → 4,635) because #1978/#1982 added new test files. Of the original 10 failures, the
+> two `tests/discover/panels-parity.test.tsx` class-string assertions and the four
+> `CityLaunchPreview.test.tsx` tests are **fixed** by PR #1982; the remaining accepted failures are
+> the pre-existing `PropertyMap.jitterDiagnostic` Leaflet-mock cluster and one
+> `useCityLaunchNavigation` zod-validation test (both documented pre-existing debt). Full
+> fingerprints: `docs/audit/evidence/phase0-baseline-stabilisation/README.md` §2. The
+> 4,552-tests/10-failed figure below is the `ce1d6aa1` snapshot.
 
 | Metric | Value |
 |---|---|
@@ -502,17 +561,29 @@ not merged. The removal protocol in roadmap §1B.1 checks all six.
 
 | LOC | Finding | Evidence |
 |---|---|---|
-| 710 | `src/components/discover/panels/SchoolsInAreaPanel.tsx` | **0 importers.** Superseded by `SchoolJourneyPanels.tsx`, which exports an identically-named `SchoolsInAreaPanel`. Two components, same name, one unreachable. |
-| 294 | `src/components/map/PropertyDetailModal.tsx` | **0 importers.** |
-| 312 | `src/components/map/filters/*.tsx` (6 files) | **0 importers each** — `BedroomFilter`, `DateRangeFilter`, `ListingStatusFilter`, `PriceRangeFilter`, `PropertyTypeFilter`, `SellerTypeFilter`. |
-| 4 | `src/components/ui/use-toast.ts` | **0 importers** (all 40 consumers use `@/hooks/use-toast`). |
-| 56 | `use-mobile.tsx` (1 importer) + `useMediaQuery.ts` (1 importer) | Two hooks, one responsibility, one consumer each. |
-| **1,376** | **total verified-dead / duplicated** | |
+| 294 | `src/components/map/PropertyDetailModal.tsx` | **0 importers** (incl. tests). Confirmed dead. |
+| 4 | `src/components/ui/use-toast.ts` | **0 importers** (all 40 consumers use `@/hooks/use-toast`). Confirmed dead. |
+| 56 | `use-mobile.tsx` (1 importer) + `useMediaQuery.ts` (1 importer) | Two hooks, one responsibility, one consumer each. **Not dead** — a consolidation candidate, unaffected by the correction below. |
+| **~298** | **total confirmed-dead** (`PropertyDetailModal` + `use-toast`) | |
 
-> **New in rev 2.** The 7 files under `src/components/map/` (`PropertyDetailModal` + the
-> 6 `filters/`) are a finding rev 1 missed; they surfaced from the importer analysis added
-> for §4.2. They are **606 LOC of fully unreferenced code sitting directly in the directory
-> #1956 will be working in**, which raises their removal priority.
+> **⚠️ Phase 0B correction (2026-07-24) — two rev-2 entries were wrong and are withdrawn.**
+> Re-verified importer analysis found **live production importers** for two entries this table
+> previously listed as dead. They are removed above:
+> - `src/components/discover/panels/SchoolsInAreaPanel.tsx` (710 LOC) — **NOT dead.**
+>   `SchoolJourneyPanels.tsx:35` imports it live (`import { SchoolsInAreaPanel as
+>   RealSchoolsInAreaPanel } from './SchoolsInAreaPanel'`). The "two components, same name, one
+>   unreachable" claim was false: the panel-directory one is the reachable one.
+> - `src/components/map/filters/*.tsx` (6 files, 312 LOC) — **NOT dead.** All six
+>   (`BedroomFilter`, `DateRangeFilter`, `ListingStatusFilter`, `PriceRangeFilter`,
+>   `PropertyTypeFilter`, `SellerTypeFilter`) are imported by `MapFilters.tsx:8-13`, which is
+>   imported live by `MapDiscovery.tsx:8`.
+>
+> **The verified-dead total drops from 1,376 LOC to ~298 LOC** (`PropertyDetailModal` 294 +
+> `use-toast` 4). The rev-2 "606 LOC of unreferenced `components/map/` code" claim is withdrawn:
+> the 6 `filters/` are live, leaving only `PropertyDetailModal` (294) genuinely dead in that
+> directory. **This is exactly the error the six-check importer protocol in roadmap §1B.1 exists
+> to catch — a static specifier scan on `main` that missed re-export/aliased and page-level
+> importers — and it validates that protocol as effective, not the deletion list.**
 
 **Naming drift:**
 
@@ -690,6 +761,13 @@ produces `undefined` deep in a component, not an error at the boundary.
 `zod@3.25.76` is a **production dependency used in exactly one file** —
 `src/lib/schemas/auth.ts`. The tool to fix this is already installed and paid for.
 
+> **Phase 0B correction (2026-07-24, `main` @ `475785d0`).** zod is no longer single-file. PR
+> #1978 shipped `src/lib/schemas/navigationHierarchy.ts` (563 LOC of Zod schemas for the new
+> navigation endpoints), consumed via `src/hooks/useCityLaunchNavigation.ts` — so zod is now used
+> in **at least 3 production files** (`schemas/auth.ts`, `schemas/navigationHierarchy.ts`, and its
+> consumer). The `getValidated` + zod pattern this section motivates is therefore **partially
+> pre-built** for the navigation endpoints; roadmap §3.2's remaining scope shrinks accordingly.
+
 Separately, there are **two data paths**: `lib/api.ts` (66 importers) *and* direct Supabase
 client usage in **16 production files** including `usePropertyListings.ts`, `useAdminData.ts`,
 `useListingImages.ts`, and 3 page components. The Supabase path is where all 10 `TS2339`
@@ -780,17 +858,42 @@ This audit is written to be executed **as an engineering roadmap alongside a liv
 Treating that programme as a constraint — rather than discovering it mid-execution — is what
 makes the roadmap safe.
 
+> ### ✅ RESOLVED 2026-07-24 — #1955 is merged
+>
+> The entire "in-flight" framing of this section is now **historical**. **#1955 merged via
+> PR #1978** (2026-07-24T06:30:15Z) — confirmed `gh issue view 1955` = CLOSED, `gh pr view 1978`
+> = MERGED with body "Closes #1955". The pre-merge branch inspection recorded below (19 paths,
+> 100% backend) was accurate for the *uncommitted worktree at the time*, but the **merged
+> artifact shipped ~2,500 LOC of frontend code**:
+> - `src/components/discover/cityLaunchPreview/NavigationDiffView.tsx` (148 LOC)
+> - `src/components/discover/cityLaunchPreview/NavigationHierarchyTree.tsx` (139 LOC)
+> - `src/components/discover/cityLaunchPreview/NavigationOverridesPanel.tsx` (369 LOC)
+> - `src/features/discover/state/navigationTreeUtils.ts` (new — in the intended `features/discover/` home)
+> - `src/features/discover/state/DiscoverDataSourceContext.tsx` (modified — now requires a
+>   `children` prop, creating the new TS2769 test-mock cluster in the Phase 0 baseline)
+> - `src/hooks/useCityLaunchNavigation.ts` (new hook)
+> - `src/lib/schemas/navigationHierarchy.ts` (new — 563 LOC of Zod schemas for the nav endpoints)
+> - `src/pages/admin/CityLaunchPreview.tsx` (modified)
+>
+> Re-verify with `git diff --name-only ce1d6aa1 475785d0 -- src/`. **Notably, `App.tsx` and all
+> build/lint/tsconfig files were NOT touched by #1978** — which de-risks the §1A.5 "App.tsx
+> overlap" caveat (that overlap did not materialise). Every **`AFTER-1955`** constraint in §5.1
+> and §6 is now **unblocked**; the tags are retained as historical record of why sequencing was
+> designed this way.
+
 | Issue | State (precise) | Frontend footprint | Roadmap implication |
 |---|---|---|---|
-| **#1955** — recursive city navigation hierarchy: generate, preview, promote, cache | **Actively being implemented.** Separate session, branch `issue-1955-areas-navigation-hierarchy` at `/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-1955-areas-hierarchy-pr-a`. **Uncommitted working tree.** | **Verified 2026-07-24: 19 changed paths, 100% backend/infra, ZERO frontend files.** Its required City Launch Preview extension — which by design "reuses the actual Discover map/navigation components against sandbox rows" — is **not present in the working tree yet**, and will also touch routing. | **Blocks Slice 2, mass Discover moves, and all broad frontend restructuring** until it is committed and merged. See §5.1. |
+| **#1955** — recursive city navigation hierarchy: generate, preview, promote, cache | ✅ **MERGED 2026-07-24 via PR #1978** *(row below is the pre-merge snapshot).* Was: **Actively being implemented.** Separate session, branch `issue-1955-areas-navigation-hierarchy` at `/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-1955-areas-hierarchy-pr-a`. **Uncommitted working tree.** | **Pre-merge verified 2026-07-24: 19 changed paths, 100% backend/infra, ZERO frontend files. — Superseded: the merged PR #1978 shipped ~2,500 LOC of frontend (see RESOLVED box above).** Its City Launch Preview extension did land, reusing Discover components. | ~~Blocks Slice 2 …~~ **RESOLVED — now merged. All `AFTER-1955` items unblocked.** See §5.1. |
 | **#1956** — adaptive-depth Areas journey with canonical breadcrumbs | **Planned next milestone issue; not yet started.** Verified: no branch matching `*1956*`, no worktree. Its own body states it "Depends on #1955 being merged, demonstrated through City Launch Preview, and explicitly signed off." | **Anticipated (from the issue body, not from code):** adds `node=` URL param + legacy compatibility resolver (`groupId`/`region`/`areaKey`/`scope`); **removes `macroRegionResolver.ts` and all 7 consumers**; re-skins every Areas panel; routes camera fits through a single `CameraIntent` owner; adds visual baselines at 1366×768 and 390×844. | **Will co-own URL state, camera orchestration, and panel styling.** Roadmap prepares those surfaces before it starts, then stays out of them. All footprint claims are **scope-derived, not branch-derived** — re-verify when a branch exists. |
 | **#1960** — final milestone | **Future issue; not started.** | Will own `jest-axe`, `@axe-core/playwright`, keyboard-only acceptance, screen-reader acceptance, a11y evidence. | **Owns all comprehensive accessibility work.** This roadmap schedules none before Slice 4 and defers to #1960 there. |
 
-> **On the word "in-flight".** Only **#1955** is in flight. #1956 and #1960 are **planned**, and
-> every statement this audit makes about their footprint is derived from their issue bodies, not
-> from code. That distinction is load-bearing: scope-derived claims are exactly the kind that
-> proved wrong about #1955 in rev 2 (see §5.1), so they are labelled as such throughout and must
-> be re-verified once branches exist.
+> **On the word "in-flight".** *(Phase 0B: **#1955 is now merged** — see the RESOLVED box above;
+> nothing is in flight as of 2026-07-24.)* At audit time, only **#1955** was in flight. #1956 and
+> #1960 remain **planned**, and every statement this audit makes about their footprint is derived
+> from their issue bodies, not from code. That distinction is load-bearing: scope-derived claims
+> are exactly the kind that proved wrong about #1955 in rev 2 (see §5.1) — and, indeed, the
+> pre-merge "0 frontend" branch snapshot proved wrong about the *merged* #1955 too — so they are
+> labelled as such throughout and must be re-verified once branches exist.
 
 ### #1955 — verified branch state (2026-07-24)
 
@@ -828,6 +931,13 @@ to treat it that way. Absence of textual overlap at one moment is a snapshot, no
   path-disjointness does nothing to reduce.
 
 ### 5.1 Sequencing rule (deterministic)
+
+> ### ✅ RESOLVED 2026-07-24 — precondition satisfied
+> **#1955 is committed and merged (PR #1978).** The rule below is now **satisfied**, so Slice 2,
+> mass Discover moves, and broad frontend restructuring are **unblocked**. The rule, its
+> cost-asymmetry reasoning, and the "why an estimate-based rule is wrong" argument are all retained
+> **unchanged** — they remain methodologically correct and are the reason sequencing was designed
+> this way; only their precondition has now been met.
 
 ```text
 Do not begin Slice 2, mass Discover moves, or other broad frontend
@@ -893,13 +1003,24 @@ tagged with one of four evidence-based categories:
 | **COORDINATE** | Independent tooling change, but it alters shared developer behaviour — **coordinate with active sessions** |
 | **DEFERRED** | Explicitly not scheduled here |
 
+> ### ✅ Phase 0B update (2026-07-24) — `AFTER-1955` items are now unblocked
+> **#1955 is merged (PR #1978).** Every **`AFTER-1955`** row below (items 4, 6, 7) is now
+> **UNBLOCKED**; the tags are kept as historical record. Also refreshed against the current
+> baseline (`475785d0`, post PR #1982 + PR #1984): item 2's typecheck baseline is now **31
+> errors / 10 files** (not 42) — PR #1984 additionally removed a 12-site
+> `DiscoverDataSourceProviderProps` `children`-required regression that PR #1978 introduced
+> and that was briefly, incorrectly, proposed for the accepted baseline before being fixed —
+> item 3's red tests are now **5 failing** (not 10 — the two panels-parity failures cited are
+> fixed by PR #1982), and item 5's dead-code total is **~298 LOC** (not 1,376 — see §2.12
+> correction).
+
 | # | Change | Evidence | Effort | Coordination |
 |---|---|---|---|---|
 | 1 | Enable `build.minify` | `vite.config.ts:28`; −2.77 MB / −95 kB gzip measured | 15 min | **CONFIRM-FIRST** — build config only; changes production delivery/runtime characteristics, not business behaviour |
 | 2 | Add `typecheck` script + **fingerprint** baseline | `npx tsc --noEmit` → 42 errors; no script in `package.json` | 1 d | **COORDINATE** — logically independent, but adding a CI gate changes what merges. **Not to be implemented by this audit session.** |
 | 3 | Fix the 10 red tests; make red-on-`main` non-negotiable | `npx vitest run` → 10 failed / 7 suites | 1 d | **CONFIRM-FIRST** — test files only; verify no active session owns `tests/discover/panels-parity.test.tsx` |
 | 4 | Fix the Supabase generated-types drift | 10 × `TS2339` in `usePropertyListings.ts` | 1 d | **AFTER-1955** — it adds `V121__navigation_nodes_and_sandbox.sql`; regenerating types against today's schema goes stale on merge |
-| 5 | Delete 1,376 LOC of dead code | Static importer count = 0 across production files | 1 d | **CONFIRM-FIRST** — low reachability risk, **not zero**; requires the six-check protocol in roadmap §1B.1 |
+| 5 | Delete **~298 LOC** of dead code *(corrected from 1,376 — §2.12; `SchoolsInAreaPanel` and `map/filters/*` have live importers)* | Static importer count = 0 across production files, **re-verified** | 0.25 d | **CONFIRM-FIRST** — low reachability risk, **not zero**; the six-check protocol in roadmap §1B.1 is what caught the two false-dead entries |
 | 6 | Add route-level error boundaries | Single root boundary at `main.tsx:14` | 0.5 d | **AFTER-1955** — it will add City Launch Preview routing to `App.tsx`; overlap is plausible, not disproven. Intentionally changes crash-containment behaviour. |
 | 7 | Validate API responses at the boundary | `api.ts:78` `JSON.parse(text) as T`; zod already a dependency | 4 d | **AFTER-1955** — additive, and #1955's new endpoints are the primary beneficiary |
 
@@ -940,9 +1061,12 @@ Mitigating factors: exceptional inline documentation; `AGENTS.md`, `CLAUDE.md`,
 `PROJECT_CONTEXT.md`, and `docs/FRONTEND_GUIDE.md` exist; 161 well-named custom hooks give
 good vocabulary.
 
-Aggravating factors: two components named `SchoolsInAreaPanel` (one dead); `dealer` and
-`broker` used interchangeably including in live cache keys; two test roots; 1,376 LOC of dead
-code; `features/` existing but not authoritative — a newcomer cannot infer where new code belongs.
+Aggravating factors: two components named `SchoolsInAreaPanel` (**Phase 0B correction:** both are
+live — the panel-directory one is imported by `SchoolJourneyPanels.tsx:35`; the name collision is
+still a navigation hazard, but neither is dead); `dealer` and `broker` used interchangeably
+including in live cache keys; two test roots; **~298 LOC of confirmed dead code** (corrected down
+from 1,376 — see §2.12); `features/` existing but not authoritative — a newcomer cannot infer
+where new code belongs.
 
 ---
 
@@ -1035,6 +1159,9 @@ Discover-specificity**, not wholesale.
 ## 11. Reproducing this audit
 
 ```bash
+# Numbers below are the ce1d6aa1 snapshot. Post-#1978/#1982/#1984 baseline (475785d0) in
+# docs/audit/evidence/phase0-baseline-stabilisation/README.md:
+#   tsc  → 31 errors / 10 files · vitest → 5 FAILED / 2 files (4,635 total) · eslint → 103 (11/92) / 54 files
 npx tsc -p tsconfig.app.json --noEmit    # 42 errors in 17 files
 npx vitest run                            # 4552 tests, 10 FAILED, 7 suites
 npx eslint . -f json                      # 97 problems (11 err, 86 warn)
