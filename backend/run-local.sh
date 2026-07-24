@@ -18,38 +18,44 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-# ── Load ALL variables from .env into the shell environment ──────────────────
-# set -a exports every variable defined by source, including any new ones
-# added to .env. Spring Boot picks them all up automatically.
-echo ">>> Loading env from $ENV_FILE"
-set -a
-# shellcheck source=/dev/null
-source "$ENV_FILE"
-set +a
+if [[ "${SKIP_BACKEND_ENV_LOAD:-false}" != "true" ]]; then
+  # ── Load ALL variables from .env into the shell environment ──────────────────
+  # set -a exports every variable defined by source, including any new ones
+  # added to .env. Spring Boot picks them all up automatically.
+  echo ">>> Loading env from $ENV_FILE"
+  set -a
+  # shellcheck source=/dev/null
+  source "$ENV_FILE"
+  set +a
 
-# ── Print a summary of what was loaded (sensitive values masked) ─────────────
-echo ""
-echo ">>> Variables loaded from .env:"
-SENSITIVE_KEYS=(PASSWORD KEY SECRET TOKEN DSN)
-while IFS='=' read -r KEY _; do
-  # Skip blank lines and comments
-  [[ -z "$KEY" || "$KEY" == \#* ]] && continue
-  KEY="${KEY// /}"  # trim whitespace
-  VALUE="${!KEY:-}"
-  # Mask sensitive values (use tr for bash 3.2 compat — macOS default)
-  KEY_UPPER="$(echo "$KEY" | tr '[:lower:]' '[:upper:]')"
-  MASKED=false
-  for S in "${SENSITIVE_KEYS[@]}"; do
-    if [[ "$KEY_UPPER" == *"$S"* ]]; then
-      echo "    $KEY=***"
-      MASKED=true
-      break
+  # ── Print a summary of what was loaded (sensitive values masked) ─────────────
+  echo ""
+  echo ">>> Variables loaded from .env:"
+  SENSITIVE_KEYS=(PASSWORD KEY SECRET TOKEN DSN)
+  while IFS='=' read -r KEY _; do
+    # Skip blank lines and comments
+    [[ -z "$KEY" || "$KEY" == \#* ]] && continue
+    KEY="${KEY// /}"  # trim whitespace
+    VALUE="${!KEY:-}"
+    # Mask sensitive values (use tr for bash 3.2 compat — macOS default)
+    KEY_UPPER="$(echo "$KEY" | tr '[:lower:]' '[:upper:]')"
+    MASKED=false
+    for S in "${SENSITIVE_KEYS[@]}"; do
+      if [[ "$KEY_UPPER" == *"$S"* ]]; then
+        echo "    $KEY=***"
+        MASKED=true
+        break
+      fi
+    done
+    if [[ "$MASKED" == false ]]; then
+      echo "    $KEY=$VALUE"
     fi
-  done
-  if [[ "$MASKED" == false ]]; then
-    echo "    $KEY=$VALUE"
-  fi
-done < "$ENV_FILE"
+  done < "$ENV_FILE"
+else
+  echo ">>> SKIP_BACKEND_ENV_LOAD=true — not loading $ENV_FILE; using caller-supplied environment."
+  echo ""
+  echo ">>> Using caller-supplied environment (SKIP_BACKEND_ENV_LOAD=true)"
+fi
 
 # ── Validate required variables (no defaults in application.yml) ─────────────
 echo ""
