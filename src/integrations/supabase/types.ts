@@ -156,6 +156,8 @@ export type Database = {
       }
       property_listings: {
         Row: {
+          area_key: string | null
+          area_label: string | null
           bathrooms: number | null
           bedrooms: number | null
           built_area: number | null
@@ -202,6 +204,8 @@ export type Database = {
           washrooms: number | null
         }
         Insert: {
+          area_key?: string | null
+          area_label?: string | null
           bathrooms?: number | null
           bedrooms?: number | null
           built_area?: number | null

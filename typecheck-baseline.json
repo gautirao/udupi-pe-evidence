@@ -55,18 +55,6 @@
       "message": "Argument of type 'PropertyType' is not assignable to parameter of type 'NonNullable<\"land\" | \"house\" | \"commercial\" | \"other\" | \"apartment\">'."
     },
     {
-      "fingerprint": "0d528a757515dfe7d54cd6faba34ec2f04ffd5c3",
-      "file": "src/hooks/usePropertyListings.ts",
-      "code": "TS2339",
-      "message": "Property 'area_key' does not exist on type 'SelectQueryError<\"column 'area_key' does not exist on 'property_listings'.\">'."
-    },
-    {
-      "fingerprint": "8d7b8559d9d4d1f4750a70c9f728ac961b35d3f1",
-      "file": "src/hooks/usePropertyListings.ts",
-      "code": "TS2339",
-      "message": "Property 'locality' does not exist on type 'SelectQueryError<\"column 'area_key' does not exist on 'property_listings'.\">'."
-    },
-    {
       "fingerprint": "940f05831cbc6f6eafd41670b225ddf1583c14b1",
       "file": "src/hooks/usePropertyListings.ts",
       "code": "TS2345",
