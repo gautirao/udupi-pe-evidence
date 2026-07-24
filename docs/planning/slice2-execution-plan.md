@@ -88,7 +88,9 @@
 
 ## PR3 — Establish the `compatibility` domain (the URL public-API seam for #1956)
 
-**Goal:** extract the existing legacy-param normalisation logic (`groupId`/`region`/`areaKey`/`scope` → canonical forms) into a named `compatibility` domain, giving #1956 a stable, well-isolated seam to plug its `node=` parameter and stale-link resolution ladder into — without adding that new parameter itself.
+**Goal:** extract the existing legacy-param normalisation logic into a named `compatibility` domain, giving #1956 a stable, well-isolated seam to plug its `node=` parameter and stale-link resolution ladder into — without adding that new parameter itself.
+
+**Scope correction (post-PR3-review, 2026-07-24):** this domain owns only the genuinely deprecated/legacy surface — the `scope` read-time normalisation and the legacy `group=DIRECTION:BAND` read (`selectedGroup`) + its deprecated writer (`selectRegionalGroup`). **`groupId`, `areaKey`, and `region` are canonical, actively-used selection state and are NOT moved here** — they remain owned by their proper domains (`area.ts` for `areaKey`/`groupId`, `agricultural.ts` for `region`). Earlier issue/plan text describing this domain's scope as "`groupId`/`region`/`areaKey`/`scope`" was imprecise and is corrected by this note. A future compatibility resolver (#1956) reads `areaKey`/`groupId`/`region` directly from their canonical domains as its legacy-compat inputs and normalises them to `node=` — #1956's implementation plan must not assume `useCompatibilityUrlDomain` already returns them, since it does not.
 
 **Rollback boundary:** self-contained to the same file/test-asset as PR2; a pure extraction, not a behaviour change, so reverting restores the pre-extraction inline logic with zero observable difference.
 
@@ -102,7 +104,7 @@
 
 **Parallel with:** PR1 (different files). Not parallel with PR2 (dependency). Can run alongside PR4/PR5 (different file).
 
-**Tests / AC:** same test-asset gate as PR2; additionally confirm current legacy-param behaviour is byte-for-byte unchanged (re-verify occurrence counts — `groupId`/`areaKey`/`scope` — at PLAN_REVIEW rather than trusting the roadmap's dated figures) — this is a pure extraction, not a behaviour change, and the test must prove that.
+**Tests / AC:** same test-asset gate as PR2; additionally confirm current legacy-param behaviour is byte-for-byte unchanged (re-verify occurrence counts for `scope` and the legacy `group` param at PLAN_REVIEW rather than trusting the roadmap's dated figures) — this is a pure extraction, not a behaviour change, and the test must prove that. `groupId`/`areaKey` occurrence counts are out of scope for this PR's AC — those fields are not moved (see scope correction above).
 
 **Overlap risk with #1956:** **direct and intentional — this PR's entire purpose is to be the seam #1956 extends.** No file-level collision (PR3 merges well before #1956 starts), but the domain's exact shape is load-bearing for #1956's implementation; get code-reviewer to scrutinise this one closely.
 

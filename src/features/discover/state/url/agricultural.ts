@@ -1,14 +1,16 @@
 /**
- * Agricultural URL domain — Issue #2001 Slice 2 PR2.
+ * Agricultural URL domain — Issue #2001 Slice 2 PR2 (updated #2002 Slice 2 PR3).
  *
- * Owns: `region`/`maxKm` corridor-first model (#1429/#1445), the deprecated
- * `group` legacy read + writer (#1409, superseded by region/maxKm), the
- * agri-group listing peek (#1430), and the agri-group-locality drill-down
- * (#1464). Also OWNS the two cold-load mount effects — the OD-1 legacy
- * group=DIR:BAND migration and the region-without-maxKm canonicalisation —
- * which MUST stay co-located here because they share coldLoadDoneRef and
- * form a single state machine (qa-fast R2). See useDiscoverUrlState.ts's
- * module doc for the full param contract.
+ * Owns: `region`/`maxKm` corridor-first model (#1429/#1445), the agri-group
+ * listing peek (#1430), and the agri-group-locality drill-down (#1464). Also
+ * OWNS the two cold-load mount effects — the OD-1 legacy group=DIR:BAND
+ * migration and the region-without-maxKm canonicalisation — which MUST stay
+ * co-located here because they share coldLoadDoneRef and form a single state
+ * machine (qa-fast R2). Still reads `rawGroupLegacy`/`hasLegacyGroupParam`
+ * for that state machine, but the deprecated `selectedGroup` read and
+ * `selectRegionalGroup` writer (#1409, superseded by region/maxKm) have been
+ * lifted to compatibility.ts by #2002. See useDiscoverUrlState.ts's module
+ * doc for the full param contract.
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { VALID_DIRECTIONS, extractLegacyGroupDirection } from '@/hooks/discoverUrlNormalize';
@@ -34,7 +36,7 @@ type DirectionCode = 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW';
 
 type AgriculturalState = Pick<
   DiscoverUrlState,
-  'selectedRegion' | 'selectedMaxKm' | 'selectedGroup' | 'selectedListing' | 'selectedLocality'
+  'selectedRegion' | 'selectedMaxKm' | 'selectedListing' | 'selectedLocality'
 >;
 type AgriculturalActions = Pick<
   DiscoverUrlActions,
@@ -46,7 +48,6 @@ type AgriculturalActions = Pick<
   | 'clearSelectedListing'
   | 'setLocality'
   | 'clearLocality'
-  | 'selectRegionalGroup'
 >;
 
 export function useAgriculturalUrlDomain(
@@ -69,18 +70,6 @@ export function useAgriculturalUrlDomain(
 
   // OD-1 OPTION A — legacy cold-load migration: group=DIR:BAND → region=DIR (band dropped).
   const rawGroupLegacy = urlParams.get('group');
-  const GROUP_REGEX = /^(N|NE|E|SE|S|SW|W|NW):(0_10|10_25|25_50|50_up)$/;
-
-  // Synchronous-read: derive selectedGroup from the legacy `group` param for
-  // backward-compat with discoverPanelState and any existing panels.
-  // COMPAT SEAM (#2002) — lifted into compatibility.ts by #2002.
-  const selectedGroup =
-    rawGroupLegacy && GROUP_REGEX.test(rawGroupLegacy)
-      ? {
-          directionKey: rawGroupLegacy.split(':')[0],
-          distanceBandKey: rawGroupLegacy.split(':')[1],
-        }
-      : null;
 
   // Issue #1430 — agri-group listing peek. UUID string from `listing` URL param.
   const rawListing = urlParams.get('listing');
@@ -318,32 +307,8 @@ export function useAgriculturalUrlDomain(
     );
   }, [setUrlParams]);
 
-  /**
-   * @deprecated Use setRegion + setMaxKm instead (Issue #1429 corridor-first model).
-   * COMPAT SEAM (#2002) — writes the legacy `group=DIRECTION:BAND` param; lifted
-   * into compatibility.ts by #2002.
-   */
-  const selectRegionalGroup = useCallback(
-    (group: { directionKey: string; distanceBandKey: string } | null) => {
-      setUrlParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (group) {
-            next.set('group', `${group.directionKey}:${group.distanceBandKey}`);
-          } else {
-            next.delete('group');
-          }
-          // Do NOT delete areaKey — B2 allows group selection independently of area selection.
-          return next;
-        },
-        { replace: false }, // PUSH — group selection is a navigational choice
-      );
-    },
-    [setUrlParams],
-  );
-
   return {
-    state: { selectedRegion, selectedMaxKm, selectedGroup, selectedListing, selectedLocality },
+    state: { selectedRegion, selectedMaxKm, selectedListing, selectedLocality },
     actions: {
       setRegion,
       setRegionWithMaxKm,
@@ -353,7 +318,6 @@ export function useAgriculturalUrlDomain(
       clearSelectedListing,
       setLocality,
       clearLocality,
-      selectRegionalGroup,
     },
   };
 }

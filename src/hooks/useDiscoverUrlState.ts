@@ -58,16 +58,16 @@
  *   Committed filter     → push
  *   School board/cat     → replace
  *
- * ─── Implementation note (Issue #2001 Slice 2 PR2) ────────────────────────────
+ * ─── Implementation note (Issue #2001 Slice 2 PR2/PR3) ─────────────────────────
  * The ~1,100-line body that used to live in this file has been decomposed into
- * six domain hooks under src/features/discover/state/url/ (viewport, city,
- * filters, school, area, agricultural), each owning its own slice of state +
- * actions plus a shared _shared.ts for the cross-domain context types. This
- * file is now a thin facade: it owns the three debounce-timer refs, the single
- * unmount cleanup effect, builds the shared ctx, calls the six domain hooks,
- * and assembles their outputs into the unchanged [DiscoverUrlState,
- * DiscoverUrlActions] public return shape. See each domain module's header
- * comment for what it owns.
+ * seven domain hooks under src/features/discover/state/url/ (viewport, city,
+ * filters, school, area, agricultural, compatibility), each owning its own
+ * slice of state + actions plus a shared _shared.ts for the cross-domain
+ * context types. This file is now a thin facade: it owns the three
+ * debounce-timer refs, the single unmount cleanup effect, builds the shared
+ * ctx, calls the seven domain hooks, and assembles their outputs into the
+ * unchanged [DiscoverUrlState, DiscoverUrlActions] public return shape. See
+ * each domain module's header comment for what it owns.
  */
 
 import { useEffect, useMemo, useRef } from 'react';
@@ -80,6 +80,7 @@ import { useFiltersUrlDomain } from '@/features/discover/state/url/filters';
 import { useSchoolUrlDomain } from '@/features/discover/state/url/school';
 import { useAreaUrlDomain } from '@/features/discover/state/url/area';
 import { useAgriculturalUrlDomain } from '@/features/discover/state/url/agricultural';
+import { useCompatibilityUrlDomain } from '@/features/discover/state/url/compatibility';
 
 // Byte-identical re-export: DEFAULT_MAX_KM is now declared in agricultural.ts
 // (the only domain that uses it), but every existing consumer imports it from
@@ -499,13 +500,14 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     reads: { city },
   };
 
-  // Fixed call order — all six domain hooks run unconditionally every render.
+  // Fixed call order — all seven domain hooks run unconditionally every render.
   const viewportDomain = useViewportUrlDomain(ctx);
   const cityDomain = useCityUrlDomain(ctx);
   const filtersDomain = useFiltersUrlDomain(ctx);
   const schoolDomain = useSchoolUrlDomain(ctx);
   const areaDomain = useAreaUrlDomain(ctx);
   const agriculturalDomain = useAgriculturalUrlDomain(ctx);
+  const compatibilityDomain = useCompatibilityUrlDomain(ctx);
 
   // Explicit literal in the ORIGINAL 18-key order (qa-fast R3) — guards any
   // Object.keys/snapshot assertion a caller may add later.
@@ -521,18 +523,18 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     groupId: areaDomain.state.groupId,
     schoolPicking: schoolDomain.state.schoolPicking,
     groupResults: areaDomain.state.groupResults,
-    selectedGroup: agriculturalDomain.state.selectedGroup,
+    selectedGroup: compatibilityDomain.state.selectedGroup,
     selectedRegion: agriculturalDomain.state.selectedRegion,
     selectedMaxKm: agriculturalDomain.state.selectedMaxKm,
     selectedListing: agriculturalDomain.state.selectedListing,
     selectedLocality: agriculturalDomain.state.selectedLocality,
     intent: cityDomain.state.intent,
-    scope: cityDomain.state.scope,
+    scope: compatibilityDomain.state.scope,
   };
 
   // Spread merge is safe under this explicit `DiscoverUrlActions` annotation —
   // TypeScript verifies every key of the 37-action interface is present across
-  // the six domain slices (a missing/misspelled action key fails the build).
+  // the seven domain slices (a missing/misspelled action key fails the build).
   const actions: DiscoverUrlActions = {
     ...viewportDomain.actions,
     ...cityDomain.actions,
@@ -540,6 +542,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     ...schoolDomain.actions,
     ...areaDomain.actions,
     ...agriculturalDomain.actions,
+    ...compatibilityDomain.actions,
   };
 
   return [state, actions];

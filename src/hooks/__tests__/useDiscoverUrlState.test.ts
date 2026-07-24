@@ -3700,3 +3700,57 @@ describe('useDiscoverUrlState — clearAllFiltersAndSearch (Issue #1854 atomicit
     expect(result.current[0].viewport).toBeNull();
   });
 });
+
+// ─── Issue #2002 Slice 2 PR3 — compatibility domain facade repoint guard ──────
+//
+// Pure refactor guard: useCompatibilityUrlDomain now owns the `scope` and
+// `selectedGroup` reads (moved from city.ts / agricultural.ts respectively)
+// plus the `selectRegionalGroup` writer. These tests exercise ONLY the public
+// [state, actions] facade — if the facade's state-literal repoint to
+// compatibilityDomain.state.{scope,selectedGroup} were accidentally missed,
+// TypeScript would still compile (both are optional-ish/nullable fields) but
+// the values would silently come back undefined/null at runtime with no
+// build error, which is exactly what this guards against.
+describe('useDiscoverUrlState — compatibility domain (scope + selectedGroup) facade repoint', () => {
+  it('resolves scope from the URL via the public facade', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&scope=north'),
+    });
+    expect(result.current[0].scope).toBe('north');
+  });
+
+  it('resolves scope=null when the scope param is absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].scope).toBeNull();
+  });
+
+  it('resolves selectedGroup=null when the group param is absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first'),
+    });
+    expect(result.current[0].selectedGroup).toBeNull();
+  });
+
+  it('selectRegionalGroup round-trips through the public facade: set then read back', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first'),
+    });
+
+    act(() => {
+      result.current[1].selectRegionalGroup({ directionKey: 'E', distanceBandKey: '25_50' });
+    });
+
+    expect(result.current[0].selectedGroup).toEqual({
+      directionKey: 'E',
+      distanceBandKey: '25_50',
+    });
+
+    act(() => {
+      result.current[1].selectRegionalGroup(null);
+    });
+
+    expect(result.current[0].selectedGroup).toBeNull();
+  });
+});

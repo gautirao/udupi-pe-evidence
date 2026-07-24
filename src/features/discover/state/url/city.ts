@@ -1,9 +1,11 @@
 /**
- * City URL domain — Issue #2001 Slice 2 PR2.
+ * City URL domain — Issue #2001 Slice 2 PR2 (updated #2002 Slice 2 PR3).
  *
- * Owns: `city`, `intent` (#1494), `scope` (#1745 P2) reads + changeCity /
- * setCity / setIntent / setScope writes. See useDiscoverUrlState.ts's
- * module doc for the full param contract.
+ * Owns: `city`, `intent` (#1494) reads + changeCity / setCity / setIntent /
+ * setScope writes. The `scope` (#1745 P2) read has been lifted to
+ * compatibility.ts by #2002; this module still owns the setScope writer
+ * (canonical writer stays here). See useDiscoverUrlState.ts's module doc for
+ * the full param contract.
  */
 import { useCallback } from 'react';
 import { isValidScope } from '@/hooks/discoverUrlNormalize';
@@ -19,7 +21,7 @@ import type {
   DiscoverUrlState,
 } from '@/hooks/useDiscoverUrlState';
 
-type CityState = Pick<DiscoverUrlState, 'city' | 'intent' | 'scope'>;
+type CityState = Pick<DiscoverUrlState, 'city' | 'intent'>;
 type CityActions = Pick<DiscoverUrlActions, 'changeCity' | 'setCity' | 'setIntent' | 'setScope'>;
 
 export function useCityUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<CityState, CityActions> {
@@ -33,12 +35,6 @@ export function useCityUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<CityState, 
   // (absent, 'buy', or invalid) maps to the default 'buy'.
   const rawIntent = urlParams.get('intent');
   const intent: DiscoverIntent = rawIntent === 'rent' ? 'rent' : 'buy';
-
-  // Issue #1745 P2 — residential scope axis. Distinct from `region` (agri-only
-  // corridor direction, agricultural.ts); validated against isValidScope.
-  // COMPAT SEAM (#2002) — lifted into compatibility.ts by #2002.
-  const rawScope = urlParams.get('scope');
-  const scope: string | null = rawScope && isValidScope(rawScope) ? rawScope : null;
 
   const setCity = useCallback(
     (newCity: string) => {
@@ -135,7 +131,7 @@ export function useCityUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<CityState, 
   );
 
   return {
-    state: { city, intent, scope },
+    state: { city, intent },
     actions: { changeCity, setCity, setIntent, setScope },
   };
 }
