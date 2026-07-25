@@ -88,18 +88,17 @@ export default function MapDiscovery() {
   // Issue #1953 (build step 2) — MapDiscovery is no longer a production caller
   // of useDiscoverUrlState(); it consumes the DiscoverProvider facade instead
   // (team-lead-plan.toml decisions.D1_facade.sole_caller). Issue #2003 PR4
-  // (rework) — the former flat urlState/urlActions accessor call sites below
-  // have been migrated to nav / viewport / actions directly. The `urlState`
-  // object (below) is retained only for its remaining whole-object consumers
-  // (useMarkerSelection, useDiscoverPageState, useDiscoverJourneyTransitions,
-  // useDiscoverCameraOrchestration, toLayerInput, etc.) pending the follow-on
-  // shim-deletion PR (PR5) — it is NOT a second URL writer; nav/viewport/
-  // actions are all sourced from the one provider-owned useDiscoverUrlState()
-  // call.
+  // (rework) — the former flat accessor call sites below have been migrated
+  // to nav / viewport / actions directly. Issue #2004 PR5 — the remaining
+  // whole-object consumers (useMarkerSelection, useDiscoverPageState,
+  // useDiscoverJourneyTransitions, useDiscoverCameraOrchestration,
+  // toLayerInput, etc.) now each build their own `{ ...nav, viewport }
+  // satisfies DiscoverUrlState` inline at the call site — there is no
+  // module-level shim reconstructing the whole object; nav/viewport/actions
+  // remain all sourced from the one provider-owned useDiscoverUrlState() call.
   const nav = useDiscoverNav();
   const viewport = useDiscoverViewport();
   const actions = useDiscoverActions();
-  const urlState: DiscoverUrlState = useMemo(() => ({ ...nav, viewport }), [nav, viewport]);
   // Issue #1953 (build step 3, RH4 narrowed) — mobileView only, to key the
   // bboxTimerRef clear-on-leave-MAP effect below.
   // Build step 4 — isMobileShell/setMobileView now also read here, to drive
@@ -119,7 +118,7 @@ export default function MapDiscovery() {
   // Issue #1745 P2 — routed through the layer-registry façade (discoverLayerRegistry.ts)
   // rather than calling derivePanelContent directly. computeDiscoverLayer delegates to
   // derivePanelContent by construction, so this is behaviour-preserving.
-  const panelContent = computeDiscoverLayer(toLayerInput(urlState));
+  const panelContent = computeDiscoverLayer(toLayerInput({ ...nav, viewport } satisfies DiscoverUrlState));
 
   // Issue #1597 — early derivation of PropertyFilters from URL state, available before
   // useDiscoverPageState is called. Used by the group-results listings query so it respects
@@ -385,7 +384,7 @@ export default function MapDiscovery() {
     clearMarkerPopoverFromUrl,
     isMarkerPopoverUrlBacked,
     hydrateSelectedMarkerFromUrl,
-  } = useMarkerSelection({ urlActions: actions, urlState, mapContainerRef });
+  } = useMarkerSelection({ urlActions: actions, urlState: { ...nav, viewport } satisfies DiscoverUrlState, mapContainerRef });
 
   // Issue #1374 — override panelContent to 'agri-detail' while an agri polygon is
   // selected. Confined to 'agri-selected' (not 'agri-landing') so a stale
@@ -508,7 +507,7 @@ export default function MapDiscovery() {
     handlePolygonDrawn, handlePolygonCleared,
     handleAreaClick, handleAreaSelect, handleAreaBack,
     page, setPage,
-  } = useDiscoverPageState({ urlState, urlActions: actions });
+  } = useDiscoverPageState({ urlState: { ...nav, viewport } satisfies DiscoverUrlState, urlActions: actions });
 
   // Issue #1882 (Track A PR2 Slice S2c) — backend-owned region summary for the
   // journeyless-landing macro-region bubbles (see overviewAreas below), sourced
@@ -833,7 +832,7 @@ export default function MapDiscovery() {
   // their useState declaration above) — injected here rather than owned by the hook;
   // see useDiscoverJourneyTransitions.ts's "Deviation 2" header comment for why.
   const { view: journeyView, commands: journeyCommands } = useDiscoverJourneyTransitions({
-    urlState,
+    urlState: { ...nav, viewport } satisfies DiscoverUrlState,
     urlActions: actions,
     selectedSchool,
     filters,
@@ -1084,7 +1083,7 @@ export default function MapDiscovery() {
     schoolFocusLon: selectedSchoolLon,
     agriGroupFocusBounds,
   } = useDiscoverCameraOrchestration({
-    urlState,
+    urlState: nav,
     selectedSchool,
     setPanToArea,
     isLoadingAreaListings,
@@ -1444,7 +1443,7 @@ export default function MapDiscovery() {
     discoverAreas,
     areasLoading,
     cityTotal,
-    urlState,
+    urlState: { ...nav, viewport } satisfies DiscoverUrlState,
     isAgriJourney,
     mapZoom,
   });
@@ -1474,7 +1473,7 @@ export default function MapDiscovery() {
     corridorGroups,
     agriAreasData,
     liveAreas,
-    urlState,
+    urlState: { ...nav, viewport } satisfies DiscoverUrlState,
     summaryRegions,
     cityCenter,
     focusedGroup,
