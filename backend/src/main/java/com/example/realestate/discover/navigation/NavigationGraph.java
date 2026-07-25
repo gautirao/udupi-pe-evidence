@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -188,14 +189,32 @@ public final class NavigationGraph {
         return ancestryByAreaKey.getOrDefault(areaKey, List.of());
     }
 
-    /** Every AREA leaf's area_key in {@code nodeKey}'s subtree (empty for an AREA node's own key
-     * — an AREA node has no descendants below it). */
+    /** Every AREA leaf's area_key in {@code nodeKey}'s subtree. For a CLUSTER, every AREA leaf
+     * beneath it; for an AREA node, a single-element list containing the node's OWN area_key —
+     * it has no descendants below it, but this method includes the node itself rather than
+     * returning empty (fix-cycle-1 S8: this javadoc previously claimed "empty for an AREA node's
+     * own key", which {@code NavigationGraphTest#build_ancestryDescendantsAndBounds} disproves;
+     * see {@link NavigationNodeResponse#forNode} and {@link AreaCountRollupService#countForNode},
+     * which both deliberately special-case AREA before calling this method rather than relying on
+     * it to return empty). */
     public List<String> descendantAreaKeysOf(String nodeKey) {
         return descendantAreaKeysByNodeKey.getOrDefault(nodeKey, List.of());
     }
 
     public Bounds boundsOf(String nodeKey) {
         return boundsByNodeKey.get(nodeKey);
+    }
+
+    /** All nodes in this graph, in no guaranteed order — used by resolution-ladder scans that must
+     * examine every node (#1956 AC18: the {@code /navigation/resolve} stale {@code "c:"}
+     * cluster-key rung, which parses the stale key's representative-area segment into known area
+     * slugs longest-first and then prefers the DEEPEST CLUSTER whose subtree contains ALL surviving
+     * representatives, falling back to the deepest node of ANY type that ALSO contains ALL of them,
+     * else nothing — the caller falls through to CITY_ROOT rather than label a partial-containment
+     * node ANCESTOR). Not a hot path: only called on a resolve-ladder EXACT-key miss, never on the {@link
+     * NavigationController#getNode} structural read path. */
+    public Collection<NavigationNode> allNodes() {
+        return nodesByKey.values();
     }
 
     /** Structural bounds snapshot for one node — deliberately NOT a listing-count concept, see
