@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -102,6 +103,82 @@ class NavigationGraphTest {
 
         assertThatThrownBy(() -> NavigationGraph.build("testcity", 1L, List.of(leafBeforeParent, root)))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    // ── #<root-display-order-fix> regression: NavigationGraph.childrenOf(root) ordering ─────
+
+    /** Converts a generator-produced multi-region city tree into persisted-shape {@link
+     * NavigationNode}s (assigning surrogate ids as {@link NavigationTreeSandboxWriter}/promotion
+     * would) and builds a real {@link NavigationGraph} over it, proving the fix threads through
+     * to the same public accessor ({@link NavigationGraph#childrenOf}) callers actually use —
+     * not just the generator's own in-memory {@code displayOrder} field. */
+    private NavigationGraph buildGraphFromGeneratedNodes(List<GeneratedNode> generated) {
+        List<GeneratedNode> depthOrdered = generated.stream()
+                .sorted(java.util.Comparator.comparing(GeneratedNode::depth)
+                        .thenComparing(GeneratedNode::displayOrder))
+                .toList();
+
+        java.util.Map<String, Long> idByNodeKey = new java.util.HashMap<>();
+        List<NavigationNode> flat = new ArrayList<>();
+        long nextId = 1L;
+        for (GeneratedNode g : depthOrdered) {
+            long id = nextId++;
+            Long parentId = g.parentNodeKey() == null ? null : idByNodeKey.get(g.parentNodeKey());
+            NavigationNode n = new NavigationNode(
+                    1, g.regionKey(), g.nodeType(), parentId, g.nodeKey(), g.areaKey(),
+                    g.representativeAreaKeys(), g.displayLabel(), g.displayOrder(), g.depth(),
+                    g.ancestorKeys(), g.descendantAreaCount(),
+                    g.centreLat(), g.centreLon(), g.minLat(), g.minLon(), g.maxLat(), g.maxLon(),
+                    g.policyFingerprint(), g.generatedAt());
+            withId(n, id);
+            idByNodeKey.put(g.nodeKey(), id);
+            flat.add(n);
+        }
+        return NavigationGraph.build("testcity", 1L, flat);
+    }
+
+    @Test
+    @DisplayName("[regression] NavigationGraph.childrenOf(null) for a real multi-region generator "
+            + "city is deterministic and gapless — proves the root display_order fix survives the "
+            + "generator->persisted-entity->graph pipeline, not just the generator's own output")
+    void childrenOf_root_deterministicAcrossShuffledRegionInputForGeneratedCity() {
+        NavigationTreeGenerator generator = new NavigationTreeGenerator();
+        GeneratorPolicy policy = new GeneratorPolicy(
+                4, 2, 5, true, BigDecimal.valueOf(0.35), BigDecimal.valueOf(0.5),
+                "GEOMETRIC_BISECTION", "CENTROID_NEAREST", "ATTACH_NEAREST_CLUSTER", "AREA_CENTROID_MEAN");
+        Instant generatedAt = Instant.parse("2026-01-01T00:00:00Z");
+
+        List<GeneratorRegionInput> ordered = List.of(
+                new GeneratorRegionInput("north", List.of(genArea("city|n1", "N1", 13.0))),
+                new GeneratorRegionInput("south", List.of(genArea("city|s1", "S1", 12.0))),
+                new GeneratorRegionInput("east", List.of(genArea("city|e1", "E1", 12.5))));
+        List<GeneratorRegionInput> shuffled = new ArrayList<>(List.of(ordered.get(2), ordered.get(0), ordered.get(1)));
+
+        NavigationGraph graphOrdered = buildGraphFromGeneratedNodes(
+                generator.generateCity(ordered, policy, "fp", generatedAt));
+        NavigationGraph graphShuffled = buildGraphFromGeneratedNodes(
+                generator.generateCity(shuffled, policy, "fp", generatedAt));
+
+        // region_key sort is fixed (east, north, south) regardless of input order, so both graphs'
+        // root children lists must be identical and gapless.
+        assertThat(graphOrdered.childrenOf(null)).hasSize(3);
+        assertThat(graphOrdered.childrenOf(null)).isEqualTo(graphShuffled.childrenOf(null));
+        for (String rootKey : graphOrdered.childrenOf(null)) {
+            assertThat(graphOrdered.nodeByKey(rootKey).getParentNodeId()).isNull();
+        }
+        List<Integer> rootDisplayOrders = graphOrdered.childrenOf(null).stream()
+                .map(k -> graphOrdered.nodeByKey(k).getDisplayOrder())
+                .sorted()
+                .toList();
+        assertThat(rootDisplayOrders).containsExactly(1, 2, 3);
+    }
+
+    private static GeneratorArea genArea(String areaKey, String name, double lat) {
+        BigDecimal latBd = BigDecimal.valueOf(lat);
+        BigDecimal lon = BigDecimal.valueOf(77.0);
+        return new GeneratorArea(areaKey, name, latBd, lon,
+                latBd.subtract(BigDecimal.valueOf(0.01)), lon.subtract(BigDecimal.valueOf(0.01)),
+                latBd.add(BigDecimal.valueOf(0.01)), lon.add(BigDecimal.valueOf(0.01)));
     }
 
     // ── Fixture helpers ──────────────────────────────────────────────────────────────────────────

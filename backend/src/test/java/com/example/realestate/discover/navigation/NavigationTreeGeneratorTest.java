@@ -321,6 +321,133 @@ class NavigationTreeGeneratorTest {
         assertThat(result).extracting(GeneratedNode::nodeKey).doesNotHaveDuplicates();
     }
 
+    // ── #<root-display-order-fix> regression: generateCity root display_order sequencing ────
+
+    /** Three regions, each with 2 areas that fit directly (max_direct_children=4) -> every node
+     * is an AREA root leaf (parentNodeKey == null), reproducing exactly the pre-fix collision
+     * condition: >=2 regions, each contributing its own depth-0 nodes. */
+    private List<GeneratedNode> multiRegionRootOnlyCity(List<GeneratorRegionInput> regionsInOrder) {
+        return generator.generateCity(regionsInOrder, policy(4, 2, 5, true), FINGERPRINT, GENERATED_AT);
+    }
+
+    private static List<GeneratorRegionInput> threeRegionFixture() {
+        GeneratorRegionInput north = new GeneratorRegionInput("north", List.of(
+                area("city|n1", "N1", 13.0), area("city|n2", "N2", 13.1)));
+        GeneratorRegionInput south = new GeneratorRegionInput("south", List.of(
+                area("city|s1", "S1", 12.0), area("city|s2", "S2", 12.1)));
+        GeneratorRegionInput east = new GeneratorRegionInput("east", List.of(
+                area("city|e1", "E1", 12.5), area("city|e2", "E2", 12.6)));
+        return new ArrayList<>(List.of(north, south, east));
+    }
+
+    @Test
+    @DisplayName("[regression] generateCity output for a multi-region city (>=2 regions, each "
+            + "contributing root nodes) validates cleanly against NavigationTreeValidationService "
+            + "invariant #8 (no duplicate display_order among parentNodeKey=null siblings)")
+    void generateCity_multiRegion_validatesCleanly() {
+        List<GeneratedNode> result = multiRegionRootOnlyCity(threeRegionFixture());
+
+        assertThat(result).hasSize(6);
+        assertValidatesCleanly(result);
+    }
+
+    @Test
+    @DisplayName("[regression] all root display_order values across a multi-region city are unique "
+            + "and form a gapless 1..N sequence")
+    void generateCity_multiRegion_rootDisplayOrdersAreGaplessAndUnique() {
+        List<GeneratedNode> result = multiRegionRootOnlyCity(threeRegionFixture());
+
+        List<Integer> rootOrders = result.stream()
+                .filter(n -> n.parentNodeKey() == null)
+                .map(GeneratedNode::displayOrder)
+                .sorted()
+                .toList();
+
+        assertThat(rootOrders).doesNotHaveDuplicates();
+        assertThat(rootOrders).containsExactlyElementsOf(
+                java.util.stream.IntStream.rangeClosed(1, result.size()).boxed().toList());
+    }
+
+    @Test
+    @DisplayName("[regression] shuffling the input region order produces an identical generated "
+            + "tree — generateCity's region_key sort makes root numbering order-independent")
+    void generateCity_multiRegion_shufflingInputRegionOrderIsDeterministic() {
+        List<GeneratorRegionInput> ordered = threeRegionFixture();
+        List<GeneratorRegionInput> shuffled = new ArrayList<>(ordered);
+        Collections.reverse(shuffled);
+        // Also rotate to prove it's not merely reversal-safe.
+        Collections.swap(shuffled, 0, 1);
+
+        List<GeneratedNode> resultOrdered = generator.generateCity(
+                ordered, policy(4, 2, 5, true), FINGERPRINT, GENERATED_AT);
+        List<GeneratedNode> resultShuffled = generator.generateCity(
+                shuffled, policy(4, 2, 5, true), FINGERPRINT, GENERATED_AT);
+
+        assertThat(resultShuffled).isEqualTo(resultOrdered);
+    }
+
+    @Test
+    @DisplayName("[regression] single-region behaviour is unchanged by the fix: the public 6-arg "
+            + "generateRegion API produces the exact same tree as generateCity given one region")
+    void generateRegion_singleRegionOutputUnchangedByCityWideCounterFix() {
+        GeneratorArea a1 = area("city|q1", "Q1", 12.0);
+        GeneratorArea a2 = area("city|q2", "Q2", 12.1);
+        GeneratorArea a3 = area("city|q3", "Q3", 12.2);
+        GeneratorPolicy policy = policy(4, 2, 5, true);
+
+        List<GeneratedNode> viaPublicRegionApi = generator.generateRegion(
+                "solo", List.of(a1, a2, a3), policy, FINGERPRINT, GENERATED_AT, new HashSet<>());
+        List<GeneratedNode> viaCityApiSingleRegion = generator.generateCity(
+                List.of(new GeneratorRegionInput("solo", List.of(a1, a2, a3))),
+                policy, FINGERPRINT, GENERATED_AT);
+
+        assertThat(viaPublicRegionApi).isEqualTo(viaCityApiSingleRegion);
+        assertThat(viaPublicRegionApi).extracting(GeneratedNode::displayOrder).containsExactly(1, 2, 3);
+        assertValidatesCleanly(viaPublicRegionApi);
+    }
+
+    @Test
+    @DisplayName("[regression] beneath separate cluster parents (from different regions of the same "
+            + "city), each parent's children remain independently gapless 1..N — only the root level "
+            + "draws from the shared city-wide counter, deeper levels are unaffected")
+    void generateCity_multiRegion_childOrderingUnderSeparateClusterParentsStaysIndependentlyGapless() {
+        List<GeneratorArea> northAreas = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            northAreas.add(area(String.format("city|n%d", i), "N" + i, 12.0 + i * 0.1));
+        }
+        List<GeneratorArea> southAreas = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            southAreas.add(area(String.format("city|s%d", i), "S" + i, 20.0 + i * 0.1));
+        }
+        GeneratorPolicy policy = policy(2, 1, 5, true);
+        List<GeneratedNode> result = generator.generateCity(
+                List.of(
+                        new GeneratorRegionInput("north", northAreas),
+                        new GeneratorRegionInput("south", southAreas)),
+                policy, FINGERPRINT, GENERATED_AT);
+
+        // Two regions each produce >1 CLUSTER root -> real, distinct non-null parent keys exist
+        // at depth 1 in more than one region, letting us check independence across parents.
+        Map<String, List<GeneratedNode>> byParent = result.stream()
+                .filter(n -> n.parentNodeKey() != null)
+                .collect(Collectors.groupingBy(GeneratedNode::parentNodeKey));
+        assertThat(byParent).isNotEmpty();
+
+        for (Map.Entry<String, List<GeneratedNode>> e : byParent.entrySet()) {
+            List<Integer> orders = e.getValue().stream()
+                    .map(GeneratedNode::displayOrder)
+                    .sorted()
+                    .toList();
+            assertThat(orders)
+                    .as("children of " + e.getKey() + " must be gapless 1..N regardless of the "
+                            + "shared root-level counter")
+                    .containsExactlyElementsOf(
+                            java.util.stream.IntStream.rangeClosed(1, orders.size()).boxed().toList());
+        }
+
+        assertValidatesCleanly(result);
+    }
+
     // ── Shared helpers ────────────────────────────────────────────────────────────────────────
 
     private void assertDescendantCountsAndBoundsCorrectEverywhere(List<GeneratedNode> nodes) {

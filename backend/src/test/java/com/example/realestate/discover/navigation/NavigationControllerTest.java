@@ -739,6 +739,64 @@ class NavigationControllerTest {
         verify(webRequestForBb).checkNotModified(etagForBb);
     }
 
+    // ── public root response ordering ──────────────────────────────────────────────────────
+
+    /**
+     * Three depth-0, parentNodeId=null nodes from three different regions (east/north/south),
+     * each carrying the displayOrder a city-wide generateCity call would assign following
+     * region_key sort order (east=1, north=2, south=3) — the exact shape the pre-fix bug
+     * collided on (every depth-0 node sharing parentNodeKey=null across >=2 regions). The SAME
+     * three {@link NavigationNode} objects are reused across both graphs below so only the input
+     * list ORDER passed to {@link NavigationGraph#build} varies, isolating the ordering
+     * guarantee under test from any other difference.
+     */
+    private NavigationGraph buildMultiRegionRootGraph(String citySlug, List<NavigationNode> flatNodesInGivenOrder) {
+        return NavigationGraph.build(citySlug, 99L, flatNodesInGivenOrder);
+    }
+
+    @Test
+    void getNode_root_multiRegionCity_childOrderIsDeterministic_regardlessOfBuildInputOrder() {
+        Instant now = Instant.now();
+        NavigationNode rootEast = node(301L, null, "east", "AREA", "a:eastarea", "eastarea",
+                List.of("eastarea"), "East Area", 1, 0, List.of(), 0, now);
+        NavigationNode rootNorth = node(302L, null, "north", "AREA", "a:northarea", "northarea",
+                List.of("northarea"), "North Area", 2, 0, List.of(), 0, now);
+        NavigationNode rootSouth = node(303L, null, "south", "AREA", "a:southarea", "southarea",
+                List.of("southarea"), "South Area", 3, 0, List.of(), 0, now);
+
+        NavigationGraph orderedGraph = buildMultiRegionRootGraph(
+                "multiregiona", List.of(rootEast, rootNorth, rootSouth));
+        NavigationGraph shuffledGraph = buildMultiRegionRootGraph(
+                "multiregionb", List.of(rootSouth, rootEast, rootNorth));
+
+        when(graphCache.getActiveGraph("multiregiona")).thenReturn(Optional.of(orderedGraph));
+        when(graphCache.getActiveGraph("multiregionb")).thenReturn(Optional.of(shuffledGraph));
+
+        NavigationNodeResponse bodyOrdered =
+                controller.getNode("multiregiona", "root", lenientWebRequest()).getBody();
+        NavigationNodeResponse bodyShuffled =
+                controller.getNode("multiregionb", "root", lenientWebRequest()).getBody();
+
+        // Both the node-key ordering and the display_order sequence the public root response
+        // carries must be identical regardless of which order the underlying rows were built
+        // from — the whole point of the city-wide rootOrderCounter fix.
+        assertThat(bodyOrdered.children())
+                .extracting(NavigationNodeResponse.NavigationChildSummary::nodeKey)
+                .containsExactly("a:eastarea", "a:northarea", "a:southarea");
+        assertThat(bodyOrdered.children())
+                .extracting(NavigationNodeResponse.NavigationChildSummary::displayOrder)
+                .containsExactly(1, 2, 3);
+
+        assertThat(bodyShuffled.children())
+                .extracting(NavigationNodeResponse.NavigationChildSummary::nodeKey)
+                .containsExactly("a:eastarea", "a:northarea", "a:southarea");
+        assertThat(bodyShuffled.children())
+                .extracting(NavigationNodeResponse.NavigationChildSummary::displayOrder)
+                .containsExactly(1, 2, 3);
+
+        assertThat(bodyOrdered.children()).isEqualTo(bodyShuffled.children());
+    }
+
     @Test
     void getCounts_node_returnsRolledUpTotalsOnly_structurallySeparateFromGetNode() {
         NavigationGraph graph = buildGraph();

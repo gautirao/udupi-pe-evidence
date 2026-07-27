@@ -56,7 +56,10 @@ public class NavigationTreeGenerator {
     /**
      * Generates every region's tree for a city, in a fixed region_key order, sharing one
      * node_key-collision-disambiguation set across all regions (node_key uniqueness is scoped to
-     * the whole city/revision, not to one region).
+     * the whole city/revision, not to one region). Root-level nodes (no parent) additionally
+     * share one city-wide {@code display_order} sequence, numbered following this region order
+     * then each region's existing member order — siblings are scoped to {@code parentNodeKey} by
+     * the validator, and all roots share {@code parentNodeKey == null}.
      */
     public List<GeneratedNode> generateCity(
             List<GeneratorRegionInput> regions, GeneratorPolicy policy,
@@ -68,17 +71,34 @@ public class NavigationTreeGenerator {
 
         List<GeneratedNode> out = new ArrayList<>();
         Set<String> usedClusterKeys = new HashSet<>();
+        int[] rootOrderCounter = new int[] {1};
         for (GeneratorRegionInput region : sortedRegions) {
             out.addAll(generateRegion(region.regionKey(), region.members(), policy,
-                    policyFingerprint, generatedAt, usedClusterKeys));
+                    policyFingerprint, generatedAt, usedClusterKeys, rootOrderCounter));
         }
         return out;
     }
 
-    /** Generates one region's tree. {@code usedClusterKeys} may be shared across regions (city-wide). */
+    /**
+     * Generates one region's tree. {@code usedClusterKeys} may be shared across regions
+     * (city-wide). Root-level nodes are numbered starting at 1, gapless within this call.
+     */
     public List<GeneratedNode> generateRegion(
             String regionKey, List<GeneratorArea> members, GeneratorPolicy policy,
             String policyFingerprint, Instant generatedAt, Set<String> usedClusterKeys) {
+        return generateRegion(regionKey, members, policy, policyFingerprint, generatedAt,
+                usedClusterKeys, new int[] {1});
+    }
+
+    /**
+     * Same as {@link #generateRegion(String, List, GeneratorPolicy, String, Instant, Set)} but
+     * threading a shared, mutable root-level display_order counter so that {@link #generateCity}
+     * can number roots city-wide instead of restarting at 1 per region.
+     */
+    private List<GeneratedNode> generateRegion(
+            String regionKey, List<GeneratorArea> members, GeneratorPolicy policy,
+            String policyFingerprint, Instant generatedAt, Set<String> usedClusterKeys,
+            int[] rootOrderCounter) {
 
         List<GeneratorArea> sortedMembers = members.stream()
                 .sorted(Comparator.comparing(GeneratorArea::areaKey))
@@ -86,14 +106,14 @@ public class NavigationTreeGenerator {
 
         List<GeneratedNode> out = new ArrayList<>();
         expand(regionKey, sortedMembers, 0, List.of(), null, policy, policyFingerprint,
-                generatedAt, usedClusterKeys, out);
+                generatedAt, usedClusterKeys, out, rootOrderCounter);
         return out;
     }
 
     private void expand(
             String regionKey, List<GeneratorArea> members, int depth, List<String> ancestorKeys,
             String parentNodeKey, GeneratorPolicy policy, String policyFingerprint, Instant generatedAt,
-            Set<String> usedClusterKeys, List<GeneratedNode> out) {
+            Set<String> usedClusterKeys, List<GeneratedNode> out, int[] rootOrderCounter) {
 
         if (members.isEmpty()) {
             return;
@@ -108,8 +128,9 @@ public class NavigationTreeGenerator {
                     || partition.second().size() < policy.minAreasPerCluster();
 
             if (!rejectSplit) {
-                int order = 1;
+                int localOrder = 1;
                 for (List<GeneratorArea> part : List.of(partition.first(), partition.second())) {
+                    int order = parentNodeKey == null ? rootOrderCounter[0]++ : localOrder++;
                     List<String> reps = selectRepresentatives(part, policy);
                     String clusterKey = deriveClusterNodeKey(regionKey, part, reps, usedClusterKeys);
                     usedClusterKeys.add(clusterKey);
@@ -125,16 +146,16 @@ public class NavigationTreeGenerator {
                     List<String> childAncestors = new ArrayList<>(ancestorKeys);
                     childAncestors.add(clusterKey);
                     expand(regionKey, part, depth + 1, List.copyOf(childAncestors), clusterKey,
-                            policy, policyFingerprint, generatedAt, usedClusterKeys, out);
-                    order++;
+                            policy, policyFingerprint, generatedAt, usedClusterKeys, out, rootOrderCounter);
                 }
                 return;
             }
             // fall through: split rejected, collapse to AREA leaves below.
         }
 
-        int order = 1;
+        int localOrder = 1;
         for (GeneratorArea area : members) {
+            int order = parentNodeKey == null ? rootOrderCounter[0]++ : localOrder++;
             Bounds bounds = new Bounds(
                     round(area.centreLat()), round(area.centreLon()),
                     round(area.minLat()), round(area.minLon()),
@@ -144,7 +165,6 @@ public class NavigationTreeGenerator {
                     area.areaKey(), List.of(area.areaKey()), area.name(), order, depth, ancestorKeys, 1,
                     bounds.centreLat(), bounds.centreLon(), bounds.minLat(), bounds.minLon(),
                     bounds.maxLat(), bounds.maxLon(), policyFingerprint, generatedAt));
-            order++;
         }
     }
 
