@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discover experience — functional & interaction audit</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+html,body{margin:0;background:var(--canvas-200);font-family:var(--font-sans);color:var(--text-strong)}
+*{box-sizing:border-box}
+a{color:var(--accent);text-decoration:none}a:hover{color:var(--accent-hover);text-decoration:underline}
+.wrap{max-width:1220px;margin:0 auto;padding:0 24px 96px}
+header.top{background:var(--navy-900);color:#fff;padding:26px 0 22px;margin-bottom:22px}
+header.top .wrap{padding-bottom:0}
+.eyebrow{font-size:10.5px;font-weight:700;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:rgba(255,255,255,.55)}
+h1{font-family:var(--font-serif);font-size:32px;font-weight:600;letter-spacing:-.02em;margin:6px 0 8px}
+header.top p{margin:0;max-width:80ch;font-size:13.5px;line-height:1.5;color:rgba(255,255,255,.76);text-wrap:pretty}
+nav.toc{position:sticky;top:0;z-index:20;background:var(--paper);border-bottom:1px solid var(--border);margin-bottom:22px}
+nav.toc .wrap{display:flex;flex-wrap:wrap;gap:4px 6px;padding:8px 24px}
+nav.toc a{font-size:11.5px;font-weight:600;padding:4px 9px;border-radius:var(--radius-full);background:var(--surface-subtle);color:var(--text-body)}
+nav.toc a:hover{background:var(--navy-100);color:var(--navy-800);text-decoration:none}
+section{margin:0 0 34px;scroll-margin-top:52px}
+h2{font-family:var(--font-serif);font-size:22px;font-weight:600;letter-spacing:-.02em;margin:0 0 4px}
+h2 .num{font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--accent);margin-right:9px;vertical-align:2px}
+h3{font-size:13px;font-weight:700;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-muted);margin:20px 0 7px}
+p.lede{margin:0 0 12px;font-size:13.5px;line-height:1.5;color:var(--text-body);max-width:92ch;text-wrap:pretty}
+table{display:block;max-width:100%;overflow-x:auto;border-collapse:collapse;background:var(--paper);border:1px solid var(--border);border-radius:var(--radius-md);font-size:12px;margin:0 0 12px}
+table tbody{display:table;width:100%;min-width:100%}
+th,td{text-align:left;vertical-align:top;padding:7px 9px;border-bottom:1px solid var(--border);line-height:1.4;overflow-wrap:anywhere}
+th{background:var(--surface-subtle);font-size:10px;font-weight:700;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-muted)}
+tr:last-child td{border-bottom:none}
+td strong{font-weight:700}
+td code,p code,li code{font-family:var(--font-mono);font-size:11px;background:var(--surface-subtle);padding:1px 4px;border-radius:3px}
+.pill{display:inline-block;padding:2px 7px;border-radius:var(--radius-full);font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
+.cr{background:var(--evergreen-50);color:var(--evergreen-600)}
+.pr{background:var(--navy-100);color:var(--navy-700)}
+.im{background:var(--surface-subtle);color:var(--grey-500)}
+.ms{background:var(--brick-50);color:var(--brick-600)}
+.ct{background:#F6DCD3;color:#8C3A1C}
+.am{background:var(--ochre-50);color:var(--ochre-600)}
+.pd{background:#EDE7F6;color:#5E5286}
+.eu{background:#E4E9F2;color:#3B4A63}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:11px 13px;background:var(--paper);border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:16px;font-size:11.5px;color:var(--text-body)}
+.legend span.pill{margin-right:5px}
+.callout{padding:12px 14px;border-radius:var(--radius-md);background:var(--paper);border:1px solid var(--border-strong);font-size:13px;line-height:1.5;color:var(--text-body);margin:0 0 14px;text-wrap:pretty}
+.callout.warn{background:var(--ochre-50);border-color:var(--ochre-600)}
+.callout.bad{background:var(--brick-50);border-color:var(--brick-600)}
+.callout b{color:var(--text-strong)}
+ol.q,ul.q{margin:0 0 12px;padding-left:20px;font-size:13px;line-height:1.55;color:var(--text-body)}
+ol.q li,ul.q li{margin-bottom:6px}
+.verdict{padding:20px 22px;border-radius:var(--radius-lg);background:var(--navy-900);color:#fff}
+.verdict .v{font-family:var(--font-mono);font-size:19px;font-weight:700;letter-spacing:-.01em;margin:8px 0 10px;color:var(--copper-400)}
+.verdict p{margin:0 0 8px;font-size:13px;line-height:1.55;color:rgba(255,255,255,.8);max-width:92ch}
+.verdict ul{margin:6px 0 0;padding-left:20px;font-size:12.5px;line-height:1.55;color:rgba(255,255,255,.8)}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}
+.meta span{padding:4px 10px;border-radius:var(--radius-full);background:rgba(255,255,255,.1);font-size:11px;font-weight:600;color:rgba(255,255,255,.82)}
+.scope{font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+<div class="eyebrow">Review artefact · not customer-facing</div>
+<h1>Discover experience — functional &amp; interaction audit</h1>
+<p>Audit of what <code style="color:#fff;background:rgba(255,255,255,.12)">ui_kits/new_discover/experience.html</code> (and the scripts it loads) actually communicates: journeys, states, transitions, result scopes, marker grammar, responsive coverage. Nothing about the repository, backend, API contracts, production URLs or any PR plan is assumed; where the mock does not prove behaviour it is recorded as unknown. No customer-facing state in the mock was changed to produce this report.</p>
+<div class="meta"><span>Audited: experience.html + src/Experience · ExpPanel · ExpMap · ExpModeBar · ExpSchools · ExpAgri · exp-journeys · exp-data</span><span>Date: 27 Jul 2026</span><span>States frozen — verdict: READY FOR CLI INVESTIGATION</span></div>
+</div></header>
+
+<nav class="toc"><div class="wrap">
+<a href="#s0">Index</a><a href="#s1">1 Journeys</a><a href="#s2">2 Hierarchy shapes</a><a href="#s3">3 State &amp; restoration</a><a href="#s4">4 Actions</a><a href="#s5">5 Result scope</a><a href="#s6">6 Add nearby areas</a><a href="#s7">7 Markers &amp; cards</a><a href="#s8">8 School counts</a><a href="#s9">9 Direct search</a><a href="#s10">10 Agri isolation</a><a href="#s11">11 Responsive</a><a href="#s12">12 Missing states</a><a href="#s13">13 Contradictions</a><a href="#s14">14 Product decisions</a><a href="#s15">15 CLI handoff</a><a href="#sdelta">Correction delta</a><a href="#s16">16 Verdict</a>
+</div></nav>
+
+<div class="wrap">
+
+<section id="s0">
+<h2><span class="num">01</span>Functional-audit index</h2>
+<div class="legend">
+<span><span class="pill cr">Clear</span>proven by the mock</span>
+<span><span class="pill pr">Partial</span>state exists, coverage incomplete</span>
+<span><span class="pill im">Implied</span>affordance visible, state never rendered</span>
+<span><span class="pill ms">Missing</span>no representation</span>
+<span><span class="pill ct">Contradictory</span>two parts disagree</span>
+<span><span class="pill am">Ambiguous</span>readable two ways</span>
+<span><span class="pill pd">Decision</span>needs product decision</span>
+<span><span class="pill eu">Eng unknown</span>not decidable from the mock</span>
+</div>
+<p class="lede">The mock is a single persistent shell with three journeys (Areas · Schools · Agricultural) and a reviewer strip of ten scenarios. Journey state is separated (<code>st</code> / <code>st.sch</code> / <code>st.ag</code>), committed transitions push history, presentation-only changes do not. Coverage of the residential Areas journey is high; Schools and Agricultural are complete as navigation but thin on results-state services (alerts, loading, detail); cross-journey and cross-device edges hold most of the defects.</p>
+<table>
+<tr><th>Area</th><th>Represented</th><th>Weakest point</th><th>Status</th></tr>
+<tr><td>Areas-first hierarchy (both shallow shapes)</td><td>City · Direction · optional Local · Area · Listings, breadcrumb, hierarchy Back, visual clusters</td><td>Zero-match destinations and zero-listing areas are filtered out of the funnel entirely</td><td><span class="pill pr">Partial</span></td></tr>
+<tr><td>Multi-area (Add nearby areas)</td><td>Draft → commit, max 3, duplicate refusal, chips, Edit / Clear, combined results</td><td>Comparison metaphor survives in the capability strip; Preview survives in zero-results</td><td><span class="pill pr">Partial</span></td></tr>
+<tr><td>Polygon</td><td>Boundary layer, replacement confirmation, active polygon results, return</td><td>Drawing/editing itself is never shown — the boundary is synthesised on one press</td><td><span class="pill im">Implied</span></td></tr>
+<tr><td>Search this area</td><td>Pan → results unchanged → CTA → confirm → committed viewport, scope rect, return</td><td>Zero-result recovery from a viewport scope silently converts it to an area set</td><td><span class="pill ct">Contradictory</span></td></tr>
+<tr><td>Schools-first</td><td>Directional school nav, school-aware clusters, area schools, board/level, radius homes</td><td>Radius homes ignore active property filters; no scope indicator; no alert</td><td><span class="pill pr">Partial</span></td></tr>
+<tr><td>Area → Schools</td><td>Area kept, return-to-properties path, "located inside" copy</td><td>Only works from a single selected area; from 2–3 areas the journey drops to the city root</td><td><span class="pill ct">Contradictory</span></td></tr>
+<tr><td>Agricultural</td><td>Origin, outbound direction, cumulative bands, towns, parcels, agri filters, isolation copy</td><td>No parcel detail, no alert, residential Buy/Rent + city controls remain visible</td><td><span class="pill pr">Partial</span></td></tr>
+<tr><td>Zero results</td><td>Area-set and city recovery: nearby areas, one-filter changes with real counts, alert, error</td><td>Polygon / viewport / school / agri zero states have no equivalent recovery</td><td><span class="pill pr">Partial</span></td></tr>
+<tr><td>Alerts</td><td>Create from area-set/city/polygon/viewport results and from zero, save, fail, retry, list, pause, delete, reopen</td><td>Unreachable in Schools and Agricultural; no signed-in/out state; no notification return</td><td><span class="pill ms">Missing</span></td></tr>
+<tr><td>Listing detail &amp; restoration</td><td>Peek → detail → Back to results, restoration promise in copy</td><td>Scroll position is remounted away; detail is invisible in mobile map mode; not a history entry</td><td><span class="pill ct">Contradictory</span></td></tr>
+<tr><td>URL / refresh restoration</td><td>In-session Back over committed snapshots</td><td>No product URL at all; the only query parameter is the reviewer's scenario switch</td><td><span class="pill ms">Missing</span></td></tr>
+</table>
+</section>
+
+<section id="s1">
+<h2><span class="num">02</span>Journey inventory</h2>
+<p class="lede">One row per journey or sub-journey the mock represents. "Entry point shown" is what a shopper can press; reviewer scenario buttons are not entry points and are excluded from that column.</p>
+<table>
+<tr><th>Journey</th><th>Entry point shown</th><th>First visible state</th><th>Steps represented</th><th>Final result state</th><th>Map</th><th>Panel</th><th>Back</th><th>Mobile</th><th>Status</th><th>Main gap</th></tr>
+<tr><td><strong>Areas-first A1</strong> (Direction → Area)</td><td>Areas journey card (default, "Rec")</td><td>City landing, 5 directional cards on a compass canvas</td><td>City → Direction (East/South/West/Centre) → Area → Listings</td><td>Single-area results with filters, search-within, listing cards</td><td>Direction cards by bearing → area pills → price pins with proximity clustering</td><td>Direction rows → area rows → scope head + filters + cards</td><td>"Back to areas in East" / hierarchy Back on every level</td><td>Yes</td><td><span class="pill cr">Clear</span></td><td>Direction with zero matches never renders (filtered out)</td></tr>
+<tr><td><strong>Areas-first A2</strong> (+ Local destination)</td><td>Same, via North Bangalore</td><td>Direction with 3 local destinations</td><td>City → Direction → Local → Area → Listings</td><td>Same as A1</td><td>Local cards → dashed visual clusters + area pills</td><td>Local rows → area rows ("N areas with matches" note)</td><td>Back to parent local/direction</td><td>Yes</td><td><span class="pill cr">Clear</span></td><td>One-child local destination not representable in the data</td></tr>
+<tr><td><strong>Browse all listings</strong></td><td>Text button at journey root</td><td>City-wide results</td><td>City → all listings</td><td><code>CITY</code> scope, "Every area in Bangalore" chip</td><td>City fit, price pins/clusters</td><td>Scope head, filters, cards</td><td>"Back to Areas in Bangalore"</td><td>Root cue hidden on mobile</td><td><span class="pill pr">Partial</span></td><td>Entry point is not reachable on mobile (cue row is desktop-only)</td></tr>
+<tr><td><strong>Direct area search</strong></td><td>Control-bar autocomplete</td><td>Dropdown of ≤6 name matches with ancestry sub-label</td><td>Query → pick → area results</td><td>Single-area results (breadcrumb rebuilt from ancestry)</td><td>Fit to the area</td><td>Full area landing incl. Schools / Add-nearby shortcuts</td><td>Parent Back present</td><td>Yes</td><td><span class="pill cr">Clear</span></td><td>No landmark/project/city queries; no disambiguation page</td></tr>
+<tr><td><strong>Multi-area</strong></td><td>"Add nearby areas" card on an area landing; "Edit areas" on a set</td><td>Draft editor, dashed eyebrow "Draft selection · 1 of 3"</td><td>Draft add/remove → refuse 4th → commit → chips → edit/clear</td><td><code>AREA_SET</code> of 2–3 areas, combined listings, schools block</td><td>Camera anchored on committed area; candidates as dashed labels</td><td>Candidate grid with one <em>Add</em>; sticky "Show N listings"</td><td>Cancel returns to results unchanged</td><td>Yes — single CTA in a fixed footer</td><td><span class="pill pr">Partial</span></td><td>Candidate map labels are inert (add only from the panel)</td></tr>
+<tr><td><strong>Polygon</strong></td><td>"Draw search area" in the scope bar</td><td>Dashed boundary already drawn, results unchanged + note</td><td>Draw → confirm replacement → polygon results → return</td><td><code>POLYGON</code> scope, copper boundary, "Drawn area" chip</td><td>Boundary polygon; fit to its extent</td><td>Scope head with return-to-previous ghost</td><td>× on the chip and "Return to …"</td><td>Reachable, untested layout</td><td><span class="pill im">Implied</span></td><td>No draw mode, no vertices, no edit, no cancel-mid-draw</td></tr>
+<tr><td><strong>Search this area</strong></td><td>Map CTA after any pan/zoom in a results state</td><td>Results unchanged + "You moved the map" note</td><td>Pan → CTA → confirm → viewport results → return</td><td><code>VIEWPORT</code> scope, dashed committed rect, camera note</td><td>Committed bounds rectangle</td><td>Scope head "Visible map area" + return</td><td>"Return to Hebbal + Nagawara + Jakkur"</td><td>CTA repositioned above the sheet</td><td><span class="pill cr">Clear</span></td><td>Zero-result recovery breaks the scope model (§13)</td></tr>
+<tr><td><strong>Schools-first</strong></td><td>Schools journey card; school-name search</td><td>"Where do you want schools?" · 5 directions counted in schools</td><td>Direction → (Local) → Area → schools list → school → radius homes</td><td>School-centred radius result state (3/5/10 km)</td><td>Plum school pins, dashed radius ring, price pins</td><td>Board/Level facets, school rows, radius control, distance-sorted cards</td><td>Layered Back to schools / areas / direction</td><td>Yes</td><td><span class="pill pr">Partial</span></td><td>No result-scope indicator, no alert, filters ignored</td></tr>
+<tr><td><strong>Area → Schools</strong></td><td>"Schools in Hebbal · N schools · keeps this area"</td><td>Schools in the kept area, green "your area is kept" pill</td><td>Area results → schools in area → school → radius homes → back to properties</td><td>Radius homes, with "Back to properties in Hebbal"</td><td>School pins inside the area bounds</td><td>Kept-area pill + return ghost</td><td>Two explicit returns</td><td>Yes</td><td><span class="pill ct">Contradictory</span></td><td>From 2–3 selected areas the same action loses the selection</td></tr>
+<tr><td><strong>Agricultural</strong></td><td>Agricultural journey card; area search "Use as origin"</td><td>Outbound directions from Bangalore centre or a carried origin</td><td>Origin → direction sector → cumulative distance band → town → parcels</td><td>Parcel grid with agri filters and "N of M shown"</td><td>Green corridor cards, sector wedge + band arcs, town discs, parcel pins</td><td>Origin bar, distance chips with counts, town rows, parcel cards</td><td>Back to towns / directions</td><td>Yes</td><td><span class="pill pr">Partial</span></td><td>No parcel detail, no alert, no loading/error</td></tr>
+<tr><td><strong>Zero results</strong></td><td>Reached by filters, by search, or by a scope with no matches</td><td>Ochre "search is kept exactly as it is" panel</td><td>Nearby areas with real counts · one-filter changes · alert · simulate failure</td><td>Recovery actions only</td><td>Unchanged camera, no pins</td><td>Recovery stack</td><td>Unchanged</td><td>Yes</td><td><span class="pill pr">Partial</span></td><td>Only area-set/city are served; other scopes fall through</td></tr>
+<tr><td><strong>Alerts</strong></td><td>"Create alert" in the scope bar; "Saved alerts" in the top nav</td><td>Form with locked scope + filter summary</td><td>Draft → frequency → save → success → list → pause/resume → delete confirm → reopen</td><td>Alert list; reopening restores scope + filters</td><td>Restored fit on reopen</td><td>Form, list, states</td><td>"Back to results"</td><td>List mode only</td><td><span class="pill pr">Partial</span></td><td>Areas-only; no auth, no notification return</td></tr>
+<tr><td><strong>Listing detail</strong></td><td>Price pin or card</td><td>Detail with image, price, trust tier</td><td>Results → detail → Back to results (+ restoration promise)</td><td>Back to the same result state</td><td>Unchanged (no detail-linked map state)</td><td>Detail replaces the body</td><td>"Back to results"</td><td>List mode only</td><td><span class="pill ct">Contradictory</span></td><td>Promise of restored list position is not kept; invisible in map mode</td></tr>
+</table>
+</section>
+
+<section id="s2">
+<h2><span class="num">03</span>Hierarchy-shape matrix</h2>
+<table>
+<tr><th>ID</th><th>Journey</th><th>Path</th><th>In mock?</th><th>Mock state</th><th>Map content</th><th>Panel content</th><th>Breadcrumb</th><th>Back target</th><th>Status</th><th>Problem</th></tr>
+<tr><td><strong>A1</strong></td><td>Areas</td><td>City → Direction → AREA → Listings</td><td>Yes</td><td>East / South / West / Centre carry area children directly</td><td>Area pills, no intermediate layer</td><td>"This direction goes straight to its areas — no extra layer is invented."</td><td>Bangalore › East Bangalore › Whitefield</td><td>"Back to areas in East"</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td><strong>A2</strong></td><td>Areas</td><td>City → Direction → Local → AREA → Listings</td><td>Yes</td><td>North Bangalore → 3 local destinations</td><td>Local cards by bearing, then clusters + pills</td><td>"Local destinations, named by their prominent areas."</td><td>4 levels</td><td>Back to the local, then the direction</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td><strong>A3</strong></td><td>Areas</td><td>City → Direction → Local → <em>another cluster</em> → AREA</td><td>No — and deliberately not</td><td>Visual clusters set <code>clusterFocus</code> only</td><td>Dashed chip + magnifier, "Tap to zoom"</td><td>Note: "N areas in this map view — the breadcrumb did not change"</td><td>Unchanged by design</td><td>"Show all areas" (a camera undo, not a Back)</td><td><span class="pill cr">Clear</span></td><td>No public cluster level is introduced — no contradiction found</td></tr>
+<tr><td>H4</td><td>Areas</td><td>Direction with zero matching areas</td><td>No</td><td>Directions with <code>n === 0</code> are removed from the children list</td><td>Card absent</td><td>Row absent</td><td>n/a</td><td>n/a</td><td><span class="pill ct">Contradictory</span></td><td>The stated intent is that a zero-match destination stays visible; the mock hides it</td></tr>
+<tr><td>H5</td><td>Areas</td><td>Direction with no children at all</td><td>No</td><td>Not representable — every direction has areas</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="pill ms">Missing</span></td><td>Empty-node state undefined</td></tr>
+<tr><td>H6</td><td>Areas</td><td>Local destination with exactly one AREA</td><td>No</td><td>All three locals have ≥3 areas</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="pill ms">Missing</span></td><td>Should a single-child local be skipped or shown? Undecided</td></tr>
+<tr><td>H7</td><td>Areas</td><td>City with no hierarchy</td><td>No</td><td>Mumbai / Pune / Hyderabad are disabled "Soon"</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="pill ms">Missing</span></td><td>No unlaunched-city state beyond the disabled row</td></tr>
+<tr><td>H8</td><td>Areas</td><td>Many direct AREA children</td><td>Partly</td><td>7 areas under one local; 4 under East</td><td>Clusters absorb crowding only where a cluster is defined</td><td>Flat scrolling list</td><td>Unchanged</td><td>Unchanged</td><td><span class="pill pr">Partial</span></td><td>No representation of a 20+ area node (no paging or "show more")</td></tr>
+<tr><td>H9</td><td>Areas</td><td>Direct search landing at AREA</td><td>Yes</td><td>Autocomplete → area results, ancestry rebuilt</td><td>Fit to the area</td><td>Area landing</td><td>Full 3–4 level crumb</td><td>Parent direction/local</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>H10</td><td>Areas</td><td>Cold entry at Direction</td><td>Intent only</td><td>Reviewer scenarios enter at areas or sets, never at a bare direction</td><td>—</td><td>—</td><td>Would be rebuildable from ancestry</td><td>Would be the city</td><td><span class="pill im">Implied</span></td><td>Landing state exists structurally but is never entered cold</td></tr>
+<tr><td>H11</td><td>Areas</td><td>Cold entry at Local destination</td><td>Intent only</td><td>Same</td><td>—</td><td>—</td><td>Rebuildable</td><td>Direction</td><td><span class="pill im">Implied</span></td><td>Same</td></tr>
+<tr><td>H12</td><td>Areas</td><td>Cold entry at AREA</td><td>Yes (in effect)</td><td>Scenarios start at Hebbal with a committed set; search lands the same way</td><td>Fit to area(s)</td><td>Area landing / set</td><td>Full crumb</td><td>Parent</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>S1</td><td>Schools</td><td>City → Direction → (Local) → AREA → schools</td><td>Yes</td><td>Counted in schools throughout; areas with zero schools removed</td><td>Plum-toned direction cards, school-aware clusters, area pills</td><td>School-count rows with a secondary listings line</td><td>Bangalore › Schools › …</td><td>Layered</td><td><span class="pill pr">Partial</span></td><td>Area marker in this journey still says "Tap to view homes" (§13)</td></tr>
+<tr><td>S2</td><td>Schools</td><td>School → radius → homes</td><td>Yes</td><td>3/5/10 km, distance-sorted, ring drawn</td><td>Selected school pin + ring + price pins</td><td>Radius control, "not every home in the area" copy</td><td>… › Area › School</td><td>Back to schools in the area</td><td><span class="pill cr">Clear</span></td><td>Radius change creates no history entry (§14)</td></tr>
+<tr><td>G1</td><td>Agri</td><td>Origin → direction → band → town → parcels</td><td>Yes</td><td>Own state, own nouns, own filters</td><td>Sector wedge, cumulative band arcs, town discs, parcel pins</td><td>Origin bar, band chips with counts, town rows, parcel cards</td><td>Bangalore › Origin: X › North of X · 20–45 km › Town</td><td>Back to towns / directions</td><td><span class="pill cr">Clear</span></td><td>Distance band creates no history entry (§14)</td></tr>
+</table>
+<p class="scope">Landing states are audited as states only. The mock proves no URL support of any kind, so no claim about deep links is made here.</p>
+</section>
+
+<section id="s3">
+<h2><span class="num">04</span>State and restoration-intent audit</h2>
+<div class="callout bad"><b>Hard limitation.</b> The mock has no product URL. The one query parameter it reads (<code>?journey=</code>) selects a <em>reviewer scenario</em> at mount and is never written back. Browser history is a stack of in-memory snapshots (<code>pushState</code> with an index into a JS array), so it survives Back within a session and is destroyed by refresh: after reload, Back falls into a hardcoded reset to the Areas city root. Every "should survive refresh" below is therefore an intent statement, described semantically, never as a parameter name.</p></div>
+<table>
+<tr><th>State concept</th><th>Journey</th><th>Meaning shown</th><th>Draft / committed</th><th>Survive refresh?</th><th>Create history?</th><th>Shown?</th><th>Classification</th><th>Ambiguity</th></tr>
+<tr><td>City</td><td>All</td><td>Catalogue root; switching resets all journeys</td><td>Committed</td><td>Yes</td><td>Yes</td><td>Yes — switcher + reset</td><td><span class="pill pr">Explicitly shown</span></td><td>Only one city is live; multi-city semantics unproven</td></tr>
+<tr><td>Selected journey</td><td>All</td><td>Which of three models is on screen</td><td>Committed</td><td>Yes</td><td>Yes (pushes)</td><td>Yes — cards, badge, tint</td><td><span class="pill cr">Explicitly shown</span></td><td>—</td></tr>
+<tr><td>Direction</td><td>Areas / Schools</td><td>Canonical navigation context</td><td>Committed</td><td>Yes</td><td>Yes</td><td>Yes</td><td><span class="pill cr">Explicitly shown</span></td><td>—</td></tr>
+<tr><td>Local destination</td><td>Areas / Schools</td><td>Optional canonical layer</td><td>Committed</td><td>Yes</td><td>Yes</td><td>Yes</td><td><span class="pill cr">Explicitly shown</span></td><td>—</td></tr>
+<tr><td>Selected AREA</td><td>Areas</td><td>Navigation context <em>and</em> a one-area result scope at once</td><td>Committed</td><td>Yes</td><td>Yes</td><td>Yes</td><td><span class="pill cr">Explicitly shown</span></td><td>One press sets two concepts; the mock never separates them</td></tr>
+<tr><td>Selected AREA set</td><td>Areas</td><td>Committed multi-area result scope (max 3)</td><td>Committed</td><td>Yes — "restorable by name"</td><td>Yes</td><td>Yes — chips</td><td><span class="pill cr">Explicitly shown</span></td><td>—</td></tr>
+<tr><td>Draft area selection</td><td>Areas</td><td>Uncommitted candidate list</td><td>Draft</td><td>Intent: no</td><td>No — stated in copy</td><td>Yes — dashed treatment</td><td><span class="pill cr">Explicitly shown</span></td><td>—</td></tr>
+<tr><td>Visual cluster focus</td><td>Areas / Schools</td><td>Camera grouping only</td><td>Presentation</td><td>No</td><td>No</td><td>Yes — chip + note</td><td><span class="pill cr">Explicitly shown</span></td><td>—</td></tr>
+<tr><td>Polygon</td><td>Areas</td><td>Replacing geographic scope</td><td>Committed after confirm</td><td>Should be — geometry must be restorable</td><td>Yes</td><td>Yes</td><td><span class="pill pr">Implied by the interaction</span></td><td>Geometry provenance (drawn where, at what zoom) never captured</td></tr>
+<tr><td>Visible-map search</td><td>Areas</td><td>Committed bounds as scope</td><td>Committed after confirm</td><td>Should be — bounds must be restorable</td><td>Yes</td><td>Yes — rect + note</td><td><span class="pill pr">Implied by the interaction</span></td><td>Distinction between committed bounds and current camera is stated in copy only</td></tr>
+<tr><td>Camera / pan-zoom</td><td>All</td><td>Presentation</td><td>Neither</td><td>No</td><td>No</td><td>Yes — "nothing was requested"</td><td><span class="pill cr">Explicitly shown</span></td><td>—</td></tr>
+<tr><td>Selected school</td><td>Schools</td><td>Centre of a radius query</td><td>Committed</td><td>Should be</td><td>Yes</td><td>Yes</td><td><span class="pill cr">Explicitly shown</span></td><td>—</td></tr>
+<tr><td>School radius</td><td>Schools</td><td>Defines the result set</td><td>Committed in effect, treated as presentation</td><td>Should be</td><td><strong>No</strong></td><td>Control shown</td><td><span class="pill pd">Decision required</span></td><td>A result-defining value with no history entry</td></tr>
+<tr><td>School board / level facets</td><td>Schools</td><td>Narrow the school list</td><td>Filter</td><td>Should be</td><td>No</td><td>Yes</td><td><span class="pill pr">Implied</span></td><td>Not mirrored in any scope summary</td></tr>
+<tr><td>Agri origin</td><td>Agri</td><td>Point outward search starts from</td><td>Committed</td><td>Should be</td><td>Yes</td><td>Yes — origin bar + pin</td><td><span class="pill cr">Explicitly shown</span></td><td>—</td></tr>
+<tr><td>Agri direction (corridor)</td><td>Agri</td><td>Outbound sector</td><td>Committed</td><td>Should be</td><td>Yes</td><td>Yes</td><td><span class="pill cr">Explicitly shown</span></td><td>Labelled by bearing from the origin, not by a stable corridor name</td></tr>
+<tr><td>Agri distance band</td><td>Agri</td><td>Cumulative outward limit; changes counts</td><td>Committed in effect, treated as presentation</td><td>Should be</td><td><strong>No</strong></td><td>Yes — chips with counts</td><td><span class="pill pd">Decision required</span></td><td>Same class of problem as school radius</td></tr>
+<tr><td>Selected listing</td><td>Areas / Schools</td><td>Detail overlay</td><td>Neither</td><td>Product decision</td><td><strong>No</strong></td><td>Yes</td><td><span class="pill pd">Decision required</span></td><td>Browser Back from a detail does not close it — it leaves the previous committed state</td></tr>
+<tr><td>Active parcel</td><td>Agri</td><td>Card outline / map emphasis</td><td>Presentation</td><td>No</td><td>No</td><td>Yes</td><td><span class="pill ms">Intended but not represented</span></td><td>No parcel detail state exists to be restored</td></tr>
+<tr><td>Buy / Rent</td><td>All</td><td>Purpose of the search</td><td>Filter</td><td>Yes</td><td>No</td><td>Control shown</td><td><span class="pill ct">Contradictory</span></td><td>Present in labels and alert summaries but never applied to any result set</td></tr>
+<tr><td>Property filters</td><td>Areas</td><td>Beds / budget / type / ready / verified</td><td>Filter</td><td>Yes</td><td>No — explicitly not a navigation change</td><td>Yes</td><td><span class="pill cr">Explicitly shown</span></td><td>Filters also silently re-rank the representative names on destination cards (§7)</td></tr>
+<tr><td>Map / List mode</td><td>All (mobile)</td><td>Presentation</td><td>Neither</td><td>Product decision</td><td>No</td><td>Yes</td><td><span class="pill cr">Explicitly shown</span></td><td>—</td></tr>
+<tr><td>Result count</td><td>All</td><td>Derived, never stored</td><td>n/a</td><td>Recomputed</td><td>No</td><td>Yes</td><td><span class="pill cr">Explicitly shown</span></td><td>—</td></tr>
+<tr><td>Alert identity</td><td>Areas</td><td>Saved scope + filters snapshot</td><td>Committed</td><td>Should be — server-side</td><td>Reopening pushes</td><td>Yes</td><td><span class="pill pr">Implied</span></td><td>Snapshot carries no school/agri state, so non-residential alerts could not restore</td></tr>
+<tr><td>Signed-in identity</td><td>All</td><td>—</td><td>—</td><td>—</td><td>—</td><td>No</td><td><span class="pill ms">Not represented</span></td><td>Alerts are saved with no account concept anywhere in the mock</td></tr>
+</table>
+</section>
+
+<section id="s4">
+<h2><span class="num">05</span>Action and transition audit</h2>
+<table>
+<tr><th>Current state</th><th>Action</th><th>Draft/committed</th><th>Next state</th><th>Map change</th><th>Panel change</th><th>Result change</th><th>History</th><th>Back</th><th>Status</th><th>Problem</th></tr>
+<tr><td>City</td><td>Select Direction</td><td>Committed</td><td>Direction node</td><td>Refit + card swap</td><td>Rows swap</td><td>None (no scope yet)</td><td>Push</td><td>City</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Direction</td><td>Select Local destination</td><td>Committed</td><td>Local node</td><td>Refit</td><td>Area rows + cluster note</td><td>None</td><td>Push</td><td>Direction</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Local / Direction with areas</td><td>Tap visual AREA cluster</td><td>Neither</td><td>Same node, camera focused</td><td>Zoom to members</td><td>List filtered to members + undo note</td><td>None</td><td>None</td><td>"Show all areas"</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Cluster focus</td><td>Show all areas</td><td>Neither</td><td>Node unfocused</td><td>Refit to node</td><td>Full list</td><td>None</td><td>None</td><td>n/a</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Any node with areas</td><td>Select individual AREA</td><td>Committed</td><td>Area results</td><td>Fit + price pins</td><td>Scope head, filters, actions, cards</td><td>New scope</td><td>Push</td><td>Parent</td><td><span class="pill cr">Clear</span></td><td>Navigation and result scope are set by one press</td></tr>
+<tr><td>Anywhere</td><td>Direct-search an AREA</td><td>Committed</td><td>Area results</td><td>Fit</td><td>Area landing</td><td>New scope</td><td>Push</td><td>Parent</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Schools journey</td><td>Direct-search a school</td><td>Committed</td><td>Radius homes for that school</td><td>Ring + pins</td><td>Radius state</td><td>New result set</td><td>Push</td><td>Back to schools in its area</td><td><span class="pill cr">Clear</span></td><td>Funnel is skipped deliberately</td></tr>
+<tr><td>Area results</td><td>Open Add nearby areas</td><td>Draft</td><td>Draft editor</td><td><strong>Unchanged</strong> (same fit key)</td><td>Dashed draft head + candidates</td><td>None</td><td>None</td><td>Cancel</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Draft</td><td>Add nearby area</td><td>Draft</td><td>Draft +1</td><td>Dashed candidate label only</td><td>Added state, total recomputed on the CTA</td><td>None</td><td>None</td><td>Remove</td><td><span class="pill cr">Clear</span></td><td>Cannot add from the map — candidate labels are inert</td></tr>
+<tr><td>Draft</td><td>Remove area</td><td>Draft</td><td>Draft −1</td><td>Label reverts</td><td>Chip/× and card revert</td><td>None</td><td>None</td><td>n/a</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Draft at 3</td><td>Attempt a fourth</td><td>Draft</td><td>Refused with a reason</td><td>None</td><td>Ochre note naming the refused area; Add buttons disabled</td><td>None</td><td>None</td><td>n/a</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Draft</td><td>Show N listings</td><td><strong>Commit</strong></td><td><code>AREA_SET</code> results</td><td>Fit to the set</td><td>Chips, combined list, schools block</td><td>Combined</td><td>Push</td><td>Previous committed state</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Area set</td><td>Edit areas</td><td>Draft</td><td>Draft seeded with committed keys</td><td>Unchanged</td><td>Draft editor</td><td>None</td><td>None</td><td>Cancel</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Area set</td><td>Remove a committed chip (×)</td><td><strong>Commit</strong></td><td>Smaller set</td><td>Refit</td><td>Chips update</td><td>Recomputed</td><td>Push</td><td>Previous set</td><td><span class="pill am">Ambiguous</span></td><td>A committed scope change with no confirmation, unlike every other replacement</td></tr>
+<tr><td>Area set</td><td>Clear selected areas</td><td><strong>Commit</strong> after confirm</td><td>Parent node, no scope</td><td>Refit to parent</td><td>Navigation level</td><td>Cleared</td><td>Push</td><td>Previous</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Schools in area</td><td>Select school</td><td>Committed</td><td>Radius homes</td><td>Ring + pins</td><td>Radius state</td><td>New set (city-wide within radius)</td><td>Push</td><td>Back to all schools</td><td><span class="pill pr">Partial</span></td><td>No "Result scope —" indicator for this state</td></tr>
+<tr><td>Radius homes</td><td>Change radius</td><td>Presentation in code, result-defining in fact</td><td>Same state, different set</td><td>Ring resizes, refit</td><td>Count + cards change</td><td><strong>Yes</strong></td><td><strong>None</strong></td><td>n/a</td><td><span class="pill pd">Decision</span></td><td>Result set changes with no history</td></tr>
+<tr><td>Results</td><td>Draw polygon</td><td>Draft</td><td>Boundary drawn, results unchanged</td><td>Dashed boundary</td><td>Muted note + "Use drawn area"</td><td>None</td><td>None</td><td>Cancel clears it</td><td><span class="pill im">Implied</span></td><td>The drawing gesture itself is never represented</td></tr>
+<tr><td>Boundary drawn</td><td>Use drawn area</td><td><strong>Commit</strong> after confirm</td><td><code>POLYGON</code> scope</td><td>Copper boundary, fit</td><td>Scope head + return</td><td>Replaced</td><td>Push</td><td>Return to previous</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Results</td><td>Pan / zoom</td><td>Neither</td><td>Same state</td><td>Camera only</td><td>"You moved the map… nothing was requested"</td><td>None</td><td>None</td><td>n/a</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Moved map</td><td>Search this area</td><td><strong>Commit</strong> after confirm</td><td><code>VIEWPORT</code> scope</td><td>Committed rect + camera note</td><td>Scope head + return</td><td>Replaced</td><td>Push</td><td>Return to previous</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Polygon / viewport</td><td>Return to selected areas</td><td><strong>Commit</strong></td><td>Previous scope by name</td><td>Refit</td><td>Chips restored</td><td>Restored</td><td>Push</td><td>Chain</td><td><span class="pill pr">Partial</span></td><td>Only one previous scope is remembered; a second replacement overwrites it</td></tr>
+<tr><td>Any results</td><td>Change filters</td><td>Filter</td><td>Same scope</td><td>Pins refresh</td><td>Counts refresh</td><td>Yes</td><td>None (by design)</td><td>n/a</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Mobile results</td><td>Switch Map / List</td><td>Neither</td><td>Same state</td><td>Sheet appears</td><td>Body swaps</td><td>None</td><td>None</td><td>n/a</td><td><span class="pill pr">Partial</span></td><td>Detail, alert form and alert list exist only in List mode</td></tr>
+<tr><td>Results</td><td>Open listing</td><td>Neither</td><td>Detail</td><td>Unchanged</td><td>Detail body</td><td>None</td><td><strong>None</strong></td><td>"Back to results"</td><td><span class="pill ct">Contradictory</span></td><td>Browser Back skips the detail; scroll position is lost on return</td></tr>
+<tr><td>Detail</td><td>Back to results</td><td>Neither</td><td>Previous results</td><td>Unchanged</td><td>List returns at top</td><td>None</td><td>None</td><td>n/a</td><td><span class="pill ct">Contradictory</span></td><td>Copy promises "this list position" is restored; the list remounts</td></tr>
+<tr><td>Any residential results</td><td>Create alert</td><td>Draft → commit</td><td>Form → saved → list</td><td>Unchanged</td><td>Form, then list with the new alert</td><td>None</td><td>None for the form</td><td>Cancel / Back to results</td><td><span class="pill cr">Clear</span></td><td>Unreachable in Schools and Agricultural</td></tr>
+<tr><td>Alert list</td><td>Pause / resume</td><td>Committed</td><td>Status toggles</td><td>—</td><td>Badge changes</td><td>—</td><td>None</td><td>n/a</td><td><span class="pill cr">Clear</span></td><td>—</td></tr>
+<tr><td>Alert list</td><td>Delete</td><td>Committed after in-place confirm</td><td>Removed</td><td>—</td><td>Row disappears</td><td>—</td><td>None</td><td>No undo</td><td><span class="pill pr">Partial</span></td><td>Destructive with no undo path</td></tr>
+<tr><td>Alert list</td><td>Open saved search</td><td><strong>Commit</strong></td><td>Restored scope + filters</td><td>Refit</td><td>Results</td><td>Restored</td><td>Push</td><td>Chain</td><td><span class="pill cr">Clear</span></td><td>Restores residential state only</td></tr>
+<tr><td>Any journey</td><td>Switch Areas / Schools / Agricultural</td><td><strong>Commit</strong></td><td>The other journey where it was left</td><td>That journey's fit</td><td>That journey's body</td><td>That journey's results</td><td>Push</td><td>Previous journey state</td><td><span class="pill pr">Partial</span></td><td>Carry-over only from exactly one selected area (§13)</td></tr>
+<tr><td>Any state</td><td>Browser Back</td><td>—</td><td>Previous committed snapshot</td><td>Refit</td><td>Rebuilt</td><td>Restored</td><td>—</td><td>—</td><td><span class="pill ct">Contradictory</span></td><td>Back from the first committed state resets to the Areas city root instead of the entry state; snapshots die on refresh</td></tr>
+</table>
+<h3>Control-treatment check — does each control look like what it does?</h3>
+<table>
+<tr><th>Behaviour class</th><th>Control</th><th>Treatment</th><th>Reads correctly?</th></tr>
+<tr><td>Hierarchy destination — changes canonical context</td><td>Direction / Local card</td><td>Solid navy card, big count, "Explore ›"</td><td><span class="pill cr">Yes</span></td></tr>
+<tr><td>Visual cluster — camera only</td><td>Cluster chip</td><td>White dashed chip, magnifier, "Tap to zoom"</td><td><span class="pill cr">Yes</span> — shape, not colour, carries it</td></tr>
+<tr><td>Individual area — commits a one-area scope</td><td>Area pill</td><td>White pill + tail, "Tap to view homes"</td><td><span class="pill am">Mostly</span> — wrong caption in the Schools journey</td></tr>
+<tr><td>Draft edit only</td><td>Add / Added</td><td>Navy button → navy check chip, dashed context</td><td><span class="pill cr">Yes</span></td></tr>
+<tr><td>Commit</td><td>Show N listings</td><td>Only copper primary on screen</td><td><span class="pill cr">Yes</span></td></tr>
+<tr><td>Presentation change</td><td>Pan / zoom, Map/List, Fit all, chip focus</td><td>No primary styling; explanatory notes</td><td><span class="pill cr">Yes</span></td></tr>
+<tr><td>Scope replacement</td><td>Use drawn area / Search this area</td><td>Ghost → confirmation dialog naming what is lost</td><td><span class="pill cr">Yes</span></td></tr>
+<tr><td>Scope replacement (unlabelled)</td><td>"Add and search" in zero-results</td><td>Ordinary ghost, no confirmation</td><td><span class="pill ct">No</span> — can convert a polygon/viewport scope into an area set (§13)</td></tr>
+<tr><td>Journey switch</td><td>Breadcrumb root "Bangalore" in Schools / Agri</td><td>Looks like a hierarchy ancestor</td><td><span class="pill am">No</span> — it changes journey, not level</td></tr>
+</table>
+</section>
+
+<section id="s5">
+<h2><span class="num">06</span>Result-scope audit</h2>
+<p class="lede">Four concepts kept apart: navigation context, the scope that controls listings, filters, and temporary map focus. The mock holds exactly one residential result scope at a time (a single scope object), so the dangerous "areas + polygon + viewport all live" state does not occur. The failures are elsewhere: two states have a result set with no scope indicator at all.</p>
+<table>
+<tr><th>Mock state</th><th>Navigation context</th><th>Result scope</th><th>Filters</th><th>Temporary focus</th><th>Indicator?</th><th>Return action?</th><th>Conflict</th></tr>
+<tr><td>Single AREA</td><td>Area node (crumb)</td><td>That one area</td><td>Property filters visible</td><td>Camera / cluster focus</td><td>Yes — "Result scope — Selected areas"</td><td>Hierarchy Back</td><td>Context and scope are the same object; a future "browse without searching" state has nowhere to live</td></tr>
+<tr><td>Selected AREA set</td><td>Last area entered</td><td>2–3 areas combined</td><td>Same, shared</td><td>Chip focus + "Fit all N areas"</td><td>Yes + chips</td><td>Edit / Clear</td><td>Crumb still points at one member area only</td></tr>
+<tr><td>Polygon</td><td>Unchanged from before the draw</td><td>Inside the boundary</td><td>Kept</td><td>Camera</td><td>Yes — "Drawn area"</td><td>"Return to …" + chip ×</td><td>Crumb describes geography the results no longer come from</td></tr>
+<tr><td>Visible map area</td><td>Unchanged</td><td>Committed bounds</td><td>Kept</td><td>Camera may drift off the committed rect</td><td>Yes + camera note</td><td>"Return to …"</td><td>Crumb vs scope mismatch, mitigated by the note</td></tr>
+<tr><td>Browse all listings</td><td>City root</td><td>Whole city</td><td>Kept</td><td>Camera</td><td>Yes — "All listings"</td><td>"Back to Areas in Bangalore"</td><td>—</td></tr>
+<tr><td>School + radius</td><td>Schools › Area › School</td><td>Homes within N km of the school, city-wide</td><td><strong>Property filters not applied</strong>, and hidden</td><td>Camera</td><td><strong>No scope bar</strong></td><td>Back to schools / to properties in the kept area</td><td><span class="pill ct">Conflict</span> — a result state with no scope indicator and silently inert filters</td></tr>
+<tr><td>Agricultural parcels</td><td>Origin › Direction · band › Town</td><td>Parcels in the town, agri filters</td><td>Own filter set; residential Buy/Rent still on screen</td><td>Camera, active parcel</td><td>No scope bar (own heading instead)</td><td>Back to towns</td><td><span class="pill am">Ambiguous</span> — residential controls remain visible over an agri result set</td></tr>
+<tr><td>Draft selection</td><td>Unchanged</td><td><strong>Still the committed scope</strong></td><td>Kept</td><td>Camera pinned to committed areas</td><td>Yes — dashed "Draft selection · N of 3"</td><td>Cancel</td><td>—</td></tr>
+</table>
+</section>
+
+<section id="s6">
+<h2><span class="num">07</span>Add-nearby-areas audit</h2>
+<table>
+<tr><th>Requirement</th><th>Finding</th><th>Status</th></tr>
+<tr><td>Wording is "Add nearby areas"</td><td>Entry card, draft heading and eyebrow all use it</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>No comparison language</td><td>Panel and draft are clean — <strong>but</strong> the Areas capability strip at the journey root still reads "Compare up to 3 areas", and a dead "Compared areas · N" string remains in the view builder</td><td><span class="pill ct">Contradictory</span></td></tr>
+<tr><td>No Preview action</td><td>Removed from the draft — <strong>but</strong> zero-result recovery still offers "Preview / Previewing" on nearby areas, plus a "Previewing X — not added to any search" note</td><td><span class="pill ct">Contradictory</span></td></tr>
+<tr><td>One Add action per candidate</td><td>Single navy <em>Add</em>, becomes an <em>Added</em> check chip</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Candidate relationship shown</td><td>"Adjacent to Hebbal" or "3.4 km away"</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Listing + school count per candidate</td><td>"31 listings · 9 schools", filter-aware listings</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Draft visually distinct</td><td>Ochre eyebrow, dashed rule, dashed chips, dashed map labels</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Committed visually distinct</td><td>Solid chips, "Result scope —" eyebrow, solid map pills</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Results do not change during the draft</td><td>Draft is not a scope; count only appears on the CTA; note states it explicitly</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Map does not fit candidates</td><td>Draft reuses the committed fit key, so the camera never moves</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Final CTA is "Show N listings"</td><td>Yes, with an honest sub-label for one vs several areas</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>One + two maximum</td><td>Enforced at 3 with a disabled state and an explanatory note</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Duplicate prevention</td><td>Named refusal message; already-added cards show <em>Added</em></td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Fourth-area rejection</td><td>Refused with the reason and the remedy</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Removal</td><td>From chips and (on mobile) from sheet rows</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Cancellation</td><td>Cancel restores the results untouched</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Edit areas / Clear selected areas</td><td>Both present; Clear is confirmed, chip-× is not</td><td><span class="pill pr">Partial</span></td></tr>
+<tr><td>Start from direct search</td><td>Search → area landing → the same entry card</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Start from hierarchy</td><td>Same</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Non-contiguous selection</td><td>Candidates come from an adjacency table, so only neighbours (or neighbours-of-neighbours) can be added; a deliberately far-apart set cannot be built here</td><td><span class="pill ms">Missing</span></td></tr>
+<tr><td>Zero-result recovery for a set</td><td>Full recovery stack keyed to the set</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Mobile state</td><td>One CTA in a fixed footer in List mode; sheet CTA in Map mode; Cancel as a ghost</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Add from the map</td><td>Candidate labels are non-interactive on desktop; adding is panel-only</td><td><span class="pill pr">Partial</span></td></tr>
+</table>
+</section>
+
+<section id="s7">
+<h2><span class="num">08</span>Marker and card metadata audit</h2>
+<table>
+<tr><th>Journey</th><th>Component</th><th>Primary</th><th>Secondary</th><th>Area count</th><th>Listings</th><th>Schools</th><th>CTA</th><th>Intended meaning</th><th>Ambiguity</th></tr>
+<tr><td>Areas</td><td>Direction / Local marker</td><td>2 representative area names</td><td>"+N areas with matches" pill</td><td>Yes (as +N)</td><td>Yes, primary</td><td>No</td><td>Explore ›</td><td>Canonical navigation</td><td><span class="pill ct">Names are ranked by listing count under the current filters, so they change as filters change; the "+N" form is shared with visual clusters</span></td></tr>
+<tr><td>Areas</td><td>Direction / Local panel row</td><td>Label</td><td>Names · +N areas with matches</td><td>Yes</td><td>Yes, primary</td><td>No</td><td>Chevron</td><td>Same</td><td>Same instability</td></tr>
+<tr><td>Schools</td><td>Direction / Local marker</td><td>Representative names by school count</td><td>"+N areas with schools"</td><td>Yes</td><td>No</td><td>Yes, primary</td><td>Explore ›</td><td>Canonical navigation, school-weighted</td><td><span class="pill cr">Stable — school counts are not filter-dependent</span></td></tr>
+<tr><td>Areas</td><td>Visual AREA cluster</td><td>Visible names</td><td>"+N / N areas with matches"</td><td>Yes</td><td>Yes</td><td>No</td><td>Tap to zoom</td><td>Camera grouping</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Schools</td><td>Visual AREA cluster</td><td>Visible names</td><td>"+N areas with schools"</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Tap to zoom</td><td>Camera grouping</td><td><span class="pill am">Four data lines in a 190 px chip — legible but at the limit</span></td></tr>
+<tr><td>Areas</td><td>Individual AREA marker</td><td>Area name</td><td>—</td><td>—</td><td>Yes</td><td>No</td><td>Tap to view homes</td><td>Commits a one-area scope</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Schools</td><td>Individual AREA marker</td><td>Area name</td><td>—</td><td>—</td><td>No</td><td>Yes — but unlabelled, in the slot the Areas journey uses for listings</td><td><strong>"Tap to view homes"</strong></td><td>Should open <em>schools in the area</em>, which is what it does</td><td><span class="pill ct">The number means schools while the caption promises homes; the panel row for the same area says "12 schools" + "42 listings in this area"</span></td></tr>
+<tr><td>Areas / Schools</td><td>Listing cluster</td><td>Count</td><td>"HOMES"</td><td>—</td><td>Yes</td><td>No</td><td>Zooms in</td><td>Crowded price pins</td><td><span class="pill cr">Distinct from direction cards and cluster chips</span></td></tr>
+<tr><td>Schools</td><td>School marker</td><td>School name</td><td>—</td><td>—</td><td>No</td><td>—</td><td>Selects the school</td><td>A school location</td><td><span class="pill cr">Clear</span> — plum, mortarboard, own shape</td></tr>
+<tr><td>Agri</td><td>Corridor marker</td><td>"North of Hebbal"</td><td>Distance range</td><td>—</td><td>No</td><td>No</td><td>Explore ›</td><td>Outbound sector</td><td><span class="pill cr">Clear</span> — green, "parcels" noun</td></tr>
+<tr><td>Agri</td><td>Town disc</td><td>Parcel count</td><td>Town name below</td><td>—</td><td>No</td><td>No</td><td>Navigates to the town</td><td>Hierarchy step</td><td><span class="pill am">Nearly identical to the green parcel-cluster bubble, which only zooms</span></td></tr>
+<tr><td>Agri</td><td>Parcel cluster bubble</td><td>Count</td><td>"PARCELS"</td><td>—</td><td>No</td><td>No</td><td>Zooms in</td><td>Crowded parcel pins</td><td>Same pairing risk</td></tr>
+<tr><td>Areas</td><td>Draft candidate label</td><td>Area name + count</td><td>—</td><td>—</td><td>Yes</td><td>No</td><td>None (inert)</td><td>"Available to add, not selected"</td><td><span class="pill am">Reads as informational; no affordance and no action</span></td></tr>
+</table>
+</section>
+
+<section id="s8">
+<h2><span class="num">09</span>School-count meaning audit</h2>
+<p class="lede">The mock states one meaning explicitly in one place — "Located inside {areas}. Not a measure of distance from any home." Everywhere else the count is unqualified, and at direction and cluster level it is an <em>aggregate of per-area counts</em>, which the copy never says.</p>
+<table>
+<tr><th>State / component</th><th>Count shown</th><th>Apparent meaning</th><th>Clear?</th><th>Likely user reading</th><th>Clarification required</th></tr>
+<tr><td>Schools journey root</td><td>Total across the city</td><td>All schools in the dataset</td><td>Partly</td><td>"Every school in Bangalore"</td><td>Is it every school, or only those in areas with listings?</td></tr>
+<tr><td>Schools direction / local card</td><td>Sum over areas with ≥1 school</td><td>Schools located inside areas of that direction</td><td>No</td><td>"Schools serving North Bangalore"</td><td>Yes — "in" vs "serving" is exactly the wrong ambiguity to leave for a schools product</td></tr>
+<tr><td>Schools visual cluster</td><td>Sum over member areas</td><td>Same</td><td>No</td><td>Same</td><td>Yes</td></tr>
+<tr><td>Schools area card / marker</td><td>Per-area count</td><td>Schools physically inside the area</td><td>Partly</td><td>Correct reading likely</td><td>Marker caption contradicts it (§8)</td></tr>
+<tr><td>Areas-journey area row</td><td>"N listings · N schools"</td><td>Schools inside the area</td><td>Partly</td><td>Correct, but sits beside a listings count as if comparable</td><td>Label the schools number</td></tr>
+<tr><td>"Schools in selected areas" block</td><td>Sum over the selected set</td><td><strong>Stated</strong>: located inside, not a distance measure</td><td>Yes</td><td>Correct</td><td>None — this is the model for the rest</td></tr>
+<tr><td>Nearby-area candidate card</td><td>Per-area count</td><td>Schools inside the candidate</td><td>Partly</td><td>Correct</td><td>Minor</td></tr>
+<tr><td>Radius homes state</td><td>Homes, not schools</td><td>Homes within N km of one school</td><td>Yes</td><td>Correct — copy denies the "every home in the area" reading</td><td>Straight-line vs travel distance is unstated</td></tr>
+</table>
+<h3>Misreading risks</h3>
+<ul class="q">
+<li><span class="pill cr">Not present</span> No quality, ranking, rating or admission-eligibility claim appears anywhere.</li>
+<li><span class="pill cr">Not present</span> No travel-time claim; distances are labelled in km only.</li>
+<li><span class="pill am">Risk</span> "Homes within 5 km" is computed as straight-line distance. Without a qualifier, shoppers read radius as commute.</li>
+<li><span class="pill am">Risk</span> Aggregated direction-level counts could be read as "every property here is near all of these schools".</li>
+<li><span class="pill cr">Handled</span> The two journeys are kept apart by copy ("keeps this area", "not every home in {area}", "Back to properties in {area}") and by different levels, headings and tints.</li>
+<li><span class="pill ct">Risk</span> Selecting a school <em>does</em> change the result set, but the state that results carries no scope indicator, so the change is announced only by prose.</li>
+</ul>
+</section>
+
+<section id="s9">
+<h2><span class="num">10</span>Direct-search audit</h2>
+<table>
+<tr><th>Search type</th><th>Query shown</th><th>Landing state</th><th>Breadcrumb</th><th>Map fit</th><th>Panel</th><th>Parent Back</th><th>Scope clear?</th><th>Missing state</th></tr>
+<tr><td>Exact AREA</td><td>"Hebbal"</td><td>Area results</td><td>Full ancestry</td><td>Yes</td><td>Area landing + actions</td><td>Yes</td><td>Yes</td><td>—</td></tr>
+<tr><td>Ambiguous AREA</td><td>Partial string → ≤6 substring matches with ancestry sub-labels</td><td>Resolved by picking a row</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No "many results" page; no ranking beyond catalogue order</td></tr>
+<tr><td>AREA with zero listings under the active filters</td><td>Any name</td><td>Zero-result recovery for that area</td><td>Yes</td><td>Yes</td><td>Recovery stack</td><td>Yes</td><td>Yes</td><td>Search does not warn before landing on an empty area</td></tr>
+<tr><td>Exact school</td><td>School name (Schools journey)</td><td>Radius homes, funnel skipped</td><td>Schools › Area › School</td><td>Ring fit</td><td>Radius state</td><td>Back to schools in the area</td><td>Partly — no scope bar</td><td>—</td></tr>
+<tr><td>Ambiguous school</td><td>Substring → up to 4 schools + 3 areas with schools, each with its own CTA</td><td>Resolved by picking</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Identical school names in different areas are only separated by the sub-label</td></tr>
+<tr><td>City name</td><td>"Bangalore"</td><td>"Nothing matches …"</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="pill ms">City / region queries unsupported</span></td></tr>
+<tr><td>Landmark or project</td><td>Only inside an already-selected area ("Search Hebbal by road, project or landmark…")</td><td>Filtered list within the scope + a clearable note</td><td>Unchanged</td><td>Unchanged</td><td>Filtered cards</td><td>Unchanged</td><td>Yes</td><td><span class="pill ms">No city-wide landmark/project search</span></td></tr>
+<tr><td>Search in another direction</td><td>Any area name</td><td>Jumps across the hierarchy, crumb rebuilt from the target</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Target's parent</td><td>Yes</td><td>No "you left North Bangalore" acknowledgement</td></tr>
+<tr><td>Change journey after a search</td><td>—</td><td>Agri: "Use as origin"; Schools: "View schools"; Areas: "Open area"</td><td>Journey-specific</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>—</td></tr>
+<tr><td>Mobile search</td><td>Same control bar, wrapped</td><td>Same</td><td>Header crumb</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Dropdown occupies most of a 390 px screen; no full-screen search state</td></tr>
+</table>
+<p class="scope">Refresh and Back intent for a search landing are <span class="pill eu">Engineering unknown</span>: the mock has no URL, so nothing about a shared or reloaded search result can be proven here.</p>
+</section>
+
+<section id="s10">
+<h2><span class="num">11</span>Agricultural-isolation audit</h2>
+<table>
+<tr><th>Concept</th><th>Agri meaning in the mock</th><th>Inherited residential meaning?</th><th>Status</th></tr>
+<tr><td>Direction</td><td>Outbound bearing from an origin ("North of Hebbal"), drawn as a sector wedge</td><td>No — different noun, different geometry, different tint</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Distance band</td><td>Cumulative km from the origin, chips carry real parcel counts, arcs drawn on the map</td><td>No residential equivalent</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Destination</td><td>Town, with distance, parcels and acres</td><td>No</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Parcel counts</td><td>Parcels and acres only; the panel states nothing is counted into residential totals</td><td>No</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Map extent</td><td>Regional; own zoom ceilings; origin pin</td><td>No</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Selected result</td><td>Active parcel = card outline + map emphasis</td><td>Residential has a detail state; agri has none</td><td><span class="pill ms">Missing</span></td></tr>
+<tr><td>Filters</td><td>Agri filter set with its own clear action</td><td><strong>Buy/Rent and the city switcher stay in the bar and still write residential state</strong></td><td><span class="pill am">Ambiguous</span></td></tr>
+<tr><td>Back</td><td>Towns → directions; no Back at the root</td><td>Shares the shell Back, journey-routed</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Map / List</td><td>Shared mobile toggle; sheet rows are towns or parcels</td><td>Shared, correctly</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Empty state</td><td>Two: no towns in band (with "widen to N km"), no parcels matching filters (with clear)</td><td>Own copy, own accent</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Saved search / alert</td><td>None — no entry point in any agri state</td><td>Residential alerts cannot express a parcel search</td><td><span class="pill ms">Missing</span></td></tr>
+<tr><td>Loading / error</td><td>None</td><td>Residential has both</td><td><span class="pill ms">Missing</span></td></tr>
+<tr><td>Switching to/from residential</td><td>State kept on both sides; entering from an area carries it as the origin</td><td>Correctly separated</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Breadcrumb root</td><td>"Bangalore" leaves the agri journey entirely</td><td>Looks like a hierarchy level</td><td><span class="pill am">Ambiguous</span></td></tr>
+</table>
+</section>
+
+<section id="s11">
+<h2><span class="num">12</span>Responsive-state matrix</h2>
+<div class="callout warn"><b>Structural caveat.</b> Both devices are fixed canvases (1366×768 and 390×844) scaled to fit the reviewer's window. The mock therefore proves two <em>layouts</em>, not responsive reflow: nothing between 391 px and 1365 px is represented, and no tablet or split-pane behaviour exists.</div>
+<table>
+<tr><th>State</th><th>1366×768</th><th>390×844</th><th>Mobile treatment</th><th>Status</th></tr>
+<tr><td>City landing / direction / local</td><td>Yes</td><td>Yes</td><td>List rows, or map with the destination sheet</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Visual cluster focus</td><td>Yes</td><td>Yes</td><td>Sheet title changes, "Show all areas" in the sheet, crumb unchanged</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Area results + filters</td><td>Yes</td><td>Yes</td><td>Single-column cards, filter chips wrap</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Add-nearby draft</td><td>Yes — sticky footer CTA + Cancel</td><td>Yes — one CTA in a fixed footer, Cancel as a ghost</td><td>Sheet lists selected areas and "Add X" rows in map mode</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Committed area set</td><td>Yes</td><td>Yes</td><td>Chips wrap; "Fit all N areas" available on the map</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Polygon</td><td>Yes</td><td>Reachable</td><td>No draw gesture on either device; scope bar wraps</td><td><span class="pill im">Implied</span></td></tr>
+<tr><td>Search this area</td><td>Yes</td><td>Yes — CTA lifted above the sheet</td><td>Confirmation renders in list mode only</td><td><span class="pill pr">Partial</span></td></tr>
+<tr><td>Zero results</td><td>Yes</td><td>Yes</td><td>Recovery stack scrolls; actions wrap</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Listing detail</td><td>Yes</td><td>List mode only</td><td><strong>Tapping a price pin in map mode changes nothing visible</strong></td><td><span class="pill ct">Contradictory</span></td></tr>
+<tr><td>Alert form / list</td><td>Yes</td><td>List mode only</td><td>Same class of gap; no sheet or modal equivalent</td><td><span class="pill pr">Partial</span></td></tr>
+<tr><td>Schools nav / area / radius</td><td>Yes</td><td>Yes</td><td>Facet chips wrap; radius control full width; sheet rows are schools</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Agri directions / towns / parcels</td><td>Yes</td><td>Yes</td><td>Band chips wrap; sheet rows are towns or parcels</td><td><span class="pill cr">Clear</span></td></tr>
+<tr><td>Journey switching</td><td>Cards with sub-labels + "Rec"</td><td>Compact cards, icon + label only</td><td>Capability cues and "Browse all listings" are hidden</td><td><span class="pill pr">Partial</span></td></tr>
+<tr><td>Breadcrumb</td><td>Floating pill on the map</td><td>In the header strip, truncating</td><td>Header crumb is not clickable on mobile — only Back is</td><td><span class="pill pr">Partial</span></td></tr>
+<tr><td>Bottom sheet</td><td>n/a</td><td>Fixed height, scrolling rows</td><td>Drag handle is decorative — no drag, no expanded state</td><td><span class="pill im">Implied</span></td></tr>
+<tr><td>Loading / error</td><td>Yes (Areas)</td><td>Yes (Areas)</td><td>Skeletons single-column</td><td><span class="pill pr">Partial</span></td></tr>
+</table>
+</section>
+
+<section id="s12">
+<h2><span class="num">13</span>Missing-state report</h2>
+<table>
+<tr><th>#</th><th>Missing state</th><th>Where it belongs</th><th>Consequence if left undefined</th></tr>
+<tr><td>M1</td><td>Any refresh-restorable state — the mock has no product URL at all</td><td>Every committed state in all three journeys</td><td>Sharing, reloading and notification returns are entirely unspecified</td></tr>
+<tr><td>M2</td><td>Zero-match Direction / Local / AREA kept visible in the funnel</td><td>Areas and Schools navigation levels</td><td>Shoppers cannot tell "nothing here" from "does not exist"; counts appear to shrink the map</td></tr>
+<tr><td>M3</td><td>Create alert in the Schools and Agricultural journeys</td><td>School-radius results; agri town/parcel results</td><td>Two of three journeys cannot be saved; the alert model may be built residential-only</td></tr>
+<tr><td>M4</td><td>Signed-out and signed-in states around alerts</td><td>Create alert, alert list</td><td>The sign-in gate — the most likely real-world friction — is unrepresented</td></tr>
+<tr><td>M5</td><td>Alert notification / deep-link return</td><td>Entry into a saved search from outside the app</td><td>Restoration contract for the highest-value re-entry path is undefined</td></tr>
+<tr><td>M6</td><td>Agricultural parcel detail</td><td>After a parcel card or pin</td><td>The agri journey has no leaf; "Back to results" has no counterpart</td></tr>
+<tr><td>M7</td><td>Loading and error states in Schools and Agricultural</td><td>All non-residential result transitions</td><td>Only residential failure is designed</td></tr>
+<tr><td>M8</td><td>Polygon draw / edit / cancel-mid-draw</td><td>Between "Draw search area" and "Use drawn area"</td><td>The whole interaction is a black box</td></tr>
+<tr><td>M9</td><td>City with no hierarchy / unlaunched city</td><td>City switcher</td><td>Second-city launch has no design</td></tr>
+<tr><td>M10</td><td>One-child local destination; node with 20+ areas</td><td>Areas / Schools navigation</td><td>Degenerate and overloaded hierarchy shapes undefined</td></tr>
+<tr><td>M11</td><td>Zero schools in an area or direction</td><td>Schools navigation</td><td>Areas without schools are filtered away rather than explained</td></tr>
+<tr><td>M12</td><td>Non-contiguous multi-area selection</td><td>Add nearby areas</td><td>"Hebbal + Electronic City" cannot be expressed or refused</td></tr>
+<tr><td>M13</td><td>Mobile detail, alert form and alert list in Map mode</td><td>390×844 map presentation</td><td>Actions available on the map lead nowhere</td></tr>
+<tr><td>M14</td><td>Undo for alert deletion</td><td>Alert list</td><td>Destructive action with no recovery</td></tr>
+<tr><td>M15</td><td>Any state between 391 px and 1365 px</td><td>Responsive behaviour</td><td>Tablet and small-laptop layout unspecified</td></tr>
+<tr><td>M16</td><td>Filter state for the school-radius result set</td><td>Schools journey</td><td>It is unclear whether property filters should apply at all</td></tr>
+</table>
+</section>
+
+<section id="s13">
+<h2><span class="num">14</span>Contradiction report</h2>
+<table>
+<tr><th>#</th><th>Contradiction</th><th>Evidence in the mock</th><th>Severity</th></tr>
+<tr><td>C1</td><td>Individual AREA marker in the Schools journey shows a school count under a caption promising homes</td><td>The marker renders the journey's count (schools) with "Tap to view homes"; the panel row for the same area reads "12 schools" plus "42 listings in this area"</td><td><strong>High</strong> — mislabels the primary navigation object of a whole journey</td></tr>
+<tr><td>C2</td><td>Zero-result recovery can silently change the <em>kind</em> of result scope</td><td>From a polygon or viewport zero state, "Add and search" appends an area to the previous committed keys and commits an area set — no confirmation, while every other scope replacement is confirmed. The zero panel also lists the previous area names as the current scope</td><td><strong>High</strong> — breaks the one-scope-at-a-time model the rest of the mock enforces</td></tr>
+<tr><td>C3</td><td>"Back to results" promises the list position, then discards it</td><td>The detail copy claims scope, filters, camera and "this list position" are restored; the scrolling container is keyed on a value that includes the open listing, so it remounts and returns to the top</td><td><strong>High</strong> — the mock's own promise is falsified on screen</td></tr>
+<tr><td>C4</td><td>Buy / Rent is a first-class control that changes no result</td><td>The toggle writes the purpose into filter labels and alert summaries; the match predicate never reads it, so Rent returns the same homes at the same sale prices</td><td><strong>High</strong> — the most prominent filter in the shell is inert</td></tr>
+<tr><td>C5</td><td>"Schools in selected areas → Open Schools" loses the selection when more than one area is selected</td><td>Carry-over happens only for exactly one committed area; from a 2–3 area set the Schools journey opens at the city root, contradicting the block's own label</td><td><strong>High</strong></td></tr>
+<tr><td>C6</td><td>Tapping a listing in mobile Map mode produces no visible change</td><td>Detail renders only in the list body; map mode keeps showing the map and the sheet</td><td><strong>High</strong></td></tr>
+<tr><td>C7</td><td>Browser Back from the first committed state discards the entry state</td><td>History snapshots live in memory and the initial entry carries no index, so Back falls into a hardcoded reset to the Areas city root; after a refresh every Back does this</td><td>Medium — in-mock defect that will mislead any URL/history investigation</td></tr>
+<tr><td>C8</td><td>Comparison metaphor and Preview survive after being removed</td><td>Capability strip: "Compare up to 3 areas"; a dead "Compared areas · N" string in the view builder; "Preview / Previewing" buttons and a "not added to any search" note in zero-result recovery</td><td>Medium — the intended vocabulary change is incomplete</td></tr>
+<tr><td>C9</td><td>Zero-match destinations are hidden although the model says they stay visible</td><td>Children are filtered to those with a non-zero count at every level, in both Areas and Schools</td><td>Medium</td></tr>
+<tr><td>C10</td><td>Representative names on structural cards are filter-dependent</td><td>Names are the top areas by current filtered listing count, so a canonical destination re-labels itself as filters change — while the Schools journey's equivalents stay stable</td><td>Medium</td></tr>
+<tr><td>C11</td><td>Committed chip removal is unconfirmed while clearing is confirmed</td><td>The chip × commits a new smaller scope immediately; "Clear selected areas" asks first</td><td>Low</td></tr>
+<tr><td>C12</td><td>A result state with no result-scope indicator</td><td>The school-radius state defines a result set but renders no scope bar, unlike every residential scope</td><td>Medium</td></tr>
+<tr><td>C13</td><td>Residential controls remain active over non-residential results</td><td>Buy/Rent and the city switcher stay in the bar in Schools and Agricultural; property filter chips disappear but the values keep applying to residential state</td><td>Medium</td></tr>
+<tr><td>C14</td><td>Breadcrumb root switches journeys</td><td>"Bangalore" in the Schools and Agricultural crumbs leaves the journey instead of moving up a level</td><td>Low</td></tr>
+</table>
+</section>
+
+<section id="s14">
+<h2><span class="num">15</span>Product-decision report</h2>
+<ol class="q">
+<li><strong>Are the school radius and the agricultural distance band committed states?</strong> Both change the result set; neither creates history or is presented as a scope. Decide once, for both.</li>
+<li><strong>Is a listing detail a state in the journey or an overlay on it?</strong> This decides whether Browser Back closes a detail and whether a detail is shareable.</li>
+<li><strong>Should a zero-match destination remain visible with a zero count?</strong> Affects every navigation level in two journeys, and whether counts on cards can ever read 0.</li>
+<li><strong>Do property filters apply to homes near a school?</strong> Today they are hidden and ignored while Buy/Rent stays visible. Either scope filters to the journey or apply them and show them.</li>
+<li><strong>What does a school count mean at direction and cluster level</strong> — located inside, or serving? The per-area meaning is stated; the aggregate is not.</li>
+<li><strong>Can Schools and Agricultural searches be saved as alerts?</strong> If yes, the alert record must carry journey-specific state, not just areas and property filters.</li>
+<li><strong>Where does sign-in sit in the alert flow?</strong> Nothing in the mock represents an account.</li>
+<li><strong>Selecting one area both navigates and searches.</strong> Is that permanent, or is there a browse-without-searching state?</li>
+<li><strong>Is Buy/Rent a filter, a separate result model, or a separate journey?</strong> It cannot stay an inert control.</li>
+<li><strong>How deep is scope-replacement history?</strong> Only one previous scope is remembered, so polygon → viewport → return cannot reach the original area set.</li>
+<li><strong>May a multi-area selection be non-contiguous?</strong> Candidates come from adjacency only; there is no refusal message for a far-apart pair either.</li>
+<li><strong>Does the Add-nearby draft survive navigating away, or is it always discarded?</strong> Copy says nothing changes until commit, but not what happens if the shopper leaves.</li>
+<li><strong>Which journey is the mobile Map mode allowed to be a dead end for?</strong> Detail, alerts and confirmations currently exist only in List mode.</li>
+</ol>
+</section>
+
+<section id="s15">
+<h2><span class="num">16</span>Engineering-investigation handoff</h2>
+<p class="lede">Questions the mock cannot answer, phrased so they can be answered against the real implementation. No files, owners, issue or PR references are assigned.</p>
+<h3>State, URL and history</h3>
+<ul class="q">
+<li>Which committed states are addressable today, and which are reconstructible from an address alone: direction, local destination, single area, area set, polygon geometry, committed viewport bounds, selected school + radius, agri origin + direction + band + town? <span class="pill eu">Unknown</span></li>
+<li>Does the current implementation push history for presentation-only changes (cluster zoom, chip focus, pan, Map/List, radius, distance band)?</li>
+<li>Is a listing detail an addressable state, and does Back close it?</li>
+<li>On reload, what is restored, and what silently resets to a city root?</li>
+<li>Is there a single canonical state object, or does each journey keep its own store that can drift when journeys are switched?</li>
+</ul>
+<h3>Result scope</h3>
+<ul class="q">
+<li>Can more than one residential scope be active at once in the real system (a selected set plus a viewport, or a polygon plus a set)?</li>
+<li>How are scope replacements ordered and unwound — is there a stack, or one remembered previous scope?</li>
+<li>Is the committed viewport a stored bounding box, or the live camera at request time?</li>
+<li>Does the polygon store geometry, and at what precision and projection?</li>
+</ul>
+<h3>Counts and catalogue</h3>
+<ul class="q">
+<li>Are destination counts filter-aware server-side, and are the representative names on a destination stable or ranked by the current filter?</li>
+<li>What exactly does a school count aggregate at each level, and is any radius or catchment involved?</li>
+<li>Is a "homes near a school" distance straight-line or routed?</li>
+<li>Are zero-match destinations returned and suppressed by the client, or never returned?</li>
+<li>Is Buy/Rent a filter over one inventory, or two separate inventories?</li>
+</ul>
+<h3>Journeys and alerts</h3>
+<ul class="q">
+<li>Do Schools and Agricultural share the residential filter and alert models, or have their own?</li>
+<li>What can an alert record express today — areas only, or polygon, viewport, school radius and agri geography as well?</li>
+<li>What is the auth requirement for creating an alert, and what happens to an in-progress alert across sign-in?</li>
+<li>How does an alert notification re-enter the app, and what state does it carry?</li>
+<li>Does agricultural inventory ever appear in residential counts anywhere in the real data?</li>
+</ul>
+<h3>Client behaviour</h3>
+<ul class="q">
+<li>Where are the real loading, empty and error boundaries, and do they differ per journey?</li>
+<li>Is list scroll position preserved across a detail round trip?</li>
+<li>What are the real breakpoints, and is there a tablet layout between the two the mock shows?</li>
+<li>Are map clustering thresholds and marker priorities server-driven or client-side?</li>
+</ul>
+</section>
+
+<section id="sdelta">
+<h2><span class="num">→</span>Correction pass — audit delta</h2>
+<p class="lede">One focused correction pass was applied to the mock after this audit. The navigation model, the journey set and every unaffected state are unchanged; only the findings below were touched. This table replaces a re-run of the full audit.</p>
+<table>
+<tr><th>Previous finding</th><th>Change made</th><th>Mock states updated</th><th>Resolution</th><th>Remaining question</th></tr>
+<tr><td><strong>C1</strong> Schools AREA marker said “Tap to view homes” over a school count</td><td>Schools-journey area marker is now its own treatment: area name, <em>N schools</em> as the primary metric, <em>N listings</em> as secondary context, caption <em>View schools</em>. The panel row carries the same two counts and a “View schools” affordance</td><td>Schools nav (area level), map + panel, mobile sheet</td><td><span class="pill cr">Resolved</span></td><td>Should the listings figure on a schools marker be filter-aware, or always the full area count?</td></tr>
+<tr><td><strong>C2</strong> Zero-result recovery silently converted a polygon/viewport scope into an area set</td><td>Recovery is now scope-specific. Polygon: <em>Adjust boundary</em> · <em>Replace with …</em> (confirmed) · filter changes · alert. Visible map: <em>Expand visible map area</em> (stays a visible-map search) · <em>Return to previous selected areas</em> · <em>Replace with …</em> (confirmed). Area sets keep nearby suggestions, but <em>Add</em> now opens a draft instead of committing. The zero panel no longer prints previous area names as the active scope</td><td>Zero results under AREA_SET, CITY, POLYGON, VIEWPORT</td><td><span class="pill cr">Resolved</span></td><td>How deep should scope history be — today only one previous scope is remembered</td></tr>
+<tr><td><strong>C3</strong> Back-to-results promised a list position it discarded</td><td>Scroll offset is stored against the result state it belongs to and restored when that same state returns; the copy now reads “Your search, filters and map view are restored … along with the place you had reached in the list”</td><td>Listing detail (desktop + mobile)</td><td><span class="pill cr">Resolved</span></td><td>Is scroll restoration expected across a full reload, or only within a session?</td></tr>
+<tr><td><strong>C4</strong> Buy/Rent changed labels but not inventory</td><td>Rent is a separate inventory: plots are never let, only part of the stock is available to rent, and each rentable home carries a monthly price. Rent changes counts everywhere, swaps price display to ₹ x k/mo, replaces the budget scale with monthly bands, and renames results (“rentals”, “Homes to rent in …”, “Available now”)</td><td>All Areas states, cards, map pins, mobile sheet, filter bar, alert summaries</td><td><span class="pill cr">Resolved</span></td><td>Is Rent a filter over one inventory or a separate model server-side? Should rent and sale alerts differ?</td></tr>
+<tr><td><strong>C5</strong> “Schools in selected areas” dropped the selection when 2–3 areas were selected</td><td>The Schools journey now holds a set of areas. Opening it from a selected-area set shows “Schools in selected areas · Hebbal · Nagawara · Jakkur”, distinct schools located inside them, each row tagged with its area, and an explicit <em>Back to properties in Hebbal + Nagawara + Jakkur</em></td><td>Area → Schools from 1, 2 or 3 areas; journey switch carry-over; Schools crumb</td><td><span class="pill cr">Resolved</span></td><td>Should selecting a school from this state keep the selected areas as a constraint, or stay a pure radius query as it does now?</td></tr>
+<tr><td><strong>C6</strong> A listing tap in mobile Map mode produced nothing</td><td>A marker selection opens a listing preview sheet (image, price, type, bedrooms, area, <em>View details</em>, <em>Close</em>); View details opens the full detail, and Back or Close returns to the same map state</td><td>Mobile Map mode, all listing-capable scopes</td><td><span class="pill cr">Resolved</span></td><td>Should the alert form and confirmations also get a Map-mode surface? Still list-only</td></tr>
+<tr><td><strong>C8</strong> Compare and Preview vocabulary survived</td><td>“Compare up to 3 areas” → “Up to 3 selected areas”; the dead “Compared areas·N” string is now “Selected areas·N”; Preview / Previewing / “not added to any search” are gone — nearby areas offer only <em>Add</em> / <em>Added</em></td><td>Capability strip, selected-area heading, zero-result recovery</td><td><span class="pill cr">Resolved</span></td><td>None</td></tr>
+<tr><td><strong>C9</strong> Zero-match destinations disappeared from the funnel</td><td>Direction and Local-Destination cards always render, in a fixed geographic position, with “No matches with current filters” in place of the count. A node whose areas all fail the filters explains itself and offers a filter reset</td><td>City landing, direction landing (map + panel)</td><td><span class="pill cr">Resolved</span></td><td>Should an individual AREA with zero matches also stay listed? Areas are still filtered out</td></tr>
+<tr><td><strong>C10</strong> Representative names were re-ranked by the active filters</td><td>Names, positions and bounds of structural destinations are computed from the full area set and never move; only counts respond to filters. Structural cards read “N areas with matches”; the <code>+N</code> form is now reserved for visual clusters</td><td>Areas + Schools nav at every level, map and panel</td><td><span class="pill cr">Resolved</span></td><td>Which names are canonical in production — by inventory, by recognition, or editorially chosen?</td></tr>
+<tr><td><strong>C12</strong> The school-radius state had no scope indicator</td><td>The state names itself: heading “Homes within 5 km of …”, a scope bar reading “Result scope — homes within 5 km of …” with the straight-line qualifier, and a mobile scope pill. The agricultural band does the same: “Parcels 20–45 km north of Hebbal” plus a scope bar at band and parcel level. <strong>Final ruling applied:</strong> the first school or corridor selection commits a state; each later radius or band change <em>replaces</em> that state instead of adding a history entry per chip press</td><td>Schools radius homes; Agri towns and parcels; in-session history</td><td><span class="pill cr">Resolved</span></td><td>None — ruled</td></tr>
+<tr><td><strong>C13</strong> Residential controls sat over non-residential results</td><td>Property filters apply to school-radius homes and are shown in that state. <strong>Final ruling applied:</strong> the Buy/Rent control is hidden while Agricultural is active, so only journey-relevant controls appear; the shopper's residential Buy/Rent value is untouched by the agri journey and is in force again on returning to Areas or Schools</td><td>Schools radius homes; Agricultural control bar; journey switching</td><td><span class="pill cr">Resolved</span></td><td>None — ruled</td></tr>
+<tr><td><strong>C7</strong> Browser Back from the first committed state reset to the city root</td><td>The entry state is now itself a history snapshot, and a listing detail gets its own entry, so Back closes a detail and lands on the results it came from</td><td>All journeys, in-session history</td><td><span class="pill pr">Partially resolved</span></td><td>Refresh restoration still needs a real addressable state — out of scope for this pass</td></tr>
+</table>
+<h3>Deliberately left as documented gaps</h3>
+<p class="lede">Not touched in this pass, still recorded in §13 and §15: product URLs and refresh restoration, tablet breakpoints, agricultural alerts and parcel detail, polygon vertex editing, alert notification deep links, sign-in states, non-contiguous multi-area selection, and comprehensive loading/error states for the non-residential journeys.</p>
+<div class="callout"><b>States frozen.</b> With the two final rulings applied (radius and band replace the current state; Buy/Rent is hidden while Agricultural is active), the customer-facing states are frozen for engineering investigation. No further product or interaction changes are to be made to the mock; anything new is a change request against the frozen states, not an edit to them.</div>
+</section>
+
+<section id="s16">
+<h2><span class="num">17</span>Final readiness verdict</h2>
+<p class="scope">Sections 1–16 record the state of the mock <em>before</em> the correction pass; the delta above records what changed and what did not.</p>
+<div class="verdict">
+<div class="eyebrow" style="color:rgba(255,255,255,.5)">Verdict · states frozen</div>
+<div class="v">READY FOR CLI INVESTIGATION</div>
+<p>All fourteen contradictions are resolved. The Schools area marker names its own action; zero-result recovery never changes the kind of scope without a confirmation; the restoration promise is kept; Buy and Rent are two inventories rather than two labels; a multi-area selection survives into Schools; a mobile map tap opens a real preview; structural destinations neither move nor vanish when filters change; and the school radius and agricultural distance band both declare themselves as result-defining scope — committed once, then replaced rather than stacked. Agricultural shows only journey-relevant controls, with the shopper's residential Buy/Rent value preserved for their return.</p>
+<p>What remains is a set of recorded non-goals of this mock, not unresolved intent: no addressable state or refresh restoration, no layout between the two device canvases, no alerts or parcel detail in the non-residential journeys, no polygon vertex editing, no sign-in, and no non-contiguous multi-area selection. §15 lists the questions to put to the real implementation.</p>
+<p><strong>The customer-facing states are frozen at this verdict.</strong> Sections 1–16 remain the pre-correction record; the correction delta above is the change log.</p>
+</div>
+</section>
+
+</div>
+</body>
+</html>

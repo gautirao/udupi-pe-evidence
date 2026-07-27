@@ -27,7 +27,7 @@ function dirCard(o) {
   const eyebrow = centre
     ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:8.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.72);"><span style="display:inline-flex;">${CENTRE_GLYPH}</span>Central</span>`
     : "";
-  return `<div class="nd-nav${hov ? " nd-nav-on" : ""}" style="position:relative;width:${width}px;margin-left:-${width / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;">
+  return `<div class="nd-nav${hov ? " nd-nav-on" : ""}" data-design-component="directional-marker" style="position:relative;width:${width}px;margin-left:-${width / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;">
     <div class="nd-navcore" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 15px 10px;border-radius:var(--radius-lg);background:${bg};color:#fff;box-shadow:var(--shadow-lg);border:${border};transform:scale(${sel ? 1.06 : 1});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s,border-color .18s;">
       ${eyebrow}
       <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.2;text-wrap:balance;">${namesTxt}</span>
@@ -51,7 +51,7 @@ function areaPin(o) {
   const glyph = tone === "plum"
     ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="${pin}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>`
     : `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="${pin}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
-  return `<div class="nd-nav${o.hovered ? " nd-nav-on" : ""}" style="position:relative;width:230px;margin-left:-115px;transform:translateY(-100%);text-align:center;font-family:var(--font-sans);">
+  return `<div class="nd-nav${o.hovered ? " nd-nav-on" : ""}" data-design-component="area-marker" style="position:relative;width:230px;margin-left:-115px;transform:translateY(-100%);text-align:center;font-family:var(--font-sans);">
     <div class="nd-navcore" style="display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border-radius:var(--radius-full);background:${bg};color:${fg};box-shadow:${sel ? "var(--shadow-lg)" : "var(--shadow-md)"};border:${border};white-space:nowrap;transition:all .18s cubic-bezier(.4,0,.2,1);transform:scale(${sel ? 1.06 : 1});">
       <span style="font-size:13px;font-weight:700;letter-spacing:-0.01em;">${o.name}</span>
       <span style="display:inline-flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:11px;color:${sub};">${glyph}${o.count}</span>
@@ -65,7 +65,7 @@ function schoolPin(o) {
   const bg = sel ? "var(--plum-600)" : "var(--paper)";
   const fg = sel ? "#fff" : "var(--navy-800)";
   const border = sel ? "none" : "1px solid var(--border)";
-  return `<div class="nd-nav${o.hovered ? " nd-nav-on" : ""}" style="position:relative;width:250px;margin-left:-125px;transform:translateY(-100%);text-align:center;font-family:var(--font-sans);">
+  return `<div class="nd-nav${o.hovered ? " nd-nav-on" : ""}" data-design-component="school-marker" style="position:relative;width:250px;margin-left:-125px;transform:translateY(-100%);text-align:center;font-family:var(--font-sans);">
     <div class="nd-navcore" style="display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:var(--radius-full);background:${bg};color:${fg};box-shadow:${sel ? "var(--shadow-lg)" : "var(--shadow-sm)"};border:${border};white-space:nowrap;transition:all .18s cubic-bezier(.4,0,.2,1);transform:scale(${sel ? 1.06 : 1});max-width:230px;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${sel ? "#fff" : "var(--plum-600)"}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>
       <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;">${o.name.split(",")[0]}</span>
@@ -80,7 +80,7 @@ function corridorCard(o) {
   const bg = sel ? "#154834" : "#1F7A5C";
   const nameLine = o.names.join(" \u00B7 ") + (o.more > 0 ? ` <span style="opacity:.6;font-weight:600;">+${o.more}</span>` : "");
   const subLine = o.sub ? `<span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;opacity:.82;">${o.sub}</span>` : "";
-  return `<div class="nd-nav${o.hovered ? " nd-nav-on" : ""}" style="position:relative;width:200px;margin-left:-100px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;">
+  return `<div class="nd-nav${o.hovered ? " nd-nav-on" : ""}" data-design-component="corridor-marker" style="position:relative;width:200px;margin-left:-100px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;">
     <div class="nd-navcore" style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;max-width:194px;padding:8px 14px 9px;border-radius:var(--radius-lg);background:${bg};color:#fff;box-shadow:var(--shadow-lg);border:1.5px solid rgba(255,255,255,${sel ? 0.9 : 0.5});transform:scale(${sel ? 1.05 : 1});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s;">
       ${subLine}
       <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;white-space:nowrap;">${nameLine}</span>
@@ -125,7 +125,7 @@ function drawSector(layer, s) {
 }
 function townDisc(o) {
   const size = o.sel ? 52 : 44;
-  return `<div class="nd-nav${o.hovered ? " nd-nav-on" : ""}" style="transform:translate(-50%,-100%);font-family:var(--font-sans);text-align:center;">
+  return `<div class="nd-nav${o.hovered ? " nd-nav-on" : ""}" data-design-component="town-marker" style="transform:translate(-50%,-100%);font-family:var(--font-sans);text-align:center;">
     <div class="nd-navcore" style="width:${size}px;height:${size}px;border-radius:var(--radius-full);background:linear-gradient(160deg,#2E9B74,#1C5B43);border:3px solid #fff;box-shadow:0 4px 14px rgba(20,50,40,.35);display:flex;align-items:center;justify-content:center;margin:0 auto;transition:all .18s cubic-bezier(.4,0,.2,1);">
       <span style="font-family:var(--font-mono);font-size:17px;font-weight:800;color:#fff;">${o.count}</span>
     </div>
@@ -406,7 +406,7 @@ function NDMap(props) {
   return (
     <div style={{ position: "relative", height: "100%", width: "100%" }}>
       <div ref={elRef} style={{ position: "absolute", inset: 0 }} />
-      <div style={{ position: "absolute", top: "18px", left: "18px", zIndex: 500, display: "flex", alignItems: "center", gap: "7px", padding: "9px 14px", background: "var(--paper)", borderRadius: "var(--radius-full)", boxShadow: "var(--shadow-md)", border: "1px solid var(--border)", fontFamily: "var(--font-sans)", fontSize: "13.5px", fontWeight: 600, maxWidth: "calc(100% - 36px)", overflow: "hidden" }}>
+      <div data-design-component="breadcrumb" style={{ position: "absolute", top: "18px", left: "18px", zIndex: 500, display: "flex", alignItems: "center", gap: "7px", padding: "9px 14px", background: "var(--paper)", borderRadius: "var(--radius-full)", boxShadow: "var(--shadow-md)", border: "1px solid var(--border)", fontFamily: "var(--font-sans)", fontSize: "13.5px", fontWeight: 600, maxWidth: "calc(100% - 36px)", overflow: "hidden" }}>
         <MIcon name="map-pin" size={16} color={isAgri ? "var(--evergreen-600)" : "var(--accent)"} />
         {(crumb || ["Bangalore"]).map((c, i, arr) => (
           <React.Fragment key={i}>
@@ -429,7 +429,7 @@ function NDMap(props) {
         <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-strong)" }}>{summary.count.toLocaleString("en-IN")}</span> {summary.noun}
       </div>
       {view.sector && (
-        <div style={{ position: "absolute", bottom: "20px", left: "18px", zIndex: 500, display: "flex", alignItems: "center", gap: "9px", maxWidth: "min(320px, calc(100% - 36px))", padding: "9px 13px", background: "var(--paper)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-md)", border: "1px solid var(--border)", fontFamily: "var(--font-sans)" }}>
+        <div data-design-component="agricultural-sector" style={{ position: "absolute", bottom: "20px", left: "18px", zIndex: 500, display: "flex", alignItems: "center", gap: "9px", maxWidth: "min(320px, calc(100% - 36px))", padding: "9px 13px", background: "var(--paper)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-md)", border: "1px solid var(--border)", fontFamily: "var(--font-sans)" }}>
           <span style={{ flex: "none", width: "22px", height: "16px", borderRadius: "3px", background: "rgba(46,155,116,0.16)", border: "1.5px solid #1F7A5C" }} />
           <span style={{ fontSize: "11.5px", lineHeight: 1.35, color: "var(--text-muted)", textWrap: "pretty" }}><strong style={{ color: "var(--text-strong)", fontWeight: 700 }}>Search sector</strong> — direction &amp; distance from {view.sector.originName}</span>
         </div>

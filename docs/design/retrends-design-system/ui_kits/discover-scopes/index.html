@@ -1,0 +1,295 @@
+<!-- @dsCard group="Discover" viewport="1280x900" name="Discover — Result Scopes and Multi-Area Search" subtitle="#2020 · state index for result scopes, multi-area search, schools, zero-result recovery and saved-search alerts" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discover — Result Scopes and Multi-Area Search</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+html,body{margin:0;background:var(--background)}
+body{font-family:var(--font-sans);color:var(--text-strong)}
+*{box-sizing:border-box}
+::selection{background:var(--accent);color:#fff}
+:root{--plum-600:#5E5286;--plum-500:#7E6BA8;--plum-100:#DED7EC;--plum-tint:#F1EDF7;--ochre-50:#FBF3E2;--ochre-600:#A8791F;--ochre-700:#7A5714;--brick-600:#A33A2A}
+a{color:var(--copper-600);text-decoration:none}
+a:hover{color:var(--navy-800);text-decoration:underline}
+.rs-mk .rs-core{transition:transform .18s cubic-bezier(.4,0,.2,1)}
+.rs-mk:hover .rs-core{transform:scale(1.05)}
+.rs-spec > div{margin-left:0 !important;transform:none !important}
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;vertical-align:top;padding:11px 13px;border-bottom:1px solid var(--border);font-size:12.5px;line-height:1.5}
+th{font-size:10.5px;font-weight:700;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-muted);background:var(--surface-subtle);border-bottom:1px solid var(--border-strong)}
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#1B2A45">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#1B2A45"/>
+    <rect x="180" y="200" width="380" height="120" rx="24" fill="none" stroke="#F6F5F2" stroke-width="10" stroke-dasharray="26 18"/>
+    <rect x="180" y="380" width="380" height="120" rx="24" fill="#B05C3A"/>
+    <rect x="180" y="560" width="380" height="120" rx="24" fill="none" stroke="#F6F5F2" stroke-width="10"/>
+    <circle cx="820" cy="330" r="90" fill="#B05C3A"/>
+    <rect x="680" y="480" width="340" height="40" rx="12" fill="#F6F5F2" opacity="0.85"/>
+    <rect x="680" y="550" width="240" height="40" rx="12" fill="#F6F5F2" opacity="0.55"/>
+  </svg>
+</template>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="src/scope-data.js?v=rs1"></script>
+<script src="src/states-a.js?v=rs1"></script>
+<script src="src/states-b.js?v=rs1"></script>
+<script type="text/babel" src="src/ScopeBits.jsx?v=rs1"></script>
+<script type="text/babel" src="src/ScopeMap.jsx?v=rs1"></script>
+<script type="text/babel">
+const { Icon } = window.ReTrendsDesignSystem_f37966;
+const S = window.RS_STATES;
+const ISSUES = [
+  ["#2016", "Canonical geographic result-scope contract", "Exactly one active scope — selected areas, drawn polygon or visible map area — always named, always replaceable, never combined."],
+  ["#2017", "Multi-area chips and nearby suggestions", "Up to three canonical areas edited as draft chips, committed by one Search, reported as one combined total. Schools in those areas are informational only."],
+  ["#2018", "Honest zero-result recovery", "Zero means zero. Nothing is broadened without an explicit action, and a backend failure never renders as an empty result."],
+  ["#2019", "Saved-search alerts", "The exact scope and filters are restated before saving, success is shown only on durable persistence, and every saved search is manageable."],
+  ["#2015", "Search this area — viewport search", "Moving the map changes nothing. Search this area commits the visible rectangle, and the return path to the previous areas is permanent."],
+  ["#2014", "Shallow directional Areas navigation", "Hierarchy destinations move the breadcrumb; visual clusters move only the camera; the panel always explains why its rows changed."],
+];
+
+function Wrap({ children, id, title, kicker }) {
+  return (
+    <section id={id} style={{ maxWidth: "1180px", margin: "0 auto", padding: "0 40px 56px" }}>
+      {kicker && <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "var(--copper-600)", marginBottom: "8px" }}>{kicker}</div>}
+      {title && <h2 style={{ margin: "0 0 18px", fontFamily: "var(--font-serif)", fontSize: "27px", fontWeight: 600, letterSpacing: "-0.02em", color: "var(--text-strong)" }}>{title}</h2>}
+      {children}
+    </section>
+  );
+}
+
+function StateRow({ s }) {
+  const [h, setH] = React.useState(false);
+  return (
+    <div onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+      style={{ display: "flex", alignItems: "center", gap: "14px", padding: "13px 15px", borderRadius: "var(--radius-lg)", background: "var(--surface-card)", border: "1px solid var(--border)", boxShadow: h ? "var(--shadow-md)" : "var(--shadow-xs)", transform: h ? "translateY(-1px)" : "none", transition: "box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard)" }}>
+      <span style={{ flex: "none", fontFamily: "var(--font-mono)", fontSize: "11px", fontWeight: 700, padding: "3px 8px", borderRadius: "var(--radius-sm)", background: "var(--navy-800)", color: "#fff" }}>{s.id}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <a href={`state.html?state=${s.id}`} style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em" }}>{s.title}</a>
+        <div style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-muted)", marginTop: "3px" }}>{s.name}</div>
+      </div>
+      <span style={{ flex: "none", display: "flex", gap: "7px" }}>
+        <a href={`state.html?state=${s.id}`} style={{ padding: "6px 11px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-strong)", background: "var(--surface-card)", fontSize: "12px", fontWeight: 600, color: "var(--text-strong)", whiteSpace: "nowrap" }}>Desktop</a>
+        <a href={`state.html?state=${s.id}&device=mobile`} style={{ padding: "6px 11px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-strong)", background: "var(--surface-card)", fontSize: "12px", fontWeight: 600, color: "var(--text-strong)", whiteSpace: "nowrap" }}>Mobile</a>
+      </span>
+    </div>
+  );
+}
+
+function Marker({ items, label, behaviour }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      <div style={{ position: "relative", height: "150px", borderRadius: "var(--radius-lg)", background: "#EDEBE6", border: "1px solid var(--border)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", gap: "18px" }}>
+        {items.map((it, i) => (
+          <div key={i} className="rs-spec" style={{ width: it.w, display: "flex", justifyContent: "center" }} dangerouslySetInnerHTML={{ __html: it.html }}></div>
+        ))}
+      </div>
+      <div>
+        <div style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em" }}>{label}</div>
+        <p style={{ margin: "4px 0 0", fontSize: "12.5px", lineHeight: 1.55, color: "var(--text-muted)", textWrap: "pretty" }}>{behaviour}</p>
+      </div>
+    </div>
+  );
+}
+
+const OPEN = [
+  ["Three-area maximum", "Is three a product rule or a query-cost guard? The mocks propose an explicit swap (B4) rather than a hard stop, but they do not choose which chip is released by default — currently the user names it."],
+  ["Two count semantics side by side", "Suggestion counts (B1) are whole-area totals before filters; recovery counts (E2) are filter-aware. Both are labelled, but two meanings of “22 listings” on adjacent screens is a real risk. Unify, or keep and rely on the labels?"],
+  ["“Show 95 listings” in the #2020 example", "The issue's Group B example shows a 95-listing button under a single Hebbal selection. The mocks show the honest draft total (42) and only reach 95 once all three areas are drafted. Confirm the correction."],
+  ["Viewport scope lifetime", "Does a committed visible-map scope survive a hierarchy navigation, a reload, or a day? The mocks keep the return-to-areas action permanently; expiry is undefined."],
+  ["Breadcrumb for non-contiguous sets", "C4 collapses the breadcrumb to Bangalore because the three areas share no parent. The alternative is keeping the last visited node. Needs a product decision."],
+  ["Schools from zero-listing areas", "D2 counts schools from every selected area including ones with no listings. Correct, or misleading beside a property total?"],
+  ["Frozen rectangle alerts", "F3 saves the viewport as a fixed rectangle and says so. The alternative — resolving it to canonical areas at save time — would be easier to explain in the management list but changes what was saved."],
+  ["Stale-result retention window", "E10 keeps the last successful results with an age stamp. How old is too old before they must be withdrawn?"],
+  ["Search this area before the camera moves", "Should the control be disabled until the viewport actually differs from the committed scope, or always available?"],
+  ["Draft persistence", "If a draft edit is abandoned by navigating away, is it discarded (as mocked) or restored on return?"],
+];
+
+function App() {
+  const byIssue = (i) => S.filter((s) => s.issue === i);
+  return (
+    <div style={{ paddingBottom: "80px" }}>
+      <header style={{ background: "var(--surface-navy)", color: "var(--text-on-navy)", padding: "52px 0 46px", marginBottom: "48px" }}>
+        <div style={{ maxWidth: "1180px", margin: "0 auto", padding: "0 40px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px", flexWrap: "wrap" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", fontWeight: 700, padding: "4px 10px", borderRadius: "var(--radius-sm)", background: "var(--accent)", color: "#fff" }}>#2020</span>
+            <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "rgba(255,255,255,0.6)" }}>Extension of the approved Discover design</span>
+          </div>
+          <h1 style={{ margin: "0 0 14px", fontFamily: "var(--font-serif)", fontSize: "44px", fontWeight: 600, letterSpacing: "-0.025em", lineHeight: 1.1, maxWidth: "800px" }}>Discover — Result Scopes and Multi-Area Search</h1>
+          <p style={{ margin: "0 0 26px", fontSize: "16px", lineHeight: 1.6, color: "rgba(255,255,255,0.78)", maxWidth: "720px", textWrap: "pretty" }}>
+            {S.length} named states across desktop 1366×768 and mobile 390×844, built on the existing Discover shell — same left-map / right-panel composition, same cards, filters, map controls and breadcrumb treatment. Nothing in the approved kit was changed.
+          </p>
+          <div style={{ display: "flex", gap: "26px", flexWrap: "wrap", paddingTop: "22px", borderTop: "1px solid rgba(255,255,255,0.16)" }}>
+            {[["States", S.length], ["Groups", 7], ["Issues covered", 6], ["Viewports", 2]].map(([k, v]) => (
+              <div key={k}><div style={{ fontFamily: "var(--font-mono)", fontSize: "26px", fontWeight: 600 }}>{v}</div><div style={{ fontSize: "12px", color: "rgba(255,255,255,0.6)" }}>{k}</div></div>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      <Wrap id="model" kicker="Core product model" title="Four concepts that must never look interchangeable">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "14px" }}>
+          {[
+            ["1 · Canonical navigation context", "Bangalore → North Bangalore → Hebbal · Yelahanka → Hebbal", "Plain text with chevrons. No container, no ×, never removable. Set only by hierarchy destinations."],
+            ["2 · Active result scope", "Selected areas · drawn polygon · visible map area", "Square bordered chips with a scope glyph and a ×. Exactly one kind at a time; switching kinds is a confirmed replacement."],
+            ["3 · Property filters", "Buy · up to ₹45 lakh · 3 BHK · ready to move", "Mono pills in their own row, labelled Filters. Never changed by a scope change, and never changed for you."],
+            ["4 · Map presentation focus", "Zoom a cluster · focus one chip · pan the camera", "Camera state only. Reported in the panel, never folded into the result scope."],
+          ].map(([t, ex, b]) => (
+            <div key={t} style={{ background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "17px 18px", boxShadow: "var(--shadow-xs)" }}>
+              <div style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", marginBottom: "8px" }}>{t}</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "11.5px", color: "var(--copper-600)", marginBottom: "9px", lineHeight: 1.5 }}>{ex}</div>
+              <p style={{ margin: 0, fontSize: "12.5px", lineHeight: 1.6, color: "var(--text-muted)", textWrap: "pretty" }}>{b}</p>
+            </div>
+          ))}
+        </div>
+      </Wrap>
+
+      <Wrap id="grammar" kicker="Reusable components" title="Visual grammar — four marker families">
+        <p style={{ margin: "-8px 0 22px", fontSize: "14px", lineHeight: 1.65, color: "var(--text-body)", maxWidth: "760px", textWrap: "pretty" }}>
+          Nothing here is distinguished by colour alone. Each family has its own silhouette (solid card · dashed hollow chip · tailed pill · disc), its own glyph (layers · magnifier · map-pin · price) and its own action verb.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "22px" }}>
+          <Marker label="Hierarchy destination" behaviour="Canonical navigation. Changes the breadcrumb and the node state. Never sets a result scope on its own."
+            items={[{ w: 230, html: window.RSMarkerHTML.hier({ eyebrow: "North Bangalore", title: "Yelahanka · Devanahalli", sub: "+12 nearby areas", count: "186 listings" }) }]} />
+          <Marker label="Visual area cluster" behaviour="Zooms or reveals its member areas. Changes neither the breadcrumb nor the result scope — drawn as a zoom control, not a destination."
+            items={[{ w: 240, html: window.RSMarkerHTML.cluster({ title: "Hebbal · Nagawara", sub: "+3 areas with matches", count: "120 listings · 50 schools" }) }]} />
+          <Marker label="Individual area marker" behaviour="Selects a real canonical area, which joins the result scope as a chip. Anchored with a tail because it points at a place."
+            items={[{ w: 250, html: window.RSMarkerHTML.area({ name: "Hebbal", count: "42 listings", cta: "Tap to view homes" }) }]} />
+          <Marker label="Listing price marker and cluster" behaviour="Unchanged property grammar — mono price pill, solid disc for a cluster. Never confusable with an area control."
+            items={[{ w: 110, html: window.RSMarkerHTML.price({ label: "₹2.15 Cr" }) }, { w: 80, html: window.RSMarkerHTML.pricecluster({ n: 24 }) }]} />
+        </div>
+        <div style={{ marginTop: "26px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+          <div style={{ background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "17px 18px" }}>
+            <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: "12px" }}>Result-scope chips</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+              <window.RSScopeChip kind="areas" label="Hebbal" onRemove={() => { }} />
+              <window.RSScopeChip kind="areas" label="Nagawara" onRemove={() => { }} />
+              <window.RSScopeChip kind="areas" label="Jakkur" onRemove={() => { }} />
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              <window.RSScopeChip kind="polygon" label="Drawn area" onRemove={() => { }} />
+              <window.RSScopeChip kind="viewport" label="Visible map area" onRemove={() => { }} />
+            </div>
+          </div>
+          <div style={{ background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "17px 18px" }}>
+            <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: "12px" }}>Breadcrumb — not a chip</div>
+            <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
+              {["Bangalore", "North Bangalore", "Hebbal · Yelahanka", "Hebbal"].map((b, i) => (
+                <React.Fragment key={b}>
+                  {i > 0 && <Icon name="chevron-right" size={12} color="var(--grey-400)" />}
+                  <span style={{ fontSize: "12.5px", fontWeight: 600, color: i === 3 ? "var(--text-strong)" : "var(--text-muted)" }}>{b}</span>
+                </React.Fragment>
+              ))}
+            </div>
+            <p style={{ margin: "12px 0 0", fontSize: "12.5px", lineHeight: 1.6, color: "var(--text-muted)", textWrap: "pretty" }}>No border, no fill, no remove control. A multi-area set is never rendered this way.</p>
+          </div>
+          <div style={{ background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "17px 18px" }}>
+            <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: "12px" }}>Draft vs committed</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
+              <window.RSScopeChip kind="areas" label="Hebbal" draft onRemove={() => { }} />
+              <window.RSScopeChip kind="areas" label="Nagawara" draft onRemove={() => { }} />
+            </div>
+            <p style={{ margin: 0, fontSize: "12.5px", lineHeight: 1.6, color: "var(--text-muted)", textWrap: "pretty" }}>Dashed borders mean the edit has not been committed — results have not changed. A solid chip is a live result scope.</p>
+          </div>
+        </div>
+      </Wrap>
+
+      <Wrap id="index" kicker="State index" title="Every state, grouped by product contract">
+        <div style={{ display: "flex", flexDirection: "column", gap: "34px" }}>
+          {ISSUES.map(([code, name, blurb]) => {
+            const list = byIssue(code);
+            if (!list.length) return null;
+            return (
+              <div key={code}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap", marginBottom: "6px" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "13px", fontWeight: 700, padding: "3px 9px", borderRadius: "var(--radius-sm)", background: "var(--accent-tint)", color: "var(--copper-600)" }}>{code}</span>
+                  <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 700, letterSpacing: "-0.01em", color: "var(--text-strong)" }}>{name}</h3>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "11.5px", color: "var(--text-muted)" }}>{list.length} states</span>
+                </div>
+                <p style={{ margin: "0 0 14px", fontSize: "13.5px", lineHeight: 1.6, color: "var(--text-muted)", maxWidth: "780px", textWrap: "pretty" }}>{blurb}</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>{list.map((s) => <StateRow key={s.id} s={s} />)}</div>
+              </div>
+            );
+          })}
+        </div>
+      </Wrap>
+
+      <Wrap id="mapping" kicker="Traceability" title="Mock state → issue → acceptance criterion">
+        <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden", background: "var(--surface-card)" }}>
+          <table>
+            <thead><tr><th style={{ width: "58px" }}>ID</th><th style={{ width: "210px" }}>Mock state name</th><th style={{ width: "84px" }}>Issue</th><th>Acceptance criterion represented</th></tr></thead>
+            <tbody>
+              {S.map((s) => (
+                <tr key={s.id}>
+                  <td><a href={`state.html?state=${s.id}`} style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>{s.id}</a></td>
+                  <td style={{ fontFamily: "var(--font-mono)", fontSize: "11.5px" }}>{s.name}</td>
+                  <td style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--copper-600)" }}>{s.issue}</td>
+                  <td style={{ color: "var(--text-body)" }}>{s.ac}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Wrap>
+
+      <Wrap id="before-after" kicker="Before / after" title="The approved design is untouched">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "16px" }}>
+          {[
+            ["Before — approved Discover portal", "../discover/index.html", "The shipped shell: one Discover surface, region → journey → node → results, area / school / listings / agri. Unchanged by this work.", "Open the approved kit"],
+            ["Before — area-first journey", "../../ui_kits/discover/discover_city_journey_area_first.html", "The earlier area-first exploration, kept for reference.", "Open the earlier journey"],
+            ["After — result scopes and multi-area search", "state.html?state=A1", "The same shell with a result-scope layer added above the results: chips, replacement confirmations, draft editing, recovery and alerts.", "Open the new states"],
+            ["After — mobile, list-first", "state.html?state=E11&device=mobile", "390×844. Recovery actions above the fold, sticky Search, scope identity in the bottom bar, map on a toggle.", "Open the mobile state"],
+          ].map(([t, href, b, cta]) => (
+            <a key={t} href={href} style={{ display: "block", textDecoration: "none", background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "18px 19px", boxShadow: "var(--shadow-xs)" }}>
+              <div style={{ fontSize: "14.5px", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", marginBottom: "7px" }}>{t}</div>
+              <p style={{ margin: "0 0 14px", fontSize: "12.5px", lineHeight: 1.6, color: "var(--text-muted)", textWrap: "pretty" }}>{b}</p>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 600, color: "var(--copper-600)" }}>{cta} <Icon name="arrow-right" size={15} color="var(--copper-600)" /></span>
+            </a>
+          ))}
+        </div>
+      </Wrap>
+
+      <Wrap id="tasks" kicker="#2021" title="Usability-validation tasks this prototype supports">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "12px" }}>
+          {[
+            ["Navigate the hierarchy", "G1"], ["Zoom a visual cluster without changing results", "G2"],
+            ["Select an individual area", "A1"], ["Add a nearby suggestion", "B1"], ["Commit a multi-area Search", "B3"],
+            ["Replace selected areas with a polygon", "A2"], ["Use Search this area", "A6"],
+            ["Return to selected areas", "A8"], ["Recover from zero results", "E1"], ["Create an alert", "F1"], ["Use hierarchy Back", "C1"],
+          ].map(([t, id]) => (
+            <a key={t} href={`state.html?state=${id}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", textDecoration: "none", background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "12px 14px" }}>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-strong)" }}>{t}</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", fontWeight: 700, color: "var(--copper-600)" }}>{id} ›</span>
+            </a>
+          ))}
+        </div>
+      </Wrap>
+
+      <Wrap id="open" kicker="Not decided" title="Unresolved design decisions">
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxWidth: "900px" }}>
+          {OPEN.map(([t, b], i) => (
+            <div key={t} style={{ display: "flex", gap: "14px", background: "var(--surface-card)", border: "1px solid var(--border)", borderLeft: "3px solid var(--ochre-600)", borderRadius: "var(--radius-lg)", padding: "14px 16px" }}>
+              <span style={{ flex: "none", fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 700, color: "var(--ochre-700)" }}>{String(i + 1).padStart(2, "0")}</span>
+              <div>
+                <div style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", marginBottom: "5px" }}>{t}</div>
+                <p style={{ margin: 0, fontSize: "12.5px", lineHeight: 1.6, color: "var(--text-body)", textWrap: "pretty" }}>{b}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Wrap>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

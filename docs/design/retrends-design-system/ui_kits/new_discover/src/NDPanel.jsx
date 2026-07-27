@@ -56,7 +56,7 @@ function CapabilityCues({ mode }) {
     : [{ icon: "map-pin", t: `${DATA.areas.length} areas` }, { icon: "building", t: `${CO.totalHomes} properties` }, { icon: "trending-up", t: "Locality insights" }];
   const tint = MODE_TINT[mode];
   return (
-    <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "7px 10px", padding: "7px 11px", background: MODE_BG[mode], borderRadius: "var(--radius-md)" }}>
+    <div data-design-component="metadata-strip" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "7px 10px", padding: "7px 11px", background: MODE_BG[mode], borderRadius: "var(--radius-md)" }}>
       {items.map((it, i) => (
         <React.Fragment key={it.t}>
           {i > 0 && <span style={{ width: "3px", height: "3px", borderRadius: "50%", background: "var(--grey-400)" }} />}
@@ -84,7 +84,7 @@ function CityPill({ city }) {
   }, [open]);
   const cities = [{ name: "Bangalore", live: true }, { name: "Mumbai", live: false }, { name: "Pune", live: false }, { name: "Hyderabad", live: false }];
   return (
-    <div ref={ref} style={{ position: "relative", flex: "0 0 auto" }}>
+    <div ref={ref} data-design-component="city-switcher" style={{ position: "relative", flex: "0 0 auto" }}>
       <button onClick={() => setOpen((o) => !o)} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} aria-haspopup="listbox" aria-expanded={open} title="Change city"
         style={{ display: "flex", alignItems: "center", gap: "8px", height: "100%", padding: "0 13px", cursor: "pointer",
           border: "none", borderRight: "1px solid var(--border)", background: h || open ? "var(--surface-subtle)" : "transparent",
@@ -119,7 +119,7 @@ function CityPill({ city }) {
 // Buy/Rent as an inline bar segment (no nested pill chrome).
 function BuyRentSeg({ value, onChange }) {
   return (
-    <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: "3px", padding: "0 8px", borderRight: "1px solid var(--border)" }}>
+    <div data-design-component="buy-rent-toggle" style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: "3px", padding: "0 8px", borderRight: "1px solid var(--border)" }}>
       {["Buy", "Rent"].map((o) => {
         const on = value === o;
         return (
@@ -165,7 +165,7 @@ function AreaSearch({ ctx }) {
   };
   const regionShort = (rid) => (window.ND.region(rid) ? window.ND.region(rid).short : "");
   return (
-    <div ref={ref} style={{ position: "relative", flex: "1 1 210px", minWidth: "150px", display: "flex", alignItems: "center" }}>
+    <div ref={ref} data-design-component="area-autocomplete" style={{ position: "relative", flex: "1 1 210px", minWidth: "150px", display: "flex", alignItems: "center" }}>
       <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", display: "flex", color: open ? tint : "var(--grey-500)", pointerEvents: "none" }}><NIcon name="search" size={16} /></span>
       <input value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={onKey}
         placeholder={placeholder} aria-label="Search any area or locality"
@@ -206,7 +206,7 @@ function Setup({ ctx }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
       {/* one coordinated control bar */}
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "stretch", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", background: "var(--surface-card)", boxShadow: "var(--shadow-xs)", minHeight: "44px" }}>
+      <div data-design-component="global-control-bar" style={{ display: "flex", flexWrap: "wrap", alignItems: "stretch", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", background: "var(--surface-card)", boxShadow: "var(--shadow-xs)", minHeight: "44px" }}>
         <CityPill city={ctx.city} />
         <BuyRentSeg value={ctx.buyRent} onChange={ctx.setBuyRent} />
         <AreaSearch ctx={ctx} />
@@ -224,7 +224,7 @@ function Setup({ ctx }) {
           </button>
         )}
       </div>
-      <div role="tablist" aria-label="Search mode" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", alignItems: "stretch" }}>
+      <div role="tablist" data-design-component="mode-selector" aria-label="Search mode" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", alignItems: "stretch" }}>
         {modes.map((m) => <ModeCard key={m.k} m={m} on={ctx.mode === m.k} onSelect={() => ctx.setMode(m.k)} />)}
       </div>
       <CapabilityCues mode={ctx.mode} />
@@ -237,7 +237,7 @@ function ColStack({ children, gap }) { return <div style={{ display: "flex", fle
 // subtle reassurance strip beneath the region cards
 function TrustStrip() {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "20px", padding: "13px 16px", background: "var(--trust-verified-bg)", border: "1px solid var(--evergreen-100, #CFE6D9)", borderRadius: "var(--radius-lg)" }}>
+    <div data-design-component="trust-strip" style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "20px", padding: "13px 16px", background: "var(--trust-verified-bg)", border: "1px solid var(--evergreen-100, #CFE6D9)", borderRadius: "var(--radius-lg)" }}>
       <span style={{ flex: "none", width: "34px", height: "34px", borderRadius: "var(--radius-full)", background: "var(--evergreen-600)", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <NIcon name="shield-check" size={18} color="#fff" />
       </span>
@@ -277,7 +277,7 @@ function DirNavCard({ node, ctx }) {
   const moreN = node.total - node.reps4.length;
   const namesLine = node.reps4.join(" · ") + (moreN > 0 ? "  ·  +" + moreN + " " + (moreN === 1 ? "area" : "areas") : "");
   return (
-    <div role="button" tabIndex={0} data-nd-card={node.id} aria-label={`${cardTitle}, ${node.count} ${node.noun}. ${node.reps4.join(", ")}${moreN > 0 ? " and " + moreN + " more areas" : ""}. Activate to explore.`}
+    <div role="button" tabIndex={0} data-design-component="directional-card" data-nd-card={node.id} aria-label={`${cardTitle}, ${node.count} ${node.noun}. ${node.reps4.join(", ")}${moreN > 0 ? " and " + moreN + " more areas" : ""}. Activate to explore.`}
       onMouseEnter={enter} onMouseLeave={leave} onFocus={() => { setF(true); ctx.onHover(node.id, "panel"); }} onBlur={() => { setF(false); ctx.onHover(null, "panel"); }}
       onClick={() => ctx.onPickNode(node)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ctx.onPickNode(node); } }}
       style={{ background: "var(--surface-card)", border: "1px solid " + (hovered ? "var(--border-strong)" : "var(--border)"), borderRadius: "var(--radius-lg)", padding: "12px 14px", cursor: "pointer",
@@ -354,7 +354,7 @@ function PropSearch({ ctx, area, isBrowse }) {
   const submit = () => ctx.setListingQuery(q);
   const scope = isBrowse ? "these listings" : area.name + " properties";
   return (
-    <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+    <div data-design-component="property-search" style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
       <div style={{ position: "relative", flex: 1 }}>
         <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", display: "flex", color: "var(--grey-500)", pointerEvents: "none" }}><NIcon name="search" size={16} /></span>
         <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder={`Search within ${scope}…`} aria-label={`Search within ${scope}`}
@@ -371,7 +371,7 @@ function ListingToolbar({ ctx }) {
   const ptypes = [{ k: "Any type", label: "All" }, { k: "Apartment", label: "Apartments" }, { k: "Villa", label: "Villas" }, { k: "Plot", label: "Plots" }];
   const beds = [{ k: 0, label: "Any" }, { k: 1, label: "1 BHK" }, { k: 2, label: "2 BHK" }, { k: 3, label: "3 BHK+" }];
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "9px", marginBottom: "14px" }}>
+    <div data-design-component="filter-toolbar" style={{ display: "flex", flexDirection: "column", gap: "9px", marginBottom: "14px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "7px", flexWrap: "wrap" }}>
         <ToolLabel>Type</ToolLabel>{ptypes.map((p) => <FChip key={p.k} label={p.label} on={f.ptype === p.k} onClick={() => setF({ ...f, ptype: p.k })} accent={acc} />)}
       </div>
@@ -387,7 +387,7 @@ function ListingToolbar({ ctx }) {
 function SchoolsShortcut({ ctx, area }) {
   const [h, setH] = React.useState(false);
   return (
-    <button onClick={ctx.exploreSchools} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+    <button data-design-component="school-shortcut" onClick={ctx.exploreSchools} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
       style={{ display: "flex", alignItems: "center", gap: "11px", width: "100%", textAlign: "left", padding: "10px 13px", marginBottom: "12px", borderRadius: "var(--radius-md)", border: "1px solid " + (h ? "var(--plum-500)" : "var(--plum-200, #E4D3E8)"), background: "var(--plum-tint)", cursor: "pointer", fontFamily: "var(--font-sans)", boxShadow: h ? "var(--shadow-sm)" : "none", transition: "border-color var(--dur-fast), box-shadow var(--dur-fast)" }}>
       <span style={{ flex: "none", width: "32px", height: "32px", borderRadius: "var(--radius-md)", background: "var(--plum-600)", display: "flex", alignItems: "center", justifyContent: "center" }}><NIcon name="building" size={17} color="#fff" /></span>
       <span style={{ flex: 1, minWidth: 0, lineHeight: 1.3 }}>
@@ -405,7 +405,7 @@ function SchoolFilters({ ctx, v }) {
   const levels = ["Primary", "Secondary", "Higher Secondary"].filter((l) => v.levelsAvail.indexOf(l) !== -1);
   const tog = (arr, val, set) => set(arr.indexOf(val) !== -1 ? arr.filter((x) => x !== val) : arr.concat([val]));
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "14px" }}>
+    <div data-design-component="school-filters" style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "14px" }}>
       <div style={{ position: "relative" }}>
         <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", display: "flex", color: "var(--grey-500)", pointerEvents: "none" }}><NIcon name="search" size={16} /></span>
         <input value={ctx.schoolQuery} onChange={(e) => ctx.setSchoolQuery(e.target.value)} placeholder="Search school name…" aria-label="Search school name"
@@ -424,7 +424,7 @@ function SchoolRow({ school, ctx }) {
   const hovered = h || f || (ctx.hoverId === school.id && ctx.hoverSrc !== "panel");
   const meta = [school.board].concat((school.levels || []).slice(0, 3)).join(" · ");
   return (
-    <div role="button" tabIndex={0} data-nd-card={school.id} aria-label={`${school.name}. ${meta}. Activate to see homes near this school.`}
+    <div role="button" tabIndex={0} data-design-component="school-result" data-nd-card={school.id} aria-label={`${school.name}. ${meta}. Activate to see homes near this school.`}
       onMouseEnter={() => { setH(true); ctx.onHover(school.id, "panel"); }} onMouseLeave={() => { setH(false); ctx.onHover(null, "panel"); }}
       onFocus={() => { setF(true); ctx.onHover(school.id, "panel"); }} onBlur={() => { setF(false); ctx.onHover(null, "panel"); }}
       onClick={() => ctx.onPickSchool(school.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ctx.onPickSchool(school.id); } }}
@@ -445,7 +445,7 @@ function AgriSearch({ ctx, placeholder }) {
   React.useEffect(() => setQ(ctx.agriQuery), [ctx.agriQuery]);
   const submit = () => ctx.setAgriQuery(q);
   return (
-    <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+    <div data-design-component="agricultural-search" style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
       <div style={{ position: "relative", flex: 1 }}>
         <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", display: "flex", color: "var(--grey-500)", pointerEvents: "none" }}><NIcon name="search" size={16} /></span>
         <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder={placeholder} aria-label={placeholder}
@@ -460,7 +460,7 @@ function AgriSearch({ ctx, placeholder }) {
 function AgriOriginBar({ ctx }) {
   const origin = ctx.agriOrigin, name = origin ? origin.name : ctx.city + " centre";
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", padding: "7px 12px", background: "var(--evergreen-50)", border: "1px solid var(--evergreen-100, #CFE6D9)", borderRadius: "var(--radius-md)", marginBottom: "12px" }}>
+    <div data-design-component="agricultural-origin" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", padding: "7px 12px", background: "var(--evergreen-50)", border: "1px solid var(--evergreen-100, #CFE6D9)", borderRadius: "var(--radius-md)", marginBottom: "12px" }}>
       <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", minWidth: 0, fontSize: "12.5px", color: "var(--text-body)" }}>
         <NIcon name="target" size={15} color="var(--evergreen-600)" style={{ flex: "none" }} />
         <span style={{ minWidth: 0 }}>Search origin: <strong style={{ color: "var(--text-strong)", fontWeight: 700 }}>{name}</strong></span>
@@ -478,7 +478,7 @@ function TownRow({ town, ctx, origin }) {
   const parcels = AG.townProps(town.id), acres = AG.townAcres(town.id);
   const distKm = Math.round(window.BLR_DIST(origin || { lat: window.BLR_DATA.city.lat, lon: window.BLR_DATA.city.lon }, town));
   return (
-    <div role="button" tabIndex={0} data-nd-card={town.id} aria-label={`${town.name}, about ${distKm} km from ${origin ? origin.name : ctx.city}, ${parcels} parcels, ${acres.toFixed(1)} acres. Activate to view parcels.`}
+    <div role="button" tabIndex={0} data-design-component="town-row" data-nd-card={town.id} aria-label={`${town.name}, about ${distKm} km from ${origin ? origin.name : ctx.city}, ${parcels} parcels, ${acres.toFixed(1)} acres. Activate to view parcels.`}
       onMouseEnter={() => { setH(true); ctx.onHover(town.id, "panel"); }} onMouseLeave={() => { setH(false); ctx.onHover(null, "panel"); }}
       onFocus={() => { setF(true); ctx.onHover(town.id, "panel"); }} onBlur={() => { setF(false); ctx.onHover(null, "panel"); }}
       onClick={() => ctx.onPickNode({ type: "town", id: town.id })} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ctx.onPickNode({ type: "town", id: town.id }); } }}
@@ -608,7 +608,7 @@ function PanelBody({ ctx }) {
         <NavHeader ctx={ctx} eyebrow="Agricultural land" heading={origin ? `Agricultural land around ${origin.name}` : `Farmland out of ${ctx.city}`}
           sub={origin ? `Explore farmland by outbound direction and distance from ${origin.name}, or reset to search from ${ctx.city} centre.` : `Explore farmland by outbound direction and distance from ${ctx.city}, or choose another area as the search origin.`}
           stat={{ value: window.BLR_AGRI.totalParcels, label: "parcels" }} compact />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", padding: "8px 12px", background: "var(--evergreen-50)", border: "1px solid var(--evergreen-100, #CFE6D9)", borderRadius: "var(--radius-md)", marginBottom: "12px" }}>
+        <div data-design-component="agricultural-origin" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", padding: "8px 12px", background: "var(--evergreen-50)", border: "1px solid var(--evergreen-100, #CFE6D9)", borderRadius: "var(--radius-md)", marginBottom: "12px" }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", minWidth: 0, fontSize: "12.5px", color: "var(--text-body)" }}>
             <NIcon name="target" size={15} color="var(--evergreen-600)" style={{ flex: "none" }} />
             <span style={{ minWidth: 0 }}>Search origin: <strong style={{ color: "var(--text-strong)", fontWeight: 700 }}>{originName}</strong></span>

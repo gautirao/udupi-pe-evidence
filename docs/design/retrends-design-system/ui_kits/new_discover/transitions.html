@@ -1,0 +1,45 @@
+<!-- @dsCard group="Discover" viewport="1440x900" name="Discover V2 — Journey transitions" subtitle="#2020 transition story: J1–J7 before → action → after, node/scope/filter/camera/history deltas, marker legend, state-library mapping" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discover V2 — journey transitions</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  html, body { margin: 0; background: var(--background); }
+  body { font-family: var(--font-sans); color: var(--text-strong); }
+  * { box-sizing: border-box; }
+  ::selection { background: var(--accent); color: #fff; }
+  :root { --plum-600: #5E5286; --plum-500: #7E6BA8; --plum-100: #DED7EC; --plum-tint: #F1EDF7; --evergreen-100: #CFE6D9; --evergreen-700: #1F694A; }
+  a { color: var(--accent); text-decoration: none; } a:hover { color: var(--accent-hover); text-decoration: underline; }
+  button { font-family: var(--font-sans); }
+  img { display: block; }
+  section::-webkit-scrollbar, div::-webkit-scrollbar { height: 10px; width: 10px; }
+  div::-webkit-scrollbar-thumb { background: var(--stone-400); border-radius: 999px; border: 3px solid var(--background); }
+  @media print { nav { position: static !important; } }
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#1B2A45">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#1B2A45"/>
+    <rect x="240" y="330" width="220" height="140" rx="18" fill="#fff"/>
+    <rect x="740" y="330" width="220" height="140" rx="18" fill="#B05C3A"/>
+    <path d="M500 400h180" stroke="#fff" stroke-width="14" stroke-linecap="round"/>
+    <path d="M660 372l40 28-40 28z" fill="#fff"/>
+  </svg>
+</template>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="src/transitions-data.js?v=t9"></script>
+<script type="text/babel" src="src/TBits.jsx?v=t9"></script>
+<script type="text/babel" src="src/Transitions.jsx?v=t9"></script>
+<script type="text/babel">
+  ReactDOM.createRoot(document.getElementById("root")).render(<window.TXApp />);
+</script>
+</body>
+</html>

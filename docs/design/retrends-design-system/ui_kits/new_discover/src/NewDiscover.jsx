@@ -355,16 +355,37 @@ function NewDiscover() {
 
   const accent = mode === "agri" ? "agri" : mode === "schools" ? "plum" : "copper";
 
+  // Stable screen identifier — mirrors DESIGN_STATE_MANIFEST.json state ids (handoff only, no visible effect).
+  const screenId = (() => {
+    if (mode === "agri") {
+      if (view.level === "parcels") return "agri-town-parcels";
+      if (view.level === "towns") return "agri-corridor-towns";
+      return agriOriginId ? "agri-area-origin" : "agri-city-default";
+    }
+    if (mode === "schools") {
+      if (view.level === "homes") return "schools-homes-near";
+      if (view.level === "schools") return "schools-area-schools";
+      if (view.level === "clusters") return "schools-region-clusters";
+      if (view.level === "areas") return "schools-region-areas";
+      return "schools-city-default";
+    }
+    if (view.level === "browse") return "areas-browse-all";
+    if (view.level === "listings") return "areas-area-listings";
+    if (view.level === "clusters") return "areas-region-clusters";
+    if (view.level === "areas") return "areas-region-areas";
+    return "areas-city-default";
+  })();
+
   return (
-    <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", height: "calc(100vh - 60px)" }}>
-      <div style={isMobile
+    <div data-design-screen={screenId} data-design-mode={mode} data-design-level={view.level} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", height: "calc(100vh - 60px)" }}>
+      <div data-design-component="map-surface" style={isMobile
         ? { flex: "0 0 42%", minHeight: "260px", position: "relative", borderBottom: "1px solid var(--border)" }
         : { flex: "0 0 52%", position: "relative", borderRight: "1px solid var(--border)" }}>
         <window.NDMap view={view} accent={accent} crumb={view.crumb} summary={view.summary} instr={instr}
           hoverId={ctx.hoverId} hoverSrc={ctx.hoverSrc} onHover={onHover}
           active={active} onActivate={setActive} onPickNode={pickNode} isMobile={isMobile} />
       </div>
-      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", background: "var(--background)", ...(isMobile ? { borderRadius: "16px 16px 0 0", marginTop: "-14px", zIndex: 600, boxShadow: "0 -6px 24px rgba(20,26,40,0.12)" } : {}) }}>
+      <div data-design-component="results-panel" style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", background: "var(--background)", ...(isMobile ? { borderRadius: "16px 16px 0 0", marginTop: "-14px", zIndex: 600, boxShadow: "0 -6px 24px rgba(20,26,40,0.12)" } : {}) }}>
         {isMobile && <div style={{ display: "flex", justifyContent: "center", padding: "8px 0 2px", flex: "none" }}><span style={{ width: "40px", height: "4px", borderRadius: "var(--radius-full)", background: "var(--grey-300, #D8D4CC)" }} /></div>}
         <div style={{ padding: "16px 28px 16px", borderBottom: "1px solid var(--border)", background: "var(--background)", flex: "none" }}>
           <window.NDSetup ctx={ctx} isMobile={isMobile} />

@@ -63,7 +63,9 @@
       <a href="DESIGN_INTENT.md">DESIGN_INTENT.md</a>
       <a href="VISUAL_RULES.md">VISUAL_RULES.md</a>
       <a href="DESIGN_STATE_MANIFEST.json">DESIGN_STATE_MANIFEST.json</a>
+      <a href="NONREGRESSION_MATRIX.md">NONREGRESSION_MATRIX.md</a>
       <a href="index.html">Open the design ↗</a>
+      <a href="experience.html?journey=guided-areas">Interactive experience ↗</a>
     </div>
     <div class="note"><strong>How states are reached.</strong> Discover V2 is a single-page app; each link opens the one design file at a URL hash (hash keys are reference-only, not a prescribed API). Navigation-level states (region, area, school, corridor, town, distance band) are genuinely restored by their hash. <strong>Overlay, within-results search and filter states are interaction-only</strong> — the prototype does not encode them in the URL, so their link opens the nearest <em>base</em> state and the card shows the exact interaction needed to reach the documented state. The app root carries <code>data-design-screen="&lt;state id&gt;"</code> and major components carry <code>data-design-component</code> matching VISUAL_RULES.md. The build is Bangalore-only; other cities are coming-soon placeholders.</div>
   </header>

@@ -319,9 +319,9 @@ function AgriFilters({ f, setF, onClear }) {
 }
 
 // ---- Radius selector (school journey: 3 / 5 / 10 km) ----
-function Radius({ value, onChange, school }) {
+function Radius({ value, onChange, school, count }) {
   return (
-    <div style={{ marginBottom: "20px" }}>
+    <div data-design-component="radius-selector" style={{ marginBottom: "20px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
         <SIcon name="route" size={15} color="var(--plum-600)" />
         <span style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "var(--text-muted)" }}>Search radius</span>
@@ -329,7 +329,7 @@ function Radius({ value, onChange, school }) {
       <div style={{ display: "flex", gap: "8px" }}>
         {[3, 5, 10].map((km) => {
           const on = value === km;
-          const n = window.BLR_HOMES_NEAR(school, km).length;
+          const n = count ? count(km) : window.BLR_HOMES_NEAR(school, km).length;
           return (
             <button key={km} onClick={() => onChange(km)} style={{
               flex: 1, border: on ? "1px solid var(--plum-500)" : "1px solid var(--border)",
@@ -365,7 +365,7 @@ function Empty({ icon = "map-pin", title, body, actions, accent }) {
 // ---- Distance-band chips (agri catchment: 10/25/50/100 km from the city) ----
 function DistanceChips({ distances, value, onChange, count, originName }) {
   return (
-    <div style={{ marginBottom: "18px" }}>
+    <div data-design-component="distance-selector" style={{ marginBottom: "18px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
         <SIcon name="route" size={15} color="var(--evergreen-600)" />
         <span style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "var(--text-muted)" }}>Distance from {originName || "city"}</span>

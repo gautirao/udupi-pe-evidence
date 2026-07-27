@@ -325,10 +325,11 @@ function SchoolCard({ school, radiusKm, onView, onHover }) {
 }
 
 // ---------- Residential listing card (optional distance chip in school journey) ----------
-function ListingCard({ listing, onHover, onOpen, saved, onToggleSave, distanceKm }) {
+function ListingCard({ listing, onHover, onOpen, saved, onToggleSave, distanceKm, priceText }) {
   const [h, setH] = React.useState(false);
   return (
     <div onMouseEnter={() => { setH(true); onHover && onHover(listing.id); }} onMouseLeave={() => { setH(false); onHover && onHover(null); }}
+      data-design-component="listing-card"
       style={{ background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden", boxShadow: h ? "var(--shadow-lg)" : "var(--shadow-sm)", transform: h ? "translateY(-2px)" : "none", transition: "box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard)", display: "flex", flexDirection: "column" }}>
       <div style={{ position: "relative", height: "168px", background: "var(--surface-muted)", overflow: "hidden" }}>
         <img src={listing.image} alt={listing.title} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", transform: h ? "scale(1.05)" : "scale(1)", transition: "transform var(--dur-slow) var(--ease-standard)" }} />
@@ -344,7 +345,7 @@ function ListingCard({ listing, onHover, onOpen, saved, onToggleSave, distanceKm
       </div>
       <div style={{ padding: "15px", display: "flex", flexDirection: "column", flex: 1 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "8px" }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: "19px", fontWeight: 600, color: "var(--text-strong)" }}>{inr(listing.price)}</span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: "19px", fontWeight: 600, color: "var(--text-strong)" }}>{priceText || inr(listing.price)}</span>
           <CBadge tone={TYPE_TONE[listing.propType] || "neutral"} pill>{listing.propType}</CBadge>
         </div>
         <h3 style={{ margin: "8px 0 4px", fontSize: "14.5px", fontWeight: 600, color: "var(--text-strong)", lineHeight: 1.3 }}>{listing.title}</h3>
@@ -430,6 +431,7 @@ function ParcelCard({ parcel, onOpen, saved, onToggleSave }) {
   const [h, setH] = React.useState(false);
   return (
     <div onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+      data-design-component="parcel-card"
       style={{ background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden", boxShadow: h ? "var(--shadow-lg)" : "var(--shadow-sm)", transform: h ? "translateY(-2px)" : "none", transition: "box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard)", display: "flex", flexDirection: "column" }}>
       <div style={{ position: "relative", height: "150px", background: "var(--surface-muted)", overflow: "hidden" }}>
         <img src={parcel.image} alt={parcel.title} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", transform: h ? "scale(1.05)" : "scale(1)", transition: "transform var(--dur-slow) var(--ease-standard)" }} />
