@@ -423,6 +423,111 @@ class DiscoverSummaryServiceIT {
         assertThat(omitted.totalActiveListings()).isEqualTo(5L);
     }
 
+    /**
+     * #1956 PR1 review correction. Before this change {@code normalizeListingPurpose} was an
+     * exact-match allowlist, so {@code SALE} fell through to {@code null} and the summary reported
+     * the BLENDED whole-city total (5) — beside a listings endpoint that, once it started
+     * canonicalising through the shared normaliser, returned sale-only rows (3). Same
+     * count-overstates-its-results defect as AC1.16, different pair of surfaces.
+     *
+     * <p>Every derived value moves together: {@code totalActiveListings}, each region's
+     * {@code listingCount}, and each hotspot's {@code listingCount} — all three are asserted here so
+     * a partial fix (total scoped but rollups still blended) cannot pass.
+     */
+    @Test
+    @DisplayName("listingPurpose=SALE is scoped to sale(3), NOT blended(5) — total, region counts and "
+            + "hotspot counts all match the lower-cased request exactly")
+    void listingPurposeFilter_upperCased_isScopedNotBlended() {
+        seedListingPurposeFixture();
+
+        DiscoverSummaryResponse upper = service.getSummary(
+                new SummaryQuery(CITY, null, "area_group", 8, "SALE"));
+        DiscoverSummaryResponse lower = service.getSummary(
+                new SummaryQuery(CITY, null, "area_group", 8, "sale"));
+        DiscoverSummaryResponse omitted = service.getSummary(
+                new SummaryQuery(CITY, null, "area_group", 8));
+
+        assertThat(upper.totalActiveListings())
+                .as("SALE must behave exactly as sale")
+                .isEqualTo(lower.totalActiveListings())
+                .isEqualTo(3L);
+        assertThat(upper.totalActiveListings())
+                .as("and must NOT be the blended total it silently returned before this correction")
+                .isNotEqualTo(omitted.totalActiveListings());
+
+        assertThat(upper.regions())
+                .as("region rollups must be scoped identically, not left blended")
+                .isEqualTo(lower.regions());
+        assertThat(upper.hotspots())
+                .as("hotspot rollups must be scoped identically, not left blended")
+                .isEqualTo(lower.hotspots());
+
+        // Whitespace tolerance is unchanged and case-insensitivity composes with it.
+        assertThat(service.getSummary(new SummaryQuery(CITY, null, "area_group", 8, " Sale "))
+                .totalActiveListings()).isEqualTo(3L);
+    }
+
+    // ── propertyType: total and rollups must resolve an unknown value IDENTICALLY ─────────────
+
+    /**
+     * #1956 PR1 review fix A — a regression this PR introduced against origin/main, caught in review.
+     *
+     * <p>{@code propertyType} is a free-form {@code @RequestParam} on a public unauthenticated
+     * endpoint, so a typo or a stale bookmark reaches it. Replacing the bespoke
+     * {@code LOWER(pl.property_type) = LOWER(?)} fragment with the allowlisted shared predicate on
+     * ONE side left {@code totalActiveListings} using the raw value (→ 0) while {@code regions[]}
+     * and {@code hotspots[]} went through {@code AreaCountQuery}'s allowlist, which dropped the
+     * unknown value and returned whole-city BLENDED counts. On origin/main both sides used the same
+     * fragment and agreed at zero.
+     *
+     * <p>Every case in this class used {@code house}/{@code apartment}/blank, which is exactly why
+     * it slipped through. The assertion is the internal-consistency one: the total must equal the
+     * sum of the region counts, non-vacuously — the blended control proves the fixture is non-empty
+     * and that the sum-of-regions figure is a real, moving number.
+     */
+    @Test
+    @DisplayName("an UNRECOGNISED propertyType resolves identically on every number in one payload: "
+            + "totalActiveListings == sum(regions[].listingCount) == 0, never 0 beside blended rollups")
+    void unrecognisedPropertyType_totalAndRollupsAgree_withinOneResponse() {
+        seedListingPurposeFixture(); // 5 listings: 3 house, 2 apartment — zero 'penthouse'
+
+        DiscoverSummaryResponse unknown = service.getSummary(
+                new SummaryQuery(CITY, "penthouse", "area_group", 8));
+
+        long unknownRegionSum = unknown.regions().stream()
+                .mapToLong(DiscoverSummaryResponse.RegionCount::listingCount).sum();
+        long unknownHotspotSum = unknown.hotspots().stream()
+                .mapToLong(DiscoverSummaryResponse.Hotspot::listingCount).sum();
+
+        assertThat(unknown.totalActiveListings())
+                .as("total must agree with the region rollups it is displayed beside")
+                .isEqualTo(unknownRegionSum)
+                .isEqualTo(0L);
+        assertThat(unknownHotspotSum)
+                .as("hotspots must not carry blended counts either")
+                .isZero();
+        assertThat(unknown.propertyType())
+                .as("the RAW value is still echoed back — that is correct behaviour, not a bug")
+                .isEqualTo("penthouse");
+
+        // Non-vacuity control: the same fixture under a blended query yields a real, non-zero
+        // total AND a non-zero region sum, so the zeros above are a genuine narrowing result and
+        // not an artefact of an empty city or of regions[] always summing to zero.
+        DiscoverSummaryResponse blended = service.getSummary(
+                new SummaryQuery(CITY, null, "area_group", 8));
+        long blendedRegionSum = blended.regions().stream()
+                .mapToLong(DiscoverSummaryResponse.RegionCount::listingCount).sum();
+        assertThat(blended.totalActiveListings()).isEqualTo(5L);
+        assertThat(blendedRegionSum).isPositive();
+
+        // And a RECOGNISED type still agrees across both sides, mis-cased or not.
+        DiscoverSummaryResponse house = service.getSummary(
+                new SummaryQuery(CITY, "HOUSE", "area_group", 8));
+        long houseRegionSum = house.regions().stream()
+                .mapToLong(DiscoverSummaryResponse.RegionCount::listingCount).sum();
+        assertThat(house.totalActiveListings()).isEqualTo(houseRegionSum).isEqualTo(3L);
+    }
+
     @Test
     @DisplayName("listingPurpose and propertyType combine via AND without being conflated: "
             + "sale+house=3, rent+house=1, sale(any type)=4")

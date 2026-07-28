@@ -16,6 +16,10 @@ import { CITY_CONFIG } from '@/lib/localityUtils';
 import { labelToSlug } from '@/utils/macroRegionResolver';
 import { resolveScope, type ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
 import type { RegionScopedAreaGroup } from '@/hooks/useRegionScopedAreaGroups';
+import {
+  deriveVisibleMemberSet,
+  type VisibleMemberSet,
+} from '@/features/discover/navigation/visibleMemberSet';
 
 export interface UseDiscoverMapPresentationParams {
   mapLayerKind: DiscoverMapLayerKind;
@@ -60,6 +64,21 @@ export interface UseDiscoverMapPresentationParams {
    * marker set (Resolution A) rather than showing nothing.
    */
   regionScopedGroups?: RegionScopedAreaGroup[];
+  /**
+   * Issue #1956 PR 1 (FE-3, item 2) — THE shared visible-member set, produced by
+   * `useDiscoverMapData` (which is upstream of this hook) and threaded in by
+   * MapDiscovery.tsx. Supplied means map and panel read the SAME object, by
+   * reference — which is the point: AC1.12 fails the moment each side derives
+   * its own.
+   *
+   * Optional, and OMITTED means "derive an equivalent one locally from
+   * `focusedGroup`/`discoverAreas` via the same pure function" — mirroring the
+   * `scopeNamespaces` precedent above, so the frozen S9b1 fixture (which cannot
+   * be edited) keeps type-checking without supplying it.
+   *
+   * ADDITIVE AND INERT in PR 1: this hook exposes it and NOTHING renders it.
+   */
+  visibleMemberSet?: VisibleMemberSet;
 }
 
 export interface UseDiscoverMapPresentationResult {
@@ -71,6 +90,13 @@ export interface UseDiscoverMapPresentationResult {
   regionOverviewShortLabel: string | null;
   areaJourneySegments: DiscoverMapCrumb[];
   schoolJourneySegments: DiscoverMapCrumb[];
+  /**
+   * Issue #1956 PR 1 (FE-3, item 2) — the SAME set `useDiscoverMapData` produced
+   * when the caller threads it in (re-exposed by reference, not re-derived), or
+   * an equivalent locally-derived one when it does not. Consumed by nothing in
+   * PR 1. See `@/features/discover/navigation/visibleMemberSet`.
+   */
+  visibleMemberSet: VisibleMemberSet;
 }
 
 /**
@@ -105,6 +131,7 @@ export function useDiscoverMapPresentation({
   selectedMarkerListing = null,
   scopeNamespaces,
   regionScopedGroups,
+  visibleMemberSet,
 }: UseDiscoverMapPresentationParams): UseDiscoverMapPresentationResult {
   // Issue #1910 (PR2) — fall back to a locally-derived namespace when the
   // caller doesn't supply one (see the scopeNamespaces JSDoc above).
@@ -127,6 +154,25 @@ export function useDiscoverMapPresentation({
       groupNameSlugs,
     };
   }, [scopeNamespaces, summaryRegions, areaGroupsData]);
+
+  // Issue #1956 PR 1 (FE-3, item 2) — THE shared visible-member set. When the
+  // caller threads one in (MapDiscovery.tsx does, from useDiscoverMapData) it is
+  // re-exposed BY REFERENCE and nothing is recomputed: that reference identity is
+  // the whole mechanism by which map and panel cannot disagree (AC1.12). The
+  // fallback runs the SAME pure function over this hook's own equivalent inputs,
+  // so there is one derivation rule in the codebase, not two.
+  //
+  // ADDITIVE AND INERT: no branch below reads this, and no returned value other
+  // than the new `visibleMemberSet` field is affected by it.
+  const resolvedVisibleMemberSet: VisibleMemberSet = useMemo(
+    () =>
+      visibleMemberSet ??
+      deriveVisibleMemberSet({
+        candidateAreaKeys: discoverAreas.map((a) => a.areaKey),
+        scopedAreaKeys: focusedGroup ? focusedGroup.area_keys ?? [] : undefined,
+      }),
+    [visibleMemberSet, discoverAreas, focusedGroup],
+  );
 
   const overviewAreas = useMemo((): AreaPoint[] => {
     if (mapLayerKind === 'zoom-gated' || mapLayerKind === 'agri-drilldown') return [];
@@ -606,5 +652,6 @@ export function useDiscoverMapPresentation({
     regionOverviewShortLabel,
     areaJourneySegments,
     schoolJourneySegments,
+    visibleMemberSet: resolvedVisibleMemberSet,
   };
 }

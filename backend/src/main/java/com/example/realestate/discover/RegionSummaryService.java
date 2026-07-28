@@ -8,7 +8,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Read model for GET /api/discover/cities/{citySlug}/regions (#1882 Track A PR1).
@@ -41,10 +40,10 @@ import java.util.Set;
  * <p>{@code listingPurpose} (#1882 rework, ADVISORY-1) is an independent optional filter applied
  * ONLY to {@code listingCount} — {@code "sale"}/{@code "rent"} — passed to the shared
  * {@link DiscoverListingPredicateBuilder}'s {@code listingPurpose} predicate exactly as
- * {@link DiscoverSummaryService} does. See {@link #normalizeListingPurpose(String)}: this
- * mirrors {@link DiscoverSummaryService}'s allowed-set validation and blank/invalid fallback
- * verbatim (same {@code Set.of("sale", "rent")}, same blended-fallback behaviour) — reused, not
- * reinvented. Region geometry/membership/ordering/{@code boundsStatus} are entirely unaffected;
+ * {@link DiscoverSummaryService} does. See {@link #normalizeListingPurpose(String)}: since the
+ * #1956 PR1 review correction both delegate to the ONE shared
+ * {@link DiscoverFilterNormalizer#normalizePurpose} rather than each mirroring their own copy of
+ * the allowed set. Region geometry/membership/ordering/{@code boundsStatus} are entirely unaffected;
  * only the {@code pl} JOIN predicate (and therefore {@code listing_count}) changes.
  */
 @Service
@@ -52,12 +51,10 @@ public class RegionSummaryService {
 
     private static final Logger log = LoggerFactory.getLogger(RegionSummaryService.class);
 
-    /**
-     * Allowed {@code listingPurpose} values (#1882 rework) — mirrors
-     * {@link DiscoverSummaryService#ALLOWED_LISTING_PURPOSES} exactly (same DB values, same
-     * {@code chk_listing_purpose} CHECK constraint from V32).
-     */
-    private static final Set<String> ALLOWED_LISTING_PURPOSES = Set.of("sale", "rent");
+    // The allowed listingPurpose vocabulary (#1882 rework) is no longer duplicated here: it lives
+    // ONCE in DiscoverFilterNormalizer (#1956 PR1 review correction), which every Discover surface
+    // — listings, markers, counts, summary, regions, groups — now shares. The values still mirror
+    // the chk_listing_purpose CHECK constraint from V32.
 
     private final JdbcOperations jdbcOperations;
 
@@ -167,23 +164,21 @@ public class RegionSummaryService {
     }
 
     /**
-     * Normalises {@code listingPurpose} (#1882 rework) — mirrors
-     * {@link DiscoverSummaryService}'s {@code normalizeListingPurpose} verbatim: blank/whitespace-
-     * only values and any value outside {@link #ALLOWED_LISTING_PURPOSES} fall back to
-     * {@code null} (blended, all-purposes) — preserving current behaviour for every existing
-     * caller that omits the param, and matching the repo's established invalid-purpose handling
-     * (silently ignored, not a 400) rather than inventing a new validation rule.
+     * Normalises {@code listingPurpose} (#1882 rework) — blank/whitespace-only values and any value
+     * outside the allowed vocabulary fall back to {@code null} (blended, all-purposes), matching the
+     * repo's established invalid-purpose handling (silently ignored, not a 400).
      *
      * <p>Package-private (not {@code private}) so {@link AreaGroupsService} (#1910 PR1) can reuse
      * this exact validation for its region-scoped groups endpoint's {@code listingPurpose} param
-     * without reimplementing it — this is a pure visibility change, zero behaviour change; the
-     * method body and every existing caller/behaviour are untouched.
+     * without reimplementing it.
+     *
+     * <p><b>Delegates to {@link DiscoverFilterNormalizer#normalizePurpose}</b> (#1956 PR1 review
+     * correction). This method used to own an exact-match allowlist, so {@code ?listingPurpose=SALE}
+     * produced BLENDED region/group counts beside a sale-only listings result — the same
+     * count-overstates-its-results defect AC1.16 closes. Allowlisting semantics are otherwise
+     * unchanged; only the casing tolerance is new.
      */
     static String normalizeListingPurpose(String listingPurpose) {
-        if (listingPurpose == null) {
-            return null;
-        }
-        String trimmed = listingPurpose.trim();
-        return ALLOWED_LISTING_PURPOSES.contains(trimmed) ? trimmed : null;
+        return DiscoverFilterNormalizer.normalizePurpose(listingPurpose);
     }
 }

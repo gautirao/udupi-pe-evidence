@@ -57,7 +57,20 @@ public class DiscoverListingPredicateBuilder {
      */
     public record Sql(String whereFragment, List<Object> params, boolean bboxApplied) {}
 
-    public static Sql build(Filters f) {
+    /**
+     * Assembles the shared WHERE fragment.
+     *
+     * <p><b>The filter vocabulary is canonicalised HERE, first thing</b> (#1956 PR1 review fix,
+     * AC1.16) — {@code listingPurpose}, {@code propertyTypes}, {@code bedrooms} and
+     * {@code sellerTypes} are routed through {@link DiscoverFilterNormalizer#normalize} before a
+     * single clause is appended. Doing it inside {@code build} rather than at each call site is what
+     * makes it unbypassable: no caller can produce a {@code Filters} whose predicate disagrees with
+     * the navigation count computed from the same raw input (which normalises via
+     * {@code AreaCountQuery}'s compact constructor, using the SAME helpers). See
+     * {@link DiscoverFilterNormalizer}'s class javadoc for the four divergences this closes.
+     */
+    public static Sql build(Filters rawFilters) {
+        Filters f = DiscoverFilterNormalizer.normalize(rawFilters);
         StringBuilder sb = new StringBuilder();
         List<Object> params = new ArrayList<>();
 
@@ -68,14 +81,23 @@ public class DiscoverListingPredicateBuilder {
         sb.append(" AND pl.area_key IN (SELECT a.area_key FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = ? AND c.is_active = true)");
         params.add(f.city());
 
-        // propertyTypes
+        // propertyTypes — an UNSATISFIABLE list (non-empty, nothing in the CHECK-constrained
+        // vocabulary) becomes a literal FALSE rather than an IN list of values that cannot match.
+        // Same answer, but Postgres plans it as a One-Time Filter and scans NOTHING, instead of
+        // scanning the city's listings to prove the obvious (#1956 PR1 AC1.15 #8). No binds either,
+        // so a long garbage list cannot push the statement toward the 65535-parameter ceiling.
         if (f.propertyTypes() != null && !f.propertyTypes().isEmpty()) {
-            sb.append(" AND pl.property_type IN (");
-            for (int i = 0; i < f.propertyTypes().size(); i++) {
-                sb.append(i == 0 ? "?" : ",?");
-                params.add(f.propertyTypes().get(i));
+            if (DiscoverFilterNormalizer.isUnsatisfiable(
+                    f.propertyTypes(), DiscoverFilterNormalizer.ALLOWED_PROPERTY_TYPES)) {
+                sb.append(" AND FALSE");
+            } else {
+                sb.append(" AND pl.property_type IN (");
+                for (int i = 0; i < f.propertyTypes().size(); i++) {
+                    sb.append(i == 0 ? "?" : ",?");
+                    params.add(f.propertyTypes().get(i));
+                }
+                sb.append(")");
             }
-            sb.append(")");
         }
 
         // price range
@@ -122,14 +144,22 @@ public class DiscoverListingPredicateBuilder {
             }
         }
 
-        // sellerTypes
+        // sellerTypes — same unsatisfiable short-circuit as propertyTypes above.
+        // NOTE: bedrooms above deliberately has NO such short-circuit — `bedrooms` carries no CHECK
+        // constraint, so an out-of-vocabulary value is not provably empty. See
+        // DiscoverFilterNormalizer#isProvablyEmpty.
         if (f.sellerTypes() != null && !f.sellerTypes().isEmpty()) {
-            sb.append(" AND pl.seller_type IN (");
-            for (int i = 0; i < f.sellerTypes().size(); i++) {
-                sb.append(i == 0 ? "?" : ",?");
-                params.add(f.sellerTypes().get(i));
+            if (DiscoverFilterNormalizer.isUnsatisfiable(
+                    f.sellerTypes(), DiscoverFilterNormalizer.ALLOWED_SELLER_TYPES)) {
+                sb.append(" AND FALSE");
+            } else {
+                sb.append(" AND pl.seller_type IN (");
+                for (int i = 0; i < f.sellerTypes().size(); i++) {
+                    sb.append(i == 0 ? "?" : ",?");
+                    params.add(f.sellerTypes().get(i));
+                }
+                sb.append(")");
             }
-            sb.append(")");
         }
 
         // backOnMarket — back_to_market_at is a real column; backOnMarket is Java-derived
@@ -232,7 +262,9 @@ public class DiscoverListingPredicateBuilder {
             params.add(normQ);
         }
 
-        // listingPurpose — 'sale' or 'rent'; null/blank = no filter (backward-compatible)
+        // listingPurpose — canonical 'sale'/'rent' or null by this point (DiscoverFilterNormalizer
+        // allowlisted it case-insensitively at the top of build); the blank guard is retained as a
+        // defensive belt-and-suspenders, not as the normalisation itself.
         String normPurpose = (f.listingPurpose() != null && !f.listingPurpose().isBlank())
                 ? f.listingPurpose().trim() : null;
         if (normPurpose != null) {

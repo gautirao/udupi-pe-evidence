@@ -11,16 +11,21 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Production-ready {@link AreaCountProvider} (#1955 Areas PR A, SLICE 2e, AC12): ONE area-level
- * {@code GROUP BY area_key} aggregation per (city, filter context) over {@code property_listings}
- * — the single query every caller (the navigation-counts endpoint's roll-up, and {@link
- * com.example.realestate.discover.DiscoverSummaryService}'s hotspots/region rollups) shares,
- * rather than one aggregate query per region/grouping as before.
+ * Production-ready {@link AreaCountProvider} (#1955 Areas PR A, SLICE 2e, AC12; #1956 PR1
+ * Decision 2): ONE area-level {@code GROUP BY area_key} aggregation per (city, filter context) over
+ * {@code property_listings} — the single query every caller (the navigation-counts endpoint's
+ * roll-up, and {@link com.example.realestate.discover.DiscoverSummaryService}'s hotspots/region
+ * rollups) shares, rather than one aggregate query per region/grouping as before.
  *
- * <p>Reuses {@link DiscoverListingPredicateBuilder#build} for the shared LIVE / not-archived /
- * not-duplicate / active-city predicate (mirrors {@code DiscoverSummaryService}'s own usage
- * exactly), plus the SAME 4-segment {@code area_key} guard and case-insensitive property-type
- * match that every other discover-summary read path applies, so counts reconcile everywhere.
+ * <p>Reuses {@link DiscoverListingPredicateBuilder#build} via {@link
+ * AreaCountQuery#toPredicateFilters()} for the ENTIRE filter predicate — including {@code
+ * propertyTypes}, which used to be a bespoke {@code LOWER(pl.property_type) = LOWER(?)} fragment
+ * maintained only here. That bespoke fragment is deleted: {@link AreaCountQuery}'s compact
+ * constructor now allowlist-canonicalises {@code propertyTypes} to its {@link
+ * com.example.realestate.ai.PropertyType} stored (lower-case) value, so routing through the SAME
+ * case-SENSITIVE {@code IN (?)} predicate the cards/markers path uses no longer disagrees with it
+ * on casing (the #1956 PR1 live-bug fix — see {@link AreaCountQuery}'s class javadoc). Only the
+ * 4-segment {@code area_key} guard remains provider-specific (a hierarchy invariant, not a filter).
  */
 @Component
 public class PostgresAreaCountProvider implements AreaCountProvider {
@@ -33,14 +38,12 @@ public class PostgresAreaCountProvider implements AreaCountProvider {
      * The ONE area-level GROUP BY aggregation this provider ever issues — captured as a named,
      * documented template (rather than assembled ad hoc inline) so a later EXPLAIN ANALYZE pass
      * (qa step) can run this exact query shape directly against a representative city. {@code %s}
-     * placeholders are, in order: the shared predicate WHERE fragment, the 4-segment guard, and an
-     * optional trailing property-type filter fragment (empty string when no propertyType filter
-     * applies).
+     * placeholders are, in order: the shared predicate WHERE fragment, then the 4-segment guard.
      */
     static final String COUNT_BY_AREA_SQL_TEMPLATE = """
             SELECT pl.area_key AS area_key, COUNT(*) AS listing_count
             FROM property_listings pl
-            WHERE %s AND %s%s
+            WHERE %s AND %s
             GROUP BY pl.area_key
             """;
 
@@ -53,23 +56,20 @@ public class PostgresAreaCountProvider implements AreaCountProvider {
     @Override
     @Transactional(readOnly = true)
     public Map<String, Long> countsByAreaKey(AreaCountQuery query) {
-        DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
-                query.citySlug(), null, null, null, null, null, null, null,
-                null, null, null, null, null,
-                null, null, null,
-                null, null, query.listingPurpose(), null, null
-        );
+        // Provably-empty filter sets never reach the database (#1956 PR1 AC1.15 #7/#8). An
+        // unsatisfiable propertyTypes/sellerTypes request cannot match a row whatever the other
+        // filters say, so an arbitrary-string cardinality lever costs ZERO queries here rather than
+        // one aggregate scan each. The answer is identical to running the query — every area would
+        // simply be absent from the map, which callers already read as 0 via getOrDefault.
+        if (query.isProvablyEmpty()) {
+            return Map.of();
+        }
+
+        DiscoverListingPredicateBuilder.Filters filters = query.toPredicateFilters();
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(filters);
 
         List<Object> params = new ArrayList<>(sql.params());
-        String typeFilterFragment = "";
-        String propertyType = query.propertyType();
-        if (propertyType != null && !propertyType.isBlank()) {
-            typeFilterFragment = " AND LOWER(pl.property_type) = LOWER(?)";
-            params.add(propertyType);
-        }
-
-        String sqlText = COUNT_BY_AREA_SQL_TEMPLATE.formatted(sql.whereFragment(), FOUR_SEGMENT_GUARD, typeFilterFragment);
+        String sqlText = COUNT_BY_AREA_SQL_TEMPLATE.formatted(sql.whereFragment(), FOUR_SEGMENT_GUARD);
 
         List<Map.Entry<String, Long>> rows = jdbcOperations.query(sqlText,
                 (rs, rowNum) -> Map.entry(rs.getString("area_key"), rs.getLong("listing_count")),

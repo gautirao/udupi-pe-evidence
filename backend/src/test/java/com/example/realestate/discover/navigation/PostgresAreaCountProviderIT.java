@@ -15,6 +15,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -80,7 +81,7 @@ class PostgresAreaCountProviderIT {
         insertListing(MANIPAL, "house", "LIVE", true, "sale");            // excluded: duplicate
         insertListing(MALFORMED, "house", "LIVE", false, "sale");         // excluded: 4-part guard
 
-        Map<String, Long> counts = provider.countsByAreaKey(new AreaCountQuery(CITY, null, null, "public"));
+        Map<String, Long> counts = provider.countsByAreaKey(AreaCountQuery.blended(CITY));
 
         assertThat(counts).containsEntry(MANIPAL, 2L);
         assertThat(counts).containsEntry(KATAPADI, 1L);
@@ -95,8 +96,10 @@ class PostgresAreaCountProviderIT {
         insertListing(MANIPAL, "apartment", "LIVE", false, "rent");
         insertListing(KATAPADI, "house", "LIVE", false, "rent");
 
-        Map<String, Long> houseOnly = provider.countsByAreaKey(new AreaCountQuery(CITY, null, "house", "public"));
-        Map<String, Long> saleOnly = provider.countsByAreaKey(new AreaCountQuery(CITY, "sale", null, "public"));
+        Map<String, Long> houseOnly = provider.countsByAreaKey(
+                AreaCountQuery.blended(CITY).withPropertyTypes(List.of("house")));
+        Map<String, Long> saleOnly = provider.countsByAreaKey(
+                AreaCountQuery.blended(CITY).withListingPurpose("sale"));
 
         assertThat(houseOnly).containsEntry(MANIPAL, 1L).containsEntry(KATAPADI, 1L);
         assertThat(saleOnly).containsExactlyEntriesOf(Map.of(MANIPAL, 1L));
@@ -107,7 +110,7 @@ class PostgresAreaCountProviderIT {
     void countsByAreaKey_unknownCity_returnsEmptyMap() {
         insertListing(MANIPAL, "house", "LIVE", false, "sale");
 
-        Map<String, Long> counts = provider.countsByAreaKey(new AreaCountQuery("nowhere-city", null, null, "public"));
+        Map<String, Long> counts = provider.countsByAreaKey(AreaCountQuery.blended("nowhere-city"));
 
         assertThat(counts).isEmpty();
     }

@@ -5,6 +5,10 @@ import {
   useDiscoverShell,
 } from '@/features/discover/context/useDiscoverContext';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
+import {
+  isAreasPreviewCapabilityEnabled,
+  isAreasPreviewJourneyActive,
+} from '@/features/discover/preview/areasPreviewCapability';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { CITY_CONFIG } from '@/lib/localityUtils';
@@ -239,6 +243,22 @@ export function DiscoverRightPanelContainer({
   // scroll-preserving hook knows when the Map overlay is covering it.
   const { isMobileShell, mobileView } = useDiscoverShell();
   const isMobileMapOpen = isMobileShell && mobileView === 'MAP';
+  // Issue #1956 PR 1 (AC1.2 + AC1.14) — the dual preview gate, wired here and
+  // DELIBERATELY INERT. It selects no panel and changes no render output,
+  // because no canonical Areas panel exists until PR 2; every legacy branch
+  // below is untouched. Computing it now (rather than in PR 2) is what makes
+  // the seam real and testable while PR 1's shopper outcome stays NONE — the
+  // reconciliation of "the journey mounts only under the dual gate" with "no
+  // net-new UI". `void` marks the non-consumption as deliberate rather than an
+  // oversight. The gate reads only the capability + areasPreview; it is
+  // intentionally independent of `node=` (a direct search or canonical deep
+  // link can legitimately carry `node=` while the journey is incomplete, and a
+  // node-sensitive gate would leak partial work to shoppers).
+  const areasPreviewJourneyActive = isAreasPreviewJourneyActive({
+    capabilityEnabled: isAreasPreviewCapabilityEnabled(),
+    areasPreview: urlState.areasPreview,
+  });
+  void areasPreviewJourneyActive;
   return (
     <DiscoverRightPanel
       panelContent={resolvedPanelContent}

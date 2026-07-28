@@ -185,7 +185,56 @@ QP_5 = QueryDef(
     params_template=f"city_slug={{city_slug}}, window={AREA_LISTING_WINDOW}",
 )
 
-ALL_QUERIES: list[QueryDef] = [QP_1A, QP_1B, QP_1C, QP_1D, QP_2, QP_3A, QP_3B, QP_5]
+# Source: PostgresAreaCountProvider.COUNT_BY_AREA_SQL_TEMPLATE (#1955 Areas PR A / #1956 PR1) --
+# the ONE area-level GROUP BY count query shared by NavigationController's counts endpoint
+# (via AreaCountRollupService) and DiscoverSummaryService's hotspots/region rollups. Uses the
+# same city-scoped BASE_WHERE plus the 4-segment area_key guard every other navigation/summary
+# count path applies (see PostgresAreaCountProvider.FOUR_SEGMENT_GUARD).
+QP_6 = QueryDef(
+    id="QP-6",
+    description="Navigation area-level count (GROUP BY area_key, 4-segment guard)",
+    sql=f"""SELECT pl.area_key AS area_key, COUNT(*) AS listing_count
+FROM property_listings pl
+WHERE {BASE_WHERE}
+  AND array_length(string_to_array(pl.area_key, '|'), 1) = 4
+GROUP BY pl.area_key""",
+    params_template="city_slug={city_slug}",
+)
+
+# Source: PostgresAreaSchoolCountProvider.SCHOOL_COVERAGE_BY_AREA_SQL (#1956 PR1) -- the only NEW
+# query the PR introduces. Kept character-identical to the shipped constant, including the
+# relationship_type IN-list (no space after commas), which is also V110's
+# idx_school_coverage_counted partial-index predicate.
+#
+# REPLACED the earlier DISTINCT ON (school_id) shape, which globally attributed each school to a
+# single "canonical" area and so reported 0 for other areas that genuinely contained it. Each area
+# now counts its own schools; the roll-up de-duplicates in memory by school identity instead.
+#
+# What to look for in the plan: idx_school_coverage_counted is
+# (curated_area_key, school_id) WHERE relationship_type IN (...), so it matches this query's
+# predicate exactly AND covers both selected columns -- an Index Only Scan is the expected/ideal
+# shape. Unlike the previous DISTINCT ON version there is no ORDER BY leading on school_id, so the
+# full sort of the city's counted rows that shape forced should no longer appear.
+#
+# VOLUME: this returns one row per distinct (area, school) counted pair for the city -- the same set
+# held in memory by AreaSchoolCoverage. Bounded above by the city's counted coverage rows. Watch the
+# row count in the plan output: order 10^3 is expected for Bangalore; materially larger means the
+# in-memory pair set should be re-examined before it ships.
+QP_7 = QueryDef(
+    id="QP-7",
+    description="Navigation school coverage pairs by area (DISTINCT area_key/school_id, counted only)",
+    sql="""SELECT DISTINCT c.curated_area_key AS area_key, c.school_id AS school_id
+FROM school_discover_area_coverage c
+JOIN areas a ON a.area_key = c.curated_area_key
+JOIN cities ci ON ci.id = a.city_id
+WHERE ci.slug = %s
+  AND ci.is_active = true
+  AND array_length(string_to_array(a.area_key, '|'), 1) = 4
+  AND c.relationship_type IN ('contained','primary','reviewed_override')""",
+    params_template="city_slug={city_slug}",
+)
+
+ALL_QUERIES: list[QueryDef] = [QP_1A, QP_1B, QP_1C, QP_1D, QP_2, QP_3A, QP_3B, QP_5, QP_6, QP_7]
 
 QUERY_MAP: dict[str, QueryDef] = {q.id: q for q in ALL_QUERIES}
 
@@ -223,6 +272,10 @@ def _build_params(query: QueryDef, city_slug: str) -> tuple:
         return (city_slug, BBOX_WEST, BBOX_SOUTH, BBOX_EAST, BBOX_NORTH)
     elif query.id == "QP-5":
         return (city_slug, AREA_LISTING_WINDOW)
+    elif query.id == "QP-6":
+        return (city_slug,)
+    elif query.id == "QP-7":
+        return (city_slug,)
     else:
         raise ValueError(f"Unknown query id: {query.id}")
 
@@ -536,6 +589,8 @@ def main() -> None:
               QP-3a  Markers city-only (LIMIT 1001)
               QP-3b  Markers with bbox (&& operator)
               QP-5   City-area listings (ROW_NUMBER OVER PARTITION BY area_key)
+              QP-6   Navigation area-level count (GROUP BY area_key, 4-segment guard)
+              QP-7   Navigation school coverage pairs by area (DISTINCT area_key/school_id)
         """),
     )
     parser.add_argument(
@@ -549,7 +604,7 @@ def main() -> None:
         default=None,
         metavar="ID",
         choices=list(QUERY_MAP.keys()),
-        help="Run a single query path (QP-1a … QP-5). Default: all",
+        help="Run a single query path (QP-1a … QP-7). Default: all",
     )
     parser.add_argument(
         "--dry-run",

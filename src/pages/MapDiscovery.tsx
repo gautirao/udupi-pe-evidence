@@ -695,6 +695,10 @@ export default function MapDiscovery() {
     markersTruncated, markersReturnedElements, markersTotalFilteredElements,
     agriAreasData, isLoadingAgriAreas,
     cameraIntent, publishCameraIntent, publishClusterCameraIntent,
+    // Issue #1956 PR 1 (FE-3, item 2) — threaded straight into
+    // useDiscoverMapPresentation below and read by NOTHING else. Additive and
+    // inert; it renders nothing in PR 1.
+    visibleMemberSet,
   } = useDiscoverMapData({
     city, selectedArea, filters: effectiveFilters, debouncedSearch,
     urlSchoolId: nav.schoolId, isAuthenticated, fitTick,
@@ -1484,6 +1488,11 @@ export default function MapDiscovery() {
     selectedMarkerListing,
     scopeNamespaces,
     regionScopedGroups: regionScopedGroupsData?.groups,
+    // Issue #1956 PR 1 (FE-3, item 2) — the ONE visible-member set, produced by
+    // useDiscoverMapData above. Passing it (rather than letting this hook derive
+    // its own) is what makes it genuinely SHARED. Deliberately not destructured
+    // out of the result: PR 1 has no consumer.
+    visibleMemberSet,
   });
 
   // Issue #1910 (PR2) — resolveScope-based classification REPLACES the old

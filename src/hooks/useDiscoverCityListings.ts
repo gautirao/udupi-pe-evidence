@@ -2,6 +2,17 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 
+/**
+ * Client freshness for public city listings, mirroring the endpoint's
+ * `Cache-Control: max-age=60, public`.
+ *
+ * Named and exported (Issue #1956 PR 1, FE-3) purely so the AC1.17 inequality
+ * "count cache freshness <= listing cache freshness" can be asserted against the
+ * REAL value rather than a duplicated literal. The value is unchanged from the
+ * inline `60_000` it replaces. See `useDiscoverNavigationCounts.ts`.
+ */
+export const DISCOVER_CITY_LISTINGS_STALE_TIME_MS = 60_000;
+
 export interface DiscoverCityListingItem {
   id: string;
   pricePaise?: number;
@@ -159,7 +170,7 @@ export function useDiscoverCityListings({
       );
     },
     enabled: areaKeys.length > 0,
-    staleTime: 60_000,
+    staleTime: DISCOVER_CITY_LISTINGS_STALE_TIME_MS,
     placeholderData: keepPreviousData,
   });
 }

@@ -13,7 +13,7 @@
  * S11a DiscoverMapCanvas pattern of mocking its own heaviest leaf
  * (PropertyMap).
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -120,6 +120,28 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
     setMobileView: vi.fn(),
   }),
 }));
+
+// Issue #1956 PR 1 (FE-1) — the dual preview gate. The deployment capability
+// read is replaced by a mutable hoisted flag so the container's gate can be
+// driven through its 2x2; the PREDICATE itself is the real implementation,
+// wrapped in a spy so the flag's computed value is observable at the container
+// level without the container having to expose it (it deliberately exposes
+// nothing — the flag is inert in PR 1).
+const { previewGateState, gateSpy } = vi.hoisted(() => ({
+  previewGateState: { capabilityEnabled: false },
+  gateSpy: vi.fn(),
+}));
+
+vi.mock('@/features/discover/preview/areasPreviewCapability', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/features/discover/preview/areasPreviewCapability')>();
+  gateSpy.mockImplementation(actual.isAreasPreviewJourneyActive);
+  return {
+    ...actual,
+    isAreasPreviewCapabilityEnabled: () => previewGateState.capabilityEnabled,
+    isAreasPreviewJourneyActive: gateSpy,
+  };
+});
 
 import {
   DiscoverRightPanelContainer,
@@ -352,5 +374,91 @@ describe('DiscoverRightPanelContainer', () => {
     // Belt-and-suspenders: the helper identifiers themselves must never appear as a
     // named import binding (only inside comments, which this file legitimately has).
     expect(importLines).not.toMatch(/formatDiscoverBadgeCopy|deriveSchoolRadiusPillNoun|hasActiveAnonPropertyFilter/);
+  });
+});
+
+/**
+ * Issue #1956 PR 1 (FE-1) — AC1.2 + AC1.14.
+ *
+ * The container computes the dual preview gate, and that computation must be
+ * COMPLETELY INERT: identical DOM whether the gate is true or false, because no
+ * canonical Areas panel exists until PR 2. These tests pin both halves — the
+ * flag's value, and the render-neutrality of holding it.
+ */
+describe('DiscoverRightPanelContainer — areasPreview dual gate (inert in PR 1)', () => {
+  const GATE_CASES: {
+    capabilityEnabled: boolean;
+    areasPreview: boolean | undefined;
+    expected: boolean;
+  }[] = [
+    { capabilityEnabled: false, areasPreview: undefined, expected: false },
+    { capabilityEnabled: false, areasPreview: true, expected: false },
+    { capabilityEnabled: true, areasPreview: undefined, expected: false },
+    { capabilityEnabled: true, areasPreview: true, expected: true },
+  ];
+
+  beforeEach(() => {
+    gateSpy.mockClear();
+    previewGateState.capabilityEnabled = false;
+    BASE_URL_STATE.areasPreview = undefined;
+  });
+
+  afterEach(() => {
+    previewGateState.capabilityEnabled = false;
+    BASE_URL_STATE.areasPreview = undefined;
+  });
+
+  it.each(GATE_CASES)(
+    'capability=$capabilityEnabled areasPreview=$areasPreview -> gate is $expected',
+    ({ capabilityEnabled, areasPreview, expected }) => {
+      previewGateState.capabilityEnabled = capabilityEnabled;
+      BASE_URL_STATE.areasPreview = areasPreview;
+
+      render(<DiscoverRightPanelContainer {...baseProps()} />);
+
+      expect(gateSpy).toHaveBeenCalledWith({ capabilityEnabled, areasPreview });
+      expect(gateSpy.mock.results[0].value).toBe(expected);
+    },
+  );
+
+  it('renders byte-identical output whether the gate is true or false (AC1.14 — no net-new UI)', () => {
+    previewGateState.capabilityEnabled = false;
+    BASE_URL_STATE.areasPreview = undefined;
+    const gateOff = render(
+      <DiscoverRightPanelContainer
+        {...baseProps({ resolvedPanelContent: 'area-groups-landing', isAuthenticated: true, page: 1, totalPages: 3, totalElements: 57 })}
+      />,
+    );
+    const offHtml = gateOff.container.innerHTML;
+    gateOff.unmount();
+
+    previewGateState.capabilityEnabled = true;
+    BASE_URL_STATE.areasPreview = true;
+    const gateOn = render(
+      <DiscoverRightPanelContainer
+        {...baseProps({ resolvedPanelContent: 'area-groups-landing', isAuthenticated: true, page: 1, totalPages: 3, totalElements: 57 })}
+      />,
+    );
+
+    // Sanity: the gate really did flip for the second render.
+    expect(gateSpy.mock.results.at(-1)?.value).toBe(true);
+    expect(gateOn.container.innerHTML).toBe(offHtml);
+  });
+
+  it('the gate never consults `node` — a node= present or absent does not change it', () => {
+    previewGateState.capabilityEnabled = true;
+    BASE_URL_STATE.areasPreview = true;
+
+    BASE_URL_STATE.node = null;
+    render(<DiscoverRightPanelContainer {...baseProps()} />);
+    const withoutNode = gateSpy.mock.calls.at(-1)?.[0];
+
+    BASE_URL_STATE.node = 'a:IN|KA|Bengaluru|Whitefield';
+    render(<DiscoverRightPanelContainer {...baseProps()} />);
+    const withNode = gateSpy.mock.calls.at(-1)?.[0];
+
+    expect(withoutNode).toEqual({ capabilityEnabled: true, areasPreview: true });
+    expect(withNode).toEqual({ capabilityEnabled: true, areasPreview: true });
+    BASE_URL_STATE.node = null;
   });
 });

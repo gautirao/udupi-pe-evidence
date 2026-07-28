@@ -7,9 +7,16 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link AreaCountRollupService} (#1955 Areas PR A, SLICE 2e, AC12) — proves the
@@ -70,7 +77,8 @@ class AreaCountRollupServiceTest {
         // map — the provider is never invoked, so a real (unused) PostgresAreaCountProvider stands
         // in here rather than a mock.
         AreaCountRollupService service = new AreaCountRollupService(
-                new PostgresAreaCountProvider(null), null, false, 30, 500, Ticker.systemTicker());
+                new PostgresAreaCountProvider(null), null, false,
+                new PostgresAreaSchoolCountProvider(null), 30, 500, Ticker.systemTicker());
 
         NavigationNode root = graph.nodeByKey("c:north:leaf1-leaf2-leaf3");
         NavigationNode mid = graph.nodeByKey("c:north:leaf1-leaf2");
@@ -91,7 +99,8 @@ class AreaCountRollupServiceTest {
         // map — the provider is never invoked, so a real (unused) PostgresAreaCountProvider stands
         // in here rather than a mock.
         AreaCountRollupService service = new AreaCountRollupService(
-                new PostgresAreaCountProvider(null), null, false, 30, 500, Ticker.systemTicker());
+                new PostgresAreaCountProvider(null), null, false,
+                new PostgresAreaSchoolCountProvider(null), 30, 500, Ticker.systemTicker());
 
         NavigationNode root = graph.nodeByKey("c:north:leaf1-leaf2-leaf3");
         assertThat(service.countForNode(graph, root, areaCounts)).isEqualTo(5L);
@@ -105,13 +114,52 @@ class AreaCountRollupServiceTest {
         // map — the provider is never invoked, so a real (unused) PostgresAreaCountProvider stands
         // in here rather than a mock.
         AreaCountRollupService service = new AreaCountRollupService(
-                new PostgresAreaCountProvider(null), null, false, 30, 500, Ticker.systemTicker());
+                new PostgresAreaCountProvider(null), null, false,
+                new PostgresAreaSchoolCountProvider(null), 30, 500, Ticker.systemTicker());
 
-        var children = service.childCounts(graph, "c:north:leaf1-leaf2-leaf3", areaCounts);
+        var children = service.childCounts(
+                graph, "c:north:leaf1-leaf2-leaf3", areaCounts, AreaSchoolCoverage.empty());
         assertThat(children).extracting(AreaCountRollupService.NodeCount::nodeKey)
                 .containsExactly("c:north:leaf1-leaf2", "a:leaf3");
         assertThat(children).extracting(AreaCountRollupService.NodeCount::count)
                 .containsExactly(8L, 2L);
+        assertThat(children).extracting(AreaCountRollupService.NodeCount::schoolCount)
+                .containsExactly(0L, 0L);
+    }
+
+    /**
+     * #1956 PR1 AC1.15 #7: an unsatisfiable filter set must return BEFORE the cache is consulted —
+     * no provider call AND no cache entry. Asserting only "the result is empty" would not
+     * distinguish this from the un-optimised path, so this asserts the provider is never invoked,
+     * and that many DISTINCT garbage values still produce zero provider calls (the cardinality
+     * lever the finding is about).
+     */
+    @Test
+    void areaCountsForCity_provablyEmptyFilters_neverCallProviderAndMintNoCacheEntry() {
+        AtomicInteger calls = new AtomicInteger();
+        AreaCountProvider counting = q -> {
+            calls.incrementAndGet();
+            return Map.of("leaf1", 5L);
+        };
+        AreaCountRollupService service = new AreaCountRollupService(
+                new PostgresAreaCountProvider(null), counting, true,
+                new PostgresAreaSchoolCountProvider(null), 30, 500, Ticker.systemTicker());
+
+        // 50 DISTINCT unsatisfiable values — on the un-short-circuited path this would be 50
+        // provider calls and 50 cache entries in a 500-entry cache.
+        for (int i = 0; i < 50; i++) {
+            Map<String, Long> counts = service.areaCountsForCity("testcity", 42L,
+                    AreaCountQuery.blended("testcity").withPropertyTypes(List.of("garbage-" + i)));
+            assertThat(counts).isEmpty();
+        }
+        assertThat(calls.get())
+                .as("zero provider calls AND zero cache entries — the lever is removed, not merely bounded")
+                .isZero();
+
+        // Control: a satisfiable query still reaches the provider exactly once.
+        service.areaCountsForCity("testcity", 42L,
+                AreaCountQuery.blended("testcity").withPropertyTypes(List.of("apartment")));
+        assertThat(calls.get()).isEqualTo(1);
     }
 
     @Test
@@ -124,13 +172,53 @@ class AreaCountRollupServiceTest {
         // Routed through the OpenSearch seam (enabled=true, non-null OS provider) purely so the
         // invocation count can be observed without standing up a live DB for PostgresAreaCountProvider.
         AreaCountRollupService service = new AreaCountRollupService(
-                new PostgresAreaCountProvider(null), provider, true, 30, 500, Ticker.systemTicker());
+                new PostgresAreaCountProvider(null), provider, true,
+                new PostgresAreaSchoolCountProvider(null), 30, 500, Ticker.systemTicker());
 
-        AreaCountQuery query = new AreaCountQuery("testcity", null, null, "public");
+        AreaCountQuery query = AreaCountQuery.blended("testcity");
         service.areaCountsForCity("testcity", 42L, query);
         service.areaCountsForCity("testcity", 42L, query);
         service.areaCountsForCity("testcity", 42L, query);
 
         assertThat(calls.get()).isEqualTo(1);
+    }
+
+    @Test
+    void schoolCoverageForCity_cachedSeparatelyFromListingCounts_evenAtSameCityAndRevision() {
+        // #1956 PR1: widened cache key is (Dimension, citySlug, revisionId, filterHash) — this
+        // proves LISTING and SCHOOL never share a cache entry even at an identical
+        // (citySlug, revisionId), and that schoolCoverageForCity never consults the listing provider.
+        AreaProvider listingCalls = new AreaProvider();
+        PostgresAreaSchoolCountProvider schoolProvider = mock(PostgresAreaSchoolCountProvider.class);
+        AreaSchoolCoverage seededCoverage = new AreaSchoolCoverage(Map.of(
+                "leaf1", Set.of(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())));
+        when(schoolProvider.schoolCoverageForCity(anyString())).thenReturn(seededCoverage);
+
+        AreaCountRollupService service = new AreaCountRollupService(
+                new PostgresAreaCountProvider(null), listingCalls, true,
+                schoolProvider, 30, 500, Ticker.systemTicker());
+
+        AreaCountQuery query = AreaCountQuery.blended("testcity");
+        Map<String, Long> listingCounts = service.areaCountsForCity("testcity", 42L, query);
+        AreaSchoolCoverage coverage = service.schoolCoverageForCity("testcity", 42L);
+        // Re-fetch both — each must still hit its own single cached entry, not the other's.
+        service.areaCountsForCity("testcity", 42L, query);
+        service.schoolCoverageForCity("testcity", 42L);
+
+        assertThat(listingCounts).isNotEqualTo(coverage.countsByAreaKey());
+        assertThat(coverage.countsByAreaKey()).containsEntry("leaf1", 4L);
+        assertThat(listingCalls.calls.get()).isEqualTo(1);
+        verify(schoolProvider, times(1)).schoolCoverageForCity("testcity");
+    }
+
+    /** Trivial {@link AreaCountProvider} fake that counts invocations. */
+    private static final class AreaProvider implements AreaCountProvider {
+        private final AtomicInteger calls = new AtomicInteger();
+
+        @Override
+        public Map<String, Long> countsByAreaKey(AreaCountQuery query) {
+            calls.incrementAndGet();
+            return Map.of("leaf1", 1L);
+        }
     }
 }

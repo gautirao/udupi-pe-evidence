@@ -251,4 +251,33 @@ class RegionSummaryPurposeIT {
                 .isEqualTo(blendedView.listingCount())
                 .isEqualTo(2L);
     }
+
+    // ── (g) upper-cased purpose → scoped, NOT blended (#1956 PR1 review correction) ─
+
+    @Test
+    @DisplayName("listingPurpose=SALE is scoped to sale, NOT blended — closes the divergence where a "
+            + "region showed a blended whole-city count beside a sale-only listings result")
+    void upperCasedPurpose_isScopedNotBlended() {
+        insertLiveListing(MANIPAL, "sale");
+        insertLiveListing(MANIPAL, "sale");
+        insertLiveListing(MANIPAL, "rent");
+
+        RegionSummaryResponse.Region upper = findManipalRegion(controller.getRegions("udupi", "SALE"));
+        RegionSummaryResponse.Region lower = findManipalRegion(controller.getRegions("udupi", "sale"));
+        RegionSummaryResponse.Region blended = findManipalRegion(controller.getRegions("udupi", null));
+
+        assertThat(upper.listingCount())
+                .as("SALE must behave exactly as sale -- one vocabulary governs every Discover surface")
+                .isEqualTo(lower.listingCount())
+                .isEqualTo(2L);
+        assertThat(upper.listingCount())
+                .as("and it must NOT be the blended total, which is what it silently returned before "
+                        + "this correction")
+                .isNotEqualTo(blended.listingCount());
+        assertThat(blended.listingCount()).as("sanity: blended is 3").isEqualTo(3L);
+
+        // Surrounding whitespace is tolerated identically.
+        assertThat(findManipalRegion(controller.getRegions("udupi", "  Sale ")).listingCount())
+                .isEqualTo(2L);
+    }
 }

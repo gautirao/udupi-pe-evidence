@@ -1,5 +1,6 @@
 package com.example.realestate.discover.navigation;
 
+import com.example.realestate.discover.DiscoverFilterNormalizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -53,7 +54,6 @@ public class NavigationController {
 
     private static final Logger log = LoggerFactory.getLogger(NavigationController.class);
 
-    private static final Set<String> ALLOWED_LISTING_PURPOSES = Set.of("sale", "rent");
     private static final String ROOT_NODE_KEY = "root";
     private static final String AREA_NODE_KEY_PREFIX = "a:";
     private static final String CLUSTER_NODE_KEY_PREFIX = "c:";
@@ -539,17 +539,65 @@ public class NavigationController {
     }
 
     /**
-     * GET /api/discover/cities/{city}/navigation/{nodeKey}/counts?purpose=&amp;propertyType= —
-     * display-time counts from {@link AreaCountRollupService} (AC8b). {@code nodeKey="root"}
-     * returns the whole city's total plus each top-level node's rolled-up total.
+     * GET /api/discover/cities/{city}/navigation/{nodeKey}/counts?purpose=&amp;propertyType=&amp;
+     * propertyTypes=&amp;bedrooms=&amp;sellerTypes=&amp;readyToMove=&amp;reraRegistered=&amp;
+     * newToMarket=&amp;backOnMarket= — display-time counts from {@link AreaCountRollupService}
+     * (AC8b; filter widening + school counts #1956 PR1). {@code nodeKey="root"} returns the whole
+     * city's total plus each top-level node's rolled-up total.
+     *
+     * <p>Every filter param is OPTIONAL — omitting all of them reproduces the pre-#1956 blended
+     * behaviour byte-for-byte, since {@link AreaCountQuery}'s compact constructor normalises an
+     * absent/unrecognised value to blended, never to an error. {@code propertyType} (singular) is
+     * the pre-#1956 param, kept for backward compatibility; {@code propertyTypes} (plural, matching
+     * {@link com.example.realestate.discover.DiscoverListingsController}'s convention) is preferred
+     * when both are supplied.
+     *
+     * <p>{@code schoolCount} (node + each child) and the whole-city {@code areaCounts} map are new
+     * response fields — see {@link NavigationCountsResponse}'s javadoc.
+     *
+     * <p><b>{@code priceMin}/{@code priceMax} are DELIBERATELY NOT BOUND on this endpoint —
+     * contract, not oversight</b> (#1956 PR1 AC1.15), in the same register as {@link
+     * AreaCountQuery}'s existing exclusion of {@code bbox}, {@code polygon}, {@code q}, school
+     * lat/lon/radius, {@code dateFrom}/{@code dateTo} and {@code areaKeys}. Price is excluded here
+     * because its value space is UNBOUNDED and CONTINUOUS: the app's price inputs are free-form
+     * numeric fields ({@code step="any"}, no maximum) and no CHECK constraint bounds
+     * {@code price_paise}, so every distinct rupee value would mint a distinct entry in this public,
+     * unauthenticated endpoint's shared count cache. Coarsening the value to bound that cardinality
+     * was rejected: it would widen the band a shopper actually asked for, and a performance budget
+     * never authorises altered shopper semantics.
+     *
+     * <p><b>This is a DEFERRED DECISION with a named owner, NOT a product statement that counts
+     * ignore price.</b> The PR that FIRST RENDERS these counts must reintroduce price together with
+     * a cardinality answer derived from that surface's real input granularity (a discrete ladder the
+     * UI itself emits makes bounded caching a provable no-op; a free-form input does not). Nothing
+     * is lost in the interim: no shopper can currently reach this lever, because no mounted
+     * component sends price to this endpoint.
+     *
+     * <p><b>Unbound, not rejected.</b> The params are simply absent from the method signature, so a
+     * stale bookmark or client still carrying {@code ?priceMin=…} continues to return 200 with
+     * blended-on-price counts rather than becoming a new 400. Spring ignores unmapped query params.
+     * The fields REMAIN on {@link AreaCountQuery} (normalised, and folded into its cache-key hash) —
+     * this narrows what the PUBLIC ENDPOINT accepts, not the record's type: callers that construct
+     * {@code AreaCountQuery} directly keep full price support.
      */
     @GetMapping("/{city}/navigation/{nodeKey}/counts")
     public ResponseEntity<NavigationCountsResponse> getCounts(
             @PathVariable("city") String city,
             @PathVariable("nodeKey") String nodeKey,
             @RequestParam(name = "purpose", required = false) String purpose,
-            @RequestParam(name = "propertyType", required = false) String propertyType) {
+            @RequestParam(name = "propertyType", required = false) String propertyType,
+            @RequestParam(name = "propertyTypes", required = false) List<String> propertyTypes,
+            @RequestParam(name = "bedrooms", required = false) List<Integer> bedrooms,
+            @RequestParam(name = "sellerTypes", required = false) List<String> sellerTypes,
+            @RequestParam(name = "readyToMove", required = false) Boolean readyToMove,
+            @RequestParam(name = "reraRegistered", required = false) Boolean reraRegistered,
+            @RequestParam(name = "newToMarket", required = false) Boolean newToMarket,
+            @RequestParam(name = "backOnMarket", required = false) Boolean backOnMarket) {
 
+        // #1956 PR1: tightened node/city validation — the graph/city lookup and node existence
+        // check both happen BEFORE any filter parsing/normalisation work below, so a request for an
+        // unknown city or node 404s without ever constructing an AreaCountQuery or touching the
+        // count cache.
         NavigationGraph graph = activeGraphOrNotFound(city);
 
         NavigationNode node = null;
@@ -560,40 +608,79 @@ public class NavigationController {
             }
         }
 
-        AreaCountQuery query = new AreaCountQuery(city, normalizePurpose(purpose), normalizePropertyType(propertyType), "public");
+        List<String> effectivePropertyTypes = (propertyTypes != null && !propertyTypes.isEmpty())
+                ? propertyTypes
+                : (propertyType != null ? List.of(propertyType) : null);
+
+        // #1956 PR1 AC1.15 #5 — bound repeated filter params on this public, unauthenticated route.
+        // These accept unbounded repetition by default, and an all-unrecognised list is PRESERVED
+        // (so it can narrow to zero honestly rather than widening to the whole city), meaning each
+        // repetition would otherwise become one more bind parameter — reaching PostgreSQL's 65535
+        // ceiling as a 500 rather than a clean 400. Caps are derived from the vocabularies, never
+        // hardcoded, so a new enum value raises them automatically.
+        requireAtMost(effectivePropertyTypes, DiscoverFilterNormalizer.MAX_PROPERTY_TYPE_VALUES, "propertyTypes");
+        requireAtMost(sellerTypes, DiscoverFilterNormalizer.MAX_SELLER_TYPE_VALUES, "sellerTypes");
+        requireAtMost(bedrooms, DiscoverFilterNormalizer.MAX_BEDROOM_VALUES, "bedrooms");
+
+        // #1956 PR1 AC1.15 — a NEGATIVE bedrooms value is rejected outright, rather than being
+        // carried through as an unsatisfiable filter the way an unknown propertyTypes/sellerTypes
+        // value is. The difference is load-bearing: property_type and seller_type are
+        // CHECK-constrained, so an out-of-vocabulary value provably matches nothing;
+        // property_listings.bedrooms carries NO CHECK constraint (a plain nullable INTEGER, V0:87),
+        // so `IN (-5)` and `IN (-7)` are neither provably empty nor provably equal — collapsing them
+        // onto a shared cached answer would be wrong-answer poisoning, not an optimisation.
+        if (bedrooms != null && bedrooms.stream().anyMatch(b -> b != null && b < 0)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "bedrooms must be non-negative");
+        }
+
+        AreaCountQuery query = AreaCountQuery.blended(city)
+                .withListingPurpose(purpose)
+                .withPropertyTypes(effectivePropertyTypes)
+                .withBedrooms(bedrooms)
+                .withSellerTypes(sellerTypes)
+                .withReadyToMove(readyToMove)
+                .withReraRegistered(reraRegistered)
+                .withNewToMarket(newToMarket)
+                .withBackOnMarket(backOnMarket);
+
         Map<String, Long> areaCounts = rollupService.areaCountsForCity(city, graph.revisionId(), query);
+        AreaSchoolCoverage schoolCoverage = rollupService.schoolCoverageForCity(city, graph.revisionId());
+        Map<String, Long> areaSchoolCounts = schoolCoverage.countsByAreaKey();
 
         long total = node == null
                 ? areaCounts.values().stream().mapToLong(Long::longValue).sum()
                 : rollupService.countForNode(graph, node, areaCounts);
-        var children = rollupService.childCounts(graph, node == null ? null : nodeKey, areaCounts);
+        // The city-wide school total is a DISTINCT UNION over every area, not a sum of
+        // areaSchoolCounts — a school covering two areas is one school. Listings sum because a
+        // listing belongs to exactly one area; schools do not. See AreaSchoolCoverage.
+        long schoolTotal = node == null
+                ? schoolCoverage.totalDistinctSchoolCount()
+                : rollupService.schoolCountForNode(graph, node, schoolCoverage);
+        var children = rollupService.childCounts(graph, node == null ? null : nodeKey, areaCounts, schoolCoverage);
 
-        NavigationCountsResponse body = new NavigationCountsResponse(nodeKey, total, children, graph.revisionId());
+        NavigationCountsResponse body = new NavigationCountsResponse(
+                nodeKey, total, schoolTotal, areaCounts, areaSchoolCounts, children, graph.revisionId());
 
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(countsCacheMaxAgeSeconds, TimeUnit.SECONDS).cachePublic())
                 .body(body);
     }
 
+    /**
+     * 400s when a repeated filter param carries more values than its vocabulary can meaningfully
+     * hold (#1956 PR1 AC1.15 #5). Same style as the price validation above: a clean, explicit
+     * BAD_REQUEST rather than letting an oversized list reach the database as a 500.
+     */
+    private static void requireAtMost(List<?> values, int maxValues, String paramName) {
+        if (values != null && values.size() > maxValues) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    paramName + " accepts at most " + maxValues + " values");
+        }
+    }
+
     private NavigationGraph activeGraphOrNotFound(String city) {
         return graphCache.getActiveGraph(city)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "City has no active navigation hierarchy"));
-    }
-
-    private static String normalizePurpose(String listingPurpose) {
-        if (listingPurpose == null) {
-            return null;
-        }
-        String trimmed = listingPurpose.trim();
-        return ALLOWED_LISTING_PURPOSES.contains(trimmed) ? trimmed : null;
-    }
-
-    private static String normalizePropertyType(String propertyType) {
-        if (propertyType == null) {
-            return null;
-        }
-        String trimmed = propertyType.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 }

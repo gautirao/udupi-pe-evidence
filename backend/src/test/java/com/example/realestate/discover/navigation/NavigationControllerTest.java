@@ -1,6 +1,8 @@
 package com.example.realestate.discover.navigation;
 
+import com.example.realestate.discover.DiscoverFilterNormalizer;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.server.ResponseStatusException;
@@ -10,6 +12,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -77,6 +81,16 @@ class NavigationControllerTest {
             throw new RuntimeException(e);
         }
         return n;
+    }
+
+    // Stable school ids for the coverage fixtures — literal UUIDs so a failure message identifies
+    // WHICH school rather than showing a fresh random value each run.
+    private static final UUID SCHOOL_A = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+    private static final UUID SCHOOL_B = UUID.fromString("00000000-0000-0000-0000-00000000000b");
+    private static final UUID SCHOOL_C = UUID.fromString("00000000-0000-0000-0000-00000000000c");
+
+    private static AreaSchoolCoverage coverageOf(Map<String, Set<UUID>> schoolIdsByAreaKey) {
+        return new AreaSchoolCoverage(schoolIdsByAreaKey);
     }
 
     private WebRequest lenientWebRequest() {
@@ -844,19 +858,286 @@ class NavigationControllerTest {
         NavigationGraph graph = buildGraph();
         when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(graph));
         Map<String, Long> areaCounts = Map.of("leaf1", 5L, "leaf2", 3L, "leaf3", 2L);
+        AreaSchoolCoverage coverage = coverageOf(Map.of(
+                "leaf1", Set.of(SCHOOL_A),
+                "leaf3", Set.of(SCHOOL_B, SCHOOL_C)));
         when(rollupService.areaCountsForCity(eq("testcity"), eq(42L), any())).thenReturn(areaCounts);
+        when(rollupService.schoolCoverageForCity(eq("testcity"), eq(42L))).thenReturn(coverage);
         when(rollupService.countForNode(any(), any(), eq(areaCounts))).thenReturn(8L);
-        when(rollupService.childCounts(any(), eq("c:north:leaf1-leaf2"), eq(areaCounts)))
-                .thenReturn(List.of(new AreaCountRollupService.NodeCount("a:leaf1", 5L),
-                        new AreaCountRollupService.NodeCount("a:leaf2", 3L)));
+        when(rollupService.schoolCountForNode(any(), any(), eq(coverage))).thenReturn(1L);
+        when(rollupService.childCounts(any(), eq("c:north:leaf1-leaf2"), eq(areaCounts), eq(coverage)))
+                .thenReturn(List.of(new AreaCountRollupService.NodeCount("a:leaf1", 5L, 1L),
+                        new AreaCountRollupService.NodeCount("a:leaf2", 3L, 0L)));
 
         NavigationCountsResponse body = controller.getCounts(
-                "testcity", "c:north:leaf1-leaf2", null, null).getBody();
+                "testcity", "c:north:leaf1-leaf2", null, null, null, null, null, null, null, null, null)
+                .getBody();
 
         assertThat(body.nodeKey()).isEqualTo("c:north:leaf1-leaf2");
         assertThat(body.count()).isEqualTo(8L);
+        assertThat(body.schoolCount()).isEqualTo(1L);
+        assertThat(body.areaCounts()).isEqualTo(areaCounts);
+        assertThat(body.areaSchoolCounts())
+                .as("per-area school map is derived from the SAME coverage snapshot the totals came "
+                        + "from, so the two can never disagree")
+                .containsExactlyInAnyOrderEntriesOf(Map.of("leaf1", 1L, "leaf3", 2L));
         assertThat(body.children()).extracting(AreaCountRollupService.NodeCount::nodeKey)
                 .containsExactly("a:leaf1", "a:leaf2");
         assertThat(body.revisionId()).isEqualTo(42L);
+    }
+
+    /**
+     * The city-root school total is the ONE piece of school-count arithmetic outside the roll-up
+     * service, and it is the landing view. Every other root case here stubs {@link
+     * AreaSchoolCoverage#empty()}, which returns 0 under ANY implementation — including a regression
+     * to {@code areaSchoolCounts.values().sum()}. This exercises it with NON-EMPTY coverage
+     * containing a school that spans two areas, so the union (3) and the sum (4) differ and the
+     * regression cannot pass.
+     */
+    @Test
+    void getCounts_root_schoolTotalIsCityWideUnion_notTheSumOfPerAreaCounts() {
+        NavigationGraph graph = buildGraph();
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(graph));
+        // SCHOOL_A covers BOTH leaf1 and leaf2; leaf1 and leaf3 each add one of their own.
+        AreaSchoolCoverage coverage = coverageOf(Map.of(
+                "leaf1", Set.of(SCHOOL_A, SCHOOL_B),
+                "leaf2", Set.of(SCHOOL_A),
+                "leaf3", Set.of(SCHOOL_C)));
+        when(rollupService.areaCountsForCity(eq("testcity"), eq(42L), any())).thenReturn(Map.of("leaf1", 5L));
+        when(rollupService.schoolCoverageForCity(eq("testcity"), eq(42L))).thenReturn(coverage);
+        when(rollupService.childCounts(any(), any(), any(), any())).thenReturn(List.of());
+
+        NavigationCountsResponse body = controller.getCounts(
+                "testcity", "root", null, null, null, null, null, null, null, null, null).getBody();
+
+        assertThat(body.schoolCount())
+                .as("3 DISTINCT schools city-wide -- SCHOOL_A spans leaf1 and leaf2 and must count "
+                        + "ONCE; a sum of the per-area counts would give 4")
+                .isEqualTo(3L);
+        assertThat(body.areaSchoolCounts().values().stream().mapToLong(Long::longValue).sum())
+                .as("the per-area map genuinely sums to 4 -- which is exactly why the total must not "
+                        + "be computed that way")
+                .isEqualTo(4L);
+        assertThat(body.areaSchoolCounts())
+                .as("each area still reports its OWN membership, including the shared school")
+                .containsExactlyInAnyOrderEntriesOf(Map.of("leaf1", 2L, "leaf2", 1L, "leaf3", 1L));
+    }
+
+    /**
+     * NOTE — DELIBERATE RULE CHANGE (#1956 PR1 review fix B), not a weakened assertion. This test
+     * previously asserted {@code propertyTypes()).isEmpty()} — i.e. an unrecognised value dropped to
+     * BLENDED. That was overturned: dropping the clause hands a shopper who narrowed to one property
+     * type the entire city. The value is now PRESERVED so the predicate matches nothing. The
+     * never-throws half of the contract — no 400 on a URL shape the frontend may already emit — is
+     * unchanged and still asserted.
+     */
+    @Test
+    void getCounts_unknownPropertyType_isUnsatisfiable_neverThrows() {
+        // #1956 PR1: an unrecognised propertyType/propertyTypes value narrows to nothing rather
+        // than 400ing, and rather than silently widening to blended.
+        NavigationGraph graph = buildGraph();
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(graph));
+        Map<String, Long> areaCounts = Map.of("leaf1", 5L);
+        when(rollupService.areaCountsForCity(eq("testcity"), eq(42L), any())).thenReturn(areaCounts);
+        when(rollupService.schoolCoverageForCity(eq("testcity"), eq(42L))).thenReturn(AreaSchoolCoverage.empty());
+        when(rollupService.countForNode(any(), any(), any())).thenReturn(5L);
+        when(rollupService.childCounts(any(), any(), any(), any())).thenReturn(List.of());
+
+        NavigationCountsResponse body = controller.getCounts(
+                "testcity", "root", null, "not-a-real-property-type", null, null, null, null, null, null, null)
+                .getBody();
+
+        ArgumentCaptor<AreaCountQuery> queryCaptor = ArgumentCaptor.forClass(AreaCountQuery.class);
+        verify(rollupService).areaCountsForCity(eq("testcity"), eq(42L), queryCaptor.capture());
+        assertThat(queryCaptor.getValue().propertyTypes())
+                .as("preserved, so the count predicate matches nothing — NOT emptied to blended")
+                .containsExactly("not-a-real-property-type");
+        assertThat(body).as("and still a 200 with a body, never a 400").isNotNull();
+    }
+
+    /**
+     * DELIBERATE CONTRACT CHANGE (#1956 PR1 AC1.15), not a deleted assertion. This replaces
+     * {@code getCounts_priceMinGreaterThanPriceMax_400}, which asserted the endpoint 400'd on an
+     * inverted price range. That validation is gone because the PARAMS are gone: {@code priceMin}/
+     * {@code priceMax} are no longer bound on this public endpoint at all — their value space is
+     * unbounded and continuous, so every distinct rupee value would mint a distinct entry in a
+     * shared, unauthenticated count cache, and coarsening the value to bound that was rejected as
+     * altered shopper semantics.
+     *
+     * <p>What must hold now is the BACKWARD-COMPATIBILITY half: an old client or bookmark still
+     * carrying the params must keep working rather than meeting a new 400. Since the params are
+     * simply absent from the signature, Spring never binds them and the request is served as though
+     * they were not sent — blended on price. The test below asserts the resulting {@link
+     * AreaCountQuery} carries NO price range, which is what proves the value was ignored rather
+     * than silently applied from somewhere else.
+     *
+     * <p>The price FIELDS remain on {@link AreaCountQuery} and are still normalised and hashed —
+     * this narrows the public endpoint's surface, not the record's type. {@code
+     * AreaCountQueryPriceFieldsRetainedTest} below pins that.
+     */
+    @Test
+    void getCounts_priceParamsAreNotBound_oldUrlStillSucceedsAndPriceIsIgnored() {
+        NavigationGraph graph = buildGraph();
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(graph));
+        when(rollupService.areaCountsForCity(eq("testcity"), eq(42L), any())).thenReturn(Map.of("leaf1", 5L));
+        when(rollupService.schoolCoverageForCity(eq("testcity"), eq(42L))).thenReturn(AreaSchoolCoverage.empty());
+        when(rollupService.countForNode(any(), any(), any())).thenReturn(5L);
+        when(rollupService.childCounts(any(), any(), any(), any())).thenReturn(List.of());
+
+        // The call shape a stale ?priceMin=&priceMax= URL now produces: Spring cannot bind params
+        // the method does not declare, so they never reach the controller at all.
+        NavigationCountsResponse body = controller.getCounts(
+                "testcity", "root", null, null, null, null, null, null, null, null, null).getBody();
+
+        assertThat(body).as("an old URL carrying price params must still be a 200, never a new 400")
+                .isNotNull();
+
+        ArgumentCaptor<AreaCountQuery> queryCaptor = ArgumentCaptor.forClass(AreaCountQuery.class);
+        verify(rollupService).areaCountsForCity(eq("testcity"), eq(42L), queryCaptor.capture());
+        assertThat(queryCaptor.getValue().priceMinPaise())
+                .as("price is blended, not applied — the endpoint no longer accepts it")
+                .isNull();
+        assertThat(queryCaptor.getValue().priceMaxPaise()).isNull();
+    }
+
+    /**
+     * The other half of the ruling: removing the params from the ENDPOINT must not narrow {@link
+     * AreaCountQuery} itself. Callers that construct the record directly keep full price support,
+     * including normalisation and participation in the cache-key hash — so the PR that first renders
+     * these counts can reintroduce the endpoint params without rebuilding the filter plumbing.
+     */
+    @Test
+    void areaCountQuery_stillSupportsPriceRange_endpointRemovalDidNotNarrowTheRecord() {
+        AreaCountQuery priced = AreaCountQuery.blended("testcity").withPriceRange(1_000L, 9_000L);
+
+        assertThat(priced.priceMinPaise()).isEqualTo(1_000L);
+        assertThat(priced.priceMaxPaise()).isEqualTo(9_000L);
+        assertThat(priced.normalizedFilterHash())
+                .as("price still participates in the cache key, so two different price ranges cannot "
+                        + "collide onto one cached count")
+                .isNotEqualTo(AreaCountQuery.blended("testcity").withPriceRange(1_000L, 8_000L)
+                        .normalizedFilterHash())
+                .isNotEqualTo(AreaCountQuery.blended("testcity").normalizedFilterHash());
+    }
+
+    // ── #1956 PR1 AC1.15: repetition caps + negative-bedrooms rejection on a PUBLIC route ────────
+
+    /**
+     * These params accept unbounded repetition by default. Since an all-unrecognised list is now
+     * PRESERVED (so an impossible filter narrows honestly to zero rather than widening to the whole
+     * city), each repetition would otherwise become one more bind parameter — hitting PostgreSQL's
+     * 65535-parameter ceiling as a 500 rather than a clean 400, and minting one cache key per
+     * distinct list.
+     */
+    @Test
+    void getCounts_tooManyPropertyTypes_400() {
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(buildGraph()));
+        List<String> tooMany = java.util.stream.IntStream
+                .rangeClosed(0, DiscoverFilterNormalizer.MAX_PROPERTY_TYPE_VALUES)
+                .mapToObj(i -> "t" + i).toList();
+
+        assertThatThrownBy(() -> controller.getCounts(
+                "testcity", "root", null, null, tooMany, null, null, null, null, null, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400")
+                .hasMessageContaining("propertyTypes");
+    }
+
+    @Test
+    void getCounts_propertyTypesExactlyAtCap_isAccepted() {
+        NavigationGraph graph = buildGraph();
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(graph));
+        when(rollupService.areaCountsForCity(eq("testcity"), eq(42L), any())).thenReturn(Map.of());
+        when(rollupService.schoolCoverageForCity(eq("testcity"), eq(42L))).thenReturn(AreaSchoolCoverage.empty());
+        when(rollupService.countForNode(any(), any(), any())).thenReturn(0L);
+        when(rollupService.childCounts(any(), any(), any(), any())).thenReturn(List.of());
+
+        List<String> atCap = java.util.stream.IntStream
+                .range(0, DiscoverFilterNormalizer.MAX_PROPERTY_TYPE_VALUES)
+                .mapToObj(i -> "t" + i).toList();
+
+        assertThat(controller.getCounts(
+                "testcity", "root", null, null, atCap, null, null, null, null, null, null)
+                .getBody())
+                .as("the cap is a ceiling, not an off-by-one that rejects a legitimate full selection")
+                .isNotNull();
+    }
+
+    @Test
+    void getCounts_tooManySellerTypes_400() {
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(buildGraph()));
+        List<String> tooMany = java.util.stream.IntStream
+                .rangeClosed(0, DiscoverFilterNormalizer.MAX_SELLER_TYPE_VALUES)
+                .mapToObj(i -> "s" + i).toList();
+
+        assertThatThrownBy(() -> controller.getCounts(
+                "testcity", "root", null, null, null, null, tooMany, null, null, null, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400")
+                .hasMessageContaining("sellerTypes");
+    }
+
+    @Test
+    void getCounts_tooManyBedroomValues_400() {
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(buildGraph()));
+        List<Integer> tooMany = java.util.stream.IntStream
+                .rangeClosed(0, DiscoverFilterNormalizer.MAX_BEDROOM_VALUES)
+                .boxed().toList();
+
+        assertThatThrownBy(() -> controller.getCounts(
+                "testcity", "root", null, null, null, tooMany, null, null, null, null, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400")
+                .hasMessageContaining("bedrooms");
+    }
+
+    /**
+     * A negative bedrooms value is REJECTED rather than carried through as an unsatisfiable filter,
+     * because {@code property_listings.bedrooms} has no CHECK constraint — so {@code IN (-5)} and
+     * {@code IN (-7)} are neither provably empty nor provably equal, and collapsing them onto one
+     * cached answer would be wrong-answer poisoning. Contrast with propertyTypes/sellerTypes, whose
+     * columns ARE CHECK-constrained and so can safely narrow to a provable zero.
+     */
+    @Test
+    void getCounts_negativeBedrooms_400() {
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(buildGraph()));
+
+        assertThatThrownBy(() -> controller.getCounts(
+                "testcity", "root", null, null, null, List.of(-5), null, null, null, null, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400")
+                .hasMessageContaining("bedrooms");
+    }
+
+    @Test
+    void getCounts_zeroBedrooms_isAccepted_studioIsNotNegative() {
+        NavigationGraph graph = buildGraph();
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(graph));
+        when(rollupService.areaCountsForCity(eq("testcity"), eq(42L), any())).thenReturn(Map.of());
+        when(rollupService.schoolCoverageForCity(eq("testcity"), eq(42L))).thenReturn(AreaSchoolCoverage.empty());
+        when(rollupService.countForNode(any(), any(), any())).thenReturn(0L);
+        when(rollupService.childCounts(any(), any(), any(), any())).thenReturn(List.of());
+
+        assertThat(controller.getCounts(
+                "testcity", "root", null, null, null, List.of(0), null, null, null, null, null)
+                .getBody())
+                .as("0 is a studio, a legitimate value — the guard rejects NEGATIVES, not zero")
+                .isNotNull();
+    }
+
+    /**
+     * The 404-before-work ordering must survive the new validation: an unknown node must still 404
+     * rather than 400, so a caller cannot probe filter-validation behaviour against a node that does
+     * not exist.
+     */
+    @Test
+    void getCounts_unknownNodeWithInvalidFilters_404sBeforeFilterValidation() {
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(buildGraph()));
+
+        assertThatThrownBy(() -> controller.getCounts(
+                "testcity", "c:does-not-exist", null, null, null, List.of(-5), null,
+                null, null, null, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
     }
 }

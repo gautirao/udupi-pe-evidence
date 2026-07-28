@@ -1,5 +1,6 @@
 package com.example.realestate.discover.opensearch;
 
+import com.example.realestate.discover.DiscoverFilterNormalizer;
 import com.example.realestate.discover.DiscoverListingPredicateBuilder;
 import com.example.realestate.discover.DiscoverListingsQuery;
 
@@ -138,8 +139,14 @@ public final class DiscoverQueryDsl {
         );
     }
 
-    private static Map<String, Object> buildBoolQuery(DiscoverListingPredicateBuilder.Filters f,
+    private static Map<String, Object> buildBoolQuery(DiscoverListingPredicateBuilder.Filters rawFilters,
                                                         Collection<String> activeAreaKeys) {
+        // #1956 PR1 review fix (AC1.16): canonicalise the filter vocabulary through the SAME
+        // normaliser DiscoverListingPredicateBuilder#build applies, so the OpenSearch engine and the
+        // Postgres engine behind the same Filters cannot disagree on casing/allowlisting — and
+        // neither can disagree with the navigation count computed from the same raw input.
+        DiscoverListingPredicateBuilder.Filters f = DiscoverFilterNormalizer.normalize(rawFilters);
+
         // Polygon filter is not supported in the OpenSearch path. Throwing here causes the
         // routing service to catch and fall back to Postgres, which handles ST_Contains natively.
         if (f.polygon() != null && !f.polygon().isEmpty()) {

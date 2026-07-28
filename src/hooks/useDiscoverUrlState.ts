@@ -81,6 +81,7 @@ import { useSchoolUrlDomain } from '@/features/discover/state/url/school';
 import { useAreaUrlDomain } from '@/features/discover/state/url/area';
 import { useAgriculturalUrlDomain } from '@/features/discover/state/url/agricultural';
 import { useCompatibilityUrlDomain } from '@/features/discover/state/url/compatibility';
+import { useNavigationUrlDomain } from '@/features/discover/state/url/navigation';
 
 // Byte-identical re-export: DEFAULT_MAX_KM is now declared in agricultural.ts
 // (the only domain that uses it), but every existing consumer imports it from
@@ -231,6 +232,33 @@ export interface DiscoverUrlState {
    * in tests/callers that predate this field.
    */
   scope?: string | null;
+  /**
+   * Issue #1956 — the canonical Areas hierarchy identity cursor, parsed from
+   * URL `node`. Null when absent, empty, or whitespace-only (same `?.trim()`
+   * discipline the groupId guards in discoverPanelState already use).
+   *
+   * AC1.4 — inside the Areas preview this is the SOLE hierarchy identity;
+   * groupId / region / areaKey / scope are never hierarchy identity. Node keys
+   * are produced ONLY by the server (`.../areas/{areaKey}/navigation-path`) —
+   * the frontend never constructs them.
+   *
+   * Optional (like scope/selectedRegion/etc.) so existing tests and callers
+   * that build a partial state literal keep compiling.
+   */
+  node?: string | null;
+  /**
+   * Issue #1956 — deployment-preview opt-in flag for the canonical Areas
+   * journey, parsed from URL `areasPreview=1`. Same presence-flag read style as
+   * schoolPicking / groupResults (`=== '1' ? true : undefined`).
+   *
+   * AC1.3 — read-only by construction: no action anywhere writes it, so an
+   * ordinary interaction can never introduce it and it can never appear in a
+   * canonical/share URL. It survives navigation and refresh because every
+   * existing writer copies the current params. AC1.2 — on its own it does
+   * nothing; the preview journey mounts only when it is combined with the
+   * deployment capability (see features/discover/preview/areasPreviewCapability).
+   */
+  areasPreview?: boolean;
 }
 
 export interface DiscoverUrlActions {
@@ -500,7 +528,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     reads: { city },
   };
 
-  // Fixed call order — all seven domain hooks run unconditionally every render.
+  // Fixed call order — all eight domain hooks run unconditionally every render.
   const viewportDomain = useViewportUrlDomain(ctx);
   const cityDomain = useCityUrlDomain(ctx);
   const filtersDomain = useFiltersUrlDomain(ctx);
@@ -508,6 +536,9 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   const areaDomain = useAreaUrlDomain(ctx);
   const agriculturalDomain = useAgriculturalUrlDomain(ctx);
   const compatibilityDomain = useCompatibilityUrlDomain(ctx);
+  // Issue #1956 PR 1 — read-only domain (no actions), appended LAST so the
+  // existing seven-domain call order is byte-for-byte unchanged.
+  const navigationDomain = useNavigationUrlDomain(ctx);
 
   // Explicit literal in the ORIGINAL 18-key order (qa-fast R3) — guards any
   // Object.keys/snapshot assertion a caller may add later.
@@ -530,6 +561,10 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     selectedLocality: agriculturalDomain.state.selectedLocality,
     intent: cityDomain.state.intent,
     scope: compatibilityDomain.state.scope,
+    // Issue #1956 PR 1 — appended AFTER the original 18 keys so the existing
+    // key order is preserved for any Object.keys/snapshot assertion.
+    node: navigationDomain.state.node,
+    areasPreview: navigationDomain.state.areasPreview,
   };
 
   // Spread merge is safe under this explicit `DiscoverUrlActions` annotation —

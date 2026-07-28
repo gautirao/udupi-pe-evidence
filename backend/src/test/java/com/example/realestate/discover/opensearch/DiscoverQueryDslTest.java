@@ -187,6 +187,64 @@ class DiscoverQueryDslTest {
     }
 
     // -----------------------------------------------------------------------
+    // #1956 PR1 review fix B: unsatisfiable narrowing filters must emit an
+    // equivalent match-nothing clause, never be silently omitted.
+    // -----------------------------------------------------------------------
+
+    @SuppressWarnings("unchecked")
+    private static List<Object> termsValuesFor(List<Object> filter, String field) {
+        return filter.stream()
+                .filter(f -> f instanceof Map<?, ?> m
+                        && m.get("terms") instanceof Map<?, ?> t && t.containsKey(field))
+                .map(f -> (Map<String, Object>) ((Map<String, Object>) f).get("terms"))
+                .map(t -> (List<Object>) t.get(field))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * The OpenSearch engine must reach the SAME zero as Postgres for a narrowing filter nothing
+     * satisfies. Omitting the clause would return the whole city — the exact quietly-wrong outcome
+     * the shared normaliser exists to prevent, and it must not reappear on the second engine.
+     */
+    @Test
+    void unsatisfiableNarrowingFilters_emitMatchNothingTermsClauses_neverOmitted() {
+        DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", List.of("PENTHOUSE"), null, null, null, null, List.of(-5), List.of("landlord"),
+                null, null, null, null, null, null, null, null, null, null, null, null, null
+        );
+
+        List<Object> filter = getFilter(getBool(
+                DiscoverQueryDsl.buildMarkersQuery(filters, ANY_ACTIVE_AREA_KEYS)));
+
+        assertThat(termsValuesFor(filter, "property_type"))
+                .as("an unknown property type must still emit a terms clause -- lower-cased, matching "
+                        + "nothing -- rather than being dropped so every listing comes back")
+                .containsExactly("penthouse");
+        assertThat(termsValuesFor(filter, "seller_type"))
+                .as("same rule for seller_type")
+                .containsExactly("landlord");
+        assertThat(filter)
+                .as("an all-negative bedrooms list must still constrain the query")
+                .anyMatch(f -> f instanceof Map<?, ?> m
+                        && (m.containsKey("range") || m.containsKey("terms") || m.containsKey("bool")));
+    }
+
+    @Test
+    void recognisedNarrowingFilters_areCanonicalisedNotPassedThroughRaw() {
+        DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", List.of("APARTMENT"), null, null, null, null, null, List.of("OWNER"),
+                null, null, null, null, null, null, null, null, null, null, null, null, null
+        );
+
+        List<Object> filter = getFilter(getBool(
+                DiscoverQueryDsl.buildMarkersQuery(filters, ANY_ACTIVE_AREA_KEYS)));
+
+        assertThat(termsValuesFor(filter, "property_type")).containsExactly("apartment");
+        assertThat(termsValuesFor(filter, "seller_type")).containsExactly("owner");
+    }
+
+    // -----------------------------------------------------------------------
     // Test 4: combined q + bbox
     // -----------------------------------------------------------------------
 

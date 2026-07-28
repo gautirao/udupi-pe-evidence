@@ -53,13 +53,11 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
     private static final String FOUR_SEGMENT_GUARD =
             "array_length(string_to_array(pl.area_key, '|'), 1) = 4";
 
-    /**
-     * Allowed {@code listingPurpose} values (#1745 P5-addendum) — mirrors the {@code chk_listing_purpose}
-     * DB CHECK constraint (V32) and {@link DiscoverListingPredicateBuilder}'s case-sensitive
-     * {@code pl.listing_purpose = ?} equality clause exactly. Independent of {@code propertyType}'s
-     * filter — see {@link #normalizeListingPurpose(String)}.
-     */
-    private static final Set<String> ALLOWED_LISTING_PURPOSES = Set.of("sale", "rent");
+    // The allowed listingPurpose vocabulary (#1745 P5-addendum) is no longer duplicated here: it
+    // lives ONCE in DiscoverFilterNormalizer (#1956 PR1 review correction), shared with the
+    // listings/markers/counts paths. The values still mirror the chk_listing_purpose DB CHECK
+    // constraint (V32) and DiscoverListingPredicateBuilder's pl.listing_purpose = ? equality clause.
+    // Independent of propertyType's filter — see normalizeListingPurpose(String).
 
     private final JdbcOperations jdbcOperations;
     private final CityActivationGuard cityActivationGuard;
@@ -78,10 +76,25 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
     @Transactional(readOnly = true)
     public DiscoverSummaryResponse getSummary(SummaryQuery query) {
         String city = query.city();
-        String normalizedType = normalizeFilter(query.propertyType());
+        // The value ECHOED back in the response — blank-trimmed only, never allowlisted, so the
+        // caller sees exactly what it asked for (DiscoverSummaryServiceIT
+        // #propertyTypeFilter_caseInsensitive_countsThree asserts propertyType() == "HOUSE").
+        String echoedType = normalizeFilter(query.propertyType());
+
+        // The value that FILTERS — canonicalised ONCE through the shared normaliser and fed to BOTH
+        // the total and the area-count rollups (#1956 PR1 review fix A). Previously `echoedType`
+        // went raw into queryTotal's LOWER(pl.property_type) = LOWER(?) fragment while the rollups
+        // went through AreaCountQuery's allowlist, so an unrecognised type (e.g. `penthouse` — a
+        // free-form param on a public unauthenticated endpoint) produced totalActiveListings=0
+        // beside regions[]/hotspots[] carrying whole-city BLENDED counts: the AC1.16 defect class
+        // inside a single response payload. One resolution now governs every number in the body.
+        List<String> filterTypes = DiscoverFilterNormalizer.normalizePropertyTypes(
+                echoedType == null ? null : List.of(echoedType));
+        String typeFilter = filterTypes.isEmpty() ? null : filterTypes.get(0);
+
         String normalizedPurpose = normalizeListingPurpose(query.listingPurpose());
         log.debug("getSummary city={} propertyType={} groupBy={} hotspotLimit={} listingPurpose={}",
-                city, normalizedType, query.groupBy(), query.hotspotLimit(), normalizedPurpose);
+                city, echoedType, query.groupBy(), query.hotspotLimit(), normalizedPurpose);
 
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 city, null, null, null, null, null, null, null,
@@ -91,12 +104,16 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
         );
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(filters);
 
-        long total = queryTotal(sql, normalizedType);
+        long total = queryTotal(sql, typeFilter);
 
         // #1955 Areas PR A, SLICE 2e (AC13): ONE area-level GROUP BY, shared by all three
         // region/hotspot rollups below — replaces three independent per-region SQL aggregations.
+        // Fed the SAME canonicalised type list as queryTotal above, so the total and the rollups
+        // can never resolve an unrecognised propertyType differently.
         Map<String, Long> areaCounts = areaCountProvider.countsByAreaKey(
-                new AreaCountQuery(city, normalizedPurpose, normalizedType, "public"));
+                AreaCountQuery.blended(city)
+                        .withListingPurpose(normalizedPurpose)
+                        .withPropertyTypes(filterTypes.isEmpty() ? null : filterTypes));
 
         List<DiscoverSummaryResponse.RegionCount> regions = "corridor".equals(query.groupBy())
                 ? queryCorridorRegions(city, areaCounts)
@@ -105,7 +122,7 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
         List<DiscoverSummaryResponse.Hotspot> hotspots = queryHotspots(areaCounts, query.hotspotLimit());
 
         return new DiscoverSummaryResponse(
-                city, normalizedType, query.groupBy(), total, regions, hotspots, Instant.now());
+                city, echoedType, query.groupBy(), total, regions, hotspots, Instant.now());
     }
 
     // ── Total ─────────────────────────────────────────────────────────────────
@@ -264,15 +281,18 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
     /**
      * Normalises {@code listingPurpose} (#1745 P5-addendum) — an independent filter, separate from
      * {@code propertyType}/{@link #normalizeFilter(String)}. Blank/whitespace-only values and any
-     * value outside {@link #ALLOWED_LISTING_PURPOSES} fall back to {@code null} (blended,
-     * all-purposes) — preserving current behaviour for every existing caller that omits the param.
+     * value outside the allowed vocabulary fall back to {@code null} (blended, all-purposes).
+     *
+     * <p><b>Delegates to {@link DiscoverFilterNormalizer#normalizePurpose}</b> (#1956 PR1 review
+     * correction). This method used to own an exact-match allowlist, which made
+     * {@code ?listingPurpose=SALE} fall back to a BLENDED whole-city summary total while the
+     * listings endpoint — which canonicalises through the shared normaliser inside
+     * {@link DiscoverListingPredicateBuilder#build} — returned sale-only rows. That is the same
+     * count-overstates-its-results defect AC1.16 closes, merely on a different pair of surfaces.
+     * One vocabulary now governs the whole system.
      */
     private static String normalizeListingPurpose(String listingPurpose) {
-        if (listingPurpose == null) {
-            return null;
-        }
-        String trimmed = listingPurpose.trim();
-        return ALLOWED_LISTING_PURPOSES.contains(trimmed) ? trimmed : null;
+        return DiscoverFilterNormalizer.normalizePurpose(listingPurpose);
     }
 
     private static Double nullableDouble(Object val) {

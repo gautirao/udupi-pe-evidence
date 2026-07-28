@@ -20,6 +20,10 @@ import { CITY_CONFIG } from '@/lib/localityUtils';
 import { AGRICULTURAL_LAND_PROPERTY_TYPE } from '@/lib/listing-constants';
 import { shouldShowMarkers } from '@/lib/map/zoomPolicy';
 import {
+  deriveVisibleMemberSet,
+  type VisibleMemberSet,
+} from '@/features/discover/navigation/visibleMemberSet';
+import {
   filteredMarkerToPropertyListing,
   discoverListingToPropertyListing,
   cityListingToPropertyListing,
@@ -376,6 +380,17 @@ export interface UseDiscoverMapDataResult {
     bounds: CameraIntent['bounds'],
     center: [number, number],
   ) => void;
+  /**
+   * Issue #1956 PR 1 (FE-3, item 2) — THE shared visible-member set for the
+   * current destination scope, derived once here and handed to
+   * `useDiscoverMapPresentation` so map and panel can never disagree about which
+   * areas are members (AC1.12).
+   *
+   * ADDITIVE AND INERT in PR 1: exposed, threaded, and rendered by NOTHING.
+   * Reading it is a later PR's job. See
+   * `@/features/discover/navigation/visibleMemberSet`.
+   */
+  visibleMemberSet: VisibleMemberSet;
 }
 
 export function useDiscoverMapData({
@@ -728,6 +743,22 @@ export function useDiscoverMapData({
   const totalElements = discoverListingsPage?.totalElements ?? 0;
   const totalPages = discoverListingsPage?.totalPages ?? 0;
 
+  // ── Issue #1956 PR 1 (FE-3, item 2): THE shared visible-member set ─────────
+  // ADDITIVE AND INERT. Derived here because this hook is UPSTREAM of
+  // useDiscoverMapPresentation (MapDiscovery threads `discoverAreas` from here
+  // into there), so this is the only point at which ONE set can reach both the
+  // map and the panel side. Nothing reads it yet — no render output changes.
+  // See visibleMemberSet.ts for why one shared set (not two derivations) is
+  // what AC1.12 actually requires.
+  const visibleMemberSet = useMemo(
+    () =>
+      deriveVisibleMemberSet({
+        candidateAreaKeys: discoverAreas.map((a) => a.areaKey),
+        scopedAreaKeys: groupAreaKeys,
+      }),
+    [discoverAreas, groupAreaKeys],
+  );
+
   // ── Marker truncation metadata ────────────────────────────────────────────
   const markersTruncated = filteredMarkersData?.truncated ?? false;
   const markersReturnedElements = filteredMarkersData?.returnedElements;
@@ -770,5 +801,6 @@ export function useDiscoverMapData({
     cameraIntent,
     publishCameraIntent,
     publishClusterCameraIntent,
+    visibleMemberSet,
   };
 }
