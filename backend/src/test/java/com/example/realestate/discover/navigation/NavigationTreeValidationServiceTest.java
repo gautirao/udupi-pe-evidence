@@ -10,9 +10,15 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Unit tests for {@link NavigationTreeValidationService} — the 13 blocking invariants (#1955 AC7).
- * Each test crafts one specific bad tree via {@link ValidationNode} fixtures (no Spring/DB) and
- * asserts the corresponding error code fires; a final test proves a valid tree yields zero errors.
+ * Unit tests for {@link NavigationTreeValidationService} — the 13 blocking invariants (#1955 AC7)
+ * plus the additive #14 hierarchy-shape invariant (#1956 D6). Each test crafts one specific bad
+ * tree via {@link ValidationNode} fixtures (no Spring/DB) and asserts the corresponding error code
+ * fires; a final test proves a valid tree yields zero errors. Every fixture that predates #1956
+ * (a bare CLUSTER/AREA root, no DIRECTION ancestor) still asserts with {@code .contains(...)}, so
+ * the additional MISSING_DIRECTION_ANCESTOR finding check #14 now also raises against it doesn't
+ * break the test — only {@code validTree()}/{@code postExcludeTree}, reused by every "well-formed
+ * override produces zero errors" ({@code .isEmpty()}) test, were updated to a genuine DIRECTION-
+ * rooted shape so those keep asserting a truly empty error list.
  */
 class NavigationTreeValidationServiceTest {
 
@@ -22,20 +28,38 @@ class NavigationTreeValidationServiceTest {
 
     private final NavigationTreeValidationService service = new NavigationTreeValidationService();
 
+    /** {@code regionKey} defaults to "north" for every node here — none of checks #1-13 or this
+     * file's own tests care about its value; check #14's region-ancestry-agreement piece is
+     * exercised by {@code validTree()} using the SAME "north" value on every node, matching its
+     * DIRECTION ancestor. */
     private static ValidationNode node(
             String nodeKey, String parentNodeKey, String nodeType, String areaKey,
             List<String> reps, int depth, List<String> ancestorKeys, int descendantAreaCount, int displayOrder) {
         return new ValidationNode(
                 SCOPE, nodeKey, parentNodeKey, nodeType, areaKey, reps, depth, ancestorKeys,
-                descendantAreaCount, displayOrder, LAT, LON, LAT, LON, LAT, LON);
+                descendantAreaCount, displayOrder, LAT, LON, LAT, LON, LAT, LON, "north");
     }
 
-    /** A minimal, valid 1-cluster-with-2-area-leaves tree, used as the base for most fixtures. */
+    /**
+     * #1956 D6: a genuine {@code City -> Direction -> CLUSTER -> AREA} shape (was a bare
+     * CLUSTER-rooted tree pre-#1956) so this fixture — reused by most "well-formed override
+     * produces zero errors" tests below, which assert {@code .isEmpty()} — still validates cleanly
+     * against check #14 (hierarchy shape). ONE cluster beneath the DIRECTION: check #4
+     * (ONE_CHILD_CLUSTER) is now CLUSTER-specific (see {@link
+     * NavigationTreeValidationService#checkOneChildClusters}), so a single-child DIRECTION is
+     * legitimate and no longer needs a second, otherwise-pointless sibling cluster to dodge it. The
+     * CLUSTER itself still needs >=2 children (city|a, city|b) — that guard is unrelated to the
+     * DIRECTION fix and still fires for a genuinely single-child CLUSTER.
+     */
     private static List<ValidationNode> validTree() {
         return List.of(
-                node("c:north:a-b", null, "CLUSTER", null, List.of("city|a", "city|b"), 0, List.of(), 2, 1),
-                node("a:city|a", "c:north:a-b", "AREA", "city|a", List.of("city|a"), 1, List.of("c:north:a-b"), 1, 1),
-                node("a:city|b", "c:north:a-b", "AREA", "city|b", List.of("city|b"), 1, List.of("c:north:a-b"), 1, 2));
+                node("d:north", null, "DIRECTION", null, List.of("city|a", "city|b"), 0, List.of(), 2, 1),
+                node("c:north:a-b", "d:north", "CLUSTER", null, List.of("city|a", "city|b"), 1,
+                        List.of("d:north"), 2, 1),
+                node("a:city|a", "c:north:a-b", "AREA", "city|a", List.of("city|a"), 2,
+                        List.of("d:north", "c:north:a-b"), 1, 1),
+                node("a:city|b", "c:north:a-b", "AREA", "city|b", List.of("city|b"), 2,
+                        List.of("d:north", "c:north:a-b"), 1, 2));
     }
 
     @Test
@@ -82,10 +106,10 @@ class NavigationTreeValidationServiceTest {
     void crossScopeParentage() {
         ValidationNode parent = new ValidationNode(
                 1L, "c:north:a-b", null, "CLUSTER", null, List.of("city|a", "city|b"), 0, List.of(), 2, 1,
-                LAT, LON, LAT, LON, LAT, LON);
+                LAT, LON, LAT, LON, LAT, LON, "north");
         ValidationNode child = new ValidationNode(
                 2L, "a:city|a", "c:north:a-b", "AREA", "city|a", List.of("city|a"), 1, List.of("c:north:a-b"), 1, 1,
-                LAT, LON, LAT, LON, LAT, LON);
+                LAT, LON, LAT, LON, LAT, LON, "north");
         ValidationReport report = service.validate(List.of(parent, child));
         assertThat(report.errors()).extracting(ValidationError::code).contains("CROSS_SCOPE_PARENTAGE");
     }
@@ -96,6 +120,46 @@ class NavigationTreeValidationServiceTest {
         List<ValidationNode> nodes = List.of(
                 node("c:north:a", null, "CLUSTER", null, List.of("city|a"), 0, List.of(), 1, 1),
                 node("a:city|a", "c:north:a", "AREA", "city|a", List.of("city|a"), 1, List.of("c:north:a"), 1, 1));
+        ValidationReport report = service.validate(nodes);
+        assertThat(report.errors()).extracting(ValidationError::code).contains("ONE_CHILD_CLUSTER");
+    }
+
+    @Test
+    @DisplayName("4b: a DIRECTION with exactly one child AREA is valid — a region may genuinely "
+            + "contain a single canonical area (confirmed live: udupi's W region has exactly one "
+            + "area) — regression guard for the type-aware #4 fix")
+    void oneChildDirectionIsValid() {
+        List<ValidationNode> nodes = List.of(
+                node("d:west", null, "DIRECTION", null, List.of("city|only"), 0, List.of(), 1, 1),
+                node("a:city|only", "d:west", "AREA", "city|only", List.of("city|only"), 1,
+                        List.of("d:west"), 1, 1));
+        ValidationReport report = service.validate(nodes);
+        assertThat(report.errors()).extracting(ValidationError::code).doesNotContain("ONE_CHILD_CLUSTER");
+        assertThat(report.errors()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("4c: a DIRECTION with multiple direct AREA children still validates cleanly — "
+            + "no regression from the type-aware #4 fix")
+    void multiChildDirectionIsValid() {
+        List<ValidationNode> nodes = List.of(
+                node("d:north", null, "DIRECTION", null, List.of("city|a", "city|b"), 0, List.of(), 2, 1),
+                node("a:city|a", "d:north", "AREA", "city|a", List.of("city|a"), 1, List.of("d:north"), 1, 1),
+                node("a:city|b", "d:north", "AREA", "city|b", List.of("city|b"), 1, List.of("d:north"), 1, 2));
+        ValidationReport report = service.validate(nodes);
+        assertThat(report.errors()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("4d: a CLUSTER with exactly one child is still rejected under a real DIRECTION "
+            + "root — the type-check must resolve the parent's actual kind, not silently exempt "
+            + "CLUSTER nodes too")
+    void oneChildClusterStillRejectedUnderDirectionRoot() {
+        List<ValidationNode> nodes = List.of(
+                node("d:north", null, "DIRECTION", null, List.of("city|a"), 0, List.of(), 1, 1),
+                node("c:north:a", "d:north", "CLUSTER", null, List.of("city|a"), 1, List.of("d:north"), 1, 1),
+                node("a:city|a", "c:north:a", "AREA", "city|a", List.of("city|a"), 2,
+                        List.of("d:north", "c:north:a"), 1, 1));
         ValidationReport report = service.validate(nodes);
         assertThat(report.errors()).extracting(ValidationError::code).contains("ONE_CHILD_CLUSTER");
     }
@@ -179,7 +243,7 @@ class NavigationTreeValidationServiceTest {
     void missingBounds() {
         ValidationNode bad = new ValidationNode(
                 SCOPE, "a:city|a", null, "AREA", "city|a", List.of("city|a"), 0, List.of(), 1, 1,
-                null, LON, LAT, LON, LAT, LON);
+                null, LON, LAT, LON, LAT, LON, "north");
         ValidationReport report = service.validate(List.of(bad));
         assertThat(report.errors()).extracting(ValidationError::code).contains("MISSING_BOUNDS");
     }
@@ -238,8 +302,16 @@ class NavigationTreeValidationServiceTest {
         // A tree that ALREADY reflects city|a excluded (only city|b remains as an AREA leaf), the way
         // NavigationTreeGenerationService's real pipeline builds it — expectedAreaKeys is POST-exclude
         // (does not contain city|a), but canonicalAreaKeys is PRE-exclude (does).
+        //
+        // #1956 D6: wrapped in a DIRECTION root (was a bare AREA root pre-#1956) so this stays a
+        // genuine City -> Direction -> AREA shape under check #14. The DIRECTION's only remaining
+        // child is the single surviving city|b leaf — that's honest and no longer needs an
+        // unrelated sibling AREA to dodge check #4: #4 (ONE_CHILD_CLUSTER) is now CLUSTER-specific
+        // (see NavigationTreeValidationService#checkOneChildClusters), so a single-child DIRECTION
+        // — exactly this shape, a region left with one area after an exclude — is legitimate.
         List<ValidationNode> postExcludeTree = List.of(
-                node("a:city|b", null, "AREA", "city|b", List.of("city|b"), 0, List.of(), 1, 1));
+                node("d:north", null, "DIRECTION", null, List.of("city|b"), 0, List.of(), 1, 1),
+                node("a:city|b", "d:north", "AREA", "city|b", List.of("city|b"), 1, List.of("d:north"), 1, 1));
 
         ValidationReport report = service.validate(
                 postExcludeTree,
@@ -341,5 +413,86 @@ class NavigationTreeValidationServiceTest {
                 node("a:city|b", "c:north:a-b", "AREA", "city|b", List.of("city|b"), 1, List.of("c:north:a-b"), 1, 2));
         ValidationReport report = service.validate(nodes);
         assertThat(report.errors()).extracting(ValidationError::code).contains("ANCESTRY_MISMATCH");
+    }
+
+    // ── 14: hierarchy shape (#1956 D6) ──────────────────────────────────────────────────────────
+    // Each test below reproduces one specific way the incident's flat `City -> AREA` tree (or a
+    // structurally-similar violation) could reappear, and asserts the exact error code check #14
+    // raises for it — never merely "some error fired".
+
+    @Test
+    @DisplayName("14a: a flat City -> AREA tree (non-DIRECTION root) is MISSING_DIRECTION_ANCESTOR — "
+            + "the exact incident shape (323 AREA roots, zero DIRECTION nodes) that passed all 13 "
+            + "pre-#1956 checks and reached production")
+    void flatCityToAreaRootIsRejected() {
+        List<ValidationNode> nodes = List.of(
+                node("a:city|a", null, "AREA", "city|a", List.of("city|a"), 0, List.of(), 1, 1));
+        ValidationReport report = service.validate(nodes);
+        assertThat(report.errors()).extracting(ValidationError::code).contains("MISSING_DIRECTION_ANCESTOR");
+    }
+
+    @Test
+    @DisplayName("14b: an AREA with empty ancestry (even with a real parent) is MISSING_DIRECTION_ANCESTOR")
+    void areaWithEmptyAncestryIsRejected() {
+        List<ValidationNode> nodes = List.of(
+                node("d:north", null, "DIRECTION", null, List.of("city|a", "city|b"), 0, List.of(), 2, 1),
+                node("a:city|a", "d:north", "AREA", "city|a", List.of("city|a"), 1, List.of(), 1, 1),
+                node("a:city|b", "d:north", "AREA", "city|b", List.of("city|b"), 1, List.of("d:north"), 1, 2));
+        ValidationReport report = service.validate(nodes);
+        assertThat(report.errors()).extracting(ValidationError::code).contains("MISSING_DIRECTION_ANCESTOR");
+    }
+
+    @Test
+    @DisplayName("14c: an AREA whose first (root) ancestor is a CLUSTER, not a DIRECTION, is "
+            + "MISSING_DIRECTION_ANCESTOR even though the tree's actual root IS a DIRECTION")
+    void areaFirstAncestorNotDirectionIsRejected() {
+        List<ValidationNode> nodes = List.of(
+                node("d:north", null, "DIRECTION", null, List.of("city|a", "city|b"), 0, List.of(), 2, 1),
+                node("c:north:a-b", "d:north", "CLUSTER", null, List.of("city|a", "city|b"), 1,
+                        List.of("d:north"), 2, 1),
+                // WRONG: this leaf's stored ancestor_keys omits the DIRECTION, starting at the CLUSTER instead.
+                node("a:city|a", "c:north:a-b", "AREA", "city|a", List.of("city|a"), 2,
+                        List.of("c:north:a-b"), 1, 1),
+                node("a:city|b", "c:north:a-b", "AREA", "city|b", List.of("city|b"), 2,
+                        List.of("d:north", "c:north:a-b"), 1, 2));
+        ValidationReport report = service.validate(nodes);
+        assertThat(report.errors()).extracting(ValidationError::code).contains("MISSING_DIRECTION_ANCESTOR");
+    }
+
+    @Test
+    @DisplayName("14d: a node's region_key disagreeing with its DIRECTION ancestor's region_key is "
+            + "INVALID_HIERARCHY_SHAPE")
+    void regionKeyDisagreesWithDirectionAncestorIsRejected() {
+        ValidationNode direction = new ValidationNode(
+                SCOPE, "d:north", null, "DIRECTION", null, List.of("city|a", "city|b"), 0, List.of(), 2, 1,
+                LAT, LON, LAT, LON, LAT, LON, "north");
+        // WRONG: this leaf claims region_key="south" while descending from the "north" DIRECTION.
+        ValidationNode mismatched = new ValidationNode(
+                SCOPE, "a:city|a", "d:north", "AREA", "city|a", List.of("city|a"), 1, List.of("d:north"), 1, 1,
+                LAT, LON, LAT, LON, LAT, LON, "south");
+        ValidationNode consistent = new ValidationNode(
+                SCOPE, "a:city|b", "d:north", "AREA", "city|b", List.of("city|b"), 1, List.of("d:north"), 1, 2,
+                LAT, LON, LAT, LON, LAT, LON, "north");
+        ValidationReport report = service.validate(List.of(direction, mismatched, consistent));
+        assertThat(report.errors()).extracting(ValidationError::code).contains("INVALID_HIERARCHY_SHAPE");
+    }
+
+    @Test
+    @DisplayName("14e: a CLUSTER at depth 2 (a forbidden third public level beneath its own CLUSTER "
+            + "parent) is INVALID_HIERARCHY_SHAPE, independent of check #11's max_safety_depth")
+    void clusterAtDepthTwoIsRejected() {
+        List<ValidationNode> nodes = List.of(
+                node("d:north", null, "DIRECTION", null, List.of("city|a", "city|b"), 0, List.of(), 2, 1),
+                node("c:north:top", "d:north", "CLUSTER", null, List.of("city|a", "city|b"), 1,
+                        List.of("d:north"), 2, 1),
+                // WRONG: a second CLUSTER level directly beneath the first — a forbidden third public level.
+                node("c:north:sub", "c:north:top", "CLUSTER", null, List.of("city|a", "city|b"), 2,
+                        List.of("d:north", "c:north:top"), 2, 1),
+                node("a:city|a", "c:north:sub", "AREA", "city|a", List.of("city|a"), 3,
+                        List.of("d:north", "c:north:top", "c:north:sub"), 1, 1),
+                node("a:city|b", "c:north:sub", "AREA", "city|b", List.of("city|b"), 3,
+                        List.of("d:north", "c:north:top", "c:north:sub"), 1, 2));
+        ValidationReport report = service.validate(nodes);
+        assertThat(report.errors()).extracting(ValidationError::code).contains("INVALID_HIERARCHY_SHAPE");
     }
 }

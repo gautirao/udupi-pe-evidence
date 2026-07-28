@@ -39,6 +39,16 @@ public final class NavigationKeys {
     }
 
     /**
+     * #1956 D1: DIRECTION node_key = "d:" + slug(region_key). A pure function of geography (the
+     * region_key alone) — no surrogate id, no listing data, no iteration order — mirroring the
+     * same determinism contract as {@link #areaNodeKey} and {@link #clusterNodeKeyBase}. Region
+     * keys are unique per city, so unlike cluster keys this never needs collision disambiguation.
+     */
+    public static String directionNodeKey(String regionKey) {
+        return "d:" + slug(regionKey);
+    }
+
+    /**
      * D5 base recipe (pre-collision-disambiguation):
      * {@code c:} + slug(region_key) + {@code :} + slug(sorted(representative_area_keys).join("-")).
      * Callers are responsible for passing an already-sorted representative list and for

@@ -271,6 +271,48 @@ class NavigationControllerTest {
     }
 
     @Test
+    void resolve_staleClusterKey_threeNestedClusterLevels_resolvesToDeepestNotIntermediate() {
+        // Algorithm-generality tier (#2025 / #1955 split): the promotion pipeline (anything calling
+        // prepareValidateAndPromote) is now gated to the #2025 MAX_PUBLIC_DEPTH=2 contract — DIRECTION
+        // at depth 0, at most ONE "Local Destination" CLUSTER at depth 1, AREA at depth 2 — so its
+        // fixtures were reduced to that contract shape and can no longer exercise a THIRD nested
+        // CLUSTER level. This test deliberately builds a graph directly against NavigationGraph/the
+        // in-memory node() helper — bypassing prepareValidateAndPromote and the validator entirely —
+        // to prove the underlying stale-cluster-key resolution ALGORITHM (deepest-containing-ancestor,
+        // #1956 fix-cycle-6) still generalizes across three CLUSTER levels, not just the two levels
+        // every other test in this file's buildGraph() fixture provides. It intentionally exceeds the
+        // #2025 depth ceiling because it never touches the promotion-time contract.
+        Instant now = Instant.now();
+        NavigationNode root = node(600L, null, "north", "CLUSTER", "c:north:deepleaf-3lvl-root", null,
+                List.of("deepleaf"), "Root3", 0, 0, List.of(), 1, now);
+        NavigationNode mid = node(601L, 600L, "north", "CLUSTER", "c:north:deepleaf-3lvl-mid", null,
+                List.of("deepleaf"), "Mid3", 0, 1, List.of("c:north:deepleaf-3lvl-root"), 1, now);
+        NavigationNode deep = node(602L, 601L, "north", "CLUSTER", "c:north:deepleaf-3lvl-deep", null,
+                List.of("deepleaf"), "Deep3", 0, 2,
+                List.of("c:north:deepleaf-3lvl-root", "c:north:deepleaf-3lvl-mid"), 1, now);
+        NavigationNode leaf = node(603L, 602L, "north", "AREA", "a:deepleaf", "deepleaf",
+                List.of("deepleaf"), "Deep Leaf", 0, 3,
+                List.of("c:north:deepleaf-3lvl-root", "c:north:deepleaf-3lvl-mid", "c:north:deepleaf-3lvl-deep"),
+                0, now);
+        NavigationGraph graph = NavigationGraph.build(
+                "threelevelcity", 55L, List.of(root, mid, deep, leaf));
+        when(graphCache.getActiveGraph("threelevelcity")).thenReturn(Optional.of(graph));
+
+        // "deepleaf" survives and is genuinely contained by ALL THREE cluster levels' subtrees; the
+        // suffix guarantees the requested key itself is stale (never a real generator output).
+        String staleKey = "c:north:" + NavigationKeys.slug("deepleaf") + "-no-longer-a-real-cluster-suffix";
+        NavigationResolveResponse body = controller.resolve("threelevelcity", staleKey, lenientWebRequest()).getBody();
+
+        assertThat(body.resolution()).isEqualTo(NavigationResolution.ANCESTOR);
+        // A regression to a shallowest-containing (or mid-preferring) policy would return the root or
+        // mid cluster here instead — this fails against either.
+        assertThat(body.node().nodeKey())
+                .isEqualTo("c:north:deepleaf-3lvl-deep")
+                .isNotEqualTo("c:north:deepleaf-3lvl-mid")
+                .isNotEqualTo("c:north:deepleaf-3lvl-root");
+    }
+
+    @Test
     void resolve_staleClusterKey_representativesSpanMidAndItsSibling_escalatesToSharedAncestor_notPartialMid() {
         // #1956 fix-cycle-6 hardening — THE test that closes the actual coverage hole: every other
         // ANCESTOR-asserting "c:" test in this suite resolves to exactly ONE surviving representative,

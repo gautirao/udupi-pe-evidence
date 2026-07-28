@@ -824,24 +824,25 @@ class CityLaunchPromotionServiceIT {
     // =========================================================================================
 
     @Test
-    @DisplayName("seventhTablePromotion: a sandbox nav tree (1 CLUSTER root + 2 AREA leaves) promotes "
-            + "verbatim, with parent_node_id remapped from sandbox surrogate ids to production ids; "
-            + "ancestor_keys copied unchanged")
+    @DisplayName("seventhTablePromotion: a sandbox nav tree (1 DIRECTION root + 2 AREA leaves — was a "
+            + "1 CLUSTER root pre-#1956, fixed per the D6(d) ruling so this fixture stays "
+            + "contract-shaped) promotes verbatim, with parent_node_id remapped from sandbox "
+            + "surrogate ids to production ids; ancestor_keys copied unchanged")
     void seventhTablePromotion_verbatimWithParentRemap() {
         int cityId = seedFullValidGeography("nv7", false);
         long revisionId = prepareAndValidate(cityId);
 
         long rootSandboxId = seedSandboxNavigationNode(
-                revisionId, "nv7-north", "CLUSTER", null, "c:nv7-north:nv7|area-1-nv7|area-2", null,
+                revisionId, "nv7-north", "DIRECTION", null, "d:nv7-north", null,
                 List.of("nv7|area-1", "nv7|area-2"), "Nv7 North", 1, 0, List.of(), 2,
                 13.015, 74.715, 13.01, 74.71, 13.02, 74.72, "fp-nv7-root");
         seedSandboxNavigationNode(
                 revisionId, "nv7-north", "AREA", rootSandboxId, "a:nv7|area-1", "nv7|area-1",
-                List.of("nv7|area-1"), "Area One", 1, 1, List.of("c:nv7-north:nv7|area-1-nv7|area-2"), 1,
+                List.of("nv7|area-1"), "Area One", 1, 1, List.of("d:nv7-north"), 1,
                 13.01, 74.71, 13.01, 74.71, 13.01, 74.71, "fp-nv7-leaf");
         seedSandboxNavigationNode(
                 revisionId, "nv7-north", "AREA", rootSandboxId, "a:nv7|area-2", "nv7|area-2",
-                List.of("nv7|area-2"), "Area Two", 2, 1, List.of("c:nv7-north:nv7|area-1-nv7|area-2"), 1,
+                List.of("nv7|area-2"), "Area Two", 2, 1, List.of("d:nv7-north"), 1,
                 13.02, 74.72, 13.02, 74.72, 13.02, 74.72, "fp-nv7-leaf");
         recomputeAndPersistChecksumWithNavigationNodes(revisionId);
 
@@ -853,9 +854,9 @@ class CityLaunchPromotionServiceIT {
         assertThat(prodNodes).hasSize(3);
 
         NavigationNode root = navigationNodeRepository
-                .findByCityIdAndNodeKey(cityId, "c:nv7-north:nv7|area-1-nv7|area-2").orElseThrow();
+                .findByCityIdAndNodeKey(cityId, "d:nv7-north").orElseThrow();
         assertThat(root.getParentNodeId()).isNull();
-        assertThat(root.getNodeType()).isEqualTo("CLUSTER");
+        assertThat(root.getNodeType()).isEqualTo("DIRECTION");
         assertThat(root.getAreaKey()).isNull();
         assertThat(root.getRepresentativeAreaKeys()).containsExactly("nv7|area-1", "nv7|area-2");
         assertThat(root.getDisplayLabel()).isEqualTo("Nv7 North");
@@ -869,7 +870,7 @@ class CityLaunchPromotionServiceIT {
         // Parent remapped from the sandbox surrogate id to the PRODUCTION surrogate id of the root.
         assertThat(leaf1.getParentNodeId()).isEqualTo(root.getId());
         // ancestor_keys are node_keys, copied VERBATIM — never remapped.
-        assertThat(leaf1.getAncestorKeys()).containsExactly("c:nv7-north:nv7|area-1-nv7|area-2");
+        assertThat(leaf1.getAncestorKeys()).containsExactly("d:nv7-north");
         assertThat(leaf1.getDisplayOrder()).isEqualTo(1);
         assertThat(leaf1.getDepth()).isEqualTo(1);
 
@@ -902,16 +903,17 @@ class CityLaunchPromotionServiceIT {
         jdbc.update("DELETE FROM public.area_alias WHERE city_id = ?", cityId);
         jdbc.update("DELETE FROM public.areas WHERE city_id = ?", cityId);
 
-        // A valid root, then an AREA leaf whose area_key references NO area anywhere in production
-        // (not even under another city) -> navigation_nodes.area_key's FK violates on INSERT.
+        // A valid root (DIRECTION — was CLUSTER pre-#1956, fixed per the D6(d) ruling), then an
+        // AREA leaf whose area_key references NO area anywhere in production (not even under
+        // another city) -> navigation_nodes.area_key's FK violates on INSERT.
         long rootSandboxId = seedSandboxNavigationNode(
-                revisionId, "rb7-north", "CLUSTER", null, "c:rb7-north:rb7|area-1", null,
+                revisionId, "rb7-north", "DIRECTION", null, "d:rb7-north", null,
                 List.of("rb7|area-1"), "Rb7 North", 1, 0, List.of(), 1,
                 13.01, 74.71, 13.01, 74.71, 13.01, 74.71, "fp-rb7-root");
         seedSandboxNavigationNode(
                 revisionId, "rb7-north", "AREA", rootSandboxId, "a:rb7|area-does-not-exist",
                 "rb7|area-does-not-exist", List.of("rb7|area-does-not-exist"), "Ghost Area", 1, 1,
-                List.of("c:rb7-north:rb7|area-1"), 1,
+                List.of("d:rb7-north"), 1,
                 13.05, 74.75, 13.05, 74.75, 13.05, 74.75, "fp-rb7-leaf");
         recomputeAndPersistChecksumWithNavigationNodes(revisionId);
 
@@ -945,53 +947,65 @@ class CityLaunchPromotionServiceIT {
     void relaunchReplacesPriorNavigationTree() {
         int cityId = seedFullValidGeography("rp7", false);
 
+        // [#1956 D3/D6, fixed] v1 = DIRECTION -> CLUSTER (a "Local Destination") -> 2 AREA leaves
+        // (was a bare CLUSTER root pre-#1956 — fixed per the D6(d) ruling so this fixture stays
+        // contract-shaped).
         long revision1 = prepareAndValidate(cityId);
-        long root1 = seedSandboxNavigationNode(
-                revision1, "rp7-north", "CLUSTER", null, "c:rp7-north:rp7|area-1-rp7|area-2", null,
+        long direction1 = seedSandboxNavigationNode(
+                revision1, "rp7-north", "DIRECTION", null, "d:rp7-north", null,
                 List.of("rp7|area-1", "rp7|area-2"), "Rp7 North v1", 1, 0, List.of(), 2,
+                13.015, 74.715, 13.01, 74.71, 13.02, 74.72, "fp-rp7-v1-direction");
+        long root1 = seedSandboxNavigationNode(
+                revision1, "rp7-north", "CLUSTER", direction1, "c:rp7-north:rp7|area-1-rp7|area-2", null,
+                List.of("rp7|area-1", "rp7|area-2"), "Rp7 North v1", 1, 1, List.of("d:rp7-north"), 2,
                 13.015, 74.715, 13.01, 74.71, 13.02, 74.72, "fp-rp7-v1-root");
         seedSandboxNavigationNode(
                 revision1, "rp7-north", "AREA", root1, "a:rp7|area-1", "rp7|area-1",
-                List.of("rp7|area-1"), "Area One", 1, 1, List.of("c:rp7-north:rp7|area-1-rp7|area-2"), 1,
+                List.of("rp7|area-1"), "Area One", 1, 2, List.of("d:rp7-north", "c:rp7-north:rp7|area-1-rp7|area-2"), 1,
                 13.01, 74.71, 13.01, 74.71, 13.01, 74.71, "fp-rp7-v1-leaf");
         seedSandboxNavigationNode(
                 revision1, "rp7-north", "AREA", root1, "a:rp7|area-2", "rp7|area-2",
-                List.of("rp7|area-2"), "Area Two", 2, 1, List.of("c:rp7-north:rp7|area-1-rp7|area-2"), 1,
+                List.of("rp7|area-2"), "Area Two", 2, 2, List.of("d:rp7-north", "c:rp7-north:rp7|area-1-rp7|area-2"), 1,
                 13.02, 74.72, 13.02, 74.72, 13.02, 74.72, "fp-rp7-v1-leaf");
         recomputeAndPersistChecksumWithNavigationNodes(revision1);
 
         PromotionReport firstReport = promotionService.launch(cityId, revision1, ADMIN_ID.toString());
-        assertThat(firstReport.navigationNodesPromoted()).isEqualTo(3);
-        assertThat(navigationNodeRepository.findByCityIdOrderByDepthAscDisplayOrderAsc(cityId)).hasSize(3);
+        assertThat(firstReport.navigationNodesPromoted()).isEqualTo(4);
+        assertThat(navigationNodeRepository.findByCityIdOrderByDepthAscDisplayOrderAsc(cityId)).hasSize(4);
 
         // Second revision, same city, SAME canonical geography (unchanged) but a DIFFERENT nav-tree
-        // shape: no CLUSTER this time, just two flat AREA roots directly under the region.
+        // shape: no CLUSTER this time -- the 2 AREA leaves sit directly beneath the DIRECTION root
+        // (still contract-shaped: City -> Direction -> AREA, just without a Local Destination level).
         long revision2 = prepareAndValidate(cityId);
         // uq_clr_current_promoted allows only ONE non-superseded PROMOTED row per city; supersede
         // revision1 (out of this test's scope to exercise the real rerunSuperseding flow, which is
         // for PREPARED/VALIDATED revisions, not an already-PROMOTED one) so revision2 can promote.
         jdbc.update("UPDATE public.city_launch_revision SET superseded_by = ? WHERE id = ?", revision2, revision1);
+        long direction2 = seedSandboxNavigationNode(
+                revision2, "rp7-north", "DIRECTION", null, "d:rp7-north", null,
+                List.of("rp7|area-1", "rp7|area-2"), "Rp7 North v2", 1, 0, List.of(), 2,
+                13.015, 74.715, 13.01, 74.71, 13.02, 74.72, "fp-rp7-v2-direction");
         seedSandboxNavigationNode(
-                revision2, "rp7-north", "AREA", null, "a:rp7|area-1", "rp7|area-1",
-                List.of("rp7|area-1"), "Area One (flat)", 1, 0, List.of(), 1,
+                revision2, "rp7-north", "AREA", direction2, "a:rp7|area-1", "rp7|area-1",
+                List.of("rp7|area-1"), "Area One (flat)", 1, 1, List.of("d:rp7-north"), 1,
                 13.01, 74.71, 13.01, 74.71, 13.01, 74.71, "fp-rp7-v2-leaf");
         seedSandboxNavigationNode(
-                revision2, "rp7-north", "AREA", null, "a:rp7|area-2", "rp7|area-2",
-                List.of("rp7|area-2"), "Area Two (flat)", 2, 0, List.of(), 1,
+                revision2, "rp7-north", "AREA", direction2, "a:rp7|area-2", "rp7|area-2",
+                List.of("rp7|area-2"), "Area Two (flat)", 2, 1, List.of("d:rp7-north"), 1,
                 13.02, 74.72, 13.02, 74.72, 13.02, 74.72, "fp-rp7-v2-leaf");
         recomputeAndPersistChecksumWithNavigationNodes(revision2);
 
         PromotionReport secondReport = promotionService.launch(cityId, revision2, ADMIN_ID.toString());
         assertThat(secondReport.idempotentNoop()).isFalse();
-        assertThat(secondReport.navigationNodesPromoted()).isEqualTo(2);
+        assertThat(secondReport.navigationNodesPromoted()).isEqualTo(3);
 
         List<NavigationNode> prodNodesAfterRelaunch =
                 navigationNodeRepository.findByCityIdOrderByDepthAscDisplayOrderAsc(cityId);
-        assertThat(prodNodesAfterRelaunch).hasSize(2);
-        assertThat(prodNodesAfterRelaunch).allSatisfy(n -> {
-            assertThat(n.getNodeType()).isEqualTo("AREA");
-            assertThat(n.getParentNodeId()).isNull();
-        });
+        assertThat(prodNodesAfterRelaunch).hasSize(3);
+        assertThat(prodNodesAfterRelaunch).filteredOn(n -> "AREA".equals(n.getNodeType())).hasSize(2)
+                .allSatisfy(n -> assertThat(n.getParentNodeId()).isNotNull());
+        assertThat(prodNodesAfterRelaunch).filteredOn(n -> "DIRECTION".equals(n.getNodeType())).hasSize(1)
+                .allSatisfy(n -> assertThat(n.getParentNodeId()).isNull());
         // The first revision's CLUSTER root is genuinely gone -- not just superseded/orphaned.
         assertThat(navigationNodeRepository.findByCityIdAndNodeKey(
                 cityId, "c:rp7-north:rp7|area-1-rp7|area-2")).isEmpty();

@@ -387,9 +387,14 @@ class NavigationGraphCacheLifecycleIT {
                 Long.class, cityId, nextRevisionNumber++);
     }
 
-    /** One CLUSTER root + 2 AREA leaves — the smallest tree shape that satisfies every
-     *  {@link NavigationTreeValidationService} check (no one-child clusters, gapless sibling
-     *  display_order, correct descendant_area_count/ancestor_keys, all bounds present). */
+    /** [#1956 D3/D6, fixed] One DIRECTION root (was CLUSTER pre-#1956 — flagged in PR1's report and
+     *  fixed here per the D6(d) ruling) + 2 AREA leaves — the smallest tree shape that satisfies
+     *  every {@link NavigationTreeValidationService} check, INCLUDING #14 (hierarchy shape: every
+     *  root must be a DIRECTION, and depth may never exceed the max public depth of 2 — this shape
+     *  uses depths 0/1, well within it) — no one-child clusters, gapless sibling display_order,
+     *  correct descendant_area_count/ancestor_keys, all bounds present. Requires V123 (widens the
+     *  {@code node_type} CHECK to admit 'DIRECTION'), already on the classpath via
+     *  {@code classpath:db/migration}. */
     private void seedSimpleTree(int cityId, String rootNodeKey, String areaKeyPrefix) {
         String area1 = areaKeyPrefix + "-1";
         String area2 = areaKeyPrefix + "-2";
@@ -398,12 +403,12 @@ class NavigationGraphCacheLifecycleIT {
         jdbc.update("INSERT INTO public.areas (area_key, city_id, name, geo_center_lat, geo_center_lon) "
                 + "VALUES (?, ?, ?, 13.06, 77.60)", area2, cityId, area2);
 
-        long clusterId = jdbc.queryForObject(
+        long directionId = jdbc.queryForObject(
                 "INSERT INTO public.navigation_nodes (city_id, region_key, node_type, parent_node_id, "
                         + "node_key, area_key, representative_area_keys, display_label, display_order, depth, "
                         + "ancestor_keys, descendant_area_count, centre_lat, centre_lon, min_lat, min_lon, "
                         + "max_lat, max_lon, policy_fingerprint, generated_at) "
-                        + "VALUES (?, 'north', 'CLUSTER', NULL, ?, NULL, ARRAY[?, ?]::text[], ?, 1, 0, "
+                        + "VALUES (?, 'north', 'DIRECTION', NULL, ?, NULL, ARRAY[?, ?]::text[], ?, 1, 0, "
                         + "ARRAY[]::text[], 2, 13.05, 77.59, 13.0, 77.5, 13.1, 77.7, 'fp', now()) RETURNING id",
                 Long.class, cityId, rootNodeKey, area1, area2, rootNodeKey);
 
@@ -414,7 +419,7 @@ class NavigationGraphCacheLifecycleIT {
                         + "max_lat, max_lon, policy_fingerprint, generated_at) "
                         + "VALUES (?, 'north', 'AREA', ?, ?, ?, ARRAY[?]::text[], ?, 1, 1, ARRAY[?]::text[], 1, "
                         + "13.05, 77.59, 13.04, 77.49, 13.06, 77.51, 'fp', now())",
-                cityId, clusterId, rootNodeKey + "-a1", area1, area1, area1, rootNodeKey);
+                cityId, directionId, rootNodeKey + "-a1", area1, area1, area1, rootNodeKey);
 
         jdbc.update(
                 "INSERT INTO public.navigation_nodes (city_id, region_key, node_type, parent_node_id, "
@@ -423,6 +428,6 @@ class NavigationGraphCacheLifecycleIT {
                         + "max_lat, max_lon, policy_fingerprint, generated_at) "
                         + "VALUES (?, 'north', 'AREA', ?, ?, ?, ARRAY[?]::text[], ?, 2, 1, ARRAY[?]::text[], 1, "
                         + "13.06, 77.60, 13.05, 77.50, 13.07, 77.52, 'fp', now())",
-                cityId, clusterId, rootNodeKey + "-a2", area2, area2, area2, rootNodeKey);
+                cityId, directionId, rootNodeKey + "-a2", area2, area2, area2, rootNodeKey);
     }
 }

@@ -56,41 +56,52 @@ class NavigationTreeGeneratorTest {
     }
 
     @Test
-    @DisplayName("1 area -> single AREA root leaf, no CLUSTER wrapper")
+    @DisplayName("[#1956 D3] 1 area -> DIRECTION root + single AREA leaf beneath it, no CLUSTER wrapper")
     void oneArea() {
         GeneratorArea a = area("city|a1", "Area One", 12.0);
         List<GeneratedNode> result = generator.generateRegion(
                 "north", List.of(a), policy(4, 2, 5, true), FINGERPRINT, GENERATED_AT, new HashSet<>());
 
-        assertThat(result).hasSize(1);
-        GeneratedNode node = result.get(0);
-        assertThat(node.nodeType()).isEqualTo("AREA");
+        assertThat(result).hasSize(2);
+        GeneratedNode direction = result.stream().filter(n -> "DIRECTION".equals(n.nodeType())).findFirst().orElseThrow();
+        assertThat(direction.nodeKey()).isEqualTo("d:north");
+        assertThat(direction.parentNodeKey()).isNull();
+        assertThat(direction.depth()).isEqualTo(0);
+        assertThat(direction.ancestorKeys()).isEmpty();
+        assertThat(direction.descendantAreaCount()).isEqualTo(1);
+
+        GeneratedNode node = result.stream().filter(n -> "AREA".equals(n.nodeType())).findFirst().orElseThrow();
         assertThat(node.nodeKey()).isEqualTo("a:city|a1");
-        assertThat(node.parentNodeKey()).isNull();
-        assertThat(node.depth()).isEqualTo(0);
+        assertThat(node.parentNodeKey()).isEqualTo("d:north");
+        assertThat(node.depth()).isEqualTo(1);
         assertThat(node.descendantAreaCount()).isEqualTo(1);
         assertThat(node.displayLabel()).isEqualTo("Area One");
-        assertThat(node.ancestorKeys()).isEmpty();
+        assertThat(node.ancestorKeys()).containsExactly("d:north");
     }
 
     @Test
-    @DisplayName("2 areas within max_direct_children -> two AREA root leaves, no CLUSTER")
+    @DisplayName("[#1956 D3] 2 areas within max_direct_children -> DIRECTION root + two AREA leaves, no CLUSTER")
     void twoAreasFitDirectly() {
         List<GeneratorArea> areas = List.of(area("city|a1", "A1", 12.0), area("city|a2", "A2", 12.1));
         List<GeneratedNode> result = generator.generateRegion(
                 "north", areas, policy(4, 2, 5, true), FINGERPRINT, GENERATED_AT, new HashSet<>());
 
-        assertThat(result).hasSize(2);
-        assertThat(result).allMatch(n -> "AREA".equals(n.nodeType()) && n.parentNodeKey() == null && n.depth() == 0);
-        assertThat(result).extracting(GeneratedNode::displayOrder).containsExactly(1, 2);
+        assertThat(result).hasSize(3);
+        List<GeneratedNode> leaves = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
+        assertThat(leaves).hasSize(2);
+        assertThat(leaves).allMatch(n -> "d:north".equals(n.parentNodeKey()) && n.depth() == 1);
+        assertThat(leaves).extracting(GeneratedNode::displayOrder).containsExactly(1, 2);
     }
 
     // ── Genuine multi-level cluster city ────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("16 areas, max_direct_children=2 -> a genuine 3 CLUSTER-level tree (depths 0,1,2), "
-            + "AREA leaves at depth 3, every node's descendant_area_count and bounds correct")
-    void genuineThreeClusterLevelCity() {
+    @DisplayName("[#1956 D3] 16 areas, max_direct_children=2 -> DIRECTION root at depth 0, a genuine "
+            + "3 CLUSTER-level tree (depths 1,2,3), AREA leaves at depth 4, every node's "
+            + "descendant_area_count and bounds correct — but #1956/#2014's locked product contract "
+            + "permits only ONE CLUSTER level (max public depth 2), so this deep-but-structurally-"
+            + "sound tree now FAILS validation with INVALID_HIERARCHY_SHAPE, not despite it")
+    void genuineThreeClusterLevelCity_producesStructureButFailsContractShapeValidation() {
         List<GeneratorArea> areas = new ArrayList<>();
         for (int i = 0; i < 16; i++) {
             areas.add(area(String.format("city|z%02d", i), "Area " + i, 12.0 + i * 0.1));
@@ -99,26 +110,39 @@ class NavigationTreeGeneratorTest {
         List<GeneratedNode> result = generator.generateRegion(
                 "north", areas, policy, FINGERPRINT, GENERATED_AT, new HashSet<>());
 
+        // The generator itself is UNCHANGED and still recursion-capable: given a policy that
+        // allows it (max_safety_depth=10 here), it still mechanically produces a genuine 3
+        // CLUSTER-level tree. This capability is deliberately still proven below — only the
+        // VALIDATION expectation changed (#1956/#2014 D6(d) ruling), not the generator.
         Set<Integer> clusterDepths = result.stream()
                 .filter(n -> "CLUSTER".equals(n.nodeType()))
                 .map(GeneratedNode::depth)
                 .collect(Collectors.toSet());
-        assertThat(clusterDepths).containsExactlyInAnyOrder(0, 1, 2);
+        assertThat(clusterDepths).containsExactlyInAnyOrder(1, 2, 3);
 
         List<GeneratedNode> leaves = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
         assertThat(leaves).hasSize(16);
-        assertThat(leaves).allMatch(n -> n.depth() == 3);
+        assertThat(leaves).allMatch(n -> n.depth() == 4);
 
         assertDescendantCountsAndBoundsCorrectEverywhere(result);
-        assertValidatesCleanly(result);
+
+        // #1956/#2014 D6(d), owned ruling: a third public CLUSTER level (depths 2,3 here) and any
+        // node beyond the max public depth of 2 (depth 4 leaves here) is NOT a legal public shape,
+        // regardless of the generator's mechanical capability — NavigationTreeValidationService
+        // check #14 rejects it with INVALID_HIERARCHY_SHAPE, independent of check #11's
+        // policy-driven max_safety_depth (which this test's policy of 10 would otherwise permit).
+        assertFailsWithHierarchyShapeViolation(result);
     }
 
     // ── Recursive termination + max-depth guard ─────────────────────────────────────────────
 
     @Test
-    @DisplayName("max_safety_depth forces AREA leaves even when member count still exceeds "
-            + "max_direct_children — no node ever exceeds the depth ceiling")
-    void maxSafetyDepthTerminatesRecursion() {
+    @DisplayName("[#1956 D3/D5] max_safety_depth forces AREA leaves even when member count still "
+            + "exceeds max_direct_children — no node ever exceeds the depth ceiling (now "
+            + "max_safety_depth + 1, since depth 0 is occupied by the DIRECTION root) — but with "
+            + "max_safety_depth=2 the leaves land at depth 3, itself beyond #1956/#2014's max public "
+            + "depth of 2, so this ALSO now fails contract-shape validation")
+    void maxSafetyDepthTerminatesRecursion_producesStructureButFailsContractShapeValidation() {
         List<GeneratorArea> areas = new ArrayList<>();
         for (int i = 0; i < 8; i++) {
             areas.add(area(String.format("city|d%02d", i), "D" + i, 12.0 + i * 0.1));
@@ -127,21 +151,28 @@ class NavigationTreeGeneratorTest {
         List<GeneratedNode> result = generator.generateRegion(
                 "north", areas, policy, FINGERPRINT, GENERATED_AT, new HashSet<>());
 
-        assertThat(result).allMatch(n -> n.depth() <= 2);
+        assertThat(result).allMatch(n -> n.depth() <= 3);
         List<GeneratedNode> leaves = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
         assertThat(leaves).hasSize(8);
-        // Every leaf sits at exactly the safety depth (2 areas remained per parent at that depth,
-        // exceeding max_direct_children=1, yet leafed anyway because depth hit the ceiling).
-        assertThat(leaves).allMatch(n -> n.depth() == 2);
+        // Every leaf sits at exactly the safety depth + 1 (2 areas remained per parent at cluster
+        // depth 2, exceeding max_direct_children=1, yet leafed anyway because cluster depth hit
+        // the max_safety_depth=2 ceiling; +1 for the DIRECTION level now above it). The generator's
+        // recursion-termination behaviour is UNCHANGED and still proven here.
+        assertThat(leaves).allMatch(n -> n.depth() == 3);
 
         assertDescendantCountsAndBoundsCorrectEverywhere(result);
-        assertValidatesCleanly(result);
+
+        // #1956/#2014 D6(d): depth 3 leaves exceed the max public depth of 2 — a policy of
+        // max_safety_depth=2 is a legal OPERATOR value (check #11 alone would accept depth <= 3),
+        // but the resulting tree is still not a legal PUBLIC shape, so check #14 rejects it too.
+        assertFailsWithHierarchyShapeViolation(result);
     }
 
     // ── Meaningless-split fallback (one-child + below-minimum) ──────────────────────────────
 
     @Test
-    @DisplayName("a split that would create a one-child cluster collapses to AREA leaves instead")
+    @DisplayName("[#1956 D3] a split that would create a one-child cluster collapses to AREA leaves "
+            + "directly beneath the DIRECTION root instead")
     void oneChildSplitCollapsesToLeaves() {
         List<GeneratorArea> areas = List.of(
                 area("city|o1", "O1", 12.0), area("city|o2", "O2", 12.1), area("city|o3", "O3", 12.2));
@@ -150,12 +181,15 @@ class NavigationTreeGeneratorTest {
         List<GeneratedNode> result = generator.generateRegion(
                 "north", areas, policy, FINGERPRINT, GENERATED_AT, new HashSet<>());
 
-        assertThat(result).hasSize(3);
-        assertThat(result).allMatch(n -> "AREA".equals(n.nodeType()) && n.depth() == 0 && n.parentNodeKey() == null);
+        assertThat(result).hasSize(4); // DIRECTION + 3 AREA leaves
+        List<GeneratedNode> leaves = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
+        assertThat(leaves).hasSize(3);
+        assertThat(leaves).allMatch(n -> n.depth() == 1 && "d:north".equals(n.parentNodeKey()));
     }
 
     @Test
-    @DisplayName("a split whose partition falls below min_areas_per_cluster collapses to AREA leaves")
+    @DisplayName("[#1956 D3] a split whose partition falls below min_areas_per_cluster collapses to "
+            + "AREA leaves directly beneath the DIRECTION root")
     void belowMinimumSplitCollapsesToLeaves() {
         List<GeneratorArea> areas = new ArrayList<>();
         for (int i = 0; i < 5; i++) {
@@ -167,8 +201,10 @@ class NavigationTreeGeneratorTest {
         List<GeneratedNode> result = generator.generateRegion(
                 "north", areas, policy, FINGERPRINT, GENERATED_AT, new HashSet<>());
 
-        assertThat(result).hasSize(5);
-        assertThat(result).allMatch(n -> "AREA".equals(n.nodeType()) && n.depth() == 0);
+        assertThat(result).hasSize(6); // DIRECTION + 5 AREA leaves
+        List<GeneratedNode> leaves = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
+        assertThat(leaves).hasSize(5);
+        assertThat(leaves).allMatch(n -> n.depth() == 1);
     }
 
     // ── Fixed-order determinism + geometric near-tie ────────────────────────────────────────
@@ -222,8 +258,8 @@ class NavigationTreeGeneratorTest {
     // ── Stable labels + ordering ─────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("CLUSTER display_label is built purely from representative area names, siblings "
-            + "have a gapless 1..n display_order")
+    @DisplayName("[#1956 D3] CLUSTER display_label is built purely from representative area names, "
+            + "the two CLUSTERs beneath the DIRECTION root have a gapless 1..n display_order")
     void stableLabelsAndOrdering() {
         List<GeneratorArea> areas = new ArrayList<>();
         for (int i = 0; i < 6; i++) {
@@ -233,11 +269,12 @@ class NavigationTreeGeneratorTest {
         List<GeneratedNode> result = generator.generateRegion(
                 "north", areas, policy, FINGERPRINT, GENERATED_AT, new HashSet<>());
 
-        List<GeneratedNode> clusterRoots = result.stream()
-                .filter(n -> n.parentNodeKey() == null)
+        GeneratedNode direction = result.stream().filter(n -> "DIRECTION".equals(n.nodeType())).findFirst().orElseThrow();
+        List<GeneratedNode> topClusters = result.stream()
+                .filter(n -> direction.nodeKey().equals(n.parentNodeKey()))
                 .toList();
-        assertThat(clusterRoots).extracting(GeneratedNode::displayOrder).containsExactly(1, 2);
-        assertThat(clusterRoots).allMatch(n -> n.displayLabel() != null && !n.displayLabel().isBlank());
+        assertThat(topClusters).extracting(GeneratedNode::displayOrder).containsExactly(1, 2);
+        assertThat(topClusters).allMatch(n -> n.displayLabel() != null && !n.displayLabel().isBlank());
 
         // No AREA node ever invents a marketing label — its label is exactly its own name.
         result.stream().filter(n -> "AREA".equals(n.nodeType())).forEach(n ->
@@ -266,8 +303,11 @@ class NavigationTreeGeneratorTest {
         List<GeneratedNode> result = generator.generateRegion(
                 "north", areas, policy, FINGERPRINT, GENERATED_AT, usedClusterKeys);
 
+        // [#1956 D3] the top-level clusters now sit at depth 1 (beneath the DIRECTION root at
+        // depth 0), not depth 0 — filtered by representativeAreaKeys instead of depth to find the
+        // one under test.
         GeneratedNode target = result.stream()
-                .filter(n -> "CLUSTER".equals(n.nodeType()) && n.depth() == 0)
+                .filter(n -> "CLUSTER".equals(n.nodeType()))
                 .filter(n -> n.representativeAreaKeys().equals(List.of("grp|c1", "grp|c2")))
                 .findFirst()
                 .orElseThrow();
@@ -306,8 +346,9 @@ class NavigationTreeGeneratorTest {
     // ── Whole-city generation across multiple regions, shared node_key uniqueness ───────────
 
     @Test
-    @DisplayName("generateCity processes regions in fixed region_key order and shares node_key "
-            + "uniqueness across all of them")
+    @DisplayName("[#1956 D4] generateCity processes regions in canonical displayOrder (tie-broken by "
+            + "region_key when, as here via the 2-arg GeneratorRegionInput constructor, every region "
+            + "defaults to the same displayOrder) and shares node_key uniqueness across all of them")
     void generateCitySortsRegionsAndSharesKeySpace() {
         GeneratorRegionInput south = new GeneratorRegionInput("south",
                 List.of(area("city|s1", "S1", 11.0)));
@@ -317,15 +358,18 @@ class NavigationTreeGeneratorTest {
         List<GeneratedNode> result = generator.generateCity(
                 List.of(south, north), policy(4, 2, 5, true), FINGERPRINT, GENERATED_AT);
 
-        assertThat(result).extracting(GeneratedNode::regionKey).containsExactly("north", "south");
+        // [#1956 D3] each single-area region now contributes 2 nodes (DIRECTION + AREA), not 1.
+        assertThat(result).extracting(GeneratedNode::regionKey)
+                .containsExactly("north", "north", "south", "south");
         assertThat(result).extracting(GeneratedNode::nodeKey).doesNotHaveDuplicates();
     }
 
     // ── #<root-display-order-fix> regression: generateCity root display_order sequencing ────
 
-    /** Three regions, each with 2 areas that fit directly (max_direct_children=4) -> every node
-     * is an AREA root leaf (parentNodeKey == null), reproducing exactly the pre-fix collision
-     * condition: >=2 regions, each contributing its own depth-0 nodes. */
+    /** Three regions, each with 2 areas that fit directly (max_direct_children=4) -> each region
+     * contributes exactly one DIRECTION root (parentNodeKey == null, #1956 D3) plus 2 AREA leaves
+     * beneath it, reproducing exactly the pre-fix collision condition: >=2 regions, each
+     * contributing its own depth-0 root node. */
     private List<GeneratedNode> multiRegionRootOnlyCity(List<GeneratorRegionInput> regionsInOrder) {
         return generator.generateCity(regionsInOrder, policy(4, 2, 5, true), FINGERPRINT, GENERATED_AT);
     }
@@ -342,12 +386,14 @@ class NavigationTreeGeneratorTest {
 
     @Test
     @DisplayName("[regression] generateCity output for a multi-region city (>=2 regions, each "
-            + "contributing root nodes) validates cleanly against NavigationTreeValidationService "
-            + "invariant #8 (no duplicate display_order among parentNodeKey=null siblings)")
+            + "contributing a DIRECTION root node — #1956 D3) validates cleanly against "
+            + "NavigationTreeValidationService invariant #8 (no duplicate display_order among "
+            + "parentNodeKey=null siblings)")
     void generateCity_multiRegion_validatesCleanly() {
         List<GeneratedNode> result = multiRegionRootOnlyCity(threeRegionFixture());
 
-        assertThat(result).hasSize(6);
+        // [#1956 D3] 3 regions x (1 DIRECTION + 2 AREA leaves each) = 9 nodes, not 6.
+        assertThat(result).hasSize(9);
         assertValidatesCleanly(result);
     }
 
@@ -364,8 +410,10 @@ class NavigationTreeGeneratorTest {
                 .toList();
 
         assertThat(rootOrders).doesNotHaveDuplicates();
+        // [#1956 D3] roots are now exactly the 3 DIRECTION nodes (one per region), not every node
+        // in the tree — the gapless range bound is rootOrders.size(), not result.size().
         assertThat(rootOrders).containsExactlyElementsOf(
-                java.util.stream.IntStream.rangeClosed(1, result.size()).boxed().toList());
+                java.util.stream.IntStream.rangeClosed(1, rootOrders.size()).boxed().toList());
     }
 
     @Test
@@ -402,7 +450,11 @@ class NavigationTreeGeneratorTest {
                 policy, FINGERPRINT, GENERATED_AT);
 
         assertThat(viaPublicRegionApi).isEqualTo(viaCityApiSingleRegion);
-        assertThat(viaPublicRegionApi).extracting(GeneratedNode::displayOrder).containsExactly(1, 2, 3);
+        // [#1956 D3] DIRECTION root gets display_order=1 (the shared root counter); its 3 AREA
+        // children get their OWN gapless 1..3 local order beneath it — displayOrder is no longer a
+        // single city-wide sequence across every node, only across roots (here, one root: the
+        // Direction) and, separately, within each parent's own children.
+        assertThat(viaPublicRegionApi).extracting(GeneratedNode::displayOrder).containsExactly(1, 1, 2, 3);
         assertValidatesCleanly(viaPublicRegionApi);
     }
 
@@ -448,6 +500,92 @@ class NavigationTreeGeneratorTest {
         assertValidatesCleanly(result);
     }
 
+    // ── #1956 regression coverage: DIRECTION hierarchy shape ────────────────────────────────────
+
+    @Test
+    @DisplayName("[#1956 regression] max_safety_depth=0 -> exactly Direction -> AREA (no CLUSTER "
+            + "nodes at all) and the tree validates cleanly")
+    void maxSafetyDepthZero_producesDirectionToAreaShapeOnly() {
+        List<GeneratorArea> areas = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            areas.add(area(String.format("city|z%d", i), "Z" + i, 12.0 + i * 0.1));
+        }
+        GeneratorPolicy policy = policy(4, 2, 0, true);
+        List<GeneratedNode> result = generator.generateRegion(
+                "north", areas, policy, FINGERPRINT, GENERATED_AT, new HashSet<>());
+
+        assertThat(result.stream().map(GeneratedNode::nodeType).collect(Collectors.toSet()))
+                .containsExactlyInAnyOrder("DIRECTION", "AREA");
+        List<GeneratedNode> leaves = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
+        assertThat(leaves).hasSize(6);
+        assertThat(leaves).allMatch(n -> n.depth() == 1 && "d:north".equals(n.parentNodeKey()));
+        assertValidatesCleanly(result);
+    }
+
+    @Test
+    @DisplayName("[#1956 regression] every AREA in a multi-region city descends from its OWN region's "
+            + "DIRECTION: parentNodeKey and ancestorKeys[0] both point at it, ancestorKeys is never "
+            + "empty, and the AREA's region_key always matches its DIRECTION ancestor's region_key")
+    void everyArea_descendsFromOwnRegionDirection_andRegionKeysAgree() {
+        List<GeneratedNode> result = multiRegionRootOnlyCity(threeRegionFixture());
+
+        Map<String, GeneratedNode> directionsByRegion = result.stream()
+                .filter(n -> "DIRECTION".equals(n.nodeType()))
+                .collect(Collectors.toMap(GeneratedNode::regionKey, n -> n));
+        assertThat(directionsByRegion).hasSize(3);
+
+        List<GeneratedNode> areas = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
+        assertThat(areas).hasSize(6);
+        for (GeneratedNode areaNode : areas) {
+            assertThat(areaNode.ancestorKeys()).as("ancestorKeys for " + areaNode.nodeKey()).isNotEmpty();
+            GeneratedNode ownDirection = directionsByRegion.get(areaNode.regionKey());
+            assertThat(ownDirection).as("a DIRECTION must exist for region " + areaNode.regionKey()).isNotNull();
+            assertThat(areaNode.parentNodeKey()).isEqualTo(ownDirection.nodeKey());
+            assertThat(areaNode.ancestorKeys().get(0)).isEqualTo(ownDirection.nodeKey());
+            assertThat(areaNode.regionKey()).isEqualTo(ownDirection.regionKey());
+        }
+    }
+
+    @Test
+    @DisplayName("[#1956 D4 regression] DIRECTION display_order is gapless 1..N across the city and "
+            + "follows CANONICAL region order (CENTRAL,N,E,S,W), not the alphabetical region_key sort "
+            + "generateCity uses for processing determinism — fixture deliberately makes the two "
+            + "orders disagree so a regression to alphabetical numbering would be caught")
+    void directionDisplayOrder_followsCanonicalRegionOrder_notAlphabetical() {
+        // Canonical order is CENTRAL, N, E, S, W. Alphabetically by region_key it would instead be
+        // central, east, north, south, west (east and north swapped relative to canonical) — proof
+        // that display_order truly tracks the canonical sequence, not a re-derived alphabetical one.
+        GeneratorRegionInput central = new GeneratorRegionInput(
+                "central", List.of(area("city|c1", "C1", 10.0)), 1, "Central");
+        GeneratorRegionInput north = new GeneratorRegionInput(
+                "north", List.of(area("city|n1", "N1", 20.0)), 2, "North");
+        GeneratorRegionInput east = new GeneratorRegionInput(
+                "east", List.of(area("city|e1", "E1", 15.0)), 3, "East");
+        GeneratorRegionInput south = new GeneratorRegionInput(
+                "south", List.of(area("city|s1", "S1", 5.0)), 4, "South");
+        GeneratorRegionInput west = new GeneratorRegionInput(
+                "west", List.of(area("city|w1", "W1", 25.0)), 5, "West");
+
+        List<GeneratedNode> result = generator.generateCity(
+                List.of(east, west, central, south, north), // shuffled input, alphabetical-ish disorder
+                policy(4, 2, 5, true), FINGERPRINT, GENERATED_AT);
+
+        Map<String, Integer> directionOrderByRegion = result.stream()
+                .filter(n -> "DIRECTION".equals(n.nodeType()))
+                .collect(Collectors.toMap(GeneratedNode::regionKey, GeneratedNode::displayOrder));
+
+        assertThat(directionOrderByRegion).containsOnly(
+                Map.entry("central", 1), Map.entry("north", 2), Map.entry("east", 3),
+                Map.entry("south", 4), Map.entry("west", 5));
+
+        List<Integer> gapless = directionOrderByRegion.values().stream().sorted().toList();
+        assertThat(gapless).containsExactly(1, 2, 3, 4, 5);
+
+        // The alphabetical region_key order would have placed "east" (order=3 here) BEFORE "north"
+        // (order=2 here) — asserting the opposite confirms canonical, not alphabetical, ordering won.
+        assertThat(directionOrderByRegion.get("north")).isLessThan(directionOrderByRegion.get("east"));
+    }
+
     // ── Shared helpers ────────────────────────────────────────────────────────────────────────
 
     private void assertDescendantCountsAndBoundsCorrectEverywhere(List<GeneratedNode> nodes) {
@@ -489,5 +627,21 @@ class NavigationTreeGeneratorTest {
                 .toList();
         ValidationReport report = new NavigationTreeValidationService().validate(validationNodes);
         assertThat(report.errors()).as("generated tree should validate cleanly").isEmpty();
+    }
+
+    /** [#1956/#2014 D6(d)] Cross-checks a generated tree through the validation service and asserts
+     * it is REJECTED specifically for exceeding the locked product contract's two approved public
+     * shapes (a third CLUSTER level and/or a node beyond max public depth 2) — used by tests that
+     * deliberately construct a policy allowing the generator to recurse deeper than the contract
+     * permits, to prove check #14 (not merely check #11) catches it. */
+    private void assertFailsWithHierarchyShapeViolation(List<GeneratedNode> nodes) {
+        List<ValidationNode> validationNodes = nodes.stream()
+                .map(n -> ValidationNode.fromGeneratedNode(1L, n))
+                .toList();
+        ValidationReport report = new NavigationTreeValidationService().validate(validationNodes);
+        assertThat(report.errors())
+                .as("a tree exceeding the max public depth of 2 must fail hierarchy-shape validation")
+                .extracting(ValidationError::code)
+                .contains("INVALID_HIERARCHY_SHAPE");
     }
 }

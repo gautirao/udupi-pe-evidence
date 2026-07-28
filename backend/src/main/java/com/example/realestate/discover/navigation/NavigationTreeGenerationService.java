@@ -93,6 +93,13 @@ public class NavigationTreeGenerationService {
                         Collectors.mapping(CanonicalGeographyReader.CanonicalCityRegionMembership::areaKey,
                                 Collectors.toList())));
 
+        // #1956 D4: canonical region displayOrder/displayLabel (city_regions, already loaded by
+        // CanonicalGeographyReader) — threaded through GeneratorRegionInput so the generator can
+        // number each region's DIRECTION root in CANONICAL region order (CENTRAL, N, E, S, W), not
+        // the region_key alphabetical sort generateCity uses for processing determinism.
+        Map<String, CanonicalGeographyReader.CanonicalCityRegion> regionByKey = geography.regions().stream()
+                .collect(Collectors.toMap(CanonicalGeographyReader.CanonicalCityRegion::regionKey, r -> r, (a, b) -> a));
+
         List<GeneratorRegionInput> regionInputs = new ArrayList<>();
         for (Map.Entry<String, List<String>> e : areaKeysByRegion.entrySet()) {
             List<GeneratorArea> members = new ArrayList<>();
@@ -112,7 +119,12 @@ public class NavigationTreeGenerationService {
                 }
                 members.add(generatorArea);
             }
-            regionInputs.add(new GeneratorRegionInput(e.getKey(), members));
+            CanonicalGeographyReader.CanonicalCityRegion regionMeta = regionByKey.get(e.getKey());
+            int regionDisplayOrder = regionMeta != null && regionMeta.displayOrder() != null
+                    ? regionMeta.displayOrder() : 0;
+            String regionDisplayLabel = regionMeta != null && regionMeta.displayLabel() != null
+                    ? regionMeta.displayLabel() : e.getKey();
+            regionInputs.add(new GeneratorRegionInput(e.getKey(), members, regionDisplayOrder, regionDisplayLabel));
         }
 
         List<SandboxNavigationOverride> overrideRows =

@@ -54,9 +54,14 @@ public class NavigationTreeOverrideApplier {
 
         Map<String, List<GeneratorArea>> membersByRegion = new LinkedHashMap<>();
         Map<String, GeneratorArea> areaByKey = new LinkedHashMap<>();
+        // #1956 D4: preserved so the reconstruction below never loses a region's canonical
+        // displayOrder/displayLabel — every key membersByRegion ends up with was seeded from this
+        // same regions list, so this lookup is always non-null at reconstruction time.
+        Map<String, GeneratorRegionInput> originalByRegionKey = new LinkedHashMap<>();
         for (GeneratorRegionInput r : regions) {
             List<GeneratorArea> members = new ArrayList<>(r.members());
             membersByRegion.put(r.regionKey(), members);
+            originalByRegionKey.put(r.regionKey(), r);
             for (GeneratorArea a : members) {
                 areaByKey.put(a.areaKey(), a);
             }
@@ -85,7 +90,12 @@ public class NavigationTreeOverrideApplier {
                 });
 
         return membersByRegion.entrySet().stream()
-                .map(e -> new GeneratorRegionInput(e.getKey(), e.getValue()))
+                .map(e -> {
+                    GeneratorRegionInput original = originalByRegionKey.get(e.getKey());
+                    int displayOrder = original != null ? original.displayOrder() : 0;
+                    String displayLabel = original != null ? original.displayLabel() : e.getKey();
+                    return new GeneratorRegionInput(e.getKey(), e.getValue(), displayOrder, displayLabel);
+                })
                 .toList();
     }
 

@@ -15,20 +15,26 @@ import java.util.List;
  * </ul>
  * {@code scopeId} generalizes {@code city_id}/{@code revision_id} for the cross-scope-parentage
  * check.
+ *
+ * <p>{@code regionKey} (#1956 D6, additive) is the node's own {@code region_key} column — carried
+ * so {@link NavigationTreeValidationService}'s new hierarchy-shape invariant can confirm it agrees
+ * with the region_key of the node's DIRECTION ancestor.
  */
 public record ValidationNode(
         Long scopeId, String nodeKey, String parentNodeKey, String nodeType, String areaKey,
         List<String> representativeAreaKeys, int depth, List<String> ancestorKeys,
         int descendantAreaCount, int displayOrder,
         BigDecimal centreLat, BigDecimal centreLon,
-        BigDecimal minLat, BigDecimal minLon, BigDecimal maxLat, BigDecimal maxLon) {
+        BigDecimal minLat, BigDecimal minLon, BigDecimal maxLat, BigDecimal maxLon,
+        String regionKey) {
 
     public static ValidationNode fromGeneratedNode(Long scopeId, GeneratedNode node) {
         return new ValidationNode(
                 scopeId, node.nodeKey(), node.parentNodeKey(), node.nodeType(), node.areaKey(),
                 node.representativeAreaKeys(), node.depth(), node.ancestorKeys(),
                 node.descendantAreaCount(), node.displayOrder(),
-                node.centreLat(), node.centreLon(), node.minLat(), node.minLon(), node.maxLat(), node.maxLon());
+                node.centreLat(), node.centreLon(), node.minLat(), node.minLon(), node.maxLat(), node.maxLon(),
+                node.regionKey());
     }
 
     /**
@@ -44,7 +50,7 @@ public record ValidationNode(
                 node.getRepresentativeAreaKeys(), node.getDepth(), node.getAncestorKeys(),
                 node.getDescendantAreaCount(), node.getDisplayOrder(),
                 node.getCentreLat(), node.getCentreLon(), node.getMinLat(), node.getMinLon(),
-                node.getMaxLat(), node.getMaxLon());
+                node.getMaxLat(), node.getMaxLon(), node.getRegionKey());
     }
 
     /**
@@ -60,6 +66,6 @@ public record ValidationNode(
                 node.getRepresentativeAreaKeys(), node.getDepth(), node.getAncestorKeys(),
                 node.getDescendantAreaCount(), node.getDisplayOrder(),
                 node.getCentreLat(), node.getCentreLon(), node.getMinLat(), node.getMinLon(),
-                node.getMaxLat(), node.getMaxLon());
+                node.getMaxLat(), node.getMaxLon(), node.getRegionKey());
     }
 }

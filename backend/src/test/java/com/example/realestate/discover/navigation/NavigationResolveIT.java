@@ -282,12 +282,22 @@ class NavigationResolveIT {
     @DisplayName("resolve: additive areaKey field (#1956 fix-cycle-1 S6) is omitted (JSON-level) for "
             + "a CLUSTER node")
     void resolve_areaKeyField_omittedOnCluster() throws Exception {
-        CityFixture fixture = seedMultiLevelCity("resolve-areakey-cluster", 16, 2, 1, 10);
+        // #1956/#2014 D6(d): max_safety_depth=1 (not 10) so the generated tree stays within the
+        // locked two-shape contract's max public depth of 2 (DIRECTION 0, CLUSTER 1, AREA 2) --
+        // 16 areas still genuinely split into two CLUSTER siblings, just not recursively beneath
+        // each other anymore. See NavigationTreeValidationServiceTest for the invariant itself.
+        CityFixture fixture = seedMultiLevelCity("resolve-areakey-cluster", 16, 2, 1, 1);
         prepareValidateAndPromote(fixture);
 
         String rootBody = mockMvc.perform(get("/api/discover/cities/" + fixture.slug() + "/navigation/root"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        String clusterNodeKey = objectMapper.readTree(rootBody).get("children").get(0).get("nodeKey").asText();
+        // #1956 D3: root's own child is now the region's DIRECTION node, not a CLUSTER directly --
+        // descend one more level to reach a genuine CLUSTER (the DIRECTION's own child).
+        String directionNodeKey = objectMapper.readTree(rootBody).get("children").get(0).get("nodeKey").asText();
+        String directionBody = mockMvc.perform(get("/api/discover/cities/" + fixture.slug()
+                        + "/navigation/" + directionNodeKey))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String clusterNodeKey = objectMapper.readTree(directionBody).get("children").get(0).get("nodeKey").asText();
 
         mockMvc.perform(get("/api/discover/cities/" + fixture.slug() + "/navigation/resolve")
                         .param("node", clusterNodeKey))
@@ -319,30 +329,44 @@ class NavigationResolveIT {
             + "— NEVER the unrelated depth-0 SIBLING half (#1956 fix-cycle-1 B1/S5, fix-cycle-3 S-2)")
     void resolve_staleClusterKey_representativeAreaStillPresent_resolvesToGenuineContainingAncestor_notSibling()
             throws Exception {
-        // 16 areas, max_direct_children=2 -> root splits at depth 0 into TWO CLUSTER siblings (same
-        // recipe as EndToEndNavigationPipelineIT's structural-integrity test) — exactly the shape
-        // B1 fixes: NavigationTreeGenerator#expand emits both partition halves as depth-0 CLUSTERs
-        // with parentNodeKey=null, so neither sibling is an ancestor of the other. The PRIOR
-        // region-only heuristic tie-broke by nodeKey.compareTo — an ARBITRARY pick between the two
-        // — so a stale key genuinely derived from children[1]'s geography could resolve to
-        // children[0] instead and be mislabelled ANCESTOR despite disjoint descendantAreaKeys. This
-        // is why the assertion below checks the RELATIONSHIP (genuine containment of a real area),
-        // not a positional index into rootJson.children[].
+        // #1956/#2014 D6(d): max_safety_depth=1 (not 10) so the generated tree stays within the
+        // locked two-shape contract's max public depth of 2 (DIRECTION 0, CLUSTER 1, AREA 2). 16
+        // areas, max_direct_children=2 -> the DIRECTION's single split still produces TWO CLUSTER
+        // siblings at depth 1 (same disjoint-content relationship B1 fixes: NavigationTreeGenerator
+        // #expand emits both partition halves as CLUSTERs sharing one parent — the DIRECTION here,
+        // not null — so neither sibling is an ancestor of the other). The PRIOR region-only
+        // heuristic tie-broke by nodeKey.compareTo — an ARBITRARY pick between the two — so a stale
+        // key genuinely derived from siblingB's geography could resolve to siblingA instead and be
+        // mislabelled ANCESTOR despite disjoint descendantAreaKeys. This is why the assertion below
+        // checks the RELATIONSHIP (genuine containment of a real area), not a positional index.
         //
-        // Fix-cycle-3 S-2 prefers the DEEPEST cluster containing the (single) surviving
-        // representative over the shallower depth-0 sibling itself — with a nested tree (16 areas,
-        // max_direct_children=2 forces multiple split levels), that deepest cluster is very likely
-        // a descendant of siblingB, not siblingB's own node_key. So this test asserts genuine
-        // containment (the resolved node's own descendantAreaKeys includes survivingAreaKey) and
-        // non-identity with siblingA, rather than pinning the exact resolved node_key to siblingB.
-        CityFixture fixture = seedMultiLevelCity("resolve-stale-c", 16, 2, 1, 10);
+        // NOTE (#1956/#2014 D6(d) capability trade-off, called out explicitly per instruction): with
+        // only ONE CLUSTER level permitted, "the deepest cluster containing the surviving
+        // representative" and "the only cluster containing it" now coincide — this IT no longer
+        // separately exercises fix-cycle-3 S-2's "prefer deepest over shallow ancestor" nuance
+        // across MULTIPLE nested cluster levels. That nuance remains covered by {@code
+        // NavigationControllerTest#resolve_staleClusterKey_representativeAreaStillPresent_resolvesToDeepestContainingAncestor}
+        // (a hand-built multi-level graph, per this class's own header javadoc on why such rungs are
+        // unit-tested there). What THIS test still genuinely proves, unweakened, is the actual B1
+        // incident: a stale key must resolve to the cluster that genuinely CONTAINS the surviving
+        // area, never an unrelated disjoint-content sibling — that relationship does not depend on
+        // tree depth, and the assertions below still require true containment + non-identity with
+        // siblingA, not a vacuous pass.
+        CityFixture fixture = seedMultiLevelCity("resolve-stale-c", 16, 2, 1, 1);
         prepareValidateAndPromote(fixture);
 
         String rootBody = mockMvc.perform(get("/api/discover/cities/" + fixture.slug() + "/navigation/root"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        JsonNode rootJson = objectMapper.readTree(rootBody);
-        String siblingAKey = rootJson.get("children").get(0).get("nodeKey").asText();
-        String siblingBKey = rootJson.get("children").get(1).get("nodeKey").asText();
+        // #1956 D3: root's own child is the region's DIRECTION node, not a CLUSTER directly --
+        // descend one more level to reach the two genuine CLUSTER siblings (the DIRECTION's own
+        // children).
+        String directionNodeKey = objectMapper.readTree(rootBody).get("children").get(0).get("nodeKey").asText();
+        String directionBody = mockMvc.perform(get("/api/discover/cities/" + fixture.slug()
+                        + "/navigation/" + directionNodeKey))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        JsonNode directionJson = objectMapper.readTree(directionBody);
+        String siblingAKey = directionJson.get("children").get(0).get("nodeKey").asText();
+        String siblingBKey = directionJson.get("children").get(1).get("nodeKey").asText();
         String regionSlug = siblingBKey.split(":", -1)[1];
 
         // Pull siblingB's OWN descendantAreaKeys so the stale key genuinely derives from ITS
@@ -379,12 +403,18 @@ class NavigationResolveIT {
     @DisplayName("resolve: a stale 'c:' cluster key with NO surviving representative area -> "
             + "CITY_ROOT, not a region-only-coincidence ANCESTOR (#1956 fix-cycle-1 B1)")
     void resolve_staleClusterKey_noSurvivingRepresentativeArea_fallsBackToCityRoot() throws Exception {
-        CityFixture fixture = seedMultiLevelCity("resolve-stale-c-miss", 16, 2, 1, 10);
+        // #1956/#2014 D6(d): max_safety_depth=1 (not 10) — see the sibling-disambiguation test
+        // above for why this keeps the tree contract-shaped without changing this test's meaning
+        // (it never depends on cluster nesting depth, only on the stale key matching nothing).
+        CityFixture fixture = seedMultiLevelCity("resolve-stale-c-miss", 16, 2, 1, 1);
         prepareValidateAndPromote(fixture);
 
         String rootBody = mockMvc.perform(get("/api/discover/cities/" + fixture.slug() + "/navigation/root"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         JsonNode rootJson = objectMapper.readTree(rootBody);
+        // #1956 D3: root's child is now the region's DIRECTION node ("d:" + regionSlug) rather than
+        // a CLUSTER ("c:" + regionSlug + ":..."), but the region slug still sits at split-index 1
+        // either way, so this extraction is unchanged.
         String regionSlug = rootJson.get("children").get(0).get("nodeKey").asText().split(":", -1)[1];
         // No real area_key's slug appears anywhere in this suffix -> containment finds nothing.
         String staleKey = "c:" + regionSlug + ":definitely-not-a-real-cluster-suffix-anymore";
@@ -412,7 +442,10 @@ class NavigationResolveIT {
     @Test
     @DisplayName("resolve: ALIAS is never returned across EXACT/ANCESTOR/CITY_ROOT-triggering inputs")
     void resolve_neverReturnsAlias() throws Exception {
-        CityFixture fixture = seedMultiLevelCity("resolve-no-alias", 16, 2, 1, 10);
+        // #1956/#2014 D6(d): max_safety_depth=1 (not 10) so the tree stays contract-shaped; this
+        // test only feeds fixed literal node= strings, never inspects tree shape, so is otherwise
+        // unaffected.
+        CityFixture fixture = seedMultiLevelCity("resolve-no-alias", 16, 2, 1, 1);
         prepareValidateAndPromote(fixture);
 
         List<String> inputs = List.of(

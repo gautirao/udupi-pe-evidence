@@ -247,10 +247,18 @@ class EndToEndNavigationPipelineIT {
             + "structurally sound, verbatim-copied production tree with no cycles/orphans/duplicate "
             + "active paths/cross-city parentage/invalid depth/invalid representative areas")
     void endToEnd_multiLevelCity_structurallySound() {
-        // 16 areas, max_direct_children=2, min_areas_per_cluster=1 -> a genuine multi-CLUSTER-level
-        // tree (mirrors NavigationTreeGeneratorTest's genuineThreeClusterLevelCity fixture shape),
-        // now driven through the REAL DB-backed prepare/generate/validate/promote pipeline.
-        CityFixture fixture = seedMultiLevelCity("e2e-ml", 16, 2, 1, 10);
+        // #1956/#2014 D6(d): max_safety_depth=1 (not 10) -- the locked two-shape product contract
+        // permits only ONE CLUSTER "Local Destination" level beneath a region's DIRECTION root
+        // (max public depth 2: DIRECTION 0, CLUSTER 1, AREA 2), so the deep multi-CLUSTER-level
+        // shape this fixture used to produce (mirroring NavigationTreeGeneratorTest's
+        // genuineThreeClusterLevelCity_producesStructureButFailsContractShapeValidation -- note the
+        // rename: that generator test now explicitly documents this exact shape FAILS validation)
+        // is no longer a legal tree. 16 areas, max_direct_children=2, max_safety_depth=1 still
+        // produces a genuine 2-CLUSTER-sibling tree (DIRECTION -> 2 CLUSTERs of 8 AREAs each) --
+        // every invariant this test actually checks below (cycles/orphans/cross-city parentage/
+        // dup keys/representative-subset/checksum+verbatim-copy fidelity) is exercised exactly as
+        // rigorously by this shallower, contract-legal shape.
+        CityFixture fixture = seedMultiLevelCity("e2e-ml", 16, 2, 1, 1);
 
         long revisionId = prepareValidateAndPromote(fixture);
 
@@ -352,8 +360,14 @@ class EndToEndNavigationPipelineIT {
             + "tree (node_key set + diagnostic checksum) whether the city has zero listings or many "
             + "at generation time")
     void listingIndependence_zeroVsManyListingsAtGenerationTime_identicalStructure() {
-        CityFixture zeroListingsCity = seedMultiLevelCity("e2e-li0", 9, 3, 1, 8);
-        CityFixture manyListingsCity = seedMultiLevelCity("e2e-liN", 9, 3, 1, 8);
+        // #1956/#2014 D6(d): max_safety_depth=1 (not 8) so the generated tree stays within the
+        // locked two-shape contract's max public depth of 2. This test only proves STRUCTURAL
+        // IDENTITY between two independently-generated trees over identical geometry -- it does
+        // not depend on absolute depth, so this shallower (but still multi-CLUSTER, since 9 areas
+        // still split at max_direct_children=3) shape proves exactly the same listing-independence
+        // claim with zero loss of rigor.
+        CityFixture zeroListingsCity = seedMultiLevelCity("e2e-li0", 9, 3, 1, 1);
+        CityFixture manyListingsCity = seedMultiLevelCity("e2e-liN", 9, 3, 1, 1);
         // Insert many listings for manyListingsCity's areas BEFORE prepare/generate runs.
         for (String areaKey : manyListingsCity.areaKeys()) {
             for (int i = 0; i < 5; i++) {
@@ -446,7 +460,11 @@ class EndToEndNavigationPipelineIT {
     @DisplayName("ancestry equivalence: GET .../areas/{areaKey}/navigation-path ancestry matches "
             + "walking GET .../navigation/{nodeKey} from root, for every seeded area")
     void ancestryEquivalence_directSearchMatchesGuidedNavigationWalk() throws Exception {
-        CityFixture fixture = seedMultiLevelCity("e2e-anc", 12, 2, 1, 10);
+        // #1956/#2014 D6(d): max_safety_depth=1 (not 10) so the tree stays contract-shaped. This
+        // test's guided-walk-vs-direct-search equivalence check is entirely shape-agnostic (it
+        // follows real parent/child links generically for however many hops exist) so shortening
+        // the tree loses zero rigor -- it proves the exact same equivalence over a shallower path.
+        CityFixture fixture = seedMultiLevelCity("e2e-anc", 12, 2, 1, 1);
         prepareValidateAndPromote(fixture);
 
         for (String areaKey : fixture.areaKeys()) {
@@ -495,29 +513,57 @@ class EndToEndNavigationPipelineIT {
 
     @Test
     @DisplayName("API checkpoint: shape, nextLevelType, bounds, dynamic counts, ancestry all present+"
-            + "correct for 0-/1-/2-level cities; surrogate ids never leak in any public response")
-    void apiCheckpoint_zeroOneAndTwoLevelCities_shapeAndNoSurrogateIdLeak() throws Exception {
-        // 0-level: 1 area -> AREA root leaf directly, no CLUSTER at all.
+            + "correct for 0-/1-level cities; surrogate ids never leak in any public response")
+    void apiCheckpoint_zeroAndOneLevelCities_shapeAndNoSurrogateIdLeak() throws Exception {
+        // #1956/#2014 D6(d), GENUINE PRODUCT-CONTRACT CONFLICT (not a test-authoring fix) — read
+        // before touching this test again:
+        //
+        // This method ORIGINALLY covered three distinguishable public shapes: 0-level (root's
+        // direct children are AREA leaves), 1-level (root -> one CLUSTER layer -> AREA), and
+        // 2-level (root -> TWO CLUSTER layers -> AREA). The locked #1956/#2014 two-shape contract
+        // (City -> Direction -> AREA, or City -> Direction -> ONE Local Destination CLUSTER ->
+        // AREA — never a third public CLUSTER level) makes the ORIGINAL "2-level" shape
+        // mathematically impossible to construct as a genuinely-distinct third case: with only one
+        // CLUSTER level ever permitted, the ORIGINAL "2-level" shape and the ORIGINAL "1-level"
+        // shape now COINCIDE (both are Direction -> one CLUSTER layer -> AREA). Re-adding a "2-level"
+        // fixture here could only ever pass by asserting the exact same shape as "1-level" a second
+        // time under a different name — a vacuous, trivially-true duplicate, which the hard rule for
+        // this task explicitly forbids manufacturing. So the "2-level" fixture (`e2e-lvl2`,
+        // `twoLevel`) and its `assertRootShape(twoLevel, "CLUSTER", 2)` call were REMOVED here, not
+        // weakened — the two REMAINING scenarios (0-level, 1-level) are the only two genuinely
+        // distinct public shapes the current contract allows, and both are still asserted at full
+        // strength below, unweakened. If a genuine third public depth is ever reintroduced, this is
+        // exactly where its coverage would be restored.
+        //
+        // #1956 D3 (independent of the above): every region's DIRECTION node is now unconditionally
+        // the sole root child, so root's OWN nextLevelType is always "DIRECTION" — never AREA/
+        // CLUSTER directly, regardless of fixture shape. assertRootShape below was updated to check
+        // root's nextLevelType is DIRECTION, then descend into the DIRECTION node to check the real
+        // AREA-vs-CLUSTER distinction this method exists to prove, and ancestry length now expects
+        // +1 for the DIRECTION hop that is now always present.
+
+        // 0-level: 1 area -> DIRECTION's direct child is a single AREA leaf, no CLUSTER at all.
+        // This USED to be 2 areas: invariant #4 (ONE_CHILD_CLUSTER) originally fired for ANY
+        // single-child parent regardless of node kind, so a genuine 1-area region tripped it
+        // ("cluster d:e2e-lvl0-north has exactly one child" — confirmed live) even though nothing
+        // was actually a degenerate CLUSTER split. #4 is now CLUSTER-specific (see
+        // NavigationTreeValidationService#checkOneChildClusters) — a single-child DIRECTION is a
+        // legitimate "region with exactly one canonical area" shape — so 1 area is now the more
+        // honest fixture for "0-level, no CLUSTER" and still proves the exact same shape.
         CityFixture zeroLevel = seedMultiLevelCity("e2e-lvl0", 1, 4, 1, 8);
         // 1-level: 5 areas, max_direct_children=4 -> one bisection (~3/2) already fits under 4 on
-        // both sides -> exactly one CLUSTER layer between root and AREA (mirrors
+        // both sides -> exactly one CLUSTER layer between the DIRECTION and AREA (mirrors
         // NavigationTreeGeneratorTest's halving behaviour).
         CityFixture oneLevel = seedMultiLevelCity("e2e-lvl1", 5, 4, 1, 8);
-        // 2-level: 13 areas, max_direct_children=4 -> first bisection (~7/6) still exceeds 4 on
-        // both sides, second bisection (~4/3 and ~3/3) fits -> exactly two CLUSTER layers (depths
-        // 0,1), AREA leaves at depth 2.
-        CityFixture twoLevel = seedMultiLevelCity("e2e-lvl2", 13, 4, 1, 10);
 
         prepareValidateAndPromote(zeroLevel);
         prepareValidateAndPromote(oneLevel);
-        prepareValidateAndPromote(twoLevel);
 
         assertRootShape(zeroLevel, "AREA", 0);
         assertRootShape(oneLevel, "CLUSTER", 1);
-        assertRootShape(twoLevel, "CLUSTER", 2);
 
         // Dynamic counts: 0 before any listing, exactly N after N listings, for every fixture.
-        for (CityFixture fixture : List.of(zeroLevel, oneLevel, twoLevel)) {
+        for (CityFixture fixture : List.of(zeroLevel, oneLevel)) {
             String countsUrl = "/api/discover/cities/" + fixture.slug() + "/navigation/root/counts";
             mockMvc.perform(get(countsUrl)).andExpect(status().isOk()).andExpect(jsonPath("$.count").value(0));
             for (String areaKey : fixture.areaKeys()) {
@@ -530,7 +576,7 @@ class EndToEndNavigationPipelineIT {
         // No surrogate id leakage: neither the structural navigation body, the navigation-path
         // body, nor the counts body ever include a raw DB surrogate id / parent id / sandbox id
         // field, for every fixture and every one of its areas.
-        for (CityFixture fixture : List.of(zeroLevel, oneLevel, twoLevel)) {
+        for (CityFixture fixture : List.of(zeroLevel, oneLevel)) {
             String rootBody = mockMvc.perform(get("/api/discover/cities/" + fixture.slug() + "/navigation/root"))
                     .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
             assertNoSurrogateIdLeak(rootBody);
@@ -548,24 +594,37 @@ class EndToEndNavigationPipelineIT {
         }
     }
 
-    private void assertRootShape(CityFixture fixture, String expectedNextLevelType, int minAncestryDepthSeen) throws Exception {
+    private void assertRootShape(CityFixture fixture, String expectedDirectionNextLevelType, int extraClusterAncestors)
+            throws Exception {
         String rootUrl = "/api/discover/cities/" + fixture.slug() + "/navigation/root";
-        mockMvc.perform(get(rootUrl))
+        String rootBody = mockMvc.perform(get(rootUrl))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nodeKey").value("root"))
                 .andExpect(jsonPath("$.nodeType").value("ROOT"))
-                .andExpect(jsonPath("$.nextLevelType").value(expectedNextLevelType))
+                // #1956 D3: root's own nextLevelType is unconditionally "DIRECTION" now.
+                .andExpect(jsonPath("$.nextLevelType").value("DIRECTION"))
                 .andExpect(jsonPath("$.bounds").doesNotExist())
-                .andExpect(jsonPath("$.children").isNotEmpty());
+                .andExpect(jsonPath("$.children").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
 
-        // Depth/ancestry sanity for the deepest reachable AREA: must equal minAncestryDepthSeen
-        // CLUSTER ancestors (0 for the 0-level fixture, >=1 for 1-/2-level).
+        // Descend into the region's DIRECTION node — ITS nextLevelType is the real AREA-vs-CLUSTER
+        // distinction this method exists to prove.
+        String directionNodeKey = new com.fasterxml.jackson.databind.ObjectMapper().readTree(rootBody)
+                .get("children").get(0).get("nodeKey").asText();
+        mockMvc.perform(get("/api/discover/cities/" + fixture.slug() + "/navigation/" + directionNodeKey))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nodeType").value("DIRECTION"))
+                .andExpect(jsonPath("$.nextLevelType").value(expectedDirectionNextLevelType));
+
+        // Depth/ancestry sanity for the deepest reachable AREA: extraClusterAncestors CLUSTER
+        // ancestors (0 for the 0-level fixture, 1 for 1-level) PLUS 1 for the DIRECTION ancestor,
+        // which is now unconditionally present (#1956 D3).
         String anyAreaKey = fixture.areaKeys().get(0);
         String pathUrl = "/api/discover/cities/" + fixture.slug() + "/areas/" + anyAreaKey + "/navigation-path";
         mockMvc.perform(get(pathUrl))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.areaKey").value(anyAreaKey))
-                .andExpect(jsonPath("$.ancestry.length()").value(minAncestryDepthSeen));
+                .andExpect(jsonPath("$.ancestry.length()").value(extraClusterAncestors + 1));
     }
 
     private static void assertNoSurrogateIdLeak(String jsonBody) {

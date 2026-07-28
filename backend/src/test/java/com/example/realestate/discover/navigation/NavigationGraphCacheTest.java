@@ -209,6 +209,49 @@ class NavigationGraphCacheTest {
         assertThat(invocationCount.get()).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("evictIfActiveRevision: matching stale revision IS evicted — pointer and cache "
+            + "entry both removed")
+    void evictIfActiveRevision_matchingRevision_evicts() {
+        NavigationGraphLoader loader = mock(NavigationGraphLoader.class);
+        NavigationGraphCache cache = new NavigationGraphCache(loader, props(30), Ticker.systemTicker());
+        cache.seed("city-h", 17, 1L, fakeGraph("city-h", 1L));
+
+        boolean evicted = cache.evictIfActiveRevision("city-h", 1L);
+
+        assertThat(evicted).isTrue();
+        assertThat(cache.activeRevisionId("city-h")).isEmpty();
+        assertThat(cache.estimatedProductionSize()).isZero();
+    }
+
+    @Test
+    @DisplayName("evictIfActiveRevision: a NEWER revision than expected is NOT evicted — the "
+            + "compare fails and the current pointer/graph are left untouched")
+    void evictIfActiveRevision_newerRevisionActive_doesNotEvict() {
+        NavigationGraphLoader loader = mock(NavigationGraphLoader.class);
+        NavigationGraphCache cache = new NavigationGraphCache(loader, props(30), Ticker.systemTicker());
+        cache.seed("city-i", 19, 1L, fakeGraph("city-i", 1L));
+
+        NavigationGraph newGraph = fakeGraph("city-i", 2L);
+        when(loader.loadValidated("city-i", 19, 2L)).thenReturn(newGraph);
+        cache.refreshActiveRevision("city-i", 19, 2L); // simulates a promotion that landed first
+
+        boolean evicted = cache.evictIfActiveRevision("city-i", 1L); // stale caller-observed revision
+
+        assertThat(evicted).isFalse();
+        assertThat(cache.activeRevisionId("city-i")).hasValue(2L);
+        assertThat(cache.getActiveGraph("city-i")).contains(newGraph);
+    }
+
+    @Test
+    @DisplayName("evictIfActiveRevision: unknown city is a no-op — returns false, invokes nothing")
+    void evictIfActiveRevision_unknownCity_returnsFalse() {
+        NavigationGraphLoader loader = mock(NavigationGraphLoader.class);
+        NavigationGraphCache cache = new NavigationGraphCache(loader, props(30), Ticker.systemTicker());
+
+        assertThat(cache.evictIfActiveRevision("never-seeded", 1L)).isFalse();
+    }
+
     /** Reflection-only test hook: sets {@code NavigationGraphCache}'s private active-pointer map
      *  directly, bypassing {@code seed()} (which always caches a graph too) — see the coalescing
      *  test's javadoc for why this is the only way to reach a genuine miss state in a unit test. */

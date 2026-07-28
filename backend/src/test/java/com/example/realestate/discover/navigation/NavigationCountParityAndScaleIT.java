@@ -144,8 +144,11 @@ class NavigationCountParityAndScaleIT {
         return sb.append('}').toString();
     }
 
-    /** ROOT CLUSTER -&gt; 2 sub-CLUSTERs -&gt; 2 AREA leaves each (4 areas total, 2-level tree) —
-     *  the smallest shape that lets the no-double-count roll-up assertion span two branch levels. */
+    /** [#1956 D3/D6, fixed] DIRECTION root (was ROOT CLUSTER pre-#1956 — flagged in PR1's report,
+     *  fixed here per the D6(d) ruling) -&gt; 2 CLUSTERs (the single "Local Destination" level,
+     *  depth 1) -&gt; 2 AREA leaves each (4 areas total, depth 2) — the smallest shape that lets the
+     *  no-double-count roll-up assertion span two branch levels while staying within the max
+     *  public depth of 2 (invariant #14). */
     private NavigationGraph seedTwoLevelTreeWithFourAreas(String slug) {
         int cityId = seedCity(slug);
         // area_key MUST be the real 4-pipe-segment convention (country|state|city|area) --
@@ -158,11 +161,11 @@ class NavigationCountParityAndScaleIT {
             seedArea(cityId, a);
         }
 
-        String rootKey = "c:" + slug + ":root";
+        String rootKey = "d:" + slug + ":root";
         String leftKey = "c:" + slug + ":left";
         String rightKey = "c:" + slug + ":right";
 
-        long rootId = insertNode(cityId, "CLUSTER", null, rootKey, null, List.of(a1, a3), 1, 0, List.of(), 4);
+        long rootId = insertNode(cityId, "DIRECTION", null, rootKey, null, List.of(a1, a3), 1, 0, List.of(), 4);
         long leftId = insertNode(cityId, "CLUSTER", rootId, leftKey, null, List.of(a1, a2), 1, 1, List.of(rootKey), 2);
         long rightId = insertNode(cityId, "CLUSTER", rootId, rightKey, null, List.of(a3, a4), 2, 1, List.of(rootKey), 2);
         insertNode(cityId, "AREA", leftId, "a:" + a1, a1, List.of(a1), 1, 2, List.of(rootKey, leftKey), 1);
@@ -224,7 +227,7 @@ class NavigationCountParityAndScaleIT {
                 Long.class, "IN|KA|" + slug + "|%");
         assertThat(independentRawTotal).isEqualTo(10L);
 
-        NavigationNode root = graph.nodeByKey("c:" + slug + ":root");
+        NavigationNode root = graph.nodeByKey("d:" + slug + ":root");
         NavigationNode left = graph.nodeByKey("c:" + slug + ":left");
         NavigationNode right = graph.nodeByKey("c:" + slug + ":right");
 

@@ -11,8 +11,11 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -82,6 +85,14 @@ public class NavigationGraphCache {
     }
 
     /**
+     * (#2028) A cached city paired with the revisionId that was active for it at snapshot time —
+     * returned by {@link #cachedCityRevisions()} so a caller can later perform a revision-aware
+     * compare-and-remove via {@link #evictIfActiveRevision} instead of an unconditional evict.
+     */
+    public record CachedCityRevision(String citySlug, long revisionId) {
+    }
+
+    /**
      * Seeds the cache + active pointer for a city — used ONLY by the eager startup preload (never
      * mid-flight; a running instance always goes through {@link #refreshActiveRevision} instead,
      * which enforces load-before-swap).
@@ -114,6 +125,62 @@ public class NavigationGraphCache {
     public OptionalLong activeRevisionId(String citySlug) {
         ActivePointer pointer = activePointers.get(citySlug);
         return pointer == null ? OptionalLong.empty() : OptionalLong.of(pointer.revisionId());
+    }
+
+    /**
+     * (#1956 D11, revised #2028) Every city slug this cache currently believes has an active
+     * pointer, PAIRED WITH the revisionId active for it at snapshot time — used by {@code
+     * NavigationHierarchySafetyPoller} to find a cached city the DB no longer reports a PROMOTED
+     * revision for (de-promoted/rolled back/deactivated), so it can be {@link
+     * #evictIfActiveRevision evicted} rather than serving a stale graph forever. Capturing the
+     * revisionId alongside the slug (rather than the slug alone) is what lets the caller later
+     * evict conditionally: a promotion can land after this snapshot but before the caller's
+     * eviction call, and only a revision-aware compare-and-remove can tell "still the stale
+     * revision I saw" apart from "already replaced by a newer one." A defensive copy — never the
+     * live entry set — so a caller iterating it is unaffected by a concurrent {@link
+     * #refreshActiveRevision} or {@link #evictIfActiveRevision}.
+     */
+    public Set<CachedCityRevision> cachedCityRevisions() {
+        Set<CachedCityRevision> snapshot = new HashSet<>();
+        for (Map.Entry<String, ActivePointer> entry : activePointers.entrySet()) {
+            snapshot.add(new CachedCityRevision(entry.getKey(), entry.getValue().revisionId()));
+        }
+        return Set.copyOf(snapshot);
+    }
+
+    /**
+     * (#1956 D11, revised #2028) Evicts {@code citySlug}'s active pointer and cached graph ONLY IF
+     * the cache's current active revision for that city is still {@code expectedRevisionId} —
+     * called when the database no longer has ANY PROMOTED revision for this city (de-promotion,
+     * rollback, or deactivation), the gap {@link #refreshActiveRevision} does not cover.
+     *
+     * <p><b>Why the compare is load-bearing:</b> the caller (the safety poller) reads the DB's
+     * promoted-revision set, finds this city absent, and only THEN calls this method. A promotion
+     * can land — via the AFTER_COMMIT listener calling {@link #refreshActiveRevision} on a
+     * completely different thread — in the window between that DB read and this call, installing
+     * a NEWER active pointer for the same {@code citySlug}. An unconditional {@code remove(key)}
+     * would delete that freshly-promoted pointer along with its cache entry, wiping out a
+     * hierarchy that was just made active. Comparing against the exact {@link ActivePointer}
+     * observed at snapshot time turns the removal into a true CAS: it only succeeds if nothing
+     * changed the pointer in between. {@link ActivePointer} is a record (value equality), so
+     * {@code ConcurrentHashMap.remove(key, expectedValue)} performs this atomically in one call —
+     * a get-then-remove sequence would reopen exactly the race this method exists to close, since
+     * another thread's swap could land between the get and the remove.
+     *
+     * @return true if the pointer/graph were actually removed; false if no pointer was cached, or
+     *     a different/newer revision is now active (a no-op in that case — the newer revision is
+     *     left untouched).
+     */
+    public boolean evictIfActiveRevision(String citySlug, long expectedRevisionId) {
+        ActivePointer current = activePointers.get(citySlug);
+        if (current == null || current.revisionId() != expectedRevisionId) {
+            return false;
+        }
+        boolean removed = activePointers.remove(citySlug, current);
+        if (removed) {
+            productionCache.invalidate(new NavigationGraphKey(citySlug, expectedRevisionId));
+        }
+        return removed;
     }
 
     /**

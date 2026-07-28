@@ -42,6 +42,18 @@ import java.util.stream.Collectors;
  *   <li>orphaned/inconsistent overrides</li>
  *   <li>direct-search vs guided-navigation ancestry mismatch</li>
  * </ol>
+ *
+ * <h2>#14: hierarchy shape (#1956 D6, ADDITIVE)</h2>
+ * A 14th check, added without touching the logic of the 13 above: the locked #1956/#2014 product
+ * contract permits EXACTLY two public shapes — {@code City -> Direction -> AREA} (depths 0,1) and
+ * {@code City -> Direction -> Local Destination (CLUSTER) -> AREA} (depths 0,1,2), NEVER a third
+ * public CLUSTER level — and a DIRECTION node must be a GENUINE ancestor in the tree, not merely
+ * {@code region_key} row metadata. This is the rule whose absence let a flat {@code City -> AREA}
+ * tree (323 AREA roots, zero DIRECTION nodes anywhere) pass all 13 checks above, get promoted, and
+ * then have to be rolled back — see {@link #checkHierarchyShape}. The depth ceiling this check
+ * enforces is a FIXED product rule, independent of check #11's operator-configurable {@code
+ * max_safety_depth} — a tree can satisfy #11 (the policy allows deeper recursion) and still fail
+ * #14 (the product contract doesn't expose that depth publicly).
  */
 @Service
 public class NavigationTreeValidationService {
@@ -99,7 +111,7 @@ public class NavigationTreeValidationService {
         checkOrphans(nodes, byKey, errors);                                  // 2
         checkCycles(nodes, byKey, errors);                                   // 1
         checkDepthAndParentage(nodes, byKey, errors);                        // 3
-        checkOneChildClusters(byParent, errors);                             // 4
+        checkOneChildClusters(byParent, byKey, errors);                      // 4
         checkDuplicateAndMissingAreaLeaves(nodes, expectedAreaKeys, errors); // 5
         checkAreaInMultipleLeafPaths(nodes, byKey, errors);                  // 6
         checkRepresentativesAreMembers(nodes, byParent, errors);            // 7
@@ -109,6 +121,7 @@ public class NavigationTreeValidationService {
         checkMaxDepth(nodes, maxSafetyDepth, errors);                       // 11
         checkOverrides(byKey, byParent, overrides, canonicalAreaKeys, validRegionKeys, errors); // 12
         checkAncestryMismatch(nodes, byKey, errors);                       // 13
+        checkHierarchyShape(nodes, byKey, errors);                        // 14
 
         return new ValidationReport(List.copyOf(errors));
     }
@@ -179,11 +192,30 @@ public class NavigationTreeValidationService {
         }
     }
 
-    // 4: one-child clusters — a node with exactly one child.
-    private void checkOneChildClusters(Map<String, List<ValidationNode>> byParent, List<ValidationError> errors) {
+    // 4: one-child clusters — a CLUSTER node with exactly one child.
+    //
+    // This check is CLUSTER-specific BY DESIGN, not a gap: a CLUSTER exists only to group multiple
+    // AREAs under a "Local Destination" label, so a CLUSTER with a single child is always
+    // degenerate (nothing left to disambiguate — collapse it, don't render it). A DIRECTION node
+    // is different: it represents a genuine city region, and a region may legitimately contain
+    // exactly one canonical AREA (confirmed live: udupi's W region has exactly one area). Rejecting
+    // a one-child DIRECTION would make every single-area region unrepresentable, which contradicts
+    // the locked City -> Direction -> AREA contract itself. Applying this rule to every non-root
+    // parent regardless of node kind — as the original implementation did, keyed only by
+    // byParent's map key with no type lookup — was the bug.
+    private void checkOneChildClusters(
+            Map<String, List<ValidationNode>> byParent, Map<String, ValidationNode> byKey,
+            List<ValidationError> errors) {
         for (Map.Entry<String, List<ValidationNode>> e : byParent.entrySet()) {
             if (e.getKey().isEmpty()) {
                 continue; // roots have no CLUSTER parent to check
+            }
+            ValidationNode parent = byKey.get(e.getKey());
+            if (parent == null) {
+                continue; // unresolvable parent key is already reported as ORPHAN_NODE (check #2)
+            }
+            if (!"CLUSTER".equals(parent.nodeType())) {
+                continue; // e.g. a DIRECTION with one child AREA is a legitimate single-area region
             }
             if (e.getValue().size() == 1) {
                 errors.add(new ValidationError("ONE_CHILD_CLUSTER",
@@ -357,15 +389,26 @@ public class NavigationTreeValidationService {
     }
 
     // 11: max-depth violations.
+    /**
+     * #1956 D5: depth 0 is now always occupied by the region's DIRECTION node (never a CLUSTER or
+     * AREA), so {@code max_safety_depth} — which still means "how many CLUSTER levels may nest
+     * beneath a Direction", an operator-facing meaning UNCHANGED by this issue — caps the tree at
+     * {@code max_safety_depth + 1}, not {@code max_safety_depth}. This is NOT a relaxation of the
+     * policy knob's meaning: it is the same number of allowed CLUSTER levels, shifted by exactly
+     * the one extra DIRECTION level now sitting above them. See {@link
+     * NavigationTreeGenerator#expand}'s {@code clusterDepth = depth - 1} comparison, which this
+     * check mirrors from the validation side.
+     */
     private void checkMaxDepth(List<ValidationNode> nodes, Integer maxSafetyDepth, List<ValidationError> errors) {
         if (maxSafetyDepth == null) {
             return;
         }
+        int maxAllowedDepth = maxSafetyDepth + 1;
         for (ValidationNode n : nodes) {
-            if (n.depth() > maxSafetyDepth) {
+            if (n.depth() > maxAllowedDepth) {
                 errors.add(new ValidationError("MAX_DEPTH_VIOLATION",
                         "node " + n.nodeKey() + " has depth=" + n.depth() + " exceeding max_safety_depth="
-                                + maxSafetyDepth, n.nodeKey()));
+                                + maxSafetyDepth + " (allowed depth <= " + maxAllowedDepth + ")", n.nodeKey()));
             }
         }
     }
@@ -507,6 +550,99 @@ public class NavigationTreeValidationService {
                 errors.add(new ValidationError("ANCESTRY_MISMATCH",
                         "node " + n.nodeKey() + " stores ancestor_keys=" + n.ancestorKeys()
                                 + " but the actual root->parent chain is " + actual, n.nodeKey()));
+            }
+        }
+    }
+
+    // 14: hierarchy shape (#1956 D6, ADDITIVE — never touches checks #1-13 above). Rejects:
+    //  (a) any root node (parent_node_key == null) that is not a DIRECTION — the incident's flat
+    //      City -> AREA shape had every AREA sitting at the root;
+    //  (b) any AREA/CLUSTER whose ancestry does not begin with a DIRECTION node;
+    //  (c) ancestry that disagrees with the node's own region_key — the node's region_key must
+    //      match the region_key of its DIRECTION ancestor;
+    //  (d) node kinds outside {DIRECTION, CLUSTER, AREA}, and a DIRECTION node ever appearing
+    //      anywhere but depth 0;
+    //  (e) contract-shape depth ceiling (#1956/#2014 ruling, decided — not a re-litigable design
+    //      choice): the locked product contract permits EXACTLY two public shapes — {@code City ->
+    //      Direction -> AREA} (depths 0,1) and {@code City -> Direction -> Local Destination ->
+    //      AREA} (depths 0,1,2) — and NEVER a third public CLUSTER level, regardless of what the
+    //      generator's policy-driven recursion is mechanically capable of producing. This is a
+    //      FIXED product rule, INDEPENDENT of check #11 (which enforces the operator-configurable
+    //      {@code max_safety_depth} knob) — a tree can pass #11 (policy allows deep recursion) and
+    //      still fail #14(e) (the product contract doesn't expose that depth publicly). Enforced
+    //      two ways: (i) no node of ANY kind may sit deeper than depth 2; (ii) a CLUSTER may only
+    //      ever occupy depth 1 (the single "Local Destination" level) — a CLUSTER at depth >= 2
+    //      would itself be a forbidden third public level even before depth 2's AREA-only floor is
+    //      reached.
+    private static final Set<String> VALID_NODE_KINDS = Set.of("DIRECTION", "CLUSTER", "AREA");
+    private static final int MAX_PUBLIC_DEPTH = 2;
+
+    private void checkHierarchyShape(
+            List<ValidationNode> nodes, Map<String, ValidationNode> byKey, List<ValidationError> errors) {
+        for (ValidationNode n : nodes) {
+            if (!VALID_NODE_KINDS.contains(n.nodeType())) {
+                errors.add(new ValidationError("INVALID_HIERARCHY_SHAPE",
+                        "node " + n.nodeKey() + " has an unrecognized node_type=" + n.nodeType()
+                                + " — only DIRECTION, CLUSTER, AREA are valid", n.nodeKey()));
+                continue; // an unknown kind can't be reasoned about further below
+            }
+
+            // (e) contract-shape depth ceiling — see the class/method javadoc above for why this is
+            // independent of check #11's policy-driven max_safety_depth ceiling.
+            if (n.depth() > MAX_PUBLIC_DEPTH) {
+                errors.add(new ValidationError("INVALID_HIERARCHY_SHAPE",
+                        "node " + n.nodeKey() + " has depth=" + n.depth() + " exceeding the max public "
+                                + "depth of " + MAX_PUBLIC_DEPTH + " (City -> Direction -> [Local "
+                                + "Destination ->] AREA) — no third public CLUSTER level is permitted",
+                        n.nodeKey()));
+            }
+            if ("CLUSTER".equals(n.nodeType()) && n.depth() >= MAX_PUBLIC_DEPTH) {
+                errors.add(new ValidationError("INVALID_HIERARCHY_SHAPE",
+                        "CLUSTER node " + n.nodeKey() + " is at depth=" + n.depth() + " — a CLUSTER may "
+                                + "only occupy depth 1 (the single Local Destination level); a CLUSTER "
+                                + "at depth >= " + MAX_PUBLIC_DEPTH + " would be a forbidden third public "
+                                + "level", n.nodeKey()));
+            }
+
+            boolean isRoot = n.parentNodeKey() == null;
+            if (isRoot && !"DIRECTION".equals(n.nodeType())) {
+                errors.add(new ValidationError("MISSING_DIRECTION_ANCESTOR",
+                        "root node " + n.nodeKey() + " is a " + n.nodeType() + ", but every root of the "
+                                + "public navigation tree must be a DIRECTION node (City -> Direction -> ...)",
+                        n.nodeKey()));
+            }
+
+            if ("DIRECTION".equals(n.nodeType())) {
+                if (n.depth() != 0) {
+                    errors.add(new ValidationError("INVALID_HIERARCHY_SHAPE",
+                            "DIRECTION node " + n.nodeKey() + " has depth=" + n.depth() + ", expected 0",
+                            n.nodeKey()));
+                }
+                continue; // a DIRECTION node has no ancestry/region-consistency of its own to check
+            }
+
+            // (b) a non-DIRECTION node's ancestry must begin with a DIRECTION node.
+            if (n.ancestorKeys().isEmpty()) {
+                errors.add(new ValidationError("MISSING_DIRECTION_ANCESTOR",
+                        "node " + n.nodeKey() + " (" + n.nodeType() + ") has no ancestors — every AREA/CLUSTER "
+                                + "must descend from a DIRECTION node", n.nodeKey()));
+                continue;
+            }
+            String rootAncestorKey = n.ancestorKeys().get(0);
+            ValidationNode rootAncestor = byKey.get(rootAncestorKey);
+            if (rootAncestor == null || !"DIRECTION".equals(rootAncestor.nodeType())) {
+                errors.add(new ValidationError("MISSING_DIRECTION_ANCESTOR",
+                        "node " + n.nodeKey() + "'s root ancestor " + rootAncestorKey
+                                + " is not a DIRECTION node", n.nodeKey()));
+                continue;
+            }
+
+            // (c) ancestry must agree with the node's own region_key.
+            if (!Objects.equals(rootAncestor.regionKey(), n.regionKey())) {
+                errors.add(new ValidationError("INVALID_HIERARCHY_SHAPE",
+                        "node " + n.nodeKey() + " has region_key=" + n.regionKey() + " but its DIRECTION "
+                                + "ancestor " + rootAncestorKey + " has region_key=" + rootAncestor.regionKey(),
+                        n.nodeKey()));
             }
         }
     }
