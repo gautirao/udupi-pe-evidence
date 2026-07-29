@@ -656,7 +656,28 @@ public class NavigationController {
         long schoolTotal = node == null
                 ? schoolCoverage.totalDistinctSchoolCount()
                 : rollupService.schoolCountForNode(graph, node, schoolCoverage);
-        var children = rollupService.childCounts(graph, node == null ? null : nodeKey, areaCounts, schoolCoverage);
+        List<AreaCountRollupService.NodeCount> rawChildren =
+                rollupService.childCounts(graph, node == null ? null : nodeKey, areaCounts, schoolCoverage);
+
+        // #1956 PR2 fix-verify cycle 1 (matching_area_count_backend_widening): widen each child with
+        // matchingAreaCount — a pure in-memory fold over the areaCounts map and descendantAreaKeysOf
+        // this method already fetched above, so no additional query/round trip is introduced. See
+        // NavigationCountsResponse.ChildCount's javadoc for the full contract. A Set (not a raw
+        // counter) collects the matching descendant area keys so a duplicate entry in
+        // descendantAreaKeysOf's list — never expected per NavigationGraph's tree invariant, but not
+        // this method's invariant to rely on unchecked — still cannot double-count the same area.
+        List<NavigationCountsResponse.ChildCount> children = new ArrayList<>(rawChildren.size());
+        for (AreaCountRollupService.NodeCount rawChild : rawChildren) {
+            Set<String> matchingAreaKeys = new HashSet<>();
+            for (String descendantAreaKey : graph.descendantAreaKeysOf(rawChild.nodeKey())) {
+                if (areaCounts.getOrDefault(descendantAreaKey, 0L) > 0) {
+                    matchingAreaKeys.add(descendantAreaKey);
+                }
+            }
+            long matchingAreaCount = matchingAreaKeys.size();
+            children.add(new NavigationCountsResponse.ChildCount(
+                    rawChild.nodeKey(), rawChild.count(), rawChild.schoolCount(), matchingAreaCount));
+        }
 
         NavigationCountsResponse body = new NavigationCountsResponse(
                 nodeKey, total, schoolTotal, areaCounts, areaSchoolCounts, children, graph.revisionId());

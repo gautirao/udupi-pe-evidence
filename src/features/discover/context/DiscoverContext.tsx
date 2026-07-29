@@ -97,6 +97,11 @@ const ACTION_KEYS = [
   'clearAgriFilters',
   'setIntent',
   'setSchoolJourney',
+  'goToNode',
+  'goToAncestorNode',
+  'clearNode',
+  'enterAreasJourney',
+  'buildNodeHref',
 ] as const satisfies readonly (keyof DiscoverUrlActions)[];
 
 // A deliberately-omitted (or renamed/added) DiscoverUrlActions key makes this

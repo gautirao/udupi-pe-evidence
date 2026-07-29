@@ -35,6 +35,8 @@ import type {
 import type { DiscoverInteractionCommands } from '@/features/discover/state/useDiscoverInteractionState';
 import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
 import type { ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
+import { DiscoverAreasJourneyPanel } from '@/features/discover/views/DiscoverAreasJourneyPanel';
+import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 
 /**
  * Issue #1824 Slice S11c — the DiscoverRightPanel call-site region, lifted
@@ -149,6 +151,14 @@ export interface DiscoverRightPanelContainerProps {
   totalPages: number;
   totalElements: number;
   setPage: Dispatch<SetStateAction<number>>;
+  /**
+   * Issue #1956 PR 2 — the ONE `useAreasNavigationJourney` result MapDiscovery
+   * resolved, threaded down unchanged so this container never re-derives its
+   * own node/counts (AC3.4/AC3.9/T3 — map and panel share this by reference).
+   */
+  areasNavigationJourney: UseAreasNavigationJourneyResult;
+  hoveredNavigationNodeKey?: string | null;
+  onNavigationNodeHoverChange?: (nodeKey: string | null) => void;
 }
 
 export function DiscoverRightPanelContainer({
@@ -229,6 +239,9 @@ export function DiscoverRightPanelContainer({
   totalPages,
   totalElements,
   setPage,
+  areasNavigationJourney,
+  hoveredNavigationNodeKey = null,
+  onNavigationNodeHoverChange,
 }: DiscoverRightPanelContainerProps) {
   // Issue #1953 (build step 2) — consumes the DiscoverProvider facade
   // directly rather than receiving urlState/urlActions as props (D2 prop
@@ -243,22 +256,42 @@ export function DiscoverRightPanelContainer({
   // scroll-preserving hook knows when the Map overlay is covering it.
   const { isMobileShell, mobileView } = useDiscoverShell();
   const isMobileMapOpen = isMobileShell && mobileView === 'MAP';
-  // Issue #1956 PR 1 (AC1.2 + AC1.14) — the dual preview gate, wired here and
-  // DELIBERATELY INERT. It selects no panel and changes no render output,
-  // because no canonical Areas panel exists until PR 2; every legacy branch
-  // below is untouched. Computing it now (rather than in PR 2) is what makes
-  // the seam real and testable while PR 1's shopper outcome stays NONE — the
-  // reconciliation of "the journey mounts only under the dual gate" with "no
-  // net-new UI". `void` marks the non-consumption as deliberate rather than an
-  // oversight. The gate reads only the capability + areasPreview; it is
-  // intentionally independent of `node=` (a direct search or canonical deep
-  // link can legitimately carry `node=` while the journey is incomplete, and a
-  // node-sensitive gate would leak partial work to shoppers).
+  // Issue #1956 PR 1 (AC1.2 + AC1.14) — the dual preview gate. The gate reads
+  // only the capability + areasPreview; it is intentionally independent of
+  // `node=` (a direct search or canonical deep link can legitimately carry
+  // `node=` while the journey is incomplete, and a node-sensitive gate would
+  // leak partial work to shoppers).
+  //
+  // Issue #1956 PR 2 (T1 — the panel-routing seam) — `resolvedPanelContent`
+  // is computed upstream from `derivePanelContent`/`computeDiscoverLayer`
+  // (src/features/discover/utils/discoverPanelState.ts and
+  // discoverLayerRegistry.ts), NEITHER of which inspects `node=` and NEITHER
+  // of which is in this PR's allowed scope to edit. Rather than extending
+  // that discriminated union, the canonical Areas journey panel is mounted
+  // by a SEPARATE, EARLIER branch that pre-empts the legacy `panelContent`
+  // switch entirely when the dual gate is active and the user is in the
+  // area-first journey — it renders instead of `DiscoverRightPanel`, never
+  // alongside it, so there is exactly one panel mounted at a time.
   const areasPreviewJourneyActive = isAreasPreviewJourneyActive({
     capabilityEnabled: isAreasPreviewCapabilityEnabled(),
     areasPreview: urlState.areasPreview,
   });
-  void areasPreviewJourneyActive;
+  const showAreasNavigationJourney =
+    areasPreviewJourneyActive && urlState.journey === 'area-first';
+
+  if (showAreasNavigationJourney) {
+    return (
+      <DiscoverAreasJourneyPanel
+        journey={areasNavigationJourney}
+        hoveredNodeKey={hoveredNavigationNodeKey}
+        onHoverChange={onNavigationNodeHoverChange}
+        // Issue #1956 PR 2 (Slice 5) — the pure href builder the visible
+        // in-app HierarchyBackButton uses to resolve the canonical parent.
+        buildNodeHref={urlActions.buildNodeHref}
+      />
+    );
+  }
+
   return (
     <DiscoverRightPanel
       panelContent={resolvedPanelContent}

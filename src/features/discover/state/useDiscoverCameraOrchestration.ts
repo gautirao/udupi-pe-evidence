@@ -11,6 +11,7 @@ import { getSectorBounds } from '@/lib/geo';
 import { labelToSlug } from '@/utils/macroRegionResolver';
 import { resolveScope, type ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
 import type { RegionScopedAreaGroup } from '@/hooks/useRegionScopedAreaGroups';
+import type { NavigationBounds } from '@/features/discover/navigation/types';
 
 /**
  * Issue #1824 Slice S7 — camera panner/tick orchestration (R9) extracted
@@ -127,6 +128,16 @@ export interface UseDiscoverCameraOrchestrationParams {
    * is falsy, so the gate never blocks unless there's a caller that opts in).
    */
   isLoadingRegionScopedGroups?: boolean;
+  /**
+   * Issue #1956 PR 2 (Slice 3, AC3.10/T2) — the canonical Areas navigation
+   * node's OWN key and bounds, from the SAME `useAreasNavigationJourney`
+   * instance the panel renders (never re-fetched here). `null` when the
+   * journey is not mounted, still loading, or the resolved node has no
+   * bounds. See the fit-once effect below for why this is keyed on the
+   * TRANSITION rather than a `${nodeKey}:${revisionId}` destination identity.
+   */
+  navigationNodeKey?: string | null;
+  navigationNodeBounds?: NavigationBounds | null;
 }
 
 export interface UseDiscoverCameraOrchestrationResult {
@@ -156,6 +167,8 @@ export function useDiscoverCameraOrchestration({
   scopeNamespaces,
   regionScopedGroups,
   isLoadingRegionScopedGroups,
+  navigationNodeKey = null,
+  navigationNodeBounds = null,
 }: UseDiscoverCameraOrchestrationParams): UseDiscoverCameraOrchestrationResult {
   // Issue #1910 (PR2 fix-up, Finding 2) — fall back to a locally-derived
   // namespace when the caller doesn't supply one (mirrors
@@ -396,6 +409,55 @@ export function useDiscoverCameraOrchestration({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlState.scope, urlState.groupId, urlState.areaKey, areasLoading, isLoadingAreaGroups, discoverAreas, areaGroupsData, summaryRegions, resolvedScopeNamespaces, regionScopedGroups, isLoadingRegionScopedGroups]);
+
+  // Issue #1956 PR 2 (Slice 3, AC3.10) — fit-once per canonical Areas
+  // navigation SELECTION, reusing the existing `setPanToArea` AreaPanner
+  // fitBounds machinery (zero new fitBounds machinery, same recipe as the
+  // group-focused effect above: a synthetic AreaPoint carrying the target
+  // bbox).
+  //
+  // T2 — THE FIT-ONCE GUARD IS KEYED ON THE TRANSITION, NOT ON A
+  // `${nodeKey}:${revisionId}` DESTINATION IDENTITY. qa-fast's pre-
+  // implementation scan (MV-2) confirmed no such guard exists yet on this
+  // branch, and flagged the exact trap a naive port would reintroduce: keying
+  // on destination identity makes Direction -> Area -> Back-to-the-same-
+  // Direction produce an IDENTICAL key on the second visit to that Direction,
+  // so no fit would fire and the map would stay framed on the child while the
+  // panel already shows the parent. Keying on "did `navigationNodeKey` change
+  // since the last render this effect acted on" fires again on every genuine
+  // transition, including a return to a previously-visited node, because the
+  // ref is advanced to the INTERVENING key (the child's) in between.
+  const prevNavigationNodeKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (navigationNodeKey == null) {
+      prevNavigationNodeKeyRef.current = null;
+      return;
+    }
+    const transitioned = navigationNodeKey !== prevNavigationNodeKeyRef.current;
+    prevNavigationNodeKeyRef.current = navigationNodeKey;
+    if (!transitioned) return;
+
+    const bounds = navigationNodeBounds;
+    if (
+      !bounds ||
+      bounds.minLat == null ||
+      bounds.minLon == null ||
+      bounds.maxLat == null ||
+      bounds.maxLon == null
+    ) {
+      return;
+    }
+    setPanToArea({
+      areaKey: navigationNodeKey,
+      areaLabel: navigationNodeKey,
+      geo_center_lat: bounds.centreLat ?? (bounds.minLat + bounds.maxLat) / 2,
+      geo_center_lon: bounds.centreLon ?? (bounds.minLon + bounds.maxLon) / 2,
+      bbox: [
+        [bounds.minLat, bounds.minLon],
+        [bounds.maxLat, bounds.maxLon],
+      ],
+    });
+  }, [navigationNodeKey, navigationNodeBounds, setPanToArea]);
 
   // Issue #1410 (B3) — viewport-fit when agri group listings arrive.
   // Uses a state variable fed into PropertyMap's focusBounds so it's consistent with how

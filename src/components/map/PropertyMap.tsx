@@ -10,7 +10,13 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
 import type { PropertyListing, PropertyType, PropertyImage } from '@/hooks/usePropertyListings';
 import { DrawControl } from '@/components/map/DrawControl';
-import { AreaMarkerLayer, type AreaPoint, type AreaMarkerClusterInfo } from '@/components/map/AreaMarkerLayer';
+import {
+  AreaMarkerLayer,
+  AreaDestinationMarkerLayer,
+  type AreaPoint,
+  type AreaMarkerClusterInfo,
+} from '@/components/map/AreaMarkerLayer';
+import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { CameraIntent } from '@/hooks/useDiscoverMapData';
 import { SchoolMarkerLayer } from '@/components/map/SchoolMarkerLayer';
 import { SchoolZoneLabelLayer, type ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
@@ -389,6 +395,37 @@ interface PropertyMapProps {
   onAreaClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
   /** Fired after each area-marker bucketing recompute with (shown, total). */
   onAreaMarkersComputed?: (shownCount: number, totalCount: number) => void;
+  /**
+   * Issue #1956 PR 2 (Slice 3, map half) — the ONE `useAreasNavigationJourney`
+   * result MapDiscovery resolved (node/levelKind/children/selectNode), threaded
+   * through UNCHANGED so the map's Direction destinations and the right
+   * panel's cards read the identical node/counts/selectNode reference
+   * (AC3.4/AC3.9/T3) rather than each re-deriving their own. `null`/absent
+   * whenever the canonical Areas journey is not mounted.
+   */
+  areasNavigationJourney?: Pick<
+    UseAreasNavigationJourneyResult,
+    'node' | 'levelKind' | 'children' | 'selectNode'
+  > | null;
+  /**
+   * Issue #1956 PR 2 (Slice 3, pass 4, AC3.9) — the ephemeral hover/focus
+   * node_key MapDiscovery owns alongside `areasNavigationJourney`, threaded
+   * through unchanged so `AreaDestinationMarkerLayer` and the right panel's
+   * `NavigationChildCard` list highlight the SAME child by stable node_key.
+   * Never written to the URL — no history entry, no camera fit.
+   */
+  hoveredNavigationNodeKey?: string | null;
+  onNavigationNodeHoverChange?: (nodeKey: string | null) => void;
+  /**
+   * Issue #1956 PR 2 (Slice 3, map half) — the SAME dual-preview-gate +
+   * `journey === 'area-first'` condition `DiscoverRightPanelContainer`
+   * already evaluates to decide whether `DiscoverAreasJourneyPanel` (rather
+   * than the legacy panel) is mounted. When true, `AreaDestinationMarkerLayer`
+   * replaces the legacy `AreaMarkerLayer` for this render — the two are
+   * mutually exclusive, never both mounted, so they never double-render or
+   * fight over the area-marker slot.
+   */
+  showAreasNavigationDestinations?: boolean;
   /** Called on every zoomend with the new zoom level. Used by zoom-band switching logic. */
   onZoomChange?: (zoom: number) => void;
   /**
@@ -1726,6 +1763,10 @@ export function PropertyMap({
   onAreaClusterClick,
   onAreaClusterCameraIntent,
   onAreaMarkersComputed,
+  areasNavigationJourney = null,
+  hoveredNavigationNodeKey = null,
+  onNavigationNodeHoverChange,
+  showAreasNavigationDestinations = false,
   onZoomChange,
   onViewportChange,
   onBoundsChange,
@@ -1885,26 +1926,42 @@ export function PropertyMap({
             />
           )
         )}
-        {/* Issue #1882 (Track A PR3, Slice S3) — AreaMarkerLayer renders when it's
-            the selected primary layer ('area') OR when agri mode intentionally
-            coexists with it ('agriCoexist', unchanged pre-#1882 behaviour) —
-            never when the residential cluster layer won the exclusivity check. */}
-        {areas.length > 0 && (primaryMapLayer === 'area' || primaryMapLayer === 'agriCoexist') && (
-          <AreaMarkerLayer
-            areas={areas}
-            onAreaClick={onAreaClick}
-            onAreaCameraIntent={onAreaCameraIntent}
-            focusedGroupAreas={focusedGroupAreas}
-            journey={journey}
-            selectedSchool={selectedSchool}
-            enableDegradation={enableAreaMarkerDegradation}
-            selectedAreaKey={selectedAreaKey}
-            searchMatchKeys={areaSearchMatchKeys}
-            hoveredAreaKey={hoveredAreaKey}
-            onAreaClusterClick={onAreaClusterClick}
-            onAreaClusterCameraIntent={onAreaClusterCameraIntent}
-            onMarkersComputed={onAreaMarkersComputed}
+        {/* Issue #1956 PR 2 (Slice 3, map half) — the canonical Areas-journey
+            Direction destinations are MUTUALLY EXCLUSIVE with the legacy
+            AreaMarkerLayer below (never both mounted): when the SAME gate
+            DiscoverRightPanelContainer uses to mount DiscoverAreasJourneyPanel
+            is active, this layer takes the area-marker slot instead. */}
+        {showAreasNavigationDestinations && areasNavigationJourney ? (
+          <AreaDestinationMarkerLayer
+            node={areasNavigationJourney.node}
+            levelKind={areasNavigationJourney.levelKind}
+            children={areasNavigationJourney.children}
+            onSelect={areasNavigationJourney.selectNode}
+            hoveredNodeKey={hoveredNavigationNodeKey}
+            onHoverChange={onNavigationNodeHoverChange}
           />
+        ) : (
+          // Issue #1882 (Track A PR3, Slice S3) — AreaMarkerLayer renders when it's
+          // the selected primary layer ('area') OR when agri mode intentionally
+          // coexists with it ('agriCoexist', unchanged pre-#1882 behaviour) —
+          // never when the residential cluster layer won the exclusivity check.
+          areas.length > 0 && (primaryMapLayer === 'area' || primaryMapLayer === 'agriCoexist') && (
+            <AreaMarkerLayer
+              areas={areas}
+              onAreaClick={onAreaClick}
+              onAreaCameraIntent={onAreaCameraIntent}
+              focusedGroupAreas={focusedGroupAreas}
+              journey={journey}
+              selectedSchool={selectedSchool}
+              enableDegradation={enableAreaMarkerDegradation}
+              selectedAreaKey={selectedAreaKey}
+              searchMatchKeys={areaSearchMatchKeys}
+              hoveredAreaKey={hoveredAreaKey}
+              onAreaClusterClick={onAreaClusterClick}
+              onAreaClusterCameraIntent={onAreaClusterCameraIntent}
+              onMarkersComputed={onAreaMarkersComputed}
+            />
+          )
         )}
         {schoolZoneLabels && schoolZoneLabels.length > 0 && (
           <SchoolZoneLabelLayer zones={schoolZoneLabels} onZoneClick={onSelectZone} />

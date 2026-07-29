@@ -73,6 +73,11 @@ import {
   deriveDiscoverBadge,
   formatDiscoverBadgeCopy,
 } from '@/features/discover/presentation/discoverBadge';
+import { useAreasNavigationJourney } from '@/features/discover/navigation/useAreasNavigationJourney';
+import {
+  isAreasPreviewCapabilityEnabled,
+  isAreasPreviewJourneyActive,
+} from '@/features/discover/preview/areasPreviewCapability';
 import {
   deriveShowSchoolMarkers,
   deriveSchoolRadiusPillNoun,
@@ -119,6 +124,35 @@ export default function MapDiscovery() {
   // rather than calling derivePanelContent directly. computeDiscoverLayer delegates to
   // derivePanelContent by construction, so this is behaviour-preserving.
   const panelContent = computeDiscoverLayer(toLayerInput({ ...nav, viewport } satisfies DiscoverUrlState));
+
+  // Issue #1956 PR 2 (Slice 3) — the ONE `useAreasNavigationJourney` instance
+  // for this view. Called UNCONDITIONALLY (rules of hooks); `enabled` gates
+  // its internal fetches so it is a pure no-op (node=null) whenever the dual
+  // preview gate is closed or the user is not in the area-first journey. The
+  // resolved `node`/`children`/`selectNode` are threaded to
+  // DiscoverRightPanelContainer AND to useDiscoverCameraOrchestration below —
+  // ONE reference, never two independently-fetched copies (T3/AC3.4/AC3.9).
+  const areasPreviewJourneyActive = isAreasPreviewJourneyActive({
+    capabilityEnabled: isAreasPreviewCapabilityEnabled(),
+    areasPreview: nav.areasPreview,
+  });
+  const showAreasNavigationJourney = areasPreviewJourneyActive && nav.journey === 'area-first';
+  // Issue #1956 PR 2 (Slice 3, pass 4, AC3.9) — the ONE ephemeral hover/focus
+  // node_key, lifted here for the same reason `areasNavigationJourney` is:
+  // threaded unchanged to BOTH the map's AreaDestinationMarkerLayer and the
+  // panel's NavigationChildCard list so a hover on either side highlights the
+  // matching item on the other, by stable node_key. Plain useState (never the
+  // URL) — hover creates no history entry and no camera fit.
+  const [hoveredNavigationNodeKey, setHoveredNavigationNodeKey] = useState<string | null>(null);
+  const areasNavigationJourney = useAreasNavigationJourney({
+    // Matches the established `nav.city || DEFAULT_CITY` idiom this early
+    // section already uses (see useAreaGroups/useRegionalAreaGroups below) —
+    // the `city` local const is only defined later, inside useDiscoverPageState.
+    city: nav.city || DEFAULT_CITY,
+    requestedNodeKey: nav.rawNodeParam ?? null,
+    onSelectNode: actions.goToNode,
+    enabled: showAreasNavigationJourney,
+  });
 
   // Issue #1597 — early derivation of PropertyFilters from URL state, available before
   // useDiscoverPageState is called. Used by the group-results listings query so it respects
@@ -1105,6 +1139,10 @@ export default function MapDiscovery() {
     scopeNamespaces,
     regionScopedGroups: regionScopedGroupsData?.groups,
     isLoadingRegionScopedGroups,
+    // Issue #1956 PR 2 (Slice 3, AC3.10/T2) — the SAME areasNavigationJourney
+    // instance's node identity/bounds, not a re-fetch.
+    navigationNodeKey: areasNavigationJourney.node?.nodeKey ?? null,
+    navigationNodeBounds: areasNavigationJourney.node?.bounds ?? null,
   });
 
   // Debug: expose areaListings and related data to window.__debug for Playwright tests.
@@ -1876,6 +1914,13 @@ export default function MapDiscovery() {
           publishClusterCameraIntent={publishClusterCameraIntent}
           handleAreaClusterClick={handleAreaClusterClick}
           handleAreaMarkersComputed={handleAreaMarkersComputed}
+          areasNavigationJourney={areasNavigationJourney}
+          hoveredNavigationNodeKey={hoveredNavigationNodeKey}
+          onNavigationNodeHoverChange={setHoveredNavigationNodeKey}
+          // Issue #1956 PR 2 (Slice 5) — the map-side canonical Areas
+          // breadcrumb's pure href builder (same `actions.buildNodeHref`
+          // the right panel's HierarchyBackButton uses).
+          buildNavigationNodeHref={actions.buildNodeHref}
           schoolZoneLabels={schoolZoneLabels}
           setMapZoom={setMapZoom}
           handleBoundsChange={handleBoundsChange}
@@ -1948,6 +1993,9 @@ export default function MapDiscovery() {
 
         <DiscoverRightPanelContainer
           resolvedPanelContent={resolvedPanelContent}
+          areasNavigationJourney={areasNavigationJourney}
+          hoveredNavigationNodeKey={hoveredNavigationNodeKey}
+          onNavigationNodeHoverChange={setHoveredNavigationNodeKey}
           selectedMarkerListing={selectedMarkerListing}
           clearSelectedMarkerListing={clearSelectedMarkerListing}
           city={city}

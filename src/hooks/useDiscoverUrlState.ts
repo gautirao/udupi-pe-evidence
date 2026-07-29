@@ -259,6 +259,24 @@ export interface DiscoverUrlState {
    * deployment capability (see features/discover/preview/areasPreviewCapability).
    */
   areasPreview?: boolean;
+  /**
+   * Issue #1956 PR 2 — the RAW trimmed `node` param, BEFORE the shape/size
+   * validation `node` applies. Null only when `node=` is genuinely absent, empty
+   * or whitespace-only.
+   *
+   * This exists so that "malformed `node=`" and "no `node=` at all" stay
+   * DISTINGUISHABLE. `node` above reads a malformed or oversized value as null so
+   * it is never treated as a hierarchy identity — but a mount gate reading that
+   * same null would fall through to the legacy flat landing silently, with no
+   * resolution notice, for a URL the user can plainly see carries a node. The
+   * server's resolve ladder (EXACT → ANCESTOR → CITY_ROOT) is designed to absorb
+   * an unknown key, so a consumer mounts on the raw value and lets the server
+   * classify it. See state/url/navigation.ts's own doc for the full rationale.
+   *
+   * Optional, like the other late-added fields, so partial state literals in
+   * existing tests and callers keep compiling.
+   */
+  rawNodeParam?: string | null;
 }
 
 export interface DiscoverUrlActions {
@@ -474,6 +492,41 @@ export interface DiscoverUrlActions {
     zoom: number;
     areaKey?: string | null;
   }) => void;
+  /**
+   * Issue #1956 PR 2 — drill into a canonical Areas hierarchy node. Writes
+   * `node=<serverSuppliedKey>` and drops `lat`/`lon`/`zoom`/`listing` (the new
+   * node owns the camera; a peek pinned to the previous context must not
+   * survive). Single PUSH. A repeat call for the node already active is a no-op
+   * (zero writes) so one click never costs two Back presses.
+   */
+  goToNode: (nodeKey: string) => void;
+  /**
+   * Issue #1956 PR 2 — jump to an ancestry crumb, including `'root'` (the
+   * synthetic city top level, a real server key). Identical URL delta to
+   * `goToNode`; a distinct name so breadcrumb intent has its own call site.
+   * Single PUSH.
+   */
+  goToAncestorNode: (nodeKey: string) => void;
+  /**
+   * Issue #1956 PR 2 — leave the hierarchy cursor: deletes `node` plus
+   * `lat`/`lon`/`zoom`/`listing`. Single PUSH.
+   */
+  clearNode: () => void;
+  /**
+   * Issue #1956 PR 2 — ATOMIC entry into the canonical Areas journey: sets
+   * `journey=area-first` AND `node=` in ONE write, therefore ONE history entry.
+   * Callers must use this instead of composing `setJourney` (itself a PUSH) with
+   * a node write, which would push twice in a single tick.
+   */
+  enterAreasJourney: (nodeKey: string | null) => void;
+  /**
+   * Issue #1956 PR 2 — PURE: returns the query string a middle-click / cmd-click
+   * / "copy link address" on a node destination should resolve to, or null when
+   * the key is not writable. Writes NOTHING. Guaranteed by a differential test to
+   * produce exactly the URL `goToNode` would produce from the same params, so the
+   * link affordance and the click affordance cannot diverge.
+   */
+  buildNodeHref: (nodeKey: string) => string | null;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -565,11 +618,18 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     // key order is preserved for any Object.keys/snapshot assertion.
     node: navigationDomain.state.node,
     areasPreview: navigationDomain.state.areasPreview,
+    // Issue #1956 PR 2 — appended after PR 1's two keys, same rationale.
+    rawNodeParam: navigationDomain.state.rawNodeParam,
   };
 
   // Spread merge is safe under this explicit `DiscoverUrlActions` annotation —
-  // TypeScript verifies every key of the 37-action interface is present across
-  // the seven domain slices (a missing/misspelled action key fails the build).
+  // TypeScript verifies every key of the action interface is present across the
+  // domain slices (a missing/misspelled action key fails the build).
+  //
+  // Issue #1956 PR 2 — the navigation domain now contributes actions too (it was
+  // deliberately action-less in PR 1, when nothing navigated). Spread LAST, in
+  // the same position its hook occupies in the call order above. Its keys are
+  // disjoint from every other domain's, so the merge order is not load-bearing.
   const actions: DiscoverUrlActions = {
     ...viewportDomain.actions,
     ...cityDomain.actions,
@@ -578,6 +638,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     ...areaDomain.actions,
     ...agriculturalDomain.actions,
     ...compatibilityDomain.actions,
+    ...navigationDomain.actions,
   };
 
   return [state, actions];

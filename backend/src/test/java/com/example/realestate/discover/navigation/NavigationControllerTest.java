@@ -20,7 +20,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -881,9 +883,184 @@ class NavigationControllerTest {
                 .as("per-area school map is derived from the SAME coverage snapshot the totals came "
                         + "from, so the two can never disagree")
                 .containsExactlyInAnyOrderEntriesOf(Map.of("leaf1", 1L, "leaf3", 2L));
-        assertThat(body.children()).extracting(AreaCountRollupService.NodeCount::nodeKey)
+        assertThat(body.children()).extracting(NavigationCountsResponse.ChildCount::nodeKey)
                 .containsExactly("a:leaf1", "a:leaf2");
         assertThat(body.revisionId()).isEqualTo(42L);
+    }
+
+    // ── #1956 PR2 fix-verify cycle 1 (matching_area_count_backend_widening) ────────────────────
+
+    /**
+     * The defect this field exists to prevent: a child's LISTING total ({@code count}) must never
+     * be substituted for its matching-AREA count. The "mid" cluster's descendant areas are leaf1
+     * and leaf2 (see {@link #buildGraph()}); leaf1 has a huge listing count and leaf2 has zero, so
+     * only ONE of its two descendant areas actually matches the active filters. The stubbed
+     * {@code count} on the child (1,736, deliberately unrelated to the area-count arithmetic) would
+     * make a test that accidentally asserts the listing count instead pass at the wrong value —
+     * this asserts the correct value (1) and, separately, that it is NOT the listing count.
+     */
+    @Test
+    void getCounts_matchingAreaCount_reportsDistinctMatchingAreas_notTheListingTotal() {
+        NavigationGraph graph = buildGraph();
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(graph));
+        // leaf1: 1,730 listings (matches); leaf2: present but zero listings (does not match).
+        Map<String, Long> areaCounts = Map.of("leaf1", 1730L, "leaf2", 0L);
+        when(rollupService.areaCountsForCity(eq("testcity"), eq(42L), any())).thenReturn(areaCounts);
+        when(rollupService.schoolCoverageForCity(eq("testcity"), eq(42L))).thenReturn(AreaSchoolCoverage.empty());
+        when(rollupService.countForNode(any(), any(), eq(areaCounts))).thenReturn(1736L);
+        when(rollupService.schoolCountForNode(any(), any(), any())).thenReturn(0L);
+        // "mid"'s own listing total is stubbed to 1,736 -- deliberately far from the real
+        // matching-area count (1) so a test that accidentally reads count() instead of
+        // matchingAreaCount() fails loudly rather than by coincidence.
+        when(rollupService.childCounts(any(), isNull(), eq(areaCounts), any()))
+                .thenReturn(List.of(new AreaCountRollupService.NodeCount("c:north:leaf1-leaf2", 1736L, 0L)));
+
+        NavigationCountsResponse body = controller.getCounts(
+                "testcity", "root", null, null, null, null, null, null, null, null, null)
+                .getBody();
+
+        NavigationCountsResponse.ChildCount mid = body.children().get(0);
+        assertThat(mid.nodeKey()).isEqualTo("c:north:leaf1-leaf2");
+        assertThat(mid.count()).isEqualTo(1736L);
+        assertThat(mid.matchingAreaCount())
+                .as("1,730 listings sit in leaf1 alone -- only ONE of mid's two descendant areas "
+                        + "(leaf1, leaf2) actually matches, never the listing total")
+                .isEqualTo(1L)
+                .isNotEqualTo(mid.count());
+    }
+
+    /**
+     * Zero is a real, meaningful, always-present value -- not null/absent. A child whose every
+     * descendant area has zero matching listings must report {@code matchingAreaCount() == 0},
+     * exactly like the parent total ({@code count()}) is 0 in that case, never a distinct
+     * null/omitted representation.
+     */
+    @Test
+    void getCounts_matchingAreaCount_zeroWhenNoDescendantAreaMatches_neverNullOrOmitted() {
+        NavigationGraph graph = buildGraph();
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(graph));
+        Map<String, Long> areaCounts = Map.of("leaf1", 0L, "leaf2", 0L);
+        when(rollupService.areaCountsForCity(eq("testcity"), eq(42L), any())).thenReturn(areaCounts);
+        when(rollupService.schoolCoverageForCity(eq("testcity"), eq(42L))).thenReturn(AreaSchoolCoverage.empty());
+        when(rollupService.countForNode(any(), any(), eq(areaCounts))).thenReturn(0L);
+        when(rollupService.schoolCountForNode(any(), any(), any())).thenReturn(0L);
+        when(rollupService.childCounts(any(), isNull(), eq(areaCounts), any()))
+                .thenReturn(List.of(new AreaCountRollupService.NodeCount("c:north:leaf1-leaf2", 0L, 0L)));
+
+        NavigationCountsResponse body = controller.getCounts(
+                "testcity", "root", null, null, null, null, null, null, null, null, null)
+                .getBody();
+
+        assertThat(body.children().get(0).matchingAreaCount()).isEqualTo(0L);
+    }
+
+    /**
+     * Filter awareness: the SAME child, the SAME graph -- only the {@code areaCounts} map (which the
+     * active filters produced) differs between the two calls. {@code matchingAreaCount} must track
+     * it, proving it is not computed from some filter-independent structural fact.
+     */
+    @Test
+    void getCounts_matchingAreaCount_changesWhenActiveFiltersChangeTheAreaCountsMap() {
+        NavigationGraph graph = buildGraph();
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(graph));
+        when(rollupService.schoolCoverageForCity(eq("testcity"), eq(42L))).thenReturn(AreaSchoolCoverage.empty());
+        when(rollupService.countForNode(any(), any(), any())).thenReturn(0L);
+        when(rollupService.schoolCountForNode(any(), any(), any())).thenReturn(0L);
+
+        Map<String, Long> bothMatch = Map.of("leaf1", 4L, "leaf2", 6L);
+        when(rollupService.areaCountsForCity(eq("testcity"), eq(42L), any())).thenReturn(bothMatch);
+        when(rollupService.childCounts(any(), isNull(), eq(bothMatch), any()))
+                .thenReturn(List.of(new AreaCountRollupService.NodeCount("c:north:leaf1-leaf2", 10L, 0L)));
+        long unfiltered = controller.getCounts(
+                "testcity", "root", null, null, null, null, null, null, null, null, null)
+                .getBody().children().get(0).matchingAreaCount();
+
+        // A narrower filter (e.g. a property type only leaf1 has) drops leaf2 out of the map entirely.
+        Map<String, Long> onlyLeaf1Matches = Map.of("leaf1", 4L);
+        when(rollupService.areaCountsForCity(eq("testcity"), eq(42L), any())).thenReturn(onlyLeaf1Matches);
+        when(rollupService.childCounts(any(), isNull(), eq(onlyLeaf1Matches), any()))
+                .thenReturn(List.of(new AreaCountRollupService.NodeCount("c:north:leaf1-leaf2", 4L, 0L)));
+        long filtered = controller.getCounts(
+                "testcity", "root", null, "some-property-type", null, null, null, null, null, null, null)
+                .getBody().children().get(0).matchingAreaCount();
+
+        assertThat(unfiltered).isEqualTo(2L);
+        assertThat(filtered)
+                .as("narrowing the active filters must change the reported matching-area count")
+                .isEqualTo(1L)
+                .isNotEqualTo(unfiltered);
+    }
+
+    /**
+     * Distinctness: an area reachable twice under the same child must count ONCE, never summed.
+     * {@link NavigationGraph#descendantAreaKeysOf} is documented to already return each subtree
+     * AREA leaf exactly once per node (a genuine tree invariant), so a mocked {@link NavigationGraph}
+     * is used here to exercise the defensive case directly -- a duplicate entry in that list -- and
+     * prove the controller's own fold does not double-count it regardless of that upstream
+     * guarantee.
+     */
+    @Test
+    void getCounts_matchingAreaCount_duplicateDescendantAreaKey_countedOnce_notSummed() {
+        NavigationGraph mockedGraph = mock(NavigationGraph.class);
+        when(mockedGraph.revisionId()).thenReturn(77L);
+        when(graphCache.getActiveGraph("dupcity")).thenReturn(Optional.of(mockedGraph));
+        when(mockedGraph.nodeByKey("c:dup:child")).thenReturn(null);
+        when(mockedGraph.descendantAreaKeysOf("c:dup:child"))
+                .thenReturn(List.of("leaf1", "leaf1", "leaf2"));
+
+        Map<String, Long> areaCounts = Map.of("leaf1", 9L, "leaf2", 0L);
+        when(rollupService.areaCountsForCity(eq("dupcity"), eq(77L), any())).thenReturn(areaCounts);
+        when(rollupService.schoolCoverageForCity(eq("dupcity"), eq(77L))).thenReturn(AreaSchoolCoverage.empty());
+        when(rollupService.countForNode(any(), any(), any())).thenReturn(9L);
+        when(rollupService.schoolCountForNode(any(), any(), any())).thenReturn(0L);
+        when(rollupService.childCounts(any(), isNull(), eq(areaCounts), any()))
+                .thenReturn(List.of(new AreaCountRollupService.NodeCount("c:dup:child", 9L, 0L)));
+
+        NavigationCountsResponse body = controller.getCounts(
+                "dupcity", "root", null, null, null, null, null, null, null, null, null).getBody();
+
+        assertThat(body.children().get(0).matchingAreaCount())
+                .as("leaf1 appears twice in the descendant list but is one area and must count once")
+                .isEqualTo(1L);
+    }
+
+    /**
+     * No-N+1 (added-field must not introduce extra queries/round trips). This suite is a plain
+     * Mockito unit test with no real database and no Testcontainers/@DataJpaTest query-count
+     * infrastructure to reuse, so there is no established way in this codebase to assert an actual
+     * SQL round-trip count here -- inventing one (e.g. a fragile Statement-count proxy) would not be
+     * real evidence. The available, non-fragile proxy is verifying that the two calls which DO reach
+     * a real provider/query ({@code areaCountsForCity}, {@code schoolCoverageForCity}) and the
+     * existing whole-city {@code childCounts} fold each still happen EXACTLY ONCE per request --
+     * never once per child -- regardless of how many children this node has (2, here).
+     * {@code matchingAreaCount} is computed purely from {@code graph.descendantAreaKeysOf} (an
+     * in-memory, already-cached lookup, not a provider call) and the SAME {@code areaCounts} map
+     * already returned by the one {@code areaCountsForCity} call above.
+     */
+    @Test
+    void getCounts_matchingAreaCount_addsNoExtraRollupServiceCalls_pureInMemoryFold() {
+        NavigationGraph graph = buildGraph();
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(graph));
+        Map<String, Long> areaCounts = Map.of("leaf1", 5L, "leaf2", 3L, "leaf3", 0L);
+        AreaSchoolCoverage coverage = AreaSchoolCoverage.empty();
+        when(rollupService.areaCountsForCity(eq("testcity"), eq(42L), any())).thenReturn(areaCounts);
+        when(rollupService.schoolCoverageForCity(eq("testcity"), eq(42L))).thenReturn(coverage);
+        when(rollupService.countForNode(any(), any(), eq(areaCounts))).thenReturn(8L);
+        when(rollupService.schoolCountForNode(any(), any(), eq(coverage))).thenReturn(0L);
+        when(rollupService.childCounts(any(), eq("c:north:leaf1-leaf2-leaf3"), eq(areaCounts), eq(coverage)))
+                .thenReturn(List.of(
+                        new AreaCountRollupService.NodeCount("c:north:leaf1-leaf2", 8L, 0L),
+                        new AreaCountRollupService.NodeCount("a:leaf3", 0L, 0L)));
+
+        NavigationCountsResponse body = controller.getCounts(
+                "testcity", "c:north:leaf1-leaf2-leaf3", null, null, null, null, null, null, null, null, null)
+                .getBody();
+
+        assertThat(body.children()).hasSize(2);
+        verify(rollupService, times(1)).areaCountsForCity(eq("testcity"), eq(42L), any());
+        verify(rollupService, times(1)).schoolCoverageForCity(eq("testcity"), eq(42L));
+        verify(rollupService, times(1))
+                .childCounts(any(), eq("c:north:leaf1-leaf2-leaf3"), eq(areaCounts), eq(coverage));
     }
 
     /**

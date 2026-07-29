@@ -77,6 +77,13 @@ function makeResponse(
       nodeKey: `a:bangalore|area-${i}`,
       count: i + 1,
       schoolCount: i,
+      // Fixture-only value for type completeness (#1956 PR 2 frontend
+      // consumption widening) — this file's hook is a pure pass-through of
+      // `matchingAreaCount` (see `toSnapshot`'s `childCounts` map, which
+      // stores the whole `NavigationNodeCount` object unchanged), so no
+      // consuming logic here needed updating, only the fixture's literal
+      // shape to satisfy the now-required field.
+      matchingAreaCount: i,
     })),
     revisionId: 8,
     ...overrides,
@@ -293,6 +300,7 @@ describe('AC1.12 — one identity owns both map and panel counts', () => {
       nodeKey: 'a:bangalore|area-2',
       count: 3,
       schoolCount: 2,
+      matchingAreaCount: 2,
     });
     // `count` keeps its wire name; the snapshot's own field is the node total.
     expect(snapshot.listingCount).toBe(100);

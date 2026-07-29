@@ -58,8 +58,8 @@ import java.util.Map;
  *                          and {@code children} already carry the correctly union-deduplicated
  *                          roll-ups, and a client must use those rather than adding these up. An
  *                          area with no counted schools is ABSENT from the map, not zero-valued.
- * @param children          each direct child's own rolled-up listing + school totals, in display
- *                          order
+ * @param children          each direct child's own rolled-up listing + school totals plus its
+ *                          {@link ChildCount#matchingAreaCount}, in display order
  * @param revisionId        the production revision the counts' structural fold was computed against
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -69,7 +69,37 @@ public record NavigationCountsResponse(
         long schoolCount,
         Map<String, Long> areaCounts,
         Map<String, Long> areaSchoolCounts,
-        List<AreaCountRollupService.NodeCount> children,
+        List<ChildCount> children,
         long revisionId
 ) {
+
+    /**
+     * One direct child's rolled-up counts, widened from {@link AreaCountRollupService.NodeCount}
+     * with ONE additive field (#1956 PR2 fix-verify cycle 1, {@code matching_area_count_backend_
+     * widening} ruling): {@code matchingAreaCount}, the number of DISTINCT descendant AREA keys
+     * beneath this child whose value in the enclosing response's {@code areaCounts} map (the SAME
+     * filtered map {@code count}/{@code schoolCount} were rolled up from) is strictly greater than
+     * zero.
+     *
+     * <p>This counts AREAS with at least one matching listing under the active filters — NOT this
+     * child's listing total ({@code count}), which can be far larger: a child with 1,736 listings
+     * spread across only 12 eligible areas must report {@code matchingAreaCount == 12}, never
+     * {@code 1736}. Conflating the two was an identified defect this field exists to eliminate.
+     *
+     * <p>Zero is a REAL, meaningful value (no descendant area currently matches the active filters)
+     * and is always present, never {@code null}/omitted — a client renders it as its own locked-zero
+     * state rather than treating absence as "no data".
+     *
+     * <p>Computed as a pure in-memory fold over data the counts path already holds — the SAME
+     * whole-city {@code areaCounts} map and the SAME cached {@code NavigationGraph#descendantAreaKeysOf}
+     * descendant-area list this response already uses elsewhere — so there is no additional query,
+     * no per-child fetch, and no descendant area KEYS are exposed on the wire, only the derived count.
+     *
+     * @param nodeKey            this child's node key
+     * @param count              this child's own rolled-up listing total
+     * @param schoolCount        this child's own rolled-up school total
+     * @param matchingAreaCount  distinct descendant AREA keys with a filtered listing count > 0
+     */
+    public record ChildCount(String nodeKey, long count, long schoolCount, long matchingAreaCount) {
+    }
 }

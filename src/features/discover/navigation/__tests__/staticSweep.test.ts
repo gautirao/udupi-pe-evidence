@@ -69,39 +69,95 @@ function read(file: string): string {
 }
 
 /**
- * The pure navigation/preview modules PR 1 adds. These own no URLs, no camera,
+ * The pure navigation/preview modules under sweep. These own no URLs, no camera,
  * no labels of their own — every sweep below is scoped to them.
+ *
+ * ── CHANGED IN PR 2: DISCOVERED, NOT HARDCODED ──
+ * PR 1 declared this as a hardcoded 8-item allowlist pinned by
+ * `expect(...length).toBe(8)`. That made the sweep BLIND BY CONSTRUCTION to every
+ * module added afterwards: a new navigation module was simply not in the array,
+ * so "no new module calls the camera" silently meant "none of these eight does",
+ * which was already true and stayed true no matter what was added. PR 2 adds
+ * modules to exactly this directory — including, in a later pass, a journey hook
+ * that DOES publish a camera intent — so the allowlist form would have let the
+ * one file the sweep most needs to police walk straight past it.
+ *
+ * The list is therefore now a DIRECTORY WALK with an EXPLICIT EXEMPTION SET. A
+ * new file is swept by default; excluding one is a deliberate, named, reasoned
+ * act recorded below rather than an omission nobody notices.
  */
+
+/**
+ * Modules inside the swept directories that are deliberately NOT held to the
+ * "pure module" rules, each with the reason it is legitimately different.
+ * Adding an entry here is a review-visible decision; forgetting to add a file to
+ * a list is not. Keep this set as small as the truth allows.
+ */
+const SWEEP_EXEMPTIONS: Record<string, string> = {
+  // Issue #1956 PR 2 (Slice 3) — useAreasNavigationJourney.ts is the resolved
+  // navigation node's ONE source (city-root/Direction/Local-Destination/AREA),
+  // and its `node.nodeKey`/`node.bounds` are what seed the exactly-one-fit-per
+  // -selection camera transition in useDiscoverCameraOrchestration.ts (AC3.10,
+  // T2). The actual `setPanToArea(` call site lives in that camera hook, not
+  // here, precisely so the fetch/derive concern and the one-shot camera-ref
+  // guard concern (which already owns prevGroupIdRef/prevScopeRef alongside
+  // this new node guard) are not duplicated across two modules — but this
+  // hook is the seam the camera fit is keyed on, so it is exempted from the
+  // "no new module calls the camera" sweep by name here rather than left to
+  // be discovered as a false failure later.
+  'navigation/useAreasNavigationJourney.ts':
+    'Seeds the camera-orchestration fit-once transition via node/bounds; the actual setPanToArea call lives in useDiscoverCameraOrchestration.ts, not here.',
+};
+
+function listSweptModules(dir: string, label: string): { file: string; source: string }[] {
+  return fs
+    .readdirSync(dir)
+    .filter((entry) => /\.tsx?$/.test(entry) && !/\.test\.tsx?$/.test(entry))
+    .filter((entry) => fs.statSync(path.join(dir, entry)).isFile())
+    .map((entry) => `${label}/${entry}`)
+    .filter((file) => !(file in SWEEP_EXEMPTIONS))
+    .sort()
+    .map((file) => ({ file, source: read(path.join(dir, path.basename(file))) }));
+}
+
 const PURE_NAV_MODULES: { file: string; source: string }[] = [
-  { file: 'navigation/types.ts', source: read(path.join(NAV_DIR, 'types.ts')) },
-  { file: 'navigation/nodeLevelKind.ts', source: read(path.join(NAV_DIR, 'nodeLevelKind.ts')) },
-  { file: 'navigation/navigationModel.ts', source: read(path.join(NAV_DIR, 'navigationModel.ts')) },
-  {
-    file: 'navigation/nearbyAreaArithmetic.ts',
-    source: read(path.join(NAV_DIR, 'nearbyAreaArithmetic.ts')),
-  },
-  {
-    file: 'navigation/journeyVisibility.ts',
-    source: read(path.join(NAV_DIR, 'journeyVisibility.ts')),
-  },
-  {
-    file: 'navigation/areasDestination.ts',
-    source: read(path.join(NAV_DIR, 'areasDestination.ts')),
-  },
-  {
-    file: 'navigation/visibleMemberSet.ts',
-    source: read(path.join(NAV_DIR, 'visibleMemberSet.ts')),
-  },
-  {
-    file: 'preview/areasPreviewCapability.ts',
-    source: read(path.join(PREVIEW_DIR, 'areasPreviewCapability.ts')),
-  },
+  ...listSweptModules(NAV_DIR, 'navigation'),
+  ...listSweptModules(PREVIEW_DIR, 'preview'),
 ];
 
-it('the swept module list is non-empty and complete (guards against a vacuous sweep)', () => {
-  expect(PURE_NAV_MODULES.length).toBe(8);
+it('the swept module list is discovered from disk and non-vacuous', () => {
+  // A floor, not an equality: an equality assertion here is precisely what made
+  // PR 1's version unable to see new files. The floor still catches a walk that
+  // breaks and silently returns nothing.
+  expect(PURE_NAV_MODULES.length).toBeGreaterThanOrEqual(8);
   for (const { file, source } of PURE_NAV_MODULES) {
     expect(source.trim().length, `${file} is empty after comment stripping`).toBeGreaterThan(0);
+  }
+});
+
+it('the sweep actually covers the modules PR 1 and PR 2 introduced', () => {
+  const files = PURE_NAV_MODULES.map((m) => m.file);
+  for (const required of [
+    'navigation/types.ts',
+    'navigation/nodeLevelKind.ts',
+    'navigation/navigationModel.ts',
+    'navigation/nearbyAreaArithmetic.ts',
+    'navigation/journeyVisibility.ts',
+    'navigation/areasDestination.ts',
+    'navigation/visibleMemberSet.ts',
+    'navigation/normalize.ts',
+    'preview/areasPreviewCapability.ts',
+  ]) {
+    expect(files, `${required} fell out of the sweep`).toContain(required);
+  }
+});
+
+it('every exemption names a file that really exists (exemptions cannot rot)', () => {
+  for (const [file, reason] of Object.entries(SWEEP_EXEMPTIONS)) {
+    const [dir, base] = [file.split('/')[0], path.basename(file)];
+    const root = dir === 'navigation' ? NAV_DIR : PREVIEW_DIR;
+    expect(fs.existsSync(path.join(root, base)), `exempted ${file} no longer exists`).toBe(true);
+    expect(reason.length, `exemption for ${file} has no stated reason`).toBeGreaterThan(20);
   }
 });
 
@@ -171,11 +227,35 @@ describe('static sweep — depth-genericity (the one level switch)', () => {
     expect(source).toMatch(/switch \(node\.nextLevelType\)/);
   });
 
-  it('nextLevelType is read by exactly one module (types.ts merely declares it)', () => {
-    const readers = PURE_NAV_MODULES.filter(({ source }) => /nextLevelType/.test(source)).map(
-      ({ file }) => file,
-    );
-    expect(readers.sort()).toEqual(['navigation/nodeLevelKind.ts', 'navigation/types.ts']);
+  it('nextLevelType is BRANCHED ON by exactly one module', () => {
+    // CHANGED IN PR 2. This previously asserted the set of modules MENTIONING
+    // `nextLevelType` was exactly {nodeLevelKind.ts, types.ts} (types.ts merely
+    // declares it). PR 2 adds `normalize.ts`, which must name the field to map
+    // its absent-key wire form to `null` — a pure DATA passthrough, not a level
+    // decision. Mentioning the field and BRANCHING on it are different things,
+    // and only the second is what this assertion was ever protecting.
+    //
+    // The assertion is therefore re-scoped to the branch, not the mention: the
+    // set of modules containing a `switch`/`if` ON `nextLevelType` is still
+    // exactly one. That is strictly stronger than the mention-set version, which
+    // would have passed for a module that read the field and branched on it as
+    // long as it happened to be one of the two named files.
+    const branchers = PURE_NAV_MODULES.filter(({ source }) =>
+      /(switch\s*\(|if\s*\()[^)]*nextLevelType/.test(source),
+    ).map(({ file }) => file);
+    expect(branchers).toEqual(['navigation/nodeLevelKind.ts']);
+
+    // The mention set is still pinned, just no longer as a closed literal — every
+    // module naming the field must be one of the three legitimate roles:
+    // declaring it (types.ts), normalising it (normalize.ts), or switching on it.
+    const mentioners = PURE_NAV_MODULES.filter(({ source }) => /nextLevelType/.test(source))
+      .map(({ file }) => file)
+      .sort();
+    expect(mentioners).toEqual([
+      'navigation/nodeLevelKind.ts',
+      'navigation/normalize.ts',
+      'navigation/types.ts',
+    ]);
   });
 });
 
@@ -208,29 +288,116 @@ describe('static sweep — the frontend NEVER constructs a node key', () => {
   // CONSTRUCTION only (concatenation or interpolation onto the `a:` prefix) —
   // a literal fixture key like `'a:bangalore|whitefield'` is data, not a
   // construction site, and test files are excluded for the same reason.
+  //
+  // ── WIDENED IN PR 2 ──
+  // PR 1's patterns required a BACKTICK IMMEDIATELY BEFORE the prefix
+  // (/`a:\$\{/), so they only ever caught a template literal that STARTS with
+  // the prefix. Three forms a producer would reach for naturally all slipped
+  // through, on exactly the files this sweep exists to police:
+  //   • `/discover?city=${c}&node=a:${areaKey}`  — prefix mid-template
+  //   • AREA_PREFIX + areaKey                     — via a named constant
+  //   • 'a:'.concat(areaKey)                      — concat instead of +
+  // All three are now caught, and the `d:` DIRECTION prefix (#1956 D1, which did
+  // not exist when PR 1's list was written) is swept alongside `a:` and `c:`.
+  // The prefix set is derived from the backend's own NavigationKeys.java.
+  const KEY_PREFIXES = ['a', 'c', 'd'];
+
   const CONSTRUCTION_PATTERNS: RegExp[] = [
-    /(['"])a:\1\s*\+/, //  'a:' + something
-    /\+\s*(['"])a:\1/, //  something + 'a:'
-    /`a:\$\{/, //          `a:${areaKey}`
-    /(['"])c:\1\s*\+/, //  the CLUSTER prefix, same rule
-    /`c:\$\{/,
+    // 'a:' + something   /   something + 'a:'   /   'a:'.concat(...)
+    ...KEY_PREFIXES.flatMap((p) => [
+      new RegExp(`(['"\`])${p}:\\1\\s*\\+`),
+      new RegExp(`\\+\\s*(['"\`])${p}:\\1`),
+      new RegExp(`(['"\`])${p}:\\1\\s*\\.concat\\(`),
+    ]),
+    // `a:${...}` at the START of a template literal.
+    ...KEY_PREFIXES.map((p) => new RegExp('`' + p + ':\\$\\{')),
+    // ...and the same prefix in URL-PARAM POSITION anywhere inside a template —
+    // `/discover?city=${c}&node=a:${areaKey}`. Anchored on a `=`/`&`/`?`
+    // immediately before the prefix rather than accepting it after any character:
+    // a bare `[^`]*d:${` false-positives on ordinary CSS and query strings that
+    // merely END in the prefix letter (`background:${c}`, `loc:${x}`), and a
+    // sweep that cries wolf on the icon builders is a sweep people switch off.
+    ...KEY_PREFIXES.map((p) => new RegExp('`[^`]*[=&?]' + p + ':\\$\\{')),
+    // A named constant standing in for the prefix, then concatenated.
+    /\b[A-Z_]*(NODE|AREA|CLUSTER|DIRECTION)_?(KEY_)?PREFIX\b\s*\+/,
+    /\+\s*\b[A-Z_]*(NODE|AREA|CLUSTER|DIRECTION)_?(KEY_)?PREFIX\b/,
   ];
+
+  function constructsKey(source: string): boolean {
+    return CONSTRUCTION_PATTERNS.some((pattern) => pattern.test(source));
+  }
+
+  it('POSITIVE CONTROL — the patterns really do trip on key construction', () => {
+    // Without this, every negative assertion below is unfalsifiable: a typo in a
+    // pattern would make the sweep pass forever while catching nothing. These
+    // fixtures are the exact forms PR 1's narrower patterns let through.
+    const OFFENDING_FIXTURES = [
+      "const key = 'a:' + areaKey;",
+      "const key = 'd:' + regionSlug;",
+      'const key = `a:${areaKey}`;',
+      'const href = `/discover?city=${city}&node=a:${areaKey}`;',
+      'const href = `/discover?city=${city}&node=d:${regionSlug}`;',
+      "const key = 'a:'.concat(areaKey);",
+      "const AREA_KEY_PREFIX = 'a:'; const key = AREA_KEY_PREFIX + areaKey;",
+      "const key = prefix + CLUSTER_PREFIX;",
+    ];
+    for (const fixture of OFFENDING_FIXTURES) {
+      expect(constructsKey(fixture), `pattern set failed to catch: ${fixture}`).toBe(true);
+    }
+
+    // NEGATIVE CONTROL — legitimate code must not trip it, or the sweep becomes
+    // noise everyone learns to route around.
+    const INNOCENT_FIXTURES = [
+      "const key = node.nodeKey;", //           consuming a server key
+      "expect(state.node).toBe('a:IN|KA|X');", // a literal fixture is data
+      "const label = `${node.displayLabel}`;", // ordinary interpolation
+      "if (key.startsWith('a:')) return true;", // RECOGNISING a prefix is not minting one
+      // Real code in this repo that a naïve `[^`]*d:${` pattern false-positived
+      // on — CSS and cache keys that merely END in a prefix letter before a
+      // colon. Pinned here so the anchoring can never be loosened back.
+      'const html = `<div style="background:${discColour}">`;',
+      'const dedupeKey = `loc:${dup.locality}_${dup.property_type}`;',
+      'const css = `border-radius:${r}px`;',
+    ];
+    for (const fixture of INNOCENT_FIXTURES) {
+      expect(constructsKey(fixture), `pattern set false-positived on: ${fixture}`).toBe(false);
+    }
+  });
 
   it('no production module concatenates or interpolates a node-key prefix', () => {
     const offenders: string[] = [];
     for (const file of walkTypeScript(SRC_ROOT)) {
       if (/\.test\.tsx?$/.test(file)) continue;
-      const source = read(file);
-      if (CONSTRUCTION_PATTERNS.some((pattern) => pattern.test(source))) {
+      if (constructsKey(read(file))) {
         offenders.push(path.relative(SRC_ROOT, file));
       }
     }
     expect(offenders).toEqual([]);
   });
 
-  it('the URL navigation domain exports no key-construction helper', () => {
+  it('the URL navigation domain constructs no node key, though it may build an href from one', () => {
+    // RE-SCOPED IN PR 2, deliberately — not deleted.
+    //
+    // This previously asserted `!/export function (build|make|to)Node(Key|Href)/`,
+    // a SUBSTRING match that conflated two different things under one regex. PR 2
+    // adds `buildNodeHrefFromParams`, an href builder that CONSUMES a
+    // server-supplied key and never mints one; the old assertion would go red on
+    // it purely because "buildNodeHref" contains the matched substring.
+    //
+    // The assertion's real intent was always "no key CONSTRUCTION here". That
+    // intent is preserved and made exact below: a key BUILDER
+    // (`buildNodeKey`/`makeNodeKey`/`toNodeKey`) is still forbidden, and the
+    // module is additionally run through the same CONSTRUCTION_PATTERNS every
+    // other production file is — which is a stronger guarantee than the name
+    // check ever gave, since it catches construction under any function name.
     const source = read(path.join(URL_DOMAIN_DIR, 'navigation.ts'));
-    expect(source).not.toMatch(/export function (build|make|to)Node(Key|Href)/);
+    expect(source).not.toMatch(/export function (build|make|to)NodeKey\b/);
+    expect(constructsKey(source), 'the navigation URL domain must never mint a node key').toBe(
+      false,
+    );
+    // Positive control: the module really is non-trivial and really does handle
+    // node keys, so the negatives above are not vacuously true of an empty file.
+    expect(source).toMatch(/isWritableNodeKey/);
   });
 
   it('the counts hook takes a node key as INPUT and never derives one', () => {

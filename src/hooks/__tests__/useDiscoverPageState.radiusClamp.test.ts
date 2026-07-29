@@ -71,6 +71,12 @@ function makeUrlActions(): DiscoverUrlActions {
     // Issue #1597 — area-group-results journey actions.
     enterGroupResults: vi.fn(),
     clearGroupResults: vi.fn(),
+    // Issue #1956 PR 2 — canonical Areas hierarchy write actions.
+    goToNode: vi.fn(),
+    goToAncestorNode: vi.fn(),
+    clearNode: vi.fn(),
+    enterAreasJourney: vi.fn(),
+    buildNodeHref: vi.fn(),
   } as DiscoverUrlActions;
 }
 

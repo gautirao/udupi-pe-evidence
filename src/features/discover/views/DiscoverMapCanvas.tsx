@@ -31,6 +31,11 @@ import type { MarkerPopoverStepper } from '@/features/discover/map/resolveMarker
 import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
 import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
 import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
+import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
+import {
+  isAreasPreviewCapabilityEnabled,
+  isAreasPreviewJourneyActive,
+} from '@/features/discover/preview/areasPreviewCapability';
 
 /**
  * Issue #1824 Slice S11a — the map-half return-tree region (mapContainerRef
@@ -92,6 +97,35 @@ export interface DiscoverMapCanvasProps {
   publishClusterCameraIntent: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
   handleAreaClusterClick: (cluster: AreaMarkerClusterInfo) => void;
   handleAreaMarkersComputed: (shownCount: number, totalCount: number) => void;
+  /**
+   * Issue #1956 PR 2 (Slice 3, map half) — the ONE `useAreasNavigationJourney`
+   * result MapDiscovery resolved, threaded through unchanged (AC3.4/AC3.9/T3
+   * — same reference as the right panel receives). The mount gate itself is
+   * computed HERE from `nav`, mirroring `DiscoverRightPanelContainer`'s own
+   * `showAreasNavigationJourney` derivation exactly, so the map and panel can
+   * never disagree about whether the canonical Areas journey is active.
+   * Optional (unlike the panel container's version of this prop) purely so
+   * existing test fixtures that predate this prop keep compiling unchanged;
+   * MapDiscovery's real call site always supplies it.
+   */
+  areasNavigationJourney?: UseAreasNavigationJourneyResult;
+  /**
+   * Issue #1956 PR 2 (Slice 3, pass 4, AC3.9) — the ephemeral hover/focus
+   * node_key MapDiscovery owns alongside `areasNavigationJourney` (same
+   * lifting rationale: ONE piece of state, threaded to both the map's
+   * `AreaDestinationMarkerLayer` and the right panel's `NavigationChildCard`
+   * list so they highlight the SAME child by stable node_key). Never written
+   * to the URL — no history entry, no camera fit, purely a view-state sync.
+   */
+  hoveredNavigationNodeKey?: string | null;
+  onNavigationNodeHoverChange?: (nodeKey: string | null) => void;
+  /**
+   * Issue #1956 PR 2 (Slice 5) — pure href builder for the canonical Areas
+   * map breadcrumb's ancestor crumbs (`urlActions.buildNodeHref`, unchanged).
+   * Forwarded to `DiscoverMapContextOverlay`'s `AreasBreadcrumbTrail` branch;
+   * unused whenever `areasNavigationJourney.node` is null.
+   */
+  buildNavigationNodeHref?: (nodeKey: string) => string | null;
   schoolZoneLabels: ZoneLabelPoint[];
   setMapZoom: Dispatch<SetStateAction<number>>;
   handleBoundsChange: (bbox: [number, number, number, number]) => void;
@@ -219,6 +253,10 @@ export function DiscoverMapCanvas({
   publishClusterCameraIntent,
   handleAreaClusterClick,
   handleAreaMarkersComputed,
+  areasNavigationJourney,
+  hoveredNavigationNodeKey,
+  onNavigationNodeHoverChange,
+  buildNavigationNodeHref,
   schoolZoneLabels,
   setMapZoom,
   handleBoundsChange,
@@ -294,6 +332,16 @@ export function DiscoverMapCanvas({
   const nav = useDiscoverNav();
   const viewport = useDiscoverViewport();
   const urlActions = useDiscoverActions();
+  // Issue #1956 PR 2 (Slice 3, map half) — the SAME dual-preview-gate +
+  // journey==='area-first' condition DiscoverRightPanelContainer evaluates
+  // to decide whether DiscoverAreasJourneyPanel (rather than the legacy
+  // panel) is mounted. Recomputed here (not threaded as a prop) so the two
+  // call sites can never drift apart from independently-passed booleans.
+  const areasPreviewJourneyActive = isAreasPreviewJourneyActive({
+    capabilityEnabled: isAreasPreviewCapabilityEnabled(),
+    areasPreview: nav.areasPreview,
+  });
+  const showAreasNavigationDestinations = areasPreviewJourneyActive && nav.journey === 'area-first';
   return (
     <div ref={mapContainerRef} className="lg:w-1/2 h-64 lg:h-full relative order-1 lg:order-1" style={{ background: 'hsl(var(--map-bg))' }} onClick={
       // a3 — background click dismisses the marker popover. stopPropagation is applied
@@ -379,6 +427,10 @@ export function DiscoverMapCanvas({
           onAreaClusterCameraIntent={publishClusterCameraIntent}
           onAreaClusterClick={handleAreaClusterClick}
           onAreaMarkersComputed={handleAreaMarkersComputed}
+          areasNavigationJourney={areasNavigationJourney}
+          hoveredNavigationNodeKey={hoveredNavigationNodeKey}
+          onNavigationNodeHoverChange={onNavigationNodeHoverChange}
+          showAreasNavigationDestinations={showAreasNavigationDestinations}
           schoolZoneLabels={schoolZoneLabels}
           onSelectZone={(groupId) => urlActions.selectGroup(groupId)}
           onZoomChange={setMapZoom}
@@ -456,6 +508,11 @@ export function DiscoverMapCanvas({
         selectedArea={selectedArea}
         focusedGroup={focusedGroup}
         city={city}
+        // Issue #1956 PR 2 (Slice 5) — the SAME resolved node the map markers
+        // and right panel already consume (AC3.4/AC3.9/T3 identity), never a
+        // re-derived projection.
+        canonicalNavigationNode={areasNavigationJourney?.node ?? null}
+        buildNavigationNodeHref={buildNavigationNodeHref}
       />
 
       {/* Discover map marker redesign — "EXPLORE THE MAP" guidance card, shown

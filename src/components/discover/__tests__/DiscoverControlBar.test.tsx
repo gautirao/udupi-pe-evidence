@@ -67,6 +67,12 @@ const { BASE_NAV, ACTIONS } = vi.hoisted(() => {
     clearAgriFilters: vi.fn(),
     setIntent: vi.fn(),
     setSchoolJourney: vi.fn(),
+    // Issue #1956 PR 2 — canonical Areas hierarchy write actions.
+    goToNode: vi.fn(),
+    goToAncestorNode: vi.fn(),
+    clearNode: vi.fn(),
+    enterAreasJourney: vi.fn(),
+    buildNodeHref: vi.fn(),
   };
 
   return { BASE_NAV: nav, ACTIONS: actions };

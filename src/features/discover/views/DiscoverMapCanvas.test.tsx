@@ -21,7 +21,15 @@ import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
 import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
 
 vi.mock('@/components/map/PropertyMap', () => ({
-  PropertyMap: () => <div data-testid="property-map-mock" />,
+  // Issue #1956 PR 2 (Slice 3, pass 4, AC3.9) — captures the two hover-sync
+  // props as data attributes so a test can prove DiscoverMapCanvas actually
+  // forwards them to PropertyMap unchanged, rather than silently dropping them.
+  PropertyMap: (props: { hoveredNavigationNodeKey?: string | null }) => (
+    <div
+      data-testid="property-map-mock"
+      data-hovered-navigation-node-key={props.hoveredNavigationNodeKey ?? ''}
+    />
+  ),
 }));
 
 // Issue #1953 (build step 2) — DiscoverMapCanvas now consumes the
@@ -83,6 +91,12 @@ const { BASE_URL_STATE, BASE_NAV, URL_ACTIONS } = vi.hoisted(() => {
     setRegionWithMaxKm: vi.fn(),
     setMaxKm: vi.fn(),
     clearRegionAndMaxKm: vi.fn(),
+    // Issue #1956 PR 2 — canonical Areas hierarchy write actions.
+    goToNode: vi.fn(),
+    goToAncestorNode: vi.fn(),
+    clearNode: vi.fn(),
+    enterAreasJourney: vi.fn(),
+    buildNodeHref: vi.fn(),
     setSelectedListing: vi.fn(),
     clearSelectedListing: vi.fn(),
     setLocality: vi.fn(),
@@ -261,6 +275,14 @@ describe('DiscoverMapCanvas', () => {
     // The root element DiscoverMapCanvas returns must be the div carrying mapContainerRef —
     // verifies no extra wrapper node was introduced around the moved JSX (AC1/DOM parity).
     expect(container.firstElementChild).toBe(ref.current);
+  });
+
+  it('count_display_defect/AC3.9 (pass 4) — forwards hoveredNavigationNodeKey to PropertyMap unchanged, never re-derived', () => {
+    render(<DiscoverMapCanvas {...baseProps({ hoveredNavigationNodeKey: 'd:n' })} />);
+    expect(screen.getByTestId('property-map-mock')).toHaveAttribute(
+      'data-hovered-navigation-node-key',
+      'd:n',
+    );
   });
 
   it('shows the error card instead of PropertyMap when error is set', () => {

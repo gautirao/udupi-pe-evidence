@@ -569,4 +569,90 @@ describe('useDiscoverCameraOrchestration', () => {
       expect(result.current.agriGroupFocusBounds).toBeNull();
     });
   });
+
+  describe('navigation node fit-once (Issue #1956 PR 2, AC3.10 / T2)', () => {
+    const BOUNDS = {
+      centreLat: 13.0,
+      centreLon: 77.6,
+      minLat: 12.9,
+      minLon: 77.5,
+      maxLat: 13.1,
+      maxLon: 77.7,
+    };
+
+    it('fires exactly once when a navigation node with bounds is first resolved', () => {
+      const setPanToArea = vi.fn();
+      const params = makeParams({ setPanToArea, navigationNodeKey: 'd:n', navigationNodeBounds: BOUNDS });
+      renderHook((p) => useDiscoverCameraOrchestration(p), { initialProps: params });
+
+      expect(setPanToArea).toHaveBeenCalledTimes(1);
+      expect(setPanToArea.mock.calls[0][0]).toMatchObject({
+        bbox: [
+          [BOUNDS.minLat, BOUNDS.minLon],
+          [BOUNDS.maxLat, BOUNDS.maxLon],
+        ],
+      });
+    });
+
+    it('does NOT re-fire on a re-render with the SAME navigationNodeKey (no duplicate fits per selection)', () => {
+      const setPanToArea = vi.fn();
+      const params = makeParams({ setPanToArea, navigationNodeKey: 'd:n', navigationNodeBounds: BOUNDS });
+      const { rerender } = renderHook((p) => useDiscoverCameraOrchestration(p), { initialProps: params });
+      expect(setPanToArea).toHaveBeenCalledTimes(1);
+
+      rerender({ ...params });
+      expect(setPanToArea).toHaveBeenCalledTimes(1);
+    });
+
+    it('T2 — Direction -> Area -> back to the SAME Direction fires a fit on EVERY transition, not keyed on destination identity', () => {
+      const setPanToArea = vi.fn();
+      const directionParams = makeParams({
+        setPanToArea,
+        navigationNodeKey: 'd:n',
+        navigationNodeBounds: BOUNDS,
+      });
+      const { rerender } = renderHook((p) => useDiscoverCameraOrchestration(p), {
+        initialProps: directionParams,
+      });
+      expect(setPanToArea).toHaveBeenCalledTimes(1);
+
+      const areaBounds = { ...BOUNDS, centreLat: 13.05 };
+      rerender({ ...directionParams, navigationNodeKey: 'a:IN|KA|Bangalore|Hebbal', navigationNodeBounds: areaBounds });
+      expect(setPanToArea).toHaveBeenCalledTimes(2);
+
+      // Back to the SAME Direction key as the first render — a
+      // `${nodeKey}:${revisionId}`-keyed guard would treat this as an
+      // identical destination and skip the fit (the salvage's bug). The
+      // TRANSITION-keyed guard here must still fire a third time.
+      rerender({ ...directionParams, navigationNodeKey: 'd:n', navigationNodeBounds: BOUNDS });
+      expect(setPanToArea).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not fire when navigationNodeKey is null (journey not mounted / at rest)', () => {
+      const setPanToArea = vi.fn();
+      const params = makeParams({ setPanToArea, navigationNodeKey: null, navigationNodeBounds: null });
+      renderHook((p) => useDiscoverCameraOrchestration(p), { initialProps: params });
+      expect(setPanToArea).not.toHaveBeenCalled();
+    });
+
+    it('does not fire when the resolved node has no bounds (e.g. the synthetic city root)', () => {
+      const setPanToArea = vi.fn();
+      const params = makeParams({ setPanToArea, navigationNodeKey: 'root', navigationNodeBounds: null });
+      renderHook((p) => useDiscoverCameraOrchestration(p), { initialProps: params });
+      expect(setPanToArea).not.toHaveBeenCalled();
+    });
+
+    it('leaving the journey (navigationNodeKey -> null) then re-entering the SAME node fires again', () => {
+      const setPanToArea = vi.fn();
+      const params = makeParams({ setPanToArea, navigationNodeKey: 'd:n', navigationNodeBounds: BOUNDS });
+      const { rerender } = renderHook((p) => useDiscoverCameraOrchestration(p), { initialProps: params });
+      expect(setPanToArea).toHaveBeenCalledTimes(1);
+
+      rerender({ ...params, navigationNodeKey: null, navigationNodeBounds: null });
+      expect(setPanToArea).toHaveBeenCalledTimes(1);
+
+      rerender({ ...params, navigationNodeKey: 'd:n', navigationNodeBounds: BOUNDS });
+      expect(setPanToArea).toHaveBeenCalledTimes(2);
+    });
+  });
 });

@@ -1,9 +1,11 @@
 import { MapPin, GraduationCap } from 'lucide-react';
 import { DiscoverMapBreadcrumb, type DiscoverMapCrumb } from '@/components/discover/DiscoverMapBreadcrumb';
+import { AreasBreadcrumbTrail } from '@/components/discover/navigation/AreasBreadcrumbTrail';
 import { AreaIndicatorOverlay } from '@/components/discover/AreaIndicatorOverlay';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
+import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
 
 /**
  * Issue #1824 Slice S8 — top-left context overlay: routes between the four
@@ -11,6 +13,27 @@ import type { AreaGroup } from '@/hooks/useAreaGroups';
  * (~L2900-2953). PURE presentation: every gate/segment array is computed by
  * the page and received by prop. See
  * docs/audit/evidence/issue-1824-map-discovery-decomposition/slice-s8-design.md.
+ *
+ * Issue #1956 PR 2 (Slice 5) — adds a FIFTH, highest-priority branch: the
+ * bounded canonical Areas breadcrumb (`AreasBreadcrumbTrail`), rendered
+ * whenever `canonicalNavigationNode` is resolved (the canonical Areas
+ * preview journey is active AND has a real node). This directly closes the
+ * plan's "overlay-vs-panel breadcrumb inconsistency" open defect for the
+ * canonical journey: that defect is the legacy `areaJourneySegments` fallback
+ * arm (`useDiscoverMapPresentation.ts`, out of this PR's scope) firing
+ * "whenever the overlay has no resolved navigationNode" — this branch now
+ * ALWAYS wins ahead of it once a real node is resolved, so the generic
+ * "Home > City > Areas" fallback can never show over a resolved canonical
+ * node. MECHANISM-VERIFIED, not live-browser-confirmed (no backend fixture
+ * data available this pass — see the handoff's evidence-blocked note).
+ *
+ * MV-1 FIX — the pre-existing `map-group-breadcrumb` branch below (legacy
+ * area-groups journey, unrelated to the canonical node journey) passed NO
+ * `containerClassName`, so `truncate` could never engage and AC5.14's
+ * no-clip requirement was exposed on THIS branch even before this PR
+ * (confirmed by qa-fast + independently spot-checked, `must_verify_not_established_fact_breadcrumb_maxwidth`
+ * in the execution handoff). Given the SAME bounded max-width the school
+ * branch already uses, rather than a new mechanism.
  */
 export interface DiscoverMapContextOverlayProps {
   isAreaFirstCityLanding: boolean;
@@ -20,6 +43,18 @@ export interface DiscoverMapContextOverlayProps {
   selectedArea: AreaPoint | null;
   focusedGroup: AreaGroup | null;
   city: string;
+  /**
+   * Issue #1956 PR 2 (Slice 5) — the ONE resolved canonical Areas navigation
+   * node (`useAreasNavigationJourney`'s `node`, threaded unchanged). `null`/
+   * undefined when the canonical journey is not mounted or not yet resolved
+   * — every other branch below is unaffected and behaves exactly as before.
+   */
+  canonicalNavigationNode?: NavigationNodeResponse | null;
+  /**
+   * Pure href builder for an ancestor's node key (`urlActions.buildNodeHref`).
+   * Required whenever `canonicalNavigationNode` is supplied; unused otherwise.
+   */
+  buildNavigationNodeHref?: (nodeKey: string) => string | null;
 }
 
 export function DiscoverMapContextOverlay({
@@ -30,10 +65,17 @@ export function DiscoverMapContextOverlay({
   selectedArea,
   focusedGroup,
   city,
+  canonicalNavigationNode = null,
+  buildNavigationNodeHref,
 }: DiscoverMapContextOverlayProps) {
   return (
     <div className="absolute top-4 left-4 z-[1000]">
-      {isAreaFirstCityLanding ? (
+      {canonicalNavigationNode ? (
+        <AreasBreadcrumbTrail
+          node={canonicalNavigationNode}
+          buildHref={buildNavigationNodeHref ?? (() => null)}
+        />
+      ) : isAreaFirstCityLanding ? (
         // Issue #1607 — the area-first city-level landing shows the
         // "Home › City › Areas" breadcrumb (mock placement). Home and the city
         // crumb route progressively; "Areas" is the terminal (current) page.
@@ -71,6 +113,11 @@ export function DiscoverMapContextOverlay({
           testId="map-group-breadcrumb"
           leadingIcon={MapPin}
           leadingIconClassName="text-[hsl(var(--copper))]"
+          // MV-1 fix (AC5.14) — this branch previously passed no
+          // containerClassName at all, so `truncate` (applied per-segment by
+          // DiscoverMapBreadcrumb) could never actually engage. Same bounded
+          // max-width the school-journey branch above already uses.
+          containerClassName="max-w-[min(88vw,520px)] shadow-md"
           segments={areaJourneySegments}
         />
       ) : (

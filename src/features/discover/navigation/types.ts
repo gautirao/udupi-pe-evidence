@@ -191,6 +191,25 @@ export interface NavigationNodeCount {
    * to this field.
    */
   schoolCount: number;
+  /**
+   * DISTINCT descendant AREA count under this child whose filtered
+   * {@link NavigationCountsResponse.areaCounts} value is > 0 — the number
+   * `presentStructuralLevel`'s `matchingAreaCount` parameter needs, computed
+   * SERVER-SIDE from data already held by the counts path.
+   *
+   * This is an AREA count, NOT a listing count — a child with 1,736 listings
+   * across 12 eligible areas reports `12` here, never `1736`; do not conflate
+   * it with {@link count}. Summing this across siblings to derive any total
+   * is the same arithmetically-wrong move {@link areaCounts} warns against —
+   * treat it as this child's own number only.
+   *
+   * ALWAYS PRESENT: `0` is a REAL, MEANINGFUL value (this child has no
+   * descendant area with an eligible listing under the current filters), not
+   * an absent/unknown signal — unlike the historical client-side
+   * "entailed-zero-or-null" compromise this field replaces, `0` here is never
+   * ambiguous with "not computed."
+   */
+  matchingAreaCount: number;
 }
 
 /**

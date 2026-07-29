@@ -13,6 +13,16 @@ import {
 import { AREA_LAYER_MAX_ZOOM, clusterCanSplit, hasSpatialSpread } from '@/lib/map/areaClusterSplit';
 import { compassPointFor, computeCompassLayout } from '@/lib/map/regionCompassLayout';
 import type { CameraIntent } from '@/hooks/useDiscoverMapData';
+import {
+  formatListingCount,
+  type AreasNavigationChild,
+} from '@/features/discover/navigation/useAreasNavigationJourney';
+import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
+import type { NodeLevelKind } from '@/features/discover/navigation/nodeLevelKind';
+import {
+  presentStructuralLevel,
+  type StructuralLevelIdentity,
+} from '@/features/discover/navigation/journeyVisibility';
 
 /**
  * One area marker point.
@@ -423,6 +433,205 @@ function unionBounds(areas: AreaPoint[]): L.LatLngExpression[] {
     }
   }
   return points;
+}
+
+/**
+ * ── Canonical Areas hierarchy — Direction destination markers ─────────────
+ * Issue #1956 PR 2 (Slice 3, map half). Covers AC3.1/AC3.2/AC3.3, and the
+ * map-click half of AC3.9.
+ *
+ * Renders the CURRENT node's direct DIRECTION children (`levelKind ===
+ * 'directions'`, i.e. the city root) as positioned map destination cards —
+ * the map-side counterpart to `NavigationChildCard` (panel).
+ *
+ * ── WHY ONLY 'directions' TODAY (documented data-gap, not an oversight) ──
+ * `NavigationChildSummary` (`useAreasNavigationJourney.ts`) carries only
+ * `nodeKey` / `nodeType` / `displayLabel` / `displayOrder` — no per-child
+ * lat/lon or bbox exists anywhere in the resolve/counts payload. A DIRECTION
+ * child's `nodeKey` is server-given in the `d:<code>` shape (e.g. `d:n`,
+ * `d:se`, `d:central` — see `navigationCommandMatrix.test.ts` /
+ * `normalize.ts`), so its presentation position CAN be derived exactly the
+ * way the legacy macro-region markers in `AreaMarkerLayer` above already do:
+ * read the code (never assemble one), map it through
+ * `regionCompassLayout.ts`'s compass circle. CLUSTER ("Local Destination")
+ * and AREA children carry no equivalent server-given position hint in this
+ * payload, so this component deliberately renders nothing for those levels
+ * rather than fabricating a coordinate. Wiring a real position source for
+ * those (e.g. cross-referencing the existing area geo dataset by areaKey) is
+ * follow-up work, not built here.
+ *
+ * ── IDENTITY (AC3.9 / T3) ──
+ * `onSelect` is the caller's `useAreasNavigationJourney().selectNode`
+ * reference, forwarded UNCHANGED — never wrapped in a new closure — so a map
+ * marker's click and a panel card's `onSelect` prop are provably the same
+ * function, not two call sites that merely look alike.
+ *
+ * ── COMPOSITION ──
+ * Primary text = `displayLabel` (Task 3 / AC3.2 ruling: no richer per-child
+ * name exists in-payload today — see module doc on `useAreasNavigationJourney`
+ * — canonical `displayLabel` satisfies AC3.2 as literally written). Count
+ * copy reuses `presentStructuralLevel` — the SAME locked-copy function
+ * `NavigationChildCard` calls — so map and panel can never show two
+ * different strings for the same node. No `+N` form; distinct card shape/
+ * accent (copper pill) from the navy circular listing-cluster badge
+ * (PropertyMap.tsx) and from the legacy plain `AreaPoint` pins above.
+ */
+export interface AreaDestinationMarkerLayerProps {
+  /** The currently-resolved node, by reference — same object the panel consumes (T3). `null` while loading/disabled. */
+  node: NavigationNodeResponse | null;
+  /** node's next-level kind. Markers render only when this is 'directions' (see module doc). */
+  levelKind: NodeLevelKind;
+  /** node's direct children, already bounded/ordered by useAreasNavigationJourney — never re-derived here. */
+  children: AreasNavigationChild[];
+  /** The single selection action — same reference every render (AC3.9). */
+  onSelect: (nodeKey: string) => void;
+  /** The currently-selected destination's nodeKey, for the pressed/active visual state. */
+  selectedNodeKey?: string | null;
+  /** The currently hovered/focused destination's nodeKey — panel<->map sync by node_key. */
+  hoveredNodeKey?: string | null;
+  /** Fired on marker hover/focus enter (nodeKey) and leave (null). */
+  onHoverChange?: (nodeKey: string | null) => void;
+}
+
+const DESTINATION_ACCENT = C_COPPER;
+const DESTINATION_ACCENT_ACTIVE = C_COPPER_HOVER;
+
+/**
+ * Reads (never constructs) the compass code embedded in a server-given
+ * DIRECTION nodeKey (`d:<code>`) purely to pick a presentation slot on the
+ * compass circle — mirrors the exact rationale documented in
+ * `regionCompassLayout.ts`. An unrecognised code falls back to the layout
+ * centre via `compassPointFor`'s own fallback, never throws.
+ */
+function compassCodeFromDirectionNodeKey(nodeKey: string): string {
+  const suffix = nodeKey.startsWith('d:') ? nodeKey.slice(2) : nodeKey;
+  return suffix.toUpperCase();
+}
+
+function makeDestinationCard(
+  child: AreasNavigationChild,
+  isSelected: boolean,
+  isHovered: boolean,
+): L.DivIcon {
+  const label = escapeHtml(child.displayLabel);
+  const identity: StructuralLevelIdentity = {
+    nodeKey: child.nodeKey,
+    nodeType: child.nodeType,
+    displayLabel: child.displayLabel,
+    parentNodeKey: null,
+    displayOrder: child.displayOrder,
+  };
+  // BLOCKING FIX (count_display_defect_2026_07_29) — mirrors NavigationChildCard
+  // exactly, reading the SAME shared `child.matchingAreaCount` field (never
+  // `child.listingCount`) for the areas-with-matches line, so map and panel
+  // can never diverge or independently re-derive the number. `null` means the
+  // exact count is not derivable from currently available data — omit the
+  // areas line rather than mislabel the listing total as an area count.
+  //
+  // count_display_defect_2026_07_29 (pass 4 follow-up): the areas line being
+  // unavailable must never suppress the journey-aware LISTING count too —
+  // mirrors NavigationChildCard's showListingsLine/areasLabel/listingsLabel
+  // split exactly (see that component's doc for the full rule), reading the
+  // SAME `formatListingCount` helper so map and panel never diverge on
+  // singular/plural copy either.
+  const presentation = child.matchingAreaCount == null
+    ? null
+    : presentStructuralLevel(identity, child.matchingAreaCount);
+  const areasLabel = presentation ? escapeHtml(presentation.countLabel) : null;
+  const showListingsLine = !presentation?.isZeroContent;
+  const listingsLabel = showListingsLine ? escapeHtml(formatListingCount(child.listingCount)) : null;
+  const borderColor = isSelected ? DESTINATION_ACCENT_ACTIVE : C_BORDER;
+  const borderWidth = isSelected || isHovered ? '2px' : '1px';
+  const countColor = presentation?.isZeroContent ? C_GREY_400 : C_MUTED;
+  const ariaLabelParts = [label, areasLabel, listingsLabel].filter((part): part is string => part != null);
+  const ariaLabel = ariaLabelParts.join(', ');
+  const html = `<div data-testid="area-destination-marker" data-node-key="${escapeHtml(child.nodeKey)}" data-selected="${isSelected}" tabindex="0" role="button" aria-label="${ariaLabel}" style="transform:translate(-50%,-100%);font-family:inherit;pointer-events:auto;cursor:pointer;outline:none;">
+    <div style="display:flex;flex-direction:column;gap:2px;min-width:96px;padding:8px 12px;border-radius:12px;background:${C_PAPER};border:${borderWidth} solid ${borderColor};box-shadow:${PILL_SHADOW};">
+      <div style="display:flex;align-items:center;gap:6px;">
+        ${pinSvg(DESTINATION_ACCENT)}
+        <span style="font-size:12.5px;font-weight:700;color:${C_INK};white-space:nowrap;">${label}</span>
+      </div>
+      ${areasLabel != null ? `<span style="font-size:10.5px;font-weight:600;color:${countColor};">${areasLabel}</span>` : ''}
+      ${listingsLabel != null ? `<span style="font-size:10.5px;font-weight:600;color:${C_MUTED};">${listingsLabel}</span>` : ''}
+      <span style="font-family:${MONO};font-size:9.5px;font-weight:600;color:${DESTINATION_ACCENT};">Tap to zoom &rsaquo;</span>
+    </div>
+  </div>`;
+  return L.divIcon({ className: 'area-destination-marker-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
+}
+
+export function AreaDestinationMarkerLayer({
+  node,
+  levelKind,
+  children,
+  onSelect,
+  selectedNodeKey = null,
+  hoveredNodeKey = null,
+  onHoverChange,
+}: AreaDestinationMarkerLayerProps) {
+  const map = useMap();
+  const [layoutTick, setLayoutTick] = useState(0);
+
+  // Recompute the compass layout whenever the map container's pixel size
+  // changes — same trigger set the legacy macro-region markers use above.
+  useEffect(() => {
+    const recompute = () => setLayoutTick((t) => t + 1);
+    map.on('zoomend', recompute);
+    map.on('resize', recompute);
+    const container = map.getContainer();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(recompute) : null;
+    ro?.observe(container);
+    return () => {
+      map.off('zoomend', recompute);
+      map.off('resize', recompute);
+      ro?.disconnect();
+    };
+  }, [map]);
+
+  useEffect(() => {
+    if (!node || levelKind !== 'directions' || children.length === 0) return;
+    const markers: L.Marker[] = [];
+    const mapSize = map.getSize();
+    const compassLayout = computeCompassLayout(mapSize.x, mapSize.y);
+
+    for (const child of children) {
+      const code = compassCodeFromDirectionNodeKey(child.nodeKey);
+      const point = compassPointFor(code, compassLayout);
+      const latLng = map.containerPointToLatLng([point.x, point.y]);
+      const isSelected = selectedNodeKey === child.nodeKey;
+      const isHovered = hoveredNodeKey === child.nodeKey;
+
+      const marker = L.marker([latLng.lat, latLng.lng], {
+        icon: makeDestinationCard(child, isSelected, isHovered),
+      });
+
+      // AC3.9/T3 — dispatches the SAME selectNode reference the panel card
+      // uses, unwrapped, with the server-given nodeKey only.
+      marker.on('click', () => onSelect(child.nodeKey));
+      marker.on('mouseover', () => onHoverChange?.(child.nodeKey));
+      marker.on('mouseout', () => onHoverChange?.(null));
+      marker.addTo(map);
+
+      // Keyboard-operable, mirroring the existing macro-region/group marker
+      // Enter/Space bridge above (a plain div has no native key->click).
+      const el = marker.getElement()?.querySelector<HTMLElement>('[data-testid="area-destination-marker"]');
+      el?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          el.click();
+        }
+      });
+      el?.addEventListener('focus', () => onHoverChange?.(child.nodeKey));
+      el?.addEventListener('blur', () => onHoverChange?.(null));
+
+      markers.push(marker);
+    }
+
+    return () => {
+      markers.forEach((m) => m.remove());
+    };
+  }, [node, levelKind, children, map, onSelect, selectedNodeKey, hoveredNodeKey, onHoverChange, layoutTick]);
+
+  return null;
 }
 
 export function AreaMarkerLayer({

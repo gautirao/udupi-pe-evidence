@@ -79,9 +79,9 @@ describe('server-computed totals', () => {
     // construction — another reason the frontend must never add it up.
     areaSchoolCounts: { whitefield: 5, varthur: 4, kadugodi: 4 },
     children: [
-      { nodeKey: 'a:whitefield', count: 20, schoolCount: 5 },
-      { nodeKey: 'a:varthur', count: 12, schoolCount: 4 },
-      { nodeKey: 'a:kadugodi', count: 12, schoolCount: 4 },
+      { nodeKey: 'a:whitefield', count: 20, schoolCount: 5, matchingAreaCount: 1 },
+      { nodeKey: 'a:varthur', count: 12, schoolCount: 4, matchingAreaCount: 1 },
+      { nodeKey: 'a:kadugodi', count: 12, schoolCount: 4, matchingAreaCount: 1 },
     ],
     revisionId: 8,
   };
@@ -111,6 +111,7 @@ describe('server-computed totals', () => {
       nodeKey: counts.nodeKey,
       count: counts.count,
       schoolCount: counts.schoolCount,
+      matchingAreaCount: 3,
     };
 
     // Distinctness across the cluster's member areas is already applied
@@ -123,9 +124,9 @@ describe('server-computed totals', () => {
   });
 
   it('reads the listing total off `count` — there is deliberately no listingCount alias', () => {
-    const node: NavigationNodeCount = { nodeKey: 'a:x', count: 7, schoolCount: 2 };
+    const node: NavigationNodeCount = { nodeKey: 'a:x', count: 7, schoolCount: 2, matchingAreaCount: 1 };
     expect(listingCountForNode(node)).toBe(7);
-    expect(Object.keys(node)).toEqual(['nodeKey', 'count', 'schoolCount']);
+    expect(Object.keys(node)).toEqual(['nodeKey', 'count', 'schoolCount', 'matchingAreaCount']);
     expect(Object.keys(node)).not.toContain('listingCount');
   });
 

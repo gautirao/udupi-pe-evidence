@@ -473,3 +473,102 @@ describe('agri-first corridor card — area name display (Issue #1659)', () => {
     expect(onSetRegionWithMaxKm).toHaveBeenCalledWith('N');
   });
 });
+
+// ── Issue #1956 PR 2 — NavigationChildCard representative-name display ─────────
+//
+// Extends this suite (rather than duplicating it elsewhere) because
+// representative-name display is now REQUIRED behaviour for the canonical
+// Areas hierarchy destination card too — same Issue #1659 lineage, a
+// DIFFERENT locked composition: 1-2 names as the PRIMARY label (no "+ n
+// more" suffix ever, which is reserved for PR-3's visual clusters), and an
+// AREA leaf card always uses its own displayLabel regardless of any
+// representative-name input.
+
+import { NavigationChildCard } from '../navigation/NavigationChildCard';
+import type { AreasNavigationChild } from '@/features/discover/navigation/useAreasNavigationJourney';
+
+function makeDirectionChild(overrides: Partial<AreasNavigationChild> = {}): AreasNavigationChild {
+  return {
+    nodeKey: 'd:n',
+    nodeType: 'DIRECTION',
+    displayLabel: 'North Bangalore',
+    displayOrder: 1,
+    listingCount: 12,
+    schoolCount: 3,
+    isLeafArea: false,
+    matchingAreaCount: null,
+    ...overrides,
+  };
+}
+
+function makeAreaChild(overrides: Partial<AreasNavigationChild> = {}): AreasNavigationChild {
+  return {
+    nodeKey: 'a:IN|KA|Bangalore|Whitefield',
+    nodeType: 'AREA',
+    displayLabel: 'Whitefield',
+    displayOrder: 1,
+    listingCount: 5,
+    schoolCount: null,
+    isLeafArea: true,
+    matchingAreaCount: null,
+    ...overrides,
+  };
+}
+
+describe('NavigationChildCard — representative area names (Issue #1956 PR 2)', () => {
+  it('shows 1-2 representative area names as the primary label for a structural child', () => {
+    render(
+      <NavigationChildCard
+        child={makeDirectionChild()}
+        representativeAreaNames={['Hebbal', 'Yelahanka']}
+        onSelect={vi.fn()}
+      />,
+    );
+    const card = screen.getByTestId('navigation-child-card-d:n');
+    expect(card.textContent).toContain('Hebbal, Yelahanka');
+    // Never a "+N" form at Direction/Local-Destination level (locked copy).
+    expect(card.textContent).not.toContain('+');
+  });
+
+  it('falls back to the canonical displayLabel when no representative names are supplied', () => {
+    render(<NavigationChildCard child={makeDirectionChild()} onSelect={vi.fn()} />);
+    const card = screen.getByTestId('navigation-child-card-d:n');
+    expect(card.textContent).toContain('North Bangalore');
+  });
+
+  it('uses the locked structural copy, never "+N", for the count line', () => {
+    render(
+      <NavigationChildCard
+        child={makeDirectionChild({ listingCount: 0, matchingAreaCount: 0 })}
+        representativeAreaNames={['Hebbal']}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('No matches with current filters')).toBeInTheDocument();
+  });
+
+  it('an AREA leaf card always uses its own displayLabel, ignoring representativeAreaNames', () => {
+    render(
+      <NavigationChildCard
+        child={makeAreaChild()}
+        representativeAreaNames={['Some Other Area']}
+        onSelect={vi.fn()}
+      />,
+    );
+    const card = screen.getByTestId('navigation-child-card-a:IN|KA|Bangalore|Whitefield');
+    expect(card.textContent).toContain('Whitefield');
+    expect(card.textContent).not.toContain('Some Other Area');
+  });
+
+  it('does not show raw node keys anywhere in the card', () => {
+    render(
+      <NavigationChildCard
+        child={makeDirectionChild()}
+        representativeAreaNames={['Hebbal', 'Yelahanka']}
+        onSelect={vi.fn()}
+      />,
+    );
+    const card = screen.getByTestId('navigation-child-card-d:n');
+    expect(card.textContent).not.toContain('d:n');
+  });
+});

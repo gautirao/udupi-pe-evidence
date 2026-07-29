@@ -18,6 +18,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import userEvent from '@testing-library/user-event';
 import type { DiscoverRightPanelProps } from '@/components/discover/DiscoverRightPanel';
 import type { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
 import type {
@@ -27,6 +29,7 @@ import type {
 import type { DiscoverInteractionCommands } from '@/features/discover/state/useDiscoverInteractionState';
 import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
 import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
+import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 
 vi.mock('@/components/discover/DiscoverRightPanel', () => ({
   DiscoverRightPanel: (props: DiscoverRightPanelProps) => (
@@ -95,6 +98,12 @@ const { BASE_URL_STATE, URL_ACTIONS } = vi.hoisted(() => {
     setRegionWithMaxKm: vi.fn(),
     setMaxKm: vi.fn(),
     clearRegionAndMaxKm: vi.fn(),
+    // Issue #1956 PR 2 — canonical Areas hierarchy write actions.
+    goToNode: vi.fn(),
+    goToAncestorNode: vi.fn(),
+    clearNode: vi.fn(),
+    enterAreasJourney: vi.fn(),
+    buildNodeHref: vi.fn(),
     setSelectedListing: vi.fn(),
     clearSelectedListing: vi.fn(),
     setLocality: vi.fn(),
@@ -189,6 +198,31 @@ const SCHOOLS_QUERY = {
   refetch: vi.fn(),
 } as unknown as UseInfiniteQueryResult<InfiniteData<SchoolsByAreaResponse>, Error>;
 
+// Issue #1956 PR 2 — the default "not mounted" shape of the ONE
+// useAreasNavigationJourney result this container now requires. `node: null`
+// with isLoading/isError both false is exactly what the hook returns when
+// `enabled` is false (the gate is closed) — mirrors real behaviour rather
+// than an arbitrary stub.
+function inertAreasNavigationJourney(
+  overrides: Partial<UseAreasNavigationJourneyResult> = {},
+): UseAreasNavigationJourneyResult {
+  return {
+    isLoading: false,
+    isError: false,
+    error: null,
+    node: null,
+    levelKind: 'empty',
+    children: [],
+    wasTruncated: false,
+    resolutionNotice: null,
+    nodeCount: null,
+    selectNode: vi.fn(),
+    refetch: vi.fn(),
+    historyAdjacencyLog: [],
+    ...overrides,
+  };
+}
+
 function baseProps(
   overrides: Partial<DiscoverRightPanelContainerProps> = {},
 ): DiscoverRightPanelContainerProps {
@@ -271,6 +305,7 @@ function baseProps(
     totalPages: 1,
     totalElements: 0,
     setPage: vi.fn(),
+    areasNavigationJourney: inertAreasNavigationJourney(),
     ...overrides,
   };
 }
@@ -378,14 +413,15 @@ describe('DiscoverRightPanelContainer', () => {
 });
 
 /**
- * Issue #1956 PR 1 (FE-1) — AC1.2 + AC1.14.
+ * Issue #1956 PR 1 (FE-1) — AC1.2 + AC1.14, still true in PR 2.
  *
- * The container computes the dual preview gate, and that computation must be
- * COMPLETELY INERT: identical DOM whether the gate is true or false, because no
- * canonical Areas panel exists until PR 2. These tests pin both halves — the
- * flag's value, and the render-neutrality of holding it.
+ * The dual preview gate (capability + `areasPreview=1`) alone is STILL inert:
+ * these tests never set `journey='area-first'`, so `showAreasNavigationJourney`
+ * (gate AND journey==='area-first') stays false and the legacy DOM is
+ * unaffected — the gate flag by itself changes nothing. PR 2 activation is
+ * covered separately below ("canonical Areas journey panel (PR 2 activation)").
  */
-describe('DiscoverRightPanelContainer — areasPreview dual gate (inert in PR 1)', () => {
+describe('DiscoverRightPanelContainer — areasPreview dual gate (inert without journey=area-first)', () => {
   const GATE_CASES: {
     capabilityEnabled: boolean;
     areasPreview: boolean | undefined;
@@ -460,5 +496,190 @@ describe('DiscoverRightPanelContainer — areasPreview dual gate (inert in PR 1)
     expect(withoutNode).toEqual({ capabilityEnabled: true, areasPreview: true });
     expect(withNode).toEqual({ capabilityEnabled: true, areasPreview: true });
     BASE_URL_STATE.node = null;
+  });
+});
+
+/**
+ * Issue #1956 PR 2 (Slice 3, T1) — the panel-routing seam.
+ *
+ * `resolvedPanelContent` is computed upstream (derivePanelContent /
+ * computeDiscoverLayer) and NEVER inspects `node=` — extending that
+ * discriminated union is out of this PR's allowed scope. These tests pin the
+ * seam that mounts the canonical Areas journey WITHOUT touching it: a
+ * SEPARATE, earlier branch pre-empts the legacy `DiscoverRightPanel` mount
+ * entirely when the dual gate is active AND `journey==='area-first'`.
+ */
+describe('DiscoverRightPanelContainer — canonical Areas journey panel (PR 2 activation)', () => {
+  beforeEach(() => {
+    gateSpy.mockClear();
+    previewGateState.capabilityEnabled = false;
+    BASE_URL_STATE.areasPreview = undefined;
+    BASE_URL_STATE.journey = null;
+  });
+
+  afterEach(() => {
+    previewGateState.capabilityEnabled = false;
+    BASE_URL_STATE.areasPreview = undefined;
+    BASE_URL_STATE.journey = null;
+  });
+
+  it('mounts DiscoverAreasJourneyPanel instead of the legacy DiscoverRightPanel when the gate is active and journey=area-first', () => {
+    previewGateState.capabilityEnabled = true;
+    BASE_URL_STATE.areasPreview = true;
+    BASE_URL_STATE.journey = 'area-first';
+
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanelContainer
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            areasNavigationJourney: inertAreasNavigationJourney({
+              node: {
+                nodeKey: 'root',
+                nodeType: 'ROOT',
+                displayLabel: 'Bangalore',
+                depth: -1,
+                regionKey: null,
+                ancestry: [],
+                nextLevelType: 'DIRECTION',
+                children: [],
+                revisionId: 1,
+                bounds: null,
+                descendantAreaKeys: null,
+                areaKey: null,
+              },
+            }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId('discover-right-panel-mock')).not.toBeInTheDocument();
+    // The panel itself renders an empty-children state here (no destinations
+    // supplied) — asserting its presence, not its internals, is this
+    // container-level test's job.
+    expect(screen.getByTestId('navigation-level-panel')).toBeInTheDocument();
+  });
+
+  it('AC3.9 (pass 4) — forwards hoveredNavigationNodeKey/onNavigationNodeHoverChange down to the real NavigationChildCard, by stable node_key', async () => {
+    const user = userEvent.setup();
+    previewGateState.capabilityEnabled = true;
+    BASE_URL_STATE.areasPreview = true;
+    BASE_URL_STATE.journey = 'area-first';
+    const onNavigationNodeHoverChange = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanelContainer
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            onNavigationNodeHoverChange,
+            areasNavigationJourney: inertAreasNavigationJourney({
+              node: {
+                nodeKey: 'root',
+                nodeType: 'ROOT',
+                displayLabel: 'Bangalore',
+                depth: -1,
+                regionKey: null,
+                ancestry: [],
+                nextLevelType: 'DIRECTION',
+                children: [],
+                revisionId: 1,
+                bounds: null,
+                descendantAreaKeys: null,
+                areaKey: null,
+              },
+              children: [
+                {
+                  nodeKey: 'd:n',
+                  nodeType: 'DIRECTION',
+                  displayLabel: 'North Bangalore',
+                  displayOrder: 1,
+                  listingCount: 5,
+                  schoolCount: null,
+                  isLeafArea: false,
+                  matchingAreaCount: null,
+                },
+              ],
+            }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    const card = screen.getByTestId('navigation-child-card-d:n');
+    await user.hover(card);
+    // The SAME callback MapDiscovery threads through — proves the panel side
+    // reports the hovered node_key up to the one shared owner, never a
+    // locally-invented handler.
+    expect(onNavigationNodeHoverChange).toHaveBeenCalledWith('d:n');
+  });
+
+  it('keeps rendering the legacy panel when journey is NOT area-first, even with the gate active', () => {
+    previewGateState.capabilityEnabled = true;
+    BASE_URL_STATE.areasPreview = true;
+    BASE_URL_STATE.journey = 'school-first';
+
+    render(
+      <DiscoverRightPanelContainer
+        {...baseProps({ resolvedPanelContent: 'school-browse' })}
+      />,
+    );
+
+    expect(screen.getByTestId('discover-right-panel-mock')).toBeInTheDocument();
+  });
+
+  it('keeps rendering the legacy panel when journey=area-first but the gate is closed', () => {
+    previewGateState.capabilityEnabled = false;
+    BASE_URL_STATE.areasPreview = undefined;
+    BASE_URL_STATE.journey = 'area-first';
+
+    render(
+      <DiscoverRightPanelContainer
+        {...baseProps({ resolvedPanelContent: 'area-groups-landing' })}
+      />,
+    );
+
+    expect(screen.getByTestId('discover-right-panel-mock')).toBeInTheDocument();
+  });
+
+  // Issue #1956 PR 2 (Slice 5) — the container must thread its OWN
+  // `urlActions.buildNodeHref` (never a re-derived href builder) down to the
+  // panel's hierarchy Back control.
+  it('threads urlActions.buildNodeHref to the panel so HierarchyBackButton can resolve a real href', () => {
+    previewGateState.capabilityEnabled = true;
+    BASE_URL_STATE.areasPreview = true;
+    BASE_URL_STATE.journey = 'area-first';
+    URL_ACTIONS.buildNodeHref = vi.fn((k: string) => `?node=${k}`);
+
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanelContainer
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            areasNavigationJourney: inertAreasNavigationJourney({
+              node: {
+                nodeKey: 'd:n',
+                nodeType: 'DIRECTION',
+                displayLabel: 'North Bangalore',
+                depth: 0,
+                regionKey: 'north',
+                ancestry: [{ nodeKey: 'root', nodeType: 'ROOT', displayLabel: 'Bangalore', displayOrder: 0 }],
+                nextLevelType: 'AREA',
+                children: [],
+                revisionId: 1,
+                bounds: null,
+                descendantAreaKeys: null,
+                areaKey: null,
+              },
+            }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    const back = screen.getByTestId('areas-hierarchy-back');
+    expect(back).toHaveAttribute('href', '/?node=root');
+    expect(URL_ACTIONS.buildNodeHref).toHaveBeenCalledWith('root');
   });
 });
