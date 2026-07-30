@@ -120,6 +120,27 @@ export interface DiscoverMapCanvasProps {
   hoveredNavigationNodeKey?: string | null;
   onNavigationNodeHoverChange?: (nodeKey: string | null) => void;
   /**
+   * Issue #1956 PR 3 (bounded state-lift, AC4.12/AC4.5) — the ONE focused
+   * visual-AREA-cluster identity MapDiscovery owns alongside
+   * `hoveredNavigationNodeKey` (same lifting rationale: ONE piece of state,
+   * threaded to both the map's `AreaDestinationMarkerLayer` and the right
+   * panel's `DiscoverAreasJourneyPanel` so a cluster click on either surface
+   * can never disagree on the focused member set). Never written to the
+   * URL — no history entry, no camera fit, no node= write.
+   */
+  focusedClusterMemberAreaKeys?: readonly string[] | null;
+  onClusterFocusChange?: (memberAreaKeys: readonly string[] | null) => void;
+  /**
+   * REQUIRED CHANGE 6 (review fix, AC4.4/AC4.5) — fired ONLY for a visual
+   * AREA cluster click under the canonical Areas journey. Threaded straight
+   * to `PropertyMap`'s prop of the same name (which threads it to
+   * `AreaDestinationMarkerLayer`), reusing the SAME
+   * `publishClusterCameraIntent` producer MapDiscovery already passes as
+   * `publishClusterCameraIntent` below — see that prop's doc for why sharing
+   * one producer across the legacy/canonical paths is safe.
+   */
+  onAreaVisualClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
+  /**
    * Issue #1956 PR 2 (Slice 5) — pure href builder for the canonical Areas
    * map breadcrumb's ancestor crumbs (`urlActions.buildNodeHref`, unchanged).
    * Forwarded to `DiscoverMapContextOverlay`'s `AreasBreadcrumbTrail` branch;
@@ -256,6 +277,9 @@ export function DiscoverMapCanvas({
   areasNavigationJourney,
   hoveredNavigationNodeKey,
   onNavigationNodeHoverChange,
+  focusedClusterMemberAreaKeys,
+  onClusterFocusChange,
+  onAreaVisualClusterCameraIntent,
   buildNavigationNodeHref,
   schoolZoneLabels,
   setMapZoom,
@@ -430,6 +454,9 @@ export function DiscoverMapCanvas({
           areasNavigationJourney={areasNavigationJourney}
           hoveredNavigationNodeKey={hoveredNavigationNodeKey}
           onNavigationNodeHoverChange={onNavigationNodeHoverChange}
+          focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
+          onClusterFocusChange={onClusterFocusChange}
+          onAreaVisualClusterCameraIntent={onAreaVisualClusterCameraIntent}
           showAreasNavigationDestinations={showAreasNavigationDestinations}
           schoolZoneLabels={schoolZoneLabels}
           onSelectZone={(groupId) => urlActions.selectGroup(groupId)}

@@ -159,6 +159,16 @@ export interface DiscoverRightPanelContainerProps {
   areasNavigationJourney: UseAreasNavigationJourneyResult;
   hoveredNavigationNodeKey?: string | null;
   onNavigationNodeHoverChange?: (nodeKey: string | null) => void;
+  /**
+   * Issue #1956 PR 3 (bounded state-lift, AC4.12/AC4.5) — the ONE focused
+   * visual-AREA-cluster identity MapDiscovery owns alongside
+   * `hoveredNavigationNodeKey`, threaded through unchanged so this
+   * container's `DiscoverAreasJourneyPanel` and the map's
+   * `AreaDestinationMarkerLayer` can never disagree on the focused member
+   * set. Never written to the URL — no history entry, no camera fit.
+   */
+  focusedClusterMemberAreaKeys?: readonly string[] | null;
+  onClusterFocusChange?: (memberAreaKeys: readonly string[] | null) => void;
 }
 
 export function DiscoverRightPanelContainer({
@@ -242,6 +252,8 @@ export function DiscoverRightPanelContainer({
   areasNavigationJourney,
   hoveredNavigationNodeKey = null,
   onNavigationNodeHoverChange,
+  focusedClusterMemberAreaKeys = null,
+  onClusterFocusChange,
 }: DiscoverRightPanelContainerProps) {
   // Issue #1953 (build step 2) — consumes the DiscoverProvider facade
   // directly rather than receiving urlState/urlActions as props (D2 prop
@@ -285,6 +297,8 @@ export function DiscoverRightPanelContainer({
         journey={areasNavigationJourney}
         hoveredNodeKey={hoveredNavigationNodeKey}
         onHoverChange={onNavigationNodeHoverChange}
+        focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
+        onClusterFocusChange={onClusterFocusChange}
         // Issue #1956 PR 2 (Slice 5) — the pure href builder the visible
         // in-app HierarchyBackButton uses to resolve the canonical parent.
         buildNodeHref={urlActions.buildNodeHref}

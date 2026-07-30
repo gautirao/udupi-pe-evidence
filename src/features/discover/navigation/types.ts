@@ -77,13 +77,38 @@ export type NavigationResolution = 'EXACT' | 'ALIAS' | 'ANCESTOR' | 'CITY_ROOT';
 
 /**
  * Thin ancestry/children entry (`NavigationNodeResponse.NavigationChildSummary`).
- * Carries NO bounds and NO coordinates by construction.
+ *
+ * Issue #1956 PR 3 (Slice 4) widened this record ADDITIVELY on the backend:
+ *   • `areaKey` is non-null ONLY for an AREA child; `null` for DIRECTION/CLUSTER.
+ *   • `centreLat`/`centreLon` are populated for real child nodes (AREA and
+ *     CLUSTER/DIRECTION alike) — the CENTROID (arithmetic mean) of member area
+ *     centres, not a bounding-box centre. Both are null together, never one
+ *     without the other.
+ *
+ * All three fields are OPTIONAL AND NULLABLE. This is deliberate, not lazy
+ * typing: `AreasBreadcrumbTrail.tsx` constructs a synthetic
+ * `NavigationChildSummary` literal that has no coordinates to give, so the
+ * fields must stay optional for that literal to keep compiling. Every
+ * consumer MUST treat `undefined` and `null` IDENTICALLY here — never branch
+ * on one but not the other.
+ *
+ * ── COORDINATES ARE FOR THE children[] MAP-DESTINATION PATH ONLY ──
+ * This same shape backs BOTH `children[]` and `ancestry[]` (it is one nested
+ * record on the wire). No consumer may read `centreLat`/`centreLon`/`areaKey`
+ * off an `ancestry` entry — those fields exist for the current node's direct
+ * map-rendered children, not for the breadcrumb trail.
  */
 export interface NavigationChildSummary {
   nodeKey: string;
   nodeType: NavigationNodeType;
   displayLabel: string;
   displayOrder: number;
+  /** Non-null ONLY for an AREA child. `null`/`undefined` for DIRECTION/CLUSTER — treat identically. */
+  areaKey?: string | null;
+  /** Centroid latitude of this child's member area centres. `null`/`undefined` together with `centreLon`. */
+  centreLat?: number | null;
+  /** Centroid longitude of this child's member area centres. `null`/`undefined` together with `centreLat`. */
+  centreLon?: number | null;
 }
 
 /**

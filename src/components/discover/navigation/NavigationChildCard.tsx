@@ -20,10 +20,16 @@
  *     journey-aware LISTING count (`formatListingCount`) as its own line, and
  *     ADDITIONALLY the LOCKED areas-with-matches copy (`N areas with matches` /
  *     `No matches with current filters` — `presentStructuralLevel`) whenever
- *     `matchingAreaCount` is derivable, never a `+N` form (that belongs to
- *     PR-3's visual clusters). When `matchingAreaCount` is `null` the areas
- *     line is simply omitted — the listing count is NEVER suppressed for want
- *     of the areas count (count_display_defect_2026_07_29 follow-up, pass 4).
+ *     `matchingAreaCount` is derivable, never a `+N` form. PR-3's visual AREA
+ *     clusters (`areaClustering.ts` / `representativeNames.ts`) now exist,
+ *     but their `+N` copy belongs ONLY to the map cluster marker and the
+ *     cluster-focus panel surface (its own distinct testid, never
+ *     `navigation-level-panel`) — THIS card, at structural level, must still
+ *     NEVER render `+N`; two PR-2 guards assert this negatively
+ *     (`issue-1956-pr2-count-copy.spec.ts` and `groupedCardAreaNames.test.tsx`).
+ *     When `matchingAreaCount` is `null` the areas line is simply omitted —
+ *     the listing count is NEVER suppressed for want of the areas count
+ *     (count_display_defect_2026_07_29 follow-up, pass 4).
  *     When `matchingAreaCount` is exactly 0, the locked zero literal renders
  *     ALONE (no separate "0 listings" line — a zero matching-area count
  *     guarantees a zero listing count too; see the field doc on

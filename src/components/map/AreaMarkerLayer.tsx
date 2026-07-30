@@ -21,8 +21,19 @@ import type { NavigationNodeResponse } from '@/features/discover/navigation/type
 import type { NodeLevelKind } from '@/features/discover/navigation/nodeLevelKind';
 import {
   presentStructuralLevel,
+  partitionMembersByJourney,
   type StructuralLevelIdentity,
+  type DiscoverJourney as AreasEligibilityJourney,
 } from '@/features/discover/navigation/journeyVisibility';
+import {
+  clusterVisibleAreaMembers,
+  boundsOfMembers,
+  isUsableCentroid,
+  AREA_CARD_FOOTPRINT_WIDTH_PX,
+  type ClusterableAreaMember,
+  type ProjectFn as AreaClusterProjectFn,
+} from '@/features/discover/navigation/areaClustering';
+import { presentClusterRepresentatives } from '@/features/discover/navigation/representativeNames';
 
 /**
  * One area marker point.
@@ -491,6 +502,44 @@ export interface AreaDestinationMarkerLayerProps {
   hoveredNodeKey?: string | null;
   /** Fired on marker hover/focus enter (nodeKey) and leave (null). */
   onHoverChange?: (nodeKey: string | null) => void;
+
+  // ── Issue #1956 PR 3 (Slice 4) — AREA / Local-Destination real geography ──
+  // Everything below is additive and only consumed when `levelKind` is
+  // `'areas'` or `'clusters'`; the 'directions' compass path above is
+  // untouched by any of it.
+
+  /** Active journey badge, mirroring `AreaMarkerLayer`'s own prop — school-first drives Schools-journey eligibility/ranking here too. */
+  journey?: DiscoverJourney | null;
+  /** Whether a school is currently selected (school-first journey only) — passed through for parity, unused by the eligibility dimension itself. */
+  selectedSchool?: unknown;
+  /**
+   * Fired ONLY when a client-side VISUAL AREA CLUSTER (dense-AREA grouping,
+   * never a real node) is clicked, with the bounding box of its member
+   * centroids (already padded by the caller's own convention — this layer
+   * hands back the raw union bounds) and its centre. Mirrors
+   * `onAreaClusterCameraIntent`'s contract exactly: this layer never calls
+   * `map.fitBounds`/`flyTo` itself. Clicking a visual cluster does NOT call
+   * `onSelect` — it is not a real node, so it must never change `node=`.
+   */
+  onAreaVisualClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
+  /**
+   * Controlled cluster-focus membership (the `areaKey`s of the currently
+   * focused visual cluster's members), for a parent that lifts this state to
+   * share it with the panel (AC4.12 — map and panel must expose IDENTICAL
+   * visible sets). When omitted, the layer manages focus with its own
+   * internal state instead — fully functional standalone, but with no
+   * cross-component guarantee. `null` means no cluster is focused.
+   */
+  focusedClusterMemberAreaKeys?: readonly string[] | null;
+  /**
+   * Fired whenever this layer's OWN focus decision changes — a cluster click
+   * (sets the member `areaKey` list), an explicit clear (`null`), or an
+   * automatic re-resolution clearing a focus whose members are no longer all
+   * visible (see the module doc on the areas-effect below). A parent that
+   * supplies `focusedClusterMemberAreaKeys` should feed this callback's value
+   * back into that prop to keep the map and panel in lock-step.
+   */
+  onClusterFocusChange?: (memberAreaKeys: readonly string[] | null) => void;
 }
 
 const DESTINATION_ACCENT = C_COPPER;
@@ -513,7 +562,17 @@ function makeDestinationCard(
   isSelected: boolean,
   isHovered: boolean,
 ): L.DivIcon {
-  const label = escapeHtml(child.displayLabel);
+  // UD-3 (fix-cycle-3) — a real Bangalore/Udupi DIRECTION or CLUSTER label
+  // can run well past this card's ~96px footprint with white-space:nowrap
+  // and no max-width, expanding the card and compounding UD-1's overlap risk.
+  // Reuse the existing `truncateAreaLabel` helper (never a second
+  // implementation); the ACCESSIBLE name below always carries the full
+  // untruncated label via `ariaLabelName`, even when the visible text and the
+  // `title` tooltip are shortened.
+  const { text: shortLabel, full: fullLabel } = truncateAreaLabel(child.displayLabel, true);
+  const label = escapeHtml(shortLabel);
+  const ariaLabelName = escapeHtml(child.displayLabel);
+  const titleAttr = fullLabel ? ` title="${escapeHtml(fullLabel)}"` : '';
   const identity: StructuralLevelIdentity = {
     nodeKey: child.nodeKey,
     nodeType: child.nodeType,
@@ -540,23 +599,131 @@ function makeDestinationCard(
   const areasLabel = presentation ? escapeHtml(presentation.countLabel) : null;
   const showListingsLine = !presentation?.isZeroContent;
   const listingsLabel = showListingsLine ? escapeHtml(formatListingCount(child.listingCount)) : null;
+  // Case (c) of the three-case school-count rule (locked): a canonical
+  // structural (DIRECTION/CLUSTER) marker shows the backend-provided child
+  // schoolCount AS-IS — never summed, never re-derived. `null` means not yet
+  // loaded; the line is simply omitted, mirroring NavigationChildCard exactly.
+  const schoolLabel =
+    child.schoolCount != null && child.schoolCount > 0
+      ? escapeHtml(`${child.schoolCount} ${child.schoolCount === 1 ? 'school' : 'schools'}`)
+      : null;
   const borderColor = isSelected ? DESTINATION_ACCENT_ACTIVE : C_BORDER;
   const borderWidth = isSelected || isHovered ? '2px' : '1px';
   const countColor = presentation?.isZeroContent ? C_GREY_400 : C_MUTED;
-  const ariaLabelParts = [label, areasLabel, listingsLabel].filter((part): part is string => part != null);
+  const ariaLabelParts = [ariaLabelName, areasLabel, listingsLabel, schoolLabel].filter(
+    (part): part is string => part != null,
+  );
   const ariaLabel = ariaLabelParts.join(', ');
   const html = `<div data-testid="area-destination-marker" data-node-key="${escapeHtml(child.nodeKey)}" data-selected="${isSelected}" tabindex="0" role="button" aria-label="${ariaLabel}" style="transform:translate(-50%,-100%);font-family:inherit;pointer-events:auto;cursor:pointer;outline:none;">
-    <div style="display:flex;flex-direction:column;gap:2px;min-width:96px;padding:8px 12px;border-radius:12px;background:${C_PAPER};border:${borderWidth} solid ${borderColor};box-shadow:${PILL_SHADOW};">
+    <div${titleAttr} style="display:flex;flex-direction:column;gap:2px;min-width:96px;padding:8px 12px;border-radius:12px;background:${C_PAPER};border:${borderWidth} solid ${borderColor};box-shadow:${PILL_SHADOW};">
       <div style="display:flex;align-items:center;gap:6px;">
         ${pinSvg(DESTINATION_ACCENT)}
         <span style="font-size:12.5px;font-weight:700;color:${C_INK};white-space:nowrap;">${label}</span>
       </div>
       ${areasLabel != null ? `<span style="font-size:10.5px;font-weight:600;color:${countColor};">${areasLabel}</span>` : ''}
       ${listingsLabel != null ? `<span style="font-size:10.5px;font-weight:600;color:${C_MUTED};">${listingsLabel}</span>` : ''}
+      ${schoolLabel != null ? `<span style="font-size:10.5px;font-weight:600;color:${C_MUTED};">${schoolLabel}</span>` : ''}
       <span style="font-family:${MONO};font-size:9.5px;font-weight:600;color:${DESTINATION_ACCENT};">Tap to zoom &rsaquo;</span>
     </div>
   </div>`;
   return L.divIcon({ className: 'area-destination-marker-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
+}
+
+/**
+ * Case (b) of the three-case school-count rule (locked): a single-AREA
+ * marker shows that area's EXACT server-provided schoolCount — never omitted
+ * when available, never summed/derived. No "+N" line (this is a real node,
+ * not a client-side grouping) — "Tap to view homes" instead of "Tap to
+ * zoom", since selecting an AREA leaf goes straight to listings.
+ */
+function makeSingleAreaChildCard(
+  child: AreasNavigationChild,
+  isSelected: boolean,
+  isHovered: boolean,
+): L.DivIcon {
+  // UD-1/UD-3 (fix-cycle-3) — this card type is one of the two grid-clustered
+  // builders (see areaClustering.ts's AREA_CARD_FOOTPRINT_WIDTH_PX doc): its
+  // CSS width is fixed to that SAME shared constant (never a locally re-typed
+  // number) so the no-overlap geometry and the pixels actually painted can
+  // never drift apart. Truncation (existing `truncateAreaLabel` helper, never
+  // reimplemented) plus a matching CSS max-width/ellipsis on the name span is
+  // the belt-and-suspenders that keeps the rendered width from ever exceeding
+  // that fixed footprint even for a long real label; the ACCESSIBLE name
+  // below always carries the full untruncated label.
+  const { text: shortLabel, full: fullLabel } = truncateAreaLabel(child.displayLabel, true);
+  const label = escapeHtml(shortLabel);
+  const ariaLabelName = escapeHtml(child.displayLabel);
+  const titleAttr = fullLabel ? ` title="${escapeHtml(fullLabel)}"` : '';
+  const listingsLabel = escapeHtml(formatListingCount(child.listingCount));
+  const schoolLabel =
+    child.schoolCount != null
+      ? escapeHtml(`${child.schoolCount} ${child.schoolCount === 1 ? 'school' : 'schools'}`)
+      : null;
+  const borderColor = isSelected ? DESTINATION_ACCENT_ACTIVE : C_BORDER;
+  const borderWidth = isSelected || isHovered ? '2px' : '1px';
+  const ariaLabel = [ariaLabelName, listingsLabel, schoolLabel].filter((p): p is string => p != null).join(', ');
+  const cardWidthPx = AREA_CARD_FOOTPRINT_WIDTH_PX;
+  const nameMaxWidthPx = cardWidthPx - 24 /* padding */ - 11 /* icon */ - 6 /* gap */ - 2 /* border */;
+  const html = `<div data-testid="area-single-marker" data-node-key="${escapeHtml(child.nodeKey)}" data-selected="${isSelected}" tabindex="0" role="button" aria-label="${ariaLabel}" style="transform:translate(-50%,-100%);font-family:inherit;pointer-events:auto;cursor:pointer;outline:none;">
+    <div${titleAttr} style="box-sizing:border-box;display:flex;flex-direction:column;gap:2px;width:${cardWidthPx}px;padding:8px 12px;border-radius:12px;background:${C_PAPER};border:${borderWidth} solid ${borderColor};box-shadow:${PILL_SHADOW};">
+      <div style="display:flex;align-items:center;gap:6px;">
+        ${pinSvg(DESTINATION_ACCENT)}
+        <span style="font-size:12.5px;font-weight:700;color:${C_INK};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameMaxWidthPx}px;">${label}</span>
+      </div>
+      <span style="font-size:10.5px;font-weight:600;color:${C_MUTED};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${listingsLabel}</span>
+      ${schoolLabel != null ? `<span style="font-size:10.5px;font-weight:600;color:${C_MUTED};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${schoolLabel}</span>` : ''}
+      <span style="font-family:${MONO};font-size:9.5px;font-weight:600;color:${DESTINATION_ACCENT};">Tap to view homes &rsaquo;</span>
+    </div>
+  </div>`;
+  return L.divIcon({ className: 'area-single-marker-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
+}
+
+/**
+ * Case (a) of the three-case school-count rule (locked): an AD-HOC
+ * client-side visual AREA cluster OMITS the school number entirely — school
+ * coverage is 1:N across areas, so summing member `schoolCount`s would
+ * double-count; this marker never attempts it. Visually distinct from the
+ * filled navy listing-cluster disc (`leaflet.markercluster`, PropertyMap.tsx)
+ * and from the outline navigation chip used by the legacy dense-area
+ * degradation path (`area-cluster-marker-icon`): a dashed-border card with
+ * its own `area-visual-cluster-marker` class/testid.
+ */
+function makeAreaVisualClusterCard(
+  representativeNames: string[],
+  countLabel: string,
+  totalListingCount: number,
+  accent: string,
+): L.DivIcon {
+  // UD-1/UD-3 (fix-cycle-3) — this is the other grid-clustered card builder;
+  // same fixed-width-to-the-shared-footprint-constant + truncation contract
+  // as makeSingleAreaChildCard above (see that function's comment for the
+  // full rationale — never a second truncation implementation, reuses
+  // `truncateAreaLabel`). Each representative name is truncated individually
+  // before joining (a combined 2-name string can be arbitrarily long even
+  // when neither name alone is), never a second implementation; the
+  // ACCESSIBLE name always carries the full untruncated names.
+  const shortNames = representativeNames.map((name) => truncateAreaLabel(name, true).text);
+  const namesLabel = escapeHtml(shortNames.join(', '));
+  const fullNamesLabel = escapeHtml(representativeNames.join(', '));
+  const anyNameTruncated = shortNames.some((short, i) => short !== representativeNames[i]);
+  const titleAttr = anyNameTruncated ? ` title="${fullNamesLabel}"` : '';
+  const listingsLabel = escapeHtml(formatListingCount(totalListingCount));
+  const countLabelHtml = escapeHtml(countLabel);
+  const ariaLabel = `${fullNamesLabel}, ${countLabelHtml}, ${listingsLabel}`;
+  const cardWidthPx = AREA_CARD_FOOTPRINT_WIDTH_PX;
+  const nameMaxWidthPx = cardWidthPx - 24 /* padding */ - 12 /* icon */ - 6 /* gap */ - 3 /* border */;
+  const html = `<div data-testid="area-visual-cluster-marker" tabindex="0" role="button" aria-label="${ariaLabel}" style="transform:translate(-50%,-100%);font-family:inherit;pointer-events:auto;cursor:pointer;outline:none;">
+    <div${titleAttr} style="box-sizing:border-box;display:flex;flex-direction:column;gap:2px;width:${cardWidthPx}px;padding:8px 12px;border-radius:14px;background:${C_PAPER};border:1.5px dashed ${accent};box-shadow:${PILL_SHADOW};">
+      <div style="display:flex;align-items:center;gap:6px;">
+        ${stackSvg(accent)}
+        <span style="font-size:12.5px;font-weight:700;color:${C_INK};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameMaxWidthPx}px;">${namesLabel}</span>
+      </div>
+      <span style="font-size:10.5px;font-weight:600;color:${accent};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${countLabelHtml}</span>
+      <span style="font-size:10.5px;font-weight:600;color:${C_MUTED};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${listingsLabel}</span>
+      <span style="font-family:${MONO};font-size:9.5px;font-weight:600;color:${accent};">Tap to zoom &rsaquo;</span>
+    </div>
+  </div>`;
+  return L.divIcon({ className: 'area-visual-cluster-marker-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
 }
 
 export function AreaDestinationMarkerLayer({
@@ -567,6 +734,11 @@ export function AreaDestinationMarkerLayer({
   selectedNodeKey = null,
   hoveredNodeKey = null,
   onHoverChange,
+  journey = null,
+  selectedSchool,
+  onAreaVisualClusterCameraIntent,
+  focusedClusterMemberAreaKeys,
+  onClusterFocusChange,
 }: AreaDestinationMarkerLayerProps) {
   const map = useMap();
   const [layoutTick, setLayoutTick] = useState(0);
@@ -630,6 +802,362 @@ export function AreaDestinationMarkerLayer({
       markers.forEach((m) => m.remove());
     };
   }, [node, levelKind, children, map, onSelect, selectedNodeKey, hoveredNodeKey, onHoverChange, layoutTick]);
+
+  // ── AREA / Local-Destination real geography (Issue #1956 PR 3, Slice 4) ──
+  // Recompute grouping on zoom only (grid clustering is a pure function of
+  // projected pixel position at a given zoom) — the same pan-invariant
+  // trigger convention as the legacy degraded path below in AreaMarkerLayer.
+  const [areasZoomTick, setAreasZoomTick] = useState(() => map.getZoom());
+  useEffect(() => {
+    if (levelKind !== 'areas') return;
+    const onZoomEnd = () => setAreasZoomTick(map.getZoom());
+    map.on('zoomend', onZoomEnd);
+    return () => {
+      map.off('zoomend', onZoomEnd);
+    };
+  }, [map, levelKind]);
+
+  // Issue #1956 PR 3 (bounded state-lift, AC4.12/AC4.18) — cluster focus is
+  // now ALWAYS controlled by the caller (MapDiscovery owns the ONE
+  // focused-cluster identity and threads it to both this layer and the right
+  // panel's DiscoverAreasJourneyPanel — see MapDiscovery.tsx's
+  // `focusedClusterMemberAreaKeys` state). No independent internal fallback
+  // state is kept here: an uncontrolled useState mirror could silently
+  // diverge from the parent's owned value the instant a real page mounted
+  // both consumers, which is exactly the two-sources-of-truth bug AC4.12
+  // exists to prevent. `focusedClusterMemberAreaKeys` defaults to `null`
+  // (no cluster focused) for callers — tests included — that render this
+  // layer standalone without wiring the prop.
+  const focusedMembers = focusedClusterMemberAreaKeys ?? null;
+  const setFocusedMembers = (keys: readonly string[] | null) => {
+    onClusterFocusChange?.(keys);
+  };
+
+  // Non-recreating marker registry for THIS effect only — keyed by a stable
+  // identity (a real node's nodeKey, or a visual cluster's membership hash)
+  // so unchanged markers are repositioned/re-iconed in place (AC4.19) rather
+  // than removed and recreated on every recompute. `html` is the exact divIcon
+  // HTML last applied to this marker (change AC4.19 fix) — `setIcon`/
+  // `setLatLng` are only called when the corresponding value actually
+  // changed, so a zoom-only recompute with unchanged content never tears
+  // down/rebuilds the marker's inner DOM (Leaflet's setIcon -> _initIcon
+  // reassigns innerHTML wholesale, which would otherwise destroy the
+  // data-testid child elements and drop keyboard focus on every zoom).
+  const areaMarkerRegistryRef = useRef<
+    Map<string, { marker: L.Marker; html: string; latlng: [number, number] }>
+  >(new Map());
+
+  useEffect(() => {
+    const registry = areaMarkerRegistryRef.current;
+    if (!node || (levelKind !== 'areas' && levelKind !== 'clusters')) {
+      // F1 fix (fix-cycle-3) — this effect deliberately has NO cleanup
+      // function of its own (see the dedicated true-unmount effect below,
+      // and REQUIRED CHANGE 5's comment further down for why): the
+      // stale-removal diff loop that normally tears down markers no longer
+      // desired lives further down in this same effect body, AFTER this
+      // guard. Without this, a level change OUT of areas/clusters — most
+      // commonly clicking a single-AREA marker (levelKind -> 'listings'), or
+      // a breadcrumb hop back to a DIRECTION node — hit this early return
+      // BEFORE that diff loop ever ran, leaving the previous level's AREA/
+      // cluster cards mounted indefinitely with live Leaflet click handlers
+      // still closing over the OLD nodeKeys. Clear the registry explicitly
+      // on every path out of the areas/clusters levels instead.
+      for (const entry of registry.values()) {
+        entry.marker.remove();
+      }
+      registry.clear();
+      return;
+    }
+    const eligibilityJourney: AreasEligibilityJourney = journey === 'school-first' ? 'schools' : 'areas';
+    const rawByNodeKey = new Map(node.children.map((c) => [c.nodeKey, c] as const));
+    // `hoverKey` is the stable node identity to report via onHoverChange on
+    // mouseover/mouseout/focus/blur — `null` for an ad-hoc visual cluster,
+    // which is not a real node and has no hover-highlight state of its own.
+    const desired = new Map<
+      string,
+      { latlng: [number, number]; icon: L.DivIcon; html: string; onClick: () => void; hoverKey: string | null }
+    >();
+
+    if (levelKind === 'clusters') {
+      // CLUSTER ("Local Destination") children are real nodes — case (c) of
+      // the school-count rule, structural copy, never "+N". Selecting one
+      // drills down via the SAME onSelect reference as the directions path.
+      for (const child of children) {
+        const raw = rawByNodeKey.get(child.nodeKey);
+        if (!raw || !isUsableCentroid(raw.centreLat, raw.centreLon)) continue;
+        const isSelected = selectedNodeKey === child.nodeKey;
+        const isHovered = hoveredNodeKey === child.nodeKey;
+        const icon = makeDestinationCard(child, isSelected, isHovered);
+        desired.set(child.nodeKey, {
+          // Non-null guaranteed by isUsableCentroid above.
+          latlng: [raw.centreLat as number, raw.centreLon as number],
+          icon,
+          html: String(icon.options.html),
+          onClick: () => onSelect(child.nodeKey),
+          hoverKey: child.nodeKey,
+        });
+      }
+    } else {
+      // 'areas' — dense AREA children. Visibility runs BEFORE clustering
+      // (journeyVisibility, via clusterVisibleAreaMembers) so a zero-content
+      // AREA can never reach a cluster or its "+N" count.
+      const clusterable: ClusterableAreaMember[] = [];
+      for (const child of children) {
+        const raw = rawByNodeKey.get(child.nodeKey);
+        // Minor fix-up (review) — the backend guarantees a non-null areaKey
+        // for AREA children; a child missing one is SKIPPED rather than
+        // borrowing its nodeKey as a stand-in areaKey (never mix the two key
+        // spaces — mirrors the coordinate fail-safe just below, which omits
+        // rather than fabricates).
+        if (raw?.areaKey == null) continue;
+        clusterable.push({
+          nodeKey: child.nodeKey,
+          areaKey: raw.areaKey,
+          displayLabel: child.displayLabel,
+          // Missing/invalid coordinates land on NaN, which isUsableCentroid
+          // (inside the clusterer) rejects outright — never silently
+          // defaulted to (0, 0) or any other fabricated position.
+          lat: raw.centreLat ?? Number.NaN,
+          lon: raw.centreLon ?? Number.NaN,
+          listingCount: child.listingCount,
+          displayOrder: child.displayOrder,
+          schoolCount: child.schoolCount,
+        });
+      }
+
+      // REQUIRED CHANGE 5 (AC4.18) — reconcile a controlled focus against the
+      // VISIBLE (post-eligibility) member set, computed over the full UNSCOPED
+      // `clusterable` — never the pre-visibility "still present in `children`"
+      // check this used to run — so a filter that drops EVERY focused member
+      // to zero-content (rather than removing it from `children` outright)
+      // also clears focus. This runs BEFORE any scoping/clustering, and on a
+      // clearing run the effect returns immediately with no cleanup of its
+      // own: the previous (correct) render's markers stay exactly as they
+      // are — never replaced by a stale or empty frame — until the
+      // `setFocusedMembers(null)` state update this triggers reruns the
+      // effect with a fresh, unscoped focusedMembers=null.
+      if (focusedMembers) {
+        const { visible } = partitionMembersByJourney(
+          clusterable.map((m) => ({
+            areaKey: m.areaKey,
+            displayLabel: m.displayLabel,
+            eligibleListingCount: m.listingCount,
+            eligibleSchoolCount: m.schoolCount ?? 0,
+            displayOrder: m.displayOrder,
+          })),
+          eligibilityJourney,
+        );
+        const visibleAreaKeys = new Set(visible.map((m) => m.areaKey));
+        const stillAllVisible = focusedMembers.every((k) => visibleAreaKeys.has(k));
+        if (!stillAllVisible) {
+          setFocusedMembers(null);
+          return;
+        }
+      }
+
+      const project: AreaClusterProjectFn = (lat, lon) => {
+        const pt = map.latLngToContainerPoint([lat, lon]);
+        return { x: pt.x, y: pt.y };
+      };
+
+      const scoped = focusedMembers
+        ? clusterable.filter((m) => focusedMembers.includes(m.areaKey))
+        : clusterable;
+
+      const clusterResult = clusterVisibleAreaMembers(scoped, eligibilityJourney, project, areasZoomTick);
+      const accent = journey === 'school-first' ? C_PLUM : C_COPPER;
+
+      for (const cell of clusterResult.clusters) {
+        if (cell.members.length === 1) {
+          const member = cell.members[0];
+          const childCounts = children.find((c) => c.nodeKey === member.nodeKey);
+          if (!childCounts) continue;
+          const isSelected = selectedNodeKey === member.nodeKey;
+          const isHovered = hoveredNodeKey === member.nodeKey;
+          const icon = makeSingleAreaChildCard(childCounts, isSelected, isHovered);
+          desired.set(member.nodeKey, {
+            latlng: [member.lat, member.lon],
+            icon,
+            html: String(icon.options.html),
+            onClick: () => onSelect(member.nodeKey),
+            hoverKey: member.nodeKey,
+          });
+        } else {
+          const membershipKey = cell.members.map((m) => m.areaKey).join('|');
+          const { representativeNames, countResult } = presentClusterRepresentatives(
+            cell.members,
+            eligibilityJourney,
+          );
+          const totalListingCount = cell.members.reduce((sum, m) => sum + m.listingCount, 0);
+          const icon = makeAreaVisualClusterCard(representativeNames, countResult.label, totalListingCount, accent);
+          desired.set(`cluster:${membershipKey}`, {
+            latlng: [cell.anchor.lat, cell.anchor.lon],
+            icon,
+            html: String(icon.options.html),
+            onClick: () => {
+              const bounds = boundsOfMembers(cell.members);
+              if (bounds) {
+                onAreaVisualClusterCameraIntent?.(
+                  [[bounds.minLat, bounds.minLon], [bounds.maxLat, bounds.maxLon]],
+                  [cell.anchor.lat, cell.anchor.lon],
+                );
+              }
+              // A visual cluster is client-side only — never calls onSelect,
+              // never changes node=, never touches history (spec item 5).
+              setFocusedMembers(cell.members.map((m) => m.areaKey));
+            },
+            // Not a real node — no hover-highlight state to report.
+            hoverKey: null,
+          });
+        }
+      }
+    }
+
+    // REQUIRED CHANGE 4 (re-review fix) — reuses the exact keyboard/focus
+    // bridge the directions loop above already applies: a plain div has no
+    // native key->click translation, and role="button" with no working
+    // activation is worse than no role at all for a screen-reader user.
+    //
+    // This must be (re)bound every time `setIcon` actually runs, not just on
+    // first creation: `makeSingleAreaChildCard`/`makeAreaVisualClusterCard`
+    // emit different HTML on hover/selection/count-copy changes (e.g. a
+    // 1px->2px border), so REQUIRED CHANGE 3's dirty-check correctly calls
+    // `setIcon` for those cases too — and Leaflet's `setIcon` ->
+    // `_initIcon` -> `DivIcon.createIcon(oldIcon)` reassigns the marker's
+    // outer div's innerHTML wholesale, which detaches the PREVIOUS inner
+    // `[role="button"]` element (and, harmlessly, its now-dead listeners)
+    // and creates a brand-new one. Always querying `marker.getElement()`
+    // fresh — never reusing a captured reference — means this can never
+    // double-bind: each call only ever attaches to whichever element is
+    // current at that moment.
+    const bindMarkerDom = (marker: L.Marker, hoverKey: string | null) => {
+      const el = marker.getElement()?.querySelector<HTMLElement>('[role="button"][tabindex="0"]');
+      el?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          el.click();
+        }
+      });
+      if (hoverKey != null) {
+        el?.addEventListener('focus', () => onHoverChange?.(hoverKey));
+        el?.addEventListener('blur', () => onHoverChange?.(null));
+      } else {
+        // UD-2 (fix-cycle-4) — a visual cluster (`hoverKey: null`; it is not a
+        // real node, so it correctly has no hover-highlight state of its own
+        // — see the module doc on `hoverKey` above) otherwise gets ZERO focus
+        // feedback for a keyboard user, since its outer div sets
+        // `outline:none` INLINE. A class-based rule can never beat that: an
+        // inline style declaration outranks any selector-based author
+        // declaration regardless of layers/specificity, so a stylesheet
+        // class (the previous `.area-marker-kbd-focus` approach, since
+        // reverted from index.css) never painted anything. Set the focus
+        // indicator as an INLINE style instead — the only thing guaranteed
+        // to win — mirroring every other visual property on this divIcon
+        // (literal values, no CSS pipeline). Uses a navy ring (C_NAVY, same
+        // token as this file's leader-line/anchor-dot color), not copper:
+        // this card's resting state already has a permanent dashed COPPER
+        // border, so a copper focus ring would read as "a slightly different
+        // border", not "focus" (design-audit finding). Cleared to '' on blur
+        // (never toggled via a class) so activation (Enter/Space, bound
+        // above) is unaffected either way.
+        el?.addEventListener('focus', () => {
+          if (!el) return;
+          el.style.borderRadius = '14px';
+          el.style.boxShadow = `0 0 0 2px ${C_PAPER}, 0 0 0 4px ${C_NAVY}`;
+        });
+        el?.addEventListener('blur', () => {
+          if (!el) return;
+          el.style.borderRadius = '';
+          el.style.boxShadow = '';
+        });
+      }
+    };
+
+    // Diff against the persistent registry: remove stale, add new, update
+    // (reposition/re-icon) unchanged-identity markers IN PLACE (AC4.19).
+    for (const [key, entry] of registry) {
+      if (!desired.has(key)) {
+        entry.marker.remove();
+        registry.delete(key);
+      }
+    }
+    for (const [key, spec] of desired) {
+      const existing = registry.get(key);
+      if (existing) {
+        // REQUIRED CHANGE 3 (AC4.19) — only touch Leaflet's setIcon/setLatLng
+        // when the value actually changed. setIcon -> _initIcon reassigns the
+        // DivIcon's innerHTML wholesale even when the new HTML string is
+        // identical, destroying the data-testid child elements (and any
+        // keyboard focus on them) on every call — including a bare zoom
+        // recompute where nothing about this marker actually changed.
+        if (existing.html !== spec.html) {
+          // Capture focus BEFORE setIcon detaches the current inner element,
+          // so it can be restored on the freshly bound replacement below —
+          // otherwise a keyboard user tabbed onto this marker loses focus to
+          // document.body the moment its hover/selection state changes.
+          const outerElBeforeSwap = existing.marker.getElement();
+          const hadFocus = outerElBeforeSwap != null && outerElBeforeSwap.contains(document.activeElement);
+          existing.marker.setIcon(spec.icon);
+          existing.html = spec.html;
+          bindMarkerDom(existing.marker, spec.hoverKey);
+          if (hadFocus) {
+            existing.marker
+              .getElement()
+              ?.querySelector<HTMLElement>('[role="button"][tabindex="0"]')
+              ?.focus();
+          }
+        }
+        if (existing.latlng[0] !== spec.latlng[0] || existing.latlng[1] !== spec.latlng[1]) {
+          existing.marker.setLatLng(spec.latlng);
+          existing.latlng = spec.latlng;
+        }
+        existing.marker.off('click');
+        existing.marker.on('click', spec.onClick);
+      } else {
+        const marker = L.marker(spec.latlng, { icon: spec.icon });
+        marker.on('click', spec.onClick);
+        if (spec.hoverKey != null) {
+          marker.on('mouseover', () => onHoverChange?.(spec.hoverKey));
+          marker.on('mouseout', () => onHoverChange?.(null));
+        }
+        marker.addTo(map);
+        registry.set(key, { marker, html: spec.html, latlng: spec.latlng });
+        bindMarkerDom(marker, spec.hoverKey);
+      }
+    }
+    // Minor fix-up (review) — no cleanup function here: a full teardown on
+    // every run would defeat AC4.19's reuse contract (the stale-entry
+    // removal loop just above already tears down markers whose identity no
+    // longer exists on THIS run's diff). Unmount-only cleanup lives in the
+    // dedicated effect immediately below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    node,
+    levelKind,
+    children,
+    map,
+    onSelect,
+    selectedNodeKey,
+    hoveredNodeKey,
+    onHoverChange,
+    journey,
+    selectedSchool,
+    areasZoomTick,
+    focusedMembers,
+    onAreaVisualClusterCameraIntent,
+  ]);
+
+  // True unmount cleanup — removes every marker this layer instance ever
+  // created, exactly once, when the component itself goes away.
+  useEffect(() => {
+    const registry = areaMarkerRegistryRef.current;
+    return () => {
+      for (const entry of registry.values()) {
+        entry.marker.remove();
+      }
+      registry.clear();
+    };
+  }, []);
 
   return null;
 }

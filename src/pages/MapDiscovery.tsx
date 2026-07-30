@@ -144,6 +144,20 @@ export default function MapDiscovery() {
   // matching item on the other, by stable node_key. Plain useState (never the
   // URL) — hover creates no history entry and no camera fit.
   const [hoveredNavigationNodeKey, setHoveredNavigationNodeKey] = useState<string | null>(null);
+  // Issue #1956 PR 3 (bounded state-lift, AC4.12/AC4.5) — the ONE focused
+  // visual-AREA-cluster identity, lifted here for the same reason
+  // `hoveredNavigationNodeKey` is: threaded unchanged to BOTH the map's
+  // AreaDestinationMarkerLayer (`focusedClusterMemberAreaKeys`) and the
+  // panel's DiscoverAreasJourneyPanel (via DiscoverRightPanelContainer) so a
+  // cluster-marker click on the map and the panel's own member list can
+  // never disagree on the focused member set (AC4.12). The member `areaKey`s
+  // ARE the identity — the map's own visual clustering (pan/zoom-dependent
+  // pixel grouping) picks them; this state does not re-derive or re-cluster,
+  // it only stores what the layer reports back. Plain useState (never the
+  // URL) — focus creates no history entry, no camera fit, no node= write
+  // (AC4.5 item 4).
+  const [focusedClusterMemberAreaKeys, setFocusedClusterMemberAreaKeys] =
+    useState<readonly string[] | null>(null);
   const areasNavigationJourney = useAreasNavigationJourney({
     // Matches the established `nav.city || DEFAULT_CITY` idiom this early
     // section already uses (see useAreaGroups/useRegionalAreaGroups below) —
@@ -153,6 +167,20 @@ export default function MapDiscovery() {
     onSelectNode: actions.goToNode,
     enabled: showAreasNavigationJourney,
   });
+
+  // REQUIRED CHANGE 7 (review fix) — focus is explicitly ephemeral (see the
+  // state doc above), so its lifetime is tied to the current navigation
+  // node: clicking a focused member calls selectNode, which changes
+  // areasNavigationJourney.node's identity, but the plain useState above has
+  // no reset of its own and does not self-heal even once the new node's
+  // levelKind is 'clusters'/'directions' (where focus is meaningless). Left
+  // unset, a stale member set chosen for a DIFFERENT parent node would be
+  // re-applied the next time the user returns to any 'areas' node. Scoped to
+  // exactly the node identity — no other MapDiscovery state is touched here.
+  useEffect(() => {
+    setFocusedClusterMemberAreaKeys(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [areasNavigationJourney.node?.nodeKey]);
 
   // Issue #1597 — early derivation of PropertyFilters from URL state, available before
   // useDiscoverPageState is called. Used by the group-results listings query so it respects
@@ -1912,11 +1940,22 @@ export default function MapDiscovery() {
           areaSearchMatchKeys={areaSearchMatchKeys}
           hoveredAreaKeyForMap={hoveredAreaKeyForMap}
           publishClusterCameraIntent={publishClusterCameraIntent}
+          // REQUIRED CHANGE 6 (review fix, AC4.4/AC4.5) — the canonical
+          // Areas-journey visual-cluster tap reuses the SAME
+          // publishClusterCameraIntent producer as the legacy dense-area
+          // degradation path above (shared monotonic cameraIntentSeqRef via
+          // useDiscoverMapData). Safe to share: AreaDestinationMarkerLayer
+          // and the legacy AreaMarkerLayer are mutually exclusive
+          // (showAreasNavigationDestinations), so the two producers are
+          // never invoked for the same render.
+          onAreaVisualClusterCameraIntent={publishClusterCameraIntent}
           handleAreaClusterClick={handleAreaClusterClick}
           handleAreaMarkersComputed={handleAreaMarkersComputed}
           areasNavigationJourney={areasNavigationJourney}
           hoveredNavigationNodeKey={hoveredNavigationNodeKey}
           onNavigationNodeHoverChange={setHoveredNavigationNodeKey}
+          focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
+          onClusterFocusChange={setFocusedClusterMemberAreaKeys}
           // Issue #1956 PR 2 (Slice 5) — the map-side canonical Areas
           // breadcrumb's pure href builder (same `actions.buildNodeHref`
           // the right panel's HierarchyBackButton uses).
@@ -1996,6 +2035,8 @@ export default function MapDiscovery() {
           areasNavigationJourney={areasNavigationJourney}
           hoveredNavigationNodeKey={hoveredNavigationNodeKey}
           onNavigationNodeHoverChange={setHoveredNavigationNodeKey}
+          focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
+          onClusterFocusChange={setFocusedClusterMemberAreaKeys}
           selectedMarkerListing={selectedMarkerListing}
           clearSelectedMarkerListing={clearSelectedMarkerListing}
           city={city}

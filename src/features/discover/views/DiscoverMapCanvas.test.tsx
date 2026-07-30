@@ -24,10 +24,21 @@ vi.mock('@/components/map/PropertyMap', () => ({
   // Issue #1956 PR 2 (Slice 3, pass 4, AC3.9) — captures the two hover-sync
   // props as data attributes so a test can prove DiscoverMapCanvas actually
   // forwards them to PropertyMap unchanged, rather than silently dropping them.
-  PropertyMap: (props: { hoveredNavigationNodeKey?: string | null }) => (
+  // REQUIRED CHANGE 6 (review fix, AC4.4/AC4.5) — also captures whether
+  // `onAreaVisualClusterCameraIntent` was forwarded as a real function, so a
+  // test can prove DiscoverMapCanvas doesn't silently drop it (the review
+  // finding: PropertyMap never received it in the real page, so a canonical
+  // visual-cluster tap never fit the camera).
+  PropertyMap: (props: {
+    hoveredNavigationNodeKey?: string | null;
+    onAreaVisualClusterCameraIntent?: (bounds: unknown, center: unknown) => void;
+  }) => (
     <div
       data-testid="property-map-mock"
       data-hovered-navigation-node-key={props.hoveredNavigationNodeKey ?? ''}
+      data-has-area-visual-cluster-camera-intent={String(
+        typeof props.onAreaVisualClusterCameraIntent === 'function',
+      )}
     />
   ),
 }));
@@ -282,6 +293,15 @@ describe('DiscoverMapCanvas', () => {
     expect(screen.getByTestId('property-map-mock')).toHaveAttribute(
       'data-hovered-navigation-node-key',
       'd:n',
+    );
+  });
+
+  it('REQUIRED CHANGE 6 (review fix, AC4.4/AC4.5) — forwards onAreaVisualClusterCameraIntent to PropertyMap as a real function, not silently dropped', () => {
+    const onAreaVisualClusterCameraIntent = vi.fn();
+    render(<DiscoverMapCanvas {...baseProps({ onAreaVisualClusterCameraIntent })} />);
+    expect(screen.getByTestId('property-map-mock')).toHaveAttribute(
+      'data-has-area-visual-cluster-camera-intent',
+      'true',
     );
   });
 

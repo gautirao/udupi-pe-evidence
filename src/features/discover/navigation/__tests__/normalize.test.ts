@@ -117,6 +117,53 @@ describe('normalizeNavigationNode', () => {
   });
 });
 
+describe('normalizeNavigationNode — Issue #1956 PR 3 widened NavigationChildSummary', () => {
+  it('passes an AREA child\'s areaKey/centreLat/centreLon through unchanged (present-and-null included)', () => {
+    const wire = JSON.parse(
+      JSON.stringify({
+        ...(JSON.parse(DIRECTION_WIRE_JSON) as Record<string, unknown>),
+        children: [
+          {
+            nodeKey: 'a:IN|KA|Bengaluru|Hebbal',
+            nodeType: 'AREA',
+            displayLabel: 'Hebbal',
+            displayOrder: 1,
+            areaKey: 'IN|KA|Bengaluru|Hebbal',
+            centreLat: 13.04,
+            centreLon: 77.59,
+          },
+          {
+            nodeKey: 'c:local-destination-1',
+            nodeType: 'CLUSTER',
+            displayLabel: 'Local Destination',
+            displayOrder: 2,
+            areaKey: null,
+            centreLat: 13.1,
+            centreLon: 77.6,
+          },
+        ],
+      }),
+    ) as NavigationNodeWire;
+
+    const node = normalizeNavigationNode(wire);
+
+    expect(node.children[0].areaKey).toBe('IN|KA|Bengaluru|Hebbal');
+    expect(node.children[0].centreLat).toBe(13.04);
+    expect(node.children[0].centreLon).toBe(77.59);
+    // areaKey is present-and-null for a non-AREA child — never omitted, never coerced.
+    expect(node.children[1].areaKey).toBeNull();
+    expect(node.children[1].centreLat).toBe(13.1);
+  });
+
+  it('leaves a child with the three new fields entirely absent (undefined) untouched — no normalization runs on children', () => {
+    const wire = JSON.parse(DIRECTION_WIRE_JSON) as NavigationNodeWire;
+    const node = normalizeNavigationNode(wire);
+    expect(node.children[0].areaKey).toBeUndefined();
+    expect(node.children[0].centreLat).toBeUndefined();
+    expect(node.children[0].centreLon).toBeUndefined();
+  });
+});
+
 describe('normalizeNavigationResolveResponse', () => {
   it('normalises the inlined node and carries the resolution rung through', () => {
     const wire = JSON.parse(

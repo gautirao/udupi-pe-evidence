@@ -417,6 +417,31 @@ interface PropertyMapProps {
   hoveredNavigationNodeKey?: string | null;
   onNavigationNodeHoverChange?: (nodeKey: string | null) => void;
   /**
+   * Issue #1956 PR 3 (bounded state-lift, AC4.12/AC4.5) — the ONE focused
+   * visual-AREA-cluster identity MapDiscovery owns alongside
+   * `hoveredNavigationNodeKey`, threaded through unchanged so
+   * `AreaDestinationMarkerLayer` and the right panel's
+   * `DiscoverAreasJourneyPanel` can never disagree on the focused member
+   * set. Never written to the URL — no history entry, no camera fit.
+   */
+  focusedClusterMemberAreaKeys?: readonly string[] | null;
+  onClusterFocusChange?: (memberAreaKeys: readonly string[] | null) => void;
+  /**
+   * REQUIRED CHANGE 6 (review fix, AC4.4/AC4.5) — fired ONLY when a
+   * client-side VISUAL AREA CLUSTER (dense-AREA grouping under the canonical
+   * Areas journey, never a real node) is clicked, with its member union
+   * bounds/center. Passed through to `AreaDestinationMarkerLayer` unchanged;
+   * mirrors `onAreaClusterCameraIntent`'s existing plumbing exactly — the
+   * caller publishes it via the SAME `useDiscoverMapData.publishClusterCameraIntent`
+   * producer (shared monotonic `cameraIntentSeqRef`) and feeds the result
+   * back down via the existing `cameraIntent` prop. Reusing that producer is
+   * safe here because the legacy `AreaMarkerLayer` and this canonical
+   * `AreaDestinationMarkerLayer` are mutually exclusive
+   * (`showAreasNavigationDestinations`) — the two call sites never fire in
+   * the same render.
+   */
+  onAreaVisualClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
+  /**
    * Issue #1956 PR 2 (Slice 3, map half) — the SAME dual-preview-gate +
    * `journey === 'area-first'` condition `DiscoverRightPanelContainer`
    * already evaluates to decide whether `DiscoverAreasJourneyPanel` (rather
@@ -1766,6 +1791,9 @@ export function PropertyMap({
   areasNavigationJourney = null,
   hoveredNavigationNodeKey = null,
   onNavigationNodeHoverChange,
+  focusedClusterMemberAreaKeys = null,
+  onClusterFocusChange,
+  onAreaVisualClusterCameraIntent,
   showAreasNavigationDestinations = false,
   onZoomChange,
   onViewportChange,
@@ -1939,6 +1967,9 @@ export function PropertyMap({
             onSelect={areasNavigationJourney.selectNode}
             hoveredNodeKey={hoveredNavigationNodeKey}
             onHoverChange={onNavigationNodeHoverChange}
+            focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
+            onClusterFocusChange={onClusterFocusChange}
+            onAreaVisualClusterCameraIntent={onAreaVisualClusterCameraIntent}
           />
         ) : (
           // Issue #1882 (Track A PR3, Slice S3) — AreaMarkerLayer renders when it's

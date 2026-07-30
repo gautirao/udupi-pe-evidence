@@ -26,6 +26,14 @@
  * in ./types.ts states this explicitly), so they need no wire type and no
  * normalization: parsed JSON already matches their strict shape.
  *
+ * `wire.children`/`wire.ancestry` are passed through BY REFERENCE — this
+ * module does not descend into them. Issue #1956 PR 3 widened
+ * `NavigationChildSummary` (the shared element type of both arrays) with
+ * `areaKey`/`centreLat`/`centreLon`, all OPTIONAL AND NULLABLE — since
+ * consumers must already treat an absent key and an explicit `null` on that
+ * type identically, no wire/strict split or normalization step is needed for
+ * those three fields either; this module's contract is unchanged.
+ *
  * Pure data mapping. No React, no fetch, no I/O — same discipline as every other
  * module in this directory.
  */

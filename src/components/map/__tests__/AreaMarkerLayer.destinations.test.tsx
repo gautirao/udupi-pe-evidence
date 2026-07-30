@@ -14,12 +14,15 @@
  * the compass layout intended.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act } from '@testing-library/react';
 
 type CapturedMarker = {
   handlers: Record<string, (...args: unknown[]) => void>;
   addTo: ReturnType<typeof vi.fn>;
   getElement: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
+  setLatLng: ReturnType<typeof vi.fn>;
+  setIcon: ReturnType<typeof vi.fn>;
 };
 const capturedMarkers: CapturedMarker[] = [];
 const markerLatLngCalls: [number, number][] = [];
@@ -56,29 +59,65 @@ vi.mock('leaflet', () => ({
           handlers[event] = cb;
           return instance;
         }),
+        off: vi.fn((event: string) => {
+          delete handlers[event];
+          return instance;
+        }),
         addTo: vi.fn().mockReturnThis(),
         remove: vi.fn(),
         getElement: vi.fn(() => el),
+        setLatLng: vi.fn(),
+        // Mirrors Leaflet's real `DivIcon.createIcon(oldIcon)`: `setIcon`
+        // reassigns the marker's outer div's innerHTML wholesale, which
+        // detaches the previous inner `[role="button"]` element and creates
+        // a brand-new one. A no-op `vi.fn()` here was a mock-fidelity blind
+        // spot that let `getElement()` return the same (stale) node forever,
+        // hiding the real defect where listeners bound only at marker
+        // creation go dead the moment `setIcon` runs again (AC4.19 re-review
+        // fix, required change 4).
+        setIcon: vi.fn((icon: { options: { html: string } }) => {
+          el.innerHTML = icon.options.html;
+        }),
       };
       capturedMarkers.push({
         handlers,
         addTo: instance.addTo as ReturnType<typeof vi.fn>,
         getElement: instance.getElement as ReturnType<typeof vi.fn>,
         remove: instance.remove as ReturnType<typeof vi.fn>,
+        setLatLng: instance.setLatLng as ReturnType<typeof vi.fn>,
+        setIcon: instance.setIcon as ReturnType<typeof vi.fn>,
       });
       return instance;
     }),
   },
 }));
 
+// REQUIRED CHANGE 3 (AC4.19) test support — a mutable zoom + a real
+// zoomend-handler registry so a test can simulate the areasZoomTick recompute
+// the layer itself listens for (`map.on('zoomend', ...)`), the same trigger a
+// bare mouse-wheel zoom fires in the real browser, WITHOUT changing any
+// member's data.
+let mockZoom = 11;
+const zoomendHandlers: Array<() => void> = [];
 const mapStub = {
   getSize: vi.fn(() => MAP_SIZE),
-  getZoom: vi.fn(() => 11),
+  getZoom: vi.fn(() => mockZoom),
   containerPointToLatLng: vi.fn(([x, y]: [number, number]) => containerPointToLatLng([x, y])),
+  // Inverse-ish projection for the areas/clusters grid-clustering path —
+  // linear and deterministic, mirroring containerPointFromMarkerCall above.
+  latLngToContainerPoint: vi.fn(([lat, lng]: [number, number]) => containerPointFromMarkerCall([lat, lng])),
   getContainer: vi.fn(() => document.createElement('div')),
-  on: vi.fn(),
+  on: vi.fn((event: string, cb: () => void) => {
+    if (event === 'zoomend') zoomendHandlers.push(cb);
+  }),
   off: vi.fn(),
 };
+
+/** Fires every registered zoomend handler — simulates a real map zoomend tick. */
+function fireZoomEnd(newZoom: number) {
+  mockZoom = newZoom;
+  zoomendHandlers.forEach((cb) => cb());
+}
 
 vi.mock('react-leaflet', () => ({
   useMap: vi.fn(() => mapStub),
@@ -145,6 +184,8 @@ beforeEach(() => {
   capturedMarkers.length = 0;
   markerLatLngCalls.length = 0;
   divIconHtmlCalls.length = 0;
+  zoomendHandlers.length = 0;
+  mockZoom = 11;
   vi.clearAllMocks();
 });
 
@@ -358,5 +399,874 @@ describe('AreaDestinationMarkerLayer — visual distinctness from listing/home m
     expect(classNames.every((c) => c === 'area-destination-marker-icon')).toBe(true);
     expect(classNames).not.toContain('area-cluster-marker-icon');
     expect(classNames).not.toContain('area-marker-dot-icon');
+  });
+});
+
+// ── Issue #1956 PR 3 (Slice 4) — AREA / Local-Destination real geography ──
+describe('AreaDestinationMarkerLayer — CLUSTER (Local Destination) real-geography markers', () => {
+  function clusterNode(rawChildren: NavigationNodeResponse['children']): NavigationNodeResponse {
+    return { ...ROOT_NODE, nodeKey: 'd:n', nodeType: 'DIRECTION', children: rawChildren };
+  }
+
+  it('renders one structural marker per CLUSTER child, at its real centroid, never "+N"', () => {
+    const rawChildren: NavigationNodeResponse['children'] = [
+      {
+        nodeKey: 'c:whitefield-belt',
+        nodeType: 'CLUSTER',
+        displayLabel: 'Whitefield Belt',
+        displayOrder: 0,
+        areaKey: null,
+        centreLat: 12.97,
+        centreLon: 77.75,
+      },
+    ];
+    const typedChildren: AreasNavigationChild[] = [
+      makeChild({
+        nodeKey: 'c:whitefield-belt',
+        nodeType: 'CLUSTER',
+        displayLabel: 'Whitefield Belt',
+        listingCount: 40,
+        schoolCount: 6,
+        matchingAreaCount: 8,
+      }),
+    ];
+    render(
+      <AreaDestinationMarkerLayer
+        node={clusterNode(rawChildren)}
+        levelKind="clusters"
+        children={typedChildren}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+    expect(markerLatLngCalls[0]).toEqual([12.97, 77.75]);
+    expect(divIconHtmlCalls.some((h) => h.includes('8 areas with matches'))).toBe(true);
+    expect(divIconHtmlCalls.some((h) => h.includes('6 schools'))).toBe(true);
+    expect(divIconHtmlCalls.some((h) => /\+\d/.test(h))).toBe(false);
+  });
+
+  it('dispatches the SAME onSelect reference on a CLUSTER marker click (drills down via node=)', () => {
+    const onSelect = vi.fn();
+    const rawChildren: NavigationNodeResponse['children'] = [
+      { nodeKey: 'c:x', nodeType: 'CLUSTER', displayLabel: 'X', displayOrder: 0, areaKey: null, centreLat: 13.0, centreLon: 77.6 },
+    ];
+    render(
+      <AreaDestinationMarkerLayer
+        node={clusterNode(rawChildren)}
+        levelKind="clusters"
+        children={[makeChild({ nodeKey: 'c:x', nodeType: 'CLUSTER', displayLabel: 'X' })]}
+        onSelect={onSelect}
+      />,
+    );
+    capturedMarkers[0].handlers.click();
+    expect(onSelect).toHaveBeenCalledWith('c:x');
+  });
+
+  it('omits a CLUSTER child with no coordinates rather than fabricating one', () => {
+    const rawChildren: NavigationNodeResponse['children'] = [
+      { nodeKey: 'c:no-coords', nodeType: 'CLUSTER', displayLabel: 'No Coords', displayOrder: 0, areaKey: null },
+    ];
+    render(
+      <AreaDestinationMarkerLayer
+        node={clusterNode(rawChildren)}
+        levelKind="clusters"
+        children={[makeChild({ nodeKey: 'c:no-coords', nodeType: 'CLUSTER', displayLabel: 'No Coords' })]}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(0);
+  });
+});
+
+describe('AreaDestinationMarkerLayer — dense AREA children (single markers + visual clustering)', () => {
+  function areaChild(
+    areaKey: string,
+    lat: number,
+    lon: number,
+    overrides: Partial<AreasNavigationChild> = {},
+  ): { raw: NavigationNodeResponse['children'][number]; typed: AreasNavigationChild } {
+    const nodeKey = `a:${areaKey}`;
+    return {
+      raw: { nodeKey, nodeType: 'AREA', displayLabel: areaKey, displayOrder: 0, areaKey, centreLat: lat, centreLon: lon },
+      typed: makeChild({
+        nodeKey,
+        nodeType: 'AREA',
+        displayLabel: areaKey,
+        isLeafArea: true,
+        listingCount: 3,
+        schoolCount: 2,
+        matchingAreaCount: null,
+        ...overrides,
+      }),
+    };
+  }
+
+  it('renders a lone (spatially isolated) AREA as a single-AREA marker with its exact schoolCount, no "+N" line', () => {
+    const { raw, typed } = areaChild('hebbal', 13.0, 77.6, { listingCount: 7, schoolCount: 3 });
+    render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [raw] }}
+        levelKind="areas"
+        children={[typed]}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+    expect(divIconHtmlCalls[0]).toContain('area-single-marker');
+    expect(divIconHtmlCalls[0]).toContain('3 schools');
+    expect(divIconHtmlCalls.some((h) => /\+\d/.test(h))).toBe(false);
+  });
+
+  it('selecting a single-AREA marker dispatches onSelect with its own nodeKey (a real leaf node)', () => {
+    const onSelect = vi.fn();
+    const { raw, typed } = areaChild('hebbal', 13.0, 77.6);
+    render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [raw] }}
+        levelKind="areas"
+        children={[typed]}
+        onSelect={onSelect}
+      />,
+    );
+    capturedMarkers[0].handlers.click();
+    expect(onSelect).toHaveBeenCalledWith('a:hebbal');
+  });
+
+  it('groups spatially-dense AREA children into ONE visual cluster with "+N areas with matches", omitting schoolCount entirely (case a)', () => {
+    // All at the identical projected pixel — same grid cell.
+    const members = [
+      areaChild('alpha', 13.0, 77.6, { listingCount: 10, schoolCount: 5 }),
+      areaChild('bravo', 13.0, 77.6, { listingCount: 8, schoolCount: 4 }),
+      areaChild('charlie', 13.0, 77.6, { listingCount: 3, schoolCount: 1 }),
+      areaChild('delta', 13.0, 77.6, { listingCount: 1, schoolCount: 1 }),
+    ];
+    render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+        levelKind="areas"
+        children={members.map((m) => m.typed)}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+    const html = divIconHtmlCalls[0];
+    expect(html).toContain('area-visual-cluster-marker');
+    expect(html).toContain('+2 areas with matches');
+    // Case (a): schoolCount is NEVER summed/shown for an ad-hoc visual cluster.
+    expect(html).not.toMatch(/\bschool/);
+  });
+
+  it('clicking a visual cluster fires the camera-intent callback, never onSelect (client-side grouping, no node= change)', () => {
+    const onSelect = vi.fn();
+    const onAreaVisualClusterCameraIntent = vi.fn();
+    const members = [
+      areaChild('alpha', 13.0, 77.6),
+      areaChild('bravo', 13.0, 77.6),
+    ];
+    render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+        levelKind="areas"
+        children={members.map((m) => m.typed)}
+        onSelect={onSelect}
+        onAreaVisualClusterCameraIntent={onAreaVisualClusterCameraIntent}
+      />,
+    );
+    act(() => {
+      capturedMarkers[0].handlers.click();
+    });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onAreaVisualClusterCameraIntent).toHaveBeenCalledTimes(1);
+    const [bounds, center] = onAreaVisualClusterCameraIntent.mock.calls[0];
+    expect(bounds).toEqual([[13.0, 77.6], [13.0, 77.6]]);
+    expect(center).toEqual([13.0, 77.6]);
+  });
+
+  it('excludes a zero-listing-count AREA from clustering AND from the "+N" count (visibility before clustering)', () => {
+    const members = [
+      areaChild('has-matches-1', 13.0, 77.6, { listingCount: 5 }),
+      areaChild('has-matches-2', 13.0, 77.6, { listingCount: 4 }),
+      areaChild('zero-content', 13.0, 77.6, { listingCount: 0 }),
+    ];
+    render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+        levelKind="areas"
+        children={members.map((m) => m.typed)}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+    const html = divIconHtmlCalls[0];
+    // Only 2 eligible members -> "2 areas with matches", not "3" and not "+1".
+    expect(html).toContain('2 areas with matches');
+    expect(html).not.toMatch(/\+\d/);
+  });
+
+  it('omits an AREA child with a (0, 0) centroid rather than plotting it at Null Island; siblings still render', () => {
+    const good = areaChild('good', 13.0, 77.6);
+    const nullIsland = areaChild('bad', 0, 0);
+    render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [good.raw, nullIsland.raw] }}
+        levelKind="areas"
+        children={[good.typed, nullIsland.typed]}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+    expect(markerLatLngCalls[0]).toEqual([13.0, 77.6]);
+  });
+
+  it('omits an AREA child with no coordinates at all (undefined centreLat/centreLon); siblings still render', () => {
+    const good = areaChild('good', 13.0, 77.6);
+    const noCoords = {
+      raw: { nodeKey: 'a:no-coords', nodeType: 'AREA' as const, displayLabel: 'No Coords', displayOrder: 0, areaKey: 'no-coords' },
+      typed: makeChild({ nodeKey: 'a:no-coords', nodeType: 'AREA', displayLabel: 'No Coords', isLeafArea: true }),
+    };
+    render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [good.raw, noCoords.raw] }}
+        levelKind="areas"
+        children={[good.typed, noCoords.typed]}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+  });
+
+  it('reuses the SAME marker instance across a re-render when membership/position is unchanged (AC4.19 non-recreation)', () => {
+    const { raw, typed } = areaChild('hebbal', 13.0, 77.6);
+    const { rerender } = render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [raw] }}
+        levelKind="areas"
+        children={[typed]}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+    const firstMarkerRemove = capturedMarkers[0].remove;
+
+    rerender(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [raw] }}
+        levelKind="areas"
+        children={[typed]}
+        onSelect={vi.fn()}
+        hoveredNodeKey={null}
+      />,
+    );
+
+    // A genuinely new marker would push a second capturedMarkers entry and
+    // remove the first; reuse means still exactly one L.marker() call ever,
+    // and the original marker was never removed.
+    expect(capturedMarkers).toHaveLength(1);
+    expect(firstMarkerRemove).not.toHaveBeenCalled();
+  });
+
+  // REQUIRED CHANGE 3 (review fix, AC4.19) — the PRIOR version of this suite
+  // asserted `setIcon` WAS called on every re-render, which locked in the
+  // exact DOM-recreation defect AC4.19 forbids (Leaflet's setIcon ->
+  // _initIcon reassigns the DivIcon's innerHTML wholesale, destroying the
+  // data-testid child elements — and any keyboard focus on them — even when
+  // nothing about the marker actually changed). These two tests replace that
+  // assertion with its correct opposite.
+  it('does NOT call setIcon/setLatLng on a bare re-render with unchanged content/position (AC4.19)', () => {
+    const { raw, typed } = areaChild('hebbal', 13.0, 77.6);
+    const { rerender } = render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [raw] }}
+        levelKind="areas"
+        children={[typed]}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+
+    rerender(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [raw] }}
+        levelKind="areas"
+        children={[typed]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(capturedMarkers).toHaveLength(1);
+    expect(capturedMarkers[0].setIcon).not.toHaveBeenCalled();
+    expect(capturedMarkers[0].setLatLng).not.toHaveBeenCalled();
+  });
+
+  it('does NOT call setIcon again on a zoom-only recompute when children/focusedMembers are unchanged (AC4.19)', () => {
+    const { raw, typed } = areaChild('hebbal', 13.0, 77.6);
+    const { rerender } = render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [raw] }}
+        levelKind="areas"
+        children={[typed]}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+
+    // Simulate the real zoomend tick this layer listens for
+    // (areasZoomTick), then rerender with the SAME children/focus — a bare
+    // zoom recompute with no data change must never touch this marker's DOM.
+    act(() => {
+      fireZoomEnd(13);
+    });
+    rerender(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [raw] }}
+        levelKind="areas"
+        children={[typed]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(capturedMarkers).toHaveLength(1);
+    expect(capturedMarkers[0].setIcon).not.toHaveBeenCalled();
+  });
+
+  // Positive half of the AC4.19 dirty-check (review fix) — the two tests
+  // above only pin the NEGATIVE case (setIcon skipped when nothing
+  // changed); without this, an "always skip" regression that broke content
+  // updates entirely would be invisible to the suite.
+  it('calls setIcon exactly once, reusing the same marker instance, when a single-AREA child\'s listingCount actually changes (AC4.19 positive case)', () => {
+    const { raw, typed } = areaChild('hebbal', 13.0, 77.6, { listingCount: 3 });
+    const { rerender } = render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [raw] }}
+        levelKind="areas"
+        children={[typed]}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+    expect(markerLatLngCalls).toHaveLength(1);
+
+    const changed = areaChild('hebbal', 13.0, 77.6, { listingCount: 7 });
+    rerender(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [changed.raw] }}
+        levelKind="areas"
+        children={[changed.typed]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    // Same marker instance reused (no second L.marker() construction) — just
+    // its icon updated in place.
+    expect(capturedMarkers).toHaveLength(1);
+    expect(markerLatLngCalls).toHaveLength(1);
+    expect(capturedMarkers[0].setIcon).toHaveBeenCalledTimes(1);
+  });
+
+  // REQUIRED CHANGE 4 (re-review fix, AC4.19) — a hover/selection/count-copy
+  // change correctly fires `setIcon` (positive case above), which Leaflet's
+  // real `_initIcon` implements by reassigning the marker's outer div's
+  // innerHTML wholesale, destroying and replacing the inner
+  // `[role="button"][tabindex="0"]` element the keyboard/focus bridge is
+  // attached to. If that bridge is only ever bound once (at marker
+  // creation), the fresh element it returns keeps its `role="button"
+  // tabindex="0"` attributes — visually and to a screen reader they still
+  // look activatable — but Enter/Space silently does nothing forever after
+  // the first hover/selection. The mock's `setIcon` above now genuinely
+  // replaces the element (mirroring `DivIcon.createIcon`), so this failed
+  // before the AreaMarkerLayer.tsx `bindMarkerDom` rebind fix and passes now.
+  it('rebinds the keydown->click bridge to the FRESH element after a hover-triggered setIcon, so Enter still activates a single-AREA marker (AC4.19 focus/keyboard fix)', () => {
+    const { raw, typed } = areaChild('hebbal', 13.0, 77.6);
+    const { rerender } = render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [raw] }}
+        levelKind="areas"
+        children={[typed]}
+        onSelect={vi.fn()}
+        hoveredNodeKey={null}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+
+    // Hovering this exact marker changes its border width (isHovered),
+    // dirtying the HTML and correctly firing setIcon.
+    rerender(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [raw] }}
+        levelKind="areas"
+        children={[typed]}
+        onSelect={vi.fn()}
+        hoveredNodeKey={typed.nodeKey}
+      />,
+    );
+    expect(capturedMarkers[0].setIcon).toHaveBeenCalledTimes(1);
+
+    const freshButton = (capturedMarkers[0].getElement() as HTMLElement).querySelector<HTMLElement>(
+      '[role="button"][tabindex="0"]',
+    );
+    expect(freshButton).not.toBeNull();
+    const clickSpy = vi.fn();
+    freshButton!.addEventListener('click', clickSpy);
+
+    freshButton!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('rebinds the keydown->click bridge on a visual-cluster marker after a total-listingCount (count-copy) change (AC4.19 focus/keyboard fix)', () => {
+    const members = [
+      areaChild('alpha', 13.0, 77.6, { listingCount: 10 }),
+      areaChild('bravo', 13.0, 77.6, { listingCount: 8 }),
+    ];
+    const { rerender } = render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+        levelKind="areas"
+        children={members.map((m) => m.typed)}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+
+    // Same membership (same cluster identity key) — only the count-copy
+    // changes, which still dirties the HTML via totalListingCount.
+    const changedMembers = [
+      areaChild('alpha', 13.0, 77.6, { listingCount: 20 }),
+      areaChild('bravo', 13.0, 77.6, { listingCount: 8 }),
+    ];
+    rerender(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: changedMembers.map((m) => m.raw) }}
+        levelKind="areas"
+        children={changedMembers.map((m) => m.typed)}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(1);
+    expect(capturedMarkers[0].setIcon).toHaveBeenCalledTimes(1);
+
+    const freshButton = (capturedMarkers[0].getElement() as HTMLElement).querySelector<HTMLElement>(
+      '[role="button"][tabindex="0"]',
+    );
+    expect(freshButton).not.toBeNull();
+    const clickSpy = vi.fn();
+    freshButton!.addEventListener('click', clickSpy);
+
+    freshButton!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // ── Issue #1956 PR 3 (bounded state-lift, AC4.12/AC4.5) — controlled
+  // focused-cluster identity. MapDiscovery owns ONE `focusedClusterMemberAreaKeys`
+  // value and threads it here AND to `DiscoverAreasJourneyPanel` unchanged, so
+  // a cluster click on the map and the panel's own derived member list can
+  // never disagree on the focused set (AC4.12).
+  describe('controlled cluster focus (AC4.12/AC4.5)', () => {
+    it('reports its member areaKeys via onClusterFocusChange on click — the identity a controlling parent forwards to the panel', () => {
+      const onClusterFocusChange = vi.fn();
+      const members = [
+        areaChild('alpha', 13.0, 77.6),
+        areaChild('bravo', 13.0, 77.6),
+      ];
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+          levelKind="areas"
+          children={members.map((m) => m.typed)}
+          onSelect={vi.fn()}
+          onClusterFocusChange={onClusterFocusChange}
+        />,
+      );
+      act(() => {
+        capturedMarkers[0].handlers.click();
+      });
+      expect(onClusterFocusChange).toHaveBeenCalledTimes(1);
+      const [reportedKeys] = onClusterFocusChange.mock.calls[0];
+      expect([...reportedKeys].sort()).toEqual(['alpha', 'bravo']);
+    });
+
+    it('when a parent controls focusedClusterMemberAreaKeys to a subset, only that subset is clustered — a third member outside the set never contributes to the count (AC4.12 identical visible set)', () => {
+      const members = [
+        areaChild('alpha', 13.0, 77.6, { listingCount: 10 }),
+        areaChild('bravo', 13.0, 77.6, { listingCount: 8 }),
+        areaChild('charlie', 13.0, 77.6, { listingCount: 3 }),
+      ];
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+          levelKind="areas"
+          children={members.map((m) => m.typed)}
+          onSelect={vi.fn()}
+          focusedClusterMemberAreaKeys={['alpha', 'bravo']}
+        />,
+      );
+      expect(capturedMarkers).toHaveLength(1);
+      const html = divIconHtmlCalls[0];
+      // Only the 2 controlled members are eligible -> "2 areas with matches",
+      // never "3" (charlie is excluded from the scoped/clustered set).
+      expect(html).toContain('2 areas with matches');
+      expect(html).not.toMatch(/\+\d/);
+    });
+
+    it('clearing focus (focusedClusterMemberAreaKeys=null) restores the full member set on the next render — no stale internal fallback state survives the controlled value', () => {
+      const members = [
+        areaChild('alpha', 13.0, 77.6, { listingCount: 10 }),
+        areaChild('bravo', 13.0, 77.6, { listingCount: 8 }),
+        areaChild('charlie', 13.0, 77.6, { listingCount: 3 }),
+      ];
+      const { rerender } = render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+          levelKind="areas"
+          children={members.map((m) => m.typed)}
+          onSelect={vi.fn()}
+          focusedClusterMemberAreaKeys={['alpha', 'bravo']}
+        />,
+      );
+      expect(divIconHtmlCalls[divIconHtmlCalls.length - 1]).toContain('2 areas with matches');
+
+      rerender(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+          levelKind="areas"
+          children={members.map((m) => m.typed)}
+          onSelect={vi.fn()}
+          focusedClusterMemberAreaKeys={null}
+        />,
+      );
+      // Full 3-member set is back: 2 displayed representatives (the cap) +
+      // 1 hidden -> "+1 areas with matches", never the focused 2-member copy.
+      expect(divIconHtmlCalls[divIconHtmlCalls.length - 1]).toContain('+1 areas with matches');
+    });
+
+    // REQUIRED CHANGE 5 (review fix, AC4.18) — the PRIOR reconciliation only
+    // cleared focus when a member disappeared from `children` entirely. If a
+    // filter instead drops every focused member's count to zero (still
+    // present in `children`, just no longer VISIBLE), focus used to survive
+    // — and `scoped` was computed from the stale focus BEFORE the (too-late)
+    // check, so the render right before clearing painted a stale/partial
+    // subset. This test proves both are fixed: the check now runs against
+    // the VISIBLE set, and the clearing render paints nothing new at all.
+    it('clears focus when a filter drops EVERY focused member to zero-content, painting no stale/partial frame on the clearing render (AC4.18)', () => {
+      const onClusterFocusChange = vi.fn();
+      const members = [
+        areaChild('alpha', 13.0, 77.6, { listingCount: 10 }),
+        areaChild('bravo', 13.0, 77.6, { listingCount: 8 }),
+        areaChild('charlie', 13.0, 77.6, { listingCount: 3 }),
+      ];
+      const { rerender } = render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+          levelKind="areas"
+          children={members.map((m) => m.typed)}
+          onSelect={vi.fn()}
+          focusedClusterMemberAreaKeys={['alpha', 'bravo', 'charlie']}
+          onClusterFocusChange={onClusterFocusChange}
+        />,
+      );
+      // The map marker keeps its own default 2-name representative cap
+      // (unaffected by this fix) — 3 members -> 2 shown + 1 hidden.
+      expect(divIconHtmlCalls[divIconHtmlCalls.length - 1]).toContain('+1 areas with matches');
+      const markerCountBefore = capturedMarkers.length;
+      const htmlCallCountBefore = divIconHtmlCalls.length;
+
+      // A filter tightens: charlie (still present in `children`) drops to
+      // zero listings, so the focused set is no longer FULLY visible.
+      const afterFilter = [
+        members[0],
+        members[1],
+        { ...members[2], typed: { ...members[2].typed, listingCount: 0 } },
+      ];
+      act(() => {
+        rerender(
+          <AreaDestinationMarkerLayer
+            node={{ ...ROOT_NODE, children: afterFilter.map((m) => m.raw) }}
+            levelKind="areas"
+            children={afterFilter.map((m) => m.typed)}
+            onSelect={vi.fn()}
+            focusedClusterMemberAreaKeys={['alpha', 'bravo', 'charlie']}
+            onClusterFocusChange={onClusterFocusChange}
+          />,
+        );
+      });
+
+      expect(onClusterFocusChange).toHaveBeenCalledWith(null);
+      // No new marker/icon was produced on the SAME render that decided to
+      // clear — the map is left exactly as the previous (correct) render
+      // left it, never a stale 2-member subset or an empty frame.
+      expect(capturedMarkers.length).toBe(markerCountBefore);
+      expect(divIconHtmlCalls.length).toBe(htmlCallCountBefore);
+    });
+  });
+
+  // REQUIRED CHANGE 4 (review fix) — the areas/clusters markers carry
+  // tabindex="0" role="button" in their HTML but, before this fix, the
+  // effect attached only a Leaflet click handler: no keydown Enter/Space
+  // bridge existed, so a keyboard user could tab onto a new area/cluster
+  // marker and activate none of it. Mirrors AreaMarkerLayer.test.tsx's
+  // existing directions-marker keyboard test pattern exactly: a real native
+  // 'click' listener on the element proves the keydown bridge actually
+  // invokes `el.click()`, the same DOM-level mechanism a real browser uses.
+  describe('keyboard accessibility (AC — new area/cluster markers are keyboard-operable)', () => {
+    it('Enter keydown activates a single-AREA marker', () => {
+      const { raw, typed } = areaChild('hebbal', 13.0, 77.6);
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [raw] }}
+          levelKind="areas"
+          children={[typed]}
+          onSelect={vi.fn()}
+        />,
+      );
+      const el = (capturedMarkers[0].getElement() as HTMLElement).querySelector<HTMLElement>(
+        '[role="button"][tabindex="0"]',
+      );
+      expect(el).not.toBeNull();
+      const clickSpy = vi.fn();
+      el?.addEventListener('click', clickSpy);
+      el?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('Space keydown activates a visual-AREA-cluster marker', () => {
+      const members = [
+        areaChild('alpha', 13.0, 77.6),
+        areaChild('bravo', 13.0, 77.6),
+      ];
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+          levelKind="areas"
+          children={members.map((m) => m.typed)}
+          onSelect={vi.fn()}
+        />,
+      );
+      const el = (capturedMarkers[0].getElement() as HTMLElement).querySelector<HTMLElement>(
+        '[role="button"][tabindex="0"]',
+      );
+      expect(el).not.toBeNull();
+      const clickSpy = vi.fn();
+      el?.addEventListener('click', clickSpy);
+      el?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // F1 (fix-cycle-3) — a level change OUT of areas/clusters (most commonly a
+  // single-AREA click driving levelKind -> 'listings', or a breadcrumb hop
+  // back to a DIRECTION so levelKind -> 'directions') used to hit the guard
+  // at the top of the areas/clusters effect BEFORE the stale-removal diff
+  // loop ever ran, since this effect deliberately has no unmount-only
+  // cleanup of its own. The previous level's clickable card(s) — still
+  // closing over the OLD nodeKeys — stayed mounted indefinitely.
+  describe('F1 — stale marker cleanup across a level change', () => {
+    it('removes a single-AREA marker when levelKind transitions to "listings"', () => {
+      const { raw, typed } = areaChild('hebbal', 13.0, 77.6);
+      const { rerender } = render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [raw] }}
+          levelKind="areas"
+          children={[typed]}
+          onSelect={vi.fn()}
+        />,
+      );
+      expect(capturedMarkers).toHaveLength(1);
+      const marker = capturedMarkers[0];
+      expect(marker.remove).not.toHaveBeenCalled();
+
+      rerender(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [raw] }}
+          levelKind="listings"
+          children={[typed]}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      expect(marker.remove).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes a visual-cluster marker when levelKind transitions back to "directions" (breadcrumb hop)', () => {
+      const members = [
+        areaChild('alpha', 13.0, 77.6),
+        areaChild('bravo', 13.0, 77.6),
+      ];
+      const { rerender } = render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+          levelKind="areas"
+          children={members.map((m) => m.typed)}
+          onSelect={vi.fn()}
+        />,
+      );
+      expect(capturedMarkers).toHaveLength(1);
+      const marker = capturedMarkers[0];
+
+      rerender(
+        <AreaDestinationMarkerLayer
+          node={ROOT_NODE}
+          levelKind="directions"
+          children={DIRECTION_CHILDREN}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      expect(marker.remove).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not remove markers on a same-level rerender (no regression to the AC4.19 reuse contract)', () => {
+      const { raw, typed } = areaChild('hebbal', 13.0, 77.6);
+      const { rerender } = render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [raw] }}
+          levelKind="areas"
+          children={[typed]}
+          onSelect={vi.fn()}
+        />,
+      );
+      const marker = capturedMarkers[0];
+
+      rerender(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [raw] }}
+          levelKind="areas"
+          children={[typed]}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      expect(marker.remove).not.toHaveBeenCalled();
+      expect(capturedMarkers).toHaveLength(1);
+    });
+  });
+
+  // UD-2 (fix-cycle-4, WCAG 2.4.7) — a visual cluster's card has
+  // `hoverKey: null` (correctly — it is not a real node), which used to mean
+  // its outer div's INLINE `outline:none` left a keyboard user with ZERO
+  // focus feedback while tabbed onto it — a class-based rule (the reverted
+  // `.area-marker-kbd-focus`, previously in index.css, which isn't even
+  // loaded under vitest/jsdom) could never win against that inline
+  // declaration regardless of CSS layers/specificity. Enter/Space activation
+  // already worked (existing keyboard-accessibility describe above); this
+  // only covers the missing VISUAL indicator. Asserting the RESOLVED
+  // `el.style.*` inline properties (never a class name) is the only
+  // assertion that actually proves paint — a classList-only assertion would
+  // pass even with index.css deleted entirely, since jsdom never loads it.
+  describe('UD-2 — visible keyboard focus on a visual-AREA-cluster marker', () => {
+    it('applies an inline focus box-shadow on focus and clears it on blur', () => {
+      const members = [
+        areaChild('alpha', 13.0, 77.6),
+        areaChild('bravo', 13.0, 77.6),
+      ];
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+          levelKind="areas"
+          children={members.map((m) => m.typed)}
+          onSelect={vi.fn()}
+        />,
+      );
+      const el = (capturedMarkers[0].getElement() as HTMLElement).querySelector<HTMLElement>(
+        '[role="button"][tabindex="0"]',
+      );
+      expect(el).not.toBeNull();
+      expect(el!.style.boxShadow).toBe('');
+
+      el!.dispatchEvent(new FocusEvent('focus'));
+      expect(el!.style.boxShadow).not.toBe('');
+      expect(el!.style.boxShadow).toContain('#FFFFFF'); // C_PAPER
+      expect(el!.style.boxShadow).toContain('#1B2A45'); // C_NAVY
+
+      el!.dispatchEvent(new FocusEvent('blur'));
+      expect(el!.style.boxShadow).toBe('');
+    });
+
+    it('does NOT apply the inline focus box-shadow to a single-AREA marker (real node — hoverKey is non-null, unaffected by this fix)', () => {
+      const { raw, typed } = areaChild('hebbal', 13.0, 77.6);
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [raw] }}
+          levelKind="areas"
+          children={[typed]}
+          onSelect={vi.fn()}
+        />,
+      );
+      const el = (capturedMarkers[0].getElement() as HTMLElement).querySelector<HTMLElement>(
+        '[role="button"][tabindex="0"]',
+      );
+      el!.dispatchEvent(new FocusEvent('focus'));
+      expect(el!.style.boxShadow).toBe('');
+    });
+  });
+
+  // UD-3 (fix-cycle-3) — the existing `truncateAreaLabel` helper
+  // (TRUNCATE_MAX_CHARS = 18) was called by none of the three new card
+  // builders, so a long real label expands the card past its intended
+  // footprint (compounding UD-1) with no CSS max-width to stop it. The
+  // ACCESSIBLE name must still carry the FULL untruncated label even when
+  // the visible text is shortened.
+  describe('UD-3 — label truncation on the new card builders', () => {
+    it('truncates a long single-AREA displayLabel in the visible text but keeps the full name in aria-label', () => {
+      const longLabel = 'Really Very Extremely Long Bangalore Locality Name';
+      const { typed, raw } = areaChild('long-one', 13.0, 77.6, { displayLabel: longLabel });
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [raw] }}
+          levelKind="areas"
+          children={[typed]}
+          onSelect={vi.fn()}
+        />,
+      );
+      const html = divIconHtmlCalls[0];
+      expect(html).toContain(`aria-label="${longLabel}`);
+      expect(html).not.toMatch(new RegExp(`>${longLabel}<`));
+    });
+
+    it('truncates long representative names on a visual cluster in the visible text but keeps the full names in aria-label', () => {
+      const longA = 'Kempapura Extended Village Layout Extension';
+      const longB = 'Another Excessively Long Locality Name Here';
+      const members = [
+        areaChild('alpha', 13.0, 77.6, { displayLabel: longA }),
+        areaChild('bravo', 13.0, 77.6, { displayLabel: longB }),
+      ];
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+          levelKind="areas"
+          children={members.map((m) => m.typed)}
+          onSelect={vi.fn()}
+        />,
+      );
+      const html = divIconHtmlCalls[0];
+      // aria-label carries both FULL, untruncated names.
+      const ariaLabelMatch = html.match(/aria-label="([^"]*)"/);
+      expect(ariaLabelMatch).not.toBeNull();
+      expect(ariaLabelMatch![1]).toContain(longA);
+      expect(ariaLabelMatch![1]).toContain(longB);
+      // The visible names span (joined shortNames, truncated individually)
+      // must NOT render either full name verbatim — proven by extracting the
+      // span's own text content and asserting it holds an ellipsis instead.
+      const visibleNamesMatch = html.match(/<span[^>]*>([^<]*)<\/span>\s*<\/div>\s*<span/);
+      expect(visibleNamesMatch).not.toBeNull();
+      const visibleNames = visibleNamesMatch![1];
+      expect(visibleNames).not.toBe(`${longA}, ${longB}`);
+      expect(visibleNames).toContain('…');
+    });
+
+    it('does not truncate a short single-AREA displayLabel (no title attribute added)', () => {
+      const { typed, raw } = areaChild('hebbal', 13.0, 77.6, { displayLabel: 'Hebbal' });
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [raw] }}
+          levelKind="areas"
+          children={[typed]}
+          onSelect={vi.fn()}
+        />,
+      );
+      const html = divIconHtmlCalls[0];
+      expect(html).toContain('>Hebbal<');
+      expect(html).not.toContain('title="Hebbal"');
+    });
   });
 });

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
 
@@ -66,7 +67,20 @@ public record NavigationNodeResponse(
 
     private static final Logger log = LoggerFactory.getLogger(NavigationNodeResponse.class);
 
-    public record NavigationChildSummary(String nodeKey, String nodeType, String displayLabel, int displayOrder) {}
+    /**
+     * #1956 PR-3: widened additively for area-clustering. {@code areaKey} is populated ONLY when
+     * this child is itself an AREA node (null for CLUSTER/DIRECTION/ROOT), mirroring the
+     * AREA-vs-not fork in {@link #areaKey} above. {@code centreLat}/{@code centreLon} are the
+     * child's centroid — the arithmetic mean of member area centres (see {@code
+     * NavigationTreeGenerator#computeBounds}), NOT a bounding-box centre, and it is a group
+     * locator, not a real place; populated for BOTH AREA and CLUSTER/DIRECTION children, null
+     * (never just one of the pair) when unavailable. No {@code @JsonInclude} here deliberately —
+     * unlike the outer response, nulls on this nested record serialize as present-and-null (e.g.
+     * {@code "areaKey": null}), which is the agreed wire contract for the frontend's nullable typing.
+     */
+    public record NavigationChildSummary(
+            String nodeKey, String nodeType, String displayLabel, int displayOrder,
+            String areaKey, Double centreLat, Double centreLon) {}
 
     /**
      * Fix-cycle-1 S4: {@code graph.ancestryOf}/{@code ancestorKeys} is the persisted {@code
@@ -84,8 +98,20 @@ public record NavigationNodeResponse(
                     + "omitting it from the response instead of failing the whole request", childKey);
             return null;
         }
+        // #1956 PR-3: areaKey strictly gated on AREA (mirrors the fork at forNode's areaKey
+        // computation below); centre coordinates read in-memory off the already-frozen Bounds
+        // NavigationGraph.build materialized for every node — no extra query/lookup.
+        String childAreaKey = "AREA".equals(child.getNodeType()) ? child.getAreaKey() : null;
+        NavigationGraph.Bounds childBounds = graph.boundsOf(childKey);
+        Double centreLat = childBounds == null ? null : toDouble(childBounds.centreLat());
+        Double centreLon = childBounds == null ? null : toDouble(childBounds.centreLon());
         return new NavigationChildSummary(
-                child.getNodeKey(), child.getNodeType(), child.getDisplayLabel(), child.getDisplayOrder());
+                child.getNodeKey(), child.getNodeType(), child.getDisplayLabel(), child.getDisplayOrder(),
+                childAreaKey, centreLat, centreLon);
+    }
+
+    private static Double toDouble(BigDecimal v) {
+        return v == null ? null : v.doubleValue();
     }
 
     /** {@code "root"} synthetic city-top-level node — no real {@link NavigationNode} row backs it.

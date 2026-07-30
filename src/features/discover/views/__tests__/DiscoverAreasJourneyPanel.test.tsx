@@ -207,4 +207,211 @@ describe('DiscoverAreasJourneyPanel', () => {
       expect(back).toHaveTextContent('Bangalore');
     });
   });
+
+  // ── Issue #1956 PR 3 (Slice 4 + bounded state-lift) — visual AREA cluster
+  // focus surface. `focusedClusterMemberAreaKeys` is the SAME raw areaKey
+  // array `AreaDestinationMarkerLayer`'s `onClusterFocusChange` reports to a
+  // controlling parent (mirrored prop shape) — this panel derives its own
+  // member list + count copy from `journey.node.children`/`journey.children`
+  // filtered to that array, via the SAME `presentClusterRepresentatives`
+  // function the map layer calls internally (AC4.12).
+  describe('cluster-focus panel surface (AC4.6/AC4.12)', () => {
+    const CLUSTER_RAW_CHILDREN: NavigationNodeResponse['children'] = [
+      { nodeKey: 'a:alpha', nodeType: 'AREA', displayLabel: 'Alpha', displayOrder: 1, areaKey: 'alpha', centreLat: 12.9, centreLon: 77.6 },
+      { nodeKey: 'a:bravo', nodeType: 'AREA', displayLabel: 'Bravo', displayOrder: 2, areaKey: 'bravo', centreLat: 12.91, centreLon: 77.61 },
+      { nodeKey: 'a:charlie', nodeType: 'AREA', displayLabel: 'Charlie', displayOrder: 3, areaKey: 'charlie', centreLat: 12.92, centreLon: 77.62 },
+    ];
+    const CLUSTER_CHILDREN: UseAreasNavigationJourneyResult['children'] = [
+      { nodeKey: 'a:alpha', nodeType: 'AREA', displayLabel: 'Alpha', displayOrder: 1, listingCount: 5, schoolCount: null, isLeafArea: true, matchingAreaCount: null },
+      { nodeKey: 'a:bravo', nodeType: 'AREA', displayLabel: 'Bravo', displayOrder: 2, listingCount: 3, schoolCount: null, isLeafArea: true, matchingAreaCount: null },
+      { nodeKey: 'a:charlie', nodeType: 'AREA', displayLabel: 'Charlie', displayOrder: 3, listingCount: 1, schoolCount: null, isLeafArea: true, matchingAreaCount: null },
+    ];
+    const FOCUSED_AREA_KEYS = ['alpha', 'bravo'] as const;
+
+    function renderFocused(overrides: { onClusterFocusChange?: (keys: readonly string[] | null) => void; selectNode?: ReturnType<typeof vi.fn> } = {}) {
+      return render(
+        <MemoryRouter>
+          <DiscoverAreasJourneyPanel
+            journey={makeJourney({
+              node: makeNode({ children: CLUSTER_RAW_CHILDREN }),
+              nodeCount: { listingCount: 9, schoolCount: 0, matchingAreaCount: null },
+              children: CLUSTER_CHILDREN,
+              selectNode: overrides.selectNode ?? vi.fn(),
+            })}
+            buildNodeHref={NOOP_BUILD_HREF}
+            focusedClusterMemberAreaKeys={FOCUSED_AREA_KEYS}
+            onClusterFocusChange={overrides.onClusterFocusChange}
+          />
+        </MemoryRouter>,
+      );
+    }
+
+    it('renders a DISTINCT testid from navigation-level-panel, never that one, when a cluster is focused', () => {
+      renderFocused();
+      expect(screen.getByTestId('areas-cluster-focus-panel')).toBeInTheDocument();
+      expect(screen.queryByTestId('navigation-level-panel')).not.toBeInTheDocument();
+    });
+
+    it('shows exactly the focused member subset (identical areaKey set, AC4.12) — never the third, unfocused member', () => {
+      renderFocused();
+      expect(screen.getByTestId('areas-cluster-focus-member-a:alpha')).toHaveTextContent('Alpha');
+      expect(screen.getByTestId('areas-cluster-focus-member-a:bravo')).toHaveTextContent('Bravo');
+      expect(screen.queryByTestId('areas-cluster-focus-member-a:charlie')).not.toBeInTheDocument();
+    });
+
+    it('the count copy is the total over exactly the focused members (AC4.12) — "2 areas with matches", not the 3-child total', () => {
+      renderFocused();
+      expect(screen.getByTestId('areas-cluster-focus-summary')).toHaveTextContent('2 areas with matches');
+    });
+
+    it('"Show all areas" clears focus by calling onClusterFocusChange(null)', async () => {
+      const user = userEvent.setup();
+      const onClusterFocusChange = vi.fn();
+      renderFocused({ onClusterFocusChange });
+      await user.click(screen.getByTestId('areas-cluster-focus-clear'));
+      expect(onClusterFocusChange).toHaveBeenCalledTimes(1);
+      expect(onClusterFocusChange).toHaveBeenCalledWith(null);
+    });
+
+    it('selecting a focused member calls journey.selectNode with its nodeKey — the SAME action every other child uses', async () => {
+      const user = userEvent.setup();
+      const selectNode = vi.fn();
+      renderFocused({ selectNode });
+      await user.click(screen.getByTestId('areas-cluster-focus-member-a:alpha'));
+      expect(selectNode).toHaveBeenCalledWith('a:alpha');
+    });
+
+    it('falls back to the normal navigation-level-panel when no cluster is focused (null)', () => {
+      render(
+        <MemoryRouter>
+          <DiscoverAreasJourneyPanel
+            journey={makeJourney({
+              node: makeNode(),
+              nodeCount: { listingCount: 20, schoolCount: 3, matchingAreaCount: null },
+              children: [],
+            })}
+            buildNodeHref={NOOP_BUILD_HREF}
+            focusedClusterMemberAreaKeys={null}
+          />
+        </MemoryRouter>,
+      );
+      expect(screen.queryByTestId('areas-cluster-focus-panel')).not.toBeInTheDocument();
+    });
+
+    it('does not mutate node/browser-history state when focusing or clearing a cluster (AC4.5 item 4)', async () => {
+      const user = userEvent.setup();
+      const onClusterFocusChange = vi.fn();
+      const selectNode = vi.fn();
+      const locationBefore = window.location.href;
+      const historyLengthBefore = window.history.length;
+      renderFocused({ onClusterFocusChange, selectNode });
+      await user.click(screen.getByTestId('areas-cluster-focus-clear'));
+      // Clearing focus never calls the node-selection action, and never
+      // touches window.location or pushes a history entry — only
+      // `onClusterFocusChange` fires.
+      expect(selectNode).not.toHaveBeenCalled();
+      expect(window.location.href).toBe(locationBefore);
+      expect(window.history.length).toBe(historyLengthBefore);
+    });
+
+    // REQUIRED CHANGE 1 (review fix, AC4.12) — the map's own
+    // AreaDestinationMarkerLayer filters focused members through
+    // journey-aware eligibility (clusterVisibleAreaMembers) BEFORE building
+    // its cluster; this panel used to derive its member list by areaKey
+    // membership alone, with no eligibility filter, so a member that dropped
+    // to zero listings still rendered here (reading "0 properties") while
+    // the map had already dropped it. This test proves the panel now applies
+    // the SAME filter.
+    it('excludes a focused member with listingCount 0 from BOTH the list and the count — never a stale "0 properties" row (AC4.12)', () => {
+      const rawChildren: NavigationNodeResponse['children'] = [
+        ...CLUSTER_RAW_CHILDREN,
+      ];
+      const zeroContentChildren: UseAreasNavigationJourneyResult['children'] = [
+        CLUSTER_CHILDREN[0],
+        CLUSTER_CHILDREN[1],
+        { ...CLUSTER_CHILDREN[2], listingCount: 0 },
+      ];
+      render(
+        <MemoryRouter>
+          <DiscoverAreasJourneyPanel
+            journey={makeJourney({
+              node: makeNode({ children: rawChildren }),
+              nodeCount: { listingCount: 8, schoolCount: 0, matchingAreaCount: null },
+              children: zeroContentChildren,
+            })}
+            buildNodeHref={NOOP_BUILD_HREF}
+            focusedClusterMemberAreaKeys={['alpha', 'bravo', 'charlie']}
+          />
+        </MemoryRouter>,
+      );
+      expect(screen.getByTestId('areas-cluster-focus-panel')).toBeInTheDocument();
+      expect(screen.getByTestId('areas-cluster-focus-member-a:alpha')).toBeInTheDocument();
+      expect(screen.getByTestId('areas-cluster-focus-member-a:bravo')).toBeInTheDocument();
+      expect(screen.queryByTestId('areas-cluster-focus-member-a:charlie')).not.toBeInTheDocument();
+      expect(screen.getByTestId('areas-cluster-focus-summary')).toHaveTextContent('2 areas with matches');
+    });
+
+    it('falls back to the normal level panel when EVERY focused member is zero-content (nothing eligible survives)', () => {
+      const zeroContentChildren: UseAreasNavigationJourneyResult['children'] = CLUSTER_CHILDREN.map((c) => ({
+        ...c,
+        listingCount: 0,
+      }));
+      render(
+        <MemoryRouter>
+          <DiscoverAreasJourneyPanel
+            journey={makeJourney({
+              node: makeNode({ children: CLUSTER_RAW_CHILDREN }),
+              nodeCount: { listingCount: 0, schoolCount: 0, matchingAreaCount: null },
+              children: zeroContentChildren,
+            })}
+            buildNodeHref={NOOP_BUILD_HREF}
+            focusedClusterMemberAreaKeys={FOCUSED_AREA_KEYS}
+          />
+        </MemoryRouter>,
+      );
+      expect(screen.queryByTestId('areas-cluster-focus-panel')).not.toBeInTheDocument();
+    });
+
+    // REQUIRED CHANGE 2 (review fix) — `presentClusterRepresentatives` used
+    // to be called with the default 2-name representative cap, so a 5-member
+    // focus rendered "+3 areas with matches" directly above a list naming
+    // all 5 areas — "+N" means "N more beyond the names shown", which is
+    // false when every name IS on screen. Passing the panel's real
+    // (post-eligibility) displayed count as the limit fixes this.
+    it('never renders the "+N" form — every focused member is already on screen, so a 5-member focus reads "5 areas with matches"', () => {
+      const rawChildren: NavigationNodeResponse['children'] = [
+        { nodeKey: 'a:alpha', nodeType: 'AREA', displayLabel: 'Alpha', displayOrder: 1, areaKey: 'alpha', centreLat: 12.9, centreLon: 77.6 },
+        { nodeKey: 'a:bravo', nodeType: 'AREA', displayLabel: 'Bravo', displayOrder: 2, areaKey: 'bravo', centreLat: 12.91, centreLon: 77.61 },
+        { nodeKey: 'a:charlie', nodeType: 'AREA', displayLabel: 'Charlie', displayOrder: 3, areaKey: 'charlie', centreLat: 12.92, centreLon: 77.62 },
+        { nodeKey: 'a:delta', nodeType: 'AREA', displayLabel: 'Delta', displayOrder: 4, areaKey: 'delta', centreLat: 12.93, centreLon: 77.63 },
+        { nodeKey: 'a:echo', nodeType: 'AREA', displayLabel: 'Echo', displayOrder: 5, areaKey: 'echo', centreLat: 12.94, centreLon: 77.64 },
+      ];
+      const typedChildren: UseAreasNavigationJourneyResult['children'] = [
+        { nodeKey: 'a:alpha', nodeType: 'AREA', displayLabel: 'Alpha', displayOrder: 1, listingCount: 5, schoolCount: null, isLeafArea: true, matchingAreaCount: null },
+        { nodeKey: 'a:bravo', nodeType: 'AREA', displayLabel: 'Bravo', displayOrder: 2, listingCount: 4, schoolCount: null, isLeafArea: true, matchingAreaCount: null },
+        { nodeKey: 'a:charlie', nodeType: 'AREA', displayLabel: 'Charlie', displayOrder: 3, listingCount: 3, schoolCount: null, isLeafArea: true, matchingAreaCount: null },
+        { nodeKey: 'a:delta', nodeType: 'AREA', displayLabel: 'Delta', displayOrder: 4, listingCount: 2, schoolCount: null, isLeafArea: true, matchingAreaCount: null },
+        { nodeKey: 'a:echo', nodeType: 'AREA', displayLabel: 'Echo', displayOrder: 5, listingCount: 1, schoolCount: null, isLeafArea: true, matchingAreaCount: null },
+      ];
+      render(
+        <MemoryRouter>
+          <DiscoverAreasJourneyPanel
+            journey={makeJourney({
+              node: makeNode({ children: rawChildren }),
+              nodeCount: { listingCount: 15, schoolCount: 0, matchingAreaCount: null },
+              children: typedChildren,
+            })}
+            buildNodeHref={NOOP_BUILD_HREF}
+            focusedClusterMemberAreaKeys={['alpha', 'bravo', 'charlie', 'delta', 'echo']}
+          />
+        </MemoryRouter>,
+      );
+      for (const key of ['alpha', 'bravo', 'charlie', 'delta', 'echo']) {
+        expect(screen.getByTestId(`areas-cluster-focus-member-a:${key}`)).toBeInTheDocument();
+      }
+      const summary = screen.getByTestId('areas-cluster-focus-summary');
+      expect(summary).toHaveTextContent('5 areas with matches');
+      expect(summary.textContent).not.toMatch(/\+\d/);
+    });
+  });
 });

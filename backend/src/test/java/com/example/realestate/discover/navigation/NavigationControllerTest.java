@@ -1,6 +1,8 @@
 package com.example.realestate.discover.navigation;
 
 import com.example.realestate.discover.DiscoverFilterNormalizer;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.ResponseEntity;
@@ -75,6 +77,31 @@ class NavigationControllerTest {
         NavigationNode n = new NavigationNode(1, regionKey, nodeType, parentId, nodeKey, areaKey,
                 representativeAreaKeys, label, displayOrder, depth, ancestorKeys, descendantAreaCount,
                 Z, Z, Z, Z, Z, Z, "fp", now);
+        try {
+            var f = NavigationNode.class.getDeclaredField("id");
+            f.setAccessible(true);
+            f.set(n, id);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+        return n;
+    }
+
+    /**
+     * #1956 PR-3: same shape as {@link #node}, but with a REAL, distinguishable centre coordinate
+     * instead of {@code node()}'s hard-coded {@link #Z} — needed so the widened {@code
+     * NavigationChildSummary#centreLat}/{@code centreLon} assertions below can prove the mapper
+     * actually threads the node's OWN geometry through rather than coincidentally matching a
+     * fixture-wide zero.
+     */
+    private static NavigationNode nodeWithCentre(long id, Long parentId, String regionKey, String nodeType,
+                                                  String nodeKey, String areaKey, List<String> representativeAreaKeys,
+                                                  String label, int displayOrder, int depth, List<String> ancestorKeys,
+                                                  int descendantAreaCount, BigDecimal centreLat, BigDecimal centreLon,
+                                                  Instant now) {
+        NavigationNode n = new NavigationNode(1, regionKey, nodeType, parentId, nodeKey, areaKey,
+                representativeAreaKeys, label, displayOrder, depth, ancestorKeys, descendantAreaCount,
+                centreLat, centreLon, centreLat, centreLon, centreLat, centreLon, "fp", now);
         try {
             var f = NavigationNode.class.getDeclaredField("id");
             f.setAccessible(true);
@@ -1316,5 +1343,141 @@ class NavigationControllerTest {
                 null, null, null, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404");
+    }
+
+    // ── #1956 PR-3: NavigationChildSummary widened with areaKey/centreLat/centreLon ─────────────
+
+    /**
+     * DIRECTION(root, "d:north") -&gt; CLUSTER("c:north:clusterarea") -&gt; AREA("a:clusterarea"),
+     * each carrying its OWN distinct, non-zero centre so a test that accidentally reads the wrong
+     * node's geometry (or a fixture-wide zero) fails loudly rather than by coincidence.
+     */
+    private static final BigDecimal DIRECTION_LAT = new BigDecimal("12.980000");
+    private static final BigDecimal DIRECTION_LON = new BigDecimal("77.590000");
+    private static final BigDecimal CLUSTER_LAT = new BigDecimal("12.975000");
+    private static final BigDecimal CLUSTER_LON = new BigDecimal("77.595000");
+    private static final BigDecimal AREA_LAT = new BigDecimal("12.970000");
+    private static final BigDecimal AREA_LON = new BigDecimal("77.600000");
+
+    private static NavigationGraph buildDirectionClusterAreaGraph() {
+        Instant now = Instant.now();
+        NavigationNode direction = nodeWithCentre(500L, null, "north", "DIRECTION", "d:north", null,
+                List.of("clusterarea"), "North", 1, 0, List.of(), 1, DIRECTION_LAT, DIRECTION_LON, now);
+        NavigationNode cluster = nodeWithCentre(501L, 500L, "north", "CLUSTER", "c:north:clusterarea", null,
+                List.of("clusterarea"), "North Cluster", 0, 1, List.of("d:north"), 1, CLUSTER_LAT, CLUSTER_LON, now);
+        NavigationNode area = nodeWithCentre(502L, 501L, "north", "AREA", "a:clusterarea", "clusterarea",
+                List.of("clusterarea"), "Cluster Area", 0, 2, List.of("d:north", "c:north:clusterarea"), 0,
+                AREA_LAT, AREA_LON, now);
+        return NavigationGraph.build("clustercity", 5L, List.of(direction, cluster, area));
+    }
+
+    @Test
+    void getNode_root_directionChild_areaKeyNull_centrePopulated() {
+        when(graphCache.getActiveGraph("clustercity")).thenReturn(Optional.of(buildDirectionClusterAreaGraph()));
+
+        NavigationNodeResponse body = controller.getNode("clustercity", "root", lenientWebRequest()).getBody();
+
+        NavigationNodeResponse.NavigationChildSummary directionChild = body.children().get(0);
+        assertThat(directionChild.nodeKey()).isEqualTo("d:north");
+        assertThat(directionChild.nodeType()).isEqualTo("DIRECTION");
+        assertThat(directionChild.areaKey())
+                .as("a DIRECTION is never an AREA leaf")
+                .isNull();
+        assertThat(directionChild.centreLat()).isEqualTo(DIRECTION_LAT.doubleValue());
+        assertThat(directionChild.centreLon()).isEqualTo(DIRECTION_LON.doubleValue());
+    }
+
+    @Test
+    void getNode_clusterChild_areaKeyNull_centrePopulated() {
+        when(graphCache.getActiveGraph("clustercity")).thenReturn(Optional.of(buildDirectionClusterAreaGraph()));
+
+        NavigationNodeResponse body = controller.getNode("clustercity", "d:north", lenientWebRequest()).getBody();
+
+        NavigationNodeResponse.NavigationChildSummary clusterChild = body.children().get(0);
+        assertThat(clusterChild.nodeKey()).isEqualTo("c:north:clusterarea");
+        assertThat(clusterChild.nodeType()).isEqualTo("CLUSTER");
+        assertThat(clusterChild.areaKey())
+                .as("a CLUSTER (Local-Destination) is never an AREA leaf")
+                .isNull();
+        assertThat(clusterChild.centreLat()).isEqualTo(CLUSTER_LAT.doubleValue());
+        assertThat(clusterChild.centreLon()).isEqualTo(CLUSTER_LON.doubleValue());
+    }
+
+    @Test
+    void getNode_areaChild_areaKeyPopulated_centrePopulated() {
+        when(graphCache.getActiveGraph("clustercity")).thenReturn(Optional.of(buildDirectionClusterAreaGraph()));
+
+        NavigationNodeResponse body = controller.getNode(
+                "clustercity", "c:north:clusterarea", lenientWebRequest()).getBody();
+
+        NavigationNodeResponse.NavigationChildSummary areaChild = body.children().get(0);
+        assertThat(areaChild.nodeKey()).isEqualTo("a:clusterarea");
+        assertThat(areaChild.nodeType()).isEqualTo("AREA");
+        assertThat(areaChild.areaKey())
+                .as("an AREA child's areaKey equals its own canonical area_key")
+                .isEqualTo("clusterarea");
+        assertThat(areaChild.centreLat()).isEqualTo(AREA_LAT.doubleValue());
+        assertThat(areaChild.centreLon()).isEqualTo(AREA_LON.doubleValue());
+    }
+
+    @Test
+    void getNode_ancestry_sameChildSummaryMapper_additiveFieldsWellFormed_existingAssertionsUnaffected() {
+        // #1956 PR-3: NavigationChildSummary is shared between children[] and ancestry[] — this
+        // proves the additive fields on ancestry entries are well-formed (null is acceptable, per
+        // instructions, but must be the RIGHT node's data, never garbage) and that the existing
+        // ancestry structural assertions (nodeKey/displayLabel ordering) still pass unchanged.
+        when(graphCache.getActiveGraph("clustercity")).thenReturn(Optional.of(buildDirectionClusterAreaGraph()));
+
+        NavigationNodeResponse body = controller.getNode(
+                "clustercity", "a:clusterarea", lenientWebRequest()).getBody();
+
+        assertThat(body.ancestry()).extracting(NavigationNodeResponse.NavigationChildSummary::nodeKey)
+                .containsExactly("d:north", "c:north:clusterarea");
+
+        NavigationNodeResponse.NavigationChildSummary directionAncestor = body.ancestry().get(0);
+        assertThat(directionAncestor.areaKey()).isNull();
+        assertThat(directionAncestor.centreLat()).isEqualTo(DIRECTION_LAT.doubleValue());
+        assertThat(directionAncestor.centreLon()).isEqualTo(DIRECTION_LON.doubleValue());
+
+        NavigationNodeResponse.NavigationChildSummary clusterAncestor = body.ancestry().get(1);
+        assertThat(clusterAncestor.areaKey()).isNull();
+        assertThat(clusterAncestor.centreLat()).isEqualTo(CLUSTER_LAT.doubleValue());
+        assertThat(clusterAncestor.centreLon()).isEqualTo(CLUSTER_LON.doubleValue());
+    }
+
+    /**
+     * THE most important test in this group (per qa-fast): a JSON-level assertion of the actual
+     * wire shape, following the {@code jsonPath}-style approach used at {@code
+     * NavigationResolveIT} — because {@code normalize.ts} passes children through by reference and
+     * never validates them, a silent wire/type regression (e.g. accidentally adding {@code
+     * @JsonInclude(NON_NULL)} to the nested record, which would OMIT {@code areaKey} instead of
+     * emitting it present-and-null) would otherwise only be caught by the frontend at runtime.
+     */
+    @Test
+    void getNode_wireShape_nullFieldsArePresentAndNull_notOmitted() throws Exception {
+        when(graphCache.getActiveGraph("clustercity")).thenReturn(Optional.of(buildDirectionClusterAreaGraph()));
+        ObjectMapper mapper = new ObjectMapper();
+
+        // CLUSTER child: areaKey PRESENT-AND-NULL, coords present.
+        NavigationNodeResponse directionBody = controller.getNode(
+                "clustercity", "d:north", lenientWebRequest()).getBody();
+        JsonNode clusterChildJson = mapper.valueToTree(directionBody).get("children").get(0);
+        assertThat(clusterChildJson.has("areaKey"))
+                .as("areaKey must be a PRESENT JSON key even when null — never omitted")
+                .isTrue();
+        assertThat(clusterChildJson.get("areaKey").isNull()).isTrue();
+        assertThat(clusterChildJson.has("centreLat")).isTrue();
+        assertThat(clusterChildJson.get("centreLat").isNull()).isFalse();
+        assertThat(clusterChildJson.get("centreLat").asDouble()).isEqualTo(CLUSTER_LAT.doubleValue());
+        assertThat(clusterChildJson.get("centreLon").asDouble()).isEqualTo(CLUSTER_LON.doubleValue());
+
+        // AREA child: all three additive fields present and non-null.
+        NavigationNodeResponse clusterBody = controller.getNode(
+                "clustercity", "c:north:clusterarea", lenientWebRequest()).getBody();
+        JsonNode areaChildJson = mapper.valueToTree(clusterBody).get("children").get(0);
+        assertThat(areaChildJson.has("areaKey")).isTrue();
+        assertThat(areaChildJson.get("areaKey").asText()).isEqualTo("clusterarea");
+        assertThat(areaChildJson.get("centreLat").asDouble()).isEqualTo(AREA_LAT.doubleValue());
+        assertThat(areaChildJson.get("centreLon").asDouble()).isEqualTo(AREA_LON.doubleValue());
     }
 }
