@@ -51,6 +51,7 @@ const mapStub = vi.hoisted(() => ({
   invalidateSize: vi.fn(),
   setView: vi.fn(),
   getCenter: vi.fn(() => ({ lat: 13.3409, lng: 74.7421 })),
+  remove: vi.fn(),
 }));
 
 // ─── Mocks (must come before importing PropertyMap) ───────────

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, useMap, Circle, Marker, Polygon, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
@@ -690,6 +690,123 @@ function MapReadySignal({ onReady }: { onReady?: () => void }) {
   useEffect(() => {
     onReadyRef.current?.();
   }, []); // empty deps: fire once on mount; ref always holds the current callback
+  return null;
+}
+
+/**
+ * Issue #2049 (defect 2) — "Map container is already initialized" crash on
+ * Back navigation.
+ *
+ * Root cause (verified in node_modules/react-leaflet/lib/MapContainer.js):
+ * its internal mapRef callback (L28-42) guards on `context === null`, but
+ * that callback closes over an empty `[]` dep array — so the guard is
+ * permanently frozen true from the FIRST render. Its teardown (L43-49) is a
+ * PASSIVE useEffect cleanup, which React's offscreen/Activity reappear path
+ * never runs when a hidden subtree becomes visible again. On reappear, the
+ * SAME DOM node (which still owns Leaflet's internal `_leaflet_id`) is
+ * handed back to `new L.Map(node)`, which throws.
+ *
+ * Fix: this component sits inside MapContainer (so useMap() resolves) and
+ * runs its teardown in a LAYOUT effect cleanup — the mirror-image of React's
+ * reappear path, so it fires at the exact moment react-leaflet's own passive
+ * cleanup does not. `onTeardown` bumps PropertyMap's `mapInstanceKey`, which
+ * remounts MapContainer with a fresh DOM node — see the `key={mapInstanceKey}`
+ * prop below.
+ *
+ * Double-remove safety (REVISED, cycle 2 — see
+ * e2e/discover-1939-listing-peek-url-restore.spec.ts AC3/AC4): the original
+ * assumption below ("Leaflet's Map.remove() deletes `_containerId` and
+ * `_container._leaflet_id` together, so a second remove() compares
+ * undefined !== undefined and is a no-op") does NOT hold, and this was
+ * verified empirically (instrumented trace) rather than by inspection alone.
+ *
+ * react-leaflet's OWN passive-effect cleanup (node_modules/react-leaflet/lib/
+ * MapContainer.js L43-49: `context?.map.remove()`) still fires for THIS SAME
+ * map instance after our layout-effect cleanup below has already removed it
+ * — React defers passive-effect cleanup for a deleted tree until after the
+ * remount's commit, so the redundant call always arrives.
+ *
+ * That second call is NOT a no-op: Leaflet's Map.remove()
+ * (node_modules/leaflet/dist/leaflet-src.js L3854) calls
+ * `this._initEvents(true)` as its very FIRST statement, and `_initEvents`
+ * unconditionally does `this._targets[stamp(this._container)] = this;`
+ * (same file, `_initEvents`). `stamp()` assigns a FRESH `_leaflet_id` onto
+ * `_container` whenever the property is absent — which it is, because the
+ * first remove() call already deleted it. This re-stamp happens BEFORE the
+ * container-reuse guard on L3859 (`this._containerId !== this._container.
+ * _leaflet_id`) runs, so the guard always sees undefined !== freshId and
+ * throws "Map container is being reused by another instance" — on ANY
+ * second remove() call, regardless of which physical DOM node `_container`
+ * points to. (An earlier attempt at this fix repointed `_container` at a
+ * detached scratch node on the theory that undefined-vs-undefined would
+ * stay safe; instrumented traces showed the scratch node itself gets
+ * stamped by this exact mechanism, so that approach still threw.)
+ *
+ * Fix: make removal idempotent on the instance itself, so the REAL teardown
+ * (event listeners, layers, panes) runs exactly once — right here, on the
+ * first call — and react-leaflet's later redundant call becomes a
+ * structurally guaranteed no-op that never reaches Leaflet's internals
+ * (hence never re-stamps anything, hence never throws). This does not skip
+ * or delay any real teardown — the guard fires only on a call after the one
+ * genuine remove() this component has already performed.
+ */
+function MapLifecycleGuard({ onTeardown }: { onTeardown: () => void }) {
+  const map = useMap();
+  useLayoutEffect(() => () => {
+    let alreadyRemoved = false;
+    const originalRemove = map.remove.bind(map);
+    // Leaflet's public type declares `remove(): this` with no "already
+    // removed" flag or idempotency contract — shadowing the instance method
+    // is the only way to make a second call a no-op. Cast is unavoidable:
+    // there is no typed public API for this.
+    (map as unknown as { remove: () => typeof map }).remove = () => {
+      if (alreadyRemoved) return map;
+      alreadyRemoved = true;
+      return originalRemove();
+    };
+    map.remove();
+    onTeardown();
+  }, [map, onTeardown]);
+  return null;
+}
+
+/**
+ * Issue #2049 (defect 1) — stale Leaflet `_size` cache after the map
+ * CONTAINER's pixel dimensions change (not a camera move).
+ *
+ * A camera call (fitBounds/flyTo/setView/panTo/setZoom) never changes the
+ * container's on-screen size, so it cannot invalidate Leaflet's cached
+ * `_size` — only a layout change to the container element can. This is
+ * deliberately a separate seam from the ~21 existing camera call sites
+ * (adding invalidateSize there was explicitly ruled out): firing it from
+ * inside a cameraIntent effect would also publish a transient intermediate
+ * viewport to the URL mid-navigation (see PropertyMap.jitterDiagnostic.test.tsx
+ * for that class of jitter bug).
+ *
+ * `animate: false` avoids fighting an in-flight flyTo; `debounceMoveend:
+ * true` collapses a resize burst into a single moveend. Re-entrancy is safe:
+ * Leaflet's invalidateSize returns early (before emitting any event) when
+ * the computed offset is zero, so an unchanged container is a literal no-op,
+ * and no watcher here writes cameraIntent or any tick ref, so the existing
+ * fit-once guards are structurally unreachable from this component.
+ *
+ * Known, accepted consequence: AreaMarkerLayer already listens to
+ * map.on('resize'), an event that previously never fired because nothing
+ * called invalidateSize. It will now fire on a real container resize,
+ * running its compass recompute where it previously did not — assessed
+ * idempotent, not suppressed here.
+ */
+function MapContainerResizeSync() {
+  const map = useMap();
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return;
+    const container = map.getContainer();
+    const ro = new ResizeObserver(() => {
+      map.invalidateSize({ animate: false, pan: true, debounceMoveend: true });
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [map]);
   return null;
 }
 
@@ -1865,9 +1982,21 @@ export function PropertyMap({
     hasAreas: areas.length > 0,
   });
 
+  // Issue #2049 (defect 2) — bumped by MapLifecycleGuard's onTeardown whenever
+  // react-leaflet's reappear path would otherwise hand the same (already
+  // `_leaflet_id`-tagged) DOM node back to a fresh `new L.Map(node)` call.
+  // Changing MapContainer's `key` forces React to mount a brand-new DOM node
+  // for the remount, sidestepping the crash. useCallback keeps onTeardown's
+  // identity stable across renders (MapLifecycleGuard's cleanup depends on it).
+  const [mapInstanceKey, setMapInstanceKey] = useState(0);
+  const handleMapTeardown = useCallback(() => {
+    setMapInstanceKey((key) => key + 1);
+  }, []);
+
   return (
     <div className="w-full h-full relative">
       <MapContainer
+        key={mapInstanceKey}
         center={initialCenter ?? cityCenter ?? UDUPI_CENTER}
         zoom={initialZoom ?? cityZoom ?? DEFAULT_ZOOM}
         className="w-full h-full rounded-lg z-0"
@@ -1881,6 +2010,11 @@ export function PropertyMap({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+        {/* Issue #2049 — lifecycle guard (defect 2 fix) and container-resize
+            sync (defect 1 fix). Both mount alongside the existing controllers
+            below; neither touches any camera call site. */}
+        <MapLifecycleGuard onTeardown={handleMapTeardown} />
+        <MapContainerResizeSync />
         <MapReadySignal onReady={onReady} />
         <URLViewportController initialCenter={initialCenter} initialZoom={initialZoom} />
         <MapController

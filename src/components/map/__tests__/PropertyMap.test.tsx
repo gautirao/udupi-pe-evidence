@@ -45,6 +45,8 @@ vi.mock('react-leaflet', () => ({
     getZoom: vi.fn(() => 12),
     setView: vi.fn().mockReturnThis(),
     getContainer: vi.fn(() => document.body),
+    invalidateSize: vi.fn(),
+    remove: vi.fn(),
   })),
   useMapEvents: vi.fn(() => ({
     getBounds: vi.fn(() => ({ getNorth: vi.fn(() => 14), getSouth: vi.fn(() => 13), getEast: vi.fn(() => 75), getWest: vi.fn(() => 74) })),
@@ -318,6 +320,8 @@ describe('PropertyMap — cityCenter effect skips initial mount (URL viewport fi
     getContainer: vi.fn(() => document.body),
     on: vi.fn(),
     off: vi.fn(),
+    invalidateSize: vi.fn(),
+    remove: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -410,6 +414,8 @@ describe('PropertyMap — reset zoom on area deselection (#894)', () => {
     getContainer: vi.fn(() => document.body),
     on: vi.fn(),
     off: vi.fn(),
+    invalidateSize: vi.fn(),
+    remove: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -555,6 +561,8 @@ describe('PropertyMap — RH1 remount hardening: no spurious camera throw on sec
     getContainer: vi.fn(() => document.body),
     on: vi.fn(),
     off: vi.fn(),
+    invalidateSize: vi.fn(),
+    remove: vi.fn(),
   };
 
   beforeEach(async () => {

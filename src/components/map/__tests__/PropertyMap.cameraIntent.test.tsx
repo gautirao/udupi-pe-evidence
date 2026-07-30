@@ -41,6 +41,7 @@ const mapStub = vi.hoisted(() => ({
   once: vi.fn(),
   invalidateSize: vi.fn(),
   getCenter: vi.fn(() => ({ lat: 13.3409, lng: 74.7421 })),
+  remove: vi.fn(),
 }));
 
 vi.mock('leaflet', () => ({
