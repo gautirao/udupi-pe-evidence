@@ -1,0 +1,1485 @@
+# team-lead-plan-pr-b.toml — REPLACEMENT PLAN for issue #1956 (PR-B)
+#
+# This file was FULLY REPLACED on 2026-07-26. The previous adaptive/arbitrary-depth
+# recursive-hierarchy plan is NOT AUTHORITATIVE per the "Implementation-reset ruling
+# — 2026-07-26" in the #1956 body. The superseded content is preserved verbatim at
+#   .claude/handoffs/issue-1956/team-lead-plan-pr-b.SUPERSEDED-2026-07-26-adaptive-depth.toml
+# (supersede, never overwrite — the correction history is what makes this trustworthy).
+
+[meta]
+issue = 1956
+pr = "PR-B (frontend Areas journey)"
+plan_version = 7
+plan_kind = "revision 4.2 (consolidated) — Phase 0 + 6 PRs, 14 user corrections applied, reconciled against the final design prototype, then a bounded 11-point correction pass adding the Performance Analyst view"
+terminal_state = "USER_RECONCILED_PLAN_APPROVAL_REQUIRED"
+revision_4_1_note = "Bounded correction pass. Structure UNCHANGED: Phase 0 -> PR1 -> PR2 -> PR3 -> PR4 -> PR5 -> PR6, count locked at 6, order unchanged, no seventh PR. All 11 mandatory corrections applied — see [corrections_v41]. The headline finding is that #1956 was about to propose work that ALREADY EXISTS: the area-count read abstraction, its provider seam, its cache and its OpenSearch stub are all shipped by #1955/#1745; the EXPLAIN harness (#1246), the public cache policy (#1248) and the OpenSearch architecture (#1251) are all delivered; and approved budget PROCESS rules already forbid inventing SLO numbers. Revision 4.1 therefore SHRINKS #1956's backend footprint, REMOVES the ?areaKeys= transport change entirely, and REPLACES a speculative resolver with an endpoint that already exists. Plan consequences: pr-delivery-plan-pr-b.md section 00."
+revision_5_note = "The final design prototype landed on main via PR #2022, commit c13dc017. This revision reconciles the plan against it. STRUCTURE UNCHANGED: Phase 0 + 6 PRs, count still LOCKED at 6. No recombination, split or reorder is justified by the mock; the only structural adjustment is an INTRA-PR split of the listing-preview-sheet between PR 4 (data + restoration contract) and PR 5 (mobile Map-mode presentation), which changes neither the count, the merge order, nor any rollback boundary. Full reconciliation with tables A-F and the 14 required answers: .claude/handoffs/issue-1956/final-mock-reconciliation.md. Plan consequences: pr-delivery-plan-pr-b.md section 0."
+reconciliation_artefact = ".claude/handoffs/issue-1956/final-mock-reconciliation.md"
+revision_4_note = "The user approved the Phase 0 + 6-PR structure IN PRINCIPLE and LOCKED the PR count at 6 (no additional #1956 PR without explicit user approval), then required 14 mandatory corrections before any PLAN_REVIEW resubmission. All 14 are applied — see [corrections_v4] and the compliance table in pr-delivery-plan-pr-b.md section 16. Two corrections required real investigation (backend count boundary, legacy URL producer inventory) and both changed the plan materially; findings are in [corrections_v4.c1_backend_count_boundary] and [corrections_v4.c8_legacy_producer_inventory]."
+pr_count_locked = 6
+pr_count_lock_rule = "No additional #1956 PR may be created without explicit user approval."
+revision_3_note = "PLAN_REVIEW returned REVISION_REQUIRED (.claude/openai-gates/issue-1956/20260726T222748Z-PLAN_REVIEW) requiring a firm PR-granularity decision and stronger Slice 3/4 risk mitigation. The user then reviewed the 9-PR delivery plan, did NOT approve it, approved the safety mechanism in principle, and required Phase 0 + 6 PRs plus six specific corrections. Those corrections are locked in [corrections] below and the slice-to-PR mapping is in [delivery_structure]. Plan OQ3 and OQ5 are now DECISIONS, not open questions."
+companion_artefact = ".claude/handoffs/issue-1956/pr-delivery-plan-pr-b.md (revision 2) — the per-PR delivery plan with all 20 user-required fields, the PR 2 and PR 3 risk tables, the dependency diagram and the comparison table. The two artefacts are kept in agreement."
+authored_by = "orchestrator-8 (mode3-orchestrator, registered [orchestrator_pr_b_gen7])"
+authored_at = "2026-07-27T00:20:00Z"
+stage = "Stage A — Phase 0.7 plan authoring. NOT approved. PLAN_REVIEW (OpenAI, via Main Agent) is the approval gate."
+supersedes = "team-lead-plan-pr-b.SUPERSEDED-2026-07-26-adaptive-depth.toml"
+branch = "issue-1956-pr-b-frontend-areas-journey"
+worktree = "/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-1956-pr-b-frontend-areas-journey"
+skeleton_source = "#1956 section 14 'Replacement execution roadmap' (Slice 0-8), verbatim slice names"
+schema_note = "Slices are [[slice]] array entries. Each slice's detail blocks are written as [slice.<id>.work] / [slice.<id>.files] / [slice.<id>.acceptance_criteria], which TOML attaches to that slice entry under a string key equal to its id — i.e. programmatically slice[i]['<id>']['work']. Verified to parse with tomllib and verified that every detail block associates with the matching slice id."
+
+[meta.controlling_contract]
+primary = "#2014 — consolidated shopper product contract. Controls hierarchy depth, marker content, density, map/panel sync, breadcrumbs, Back, browser history and mobile nav wherever older wording (including #1956's own older wording) conflicts."
+implementation_gate = "#1956 — the only issue that closes Areas Gate 3."
+amendments_binding = [
+  "#2014 comment 2026-07-26T08:51 — hard shopper-depth and clutter budget",
+  "#2014 comment 2026-07-26T09:24 — Back control, breadcrumbs and browser history",
+  "#2014 comment 2026-07-26T16:00 — journey-aware visible-area counts",
+  "#1956 comment 2026-07-26T16:01 — journey-aware visible-area membership (implements the #2014 ruling)",
+]
+also_read = ["#1955 / PR #1978 backend recursive foundation", "PR #2013 canonical resolve", "PR #2011 frontend ownership/shim prerequisite (MERGED — preserve)"]
+
+[contract]
+valid_shapes = [
+  "City -> Direction -> AREA -> Listings",
+  "City -> Direction -> Local Destination -> AREA -> Listings",
+]
+forbidden_shape = "any third public CLUSTER level (City -> Direction -> Cluster -> Cluster -> AREA)"
+max_city_root_directions = 5
+target_city_root_directions = "3-5 meaningful; do not invent empty directions for symmetry"
+max_local_destinations_per_direction = 6
+one_child_clusters = "INVALID"
+max_breadcrumb_items = 4
+frontend_flattening = "FORBIDDEN. An invalid promoted tree must be DETECTED AND REPORTED by the frontend, then corrected upstream (regenerate -> blocking validation -> preview -> approve exact revision -> promote exact revision). Never hidden in the frontend."
+density_solution = "VISUAL, NON-HIERARCHICAL AREA clustering only. A visual cluster never writes node=, never appears in the breadcrumb, never creates hierarchy history."
+cluster_membership = "explicit stable area_key list; never parsed or inferred from display labels"
+sole_hierarchy_identity = "node=<stable-node-key>. Absent node = city root. groupId/region/areaKey/scope must NOT act as Areas hierarchy identity (the PR #2009-#2011 compat URL domain keeps scope + legacy group as compat-only, which is NOT hierarchy identity)."
+
+[contract.journey_aware_visibility]
+scope_correction = "CORRECTED by the user's 2026-07-27 ruling (correction 3). Revision 2 of this plan applied journey-aware visibility too broadly. Visibility EXCLUSION applies to the FINAL AREA browse presentation ONLY. Direction and Local-Destination destinations keep stable canonical identity and position, are NEVER regenerated or re-parented by filters, may show dynamic counts, and render an EXPLICIT STABLE zero-match state instead of being hidden or removed."
+applies_exclusion_to = "final AREA browse presentation only"
+never_applies_exclusion_to = "Direction and Local-Destination destinations (identity, position, parentage are filter-invariant)"
+arithmetic_consistency_decision_SUPERSEDED = "SUPERSEDED by the user's correction 2 (2026-07-27). Revision 3 of this plan decided that a displayed '+N' would be visible-member-derived at EVERY level including Direction and Local-Destination cards. The user overruled that: the '+N' FORM IS NOT USED at structural levels at all, because a '+N' implies the displayed names are themselves matching members, which is not guaranteed when those names are stable canonical labels. Superseded rather than deleted so the reasoning history stays legible."
+name_and_copy_split = "See [corrections_v4.c2_label_split] for the binding rule. Structural levels (Direction / Local Destination): STABLE CANONICAL representative names that never change with filters, and the copy 'N areas with matches' or 'No matches with current filters' — NEVER a '+N'. Visual AREA clusters: representative names chosen only from VISIBLE members, and the copy '+N areas with matches'."
+areas_predicate = "visible(area) = eligibleListingCount(area, active Buy/Rent + property filters) > 0"
+schools_predicate = "visible(area) = eligibleSchoolCount(area, active school filters) > 0"
+nearby_arithmetic = "N = (visible journey members) - (displayed representative names). NOT total canonical descendants."
+worked_example = "34 canonical members, 5 visible Areas members, 2 representative names displayed => '+3 nearby areas' (never '+32')"
+representative_names = "selected ONLY from visible members, and must be members of that cluster"
+map_panel_parity = "map and panel MUST apply the same journey-aware visible-area set so counts, names and selectable destinations cannot disagree"
+identity_stability = "canonical identity, ancestry and promotion membership stay stable regardless of dynamic counts; filter changes recompute membership/names/+N but never change node=, breadcrumb or ancestry"
+zero_content_areas = "not deleted from the catalogue; resolvable by direct canonical URL or explicit search with a normal empty state; simply omitted from journey clusters while they have no relevant content"
+
+[contract.marker_composition]
+copy_correction = "CORRECTED by the user's 2026-07-27 ruling (correction 6). Where membership is filter-affected the copy is '+N areas with matches', NOT '+N nearby areas' — the latter implies geographic completeness that a filtered member set does not have."
+multi_area_cluster = ["line1: one or two prominent member-area names", "line2: '+N areas with matches' (filter-affected) — never wording implying geographic completeness", "line3: journey-aware counts ('120 listings' or '120 listings · 50 schools')", "line4: Tap to zoom"]
+single_area = ["line1: area name", "line2: journey-aware counts", "line3: Tap to view homes"]
+single_area_forbidden = "MUST NOT show '+N nearby areas'"
+city_root_forbidden = "no redundant city-total / 'Bangalore Metro · total listings' marker before the Direction children"
+label_forbidden = ["mechanical 'North of North Bangalore' style as a primary label", "compass word alone as the primary label (secondary metadata only)", "invented corridor names ('Airport Belt', 'IT Corridor') where promoted representative names exist"]
+styling = "area visual clusters must be visibly distinct from home/listing clusters"
+
+[contract.back_and_history]
+in_app_back = "navigate exactly ONE level to the backend-declared canonical parent for the current stable node_key. MUST NOT be window.history.back() or navigate(-1). Must work on cold deep links where the parent was never visited."
+city_root_back = "hidden or disabled; must never leave Discover"
+loop_prevention = "if the immediately previous app-managed entry IS the canonical parent, hierarchy Back may pop to it; otherwise (including cold deep links) it REPLACES the current hierarchy entry with the canonical parent. No child-parent-child loops, no duplicate adjacent entries."
+no_history_from = ["minor map pan/zoom", "visual AREA-cluster expansion/focus", "programmatic camera fits", "hover/focus changes", "Map/List presentation switches"]
+camera = "every breadcrumb/Back fit routes through the single CameraIntent owner as ONE direct fit, never chained animations"
+back_to_results = "listing detail/peek 'Back to results' is a DIFFERENT action from hierarchy Back; it restores the prior result context (selected AREA, filters, map/list mode, camera, panel position)"
+
+[baseline]
+captured_by = "Main Agent, 2026-07-26 post-pivot, non-destructively on the worktree as-is"
+verified_by_orchestrator_8 = "worktree state re-checked 2026-07-26T23:30Z: 3 ahead of origin/main (d01bbcd1 / 1f10f52f / 29df02a8); 44 tracked modified/deleted +1885/-5503; 12 untracked. No destructive command run."
+typecheck = "tsc --noEmit: 20 errors on branch vs 21 pre-existing on clean main (030804e7). All pre-existing agri/PropertyType typing gaps, unrelated to Areas. NO net-new typecheck regressions."
+vitest_targeted = "1187 passed, 0 failed, 3 skipped (src/features/discover, src/components/discover, useDiscoverPageState, useDiscoverUrlState, useDiscoverNavigationNode, useAreaGroups, src/pages/MapDiscovery)"
+build = "vite build succeeds (pre-existing chunk-size warning only)"
+full_suite_caveat = "the whole frontend vitest suite heap-OOMs in one process; use the #1825 subsystem batch runner scripts and aggregate JSON. EditListing.guard.test.tsx OOMs alone."
+ci_caveat = "GitHub Actions CI fails all jobs for billing reasons; red CI is not evidence of a real test failure."
+
+[salvage_audit]
+status = "COMPLETE — Slice 0 Deliverable 1"
+artefact = ".claude/handoffs/issue-1956/team-lead-execution-log-pr-b.md"
+entry_heading = "## 2026-07-26T23:55:00Z — [SLICE 0 DELIVERABLE 1] file-level KEEP/REWORK/REMOVE salvage audit"
+method = "4 parallel read-only explorer-planner audits (committed nav-core / committed UI / uncommitted-D UI / uncommitted-D state) plus 6 targeted verifications run by the orchestrator to resolve specialist UNCLEARs and overrule specialist verdicts. Specialist output is evidence, not authority."
+coverage = "every file in the committed origin/main..HEAD diff (55) and the uncommitted git diff HEAD set (44 tracked + 12 untracked) has a row with a citation-backed reason"
+totals_committed = "KEEP 38, KEEP+ADD 9, REWORK 8, REMOVE 0"
+totals_uncommitted = "KEEP 25, KEEP+ADD 2, REWORK 9, REMOVE 3, KEEP-DELETION 10, DELETION-CONDITIONAL 1"
+
+[[salvage_audit.overrule]]
+id = "O-1"
+subject = "src/features/discover/navigation/nodeLevelKind.ts, navigationModel.ts, types.ts"
+specialist_verdict = "KEEP — 'depth validation belongs upstream in the backend; the frontend receives already-constrained data'"
+orchestrator_verdict = "KEEP+ADD"
+reason = "#1956 s1 and #2014 s14 (last bullet) place a POSITIVE obligation on the frontend: it must not silently flatten or skip an invalid promoted tree. That requires a detect-and-report layer, not a licence to assume the backend validated. Depth-generic dispatch is correct and stays; the validator is additive."
+
+[[salvage_audit.overrule]]
+id = "O-2"
+subject = "src/components/discover/navigation/useCollapsedBreadcrumbTrail.ts and src/components/discover/__tests__/DiscoverMapBreadcrumb.ellipsisShrinkFloor.test.tsx"
+specialist_verdict = "UNCLEAR — 'requires quantitative geometry measurement at 390px'"
+orchestrator_verdict = "REMOVE — dead by construction, decidable statically"
+reason = "useCollapsedBreadcrumbTrail.ts:73 headCount = 2 (3 when a synthetic 'home' crumb leads); :74 hiddenCount = length - headCount - COMPACT_TAIL_COUNT (2); :75 shouldCollapse requires hiddenCount > 0. At the new 4-real-item cap the maximum is 4 segments (5 with Home), so hiddenCount is always exactly 0 and shouldCollapse is always false. The ellipsis crumb is unreachable; the apparatus is dead code."
+consequence = "AC11 (the ellipsis-geometry defect that consumed three fix cycles and was still failing when orchestrator-7 stopped) is MOOT BY CONTRACT, not fixed. Do not continue the geometry chase."
+residual_obligation_not_dropped = "#1956 s8 still requires the complete real breadcrumb to render without clipping and with reachable controls at 390x844. That is now a no-clip / per-crumb-truncation / reachability requirement for up to 4-5 segments, carried into Slice 5 and Slice 6 — NOT deleted."
+note = "the removed test currently PASSES; it is removed as a consequence of removing the apparatus it guards, not for failing."
+
+[[salvage_audit.overrule]]
+id = "O-3"
+subject = "src/utils/groupRegionLabel.ts"
+specialist_verdict = "KEEP — legitimate relocation, justified by its docstring"
+orchestrator_verdict = "KEEP, but the docstring is REWORK and the module should move School-side"
+reason = "The docstring justifies its neutral src/utils/ home on the premise that AreaGroupsLandingPanel.tsx is a live importer and is reachable as DiscoverAreasJourneyPanel's flatFallback. Both halves are FALSE as of this same uncommitted diff: that panel is DELETED and FlatAreaFallbackPanel.tsx replaced the flatFallback. Verified real consumers: SchoolJourneyPanels.tsx:16 (only value import — School-owned), DiscoverRightPanel.tsx:628 and DiscoverRightPanelContainer.tsx:11 (type-only). So this is the PERMITTED non-Areas-consumer case under #2014 s12, not a forbidden renamed wrapper — but #2014 s12 conditions that permission on the consumer being documented, and the current documentation names a consumer that no longer exists."
+
+[salvage_audit.reclassified_156_key_node]
+node = "c:blr-metro:in-ka-bengaluru-kudlu-gate-in-ka-bengaluru-singasandra"
+observed = "revisionId 3, nodeType CLUSTER, nextLevelType CLUSTER, ancestry length 0, 2 direct children, 156 descendantAreaKeys; map observed rendering 10+ stacked pill markers"
+cap_verified = "MAX_AREA_KEYS_PER_REQUEST = 100 (src/features/discover/navigation/navigationModel.ts:56), applied as slice(0,100) with a console warning and a user-visible 'Showing listings from the first 100 of N areas' notice (DiscoverAreasJourneyPanel.tsx:216-222 and :405). Truncation is therefore NOT silent, but it does fire on this node today."
+reclassification = "NOT primarily a request-sizing decision. ancestry 0 + nodeType CLUSTER + nextLevelType CLUSTER + only 2 direct children + 156 descendants implies at least a third CLUSTER level below the city root — i.e. very likely an INVALID PROMOTED HIERARCHY that #1956 s13 / #2014 s11 blocking validation exists to catch and correct upstream. The cap pressure also largely evaporates once markers are scoped to DIRECT CHILDREN (max 5/6) and then to journey-visible members instead of aggregated descendants."
+evidence_status = "INFERENCE from node metadata, NOT live-verified. Slice 1's first concrete deliverable is to prove or disprove it against the real promoted tree. Do not assume either way."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# USER-LOCKED CORRECTIONS (2026-07-27 ruling). These override any earlier
+# wording in this plan or in revision 1 of the delivery plan.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[corrections.c1_activation_seam]
+locked = "A preview-only activation gate controls whether the new Areas journey MOUNTS. It is INDEPENDENT of node=. node= only controls hierarchy POSITION once the journey is mounted."
+truth_table = "preview ENABLED -> mount new journey (node= positions within it); preview DISABLED -> preserve the COMPLETE legacy journey, INCLUDING when node= is present; PR 6 -> gate removed, new journey becomes default"
+mechanism_preference = "1) environment/config feature flag; 2) failing that, an explicitly preview-only URL parameter (areasPreview=1) that a shopper cannot arrive at by normal navigation"
+withdrawn_design = "Revision 1's 'node= present OR areasNav=1' gate is WITHDRAWN as unsafe: direct area search and canonical deep links legitimately produce node= while the new journey is incomplete, so a node=-sensitive mount gate would expose the partial journey to ordinary users."
+honesty_requirement = "The default journey may NOT be described as unchanged unless direct search, deep links and every ordinary entry point also remain on the legacy path while preview is disabled. PR 1 asserts this PER ENTRY POINT: plain ?city=X&journey=area-first, direct area search, ?areaKey= deep links (emitted by AreaCtaBlock.tsx / AreaGuide.tsx / AreaGuideHero.tsx), journey-less ?groupId=, and node= present."
+why_new_work_is_needed = "VERIFIED at src/features/discover/views/DiscoverRightPanelContainer.tsx:633-649 — the current gate is NOT node=-sensitive; it catches the whole area-first journey with nodeKey defaulting to 'root'. The branch has therefore already fully cut over, and checkpoint D additionally collapsed the two legacy panelContent values to `return null` (DiscoverRightPanel.tsx:1410-1426) and deleted the three AreaGroup*Panel files. There is no existing seam to narrow into — PR 1 must BUILD the preview gate and RESTORE the legacy branches."
+
+[corrections.c2_legacy_deletion]
+locked = "No deletion of macroRegionResolver, legacy panels, legacy route helpers or any other legacy-Areas dependency while the legacy journey remains the default. Importer/runtime ownership must be PROVEN, not assumed. All legacy-Areas-only deletion belongs to PR 6."
+sole_permitted_early_exception = "School-only relocation, with behaviour-preserving tests. Exactly one item qualifies: src/utils/groupRegionLabel.ts, whose only value consumer is SchoolJourneyPanels.tsx:16 (plus two type-only imports). Its docstring falsely cites AreaGroupsLandingPanel.tsx as a live importer — that file is deleted in the same uncommitted diff (audit overrule O-3). Relocation requires byte-identical logic plus tests, and the docstring correction is mandatory."
+consequence_for_pr_1 = "Relative to the current branch state PR 1 RESTORES rather than deletes: the three AreaGroup*Panel files and their four tests come back, DiscoverRightPanel.tsx's two collapsed branches come back, and macroRegionResolver.ts's deletion moves to PR 6 (so the groupNameToSlug local-alias restorations already made on the branch stay in place until then)."
+
+[corrections.c3_visibility_scope]
+locked_direction_and_local_destination = "Stable canonical identity and position. NEVER regenerated or re-parented by filters. Counts may update. Zero-match treatment is EXPLICIT and STABLE — a zero-match Direction renders a clear 'no matches with current filters' state and is never hidden, removed or re-parented."
+locked_final_area_presentation = "Areas journey includes AREA members with eligibleListingCount > 0; Schools presentation includes AREA members with eligibleSchoolCount > 0. Representative names and +N are computed from visible AREA members only."
+prohibition = "Do not use dynamic listing filters to restructure canonical Direction or Local-Destination navigation."
+see_also = "[contract.journey_aware_visibility].arithmetic_consistency_decision for the one point decided rather than left open."
+
+[corrections.c4_deduplication]
+areas_dedup_key = "area_key"
+listings_dedup_key = "listing UUID / canonical listing identity"
+schools_dedup_key = "stable school ID"
+prohibition = "Do NOT calculate combined listing totals by blindly summing per-area totals — a listing can belong to more than one area and would be double-counted."
+locked = "ONE authoritative combined query/result identity owns the marker count, the panel count and the total, so they cannot disagree. Per-area counts remain inputs to the VISIBILITY predicate, never addends for a TOTAL."
+required_fixture = "a listing deliberately present in two areas must be counted exactly once in the combined total."
+
+[corrections.c5_count_architecture]
+backend_owns = "one bounded/batched request keyed by the direct AREA keys plus active filters; per-area eligible listing counts; optional per-area eligible school counts; authoritative aggregate totals computed server-side with the c4 dedup identity; NO N+1."
+frontend_owns = "visibility predicate application, representative-name selection, +N arithmetic, visual clustering."
+live_measurement_status = "NOT AVAILABLE and NOT ASSUMED. No backend is reachable from this environment (curl to localhost:8080/api/discover/cities/bangalore/navigation/resolve?node=root fails, connection refused). No direct-child maximum is asserted."
+static_finding_1 = "src/features/discover/navigation/navigationModel.ts:26-33 — listingAreaKeys() returns [areaKey] for an AREA leaf and otherwise node.descendantAreaKeys. The current request is keyed by DESCENDANTS, not direct children. This is precisely why the 156-descendant node breached a 100 cap, and it is a pre-contract shape."
+static_finding_2 = "navigationModel.ts:36-56 — the real ceiling is NOT the number 100. Keys serialise as repeated ?areaKeys= values at ~40-50 encoded chars each, and past ~8KB embedded Tomcat's default max-http-header-size answers 400/431. That puts the hard ceiling near 160-200 keys. 100 was chosen as an already-shipped, user-visibly-documented value, not a measured maximum."
+static_finding_3 = "On overflow the MARKER feed fails 400/431 with NO error surface, while the listings half of the same screen truncates cleanly with a banner. Asymmetric and partly silent, and no test covers >100 keys."
+static_finding_4 = "The contract caps Directions at 5 and Local Destinations at 6 but places NO cap on direct AREA children — #2014 s4 expects the panel to list and search ALL direct AREA children and to solve density visually. A conformant final parent may legitimately have many direct AREA children, so the frontend must NOT rely on any cap."
+decision = "Do not attempt to prove that direct-child counts fit inside a request-line-encoded list. DEFINE SAFE BATCHING NOW: move keys off the request line into a request body or equivalent non-request-line channel so the ~8KB ceiling stops binding; if batching is retained it is DETERMINISTIC and aggregate totals are computed SERVER-SIDE across all batches (never client-side summed, per c4); any surviving truncation must be observable in BOTH the marker and listing feeds, never silent in the marker feed."
+phase_0_role = "Phase 0 measures the real maximum direct-AREA-child count under every valid final parent in order to SIZE the batch and produce the regression fixture — it sizes the design, it does not gate it. A measured maximum above roughly 150 makes the body-carried design mandatory rather than merely preferred."
+
+[corrections.c6_clustering_contract]
+owner_pr = 3
+must_define_and_test = [
+  "membership drawn ONLY from the current parent's direct AREA children",
+  "filtering BEFORE clustering (visibility predicate first, geometry second)",
+  "explicit stable area_key membership — never label parsing",
+  "DETERMINISTIC results for identical input, viewport and zoom",
+  "zoom-aware / screen-space grouping, or a clearly justified documented alternative",
+  "DETERMINISTIC representative-name ranking (a specified tie-break, not incidental array order)",
+  "cluster identity is PRESENTATION-ONLY",
+  "NO expectation that cluster identity survives a zoom or filter change",
+  "no node=, breadcrumb or history mutation",
+  "copy is '+N areas with matches' whenever membership is filter-affected",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DELIVERY STRUCTURE — Phase 0 + 6 PRs (user-approved shape, pending approval
+# of this revision). Full per-PR detail lives in pr-delivery-plan-pr-b.md.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[delivery_structure]
+shape = "Phase 0 validation gate (NO PR) + 6 PRs"
+superseded_shape = "revision 1's 9 PRs — presented to the user and NOT approved"
+parallel_prs = false
+parallel_prs_note = "Revision 1's option to run the clustering and history branches in parallel is WITHDRAWN per the user's ruling. Each PR starts from newly merged main."
+default_shopper_path_through_pr_5 = "COMPLETE legacy Areas journey at every entry point"
+default_shopper_path_after_pr_6 = "new Areas journey, sole path"
+only_default_changing_merge = 6
+
+[delivery_structure.phase_0]
+kind = "validation gate — no PR, no branch, no code change, no merge"
+deliverables = [
+  "promoted-hierarchy conformance for the real promoted Bangalore revision",
+  "maximum city-root breadth (<=5) and maximum Local-Destination breadth per Direction (<=6); one-child clusters flagged",
+  "proof that no public path contains a third CLUSTER level",
+  "MAXIMUM DIRECT AREA CHILD COUNT under any valid final parent — distinct from the 156-descendant finding, which measured total descendants",
+  "THE EXACT PUBLIC TYPED REQUEST/RESPONSE CONTRACT for the count boundary (correction 1), agreed before PR 1 starts so the frontend and backend halves are written against one shape",
+  "real count capability EXERCISED against the promoted revision: per-area eligible listing counts, per-area eligible school counts, authoritative deduplicated totals, ONE request per view, no N+1",
+  "confirmation or correction of the c5 backend/frontend ownership split",
+  "INDEX / QUERY-PLAN evidence for the per-area filtered count — currently UNKNOWN, not verified from entity annotations or Flyway migrations",
+  "THE COMPLETE LEGACY URL PRODUCER/CONSUMER LEDGER (correction 8): for every producer and consumer of areaKey, groupId, scope, region, node — source files, current behaviour, canonical replacement, owning PR, final support/retirement decision",
+  "THE EXACT PREVIEW CONFIG KEY and the owning parser module (correction 3)",
+  "baseline (typecheck, batched Vitest, build) and the salvage ledger carried forward from Deliverable 1",
+  "provenance check on the two carried defects: do absent anon leaf markers and the failing listing= peek reproduce on main, or are they branch-introduced?",
+  "resolution of node c:blr-metro:in-ka-bengaluru-kudlu-gate-in-ka-bengaluru-singasandra as CONFORMANT or INVALID with node-level evidence",
+]
+outcome = "exactly one of READY_FOR_IMPLEMENTATION, BLOCKED_BY_INVALID_PROMOTED_HIERARCHY, or BLOCKED_BY_MISSING_RUNTIME_EVIDENCE"
+outcome_3_added_by = "user correction 4 (2026-07-27)"
+decision_rule = "READY_FOR_IMPLEMENTATION requires deliverables 1, 2, 3, 4, 6 and 8 to be POSITIVELY EVIDENCED AGAINST A RUNNING BACKEND. If ANY of them is unexercised, the outcome is BLOCKED_BY_MISSING_RUNTIME_EVIDENCE. This is an enforcement, not a preference."
+blocked_invalid_meaning = "STOP. The remedy is upstream (regenerate -> blocking validation -> preview -> approve exact revision -> promote exact revision) and is a user scope decision, not a frontend change. Frontend flattening is forbidden, so there is no in-scope workaround."
+blocked_missing_evidence_meaning = "STOP. Do NOT return READY with a caveat. Obtain a running backend (the local fixture backend at ./scripts/dev/local-fixture-backend.sh is the intended route) and re-run Phase 0."
+retroactive_self_application = "This RECLASSIFIES the orchestrator's own revision-2 finding. Revision 2 reported 'no backend reachable, so I assert no direct-child maximum' and folded it into a plan that could still proceed. Under correction 4 that finding IS BLOCKED_BY_MISSING_RUNTIME_EVIDENCE. The measurement is not optional and cannot be substituted with a static argument."
+routing = "qa-fast -> explorer-planner -> backend-engineer (READ-ONLY, to establish the count contract and query plan) -> architect ONLY if the tree is invalid or the count boundary cannot meet the c5 contract. No implementation specialist writes production code in Phase 0."
+
+[[delivery_structure.pr]]
+number = 1
+title = "Safe preview seam and canonical Areas foundation"
+slices = "Slice 1 (validators + typed model, minus Phase-0 investigation) + Slice 2 part A + the extracted shared substrate + the backend count-boundary gaps"
+net_new_ui = false
+risk = "high"
+summary = "Builds the DUAL preview gate (deployment capability AND areasPreview=1), RESTORES the complete legacy path as default, and lands the typed destination model, validators, journey-aware final-AREA visibility, representative-name rules, +N arithmetic, deduplicated counts, the stale-response fingerprint and the shared map/panel count-response identity. This PR is also PLAN_REVIEW's requested Slice 3/4 risk mitigation: the arithmetic lands as pure functions with property-based tests and a real-data reconciliation BEFORE any pixel consumes it."
+scope_correction = "CORRECTED by correction 1 — PR 1 IS NO LONGER FRONTEND-ONLY. It carries backend work and backend-engineer routing."
+routing = "qa-fast -> architect (confirm the c5 split against Phase 0) -> backend-engineer (count boundary) -> frontend-engineer (seam, model, arithmetic) -> code-reviewer -> security-reviewer (anonymous public query) -> qa"
+security_review_required = true
+security_review_scope = "anonymous public count query: request-size and key-count bounds, city/key validation (a caller must not be able to pass keys from another city), duplicate keys, malformed filters, rate limiting, and the existing exposure and price-coarsening rules"
+evidence_added = ["indexed-query / query-plan (EXPLAIN) capture for the per-area filtered count", "request-count assertion proving ONE HTTP request per view (server-internal deterministic batching permitted; multiple HTTP round trips per view are not)"]
+backend_code_areas = [
+  "NavigationController.java — expose the per-area map; plumb school filters; tighten filter validation at :584-598",
+  "NavigationCountsResponse.java — add the per-area map and optional per-area school counts",
+  "AreaCountRollupService.java — surface the whole-city per-area map it ALREADY computes",
+  "AreaCountQuery.java — add the school-filter dimension",
+  "NEW school-count provider alongside PostgresAreaCountProvider.java in the same package",
+  "DiscoverListingPredicateBuilder — only if filter parity requires it",
+  "an index migration IF Phase 0's query-plan evidence shows one is missing",
+  "a NEW Testcontainers IT in the existing navigation IT package (per-area map correctness, school-count DISTINCT aggregation, filter awareness, one-query/no-N+1, school-in-two-areas fixture)",
+]
+deferred_out_of_pr_1 = [
+  "macroRegionResolverDeleted.test.ts as an active deletion guard — DEFERRED to PR 6 (correction 5); PR 1 restores the resolver AND its behaviour coverage, and audits staticSweep assertions INDIVIDUALLY for the same class of conflict rather than disabling the file wholesale",
+  "the groupRegionLabel.ts School-side relocation — DEFERRED to PR 6 (correction 6); because PR 1 RESTORES legacy panels, importer ownership can only be assessed after restoration against newly merged main",
+  "the listings/marker request-line key list fix — belongs to PR 4, because the ~8KB max-http-header-size risk lives in the LISTINGS feed, not the counts feed",
+]
+
+[[delivery_structure.pr]]
+number = 2
+title = "Complete desktop shallow navigation"
+slices = "Slice 3 + Slice 5"
+risk = "high"
+summary = "City-root Direction UI, Local-Destination/direct-AREA UI, shared map/panel selection, direct-search convergence, bounded breadcrumb, canonical-parent hierarchy Back, browser history and CameraIntent fits. Excludes visual AREA clustering. Removes the dead breadcrumb-collapse apparatus per overrule O-2."
+mobile_smoke_required = true
+
+[[delivery_structure.pr]]
+number = 3
+title = "Visual AREA clustering and single-AREA selection"
+slices = "Slice 4"
+risk = "high"
+summary = "Zoom-aware visual AREA clusters with explicit stable member keys, deterministic representative names, '+N areas with matches', listing and optional school counts, Tap to zoom, focused panel subset with explanation, Show all areas/reset, and the comfortable single-AREA marker. No hierarchy or history mutation."
+mobile_smoke_required = true
+
+[[delivery_structure.pr]]
+number = 4
+title = "AREA listings and restoration parity"
+slices = "Slice 7"
+risk = "medium"
+summary = "AREA to listing markers/results, filters/cards/Browse All, Schools SHORTCUT ONLY, anonymous/public exposure, listing peek, detail Back to results, empty/error/retry. Gate F security review is mandatory."
+mobile_smoke_required = true
+gate_f_security_review = true
+
+[[delivery_structure.pr]]
+number = 5
+title = "Mobile list-first journey"
+slices = "Slice 6"
+risk = "medium"
+summary = "Mobile navigation stack, named canonical-parent Back, full-screen Map/List, mobile visual clusters and bottom sheet, Show all areas, listing/restoration parity, 390x844 reachability."
+
+[[delivery_structure.pr]]
+number = 6
+title = "Final cutover and Gate 3"
+slices = "Slice 2 part B + Slice 8"
+risk = "high"
+summary = "Old/new count and ancestry convergence, new journey becomes default, preview gate AND its parser module REMOVED, AREAS-EXCLUSIVE legacy code deleted with proven ownership, the three ?areaKey= producers migrated, permanence guards restored, groupRegionLabel re-audited then relocated, residual test coverage re-homed, complete Discover E2E, visual baselines, #1943 retest, revert rehearsal. Stops at USER_MERGE_APPROVAL_REQUIRED."
+only_default_changing_merge = true
+deletion_scope_correction = "CORRECTED by correction 8's investigation. PR 6 deletes AREAS-EXCLUSIVE legacy code, NOT 'all legacy Areas code'. Only `node` is Areas-exclusive. `region` (agricultural-only), `scope` (residential + resolveScope), `groupId` (also school-first level 2) and `areaKey` (also school-first hybrid plus three area-guide producers) all have LIVE NON-AREAS CONSUMERS THAT MUST KEEP WORKING. Any wording implying a blanket deletion is wrong."
+rollback_correction = "CORRECTED by correction 7. This repository SQUASH-MERGES PRs, so internal commits inside PR 6 are review organisation only and are NOT the production rollback boundary. Revision 2's claim that the flip and the deletions could be reverted separately as commits is WITHDRAWN. The rollback is: REVERT THE PR 6 SQUASH-MERGE SHA. Before requesting merge approval, a REVERT REHEARSAL on a temporary branch must prove that reverting the prospective final squash restores (a) legacy default routing, (b) legacy panels and helpers, (c) the preview gate, (d) the required legacy tests."
+prerequisite = "the correction-8 legacy producer ledger must be FULLY DISCHARGED — no compatibility helper may be deleted until every in-repository producer has migrated to canonical node= or been intentionally retired with tests."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# USER-LOCKED CORRECTIONS, ROUND 2 (2026-07-27). 14 mandatory corrections to
+# delivery-plan revision 2. Compliance table: pr-delivery-plan-pr-b.md § 16.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[corrections_v4.c1_backend_count_boundary]
+requirement = "PR 1 locked backend-owned counts but listed only frontend files and frontend routing. Phase 0 must produce the exact public typed request/response contract. PR 1 must name the required backend controller, DTO, service, repository/query and Testcontainers areas, OR explicitly prove an existing endpoint already satisfies the complete contract. Add backend-engineer routing, a focused security review, and indexed-query/request-count evidence."
+investigated = true
+finding_already_exists = "An anonymous-public endpoint GET /api/discover/cities/{city}/navigation/{nodeKey}/counts ALREADY EXISTS (NavigationController.java:546-576). PostgresAreaCountProvider.java:40-83 already computes per-area counts via 'SELECT pl.area_key, COUNT(*) ... GROUP BY area_key' with filter predicates. AreaCountRollupService.java:75-95 already returns a WHOLE-CITY Map<area_key,count> in ONE CACHED QUERY per city+revision+filter context and rolls up node and child totals from it. Filter awareness already covers listing purpose (sale/rent) and propertyType."
+finding_that_most_changes_the_plan = "THE REQUEST-LINE PROBLEM DOES NOT APPLY TO THE COUNTS FEED AT ALL. Because areaCountsForCity already computes a whole-city per-area map in one cached query keyed by nodeKey + filters, the frontend never needs to send a list of area keys to get counts. Revision 2's 'keys must be carried in a request body' requirement was aimed at the WRONG FEED — the ~8KB max-http-header-size risk belongs to the LISTINGS/MARKER feed, which does use a repeated ?areaKeys= list (navigationModel.ts:36-56, MAX_AREA_KEYS_PER_REQUEST = 100). That work is therefore relocated to PR 4."
+gaps_pr_1_must_close = [
+  "PER-AREA MAP NOT EXPOSED — NavigationCountsResponse.java:18-25 returns only {nodeKey, count, children[], revisionId}, so the frontend cannot apply a per-area visibility predicate from it",
+  "PER-AREA ELIGIBLE SCHOOL COUNTS ENTIRELY ABSENT — no provider, no query, no response field",
+  "SCHOOL FILTERS NOT PLUMBED — no school filter parameter in getCounts, AreaCountQuery or the provider",
+  "AGGREGATE DEDUP SEMANTICS UNPROVEN — pl.area_key is a single column on property_listings, implying one area per listing and therefore that summing per-area LISTING counts is safe; SCHOOLS are the real dedup risk because they are radius-based and one school can serve several areas",
+  "VALIDATION GAPS — purpose is validated against an allowlist but propertyType is accepted as-is; there is no key-count bound, no city/key ownership validation and no rate limiting on this path",
+  "INDEX / QUERY-PLAN EVIDENCE UNKNOWN — whether (area_key, purpose, property_type) is indexed was not verifiable from entity annotations or Flyway migrations",
+]
+net_effect = "The backend work is NARROWER than a new controller/service/repository stack — it is additive to an existing endpoint. That is why the audit mattered: it removed a speculative build from the plan. But it is NOT zero, and PR 1 is no longer frontend-only."
+
+[corrections_v4.c2_label_split]
+requirement = "Split representative-name rules between structural hierarchy destinations and final visual AREA clusters. Update AC1.7 and AC1.8."
+structural_levels = "Direction and Local Destination: STABLE CANONICAL representative names; names do NOT change with filters; identity, parentage and position remain filter-invariant; copy is 'N areas with matches' or 'No matches with current filters'; DO NOT use a '+N' form, because a '+N' implies the displayed stable names are themselves matching members, which is not guaranteed."
+visual_cluster_level = "Final visual AREA cluster: representative names chosen ONLY from visible AREA members; copy is '+N areas with matches'; membership and names MAY change after filter or zoom changes; hierarchy remains unchanged."
+supersedes = "[contract.journey_aware_visibility].arithmetic_consistency_decision_SUPERSEDED — revision 3's decision to use visible-member-derived '+N' at every level is overruled."
+
+[corrections_v4.c3_preview_mechanism]
+requirement = "Do not leave environment/config versus query parameter open. Use a DUAL preview gate."
+locked = "deployment preview capability ENABLED **AND** areasPreview=1. Only then may the new journey mount. In normal production the capability is disabled, so the URL parameter ALONE has no effect and a leaked or guessed areasPreview=1 cannot expose the partial journey."
+parameter_rules = ["must survive preview navigation and refresh", "must NEVER be written by an ordinary production interaction", "must NEVER become part of a canonical share URL", "deleted in PR 6"]
+must_record_in_phase_0_or_pr_1 = "the exact chosen config key AND the owning parser module (a single owner, not scattered reads)"
+
+[corrections_v4.c4_third_phase_0_outcome]
+requirement = "Add BLOCKED_BY_MISSING_RUNTIME_EVIDENCE. Do not return READY when the promoted revision, direct-child breadth or real count capability could not be exercised."
+applied_at = "[delivery_structure.phase_0].outcome, .decision_rule, .blocked_missing_evidence_meaning, .retroactive_self_application"
+retroactive = "The orchestrator's own revision-2 'no backend reachable' finding IS this outcome, not a caveat inside a READY verdict."
+
+[corrections_v4.c5_macroregionresolver_test_contradiction]
+requirement = "While macroRegionResolver is restored for the legacy path, macroRegionResolverDeleted.test.ts cannot remain active as a deletion guard."
+pr_1 = "restore macroRegionResolver AND the behaviour coverage the legacy path needs; DEACTIVATE/DEFER the deletion-permanence test; audit staticSweep assertions INDIVIDUALLY for the same class of conflict (its assertions forbidding label-to-slug derivation may also contradict a restored legacy path) rather than disabling the file wholesale"
+pr_6 = "delete the resolver and the legacy tests, THEN add back the deletion-permanence guard and restore any staticSweep assertions deferred in PR 1"
+
+[corrections_v4.c6_defer_groupregionlabel]
+requirement = "Do not relocate groupRegionLabel in PR 1."
+reason = "PR 1 RESTORES legacy panels, so importer ownership can only be assessed after restoration against newly merged main."
+through_prs_1_to_5 = "leave the helper exactly where it is"
+pr_6 = "after legacy deletion: rerun the importer audit; relocate School-side ONLY IF School is then the sole consumer; preserve byte-equivalent behaviour and tests"
+
+[corrections_v4.c7_pr6_rollback_semantics]
+requirement = "This repository squash-merges PRs. Internal commits inside PR 6 are review organisation only and are NOT the production rollback boundary."
+withdrawn = "Revision 2's claim that 'the flip and the deletions are separate commits, so a revert can restore the legacy default without unwinding the evidence work' is WITHDRAWN as wrong."
+rollback = "REVERT THE PR 6 SQUASH-MERGE SHA. That single revert restores the legacy default as the shopper path while leaving PRs 1-5's new path present but unreachable (the preview gate returns with it)."
+revert_rehearsal_required = "Before USER_MERGE_APPROVAL_REQUIRED, prove ON A TEMPORARY BRANCH that reverting the prospective final squash restores (a) legacy default routing, (b) legacy panels and helpers, (c) the preview gate, (d) the required legacy tests. Recorded as AC6.14."
+
+[corrections_v4.c8_legacy_producer_inventory]
+requirement = "Phase 0 must inventory every producer and consumer of areaKey, groupId, scope, region, node with source files, current behaviour, canonical replacement, owning PR and final retirement decision. PR 6 cannot delete compatibility helpers until every in-repository producer has migrated or been intentionally retired with tests."
+investigated = true
+finding_that_narrows_pr_6 = "ONLY `node` IS AREAS-EXCLUSIVE. `region` is agricultural-first only (corridor direction) — and Agricultural is out of scope, so region is untouchable. `scope` serves the residential scope axis and resolveScope classification. `groupId` is consumed by school-first for its school-group-areas level 2. `areaKey` is consumed by school-first hybrid AND by three area-guide producers. Four of the five parameters have LIVE NON-AREAS CONSUMERS THAT MUST KEEP WORKING."
+consequence = "PR 6 deletes AREAS-EXCLUSIVE legacy code and Areas-exclusive read paths only. Any plan wording implying a blanket 'delete all legacy Areas code' is wrong and has been removed."
+verified_producers_at_risk = [
+  "AreaCtaBlock.tsx:19 — emits /discover?city=${citySlug}&areaKey=${encodeURIComponent(areaKey)} — BLANK PANEL after cutover if not migrated",
+  "AreaGuide.tsx:96 — same shape (no-snapshot fallback) — BLANK PANEL",
+  "AreaGuideHero.tsx:87 — same shape (hero CTA) — BLANK PANEL",
+]
+also_affected = "a body of E2E specs deep-link with legacy params and will need migration (no user-facing risk, but they will fail)"
+locked_rule = "PR 6 may not delete a compatibility helper until every in-repository producer has migrated to canonical node= or been intentionally retired with tests. Direct area search, AreaGuide, AreaCtaBlock and deep links must not become blank or land at the wrong level."
+
+[corrections_v4.c9_cluster_identity_ephemeral]
+requirement = "Canonical parent and AREA identity are stable. Visual cluster identity is ephemeral and is NOT expected to survive zoom, viewport, filter or membership changes. Remove any statement that cluster identity remains stable as membership shrinks."
+removed_sentence = "Revision 2 contained 'canonical identity stays stable so cluster identity is stable as membership shrinks'. REMOVED — it was wrong and contradicted the contract it was meant to support."
+new_required_test = "focus a visual cluster -> change filters so membership changes or disappears entirely -> stale focus is CLEARED OR RECONCILED -> panel and map both render from the NEW visible set -> node=, breadcrumb and history remain UNCHANGED"
+applies_to = "PR 3 (desktop) and PR 5 (mobile bottom sheet)"
+
+[corrections_v4.c10_lock_six_prs]
+requirement = "No additional #1956 PR may be created without explicit user approval."
+carried_defect_routing = "branch-introduced AND Gate-3-required -> PR 4. Pre-existing BUT Gate-3-required -> PR 4. Unrelated and non-blocking -> an EXISTING EXTERNAL ISSUE, not a new #1956 PR."
+removed_wording = "revision 2's allowance for 'a standalone fix PR landing at any time' is REMOVED"
+
+[corrections_v4.c11_equivalence_wording]
+requirement = "Replace 'byte-identically to main'. Do not use binary or byte equality as a React acceptance criterion."
+replacement_criterion = ["functionally equivalent", "visually equivalent at the locked viewports (1366x768 and 390x844)", "identical routing outcome", "same selectable destinations", "same filters and listing behaviour", "no material visual regression"]
+applied_at = "PR 1 AC1.1; every place the legacy default must be shown unchanged"
+
+[corrections_v4.c12_authoritative_result_identity]
+hierarchy_level = "ONE count-response identity owns map destination counts AND panel destination counts."
+area_listing_level = "ONE listing-query result identity owns cards, listing markers and the total."
+prohibition = "Do NOT redesign the full listing-results API inside PR 1 and do NOT drift into #2016. PR 1 establishes the navigation-count identity and seams the listing identity; PR 4 owns the listing surface."
+
+[corrections_v4.c13_stale_response_protection]
+requirement = "PR 1 must define a node/filter/request fingerprint and ignore or cancel stale count responses."
+required_tests = [
+  "the response for filter A arriving AFTER filter B was applied is ignored",
+  "navigation changes before an earlier count response returns, and the earlier response is ignored",
+  "map and panel update ATOMICALLY from the same response, never one from an older response than the other",
+]
+owner = "PR 1, in useDiscoverNavigationCounts.ts"
+
+[corrections_v4.c14_github_visible_ledger]
+requirement = "Keep the append-only TOML ledger AND additionally post a comment on #1956 after every merge."
+comment_contents = ["PR and squash SHA", "ACs completed", "default shopper path", "preview status", "remaining legacy code", "open risks and deviations", "exact next PR scope"]
+applied_at = "[delivery_ledger].github_comment_required and the ledger rules"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FINAL-MOCK RECONCILIATION (revision 5, 2026-07-27). Design root:
+# docs/design/retrends-design-system/ui_kits/new_discover/ (main = c13dc017).
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REVISION 4.1 — bounded 11-point correction pass (2026-07-27).
+# Detail and rationale: pr-delivery-plan-pr-b.md section 00.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[locked_contracts]
+note = "Revision 4.2 consolidation. These are the OPERATIVE contracts. There is no longer a 'preamble supersedes body' pattern — pr-delivery-plan-pr-b.md section 2 carries the same text as its own operative section, and its PR sections were physically rewritten to match."
+
+[locked_contracts.structural_copy]
+names = "STABLE CANONICAL representative names; do NOT change with filters"
+count_copy = "'N areas with matches'"
+zero_match_literal = "'No matches with current filters' — RESTORED AND LOCKED"
+plus_n_form = "NEVER used at structural levels"
+restoration_note = "Revision 4.1 withdrew this literal on the strength of a browser observation. That observation ('No matching listings in your 3 selected areas' / 'Your search is kept exactly as it is...') was made on the storyboard's Zero results tab, which is the MULTI-AREA / AREA_SET recovery state owned by #2018 — the walk explicitly could not reach a structural Direction/Local-Destination zero-match because filters exist only at the area/listings level. Conflating the two states was the error."
+
+[locked_contracts.cluster_copy]
+names = "chosen ONLY from visible members, by a deterministic ranking"
+identity = "ephemeral — not expected to survive zoom, viewport, filter or membership changes"
+arithmetic = "hiddenCount = visibleMemberCount - displayedRepresentativeCount"
+gt_zero = "'+N areas with matches'"
+eq_zero = "'N areas with matches'"
+never = "'+0' is never emitted"
+examples = ["visible 5 / displayed 2 -> '+3 areas with matches'", "visible 2 / displayed 2 -> '2 areas with matches'"]
+
+[locked_contracts.count_filter_parity]
+decision = "ALL counts displayed as 'matches' use EVERY currently active applicable property filter."
+rejected_alternative = "labelling hierarchy counts as purpose/property-type-only counts that do not claim to reflect bedrooms/verification/other filters"
+rationale = "DiscoverListingPredicateBuilder already supports the wider filter surface for cards and markers, so the predicate logic exists; AreaCountQuery simply carries a narrower field set and extending it is modest and well-bounded. The alternative would mean a count captioned 'matches' that does not reflect the shopper's active filters — exactly the quietly-wrong number this plan exists to prevent."
+consequence = "AreaCountQuery is extended to carry the same normalised filter model cards and markers use, for the applicable subset. A count labelled 'matches' must never overstate relative to the results it advertises. Where a filter is not applicable at a level it is simply absent from that level's query, never silently ignored while still claiming 'matches'."
+owner = "PR 1 AC1.16 and the count-endpoint contract"
+
+[locked_contracts.school_count]
+definition = "schoolCount = the number of DISTINCT schools PHYSICALLY LOCATED INSIDE the represented canonical area, or inside the represented member areas."
+dedup = "stable school identity; aggregate DISTINCT schools across member areas"
+not_adopted = "'serving an area'; radius, catchment, travel-time, admission or quality semantics"
+filters = "no school board/level filters on the #1956 navigation-count endpoint unless Phase 0 finds an existing in-scope consumer that already requires them"
+status = "secondary metadata only; the full Schools-first radius journey is outside #1956 (owned by #1954)"
+levels_exhaustive = ["Direction", "Local Destination", "visual AREA cluster", "individual AREA", "the selected shared-marker variants of those"]
+withdrawn = "the 'school serving two areas' fixture and radius-based dedup wording are DELETED from PR 1 tests, PR 3 risk 3.4 and the dependency diagram — they described a data model the contract does not adopt"
+display_ordering_areas_first = "listing count PRIMARY; schoolCount OPTIONAL SECONDARY metadata"
+display_ordering_schools_first = "PRESERVE the already-delivered #1954 behaviour and the current #2014 marker contract; #1956 does NOT redesign field ordering there"
+mock_ordering_rejected = "the mock's school-count-PRIMARY marker ordering is explicitly NOT adopted by #1956 — see [forward_ownership].school_primary_marker"
+ruling_url = "https://github.com/gautirao/udupi-property-explorer/issues/1956#issuecomment-5094909370"
+
+[locked_contracts.cache_tolerance]
+accepted_discrepancy_window = "60 s worst case — 30 s application count cache plus 30 s shared HTTP cache, additive. PROVISIONAL_MVP_BUDGET_REQUIRES_USER_APPROVAL"
+forces_fresh_count_on_area_transition = "NO — and it does not need to. The AREA listing view's total is owned by the LISTING-QUERY result identity, never by the hierarchy count cache. The two numbers are never displayed side by side for the same scope, so the inconsistency is removed structurally rather than by cache-busting."
+freshness_rule = "DIRECTIONAL: count freshness <= listing freshness, so a count is never staler than the results it advertises. Already satisfied — counts max-age=30, public listings max-age=60 per #1248. Any future change must preserve the inequality."
+divergence_response = "cannot arise for one scope by construction; if it ever does, the listing-query total wins and the count is not re-displayed in that view"
+gate_3_cache_states = "tests run WARM and COLD, both, explicitly (PR 6 AC6.15)"
+
+[locked_contracts.performance_budget_rule]
+rule = "A breached performance budget causes optimisation, a budget review, or a blocking verdict. It NEVER authorises truncation or altered shopper semantics."
+never_justifies = ["truncating canonical children", "dropping AREA markers", "omitting counts", "replacing real destinations with a 'top N'", "changing the hierarchy to fit a payload size", "delaying or hiding a feature to hit a request-count budget"]
+principle = "If a budget cannot be met without changing what the shopper sees, the budget is wrong or the implementation needs optimising — the product contract does not bend."
+request_budget_split_by_state = "hierarchy navigation view <=2; AREA listing view <=3; mobile preview/detail transition <=1 additional. All PROVISIONAL_MVP_BUDGET_REQUIRES_USER_APPROVAL. One number across three different state types was ambiguous."
+
+[locked_contracts.opensearch_parity]
+rule = "OpenSearch and caching must NEVER change what the shopper sees — only how quickly it is produced."
+before_go_live = "parity tests must guarantee IDENTICAL AREA membership, Buy/Rent semantics, filter semantics, counts, markers, public exposure and sorting versus the Postgres path"
+principle = "A faster path that returns a different set is a correctness regression, not an optimisation."
+
+[corrections_v41]
+structure_unchanged = "Phase 0 -> PR1 -> PR2 -> PR3 -> PR4 -> PR5 -> PR6; count LOCKED at 6; order unchanged; no seventh PR"
+all_eleven_applied = true
+consolidated_in_4_2 = "These entries record the DECISION HISTORY. The operative text now lives in [locked_contracts] above and in the rewritten PR sections of pr-delivery-plan-pr-b.md. Nothing here supersedes the plan; the plan matches these decisions."
+
+[corrections_v41.c1_phase0_circularity]
+status = "REMOVED"
+problem = "Phase 0 required working per-area school counts to be exercised before PR 1 may start, while PR 1 is what builds them — circular, making READY_FOR_IMPLEMENTATION unreachable."
+phase_0_now_requires = [
+  "existing LISTING-count capability exercised against the promoted Bangalore revision (legitimately runtime-checkable — PostgresAreaCountProvider is already shipped)",
+  "existing school data source + school-to-area identity relationship identified (which table/column, and whether 1:1, 1:N or N:M)",
+  "a representative school-count query / query-plan feasibility check",
+  "the exact proposed typed school-count response contract",
+  "proof that stable school IDs and canonical area keys exist for deduplication",
+  "confirmation the proposed query can be implemented without N+1",
+]
+pr_1_owns = "implementation of per-area school counts, runtime verification, Testcontainers evidence, dedup evidence, performance evidence"
+rule = "Phase 0 must not require runtime evidence for production code PR 1 has not built yet. The three outcomes are unchanged; BLOCKED_BY_MISSING_RUNTIME_EVIDENCE applies to EXISTING capabilities, not to unbuilt school counts."
+
+[corrections_v41.c2_school_count_contract]
+definition = "schoolCount = the number of DISTINCT schools PHYSICALLY LOCATED INSIDE the represented canonical area, or inside the represented member areas."
+rules = [
+  "deduplicate using stable school identity",
+  "aggregate DISTINCT schools across member areas",
+  "'serving an area' is NOT the same as 'located inside an area' and is NOT adopted",
+  "no radius, catchment, travel-time, admission or quality semantics",
+  "no school board/level filters on the #1956 navigation-count endpoint unless Phase 0 finds an existing in-scope consumer that already requires them",
+  "school counts are SECONDARY METADATA in #1956",
+  "the full Schools-first radius journey stays OUTSIDE #1956",
+]
+levels_exhaustive = ["Direction", "Local Destination", "visual AREA cluster", "individual AREA", "the selected shared-marker variants of those"]
+withdrawn_fixture = "Revision 4's 'a school serving two areas must be counted once' fixture is WITHDRAWN — under located-inside semantics a school belongs to exactly one canonical area, so that fixture described a data model the contract does not adopt."
+corrected_self_claim = "This also CORRECTS my revision-4 claim that 'schools, not listings, are the real dedup risk'. Under the locked semantics that is no longer true. The dedup requirement is about aggregating DISTINCT schools across a cluster's member areas. Phase 0 item 2 settles the real cardinality; if the model is genuinely N:M this clause is revisited BEFORE PR 1 rather than assumed."
+
+[corrections_v41.c3_browser_walk_acs]
+structural_ac_s1 = "structural destination count copy NEVER uses a '+N' form"
+structural_ac_s2 = "structural representative names are STABLE CANONICAL and do not change when filters change; counts may change"
+structural_ac_s3 = "SEMANTIC, deliberately not a locked literal string: 'A structural destination with no matching results remains visible in its canonical position and parentage, with explicit zero-result copy appropriate to the active Buy/Rent context.' Revision 4's hardcoded 'No matches with current filters' is WITHDRAWN — the browser walk found the app renders different wording, and exact copy requires product approval."
+cluster_ac_v1 = "hiddenCount = visibleMemberCount - displayedRepresentativeCount"
+cluster_ac_v2 = "hiddenCount > 0 -> '+N areas with matches'"
+cluster_ac_v3 = "hiddenCount == 0 -> 'N areas with matches'"
+cluster_ac_v4 = "NEVER emit '+0'"
+worked_examples = ["visible 5 / displayed 2 -> '+3 areas with matches'", "visible 2 / displayed 2 -> '2 areas with matches'"]
+f3_framing = "every remaining statement that zero-match structural visibility is 'explicitly against the mock' is REMOVED — the mock simply does not exercise that state (filters exist only at the area/listings level). Contract requirement, not a proven conflict."
+pr_5_risk = "Medium-High, consistently in every table and diagram"
+
+[corrections_v41.c4_preview_sheet_split]
+pr_4_owns = ["reusable selected-listing preview data contract", "anonymous-safe preview fields", "selected-listing identity", "relationship to the existing listing=<uuid> peek/detail flow", "Close semantics", "Back semantics", "restoration of prior listing-query result identity", "restoration of the same canonical AREA/filters/map camera", "NO hierarchy-parent navigation when closing a listing preview", "no listing-card or detail redesign"]
+pr_4_minimum_fields = ["image", "public-safe price", "property type", "bedrooms", "canonical area label", "listing identity", "View details action"]
+pr_5_owns = ["tapping a listing marker in mobile Map mode opens the preview sheet", "sheet visible without switching to List mode", "View details opens the EXISTING full listing detail", "Close returns to the same mobile Map state", "browser Back from detail returns to the same preview/result context where supported", "camera / active filters / result count / Map mode unchanged", "controls pointer/touch reachable at a TRUE 390x844"]
+made_operative_in = "revision 4.2 INTEGRATED this into the numbered ACs, tests, evidence and definition-of-ready of PR 4 (AC4.10, plus unit/integration/E2E entries and field 18) and PR 5 (AC5.10, plus its test and evidence entries). The amendment blocks were DELETED — there is one source of truth, not a box referencing supersession."
+
+[corrections_v41.c5_invariant_8]
+text = "The #1956 AREA surface must NOT render or implement AREA_SET / result-scope chip rows, Edit areas, Clear selected areas, Add nearby areas, Draw search area, Search this area, or Create alert."
+owns_only = ["the selected single canonical AREA", "listing results", "existing filters", "listing markers and cards", "listing peek/detail", "the existing Schools shortcut"]
+does_not_own = "the future general result-scope framework (#2016/#2017/#2015/#2019)"
+guards = "a static sweep asserting none of those control labels/test-ids appear in the Areas panel tree, plus a component test asserting the AREA panel renders no scope-chip row — mechanical, because the prototype renders all of them in the exact panel PR 4 edits"
+
+[corrections_v41.c6_count_endpoint_security]
+corrected_premise = "The endpoint is keyed by city (path) + canonical nodeKey (path) + normalised filter query params. It does NOT accept a submitted area-key list. Revision 4's requirements about duplicate submitted keys, request key-count bounds and cross-city submitted-key lists were IRRELEVANT and are REMOVED."
+review_scope = [
+  "does the nodeKey belong to the path city (the real authorisation question)",
+  "stale / unknown node behaviour",
+  "filter allowlists — listingPurpose is allowlisted; propertyType is trimmed but NOT allowlisted or case-normalised",
+  "filter length / value bounds — unbounded free-text propertyType is the cardinality vector",
+  "response-size bounds",
+  "cache-key cardinality",
+  "query-cost abuse",
+  "rate-limit policy",
+  "public/private data exposure",
+  "precise vs coarsened count policy for anonymous callers",
+  "malformed canonical identity",
+  "cache poisoning via unnormalised filter variants",
+]
+verified_issue = "The DB compares LOWER(property_type) (case-insensitive) but the cache key hashes the raw string, so 'Villa' and 'villa' create two entries for one logical query. Low severity, one-line fix, in a file PR 1 already edits."
+rate_limiting_finding = "DO NOT assert rate limiting must be added. VERIFIED: #1248 does not address it and there is NO global public-API rate-limit policy — the only limiters are per-actor booking and telemetry limiters. Rate limiting here would be NEW work; PR 1 records the finding rather than silently introducing a policy."
+open_design_choice = "whether school counts extend AreaCountQuery or get a SEPARATE school-count query type. A separate type is likely cleaner — AreaCountQuery is deliberately narrow. Decision assigned to architect inside PR 1."
+
+[corrections_v41.c7_areakeys_transport]
+decision = "REASSIGNED OUT of #1956 to #2016"
+q1_states = "listings feed at an AREA leaf; marker feed at an AREA leaf OR a CLUSTER node"
+q2_functions = "useDiscoverCityListings.ts (~144-158, params.append('areaKeys', k)) and useDiscoverFilteredMarkers.ts (~92-102 via buildDiscoverSearchParams)"
+q3_endpoints = "GET /api/discover/cities/{city}/listings (CityAreaListingsController:66, PUBLIC) and GET /api/discover/markers (DiscoverMarkersController:66, AUTHENTICATED), both binding List<String> areaKeys"
+q4_max_keys = "AREA leaf -> EXACTLY 1. CLUSTER node -> descendantAreaKeys.length (unbounded). Synthetic root -> 0."
+q5_can_valid_hierarchy_exceed = "only via the descendant-aggregate path at a CLUSTER node — never via a single-canonical-AREA state"
+q6_final_area_sends_one_key = "YES, confirmed — listingAreaKeys() returns [node.areaKey]"
+q7_is_it_2016_2017 = "YES — multi-area committed searches are AREA_SET work"
+deciding_evidence = "Question 6. #1956's terminal state sends exactly one key, and the frontend already caps every feed at 100 keys before anything leaves the browser. Redesigning a production endpoint over a theoretical generic-utility limit is exactly what the correction forbids."
+what_stays_in_1956 = "the SCOPING change (not the transport change): under the new contract the marker feed at a Direction/Local Destination must be scoped to DIRECT CHILDREN / journey-visible members, not aggregated descendantAreaKeys. That is a CORRECTNESS requirement, it stays in PR 3, and it independently removes the large-key-set path anyway."
+
+[corrections_v41.c8_legacy_producer_node_source]
+finding = "A supported source ALREADY EXISTS. No new backend work, so no PR-count change."
+endpoint = "GET /api/discover/cities/{city}/areas/{areaKey}/navigation-path (NavigationController ~122-145) takes an areaKey and returns the canonical node key PLUS full ancestry, constructed server-side via NavigationKeys.areaNodeKey(areaKey)"
+frontend_wrapper = "src/hooks/useDiscoverAreaNavigationPath.ts already wraps it; useAreaSearchConvergence.ts already converges direct area search onto a server-resolved nodeKey"
+binding_rule = "The frontend MUST NOT construct node keys itself. The formula happens to be 'a:' + areaKey (NavigationKeys.java:37-39) — hardcoding that client-side is exactly the guessed-template antipattern the correction forbids, and would recreate the macroRegionResolver inference problem. Producers resolve through the endpoint, never by string concatenation."
+producers = ["AreaCtaBlock.tsx:19", "AreaGuide.tsx:96", "AreaGuideHero.tsx:87", "direct area search", "E2E deep links"]
+assignment = "producer migration + convergence -> PR 2 (it already owns direct-search convergence). E2E deep-link migration -> PR 6 (it owns the cutover and the legacy-producer ledger discharge). No PR count change."
+compat_shim = "NOT recommended — the product is pre-launch and #1956 s18 says no legacy URL compatibility period is required."
+
+[corrections_v41.c9_rollback_rehearsal]
+executable_steps = [
+  "create a temp branch from post-PR5 main",
+  "merge/squash the PR 6 branch into ONE synthetic commit on that temp branch",
+  "run the final-cutover verification suite",
+  "revert that synthetic squash commit",
+  "rerun legacy-default routing verification",
+  "verify legacy panels, helpers and tests are restored",
+  "verify the preview gate returns",
+  "verify old producers and compatibility paths work again",
+]
+must_record = ["exact commands", "synthetic squash SHA", "synthetic revert SHA", "test results", "exact files restored", "resulting config state"]
+deployment_capability_rule = "The deployment preview capability must remain AVAILABLE BUT DISABLED throughout the cutover observation and rollback window. Do NOT delete or decommission the external capability configuration until the user explicitly closes the rollback window — a git revert cannot restore already-removed external deployment config."
+index_migration_requirements = ["locking/concurrency analysis", "estimated build time on representative data", "transaction/concurrent-index strategy", "deployment ordering", "rollback treatment", "post-deployment query-plan verification"]
+verified_constraint = "CREATE INDEX CONCURRENTLY is NOT usable — V13__add_hot_query_indexes.sql records that Supabase's pgBouncer transaction-pooling mode (port 6543) is incompatible with it. Any new index needs a brief exclusive-lock CREATE INDEX or a session-mode workaround. CURRENT RECOMMENDATION: no index migration in PR 1 unless the harness run shows a sequential scan at representative size."
+
+[corrections_v41.c10_document_consistency]
+single_terminal_state = "USER_RECONCILED_PLAN_APPROVAL_REQUIRED"
+removed = "the conflicting older terminal-state token was removed everywhere (2 occurrences found and replaced in pr-delivery-plan-pr-b.md; 0 in the other two artefacts). Verified by string count = 0 across all three files."
+reconciliation_table = "pr-delivery-plan-pr-b.md section 00.13 — plan version, Phase 0 outcomes, PR count, PR order, dependencies, risk levels, specialist routing, stop states, forbidden scope, rollback boundaries; VERIFIED by parsing this TOML, not asserted"
+
+# ── CORRECTION 11: Performance Analyst view ──────────────────────────────────
+
+[corrections_v41.c11_performance.already_exists]
+headline = "The source-agnostic read boundary ALREADY EXISTS, is named, and is the established repo convention. #1956 must NOT invent one."
+area_count_provider = "SHIPPED by #1955 PR A slice 2e AC12 — backend/.../discover/navigation/AreaCountProvider.java"
+postgres_impl = "SHIPPED — PostgresAreaCountProvider, one GROUP BY area_key per (city, filter context)"
+opensearch_stub = "SHIPPED as a deliberate loud-failing stub — OpenSearchAreaCountProvider throws UnsupportedOperationException so a flag flip fails loudly rather than reading as 'every area has zero listings'. VERIFIED BY DIRECT READ."
+subagent_correction = "The performance-analyst reported OpenSearchAreaCountProvider as UNKNOWN/not-found (a Glob miss). It DOES exist — I verified it myself. The seam is two-implementation-real, not interface-only."
+count_cache = "SHIPPED — AreaCountRollupService, Caffeine, key (citySlug, revisionId, normalizedFilterHash), ttl-seconds:30, max-size:500"
+port_convention = "ESTABLISHED by #1317 (DiscoverListingsPort, DiscoverMarkersPort, Routing*Service) and #1745 P5 (DiscoverSummaryPort). Single toggle discover.opensearch.enabled, default false repo-wide."
+consequence = "PR 1's backend work is SMALLER than revision 4 stated. Genuinely missing: (a) EXPOSING the per-area map in NavigationCountsResponse, (b) per-area school counts, (c) school-filter plumbing if required, (d) input-validation hardening. NO new provider, NO new interface, NO new cache."
+
+[corrections_v41.c11_performance.read_planes]
+structural = "canonical node, direct children, ancestry, canonical parent, bounds, descendant area identities, promoted revision — served by NavigationController.getNode/getAreaPath/resolve reading an IMMUTABLE NavigationGraph from NavigationGraphCache; NEVER touches a DB at read time; controllers use only typed accessors. OpenSearch does NOT replace this plane unless a later measured decision says so."
+listing_search_count = "listing results, marker results, totals, filter-aware per-area counts, Buy/Rent, visibility predicates, property filters — AreaCountProvider -> PostgresAreaCountProvider; DiscoverListingsService / DiscoverMarkersService. Expected replaceable by an OpenSearch-backed read provider."
+mixing_check = "CONFIRMED no graph traversal is embedded inside listing/search querying. The node/child rollup is pure in-memory arithmetic over one already-fetched map — no N+1."
+
+[corrections_v41.c11_performance.couplings]
+out_of_scope_1 = "PostgresAreaCountProvider uses DiscoverListingPredicateBuilder (Postgres SQL fragments) — correct pattern; SQL specifics belong inside the Postgres implementation"
+out_of_scope_2 = "no provider interface for DiscoverListingsService/DiscoverMarkersService equivalent to AreaCountProvider — pre-existing and broader; the #1317 Ports already cover the routing case"
+conditionally_in_scope = "AreaCountQuery (counts) and DiscoverListingPredicateBuilder.Filters (cards/markers) are DIFFERENT filter models. Counts vary only by citySlug/listingPurpose/propertyType/exposure; cards/markers additionally support bbox, polygon, school radius, keyword, areaKeys. Consistent by construction IF the #1956 counts view only ever applies purpose+propertyType. If PR 2/PR 3 apply any filter beyond those to a counts display, counts and cards WILL diverge — either extend AreaCountQuery or explicitly document counts as purpose/propertyType-scoped. DECISION ASSIGNED TO PR 1 as an AC."
+in_scope_fix = "propertyType cache-key case-normalisation — one line, in a file PR 1 edits"
+
+[corrections_v41.c11_performance.consistency]
+already_exposed = "revisionId is present on NavigationNodeResponse, NavigationPathResponse, NavigationCountsResponse and NavigationResolveResponse — structure-vs-counts mismatch is ALREADY detectable. DO NOT add a new version field."
+accepted_gap = "no listing/marker generation watermark, so counts-vs-cards-vs-markers share no consistency token; divergence is bounded by the 30s count-cache TTL. AreaCountRollupService's own documentation states this is deliberate. PR 1 must state it explicitly in its evidence so a reviewer does not mistake it for an omission."
+documented_future_requirement = "Counts, cards and markers for one committed view must use compatible query semantics and a compatible source generation."
+parity_tests = ["same public listing identities", "same AREA membership", "same Buy/Rent meaning", "same filter semantics including propertyType case-insensitivity", "same total", "same anonymous exposure/coarsening", "same marker membership", "deterministic stale/missing-index handling"]
+do_not_implement = "OpenSearch dual reads in #1956"
+
+[corrections_v41.c11_performance.harness]
+exists = "scripts/run_explain_harness.py — python3 scripts/run_explain_harness.py --volume=10k [--query=QP-x] [--db-url=... | $PERF_DB_URL], runs EXPLAIN (ANALYZE, BUFFERS) read-only, writes docs/audit/evidence/explain/live/<volume>/<QP-id>.txt"
+rule = "REUSE it. Do NOT build a competing harness."
+gap = "no GROUP BY area_key count path yet — but PostgresAreaCountProvider's SQL is deliberately a NAMED CONSTANT whose javadoc says it exists so a later EXPLAIN ANALYZE pass can run this exact shape. The extension is ONE QueryDef (QP-6) plus a params branch. That narrow extension is PR 1's work."
+pr_1_captures = ["count query path", "representative data size", "warm/cold execution time", "plan shape", "indexes used", "rows scanned", "result cardinality", "response bytes", "cache hit/miss state", "one-request-per-view evidence"]
+pr_4_captures = ["canonical AREA listing query", "marker query", "Buy and Rent", "representative filter combinations", "anonymous and authenticated public-safe paths", "warm/cold time", "response bytes", "any in-scope batching"]
+framing = "Postgres MVP baseline -> future OpenSearch parity and improvement baseline. NOT a Postgres optimisation project."
+index_reality = "Relevant indexes ALREADY exist: idx_property_listings_area_key (V13), idx_listing_area_key_status_created (V74), idx_property_listings_not_archived. Open empirical question: the query applies LOWER(pl.property_type) = LOWER(?) and a plain B-tree on property_type CANNOT serve a LOWER()-wrapped predicate. NO missing index is asserted — measure first."
+
+[corrections_v41.c11_performance.budgets]
+approved_rules_already_exist = "docs/new-discover-v2/06-target-architecture-and-pr-plan.md (Correction 6, approved): 'Final numerical targets stay repository- and environment-based — no invented SLO numbers — but the process is now enforceable' — capture a baseline with representative datasets, record the agreed budgets in the PR, and FAIL ACCEPTANCE if exceeded."
+existing_reference_points = "adoption triggers (P95 FTS > 200ms; ST_DWithin > 300ms; > 500K LIVE listings) and measured Postgres baselines in docs/audit/query-baseline-report.md (QP-1a COUNT 4.252ms at 10k rows)"
+provisional_new_numbers = "ALL tagged PROVISIONAL_MVP_BUDGET_REQUIRES_USER_APPROVAL: max HTTP requests per committed navigation view <=3; max count response <=8KB; max direct-child payload <=16KB; warm count <=150ms; cold count <=600ms; warm AREA listing <=300ms; cold AREA listing <=1200ms; frontend parse/render for the largest valid direct-child response <=50ms"
+non_numeric_guardrails = ["no N+1", "no unbounded cache-key growth", "no stale-response race", "no material regression vs the pre-PR baseline"]
+label = "MVP regression guardrails — NOT the hundred-city / hundred-million-listing operating envelope, which stays #2012 (whose own AC for approving p50/p95/p99 budgets is still open)"
+
+[corrections_v41.c11_performance.routing]
+phase_0 = "read-only review once the backend count contract + query evidence exist; outputs current-path diagram, cache inventory, query-plan baseline, response-size baseline, provisional MVP budgets, OpenSearch migration-seam assessment, and an APPROVE / APPROVE_WITH_LIMITS / REQUEST_CHANGES verdict"
+pr_1 = "count-query plan, count cache, response size, request count, stale-response protection, school-count aggregation, cache-key cardinality, index migration if any"
+pr_4 = "listing/marker query paths, cards/markers/total consistency, anonymous/public cache behaviour, future OpenSearch provider boundary"
+pr_6 = "BOUNDED MVP performance-regression verification ONLY. May block cutover only for a material regression caused by #1956, an unbounded query, N+1 behaviour, unsafe cache behaviour, unacceptable response growth, or a counts/cards/markers correctness inconsistency. MUST NOT block #1956 solely because future 500-city / 100M-listing certification is unfinished."
+draft_phase_0_verdict = "APPROVE_WITH_LIMITS — the counts read boundary is already well-designed and genuinely swap-ready. Limits: (1) capture PR 1 EXPLAIN evidence via the existing harness before merge, (2) fix the propertyType cache-key normalisation, (3) explicitly scope-document AreaCountQuery's narrower filter surface."
+
+[corrections_v41.c11_performance.opensearch_readiness]
+starting_point = "the EXISTING #1251 ADR docs/architecture/discover-opensearch-search-architecture.md — and the implementation track that followed it is LARGELY ALREADY BUILT (#1309-#1945 closed; #1352 and #1513 still open). #1956 implements NONE of it."
+covered_by_adr = ["city_slug", "area_key", "listing id", "status / is_duplicate / archived", "listing_purpose", "property_type", "bedrooms", "price_paise + price_bucket", "trust_tier / rera_number / ranking_score", "geo_point"]
+high_parity_risks = [
+  "PER-AREA COUNTS — the ADR defines NO terms aggregation on area_key. This is EXACTLY the gap OpenSearchAreaCountProvider throws on. -> follow-up amendment to #1251",
+  "HIERARCHY/NODE IDENTITY — no node_key or ancestry field in the ADR; but the structural plane is not expected to move to OpenSearch, so record only",
+]
+medium_risk = "property_type case-insensitivity must be replicated exactly; marker aggregation; stale-index fallback semantics"
+adr_scope_note = "the ADR explicitly places GET /api/discover/cities/{city}/listings OUT of OpenSearch scope"
+do_not_implement = ["cluster deployment", "index creation", "CDC", "Kafka", "outbox", "reindexing", "dual reads", "OpenSearch query caching"]
+
+[corrections_v41.c11_performance.ownership]
+fix_inside_1956 = [
+  "propertyType cache-key case-normalisation",
+  "capture PR 1 EXPLAIN evidence via the EXISTING harness (a baseline #1956 itself creates the need for)",
+  "settle whether the counts view applies filters beyond purpose+propertyType, and document or extend accordingly",
+  "confirm empirically whether the property-type index serves the LOWER() predicate",
+]
+record_against_post_mvp = [
+  "building the real OpenSearchAreaCountProvider",
+  "unifying one filter model across counts/cards/markers",
+  "a counts<->cards<->markers generation watermark",
+  "provider interfaces for listing/marker read paths beyond the existing Ports",
+  "cache metrics/observability",
+  "CDN/Redis design",
+  "multi-city cache capacity",
+  "load testing",
+  "final p95/p99 envelope",
+]
+new_issue_needed = false
+new_issue_note = "No new issue is proposed — existing performance issues and ADRs already own every item above."
+
+[final_mock_reconciliation]
+design_root = "docs/design/retrends-design-system/ui_kits/new_discover/"
+landed_via = "PR #2022, commit c13dc017"
+sibling_kit = "docs/design/retrends-design-system/ui_kits/discover-scopes/ — NOT #1956's design root; its README declares it is for #2020, extending ui_kits/discover/, covering #2016/#2015/#2017/#2018/#2019/#2014"
+structure_verdict = "UNCHANGED — Phase 0 + 6 PRs, count LOCKED at 6"
+pr_count_change = "none"
+only_structural_adjustment = "INTRA-PR: the listing-preview-sheet splits between PR 4 (data + restoration contract) and PR 5 (mobile Map-mode presentation). Changes neither count, merge order nor rollback boundary."
+move_to_follow_up_items = 0
+move_to_follow_up_note = "The 4th classification the brief requested is EMPTY. No salvage-branch work has drifted into #2015/#2016-#2021. Checkpoints A-D are navigation core, URL/state domains, breadcrumb/overlay, camera orchestration, marker resolution, panels and tests — all inside #1956's remit. FlatAreaFallbackPanel is a no-hierarchy-city fallback, not a result-scope feature."
+
+[final_mock_reconciliation.corroborates_contract]
+note = "The mock AGREES with the contract on every point that governs PR boundaries. This is the most important reconciliation result."
+items = [
+  "both shallow shapes implemented (areas-region-clusters = Direction with Local Destinations; areas-region-areas = Direction straight to AREAs)",
+  "NO third public CLUSTER level",
+  "visual clusters move the camera only — breadcrumb, node= and result scope unchanged",
+  "counts computed over areas WITH MATCHES (journey-aware visibility)",
+  "map/panel sync as a CSS class toggle, never a marker rebuild (also a perf protection worth adopting)",
+  "1366x768 and 390x844 as the two evidence viewports",
+  "visual cluster copy '+N areas with matches' — matches the locked cluster-level copy",
+]
+
+[final_mock_reconciliation.verified_main_state]
+main_sha = "c13dc017"
+commit_is_design_only = "VERIFIED — 33 files, 100% under docs/design/, non-design count = 0"
+baseline_staleness = "NOT STALE. The commit cannot affect tsc, Vitest, backend tests or the Vite build of application code, so revision 3's baseline and the prior backend audit both stand. Re-running would reproduce a number that cannot have moved."
+routing_seam_on_main = "VERIFIED — DiscoverRightPanelContainer.tsx on main is 484 lines with NO DiscoverAreasJourneyPanel, NO 'area-groups-landing' case and NO area-first gate. DiscoverRightPanel.tsx has FOUR live <AreaGroupsLandingPanel> render sites (1406/1442/1484/1516). macroRegionResolver is a LIVE import at DiscoverRightPanel.tsx:616."
+consequence_1 = "PR 1 INTRODUCES a journey that does not exist on main rather than narrowing an existing gate — the dual preview gate is MORE clearly necessary, not less."
+consequence_2 = "Correction 2's no-early-deletion rule is now a HARD requirement: deleting macroRegionResolver would break a live typed import on main."
+consequence_3 = "PR 1's AreaGroup*Panel 'restoration' is, against main, simply NOT DELETING — cheaper than revision 3 assumed."
+salvage_worktree = "branch issue-1956-pr-b-frontend-areas-journey, ahead 3 / behind 1 (behind = the design commit only); checkpoint D's 44 tracked + 12 untracked changes intact. Nothing reset, cleaned, rebased, deleted or overwritten."
+
+[final_mock_reconciliation.browser_walk]
+status = "COMPLETE — Playwright/headless Chromium against experience.html"
+method_note = "MUST serve from the retrends-design-system root, not new_discover/ — the kit loads ../../_ds_bundle.js and ../../styles.css; serving the design root alone 404s them and the app throws 'Cannot read properties of undefined (reading Icon)' and never renders."
+wrapper = "experience.html is a STORYBOARD wrapper (tabs per journey + 1366x768 / 390x844 canvas toggles) embedding the real app in a fixed preview canvas."
+supersedes = "parts of [final_mock_reconciliation.conflicts] — see corrections below. Detail: final-mock-reconciliation.md section 9."
+
+[final_mock_reconciliation.browser_walk.corrections]
+f2_dissolves = "OBSERVED: structural Direction/Local-Destination cards use ONLY the plain form — verbatim '13 areas with matches', '7 areas with matches', '3 areas with matches' — and NEVER a '+N'. The mock ALREADY MATCHES the user's correction 2 at structural level. My F-2 rested on FUNCTIONAL_AUDIT lines 282-283, which the running app contradicts; per the precedence rule OBSERVED WINS. The F-2 product ruling is NO LONGER NEEDED."
+cluster_plus_rule_refined = "OBSERVED: both forms appear on the SAME cluster surface, conditionally — 'Hebbal · Nagawara / +3 areas with matches / 98 listings' (named areas are a subset) vs 'Yelahanka · Jakkur / 2 areas with matches / 53 listings' (named areas ARE the complete set, no plus). ADOPT this conditional rule: emit the '+' ONLY when visible members exceed displayed representatives. Better than the flat lock."
+zero_match_copy_corrected = "OBSERVED verbatim: 'No matching listings in your 3 selected areas' / 'Your search is kept exactly as it is. Nothing here widens it for you.' / 'No nearby area has matches with these filters either. A filter change below is the honest next step.' — NOT 'No matches with current filters'. The previously locked string came from the audit's correction-delta prose, not from the app. CORRECTED."
+f3_downgraded = "F-3 goes from PRODUCT_CONFLICT to 'a contract requirement the mock does not exercise'. OBSERVED: filters (TYPE/BEDS/BUDGET) exist ONLY at the area/listings level; Direction and Local-Destination levels have NO filter toolbar at all, only global Buy/Rent — so a filter-driven zero-match Direction may be unreachable in this design. INCONCLUSIVE, not contradicted. The requirement stands; 'explicitly against the mock' is WITHDRAWN."
+preview_absent_confirmed = "OBSERVED: page.locator('text=Preview').count() = 0 at the landing state, after entering a Direction, and inside the Add-nearby-areas draft panel (whose only actions are per-area Add, a commit reading 'Show 42 listings' with caption 'Honest total for Hebbal alone', and Cancel). Audit C8's residual-Preview claim did NOT reproduce. The brief's premise is confirmed."
+single_area_marker = "OBSERVED: after selecting an AREA the markers become listing/price pins — solid circular proximity-clustered badges reading '42 HOMES', '4 HOMES'. The named single-AREA card was not observed as a distinct pre-selection state, so it remains a contract requirement not directly evidenced by the mock."
+
+[final_mock_reconciliation.browser_walk.confirmations]
+five_directions = "OBSERVED with counts: North 249, East 169, South 191, West 126, Central 72. Heading 'Where in Bangalore?'."
+no_city_total_gate = "OBSERVED: the 807-listings / 28-areas total renders as a metadata strip above the panel, NOT a marker you must click first. Satisfies #2014 s2/s14 directly."
+max_regional_depth = "OBSERVED: exactly 2 regional levels (Direction, then Local Destination) before leaf AREAs. Panel eyebrow literally reads 'LOCAL DESTINATION'. NO third navigable regional level exists."
+breadcrumb_max = "OBSERVED 4 items: 'Bangalore › North Bangalore › Hebbal · Yelahanka › Hebbal'. Independently CONFIRMS overrule O-2 — at 4 items the retired collapse apparatus could never fire."
+cluster_distinctness = "OBSERVED: cluster markers are dashed/outlined and visually distinct from the solid structural cards, captioned 'Tap to zoom'. Panel copy: 'The dashed cluster on the map only zooms.' Satisfies the distinguishability AC and the presentation-only rule."
+back_copy = "OBSERVED one-level-up at every depth: '‹ Back to Bangalore', '‹ Back to North Bangalore', '‹ Back to areas in North', '‹ Back to schools in Hebbal · Yelahanka'. Copy nit for design: 'areas in North' vs the card's 'North Bangalore'."
+schools_radius_complete = "OBSERVED fully built: 'Homes within 5 km of Kensri School', radius selector 3 km (108 homes) / 5 km (168 homes) / 10 km (335 homes) with live counts, distance chips ('0.2 km from school'), distance sorting, 'Choose another school'. Reinforces: FULL Schools journey = separate issue, preserve only."
+schools_shortcut_copy = "OBSERVED: 'Schools in Hebbal — 12 schools · keeps this area ›'"
+hash_urls_decorative = "OBSERVED: page.goto to #r=south / #a=hebbal / #m=schools always renders the landing state. The manifest's hashes are documentation, not a routing contract."
+
+[final_mock_reconciliation.browser_walk.new_risks]
+scope_gravity_inside_the_area_panel = "OBSERVED and this is the more serious of the two. At the single-AREA level the panel renders eyebrow 'RESULT SCOPE — SELECTED AREAS', an 'Hebbal ×' chip, and an action row 'Edit areas / Clear selected areas / Draw search area / Create alert', plus 'Add nearby areas — Add up to 2 nearby areas ›'. Those are #2016/#2017/#2019 features sitting INSIDE the exact panel #1956 owns, and the scope chip row appears even for a SINGLE area. NEW FORBIDDEN-SCOPE LINE in every PR: #1956's AREA panel ships the listing surface and the Schools shortcut, and must NOT ship the scope chip row, Edit areas, Clear selected areas, Draw search area, Add nearby areas or Create alert."
+mobile_reflow_unverified = "OBSERVED: a genuine Playwright viewport resize to 390x844 did NOT trigger the mobile layout — the app kept rendering the desktop two-column map+panel, shrunk, with no reflow and no 'List | Map' toggle. The mobile layout appears ONLY via the storyboard's staged 'Mobile' tab. THE MOCK PROVES A MOBILE DESIGN, NOT A WORKING MOBILE REFLOW. PR 5 must build and verify real media-query behaviour at a true 390x844 viewport and may NOT cite the mock as reflow evidence. PR 5 risk rises Medium -> Medium-High; position and scope unchanged. This also makes the mandatory 390x844 smokes in PRs 2/3/4 the only early warning that reflow works at all."
+contract_asks_more_than_mock = "No dedicated 'Show all areas' / 'Reset area view' control exists in the mock at cluster level — the interaction is zoom-only, reversible via map controls. #2014 s4 REQUIRES an explicit reset, so PR 3 must build a control the mock does not show. Contract asking for MORE than the prototype, not a conflict."
+
+[final_mock_reconciliation.browser_walk.not_certified]
+note = "Preserved honestly rather than rounded up to 'verified'."
+items = [
+  "cluster tap was NOT click-and-diffed — zoom-only behaviour is read from the app's own caption ('Tap the dashed Hebbal · Nagawara cluster: it zooms, it does not navigate.'), not from clicking the Leaflet marker and diffing state",
+  "breadcrumb per-segment clickability NOT certified — text locators kept matching the panel heading instead of the breadcrumb chip; rendered strings confirmed, interactivity not",
+  "Back links were read, not clicked",
+  "'View details' was not clicked; the manifest lists detail pages as NOT_DESIGNED",
+  "the shallow City -> Direction -> AREA path (South) was NOT walked live — CODE-READ from the manifest only",
+]
+
+[final_mock_reconciliation.browser_walk.prototype_defects_not_to_copy]
+amber_banner_lie = "OBSERVED: on the Add-nearby-areas panel an amber banner reads 'No area here has a listing that matches your filters.' / 'Reset filters' WHILE NO FILTERS ARE ACTIVE (TYPE=All, BEDS=Any, BUDGET=Any price). Likely a canned-scenario quirk, but it would read as a lie if shipped."
+debug_control = "'Simulate a backend failure' button on the zero-results scene — a debug affordance, not customer-facing."
+history_untouched_during_draft = "in-app copy: 'This is a draft selection: the map, the results and browser history do not change until you show the listings.'"
+
+[final_mock_reconciliation.conflicts]
+note = "Three PRODUCT_CONFLICTs. In all three the CONTRACT WINS — and in two of them the mock's own FUNCTIONAL_AUDIT.html records the behaviour as an internal contradiction, so this is declining to copy known prototype defects rather than overriding a considered design."
+f1 = "FROZEN-MOCK AUTHORITY. #2014 declares new_discover/index.html and src/NDMap.jsx the frozen design reference; c13dc017 changed both (plus NDPanel.jsx, NewDiscover.jsx, cards.jsx, shared.jsx) with NO issue amendment. -> REQUEST PRODUCT RULING (Phase 0 D14). Mitigating factor: #2014 limits the mock's authority to VISUAL COMPOSITION only, so hierarchy/marker/density/navigation semantics are unaffected either way."
+f2 = "STRUCTURAL '+N' COPY. The mock uses '+N areas with matches' on structural Direction/Local markers AND panel rows; the user's correction 2 forbids a '+N' form there and mandates 'N areas with matches' / 'No matches with current filters'. -> CONTRACT WINS. The mock's own audit flags the identical defect: 'the +N form is shared with visual clusters'. Record as a deliberate, reasoned divergence."
+f3 = "HIDDEN ZERO-MATCH DESTINATIONS + FILTER-RANKED NAMES. The mock removes Directions with n===0 from the children list at every level in both Areas and Schools (audit H4/C9/M2), and re-ranks structural representative names by current filtered count (audit C10, line 172). Both violate #2014 stability and correction 3. -> CONTRACT WINS; also REQUEST RULING (Phase 0 D15) to close the design's own open question 'Should a zero-match destination remain visible with a zero count?'"
+f4 = "VISUAL-CLUSTER GRAMMAR. The discover-scopes kit draws visual clusters as a hollow dashed magnifier chip, deliberately distinct from destination silhouettes — arguably a better answer to 'area clusters must be visually distinguishable' than new_discover's treatment. -> FOLLOW-UP DESIGN RULING, not a #1956 blocker."
+f5 = "SCHOOL-COUNT SEMANTICS at direction/cluster level ('located inside' vs 'serving') are UNSPECIFIED in the design. -> DEFINE IN PHASE 0 (D16). Smallest safe answer: extend SCHOOLS_NONREGRESSION.md's per-area 'located inside' upward."
+f6 = "EXPANDED FILTER SET (budget, ready) in the mock vs today's type/beds/verified. -> SEPARATE ISSUE. #1956 PRESERVES filters, it does not expand them."
+f7 = "OUT-OF-SCOPE RICHNESS: the mock fully demonstrates add-nearby-areas, polygon, viewport search, zero-result recovery, alerts and the full school-radius journey. -> NO ACTION; prototype-only for #1956. NONREGRESSION_MATRIX's 'new work preserved' list is a DESIGN-level statement, not an issue assignment."
+f8 = "NO URLs / IN-MEMORY HISTORY / C7 BACK DEFECT. -> PROTOTYPE NON-GOAL. #1956's URL/Back/history contract takes NO guidance from the mock, and C7 (hardcoded reset to city root from the first committed state) must NOT be replicated."
+f9 = "TABLET 391-1365px entirely unrepresented. -> FOLLOW-UP SEAM; #1956 locks 1366x768 and 390x844."
+f10 = "LOADING / HARD-ERROR / MAP-TILE-FAILURE states 'NOT DESIGNED'. -> NO ACTION beyond preservation; they are already on the must-not-break list."
+
+[final_mock_reconciliation.phase_0_additions]
+d14 = "Obtain the F-1 product ruling on frozen-mock authority"
+d15 = "Obtain the F-3 product ruling confirming zero-match destinations stay visible with stable names"
+d16 = "Define school-count semantics at direction/cluster level (F-5)"
+d17 = "Record that the mock contributes NOTHING to the URL/Back/history contract and that its C7 Back defect must not be replicated — a note so no later PR mistakes mock parity for correctness"
+outcomes_unchanged = true
+
+[final_mock_reconciliation.new_tests]
+a = "PR 1 + PR 2 — assert NO '+N' renders at structural levels, and that 'N areas with matches' / 'No matches with current filters' does (F-2)"
+b = "PR 2 — assert a zero-match Direction stays VISIBLE, in position, with stable parentage, explicitly against the mock (F-3)"
+c = "PR 1 — assert structural representative names do NOT change when filters change, while counts do (F-3)"
+d = "PR 3 — area-cluster vs listing-cluster visual distinguishability evidence on real dense data (F-4)"
+e = "PR 4 (contract) + PR 5 (presentation) — mobile listing-preview-sheet restoration: Back/Close returns to the SAME map state, never the hierarchy parent (Q7)"
+f = "PR 1 — Testcontainers case for SCHOOL DISTINCT dedup; schools are the real double-count risk because pl.area_key is single-valued so listing sums are safe"
+g = "PR 2 — an explicit evidence note that the mock's in-memory history and C7 Back defect are NOT the target behaviour"
+
+[final_mock_reconciliation.contract_state_recheck]
+verified_via = "gh issue view on all ten issues"
+newest_comment_across_all_ten = "2026-07-26T21:42:45Z (#2020)"
+comments_dated_2026_07_27_or_later = 0
+scope_moved_into_or_out_of_1956 = "NONE"
+new_since_revision_3 = [
+  "#2015 now DEPENDS ON #2016 and must use its exclusive VIEWPORT result-scope state — 'Do not introduce an independent viewport-search state model'",
+  "#2016/#2017/#2018/#2019 each gained a #2020 design-gate comment",
+]
+decisive_statement = "#2020 comment 2026-07-26T21:42:45Z, verbatim: 'This does not reopen or pause the already-locked #1956 implementation contract; it gates the new follow-ups #2016–#2019 and the #2015 scope amendment.' — #1956 is NOT paused and the sibling kit does not gate it."
+issue_2012 = "still explicitly NOT a dependency of #1956"
+
+[invariants]
+note = "restated verbatim in EVERY PR description and checked by code-reviewer on every PR"
+i1 = "No third public CLUSTER level."
+i2 = "Legacy remains the default until PR 6."
+i3 = "Visual AREA clusters never change node=, breadcrumb or history."
+i4 = "Map and panel share identities, members and totals."
+i5 = "Filters do not reshape Direction/Local-Destination geography."
+i6 = "Only the final AREA browse presentation excludes zero-content areas."
+i7 = "#2015 and #2016-#2021 remain out of scope."
+i8 = "The #1956 AREA surface must NOT render or implement AREA_SET / result-scope chip rows, Edit areas, Clear selected areas, Add nearby areas, Draw search area, Search this area, or Create alert. The #1956 AREA panel owns only: the selected single canonical AREA, listing results, existing filters, listing markers and cards, listing peek/detail, and the existing Schools shortcut."
+count = 8
+restated_in_every_pr = true
+
+[product_rulings]
+status = "BOTH RESOLVED — nothing in this plan is blocked on a pending ruling"
+approval = "REVISION_4_2_APPROVED_FOR_PLAN_REVIEW (product owner), conditioned on these rulings being written into the operative documents — which this revision does"
+
+[product_rulings.f1_design_authority]
+status = "RESOLVED"
+ruling_url = "https://github.com/gautirao/udupi-property-explorer/issues/1956#issuecomment-5094908480"
+prototype_controls = "PR #2022 / c13dc017 new_discover prototype controls VISUAL COMPOSITION and IN-SCOPE INTERACTION PRESENTATION"
+contracts_control = "#2014 and #1956 control hierarchy depth, canonical identity, node= URL behaviour, breadcrumb and Back semantics, browser history, issue scope and non-regression"
+experience_html_scope = "authoritative ONLY for states already owned by #1956; does NOT pull AREA_SET, polygon, viewport search, alerts or other follow-up functionality into #1956"
+discover_scopes_scope = "remains the design reference for #2015-#2019, NOT an #1956 implementation contract"
+frozen_file_wording = "any older 'frozen file' wording in #2014/#1956 refers to the LATEST APPROVED CONTENTS of those paths AFTER PR #2022, not the pre-#2022 contents"
+
+[product_rulings.f5_school_count]
+status = "RESOLVED"
+ruling_url = "https://github.com/gautirao/udupi-property-explorer/issues/1956#issuecomment-5094909370"
+definition = "schoolCount = distinct schools PHYSICALLY LOCATED INSIDE the represented canonical AREA or represented member AREAs"
+dedup = "stable school identity; Direction / Local-Destination / visual-cluster totals aggregate DISTINCT schools across member AREAs"
+not_adopted = "'serving' != 'located inside'; no catchment, radius, admission, travel-time or quality semantics; the school-radius result journey stays separate"
+display_ordering_areas_first = "listing count PRIMARY; schoolCount OPTIONAL SECONDARY metadata"
+display_ordering_schools_first = "PRESERVE the already-delivered #1954 behaviour and the current #2014 marker contract. #1956 does NOT redesign field ordering there."
+mock_ordering_rejected = "the mock's school-count-PRIMARY marker ordering is EXPLICITLY NOT ADOPTED by #1956; recorded as a non-blocking Schools design follow-up not owned by #1956"
+
+[forward_ownership]
+note = "Checked against existing issues rather than assumed (correction 14), and updated after the Main Agent posted the rulings and filed #2023."
+schools_redesign = "OWNED — #1954 (CLOSED, delivered). Forward gaps are open follow-ups #1974 (distance sorting), #1975 (marker trust badge), #1565 ('Change school' control). DO NOT file a new redesign issue; #1956 preserves and cites these. Re-confirmed correct in this pass."
+agricultural_redesign = "OWNED — #1957 -> #1958, both OPEN (Gate 4 PRs A and B). The 'Buy/Rent hidden in Agri mode' rule is NOW OWNED BY #1958 per https://github.com/gautirao/udupi-property-explorer/issues/1958#issuecomment-5094910326 — NO unowned Agricultural rule remains."
+expanded_filters = "FILED — https://github.com/gautirao/udupi-property-explorer/issues/2023, explicitly NON-BLOCKING for #1956. #1167 is a hard-gated spike about a DIFFERENT problem (top-level pre-area filtering) and is NOT the owner. #1956 PRESERVES today's filter set and does not expand it."
+discover_v2_epic = "NO ISSUE FOUND — the programme lives in docs/new-discover-v2/, not GitHub. Record only."
+school_primary_marker = "NOT OWNED BY #1956 — a NON-BLOCKING Schools design follow-up with no current owner. #2014 currently specifies the OPPOSITE ordering (listings primary, school count additive). VERIFIED BY DIRECT ISSUE READ that neither existing follow-up covers it: #1974 is SORT-ONLY ('sort the homes-near list ascending by the already-computed distance' — list ordering, not marker field ordering) and #1975 is a MISSING BACKEND FIELD (expose the public trustBadge on /api/discover/markers so the popover can show it — a field, not field primacy). DO NOT assign it to #1974 or #1975."
+
+[delivery_ledger]
+surfaces = "TWO, both mandatory after every merge (correction 14): (a) the append-only TOML below, and (b) a GitHub COMMENT ON #1956 containing PR number + squash SHA, ACs completed, default shopper path, preview status, remaining legacy code, open risks and deviations, and the exact next-PR scope."
+github_comment_required = true
+github_comment_target = "issue #1956"
+github_comment_contents = ["PR number and squash SHA", "ACs completed", "default shopper path", "preview status", "remaining legacy code", "open risks and deviations", "exact next-PR scope"]
+path = ".claude/handoffs/issue-1956/delivery-ledger.toml"
+updated = "after every merge, and verified at the start of the next PR"
+append_only = "supersede, never overwrite"
+squash_sha_note = "the ledger records squash_sha (not merge_sha) because the squash-merge SHA IS the rollback boundary in this repository — see [[delivery_structure.pr]] number 6 rollback_correction"
+fields_per_entry = [
+  "pr", "title", "squash_sha", "merged_at",
+  "acs_completed (with evidence paths)", "acs_deferred (AC id -> owning PR)",
+  "default_shopper_path", "default_path_entry_points_verified",
+  "preview_capability_key", "preview_status",
+  "legacy_producers_migrated (correction-8 ledger discharge progress)",
+  "open_risks (carried forward with owning PR)", "deviations (with reason)",
+  "next_pr_scope (exact, not a restatement of the plan)",
+  "preview_status", "remaining_legacy_code", "invariants_reasserted",
+]
+invariants_reasserted_example = [1, 2, 3, 4, 5, 6, 7, 8]
+invariants_reasserted_note = "EIGHT invariants as of revision 4.2 — the example and default are [1,2,3,4,5,6,7,8], not [1,2,3,4,5,6,7]."
+rules = [
+  "a PR may not open until the previous entry exists with a real squash_sha AND the #1956 GitHub comment has been posted",
+  "preview_status may only become 'removed' in PR 6's entry",
+  "remaining_legacy_code may only shrink in PR 6's entry — if it shrinks earlier, correction 2 was violated and the PR is non-compliant",
+  "legacy_producers_migrated must be fully discharged before PR 6 deletes any compatibility helper",
+]
+
+[forbidden_scope]
+note = "these are explicitly out of scope per #1956 s17 and #2014 s18. Preserve clean seams; do not pull implementation in."
+issues = [
+  "#2015 — viewport-bounded 'Search this area' / result-scope refresh",
+  "#2016 — AREA_SET / POLYGON / VIEWPORT result-scope framework",
+  "#2017 — multi-area chips",
+  "#2018 — zero-result recovery",
+  "#2019 — saved-search alerts",
+  "#2020 — design work",
+  "#2021 — usability research",
+  "#2012 — graph/cache/query performance redesign",
+  "#1960 — accessibility automation and comprehensive a11y sign-off",
+]
+areas = [
+  "Agricultural implementation",
+  "full Schools journey redesign (optional schoolCount in shared area-marker presentation is IN scope; redesigning school identity, radius calculations or homes-near semantics is NOT)",
+  "listing-card or property-detail redesign",
+  "graph database",
+  "second live city requirement",
+  "backward compatibility for unpublished Areas hierarchy URL parameters",
+  "automatic network request after every map pan",
+]
+
+[must_not_break]
+source = "#1956 s12 and #2014 s13"
+items = [
+  "shared Discover V2 shell",
+  "Buy/Rent and all applicable property filters",
+  "Schools search, board/level filters, selected school and radius behaviour",
+  "anonymous vs authenticated exposure and price-coarsening rules",
+  "listing cards, favourites, trust-badge behaviour",
+  "listing peek listing=<uuid> round trip and detail Back to results restoration",
+  "direct-area search and canonical URL restoration",
+  "map/panel hover and selection synchronisation",
+  "mobile List-first Map/List shell",
+  "empty, loading, retry and network-error states",
+  "existing CameraIntent ownership and camera-feedback-loop prevention",
+  "listing marker clustering and performance protections",
+  "public API and preview isolation/security rules",
+  "Browse All where already part of the frozen journey",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SLICES
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[slice]]
+id = 0
+name = "Re-baseline and salvage audit"
+status = "COMPLETE (this document plus the Deliverable-1 log entry ARE Slice 0)"
+goal = "Establish a trustworthy baseline and a citation-backed disposition for every in-progress change before any further production edit."
+production_code_changes = "NONE — audit and plan authoring only"
+deliverables = [
+  "file-level KEEP/REWORK/REMOVE table (team-lead-execution-log-pr-b.md, [SLICE 0 DELIVERABLE 1] entry)",
+  "this replacement plan",
+]
+exit_condition = "PLAN_REVIEW APPROVED by the Main Agent's OpenAI gate. No implementation before that."
+specialist_routing = "4x explorer-planner (read-only, parallel, foreground, leaf) — done"
+
+[[slice]]
+id = 1
+name = "Promoted hierarchy / API conformance"
+goal = "Prove or correct the shallow-hierarchy contract against the REAL promoted Bangalore tree, and confirm the typed API can supply everything the shopper surfaces need — including journey-aware per-area counts."
+first_concrete_deliverable = "inspect the real promoted node c:blr-metro:in-ka-bengaluru-kudlu-gate-in-ka-bengaluru-singasandra and its subtree, and prove or disprove shallow-hierarchy conformance. This is the highest-priority unknown in the whole issue."
+depends_on = "PLAN_REVIEW approval"
+
+[slice.1.work]
+investigate = [
+  "read the promoted Bangalore root and every city-root child; count Directions (must be <=5)",
+  "for each Direction, count direct Local Destinations (must be <=6) and check for one-child clusters",
+  "walk to the deepest public path; assert no third CLUSTER level exists",
+  "resolve the 156-descendant node: enumerate its real subtree depth and breadth; classify it as contract-conformant or INVALID",
+  "confirm every approved canonical AREA appears exactly once; no duplicate or missing AREA paths",
+  "confirm guided-navigation ancestry and direct-search ancestry agree for a sample of AREAs",
+]
+api_conformance = [
+  "field-by-field confirm the typed public navigation API can supply the AreasDestination shape: nodeKey, nodeType, direction, representativeAreaNames, descendantAreaCount, listingCount, schoolCount?, bounds, centroid",
+  "confirm explicit visual-cluster member area_key lists are available",
+  "confirm the count boundary can efficiently supply PER-AREA eligible listing counts and optional per-area eligible school counts for the ACTIVE filters, so journey-aware visibility needs neither label parsing nor N+1 requests (#1956 journey-aware comment, 'Add to Slice 1')",
+]
+known_gaps_from_audit = "types.ts currently lacks direction, representativeAreaNames, descendantAreaCount, listingCount, schoolCount and per-area eligible counts. Determine for each whether it is a wire gap (backend/API work) or purely a client-model gap."
+
+[slice.1.files]
+keep_plus_add = [
+  "src/features/discover/navigation/types.ts — add the missing AreasDestination fields + explicit cluster member area_keys + per-area eligible counts",
+  "src/features/discover/navigation/navigationModel.ts — add bounded depth/breadth validators (max 5 Directions, max 6 Local Destinations, no third CLUSTER, no one-child cluster)",
+  "src/features/discover/navigation/nodeLevelKind.ts — add the detect-and-REPORT layer for an out-of-contract tree (per overrule O-1); keep depth-generic dispatch",
+  "src/hooks/useDiscoverNavigationCounts.ts — extend to per-area eligible listing/school counts",
+]
+keep = [
+  "src/features/discover/navigation/normalize.ts",
+  "src/features/discover/navigation/useAreaSearchConvergence.ts",
+  "src/hooks/useDiscoverNavigationNode.ts",
+  "src/hooks/useDiscoverAreaNavigationPath.ts",
+]
+rework_tests = [
+  "src/features/discover/navigation/__tests__/navigationModel.test.ts — retire the depth 5/8 'valid capability' cases; add cap-validator cases",
+  "src/features/discover/navigation/__tests__/nodeLevelKind.test.ts — add invalid-tree REPORT cases",
+]
+new_tests = [
+  "validator unit tests: max-5 city-root, max-6 Local Destination, third-CLUSTER rejection, one-child-cluster rejection",
+  "per-area eligible-count contract test (no N+1, filter-aware)",
+]
+
+[slice.1.acceptance_criteria]
+items = [
+  "AC1.1 the real promoted Bangalore tree is documented with actual Direction count, per-Direction Local Destination counts and maximum public depth",
+  "AC1.2 the 156-descendant node is explicitly classified CONFORMANT or INVALID with node-level evidence, and if INVALID an upstream correction path is named (regenerate -> validate -> preview -> approve -> promote). No frontend workaround is proposed.",
+  "AC1.3 an invalid third-CLUSTER tree is REPORTED by the frontend validator, never silently flattened (#1956 s1, #2014 s14)",
+  "AC1.4 every AreasDestination field is either present on the wire or has a named owner and smallest-possible extension",
+  "AC1.5 per-area eligible listing counts (and optional school counts) are obtainable for the active filters without label parsing or N+1",
+  "AC1.6 no graph/cache/query redesign is performed (#2012 stays out)",
+]
+required_tests = ["#1956 s16 unit: invalid third CLUSTER cannot be accepted as valid public production data; city max-five and Direction max-six handling", "#2014 s16 backend/API: promoted root supplies direction, representative names, ancestry, bounds and next-level type; generation/validation rejects a third public cluster level; every canonical area appears exactly once"]
+evidence = ["real promoted root/API response captured to docs/audit/evidence/issue-1956/", "depth/breadth validation output", "explicit conformance verdict on the 156-key node"]
+rollback_boundary = "type/model/validator additions only plus evidence artefacts. No UI change. Revertable by dropping the validator module and the type additions."
+specialist_routing = "qa-fast (pre-implementation risk) -> explorer-planner or architect if the tree proves INVALID and an upstream correction must be specified -> frontend-engineer (types + validators) -> code-reviewer -> qa"
+forbidden = "no #2012 graph/cache work; no frontend flattening; no deletion of canonical areas to simplify the tree (#2014 s11 remedy list)"
+
+[[slice]]
+id = 2
+name = "Canonical Areas state and cutover"
+goal = "Make node= the sole Areas hierarchy identity end to end, and retire the legacy Areas hierarchy-reconstruction consumers while preserving School-owned helpers."
+depends_on = "Slice 1"
+
+[slice.2.work]
+items = [
+  "confirm and lock node= as the sole Areas hierarchy identity across cold load, direct search and stale-node resolution",
+  "retire Areas consumers of summaryRegions-as-city-root, useDiscoverSummary-as-shopper-hierarchy, useAreaGroups/useRegionScopedAreaGroups-as-recursive-tree, legacy scope-as-Areas-identity and macroRegionResolver/label-to-slug inference (#2014 s12)",
+  "relocate groupRegionLabel.ts School-side and CORRECT its factually stale docstring (per overrule O-3)",
+  "keep the temporary old/new comparison ONLY long enough to prove count/ancestry convergence, then remove it before Gate 3 (#1956 s18)",
+]
+
+[slice.2.files]
+keep = [
+  "src/features/discover/state/url/navigation.ts — already the sole node= read/write point",
+  "src/features/discover/state/url/area.ts and city.ts — compat-domain handling, not Areas identity",
+  "src/hooks/useDiscoverUrlState.ts — navigation domain threading",
+  "src/features/discover/navigation/__tests__/staticSweep.test.ts — mechanical guard against legacy templates; extend rather than replace",
+  "src/utils/__tests__/macroRegionResolverDeleted.test.ts — permanence guard; its negative assertion already covers groupRegionLabel",
+  "src/hooks/useAreaGroups.ts — no longer on the Areas hierarchy path; confirm every surviving importer is a documented non-Areas consumer",
+]
+keep_deletion = [
+  "src/utils/macroRegionResolver.ts and its test",
+  "src/components/discover/panels/AreaGroupsLandingPanel.tsx / AreaGroupResultsPanel.tsx / AreaGroupSelectedPanel.tsx and their 4 tests",
+]
+rework = [
+  "src/utils/groupRegionLabel.ts — move School-side, correct the docstring to name SchoolJourneyPanels.tsx as the documented non-Areas consumer",
+]
+note_on_deleted_shownoftotal_test = "AreaGroupSelectedPanel.shownOfTotal.test.tsx is correctly deleted, but its 'shown of total' arithmetic is superseded by journey-aware +N arithmetic which needs NEW coverage in Slice 4 — do not let the deletion silently drop the concept."
+
+[slice.2.acceptance_criteria]
+items = [
+  "AC2.1 no Areas code path reads or writes groupId/region/areaKey/scope as hierarchy identity; the compat URL domain remains compat-only",
+  "AC2.2 macro-region inference is gone and cannot regress under a renamed wrapper (permanence guard green)",
+  "AC2.3 every surviving legacy helper has a documented NON-Areas consumer, and the documentation names a consumer that actually exists",
+  "AC2.4 cold load, direct search and stale-node resolution all converge on identical canonical node, ancestry and bounds",
+  "AC2.5 the stale-node recovery ladder (nearest-valid-ancestor / city-root) still fires with a non-blocking notice",
+  "AC2.6 School-owned helpers are behaviour-preserving (byte-identical logic)",
+]
+required_tests = ["#1956 s16: direct-search/guided ancestry convergence; stale-node fallback and notice; no remaining Areas macro-region inference consumers", "#2014 s16: legacy hierarchy path is not used"]
+evidence = ["old/new ancestry + count convergence comparison output", "static sweep green", "importer audit for every surviving legacy helper"]
+rollback_boundary = "URL-domain and helper-ownership changes. The comparison selector is the rollback lever and must be removed before Gate 3 unless another active consumer is documented."
+specialist_routing = "qa-fast -> frontend-engineer -> code-reviewer -> qa"
+forbidden = "no renamed-wrapper preservation of the obsolete Areas path (#2014 s12); no removal of a School-owned helper that has a live documented consumer"
+
+[[slice]]
+id = 3
+name = "Desktop directional navigation"
+goal = "Build the actual city-root Direction surface and the Local Destination surface — the product surface that does not exist yet."
+depends_on = "Slice 1, Slice 2"
+audit_note = "MOSTLY NET-NEW. The audit confirms no code renders Direction cards, Local Destination cards, representative-name primary labels, or the locked marker composition. NavigationChildCard today renders only displayLabel + 'N properties'."
+
+[slice.3.work]
+items = [
+  "city root renders the promoted root's direct Direction children IMMEDIATELY — no city-total marker first",
+  "cap and enforce 3-5 (hard max 5) Direction destinations; do not invent empty directions",
+  "Direction level renders at most 6 Local Destinations, or goes DIRECTLY to AREA children when sparse — never fabricate a Local Destination layer",
+  "map card primary label = one or two representative canonical area names; right-panel card supplies the explicit direction heading ('North Bangalore')",
+  "direction communicated primarily by map POSITION; optional small compass eyebrow may never replace the real label",
+  "ONE shared map/panel destination model and ONE shared selection action keyed by stable node_key",
+  "authoritative one-fit CameraIntent behaviour on every destination selection",
+]
+
+[slice.3.files]
+rework = [
+  "src/components/discover/navigation/NavigationChildCard.tsx — implement the locked composition (representative names, +N nearby areas, journey-aware counts, Tap to zoom); single-AREA variant omits +N",
+  "src/components/discover/navigation/NavigationLevelPanel.tsx — keep the level-dispatch mechanism; the panels it dispatches to become bounded Direction (max 5) and Local Destination (max 6) surfaces with explicit direction headings, not a generic infinite-cluster picker",
+  "src/features/discover/views/DiscoverAreasJourneyPanel.tsx — becomes the City-root Direction surface + Local Destination surface host",
+  "src/features/discover/navigation/useAreasNavigationJourney.ts — simplify to the two valid shapes",
+]
+keep = [
+  "src/features/discover/views/DiscoverRightPanelContainer.tsx — the node-kind routing seam is the mechanism the new panels plug into",
+  "src/components/discover/navigation/NavigationChildList.tsx",
+  "src/features/discover/state/useDiscoverCameraOrchestration.ts",
+  "src/pages/MapDiscovery.tsx — preserve the PR #2011 ownership/accessor foundation",
+]
+rework_tests = ["NavigationChildCard.test.tsx", "NavigationLevelPanel.test.tsx", "__tests__/DiscoverAreasJourneyPanel.test.tsx", "__tests__/useAreasNavigationJourney.test.ts"]
+extend_tests = ["src/components/discover/__tests__/groupedCardAreaNames.test.tsx — representative-name display is now REQUIRED, so extend this existing coverage rather than replacing it"]
+
+[slice.3.acceptance_criteria]
+items = [
+  "AC3.1 city root immediately renders 3-5 promoted directional destinations and NO whole-city intermediate marker (#2014 s15)",
+  "AC3.2 root map cards use one or two prominent canonical area names as primary text (#2014 s15)",
+  "AC3.3 root positions communicate North/East/South/West/Centre correctly (#2014 s15)",
+  "AC3.4 right-panel headings explicitly name the direction and share the same node_key and counts as the map (#2014 s15)",
+  "AC3.5 a Direction shows no more than six Local Destinations or goes directly to AREA children (#2014 s15)",
+  "AC3.6 Local Destination labels use representative areas, not 'North of North' wording (#2014 s15)",
+  "AC3.7 no public path contains a third CLUSTER level (#2014 s15)",
+  "AC3.8 small/shallow paths do not fabricate a Local Destination (#2014 s15)",
+  "AC3.9 a map click and the matching panel-card click dispatch the SAME navigation action; hover/focus/selection synchronise by stable node_key (#2014 s5)",
+  "AC3.10 each destination selection issues exactly ONE CameraIntent fit (#1956 s8)",
+]
+required_tests = ["#2014 s16 unit: root direct children/no city-total marker; representative-name and directional-position rendering; maximum depth and maximum child-budget guards; map/panel dispatch the same node/area selection action", "#1956 s16 unit: shallow Direction->AREA profile; maximum Direction->LocalDest->AREA profile; prominent representative-name rendering"]
+evidence = ["real-browser desktop 1366x768 city root and Direction-selected screenshots", "side-by-side against the frozen mock for hierarchy-card composition", "map/panel identity evidence (same node_key, same counts)"]
+rollback_boundary = "Areas panel + child-card rendering. The node-kind routing seam is untouched, so reverting the panels restores the prior generic level rendering."
+specialist_routing = "qa-fast -> frontend-engineer -> code-reviewer -> (ui-designer review if composition drifts from the frozen mock) -> qa"
+forbidden = "no viewport search (#2015); no visual AREA clustering yet (that is Slice 4); no invented corridor/marketing labels"
+
+[[slice]]
+id = 4
+name = "AREA density presentation"
+goal = "Solve marker density with VISUAL, non-hierarchical AREA clustering plus journey-aware visibility — the second large net-new surface."
+depends_on = "Slice 1, Slice 3"
+audit_note = "FULLY NET-NEW. The audit found no visual clustering anywhere: every current map grouping corresponds to a hierarchy node, and no journey-aware visibility predicate exists. Counts today derive from canonical descendants."
+
+[slice.4.work]
+items = [
+  "apply the journey-aware visibility predicate BEFORE clustering (eligibleListingCount > 0 for Areas; eligibleSchoolCount > 0 for Schools)",
+  "geographically cluster crowded direct AREA markers visually, using explicit stable area_key membership — never label parsing",
+  "select representative names ONLY from visible members",
+  "compute +N nearby areas as (visible journey members) - (displayed representative names)",
+  "aggregate and deduplicate listing counts (and optional school counts) over exactly the visible member set the marker represents",
+  "single-AREA marker simplification: name + counts + Tap to view homes, and NO +N line",
+  "map and panel consume the SAME visible-area set",
+  "panel focus/subset synchronisation when a visual cluster is focused",
+  "Show all areas / Reset area view local reset that restores parent bounds and the complete area list",
+  "area-cluster styling visibly distinct from home/listing clusters",
+  "filter changes recompute membership, representative names and +N WITHOUT changing node=, breadcrumb or ancestry",
+]
+
+[slice.4.files]
+new = [
+  "visual AREA clustering module (geographic proximity over the current direct AREA children, explicit area_key membership)",
+  "journey-aware visibility predicate module (Areas and Schools variants)",
+  "Show all areas / Reset area view control",
+]
+keep_plus_add = [
+  "src/hooks/useDiscoverMapData.ts — must consume the journey-visible member set, shared with the panel",
+  "src/features/discover/presentation/useDiscoverMapPresentation.ts — add the visible-member set; this file's legacy fallback arm is also the suspected source of the overlay-vs-panel breadcrumb inconsistency",
+]
+rework = [
+  "src/features/discover/views/DiscoverAreasJourneyPanel.tsx — the 100-key truncation UI and generic level rendering are reshaped by the direct-child + journey-visible model",
+  "src/components/discover/navigation/NavigationChildCard.tsx — multi-area vs single-area marker variants",
+]
+keep = [
+  "src/features/discover/map/resolveMarkerListings.ts — the isNavigationAreaLeaf double-gate that prevents an unscoped city-wide fallback",
+  "src/features/discover/map/resolveMarkerPopover.ts",
+  "src/components/map/PropertyMap.tsx — D-1 camera mount-race fix (generic, contract-independent)",
+]
+
+[slice.4.acceptance_criteria]
+items = [
+  "AC4.1 a dense AREA-child set visually clusters on the map WITHOUT adding hierarchy depth (#2014 s15)",
+  "AC4.2 multi-area markers render representative names, +N nearby areas, dynamic listing count and Tap to zoom (#2014 s15)",
+  "AC4.3 Schools-mode multi-area markers also render a dynamic unique school count (#2014 s15)",
+  "AC4.4 tapping a visual AREA cluster zooms/reveals member areas but leaves node= AND breadcrumb AND hierarchy history unchanged (#2014 s15)",
+  "AC4.5 the panel can show the focused cluster members and restore all direct areas through Show all areas (#2014 s15)",
+  "AC4.6 at comfortable zoom a single AREA marker shows only area name and journey counts, with NO nearby-area line (#2014 s15)",
+  "AC4.7 selecting a single AREA from map or panel creates the same canonical AREA node= state (#2014 s15)",
+  "AC4.8 area visual clusters and listing clusters are visually distinguishable (#2014 s15)",
+  "AC4.9 with 34 canonical members, 5 visible Areas members and 2 representatives, the marker renders '+3 nearby areas' — never '+32' (#1956 journey-aware comment)",
+  "AC4.10 zero-listing areas are excluded from Areas browse clusters; zero-school areas from Schools browse clusters; a school-bearing area with zero listings stays visible in Schools mode and may display '0 listings'",
+  "AC4.11 a filter change recomputes membership and counts without changing node=, breadcrumb or history",
+  "AC4.12 map and panel expose identical visible area keys and totals",
+  "AC4.13 no browse destination with zero visible descendant areas is presented as a dead choice",
+  "AC4.14 no double-counting of areas, listings or schools across multiple presentation paths",
+]
+required_tests = [
+  "#1956 journey-aware comment required tests (all six): 34/5/2 => +3; zero-listing exclusion from Areas clusters; zero-school exclusion from Schools clusters; school-bearing zero-listing area visible in Schools mode; filter changes recompute without touching node=/breadcrumb/history; direct canonical access to an excluded zero-content AREA still renders the normal empty state",
+  "#2014 s16 unit: +N excludes displayed names; visual AREA cluster membership uses stable area_keys; visual cluster focus does not change breadcrumb or hierarchy URL; Show all areas restores full panel and parent fit; single AREA marker omits nearby-area metadata",
+]
+evidence = ["dense AREA visual-cluster and single-AREA desktop screenshots", "Schools-mode area clusters showing both counts", "Areas and Schools count reconciliation evidence", "map/panel identical-visible-set evidence"]
+rollback_boundary = "clustering + visibility modules are additive; reverting them returns the map to unclustered direct-child markers without touching hierarchy state."
+specialist_routing = "qa-fast -> frontend-engineer -> code-reviewer -> ui-designer (cluster styling distinctness) -> qa"
+forbidden = "no hierarchy depth used to solve overlap (#2014 s14); no visual cluster in node= or the breadcrumb; no deletion of canonical areas to satisfy a visual budget; no #2015 viewport search"
+
+[[slice]]
+id = 5
+name = "Breadcrumb, in-app Back and browser history"
+goal = "Deliver the bounded breadcrumb, the ancestry-driven in-app Back control, and correct browser history semantics."
+depends_on = "Slice 3"
+audit_note = "The goToAncestorNode ACTION exists; the visible Back CONTROL and its cold-deep-link REPLACE semantics do not. Per overrule O-2 the breadcrumb collapse apparatus is removed, and AC11 geometry is moot — the residual requirement is no-clip/reachability."
+
+[slice.5.work]
+items = [
+  "complete bounded breadcrumb: City / Direction / optional Local Destination / AREA, max 4 items; visual clusters are NEVER breadcrumb items; current item is not a link",
+  "every ancestor is selectable and restores that ancestor's direct children and authoritative bounds via ONE direct CameraIntent fit",
+  "build the visible in-app hierarchy Back control: exactly one level to the backend-declared canonical parent; never window.history.back()/navigate(-1)",
+  "cold deep link / direct search: full ancestry resolves and in-app Back reaches the canonical parent even though it was never visited",
+  "history-loop prevention: POP when the previous app entry IS the canonical parent, otherwise REPLACE; no child-parent-child loops, no duplicate adjacent entries",
+  "city root: Back hidden or disabled, must not leave Discover",
+  "no hierarchy history entries from pan/zoom, visual-cluster focus, programmatic fits, hover/focus or Map/List switches",
+  "remove the now-dead breadcrumb collapse apparatus; replace the AC11 ellipsis requirement with a no-clip/reachability requirement at 390x844",
+  "camera race regression coverage",
+]
+
+[slice.5.files]
+remove = [
+  "src/components/discover/navigation/useCollapsedBreadcrumbTrail.ts — dead by construction (overrule O-2)",
+  "src/components/discover/__tests__/DiscoverMapBreadcrumb.ellipsisShrinkFloor.test.tsx — guards an unreachable element (overrule O-2); it currently PASSES and is removed as a consequence, not for failing",
+]
+rework = [
+  "src/components/discover/DiscoverMapBreadcrumb.tsx — drop the ellipsis shrink-0 special-casing; keep the shell and the single-push click suppression",
+  "src/components/discover/DiscoverMapContextOverlay.tsx — drop the collapse wiring; keep the hasNavigationNode gate; satisfy no-clip at 390x844",
+  "src/components/discover/navigation/AreasBreadcrumbTrail.tsx — simplify to a bounded trail; add the 4-item cap guard so an over-deep ancestry is REPORTED, not rendered",
+  "src/components/discover/navigation/__tests__/AreasBreadcrumbTrail.test.tsx and src/components/discover/__tests__/DiscoverMapContextOverlay.nodeBreadcrumb.test.tsx — retarget depth/collapse cases at the bounded trail; keep the differential landing-chip cases",
+]
+keep_plus_add = [
+  "src/hooks/__tests__/useDiscoverUrlState.ac8HistoryDepth.test.ts — the push/replace instrumentation is exactly the right observable contract; ADD the cold-deep-link REPLACE case and the no-history-for-camera/pan/Map-List cases, and close the documented same-tick batching gap",
+]
+keep = [
+  "src/features/discover/state/url/area.ts double-push guard",
+  "src/features/discover/state/url/navigation.ts readRawTrimmedNodeParam mount gate",
+  "src/components/discover/navigation/NavigationResolutionNotice.tsx",
+]
+new = ["the visible in-app hierarchy Back control component + its ancestry-driven handler"]
+
+[slice.5.acceptance_criteria]
+items = [
+  "AC5.1 breadcrumb maximum is City > Direction > Local Destination > Area (#2014 s15)",
+  "AC5.2 every ancestor restores its direct children and authoritative bounds; the current item is not a link (#2014 s15)",
+  "AC5.3 from City>Direction>Area, hierarchy Back returns Area->Direction->City one parent at a time (#2014 Back-control comment AC)",
+  "AC5.4 from City>Direction>LocalCluster>Area, hierarchy Back returns Area->LocalCluster->Direction->City one parent at a time",
+  "AC5.5 a direct-search/cold-loaded AREA goes Back to its canonical parent even when that parent was never in browser history",
+  "AC5.6 refreshing any node preserves the same hierarchy Back destination",
+  "AC5.7 city root has no active hierarchy Back control and Back never leaves Discover",
+  "AC5.8 Buy/Rent and applicable filters survive parent navigation",
+  "AC5.9 map, panel, breadcrumb and URL update atomically without stale child markers or stale listing results",
+  "AC5.10 browser Back/Forward restores committed hierarchy states without child-parent loops or duplicate-history churn",
+  "AC5.11 programmatic camera fits, ordinary panning, visual-cluster focus and Map/List switches create NO hierarchy history entries",
+  "AC5.12 listing-detail Back to results restores results rather than navigating to the hierarchy parent",
+  "AC5.13 every breadcrumb ancestor jump emits exactly ONE direct CameraIntent fit, not chained animations",
+  "AC5.14 (replaces the retired AC11) the complete real breadcrumb renders at 390x844 without clipping and with all crumbs pointer/touch/keyboard reachable, at up to 4 items with real long canonical names (#1956 s8)",
+]
+required_tests = ["#1956 s16 unit: complete breadcrumb and ancestor actions; canonical-parent in-app Back including cold load; browser history push/replace/loop prevention; CameraIntent one-fit and stale-debounce race coverage", "#2014 Back-control comment required E2E coverage (all four scenarios)"]
+evidence = ["breadcrumb, hierarchy Back and browser Back/Forward E2E output", "cold-load convergence evidence", "390x844 no-clip breadcrumb evidence with real long labels"]
+rollback_boundary = "breadcrumb + Back control + history semantics. Removing the Back control leaves breadcrumb navigation functional."
+specialist_routing = "qa-fast -> frontend-engineer -> code-reviewer -> qa (e2e-authoring) -> qa (verification)"
+forbidden = "no window.history.back()/navigate(-1) for hierarchy Back; no overloading hierarchy Back to undo visual-cluster zoom; do NOT resurrect the collapse apparatus or the depth-8 spec"
+
+[[slice]]
+id = 6
+name = "Mobile list-first journey"
+goal = "Deliver the mobile list-first navigation stack at 390x844 without hierarchy or history side effects."
+depends_on = "Slice 3, Slice 4, Slice 5"
+
+[slice.6.work]
+items = [
+  "list mode shows the current node's direct children as rows/cards",
+  "top-left hierarchy Back NAMES the canonical parent (e.g. '< Bangalore')",
+  "AREA selection provides search plus the complete area list; selecting a row is identical to selecting the matching map marker",
+  "View map opens a full-screen map for the SAME canonical state; List returns to the same canonical state and is NOT hierarchy Back",
+  "Map/List changes do not modify node= and do not create browser-history entries",
+  "visual AREA clusters use the same names/+N/counts contract; tapping one zooms and updates the bottom sheet/list to explicit member areas",
+  "Show all areas clears visual focus; useful visual focus may be retained across Map/List where reliable",
+  "primary controls visible, unobscured and pointer/touch reachable at 390x844",
+]
+
+[slice.6.files]
+rework = ["mobile shell / JourneySwitcher integration for the node journey", "bottom-sheet member-list synchronisation with visual clusters"]
+keep = ["existing mobile List-first Map/List shell (must not break, #2014 s13)"]
+
+[slice.6.acceptance_criteria]
+items = [
+  "AC6.1 mobile is list-first and navigates City -> Direction -> optional Local Destination -> Area list -> Listings",
+  "AC6.2 the top-left control names and returns to the canonical parent",
+  "AC6.3 Map/List switches preserve canonical state and create no history entries (#2014 s15)",
+  "AC6.4 tapping a visual cluster zooms and updates the bottom sheet to explicit member areas; Show all areas clears focus",
+  "AC6.5 selecting a real AREA advances canonical hierarchy state",
+  "AC6.6 primary controls remain reachable and unobscured at 390x844 (#2014 s15)",
+  "AC6.7 the complete breadcrumb renders un-clipped at 390x844 (carries the reframed AC5.14)",
+]
+required_tests = ["#1956 s16 unit: mobile List/Map state preservation", "#2014 s16 mobile E2E: list-first navigation, open Map, tap area visual cluster, bottom-sheet member focus, Show all areas, select real AREA, return between Map/List, hierarchy Back, browser Back/Forward"]
+evidence = ["390x844 mobile List and full-screen Map real-browser evidence"]
+rollback_boundary = "mobile shell wiring only; desktop unaffected."
+specialist_routing = "qa-fast -> frontend-engineer -> code-reviewer -> ui-designer (390x844 reachability) -> qa"
+forbidden = "no a11y automation/comprehensive sign-off (#1960); Map/List must never become hierarchy Back"
+
+[[slice]]
+id = 7
+name = "Listings, Schools shortcut and restoration"
+goal = "Restore and prove the full AREA-listings surface after selection, and close the two real open defects carried over from checkpoint D."
+depends_on = "Slice 4, Slice 5"
+carried_open_defects = [
+  "anon leaf markers absent — still real (#2014 s13 anon exposure)",
+  "listing= peek round trip failing (J7f) — still real; #1956 s12 explicitly requires the listing=<uuid> round trip",
+  "authenticated unscoped-city-wide marker risk — likely closed by construction by the checkpoint-D isNavigationAreaLeaf double-gate, but wants one live authenticated confirmation",
+]
+
+[slice.7.work]
+items = [
+  "after AREA selection, switch from area-navigation markers to existing listing clusters/price pins, then individual price pins as zoom permits",
+  "preserve Buy/Rent and property filters, within-area property search, property cards, trust badges, anonymous price coarsening, favourites",
+  "fix the listing= peek deep-link round trip and detail Back to results restoration (selected AREA, filters, map/list mode, camera, panel position)",
+  "fix absent anon leaf markers",
+  "preserve the Schools shortcut from a selected AREA and the shared count presentation, WITHOUT redesigning the Schools journey",
+  "Browse All where already part of the frozen journey; zero-listing AREA renders a normal empty state",
+]
+
+[slice.7.files]
+keep = [
+  "src/components/discover/panels/AreaSelectedPanel.tsx",
+  "src/features/discover/map/resolveMarkerListings.ts + resolveMarkerPopover.ts (the isNavigationAreaLeaf gates)",
+  "src/hooks/useDiscoverPageState.ts onSelectAreaKey convergence",
+  "src/components/discover/DiscoverRightPanel.tsx must-not-break surface",
+  "src/components/discover/panels/SchoolJourneyPanels.tsx",
+]
+rework_tests = [
+  "e2e/discover/issue-1956-areas-adaptive-journeys.spec.ts — re-anchor J7a (filters) / J7b (search) / J7c (map-panel sync) / J7d (anon save -> sign-in modal) / J7f (listing= peek) on a CONTRACT-VALID AREA; these are must-not-break behaviours worth keeping",
+]
+excluded_not_ours = "J7e listing-detail Back restoration fails on a PRE-EXISTING Leaflet/bfcache crash that reproduces identically on the untouched e2e/discover-1939-listing-peek-url-restore.spec.ts. Keep it excluded with that clean-base citation; do not re-debug it inside this issue."
+
+[slice.7.acceptance_criteria]
+items = [
+  "AC7.1 selecting a real AREA switches to listing markers/results (#2014 s15)",
+  "AC7.2 anonymous users see leaf area markers (currently absent — regression fix)",
+  "AC7.3 the listing=<uuid> peek deep link and round trip work (#1956 s12)",
+  "AC7.4 property-detail Back to results restores results rather than navigating to the hierarchy parent (#2014 s15)",
+  "AC7.5 filters, within-area search, cards, favourites, trust badges and anonymous price coarsening are unchanged",
+  "AC7.6 the Schools shortcut from a selected AREA is preserved and school identity/radius/homes-near semantics are unchanged",
+  "AC7.7 a zero-listing canonical AREA renders a normal empty state (#1956 s15)",
+  "AC7.8 a node AREA leaf never receives an unscoped city-wide listing set — confirmed live for BOTH anonymous and authenticated",
+]
+required_tests = ["#1956 s16 unit: zero-listing area state; loading/error/retry states", "#1956 s16 E2E 9 and 10: individual AREA selection switches to listing markers/results; filters, save, detail Back, listing-peek and Schools shortcut retention"]
+evidence = ["live anon AND authenticated leaf-marker evidence with the exact request URL captured", "listing= peek round-trip evidence", "Schools no-regression evidence"]
+rollback_boundary = "leaf listing surface only; hierarchy navigation unaffected."
+specialist_routing = "qa-fast -> frontend-engineer -> code-reviewer -> security-reviewer (Gate F: anonymous vs authenticated exposure and price coarsening) -> qa"
+forbidden = "no full Schools journey redesign; no listing-card or detail redesign; no JWT/authz broadening to make anon markers work — use the public teaser path"
+
+[[slice]]
+id = 8
+name = "Cutover, regression and Gate 3 evidence"
+goal = "Prove the cutover, remove the temporary comparison lever, and assemble the Gate 3 sign-off package."
+depends_on = "Slices 1-7"
+
+[slice.8.work]
+items = [
+  "side-by-side old/new ancestry and count evidence before sole-path cutover",
+  "remove the temporary selector/read-path fallback unless a real documented consumer remains (#1956 s18)",
+  "targeted Vitest batches (subsystem batch runner — the full suite OOMs in one process), API verification, the COMPLETE existing Discover E2E suite, and visual baselines",
+  "real-browser desktop 1366x768 and mobile 390x844 evidence",
+  "explicitly retest the original #1943 overlap/fit reproduction (#1956 s16 test 13)",
+  "resolve the DELETION-CONDITIONAL on e2e/discover-map-hierarchy.spec.ts: prove its residual non-Areas map-layer-selection coverage and its #1738 marker-popover gating pointer are covered elsewhere, or re-home them",
+  "attribute or close the reproducible cluster-density label-overlap defect (lineage vs #1943/#1815 still unattributed)",
+  "build the visual-regression harness #1956 s16 requires (the deleted assertion-free capture spec did not provide it)",
+  "stop at PR merge approval; do NOT merge without explicit user authorisation",
+]
+
+[slice.8.acceptance_criteria]
+items = [
+  "AC8.1 old/new ancestry and count comparison passes before sole-path cutover (#1956 s16 test 14)",
+  "AC8.2 the temporary comparison/rollback selector is removed, or a still-active consumer is documented (#1956 s15)",
+  "AC8.3 the complete existing Discover E2E suite is green, or every failure has a clean-base pre-existing citation",
+  "AC8.4 no screenshot-only proof anywhere; every PASS states the command and its actual exit code (CLAUDE.md s11)",
+  "AC8.5 visual regression captured at 1366x768 and 390x844 for city root, Direction, Local Destination, crowded AREA visual clusters, comfortable single-AREA markers, AREA listings, loading/empty/error, mobile List and full-screen Map, and listing filters/search/result restoration",
+  "AC8.6 the promoted Bangalore hierarchy passes blocking depth/breadth/membership validation (#1956 s15)",
+  "AC8.7 #1956 consumes only typed public navigation APIs and does not reach into graph/cache/repository internals (#1956 s15)",
+  "AC8.8 the #1943 overlap/fit reproduction is explicitly retested",
+  "AC8.9 the deleted e2e/discover-map-hierarchy.spec.ts residual coverage is proven present elsewhere or re-homed",
+  "AC8.10 the full #2014 s17 sign-off package (all 10 attachments) is assembled",
+  "AC8.11 the PR stops at USER_MERGE_APPROVAL_REQUIRED",
+]
+required_tests = ["the complete #1956 s16 E2E list (14 scenarios) and the complete #2014 s16 desktop/Schools/mobile E2E flows, against real backend data with no route mocks"]
+evidence = ["#2014 s17 items 1-10", "provenance-labelled test matrix with command + exit code per row"]
+rollback_boundary = "evidence and selector removal only; the selector removal is the last irreversible step and is gated on AC8.1 passing."
+specialist_routing = "qa (e2e-authoring) -> qa (verification, terminal) -> code-reviewer -> security-reviewer -> Main Agent WORKDONE_REVIEW"
+forbidden = "no gh pr merge without an explicit user message approving that specific action (CLAUDE.md s10 — a gate verdict of APPROVED_TO_MERGE is NOT user approval); no --no-verify push without a documented user-approved justification"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CARRIED-FORWARD DEFECTS, RISKS AND OPEN QUESTIONS
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[open_defect]]
+id = "AC11-ellipsis-geometry"
+status = "MOOT — closed by contract, NOT fixed"
+detail = "Unreachable at the 4-item breadcrumb cap; see overrule O-2. Do not continue the geometry chase. The residual no-clip/reachability obligation is AC5.14 / AC6.7."
+
+[[open_defect]]
+id = "156-descendant-key-node"
+status = "RECLASSIFIED — likely an invalid promoted hierarchy, not a request-cap sizing decision"
+owner_slice = 1
+detail = "See [salvage_audit.reclassified_156_key_node]. Inference from node metadata; must be live-proven or disproven in Slice 1."
+
+[[open_defect]]
+id = "marker-count-arithmetic-mismatch"
+status = "OPEN"
+owner_slice = "1 and 4"
+detail = "10+ stacked pill markers rendered at a node with only 2 direct children. Consistent with markers being driven by aggregated descendants rather than direct children, which #2014 s5 forbids. Needs a live check, not an assumption."
+
+[[open_defect]]
+id = "overlay-vs-panel-breadcrumb-inconsistency"
+status = "OPEN — cause localised"
+owner_slice = "3 and 5"
+detail = "The generic 'Home > Bangalore > Areas' trail is the legacy fallback arm of areaJourneySegments in useDiscoverMapPresentation firing when the overlay has no resolved navigationNode. Needs a live repro to separate a loading flash from a persistent miss."
+
+[[open_defect]]
+id = "anon-leaf-markers-absent"
+status = "OPEN — real"
+owner_slice = 7
+
+[[open_defect]]
+id = "listing-peek-round-trip-J7f"
+status = "OPEN — real"
+owner_slice = 7
+
+[[open_defect]]
+id = "authenticated-unscoped-marker-risk"
+status = "LIKELY CLOSED BY CONSTRUCTION — wants one live authenticated confirmation"
+owner_slice = "1 or 4"
+
+[[open_defect]]
+id = "cluster-density-label-overlap"
+status = "OPEN — lineage unattributed (not asserted to be #1943 or #1815)"
+owner_slice = "4 and 8"
+
+[[risk]]
+id = "R1"
+severity = "high"
+risk = "If the promoted Bangalore tree is INVALID (Slice 1 AC1.2), the fix is an upstream regenerate/validate/preview/promote cycle that may not be inside this PR's frontend file globs."
+mitigation = "Slice 1 is deliberately first and read-only-ish. If it proves INVALID, escalate to the Main Agent with a scope decision rather than patching the frontend. Frontend flattening is forbidden, so there is no in-scope workaround."
+
+[[risk]]
+id = "R2"
+severity = "high"
+risk = "Slices 3 and 4 are mostly net-new product surface, not salvage. Estimating them from the checkpoint A-D diff will understate them."
+mitigation = "The audit explicitly enumerates 10 things not built at all. Treat Slice 3 and Slice 4 as new feature work with their own qa-fast risk scans."
+
+[[risk]]
+id = "R3"
+severity = "medium"
+risk = "Journey-aware visibility needs per-area eligible counts for the ACTIVE filters. If the count boundary cannot supply them efficiently, the naive implementation is an N+1 or a label-parse — both forbidden."
+mitigation = "Slice 1 AC1.5 gates this before any Slice 4 code. If the boundary cannot supply them, that is an architecture escalation, not a frontend workaround."
+
+[[risk]]
+id = "R4"
+severity = "medium"
+risk = "Recurrence of the checkpoint-D pattern where each fix round resolved its target defect and surfaced a new one at the same AC, with tests passing while real geometry failed."
+mitigation = "Every visual/geometry AC in this plan requires real-browser evidence at a stated viewport, and every PASS must state command + exit code. Component tests alone are never sufficient for a render-geometry claim. Use one clean browser tab, throttled, 3x, as the authoritative gate."
+
+[[risk]]
+id = "R5"
+severity = "medium"
+risk = "The full frontend vitest suite heap-OOMs in one process, so a naive 'run everything' verification step will fail for environmental reasons and be misread as a regression."
+mitigation = "Use the #1825 subsystem batch runner and aggregate JSON. Label environmental failures TEST_ENV_FAILURE, never FAIL or PASS."
+
+[[risk]]
+id = "R6"
+severity = "low"
+risk = "GitHub Actions CI fails all jobs for billing reasons, so red CI will appear on every PR."
+mitigation = "Cite the known billing block; rely on local batched evidence."
+
+[[decision]]
+id = "D-OQ2"
+was = "open question OQ2 — #2014 s2 defines '+N nearby areas' as total descendants minus displayed names, while the 2026-07-26 journey-aware rulings define it as visible journey members minus displayed names"
+decided_by = "user ruling 2026-07-27, corrections 3 and 6"
+decision = "The journey-aware form governs, and the COPY changes too. '+N' is computed from visible members wherever it is displayed; where membership is filter-affected the label reads '+N areas with matches', not '+N nearby areas', because the latter implies a geographic completeness a filtered member set does not have. The older #2014 s2 wording is superseded on both the arithmetic and the copy."
+status = "CLOSED"
+note = "Recorded rather than deleted so a reviewer who spots the older s2 text can see it was considered, not missed."
+
+[open_questions]
+status = "NONE OPEN"
+note = "All five open questions from plan revision 2 (OQ1-OQ5) are now CLOSED as [[decision]] entries D-OQ1 through D-OQ5. PLAN_REVIEW's first required change was a firm decision rather than an open question, so there are no open questions left to carry into resubmission."
+
+[[decision]]
+id = "D-OQ3"
+was = "open question OQ3 — API-side vs client-side application of the journey-aware visibility predicate"
+decided_by = "user ruling 2026-07-27, correction 5"
+decision = "Split ownership: BACKEND owns one bounded/batched request returning per-area eligible listing counts, optional per-area eligible school counts and authoritative server-computed deduplicated aggregate totals, with no N+1. FRONTEND owns the visibility predicate application, representative-name selection, +N arithmetic and visual clustering. See [corrections.c5_count_architecture]. Phase 0 confirms or corrects this against real data; architect reviews it inside PR 1."
+status = "CLOSED"
+
+[[decision]]
+id = "D-OQ4"
+was = "open question OQ4 — when to resolve the DELETION-CONDITIONAL on e2e/discover-map-hierarchy.spec.ts"
+decided_by = "orchestrator, consistent with the user's correction 2 (all legacy-Areas deletion in the final PR)"
+decision = "PR 6, as an explicit exit condition (AC6.4). Its legacy area-group subject matter is genuinely retired, but it also carried non-Areas map-layer-selection coverage and the #1738 marker-popover gating pointer, so the deletion is final only once that residual coverage is proven present elsewhere or re-homed. Correction 2 independently forces this timing: the spec covers the legacy path, which stays alive until PR 6."
+status = "CLOSED"
+
+[[decision]]
+id = "D-OQ5"
+was = "open question OQ5 — PR granularity (PLAN_REVIEW's first required change)"
+decided_by = "user ruling 2026-07-27"
+decision = "Phase 0 validation gate (no PR) + 6 PRs, no parallel PRs, each starting from newly merged main. See [delivery_structure]. The orchestrator's 9-PR proposal was presented and NOT approved; the 6-PR shape supersedes it."
+status = "CLOSED"
+
+[[decision]]
+id = "D-OQ1"
+was = "open question OQ1 — is an upstream promoted-hierarchy correction in scope for #1956, or a separate blocking issue?"
+decided_by = "user ruling 2026-07-27, via the Phase 0 outcome contract"
+decision = "Neither pre-authorised nor pre-excluded: Phase 0 must terminate in either READY_FOR_IMPLEMENTATION or BLOCKED_BY_INVALID_PROMOTED_HIERARCHY. On BLOCKED, work STOPS and the upstream remedy becomes an explicit user scope decision at that point. No frontend workaround exists because flattening is forbidden."
+status = "CLOSED"
+
+[plan_self_check]
+contract_read_in_full = true
+issue_1956_comments_read = "1 of 1 (2026-07-26 journey-aware membership)"
+issue_2014_comments_read = "3 of 3 (depth/clutter budget; Back/breadcrumb/history; journey-aware counts)"
+every_diff_file_classified = true
+old_plan_edited_in_place = false
+old_plan_preserved_at = "team-lead-plan-pr-b.SUPERSEDED-2026-07-26-adaptive-depth.toml"
+destructive_git_commands_run = "NONE"
+production_code_changed_in_slice_0 = false
+tests_removed_for_merely_failing = "NONE — every REMOVE cites forbidden-behaviour encoding or dead-by-construction, and the two removed breadcrumb tests currently PASS"
+pr_2011_foundation_preserved = true
+forbidden_scope_enumerated = true
