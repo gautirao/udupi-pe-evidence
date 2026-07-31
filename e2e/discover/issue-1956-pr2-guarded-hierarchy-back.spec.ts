@@ -181,9 +181,19 @@ test.describe('@integration-ui #1956 PR-2 — guarded hierarchy Back (AC5.3/AC5.
   }) => {
     // Cold load straight onto the Area — its parent Direction was never in
     // this tab's history at all.
+    //
+    // CORRECTION (#1956 PR-4, by-design): this assertion USED TO be
+    // `expect(page.getByTestId('navigation-level-panel')).toBeVisible(...)`,
+    // proving the (then-current) structural hierarchy panel mounted at a cold
+    // AREA-leaf deep link. PR-4 deliberately replaces that surface at an AREA
+    // leaf with the listings restoration contract (`areas-journey-panel-listings`)
+    // — rendering the old hierarchy panel here would now be the regression.
+    // Updated narrowly to prove the NEW contract; the HierarchyBackButton
+    // behaviour this test exists for (REPLACE-not-POP from a cold deep link)
+    // is unchanged and asserted below exactly as before.
     await page.goto(`/discover?${BASE}&node=${encodeURIComponent(AREA_BASAVESHWARA)}`);
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.getByTestId('navigation-level-panel')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('areas-journey-panel-listings')).toBeVisible({ timeout: 15_000 });
     expect(await currentNodeParam(page)).toBe(AREA_BASAVESHWARA);
 
     const backButton = page.getByTestId('areas-hierarchy-back');

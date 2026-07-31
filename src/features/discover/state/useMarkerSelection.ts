@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 import type { DiscoverUrlActions, DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
+import {
+  hasMarkerAreaContext,
+  isMarkerPopoverEligible,
+} from '@/features/discover/navigation/markerPopoverEligibility';
 
 /**
  * Issue #1824 Slice S5 — EARLY marker-selection cluster extracted verbatim
@@ -93,6 +97,20 @@ export interface UseMarkerSelectionParams {
   urlActions: DiscoverUrlActions;
   urlState: DiscoverUrlState;
   /**
+   * Issue #1956 PR-4 — true only when: `urlState.journey === 'area-first'`
+   * AND the resolved `useAreasNavigationJourney` node is a canonical AREA
+   * leaf (see `isResolvedAreaLeafNode` in navigation/nodeAreaPoint.ts).
+   * Forwarded verbatim into `isMarkerPopoverEligible` (the click CAPTURE
+   * gate below) — this hook never resolves the node itself. Defaults to
+   * `false` (via the destructure below) so every pre-existing caller is
+   * unaffected. MUST move in LOCK-STEP with MapDiscovery.tsx's page-level
+   * RENDER gate (risk R1) — both now import the SAME
+   * `isMarkerPopoverEligible` function, so they cannot drift on the
+   * formula itself; the caller is still responsible for passing the same
+   * `isNodeAreaLeaf` value to both.
+   */
+  isNodeAreaLeaf?: boolean;
+  /**
    * Issue #1939 — the SAME map-half container ref MapDiscovery passes to
    * DiscoverMapCanvas/DiscoverMapMarkerPopover for popover positioning/clamp.
    * Used ONLY by hydrateSelectedMarkerFromUrl below to locate the target
@@ -173,6 +191,7 @@ export function useMarkerSelection({
   urlActions,
   urlState,
   mapContainerRef,
+  isNodeAreaLeaf = false,
 }: UseMarkerSelectionParams): UseMarkerSelectionResult {
   // Issue #1373 — selected agri polygon listing for right-panel stub (#1374 content).
   const [selectedMarkerListing, setSelectedMarkerListing] =
@@ -187,8 +206,8 @@ export function useMarkerSelection({
   // stays empty (stable identity). urlActions changes every render; urlState.selectedRegion
   // and journey are needed inside the callback. The ref is mutated on every render so the
   // callback always reads the latest values.
-  const ctxRef = useRef({ urlActions, urlState });
-  ctxRef.current = { urlActions, urlState };
+  const ctxRef = useRef({ urlActions, urlState, isNodeAreaLeaf });
+  ctxRef.current = { urlActions, urlState, isNodeAreaLeaf };
 
   // Issue #1973 rev-2 (A1) — see this file's header comment for the full
   // contract. 'url' = popover is URL-backed (a later URL change MUST close
@@ -237,10 +256,32 @@ export function useMarkerSelection({
       // (and thus populating selectedMarkerListing for the popover) once a school is
       // also selected in area-first, while still excluding school-first (its own
       // tiered/peek marker flows own that state).
+      // Issue #1956 PR-4 — widened so a marker click at a canonical AREA
+      // leaf (node= journey, legacy `areaKey` URL param null) ALSO writes
+      // `listing=` — required for AC4.4's peek deep-link/round-trip, since
+      // the URL param is the only thing the #1939 restoration machinery
+      // reads back. Deliberately NOT delegated to the shared
+      // `isMarkerPopoverEligible` predicate here: that function's
+      // school-first OR-arm is intentionally NOT part of this URL-WRITE
+      // gate (see the "Else: popoverSourceRef stays 'click' — pure
+      // school-first" comment a few lines below) — only the areaKey clause
+      // gets the new additive OR, preserving the #1973 pure-school-first
+      // no-URL-write design exactly.
+      // FIX CYCLE 2 (opus review, Finding 6) — this was a byte-copy of
+      // `hasAreaContext` inside `isMarkerPopoverEligible`. Now composed from
+      // the exported `hasMarkerAreaContext` sub-predicate (same file this
+      // gate already imports `isMarkerPopoverEligible` from) so the formula
+      // lives in exactly one place; the school-first arm stays deliberately
+      // absent here by calling the SUB-predicate, not the full one.
+      const hasAreaContextForUrlWrite = hasMarkerAreaContext({
+        journey: state.journey,
+        areaKey: state.areaKey,
+        isNodeAreaLeaf: ctxRef.current.isNodeAreaLeaf,
+      });
       if (
         listing != null &&
         state.journey !== 'agri-first' &&
-        state.areaKey != null &&
+        hasAreaContextForUrlWrite &&
         (state.schoolId == null || state.journey === 'area-first')
       ) {
         popoverSourceRef.current = 'url';
@@ -268,11 +309,14 @@ export function useMarkerSelection({
   // (markerPixelPos) without the popover ever rendering (the #1798 bug).
   const handleMarkerClickWithPosition = useCallback(
     (pos: { x: number; y: number }) => {
-      const { urlState: state } = ctxRef.current;
+      const { urlState: state, isNodeAreaLeaf: leafFlag } = ctxRef.current;
       if (
-        state.journey !== 'agri-first' &&
-        ((state.areaKey != null && (state.schoolId == null || state.journey === 'area-first')) ||
-          (state.journey === 'school-first' && state.schoolId != null))
+        isMarkerPopoverEligible({
+          journey: state.journey,
+          areaKey: state.areaKey,
+          schoolId: state.schoolId,
+          isNodeAreaLeaf: leafFlag,
+        })
       ) {
         setMarkerPixelPos(pos);
       }

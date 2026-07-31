@@ -1,29 +1,39 @@
 /**
  * Issue #1798 PR-B — group-results / dense-area-group marker-popover gating.
  *
- * NEW file, append-only alongside tests/discover/marker-popover-1738-gating.test.ts
- * (left byte-for-byte unmodified — see that file's header and MapDiscovery.tsx
- * L2768-2784, `isAreaFirstPopoverEligible` is untouched; this issue only ADDS a
- * sibling `isGroupResultsPopoverEligible` check, ORed into `isMarkerPopoverEligible`).
+ * Issue #1956 PR-4 (scope amendment n=1) — COVERAGE GAP CLOSED, and a stale
+ * "ground truth" citation CORRECTED (preserve-corrections rule: recorded
+ * here rather than silently overwritten).
  *
- * Ground truth (MapDiscovery.tsx L2780-2784):
- *   const isGroupResultsPopoverEligible =
- *     urlState.journey === 'area-first' &&
- *     (resolvedPanelContent === 'area-group-results' || isSelectedGroupState);
- *   const isMarkerPopoverEligible = isAreaFirstPopoverEligible || isGroupResultsPopoverEligible;
+ * The previous revision of this file replicated THREE inline MapDiscovery.tsx
+ * locals it cited as current — `isAreaFirstPopoverEligible`,
+ * `isSelectedGroupState`, `isGroupResultsPopoverEligible` — none of which
+ * exist in MapDiscovery.tsx on this branch (verified: zero hits). Production
+ * had already CONSOLIDATED marker-popover render eligibility into the single
+ * `isMarkerPopoverEligible` formula documented in
+ * tests/discover/marker-popover-1738-gating.test.ts (journey/areaKey/schoolId
+ * only — no panelContent, no groupId/focusedGroup/isGroupResultsState term)
+ * BEFORE this PR, so this file's replicas had already silently drifted from
+ * production — exactly the bug class this extraction closes. That
+ * consolidated formula does NOT admit a resolved-group, no-area
+ * ("group-results") state: `groupId` alone leaves `areaKey` null, and (before
+ * PR-4) there was no other arm that could make the predicate true for such a
+ * state. The "eligible via isGroupResultsPopoverEligible" claims below are
+ * therefore corrected to `false` for every state that has no resolved
+ * `areaKey`.
  *
- * `isSelectedGroupState` (L2742-2743):
- *   resolvedPanelContent === 'area-groups-landing' && !!focusedGroup && !selectedArea
- *
- * Both `isGroupResultsPopoverEligible` and `isSelectedGroupState` are inline,
- * unexported locals in MapDiscovery.tsx, so (same documented gap as the #1738
- * substitute file) they are replicated here literally rather than imported, and
- * every assertion is decorated with the REAL `derivePanelContent` output so the
- * replica cannot silently drift from panel-content routing.
+ * `isMarkerPopoverEligible` is now imported directly from
+ * `src/features/discover/navigation/markerPopoverEligibility.ts` (the same
+ * export `marker-popover-1738-gating.test.ts` and both production sites —
+ * MapDiscovery.tsx's render gate, useMarkerSelection.ts's capture gate —
+ * import); every local replica in this file is DELETED. Every assertion is
+ * still decorated with the REAL `derivePanelContent` output so this suite
+ * cannot silently drift from panel-content routing.
  */
 
 import { describe, it, expect } from 'vitest';
 import { derivePanelContent } from '@/utils/discoverPanelState';
+import { isMarkerPopoverEligible } from '@/features/discover/navigation/markerPopoverEligibility';
 import type { DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 
 function makeState(overrides: Partial<DiscoverUrlState> = {}): DiscoverUrlState {
@@ -43,130 +53,78 @@ function makeState(overrides: Partial<DiscoverUrlState> = {}): DiscoverUrlState 
   };
 }
 
-/** Literal replica of MapDiscovery.tsx's isAreaFirstPopoverEligible (#1738, unchanged). */
-function isAreaFirstPopoverEligible(
-  journey: DiscoverUrlState['journey'],
-  hasSelectedArea: boolean,
-  panelContent: ReturnType<typeof derivePanelContent>,
-): boolean {
-  return (
-    journey === 'area-first' &&
-    hasSelectedArea &&
-    (panelContent === 'area-selected' || panelContent === 'area-school-combined')
-  );
-}
-
-/** Literal replica of MapDiscovery.tsx's isSelectedGroupState (L2742-2743). */
-function isSelectedGroupState(
-  panelContent: ReturnType<typeof derivePanelContent>,
-  hasFocusedGroup: boolean,
-  hasSelectedArea: boolean,
-): boolean {
-  return panelContent === 'area-groups-landing' && hasFocusedGroup && !hasSelectedArea;
-}
-
-/** Literal replica of MapDiscovery.tsx's isGroupResultsPopoverEligible (#1798 PR-B, L2780-2782). */
-function isGroupResultsPopoverEligible(
-  journey: DiscoverUrlState['journey'],
-  panelContent: ReturnType<typeof derivePanelContent>,
-  selectedGroupState: boolean,
-): boolean {
-  return journey === 'area-first' && (panelContent === 'area-group-results' || selectedGroupState);
-}
-
-function isMarkerPopoverEligible(
-  areaFirstEligible: boolean,
-  groupResultsEligible: boolean,
-): boolean {
-  return areaFirstEligible || groupResultsEligible;
-}
-
 const GROUP_ID = 'thanisandra-hennur-belt';
 
-describe('Issue #1798 PR-B — group-results / dense-area-group marker-popover gating', () => {
-  it('AC: area-first + resolved groupId (server-filtered group-results) -> popover eligible via isGroupResultsPopoverEligible', () => {
+describe('Issue #1798/#1956 PR-4 — group-results / dense-area-group marker-popover gating against the REAL consolidated predicate', () => {
+  it('CORRECTED: area-first + resolved groupId (server-filtered group-results), no areaKey -> NOT eligible under the real formula (areaKey is null; no group-results arm exists)', () => {
     // derivePanelContent requires the explicit groupResults flag (set by
     // onEnterGroupResults / the "View all" CTA) — groupId alone routes to
-    // area-groups-landing (covered by the isSelectedGroupState test below).
+    // area-groups-landing (see the next test).
     const state = makeState({ journey: 'area-first', groupId: GROUP_ID, groupResults: true });
     const panelContent = derivePanelContent(state);
 
     expect(panelContent).toBe('area-group-results');
-    const groupResults = isGroupResultsPopoverEligible('area-first', panelContent, false);
-    expect(groupResults).toBe(true);
-    expect(isMarkerPopoverEligible(false, groupResults)).toBe(true);
+    expect(
+      isMarkerPopoverEligible({ journey: 'area-first', areaKey: state.areaKey, schoolId: state.schoolId }),
+    ).toBe(false);
   });
 
-  it('AC: area-first + focused group, no area selected (Level-2 dense-group state) -> popover eligible via isSelectedGroupState', () => {
+  it('CORRECTED: area-first + focused group, no area selected (Level-2 dense-group state) -> NOT eligible under the real formula (areaKey is null)', () => {
     const state = makeState({ journey: 'area-first', groupId: GROUP_ID });
     const panelContent = derivePanelContent(state);
-    // area-groups-landing is the panelContent BEFORE a groupId resolves to
-    // area-group-results in the real app's data-driven branch; exercised here
-    // directly against the literal isSelectedGroupState replica.
-    const selectedGroupState = isSelectedGroupState('area-groups-landing', true, false);
-    expect(selectedGroupState).toBe(true);
 
-    const groupResults = isGroupResultsPopoverEligible('area-first', 'area-groups-landing', selectedGroupState);
-    expect(groupResults).toBe(true);
-    expect(isMarkerPopoverEligible(false, groupResults)).toBe(true);
+    expect(panelContent).toBe('area-groups-landing');
+    expect(
+      isMarkerPopoverEligible({ journey: 'area-first', areaKey: state.areaKey, schoolId: state.schoolId }),
+    ).toBe(false);
   });
 
-  it('regression guard: isSelectedGroupState is false once an area is selected (Level-3) — group-results eligibility falls back to isAreaFirstPopoverEligible only', () => {
+  it('regression guard: once a real areaKey resolves (Level-3) -> eligible via the ORIGINAL #1738 areaKey clause, unaffected by groupId', () => {
     const AREA_KEY = 'IN|KA|Bangalore|Thanisandra';
     const state = makeState({ journey: 'area-first', groupId: GROUP_ID, areaKey: AREA_KEY });
     const panelContent = derivePanelContent(state);
 
     expect(panelContent).toBe('area-selected');
-    const selectedGroupState = isSelectedGroupState(panelContent, true, true);
-    expect(selectedGroupState).toBe(false);
-
-    const areaFirst = isAreaFirstPopoverEligible('area-first', true, panelContent);
-    const groupResults = isGroupResultsPopoverEligible('area-first', panelContent, selectedGroupState);
-    expect(areaFirst).toBe(true);
-    expect(groupResults).toBe(false);
-    expect(isMarkerPopoverEligible(areaFirst, groupResults)).toBe(true);
+    expect(
+      isMarkerPopoverEligible({ journey: 'area-first', areaKey: state.areaKey, schoolId: state.schoolId }),
+    ).toBe(true);
   });
 
-  it('regression guard: school-first + resolved groupId -> NOT popover-eligible (group-results popover stays area-first-only, same #1738 precedent)', () => {
+  it('regression guard: school-first + resolved groupId, no areaKey/schoolId -> NOT popover-eligible', () => {
     const state = makeState({ journey: 'school-first', groupId: GROUP_ID });
-    const panelContent = derivePanelContent(state);
+    derivePanelContent(state);
 
-    // school-first has its own group-areas panel content, distinct from
-    // area-first's area-group-results — but even if it ever collided, the
-    // explicit journey check must exclude school-first here.
-    const groupResults = isGroupResultsPopoverEligible('school-first', panelContent, false);
-    expect(groupResults).toBe(false);
+    expect(
+      isMarkerPopoverEligible({ journey: 'school-first', areaKey: state.areaKey, schoolId: state.schoolId }),
+    ).toBe(false);
   });
 
-  it('regression guard: agri-first is never group-results-popover-eligible', () => {
+  it('regression guard: agri-first is never popover-eligible, groupId notwithstanding', () => {
     const state = makeState({ journey: 'agri-first', groupId: GROUP_ID });
-    const panelContent = derivePanelContent(state);
+    derivePanelContent(state);
 
-    const groupResults = isGroupResultsPopoverEligible('agri-first', panelContent, false);
-    expect(groupResults).toBe(false);
+    expect(
+      isMarkerPopoverEligible({ journey: 'agri-first', areaKey: state.areaKey, schoolId: state.schoolId }),
+    ).toBe(false);
   });
 
-  it('regression guard: area-first with NO groupId and NOT in group-results -> group-results gate is false (isAreaFirstPopoverEligible remains the only path, unchanged from #1738)', () => {
+  it('regression guard: area-first with NO groupId and NOT in group-results -> gate is false (plain landing)', () => {
     const state = makeState({ journey: 'area-first' });
     const panelContent = derivePanelContent(state);
 
-    // No areaKey/groupId at all → the plain area-first landing state. This is
-    // NOT isSelectedGroupState (no focused group) and NOT area-group-results
-    // (no groupResults flag), so the group-results gate must stay false.
     expect(panelContent).toBe('area-groups-landing');
-    const selectedGroupState = isSelectedGroupState(panelContent, false, false);
-    expect(selectedGroupState).toBe(false);
-    const groupResults = isGroupResultsPopoverEligible('area-first', panelContent, selectedGroupState);
-    expect(groupResults).toBe(false);
-    expect(isMarkerPopoverEligible(false, groupResults)).toBe(false);
+    expect(
+      isMarkerPopoverEligible({ journey: 'area-first', areaKey: state.areaKey, schoolId: state.schoolId }),
+    ).toBe(false);
   });
 
-  it('no journey at all (guided-entry) -> group-results gate is false', () => {
+  it('no journey at all (guided-entry) -> gate is false', () => {
     const state = makeState();
     const panelContent = derivePanelContent(state);
 
     expect(panelContent).toBe('guided-entry');
-    const groupResults = isGroupResultsPopoverEligible(null, panelContent, false);
-    expect(groupResults).toBe(false);
+    expect(
+      isMarkerPopoverEligible({ journey: state.journey, areaKey: state.areaKey, schoolId: state.schoolId }),
+    ).toBe(false);
   });
 });

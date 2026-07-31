@@ -27,6 +27,15 @@ import type { UseAreasNavigationJourneyResult } from '@/features/discover/naviga
 import { presentClusterRepresentatives } from '@/features/discover/navigation/representativeNames';
 import type { ClusterableAreaMember } from '@/features/discover/navigation/areaClustering';
 import { isMemberEligible } from '@/features/discover/navigation/journeyVisibility';
+import { deriveAreaPointFromNode } from '@/features/discover/navigation/nodeAreaPoint';
+import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { useDiscoverActions, useDiscoverNav } from '@/features/discover/context/useDiscoverContext';
+import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
+import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSearchState';
+import { CITY_CONFIG } from '@/lib/localityUtils';
+import { AreaSelectedPanel } from '@/components/discover/panels/AreaSelectedPanel';
+import type { PropertyFilters } from '@/hooks/usePropertyListings';
 
 /**
  * One visual AREA cluster's member set, as focused by a map cluster-marker
@@ -80,6 +89,34 @@ export interface DiscoverAreasJourneyPanelProps {
   focusedClusterMemberAreaKeys?: readonly string[] | null;
   /** Fired to clear focus (`null`) or, for parity with the map's own callback shape, report a new member set. A caller that owns this state feeds it straight back into `focusedClusterMemberAreaKeys` to keep the map and panel in lock-step. */
   onClusterFocusChange?: (memberAreaKeys: readonly string[] | null) => void;
+  /**
+   * Issue #1956 PR-4 FIX CYCLE 3 (blocking Fix B) — MapDiscovery's OWN
+   * committed `filters` local state (useDiscoverPageState) and its single
+   * writer `handleFiltersChange`. This is the SAME state
+   * `useDiscoverMapData`'s `effectiveFilters` feeds the map's listing/marker
+   * query with, threaded here (via `DiscoverRightPanelContainer`, which
+   * already receives both for the legacy `DiscoverRightPanel`) so an
+   * AREA-leaf chip toggle writes into that ONE state instead of a parallel
+   * URL-only `setFiltersCommitted` write the map's page-local state never
+   * observes — see `AreaLeafListingsSurface`'s `onFiltersChange` below for
+   * the actual routing. Optional only so the pre-existing loading/error/
+   * empty/children-level tests above (which never resolve an AREA leaf)
+   * keep compiling and passing unchanged.
+   */
+  areaLeafFilters?: PropertyFilters;
+  onAreaLeafFiltersChange?: (next: PropertyFilters) => void;
+  /**
+   * Issue #1956 PR-4 FINAL FIX PASS (regression fix) — the SAME
+   * `urlActions.enterSchoolPicking` handler `DiscoverRightPanelContainer`
+   * already wires to the legacy `DiscoverRightPanel`'s `onAddSchool` (see
+   * that container's call site). Enters the area-first school-picking
+   * sub-step (Issue #1157) WITHOUT flipping `journey`, so Back restores the
+   * selected area instead of deleting it. Forwarded unchanged to
+   * `AreaSelectedPanel` via `AreaLeafListingsSurface` below — no new
+   * handler is created here. Optional only so the pre-existing tests that
+   * never resolve an AREA leaf keep compiling and passing unchanged.
+   */
+  onAddSchool?: () => void;
 }
 
 export function DiscoverAreasJourneyPanel({
@@ -91,6 +128,9 @@ export function DiscoverAreasJourneyPanel({
   buildNodeHref,
   focusedClusterMemberAreaKeys = null,
   onClusterFocusChange,
+  areaLeafFilters,
+  onAreaLeafFiltersChange,
+  onAddSchool,
 }: DiscoverAreasJourneyPanelProps) {
   // Issue #1956 PR 3 (bounded state-lift, AC4.12) — derive the focused
   // cluster's member list + count copy from the SAME `journey.node.children`
@@ -166,6 +206,28 @@ export function DiscoverAreasJourneyPanel({
       countLabel: countResult.label,
     };
   }, [focusedClusterMemberAreaKeys, journey.node, journey.children]);
+
+  // Issue #1956 PR-4 (AC4.1/AC4.2/AC4.7/AC4.9) — `selectedAreaPoint` is a
+  // PURE (hook-free) re-derivation of the SAME node this component already
+  // receives via `journey.node` (identical to MapDiscovery.tsx's own
+  // `nodeAreaPoint` bridge) — no extra fetch, no new navigation state, and
+  // deliberately NOT itself calling any hook, so every existing render path
+  // that never resolves an AREA leaf (loading/error/node-null/focused-
+  // cluster/structural-empty/success-with-children) is completely unaffected
+  // by the new listings surface below. The surface's own data hooks
+  // (useAuth/useDiscoverNav/useDiscoverActions/useDiscoverCityListings) live
+  // in `AreaLeafListingsSurface` (below), which only ever MOUNTS when this
+  // is non-null — see that component's doc comment for the full contract.
+  // FIX CYCLE 2 (opus review, Finding 7) — `deriveAreaPointFromNode` returns a
+  // fresh object literal on every call; without memoisation this flowed a
+  // new `selectedArea`/`areaKeys: [areaPoint.areaKey]` object identity into
+  // `AreaSelectedPanel` and `AreaLeafListingsSurface` on every render.
+  // Memoised on `journey.node`'s identity, matching MapDiscovery.tsx's own
+  // `nodeAreaPoint` useMemo (same derivation, same dep) — an unconditional
+  // hook above the early returns is fine (matches the PR-3 hooks already
+  // declared before them in this component).
+  const selectedAreaPoint = useMemo(() => deriveAreaPointFromNode(journey.node), [journey.node]);
+
   if (journey.isLoading) {
     return (
       <div className="p-4 space-y-3" data-testid="areas-journey-panel-loading">
@@ -246,6 +308,33 @@ export function DiscoverAreasJourneyPanel({
     );
   }
 
+  // Issue #1956 PR-4 — has-listings branch, ADDITIVE and inserted BEFORE the
+  // structural empty branch below (render order: has-children/focusedCluster
+  // [unchanged, above] -> has-listings [this] -> empty [unchanged, below]).
+  // A canonical AREA leaf always has `journey.children.length === 0` (it is
+  // the terminal destination — nothing to drill into further), which is
+  // exactly why it fell into the structural "areas-journey-panel-empty"
+  // branch before this PR. The empty branch below still fires whenever
+  // there are no children AND no resolved AreaPoint (cold load, a
+  // Direction/Cluster with genuinely zero children, or a node still
+  // resolving) — AC4.7's zero-LISTING state is a DIFFERENT, normal listing
+  // empty state, rendered here (via AreaSelectedPanel's own loading/empty
+  // handling), never the structural "No matches with current filters"
+  // literal that belongs to Direction/Local-Destination levels only.
+  if (selectedAreaPoint) {
+    return (
+      <AreaLeafListingsSurface
+        areaPoint={selectedAreaPoint}
+        node={journey.node}
+        buildNodeHref={buildNodeHref}
+        historyAdjacencyLog={journey.historyAdjacencyLog}
+        committedFilters={areaLeafFilters}
+        onCommittedFiltersChange={onAreaLeafFiltersChange}
+        onAddSchool={onAddSchool}
+      />
+    );
+  }
+
   if (journey.children.length === 0) {
     return (
       <div className="p-4" data-testid="areas-journey-panel-empty">
@@ -280,6 +369,281 @@ export function DiscoverAreasJourneyPanel({
         selectedNodeKey={selectedNodeKey}
         hoveredNodeKey={hoveredNodeKey}
         onHoverChange={onHoverChange}
+      />
+    </div>
+  );
+}
+
+interface AreaLeafListingsSurfaceProps {
+  areaPoint: NonNullable<ReturnType<typeof deriveAreaPointFromNode>>;
+  node: NavigationNodeResponse;
+  buildNodeHref: (nodeKey: string) => string | null;
+  historyAdjacencyLog: UseAreasNavigationJourneyResult['historyAdjacencyLog'];
+  /**
+   * Issue #1956 PR-4 FIX CYCLE 3 (Fix B) — see
+   * `DiscoverAreasJourneyPanelProps.areaLeafFilters`/`onAreaLeafFiltersChange`.
+   * Optional so `DiscoverAreasJourneyPanel`'s own defensive fallback (used
+   * only if a caller omits them) keeps typechecking.
+   */
+  committedFilters?: PropertyFilters;
+  onCommittedFiltersChange?: (next: PropertyFilters) => void;
+  /** See `DiscoverAreasJourneyPanelProps.onAddSchool` — forwarded unchanged to `AreaSelectedPanel`. */
+  onAddSchool?: () => void;
+}
+
+/**
+ * Issue #1956 PR-4 (AC4.1/AC4.2/AC4.7/AC4.9) — lights up the EXISTING
+ * listing surface (`AreaSelectedPanel`: cards, quick filters, within-area
+ * search, favourites via `PropertyCard`, trust badges, anonymous price
+ * coarsening, Browse All) at a canonical AREA leaf, WITHOUT reaching through
+ * the forbidden `DiscoverRightPanel`/`DiscoverRightPanelContainer` legacy
+ * panel — this component derives everything it needs directly from the
+ * DiscoverProvider facade (the SAME `useDiscoverNav`/`useDiscoverActions`
+ * pattern `DiscoverRightPanelContainer` itself uses), FALLING BACK to that
+ * pattern only when the caller does not supply `committedFilters`/
+ * `onCommittedFiltersChange`. Issue #1956 PR-4 FIX CYCLE 3 (Fix B) —
+ * `DiscoverRightPanelContainer` NOW forwards its own `filters`/
+ * `handleFiltersChange` props (already received for the legacy
+ * `DiscoverRightPanel`, see that container's own prop list) into
+ * `DiscoverAreasJourneyPanel` as `areaLeafFilters`/`onAreaLeafFiltersChange`,
+ * so the AREA-leaf chip toggle below routes through the SAME page-local
+ * filters state `useDiscoverMapData`'s `effectiveFilters` feeds the map's
+ * listing/marker query with — one filter identity, not two independent
+ * stores.
+ *
+ * DELIBERATELY a separate component, mounted ONLY from
+ * `DiscoverAreasJourneyPanel`'s `if (selectedAreaPoint)` branch: every
+ * hook this component calls (useAuth/useDiscoverNav/useDiscoverActions/
+ * useDiscoverCityListings) needs its own provider context
+ * (AuthProvider/DiscoverProvider/QueryClientProvider). Keeping them OUT of
+ * the parent component means every other `DiscoverAreasJourneyPanel` render
+ * path (loading/error/node-null/focused-cluster/structural-empty/success-
+ * with-children) — including the parent's own pre-existing component test,
+ * which renders those paths without those providers — is completely
+ * unaffected by this addition.
+ */
+function AreaLeafListingsSurface({
+  areaPoint,
+  node,
+  buildNodeHref,
+  historyAdjacencyLog,
+  committedFilters,
+  onCommittedFiltersChange,
+  onAddSchool,
+}: AreaLeafListingsSurfaceProps) {
+  const { user, isLoading: authLoading } = useAuth();
+  const isAuthenticated = !authLoading && user !== null;
+  const nav = useDiscoverNav();
+  const actions = useDiscoverActions();
+  const intentListingPurpose = nav.intent === 'rent' ? 'rent' : 'sale';
+  const { searchQuery, debouncedSearch, handleSearchChange } = useDiscoverSearchState({
+    urlQ: nav.q,
+    setUrlSearch: actions.setSearchQuery,
+  });
+  // Issue #1956 PR-4 FIX PASS 4 (blocking, performance-analyst REQUEST_CHANGES
+  // against FIX CYCLE 3's Fix B) — FIX CYCLE 3 pointed the CHIP display at
+  // `committedFilters` (below, `effectiveFilters`) but left THIS query's
+  // propertyType/bedrooms/minPrice/maxPrice args reading `nav.filters`
+  // directly — the URL-derived, ~300ms-debounced copy. That reintroduced the
+  // exact class of bug Fix B was meant to close: immediately after a chip
+  // toggle, the chips showed the new value while this query (and therefore
+  // the cards + "N verified properties" count below) still reflected the
+  // stale URL filters until the debounce caught up.
+  //
+  // `effectiveFilters` (declared once, below) is now the ONE source both this
+  // query's four filter args AND the chip-display `filters` prop passed to
+  // AreaSelectedPanel read from — `committedFilters` (MapDiscovery's
+  // page-local `filters` state, the same state `useDiscoverMapData`'s
+  // `effectiveFilters` feeds the map's own listing/marker query with) when
+  // the caller supplies it, else `nav.filters` as a defensive fallback for
+  // callers/tests that render this component in isolation. Because chips,
+  // query args, and (by construction, since areaListingsForPanel/cards/count
+  // are derived from this same query's result) cards+count all read the
+  // identical `effectiveFilters` value on every render, a chip toggle can
+  // never show new chip state next to stale cards/count again.
+  //
+  // What this does NOT guarantee: that this component's TanStack Query cache
+  // entry is the SAME entry as the map's own `useDiscoverCityListings` call
+  // in `useDiscoverMapData`. `q` here is debounced by this component's own
+  // `useDiscoverSearchState` instance (a separate timer from the map's), so
+  // the two calls' query keys can still diverge on that field independent of
+  // filters — this pass does not claim or require cache-entry sharing, only
+  // same-frame filter-identity agreement between this panel's own chips,
+  // query, and cards. True single-sourcing (this component receiving
+  // MapDiscovery's ALREADY-FETCHED `areaListings` as a prop instead of
+  // issuing its own same-shaped query) remains the named PR-5 structural
+  // option, not implemented here.
+  // A minimal PropertyFilters projection (propertyType/bedrooms/price only —
+  // the fuller date/seller/board/category chip set stays on the legacy
+  // ActiveContextChips-driven surface; a documented simplification, see the
+  // PR-4 report), used by BOTH the query above and the chip-display `filters`
+  // prop below.
+  const effectiveFilters: PropertyFilters = useMemo(
+    () =>
+      committedFilters
+        ? {
+            propertyTypes: committedFilters.propertyTypes,
+            bedrooms: committedFilters.bedrooms,
+            priceMin: committedFilters.priceMin,
+            priceMax: committedFilters.priceMax,
+          }
+        : {
+            propertyTypes: nav.filters.propertyTypes as PropertyFilters['propertyTypes'],
+            bedrooms: nav.filters.bedrooms,
+            priceMin: nav.filters.priceMin,
+            priceMax: nav.filters.priceMax,
+          },
+    [
+      committedFilters,
+      nav.filters.propertyTypes,
+      nav.filters.bedrooms,
+      nav.filters.priceMin,
+      nav.filters.priceMax,
+    ],
+  );
+  const areaListingsQuery = useDiscoverCityListings({
+    city: nav.city,
+    areaKeys: [areaPoint.areaKey],
+    limitPerArea: 50,
+    propertyType:
+      effectiveFilters.propertyTypes?.length === 1 ? effectiveFilters.propertyTypes[0] : undefined,
+    bedrooms: effectiveFilters.bedrooms?.length === 1 ? effectiveFilters.bedrooms[0] : undefined,
+    minPrice: effectiveFilters.priceMin != null ? effectiveFilters.priceMin * 100 : undefined,
+    maxPrice: effectiveFilters.priceMax != null ? effectiveFilters.priceMax * 100 : undefined,
+    q: debouncedSearch?.trim() || undefined,
+    listingPurpose: intentListingPurpose,
+    isAuthenticated,
+  });
+  const areaListingsForPanel = useMemo(() => {
+    const listings = areaListingsQuery.data?.areas.flatMap((a) => a.listings) ?? [];
+    // Issue #1956 PR-4 FIX CYCLE 3 (SF4, defense-in-depth) — the anon
+    // /api/discover/cities/{city}/listings response is not expected to carry
+    // `pricePaise` for anon callers (backend-enforced), but this strips it
+    // client-side too, belt-and-suspenders, so a future backend regression
+    // can never leak an exact price into an anon render through this
+    // surface (PropertyCard renders `pricePaise` verbatim when present —
+    // Issue #1616 three-way price render — with no isAuthenticated gate of
+    // its own).
+    return isAuthenticated ? listings : listings.map((l) => ({ ...l, pricePaise: undefined }));
+  }, [areaListingsQuery.data, isAuthenticated]);
+  // Issue #1956 PR-4 FIX PASS 4 (blocking, performance-analyst REQUEST_CHANGES,
+  // item 3) — `isLoadingListings` (below) was threaded from
+  // `areaListingsQuery` but `isError` never was, so a 404/500/timeout settled
+  // to `isLoading:false, data:undefined` -> `areaListingsForPanel = []` ->
+  // AreaSelectedPanel's own listing-empty branch, presenting a backend
+  // failure as the factual claim "0 verified properties in {areaLabel}".
+  // `AreaSelectedPanel` (out of this PR's allowed_file_globs — see the panel
+  // module doc) has no error/retry prop of its own; it only distinguishes
+  // loading vs. empty vs. success. The error/retry AFFORDANCE this codebase
+  // already uses ON THIS SURFACE is the one this same component renders for
+  // `journey.isError` above (AlertCircle icon + message + Retry button) —
+  // reused verbatim here rather than inventing a second error presentation,
+  // with its own testid/copy/refetch target for this query.
+  if (areaListingsQuery.isError) {
+    return (
+      <div className="p-4" data-testid="areas-journey-panel-listings">
+        <HierarchyBackButton
+          node={node}
+          buildHref={buildNodeHref}
+          historyAdjacencyLog={historyAdjacencyLog}
+          className="mb-3"
+        />
+        <div
+          className="p-4 flex flex-col items-center text-center gap-2"
+          data-testid="areas-journey-panel-listings-error"
+        >
+          <AlertCircle className="h-6 w-6 text-destructive" aria-hidden="true" />
+          <p className="text-sm text-muted-foreground">
+            We couldn't load properties in {areaPoint.areaLabel}. Please try again.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => areaListingsQuery.refetch()}>
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    // Issue #1956 PR-4 FIX CYCLE 4 (scope_amendment n=4, mobile reachability)
+    // — was a plain `<div className="p-4">`: a block-level box with no
+    // bounded height, so AreaSelectedPanel's OWN root classes (`flex flex-1
+    // flex-col overflow-y-auto` — AreaSelectedPanel.tsx:240, out of this PR's
+    // allowed_file_globs, unedited) were inert: `flex-1` needs a flex
+    // parent, `overflow-y-auto` needs a bounded height, and this wrapper
+    // supplied neither. The card list only "scrolled" via the whole
+    // document growing past the viewport, leaving `View details` on card 1
+    // structurally below the 844px mobile viewport (confirmed live at
+    // 390x844: y=1193.9). Making THIS wrapper a real bounded flex column
+    // (`flex-1 min-h-0` on the mobile column-direction ancestor,
+    // `overflow-hidden` to stop content leaking into ancestors) is the
+    // SAME pattern the legacy `DiscoverRightPanel` root already uses
+    // (`flex flex-col ... overflow-hidden`,
+    // src/components/discover/DiscoverRightPanel.tsx:1878) — no new layout
+    // abstraction, just the missing constraint. `p-4` is unchanged (still
+    // applies to both children identically), so AreaSelectedPanel's visual
+    // inset is unaffected. Desktop is unaffected: on the row-direction
+    // desktop layout this div already got its full height via flex
+    // align-items:stretch (the same mechanism the legacy root relies on,
+    // since neither sets an explicit height); `overflow-hidden` merely
+    // makes that already-present height a real clipping boundary, matching
+    // legacy. `flex-1` on the row's main axis (width) competes for the
+    // remaining space exactly as the previous unconstrained block div did.
+    <div
+      className="flex h-full min-h-0 flex-1 flex-col overflow-hidden p-4"
+      data-testid="areas-journey-panel-listings"
+    >
+      <HierarchyBackButton
+        node={node}
+        buildHref={buildNodeHref}
+        historyAdjacencyLog={historyAdjacencyLog}
+        className="mb-3 shrink-0"
+      />
+      <AreaSelectedPanel
+        selectedArea={areaPoint}
+        // FIX CYCLE 2 (opus review, nit) — was omitted, so AreaSelectedPanel's
+        // breadcrumb fell back to the area label for cityLabel too, rendering
+        // "Manipal › Manipal" instead of "Udupi › Manipal". Same
+        // `CITY_CONFIG[city]?.label ?? city` derivation MapDiscovery.tsx and
+        // DiscoverMapContextOverlay.tsx already use for this exact prop.
+        cityLabel={CITY_CONFIG[nav.city]?.label ?? nav.city}
+        areaListings={areaListingsForPanel}
+        isLoadingListings={areaListingsQuery.isLoading}
+        isAuthenticated={isAuthenticated}
+        filters={effectiveFilters}
+        onFiltersChange={(next) => {
+          // Issue #1956 PR-4 FIX CYCLE 3 (blocking Fix B) — route through the
+          // SAME committed filters state/handler the map's query is built
+          // from (see the module doc above) so a chip toggle produces ONE
+          // filter identity across the URL, this panel's cards/count, and
+          // the map's markers. Falls back to the old URL-only
+          // `setFiltersCommitted` write only when no caller-supplied handler
+          // is present (defensive — production always supplies one via
+          // `DiscoverRightPanelContainer`).
+          if (onCommittedFiltersChange) {
+            onCommittedFiltersChange({
+              ...(committedFilters ?? {}),
+              propertyTypes: next.propertyTypes,
+              bedrooms: next.bedrooms,
+              priceMin: next.priceMin,
+              priceMax: next.priceMax,
+            });
+            return;
+          }
+          actions.setFiltersCommitted({
+            ...nav.filters,
+            propertyTypes: next.propertyTypes,
+            bedrooms: next.bedrooms,
+            priceMin: next.priceMin,
+            priceMax: next.priceMax,
+          });
+        }}
+        searchQuery={searchQuery}
+        onSearchChange={handleSearchChange}
+        selectedListingId={nav.selectedListing}
+        onSelectListing={(id) => actions.setSelectedListing(id)}
+        intent={nav.intent}
+        onAddSchool={onAddSchool}
       />
     </div>
   );

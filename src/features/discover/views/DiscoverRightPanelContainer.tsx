@@ -302,6 +302,27 @@ export function DiscoverRightPanelContainer({
         // Issue #1956 PR 2 (Slice 5) — the pure href builder the visible
         // in-app HierarchyBackButton uses to resolve the canonical parent.
         buildNodeHref={urlActions.buildNodeHref}
+        // Issue #1956 PR-4 FIX CYCLE 3 (blocking Fix B) — forward the SAME
+        // `filters`/`handleFiltersChange` this container already receives for
+        // the legacy `DiscoverRightPanel` below (see that call site's own
+        // `onFiltersChange={handleFiltersChange}`), so an AREA-leaf chip
+        // toggle writes into the identical page-local filters state the
+        // map's query reads, instead of a parallel URL-only write.
+        areaLeafFilters={filters}
+        onAreaLeafFiltersChange={handleFiltersChange}
+        // Issue #1956 PR-4 FINAL FIX PASS (regression fix) — the canonical
+        // AREA-leaf surface silently dropped the "Add a school in this
+        // area" CTA because this call site never supplied `onAddSchool`
+        // (the prop is optional on both `DiscoverAreasJourneyPanel` and
+        // `AreaSelectedPanel`, so the omission compiled but the button just
+        // never rendered). `urlActions` is already the SAME
+        // `useDiscoverActions()` facade result the legacy `DiscoverRightPanel`
+        // call site below uses for its own `onAddSchool={urlActions.enterSchoolPicking}`
+        // — reusing it here (not a new handler) keeps the area-first
+        // school-picking sub-step (Issue #1157) identical on both surfaces:
+        // `journey` stays `area-first` so Back restores the selected area
+        // instead of deleting it.
+        onAddSchool={urlActions.enterSchoolPicking}
       />
     );
   }

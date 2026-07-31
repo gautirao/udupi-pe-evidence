@@ -121,6 +121,21 @@ export interface DiscoverLayerInput {
   scope: DiscoverLayerScope;
   journey: DiscoverJourney | null;
   selection: DiscoverLayerSelection;
+  /**
+   * Issue #1956 PR-4 — CONTAINED leaf token. True when the resolved
+   * `useAreasNavigationJourney` node is a canonical AREA leaf (see
+   * `isResolvedAreaLeafNode` in `src/features/discover/navigation/
+   * nodeAreaPoint.ts`) in the area-first journey. Read ONLY by
+   * `selectDiscoverMapLayer` below — NEVER by `computeDiscoverLayer`, which
+   * only ever destructures `.scope`/`.journey`/`.selection` off its own
+   * freshly-reconstructed `DiscoverUrlState` (see that function's body) and
+   * therefore cannot reach `derivePanelContent`,
+   * `PANEL_DERIVATION_FIELDS`, the Proxy access-guard test, or the 75-cell
+   * parity matrix, regardless of what this field is set to. `toLayerInput`
+   * (the URL-state adapter used for the panel axis) never sets it, so it is
+   * always `undefined` for every pre-existing caller.
+   */
+  nodeAreaLeaf?: boolean;
 }
 
 // ─── Adapter ──────────────────────────────────────────────────────────────────
@@ -393,6 +408,17 @@ export function selectDiscoverMapLayer(
     !selection.groupId &&
     !selection.areaKey &&
     !selection.schoolId;
+  // Issue #1956 PR-4 — a resolved canonical AREA leaf (the `node=` journey)
+  // must NOT collapse to the grouped-overview bubble category just because
+  // the legacy `areaKey` URL param is absent (the node journey never writes
+  // it — see team-lead-plan-pr4.toml [scope.three_areakeys]). Scoped
+  // narrowly: `input.nodeAreaLeaf` is only ever set true by the caller for a
+  // real AREA leaf in the area-first journey — never for Direction/Cluster
+  // levels, and never for school-first (see nodeAreaPoint.ts /
+  // markerPopoverEligibility.ts for the shared leaf-resolution contract).
+  if (isTopGroupedAreaOrSchool && input.nodeAreaLeaf && journey === 'area-first') {
+    return 'all-areas';
+  }
   if (isTopGroupedAreaOrSchool) return 'area-group-bubbles';
 
   if (journey == null && (computeDiscoverLayer(input) === 'guided-entry' || computeDiscoverLayer(input) === 'area-groups-landing')) {

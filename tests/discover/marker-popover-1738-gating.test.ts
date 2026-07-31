@@ -48,32 +48,39 @@
  * including null — the #1973 fix). School-first is NO LONGER unconditionally
  * excluded; this file must not (and no longer does) assert that it is.
  *
- * `isAreaFirstPopoverEligible` below has been renamed/replaced by
- * `isMarkerPopoverEligibleReplica`, which mirrors the (journey, areaKey,
- * schoolId) shape of the real predicate above (not the old
- * (journey, hasSelectedArea, panelContent) shape) — panelContent is still
- * independently derived and asserted per case so the replica cannot silently
- * drift from panel-content routing (the actual failure mode of the original
- * #1738 bug), but eligibility itself is no longer computed from panelContent.
+ * The original `isAreaFirstPopoverEligible` was renamed to the (journey,
+ * areaKey, schoolId) shape shown above (not the old (journey,
+ * hasSelectedArea, panelContent) shape) — panelContent is still
+ * independently derived and asserted per case so a future revision cannot
+ * silently drift from panel-content routing (the actual failure mode of the
+ * original #1738 bug), but eligibility itself is no longer computed from
+ * panelContent. See the PR-4 note below for where that formula now lives.
  *
  * MarkerPopoverCard's own dismiss behaviour (X button / Escape / non-Escape
  * ignored) is already covered by
  * src/components/discover/__tests__/MarkerPopoverCard.test.tsx and is not
  * duplicated here.
  *
- * Coverage gap this leaves (documented, not silently dropped):
- * `isMarkerPopoverEligible` itself is inline in MapDiscovery.tsx, not
- * exported, so it cannot be imported directly — this file replicates its
- * literal boolean formula (cited above) and decorates every assertion with
- * the *real* `derivePanelContent` output so the replica cannot silently drift
- * from panel-content routing. Extracting `isMarkerPopoverEligible` as a named
- * export would let a future revision assert it directly; flagged here rather
- * than fixed, since this file must not modify implementation code.
+ * Issue #1956 PR-4 (scope amendment n=1) — COVERAGE GAP CLOSED. The previous
+ * revision of this file replicated `isMarkerPopoverEligible`'s literal
+ * boolean formula rather than importing it, because the real predicate was
+ * an unexported inline local in MapDiscovery.tsx — a replica can prove
+ * itself internally consistent but can never detect production drift
+ * (exactly the #1798 bug class). `isMarkerPopoverEligible` is now a named
+ * export of `src/features/discover/navigation/markerPopoverEligibility.ts`,
+ * imported directly below; `isMarkerPopoverEligibleReplica` is DELETED. Both
+ * production call sites (MapDiscovery.tsx's render gate,
+ * useMarkerSelection.ts's capture gate) import the SAME function, so this
+ * suite now asserts the real, live formula — including PR-4's new
+ * `isNodeAreaLeaf` arm (covered in
+ * navigation/__tests__/markerPopoverEligibility.test.ts, not duplicated
+ * here) — rather than a copy of it.
  */
 
 import { describe, it, expect } from 'vitest';
 import { derivePanelContent } from '@/utils/discoverPanelState';
 import { isSchoolRadiusOverlayState } from '@/components/discover/SchoolRadiusMapOverlay';
+import { isMarkerPopoverEligible } from '@/features/discover/navigation/markerPopoverEligibility';
 import type { DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 
 function makeState(overrides: Partial<DiscoverUrlState> = {}): DiscoverUrlState {
@@ -93,24 +100,6 @@ function makeState(overrides: Partial<DiscoverUrlState> = {}): DiscoverUrlState 
   };
 }
 
-/**
- * Literal replica of MapDiscovery.tsx's `isMarkerPopoverEligible` (see file
- * header) — mirrors production's (journey, areaKey, schoolId) shape directly,
- * MUST stay byte-identical in structure to the real predicate and to
- * useMarkerSelection.ts's handleMarkerClickWithPosition capture gate.
- */
-function isMarkerPopoverEligibleReplica(
-  journey: DiscoverUrlState['journey'],
-  areaKey: string | null,
-  schoolId: string | null,
-): boolean {
-  return (
-    journey !== 'agri-first' &&
-    ((areaKey != null && (schoolId == null || journey === 'area-first')) ||
-      (journey === 'school-first' && schoolId != null))
-  );
-}
-
 const AREA_KEY = 'IN|KA|Udupi|Manipal';
 const SCHOOL_ID = '8c279ab2-5770-44dd-a15e-57526b0b4a91';
 
@@ -120,7 +109,7 @@ describe('Issue #1738/#1973 — marker-popover eligibility gating (component-lev
     const panelContent = derivePanelContent(state);
 
     expect(panelContent).toBe('area-selected');
-    expect(isMarkerPopoverEligibleReplica('area-first', AREA_KEY, null)).toBe(true);
+    expect(isMarkerPopoverEligible({ journey: 'area-first', areaKey: AREA_KEY, schoolId: null })).toBe(true);
   });
 
   it('(b) area-first + areaKey + schoolId -> area-school-combined, ELIGIBLE', () => {
@@ -128,7 +117,9 @@ describe('Issue #1738/#1973 — marker-popover eligibility gating (component-lev
     const panelContent = derivePanelContent(state);
 
     expect(panelContent).toBe('area-school-combined');
-    expect(isMarkerPopoverEligibleReplica('area-first', AREA_KEY, SCHOOL_ID)).toBe(true);
+    expect(
+      isMarkerPopoverEligible({ journey: 'area-first', areaKey: AREA_KEY, schoolId: SCHOOL_ID }),
+    ).toBe(true);
 
     // The radius legend's own gate is schoolId-driven, not journey-scoped — it must
     // ALSO be visible here, proving the popover and the legend legitimately coexist
@@ -144,7 +135,9 @@ describe('Issue #1738/#1973 — marker-popover eligibility gating (component-lev
     // Pure school-first radius search is cross-area (areaKey is null in this live
     // state) — the #1973 additive-OR branch admits it regardless, unlike the old
     // #1738-only rule which required areaKey != null for every eligible case.
-    expect(isMarkerPopoverEligibleReplica('school-first', null, SCHOOL_ID)).toBe(true);
+    expect(
+      isMarkerPopoverEligible({ journey: 'school-first', areaKey: null, schoolId: SCHOOL_ID }),
+    ).toBe(true);
   });
 
   it('(d) school-first + schoolId + areaKey set -> area-school-combined, ELIGIBLE', () => {
@@ -155,7 +148,9 @@ describe('Issue #1738/#1973 — marker-popover eligibility gating (component-lev
     // journeys are indistinguishable by panelContent alone, so eligibility must key
     // off journey/schoolId directly, not panelContent.
     expect(panelContent).toBe('area-school-combined');
-    expect(isMarkerPopoverEligibleReplica('school-first', AREA_KEY, SCHOOL_ID)).toBe(true);
+    expect(
+      isMarkerPopoverEligible({ journey: 'school-first', areaKey: AREA_KEY, schoolId: SCHOOL_ID }),
+    ).toBe(true);
 
     // The radius legend is NOT journey-scoped, so school-first legitimately shows it too
     // (its own tiered/peek marker UI is a separate, unaffected concern from the legend).
@@ -167,7 +162,9 @@ describe('Issue #1738/#1973 — marker-popover eligibility gating (component-lev
     const panelContent = derivePanelContent(state);
 
     expect(panelContent).toBe('agri-selected');
-    expect(isMarkerPopoverEligibleReplica('agri-first', AREA_KEY, null)).toBe(false);
+    expect(isMarkerPopoverEligible({ journey: 'agri-first', areaKey: AREA_KEY, schoolId: null })).toBe(
+      false,
+    );
   });
 
   it('(f) journeyless / no-context (journey null, no areaKey, no schoolId) -> EXCLUDED', () => {
@@ -175,13 +172,13 @@ describe('Issue #1738/#1973 — marker-popover eligibility gating (component-lev
     const panelContent = derivePanelContent(state);
 
     expect(panelContent).toBe('guided-entry');
-    expect(isMarkerPopoverEligibleReplica(null, null, null)).toBe(false);
+    expect(isMarkerPopoverEligible({ journey: null, areaKey: null, schoolId: null })).toBe(false);
   });
 
   it('regression guard: area-first with NO area selected is never popover-eligible', () => {
     const state = makeState({ journey: 'area-first' });
     derivePanelContent(state);
 
-    expect(isMarkerPopoverEligibleReplica('area-first', null, null)).toBe(false);
+    expect(isMarkerPopoverEligible({ journey: 'area-first', areaKey: null, schoolId: null })).toBe(false);
   });
 });

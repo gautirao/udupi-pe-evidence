@@ -16,8 +16,10 @@ import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import {
   computeDiscoverLayer,
   toLayerInput,
+  selectDiscoverMapLayer,
   resolveActiveDiscoverGroup,
   resolveDiscoverGroupForAreaKey,
+  type DiscoverMapLayerKind,
 } from '@/utils/discoverLayerRegistry';
 import { CityNotSupported } from '@/components/discover/CityNotSupported';
 import { DiscoverControlBar } from '@/components/discover/DiscoverControlBar';
@@ -78,6 +80,8 @@ import {
   isAreasPreviewCapabilityEnabled,
   isAreasPreviewJourneyActive,
 } from '@/features/discover/preview/areasPreviewCapability';
+import { deriveAreaPointFromNode } from '@/features/discover/navigation/nodeAreaPoint';
+import { isMarkerPopoverEligible as computeMarkerPopoverEligible } from '@/features/discover/navigation/markerPopoverEligibility';
 import {
   deriveShowSchoolMarkers,
   deriveSchoolRadiusPillNoun,
@@ -181,6 +185,52 @@ export default function MapDiscovery() {
     setFocusedClusterMemberAreaKeys(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areasNavigationJourney.node?.nodeKey]);
+
+  // Issue #1956 PR-4 (Option C) — pure bridge: the resolved canonical AREA
+  // leaf -> an in-memory AreaPoint, feeding the EXISTING selectedArea-driven
+  // listing/marker/popover machinery (see nodeAreaPoint.ts's module doc for
+  // the full transitional-state contract). Only ever non-null while the
+  // canonical Areas journey is active AND resolved to an AREA leaf — every
+  // legacy areaKey-driven journey sees `null` here, unchanged.
+  const nodeAreaPoint = useMemo(
+    () => (showAreasNavigationJourney ? deriveAreaPointFromNode(areasNavigationJourney.node) : null),
+    [showAreasNavigationJourney, areasNavigationJourney.node],
+  );
+  // Issue #1956 PR-4 — the ONE leaf-identity boolean shared by the
+  // layer-registry containment field (below), the widened
+  // isMarkerPopoverEligible render gate, and useMarkerSelection's capture
+  // gate/URL-write gate (risk R1 — these MUST move in lock-step).
+  //
+  // FIX CYCLE 2 (opus review, blocking Finding 1) — this MUST derive from
+  // `nodeAreaPoint != null`, not from `isResolvedAreaLeafNode` alone.
+  // `isResolvedAreaLeafNode` only checks `nodeType === 'AREA' && areaKey !=
+  // null`; it says nothing about `bounds`, which is independently nullable
+  // (`NavigationBounds | null`, navigation/types.ts) and whose
+  // centreLat/centreLon are themselves independently nullable. A resolved
+  // AREA leaf with `bounds: null` (or a bounds object with a null centre)
+  // satisfied the old `isResolvedAreaLeafNode` check while `nodeAreaPoint`
+  // (nodeAreaPoint.ts, transitional states (c)/(d)) was already null for it
+  // — so this boolean and the bridge disagreed, admitting the marker
+  // popover and the 'all-areas' layer category with NO area context to back
+  // them.
+  //
+  // Deliberate choice for the bounds-less leaf: it stays a NON-LEAF for
+  // every purpose this boolean gates (popover eligibility, layer category,
+  // URL-write gate) rather than rendering a partial/degraded listing
+  // surface. Rationale: `nodeAreaPoint.ts` already treats a bounds-less
+  // resolved AREA leaf as "no safe AreaPoint" (its own module doc, (c)/(d))
+  // because `AreaPoint.geo_center_lat/lon` are non-nullable — there is no
+  // safe centre to fit the map to or scope a listings query with. Treating
+  // it as a leaf here would admit `effectiveMapLayerCategory ===
+  // 'all-areas'` and a `listing=` URL write while every downstream
+  // consumer that actually NEEDS geo data (fitBounds, area-scoped
+  // listings) still has nothing to work with — worse than the current
+  // "falls back to area-group-bubbles" state, which is at least a coherent,
+  // navigable UI. `nodeAreaPoint != null` already implies
+  // `isResolvedAreaLeafNode` (it calls that predicate internally), so this
+  // is strictly narrower and requires no new import.
+  const isNodeAreaLeafActive =
+    showAreasNavigationJourney && nav.journey === 'area-first' && nodeAreaPoint != null;
 
   // Issue #1597 — early derivation of PropertyFilters from URL state, available before
   // useDiscoverPageState is called. Used by the group-results listings query so it respects
@@ -446,7 +496,15 @@ export default function MapDiscovery() {
     clearMarkerPopoverFromUrl,
     isMarkerPopoverUrlBacked,
     hydrateSelectedMarkerFromUrl,
-  } = useMarkerSelection({ urlActions: actions, urlState: { ...nav, viewport } satisfies DiscoverUrlState, mapContainerRef });
+  } = useMarkerSelection({
+    urlActions: actions,
+    urlState: { ...nav, viewport } satisfies DiscoverUrlState,
+    mapContainerRef,
+    // Issue #1956 PR-4 (risk R1) — the SAME leaf-identity boolean fed to the
+    // page-level isMarkerPopoverEligible render gate below, so the capture
+    // gate (in the hook) and the render gate can never drift on this arm.
+    isNodeAreaLeaf: isNodeAreaLeafActive,
+  });
 
   // Issue #1374 — override panelContent to 'agri-detail' while an agri polygon is
   // selected. Confined to 'agri-selected' (not 'agri-landing') so a stale
@@ -571,6 +629,16 @@ export default function MapDiscovery() {
     page, setPage,
   } = useDiscoverPageState({ urlState: { ...nav, viewport } satisfies DiscoverUrlState, urlActions: actions });
 
+  // Issue #1956 PR-4 (Option C) — bridges nodeAreaPoint into every existing
+  // selectedArea-driven gate/consumer. Falls back to the legacy
+  // areaKey-driven `selectedArea` FIRST, so nothing changes for any
+  // pre-existing journey; `nodeAreaPoint` is only non-null while the
+  // canonical `node=` journey is active and resolved to an AREA leaf, so the
+  // two sources can never both be non-null for the same render (the legacy
+  // journeys never set nav.node, and the node journey never sets nav.areaKey
+  // — see [scope.three_areakeys]).
+  const effectiveSelectedArea = selectedArea ?? nodeAreaPoint;
+
   // Issue #1882 (Track A PR2 Slice S2c) — backend-owned region summary for the
   // journeyless-landing macro-region bubbles (see overviewAreas below), sourced
   // from the PUBLIC GET /api/discover/cities/{citySlug}/regions rollup (PR1).
@@ -681,11 +749,17 @@ export default function MapDiscovery() {
   // the PropertyFilters.polygon convention used by useDiscoverListings/the backend.
   const effectiveFilters = useMemo((): typeof filters => {
     // Only inject area-bbox polygon in combined state (area + school both present).
-    if (!nav.schoolId || !selectedArea?.bbox || filters.polygon) return filters;
-    const [[s, w], [n, e]] = selectedArea.bbox;
+    // FIX CYCLE 2 (opus review, nit) — was `selectedArea?.bbox`, which never
+    // injected a polygon for a canonical AREA-leaf + school combined state
+    // (the node journey never sets the legacy `selectedArea`). Uses
+    // `effectiveSelectedArea` — the same area+node bridge every other
+    // selectedArea-driven gate on this page already reads — so a node leaf
+    // gets the same area-bbox scoping a legacy areaKey selection does.
+    if (!nav.schoolId || !effectiveSelectedArea?.bbox || filters.polygon) return filters;
+    const [[s, w], [n, e]] = effectiveSelectedArea.bbox;
     const bboxPolygon: [number, number][] = [[s, w], [s, e], [n, e], [n, w], [s, w]];
     return { ...filters, polygon: bboxPolygon };
-  }, [filters, selectedArea, nav.schoolId]);
+  }, [filters, effectiveSelectedArea, nav.schoolId]);
 
   // Issue #1655 — top-grouped-level guard: at the grouped overview level, individual
   // property markers and paginated listings should NOT be fetched. Only group/zone
@@ -697,7 +771,11 @@ export default function MapDiscovery() {
       (nav.journey === 'area-first' || nav.journey === 'school-first') &&
       !nav.groupId &&
       !nav.areaKey &&
-      !selectedArea &&
+      // Issue #1956 PR-4 (gate 1) — `effectiveSelectedArea` also carries the
+      // canonical AREA-leaf bridge, so a resolved node leaf correctly clears
+      // this grouped-overview guard exactly like a legacy areaKey selection
+      // does. See effectiveSelectedArea's declaration above.
+      !effectiveSelectedArea &&
       !nav.schoolId &&
       !selectedSchool
     ) return true;
@@ -762,7 +840,10 @@ export default function MapDiscovery() {
     // inert; it renders nothing in PR 1.
     visibleMemberSet,
   } = useDiscoverMapData({
-    city, selectedArea, filters: effectiveFilters, debouncedSearch,
+    // Issue #1956 PR-4 (gate 3) — feeds the bridged AreaPoint so the
+    // areaKeys derivation (useDiscoverMapData.ts:511) resolves to
+    // [effectiveSelectedArea.areaKey] instead of [] at a canonical AREA leaf.
+    city, selectedArea: effectiveSelectedArea, filters: effectiveFilters, debouncedSearch,
     urlSchoolId: nav.schoolId, isAuthenticated, fitTick,
     // Issue #1806 (FIX-1) — see groupAreaKeysForMapData above for the full
     // journey/state → value mapping.
@@ -1508,7 +1589,13 @@ export default function MapDiscovery() {
   } = useDiscoverJourneyPredicates({
     resolvedPanelContent,
     focusedGroup,
-    selectedArea,
+    // Issue #1956 PR-4 — bridged so isAreaFirstCityLanding/liveAreas/
+    // cityHasNoListings correctly treat a resolved AREA leaf as "not the
+    // city landing", consistent with gate 1/3 above. mapLayerKind/
+    // mapLayerCategory (this same hook's OTHER outputs) are computed
+    // purely from URL state internally and are NOT fixed by this — see
+    // effectiveMapLayerCategory below, which is the actual gate-2 fix.
+    selectedArea: effectiveSelectedArea,
     selectedSchool,
     discoverAreas,
     areasLoading,
@@ -1549,7 +1636,7 @@ export default function MapDiscovery() {
     focusedGroup,
     debouncedAreaSearchQuery,
     city,
-    selectedArea,
+    selectedArea: effectiveSelectedArea,
     selectedSchool,
     selectedMarkerListing,
     scopeNamespaces,
@@ -1621,11 +1708,35 @@ export default function MapDiscovery() {
   // below still keeps them popup-free regardless of this predicate. MUST stay byte-identical
   // to the capture-gate predicate in useMarkerSelection.ts's handleMarkerClickWithPosition —
   // see that function's comment — or the two can drift apart again (the exact #1798 bug).
-  const isMarkerPopoverEligible =
-    nav.journey !== 'agri-first' &&
-    ((nav.areaKey != null &&
-      (nav.schoolId == null || nav.journey === 'area-first')) ||
-      (nav.journey === 'school-first' && nav.schoolId != null));
+  // Issue #1956 PR-4 (gate 2) — useDiscoverJourneyPredicates (out of this
+  // PR's allowed scope) derives mapLayerCategory purely from URL state via
+  // toLayerInput/selectDiscoverMapLayer internally, so it cannot see the
+  // in-memory node bridge above and still resolves 'area-group-bubbles' for
+  // a canonical AREA leaf (legacy `areaKey` URL param null). Recomputes the
+  // SAME real selectDiscoverMapLayer with the CONTAINED `nodeAreaLeaf` field
+  // (discoverLayerRegistry.ts) set, used ONLY for the resolveMarkerPopover
+  // call below — mapLayerKind/mapLayerCategory themselves are left
+  // untouched for their other pre-existing consumers.
+  const effectiveMapLayerCategory: DiscoverMapLayerKind = isNodeAreaLeafActive
+    ? selectDiscoverMapLayer(
+        { ...toLayerInput({ ...nav, viewport } satisfies DiscoverUrlState), nodeAreaLeaf: true },
+        'overview',
+      )
+    : mapLayerCategory;
+
+  // Issue #1798 PR-C — canonical listing-marker popover RENDER-eligibility
+  // predicate, now the ONE shared `isMarkerPopoverEligible` export (Issue
+  // #1956 PR-4 scope amendment n=1 — see markerPopoverEligibility.ts's
+  // module doc for the full four-site extraction history and the new
+  // AREA-leaf arm). MUST stay in lock-step with useMarkerSelection.ts's
+  // capture gate (risk R1) — both import the same function and are fed the
+  // same `isNodeAreaLeafActive` value.
+  const isMarkerPopoverEligible = computeMarkerPopoverEligible({
+    journey: nav.journey,
+    areaKey: nav.areaKey,
+    schoolId: nav.schoolId,
+    isNodeAreaLeaf: isNodeAreaLeafActive,
+  });
 
   // Issue #1824 Slice S10b — the marker-resolve + stepper cluster (Issue
   // #1810 Stage 2A, MODEL A user-locked model, see approved-plan.toml
@@ -1640,8 +1751,8 @@ export default function MapDiscovery() {
   // Hooks). Every field this call closes over was already available earlier
   // in the component before this move (per the original S10b comment).
   const { currentMapMarkerListings, markerPopoverStepper } = resolveMarkerPopover({
-    mapLayerCategory,
-    selectedArea,
+    mapLayerCategory: effectiveMapLayerCategory,
+    selectedArea: effectiveSelectedArea,
     isGroupResultsState,
     mapZoom,
     areaLayerMaxZoom: AREA_LAYER_MAX_ZOOM,
@@ -1936,7 +2047,11 @@ export default function MapDiscovery() {
           cameraIntent={cameraIntent}
           focusedGroupAreas={focusedGroupAreas}
           areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
-          selectedArea={selectedArea}
+          // Issue #1956 PR-4 (Option C) — same bridge as the data hooks
+          // above, so the map's own selectedArea-driven behaviour (fitBounds,
+          // area-marker fade/highlight) treats a resolved canonical AREA leaf
+          // identically to a legacy areaKey selection.
+          selectedArea={effectiveSelectedArea}
           areaSearchMatchKeys={areaSearchMatchKeys}
           hoveredAreaKeyForMap={hoveredAreaKeyForMap}
           publishClusterCameraIntent={publishClusterCameraIntent}
@@ -2042,7 +2157,14 @@ export default function MapDiscovery() {
           city={city}
           activeContextChips={activeContextChips}
           discoverAreas={discoverAreas}
-          selectedArea={selectedArea}
+          // Issue #1956 PR-4 — harmless-but-consistent bridge: the legacy
+          // DiscoverRightPanel branch this prop feeds is UNREACHABLE while
+          // the canonical Areas journey is mounted (see
+          // DiscoverRightPanelContainer's showAreasNavigationJourney
+          // early-return, [scope.must_not_change]), so this has no visible
+          // effect today — kept in sync with every other selectedArea
+          // consumer on this page rather than silently left stale.
+          selectedArea={effectiveSelectedArea}
           areaListings={areaListings}
           isLoadingAreaListings={isLoadingAreaListings}
           isAuthenticated={isAuthenticated}
