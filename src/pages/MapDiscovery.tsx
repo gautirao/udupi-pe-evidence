@@ -71,6 +71,9 @@ import { DiscoverMapMount } from '@/features/discover/views/DiscoverMapMount';
 import { useMobileMapOverlayShell } from '@/hooks/useMobileMapOverlayShell';
 import { DiscoverOverlaySheets } from '@/features/discover/views/DiscoverOverlaySheets';
 import { DiscoverRightPanelContainer } from '@/features/discover/views/DiscoverRightPanelContainer';
+import { MobileClusterSheet } from '@/features/discover/views/mobile/MobileClusterSheet';
+import { MobileListingPreviewSheet } from '@/features/discover/views/mobile/MobileListingPreviewSheet';
+import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import {
   deriveDiscoverBadge,
   formatDiscoverBadgeCopy,
@@ -185,6 +188,22 @@ export default function MapDiscovery() {
     setFocusedClusterMemberAreaKeys(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areasNavigationJourney.node?.nodeKey]);
+
+  // Issue #1956 PR-5 (Slice 5, AC5.10/AC5.10c) — the mobile Map-mode preview
+  // sheet's data. Reported UP by DiscoverAreasJourneyPanel's own
+  // AreaLeafListingsSurface (via DiscoverRightPanelContainer's
+  // onSelectedListingPreviewChange), which derives it from its own
+  // ALREADY-FETCHED DiscoverCityListingItem[] — this page issues NO second
+  // query and does not re-derive the preview itself. Plain useState (never
+  // the URL): the underlying selection is URL-backed (`nav.selectedListing`,
+  // OQ6 ruling — KEEP the existing listing= PUSH peek), so this state is a
+  // pure, harmless PROJECTION of that URL value re-synced by the panel's own
+  // effect whenever nav.selectedListing/the area's result set changes; it is
+  // never itself written to the URL/history. Distinct from the cluster-focus
+  // state above — this addition does not touch that state or its clearing
+  // effect.
+  const [selectedListingPreview, setSelectedListingPreview] =
+    useState<SelectedListingPreview | null>(null);
 
   // Issue #1956 PR-4 (Option C) — pure bridge: the resolved canonical AREA
   // leaf -> an in-memory AreaPoint, feeding the EXISTING selectedArea-driven
@@ -2016,10 +2035,44 @@ export default function MapDiscovery() {
             <button
               type="button"
               onClick={() => setMobileView('LIST')}
+              data-testid="mobile-map-close-list-button"
               className="absolute right-4 top-4 z-50 rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md"
             >
               List
             </button>
+          )}
+          {/* Issue #1956 PR-5 (Slice 3, AC5.6/AC5.7) — the MAP-mode counterpart
+              of DiscoverAreasJourneyPanel's own (LIST-mode-only-visible)
+              focused-cluster branch. Mounted INSIDE this SAME z-[60] overlay
+              container (never portalled — see [reuse_seams].sheet_stacking),
+              so it inherits the correct stacking context above the map
+              canvas with no z fight against the shared sheet primitive.
+              Reuses the SAME areasNavigationJourney instance and the SAME
+              focusedClusterMemberAreaKeys/setFocusedClusterMemberAreaKeys
+              state this file already owns and threads to the map layer and
+              the panel — no second navigation-journey call, no new state. */}
+          {mobileMapOpen && (
+            <MobileClusterSheet
+              journey={areasNavigationJourney}
+              focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
+              onClusterFocusChange={setFocusedClusterMemberAreaKeys}
+            />
+          )}
+          {/* Issue #1956 PR-5 (Slice 5, AC5.10/AC5.10c) — the mobile Map-mode
+              listing preview sheet. Mounted INSIDE this SAME z-[60] overlay
+              container (never portalled — [reuse_seams].sheet_stacking),
+              following the MarkerPopoverCard/MobileClusterSheet precedent.
+              `selectedListingPreview` is a plain projection of the URL-backed
+              `listing=` peek (OQ6 — KEEP the existing PUSH writer; no
+              suppression seam added). Dismissing routes through the SAME
+              clearSelectedListing() every other peek-close affordance uses,
+              so camera/filters/result-count/Map-mode are all unchanged. */}
+          {mobileMapOpen && selectedListingPreview && (
+            <MobileListingPreviewSheet
+              preview={selectedListingPreview}
+              onDismiss={() => actions.clearSelectedListing()}
+              onViewDetails={(id) => navigate(`/listing/${id}`)}
+            />
           )}
           <DiscoverMapMount
           mapContainerRef={mapContainerRef}
@@ -2137,7 +2190,30 @@ export default function MapDiscovery() {
           markersTotalFilteredElements={markersTotalFilteredElements}
           isLoading={isLoading}
           mapZoom={mapZoom}
-          isMarkerPopoverEligible={isMarkerPopoverEligible}
+          // Issue #1956 PR-5 defect fix (Phase 7A) — on mobile Map mode,
+          // MobileListingPreviewSheet (rendered above at the mobileMapOpen
+          // branch, L2070) is the intended single preview surface for a
+          // selected listing. The legacy MarkerPopoverCard (rendered inside
+          // DiscoverMapCanvas via DiscoverMapMarkerPopover, gated on this
+          // exact prop) has no mobile guard of its own, so without this
+          // AND-clause both surfaces render simultaneously for the same
+          // `listing=` selection — confirmed live via getComputedStyle
+          // (both fully visible, same z-index). This is a RENDER-gate-only
+          // change: the raw `isMarkerPopoverEligible` const above (used by
+          // the capture/URL-write effects, risk R1) is untouched — only the
+          // value threaded into DiscoverMapMount's render prop is narrowed.
+          // Desktop is unaffected: mobileMapOpen is `isMobileShell &&
+          // mobileView === 'MAP'` (L120), always false on desktop, so
+          // `!mobileMapOpen` is always true there and this reduces to the
+          // original `isMarkerPopoverEligible`. Mobile LIST mode is also
+          // unaffected: mobileMapOpen is false there too (and
+          // DiscoverMapMount already real-unmounts the map in that state),
+          // so this clause is a no-op in that branch, not a new suppression
+          // path. Every other journey (school-first, agri-first, area) that
+          // feeds into `isMarkerPopoverEligible` is equally covered, since
+          // MobileListingPreviewSheet's own mobileMapOpen gate is
+          // journey-agnostic.
+          isMarkerPopoverEligible={isMarkerPopoverEligible && !mobileMapOpen}
           markerPopoverStepper={markerPopoverStepper}
           navigate={navigate}
           handleStepMarkerListing={handleStepMarkerListing}
@@ -2152,6 +2228,7 @@ export default function MapDiscovery() {
           onNavigationNodeHoverChange={setHoveredNavigationNodeKey}
           focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
           onClusterFocusChange={setFocusedClusterMemberAreaKeys}
+          onSelectedListingPreviewChange={setSelectedListingPreview}
           selectedMarkerListing={selectedMarkerListing}
           clearSelectedMarkerListing={clearSelectedMarkerListing}
           city={city}

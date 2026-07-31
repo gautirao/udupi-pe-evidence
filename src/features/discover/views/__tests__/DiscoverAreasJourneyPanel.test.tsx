@@ -122,6 +122,74 @@ describe('DiscoverAreasJourneyPanel', () => {
     expect(screen.getByTestId('navigation-child-card-d:n')).toBeInTheDocument();
   });
 
+  // ── Issue #1956 PR-5 (Slice 1, AC5.1/AC5.13) — mobile list-first stack ──
+  // jsdom has no layout engine (see this PR's [test_strategy].jsdom_cannot_prove),
+  // so this proves the underlying MARKUP is list-first by default (base
+  // Tailwind class, no media query needed to activate it) rather than the
+  // real 390x844 visual reflow, which is the job of
+  // e2e/discover/issue-1956-pr5-mobile-list-first.spec.ts. `NavigationChildList`
+  // itself is out of this PR's allowed_file_globs and untouched — this is a
+  // proof-only test, not a construction one.
+  describe('mobile list-first navigation stack (AC5.1/AC5.13)', () => {
+    it('renders the CURRENT node\'s direct children in a single-column-by-default grid (list-first at 390px)', () => {
+      render(
+        <MemoryRouter>
+          <DiscoverAreasJourneyPanel
+            journey={makeJourney({
+              // Non-root ancestry so HierarchyBackButton actually renders
+              // (AC5.7 hides it only at the city root's empty ancestry).
+              node: makeNode({
+                nodeKey: 'd:root-child',
+                nodeType: 'DIRECTION',
+                displayLabel: 'Some Direction',
+                ancestry: [{ nodeKey: 'root', nodeType: 'ROOT', displayLabel: 'Bangalore', displayOrder: 0 }],
+              }),
+              nodeCount: { listingCount: 20, schoolCount: 3, matchingAreaCount: null },
+              children: [
+                {
+                  nodeKey: 'd:n',
+                  nodeType: 'DIRECTION',
+                  displayLabel: 'North Bangalore',
+                  displayOrder: 1,
+                  listingCount: 20,
+                  schoolCount: 3,
+                  isLeafArea: false,
+                  matchingAreaCount: null,
+                },
+                {
+                  nodeKey: 'd:s',
+                  nodeType: 'DIRECTION',
+                  displayLabel: 'South Bangalore',
+                  displayOrder: 2,
+                  listingCount: 15,
+                  schoolCount: 2,
+                  isLeafArea: false,
+                  matchingAreaCount: null,
+                },
+              ],
+            })}
+            buildNodeHref={(k) => `?node=${k}`}
+          />
+        </MemoryRouter>,
+      );
+      const list = screen.getByTestId('navigation-child-list');
+      // Base (no-media-query) class is single-column — the sm: two-column
+      // variant only activates at >=640px, well above the 390px viewport
+      // AC5.1 targets, so the rendered stack is list-first by construction.
+      expect(list).toHaveClass('grid-cols-1');
+      expect(list.getAttribute('role')).toBe('list');
+      // Renders EXACTLY the current node's direct children — not a flattened
+      // or parent set.
+      expect(screen.getByTestId('navigation-child-card-d:n')).toBeInTheDocument();
+      expect(screen.getByTestId('navigation-child-card-d:s')).toBeInTheDocument();
+      // The named canonical-parent Back control (AC5.2) is laid out FIRST
+      // in DOM order — top of the mobile stack.
+      const panel = screen.getByTestId('areas-journey-panel');
+      const back = screen.getByTestId('areas-hierarchy-back');
+      expect(panel.firstElementChild).toBe(back);
+    });
+  });
+
   it('renders nothing when node is null and not loading/erroring (gate closed)', () => {
     const { container } = render(
       <DiscoverAreasJourneyPanel journey={makeJourney()} buildNodeHref={NOOP_BUILD_HREF} />,

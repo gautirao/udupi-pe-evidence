@@ -37,6 +37,7 @@ import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCa
 import type { ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
 import { DiscoverAreasJourneyPanel } from '@/features/discover/views/DiscoverAreasJourneyPanel';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
+import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 
 /**
  * Issue #1824 Slice S11c — the DiscoverRightPanel call-site region, lifted
@@ -169,6 +170,13 @@ export interface DiscoverRightPanelContainerProps {
    */
   focusedClusterMemberAreaKeys?: readonly string[] | null;
   onClusterFocusChange?: (memberAreaKeys: readonly string[] | null) => void;
+  /**
+   * Issue #1956 PR-5 (Slice 5, AC5.10/AC5.10c) — forwarded unchanged to
+   * `DiscoverAreasJourneyPanel`. MapDiscovery stores the reported preview
+   * in state and renders the mobile Map-mode preview sheet from it; this
+   * container has no opinion on Map/List mode or mobile/desktop.
+   */
+  onSelectedListingPreviewChange?: (preview: SelectedListingPreview | null) => void;
 }
 
 export function DiscoverRightPanelContainer({
@@ -254,6 +262,7 @@ export function DiscoverRightPanelContainer({
   onNavigationNodeHoverChange,
   focusedClusterMemberAreaKeys = null,
   onClusterFocusChange,
+  onSelectedListingPreviewChange,
 }: DiscoverRightPanelContainerProps) {
   // Issue #1953 (build step 2) — consumes the DiscoverProvider facade
   // directly rather than receiving urlState/urlActions as props (D2 prop
@@ -323,6 +332,7 @@ export function DiscoverRightPanelContainer({
         // `journey` stays `area-first` so Back restores the selected area
         // instead of deleting it.
         onAddSchool={urlActions.enterSchoolPicking}
+        onSelectedListingPreviewChange={onSelectedListingPreviewChange}
       />
     );
   }

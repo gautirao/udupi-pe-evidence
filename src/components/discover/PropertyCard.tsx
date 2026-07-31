@@ -59,7 +59,7 @@ export function purposeLabel(p: string | null | undefined): string {
  * the backend emits "verified" | "trusted" | "listed", or omits the field entirely).
  * Any value outside this vocabulary (or null/absent) yields no badge — never invent one.
  */
-const TRUST_BADGES: Record<'verified' | 'trusted' | 'listed', { label: string; className: string; icon: typeof ShieldCheck }> = {
+export const TRUST_BADGES: Record<'verified' | 'trusted' | 'listed', { label: string; className: string; icon: typeof ShieldCheck }> = {
   verified: { label: 'Verified', className: 'bg-[hsl(var(--evergreen-tint))] text-[hsl(var(--evergreen))]', icon: ShieldCheck },
   trusted: { label: 'Trusted', className: 'bg-secondary text-secondary-foreground', icon: Shield },
   listed: { label: 'Listed', className: 'bg-muted/60 text-muted-foreground', icon: Shield },

@@ -97,7 +97,13 @@ describe('AreaFirstBreadcrumb', () => {
   it('renders as a single rounded pill container (AC9 pill-and-chevron pattern)', () => {
     render(<AreaFirstBreadcrumb cityLabel="Udupi" groupName="University Belt" areaLabel="Manipal" />);
     const nav = screen.getByTestId('area-first-breadcrumb');
-    expect(nav).toHaveClass('rounded-full');
+    // Issue #1956 PR-5 (Slice 6, AC5.9): the pill is only unconditionally
+    // `rounded-full` at `sm:` and up (desktop, where the AC9 pill-and-chevron
+    // design is unchanged); below `sm` it wraps across lines (`rounded-2xl`)
+    // so no crumb needs clipping at a true 390px mobile viewport — see the
+    // un-clipping describe block below.
+    expect(nav).toHaveClass('sm:rounded-full');
+    expect(nav).toHaveClass('rounded-2xl');
     expect(nav).toHaveClass('border');
     expect(nav).toHaveClass('bg-card/95');
   });
@@ -113,6 +119,59 @@ describe('AreaFirstBreadcrumb', () => {
     );
     expect(screen.queryByTestId('breadcrumb-cluster')).not.toBeInTheDocument();
     expect(screen.queryAllByTestId(/breadcrumb-cluster/)).toHaveLength(0);
+  });
+
+  // ─── Issue #1956 PR-5 (Slice 6, AC5.9) — breadcrumb un-clipping ──────────
+  // jsdom cannot prove the actual visual reflow (no layout engine — see this
+  // PR's [test_strategy].jsdom_cannot_prove) — the REAL-BROWSER proof is
+  // e2e/discover/issue-1956-pr5-mobile-list-first.spec.ts. A real 390x844
+  // browser measurement showed the original min-w-0 + fixed max-w-* +
+  // single-line (nowrap) fix (below) still over-clipped short crumbs
+  // (e.g. "Bangalore" shrunk to 36px in a 326px-wide pill with 64px of
+  // unused width) — proportional flex-shrink squeezes every crumb once ANY
+  // crumb doesn't fit, even ones that would easily fit alone. The corrected
+  // fix additionally wraps (`flex-wrap`) below the `sm` breakpoint so the
+  // pill grows taller instead of clipping; `sm:flex-nowrap` +
+  // `sm:overflow-hidden` restore the exact prior single-line desktop
+  // behaviour, where it was already correct (the desktop regression spec,
+  // issue-1956-pr5-desktop-breadcrumb-regression.spec.ts, asserts this).
+  describe('un-clipping fix (AC5.9) — mobile flex-wrap, desktop single-line unchanged', () => {
+    it('the pill container wraps below sm and stays single-line at sm and up', () => {
+      render(
+        <AreaFirstBreadcrumb
+          cityLabel="Bangalore"
+          regionName="North Bangalore"
+          groupName="Thanisandra-Hennur Belt"
+          areaLabel="Thanisandra-Hennur Belt"
+        />,
+      );
+      const nav = screen.getByTestId('area-first-breadcrumb');
+      expect(nav).toHaveClass('min-w-0');
+      expect(nav).toHaveClass('flex-wrap');
+      expect(nav).toHaveClass('sm:flex-nowrap');
+      expect(nav).toHaveClass('sm:overflow-hidden');
+    });
+
+    it('every variable-length crumb can shrink to its cap at sm and up, and is unclamped below sm (min-w-0 + max-w-full sm:max-w-*)', () => {
+      render(
+        <AreaFirstBreadcrumb
+          cityLabel="Bangalore"
+          regionName="North Bangalore"
+          groupName="Thanisandra-Hennur Belt"
+          areaLabel="Thanisandra-Hennur Belt"
+        />,
+      );
+      for (const testId of ['breadcrumb-city', 'breadcrumb-region', 'breadcrumb-group', 'breadcrumb-area']) {
+        const crumb = screen.getByTestId(testId);
+        expect(crumb).toHaveClass('min-w-0');
+        expect(crumb).toHaveClass('max-w-full');
+        expect(crumb).toHaveClass('truncate');
+      }
+      expect(screen.getByTestId('breadcrumb-city')).toHaveClass('sm:max-w-[120px]');
+      expect(screen.getByTestId('breadcrumb-region')).toHaveClass('sm:max-w-[130px]');
+      expect(screen.getByTestId('breadcrumb-group')).toHaveClass('sm:max-w-[140px]');
+      expect(screen.getByTestId('breadcrumb-area')).toHaveClass('sm:max-w-[140px]');
+    });
   });
 });
 

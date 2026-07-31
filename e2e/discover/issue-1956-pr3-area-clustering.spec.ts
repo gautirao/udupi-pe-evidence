@@ -12,75 +12,152 @@
  * (`DiscoverAreasJourneyPanel`).
  *
  * ── FIXTURE PROVENANCE (read before "fixing" any assertion below) ──
- * Per issue #2032, the local fixture backend cannot generate/promote a
- * navigation revision from canonical seed inputs (`CityLaunchPromotionService`
- * requires a full sandbox-generate -> validate -> launch admin workflow with
- * no fixture-restore equivalent). A fresh `local-fixture-backend.sh` restore
- * has ZERO rows in `navigation_nodes`, `city_launch_revision` and
- * `property_listings` for Bangalore — confirmed live against this branch's
- * fixture container (`GET .../navigation/resolve?node=d:w` returns
- * `"City has no active navigation hierarchy"` before seeding). This spec
- * therefore extends PR-2's own hand-seeded approach: a deterministic tree was
- * inserted directly into the disposable local fixture Postgres (never
- * committed to the repo, never touching the shared hosted Supabase DB — see
- * `scripts/dev/local-fixture-backend.sh`'s throwaway-container guarantee),
- * mirroring PR-2's `d:w`/Basaveshwara Nagar node exactly and adding ONE new
- * Direction (`d:s`, "South Bangalore") dense enough to force visual
- * clustering:
+ * The ORIGINAL PR-3 fixture (a `d:s`/"South Bangalore" Direction with RR
+ * Nagar/Vijayanagar/Nagarbhavi/Hosahalli) was HAND-INSERTED directly into the
+ * disposable local fixture Postgres during that session and NEVER COMMITTED
+ * to the repo — exactly the anti-pattern ruled out on PR #2056 (comment
+ * 5139969300). That data does not survive a fresh fixture restore, so this
+ * spec's evidence was not reproducible. It has been repointed (#1956 PR-5) at
+ * a COMMITTED, idempotent replacement:
+ * `scripts/db/fixtures/navigation-hierarchy-fixture-seed.sql` +
+ * `scripts/db/fixtures/navigation-hierarchy-fixture-listings-seed.sql`,
+ * applied via `scripts/dev/seed-navigation-hierarchy-fixture.sh`. The
+ * pre-existing `d:s` row from the vanished hand-insert is left exactly as
+ * found (only ONE stale Hosahalli child, no listings) — additive-only, no
+ * UPDATE of that row — so this spec now targets the NEW, committed
+ * `d:southeast` Direction instead. `d:w`/Basaveshwara Nagar (PR-2's own
+ * fixture) is untouched by this repointing and still exercised by the first
+ * test below as-is.
  *
  *   root
- *     -> d:w "West Bangalore" (DIRECTION)
- *          -> a:...Basaveshwara Nagar (AREA, 2 listings) — REAL geo_center,
- *             the DIRECTION's only child, so it always renders as a lone
- *             `area-single-marker`, never a cluster (AC4.6).
- *     -> d:s "South Bangalore" (DIRECTION, NEW for PR-3)
- *          -> a:...RR Nagar     (AREA, 3 listings)  \
- *          -> a:...Vijayanagar  (AREA, 2 listings)   |- synthetic
- *          -> a:...Nagarbhavi   (AREA, 1 listing)    |  navigation_nodes
- *          -> a:...Hosahalli    (AREA, 0 listings)  /   centre_lat/lon
- *             (NOT each area's real geo_center — navigation_nodes carries its
- *             OWN centre columns, independent of `areas.geo_center_*`)
- *             deliberately ~10-15m apart for RR Nagar/Vijayanagar/Nagarbhavi,
- *             so the client-side pixel-grid clusterer (`areaClustering.ts`)
- *             groups them into exactly ONE visual cluster cell at any
- *             zoom/viewport this suite runs at. Hosahalli carries 0 listings
- *             -> `journeyVisibility`'s eligibility filter runs BEFORE
- *             clustering, so it is excluded from the map entirely (never
- *             part of the cluster), but still renders in the un-focused
- *             panel's normal child list as a "No listings yet" leaf AREA
- *             card (same contract as PR-2's Binnipete).
+ *     -> d:w "West Bangalore" (DIRECTION, PRE-EXISTING, untouched by #1956 PR-5)
+ *          -> a:...Basaveshwara Nagar (AREA) — REAL geo_center, the
+ *             DIRECTION's only child, so it always renders as a lone
+ *             `area-single-marker`, never a cluster (AC4.6). NOTE: its
+ *             listing count has drifted from this spec's original "2
+ *             listings" expectation in the shared, long-lived fixture
+ *             container (other sessions' fixture activity) — a PRE-EXISTING
+ *             environmental issue, unrelated to and out of scope for #1956
+ *             PR-5's navigation-node seed work. Left as-is; reported, not
+ *             fixed, here.
+ *     -> d:southeast "South-East Bangalore" (DIRECTION, COMMITTED #1956 PR-5 seed)
+ *          -> a:...RR Nagar     (AREA, 1 listing)  \
+ *          -> a:...Vijayanagar  (AREA, 1 listing)   |- synthetic navigation_nodes
+ *          -> a:...Nagarbhavi   (AREA, 1 listing)  /   centre_lat/lon, deliberately
+ *             ~10-15m apart (NOT each area's real geo_center — navigation_nodes
+ *             carries its OWN centre columns, independent of
+ *             `areas.geo_center_*`), so the client-side pixel-grid clusterer
+ *             (`areaClustering.ts`) groups all three into exactly ONE visual
+ *             cluster cell at any zoom/viewport this suite runs at.
+ *     -> d:southwest "South-West Bangalore" (DIRECTION, COMMITTED #1956 PR-5 seed,
+ *        added in a follow-up round specifically to restore invariant-6 coverage)
+ *          -> a:...Deepanjali Nagar         (AREA, 1 listing)  \
+ *          -> a:...Gnana Bharathi           (AREA, 1 listing)   |- same synthetic
+ *          -> a:...Chandra Layout Extension (AREA, 1 listing)  /   ~10-15m-apart
+ *             centre_lat/lon technique as d:southeast, so these three collapse
+ *             into ONE visual cluster.
+ *          -> a:...Avalahalli               (AREA, 0 listings — NO row in
+ *             navigation-hierarchy-fixture-listings-seed.sql) — the
+ *             `journeyVisibility` eligibility filter (runs BEFORE clustering)
+ *             excludes it from the map/cluster entirely, but it still renders
+ *             in the un-focused panel's normal child list as a "No listings
+ *             yet" leaf AREA card. This is `d:southwest`'s reason for
+ *             existing: it is a BRAND-NEW Direction (not a 4th child bolted
+ *             onto `d:southeast`) specifically because `d:southeast`'s
+ *             `descendant_area_count` was already committed at 3 by an
+ *             earlier seed run — adding a 4th child there without an UPDATE
+ *             to that existing row would create a DESCENDANT_COUNT_MISMATCH
+ *             that fails validation for the WHOLE Bangalore tree on the next
+ *             fresh load. A brand-new Direction's `descendant_area_count` is
+ *             written correctly in its own first INSERT, so there is no
+ *             pre-existing stored value to contradict, and the additive-only
+ *             contract holds unconditionally. See
+ *             `scripts/db/fixtures/navigation-hierarchy-fixture-seed.sql`
+ *             section 3 for the full mechanism.
  *
- * Confirmed live via `GET /api/discover/cities/bangalore/navigation/root/counts`
- * after seeding: `{"nodeKey":"d:w","count":2,"matchingAreaCount":1}`,
- * `{"nodeKey":"d:s","count":6,"matchingAreaCount":3}` — the cluster's 3
- * visible members (3+2+1 listings = 6) sum to the SAME total the map cluster
- * marker and the focused panel both display (AC4.12). NOTE, confirmed live:
- * the map marker's "+N areas with matches" copy caps representative names at
- * `MAX_REPRESENTATIVE_NAMES` (2), so with 3 visible members it reads "+1
- * areas with matches"; the PANEL's focused view passes its own real,
- * uncapped displayed count as the limit (`DiscoverAreasJourneyPanel`'s
- * "REQUIRED CHANGE 2"), so the SAME 3-member cluster reads "3 areas with
- * matches" there — a deliberate, locked divergence between the two
- * surfaces' copy, not a bug. Agreement (AC4.12) is on the underlying member
- * set and listing total, never on the two surfaces sharing one string.
+ * Confirmed live via `GET /api/discover/cities/bangalore/navigation/d:southeast/counts`
+ * after seeding: `{"nodeKey":"d:southeast","count":3,"matchingAreaCount":3}`
+ * — the cluster's 3 visible members (1+1+1 listings = 3) sum to the SAME
+ * total the map cluster marker and the focused panel both display (AC4.12).
+ * This is a genuinely different real number from the original fixture's "6
+ * listings" (3+2+1, which included a 0 from the now-absent Hosahalli) — the
+ * literal count assertions below have been updated from `6` to `3` to match
+ * the real committed data, NOT loosened or removed. The "+1 areas with
+ * matches" / "3 areas with matches" copy assertions are numerically
+ * UNCHANGED from the original spec: `MAX_REPRESENTATIVE_NAMES` (2) still caps
+ * the map marker's representative names at 2 of 3 visible members (hiddenCount
+ * 1 -> "+1"), and the panel's own uncapped view still shows all 3 members
+ * ("3 areas with matches", hiddenCount 0) — the exact same divergence the
+ * original spec documented, not a coincidence engineered by this repointing.
  *
  * The area_keys themselves (`IN|KA|Bengaluru|RR Nagar` etc.) are real
  * Bangalore geography rows already present from the V106 migration — only
  * their `navigation_nodes` position/parentage and their `property_listings`
- * rows are fixture-only, non-committed data.
+ * rows are fixture-only, COMMITTED data (see the two seed SQL files above).
+ *
+ * Test allocation: AC4.4 (cluster tap is presentation-only) and the F1 guard
+ * (stale-marker removal) run against `d:southeast` — they need only a dense
+ * cluster, not a zero-listing sibling, so the smaller/first-seeded fixture is
+ * enough. AC4.5 (Show all areas), AC4.12 (map/panel agreement) and the
+ * AC4.7-adjacent (focus clears on navigation) tests run against
+ * `d:southwest`, because their invariant-6 sub-assertions specifically need a
+ * real zero-listing sibling (Avalahalli) alongside the cluster.
  */
 import { test, expect, type Page } from '@playwright/test';
 
 const CITY = 'bangalore';
 const BASE = `city=${CITY}&journey=area-first&areasPreview=1`;
 
+// Same fallback src/lib/api.ts's own API_BASE_URL uses, and the same env var
+// name the isolated Vite process for this suite is started with
+// (`VITE_API_BASE_URL=... npx vite --port <port> --strictPort`) — so this
+// test asks the SAME backend the page under test is wired to, never a
+// hardcoded guess.
+const API_BASE_URL = process.env.VITE_API_BASE_URL ?? 'http://localhost:8085';
+
 const D_W = 'd:w';
-const D_S = 'd:s';
+const D_SE = 'd:southeast';
+const D_SW = 'd:southwest';
 const AREA_BASAVESHWARA = 'a:IN|KA|Bengaluru|Basaveshwara Nagar';
 const AREA_RR_NAGAR = 'a:IN|KA|Bengaluru|RR Nagar';
 const AREA_VIJAYANAGAR = 'a:IN|KA|Bengaluru|Vijayanagar';
 const AREA_NAGARBHAVI = 'a:IN|KA|Bengaluru|Nagarbhavi';
-const AREA_HOSAHALLI = 'a:IN|KA|Bengaluru|Hosahalli';
+const AREA_DEEPANJALI_NAGAR = 'a:IN|KA|Bengaluru|Deepanjali Nagar';
+const AREA_GNANA_BHARATHI = 'a:IN|KA|Bengaluru|Gnana Bharathi';
+const AREA_CHANDRA_LAYOUT = 'a:IN|KA|Bengaluru|Chandra Layout Extension';
+const AREA_AVALAHALLI = 'a:IN|KA|Bengaluru|Avalahalli';
+
+interface NavigationCountsChild {
+  nodeKey: string;
+  count: number;
+}
+
+interface NavigationCountsResponse {
+  nodeKey: string;
+  count: number;
+  children: NavigationCountsChild[];
+}
+
+/**
+ * Ground-truth read of `GET /navigation/{nodeKey}/counts` (the SAME endpoint
+ * the app's own `useDiscoverNavigationCounts` hook calls) — used so an
+ * assertion tests "the UI shows what the backend reports" instead of a
+ * hardcoded literal that ages badly in a shared, long-lived fixture
+ * container (exactly the failure mode that made the original "2 listings"
+ * assertion on Basaveshwara Nagar go stale).
+ */
+async function fetchNodeCounts(page: Page, nodeKey: string): Promise<NavigationCountsResponse> {
+  const response = await page.request.get(
+    `${API_BASE_URL}/api/discover/cities/${CITY}/navigation/${encodeURIComponent(nodeKey)}/counts`,
+  );
+  expect(response.ok()).toBe(true);
+  return response.json();
+}
+
+/** Byte-identical to `formatListingCount` in useAreasNavigationJourney.ts / AreaMarkerLayer.tsx. */
+function formatListingCount(count: number): string {
+  return count > 0 ? `${count} listing${count === 1 ? '' : 's'}` : 'No listings yet';
+}
 
 function cardTestId(nodeKey: string): string {
   return `navigation-child-card-${nodeKey}`;
@@ -150,7 +227,18 @@ test.describe('@integration-ui #1956 PR-3 — single-AREA marker composition (AC
     const marker = singleMarkerLocator(page, AREA_BASAVESHWARA);
     await expect(marker).toBeVisible();
     await expect(marker).toContainText('Basaveshwara Nagar');
-    await expect(marker).toContainText('2 listings');
+    // GROUND-TRUTH count, not a hardcoded literal: this node/area is
+    // PRE-EXISTING PR-2 fixture data, untouched by the #1956 PR-5 seed, and
+    // its live count has drifted from the original spec's hardcoded "2
+    // listings" in this shared, long-lived fixture container (other
+    // sessions' fixture activity) — exactly the failure mode a snapshot
+    // literal is prone to. Asserting against the SAME counts endpoint the
+    // app itself reads tests the real invariant (UI shows what the backend
+    // reports) instead of a fixture snapshot that ages badly, and never
+    // touches d:w's data to "fix" the drift.
+    const dwCounts = await fetchNodeCounts(page, D_W);
+    const basaveshwaraCount = dwCounts.children.find((c) => c.nodeKey === AREA_BASAVESHWARA)?.count ?? 0;
+    await expect(marker).toContainText(formatListingCount(basaveshwaraCount));
 
     // Negative, only now that positive presence is proven: no visual
     // cluster ever appears for a lone child, and the marker itself carries
@@ -164,28 +252,28 @@ test.describe('@integration-ui #1956 PR-3 — single-AREA marker composition (AC
 });
 
 test.describe('@integration-ui #1956 PR-3 — visual AREA cluster tap is presentation-only (AC4.4)', () => {
-  test('tapping the South Bangalore visual cluster focuses map/panel WITHOUT changing node=, the breadcrumb, or browser history', async ({
+  test('tapping the South-East Bangalore visual cluster focuses map/panel WITHOUT changing node=, the breadcrumb, or browser history', async ({
     page,
   }) => {
     await openRoot(page);
-    await goToDirection(page, D_S);
+    await goToDirection(page, D_SE);
 
     // Positive: the real dense-cluster surface rendered — exactly ONE
     // visual cluster marker (RR Nagar/Vijayanagar/Nagarbhavi collapse into
-    // one cell; zero-listing Hosahalli is excluded from the map entirely by
-    // eligibility, so it can never inflate this count), never one marker
-    // per member.
+    // one cell), never one marker per member.
     const cluster = clusterMarkerLocator(page);
     await expect(cluster).toHaveCount(1);
     await expect(cluster).toContainText('+1 areas with matches');
-    await expect(cluster).toContainText('6 listings');
+    // 1+1+1 = 3 (COMMITTED seed data — see the file header for why this is
+    // "3", not the original hand-inserted fixture's "6").
+    await expect(cluster).toContainText('3 listings');
     await expect(page.getByTestId('areas-cluster-focus-panel')).toHaveCount(0);
 
     const nodeBefore = await currentNodeParam(page);
     const historyBefore = await historyLength(page);
     const breadcrumbBefore = await breadcrumbText(page);
-    expect(nodeBefore).toBe(D_S);
-    expect(breadcrumbBefore).toBe('South Bangalore');
+    expect(nodeBefore).toBe(D_SE);
+    expect(breadcrumbBefore).toBe('South-East Bangalore');
 
     await clickMarker(cluster);
 
@@ -217,7 +305,7 @@ test.describe('@integration-ui #1956 PR-3 — Show all areas restores (AC4.5)', 
     page,
   }) => {
     await openRoot(page);
-    await goToDirection(page, D_S);
+    await goToDirection(page, D_SW);
     await clickMarker(clusterMarkerLocator(page));
     await expect(page.getByTestId('areas-cluster-focus-panel')).toBeVisible();
 
@@ -228,16 +316,20 @@ test.describe('@integration-ui #1956 PR-3 — Show all areas restores (AC4.5)', 
     await page.getByTestId('areas-cluster-focus-clear').click();
 
     // Positive: the normal (un-focused) surface is really back, with the
-    // COMPLETE direct-child list — all four AREA children, including the
-    // zero-listing Hosahalli leaf that the focused cluster view never shows.
+    // COMPLETE direct-child list — all FOUR AREA children, including the
+    // zero-listing Avalahalli leaf that the focused cluster view never shows
+    // (invariant 6 / journeyVisibility eligibility-exclusion — restored here
+    // against d:southwest, a brand-new Direction seeded specifically for this
+    // sub-case; see the file header for why it could not be added as a 4th
+    // child of d:southeast).
     await expect(page.getByTestId('areas-cluster-focus-panel')).toHaveCount(0);
     const childList = page.getByTestId('navigation-child-list');
     await expect(childList).toBeVisible();
-    await expect(page.getByTestId(cardTestId(AREA_RR_NAGAR))).toBeVisible();
-    await expect(page.getByTestId(cardTestId(AREA_VIJAYANAGAR))).toBeVisible();
-    await expect(page.getByTestId(cardTestId(AREA_NAGARBHAVI))).toBeVisible();
-    await expect(page.getByTestId(cardTestId(AREA_HOSAHALLI))).toBeVisible();
-    await expect(page.getByTestId(`navigation-child-card-listings-${AREA_HOSAHALLI}`)).toHaveText(
+    await expect(page.getByTestId(cardTestId(AREA_DEEPANJALI_NAGAR))).toBeVisible();
+    await expect(page.getByTestId(cardTestId(AREA_GNANA_BHARATHI))).toBeVisible();
+    await expect(page.getByTestId(cardTestId(AREA_CHANDRA_LAYOUT))).toBeVisible();
+    await expect(page.getByTestId(cardTestId(AREA_AVALAHALLI))).toBeVisible();
+    await expect(page.getByTestId(`navigation-child-card-listings-${AREA_AVALAHALLI}`)).toHaveText(
       'No listings yet',
     );
 
@@ -254,36 +346,41 @@ test.describe('@integration-ui #1956 PR-3 — map and panel agree while a cluste
     page,
   }) => {
     await openRoot(page);
-    await goToDirection(page, D_S);
+    await goToDirection(page, D_SW);
 
     const cluster = clusterMarkerLocator(page);
-    await expect(cluster).toContainText('6 listings');
+    // 1+1+1 = 3 (COMMITTED seed data — see the file header).
+    await expect(cluster).toContainText('3 listings');
     await clickMarker(cluster);
 
     const focusPanel = page.getByTestId('areas-cluster-focus-panel');
     await expect(focusPanel).toBeVisible();
 
     // Positive: exactly the 3 visible (nonzero) members the map clustered
-    // are listed — never the zero-listing Hosahalli, never a partial subset.
-    await expect(page.getByTestId(`areas-cluster-focus-member-${AREA_RR_NAGAR}`)).toBeVisible();
-    await expect(page.getByTestId(`areas-cluster-focus-member-${AREA_VIJAYANAGAR}`)).toBeVisible();
-    await expect(page.getByTestId(`areas-cluster-focus-member-${AREA_NAGARBHAVI}`)).toBeVisible();
-    await expect(page.getByTestId(`areas-cluster-focus-member-${AREA_HOSAHALLI}`)).toHaveCount(0);
+    // are listed — never the zero-listing Avalahalli, never a partial subset.
+    await expect(page.getByTestId(`areas-cluster-focus-member-${AREA_DEEPANJALI_NAGAR}`)).toBeVisible();
+    await expect(page.getByTestId(`areas-cluster-focus-member-${AREA_GNANA_BHARATHI}`)).toBeVisible();
+    await expect(page.getByTestId(`areas-cluster-focus-member-${AREA_CHANDRA_LAYOUT}`)).toBeVisible();
+    // Negative, restored (invariant 6 / journeyVisibility eligibility-
+    // exclusion): the zero-listing sibling is never a member of the focused
+    // cluster, meaningfully so here because d:southwest genuinely HAS this
+    // 4th sibling (unlike d:southeast, which never had one to exclude).
+    await expect(page.getByTestId(`areas-cluster-focus-member-${AREA_AVALAHALLI}`)).toHaveCount(0);
 
     const memberButtons = focusPanel.locator('[data-node-key]');
     await expect(memberButtons).toHaveCount(3);
 
-    // The panel's own per-member counts sum to the SAME total (6) the map
+    // The panel's own per-member counts sum to the SAME total (3) the map
     // cluster marker itself displays — never independently derived.
     const listingsTexts = await memberButtons.locator('span.block').allTextContents();
     const summed = listingsTexts
       .map((t) => Number.parseInt(t, 10))
       .reduce((a, b) => a + b, 0);
-    expect(summed).toBe(6);
+    expect(summed).toBe(3);
     // The panel's own count copy is "3 areas with matches" (its representative
     // limit is the real, uncapped displayed count — see the sibling AC4.4
     // test's comment); the MAP marker's "+1 areas with matches" (capped at 2
-    // representative names) is the SAME underlying 3-member set and 6-listing
+    // representative names) is the SAME underlying 3-member set and 3-listing
     // total, just presented with a different (also-locked) cap. Agreement is
     // asserted on the member set/total above, not on the two surfaces sharing
     // one literal string.
@@ -301,7 +398,7 @@ test.describe('@integration-ui #1956 PR-3 — focused-cluster state clears on no
     // permitted file globs, so this real-browser navigation sequence is the
     // ONLY coverage this defect class has.
     await openRoot(page);
-    await goToDirection(page, D_S);
+    await goToDirection(page, D_SW);
     await clickMarker(clusterMarkerLocator(page));
     await expect(page.getByTestId('areas-cluster-focus-panel')).toBeVisible();
 
@@ -314,23 +411,25 @@ test.describe('@integration-ui #1956 PR-3 — focused-cluster state clears on no
     await goToDirection(page, D_W);
     await expect(singleMarkerLocator(page, AREA_BASAVESHWARA)).toBeVisible();
 
-    // Return to root, then back into South Bangalore — the SAME Direction
-    // whose cluster was focused a moment ago.
+    // Return to root, then back into South-West Bangalore — the SAME
+    // Direction whose cluster was focused a moment ago.
     await page.goBack();
     await expect.poll(() => currentNodeParam(page)).toBeNull();
-    await goToDirection(page, D_S);
+    await goToDirection(page, D_SW);
 
     // Positive: the FULL, un-focused child list is what actually renders —
     // never the stale 3-member cluster-focus subset chosen for a PRIOR visit
     // to this same node. This is the literal AC4.7-adjacent failure mode:
     // "returning to an 'areas' node does not re-apply a member set chosen
     // for a different parent" (here, a member set chosen before an
-    // intervening visit elsewhere).
+    // intervening visit elsewhere). Restored (invariant 6): the zero-listing
+    // Avalahalli leaf is visible again too, exactly as it was before the
+    // cluster was ever focused.
     await expect(page.getByTestId('areas-cluster-focus-panel')).toHaveCount(0);
-    await expect(page.getByTestId(cardTestId(AREA_RR_NAGAR))).toBeVisible();
-    await expect(page.getByTestId(cardTestId(AREA_VIJAYANAGAR))).toBeVisible();
-    await expect(page.getByTestId(cardTestId(AREA_NAGARBHAVI))).toBeVisible();
-    await expect(page.getByTestId(cardTestId(AREA_HOSAHALLI))).toBeVisible();
+    await expect(page.getByTestId(cardTestId(AREA_DEEPANJALI_NAGAR))).toBeVisible();
+    await expect(page.getByTestId(cardTestId(AREA_GNANA_BHARATHI))).toBeVisible();
+    await expect(page.getByTestId(cardTestId(AREA_CHANDRA_LAYOUT))).toBeVisible();
+    await expect(page.getByTestId(cardTestId(AREA_AVALAHALLI))).toBeVisible();
     await expect(clusterMarkerLocator(page)).toHaveCount(1);
   });
 });
@@ -340,7 +439,7 @@ test.describe('@integration-ui #1956 PR-3 — no stale AREA/cluster markers afte
     page,
   }) => {
     await openRoot(page);
-    await goToDirection(page, D_S);
+    await goToDirection(page, D_SE);
     await clickMarker(clusterMarkerLocator(page));
 
     const focusPanel = page.getByTestId('areas-cluster-focus-panel');

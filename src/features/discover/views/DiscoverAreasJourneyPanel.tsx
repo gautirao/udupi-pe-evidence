@@ -16,7 +16,7 @@
  * Clear selected areas / Add nearby areas / Draw search area / Search this
  * area / Create alert); those belong to #2016/#2017/#2019.
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -28,6 +28,7 @@ import { presentClusterRepresentatives } from '@/features/discover/navigation/re
 import type { ClusterableAreaMember } from '@/features/discover/navigation/areaClustering';
 import { isMemberEligible } from '@/features/discover/navigation/journeyVisibility';
 import { deriveAreaPointFromNode } from '@/features/discover/navigation/nodeAreaPoint';
+import { ROOT_NODE_KEY } from '@/features/discover/navigation/types';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverActions, useDiscoverNav } from '@/features/discover/context/useDiscoverContext';
@@ -36,6 +37,8 @@ import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSea
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { AreaSelectedPanel } from '@/components/discover/panels/AreaSelectedPanel';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
+import { toSelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
+import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 
 /**
  * One visual AREA cluster's member set, as focused by a map cluster-marker
@@ -56,6 +59,82 @@ export interface FocusedAreaClusterSummary {
   }>;
   /** The exact "+N areas with matches" / "N areas with matches" copy the map cluster marker shows. */
   countLabel: string;
+}
+
+/**
+ * Issue #1956 PR-5 (Slice 3, AC5.6) — extracted, byte-for-byte-identical pure
+ * derivation, factored OUT of the `focusedCluster` useMemo below so the new
+ * mobile Map-mode cluster sheet (`src/features/discover/views/mobile/
+ * MobileClusterSheet.tsx`) can compute the IDENTICAL member subset + count
+ * copy from the SAME `journey`/`focusedClusterMemberAreaKeys` MapDiscovery
+ * already threads to both this panel and the map layer, without a second,
+ * potentially-diverging implementation (AC5.6's "consuming the existing
+ * seam" requirement). No behaviour change versus the pre-extraction inline
+ * body — see this component's own `focusedCluster` useMemo call site.
+ */
+export function deriveFocusedAreaClusterSummary(
+  journey: Pick<UseAreasNavigationJourneyResult, 'node' | 'children'>,
+  focusedClusterMemberAreaKeys: readonly string[] | null | undefined,
+): FocusedAreaClusterSummary | null {
+  if (!focusedClusterMemberAreaKeys || focusedClusterMemberAreaKeys.length === 0) return null;
+  const rawByNodeKey = new Map((journey.node?.children ?? []).map((c) => [c.nodeKey, c] as const));
+  const wanted = new Set(focusedClusterMemberAreaKeys);
+  const clusterable: ClusterableAreaMember[] = [];
+  for (const child of journey.children) {
+    const raw = rawByNodeKey.get(child.nodeKey);
+    // Minor fix-up (review) — the backend guarantees a non-null areaKey for
+    // AREA children; a child missing one is SKIPPED rather than borrowing
+    // its nodeKey as a stand-in areaKey (mirrors the coordinate fail-safe
+    // in areaClustering.ts's isUsableCentroid — never fabricate identity).
+    if (raw?.areaKey == null || !wanted.has(raw.areaKey)) continue;
+    clusterable.push({
+      nodeKey: child.nodeKey,
+      areaKey: raw.areaKey,
+      displayLabel: child.displayLabel,
+      lat: raw.centreLat ?? Number.NaN,
+      lon: raw.centreLon ?? Number.NaN,
+      listingCount: child.listingCount,
+      displayOrder: child.displayOrder,
+      schoolCount: child.schoolCount,
+    });
+  }
+  if (clusterable.length === 0) return null;
+  // REQUIRED CHANGE 1 (AC4.12) — partition through the SAME journey-aware
+  // eligibility predicate the map's clusterVisibleAreaMembers
+  // (areaClustering.ts) applies BEFORE clustering, so a focused member that
+  // has dropped to zero-content (e.g. a filter tightened) is excluded from
+  // this panel exactly as it is excluded from the map's cluster. Falls back
+  // to the normal level panel (returns null) when nothing eligible
+  // survives — this panel only ever mounts for the areas journey (see
+  // module doc), so the eligibility dimension is always 'areas'.
+  const eligible = clusterable.filter((m) =>
+    isMemberEligible(
+      {
+        areaKey: m.areaKey,
+        displayLabel: m.displayLabel,
+        eligibleListingCount: m.listingCount,
+        eligibleSchoolCount: m.schoolCount ?? 0,
+        displayOrder: m.displayOrder,
+      },
+      'areas',
+    ),
+  );
+  if (eligible.length === 0) return null;
+  // REQUIRED CHANGE 2 — pass the panel's REAL (post-eligibility) displayed
+  // count as the limit so `presentClusterRepresentatives` never advertises
+  // a hidden "+N" for rows that are ALL already on screen here. The map
+  // marker (AreaMarkerLayer.tsx) keeps calling this with the default
+  // MAX_REPRESENTATIVE_NAMES cap — unaffected by this change.
+  const { countResult } = presentClusterRepresentatives(eligible, 'areas', eligible.length);
+  return {
+    members: eligible.map((m) => ({
+      nodeKey: m.nodeKey,
+      areaKey: m.areaKey,
+      displayLabel: m.displayLabel,
+      listingCount: m.listingCount,
+    })),
+    countLabel: countResult.label,
+  };
 }
 
 export interface DiscoverAreasJourneyPanelProps {
@@ -117,6 +196,18 @@ export interface DiscoverAreasJourneyPanelProps {
    * never resolve an AREA leaf keep compiling and passing unchanged.
    */
   onAddSchool?: () => void;
+  /**
+   * Issue #1956 PR-5 (Slice 5, AC5.10/AC5.10c) — lifts the currently-selected
+   * listing's anonymous-safe preview projection (derived from the SAME
+   * ALREADY-FETCHED `DiscoverCityListingItem[]` this surface's own
+   * `useDiscoverCityListings` call resolved — never a second query) up to
+   * the caller (MapDiscovery), which renders the mobile Map-mode preview
+   * sheet from it. `null` whenever no listing is selected or the selected
+   * id is not present in this area's own result set. Optional so every
+   * pre-existing render path/test that never resolves an AREA leaf keeps
+   * compiling unchanged.
+   */
+  onSelectedListingPreviewChange?: (preview: SelectedListingPreview | null) => void;
 }
 
 export function DiscoverAreasJourneyPanel({
@@ -131,6 +222,7 @@ export function DiscoverAreasJourneyPanel({
   areaLeafFilters,
   onAreaLeafFiltersChange,
   onAddSchool,
+  onSelectedListingPreviewChange,
 }: DiscoverAreasJourneyPanelProps) {
   // Issue #1956 PR 3 (bounded state-lift, AC4.12) — derive the focused
   // cluster's member list + count copy from the SAME `journey.node.children`
@@ -145,67 +237,10 @@ export function DiscoverAreasJourneyPanel({
   // map and panel (AC4.12). This panel only ever mounts for the area-first
   // journey (see `DiscoverRightPanelContainer`'s `showAreasNavigationJourney`
   // gate), so the eligibility dimension is always 'areas', never 'schools'.
-  const focusedCluster = useMemo((): FocusedAreaClusterSummary | null => {
-    if (!focusedClusterMemberAreaKeys || focusedClusterMemberAreaKeys.length === 0) return null;
-    const rawByNodeKey = new Map((journey.node?.children ?? []).map((c) => [c.nodeKey, c] as const));
-    const wanted = new Set(focusedClusterMemberAreaKeys);
-    const clusterable: ClusterableAreaMember[] = [];
-    for (const child of journey.children) {
-      const raw = rawByNodeKey.get(child.nodeKey);
-      // Minor fix-up (review) — the backend guarantees a non-null areaKey for
-      // AREA children; a child missing one is SKIPPED rather than borrowing
-      // its nodeKey as a stand-in areaKey (mirrors the coordinate fail-safe
-      // in areaClustering.ts's isUsableCentroid — never fabricate identity).
-      if (raw?.areaKey == null || !wanted.has(raw.areaKey)) continue;
-      clusterable.push({
-        nodeKey: child.nodeKey,
-        areaKey: raw.areaKey,
-        displayLabel: child.displayLabel,
-        lat: raw.centreLat ?? Number.NaN,
-        lon: raw.centreLon ?? Number.NaN,
-        listingCount: child.listingCount,
-        displayOrder: child.displayOrder,
-        schoolCount: child.schoolCount,
-      });
-    }
-    if (clusterable.length === 0) return null;
-    // REQUIRED CHANGE 1 (AC4.12) — partition through the SAME journey-aware
-    // eligibility predicate the map's clusterVisibleAreaMembers
-    // (areaClustering.ts) applies BEFORE clustering, so a focused member that
-    // has dropped to zero-content (e.g. a filter tightened) is excluded from
-    // this panel exactly as it is excluded from the map's cluster. Falls back
-    // to the normal level panel (returns null) when nothing eligible
-    // survives — this panel only ever mounts for the areas journey (see
-    // module doc), so the eligibility dimension is always 'areas'.
-    const eligible = clusterable.filter((m) =>
-      isMemberEligible(
-        {
-          areaKey: m.areaKey,
-          displayLabel: m.displayLabel,
-          eligibleListingCount: m.listingCount,
-          eligibleSchoolCount: m.schoolCount ?? 0,
-          displayOrder: m.displayOrder,
-        },
-        'areas',
-      ),
-    );
-    if (eligible.length === 0) return null;
-    // REQUIRED CHANGE 2 — pass the panel's REAL (post-eligibility) displayed
-    // count as the limit so `presentClusterRepresentatives` never advertises
-    // a hidden "+N" for rows that are ALL already on screen here. The map
-    // marker (AreaMarkerLayer.tsx) keeps calling this with the default
-    // MAX_REPRESENTATIVE_NAMES cap — unaffected by this change.
-    const { countResult } = presentClusterRepresentatives(eligible, 'areas', eligible.length);
-    return {
-      members: eligible.map((m) => ({
-        nodeKey: m.nodeKey,
-        areaKey: m.areaKey,
-        displayLabel: m.displayLabel,
-        listingCount: m.listingCount,
-      })),
-      countLabel: countResult.label,
-    };
-  }, [focusedClusterMemberAreaKeys, journey.node, journey.children]);
+  const focusedCluster = useMemo(
+    () => deriveFocusedAreaClusterSummary(journey, focusedClusterMemberAreaKeys),
+    [focusedClusterMemberAreaKeys, journey.node, journey.children],
+  );
 
   // Issue #1956 PR-4 (AC4.1/AC4.2/AC4.7/AC4.9) — `selectedAreaPoint` is a
   // PURE (hook-free) re-derivation of the SAME node this component already
@@ -331,6 +366,16 @@ export function DiscoverAreasJourneyPanel({
         committedFilters={areaLeafFilters}
         onCommittedFiltersChange={onAreaLeafFiltersChange}
         onAddSchool={onAddSchool}
+        // Issue #1956 PR-5 (AC5.9 breadcrumb omission-class fix) — the SAME
+        // journey.selectNode reference (AC3.9's ONE selection action) every
+        // other affordance on this surface already dispatches through
+        // (cluster-member click, "Show all areas"), so a breadcrumb crumb
+        // click can never diverge from the canonical node-navigation path
+        // (state/url/navigation.ts's writeNode/applyNodeDelta — the SAME
+        // delta buildNodeHref encodes, differentially pinned by
+        // navigationCommandMatrix.test.ts). No second history mechanism.
+        selectNode={journey.selectNode}
+        onSelectedListingPreviewChange={onSelectedListingPreviewChange}
       />
     );
   }
@@ -389,6 +434,15 @@ interface AreaLeafListingsSurfaceProps {
   onCommittedFiltersChange?: (next: PropertyFilters) => void;
   /** See `DiscoverAreasJourneyPanelProps.onAddSchool` — forwarded unchanged to `AreaSelectedPanel`. */
   onAddSchool?: () => void;
+  /**
+   * Issue #1956 PR-5 (AC5.9) — the caller's `journey.selectNode` (the ONE
+   * canonical selection action, AC3.9), passed through so this surface's
+   * breadcrumb Home/City/Region/Group crumbs can navigate without a second,
+   * parallel navigation mechanism. Never re-derived here.
+   */
+  selectNode: (nodeKey: string) => void;
+  /** See `DiscoverAreasJourneyPanelProps.onSelectedListingPreviewChange`. */
+  onSelectedListingPreviewChange?: (preview: SelectedListingPreview | null) => void;
 }
 
 /**
@@ -430,6 +484,8 @@ function AreaLeafListingsSurface({
   committedFilters,
   onCommittedFiltersChange,
   onAddSchool,
+  selectNode,
+  onSelectedListingPreviewChange,
 }: AreaLeafListingsSurfaceProps) {
   const { user, isLoading: authLoading } = useAuth();
   const isAuthenticated = !authLoading && user !== null;
@@ -526,6 +582,61 @@ function AreaLeafListingsSurface({
     // its own).
     return isAuthenticated ? listings : listings.map((l) => ({ ...l, pricePaise: undefined }));
   }, [areaListingsQuery.data, isAuthenticated]);
+
+  // Issue #1956 PR-5 (AC5.9 breadcrumb omission-class fix) — `node.ancestry`
+  // is the SAME server-declared ancestry `HierarchyBackButton` already reads
+  // (never re-derived/reconstructed client-side). For a canonical AREA leaf
+  // the live tree is City -> DIRECTION -> AREA (depth 1, ancestry length 1)
+  // or City -> DIRECTION -> CLUSTER -> AREA (depth 2, ancestry length 2,
+  // types.ts's MAX_PUBLIC_DEPTH invariant #14) — so ancestry[0] is always
+  // the macro "Region" (DIRECTION) and, when present, ancestry[1] is the
+  // "Group" (CLUSTER/Local Destination). Null/undefined when absent, so
+  // AreaFirstBreadcrumb omits the crumb entirely (its own established
+  // contract) rather than rendering a falsy label.
+  const regionAncestor = node.ancestry[0] ?? null;
+  const groupAncestor = node.ancestry[1] ?? null;
+  const regionName = regionAncestor?.displayLabel ?? null;
+  const groupName = groupAncestor?.displayLabel ?? null;
+
+  // Issue #1956 PR-5 (AC5.9) — every crumb dispatches through the SAME
+  // `journey.selectNode` (AC3.9's ONE selection action) the cluster-member
+  // list and "Show all areas" clear already use elsewhere in this file —
+  // never a raw onClick/navigate(-1)/hand-built node key, and never a
+  // second history mechanism. "Home" and "City" both resolve to the city
+  // root: this canonical node-based journey has no destination between the
+  // city's Areas root and leaving Discover entirely, so a distinct "Home"
+  // target would have to invent one; instead both crumbs honestly point at
+  // the same real, reachable destination (mirrors AreasBreadcrumbTrail's own
+  // trail, which likewise begins at the city root as its leading segment).
+  const onCrumbHome = () => selectNode(ROOT_NODE_KEY);
+  const onCrumbCity = () => selectNode(ROOT_NODE_KEY);
+  const onCrumbRegion = regionAncestor ? () => selectNode(regionAncestor.nodeKey) : undefined;
+  const onCrumbGroup = groupAncestor ? () => selectNode(groupAncestor.nodeKey) : undefined;
+
+  // Issue #1956 PR-5 (Slice 5, AC5.10/AC5.10c) — projects the currently
+  // URL-selected listing (`nav.selectedListing`) against THIS surface's own
+  // ALREADY-FETCHED `areaListingsForPanel` (a real `DiscoverCityListingItem[]`
+  // — the live DTO `toSelectedListingPreview` is contracted against, re-proven
+  // at AC5.10c) — never a second query, never the map's separate
+  // `selectedMarkerListing` (a differently-shaped `PropertyListingWithImages`
+  // sourced from the marker layer's own fetch). `null` whenever nothing is
+  // selected or the selected id fell out of this area's own result set
+  // (e.g. a filter tightened after the URL was written).
+  const selectedListingPreview = useMemo<SelectedListingPreview | null>(() => {
+    if (!nav.selectedListing) return null;
+    const match = areaListingsForPanel.find((l) => l.id === nav.selectedListing);
+    if (!match) return null;
+    return toSelectedListingPreview(match, { isAuthenticated, areaLabel: areaPoint.areaLabel });
+  }, [nav.selectedListing, areaListingsForPanel, isAuthenticated, areaPoint.areaLabel]);
+
+  // Reports the derived preview UP to the caller (MapDiscovery), which
+  // mounts the mobile Map-mode preview sheet from it — this component makes
+  // no assumption about Map/List mode or mobile/desktop; it only reports
+  // what listing is currently selected within its own already-fetched set.
+  useEffect(() => {
+    onSelectedListingPreviewChange?.(selectedListingPreview);
+  }, [selectedListingPreview, onSelectedListingPreviewChange]);
+
   // Issue #1956 PR-4 FIX PASS 4 (blocking, performance-analyst REQUEST_CHANGES,
   // item 3) — `isLoadingListings` (below) was threaded from
   // `areaListingsQuery` but `isError` never was, so a 404/500/timeout settled
@@ -607,6 +718,18 @@ function AreaLeafListingsSurface({
         // `CITY_CONFIG[city]?.label ?? city` derivation MapDiscovery.tsx and
         // DiscoverMapContextOverlay.tsx already use for this exact prop.
         cityLabel={CITY_CONFIG[nav.city]?.label ?? nav.city}
+        // Issue #1956 PR-5 (AC5.9 breadcrumb omission-class fix) — the six
+        // previously-omitted breadcrumb props (this call site passed ONLY
+        // `cityLabel` before this fix — a sibling omission to PR-4 FIX
+        // CYCLE 2, which fixed `cityLabel` alone and left these six). See
+        // this component's own derivation above for regionName/groupName/
+        // onCrumb* semantics.
+        regionName={regionName}
+        groupName={groupName}
+        onCrumbHome={onCrumbHome}
+        onCrumbCity={onCrumbCity}
+        onCrumbRegion={onCrumbRegion}
+        onCrumbGroup={onCrumbGroup}
         areaListings={areaListingsForPanel}
         isLoadingListings={areaListingsQuery.isLoading}
         isAuthenticated={isAuthenticated}
