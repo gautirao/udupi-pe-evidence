@@ -1,13 +1,11 @@
 import { useRef, useState, useCallback, useEffect, type DragEvent } from 'react';
-import { useListingImages, type ListingImage } from '@/hooks/useListingImages';
+import { useListingImages, validateFileBatch, buildRejectionToast, type ListingImage } from '@/hooks/useListingImages';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Upload, X, GripVertical, ImageOff, Loader2, RotateCw, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 interface ImageUploaderProps {
   listingId: string;
@@ -43,29 +41,56 @@ export function ImageUploader({ listingId, onCanSubmitChange }: ImageUploaderPro
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
+  // Session-scoped record of successfully-uploaded file signatures. Survives the
+  // 2s auto-clear of a 'done' entry from `uploads`, so a re-selection of an
+  // already-uploaded photo is still caught after its progress row disappears.
+  // Cross-session duplicates are NOT detected (ListingImage carries no
+  // size/hash/filename) — an accepted, documented limit (issue #2041, PR #2060).
+  // Invariant this ref relies on: one mounted ImageUploader instance per listingId
+  // (EditListing mounts a single fixed instance). It is never reset on listingId
+  // change — a future caller swapping listingId on an already-mounted instance
+  // would leak signatures across listings.
+  const uploadedSignaturesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const upload of Object.values(uploads)) {
+      if (upload.status === 'done' && upload.signature) {
+        uploadedSignaturesRef.current.add(upload.signature);
+      }
+    }
+  }, [uploads]);
+
   // Notify parent of canSubmit changes (useEffect to avoid setState-in-render)
   useEffect(() => {
     onCanSubmitChange?.(canSubmit);
   }, [canSubmit, onCanSubmitChange]);
 
   // --- File selection ---
+  // Single entry point for the file picker, drag/drop, AND the mobile
+  // camera/gallery input (all three route here) so validation, duplicate
+  // detection and overflow feedback are identical across every surface (AC8).
   const handleFiles = useCallback(
     (files: FileList | File[]) => {
-      const fileArray = Array.from(files);
-      const toUpload = fileArray.slice(0, remainingSlots);
-      for (const file of toUpload) {
-        if (file.size > MAX_FILE_SIZE_BYTES) {
-          toast({
-            variant: 'destructive',
-            title: 'File too large',
-            description: `"${file.name}" exceeds the 5 MB limit`,
-          });
-          continue;
+      const activeSignatures = new Set(uploadedSignaturesRef.current);
+      for (const upload of Object.values(uploads)) {
+        // A file that FAILED (storage PUT or metadata registration) never
+        // successfully uploaded — it must not read as "already selected or
+        // already uploaded". Only in-flight/succeeded entries count as active.
+        if (upload.signature && upload.status !== 'error' && upload.status !== 'finalize_failed') {
+          activeSignatures.add(upload.signature);
         }
+      }
+
+      const { accepted, rejections } = validateFileBatch(files, remainingSlots, activeSignatures);
+
+      if (rejections.length > 0) {
+        const { title, description } = buildRejectionToast(rejections);
+        toast({ variant: 'destructive', title, description });
+      }
+      for (const file of accepted) {
         uploadImage(file);
       }
     },
-    [uploadImage, remainingSlots, toast],
+    [uploadImage, remainingSlots, uploads, toast],
   );
 
   const handleFileInput = useCallback(
@@ -282,7 +307,9 @@ export function ImageUploader({ listingId, onCanSubmitChange }: ImageUploaderPro
                 {(upload.status === 'error' || upload.status === 'finalize_failed') && (
                   <>
                     <span className="text-xs text-destructive">
-                      We couldn't finish uploading your photo. Please try again.
+                      {upload.status === 'finalize_failed'
+                        ? "Photo uploaded, but saving it to the listing failed."
+                        : "We couldn't upload this photo. Please try again."}
                     </span>
                     <Button
                       variant="ghost"

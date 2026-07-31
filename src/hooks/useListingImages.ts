@@ -33,6 +33,13 @@ export interface UploadProgress {
   originalSize?: number;
   /** Compressed size in bytes (set when compression ran). */
   compressedSize?: number;
+  /**
+   * Composite identity signature of the ORIGINAL selected File (see
+   * getFileSignature). Carried through every status transition so duplicate
+   * detection can recognise "already selected / in-flight / uploaded this
+   * session" without holding onto the File object itself.
+   */
+  signature?: string;
 }
 
 function getFileExtension(name: string): string {
@@ -50,7 +57,7 @@ const BLOCKED_FORMAT_HINTS: Record<string, string> = {
 function validateFile(file: File): string | null {
   const ext = getFileExtension(file.name);
   if (BLOCKED_FORMAT_HINTS[ext]) {
-    return BLOCKED_FORMAT_HINTS[ext];
+    return `"${file.name}" — ${BLOCKED_FORMAT_HINTS[ext]}`;
   }
   if (!ALLOWED_EXTENSIONS.includes(ext)) {
     return `"${file.name}" has an unsupported format. Accepted: JPG, PNG, WebP.`;
@@ -59,6 +66,120 @@ function validateFile(file: File): string | null {
     return `"${file.name}" is too large (max 5 MB). Please reduce the file size and try again.`;
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Issue #2041 — shared duplicate-identity + batch-validation helper.
+//
+// Identity rule: name + size + lastModified. Filename alone is NEVER used —
+// two distinct files sharing a name (differing size and/or lastModified) are
+// always treated as distinct.
+//
+// `lastModified` is not reliably populated for every File source (some mobile
+// camera captures report 0 / non-finite values). When it can't be trusted,
+// getFileSignature returns null and the caller MUST treat the file as
+// non-comparable — i.e. never reject it as a duplicate on the strength of
+// name+size alone. A false "duplicate" rejection (blocking a genuinely
+// different photo) is worse than an undetected duplicate slipping through,
+// so uncertainty always resolves to ACCEPT.
+// ---------------------------------------------------------------------------
+function isReliableLastModified(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+/** Returns the composite identity signature, or null if not reliably distinguishing. */
+export function getFileSignature(file: File): string | null {
+  if (!isReliableLastModified(file.lastModified)) return null;
+  return `${file.name}::${file.size}::${file.lastModified}`;
+}
+
+export interface FileRejection {
+  fileName: string;
+  message: string;
+}
+
+export interface FileBatchResult {
+  accepted: File[];
+  rejections: FileRejection[];
+}
+
+/**
+ * Validates an incoming file selection (file picker, drag/drop, or mobile
+ * camera/gallery input — all callers route through this same function) against:
+ *   1. format/size (existing per-file rules)
+ *   2. duplicate identity — against `activeSignatures` (already-selected /
+ *      in-flight / uploaded-this-session, supplied by the caller) AND against
+ *      other files within THIS SAME batch
+ *   3. the effective remaining-slot cap actually available to the calling
+ *      surface (NOT assumed to be the global MAX_IMAGES — InlinePhotos has a
+ *      tighter composed cap)
+ *
+ * Every rejected file gets its own reason-specific, file-specific message;
+ * the accepted list preserves selection order. Session-scoped only — a photo
+ * already saved from an EARLIER session cannot be compared (ListingImage
+ * carries no size/hash/original filename), which is an accepted, documented
+ * limit (PR #2060), not a defect.
+ */
+export function validateFileBatch(
+  files: FileList | File[],
+  effectiveRemainingSlots: number,
+  activeSignatures: ReadonlySet<string> = new Set(),
+): FileBatchResult {
+  const fileArray = Array.from(files);
+  const cap = Math.max(0, effectiveRemainingSlots);
+  const seen = new Set(activeSignatures);
+  const accepted: File[] = [];
+  const rejections: FileRejection[] = [];
+
+  for (const file of fileArray) {
+    const formatOrSizeError = validateFile(file);
+    if (formatOrSizeError) {
+      rejections.push({ fileName: file.name, message: formatOrSizeError });
+      continue;
+    }
+
+    const signature = getFileSignature(file);
+    if (signature && seen.has(signature)) {
+      rejections.push({
+        fileName: file.name,
+        message: `"${file.name}" was skipped — it's already selected or already uploaded for this listing.`,
+      });
+      continue;
+    }
+
+    if (accepted.length >= cap) {
+      // Room actually left AT THE MOMENT OF THIS REJECTION, not the static
+      // pre-batch cap — a batch of 4 against a cap of 2 must tell the 3rd and
+      // 4th file the true remaining room is 0, never restate the stale cap.
+      const remaining = Math.max(0, cap - accepted.length);
+      rejections.push({
+        fileName: file.name,
+        message: `"${file.name}" was not added — only ${remaining} more photo${remaining === 1 ? '' : 's'} can be added right now.`,
+      });
+      continue;
+    }
+
+    if (signature) seen.add(signature);
+    accepted.push(file);
+  }
+
+  return { accepted, rejections };
+}
+
+/**
+ * Consolidates every rejection from a single file-selection batch into ONE
+ * toast payload. `src/hooks/use-toast.ts` caps visible toasts at
+ * TOAST_LIMIT=1, and its reducer collapses the toast queue on every dispatch
+ * within the same synchronous handler — so calling `toast()` once per
+ * rejection only ever shows the LAST one. Calling it once with every
+ * rejection's file-specific, reason-specific message keeps that same
+ * per-file detail (AC3/AC4) while respecting the one-toast primitive.
+ */
+export function buildRejectionToast(rejections: FileRejection[]): { title: string; description: string } {
+  return {
+    title: rejections.length > 1 ? `${rejections.length} photos not added` : 'Photo not added',
+    description: rejections.map((r) => r.message).join('\n'),
+  };
 }
 
 export function useListingImages(listingId: string | undefined) {
@@ -113,6 +234,9 @@ export function useListingImages(listingId: string | undefined) {
 
       // Stable upload key generated upfront (independent of server-assigned storagePath)
       const uploadKey = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      // Identity signature of the ORIGINAL file (not the post-compression copy) — carried
+      // through every status transition below so duplicate detection survives compression.
+      const signature = getFileSignature(file) ?? undefined;
 
       // Step 0: Compress if above threshold
       let fileToUpload: File = file;
@@ -122,7 +246,7 @@ export function useListingImages(listingId: string | undefined) {
       if (file.size > COMPRESSION_THRESHOLD) {
         setUploads((prev) => ({
           ...prev,
-          [uploadKey]: { fileName: file.name, progress: 10, status: 'compressing', file },
+          [uploadKey]: { fileName: file.name, progress: 10, status: 'compressing', file, signature },
         }));
         try {
           const compressed = await imageCompression(file, {
@@ -146,7 +270,7 @@ export function useListingImages(listingId: string | undefined) {
       // Step 1: Request a pre-signed upload URL from the backend
       setUploads((prev) => ({
         ...prev,
-        [uploadKey]: { fileName: file.name, progress: 20, status: 'uploading', file, originalSize, compressedSize },
+        [uploadKey]: { fileName: file.name, progress: 20, status: 'uploading', file, originalSize, compressedSize, signature },
       }));
 
       let signedUrl: string;
@@ -165,7 +289,7 @@ export function useListingImages(listingId: string | undefined) {
         const message = apiErr?.message ?? 'Failed to get upload URL.';
         setUploads((prev) => ({
           ...prev,
-          [uploadKey]: { fileName: file.name, progress: 0, status: 'error', error: message, file },
+          [uploadKey]: { fileName: file.name, progress: 0, status: 'error', error: message, file, signature },
         }));
         toast({ title: 'Upload failed', description: message, variant: 'destructive' });
         return;
@@ -175,7 +299,7 @@ export function useListingImages(listingId: string | undefined) {
       // The URL already carries its own auth token — do NOT add an Authorization header.
       setUploads((prev) => ({
         ...prev,
-        [uploadKey]: { fileName: file.name, progress: 40, status: 'uploading', file, originalSize, compressedSize },
+        [uploadKey]: { fileName: file.name, progress: 40, status: 'uploading', file, originalSize, compressedSize, signature },
       }));
 
       let putResponse: Response;
@@ -189,7 +313,7 @@ export function useListingImages(listingId: string | undefined) {
         const message = err instanceof Error ? err.message : 'Network error during upload.';
         setUploads((prev) => ({
           ...prev,
-          [uploadKey]: { fileName: file.name, progress: 0, status: 'error', error: message, file },
+          [uploadKey]: { fileName: file.name, progress: 0, status: 'error', error: message, file, signature },
         }));
         toast({ title: 'Upload failed', description: message, variant: 'destructive' });
         return;
@@ -199,7 +323,7 @@ export function useListingImages(listingId: string | undefined) {
         const message = `Storage upload failed (${putResponse.status}).`;
         setUploads((prev) => ({
           ...prev,
-          [uploadKey]: { fileName: file.name, progress: 0, status: 'error', error: message, file },
+          [uploadKey]: { fileName: file.name, progress: 0, status: 'error', error: message, file, signature },
         }));
         toast({ title: 'Upload failed', description: message, variant: 'destructive' });
         return;
@@ -212,7 +336,7 @@ export function useListingImages(listingId: string | undefined) {
       // Step 3: Register metadata with backend using the SERVER-returned storagePath
       setUploads((prev) => ({
         ...prev,
-        [uploadKey]: { fileName: file.name, progress: 70, status: 'registering' },
+        [uploadKey]: { fileName: file.name, progress: 70, status: 'registering', signature },
       }));
 
       try {
@@ -223,7 +347,7 @@ export function useListingImages(listingId: string | undefined) {
 
         setUploads((prev) => ({
           ...prev,
-          [uploadKey]: { fileName: file.name, progress: 100, status: 'done' },
+          [uploadKey]: { fileName: file.name, progress: 100, status: 'done', signature },
         }));
 
         // Refresh image list
@@ -245,7 +369,7 @@ export function useListingImages(listingId: string | undefined) {
         if (status === 409) {
           setUploads((prev) => ({
             ...prev,
-            [uploadKey]: { fileName: file.name, progress: 100, status: 'done' },
+            [uploadKey]: { fileName: file.name, progress: 100, status: 'done', signature },
           }));
           queryClient.invalidateQueries({ queryKey });
           setTimeout(() => {
@@ -269,6 +393,7 @@ export function useListingImages(listingId: string | undefined) {
             error: message,
             storagePath,
             url: publicUrl,
+            signature,
           },
         }));
         toast({ title: 'Finalize failed', description: 'Image uploaded but registration failed. You can retry.', variant: 'destructive' });

@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import { AlertCircle, ImageOff, Loader2, Plus, RotateCw, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useListingImages, type ListingImage } from '@/hooks/useListingImages';
+import { useListingImages, validateFileBatch, buildRejectionToast, type ListingImage } from '@/hooks/useListingImages';
+import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -42,6 +43,24 @@ export function InlinePhotos({ listingId, onCanSubmitChange }: InlinePhotosProps
   } = useListingImages(listingId);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  // Session-scoped record of successfully-uploaded file signatures — same shared
+  // duplicate-identity mechanism as ImageUploader.tsx (see validateFileBatch in
+  // useListingImages.ts). Cross-session duplicates are not detected (accepted,
+  // documented limit — issue #2041, PR #2060).
+  // Invariant this ref relies on: one mounted InlinePhotos instance per listingId
+  // (PhotosStep mounts a single fixed instance). It is never reset on listingId
+  // change — a future caller swapping listingId on an already-mounted instance
+  // would leak signatures across listings.
+  const uploadedSignaturesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const upload of Object.values(uploads)) {
+      if (upload.status === 'done' && upload.signature) {
+        uploadedSignaturesRef.current.add(upload.signature);
+      }
+    }
+  }, [uploads]);
 
   useEffect(() => {
     onCanSubmitChange?.(canSubmit);
@@ -49,8 +68,27 @@ export function InlinePhotos({ listingId, onCanSubmitChange }: InlinePhotosProps
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const toUpload = Array.from(e.target.files).slice(0, Math.max(0, Math.min(remainingSlots, TILE_SLOTS - imageCount)));
-      for (const file of toUpload) uploadImage(file);
+      // Effective cap is the tighter of the two limits this surface composes —
+      // never assume the global MAX_IMAGES (10) when TILE_SLOTS (5) is smaller.
+      const effectiveRemainingSlots = Math.max(0, Math.min(remainingSlots, TILE_SLOTS - imageCount));
+
+      const activeSignatures = new Set(uploadedSignaturesRef.current);
+      for (const upload of Object.values(uploads)) {
+        // A file that FAILED (storage PUT or metadata registration) never
+        // successfully uploaded — it must not read as "already selected or
+        // already uploaded". Only in-flight/succeeded entries count as active.
+        if (upload.signature && upload.status !== 'error' && upload.status !== 'finalize_failed') {
+          activeSignatures.add(upload.signature);
+        }
+      }
+
+      const { accepted, rejections } = validateFileBatch(e.target.files, effectiveRemainingSlots, activeSignatures);
+
+      if (rejections.length > 0) {
+        const { title, description } = buildRejectionToast(rejections);
+        toast({ variant: 'destructive', title, description });
+      }
+      for (const file of accepted) uploadImage(file);
       e.target.value = '';
     }
   };
@@ -197,7 +235,13 @@ export function InlinePhotos({ listingId, onCanSubmitChange }: InlinePhotosProps
                 <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
               )}
               <span className="truncate">{upload.fileName}</span>
-              <span>{upload.status === 'error' || upload.status === 'finalize_failed' ? "couldn't finish uploading" : upload.status}</span>
+              <span>
+                {upload.status === 'finalize_failed'
+                  ? 'uploaded — saving failed'
+                  : upload.status === 'error'
+                    ? "couldn't upload"
+                    : upload.status}
+              </span>
             </div>
           ))}
         </div>
