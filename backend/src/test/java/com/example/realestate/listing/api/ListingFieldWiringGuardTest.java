@@ -65,8 +65,24 @@ class ListingFieldWiringGuardTest {
             // CommercialFieldOptions is now WIRED (M38-FU2 / #1730 — validateCommercialFields /
             // validateCommercialFieldSet in ListingController) and intentionally removed from this
             // forward-only list. Do not re-add it without removing the real rejectIfUnknown wiring.
-            // ResidentialFieldOptions (all author-only; guard by class name)
-            "ResidentialFieldOptions",
+            // ResidentialFieldOptions: VALID_RESIDENTIAL_OWNERSHIP is now WIRED (#2048 —
+            // validateFamilyOwnershipType in ListingController, RESIDENTIAL branch only) and
+            // intentionally removed from this list. Every OTHER ResidentialFieldOptions set remains
+            // author-only / forward-only — listed individually below (not by bare class name,
+            // since the class name itself now legitimately appears in the wired call). Do not
+            // re-add VALID_RESIDENTIAL_OWNERSHIP without removing the real rejectIfUnknown wiring,
+            // and do not collapse this back to the bare "ResidentialFieldOptions" token (that would
+            // also flag the wired call and mask any future narrow-promotion mistake — D2).
+            "VALID_FURNISHING_STATUSES",
+            "VALID_PROPERTY_STATUSES",
+            "VALID_MAINT_INC",
+            "VALID_AVAILABILITY",
+            "VALID_PREFERRED_TENANTS",
+            "VALID_RESIDENTIAL_AREA_UNITS",
+            // Note: VALID_FACING_VALUES and VALID_CONVERSION_STATUSES are ALSO forward-only
+            // ResidentialFieldOptions sets, but the token names are shared with the AgriFieldOptions
+            // forward-only sets of the same name already banned above — no duplicate entry needed
+            // (the guard matches by literal token string, not by declaring class).
     };
 
     /** Pattern to locate validate* method headers (opening brace position is m.end() - 1). */

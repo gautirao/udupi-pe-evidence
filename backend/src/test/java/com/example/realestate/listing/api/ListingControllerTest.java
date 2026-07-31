@@ -17,6 +17,7 @@ import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
@@ -1558,6 +1559,267 @@ class ListingControllerTest {
                         .content("{\"propertyType\":\"house\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.boundary").doesNotExist());
+    }
+
+    // ==================== #2048: residential ownershipType family-scoping ====================
+
+    /** Stubs createDraft to return {@code saved} regardless of arguments (all-any() matcher, 38 params). */
+    private void stubCreateDraftReturns(Listing saved) {
+        when(listingCrudService.createDraft(any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any()))
+                .thenReturn(saved);
+    }
+
+    /** Stubs updateListing to return {@code updated} regardless of arguments (all-any() matcher, 48 params). */
+    private void stubUpdateListingReturns(Listing updated) {
+        when(listingCrudService.updateListing(any(), any(), anyBoolean(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(),
+                any(), any()))
+                .thenReturn(updated);
+    }
+
+    // ---- E1 (AC1 reproduction) + E5 matrix: residential accepted ownershipType values, CREATE ----
+
+    @ParameterizedTest(name = "create residential ownershipType={0} -> 201")
+    @org.junit.jupiter.params.provider.ValueSource(
+            strings = {"FREEHOLD", "COOPERATIVE_SOCIETY", "LEASEHOLD", "POWER_OF_ATTORNEY"})
+    void create_residentialValidOwnershipTypes_returns201(String ownershipType) throws Exception {
+        Listing saved = buildListing(LISTING_ID, "DRAFT", "house", "Test house",
+                "Udupi", new BigDecimal("5000000"), "Nice house");
+        stubCreateDraftReturns(saved);
+
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"house","title":"Test house","locality":"Udupi",
+                                 "price":5000000,"description":"Nice house","ownershipType":"%s"}
+                                """.formatted(ownershipType)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()));
+    }
+
+    // ---- E5 matrix: residential accepted ownershipType values, UPDATE ----
+
+    @ParameterizedTest(name = "update residential ownershipType={0} -> 200")
+    @org.junit.jupiter.params.provider.ValueSource(
+            strings = {"FREEHOLD", "COOPERATIVE_SOCIETY", "LEASEHOLD", "POWER_OF_ATTORNEY"})
+    void update_residentialValidOwnershipTypes_returns200(String ownershipType) throws Exception {
+        Listing updated = buildListing(LISTING_ID, "DRAFT", "house", "Updated title",
+                "Udupi", new BigDecimal("5000000"), "Updated desc");
+        stubUpdateListingReturns(updated);
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"house","ownershipType":"%s"}
+                                """.formatted(ownershipType)))
+                .andExpect(status().isOk());
+    }
+
+    // ---- E3: PUT omitting ownershipType stays unaffected (legacy-data / null-skip safety path) ----
+
+    @Test
+    void update_residentialOwnershipTypeOmitted_returns200() throws Exception {
+        Listing updated = buildListing(LISTING_ID, "DRAFT", "house", "Updated title",
+                "Udupi", new BigDecimal("5000000"), "Updated desc");
+        stubUpdateListingReturns(updated);
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"house","title":"Updated title"}
+                                """))
+                .andExpect(status().isOk());
+    }
+
+    // ---- D1 deliberate narrowing: agri-only ownership values are now INVALID for residential ----
+
+    @Test
+    void create_residentialInheritedOwnership_returns400() throws Exception {
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"house","title":"Test house","locality":"Udupi",
+                                 "price":5000000,"description":"Nice house","ownershipType":"INHERITED"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(
+                        "Invalid value for ownershipType: 'INHERITED'. "
+                                + "Allowed values: COOPERATIVE_SOCIETY, FREEHOLD, LEASEHOLD, POWER_OF_ATTORNEY"));
+
+        verify(listingCrudService, never()).createDraft(any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any());
+    }
+
+    // ---- Genuinely invalid value: unchanged error-body shape ({"error": "..."}, no new exception type) ----
+
+    @Test
+    void create_residentialGenuinelyInvalidOwnershipType_returns400UnchangedErrorShape() throws Exception {
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"house","title":"Test house","locality":"Udupi",
+                                 "price":5000000,"description":"Nice house","ownershipType":"BOGUS_VALUE"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(
+                        "Invalid value for ownershipType: 'BOGUS_VALUE'. "
+                                + "Allowed values: COOPERATIVE_SOCIETY, FREEHOLD, LEASEHOLD, POWER_OF_ATTORNEY"))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+    }
+
+    // ---- E4: PUT error-precedence pinning (C3) ----
+
+    @Test
+    void update_residentialInvalidOwnershipType_propertyTypeSupplied_returns400BeforeLookup() throws Exception {
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"house","ownershipType":"INHERITED"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(
+                        "Invalid value for ownershipType: 'INHERITED'. "
+                                + "Allowed values: COOPERATIVE_SOCIETY, FREEHOLD, LEASEHOLD, POWER_OF_ATTORNEY"));
+
+        // Precedence pin: when propertyType IS supplied, family resolves directly from the request
+        // and validateFamilyOwnershipType runs BEFORE any listing lookup — so an invalid value
+        // short-circuits to 400 without ever checking whether the listing exists/is owned by caller.
+        verify(listingWorkflowService, never()).findListingForCaller(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void update_residentialInvalidOwnershipType_propertyTypeOmitted_returns404BeforeValidation() throws Exception {
+        // Override the lenient default stub: this listing does not exist / is not owned by caller.
+        when(listingWorkflowService.findListingForCaller(eq(LISTING_ID), eq(DEALER_ID), eq(false)))
+                .thenThrow(new ListingNotFoundException(LISTING_ID));
+
+        // Precedence pin: when propertyType is OMITTED, the effective-type resolution fetches the
+        // existing listing FIRST (to determine effectivePropertyType) — so a not-found/not-owned
+        // listing throws 404 before validateFamilyOwnershipType is ever reached, regardless of how
+        // invalid the supplied ownershipType is.
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"ownershipType":"INHERITED"}
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Listing not found"));
+    }
+
+    // ---- E5 matrix: agricultural ownershipType unchanged (all 7 values accepted) ----
+
+    @ParameterizedTest(name = "create agricultural ownershipType={0} -> 201")
+    @org.junit.jupiter.params.provider.ValueSource(
+            strings = {"FREEHOLD", "INHERITED", "PATTA", "SURVEY_SETTLEMENT", "KATHA", "REVENUE", "OTHER"})
+    void create_agriculturalValidOwnershipTypes_returns201(String ownershipType) throws Exception {
+        Listing saved = buildListing(LISTING_ID, "DRAFT", "agricultural_land", "Test farm",
+                "Udupi", new BigDecimal("2000000"), "Nice farm");
+        stubCreateDraftReturns(saved);
+
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"agricultural_land","title":"Test farm","locality":"Udupi",
+                                 "price":2000000,"description":"Nice farm","ownershipType":"%s"}
+                                """.formatted(ownershipType)))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void create_agriculturalCooperativeSocietyOwnership_returns400() throws Exception {
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"agricultural_land","title":"Test farm","locality":"Udupi",
+                                 "price":2000000,"description":"Nice farm","ownershipType":"COOPERATIVE_SOCIETY"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(
+                        "Invalid value for ownershipType: 'COOPERATIVE_SOCIETY'. "
+                                + "Allowed values: FREEHOLD, INHERITED, KATHA, OTHER, PATTA, REVENUE, SURVEY_SETTLEMENT"));
+    }
+
+    // ---- E5 matrix: COMMERCIAL and PLOT behaviour UNCHANGED (still validated against the agri set) ----
+
+    @Test
+    void create_commercialOwnershipType_agriValueAccepted_returns201() throws Exception {
+        Listing saved = buildListing(LISTING_ID, "DRAFT", "commercial_building", "Test building",
+                "Udupi", new BigDecimal("8000000"), "Nice building");
+        stubCreateDraftReturns(saved);
+
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"commercial_building","title":"Test building","locality":"Udupi",
+                                 "price":8000000,"description":"Nice building","ownershipType":"PATTA"}
+                                """))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void create_commercialOwnershipType_residentialValueRejected_returns400() throws Exception {
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"commercial_building","title":"Test building","locality":"Udupi",
+                                 "price":8000000,"description":"Nice building","ownershipType":"COOPERATIVE_SOCIETY"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(
+                        "Invalid value for ownershipType: 'COOPERATIVE_SOCIETY'. "
+                                + "Allowed values: FREEHOLD, INHERITED, KATHA, OTHER, PATTA, REVENUE, SURVEY_SETTLEMENT"));
+    }
+
+    @Test
+    void create_plotOwnershipType_agriValueAccepted_returns201() throws Exception {
+        Listing saved = buildListing(LISTING_ID, "DRAFT", "land", "Test plot",
+                "Udupi", new BigDecimal("3000000"), "Nice plot");
+        stubCreateDraftReturns(saved);
+
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"land","title":"Test plot","locality":"Udupi",
+                                 "price":3000000,"description":"Nice plot","ownershipType":"KATHA"}
+                                """))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void create_plotOwnershipType_residentialValueRejected_returns400() throws Exception {
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"land","title":"Test plot","locality":"Udupi",
+                                 "price":3000000,"description":"Nice plot","ownershipType":"LEASEHOLD"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(
+                        "Invalid value for ownershipType: 'LEASEHOLD'. "
+                                + "Allowed values: FREEHOLD, INHERITED, KATHA, OTHER, PATTA, REVENUE, SURVEY_SETTLEMENT"));
     }
 
     // ==================== Helper ====================

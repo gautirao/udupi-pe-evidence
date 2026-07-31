@@ -92,8 +92,9 @@ public class ListingController {
         String sellerType = "user".equals(caller.role()) ? "owner" : "broker";
         String createVideoUrl = (req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl();
         validateAgriFields(req.waterSource(), req.soilType(), req.roadAccess(),
-                req.cultivationStatus(), req.ownershipType(), req.landCategory());
+                req.cultivationStatus(), req.landCategory());
         PropertyFamily createFamily = resolveFamily(req.propertyType());
+        validateFamilyOwnershipType(createFamily, req.ownershipType());
         validateFamilyFields(createFamily,
                 req.bedrooms(), req.washrooms(), req.parkingCount(),
                 req.furnishingStatus(), req.commercialUsage(), req.roadFrontageFt(),
@@ -245,7 +246,7 @@ public class ListingController {
                                     @Valid @RequestBody UpdateRequest req) {
 
         validateAgriFields(req.waterSource(), req.soilType(), req.roadAccess(),
-                req.cultivationStatus(), req.ownershipType(), req.landCategory());
+                req.cultivationStatus(), req.landCategory());
         try {
             // Resolve the EFFECTIVE property type for validation purposes: use the incoming
             // propertyType when the request supplies one; otherwise fall back to the existing
@@ -264,6 +265,7 @@ public class ListingController {
                 effectivePropertyType = existingForValidation.getPropertyType();
             }
             PropertyFamily updateFamily = resolveFamily(effectivePropertyType);
+            validateFamilyOwnershipType(updateFamily, req.ownershipType());
             validateFamilyFields(updateFamily,
                     req.bedrooms(), req.washrooms(), req.parkingCount(),
                     req.furnishingStatus(), req.commercialUsage(), req.roadFrontageFt(),
@@ -521,9 +523,17 @@ public class ListingController {
     // ===== Validation helpers =====
 
     /**
-     * Validates the 6 agri fields against the canonical option sets in {@link AgriFieldOptions}:
+     * Validates the 5 agri fields against the canonical option sets in {@link AgriFieldOptions}:
      * {@code waterSource}, {@code soilType}, {@code roadAccess}, {@code cultivationStatus},
-     * {@code ownershipType}, and {@code landCategory} (wired M38-10b / #1693).
+     * and {@code landCategory} (wired M38-10b / #1693).
+     *
+     * <p><b>{@code ownershipType} is deliberately NOT validated here</b> — see
+     * {@link #validateFamilyOwnershipType(PropertyFamily, String)}, which runs AFTER family
+     * resolution and applies the family-appropriate canonical set (residential vs.
+     * agricultural/commercial/plot). Prior to #2048 this method validated {@code ownershipType}
+     * unconditionally against the agri set for EVERY property family, before family resolution
+     * even ran — incorrectly rejecting valid residential-only values (COOPERATIVE_SOCIETY,
+     * LEASEHOLD, POWER_OF_ATTORNEY) with HTTP 400.
      *
      * <p>Null or blank values are always accepted (field not supplied).
      * A non-blank value that is not a member of the canonical set is rejected with 400.
@@ -536,13 +546,43 @@ public class ListingController {
      */
     private static void validateAgriFields(String waterSource, String soilType,
                                            String roadAccess, String cultivationStatus,
-                                           String ownershipType, String landCategory) {
+                                           String landCategory) {
         rejectIfUnknown("waterSource",       waterSource,       AgriFieldOptions.VALID_WATER_SOURCES);
         rejectIfUnknown("soilType",          soilType,          AgriFieldOptions.VALID_SOIL_TYPES);
         rejectIfUnknown("roadAccess",        roadAccess,        AgriFieldOptions.VALID_ROAD_ACCESS_VALUES);
         rejectIfUnknown("cultivationStatus", cultivationStatus, AgriFieldOptions.VALID_CULTIVATION_STATUSES);
-        rejectIfUnknown("ownershipType",     ownershipType,     AgriFieldOptions.VALID_OWNERSHIP_TYPES);
         rejectIfUnknown("landCategory",      landCategory,      AgriFieldOptions.VALID_LAND_CATEGORIES);
+    }
+
+    /**
+     * Validates {@code ownershipType} against the family-appropriate canonical set — the fix for
+     * the pre-#2048 bug where {@link #validateAgriFields} validated {@code ownershipType}
+     * unconditionally against {@link AgriFieldOptions#VALID_OWNERSHIP_TYPES} for every property
+     * family, before family resolution ran, incorrectly rejecting residential-only values.
+     *
+     * <p>RESIDENTIAL uses the narrow {@link ResidentialFieldOptions#VALID_RESIDENTIAL_OWNERSHIP}
+     * set (FREEHOLD / COOPERATIVE_SOCIETY / LEASEHOLD / POWER_OF_ATTORNEY) — a deliberate
+     * narrowing decision (issue #2048 / PR #2057, decision D1): agri-only ownership values
+     * (INHERITED, PATTA, SURVEY_SETTLEMENT, KATHA, REVENUE, OTHER) are NOT valid for residential
+     * listings, even though they share the same underlying {@code ownershipType} column.
+     *
+     * <p>AGRICULTURAL, COMMERCIAL, and PLOT are UNCHANGED from pre-#2048 behavior — they continue
+     * to validate against {@link AgriFieldOptions#VALID_OWNERSHIP_TYPES} (decision D2: only the
+     * narrow residential set is wired; {@link ResidentialFieldOptions} is not promoted generally).
+     *
+     * <p>Must be called AFTER family resolution ({@link #resolveFamily}) on both the create and
+     * update paths, so the correct canonical set is selected before the value is checked.
+     *
+     * @throws org.springframework.web.server.ResponseStatusException HTTP 400 when ownershipType
+     *         is non-blank and not a member of the resolved family's canonical set
+     */
+    private static void validateFamilyOwnershipType(PropertyFamily family, String ownershipType) {
+        switch (family) {
+            case RESIDENTIAL -> rejectIfUnknown("ownershipType", ownershipType,
+                    ResidentialFieldOptions.VALID_RESIDENTIAL_OWNERSHIP);
+            case AGRICULTURAL, COMMERCIAL, PLOT -> rejectIfUnknown("ownershipType", ownershipType,
+                    AgriFieldOptions.VALID_OWNERSHIP_TYPES);
+        }
     }
 
     private static void rejectIfUnknown(String fieldName, String value, Set<String> validValues) {
