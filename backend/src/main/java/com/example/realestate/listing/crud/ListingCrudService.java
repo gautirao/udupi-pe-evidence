@@ -358,11 +358,23 @@ public class ListingCrudService {
         listing.setUpdatedAt(now);
 
         Listing saved = listingRepository.save(listing);
-        // Child-set writes (amenities / special-location views / preferred tenants) — insert-only
-        // on create (no prior rows can exist for a brand-new listing id).
-        writeResidentialChildSets(saved.getId(), residentialFields);
-        // Commercial child-set writes (utilities / suitable uses) — insert-only on create.
-        writeCommercialChildSets(saved.getId(), commercialFields);
+        // Family-gated child-set writes (#2038 rework) — effectiveType is read AFTER the property
+        // type has been finalized and saved, so this reflects the actual listing family rather
+        // than the request payload shape. A cross-family sentinel (e.g. commercialFields.utilities
+        // = [] submitted alongside a residential listing) must never reach the OTHER family's
+        // writer — both writers share the listing_amenities table, and running the inapplicable
+        // writer would bulk-delete rows the applicable writer just inserted in the same request.
+        // No family-switch cleanup is needed here (unlike updateListing): a brand-new listing id
+        // has no prior child-set rows in any table, so there is nothing to clean up.
+        String effectiveType = saved.getPropertyType();
+        boolean isResidentialFamily = RESIDENTIAL_PROPERTY_TYPES.contains(effectiveType);
+        boolean isCommercialFamily = COMMERCIAL_PROPERTY_TYPES.contains(effectiveType);
+        if (isResidentialFamily) {
+            writeResidentialChildSets(saved.getId(), residentialFields);
+        }
+        if (isCommercialFamily) {
+            writeCommercialChildSets(saved.getId(), commercialFields);
+        }
         // Typed detail projection refresh (#1734) — keeps listing_commercial_space_details /
         // listing_residential_unit_details current for the search indexer read path.
         refreshTypedProjections(saved);
@@ -433,6 +445,14 @@ public class ListingCrudService {
      *
      * <p>Explicit delete-then-insert (not JPA cascade/merge) so stale codes never linger —
      * required per architect decision on child-set edit semantics (#1626).
+     *
+     * <p><b>Caller precondition (#2038 rework):</b> callers MUST only invoke this method when the
+     * listing's effective property type belongs to {@link #RESIDENTIAL_PROPERTY_TYPES}. This
+     * method does not itself check family — it is a plain writer — so an inapplicable-family
+     * caller would bulk-delete {@code listing_amenities} rows regardless of whether {@code
+     * f.amenities()} is null. Gating on family (not merely on which fields are non-null) is what
+     * prevents a same-request commercial sentinel (e.g. {@code utilities: []}) from wiping
+     * residential amenities just inserted in the same PUT.
      */
     private void writeResidentialChildSets(UUID listingId, ResidentialListingFields f) {
         if (f.amenities() != null) {
@@ -514,6 +534,16 @@ public class ListingCrudService {
      *
      * <p>{@code utilities} reuses the {@code listing_amenities} table (same shape as the
      * residential amenities multi-select) — see V104 migration note.
+     *
+     * <p><b>Caller precondition (#2038 rework):</b> callers MUST only invoke this method when the
+     * listing's effective property type belongs to {@link #COMMERCIAL_PROPERTY_TYPES}. Because
+     * {@code utilities} shares {@code listing_amenities} with the residential amenities writer,
+     * calling this method for a residential listing (e.g. because {@code commercialFields.utilities()}
+     * happens to be a non-null empty list, which is an accepted "not applicable" sentinel per
+     * {@code rejectIfNonEmpty} in {@code ListingController}) would bulk-delete the residential
+     * amenities the OTHER writer just inserted in the same request. This method does not check
+     * family itself; the family gate lives at the call sites in {@code createDraft}/{@code
+     * updateListing}.
      */
     private void writeCommercialChildSets(UUID listingId, CommercialListingFields f) {
         if (f.utilities() != null) {
@@ -853,6 +883,18 @@ public class ListingCrudService {
         // family-reset gate below.
         String previousListingFamily = listing.getListingFamily();
 
+        // Snapshot the property type as it existed BEFORE this update (PR_REVIEW rework-cycle-1
+        // fix). R5 below is keyed on this — not on previousListingFamily — because the family
+        // gate a few lines below (isResidentialFamily/isCommercialFamily) is deliberately keyed
+        // on property_type membership "to stay independent of the V102-backfilled stamp". Keying
+        // R5 on the stamp instead would let any residential/commercial listing whose stamp is
+        // stale or NULL (e.g. rows inserted by a bulk import rather than through this service)
+        // skip cleanup entirely while the gate still switches writers underneath it. Must be
+        // captured before propertyType is mutated below.
+        String previousPropertyType = listing.getPropertyType();
+        boolean wasResidentialFamily = RESIDENTIAL_PROPERTY_TYPES.contains(previousPropertyType);
+        boolean wasCommercialFamily = COMMERCIAL_PROPERTY_TYPES.contains(previousPropertyType);
+
         // Snapshot trust-relevant fields before the update so badge invalidation
         // can detect which fields changed.
         Map<String, Object> previousValues = snapshotTrustFields(listing);
@@ -999,9 +1041,60 @@ public class ListingCrudService {
         }
 
         Listing saved = listingRepository.save(listing);
-        // Child-set REPLACE (delete-then-insert) — the request's list is the FINAL desired set.
-        writeResidentialChildSets(saved.getId(), residentialFields);
-        writeCommercialChildSets(saved.getId(), commercialFields);
+        // Family-gated child-set REPLACE (delete-then-insert; #2038 rework). effectiveType is read
+        // AFTER the property type has been finalized and saved, so this reflects the actual
+        // post-update listing family rather than the request payload shape. A cross-family
+        // sentinel (e.g. commercialFields.utilities = [] submitted alongside a residential update)
+        // must never reach the OTHER family's writer — both writers share the listing_amenities
+        // table, and running the inapplicable writer would bulk-delete rows the applicable writer
+        // just inserted in the same request. Neither writer runs for AGRICULTURAL / null / legacy
+        // 'land'/'other' listings.
+        String effectiveType = saved.getPropertyType();
+        boolean isResidentialFamily = RESIDENTIAL_PROPERTY_TYPES.contains(effectiveType);
+        boolean isCommercialFamily = COMMERCIAL_PROPERTY_TYPES.contains(effectiveType);
+
+        // Family-switch cleanup (R5, #2038 rework, broadened in PR_REVIEW rework-cycle-1): if this
+        // update moved the listing OUT of the family whose child rows previously applied, those
+        // now-inapplicable rows must be deleted BEFORE the newly-applicable writer runs below.
+        // Without this, surviving listing_amenities rows from the old family would be re-read as
+        // the NEW family's data by ListingResponseMapper (residential amenities shown as
+        // commercial utilities, or vice versa) — a fresh cross-family data-integrity bug the
+        // family gate above would otherwise introduce on a genuine family switch.
+        //
+        // Predicate is "left the family" (wasX && !isXFamily), not "switched into the OTHER typed
+        // family" (the original #2038 version). The original predicate under-deleted: property_type
+        // has 11 CHECK-constraint values (V103), and three of them — 'land', 'other',
+        // 'agricultural_land' — are in NEITHER RESIDENTIAL_PROPERTY_TYPES nor
+        // COMMERCIAL_PROPERTY_TYPES. A RESIDENTIAL listing switched to 'land' satisfied neither
+        // original branch, so its listing_amenities/location_features/preferred_tenants rows were
+        // never deleted — an orphan today, and a resurrection risk later if the listing is
+        // switched back to a residential type with amenities omitted (null = "leave untouched"),
+        // making the stale rows reappear as if freshly selected.
+        //
+        // Keyed on previousPropertyType (snapshotted before ANY field mutation, above) rather than
+        // previousListingFamily, so it stays on the SAME AXIS as isResidentialFamily/
+        // isCommercialFamily below — both of which are deliberately keyed on property_type, not the
+        // listing_family stamp, to stay independent of the V102-backfilled stamp. Keying R5 on the
+        // stamp instead would skip cleanup for any residential/commercial listing whose stamp is
+        // stale or NULL (e.g. rows inserted by a bulk import) while the gate still switches
+        // writers underneath it. Still mutually exclusive; still a no-op for same-family edits,
+        // for listings that were never in a typed family (AGRICULTURAL/land/other/null), and for
+        // edits that don't touch propertyType at all.
+        if (wasResidentialFamily && !isResidentialFamily) {
+            listingAmenityRepository.deleteByListingId(saved.getId());
+            listingLocationFeatureRepository.deleteByListingId(saved.getId());
+            listingPreferredTenantRepository.deleteByListingId(saved.getId());
+        } else if (wasCommercialFamily && !isCommercialFamily) {
+            listingAmenityRepository.deleteByListingId(saved.getId());
+            listingSuitableUseRepository.deleteByListingId(saved.getId());
+        }
+
+        if (isResidentialFamily) {
+            writeResidentialChildSets(saved.getId(), residentialFields);
+        }
+        if (isCommercialFamily) {
+            writeCommercialChildSets(saved.getId(), commercialFields);
+        }
 
         // Typed detail projection refresh (#1734) — keeps listing_commercial_space_details /
         // listing_residential_unit_details current for the search indexer read path.

@@ -12,6 +12,7 @@ import com.example.realestate.trust.IdentityAlreadyVerifiedException;
 import com.example.realestate.trust.otp.OtpRateLimitException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.data.mapping.PropertyReferenceException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.HttpHeaders;
@@ -199,7 +200,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> handleUnexpected(Exception ex, WebRequest request) {
         log.error("Unhandled exception at {}: {}", request.getDescription(false), ex.getMessage(), ex);
-        return ResponseEntity.internalServerError()
-                .body(Map.of("error", "INTERNAL_ERROR"));
+        // #2038: surface the request/correlation id already assigned by MdcRequestFilter (and
+        // already returned as the X-Request-Id response header) so a future production report
+        // can be traced back to server-side logs. Do NOT generate a new id here — reuse only.
+        // MDC.get("requestId") can be null (filter bypassed, or this exception thrown on a
+        // thread without MDC inheritance); the "requestId" key is omitted in that case rather
+        // than included as a null value, so the body stays a flat, predictable map of strings
+        // and never contains a JSON null for this field.
+        String requestId = MDC.get("requestId");
+        Map<String, String> body = requestId != null
+                ? Map.of("error", "INTERNAL_ERROR", "requestId", requestId)
+                : Map.of("error", "INTERNAL_ERROR");
+        return ResponseEntity.internalServerError().body(body);
     }
 }

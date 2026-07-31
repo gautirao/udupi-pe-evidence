@@ -1216,6 +1216,105 @@ class ListingCrudServiceTest {
         verify(listingAmenityRepository, never()).save(any());
     }
 
+    // --- #2038 (fixed, PR_REVIEW rework cycle 1): shared listing_amenities table, cross-family
+    // scenario. listing_amenities is written by BOTH writeResidentialChildSets (amenities) and
+    // writeCommercialChildSets (utilities) — see ListingCrudService.writeCommercialChildSets,
+    // which reuses the same table for the "utilities" multi-select. This test pins the
+    // ALWAYS-SAFE case: a residential update whose CommercialListingFields carries a NULL
+    // utilities list (i.e. CommercialListingFields.EMPTY) never runs writeCommercialChildSets'
+    // delete/insert at all — writeCommercialChildSets only acts when f.utilities() != null, so
+    // this specific null-utilities case was never actually hazardous, even before #2038.
+    //
+    // The GENUINELY hazardous case — a non-null EMPTY utilities list (an accepted "not
+    // applicable" sentinel per ListingController's rejectIfNonEmpty) silently wiping residential
+    // amenities on a residential listing — was the real #2038 defect. The first rework attempt
+    // traded the reported HTTP 500 for exactly this: SILENT DATA LOSS. It is now fixed by the
+    // family gate in ListingCrudService.updateListing/createDraft: writeCommercialChildSets only
+    // runs when the effective property type belongs to COMMERCIAL_PROPERTY_TYPES, so an empty
+    // utilities list on a residential listing can no longer reach it at all. See
+    // updateListing_residentialWithEmptyCommercialUtilities_deletesAmenitiesOnlyOnce immediately
+    // below for the mockito-level regression guard pinning that fix (asserts the delete happens
+    // exactly once — from the residential pass only — never twice).
+    @Test
+    void updateListing_residentialWithNullCommercialFields_doesNotClearListingAmenities() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("apartment");
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(existing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        crudService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, false, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null,
+                null, null, null, null, null, null, null, null, null,
+                null, null,
+                // amenities IS supplied here (non-null, non-empty) — this pins the interesting
+                // boundary: writeResidentialChildSets DOES run its delete-then-insert against
+                // listing_amenities, and it is the commercial side (utilities=null/EMPTY below)
+                // that leaves that write untouched by writeCommercialChildSets.
+                residentialFields(null, null, null, null, List.of("LIFT", "GYM"), null, null),
+                // commercialFields is fully NULL/EMPTY, including utilities=null — the "not supplied"
+                // sentinel writeCommercialChildSets checks before touching listing_amenities
+                com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
+
+        verify(listingAmenityRepository, times(1)).deleteByListingId(listingId);
+        verify(listingAmenityRepository, times(2)).save(any());
+    }
+
+    // --- #2038 (PR_REVIEW rework cycle 1, Part B mockito twin of T3): pins the fix for the
+    // GENUINELY hazardous cross-family scenario at the mockito level. Pre-fix,
+    // writeCommercialChildSets ran unconditionally whenever commercialFields.utilities() was
+    // non-null (even an empty list), calling listingAmenityRepository.deleteByListingId a SECOND
+    // time on the SAME listing_id — once from the residential pass (amenities non-empty, a real
+    // delete-then-insert) and once more from the commercial pass (utilities=[], a spurious wipe).
+    // Post-fix, the family gate means writeCommercialChildSets never runs at all for a residential
+    // "apartment" listing, so deleteByListingId must be invoked exactly ONCE — from the
+    // residential pass only, never twice.
+    @Test
+    void updateListing_residentialWithEmptyCommercialUtilities_deletesAmenitiesOnlyOnce() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("apartment");
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(existing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        com.example.realestate.listing.commercial.CommercialListingFields commercialFieldsWithEmptyUtilities =
+                new com.example.realestate.listing.commercial.CommercialListingFields(
+                        null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                        null, null, null, null, null, null, null, null, null, null, null, null, null,
+                        /* suitableUses */ null,
+                        /* utilities */ List.of());
+
+        crudService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, false, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null,
+                null, null, null, null, null, null, null, null, null,
+                null, null,
+                // amenities non-empty → the residential pass performs a real delete-then-insert.
+                residentialFields(null, null, null, null, List.of("LIFT"), null, null),
+                // utilities=[] (non-null empty) — the "not applicable" masking sentinel that pre-fix
+                // ALSO ran writeCommercialChildSets' delete against listing_amenities, on top of the
+                // residential pass above. The family gate must suppress this second call entirely.
+                commercialFieldsWithEmptyUtilities);
+
+        verify(listingAmenityRepository, times(1)).deleteByListingId(listingId);
+        verify(listingAmenityRepository, times(1)).save(any());
+    }
+
     private static com.example.realestate.listing.residential.ResidentialListingFields ResidentialListingFieldsEmpty() {
         return com.example.realestate.listing.residential.ResidentialListingFields.EMPTY;
     }
