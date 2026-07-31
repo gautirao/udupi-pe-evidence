@@ -39,6 +39,7 @@ import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import {
   sortActionCards,
+  buildBrokerGreeting,
   type ActionCardDescriptor,
 } from '@/lib/brokerDashboardUtils';
 
@@ -134,7 +135,7 @@ function SummaryCardSkeleton() {
 
 export default function BrokerDashboard() {
   const { isBroker, isAdmin, isLoading, user } = useAuth();
-  const firstName = (user?.user_metadata?.full_name as string | undefined)?.split(' ')[0] ?? 'there';
+  const greeting = buildBrokerGreeting(user?.user_metadata?.full_name);
 
   const {
     data: qualitySummary,
@@ -243,7 +244,7 @@ export default function BrokerDashboard() {
         <div className="mb-6 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-primary">
-              Welcome back, {firstName}
+              {greeting}
             </h1>
             <p className="text-muted-foreground mt-1">
               Here's your portfolio at a glance.{' '}

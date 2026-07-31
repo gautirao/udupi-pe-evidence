@@ -4,7 +4,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { sortActionCards, type ActionCardDescriptor } from '@/lib/brokerDashboardUtils';
+import {
+  sortActionCards,
+  buildBrokerGreeting,
+  type ActionCardDescriptor,
+} from '@/lib/brokerDashboardUtils';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -83,5 +87,61 @@ describe('sortActionCards', () => {
 
     expect(result[0].key).toBe('missingLocation');
     expect(result[1].key).toBe('demandGap');
+  });
+});
+
+// ── buildBrokerGreeting (issue #2045) ───────────────────────────────────────────
+
+describe('buildBrokerGreeting', () => {
+  it('returns full greeting for a simple name', () => {
+    expect(buildBrokerGreeting('Asha Rao')).toBe('Welcome back, Asha Rao');
+  });
+
+  it('trims surrounding whitespace', () => {
+    expect(buildBrokerGreeting('  Asha Rao  ')).toBe('Welcome back, Asha Rao');
+  });
+
+  it('preserves the full multi-word name — no first-token split', () => {
+    expect(buildBrokerGreeting('John Michael Doe')).toBe('Welcome back, John Michael Doe');
+  });
+
+  it('returns fallback for undefined', () => {
+    expect(buildBrokerGreeting(undefined)).toBe('Welcome back');
+  });
+
+  it('returns fallback for null', () => {
+    expect(buildBrokerGreeting(null)).toBe('Welcome back');
+  });
+
+  it('returns fallback for empty string', () => {
+    expect(buildBrokerGreeting('')).toBe('Welcome back');
+  });
+
+  it('returns fallback for whitespace-only string', () => {
+    expect(buildBrokerGreeting('   ')).toBe('Welcome back');
+  });
+
+  it('returns fallback for a lone non-breaking space (plain trim strips it)', () => {
+    expect(buildBrokerGreeting(' ')).toBe('Welcome back');
+  });
+
+  it('returns fallback for a number', () => {
+    expect(buildBrokerGreeting(123)).toBe('Welcome back');
+  });
+
+  it('returns fallback for a plain object', () => {
+    expect(buildBrokerGreeting({})).toBe('Welcome back');
+  });
+
+  it('returns fallback for an empty array', () => {
+    expect(buildBrokerGreeting([])).toBe('Welcome back');
+  });
+
+  it('returns fallback for a non-empty array', () => {
+    expect(buildBrokerGreeting(['Asha'])).toBe('Welcome back');
+  });
+
+  it('returns fallback for a boolean', () => {
+    expect(buildBrokerGreeting(true)).toBe('Welcome back');
   });
 });

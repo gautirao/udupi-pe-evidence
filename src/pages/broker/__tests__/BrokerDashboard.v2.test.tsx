@@ -32,16 +32,25 @@ const mockHookState = vi.hoisted(() => ({
   recentError: false,
 }));
 
+// Mutable auth-state fixture (issue #2045) — lets tests vary the broker's
+// display name / loading / role flags per-case instead of a single static mock.
+const mockAuthState = vi.hoisted(() => ({
+  full_name: 'Test Broker' as string | undefined | null,
+  isBroker: true,
+  isAdmin: false,
+  isLoading: false,
+}));
+
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: vi.fn(() => ({
-    isBroker: true,
-    isAdmin: false,
-    isLoading: false,
+    isBroker: mockAuthState.isBroker,
+    isAdmin: mockAuthState.isAdmin,
+    isLoading: mockAuthState.isLoading,
     user: {
       id: 'broker-uid-1',
-      user_metadata: { full_name: 'Test Broker' },
+      user_metadata: { full_name: mockAuthState.full_name },
     },
   })),
 }));
@@ -150,6 +159,12 @@ describe('BrokerDashboard v2', () => {
     mockHookState.recentLoading = false;
     mockHookState.recentError = false;
     mockQualitySummary.current = buildQualitySummary();
+    // Reset every mutable auth property so tests never leak identity/role/loading
+    // state into one another (R2 — see issue #2045 risk scan).
+    mockAuthState.full_name = 'Test Broker';
+    mockAuthState.isBroker = true;
+    mockAuthState.isAdmin = false;
+    mockAuthState.isLoading = false;
     vi.clearAllMocks();
   });
 
@@ -389,6 +404,65 @@ describe('BrokerDashboard v2', () => {
       expect(screen.queryByText(/avg quality/i)).toBeNull();
       // But the page wrapper and heading still render
       expect(screen.getByTestId('app-layout')).toBeInTheDocument();
+    });
+  });
+
+  // ── Greeting fallback (issue #2045) ──────────────────────────────────────
+
+  describe('Greeting (issue #2045)', () => {
+    it('renders the exact heading "Welcome back, Test Broker" for a named user', () => {
+      renderDashboard();
+
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Welcome back, Test Broker');
+    });
+
+    it('renders exactly "Welcome back" (no dangling comma) when the display name is blank', () => {
+      mockAuthState.full_name = '   ';
+      renderDashboard();
+
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Welcome back');
+    });
+
+    it('renders exactly "Welcome back" (no dangling comma) when the display name is absent', () => {
+      mockAuthState.full_name = undefined;
+      renderDashboard();
+
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Welcome back');
+    });
+
+    it('renders no greeting heading while auth is loading', () => {
+      mockAuthState.isLoading = true;
+      renderDashboard();
+
+      expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    });
+
+    it('never renders broken personalised copy when a data query is in an error state', () => {
+      mockHookState.qualityError = true;
+      mockQualitySummary.current = null;
+      renderDashboard();
+
+      const heading = screen.getByRole('heading', { level: 1 }).textContent ?? '';
+      expect(heading).toBe('Welcome back, Test Broker');
+      expect(heading).not.toContain('Welcome back, Welcome back');
+    });
+
+    it('updates the heading when the signed-in user identity changes and drops the old name', () => {
+      mockAuthState.full_name = 'Alice';
+      const { rerender } = renderDashboard();
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Welcome back, Alice');
+
+      mockAuthState.full_name = 'Bob';
+      rerender(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <MemoryRouter initialEntries={['/broker/dashboard']}>
+            <BrokerDashboard />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Welcome back, Bob');
+      expect(screen.queryByText(/Alice/)).toBeNull();
     });
   });
 

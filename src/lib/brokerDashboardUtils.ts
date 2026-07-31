@@ -43,3 +43,20 @@ export function sortActionCards(cards: ActionCardDescriptor[]): ActionCardDescri
     return a.priority - b.priority; // stable tiebreak
   });
 }
+
+/**
+ * Builds the broker dashboard greeting from a (possibly absent/invalid) display name.
+ *
+ * Returns the COMPLETE greeting string — never a bare name fragment — so callers
+ * can render it directly with no additional literal text or punctuation.
+ */
+export function buildBrokerGreeting(displayName?: unknown): string {
+  if (typeof displayName !== 'string') {
+    return 'Welcome back';
+  }
+  const trimmed = displayName.trim();
+  if (trimmed === '') {
+    return 'Welcome back';
+  }
+  return `Welcome back, ${trimmed}`;
+}
