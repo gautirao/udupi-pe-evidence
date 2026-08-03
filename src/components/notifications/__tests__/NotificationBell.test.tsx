@@ -98,13 +98,33 @@ beforeEach(() => {
 
 describe('NotificationBell', () => {
   // ── Badge count ───────────────────────────────────────
+  //
+  // Issue #2046 alleged the broker badge wrongly gets stuck at "99+".
+  // Investigation DISPROVED the defect: measured at the canonical boundary
+  // (GET /api/notifications/unread-count, HTTP 200), the reported broker
+  // account genuinely has 444 unread notifications (450 total). Since
+  // 444 >= 100, "99+" is the CORRECT rendering, not a bug. The count is
+  // uncapped server-side; "99+" is purely client-side display formatting
+  // in NotificationBell.tsx (`{unreadCount > 99 ? '99+' : unreadCount}`).
+  //
+  // These cases lock in the current, correct badge-count contract so a
+  // future change can't silently reintroduce (or "fix") behaviour that
+  // was never broken.
 
   it('hides badge when unread count is 0', () => {
     mockUnreadCount = { data: { count: 0 } };
     renderBell();
 
-    const badge = screen.queryByText('0');
-    expect(badge).not.toBeInTheDocument();
+    // Assert the badge element itself is absent, not just the text "0" —
+    // the badge is gated by `unreadCount > 0 && (...)`, so no badge span
+    // should be rendered at all. Scoped to the badge's distinguishing class
+    // (NotificationBell.tsx:61) rather than any <span>, so this doesn't
+    // false-fail if an unrelated sr-only label span is later added to the
+    // button for accessibility.
+    expect(screen.queryByText('0')).not.toBeInTheDocument();
+    expect(screen.queryByText('99+')).not.toBeInTheDocument();
+    const bellButton = screen.getByRole('button');
+    expect(bellButton.querySelector('.bg-destructive')).not.toBeInTheDocument();
   });
 
   it('shows unread count on badge', () => {
@@ -114,11 +134,82 @@ describe('NotificationBell', () => {
     expect(screen.getByText('5')).toBeInTheDocument();
   });
 
-  it('shows 99+ when unread count exceeds 99', () => {
+  it('shows exactly "1" when unread count is 1', () => {
+    mockUnreadCount = { data: { count: 1 } };
+    renderBell();
+
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.queryByText('99+')).not.toBeInTheDocument();
+  });
+
+  it('shows exactly "99" (not "99+") when unread count is 99 — off-by-one boundary', () => {
+    mockUnreadCount = { data: { count: 99 } };
+    renderBell();
+
+    expect(screen.getByText('99')).toBeInTheDocument();
+    expect(screen.queryByText('99+')).not.toBeInTheDocument();
+  });
+
+  it('shows "99+" when unread count is exactly 100 — first saturating value', () => {
+    mockUnreadCount = { data: { count: 100 } };
+    renderBell();
+
+    expect(screen.getByText('99+')).toBeInTheDocument();
+    expect(screen.queryByText('100')).not.toBeInTheDocument();
+  });
+
+  it('shows "99+" when unread count is 150', () => {
     mockUnreadCount = { data: { count: 150 } };
     renderBell();
 
     expect(screen.getByText('99+')).toBeInTheDocument();
+  });
+
+  it('shows "99+" for count=444 — the real measured value from the #2046 investigation (broker account has 444 unread / 450 total)', () => {
+    mockUnreadCount = { data: { count: 444 } };
+    renderBell();
+
+    expect(screen.getByText('99+')).toBeInTheDocument();
+    expect(screen.queryByText('444')).not.toBeInTheDocument();
+  });
+
+  it('updates the badge in place when the unread count decreases after a mark-read, with no unmount/remount', async () => {
+    // NOTE on scope: useNotifications/useUnreadCount/useMarkAsRead are mocked
+    // wholesale in this file, so the component never exercises real
+    // react-query cache invalidation. This test cannot and does not claim to
+    // prove end-to-end query invalidation. What it DOES prove: given the
+    // hook's return value changes (as it would after a real invalidated
+    // refetch), the component re-renders the new count in place via the
+    // same mounted tree — no navigation, no re-login, no remount. Element
+    // identity of the button across the rerender is the falsifiable check:
+    // a remount would produce a new DOM node, failing the `.toBe` assertion.
+    mockUnreadCount = { data: { count: 3 } };
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <NotificationBell />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree);
+
+    expect(screen.getByText('3')).toBeInTheDocument();
+    const buttonBefore = screen.getByRole('button');
+
+    mockUnreadCount = { data: { count: 2 } };
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <NotificationBell />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByRole('button')).toBe(buttonBefore);
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.queryByText('3')).not.toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   // ── Empty state ───────────────────────────────────────
