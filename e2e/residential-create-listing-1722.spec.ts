@@ -724,10 +724,13 @@ test.describe('@residential-create-listing-1722 /broker/listings/new — correct
     await page.locator('#bedrooms').getByRole('radio', { name: '3 BHK', exact: true }).click();
     await page.locator('#carpetArea').fill('1150');
 
-    // --- Section 5 "More details" — built-up area is REQUIRED to submit for
-    // apartments (src/lib/listingStrength.ts typeSpecificGateMet), but lives
-    // in the collapsed "More details" panel (AC8 grouping), not Section 3.
-    await page.getByRole('button', { name: /more details.*ownership.*document details/i }).click();
+    // --- Section 3 — built-up area is REQUIRED to submit for apartments
+    // (src/lib/listingStrength.ts typeSpecificGateMet). Issue #2040 supersedes
+    // the #1722 AC8 classification of this field as secondary/optional: a
+    // submit-required field is core, not secondary, so it now lives in the
+    // always-visible core Section 3 (Property details), next to carpet area,
+    // not the collapsed "More details" panel. See the AC10 annotation in
+    // ResidentialListingForm.fieldGrouping.test.tsx for the full rationale.
     await page.locator('#builtArea').fill('1200');
 
     // Persist the DRAFT inline — no navigation away from this page (issue #1718).

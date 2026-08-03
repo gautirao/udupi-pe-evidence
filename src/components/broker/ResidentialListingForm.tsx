@@ -17,7 +17,7 @@ import { ListingPurposeToggle } from '@/components/broker/ListingPurposeToggle';
 import { AreaField } from '@/components/broker/AreaField';
 import { PriceField } from '@/components/broker/PriceField';
 import { BuyerPreviewCard, type BuyerPreviewSpecChip } from '@/components/broker/BuyerPreviewCard';
-import { ListingStrengthMeter, type ListingStrengthChecklist, computeListingStrength as computeFormCompleteness } from '@/components/broker/ListingStrengthMeter';
+import { ListingStrengthMeter, type ListingStrengthChecklist } from '@/components/broker/ListingStrengthMeter';
 import { SingleChipGroup, MultiChipGroup, boolToTriState, triStateToBool, type ChipOption } from '@/components/broker/ChipGroup';
 import { InlinePhotos } from '@/components/broker/residential/InlinePhotos';
 import { AddressSearch } from '@/components/broker/residential/AddressSearch';
@@ -237,6 +237,18 @@ function numToStr(n: number | null | undefined): string {
   return n != null ? String(n) : '';
 }
 
+/**
+ * Issue #2040 (code review, cycle 5) — a `document.getElementById` lookup for
+ * a gate's targetFieldId can resolve to a non-focusable container (e.g. the
+ * SingleChipGroup ToggleGroup root, a plain `role="group"` div with no
+ * tabIndex) instead of an actual control. `.focus()` on such an element is a
+ * silent no-op. Used by handleGoToReview to decide whether to focus the
+ * resolved target directly or fall back to its first focusable descendant.
+ */
+function isFocusableElement(el: HTMLElement): boolean {
+  return el.tabIndex >= 0 || ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A'].includes(el.tagName);
+}
+
 interface ResidentialLocationBridgeProps {
   params: UseResidentialLocationParams;
   onLocation: (location: UseResidentialLocationResult) => void;
@@ -316,6 +328,9 @@ export function ResidentialListingForm({ initialPropertyType, initialListingPurp
   const [mode, setMode] = useState<'edit' | 'review'>('edit');
   const [submitted, setSubmitted] = useState(false);
   const draftInFlightRef = useRef(false);
+  // Issue #2040 (AC5) — scroll target when a blocked Review attempt has no
+  // unmet gate with a mapped focusable control.
+  const strengthMeterRef = useRef<HTMLDivElement>(null);
 
   // Issue #2039 — captured once at mount: true only when this instance was
   // mounted WITH a draftId already in the URL (a fresh page load / real
@@ -610,8 +625,11 @@ export function ResidentialListingForm({ initialPropertyType, initialListingPurp
     listingPurpose,
     landArea: isPlot && landArea != null && landArea > 0 ? landArea : undefined,
     landAreaUnit: isPlot && landArea != null && landArea > 0 ? landAreaUnit : undefined,
-    // Apartment also collects builtArea (Section 3, distinct from its primary
-    // carpetArea) — the backend submit gate requires it (ListingTransitionPolicy).
+    // Issue #2040 — apartment also collects builtArea in Section 3 (Property
+    // details, next to its primary carpetArea) — the backend submit gate
+    // requires it (ListingTransitionPolicy.validateFields() case "apartment").
+    // Payload gating below is keyed on (isHouseOrVilla || isApartment)
+    // independent of section placement — do not drop the isApartment arm.
     builtArea: (isHouseOrVilla || isApartment) && builtArea != null && builtArea > 0 ? builtArea : undefined,
     builtAreaUnit: (isHouseOrVilla || isApartment) && builtArea != null && builtArea > 0 ? builtAreaUnit : undefined,
     carpetArea: isApartment && carpetArea != null && carpetArea > 0 ? carpetArea : undefined,
@@ -725,7 +743,70 @@ export function ResidentialListingForm({ initialPropertyType, initialListingPurp
     });
   };
 
-  const handleGoToReview = () => persistDraft(() => setMode('review'));
+  /**
+   * Issue #2040 (AC5) — a Review attempt while a real submit gate is unmet
+   * must not silently proceed to the review preview. Blocks the TRANSITION
+   * into review mode and scrolls+focuses the first unmet gate's control
+   * (gate order per listingStrength.ts); if no unmet gate has a mapped
+   * focusable target (e.g. only the photos gate is unmet), still blocks and
+   * scrolls the strength meter into view without calling .focus() on
+   * anything. Deliberately minimal — no new scroll/anchor abstraction.
+   *
+   * PERSIST-THEN-BLOCK SHAPE (cycle 3 correction): Review ALWAYS calls
+   * persistDraft() first, exactly as it did before AC5 existed — same call,
+   * same single-PUT behaviour, same idempotency guard — and the gate check
+   * runs only inside persistDraft's onDone callback, AFTER the save has
+   * already succeeded. Blocking BEFORE persisting (the cycle-2 shape) would
+   * silently discard every edit the broker made since their last save the
+   * moment a required field went missing — a real data-loss regression, and
+   * exactly the class of bug #2039/PR #2061 exists to prevent. This shape
+   * satisfies AC5 (review mode is never entered with a required field
+   * missing) and AC9 (Review on an existing draft still issues exactly one
+   * PUT) at the same time — there is no conflict between them once the
+   * gate check is moved after the save.
+   *
+   * Gated on `listingId` being set: InlinePhotos and MapPin (and therefore
+   * the `images` >= 3 and `pinConfirmed` gates) only render once a draft
+   * exists. Pre-draft, those gates are structurally unsatisfiable — blocking
+   * here before a draft exists would make a brand-new listing permanently
+   * un-createable (the first Review click could never pass). The gate model
+   * is already a post-draft concept in this component (the StrengthMeter
+   * itself only renders once listingId is set), so this guard only applies
+   * once that draft exists. Do not "tighten" this to run pre-draft too.
+   */
+  const handleGoToReview = () => {
+    persistDraft(() => {
+      if (listingId && !strengthResult.isSubmittable) {
+        const firstUnmetWithTarget = strengthResult.gates.find((g) => !g.met && g.targetFieldId);
+        const target = firstUnmetWithTarget?.targetFieldId
+          ? document.getElementById(firstUnmetWithTarget.targetFieldId)
+          : null;
+        if (target) {
+          // Optional-call (not just optional-chain) guards environments (e.g.
+          // jsdom) where scrollIntoView isn't implemented — never throw here.
+          target?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+          // Issue #2040 (code review, cycle 5) — some targetFieldId values
+          // (e.g. "bedrooms") resolve to a SingleChipGroup's ToggleGroup
+          // root, a plain container with no tabIndex — .focus() on it is a
+          // silent no-op and AC5's "focuses the first missing control"
+          // promise is broken for those gates. Fall back to the first
+          // actually-focusable descendant (the rendered ToggleGroupItem
+          // buttons) when the resolved target itself can't take focus.
+          const focusableTarget = isFocusableElement(target)
+            ? target
+            : target.querySelector<HTMLElement>('[role="radio"], button, input, select, textarea');
+          focusableTarget?.focus();
+        } else {
+          // Issue #2040 — a truthy-but-unresolvable targetFieldId (id mismatch
+          // between the gate config and the rendered DOM) must still degrade
+          // to the strength-meter scroll, never silently no-op.
+          strengthMeterRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+        }
+        return;
+      }
+      setMode('review');
+    });
+  };
   const handleBackToEdit = () => setMode('edit');
 
   const handleSubmitForReview = () => {
@@ -762,7 +843,6 @@ export function ResidentialListingForm({ initialPropertyType, initialListingPurp
     isPinned: addressConfirmed,
     hasDescription: description.trim().length >= 20,
   };
-  const strengthPercent = computeFormCompleteness(checklist);
 
   // Real submit-gate strength — mirrors ListingTransitionPolicy.validateFields()
   // (see src/lib/listingStrength.ts). Drives the "Submit for review" gate and
@@ -1081,6 +1161,20 @@ export function ResidentialListingForm({ initialPropertyType, initialListingPurp
             {isApartment && (
               <CarpetAreaInput initialArea={carpetArea} initialUnit={carpetAreaUnit} onChange={(a, u) => { setCarpetArea(a); setCarpetAreaUnit(u); }} />
             )}
+            {/* Issue #2040 — moved here (was previously under the collapsed
+                "More details" section, see #1722 AC8). Built-up area is
+                genuinely required for apartment at submit
+                (ListingTransitionPolicy.validateFields() case "apartment"), so
+                it belongs in the always-visible core section, not a
+                collapsed one — see the AC10 annotation in
+                ResidentialListingForm.fieldGrouping.test.tsx for the full
+                rationale and the superseded #1722 classification. */}
+            {isApartment && fieldVisible('builtArea') && (
+              <div>
+                <AreaField id="builtArea" label="Built-up area" propertyType="apartment" initialArea={builtArea} initialUnit={builtAreaUnit} onChange={(a, u) => { setBuiltArea(a); setBuiltAreaUnit(u); }} />
+                <p className="mt-1.5 text-xs text-muted-foreground">Required to submit this listing for review.</p>
+              </div>
+            )}
             {isHouseOrVilla && (
               <AreaField id="builtArea" label="Built-up area" propertyType="house" initialArea={builtArea} initialUnit={builtAreaUnit} onChange={(a, u) => { setBuiltArea(a); setBuiltAreaUnit(u); }} />
             )}
@@ -1274,13 +1368,10 @@ export function ResidentialListingForm({ initialPropertyType, initialListingPurp
               <CollapsibleContent className="space-y-4 pt-1">
                 {/* AC8 — optional/secondary Property Details fields regrouped here
                     (JSX placement only; isListingFieldVisible still gates every
-                    field, so per-subtype visibility is unchanged). */}
-                {isApartment && fieldVisible('builtArea') && (
-                  <div>
-                    <AreaField id="builtArea" label="Built-up area" propertyType="apartment" initialArea={builtArea} initialUnit={builtAreaUnit} onChange={(a, u) => { setBuiltArea(a); setBuiltAreaUnit(u); }} />
-                    <p className="mt-1.5 text-xs text-muted-foreground">Required to submit this listing for review.</p>
-                  </div>
-                )}
+                    field, so per-subtype visibility is unchanged).
+                    Issue #2040 — apartment builtArea moved OUT of this
+                    collapsed section into core Section 3 (it is submit-required,
+                    not optional); see the render site next to CarpetAreaInput. */}
                 {isApartment && fieldVisible('superBuiltArea') && (
                   <Field id="superBuiltArea" label="Super built-up area (sqft)">
                     <Input id="superBuiltArea" type="number" min="0" className="h-11 font-mono" value={superBuiltArea} onChange={(e) => setSuperBuiltArea(e.target.value)} />
@@ -1426,7 +1517,7 @@ export function ResidentialListingForm({ initialPropertyType, initialListingPurp
               Pre-draft (no listingId): the legacy pre-draft meter is the only widget.
               Post-draft (listingId): the newer StrengthMeter is authoritative and the
               legacy meter must not render — the two must never co-render. */}
-          <div className="rounded-2xl border bg-card p-4 shadow-sm">
+          <div ref={strengthMeterRef} className="rounded-2xl border bg-card p-4 shadow-sm">
             {listingId ? (
               <StrengthMeter result={strengthResult} variant="sidebar" />
             ) : (
@@ -1439,8 +1530,18 @@ export function ResidentialListingForm({ initialPropertyType, initialListingPurp
       {/* Sticky footer (design-spec.md §footer) — replaces the old bottom action row */}
       <div className="fixed inset-x-0 bottom-0 z-10 border-t bg-card/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+          {/* Issue #2040 (AC6) — must never claim "Good listing" while a real
+              submit gate is unmet; canSubmit alone (price validity only) is
+              not sufficient. Keyed off strengthResult, the byte-for-byte
+              backend submit-gate mirror (see listingStrength.ts), and
+              surfaces the remaining-blocker count instead of false positive
+              framing. */}
           <p className="text-sm text-muted-foreground">
-            {canSubmit ? `Good listing · ${strengthPercent}% complete` : 'Add price and property type to continue'}
+            {!canSubmit
+              ? 'Add price and property type to continue'
+              : strengthResult.isSubmittable
+                ? `Good listing · ${strengthResult.percent}% complete`
+                : `${strengthResult.missingItems.length} thing${strengthResult.missingItems.length === 1 ? '' : 's'} left before you can submit · ${strengthResult.percent}% complete`}
           </p>
           <div className="flex gap-3">
             {/* Issue #2039 (revision 4, finding 1) — these two actions live in the

@@ -67,6 +67,14 @@ export interface ListingStrengthGate {
   key: string;
   label: string;
   met: boolean;
+  /**
+   * Issue #2040 (AC5) — DOM element id of this gate's primary control, when
+   * one exists and is unambiguous. Used to scroll+focus the first unmet gate
+   * on a blocked Review attempt. Omitted for gates with no single focusable
+   * control (e.g. photos, map pin confirmation) — callers must fall back to
+   * scrolling the strength meter into view without focusing anything.
+   */
+  targetFieldId?: string;
 }
 
 export interface ListingStrengthResult {
@@ -99,6 +107,36 @@ function typeSpecificGateMet(input: ListingStrengthInput): boolean {
   return true;
 }
 
+/**
+ * Issue #2040 (AC4) — precise label + focus target for the apartment
+ * typeSpecific gate. Previously a single static label ('Add bedrooms (BHK)
+ * and built-up area') covered two independent required fields, so a broker
+ * who had already entered bedrooms was still told to add bedrooms. This is
+ * LABEL/targetFieldId only — typeSpecificGateMet above (the actual gate
+ * condition feeding isSubmittable/percent) is untouched.
+ */
+function typeSpecificGateDetails(input: ListingStrengthInput): { label: string; targetFieldId?: string } {
+  if (input.propertyType === 'apartment') {
+    const bedroomsMissing = input.bedrooms === '';
+    const builtAreaMissing = !(input.builtArea != null && input.builtArea > 0 && input.builtAreaUnit !== '');
+    if (bedroomsMissing && builtAreaMissing) {
+      return { label: 'Add bedrooms (BHK) and built-up area', targetFieldId: 'bedrooms' };
+    }
+    if (bedroomsMissing) {
+      return { label: 'Add bedrooms (BHK)', targetFieldId: 'bedrooms' };
+    }
+    if (builtAreaMissing) {
+      return { label: 'Add built-up area', targetFieldId: 'builtArea' };
+    }
+    // Both present (gate met) — label unused for a met gate, kept accurate anyway.
+    return { label: 'Add bedrooms (BHK) and built-up area', targetFieldId: 'bedrooms' };
+  }
+  if (input.propertyType === 'residential_plot') {
+    return { label: 'Add the plot area', targetFieldId: 'plotArea' };
+  }
+  return { label: '' };
+}
+
 export function computeListingStrength(input: ListingStrengthInput): ListingStrengthResult {
   const isSubmittableType = SUBMITTABLE_RESIDENTIAL_TYPES.has(input.propertyType);
   const priceOk = priceGateMet(input);
@@ -113,17 +151,14 @@ export function computeListingStrength(input: ListingStrengthInput): ListingStre
   const priceLabel = input.listingPurpose === 'rent'
     ? 'Add the monthly rent and security deposit'
     : 'Add the total price';
+  const priceTargetFieldId = input.listingPurpose === 'rent' ? 'monthlyRent' : 'price';
 
-  const typeSpecificLabel = input.propertyType === 'apartment'
-    ? 'Add bedrooms (BHK) and built-up area'
-    : input.propertyType === 'residential_plot'
-      ? 'Add the plot area'
-      : '';
+  const typeSpecificDetails = typeSpecificGateDetails(input);
 
   const gates: ListingStrengthGate[] = [
     { key: 'type', label: 'Property type is submittable', met: isSubmittableType },
-    { key: 'price', label: priceLabel, met: priceOk },
-    { key: 'locality', label: 'Add the locality', met: localityOk },
+    { key: 'price', label: priceLabel, met: priceOk, targetFieldId: priceTargetFieldId },
+    { key: 'locality', label: 'Add the locality', met: localityOk, targetFieldId: 'locality' },
     { key: 'images', label: `Add at least 3 photos (${Math.min(input.imageCount, 3)}/3)`, met: imagesOk },
     // Issue #1722 correction #4 — two keyed gates instead of one. pinConfirmed
     // is the ONLY one the backend actually requires (mirrors addressConfirmed
@@ -133,8 +168,8 @@ export function computeListingStrength(input: ListingStrengthInput): ListingStre
     { key: 'locationEntered', label: 'Location entered', met: locationEnteredOk },
     { key: 'pinConfirmed', label: 'Map pin confirmed', met: pinConfirmedOk },
   ];
-  if (typeSpecificLabel) {
-    gates.push({ key: 'typeSpecific', label: typeSpecificLabel, met: typeSpecificOk });
+  if (typeSpecificDetails.label) {
+    gates.push({ key: 'typeSpecific', label: typeSpecificDetails.label, met: typeSpecificOk, targetFieldId: typeSpecificDetails.targetFieldId });
   }
 
   const metCount = gates.filter((g) => g.met).length;

@@ -1,5 +1,6 @@
 /**
- * ResidentialListingForm field-grouping tests — issue #1722 (AC8).
+ * ResidentialListingForm field-grouping tests — issue #1722 (AC8), corrected
+ * by issue #2040 (AC10).
  *
  * Property Details (Section 3) must show ONLY core buyer-critical fields;
  * optional/secondary fields must live under "More details" (Section 5,
@@ -7,6 +8,16 @@
  * opened). Per-subtype VISIBILITY is unchanged: isListingFieldVisible is not
  * touched by this change, so a residential plot must never show
  * apartment/house-only fields in either section (negative case).
+ *
+ * Issue #2040 SUPERSEDES the #1722 AC8 classification of apartment
+ * builtArea as a secondary/optional field (previously moved into the
+ * collapsed "More details" section on that premise). builtArea is genuinely
+ * REQUIRED for apartment at submit — ListingTransitionPolicy.validateFields()
+ * case "apartment" rejects a submit without it — so it is core, not
+ * secondary, and now renders in the always-visible Property details section
+ * (Section 3), matching house/villa. The cross-subtype invariant spec (AC2,
+ * colocated under this same __tests__ directory) is the backstop guard
+ * against this regressing again.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
@@ -87,8 +98,15 @@ describe('ResidentialListingForm — AC8 field grouping (apartment)', () => {
     expect(document.getElementById('totalFloors')).not.toBeNull();
     expect(document.getElementById('carpetArea')).not.toBeNull();
 
-    // Optional/secondary fields must NOT be present until More details is opened.
-    expect(document.getElementById('builtArea')).toBeNull();
+    // Issue #2040 (AC10, supersedes #1722 AC8) — builtArea is REQUIRED for
+    // apartment at submit (ListingTransitionPolicy.validateFields() case
+    // "apartment"), so it is core, not secondary/optional, and must be
+    // present without opening "More details". Inverted from the pre-#2040
+    // assertion that required this to be null pre-expand.
+    expect(document.getElementById('builtArea')).not.toBeNull();
+
+    // Genuinely optional/secondary fields must still NOT be present until
+    // More details is opened.
     expect(document.getElementById('superBuiltArea')).toBeNull();
     expect(screen.queryByTestId('chip-group-amenities')).not.toBeInTheDocument();
   });
@@ -98,7 +116,8 @@ describe('ResidentialListingForm — AC8 field grouping (apartment)', () => {
     renderForm('apartment');
     await openMoreDetails(user);
 
-    expect(document.getElementById('builtArea')).not.toBeNull();
+    // builtArea is core (see the test above) — NOT asserted here since it's
+    // already present before opening More details.
     expect(document.getElementById('superBuiltArea')).not.toBeNull();
     expect(document.getElementById('parking2wCount')).not.toBeNull();
     expect(document.getElementById('parking4wCount')).not.toBeNull();
@@ -114,8 +133,10 @@ describe('ResidentialListingForm — AC8 field grouping (apartment)', () => {
 describe('ResidentialListingForm — AC8 field grouping (house/villa)', () => {
   it('keeps the primary built-up area field as core (Property Details)', () => {
     renderForm('house');
-    // House/villa's PRIMARY area metric is built-up area — it stays core,
-    // unlike apartment where built-up area is a secondary/optional metric.
+    // House/villa's PRIMARY area metric is built-up area — it stays core.
+    // Issue #2040 (supersedes #1722 AC8): apartment's built-up area is ALSO
+    // core now (required at submit for apartment too), not a point of
+    // divergence between subtypes — see the apartment test above.
     expect(document.getElementById('builtArea')).not.toBeNull();
     expect(document.getElementById('bedrooms')).not.toBeNull();
     expect(document.getElementById('bathrooms')).not.toBeNull();
@@ -160,10 +181,17 @@ describe('ResidentialListingForm — issue #1722 correction #3 (Property details
     expect(carpetAreaInput).not.toBeNull();
     expect(carpetAreaInput?.placeholder).toBe('e.g. 1150');
 
-    // Preset area chips (e.g. "600 sqft", "1,200 sqft") must NOT be present for carpet area.
-    expect(screen.queryByRole('radiogroup', { name: /common area sizes/i })).not.toBeInTheDocument();
+    // Preset area chips (e.g. "600 sqft", "1,200 sqft") must NOT be present for
+    // carpet area specifically. Issue #2040 — scoped to carpet area's own
+    // field container (rather than a document-wide query) because builtArea
+    // (now core, see the AC10-corrected test above) is an AreaField with its
+    // OWN "Common area sizes" quick-pick chips using the identical sqft
+    // presets, and is legitimately present elsewhere in the DOM.
+    const carpetAreaContainer = carpetAreaInput?.closest('.space-y-2') as HTMLElement;
+    expect(carpetAreaContainer).toBeTruthy();
+    expect(within(carpetAreaContainer).queryByRole('radiogroup', { name: /common area sizes/i })).not.toBeInTheDocument();
     for (const chipLabel of ['600 sqft', '800 sqft', '1,000 sqft', '1,200 sqft', '1,500 sqft', '2,000 sqft']) {
-      expect(screen.queryByText(chipLabel)).not.toBeInTheDocument();
+      expect(within(carpetAreaContainer).queryByText(chipLabel)).not.toBeInTheDocument();
     }
   });
 
