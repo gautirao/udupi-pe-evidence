@@ -94,7 +94,7 @@ public class ListingController {
         validateAgriFields(req.waterSource(), req.soilType(), req.roadAccess(),
                 req.cultivationStatus(), req.landCategory());
         PropertyFamily createFamily = resolveFamily(req.propertyType());
-        validateFamilyOwnershipType(createFamily, req.ownershipType());
+        validateFamilyOwnershipType(createFamily, req.propertyType(), req.ownershipType());
         validateFamilyFields(createFamily,
                 req.bedrooms(), req.washrooms(), req.parkingCount(),
                 req.furnishingStatus(), req.commercialUsage(), req.roadFrontageFt(),
@@ -265,7 +265,7 @@ public class ListingController {
                 effectivePropertyType = existingForValidation.getPropertyType();
             }
             PropertyFamily updateFamily = resolveFamily(effectivePropertyType);
-            validateFamilyOwnershipType(updateFamily, req.ownershipType());
+            validateFamilyOwnershipType(updateFamily, effectivePropertyType, req.ownershipType());
             validateFamilyFields(updateFamily,
                     req.bedrooms(), req.washrooms(), req.parkingCount(),
                     req.furnishingStatus(), req.commercialUsage(), req.roadFrontageFt(),
@@ -575,24 +575,49 @@ public class ListingController {
      * {@link #validateCommercialFields}) — both fields happen to validate against the same
      * {@link CommercialFieldOptions#VALID_COMMERCIAL_OWNERSHIP} constant.
      *
-     * <p>AGRICULTURAL and PLOT are UNCHANGED from pre-#2048 behavior — they continue to validate
-     * against {@link AgriFieldOptions#VALID_OWNERSHIP_TYPES} (decision D2: only the narrow
-     * residential and commercial sets are wired; the residual PLOT/AGRICULTURAL gap is tracked
-     * separately as issue #2067).
+     * <p>AGRICULTURAL, and PLOT's {@code land}/{@code other} property types, are UNCHANGED from
+     * pre-#2048 behavior — they continue to validate against
+     * {@link AgriFieldOptions#VALID_OWNERSHIP_TYPES} (decision D2: only the narrow residential and
+     * commercial sets are wired for those families/types).
+     *
+     * <p>PLOT's {@code residential_plot} property type is an exception WITHIN the PLOT family
+     * (issue #2067): {@link #resolveFamily} buckets {@code land}, {@code other}, and
+     * {@code residential_plot} together as {@code PropertyFamily.PLOT} for structural field
+     * validation, but only {@code residential_plot}'s broker UI renders an ownershipType control,
+     * offering the same four values as ordinary RESIDENTIAL. So within the PLOT arm, the raw
+     * property type is consulted as the smallest local discriminator: {@code residential_plot}
+     * validates against {@link ResidentialFieldOptions#VALID_RESIDENTIAL_OWNERSHIP}; {@code land}
+     * and {@code other} keep validating against {@link AgriFieldOptions#VALID_OWNERSHIP_TYPES}
+     * unchanged. This mirrors the existing {@code rawPropertyType} discriminator pattern already
+     * used for {@code residential_plot} in {@link #validateResidentialFieldSet}.
      *
      * <p>Must be called AFTER family resolution ({@link #resolveFamily}) on both the create and
-     * update paths, so the correct canonical set is selected before the value is checked.
+     * update paths, so the correct canonical set is selected before the value is checked. On the
+     * update path, {@code rawPropertyType} must be the EFFECTIVE property type (the existing
+     * listing's stored type when the request omits {@code propertyType}) — the same value already
+     * used to resolve {@code family} — never the raw, possibly-null request field.
      *
      * @throws org.springframework.web.server.ResponseStatusException HTTP 400 when ownershipType
      *         is non-blank and not a member of the resolved family's canonical set
      */
-    private static void validateFamilyOwnershipType(PropertyFamily family, String ownershipType) {
+    private static void validateFamilyOwnershipType(PropertyFamily family, String rawPropertyType,
+            String ownershipType) {
         switch (family) {
             case RESIDENTIAL -> rejectIfUnknown("ownershipType", ownershipType,
                     ResidentialFieldOptions.VALID_RESIDENTIAL_OWNERSHIP);
             case COMMERCIAL -> rejectIfUnknown("ownershipType", ownershipType,
                     CommercialFieldOptions.VALID_COMMERCIAL_OWNERSHIP);
-            case AGRICULTURAL, PLOT -> rejectIfUnknown("ownershipType", ownershipType,
+            case PLOT -> {
+                if ("residential_plot".equalsIgnoreCase(rawPropertyType)) {
+                    rejectIfUnknown("ownershipType", ownershipType,
+                            ResidentialFieldOptions.VALID_RESIDENTIAL_OWNERSHIP);
+                } else {
+                    // land, other: unchanged pre-#2048 agricultural ownership vocabulary.
+                    rejectIfUnknown("ownershipType", ownershipType,
+                            AgriFieldOptions.VALID_OWNERSHIP_TYPES);
+                }
+            }
+            case AGRICULTURAL -> rejectIfUnknown("ownershipType", ownershipType,
                     AgriFieldOptions.VALID_OWNERSHIP_TYPES);
         }
     }

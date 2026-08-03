@@ -8,8 +8,9 @@ import java.util.Set;
  *
  * <p><b>All sets in this class are AUTHOR-ONLY / FORWARD-ONLY, with one exception:</b>
  * {@link #VALID_RESIDENTIAL_OWNERSHIP} is WIRED as of #2048 — see
- * {@code ListingController.validateFamilyOwnershipType} (RESIDENTIAL branch only; a deliberate
- * narrow promotion, issue #2048 / PR #2057 decision D2 — this class is NOT promoted generally).
+ * {@code ListingController.validateFamilyOwnershipType} (RESIDENTIAL branch, and, as of #2067,
+ * the {@code residential_plot} property type within the PLOT branch; a deliberate narrow
+ * promotion, issue #2048 / PR #2057 decision D2 — this class is NOT promoted generally).
  * No other field in the current flat {@code CreateRequest} / {@code UpdateRequest} is validated
  * against any other set here. Wiring those requires a post-audit distinct-value confirmation of
  * production stored values for the corresponding field (see {@code no-live-smoke-shared-supabase}
@@ -95,12 +96,17 @@ public final class ResidentialFieldOptions {
 
     // -------------------------------------------------------------------------
     // ownership  (residential) — WIRED as of #2048: validated at the ListingController
-    // request boundary via validateFamilyOwnershipType for RESIDENTIAL-family listings only
+    // request boundary via validateFamilyOwnershipType for RESIDENTIAL-family listings
     // (rejectIfUnknown("ownershipType", ..., VALID_RESIDENTIAL_OWNERSHIP)). This is a deliberate
     // narrowing (PR #2057 decision D1): agri-only ownership values (INHERITED, PATTA,
     // SURVEY_SETTLEMENT, KATHA, REVENUE, OTHER) are NOT valid for residential listings, even
-    // though AGRICULTURAL/COMMERCIAL/PLOT still share the same underlying ownershipType column
-    // and continue to validate against AgriFieldOptions.VALID_OWNERSHIP_TYPES unchanged.
+    // though AGRICULTURAL/COMMERCIAL/PLOT still share the same underlying ownershipType column.
+    // As of #2067, the residential_plot property type (which resolveFamily buckets into
+    // PropertyFamily.PLOT alongside land/other) ALSO validates against this set — the smallest
+    // local discriminator inside validateFamilyOwnershipType's PLOT arm, since only
+    // residential_plot's broker UI renders an ownershipType control. land and other continue to
+    // validate against AgriFieldOptions.VALID_OWNERSHIP_TYPES unchanged; so do AGRICULTURAL and
+    // COMMERCIAL (the latter via CommercialFieldOptions.VALID_COMMERCIAL_OWNERSHIP).
     // All OTHER sets in this class remain AUTHOR-ONLY / FORWARD-ONLY (see class javadoc and
     // ListingFieldWiringGuardTest.FORWARD_ONLY_CONSTANTS).
     // Design: Freehold / Cooperative society / Leasehold / Power of attorney
