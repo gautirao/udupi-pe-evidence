@@ -22,7 +22,7 @@ import { Loader2 } from 'lucide-react';
 export default function ResidentialNewListingPage() {
   const { userRole, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const role = userRole as string | null;
 
   // #1748 — seed supported fields from demand-gap prefill forwarded by the
@@ -33,6 +33,22 @@ export default function ResidentialNewListingPage() {
   // #1748 — "Switch flow" returns to the selector; carry the prefill context back
   // so the selector keeps its recommendation/params (parity with browser Back).
   const prefillSearch = buildPrefillSearch(prefill);
+
+  // Issue #2039 (AC2) — a draft id recovered from the route's own URL at
+  // mount, if the broker is landing here via a refresh/reload of a URL that
+  // already carries one (see onDraftPersisted below for how it gets there).
+  const initialDraftId = searchParams.get('draftId');
+
+  // Issue #2039 (AC1) — after the draft-create POST succeeds, stash the new
+  // id into the URL via history REPLACE (not push — a first save should not
+  // grow the back-button stack), MERGING it into the existing search params
+  // rather than replacing them, so the areaKey/propertyType/listingPurpose
+  // prefill forwarded from the journey selector survives.
+  const handleDraftPersisted = (id: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('draftId', id);
+    setSearchParams(next, { replace: true });
+  };
 
   if (authLoading) {
     return (
@@ -53,6 +69,8 @@ export default function ResidentialNewListingPage() {
       <ResidentialListingForm
         initialPropertyType={initialPropertyType}
         initialListingPurpose={prefill.listingPurpose}
+        initialDraftId={initialDraftId}
+        onDraftPersisted={handleDraftPersisted}
         onSwitchToGenericFlow={() => navigate(`/broker/listings/new${prefillSearch}`)}
         navigate={navigate}
       />

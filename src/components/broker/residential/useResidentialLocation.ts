@@ -132,6 +132,31 @@ export function useResidentialLocation({
       // resume/edit flow (never fired on the create-flow's own mount, since
       // onPublicLoc there just re-sets the form's existing `locality` state).
       onPublicLoc(publicLoc);
+      return;
+    }
+
+    // Issue #2039 revision 3 — locality-only seed, DECOUPLED from the
+    // addressConfirmed+lat/lng branch above. A search-and-"Use" Save draft
+    // persists `locality` without ever confirming a pin (buildPayload,
+    // ResidentialListingForm.tsx:574), so on reload addressConfirmed is
+    // false and initialLatitude/initialLongitude are null — the branch
+    // above never fires, and without this branch the search box and the
+    // localityOk strength gate stayed empty forever.
+    //
+    // 3-state invariant (see header comment, lines 8-20): this path MUST
+    // NOT set `resolved` (that's what AddressSearch/MapPin read to decide
+    // "Location confirmed" is shown), and MUST NOT touch pin/pinConfirmed —
+    // only a real confirmPin() call may ever do that. `status: 'typed'`
+    // mirrors the hook's own vocabulary for "there's text in the box, but
+    // nothing resolved yet", keeping query/status aligned exactly like
+    // every other branch in this file.
+    if (initialLocality) {
+      setState((prev) => ({
+        ...prev,
+        query: initialLocality,
+        status: 'typed',
+      }));
+      onPublicLoc(initialLocality);
     }
   });
 

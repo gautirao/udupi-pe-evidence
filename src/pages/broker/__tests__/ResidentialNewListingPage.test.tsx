@@ -15,7 +15,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 const mockRole = vi.hoisted(() => ({ current: 'broker' as string | null }));
 const mockNavigate = vi.hoisted(() => vi.fn());
@@ -43,19 +43,28 @@ vi.mock('@/components/broker/ResidentialListingForm', () => ({
   ResidentialListingForm: ({
     initialPropertyType,
     initialListingPurpose,
+    initialDraftId,
+    onDraftPersisted,
     onSwitchToGenericFlow,
   }: {
     initialPropertyType: string;
     initialListingPurpose?: string;
+    initialDraftId?: string | null;
+    onDraftPersisted?: (id: string) => void;
     onSwitchToGenericFlow: () => void;
   }) => (
     <div
       data-testid="residential-listing-form"
       data-initial-property-type={initialPropertyType}
       data-initial-listing-purpose={initialListingPurpose ?? ''}
+      data-initial-draft-id={initialDraftId ?? ''}
     >
       <button type="button" onClick={onSwitchToGenericFlow}>
         Switch flow
+      </button>
+      {/* AC1 — simulates createListing.onSuccess firing inside the real form. */}
+      <button type="button" onClick={() => onDraftPersisted?.('draft-xyz')}>
+        Simulate draft persisted
       </button>
     </div>
   ),
@@ -64,11 +73,24 @@ vi.mock('@/components/broker/ResidentialListingForm', () => ({
 // Import AFTER mocks are registered.
 import ResidentialNewListingPage from '../ResidentialNewListingPage';
 
+function LocationSearchProbe() {
+  const location = useLocation();
+  return <div data-testid="location-search-probe">{location.search}</div>;
+}
+
 function renderPage(entry = '/broker/listings/new/residential') {
   return render(
     <MemoryRouter initialEntries={[entry]}>
       <Routes>
-        <Route path="/broker/listings/new/residential" element={<ResidentialNewListingPage />} />
+        <Route
+          path="/broker/listings/new/residential"
+          element={(
+            <>
+              <ResidentialNewListingPage />
+              <LocationSearchProbe />
+            </>
+          )}
+        />
         <Route path="/" element={<div data-testid="home-page">Home Redirect</div>} />
       </Routes>
     </MemoryRouter>,
@@ -159,5 +181,49 @@ describe('ResidentialNewListingPage demand-gap prefill (Issue #1748)', () => {
     expect(mockNavigate).toHaveBeenCalledWith(
       '/broker/listings/new?areaKey=brahmavar&propertyType=villa&listingPurpose=rent',
     );
+  });
+});
+
+describe('ResidentialNewListingPage draft recovery (Issue #2039)', () => {
+  it('AC1 — onDraftPersisted merges draftId into the URL via REPLACE and PRESERVES areaKey/propertyType/listingPurpose (a naive setSearchParams({draftId}) would drop them and fail this test)', async () => {
+    mockRole.current = 'broker';
+    renderPage('/broker/listings/new/residential?areaKey=brahmavar&propertyType=villa&listingPurpose=rent');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Simulate draft persisted' }));
+
+    const search = screen.getByTestId('location-search-probe').textContent ?? '';
+    const params = new URLSearchParams(search);
+    expect(params.get('draftId')).toBe('draft-xyz');
+    expect(params.get('areaKey')).toBe('brahmavar');
+    expect(params.get('propertyType')).toBe('villa');
+    expect(params.get('listingPurpose')).toBe('rent');
+  });
+
+  it('AC1 — draftId persists with no prior prefill params present (bare create route)', async () => {
+    mockRole.current = 'broker';
+    renderPage('/broker/listings/new/residential');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Simulate draft persisted' }));
+
+    const search = screen.getByTestId('location-search-probe').textContent ?? '';
+    expect(new URLSearchParams(search).get('draftId')).toBe('draft-xyz');
+  });
+
+  it('AC2/AC7 — a draftId already in the URL at mount is forwarded to the form as initialDraftId (hydration path wins over prefill wiring)', () => {
+    mockRole.current = 'broker';
+    renderPage('/broker/listings/new/residential?draftId=existing-draft-1&propertyType=villa');
+
+    const form = screen.getByTestId('residential-listing-form');
+    expect(form.getAttribute('data-initial-draft-id')).toBe('existing-draft-1');
+  });
+
+  it('no draftId in the URL: initialDraftId is forwarded as empty (never a stray literal "null"/"undefined" string)', () => {
+    mockRole.current = 'broker';
+    renderPage('/broker/listings/new/residential');
+
+    const form = screen.getByTestId('residential-listing-form');
+    expect(form.getAttribute('data-initial-draft-id')).toBe('');
   });
 });
