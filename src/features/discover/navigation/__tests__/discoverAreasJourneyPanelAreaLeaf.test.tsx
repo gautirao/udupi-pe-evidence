@@ -59,10 +59,17 @@ vi.mock('@/hooks/useDiscoverCityListings', async () => {
 // data wiring (which of pricePaise/priceBand it forwards, driven by the
 // mocked useDiscoverCityListings response), not PropertyCard's own
 // formatPrice/auth-branch rendering logic.
+// Issue #2051 — extended to also surface monthlyRentRupees/monthlyRentBand so the
+// R2 anon-leak guard below can assert on the rent field the same way the existing
+// pricePaise/priceBand guard does.
 vi.mock('@/components/discover/PropertyCard', () => ({
   PropertyCard: ({ listing }: { listing: DiscoverCityListingItem }) => (
     <div data-testid={`property-card-${listing.id}`}>
-      {listing.pricePaise != null ? `EXACT:${listing.pricePaise}` : (listing.priceBand ?? 'no-price')}
+      {listing.pricePaise != null
+        ? `EXACT:${listing.pricePaise}`
+        : listing.monthlyRentRupees != null
+          ? `RENT_EXACT:${listing.monthlyRentRupees}`
+          : (listing.priceBand ?? listing.monthlyRentBand ?? 'no-price')}
     </div>
   ),
 }));
@@ -208,6 +215,38 @@ describe('DiscoverAreasJourneyPanel — AREA-leaf listings surface (Issue #1956 
     expect(card).toHaveTextContent('₹50L - ₹75L');
     expect(screen.queryByText(/EXACT:/)).not.toBeInTheDocument();
     // The hook must be called with isAuthenticated: false for the anon arm.
+    expect(mockUseDiscoverCityListings).toHaveBeenCalledWith(
+      expect.objectContaining({ isAuthenticated: false }),
+    );
+  });
+
+  it('anon arm — monthlyRentRupees is stripped for anon (R2, Issue #2051 — GUARD test: fixture carries BOTH monthlyRentRupees and monthlyRentBand, so a leak would show)', () => {
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+    mockUseDiscoverCityListings.mockReturnValue({
+      data: {
+        areas: [
+          {
+            areaKey: 'IN|KA|Bangalore|Manipal',
+            listings: [
+              makeListing({
+                listingPurpose: 'rent',
+                priceBand: undefined,
+                pricePaise: undefined,
+                monthlyRentBand: '₹20–35K',
+                monthlyRentRupees: 25000,
+              }),
+            ],
+          },
+        ],
+      },
+      isLoading: false,
+    });
+
+    renderPanel(makeAreaLeafNode());
+
+    const card = screen.getByTestId('property-card-listing-1');
+    expect(card).toHaveTextContent('₹20–35K');
+    expect(screen.queryByText(/RENT_EXACT:/)).not.toBeInTheDocument();
     expect(mockUseDiscoverCityListings).toHaveBeenCalledWith(
       expect.objectContaining({ isAuthenticated: false }),
     );

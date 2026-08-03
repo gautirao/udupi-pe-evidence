@@ -23,6 +23,24 @@ export interface DiscoverCityListingItem {
    * instead. See #1616 auth-branched price contract.
    */
   priceBand?: string | null;
+  /**
+   * Issue #2051 — exact monthly rent in RUPEES (NOT paise — do not divide/multiply
+   * by 100), returned by the backend for AUTHENTICATED callers when listingPurpose
+   * is 'rent' or 'lease' and the stored monthly_rent is > 0. Mutually exclusive with
+   * monthlyRentBand — the backend sends exactly one of the two (or neither when the
+   * DB rent is null/absent, or the listing is a sale). Anonymous callers receive
+   * monthlyRentBand instead. See #1616 auth-branched price contract for the sale
+   * analogue (pricePaise/priceBand), which this mirrors.
+   */
+  monthlyRentRupees?: number;
+  /**
+   * Issue #2051 — coarse monthly-rent band string (e.g. "₹20–35K") returned by the
+   * backend for ANONYMOUS callers when listingPurpose is 'rent' or 'lease'. Mutually
+   * exclusive with monthlyRentRupees. Authenticated callers receive monthlyRentRupees
+   * instead. Absent/null for sale listings and for rent/lease listings with no valid
+   * stored rent.
+   */
+  monthlyRentBand?: string | null;
   propertyType?: string;
   locality?: string;
   primaryImageUrl?: string | null;

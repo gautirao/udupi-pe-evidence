@@ -334,6 +334,88 @@ describe('PropertyCard', () => {
     expect(screen.queryByText('Sign in to view price')).not.toBeInTheDocument();
   });
 
+  // ── Issue #2051 — rent/lease price arms (extends the #1616 three-way branch) ──
+  // 1. monthlyRentRupees present (authed rent/lease path): exact rupee amount, '/mo' suffix.
+  // 2. monthlyRentBand present (anon rent/lease path): band label, '/mo' suffix.
+  // 3. Neither present, rent/lease with null stored rent (AC4): "Price on request".
+
+  it('#2051 rent branch-1 (authed): monthlyRentRupees present → exact formatted price with "/mo" suffix', () => {
+    renderCard({
+      listing: makeListing({
+        listingPurpose: 'rent',
+        pricePaise: undefined,
+        priceBand: undefined,
+        monthlyRentRupees: 25000,
+      }),
+      isAuthenticated: true,
+      onNavigate: vi.fn(),
+    });
+    // AC8 anti-regression — a stored 25000 must render as the ₹25K-equivalent,
+    // NOT ₹250 (÷100 error) and NOT ₹25,00,000 (×100 error).
+    expect(screen.getByText('₹25K/mo')).toBeInTheDocument();
+    expect(screen.queryByText(/₹250(?!K)/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/25,00,000/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Price on request')).not.toBeInTheDocument();
+  });
+
+  it('#2051 lease branch-1 (authed): monthlyRentRupees present on a LEASE listing renders identically to rent', () => {
+    renderCard({
+      listing: makeListing({
+        listingPurpose: 'lease',
+        pricePaise: undefined,
+        priceBand: undefined,
+        monthlyRentRupees: 25000,
+      }),
+      isAuthenticated: true,
+      onNavigate: vi.fn(),
+    });
+    expect(screen.getByText('₹25K/mo')).toBeInTheDocument();
+    // R15 — lease gets its own purpose label, distinct from 'For Rent'.
+    expect(screen.getByText('For Lease')).toBeInTheDocument();
+  });
+
+  it('#2051 rent branch-2 (anon): monthlyRentBand present, no monthlyRentRupees → band label with "/mo" suffix', () => {
+    renderCard({
+      listing: makeListing({
+        listingPurpose: 'rent',
+        pricePaise: undefined,
+        priceBand: undefined,
+        monthlyRentRupees: undefined,
+        monthlyRentBand: '₹20–35K',
+      }),
+      isAuthenticated: false,
+      onNavigate: vi.fn(),
+    });
+    expect(screen.getByText('₹20–35K/mo')).toBeInTheDocument();
+    expect(screen.queryByText('Price on request')).not.toBeInTheDocument();
+  });
+
+  it('#2051 rent branch-3 (AC4): rent listing with neither monthlyRentRupees nor monthlyRentBand → "Price on request", never a fabricated band', () => {
+    renderCard({
+      listing: makeListing({
+        listingPurpose: 'rent',
+        pricePaise: undefined,
+        priceBand: undefined,
+        monthlyRentRupees: undefined,
+        monthlyRentBand: undefined,
+      }),
+      isAuthenticated: true,
+      onNavigate: vi.fn(),
+    });
+    expect(screen.getByText('Price on request')).toBeInTheDocument();
+    expect(screen.queryByText('₹0–10K/mo')).not.toBeInTheDocument();
+  });
+
+  it('#2051 sale rendering is unchanged when a listing carries no rent fields at all', () => {
+    renderCard({
+      listing: makeListing({ pricePaise: 5000000 * 100 }),
+      isAuthenticated: true,
+      onNavigate: vi.fn(),
+    });
+    expect(document.body.textContent).toMatch(/₹/);
+    expect(screen.queryByText(/\/mo/)).not.toBeInTheDocument();
+  });
+
   // Legacy tests updated for new contract (kept for backward-compat shape documentation)
 
   it('shows "Price on request" when authenticated but pricePaise is undefined', () => {

@@ -148,6 +148,66 @@ describe('PropertyMap — deriveMarkerLabel (#1942 price-band precedence)', () =
   });
 });
 
+describe('PropertyMap — deriveMarkerLabel rent/lease arms (Issue #2051, AC6c)', () => {
+  it('price=null, priceBand=null, monthlyRent=25000 → exact rent price with "/mo" suffix (authed)', () => {
+    const result = deriveMarkerLabel('apartment', null, null, 25000, null);
+    // AC8 anti-regression: 25000 rupees → "₹25K/mo", never "₹250/mo" or "₹25,00,000/mo".
+    expect(result).toEqual({ label: '₹25K/mo', isPricePill: true, isBand: false });
+  });
+
+  it('price=null, priceBand=null, monthlyRentBand="₹20–35K" → band label with "/mo" suffix (anon)', () => {
+    const result = deriveMarkerLabel('apartment', null, null, null, '₹20–35K');
+    expect(result).toEqual({ label: '₹20–35K/mo', isPricePill: true, isBand: true });
+  });
+
+  it('all four price/band/rent/rentBand null → residual "—" (genuinely price-less listing, unchanged)', () => {
+    const result = deriveMarkerLabel('apartment', null, null, null, null);
+    expect(result).toEqual({ label: '—', isPricePill: false, isBand: false });
+  });
+
+  it('monthlyRent=0 → does NOT treat 0 as an exact rent (falls through to residual when no band either)', () => {
+    const result = deriveMarkerLabel('apartment', null, null, 0, null);
+    expect(result).toEqual({ label: '—', isPricePill: false, isBand: false });
+  });
+
+  it('sale price present takes precedence over rent fields (sale precedence unchanged)', () => {
+    const result = deriveMarkerLabel('apartment', 15000000, null, 25000, '₹20–35K');
+    expect(result).toEqual({ label: '₹1.50 Cr', isPricePill: true, isBand: false });
+  });
+
+  it('sale priceBand present takes precedence over rent fields', () => {
+    const result = deriveMarkerLabel('apartment', null, '₹1–2Cr', 25000, '₹20–35K');
+    // isBand: true — a sale priceBand IS a band (pre-#2051 semantics, unchanged); the
+    // rent/rentBand args are simply ignored because the sale priceBand branch returns first.
+    expect(result).toEqual({ label: '₹1–2Cr', isPricePill: true, isBand: true });
+  });
+
+  it('createMarkerIcon rent arm: renders the exact rent price pill with no aria-label (visible text is the accessible name)', () => {
+    createMarkerIcon('apartment', null, null, 32000, null);
+    const html = lastCapturedHtml();
+    expect(html).toContain('>₹32K/mo<');
+    expect(html).not.toContain('aria-label="Approximate price');
+    expect(html).not.toContain('aria-label="Price unavailable"');
+  });
+
+  it('createMarkerIcon rent-band arm: renders the escaped band pill with an approximate-price aria-label', () => {
+    createMarkerIcon('apartment', null, null, null, '₹20–35K');
+    const html = lastCapturedHtml();
+    expect(html).toContain('>₹20–35K/mo<');
+    expect(html).toContain('aria-label="Approximate price ₹20–35K/mo"');
+  });
+
+  it('createSelectedMarkerIcon rent arm parity: default and selected icons both carry the same rent price', () => {
+    createMarkerIcon('house', null, null, 18000, null);
+    const defaultHtml = lastCapturedHtml();
+    createSelectedMarkerIcon('house', null, null, 18000, null);
+    const selectedHtml = lastCapturedHtml();
+
+    expect(defaultHtml).toContain('>₹18K/mo<');
+    expect(selectedHtml).toContain('>₹18K/mo<');
+  });
+});
+
 describe('PropertyMap — createMarkerIcon / createSelectedMarkerIcon (#1942)', () => {
   // Every test below uses a distinct propertyType (and/or distinct price/band)
   // so each createMarkerIcon/createSelectedMarkerIcon call is guaranteed a

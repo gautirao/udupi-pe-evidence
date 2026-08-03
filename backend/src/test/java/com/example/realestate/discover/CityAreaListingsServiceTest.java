@@ -3,6 +3,9 @@ package com.example.realestate.discover;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcOperations;
@@ -13,6 +16,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -40,9 +44,22 @@ class CityAreaListingsServiceTest {
         service = new CityAreaListingsService(jdbc);
     }
 
-    /** Stubs jdbc.query(sql, RowCallbackHandler, params) to drive the handler over one row. */
+    /** Stubs jdbc.query(sql, RowCallbackHandler, params) to drive the handler over one SALE row. */
     private void stubSingleRow(String areaKey, String areaName, UUID listingId,
                                 Double latitude, Double longitude) throws Exception {
+        stubSingleRow(areaKey, areaName, listingId, latitude, longitude,
+                "sale", 5_000_000L, null);
+    }
+
+    /**
+     * Stubs jdbc.query(sql, RowCallbackHandler, params) to drive the handler over one row with
+     * an explicit listingPurpose, price_paise and monthly_rent (issue #2051 — the price source
+     * is selected by listingPurpose, not by which column is non-null, so callers can set BOTH
+     * to exercise AC14's mixed-column case).
+     */
+    private void stubSingleRow(String areaKey, String areaName, UUID listingId,
+                                Double latitude, Double longitude,
+                                String listingPurpose, Long pricePaise, Long monthlyRent) throws Exception {
         when(jdbc.queryForObject(anyString(), org.mockito.ArgumentMatchers.eq(Integer.class),
                 org.mockito.ArgumentMatchers.<Object>any()))
                 .thenReturn(1);
@@ -53,12 +70,14 @@ class CityAreaListingsServiceTest {
                     when(rs.getString("area_key")).thenReturn(areaKey);
                     when(rs.getString("area_name")).thenReturn(areaName);
                     when(rs.getString("listing_id")).thenReturn(listingId.toString());
-                    when(rs.getObject("price_paise")).thenReturn(5_000_000L);
-                    when(rs.getLong("price_paise")).thenReturn(5_000_000L);
+                    when(rs.getObject("price_paise")).thenReturn(pricePaise);
+                    if (pricePaise != null) {
+                        when(rs.getLong("price_paise")).thenReturn(pricePaise);
+                    }
                     when(rs.getString("property_type")).thenReturn("house");
                     when(rs.getString("locality")).thenReturn("Malpe");
                     when(rs.getString("primary_image_url")).thenReturn(null);
-                    when(rs.getString("listing_purpose")).thenReturn("sale");
+                    when(rs.getString("listing_purpose")).thenReturn(listingPurpose);
                     when(rs.getObject("bedrooms")).thenReturn(3);
                     when(rs.getInt("bedrooms")).thenReturn(3);
                     when(rs.getString("title")).thenReturn("Nice House");
@@ -81,6 +100,10 @@ class CityAreaListingsServiceTest {
                     when(rs.getObject("longitude")).thenReturn(longitude);
                     if (longitude != null) {
                         when(rs.getDouble("longitude")).thenReturn(longitude);
+                    }
+                    when(rs.getObject("monthly_rent")).thenReturn(monthlyRent);
+                    if (monthlyRent != null) {
+                        when(rs.getLong("monthly_rent")).thenReturn(monthlyRent);
                     }
                     rch.processRow(rs);
                     return null;
@@ -154,5 +177,143 @@ class CityAreaListingsServiceTest {
         assertThat(anonCard.trustBadge()).isEqualTo("verified");
         assertThat(authedCard.trustBadge()).isEqualTo("verified");
         assertThat(anonCard.trustBadge()).isEqualTo(authedCard.trustBadge());
+    }
+
+    // ── #2051 AC16: sale x rent x lease crossed with anon x authed (6 combinations) ──
+
+    private static final Long SALE_PRICE_PAISE = 6_000_000_00L; // ₹60L → "₹50L–1Cr" band
+    private static final Long RENT_MONTHLY_RENT = 25_000L;      // ₹25,000/mo → "₹20–35K" band
+
+    static Stream<Arguments> saleRentLeaseAnonAuthedMatrix() {
+        return Stream.of(
+                // purpose, isAuthenticated, expectedPricePaise, expectedPriceBand, expectedRentRupees, expectedRentBand
+                Arguments.of("sale", false, null, "₹50L–1Cr", null, null),
+                Arguments.of("sale", true, SALE_PRICE_PAISE, null, null, null),
+                Arguments.of("rent", false, null, null, null, "₹20–35K"),
+                Arguments.of("rent", true, null, null, RENT_MONTHLY_RENT, null),
+                Arguments.of("lease", false, null, null, null, "₹20–35K"),
+                Arguments.of("lease", true, null, null, RENT_MONTHLY_RENT, null)
+        );
+    }
+
+    @ParameterizedTest(name = "purpose={0} authenticated={1}")
+    @MethodSource("saleRentLeaseAnonAuthedMatrix")
+    @org.junit.jupiter.api.DisplayName("#2051 AC16: full sale x rent x lease x anon x authed contract matrix")
+    void getAreaListings_saleRentLeaseAnonAuthedMatrix(String purpose, boolean isAuthenticated,
+                                                        Long expectedPricePaise, String expectedPriceBand,
+                                                        Long expectedRentRupees, String expectedRentBand) throws Exception {
+        UUID listingId = UUID.randomUUID();
+        // Sale rows carry price_paise only; rent/lease rows carry monthly_rent only — the
+        // mixed-column case (AC14) is covered separately below.
+        Long pricePaise = "sale".equals(purpose) ? SALE_PRICE_PAISE : null;
+        Long monthlyRent = "sale".equals(purpose) ? null : RENT_MONTHLY_RENT;
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215,
+                purpose, pricePaise, monthlyRent);
+
+        CityAreaListingsResponse resp = service.getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, isAuthenticated);
+
+        AreaListingCard card = resp.areas().get(0).listings().get(0);
+        assertThat(card.listingPurpose()).isEqualTo(purpose);
+        assertThat(card.pricePaise()).isEqualTo(expectedPricePaise);
+        assertThat(card.priceBand()).isEqualTo(expectedPriceBand);
+        assertThat(card.monthlyRentRupees()).isEqualTo(expectedRentRupees);
+        assertThat(card.monthlyRentBand()).isEqualTo(expectedRentBand);
+    }
+
+    // ── #2051 AC14: rent row that ALSO carries a non-null price_paise must NOT render a ──
+    // ── sale-derived priceBand/pricePaise — the source is selected by listing_purpose ────
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#2051 AC14: rent row with BOTH monthly_rent AND non-null price_paise "
+            + "renders the rent value, never a sale-derived priceBand")
+    void getAreaListings_rentRowWithMixedPriceColumns_neverRendersSaleBand() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        // Both columns populated on a 'rent' row — nothing in the schema prevents this (R11).
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215,
+                "rent", SALE_PRICE_PAISE, RENT_MONTHLY_RENT);
+
+        CityAreaListingsResponse anonResp = service.getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false);
+        CityAreaListingsResponse authedResp = service.getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, true);
+
+        AreaListingCard anonCard = anonResp.areas().get(0).listings().get(0);
+        AreaListingCard authedCard = authedResp.areas().get(0).listings().get(0);
+
+        // Anon: rent band present, NEVER a sale priceBand despite the non-null price_paise.
+        assertThat(anonCard.monthlyRentBand()).isEqualTo("₹20–35K");
+        assertThat(anonCard.priceBand()).isNull();
+        assertThat(anonCard.pricePaise()).isNull();
+        assertThat(anonCard.monthlyRentRupees()).isNull();
+
+        // Authed: exact rent present, NEVER the sale pricePaise despite the non-null column.
+        assertThat(authedCard.monthlyRentRupees()).isEqualTo(RENT_MONTHLY_RENT);
+        assertThat(authedCard.pricePaise()).isNull();
+        assertThat(authedCard.priceBand()).isNull();
+        assertThat(authedCard.monthlyRentBand()).isNull();
+    }
+
+    // ── #2051 AC5/R16: rent monthly_rent NULL / 0 / negative — never fabricated into a band ──
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#2051 AC4: rent listing with NULL monthly_rent — no rent field populated for either caller")
+    void getAreaListings_rentNullMonthlyRent_noRentFieldsPopulated() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215,
+                "rent", null, null);
+
+        CityAreaListingsResponse anonResp = service.getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false);
+        CityAreaListingsResponse authedResp = service.getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, true);
+
+        assertThat(anonResp.areas().get(0).listings().get(0).monthlyRentBand()).isNull();
+        assertThat(anonResp.areas().get(0).listings().get(0).monthlyRentRupees()).isNull();
+        assertThat(authedResp.areas().get(0).listings().get(0).monthlyRentRupees()).isNull();
+        assertThat(authedResp.areas().get(0).listings().get(0).monthlyRentBand()).isNull();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#2051 AC5/R16: rent monthly_rent = 0 — neither rent field populated for "
+            + "either caller; anon must NOT get '₹0–10K' and authed must NOT get an exact 0")
+    void getAreaListings_rentZeroMonthlyRent_neitherRentFieldPopulated() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215,
+                "rent", null, 0L);
+
+        CityAreaListingsResponse anonResp = service.getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false);
+        CityAreaListingsResponse authedResp = service.getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, true);
+
+        AreaListingCard anonCard = anonResp.areas().get(0).listings().get(0);
+        assertThat(anonCard.monthlyRentBand()).isNull();
+        assertThat(anonCard.monthlyRentRupees()).isNull();
+
+        AreaListingCard authedCard = authedResp.areas().get(0).listings().get(0);
+        assertThat(authedCard.monthlyRentRupees()).isNull();
+        assertThat(authedCard.monthlyRentBand()).isNull();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#2051 AC5/R16: rent monthly_rent negative — neither rent field populated for either caller")
+    void getAreaListings_rentNegativeMonthlyRent_neitherRentFieldPopulated() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215,
+                "rent", null, -1000L);
+
+        CityAreaListingsResponse anonResp = service.getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false);
+        CityAreaListingsResponse authedResp = service.getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, true);
+
+        AreaListingCard anonCard = anonResp.areas().get(0).listings().get(0);
+        assertThat(anonCard.monthlyRentBand()).isNull();
+        assertThat(anonCard.monthlyRentRupees()).isNull();
+
+        AreaListingCard authedCard = authedResp.areas().get(0).listings().get(0);
+        assertThat(authedCard.monthlyRentRupees()).isNull();
+        assertThat(authedCard.monthlyRentBand()).isNull();
     }
 }

@@ -34,6 +34,19 @@
  *     ('e2e19560-0011-0000-0000-000000000002', ... 'rent', ... monthly_rent=32000, ...),
  *     ('e2e19560-0011-0000-0000-000000000003', ... 'rent', ... monthly_rent=18000, ...);
  *
+ * Issue #2051 (AC6/AC8/AC12) extends this same fixture's coverage to the
+ * RENDERED price text of those 3 rent rows (PropertyCard.tsx), not just card
+ * COUNT. formatPrice(25000, 'INR') (src/lib/formatters.ts) takes the
+ * thousands branch (25000 >= 1000, < 100000): thousands = 25, 25 % 1 === 0,
+ * so `${(25000/1000).toFixed(0)}K` -> "25K" -> "₹25K", and PropertyCard
+ * appends the literal '/mo' suffix for the monthlyRentRupees branch (never a
+ * /100 or *100 conversion -- monthlyRentRupees is already in rupees, unlike
+ * pricePaise). The expected on-screen string for the 25000 row is therefore
+ * exactly "₹25K/mo" -- confirmed against
+ * src/components/discover/__tests__/PropertyCard.test.tsx ('#2051 rent
+ * branch-1 (authed)'), which asserts the identical string for the identical
+ * 25000 input.
+ *
  * Confirmed live against the running fixture backend (port 8081, NOT the
  * shared hosted Supabase — see this PR's evidence report for why 8081 is the
  * safe local-fixture backend and 8085 must never be used):
@@ -66,9 +79,26 @@ async function gotoAreaLeaf(page: Page, node: string) {
   await page.waitForLoadState('domcontentloaded');
 }
 
+// #2051 — PropertyCard renders the price as the first <p> in the card body
+// (title is an <h3>; location, when present, is a <p> that always comes
+// AFTER the price block in DOM order — see PropertyCard.tsx around the
+// "Price + property-type pill" comment). There is no dedicated price
+// data-testid, so this is the narrowest reliable selector without touching
+// production code.
+async function cardPriceTexts(page: Page): Promise<string[]> {
+  const cards = page.getByTestId('listing-card');
+  const count = await cards.count();
+  const texts: string[] = [];
+  for (let i = 0; i < count; i++) {
+    texts.push((await cards.nth(i).locator('p').first().innerText()).trim());
+  }
+  return texts;
+}
+
 test.describe('@integration-ui #1956 PR-4 — Areas adaptive journeys at an AREA leaf (AC4.13)', () => {
   test('AC4.1/AC4.11 — a canonical AREA leaf mounts the listings surface (not the structural empty branch), and Buy/Rent changes the result COUNT while node stays fixed', async ({
     page,
+    browser,
   }) => {
     await gotoAreaLeaf(page, AREA_BASAVESHWARA);
     await expect(page.getByTestId('areas-journey-panel-listings')).toBeVisible({ timeout: 15_000 });
@@ -96,6 +126,68 @@ test.describe('@integration-ui #1956 PR-4 — Areas adaptive journeys at an AREA
     // make (it only proves the param survives, never that it changes what's
     // shown).
     await expect(page.getByTestId('listing-card')).toHaveCount(3, { timeout: 15_000 });
+
+    // #2051 AC6/AC12 — the rendered price text of the 3 rent cards, not just
+    // their count. Anon here (this test's default context has no
+    // storageState) so PropertyCard is on the monthlyRentBand arm: every
+    // card must carry a real, non-empty price with the '/mo' suffix and must
+    // never fall back to "Price on request" for a listing that does carry a
+    // monthly_rent.
+    const anonRentPriceTexts = await cardPriceTexts(page);
+    expect(anonRentPriceTexts).toHaveLength(3);
+    for (const text of anonRentPriceTexts) {
+      expect(text.length, `rent card price "${text}" must be non-empty`).toBeGreaterThan(0);
+      expect(text, `rent card price "${text}" must carry the /mo suffix`).toMatch(/\/mo$/);
+      expect(text, `rent card price must never read "Price on request" for a priced rent listing`).not.toBe(
+        'Price on request',
+      );
+    }
+
+    // #2051 AC8 — anti-regression against a x100/÷100 unit conversion bug on
+    // the EXACT rupee figure. The anon band above can't prove this (bands
+    // are coarse, computed server-side, and share no code path with the
+    // exact-rupee conversion), so open a SEPARATE authenticated context
+    // in-place — no restructuring of this spec's anon-default test model —
+    // and re-read the same area leaf under intent=rent. The seeded 25000
+    // row must render exactly "₹25K/mo" (formatPrice's thousands branch —
+    // see this file's module doc for the derivation), never "₹250/mo" (a
+    // ÷100 error) or a "₹25,00,000" family string (a ×100 error).
+    const authedContext = await browser.newContext({ storageState: 'e2e/fixtures/user-auth.json' });
+    const authedPage = await authedContext.newPage();
+    try {
+      await authedPage.goto(`/discover?${BASE}&node=${encodeURIComponent(AREA_BASAVESHWARA)}&intent=rent`);
+      await authedPage.waitForLoadState('domcontentloaded');
+      await expect(authedPage.getByTestId('listing-card')).toHaveCount(3, { timeout: 15_000 });
+
+      const authedRentPriceTexts = await cardPriceTexts(authedPage);
+      expect(authedRentPriceTexts).toHaveLength(3);
+      expect(
+        authedRentPriceTexts,
+        `the seeded 25000 rent row must render as exactly "₹25K/mo" among ${JSON.stringify(authedRentPriceTexts)}`,
+      ).toContain('₹25K/mo');
+      for (const text of authedRentPriceTexts) {
+        expect(text, `"${text}" must not be a ÷100-corrupted "₹250/mo"`).not.toMatch(/₹250(?!K)\/mo/);
+        expect(text, `"${text}" must not be a ×100-corrupted "₹25,00,000" family string`).not.toMatch(
+          /25,00,000/,
+        );
+      }
+    } finally {
+      await authedContext.close();
+    }
+
+    // #2051 AC13 (card/marker-popover price agreement) is intentionally NOT
+    // asserted here. Doing so would require clicking a specific rent
+    // listing's map marker via `[data-listing-id="<id>"] [data-testid="property-marker"]`
+    // (the pattern used by e2e/discover-1738-regression.spec.ts and
+    // e2e/discover-1939-listing-peek-url-restore.spec.ts), but unlike the
+    // sale rows — which this file's own J7c test explicitly confirms "carry
+    // real lat/lon" — the AC4.11 fixture-seed SQL for the 3 rent rows above
+    // elides their lat/longitude ("..."), so whether a rent marker even
+    // exists to click is unconfirmed. Asserting on an unconfirmed marker
+    // would either be a guess dressed up as a real check, or would require
+    // restructuring this spec to seed/confirm rent-row coordinates first —
+    // out of scope for this authoring pass. Skipped; flagged for follow-up
+    // once the rent-row fixture coordinates are confirmed.
 
     // node= and the AREA identity are unchanged by the Buy -> Rent toggle.
     expect(nodeParam(page)).toBe(AREA_BASAVESHWARA);

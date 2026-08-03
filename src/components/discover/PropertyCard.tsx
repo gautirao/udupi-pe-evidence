@@ -50,6 +50,12 @@ export function capitalize(s: string | null | undefined): string {
 export function purposeLabel(p: string | null | undefined): string {
   if (p === 'sale') return 'For Sale';
   if (p === 'rent') return 'For Rent';
+  // Issue #2051 (R15) — lease now renders a monthly price alongside rent; without
+  // an explicit case it fell through to capitalize('lease') === 'Lease', a subtly
+  // inconsistent label next to a rent-shaped price. Given its own label (distinct
+  // from 'For Rent') to match the existing sale/lease/rent distinction established
+  // at CommercialReviewPreview.tsx:155 ("Sale terms" / "Lease terms" / "Rent terms").
+  if (p === 'lease') return 'For Lease';
   return capitalize(p ?? '');
 }
 
@@ -326,10 +332,14 @@ export function PropertyCard({
       {/* Body */}
       <div className="p-4">
         {/* Price + property-type pill
-            Issue #1616 — three-way price render:
-            1. pricePaise present (authed path): render exact formatted price.
-            2. priceBand present (anon path): render the coarse band label.
-            3. Neither present (null DB price on either path): render "Price on request". */}
+            Issue #1616 — three-way price render, extended by Issue #2051 (AC4/AC6):
+            1. pricePaise present (authed sale path): render exact formatted price.
+            2. priceBand present (anon sale path): render the coarse band label.
+            3. monthlyRentRupees present (authed rent/lease path): exact rupee amount
+               via formatPrice — NO division by 100 (monthlyRentRupees is already in
+               RUPEES, unlike pricePaise; see [critical_finding_units]) — suffixed '/mo'.
+            4. monthlyRentBand present (anon rent/lease path): the coarse band, suffixed '/mo'.
+            5. None present (null DB price/rent on either path): render "Price on request". */}
         <div className="flex items-start justify-between gap-2">
           {listing.pricePaise != null ? (
             <p className="text-xl font-mono font-semibold tracking-[-0.01em] text-foreground tabular-nums">
@@ -337,6 +347,12 @@ export function PropertyCard({
             </p>
           ) : listing.priceBand != null ? (
             <p className="text-base font-semibold text-foreground">{listing.priceBand}</p>
+          ) : listing.monthlyRentRupees != null ? (
+            <p className="text-xl font-mono font-semibold tracking-[-0.01em] text-foreground tabular-nums">
+              {formatPrice(listing.monthlyRentRupees, 'INR')}/mo
+            </p>
+          ) : listing.monthlyRentBand != null ? (
+            <p className="text-base font-semibold text-foreground">{listing.monthlyRentBand}/mo</p>
           ) : (
             <p className="text-xs text-muted-foreground">Price on request</p>
           )}

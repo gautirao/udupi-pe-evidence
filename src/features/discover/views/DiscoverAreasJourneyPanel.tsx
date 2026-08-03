@@ -580,7 +580,14 @@ function AreaLeafListingsSurface({
     // surface (PropertyCard renders `pricePaise` verbatim when present —
     // Issue #1616 three-way price render — with no isAuthenticated gate of
     // its own).
-    return isAuthenticated ? listings : listings.map((l) => ({ ...l, pricePaise: undefined }));
+    // Issue #2051 (R2) — `monthlyRentRupees` is the rent/lease analogue of
+    // `pricePaise` (also authenticated-only, also rendered verbatim by
+    // PropertyCard with no isAuthenticated gate of its own) and must be
+    // stripped for the identical reason, or an anonymous caller viewing this
+    // surface would see the exact monthly rent via a backend regression.
+    return isAuthenticated
+      ? listings
+      : listings.map((l) => ({ ...l, pricePaise: undefined, monthlyRentRupees: undefined }));
   }, [areaListingsQuery.data, isAuthenticated]);
 
   // Issue #1956 PR-5 (AC5.9 breadcrumb omission-class fix) — `node.ancestry`

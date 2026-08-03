@@ -163,7 +163,9 @@ public final class SimulatedListingFactory {
                 null, // createdAt — honest null, never fabricated
                 null, // trustBadge — honest null, never fabricated
                 listing.point().lat(),
-                listing.point().lon());
+                listing.point().lon(),
+                null, // monthlyRentRupees — simulated listings are always "sale"; never fabricated
+                null); // monthlyRentBand — simulated listings are always "sale"; never fabricated
     }
 
     public static DiscoverListingResponse toDetail(SimulatedListing listing) {

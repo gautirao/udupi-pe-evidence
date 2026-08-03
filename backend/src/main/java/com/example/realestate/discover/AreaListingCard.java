@@ -38,6 +38,14 @@ import java.util.UUID;
  *                          Never the raw internal letter grade — see {@link TrustBadge}.
  * @param latitude          geo-coordinate latitude, or null when not geocoded
  * @param longitude         geo-coordinate longitude, or null when not geocoded
+ * @param monthlyRentRupees exact monthly rent in RUPEES (issue #2051) — NOT paise, unlike the
+ *                          sibling {@code pricePaise}; authenticated callers only, null for anon.
+ *                          Populated only for listingPurpose "rent"/"lease"; always null for "sale".
+ * @param monthlyRentBand   coarse monthly-rent band label (e.g. "₹10–20K") from
+ *                          {@link MonthlyRentBand}; anonymous callers only, null for authed.
+ *                          Populated only for listingPurpose "rent"/"lease"; always null for "sale".
+ *                          Mutually exclusive with monthlyRentRupees, mirroring the pricePaise/
+ *                          priceBand contract.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record AreaListingCard(
@@ -61,5 +69,7 @@ public record AreaListingCard(
         String createdAt,
         String trustBadge,
         Double latitude,
-        Double longitude
+        Double longitude,
+        Long monthlyRentRupees,
+        String monthlyRentBand
 ) {}

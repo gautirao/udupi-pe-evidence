@@ -71,6 +71,14 @@ export interface PropertyListingWithImages extends PropertyListing {
   images?: PropertyImage[];
   /** Issue #1373 — GeoJSON Polygon string for agri listings, forwarded from DiscoverFilteredMarker via filteredMarkerToPropertyListing. */
   boundary_geojson?: string | null;
+  /**
+   * Issue #2051 — coarse monthly-rent band string (e.g. "₹20–35K"), mirroring `priceBand`
+   * but for the rent/lease value carried on `PropertyListing.monthly_rent` (already RUPEES,
+   * exact). Populated only for ANONYMOUS callers viewing a rent/lease listing; mutually
+   * exclusive with an authed caller's exact `monthly_rent`. Wired through by
+   * cityListingToPropertyListing from DiscoverCityListingItem.monthlyRentBand.
+   */
+  monthlyRentBand?: string | null;
 }
 
 // Fix default marker icons in Leaflet
@@ -116,11 +124,22 @@ const iconCache = new Map<string, L.DivIcon>();
  * carries a real (non-residual) label — exact OR band — kept as the pre-existing
  * discriminant name; `isBand` further distinguishes an approximate band label from
  * an exact price so callers can pick the right aria-label copy.
+ *
+ * Issue #2051 (AC6c) — `monthlyRent`/`monthlyRentBand` extend the same precedence
+ * for rent/lease listings, which previously fell through to the bare '—' residual
+ * because sale's `price`/`priceBand` are always null for a rent-purpose row.
+ * `monthlyRent` is already RUPEES (see [critical_finding_units] — do NOT divide by
+ * 100), suffixed '/mo' per the repo's existing convention. Sale precedence (price >
+ * priceBand) is checked FIRST and is byte-identical to the pre-#2051 behaviour; the
+ * rent arms only apply when both sale fields are absent, which they always are for a
+ * rent/lease-purpose row.
  */
 function deriveMarkerLabel(
   propertyType: string,
   price: number | null | undefined,
   priceBand?: string | null,
+  monthlyRent?: number | null,
+  monthlyRentBand?: string | null,
 ): { label: string; isPricePill: boolean; isBand: boolean } {
   if (price != null && price > 0) {
     return { label: formatPrice(price, 'INR'), isPricePill: true, isBand: false };
@@ -128,6 +147,13 @@ function deriveMarkerLabel(
   const trimmedBand = priceBand != null ? priceBand.trim() : '';
   if (trimmedBand !== '') {
     return { label: trimmedBand, isPricePill: true, isBand: true };
+  }
+  if (monthlyRent != null && monthlyRent > 0) {
+    return { label: `${formatPrice(monthlyRent, 'INR')}/mo`, isPricePill: true, isBand: false };
+  }
+  const trimmedRentBand = monthlyRentBand != null ? monthlyRentBand.trim() : '';
+  if (trimmedRentBand !== '') {
+    return { label: `${trimmedRentBand}/mo`, isPricePill: true, isBand: true };
   }
   // Preserve the isPricePill discriminant — used by callers that need to distinguish
   // a real formatted price from a null/zero fallback without inspecting label content.
@@ -165,8 +191,10 @@ const createMarkerIcon = (
   propertyType: string,
   price: number | null | undefined,
   priceBand?: string | null,
+  monthlyRent?: number | null,
+  monthlyRentBand?: string | null,
 ): L.DivIcon => {
-  const { label, isBand } = deriveMarkerLabel(propertyType, price, priceBand);
+  const { label, isBand } = deriveMarkerLabel(propertyType, price, priceBand, monthlyRent, monthlyRentBand);
   const visual = getPropertyTypeVisual(propertyType);
   // R1: key on colour (not just type) so that types sharing the same label get distinct icons.
   // The label now encodes exact price / band / '—' residual, so distinct bands (or a band
@@ -248,8 +276,10 @@ const createSelectedMarkerIcon = (
   propertyType: string,
   price: number | null | undefined,
   priceBand?: string | null,
+  monthlyRent?: number | null,
+  monthlyRentBand?: string | null,
 ): L.DivIcon => {
-  const { label, isBand } = deriveMarkerLabel(propertyType, price, priceBand);
+  const { label, isBand } = deriveMarkerLabel(propertyType, price, priceBand, monthlyRent, monthlyRentBand);
   const visual = getPropertyTypeVisual(propertyType);
   // R1: include colour in key so types sharing the same price label are not collided.
   // The label encodes exact price / band / '—' residual — distinct bands get distinct keys.
@@ -1596,9 +1626,11 @@ function MarkerClusterLayer({
         listing.id === selectedListingId || listing.id === hoveredListingId;
       // Issue #1942 — thread priceBand (anon coarse price, #1941) into both icon
       // builders so anon individual pins show the band instead of a bare '—'.
+      // Issue #2051 — also thread monthly_rent/monthlyRentBand so rent/lease pins
+      // render a price instead of falling through to the '—' residual (AC6c).
       const icon = isHighlighted
-        ? createSelectedMarkerIcon(listing.property_type, listing.price, listing.priceBand)
-        : createMarkerIcon(listing.property_type, listing.price, listing.priceBand);
+        ? createSelectedMarkerIcon(listing.property_type, listing.price, listing.priceBand, listing.monthly_rent, listing.monthlyRentBand)
+        : createMarkerIcon(listing.property_type, listing.price, listing.priceBand, listing.monthly_rent, listing.monthlyRentBand);
       const marker = L.marker([listing.latitude!, listing.longitude!], { icon });
 
       // Attach listing-id to the marker element for E2E selectors.

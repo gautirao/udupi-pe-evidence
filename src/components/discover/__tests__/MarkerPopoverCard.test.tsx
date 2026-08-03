@@ -173,6 +173,70 @@ describe('MarkerPopoverCard — anon priceBand fallback (Issue #1941)', () => {
   });
 });
 
+describe('MarkerPopoverCard — rent/lease arms (Issue #2051, AC6b/AC7)', () => {
+  it('anon + monthlyRentBand present → renders the band string with "/mo", NOT the misleading "Sign in to view price" (AC7)', () => {
+    renderCard({
+      isAuthenticated: false,
+      listing: makeListing({ listing_purpose: 'rent', price: null, priceBand: null, monthlyRentBand: '₹20–35K' }),
+    });
+    const priceEl = screen.getByTestId('popover-price');
+    expect(priceEl).toHaveTextContent('₹20–35K/mo');
+    expect(priceEl).not.toHaveTextContent('Sign in to view price');
+  });
+
+  it('anon + lease listing with monthlyRentBand present → identical rendering to rent', () => {
+    renderCard({
+      isAuthenticated: false,
+      listing: makeListing({ listing_purpose: 'lease', price: null, priceBand: null, monthlyRentBand: '₹20–35K' }),
+    });
+    expect(screen.getByTestId('popover-price')).toHaveTextContent('₹20–35K/mo');
+  });
+
+  it('anon + no priceBand and no monthlyRentBand → keeps the existing "Sign in to view price" copy', () => {
+    renderCard({
+      isAuthenticated: false,
+      listing: makeListing({ listing_purpose: 'rent', price: null, priceBand: null, monthlyRentBand: null }),
+    });
+    expect(screen.getByTestId('popover-price')).toHaveTextContent('Sign in to view price');
+  });
+
+  it('authed + monthly_rent present → renders the exact rent with "/mo" (AC6b, AC8 no unit error: 25000 → ₹25K, not ₹250/₹25,00,000)', () => {
+    renderCard({
+      isAuthenticated: true,
+      listing: makeListing({ listing_purpose: 'rent', price: null, monthly_rent: 25000 }),
+    });
+    const priceEl = screen.getByTestId('popover-price');
+    expect(priceEl).toHaveTextContent('₹25K/mo');
+    expect(priceEl).not.toHaveTextContent('Price not available');
+  });
+
+  it('authed + lease listing with monthly_rent present → identical rendering to rent', () => {
+    renderCard({
+      isAuthenticated: true,
+      listing: makeListing({ listing_purpose: 'lease', price: null, monthly_rent: 25000 }),
+    });
+    expect(screen.getByTestId('popover-price')).toHaveTextContent('₹25K/mo');
+  });
+
+  it('authed + sale price present takes precedence over any (structurally absent) rent fields — sale rendering unchanged', () => {
+    renderCard({
+      isAuthenticated: true,
+      listing: makeListing({ listing_purpose: 'sale', price: 13_500_000, monthly_rent: null }),
+    });
+    const priceEl = screen.getByTestId('popover-price');
+    expect(priceEl).toHaveTextContent('₹1.35 Cr');
+    expect(priceEl).not.toHaveTextContent('/mo');
+  });
+
+  it('authed + rent listing with no monthly_rent (AC4) → "Price not available", never a fabricated amount', () => {
+    renderCard({
+      isAuthenticated: true,
+      listing: makeListing({ listing_purpose: 'rent', price: null, monthly_rent: null }),
+    });
+    expect(screen.getByTestId('popover-price')).toHaveTextContent('Price not available');
+  });
+});
+
 describe('MarkerPopoverCard — content rendering', () => {
   it('renders the listing title', () => {
     renderCard({ listing: makeListing({ title: 'Ocean View Villa' }) });

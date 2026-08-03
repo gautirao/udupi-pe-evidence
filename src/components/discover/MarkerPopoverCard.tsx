@@ -182,6 +182,16 @@ export function MarkerPopoverCard({
   const priceText = hasPrice && listing.price != null
     ? formatPrice(listing.price, listing.price_unit)
     : null;
+  // Issue #2051 (AC6b/AC7) — rent/lease counterpart to price/priceBand above.
+  // `monthly_rent` is already RUPEES (see [critical_finding_units]) — NO division
+  // by 100, and formatPrice is called with the explicit 'INR' unit (not
+  // `listing.price_unit`, which is a sale-price concept). A rent/lease listing's
+  // `price`/`priceBand` are always null (purpose-gated by the backend), so these
+  // arms only ever apply once the sale checks above have already missed.
+  const hasRent = listing.monthly_rent != null && listing.monthly_rent > 0;
+  const rentText = hasRent ? `${formatPrice(listing.monthly_rent as number, 'INR')}/mo` : null;
+  const trimmedRentBand = listing.monthlyRentBand != null ? listing.monthlyRentBand.trim() : '';
+  const rentBandText = trimmedRentBand !== '' ? `${trimmedRentBand}/mo` : null;
 
   // Stop propagation so clicking inside the card does not trigger map background-click dismiss.
   const handleCardClick = (e: React.MouseEvent) => {
@@ -267,13 +277,17 @@ export function MarkerPopoverCard({
           {!isAuthenticated ? (
             listing.priceBand ? (
               <span data-testid="popover-price-band">{listing.priceBand}</span>
+            ) : rentBandText ? (
+              <span data-testid="popover-price-band">{rentBandText}</span>
             ) : (
               <span className="text-muted-foreground text-xs italic">Sign in to view price</span>
             )
-          ) : !hasPrice ? (
-            <span className="text-muted-foreground text-xs italic">Price not available</span>
-          ) : (
+          ) : hasPrice ? (
             priceText
+          ) : hasRent ? (
+            rentText
+          ) : (
+            <span className="text-muted-foreground text-xs italic">Price not available</span>
           )}
         </p>
 

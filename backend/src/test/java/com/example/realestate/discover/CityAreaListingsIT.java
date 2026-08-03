@@ -131,7 +131,8 @@ class CityAreaListingsIT {
                 // Already-projected public value ("B" -> "trusted") — CityAreaListingsService
                 // projects via TrustBadge.publicBadge(...) before constructing the card.
                 "trusted",
-                13.35, 74.79
+                13.35, 74.79,
+                null, null
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(anonCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -186,7 +187,8 @@ class CityAreaListingsIT {
                 // auth-branched, so this proves the SAME public value shape as the anon card
                 // above (each mapped from its own raw tier, per the TrustBadge allow-list).
                 "verified",
-                13.36, 74.80
+                13.36, 74.80,
+                null, null
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(authedCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -236,7 +238,8 @@ class CityAreaListingsIT {
                 null, null, null, null, null, null, null, null, null, null,
                 "2025-03-01T08:00:00Z",
                 null,
-                13.34, 74.78
+                13.34, 74.78,
+                null, null
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(nullPriceCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -275,7 +278,8 @@ class CityAreaListingsIT {
                 null, null, null, null, null, null, null, null, null, null,
                 "2025-01-20T12:00:00Z",
                 null,
-                13.33, 74.77
+                13.33, 74.77,
+                null, null
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(nullPriceCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -291,6 +295,67 @@ class CityAreaListingsIT {
                 .andExpect(jsonPath("$.areas[0].listings[0].pricePaise").doesNotExist())
                 .andExpect(jsonPath("$.areas[0].listings[0].priceBand").doesNotExist())
                 .andExpect(jsonPath("$.areas[0].listings[0].id", is(id.toString())));
+    }
+
+    // ── #2051 RENT: anon monthlyRentBand present, monthlyRentRupees KEY absent ──────
+
+    @Test
+    @DisplayName("#2051 rent anon: monthlyRentBand present, monthlyRentRupees KEY absent, no sale price/band")
+    void anonCaller_rentListing_monthlyRentBandPresent_exactRentAbsent() throws Exception {
+        UUID id = UUID.randomUUID();
+        AreaListingCard rentCard = new AreaListingCard(
+                id, null, null, "apartment", "Manipal Town", null, "rent",
+                2, "Cozy 2BHK for rent", 2, 900.0, "sq ft",
+                null, null, null, null, "semi-furnished",
+                "2025-04-01T09:00:00Z", "verified", 13.35, 74.79,
+                null, "₹20–35K"
+        );
+        AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(rentCard));
+        CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
+
+        when(cityAreaListingsService.getAreaListings(
+                eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), eq(false)))
+                .thenReturn(resp);
+
+        mockMvc.perform(get(LISTINGS_URL)
+                        .param("areaKeys", AREA_KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.areas[0].listings[0].monthlyRentBand", is("₹20–35K")))
+                .andExpect(jsonPath("$.areas[0].listings[0].monthlyRentRupees").doesNotExist())
+                .andExpect(jsonPath("$.areas[0].listings[0].pricePaise").doesNotExist())
+                .andExpect(jsonPath("$.areas[0].listings[0].priceBand").doesNotExist());
+    }
+
+    // ── #2051 RENT: authed monthlyRentRupees exact, monthlyRentBand KEY absent ──────
+
+    @Test
+    @WithMockUser
+    @DisplayName("#2051 rent authed: monthlyRentRupees exact (no /100 or *100), monthlyRentBand KEY absent")
+    void authedCaller_rentListing_exactMonthlyRentRupees_noConversionError() throws Exception {
+        UUID id = UUID.randomUUID();
+        AreaListingCard rentCard = new AreaListingCard(
+                id, null, null, "apartment", "Manipal Town", null, "lease",
+                2, "Cozy 2BHK for lease", 2, 900.0, "sq ft",
+                null, null, null, null, "semi-furnished",
+                "2025-04-01T09:00:00Z", "verified", 13.35, 74.79,
+                25000L, null
+        );
+        AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(rentCard));
+        CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
+
+        when(cityAreaListingsService.getAreaListings(
+                eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), eq(true)))
+                .thenReturn(resp);
+
+        mockMvc.perform(get(LISTINGS_URL)
+                        .param("areaKeys", AREA_KEY))
+                .andExpect(status().isOk())
+                // exact rupee value, verbatim — NOT 250 (÷100 error) and NOT 2,500,000 (×100 error)
+                .andExpect(jsonPath("$.areas[0].listings[0].monthlyRentRupees", is(25000)))
+                .andExpect(jsonPath("$.areas[0].listings[0].monthlyRentBand").doesNotExist())
+                .andExpect(jsonPath("$.areas[0].listings[0].pricePaise").doesNotExist())
+                .andExpect(jsonPath("$.areas[0].listings[0].priceBand").doesNotExist())
+                .andExpect(jsonPath("$.areas[0].listings[0].listingPurpose", is("lease")));
     }
 
     // ── School-radius endpoint: priceBand present, pricePaise absent (anon-only) ──

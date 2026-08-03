@@ -125,7 +125,7 @@ export function discoverListingToPropertyListing(
 export function cityListingToPropertyListing(
   l: DiscoverCityListingItem & { lat: number; lon: number },
   now: string,
-): PropertyListing & { images?: PropertyImage[] } {
+): PropertyListing & { images?: PropertyImage[]; monthlyRentBand?: string | null } {
   return {
     id: l.id,
     latitude: l.lat,
@@ -164,11 +164,17 @@ export function cityListingToPropertyListing(
     road_frontage_ft: null,
     commercial_usage: null,
     number_of_units: null,
-    monthly_rent: null,
+    // Issue #2051 — wire the exact authenticated-only rent value through (already
+    // RUPEES on the DTO — do NOT divide by 100, unlike pricePaise above). Was
+    // hardcoded null, which is why rent/lease cards and pins previously showed no
+    // price at all (AC13 — this is what makes the card and the popover/pin agree).
+    monthly_rent: l.monthlyRentRupees ?? null,
     security_deposit_months: null,
     lock_in_months: null,
     seller_type: null,
     raw_post_id: null,
+    // Issue #2051 — anonymous-only coarse rent band counterpart to monthly_rent above.
+    monthlyRentBand: l.monthlyRentBand ?? null,
     // a3 mapper dependency — thread primaryImageUrl into images so MarkerPopoverCard
     // can display the listing image. Mirrors discoverListingToPropertyListing (~L163).
     images: l.primaryImageUrl ? [{ url: l.primaryImageUrl }] : undefined,

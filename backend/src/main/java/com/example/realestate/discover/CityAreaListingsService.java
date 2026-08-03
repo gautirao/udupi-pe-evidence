@@ -172,7 +172,8 @@ public class CityAreaListingsService {
                     sub.created_at,
                     sub.trust_tier,
                     sub.latitude,
-                    sub.longitude
+                    sub.longitude,
+                    sub.monthly_rent
                 FROM (
                     SELECT
                         a.area_key,
@@ -201,6 +202,7 @@ public class CityAreaListingsService {
                         pl.trust_tier,
                         pl.latitude,
                         pl.longitude,
+                        pl.monthly_rent,
                         ROW_NUMBER() OVER (PARTITION BY a.area_key ORDER BY pl.created_at DESC) AS rn
                     FROM areas a
                     JOIN cities c ON c.id = a.city_id
@@ -243,12 +245,44 @@ public class CityAreaListingsService {
                 String createdAt = createdTs != null ? createdTs.toInstant().toString() : null;
                 Double latitude = rs.getObject("latitude") != null ? rs.getDouble("latitude") : null;
                 Double longitude = rs.getObject("longitude") != null ? rs.getDouble("longitude") : null;
+                Long monthlyRent = rs.getObject("monthly_rent") != null ? rs.getLong("monthly_rent") : null;
 
-                // Price projection: authenticated callers get exact pricePaise (priceBand null/omitted).
-                // Anonymous callers get priceBand (coarse label) and pricePaise null (omitted by NON_NULL).
-                // Null price_paise → both fields null for all callers — price is never fabricated.
-                Long projectedPricePaise = isAuthenticated ? pricePaise : null;
-                String projectedPriceBand = isAuthenticated ? null : PriceBand.of(pricePaise);
+                // #2051: the price source is selected BY listing_purpose, not by which column
+                // happens to be non-null — a rent row may also carry a non-null price_paise
+                // (AC14) and must never render a sale-derived band/price in that case.
+                // 'rent' and 'lease' receive identical treatment (ruling OQ3).
+                String purpose = rs.getString("listing_purpose");
+                boolean isRentalPurpose = "rent".equals(purpose) || "lease".equals(purpose);
+
+                Long projectedPricePaise;
+                String projectedPriceBand;
+                Long projectedMonthlyRentRupees;
+                String projectedMonthlyRentBand;
+
+                if (isRentalPurpose) {
+                    // Rent/lease: never expose a sale price/band, regardless of price_paise.
+                    projectedPricePaise = null;
+                    projectedPriceBand = null;
+                    // AC4/AC5: a null, zero or negative monthly_rent is invalid and takes the
+                    // same "unavailable" path for BOTH the exact and band projections — a stored
+                    // 0 must never surface as an exact 0 to authenticated callers either, only
+                    // as an absent field, exactly like a null value (R16).
+                    Long validMonthlyRent = (monthlyRent != null && monthlyRent > 0) ? monthlyRent : null;
+                    // Monthly-rent projection mirrors the sale price contract exactly:
+                    // authenticated callers get the exact rupee value, anon get the coarse band.
+                    // monthlyRent is wired through verbatim (RUPEES) — no /100 or *100 conversion.
+                    projectedMonthlyRentRupees = isAuthenticated ? validMonthlyRent : null;
+                    projectedMonthlyRentBand = isAuthenticated ? null : MonthlyRentBand.of(validMonthlyRent);
+                } else {
+                    // Sale (or any other purpose): existing contract, byte-for-byte unchanged.
+                    // Authenticated callers get exact pricePaise (priceBand null/omitted).
+                    // Anonymous callers get priceBand (coarse label) and pricePaise null (omitted
+                    // by NON_NULL). Null price_paise → both fields null — price never fabricated.
+                    projectedPricePaise = isAuthenticated ? pricePaise : null;
+                    projectedPriceBand = isAuthenticated ? null : PriceBand.of(pricePaise);
+                    projectedMonthlyRentRupees = null;
+                    projectedMonthlyRentBand = null;
+                }
 
                 cardsByArea.get(areaKey).add(new AreaListingCard(
                         UUID.fromString(rawId),
@@ -277,7 +311,9 @@ public class CityAreaListingsService {
                         // buyer-vs-anon distinction on a browse/list surface with no ownership
                         // concept.
                         GeoCoarsener.coarsen(latitude),
-                        GeoCoarsener.coarsen(longitude)
+                        GeoCoarsener.coarsen(longitude),
+                        projectedMonthlyRentRupees,
+                        projectedMonthlyRentBand
                 ));
             }
             // if rawId is null: area exists but has no LIVE listings — leave the list empty
