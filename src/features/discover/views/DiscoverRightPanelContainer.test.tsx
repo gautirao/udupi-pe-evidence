@@ -130,27 +130,25 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
   }),
 }));
 
-// Issue #1956 PR 1 (FE-1) — the dual preview gate. The deployment capability
-// read is replaced by a mutable hoisted flag so the container's gate can be
-// driven through its 2x2; the PREDICATE itself is the real implementation,
-// wrapped in a spy so the flag's computed value is observable at the container
-// level without the container having to expose it (it deliberately exposes
-// nothing — the flag is inert in PR 1).
-const { previewGateState, gateSpy } = vi.hoisted(() => ({
-  previewGateState: { capabilityEnabled: false },
-  gateSpy: vi.fn(),
+// Issue #1956 PR 6 rework ([rulings.oq_a_v2]) — the container now calls
+// `useDiscoverAreaNavigationPathResolver` (a `useMutation`) unconditionally
+// for the JourneySwitcher conversion seam. This suite mocks it the same way
+// it mocks every other data-layer dependency (the facade above,
+// `DiscoverRightPanel` itself) rather than standing up a real QueryClient —
+// the conversion seam's own behaviour has dedicated coverage in
+// `useDiscoverAreaNavigationPath.ts`'s consumer (real-browser E2E,
+// `issue-1956-pr6-journey-switch-conversion.spec.ts`); this file only needs
+// the hook to not throw for "no QueryClientProvider in this tree".
+vi.mock('@/features/discover/navigation/useDiscoverAreaNavigationPath', () => ({
+  useDiscoverAreaNavigationPathResolver: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
 }));
 
-vi.mock('@/features/discover/preview/areasPreviewCapability', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@/features/discover/preview/areasPreviewCapability')>();
-  gateSpy.mockImplementation(actual.isAreasPreviewJourneyActive);
-  return {
-    ...actual,
-    isAreasPreviewCapabilityEnabled: () => previewGateState.capabilityEnabled,
-    isAreasPreviewJourneyActive: gateSpy,
-  };
-});
+vi.mock('@/hooks/use-toast', () => ({
+  useToast: () => ({ toast: vi.fn() }),
+}));
 
 import {
   DiscoverRightPanelContainer,
@@ -413,119 +411,28 @@ describe('DiscoverRightPanelContainer', () => {
 });
 
 /**
- * Issue #1956 PR 1 (FE-1) — AC1.2 + AC1.14, still true in PR 2.
- *
- * The dual preview gate (capability + `areasPreview=1`) alone is STILL inert:
- * these tests never set `journey='area-first'`, so `showAreasNavigationJourney`
- * (gate AND journey==='area-first') stays false and the legacy DOM is
- * unaffected — the gate flag by itself changes nothing. PR 2 activation is
- * covered separately below ("canonical Areas journey panel (PR 2 activation)").
- */
-describe('DiscoverRightPanelContainer — areasPreview dual gate (inert without journey=area-first)', () => {
-  const GATE_CASES: {
-    capabilityEnabled: boolean;
-    areasPreview: boolean | undefined;
-    expected: boolean;
-  }[] = [
-    { capabilityEnabled: false, areasPreview: undefined, expected: false },
-    { capabilityEnabled: false, areasPreview: true, expected: false },
-    { capabilityEnabled: true, areasPreview: undefined, expected: false },
-    { capabilityEnabled: true, areasPreview: true, expected: true },
-  ];
-
-  beforeEach(() => {
-    gateSpy.mockClear();
-    previewGateState.capabilityEnabled = false;
-    BASE_URL_STATE.areasPreview = undefined;
-  });
-
-  afterEach(() => {
-    previewGateState.capabilityEnabled = false;
-    BASE_URL_STATE.areasPreview = undefined;
-  });
-
-  it.each(GATE_CASES)(
-    'capability=$capabilityEnabled areasPreview=$areasPreview -> gate is $expected',
-    ({ capabilityEnabled, areasPreview, expected }) => {
-      previewGateState.capabilityEnabled = capabilityEnabled;
-      BASE_URL_STATE.areasPreview = areasPreview;
-
-      render(<DiscoverRightPanelContainer {...baseProps()} />);
-
-      expect(gateSpy).toHaveBeenCalledWith({ capabilityEnabled, areasPreview });
-      expect(gateSpy.mock.results[0].value).toBe(expected);
-    },
-  );
-
-  it('renders byte-identical output whether the gate is true or false (AC1.14 — no net-new UI)', () => {
-    previewGateState.capabilityEnabled = false;
-    BASE_URL_STATE.areasPreview = undefined;
-    const gateOff = render(
-      <DiscoverRightPanelContainer
-        {...baseProps({ resolvedPanelContent: 'area-groups-landing', isAuthenticated: true, page: 1, totalPages: 3, totalElements: 57 })}
-      />,
-    );
-    const offHtml = gateOff.container.innerHTML;
-    gateOff.unmount();
-
-    previewGateState.capabilityEnabled = true;
-    BASE_URL_STATE.areasPreview = true;
-    const gateOn = render(
-      <DiscoverRightPanelContainer
-        {...baseProps({ resolvedPanelContent: 'area-groups-landing', isAuthenticated: true, page: 1, totalPages: 3, totalElements: 57 })}
-      />,
-    );
-
-    // Sanity: the gate really did flip for the second render.
-    expect(gateSpy.mock.results.at(-1)?.value).toBe(true);
-    expect(gateOn.container.innerHTML).toBe(offHtml);
-  });
-
-  it('the gate never consults `node` — a node= present or absent does not change it', () => {
-    previewGateState.capabilityEnabled = true;
-    BASE_URL_STATE.areasPreview = true;
-
-    BASE_URL_STATE.node = null;
-    render(<DiscoverRightPanelContainer {...baseProps()} />);
-    const withoutNode = gateSpy.mock.calls.at(-1)?.[0];
-
-    BASE_URL_STATE.node = 'a:IN|KA|Bengaluru|Whitefield';
-    render(<DiscoverRightPanelContainer {...baseProps()} />);
-    const withNode = gateSpy.mock.calls.at(-1)?.[0];
-
-    expect(withoutNode).toEqual({ capabilityEnabled: true, areasPreview: true });
-    expect(withNode).toEqual({ capabilityEnabled: true, areasPreview: true });
-    BASE_URL_STATE.node = null;
-  });
-});
-
-/**
- * Issue #1956 PR 2 (Slice 3, T1) — the panel-routing seam.
+ * Issue #1956 PR 6 (final cutover, RULED A1 MINIMAL) — the panel-routing seam.
  *
  * `resolvedPanelContent` is computed upstream (derivePanelContent /
  * computeDiscoverLayer) and NEVER inspects `node=` — extending that
  * discriminated union is out of this PR's allowed scope. These tests pin the
  * seam that mounts the canonical Areas journey WITHOUT touching it: a
  * SEPARATE, earlier branch pre-empts the legacy `DiscoverRightPanel` mount
- * entirely when the dual gate is active AND `journey==='area-first'`.
+ * entirely when `journey==='area-first'` — canonical is now the default, the
+ * preview-capability + areasPreview dual gate no longer exists.
  */
-describe('DiscoverRightPanelContainer — canonical Areas journey panel (PR 2 activation)', () => {
+describe('DiscoverRightPanelContainer — canonical Areas journey panel (default for journey=area-first)', () => {
   beforeEach(() => {
-    gateSpy.mockClear();
-    previewGateState.capabilityEnabled = false;
-    BASE_URL_STATE.areasPreview = undefined;
     BASE_URL_STATE.journey = null;
   });
 
   afterEach(() => {
-    previewGateState.capabilityEnabled = false;
-    BASE_URL_STATE.areasPreview = undefined;
     BASE_URL_STATE.journey = null;
+    BASE_URL_STATE.groupId = null;
+    BASE_URL_STATE.areaKey = null;
   });
 
-  it('mounts DiscoverAreasJourneyPanel instead of the legacy DiscoverRightPanel when the gate is active and journey=area-first', () => {
-    previewGateState.capabilityEnabled = true;
-    BASE_URL_STATE.areasPreview = true;
+  it('mounts DiscoverAreasJourneyPanel instead of the legacy DiscoverRightPanel when journey=area-first', () => {
     BASE_URL_STATE.journey = 'area-first';
 
     render(
@@ -561,10 +468,61 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (PR 2 ac
     expect(screen.getByTestId('navigation-level-panel')).toBeInTheDocument();
   });
 
+  // Issue #1956 PR-6 code review Finding 2 — a hand-typed/bookmarked stale
+  // URL (never an in-app JourneySwitcher click, which converts groupId/areaKey
+  // to `node=` BEFORE writing journey=area-first via the container's own
+  // conversion seam) can present journey=area-first alongside a leftover
+  // legacy groupId/areaKey, e.g.
+  // `?city=bangalore&journey=area-first&groupId=airport-belt&areaKey=IN%7CKA%7CBengaluru%7CYelahanka`.
+  // showAreasNavigationJourney only checks nav.journey — it must mount
+  // canonical at the city root and ignore the stale params, never fall back
+  // to (or blend in) the legacy groupId/areaKey-driven surface.
+  it('mounts canonical and ignores a stale bookmarked groupId/areaKey when journey=area-first', () => {
+    BASE_URL_STATE.journey = 'area-first';
+    BASE_URL_STATE.groupId = 'airport-belt';
+    BASE_URL_STATE.areaKey = 'IN|KA|Bengaluru|Yelahanka';
+
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanelContainer
+          {...baseProps({
+            // What derivePanelContent actually computes for this exact stale
+            // URL state (areaKey present + journey=area-first resolves to
+            // 'area-selected' before groupId is ever consulted) — passed
+            // through as the container would really receive it, to prove the
+            // canonical-vs-legacy branch decision does not depend on this
+            // value at all.
+            resolvedPanelContent: 'area-selected',
+            areasNavigationJourney: inertAreasNavigationJourney({
+              node: {
+                nodeKey: 'root',
+                nodeType: 'ROOT',
+                displayLabel: 'Bangalore',
+                depth: -1,
+                regionKey: null,
+                ancestry: [],
+                nextLevelType: 'DIRECTION',
+                children: [],
+                revisionId: 1,
+                bounds: null,
+                descendantAreaKeys: null,
+                areaKey: null,
+              },
+            }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    // Canonical mounts at the city root (ROOT node, no destinations).
+    expect(screen.getByTestId('navigation-level-panel')).toBeInTheDocument();
+    // The legacy surface — which is what would read/branch on groupId/areaKey
+    // — never mounts alongside or instead of canonical.
+    expect(screen.queryByTestId('discover-right-panel-mock')).not.toBeInTheDocument();
+  });
+
   it('AC3.9 (pass 4) — forwards hoveredNavigationNodeKey/onNavigationNodeHoverChange down to the real NavigationChildCard, by stable node_key', async () => {
     const user = userEvent.setup();
-    previewGateState.capabilityEnabled = true;
-    BASE_URL_STATE.areasPreview = true;
     BASE_URL_STATE.journey = 'area-first';
     const onNavigationNodeHoverChange = vi.fn();
 
@@ -615,9 +573,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (PR 2 ac
     expect(onNavigationNodeHoverChange).toHaveBeenCalledWith('d:n');
   });
 
-  it('keeps rendering the legacy panel when journey is NOT area-first, even with the gate active', () => {
-    previewGateState.capabilityEnabled = true;
-    BASE_URL_STATE.areasPreview = true;
+  it('keeps rendering the legacy panel when journey is NOT area-first', () => {
     BASE_URL_STATE.journey = 'school-first';
 
     render(
@@ -629,26 +585,10 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (PR 2 ac
     expect(screen.getByTestId('discover-right-panel-mock')).toBeInTheDocument();
   });
 
-  it('keeps rendering the legacy panel when journey=area-first but the gate is closed', () => {
-    previewGateState.capabilityEnabled = false;
-    BASE_URL_STATE.areasPreview = undefined;
-    BASE_URL_STATE.journey = 'area-first';
-
-    render(
-      <DiscoverRightPanelContainer
-        {...baseProps({ resolvedPanelContent: 'area-groups-landing' })}
-      />,
-    );
-
-    expect(screen.getByTestId('discover-right-panel-mock')).toBeInTheDocument();
-  });
-
   // Issue #1956 PR 2 (Slice 5) — the container must thread its OWN
   // `urlActions.buildNodeHref` (never a re-derived href builder) down to the
   // panel's hierarchy Back control.
   it('threads urlActions.buildNodeHref to the panel so HierarchyBackButton can resolve a real href', () => {
-    previewGateState.capabilityEnabled = true;
-    BASE_URL_STATE.areasPreview = true;
     BASE_URL_STATE.journey = 'area-first';
     URL_ACTIONS.buildNodeHref = vi.fn((k: string) => `?node=${k}`);
 

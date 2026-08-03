@@ -81,8 +81,33 @@ describe('compassPointFor', () => {
     expect(nw.y).toBeLessThan(layout.centerY);
   });
 
-  it('an unrecognised region_key falls back to the layout centre rather than throwing', () => {
-    expect(compassPointFor('bogus', layout)).toEqual({ x: 400, y: 300 });
+  it('an unrecognised region_key does not throw and does not collapse to the layout centre', () => {
+    // Issue #1956 AC6.9 — a silent centre fallback let unrelated unrecognised
+    // codes stack on top of each other (and on the CENTRAL marker). The
+    // fallback must still be "safe" (bounded, deterministic, on-circle) but
+    // must NOT reproduce that collapse.
+    const point = compassPointFor('bogus', layout);
+    expect(point).not.toEqual({ x: 400, y: 300 });
+    expect(distance(point, { x: layout.centerX, y: layout.centerY })).toBeCloseTo(layout.radius, 9);
+  });
+
+  it('two different unrecognised codes fall back to two different positions (no stacking)', () => {
+    // This is the exact defect shape from AC6.9: three different unmatched
+    // codes (SOUTHEAST/NORTHEAST/SOUTHWEST) all resolving to one identical
+    // point. Proven directly against compassPointFor's fallback path here;
+    // the client-side normalisation that keeps these three specific codes
+    // OFF this fallback path in the first place is covered separately in
+    // AreaMarkerLayer's own tests.
+    const a = compassPointFor('SOUTHEAST', layout);
+    const b = compassPointFor('NORTHEAST', layout);
+    const c = compassPointFor('SOUTHWEST', layout);
+    expect(a).not.toEqual(b);
+    expect(b).not.toEqual(c);
+    expect(a).not.toEqual(c);
+  });
+
+  it('an unrecognised code\'s fallback position is deterministic (same code -> same point every call)', () => {
+    expect(compassPointFor('bogus', layout)).toEqual(compassPointFor('bogus', layout));
   });
 
   it('input ordering never matters — each key maps to the same point regardless of array order', () => {

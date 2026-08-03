@@ -32,10 +32,6 @@ import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query
 import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
 import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
-import {
-  isAreasPreviewCapabilityEnabled,
-  isAreasPreviewJourneyActive,
-} from '@/features/discover/preview/areasPreviewCapability';
 
 /**
  * Issue #1824 Slice S11a — the map-half return-tree region (mapContainerRef
@@ -356,16 +352,23 @@ export function DiscoverMapCanvas({
   const nav = useDiscoverNav();
   const viewport = useDiscoverViewport();
   const urlActions = useDiscoverActions();
-  // Issue #1956 PR 2 (Slice 3, map half) — the SAME dual-preview-gate +
+  // Issue #1956 PR 6 (final cutover, RULED A1 MINIMAL, restored by the
+  // [rulings.oq_a_v2] rework after the superseded Option A guard) — the SAME
   // journey==='area-first' condition DiscoverRightPanelContainer evaluates
   // to decide whether DiscoverAreasJourneyPanel (rather than the legacy
   // panel) is mounted. Recomputed here (not threaded as a prop) so the two
-  // call sites can never drift apart from independently-passed booleans.
-  const areasPreviewJourneyActive = isAreasPreviewJourneyActive({
-    capabilityEnabled: isAreasPreviewCapabilityEnabled(),
-    areasPreview: nav.areasPreview,
-  });
-  const showAreasNavigationDestinations = areasPreviewJourneyActive && nav.journey === 'area-first';
+  // call sites can never drift apart from independently-passed booleans. The
+  // preview-capability + areasPreview dual gate is removed at cutover, and no
+  // legacy-routing exception survives here — see
+  // `legacyAreaContextGuard.ts`'s doc for why `hasLegacyAreaContext` moved to
+  // being a click-time trigger (`DiscoverRightPanelContainer.tsx`'s
+  // `handleSelectJourney`) rather than a rendering gate. This is one of THREE
+  // identical gate sites (this file, DiscoverRightPanelContainer.tsx,
+  // MapDiscovery.tsx) — the triplication below (this comment) is deliberate:
+  // the map and panel must never disagree about whether the canonical Areas
+  // journey is active, so each site recomputes the SAME condition rather
+  // than trusting a threaded boolean.
+  const showAreasNavigationDestinations = nav.journey === 'area-first';
   return (
     <div ref={mapContainerRef} className="lg:w-1/2 h-64 lg:h-full relative order-1 lg:order-1" style={{ background: 'hsl(var(--map-bg))' }} onClick={
       // a3 — background click dismisses the marker popover. stopPropagation is applied

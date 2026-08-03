@@ -80,7 +80,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const CITY = 'bangalore';
-const BASE = `city=${CITY}&journey=area-first&areasPreview=1`;
+const BASE = `city=${CITY}&journey=area-first`;
 const AREA_BASAVESHWARA = 'a:IN|KA|Bengaluru|Basaveshwara Nagar';
 const SALE_LISTING_A_ID = 'e2e19560-0003-0000-0000-000000000001';
 

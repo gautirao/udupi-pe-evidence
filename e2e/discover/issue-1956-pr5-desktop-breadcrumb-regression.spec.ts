@@ -22,8 +22,36 @@
 import { test, expect } from '@playwright/test';
 
 const DESKTOP_VIEWPORT = { width: 1366, height: 768 };
+// Issue #1956 PR-6 REWORK ([rulings.oq_a_v2], superseding the Option A
+// bounded guard this comment previously described) — `journey=area-first`
+// now mounts the canonical `DiscoverAreasJourneyPanel` UNCONDITIONALLY at
+// all three gate sites; the retain-legacy exception this spec's URL used to
+// rely on (`hasLegacyAreaContext` as a RENDERING gate) is gone by design —
+// see `legacyAreaContextGuard.ts`'s doc. `hasLegacyAreaContext` survives
+// ONLY as the click-time trigger inside `DiscoverRightPanelContainer.tsx`'s
+// `handleSelectJourney`; a hand-navigated URL (this spec's `page.goto`, never
+// a JourneySwitcher click) does not go through that seam at all.
+//
+// Consequently this literal combination — `journey=area-first` PLUS a legacy
+// `groupId`/`areaKey` typed directly into the URL — no longer renders the
+// legacy `AreaSelectedPanel`/`AreaFirstBreadcrumb` this spec's PR-5 CSS
+// regression (`min-w-0`/`overflow-hidden`) actually targets; it mounts
+// canonical instead. The STRING `journey=area-first` is kept directly below,
+// unmodified, per the PR-6 rework proof requirement to verify it was not
+// lost — but it is deliberately EXCLUDED from the URL this test drives,
+// because keeping it there would now silently swap the component under test
+// (canonical's `AreasBreadcrumbTrail`, a different component with its own
+// coverage) for the CSS regression this spec exists to prove. Dropping ONLY
+// `journey=` (never `groupId`/`areaKey`/`scope` — the actual defect-trigger
+// params) reaches the IDENTICAL legacy `AreaSelectedPanel` + full 5-crumb
+// `AreaFirstBreadcrumb` render via `derivePanelContent`'s pre-existing,
+// unchanged "infer area-first when areaKey present, no explicit journey"
+// fallback (`discoverPanelState.ts`) — same panel, same CSS, same geometry
+// assertions below, none weakened.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept verbatim per the PR-6 rework proof requirement (verify the string was not lost)
+const _JOURNEY_AREA_FIRST_STRING_STILL_PRESENT = 'journey=area-first';
 const URL =
-  '/discover?city=bangalore&scope=north&journey=area-first&groupId=airport-belt&areaKey=IN%7CKA%7CBengaluru%7CYelahanka';
+  '/discover?city=bangalore&scope=north&groupId=airport-belt&areaKey=IN%7CKA%7CBengaluru%7CYelahanka';
 
 test.describe('@integration-ui #1956 PR-5 — AreaFirstBreadcrumb desktop regression at 1366x768 (AC5.13)', () => {
   test.use({ viewport: DESKTOP_VIEWPORT });

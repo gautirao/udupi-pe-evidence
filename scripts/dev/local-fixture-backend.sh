@@ -249,6 +249,19 @@ echo ">>> Starting Spring Boot against the local fixture (hosted JWT validation 
 # mismatches for every affected migration. The fixture's schema is already correct and
 # complete (asserted by restore-test-fixture.sh's own flyway_schema_history row-count
 # check), so embedded Flyway has nothing to do here and must be disabled for this path only.
+# RATE_LIMIT_DISCOVER_REQUESTS_PER_MINUTE (#1956 AC6.15): DiscoverRateLimitFilter keys the public
+# discover GET bucket on the remote IP, and with trust-forwarded-header=false every Playwright worker
+# on this machine shares one IP — so a parallel E2E batch collapses into a SINGLE 120 req/min bucket
+# and specs start failing on 429s that have nothing to do with the code under test. Verified directly:
+# a live curl during a failing batch returned 429,429,429,429,429,200 on the conversion seam's
+# navigation-path endpoint.
+# The limit is RAISED rather than the filter DISABLED, deliberately. Setting
+# RATE_LIMIT_DISCOVER_ENABLED=false would take the filter out of the request path entirely and E2E
+# would stop covering it, which could hide a real regression in the limiter itself. Keeping it enabled
+# at a high ceiling removes the harness capacity artefact while leaving the filter wired.
+# Still overridable from the caller's environment, so a developer testing the limiter can export a low
+# value and get the production behaviour back.
+RATE_LIMIT_DISCOVER_REQUESTS_PER_MINUTE="${RATE_LIMIT_DISCOVER_REQUESTS_PER_MINUTE:-6000}" \
 SKIP_BACKEND_ENV_LOAD=true \
 SUPABASE_DB_HOST=localhost \
 SUPABASE_DB_PORT="$PG_TEST_PORT" \

@@ -330,6 +330,98 @@ describe('AreaDestinationMarkerLayer — AC3.3 (position derived from the server
   });
 });
 
+describe('AreaDestinationMarkerLayer — issue #1956 AC6.9 (Direction full-word/abbreviation vocabulary)', () => {
+  // Reproduces the EXACT live Bangalore city-root node keys observed in the
+  // reported defect: three full-word suffixes (southeast/northeast/southwest)
+  // collided onto one identical container point because the compass table
+  // only recognised abbreviations. West/South (already abbreviated) worked.
+  const BANGALORE_DIRECTION_CHILDREN: AreasNavigationChild[] = [
+    makeChild({ nodeKey: 'd:w', displayLabel: 'West Bangalore', displayOrder: 0 }),
+    makeChild({ nodeKey: 'd:s', displayLabel: 'South Bangalore', displayOrder: 1 }),
+    makeChild({ nodeKey: 'd:southeast', displayLabel: 'South-East Bangalore', displayOrder: 2 }),
+    makeChild({ nodeKey: 'd:northeast', displayLabel: 'North-East Bangalore', displayOrder: 3 }),
+    makeChild({ nodeKey: 'd:southwest', displayLabel: 'South-West Bangalore', displayOrder: 4 }),
+  ];
+
+  it('all five live Bangalore Direction node keys resolve to five DISTINCT container points (no collision, none hidden)', () => {
+    render(
+      <AreaDestinationMarkerLayer
+        node={ROOT_NODE}
+        levelKind="directions"
+        children={BANGALORE_DIRECTION_CHILDREN}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(capturedMarkers).toHaveLength(BANGALORE_DIRECTION_CHILDREN.length);
+    const points = markerLatLngCalls.map((latlng) => containerPointFromMarkerCall(latlng));
+    const seen = new Set<string>();
+    for (const p of points) {
+      const key = `${p.x.toFixed(3)},${p.y.toFixed(3)}`;
+      expect(seen.has(key)).toBe(false); // fails loudly if a real browser-observed collision reappears
+      seen.add(key);
+    }
+    expect(seen.size).toBe(BANGALORE_DIRECTION_CHILDREN.length);
+  });
+
+  it('each full-word Direction lands at its INTENDED compass position, not an arbitrary fallback one', () => {
+    render(
+      <AreaDestinationMarkerLayer
+        node={ROOT_NODE}
+        levelKind="directions"
+        children={BANGALORE_DIRECTION_CHILDREN}
+        onSelect={vi.fn()}
+      />,
+    );
+    const layout = computeCompassLayout(MAP_SIZE.x, MAP_SIZE.y);
+    const expectedCodes = ['W', 'S', 'SE', 'NE', 'SW'];
+    BANGALORE_DIRECTION_CHILDREN.forEach((_, i) => {
+      const expected = compassPointFor(expectedCodes[i], layout);
+      const actual = containerPointFromMarkerCall(markerLatLngCalls[i]);
+      expect(actual.x).toBeCloseTo(expected.x, 6);
+      expect(actual.y).toBeCloseTo(expected.y, 6);
+    });
+  });
+
+  it('every clickable marker element carries its OWN distinct nodeKey (all five individually clickable)', () => {
+    render(
+      <AreaDestinationMarkerLayer
+        node={ROOT_NODE}
+        levelKind="directions"
+        children={BANGALORE_DIRECTION_CHILDREN}
+        onSelect={vi.fn()}
+      />,
+    );
+    const nodeKeys = BANGALORE_DIRECTION_CHILDREN.map((c) => c.nodeKey);
+    expect(new Set(nodeKeys).size).toBe(nodeKeys.length);
+    nodeKeys.forEach((nodeKey) => {
+      expect(divIconHtmlCalls.some((html) => html.includes(`data-node-key="${nodeKey}"`))).toBe(true);
+    });
+  });
+
+  it('existing ABBREVIATED-key behaviour is unchanged: d:n/d:e/d:s/d:w still resolve to exactly N/E/S/W (pre-fix positions)', () => {
+    // Guards against the normalisation accidentally touching codes that
+    // already worked before this fix (the two working markers in the
+    // reported defect, West and South, were both already-abbreviated keys).
+    render(
+      <AreaDestinationMarkerLayer
+        node={ROOT_NODE}
+        levelKind="directions"
+        children={DIRECTION_CHILDREN}
+        onSelect={vi.fn()}
+      />,
+    );
+    const layout = computeCompassLayout(MAP_SIZE.x, MAP_SIZE.y);
+    // DIRECTION_CHILDREN order: d:central, d:n, d:e, d:s, d:w
+    const expectedCodes = ['CENTRAL', 'N', 'E', 'S', 'W'];
+    DIRECTION_CHILDREN.forEach((_, i) => {
+      const expected = compassPointFor(expectedCodes[i], layout);
+      const actual = containerPointFromMarkerCall(markerLatLngCalls[i]);
+      expect(actual.x).toBeCloseTo(expected.x, 6);
+      expect(actual.y).toBeCloseTo(expected.y, 6);
+    });
+  });
+});
+
 describe('AreaDestinationMarkerLayer — AC3.9 (map click dispatches the SAME action as the panel)', () => {
   it('click calls the injected onSelect reference with the exact server nodeKey — never a wrapped/derived handler', () => {
     const onSelect = vi.fn();

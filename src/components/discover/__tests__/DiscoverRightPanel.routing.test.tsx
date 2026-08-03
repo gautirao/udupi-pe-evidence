@@ -198,7 +198,13 @@ describe('DiscoverRightPanel — state machine routing', () => {
     expect(screen.getByText(/coming soon/i)).toBeInTheDocument();
   });
 
-  it('panelContent="area-groups-landing" renders AreaGroupsLandingPanel with group cards', () => {
+  // Issue #1956 PR-6 (final cutover, Step 3) — AreaGroupsLandingPanel is
+  // deleted. In the live app this switch case is reached only via the
+  // journey-less groupId inference in derivePanelContent (a stray `?groupId=`
+  // with no `journey=`); here the test constructs panelContent directly. It
+  // now renders the pre-existing AreaSelectionPanel placeholder — a safe,
+  // non-blank, non-crashing destination — never the deleted group-cards UI.
+  it('panelContent="area-groups-landing" renders the AreaSelectionPanel fallback, not the deleted group-cards UI', () => {
     const groups = [
       {
         id: 'south-zone',
@@ -214,32 +220,15 @@ describe('DiscoverRightPanel — state machine routing', () => {
         {...baseProps}
         panelContent="area-groups-landing"
         areaGroups={groups}
-        isLoadingAreaGroups={false}
         onSelectGroup={vi.fn()}
         discoverAreas={[]}
         onSelectAreaKey={vi.fn()}
       />,
     );
-    // Issue #1607 — area-groups landing now uses the mock "Choose an area" hero
-    // (neutral form here because no cityLabel is supplied in this routing test).
-    expect(screen.getByText('Choose an area')).toBeInTheDocument();
-    expect(screen.getByTestId('area-group-card-south-zone')).toBeInTheDocument();
-    expect(screen.getByText('South Zone')).toBeInTheDocument();
-  });
-
-  it('panelContent="area-groups-landing" shows loading skeletons when isLoadingAreaGroups=true', () => {
-    renderPanel(
-      <DiscoverRightPanel
-        {...baseProps}
-        panelContent="area-groups-landing"
-        areaGroups={[]}
-        isLoadingAreaGroups={true}
-        onSelectGroup={vi.fn()}
-        discoverAreas={[]}
-        onSelectAreaKey={vi.fn()}
-      />,
-    );
-    expect(screen.getByTestId('area-groups-loading')).toBeInTheDocument();
+    expect(screen.getByText('Explore by neighbourhood')).toBeInTheDocument();
+    expect(screen.getByText(/coming soon/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-card-south-zone')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('area-groups-loading')).not.toBeInTheDocument();
   });
 
   it('panelContent="area-selected" with listings renders AreaSelectedPanel', () => {
@@ -421,9 +410,11 @@ describe('DiscoverRightPanel — groupId deep-link without journey (issue #1154)
     expect(panelContent).toBe('area-groups-landing');
   });
 
-  it('renders AreaGroupsLandingPanel when panelContent=area-groups-landing (groupId deep-link result)', () => {
+  it('renders the AreaSelectionPanel fallback when panelContent=area-groups-landing (groupId deep-link result), not guided-entry', () => {
     // When derivePanelContent returns area-groups-landing for a groupId deep-link,
-    // the panel must render the landing panel (not guided-entry).
+    // the panel must render SOME non-blank area-first surface (not guided-entry).
+    // Issue #1956 PR-6 (final cutover, Step 3) — AreaGroupsLandingPanel is
+    // deleted; the safe fallback is the pre-existing AreaSelectionPanel.
     renderPanel(
       <DiscoverRightPanel
         areas={[]}
@@ -431,23 +422,26 @@ describe('DiscoverRightPanel — groupId deep-link without journey (issue #1154)
         onSelectJourney={vi.fn()}
         panelContent="area-groups-landing"
         areaGroups={[]}
-        isLoadingAreaGroups={false}
         onSelectGroup={vi.fn()}
         discoverAreas={[]}
         onSelectAreaKey={vi.fn()}
       />,
     );
-    // Issue #1607 — area-groups landing now uses the mock "Choose an area" hero
-    // (neutral form here because no cityLabel is supplied in this routing test).
-    expect(screen.getByText('Choose an area')).toBeInTheDocument();
+    expect(screen.getByText('Explore by neighbourhood')).toBeInTheDocument();
     // Guided-entry panel must NOT appear — wrong panel
     expect(screen.queryByTestId('guided-entry-panel')).not.toBeInTheDocument();
   });
 });
 
-// ─── Issue #1483: area-first + groupId (no areaKey) → Level-2 area rows ─────
+// ─── Issue #1956 PR-6 (final cutover, Step 3): the Issue #1483 Level-2 area ─
+// list (AreaGroupsLandingPanel's groupId-resolved drill-down) is deleted along
+// with the panel itself. panelContent='area-groups-landing' with a groupId
+// set is reached in the live app via the journey-less groupId inference in
+// derivePanelContent (a stray `?groupId=` with no `journey=`); this test
+// constructs panelContent directly. Asserted here to render the safe
+// AreaSelectionPanel fallback, never the old Level-2 rows/group cards.
 
-describe('DiscoverRightPanel — area-first + resolved groupId → Level-2 area list (Issue #1483)', () => {
+describe('DiscoverRightPanel — area-first + groupId (Issue #1483, retired Level-2 UI)', () => {
   const resolvedGroup = {
     id: 'south-udupi',
     name: 'South Udupi',
@@ -475,102 +469,40 @@ describe('DiscoverRightPanel — area-first + resolved groupId → Level-2 area 
     },
   ];
 
-  it('AC1 renders Level-2 area rows (not group cards) when groupId resolves to a loaded group', () => {
+  it('a resolved groupId no longer renders Level-2 area rows or group cards — renders the AreaSelectionPanel fallback', () => {
     renderPanel(
       <DiscoverRightPanel
         {...baseProps}
         panelContent="area-groups-landing"
         areaGroups={[resolvedGroup]}
-        isLoadingAreaGroups={false}
         onSelectGroup={vi.fn()}
         groupId="south-udupi"
         discoverAreas={discoverAreas}
         onSelectAreaKey={vi.fn()}
-        onClearGroup={vi.fn()}
       />,
     );
-    // Level-2 container
-    expect(screen.getByTestId('area-group-level2')).toBeInTheDocument();
-    // Area rows for the two group members
-    expect(screen.getByTestId('browse-all-area-IN|KA|Udupi|Manipal')).toBeInTheDocument();
-    expect(screen.getByTestId('browse-all-area-IN|KA|Udupi|UdupiCity')).toBeInTheDocument();
-    // Group card must NOT appear
-    expect(screen.queryByTestId('area-group-card-south-udupi')).not.toBeInTheDocument();
-  });
-
-  it('AC5 "up to all groups" button calls onClearGroup', async () => {
-    const onClearGroup = vi.fn();
-    renderPanel(
-      <DiscoverRightPanel
-        {...baseProps}
-        panelContent="area-groups-landing"
-        areaGroups={[resolvedGroup]}
-        isLoadingAreaGroups={false}
-        onSelectGroup={vi.fn()}
-        groupId="south-udupi"
-        discoverAreas={discoverAreas}
-        onSelectAreaKey={vi.fn()}
-        onClearGroup={onClearGroup}
-      />,
-    );
-    await userEvent.click(screen.getByTestId('area-group-back-to-all'));
-    expect(onClearGroup).toHaveBeenCalledTimes(1);
-  });
-
-  it('AC3 area row click calls onSelectAreaKey with canonical areaKey', async () => {
-    const onSelectAreaKey = vi.fn();
-    renderPanel(
-      <DiscoverRightPanel
-        {...baseProps}
-        panelContent="area-groups-landing"
-        areaGroups={[resolvedGroup]}
-        isLoadingAreaGroups={false}
-        onSelectGroup={vi.fn()}
-        groupId="south-udupi"
-        discoverAreas={discoverAreas}
-        onSelectAreaKey={onSelectAreaKey}
-        onClearGroup={vi.fn()}
-      />,
-    );
-    await userEvent.click(screen.getByTestId('browse-all-area-IN|KA|Udupi|Manipal'));
-    expect(onSelectAreaKey).toHaveBeenCalledWith('IN|KA|Udupi|Manipal');
-  });
-
-  it('AC2 cold-load: isLoadingAreaGroups=true shows skeletons, no Level-2 area rows', () => {
-    renderPanel(
-      <DiscoverRightPanel
-        {...baseProps}
-        panelContent="area-groups-landing"
-        areaGroups={[]}
-        isLoadingAreaGroups={true}
-        onSelectGroup={vi.fn()}
-        groupId="south-udupi"
-        discoverAreas={discoverAreas}
-        onSelectAreaKey={vi.fn()}
-        onClearGroup={vi.fn()}
-      />,
-    );
-    expect(screen.getByTestId('area-groups-loading')).toBeInTheDocument();
+    expect(screen.getByText('Explore by neighbourhood')).toBeInTheDocument();
     expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('browse-all-area-IN|KA|Udupi|Manipal')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-card-south-udupi')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('area-groups-loading')).not.toBeInTheDocument();
   });
 
-  it('AC7 invalid groupId falls back to group cards + notice', () => {
+  it('an invalid/unresolved groupId also renders the same safe fallback, never a blank panel', () => {
     renderPanel(
       <DiscoverRightPanel
         {...baseProps}
         panelContent="area-groups-landing"
         areaGroups={[resolvedGroup]}
-        isLoadingAreaGroups={false}
         onSelectGroup={vi.fn()}
         groupId="no-such-group"
         discoverAreas={discoverAreas}
         onSelectAreaKey={vi.fn()}
-        onClearGroup={vi.fn()}
       />,
     );
-    expect(screen.getByTestId('area-group-invalid-message')).toBeInTheDocument();
+    expect(screen.getByText('Explore by neighbourhood')).toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
     expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
-    expect(screen.getByTestId('area-group-card-south-udupi')).toBeInTheDocument();
   });
 
   it('regression: school-first journey unchanged — school-browse still renders correctly', () => {
@@ -1050,7 +982,6 @@ describe('DiscoverRightPanel — school-first + groupId → school-group-areas (
         isLoadingAreaGroupsForSchool={false}
         discoverAreas={schoolDiscoverAreas}
         onSelectAreaKey={vi.fn()}
-        onClearGroup={vi.fn()}
       />,
     );
     expect(screen.getByTestId('school-group-areas-list')).toBeInTheDocument();
@@ -1072,20 +1003,20 @@ describe('DiscoverRightPanel — school-first + groupId → school-group-areas (
         isLoadingAreaGroupsForSchool={false}
         discoverAreas={schoolDiscoverAreas}
         onSelectAreaKey={onSelectAreaKey}
-        onClearGroup={vi.fn()}
       />,
     );
     await userEvent.click(screen.getByTestId('school-group-area-row-IN|KA|Udupi|Manipal'));
     expect(onSelectAreaKey).toHaveBeenCalledWith('IN|KA|Udupi|Manipal');
   });
 
-  it('AC5 Back / Issue #1864: Back button calls onBack (the schoolFirstOnBack command), not onClearGroup', async () => {
+  it('AC5 Back / Issue #1864: Back button calls onBack (the schoolFirstOnBack command)', async () => {
     // Issue #1864 — SchoolGroupAreasPanel's Back must go through the journey-transition
     // hook's schoolFirstOnBack command (threaded in via `onBack`) so cityRestoreTick
-    // increments, same as the other school-first Back ladder levels. The shared
-    // onClearGroup prop (bare urlActions.selectGroup(null)) must NOT be called here.
+    // increments, same as the other school-first Back ladder levels. (The bare
+    // urlActions.selectGroup(null) `onClearGroup` prop this used to be contrasted
+    // against was removed from DiscoverRightPanel in Issue #1956 PR-6 — it fed
+    // only the now-deleted AreaGroupsLandingPanel.)
     const onBack = vi.fn();
-    const onClearGroup = vi.fn();
     renderPanel(
       <DiscoverRightPanel
         {...baseProps}
@@ -1097,12 +1028,10 @@ describe('DiscoverRightPanel — school-first + groupId → school-group-areas (
         discoverAreas={schoolDiscoverAreas}
         onSelectAreaKey={vi.fn()}
         onBack={onBack}
-        onClearGroup={onClearGroup}
       />,
     );
     await userEvent.click(screen.getByTestId('school-group-areas-back-btn'));
     expect(onBack).toHaveBeenCalledTimes(1);
-    expect(onClearGroup).not.toHaveBeenCalled();
   });
 
   it('AC8: invalid groupId (not in areaGroups) falls back to school-browse gracefully', () => {
@@ -1116,7 +1045,6 @@ describe('DiscoverRightPanel — school-first + groupId → school-group-areas (
         isLoadingAreaGroupsForSchool={false}
         discoverAreas={schoolDiscoverAreas}
         onSelectAreaKey={vi.fn()}
-        onClearGroup={vi.fn()}
       />,
     );
     // Falls back to school-browse — search input must be visible
@@ -1136,7 +1064,6 @@ describe('DiscoverRightPanel — school-first + groupId → school-group-areas (
         isLoadingAreaGroupsForSchool={true}
         discoverAreas={[]}
         onSelectAreaKey={vi.fn()}
-        onClearGroup={vi.fn()}
       />,
     );
     expect(screen.getByTestId('school-group-areas-loading-fallback')).toBeInTheDocument();

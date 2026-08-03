@@ -50,7 +50,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { assertReachable } from '../support/reachability';
 
 const CITY = 'bangalore';
-const BASE = `city=${CITY}&journey=area-first&areasPreview=1`;
+const BASE = `city=${CITY}&journey=area-first`;
 const AREA_RR_NAGAR = 'a:IN|KA|Bengaluru|RR Nagar';
 const RR_NAGAR_LISTING_ID = 'f1956005-0000-0000-0000-000000000001';
 const MOBILE_VIEWPORT = { width: 390, height: 844 };

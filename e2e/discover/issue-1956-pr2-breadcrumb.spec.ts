@@ -26,7 +26,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const CITY = 'bangalore';
-const BASE = `city=${CITY}&journey=area-first&areasPreview=1`;
+const BASE = `city=${CITY}&journey=area-first`;
 
 const D_E = 'd:e';
 const CLUSTER_DOMLUR = 'c:e:in-ka-bengaluru-c-v-raman-nagar-in-ka-bengaluru-domlur-layout';

@@ -79,10 +79,6 @@ import {
   formatDiscoverBadgeCopy,
 } from '@/features/discover/presentation/discoverBadge';
 import { useAreasNavigationJourney } from '@/features/discover/navigation/useAreasNavigationJourney';
-import {
-  isAreasPreviewCapabilityEnabled,
-  isAreasPreviewJourneyActive,
-} from '@/features/discover/preview/areasPreviewCapability';
 import { deriveAreaPointFromNode } from '@/features/discover/navigation/nodeAreaPoint';
 import { isMarkerPopoverEligible as computeMarkerPopoverEligible } from '@/features/discover/navigation/markerPopoverEligibility';
 import {
@@ -132,18 +128,25 @@ export default function MapDiscovery() {
   // derivePanelContent by construction, so this is behaviour-preserving.
   const panelContent = computeDiscoverLayer(toLayerInput({ ...nav, viewport } satisfies DiscoverUrlState));
 
-  // Issue #1956 PR 2 (Slice 3) — the ONE `useAreasNavigationJourney` instance
-  // for this view. Called UNCONDITIONALLY (rules of hooks); `enabled` gates
-  // its internal fetches so it is a pure no-op (node=null) whenever the dual
-  // preview gate is closed or the user is not in the area-first journey. The
-  // resolved `node`/`children`/`selectNode` are threaded to
-  // DiscoverRightPanelContainer AND to useDiscoverCameraOrchestration below —
-  // ONE reference, never two independently-fetched copies (T3/AC3.4/AC3.9).
-  const areasPreviewJourneyActive = isAreasPreviewJourneyActive({
-    capabilityEnabled: isAreasPreviewCapabilityEnabled(),
-    areasPreview: nav.areasPreview,
-  });
-  const showAreasNavigationJourney = areasPreviewJourneyActive && nav.journey === 'area-first';
+  // Issue #1956 PR 6 (final cutover, RULED A1 MINIMAL, restored by the
+  // [rulings.oq_a_v2] rework after the superseded Option A guard) — the ONE
+  // `useAreasNavigationJourney` instance for this view. Called
+  // UNCONDITIONALLY (rules of hooks); `enabled` gates its internal fetches so
+  // it is a pure no-op (node=null) whenever the user is not in the
+  // area-first journey. The preview-capability + areasPreview dual gate is
+  // removed at cutover — canonical is now the default for
+  // journey==='area-first', unconditionally, with no legacy-routing
+  // exception surviving here (see `legacyAreaContextGuard.ts`'s doc —
+  // `hasLegacyAreaContext` is now a click-time trigger consulted only in
+  // `DiscoverRightPanelContainer.tsx`'s `handleSelectJourney`, never a
+  // rendering gate). The resolved `node`/`children`/`selectNode` are threaded
+  // to DiscoverRightPanelContainer AND to useDiscoverCameraOrchestration
+  // below — ONE reference, never two independently-fetched copies
+  // (T3/AC3.4/AC3.9). This is one of THREE identical gate sites (this file,
+  // DiscoverRightPanelContainer.tsx, DiscoverMapCanvas.tsx) — see
+  // DiscoverMapCanvas.tsx's own copy of this comment for why the
+  // triplication is deliberate.
+  const showAreasNavigationJourney = nav.journey === 'area-first';
   // Issue #1956 PR 2 (Slice 3, pass 4, AC3.9) — the ONE ephemeral hover/focus
   // node_key, lifted here for the same reason `areasNavigationJourney` is:
   // threaded unchanged to BOTH the map's AreaDestinationMarkerLayer and the

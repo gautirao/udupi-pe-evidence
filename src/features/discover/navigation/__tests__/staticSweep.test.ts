@@ -10,10 +10,15 @@
  * ── SCOPE ──
  * The sweep targets the modules that DID NOT EXIST before #1956 PR 1. It
  * deliberately does NOT assert anything about the legacy Areas code path
- * (`AreaGroup*Panel`, `DiscoverRightPanel`'s legacy branches,
- * `macroRegionResolver.ts`, `groupRegionLabel.ts`). Those files are KEPT in PR 1
- * by design and move in PR 6; an assertion that any of them is absent would be
+ * (`DiscoverRightPanel`'s legacy branches, `macroRegionResolver.ts`). Those
+ * files are KEPT by design; an assertion that any of them is absent would be
  * wrong here, and none is made.
+ *
+ * UPDATE (Issue #1956 PR 6, final cutover, Step 3) — `AreaGroupsLandingPanel`,
+ * `AreaGroupResultsPanel`, and `AreaGroupSelectedPanel` are no longer "kept by
+ * design": they are DELETED at cutover. See the "the legacy Areas panels are
+ * permanently deleted" describe block below (AC6.3) for the permanence guard
+ * that replaces the old "kept" framing for exactly these three files.
  *
  * ── DROPPED FROM THE SALVAGE (each with its reason) ──
  *  • Every entry in the salvaged module list for a file PR 1 does not have:
@@ -49,7 +54,12 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NAV_DIR = path.join(HERE, '..');
-const PREVIEW_DIR = path.join(HERE, '..', '..', 'preview');
+// Issue #1956 PR 6 Step 1 (9660e549) deleted src/features/discover/preview/
+// (areasPreviewCapability.ts + its test) outright — the preview-capability +
+// areasPreview dual gate is fully retired at cutover, not merely unmounted.
+// There is nothing left under that directory to sweep, and `fs.readdirSync`
+// on a directory that no longer exists throws ENOENT, so the preview sweep
+// target is removed rather than pointed at a path that can't be scanned.
 const URL_DOMAIN_DIR = path.join(HERE, '..', '..', 'state', 'url');
 const HOOKS_DIR = path.join(HERE, '..', '..', '..', '..', 'hooks');
 const SRC_ROOT = path.resolve(HERE, '..', '..', '..', '..');
@@ -122,7 +132,6 @@ function listSweptModules(dir: string, label: string): { file: string; source: s
 
 const PURE_NAV_MODULES: { file: string; source: string }[] = [
   ...listSweptModules(NAV_DIR, 'navigation'),
-  ...listSweptModules(PREVIEW_DIR, 'preview'),
 ];
 
 it('the swept module list is discovered from disk and non-vacuous', () => {
@@ -146,7 +155,6 @@ it('the sweep actually covers the modules PR 1 and PR 2 introduced', () => {
     'navigation/areasDestination.ts',
     'navigation/visibleMemberSet.ts',
     'navigation/normalize.ts',
-    'preview/areasPreviewCapability.ts',
   ]) {
     expect(files, `${required} fell out of the sweep`).toContain(required);
   }
@@ -154,9 +162,10 @@ it('the sweep actually covers the modules PR 1 and PR 2 introduced', () => {
 
 it('every exemption names a file that really exists (exemptions cannot rot)', () => {
   for (const [file, reason] of Object.entries(SWEEP_EXEMPTIONS)) {
-    const [dir, base] = [file.split('/')[0], path.basename(file)];
-    const root = dir === 'navigation' ? NAV_DIR : PREVIEW_DIR;
-    expect(fs.existsSync(path.join(root, base)), `exempted ${file} no longer exists`).toBe(true);
+    // Issue #1956 PR 6 — every exemption key sweeps `navigation/`; the
+    // `preview/` sweep target was removed above (its directory is deleted).
+    const base = path.basename(file);
+    expect(fs.existsSync(path.join(NAV_DIR, base)), `exempted ${file} no longer exists`).toBe(true);
     expect(reason.length, `exemption for ${file} has no stated reason`).toBeGreaterThan(20);
   }
 });
@@ -259,25 +268,25 @@ describe('static sweep — depth-genericity (the one level switch)', () => {
   });
 });
 
-describe('static sweep — single owner of the Areas preview capability', () => {
+describe('static sweep — the Areas preview capability is fully retired (PR 6 cutover)', () => {
   const productionFiles = walkTypeScript(SRC_ROOT).filter((f) => !/\.test\.tsx?$/.test(f));
 
   it('the file walk found a realistic number of modules (guards against a vacuous sweep)', () => {
     expect(productionFiles.length).toBeGreaterThan(100);
   });
 
-  it('only areasPreviewCapability.ts reads VITE_DISCOVER_AREAS_PREVIEW', () => {
+  it('no production module reads VITE_DISCOVER_AREAS_PREVIEW — the deployment capability read was deleted at cutover', () => {
     const readers = productionFiles
       .filter((file) => read(file).includes('VITE_DISCOVER_AREAS_PREVIEW'))
       .map((file) => path.relative(SRC_ROOT, file));
-    expect(readers).toEqual(['features/discover/preview/areasPreviewCapability.ts']);
+    expect(readers).toEqual([]);
   });
 
-  it('only the navigation URL domain reads the areasPreview param', () => {
+  it('no production module reads the areasPreview param — the URL flag was deleted at cutover', () => {
     const readers = productionFiles
       .filter((file) => /(get|has)\(\s*['"]areasPreview['"]\s*\)/.test(read(file)))
       .map((file) => path.relative(SRC_ROOT, file));
-    expect(readers).toEqual(['features/discover/state/url/navigation.ts']);
+    expect(readers).toEqual([]);
   });
 });
 
@@ -406,6 +415,40 @@ describe('static sweep — the frontend NEVER constructs a node key', () => {
     for (const pattern of CONSTRUCTION_PATTERNS) {
       expect(source).not.toMatch(pattern);
     }
+  });
+});
+
+describe('static sweep — the legacy Areas panels are permanently deleted (Issue #1956 PR 6, AC6.3)', () => {
+  // Issue #1956 PR 6 (final cutover, Step 3) — these three panels (and their
+  // dedicated test files) are deleted outright, not merely unmounted. This
+  // guard exists so they cannot be silently resurrected — e.g. by a bad
+  // revert, a stray cherry-pick, or a future contributor re-adding the file
+  // without realising it was a deliberate retirement — without a red test
+  // naming exactly which file came back.
+  const DELETED_PANEL_FILES = [
+    'src/components/discover/panels/AreaGroupsLandingPanel.tsx',
+    'src/components/discover/panels/AreaGroupResultsPanel.tsx',
+    'src/components/discover/panels/AreaGroupSelectedPanel.tsx',
+    'src/components/discover/panels/__tests__/AreaGroupsLandingPanel.test.tsx',
+    'src/components/discover/panels/__tests__/AreaGroupResultsPanel.test.tsx',
+    'src/components/discover/panels/__tests__/AreaGroupSelectedPanel.test.tsx',
+    'src/components/discover/panels/__tests__/AreaGroupSelectedPanel.shownOfTotal.test.tsx',
+    'src/components/discover/__tests__/groupedCardAreaNames.test.tsx',
+  ];
+
+  it.each(DELETED_PANEL_FILES)('%s does not exist on disk', (relativePath) => {
+    expect(fs.existsSync(path.join(SRC_ROOT, relativePath))).toBe(false);
+  });
+
+  it('no production module imports AreaGroupsLandingPanel, AreaGroupResultsPanel, or AreaGroupSelectedPanel', () => {
+    const offenders: string[] = [];
+    for (const file of walkTypeScript(SRC_ROOT)) {
+      if (/\.test\.tsx?$/.test(file)) continue;
+      if (/\bAreaGroup(sLanding|Results|Selected)Panel\b/.test(read(file))) {
+        offenders.push(path.relative(SRC_ROOT, file));
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });
 

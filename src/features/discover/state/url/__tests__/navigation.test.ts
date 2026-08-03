@@ -1,30 +1,21 @@
 /**
- * Issue #1956 PR 1 (FE-1) — the `node` / `areasPreview` URL capability domain.
- *
- * Exercised through the useDiscoverUrlState facade (not the domain hook in
- * isolation) because the facade is the contract every caller actually sees, and
- * because AC1.3's "an ordinary interaction never writes areasPreview" is a
- * statement about the OTHER domains' writers, which only the facade composes.
+ * Issue #1956 PR 1 (FE-1) — the `node` URL capability domain. Issue #1956 PR 6
+ * (final cutover, RULED A1 MINIMAL) removed the `areasPreview` deployment-
+ * preview opt-in flag entirely — the canonical Areas journey is now the
+ * default for `journey==='area-first'`, so the describe blocks that exercised
+ * `areasPreview`'s presence-flag read, its survival-across-navigation
+ * behaviour, and the "no writer exists" static sweep are removed with it.
  *
  * Covers:
  *  - `node` read + whitespace/empty normalisation (AC1.4 parse discipline)
- *  - `areasPreview` presence-flag read
- *  - AC1.3 survival across preview navigation
- *  - AC1.3 "never written by an ordinary interaction"
- *  - AC1.3 "never appears in a canonical/share URL" — enforced as the absence of
- *    any writer anywhere in src/ (static sweep), which is the strongest form
- *    available given no writer exists at all in PR 1
  *  - AC1.4 — no Areas-hierarchy identity is derived from groupId/region/areaKey/
  *    scope: `node` is read from `node` alone
  */
 import { describe, it, expect } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 
 function wrapper(initialUrl: string) {
@@ -88,107 +79,5 @@ describe('navigation URL domain — `node` read', () => {
     expect(state.areaKey).toBe('IN|KA|Bengaluru|Whitefield');
     // ...but none of them is hierarchy identity.
     expect(state.node).toBeNull();
-  });
-});
-
-describe('navigation URL domain — `areasPreview` read (AC1.3)', () => {
-  it('is true for areasPreview=1', () => {
-    const { result } = renderFacade('/discover?city=bangalore&areasPreview=1');
-    expect(result.current.urlState[0].areasPreview).toBe(true);
-  });
-
-  it('is undefined when absent', () => {
-    const { result } = renderFacade('/discover?city=bangalore');
-    expect(result.current.urlState[0].areasPreview).toBeUndefined();
-  });
-
-  it.each(['0', 'true', '', 'yes'])('is undefined for areasPreview=%j', (raw) => {
-    const { result } = renderFacade(`/discover?city=bangalore&areasPreview=${raw}`);
-    expect(result.current.urlState[0].areasPreview).toBeUndefined();
-  });
-});
-
-describe('AC1.3 — areasPreview survives navigation, and is never written', () => {
-  it('survives an area selection (preview navigation)', () => {
-    const { result } = renderFacade('/discover?city=bangalore&areasPreview=1&journey=area-first');
-    act(() => {
-      result.current.urlState[1].selectArea('IN|KA|Bengaluru|Whitefield');
-    });
-    expect(result.current.location.search).toContain('areasPreview=1');
-    expect(result.current.urlState[0].areasPreview).toBe(true);
-  });
-
-  it('survives a journey switch', () => {
-    const { result } = renderFacade('/discover?city=bangalore&areasPreview=1');
-    act(() => {
-      result.current.urlState[1].setJourney('area-first');
-    });
-    expect(result.current.urlState[0].areasPreview).toBe(true);
-  });
-
-  it('survives a group selection', () => {
-    const { result } = renderFacade('/discover?city=bangalore&areasPreview=1&journey=area-first');
-    act(() => {
-      result.current.urlState[1].selectGroup('whitefield-belt');
-    });
-    expect(result.current.urlState[0].areasPreview).toBe(true);
-  });
-
-  it.each([
-    ['selectArea', (a: ReturnType<typeof useDiscoverUrlState>[1]) => a.selectArea('IN|KA|B|W')],
-    ['setJourney', (a: ReturnType<typeof useDiscoverUrlState>[1]) => a.setJourney('area-first')],
-    ['selectGroup', (a: ReturnType<typeof useDiscoverUrlState>[1]) => a.selectGroup('g1')],
-    ['deselectArea', (a: ReturnType<typeof useDiscoverUrlState>[1]) => a.deselectArea()],
-    ['startOver', (a: ReturnType<typeof useDiscoverUrlState>[1]) => a.startOver()],
-    ['setIntent', (a: ReturnType<typeof useDiscoverUrlState>[1]) => a.setIntent('rent')],
-  ])('an ordinary interaction (%s) never introduces areasPreview', (_name, invoke) => {
-    const { result } = renderFacade('/discover?city=bangalore&journey=area-first&areaKey=IN%7CKA%7CB%7CW');
-    act(() => {
-      invoke(result.current.urlState[1]);
-    });
-    expect(result.current.location.search).not.toContain('areasPreview');
-    expect(result.current.urlState[0].areasPreview).toBeUndefined();
-  });
-
-  it('startOver drops areasPreview — Start Over is a full reset, not preview navigation', () => {
-    const { result } = renderFacade('/discover?city=bangalore&areasPreview=1&journey=area-first');
-    act(() => {
-      result.current.urlState[1].startOver();
-    });
-    expect(result.current.location.search).not.toContain('areasPreview');
-  });
-});
-
-describe('AC1.3 — no writer for areasPreview exists anywhere (canonical/share URLs omit it)', () => {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const srcRoot = path.resolve(here, '../../../../../..', 'src');
-
-  function walk(dir: string, acc: string[] = []): string[] {
-    for (const entry of readdirSync(dir)) {
-      const full = path.join(dir, entry);
-      if (statSync(full).isDirectory()) {
-        walk(full, acc);
-      } else if (/\.(ts|tsx)$/.test(entry)) {
-        acc.push(full);
-      }
-    }
-    return acc;
-  }
-
-  it('no production module sets the areasPreview param', () => {
-    const offenders = walk(srcRoot)
-      .filter((file) => !/\.test\.tsx?$/.test(file))
-      .filter((file) => {
-        const source = readFileSync(file, 'utf8');
-        // Mutation sites only — doc comments naming the param are fine.
-        return (
-          source.includes(`set('areasPreview'`) ||
-          source.includes(`set("areasPreview"`) ||
-          source.includes(`append('areasPreview'`) ||
-          source.includes(`append("areasPreview"`)
-        );
-      });
-
-    expect(offenders).toEqual([]);
   });
 });

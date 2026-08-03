@@ -44,7 +44,7 @@
 import { test, expect } from '@playwright/test';
 
 const CITY = 'bangalore';
-const BASE = `city=${CITY}&journey=area-first&areasPreview=1`;
+const BASE = `city=${CITY}&journey=area-first`;
 const AREA_BASAVESHWARA = 'a:IN|KA|Bengaluru|Basaveshwara Nagar';
 
 /** See issue-1956-pr4-listing-peek-camera-restore.spec.ts's JSDoc for the

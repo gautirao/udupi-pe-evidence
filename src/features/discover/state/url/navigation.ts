@@ -1,9 +1,11 @@
 /**
- * Navigation URL domain — Issue #1956 PR 1 (FE-1) read side, PR 2 write side.
+ * Navigation URL domain — Issue #1956 PR 1 (FE-1) read side, PR 2 write side,
+ * PR 6 final cutover.
  *
- * Owns the two params that carry the canonical Areas hierarchy preview:
- *   • `node`         — the Areas hierarchy identity cursor (AC1.4)
- *   • `areasPreview` — the deployment-preview opt-in flag (AC1.3)
+ * Owns the `node` param that carries the canonical Areas hierarchy cursor
+ * (AC1.4). PR 6 removed the `areasPreview` deployment-preview opt-in flag —
+ * the canonical Areas journey is now the default for `journey==='area-first'`
+ * with no URL opt-in required.
  *
  * The 8th capability domain, wired into the useDiscoverUrlState facade alongside
  * viewport/city/filters/school/area/agricultural/compatibility. See
@@ -18,10 +20,6 @@
  *   • `clearNode`         — leave the hierarchy cursor entirely (PUSH)
  *   • `enterAreasJourney` — ATOMIC journey+node entry (ONE PUSH, see below)
  *   • `buildNodeHref`     — pure data, writes nothing (see the differential test)
- *
- * AC1.3 IS UNCHANGED: `areasPreview` still has NO writer anywhere in the app, in
- * this module or any other. PR 1's static sweep asserting that is untouched and
- * must stay green.
  *
  * ── ONE `setUrlParams` CALL PER DOMAIN ACTION (the double-push rule) ──
  * `setUrlParams` is react-router's `setSearchParams`, which NAVIGATES on each
@@ -51,7 +49,7 @@ import { useCallback } from 'react';
 import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type { DiscoverUrlActions, DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 
-type NavigationState = Pick<DiscoverUrlState, 'node' | 'areasPreview' | 'rawNodeParam'>;
+type NavigationState = Pick<DiscoverUrlState, 'node' | 'rawNodeParam'>;
 type NavigationActions = Pick<
   DiscoverUrlActions,
   'goToNode' | 'goToAncestorNode' | 'clearNode' | 'enterAreasJourney' | 'buildNodeHref'
@@ -305,11 +303,6 @@ export function useNavigationUrlDomain(
   const node = readNodeParam(urlParams);
   const rawNodeParam = readRawTrimmedNodeParam(urlParams);
 
-  // Presence-flag read style, identical to schoolPicking (school.ts) and
-  // groupResults (area.ts): exactly `=1` enables, anything else is undefined.
-  // NO WRITER EXISTS FOR THIS PARAM, here or anywhere — AC1.3.
-  const areasPreview = urlParams.get('areasPreview') === '1' ? true : undefined;
-
   /**
    * The shared write path for goToNode / goToAncestorNode / clearNode.
    *
@@ -371,6 +364,14 @@ export function useNavigationUrlDomain(
    *
    * A non-writable `nodeKey` still enters the journey (journey is set) but leaves
    * the cursor absent, matching `applyNodeDelta`'s never-write-a-bad-key rule.
+   *
+   * Issue #1956 PR 6 rework ([rulings.oq_a_v2]) — ALSO clears the legacy
+   * `groupId`/`areaKey` params in this SAME write. The canonical Areas
+   * journey never reads those params, and the one production caller (the
+   * JourneySwitcher conversion seam, `DiscoverRightPanelContainer.tsx`'s
+   * `handleSelectJourney`) requires the legacy context to disappear in the
+   * IDENTICAL transition that enters the resolved node — never a second,
+   * separate clear.
    */
   const enterAreasJourney = useCallback(
     (nodeKey: string | null) => {
@@ -379,6 +380,8 @@ export function useNavigationUrlDomain(
         (prev) => {
           const next = applyNodeDelta(prev, nodeKey);
           next.set('journey', 'area-first');
+          next.delete('groupId');
+          next.delete('areaKey');
           return next;
         },
         { replace: false }, // PUSH — entering a journey is a deliberate destination
@@ -399,7 +402,7 @@ export function useNavigationUrlDomain(
   );
 
   return {
-    state: { node, areasPreview, rawNodeParam },
+    state: { node, rawNodeParam },
     actions: { goToNode, goToAncestorNode, clearNode, enterAreasJourney, buildNodeHref },
   };
 }

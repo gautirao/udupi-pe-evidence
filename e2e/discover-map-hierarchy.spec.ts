@@ -18,6 +18,13 @@
  * where it applies (journey=area-first, area-school-combined); see that file's
  * header comment for the ground-truth justification. Re-run it alongside this file.
  *
+ * #1956 PR-6 (C10 cleanup): the single Areas-legacy test that used to live here
+ * ("area-first group landing renders the same group bubbles…") was removed —
+ * its subject (legacy AreaGroup* panels / groupId= drill-down) is deleted.
+ * This #1738 pointer note is unrelated to that removal and is preserved as-is;
+ * MH-1/MH-2/MH-2b/MH-3, the agri corridor regression, and the 4-level lockstep
+ * test below are the surviving non-Areas coverage this file exists for.
+ *
  * Backend-free: stubs all API calls via page.route (established repo pattern).
  *
  * Run:
@@ -229,23 +236,6 @@ test.describe('Issue #1745 Batch B — map hierarchy (macro-region bubbles / reg
     await expect(page.locator(AREA_MARKER, { hasText: 'Coastal Belt' })).toBeVisible();
 
     await page.screenshot({ path: SS('mh3-after-back-macro-bubbles'), fullPage: false });
-  });
-
-  test('journey regression — area-first group landing renders the same group bubbles, then drills into a real member area on click', async ({ page }) => {
-    await stubResidentialRoutes(page);
-    await page.goto(landingUrl({ journey: 'area-first' }));
-    await page.waitForLoadState('domcontentloaded');
-
-    await expect(page.locator(AREA_MARKER)).toHaveCount(2, { timeout: 15_000 });
-
-    const bubble = page.locator(AREA_MARKER, { hasText: 'South Udupi' });
-    await expect(bubble).toBeVisible();
-    await bubble.click({ force: true });
-
-    // area-first group selection uses groupId (selectGroup), never scope=.
-    await expect(page).toHaveURL(/[?&]groupId=south-udupi\b/, { timeout: 10_000 });
-    await expect(page).not.toHaveURL(/[?&]scope=/);
-    await expect(page.locator(AREA_MARKER)).toHaveCount(3, { timeout: 10_000 });
   });
 
   test('journey regression — agri corridor landing shows corridor bubbles only, no residential region/area pills', async ({ page }) => {

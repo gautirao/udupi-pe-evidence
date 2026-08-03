@@ -720,7 +720,13 @@ describe('DiscoverRightPanel — cumulative distance hint (Issue #1456)', () => 
 // ─── Issue #1745 — 4-level residential Discover hierarchy ──────────────────────
 
 describe('DiscoverRightPanel — 4-level residential hierarchy (Issue #1745)', () => {
-  it('forwards scope and onClearScope to AreaGroupsLandingPanel', () => {
+  // Issue #1956 PR-6 (final cutover, Step 3) — AreaGroupsLandingPanel (and its
+  // scope-filter-banner Level-1 UI this test used to exercise) is deleted.
+  // 'area-groups-landing' now renders the safe AreaSelectionPanel fallback —
+  // see DiscoverRightPanel.tsx's renderPanel switch. `scope`/`onClearScope`
+  // remain valid props (still consumed by the 'area-selected' case) but no
+  // longer drive any Level-1 scope-filtering UI for this panelContent value.
+  it('renders the AreaSelectionPanel fallback for area-groups-landing, not the deleted scope-filter UI', () => {
     const onClearScope = vi.fn();
     renderPanel(
       <DiscoverRightPanel
@@ -728,18 +734,6 @@ describe('DiscoverRightPanel — 4-level residential hierarchy (Issue #1745)', (
         panelContent="area-groups-landing"
         areas={[]}
         areaGroups={[
-          // Issue #1882 (Track A PR2 Slice S2c) — scope filtering now
-          // compares the backend-derived region_key with strict equality,
-          // so these fixtures carry region_key explicitly.
-          //
-          // Issue #1910 (PR2 review fix, round 3, code-review follow-up) —
-          // renamed from bare 'north'/'south' to 'north-belt'/'south-belt':
-          // round 2 of this review added canonical region-key ALIASES
-          // (resolveScope.ts) that classify the exact words 'north'/'south'
-          // as a REGION scope, which this round's `isRegionScopeUnresolved`
-          // guard now correctly suppresses (this test never wires
-          // regionScopedGroups, simulating the pre-#1910 legacy Resolution-A
-          // filter path this test is actually about).
           {
             id: 'north-zone',
             name: 'North Zone',
@@ -768,9 +762,9 @@ describe('DiscoverRightPanel — 4-level residential hierarchy (Issue #1745)', (
       />,
     );
 
-    // Verify scope filter banner is displayed in AreaGroupsLandingPanel
-    expect(screen.getByTestId('macro-region-filter-banner')).toBeInTheDocument();
-    expect(screen.getByText('North Zone')).toBeInTheDocument();
+    expect(screen.getByText('Explore by neighbourhood')).toBeInTheDocument();
+    expect(screen.queryByTestId('macro-region-filter-banner')).not.toBeInTheDocument();
+    expect(screen.queryByText('North Zone')).not.toBeInTheDocument();
     expect(screen.queryByText('South Zone')).not.toBeInTheDocument();
   });
 

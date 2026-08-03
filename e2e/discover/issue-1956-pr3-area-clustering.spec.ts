@@ -106,7 +106,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const CITY = 'bangalore';
-const BASE = `city=${CITY}&journey=area-first&areasPreview=1`;
+const BASE = `city=${CITY}&journey=area-first`;
 
 // Same fallback src/lib/api.ts's own API_BASE_URL uses, and the same env var
 // name the isolated Vite process for this suite is started with

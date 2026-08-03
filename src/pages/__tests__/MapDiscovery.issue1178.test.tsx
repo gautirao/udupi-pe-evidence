@@ -1,19 +1,31 @@
 /**
  * Issue #1178 — MapDiscovery integration: group card highlight + invalid-groupId notice.
  *
- * The area-groups-landing panel must, on cold load:
- *   AC4 — highlight the deep-linked group card when ?groupId=<valid>.
- *   AC3 — show a non-alarming notice (no highlight) when ?groupId=<invalid>.
- *   Whitespace groupId behaves like normal browse (no notice, no highlight).
- *   AC2 — clicking a different group card updates the URL groupId and moves the
- *         highlight.
+ * ORIGINALLY, the area-groups-landing panel (AreaGroupsLandingPanel), on cold load:
+ *   AC4 — highlighted the deep-linked group card when ?groupId=<valid>.
+ *   AC3 — showed a non-alarming notice (no highlight) when ?groupId=<invalid>.
+ *   Whitespace groupId behaved like normal browse (no notice, no highlight).
+ *   AC2 — clicking a different group card updated the URL groupId and moved the
+ *         highlight; "back to all" cleared groupId and returned to the L1 list.
  *
- * Prop wiring is the only production change in MapDiscovery; routing (derivePanelContent)
- * is unchanged. These tests assert the rendered DOM, not just URL params.
+ * Issue #1956 PR-6 (final cutover, Step 3) — AreaGroupsLandingPanel is DELETED.
+ *
+ * Issue #1956 PR-6 REWORK ([rulings.oq_a_v2], superseding the retain-legacy
+ * Option A guard this file previously asserted) — `journey=area-first` mounts
+ * the canonical `DiscoverAreasJourneyPanel` UNCONDITIONALLY again, with no
+ * legacy-routing exception. All four URLs below carry only a `groupId` (no
+ * `areaKey`), which is exactly the case
+ * `[orchestrator_judgement_groupid_only]` covers: there is no resolved AREA to
+ * preserve and no `groupId` -> node resolution path exists, so canonical
+ * mounts at the city root and the stale `groupId` is ignored, rather than
+ * falling back to the deleted group-highlight/invalid-notice/Level-2 UI (or
+ * even the `AreaSelectionPanel` placeholder — that placeholder is reachable
+ * only via a direct component-level render of `panelContent="area-groups-
+ * landing"`, e.g. `DiscoverRightPanel.routing.test.tsx`, never through this
+ * page-level gate). Updated below to assert the real, current destination.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import React from 'react';
@@ -192,55 +204,56 @@ describe('Issue #1178 — MapDiscovery group highlight + invalid notice', () => 
     mockUseAuth.mockReturnValue({ user: null, isLoading: false, isAdmin: false, isDealer: false });
   });
 
-  it('AC4: cold-load with valid ?groupId opens Level-2 for that group', async () => {
+  it('AC4 (changed): cold-load with a valid ?groupId (no areaKey) mounts canonical at the city root, per [orchestrator_judgement_groupid_only]', async () => {
     renderAt('/discover?city=udupi&journey=area-first&groupId=coastal-homes');
 
-    // Level-2 panel renders immediately — valid groupId resolves to coastal-homes group
-    const level2 = await screen.findByTestId('area-group-level2');
-    expect(level2).toBeInTheDocument();
-    // coastal-homes area_keys = [COASTAL_AREA_KEY] → Malpe area row is shown
-    expect(screen.getByTestId('browse-all-area-IN|KA|Udupi|Malpe')).toBeInTheDocument();
-    // Back-to-all button allows returning to the L1 group list
-    expect(screen.getByTestId('area-group-back-to-all')).toBeInTheDocument();
-    // L1 group cards are NOT shown in Level-2
+    // Canonical mounts instead of the legacy DiscoverRightPanel — the legacy
+    // panel's own always-present wrapper must be absent.
+    await waitFor(() => {
+      expect(screen.queryByTestId('discover-right-panel')).not.toBeInTheDocument();
+    });
+    // Neither the deleted Level-1/Level-2 legacy UI, nor its AreaSelectionPanel
+    // placeholder fallback, is reachable through this page-level gate.
+    expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('browse-all-area-IN|KA|Udupi|Malpe')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-back-to-all')).not.toBeInTheDocument();
     expect(screen.queryByTestId('area-group-card-coastal-homes')).not.toBeInTheDocument();
-    // No invalid-group notice (valid groupId)
     expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
   });
 
-  it('AC3: cold-load with invalid ?groupId shows the notice and no highlight', async () => {
+  it('AC3 (changed): cold-load with an invalid ?groupId (no areaKey) mounts canonical the same way — an unknown groupId is simply ignored', async () => {
     renderAt('/discover?city=udupi&journey=area-first&groupId=nonexistent-slug');
 
-    const msg = await screen.findByTestId('area-group-invalid-message');
-    expect(msg).toHaveTextContent('This group is not available. Please select a group below.');
-    expect(screen.getByTestId('area-group-card-coastal-homes')).not.toHaveAttribute('aria-current');
-    expect(screen.getByTestId('area-group-card-hill-homes')).not.toHaveAttribute('aria-current');
+    await waitFor(() => {
+      expect(screen.queryByTestId('discover-right-panel')).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-card-coastal-homes')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-card-hill-homes')).not.toBeInTheDocument();
   });
 
-  it('whitespace ?groupId behaves like normal browse (no notice, no highlight)', async () => {
+  it('whitespace ?groupId (changed): behaves the same as any other groupId-only URL — canonical mounts, never the deleted browse UI', async () => {
     renderAt('/discover?city=udupi&journey=area-first&groupId=%20');
 
-    await screen.findByTestId('area-group-card-coastal-homes');
+    await waitFor(() => {
+      expect(screen.queryByTestId('discover-right-panel')).not.toBeInTheDocument();
+    });
     expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
-    expect(screen.getByTestId('area-group-card-coastal-homes')).not.toHaveAttribute('aria-current');
-    expect(screen.getByTestId('area-group-card-hill-homes')).not.toHaveAttribute('aria-current');
+    expect(screen.queryByTestId('area-group-card-coastal-homes')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-card-hill-homes')).not.toBeInTheDocument();
   });
 
-  it('AC2: back-to-all from Level-2 returns to the L1 group card list', async () => {
-    const user = userEvent.setup();
-    renderAt('/discover?city=udupi&journey=area-first&groupId=coastal-homes');
+  it('AC2 (changed): no groupId at all lands on the identical canonical Areas surface as a groupId-only URL', async () => {
+    renderAt('/discover?city=udupi&journey=area-first');
 
-    // Level-2 is shown on cold-load (valid groupId)
-    await screen.findByTestId('area-group-level2');
-
-    // Click the back-to-all button
-    await user.click(screen.getByTestId('area-group-back-to-all'));
-
-    // L1 group cards are shown again
-    await screen.findByTestId('area-group-card-coastal-homes');
-    expect(screen.getByTestId('area-group-card-hill-homes')).toBeInTheDocument();
-
-    // Level-2 panel is gone
+    // Canonical mounts instead of the legacy DiscoverRightPanel — the legacy
+    // panel's own always-present wrapper must be absent.
+    await waitFor(() => {
+      expect(screen.queryByTestId('discover-right-panel')).not.toBeInTheDocument();
+    });
+    // The deleted Level-1/Level-2 legacy UI must never appear either.
     expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-card-coastal-homes')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-card-hill-homes')).not.toBeInTheDocument();
   });
 });

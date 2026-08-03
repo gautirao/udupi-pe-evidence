@@ -3,10 +3,14 @@
  * cluster markers (city landing — mapLayerKind === 'macro-region-bubbles').
  *
  * These markers are navigational compass selectors, not geographic centroid
- * pins: `region_key` is a stable backend-derived direction code — one of the
- * 9 CENTRAL_CARDINAL_8 keys (CityRegionProjection.java, backend) — CENTRAL,
- * N, NE, E, SE, S, SW, W, NW. This module maps that key to a presentation
- * position on a single screen-space circle around a layout centre, so the
+ * pins: `region_key` is expected to be a stable backend-derived direction
+ * code — one of the 9 CENTRAL_CARDINAL_8 keys (CityRegionProjection.java,
+ * backend) — CENTRAL, N, NE, E, SE, S, SW, W, NW. In practice the backend
+ * also emits full-word direction codes (e.g. "southeast", "northeast",
+ * "southwest"); those are normalised to the short form at the client
+ * boundary before reaching this module. This module maps the (normalised)
+ * key to a presentation position on a single screen-space circle around a
+ * layout centre, so the
  * on-screen arrangement visibly matches its compass meaning regardless of
  * each region's real (often irregular) aggregated centroid.
  *
@@ -63,18 +67,64 @@ export interface ContainerPoint {
 }
 
 /**
+ * Deterministic fallback angle (degrees, same clockwise-from-12-o'clock
+ * convention as `COMPASS_ANGLE_DEG`) for a region/direction code that isn't
+ * in the known CENTRAL_CARDINAL_8 vocabulary. Derived purely from the
+ * code's own characters (a small FNV-1a-style hash), so:
+ *   - it is a pure function of the input (same unknown code -> same angle,
+ *     every render, no hidden state);
+ *   - two DIFFERENT unknown codes land at different angles instead of both
+ *     collapsing onto the layout centre and stacking into one invisible,
+ *     unclickable control (issue #1956 AC6.9 — see compassPointFor below).
+ * This is a presentation safety net only: it never invents a "correct"
+ * position for an unrecognised code, it just guarantees unrecognised codes
+ * don't silently overlap each other or a real marker at the exact centre.
+ */
+function fallbackAngleDegForUnknownCode(code: string): number {
+  let hash = 0;
+  for (let i = 0; i < code.length; i += 1) {
+    hash = (Math.imul(hash, 31) + code.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) % 360;
+}
+
+/**
  * Presentation container-point for a macro-region marker, given its stable
  * `region_key` and the shared circle layout. CENTRAL always resolves to the
  * exact layout centre; every other (8-sector) key resolves to the same
  * `radius` distance from that centre, at its canonical compass angle.
  *
- * An unrecognised key (never expected under the CENTRAL_CARDINAL_8 model)
- * falls back to the layout centre rather than throwing, so a data anomaly
- * degrades to "marker sits at centre" instead of breaking the map.
+ * An unrecognised key (never expected under the CENTRAL_CARDINAL_8 model,
+ * but reachable if a caller passes through a code this table doesn't know —
+ * see AreaMarkerLayer.tsx's shared normalizeCompassRegionCode(), used by
+ * BOTH its Direction-marker caller (issue #1956 AC6.9) and its macro-region
+ * bubble caller (issue #1956 macro-region sibling ruling, 2026-08-03)) is a
+ * data anomaly this function must survive without throwing, but
+ * it must NOT silently collapse to the layout centre either: that previously
+ * turned every unrecognised code into the SAME point, so several unrelated
+ * unknown codes stacked into one invisible, unclickable marker. Instead it
+ * emits a dev-visible diagnostic and resolves to a deterministic off-centre
+ * position (still on the shared radius, so it renders as a real, clickable
+ * marker) derived from the code itself, so distinct unknown codes fan out
+ * instead of colliding.
  */
 export function compassPointFor(regionKey: string, layout: CompassLayout): ContainerPoint {
-  if (isCentralRegionKey(regionKey) || !isCompassDirectionKey(regionKey)) {
+  if (isCentralRegionKey(regionKey)) {
     return { x: layout.centerX, y: layout.centerY };
+  }
+  if (!isCompassDirectionKey(regionKey)) {
+    if (typeof console !== 'undefined') {
+      console.warn(
+        `[regionCompassLayout] Unrecognised compass/direction code "${regionKey}" — ` +
+          'rendering at a deterministic fallback position instead of the layout centre ' +
+          'so it does not silently overlap another marker.',
+      );
+    }
+    const angleRad = (fallbackAngleDegForUnknownCode(regionKey) * Math.PI) / 180;
+    return {
+      x: layout.centerX + layout.radius * Math.cos(angleRad),
+      y: layout.centerY + layout.radius * Math.sin(angleRad),
+    };
   }
   const angleRad = (COMPASS_ANGLE_DEG[regionKey] * Math.PI) / 180;
   return {

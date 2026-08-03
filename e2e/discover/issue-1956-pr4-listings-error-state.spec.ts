@@ -16,7 +16,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const CITY = 'bangalore';
-const BASE = `city=${CITY}&journey=area-first&areasPreview=1`;
+const BASE = `city=${CITY}&journey=area-first`;
 const AREA_BASAVESHWARA = 'a:IN|KA|Bengaluru|Basaveshwara Nagar';
 
 async function mockListingsFailure(page: Page, status: number) {

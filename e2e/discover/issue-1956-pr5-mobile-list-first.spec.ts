@@ -20,7 +20,7 @@ import { test, expect } from '@playwright/test';
 import { assertReachable, reportTouchTargetSize } from '../support/reachability';
 
 const CITY = 'bangalore';
-const BASE = `city=${CITY}&journey=area-first&areasPreview=1`;
+const BASE = `city=${CITY}&journey=area-first`;
 // Direct backend fixture read (server-side, no CORS/proxy concerns — see
 // curl-confirmed reachability of :8081 this session) so S1's "direct
 // children" assertion is checked against the SAME source of truth the app

@@ -37,8 +37,6 @@ import { PanelHeader } from './PanelHeader';
 import { GuidedEntryPanel } from './panels/GuidedEntryPanel';
 import { JourneySwitcher } from './JourneySwitcher';
 import { AreaSelectionPanel } from './panels/AreaSelectionPanel';
-import { AreaGroupsLandingPanel } from './panels/AreaGroupsLandingPanel';
-import { AreaGroupResultsPanel } from './panels/AreaGroupResultsPanel';
 import { AreaSelectedPanel } from './panels/AreaSelectedPanel';
 import { AgriGroupSelectedPanel } from './panels/AgriGroupSelectedPanel';
 import { AgriGroupListingPeek } from './panels/AgriGroupListingPeek';
@@ -535,56 +533,51 @@ export interface DiscoverRightPanelProps {
   onSearchChange?: (q: string) => void;
   /** Active journey (passed through from URL state for panel headers). */
   journey?: DiscoverJourney | null;
-  /** Area groups for the area-groups-landing panel. */
+  /**
+   * Area groups. Used by the area-selected group-name lookup and the
+   * school-first zone panels — NOT solely by the deleted AreaGroupsLandingPanel.
+   */
   areaGroups?: AreaGroup[];
-  /** True while area groups are loading. */
+  /** True while area groups are loading (mirrors the school-first isLoadingAreaGroupsForSchool default). */
   isLoadingAreaGroups?: boolean;
   /**
    * Issue #1910 (PR2) — the region-scoped area-group projection for the
-   * currently active region scope. Forwarded unchanged to every
-   * AreaGroupsLandingPanel render site in this file.
+   * currently active region scope.
    */
   regionScopedGroups?: RegionScopedAreaGroup[];
   /** Issue #1910 (PR2) — true while regionScopedGroups is in flight. */
   isLoadingRegionScopedGroups?: boolean;
   /**
    * Issue #1910 (PR2 review fix, Finding 3) — true when the region-scoped
-   * projection fetch failed. Forwarded unchanged to every
-   * AreaGroupsLandingPanel render site so a genuine backend failure renders
-   * an error+retry state instead of a misleading empty state.
+   * projection fetch failed.
    */
   isRegionScopedGroupsError?: boolean;
   onRetryRegionScopedGroups?: () => void;
   /**
    * Issue #1910 (PR2 review fix, Finding 2) — the single source-of-truth,
    * alias-aware scope namespaces (built once in MapDiscovery, includes
-   * groupNameSlugs). Forwarded unchanged to every AreaGroupsLandingPanel
-   * render site so its internal resolveScope call never drifts from the
-   * page-level classification.
+   * groupNameSlugs).
    */
   scopeNamespaces?: ScopeNamespaces;
   /**
    * Issue #1953 (build step 4, AC28 gap fix) — true while the mobile Map
-   * overlay is open. Forwarded unchanged to every AreaGroupsLandingPanel
-   * render site so its Level-1 scroll container preserves position across
-   * the List<->Map round trip. Defaults to false (desktop / callers that
-   * don't wire the mobile shell).
+   * overlay is open. Defaults to false (desktop / callers that don't wire
+   * the mobile shell).
    */
   isMobileMapOpen?: boolean;
-  /** Called when the user selects a group from the landing panel. */
+  /** Called when the user selects a group from the landing panel. Still used by the school-first zone panels. */
   onSelectGroup?: (groupId: string) => void;
   /**
-   * Issue #1178 — the active groupId from the URL. Forwarded to
-   * AreaGroupsLandingPanel so the matching group card is highlighted on deep-link,
-   * and an unmatched groupId shows a non-alarming notice.
+   * Issue #1178 — the active groupId from the URL. Used by the area-selected
+   * group-name lookup and the school-first zone panels.
    */
   groupId?: string | null;
   /**
-   * Issue #1483 — clears the active groupId, returning from Level-2 area list
-   * back to the Level-1 group-card list. Threaded to AreaGroupsLandingPanel's
-   * onClearGroup prop.
-   * Issue #1485 — also used in school-first: clears groupId returning from
-   * school-group-areas (Level 2) to school-browse (Level 1).
+   * Issue #1483 — clears the active groupId. Issue #1956 PR-6 (final cutover,
+   * Step 3) — its only production consumer (AreaGroupsLandingPanel) is
+   * deleted; kept as an accepted-but-unwired prop (see the code-review follow-up
+   * test in DiscoverRightPanel.routing.test.tsx documenting Issue #1864's
+   * onBack/onClearGroup distinction for school-group-areas).
    */
   onClearGroup?: () => void;
   /** Issue #1745 — active residential macro region scope from URL. */
@@ -863,7 +856,12 @@ export interface DiscoverRightPanelProps {
    */
   isCityEmpty?: boolean;
   // ── Area-group-results panel (Issue #1597) ────────────────────────────────
-  /** Called when the user clicks "View all" in AreaGroupSelectedPanel — enters group-results state. */
+  /**
+   * Issue #1956 PR-6 (final cutover, Step 3) — its only production consumer
+   * (AreaGroupResultsPanel) is deleted; kept as an accepted-but-unwired prop
+   * (see DiscoverRightPanelContainer.tsx's onEnterGroupResults wiring, which
+   * still forwards it unchanged).
+   */
   onEnterGroupResults?: () => void;
   /** Listings for the group-results panel (server-filtered by group's area_keys). */
   groupResultsListings?: import('@/hooks/useDiscoverListings').DiscoverListingItem[];
@@ -891,28 +889,27 @@ export interface DiscoverRightPanelProps {
   onNavigateAreaLanding?: () => void;
   // ── Issue #1798 PR-B — panel↔map area-marker plumbing (Units D/F) ───────────
   /**
-   * Fired with the live search query as the user types in ScopedSearch (area mode
-   * only). Pass-through to AreaGroupsLandingPanel → ScopedSearch (Level-1 and
-   * Level-2). Lets MapDiscovery promote matching area markers on the map without
-   * moving the camera.
+   * Fired with the live search query as the user types in the panel's area
+   * search box. Lets MapDiscovery promote matching area markers on the map
+   * without moving the camera. Issue #1815 R3b/R6 exercises this at the
+   * mocked-prop level directly against DiscoverRightPanel/MapDiscovery —
+   * NOT solely through the (now-deleted) ScopedSearch UI that used to call it.
    */
   onAreaSearchQueryChange?: (query: string) => void;
   /**
    * "Showing X of N areas on the map" counts from the map's area-marker bucketing
-   * (AreaMarkerLayer.onMarkersComputed). Pass-through to the Level-2
-   * AreaGroupSelectedPanel note only.
+   * (AreaMarkerLayer.onMarkersComputed).
    */
   shownAreaCount?: number;
   totalAreaMarkerCount?: number;
   /**
-   * Fired with the hovered/unhovered area's key from the Level-2 locality list, so
-   * the map can emphasise the matching marker. Never triggers camera movement.
+   * Fired with the hovered/unhovered area's key from the panel, so the map can
+   * emphasise the matching marker. Never triggers camera movement.
    */
   onAreaHover?: (areaKey: string | null) => void;
   /**
-   * Issue #1806 (FIX-5e) — member-area keys to highlight in the Level-2
-   * AreaGroupSelectedPanel (reached via the area-groups-landing case below),
-   * fired by a non-splittable area-cluster chip click on the map.
+   * Issue #1806 (FIX-5e) — member-area keys to highlight, fired by a
+   * non-splittable area-cluster chip click on the map.
    */
   highlightedAreaKeys?: string[];
 }
@@ -1396,180 +1393,20 @@ export function DiscoverRightPanel({
         );
 
       case 'area-groups-landing':
-        // Satisfy the discriminated union without a conditional spread (which TypeScript
-        // cannot narrow when combined with other fixed sibling props like onClearGroup).
-        // Issue #1483: fallbackAreas/onSelectArea also power the Level-2 area list — same prop
-        // threading, no additional wiring needed.
-        // Issue #1597: thread onEnterGroupResults → AreaGroupsLandingPanel → AreaGroupSelectedPanel.
-        if (onSelectAreaKey) {
-          return (
-            <AreaGroupsLandingPanel
-              groups={areaGroups}
-              isLoading={isLoadingAreaGroups}
-              regionScopedGroups={regionScopedGroups}
-              isLoadingRegionScopedGroups={isLoadingRegionScopedGroups}
-              isRegionScopedGroupsError={isRegionScopedGroupsError}
-              onRetryRegionScopedGroups={onRetryRegionScopedGroups}
-              scopeNamespaces={scopeNamespaces}
-              isMobileMapOpen={isMobileMapOpen}
-              onSelectGroup={onSelectGroup ?? (() => undefined)}
-              onStartOver={onStartOver}
-              groupId={groupId}
-              onClearGroup={onClearGroup}
-              scope={scope}
-              onClearScope={onClearScope}
-              summaryRegions={summaryRegions}
-              onBackToRegion={onBackToRegion}
-              cityLabel={cityLabel ?? city}
-              city={city}
-              onCityChange={onCityChange}
-              intent={intent}
-              onIntentChange={onIntentChange}
-              fallbackAreas={discoverAreas}
-              onSelectArea={onSelectAreaKey}
-              onViewAllResults={onEnterGroupResults}
-              onSelectJourney={onSelectJourney}
-              onSelectSchool={onSelectSchool}
-              onSearchQueryChange={onAreaSearchQueryChange}
-              shownAreaCount={shownAreaCount}
-              totalAreaMarkerCount={totalAreaMarkerCount}
-              onAreaHover={onAreaHover}
-              highlightedAreaKeys={highlightedAreaKeys}
-            />
-          );
-        }
-        return (
-          <AreaGroupsLandingPanel
-            groups={areaGroups}
-            isLoading={isLoadingAreaGroups}
-            regionScopedGroups={regionScopedGroups}
-            isLoadingRegionScopedGroups={isLoadingRegionScopedGroups}
-            isRegionScopedGroupsError={isRegionScopedGroupsError}
-            onRetryRegionScopedGroups={onRetryRegionScopedGroups}
-            scopeNamespaces={scopeNamespaces}
-            isMobileMapOpen={isMobileMapOpen}
-            onSelectGroup={onSelectGroup ?? (() => undefined)}
-            onStartOver={onStartOver}
-            groupId={groupId}
-            onClearGroup={onClearGroup}
-            scope={scope}
-            onClearScope={onClearScope}
-            summaryRegions={summaryRegions}
-            onBackToRegion={onBackToRegion}
-            cityLabel={cityLabel ?? city}
-            city={city}
-            onCityChange={onCityChange}
-            intent={intent}
-            onIntentChange={onIntentChange}
-            onViewAllResults={onEnterGroupResults}
-            onSelectJourney={onSelectJourney}
-            onSelectSchool={onSelectSchool}
-            onSearchQueryChange={onAreaSearchQueryChange}
-            shownAreaCount={shownAreaCount}
-            totalAreaMarkerCount={totalAreaMarkerCount}
-            onAreaHover={onAreaHover}
-            highlightedAreaKeys={highlightedAreaKeys}
-          />
-        );
-
-      case 'area-group-results': {
-        // Issue #1597 — group-results state: server-filtered listings across all child areas.
-        // groupId is guaranteed non-blank by derivePanelContent. Resolve the group from the
-        // loaded areaGroups list; fall back gracefully to the landing when not yet resolved.
-        const resolvedGroupForResults = areaGroups.find((g) => g.id === groupId);
-        if (!resolvedGroupForResults) {
-          // Group not yet loaded or invalid — show the landing while loading.
-          if (onSelectAreaKey) {
-            return (
-              <AreaGroupsLandingPanel
-                groups={areaGroups}
-                isLoading={isLoadingAreaGroups}
-                regionScopedGroups={regionScopedGroups}
-                isLoadingRegionScopedGroups={isLoadingRegionScopedGroups}
-                isRegionScopedGroupsError={isRegionScopedGroupsError}
-                onRetryRegionScopedGroups={onRetryRegionScopedGroups}
-                scopeNamespaces={scopeNamespaces}
-                isMobileMapOpen={isMobileMapOpen}
-                onSelectGroup={onSelectGroup ?? (() => undefined)}
-                onStartOver={onStartOver}
-                groupId={groupId}
-                onClearGroup={onClearGroup}
-                scope={scope}
-                onClearScope={onClearScope}
-                summaryRegions={summaryRegions}
-                onBackToRegion={onBackToRegion}
-                cityLabel={cityLabel ?? city}
-                intent={intent}
-                onIntentChange={onIntentChange}
-                fallbackAreas={discoverAreas}
-                onSelectArea={onSelectAreaKey}
-                onSelectJourney={onSelectJourney}
-                onSelectSchool={onSelectSchool}
-                onSearchQueryChange={onAreaSearchQueryChange}
-                shownAreaCount={shownAreaCount}
-                totalAreaMarkerCount={totalAreaMarkerCount}
-                onAreaHover={onAreaHover}
-              />
-            );
-          }
-          return (
-            <AreaGroupsLandingPanel
-              groups={areaGroups}
-              isLoading={isLoadingAreaGroups}
-              regionScopedGroups={regionScopedGroups}
-              isLoadingRegionScopedGroups={isLoadingRegionScopedGroups}
-              isRegionScopedGroupsError={isRegionScopedGroupsError}
-              onRetryRegionScopedGroups={onRetryRegionScopedGroups}
-              scopeNamespaces={scopeNamespaces}
-              isMobileMapOpen={isMobileMapOpen}
-              onSelectGroup={onSelectGroup ?? (() => undefined)}
-              onStartOver={onStartOver}
-              groupId={groupId}
-              onClearGroup={onClearGroup}
-              scope={scope}
-              onClearScope={onClearScope}
-              summaryRegions={summaryRegions}
-              onBackToRegion={onBackToRegion}
-              cityLabel={cityLabel ?? city}
-              intent={intent}
-              onIntentChange={onIntentChange}
-              onSelectJourney={onSelectJourney}
-              onSelectSchool={onSelectSchool}
-              onSearchQueryChange={onAreaSearchQueryChange}
-              shownAreaCount={shownAreaCount}
-              totalAreaMarkerCount={totalAreaMarkerCount}
-              onAreaHover={onAreaHover}
-            />
-          );
-        }
-        // Issue #1597 — compute the full group listing count from the already-loaded
-        // discoverAreas data. This is the same sum as the "View all {N}" CTA in
-        // AreaGroupSelectedPanel (areas.reduce listingCount sum). Used for the anon
-        // preview banner to show the real total vs the ≤20/area teaser.
-        const totalGroupCount = resolvedGroupForResults.area_keys.reduce((sum, key) => {
-          const area = discoverAreas.find((a) => a.areaKey === key);
-          return sum + (area?.listingCount ?? 0);
-        }, 0);
-        return (
-          <AreaGroupResultsPanel
-            group={resolvedGroupForResults}
-            cityLabel={cityLabel ?? city}
-            listings={groupResultsListings}
-            isLoading={isLoadingGroupResults}
-            isError={isGroupResultsError}
-            totalElements={groupResultsTotalElements}
-            onRetry={onRetryGroupResults}
-            onBack={onClearGroupResults}
-            onStartOver={onStartOver}
-            intent={intent}
-            selectedListingId={selectedListingId}
-            onSelectListing={onSelectResultListing}
-            onHoverListing={onHoverResultListing}
-            isAuthenticated={isAuthenticated}
-            totalGroupCount={totalGroupCount}
-          />
-        );
-      }
+      case 'area-group-results':
+        // Issue #1956 PR-6 (final cutover, Step 3) — AreaGroupsLandingPanel and
+        // AreaGroupResultsPanel are deleted. Canonical Areas navigation
+        // (DiscoverAreasJourneyPanel) mounts unconditionally for
+        // journey==='area-first' upstream in DiscoverRightPanelContainer,
+        // before this component is ever reached, so 'area-group-results' is
+        // unreachable here in the live app. 'area-groups-landing' IS still
+        // reachable: the journey-less groupId inference at the bottom of
+        // derivePanelContent (a stray `?groupId=` with no `journey=`) routes
+        // here. Both values are also reachable from isolated component tests
+        // that construct panelContent directly. AreaSelectionPanel is the
+        // pre-existing area-first placeholder panel reused here as the safe,
+        // non-blank, non-crashing destination — not new UI.
+        return <AreaSelectionPanel onStartOver={onStartOver} />;
 
       case 'area-selection':
         return <AreaSelectionPanel onStartOver={onStartOver} />;

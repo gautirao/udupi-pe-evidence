@@ -247,19 +247,6 @@ export interface DiscoverUrlState {
    */
   node?: string | null;
   /**
-   * Issue #1956 — deployment-preview opt-in flag for the canonical Areas
-   * journey, parsed from URL `areasPreview=1`. Same presence-flag read style as
-   * schoolPicking / groupResults (`=== '1' ? true : undefined`).
-   *
-   * AC1.3 — read-only by construction: no action anywhere writes it, so an
-   * ordinary interaction can never introduce it and it can never appear in a
-   * canonical/share URL. It survives navigation and refresh because every
-   * existing writer copies the current params. AC1.2 — on its own it does
-   * nothing; the preview journey mounts only when it is combined with the
-   * deployment capability (see features/discover/preview/areasPreviewCapability).
-   */
-  areasPreview?: boolean;
-  /**
    * Issue #1956 PR 2 — the RAW trimmed `node` param, BEFORE the shape/size
    * validation `node` applies. Null only when `node=` is genuinely absent, empty
    * or whitespace-only.
@@ -617,8 +604,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     // Issue #1956 PR 1 — appended AFTER the original 18 keys so the existing
     // key order is preserved for any Object.keys/snapshot assertion.
     node: navigationDomain.state.node,
-    areasPreview: navigationDomain.state.areasPreview,
-    // Issue #1956 PR 2 — appended after PR 1's two keys, same rationale.
+    // Issue #1956 PR 2 — appended after PR 1's key, same rationale.
     rawNodeParam: navigationDomain.state.rawNodeParam,
   };
 

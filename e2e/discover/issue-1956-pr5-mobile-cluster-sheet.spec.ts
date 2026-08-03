@@ -27,7 +27,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { assertReachable } from '../support/reachability';
 
 const CITY = 'bangalore';
-const BASE = `city=${CITY}&journey=area-first&areasPreview=1`;
+const BASE = `city=${CITY}&journey=area-first`;
 const D_S = 'd:southeast';
 const AREA_RR_NAGAR = 'a:IN|KA|Bengaluru|RR Nagar';
 const MOBILE_VIEWPORT = { width: 390, height: 844 };

@@ -45,10 +45,11 @@ const makeQC = () => new QueryClient({ defaultOptions: { queries: { retry: false
 describe('mobile Map/List toggle — history/URL safety (AC5.5)', () => {
   it('a full LIST -> MAP -> LIST cycle writes neither node= nor a history entry', async () => {
     const user = userEvent.setup();
-    // Issue #1956 PR-1 dual gate needs journey=area-first&areasPreview=1 to be a
-    // realistic Areas-journey URL; the toggle's history-safety is independent of
-    // this, but starting from a representative URL keeps the harness honest.
-    window.history.pushState({}, '', '/discover?city=udupi&journey=area-first&areasPreview=1&node=root');
+    // Issue #1956 PR-6 (final cutover) — journey=area-first alone is now a
+    // realistic Areas-journey URL (the areasPreview dual gate is retired); the
+    // toggle's history-safety is independent of this, but starting from a
+    // representative URL keeps the harness honest.
+    window.history.pushState({}, '', '/discover?city=udupi&journey=area-first&node=root');
     const historyLengthBefore = window.history.length;
     const searchBefore = window.location.search;
 

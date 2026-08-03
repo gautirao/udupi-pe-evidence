@@ -1,9 +1,11 @@
 /**
- * Issue #1956 PR 1 (FE-1) — derivePanelContent preview-gate NON-REGRESSION matrix.
- *
- * PR 1 builds the `node=` / `areasPreview=1` seam and the deployment preview
- * capability gate. It ships NO new UI and, critically, must not perturb panel
- * routing for a single existing entry point (AC1.1 / AC1.14).
+ * Issue #1956 PR 1 (FE-1) — derivePanelContent `node=` NON-REGRESSION matrix.
+ * De-scaffolded for Issue #1956 PR 6 (final cutover, RULED A1 MINIMAL): the
+ * deployment preview capability env var and the `areasPreview=1` URL flag no
+ * longer exist, so the gate-parameterised dimensions of this matrix are
+ * removed. The `node` dimension and the per-entry-point expectations remain —
+ * `derivePanelContent` still must not perturb panel routing for a single
+ * existing entry point regardless of `node`'s presence/shape (AC1.1/AC1.4).
  *
  * `derivePanelContent` is a pure function whose 15 panel states are resolved in
  * ORDER-DEPENDENT priority (agri-first branch first, then school-first, then
@@ -14,24 +16,16 @@
  *
  * WHAT EVERY CELL ASSERTS — the same single thing: `derivePanelContent` returns
  * exactly the value it returns today, for every combination of
- *   • the deployment preview capability env var (enabled / disabled)
- *   • `areasPreview` (absent / true)
  *   • `node` (absent / canonical key / whitespace-only)
  *   • the five AC1.1 entry points (+ two adjacent-journey control cells)
- * i.e. NEITHER the new params NOR the capability flag changes routing in PR 1.
+ * i.e. `node` alone never changes routing.
  *
  * Expectations are written out EXPLICITLY per entry point. They are deliberately
  * NOT computed by calling the function under test a second time, and deliberately
  * NOT snapshotted — a snapshot would silently re-baseline the exact regression
  * this file exists to catch.
- *
- * The capability dimension is expressed by stubbing the raw
- * `VITE_DISCOVER_AREAS_PREVIEW` env var rather than by importing the capability
- * module, so this file is valid both before and after the capability module
- * exists — it was authored and run GREEN as a baseline before any PR 1
- * production change landed.
  */
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { derivePanelContent } from '@/features/discover/utils/discoverPanelState';
 import type { DiscoverPanelContent } from '@/features/discover/utils/discoverPanelState';
 import type { DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
@@ -55,10 +49,10 @@ function baseUrlState(): DiscoverUrlState {
 }
 
 /**
- * Applies the new-param deltas via Object.assign rather than an object literal
- * so this file compiles identically before and after `node` / `areasPreview`
- * are added to DiscoverUrlState (object-literal excess-property checking would
- * otherwise reject the pre-change form). No `as` cast is involved.
+ * Applies the `node` delta via Object.assign rather than an object literal so
+ * this file compiles identically before and after `node` was added to
+ * DiscoverUrlState (object-literal excess-property checking would otherwise
+ * reject the pre-change form). No `as` cast is involved.
  */
 function withParams(
   base: DiscoverUrlState,
@@ -118,49 +112,22 @@ const ENTRY_POINTS: EntryPoint[] = [
   },
 ];
 
-const CAPABILITY_CELLS: { label: string; envValue: string | undefined }[] = [
-  { label: 'capability ENABLED', envValue: '1' },
-  { label: 'capability DISABLED', envValue: undefined },
-];
-
-const AREAS_PREVIEW_CELLS: { label: string; value: true | undefined }[] = [
-  { label: 'areasPreview absent', value: undefined },
-  { label: 'areasPreview=1', value: true },
-];
-
 const NODE_CELLS: { label: string; value: string | null }[] = [
   { label: 'node absent', value: null },
   { label: 'node canonical', value: CANONICAL_NODE_KEY },
   { label: 'node whitespace-only', value: '  ' },
 ];
 
-afterEach(() => {
-  vi.unstubAllEnvs();
-});
+describe('derivePanelContent — #1956 `node=` non-regression matrix', () => {
+  describe.each(NODE_CELLS)('$label', ({ value: node }) => {
+    it.each(ENTRY_POINTS)(
+      'routes $name to $expected, unchanged',
+      ({ state, expected }) => {
+        const urlState = withParams({ ...baseUrlState(), ...state }, { node });
 
-describe('derivePanelContent — #1956 PR 1 preview-gate non-regression matrix', () => {
-  describe.each(CAPABILITY_CELLS)('$label', ({ envValue }) => {
-    describe.each(AREAS_PREVIEW_CELLS)('$label', ({ value: areasPreview }) => {
-      describe.each(NODE_CELLS)('$label', ({ value: node }) => {
-        it.each(ENTRY_POINTS)(
-          'routes $name to $expected, unchanged',
-          ({ state, expected }) => {
-            if (envValue === undefined) {
-              vi.stubEnv('VITE_DISCOVER_AREAS_PREVIEW', '');
-            } else {
-              vi.stubEnv('VITE_DISCOVER_AREAS_PREVIEW', envValue);
-            }
-
-            const urlState = withParams({ ...baseUrlState(), ...state }, {
-              node,
-              areasPreview,
-            });
-
-            expect(derivePanelContent(urlState)).toBe(expected);
-          },
-        );
-      });
-    });
+        expect(derivePanelContent(urlState)).toBe(expected);
+      },
+    );
   });
 });
 

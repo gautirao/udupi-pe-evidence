@@ -9,6 +9,8 @@ import {
 import { useDiscoverAreas, type DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { useDiscoverAreaNavigationPathResolver } from '@/features/discover/navigation/useDiscoverAreaNavigationPath';
+import { useToast } from '@/hooks/use-toast';
 import { IntentSelector } from './IntentSelector';
 
 /**
@@ -450,11 +452,75 @@ export function DiscoverControlBar({ mobileMapTrigger }: DiscoverControlBarProps
   const actions = useDiscoverActions();
   const { data } = useDiscoverAreas(nav.city);
   const areas = data?.areas ?? [];
+  const { toast } = useToast();
+  // Issue #1956 PR 6 ([rulings.option_a_search_convergence_2026_08_03]) — the
+  // in-app area-search control used to write the legacy `areaKey=` param
+  // directly (`actions.selectArea`), which the canonical `journey=area-first`
+  // panel never reads: the map camera would move but the panel stayed on the
+  // city-root Direction cards. This resolves the selected stable areaKey
+  // through the SAME sanctioned server path (`.../navigation-path`) and the
+  // SAME atomic writer (`enterAreasJourney`) the JourneySwitcher conversion
+  // seam already uses (DiscoverRightPanelContainer.tsx's `handleSelectJourney`)
+  // — never a client-constructed node key, never a second resolution path.
+  const resolveAreaNavigationPath = useDiscoverAreaNavigationPathResolver();
 
   const handleSelectCity = (city: ControlBarCity) => {
     if (!city.active) return;
     if (city.key === nav.city) return;
     actions.changeCity(city.key);
+  };
+
+  const handleSelectArea = (areaKey: string) => {
+    // PR review rework (rework-request-pr-review-3.toml) — this control bar
+    // is SHARED across area-first, school-first, agri-first, AND the
+    // journey-less landing (nav.journey === null before any journey is
+    // picked). The canonical resolve-through-navigation-path ->
+    // enterAreasJourney seam below is authorised ONLY for the explicit
+    // area-first journey ([rulings.option_a_search_convergence_2026_08_03]
+    // scopes this to the area-search convergence fix, and the standing
+    // [rulings.oq_a] A1 MINIMAL ruling explicitly keeps journey-less
+    // convergence OUT of this PR, deferred to #2059). school-first and
+    // agri-first must keep selecting the area WITHOUT changing the active
+    // journey — restoring the pre-existing `actions.selectArea` behaviour
+    // this fix's predecessor commit (77a8af93) incorrectly replaced
+    // unconditionally. The journey-less landing case is folded into the
+    // same restored branch rather than into the canonical one: extending
+    // canonical convergence to a journey-less URL would itself be the
+    // out-of-scope journey-less defaulting A1 forbids, even though the
+    // adjacent copy fallback (resolveAreaSearchCopy) treats null as
+    // area-first for LABEL text only.
+    if (nav.journey !== 'area-first') {
+      actions.selectArea(areaKey);
+      return;
+    }
+
+    // A resolution is already in flight for a prior selection — never fire a
+    // second concurrent request/history write (mirrors handleSelectJourney's
+    // same guard for the JourneySwitcher conversion seam).
+    if (resolveAreaNavigationPath.isPending) return;
+    resolveAreaNavigationPath.mutate(
+      { city: nav.city, areaKey },
+      {
+        onSuccess: (path) => {
+          // Success: camera and panel move together, in ONE atomic write —
+          // the same writer guided hierarchy selection uses. The legacy
+          // `areaKey=`/`groupId=` params are never written in the first
+          // place, so there is nothing obsolete left to clear.
+          actions.enterAreasJourney(path.nodeKey);
+        },
+        onError: () => {
+          // Failure: preserve the current canonical state untouched (no
+          // camera move, no panel strand at city root — that split IS the
+          // defect this fix closes) and use the existing non-destructive
+          // stale-link toast-and-stay treatment.
+          toast({
+            variant: 'destructive',
+            title: "Couldn't open that area",
+            description: 'This area link looks out of date. Staying on your current view.',
+          });
+        },
+      },
+    );
   };
 
   return (
@@ -502,7 +568,7 @@ export function DiscoverControlBar({ mobileMapTrigger }: DiscoverControlBarProps
           <MapIcon className="h-5 w-5" aria-hidden="true" />
         </button>
       )}
-      <AreaAutocomplete areas={areas} journey={nav.journey} onSelectArea={actions.selectArea} />
+      <AreaAutocomplete areas={areas} journey={nav.journey} onSelectArea={handleSelectArea} />
     </div>
   );
 }

@@ -264,3 +264,92 @@ describe('AreaMarkerLayer — macro-region compass placement (city landing)', ()
     expect(actual.y).toBeCloseTo(expected.y, 6);
   });
 });
+
+// Issue #1956 macro-region sibling ruling (2026-08-03) — the same
+// full-word/abbreviation input-contract defect the AC6.9 fix closed for the
+// canonical Direction markers exists at THIS component's other
+// `compassPointFor` caller: the `isMacroRegion` city-landing bubble path
+// exercised above, keyed on the backend's bare `region_key`
+// (`area.areaKey`), which is dormant today (empty `city_regions`, #1899) but
+// activates automatically once real data arrives. These tests drive the
+// ACTUAL second caller (via `<AreaMarkerLayer>` render), not `compassPointFor`
+// in isolation — the caller was the gap, so a pure-function-only test would
+// not have caught the original bug and would not catch a regression here.
+describe('AreaMarkerLayer — macro-region compass placement: full-word region_key normalisation (#1956)', () => {
+  it('full-word region keys map to their INTENDED compass position — same point as their abbreviation, through the actual isMacroRegion render path', () => {
+    const fullWordRegions: AreaPoint[] = [
+      makeRegion('central'),
+      makeRegion('north'),
+      makeRegion('northeast'),
+      makeRegion('east'),
+      makeRegion('southeast'),
+      makeRegion('south'),
+      makeRegion('southwest'),
+      makeRegion('west'),
+      makeRegion('northwest'),
+    ];
+    render(<AreaMarkerLayer areas={fullWordRegions} />);
+    const layout = computeCompassLayout(MAP_SIZE.x, MAP_SIZE.y);
+
+    const expectedByFullWord: Record<string, string> = {
+      central: 'CENTRAL',
+      north: 'N',
+      northeast: 'NE',
+      east: 'E',
+      southeast: 'SE',
+      south: 'S',
+      southwest: 'SW',
+      west: 'W',
+      northwest: 'NW',
+    };
+
+    for (const [fullWord, abbrev] of Object.entries(expectedByFullWord)) {
+      const idx = fullWordRegions.findIndex((a) => a.areaKey === fullWord);
+      const actual = containerPointFromMarkerCall(markerLatLngCalls[idx]);
+      const expected = compassPointFor(abbrev, layout);
+      expect(actual.x).toBeCloseTo(expected.x, 6);
+      expect(actual.y).toBeCloseTo(expected.y, 6);
+    }
+  });
+
+  it('abbreviated and full-word region keys for the SAME direction land at the SAME point through the actual render path (not merely distinct positions)', () => {
+    const mixed: AreaPoint[] = [makeRegion('SE'), makeRegion('southeast')];
+    render(<AreaMarkerLayer areas={mixed} />);
+
+    const abbrevIdx = mixed.findIndex((a) => a.areaKey === 'SE');
+    const fullWordIdx = mixed.findIndex((a) => a.areaKey === 'southeast');
+    const abbrevPoint = containerPointFromMarkerCall(markerLatLngCalls[abbrevIdx]);
+    const fullWordPoint = containerPointFromMarkerCall(markerLatLngCalls[fullWordIdx]);
+
+    expect(fullWordPoint.x).toBeCloseTo(abbrevPoint.x, 6);
+    expect(fullWordPoint.y).toBeCloseTo(abbrevPoint.y, 6);
+  });
+
+  it('an unsupported region_key takes the explicit safe diagnostic/fallback path (dev warning + deterministic off-centre point), never the silent centre collapse', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const unknownRegions: AreaPoint[] = [
+      makeRegion('totally-unknown-region-a'),
+      makeRegion('totally-unknown-region-b'),
+    ];
+    render(<AreaMarkerLayer areas={unknownRegions} />);
+    const layout = computeCompassLayout(MAP_SIZE.x, MAP_SIZE.y);
+    const centralPoint = { x: layout.centerX, y: layout.centerY };
+
+    const idxA = unknownRegions.findIndex((a) => a.areaKey === 'totally-unknown-region-a');
+    const idxB = unknownRegions.findIndex((a) => a.areaKey === 'totally-unknown-region-b');
+    const pointA = containerPointFromMarkerCall(markerLatLngCalls[idxA]);
+    const pointB = containerPointFromMarkerCall(markerLatLngCalls[idxB]);
+
+    // Neither unknown code silently collapses onto the layout centre...
+    expect(Math.hypot(pointA.x - centralPoint.x, pointA.y - centralPoint.y)).not.toBeCloseTo(0, 3);
+    expect(Math.hypot(pointB.x - centralPoint.x, pointB.y - centralPoint.y)).not.toBeCloseTo(0, 3);
+    // ...and two DIFFERENT unknown codes fan out to different points instead
+    // of stacking into one shared invisible marker.
+    expect(pointA.x === pointB.x && pointA.y === pointB.y).toBe(false);
+    // The dev diagnostic fired for the unrecognised codes (explicit failure
+    // path, not a silently-plausible misplaced control).
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+});

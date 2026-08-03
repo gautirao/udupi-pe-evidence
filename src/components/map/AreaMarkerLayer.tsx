@@ -546,15 +546,58 @@ const DESTINATION_ACCENT = C_COPPER;
 const DESTINATION_ACCENT_ACTIVE = C_COPPER_HOVER;
 
 /**
- * Reads (never constructs) the compass code embedded in a server-given
- * DIRECTION nodeKey (`d:<code>`) purely to pick a presentation slot on the
- * compass circle — mirrors the exact rationale documented in
- * `regionCompassLayout.ts`. An unrecognised code falls back to the layout
- * centre via `compassPointFor`'s own fallback, never throws.
+ * Issue #1956 AC6.9 — the live backend emits BOTH abbreviated (`d:w`, `d:s`)
+ * and full-word (`d:southeast`, `d:northeast`, `d:southwest`) DIRECTION
+ * node-key suffixes. `regionCompassLayout.ts`'s `CompassDirectionKey`
+ * vocabulary only ever recognised the 8 abbreviations, so an uppercased
+ * full word like "SOUTHEAST" silently missed the table and fell back to the
+ * exact same layout centre as every other unmatched code — collapsing
+ * South-East, North-East and South-West onto one identical, invisible point
+ * (root cause of the reported 3-way marker collision). This table maps the
+ * full-word spelling of each of the 8 CompassDirectionKey values onto its
+ * abbreviation; already-abbreviated suffixes pass through unchanged.
+ *
+ * Issue #1956 macro-region sibling ruling (2026-08-03) — the SAME
+ * full-word/abbreviation input-contract defect exists at this component's
+ * OTHER `compassPointFor` caller: the legacy `isMacroRegion` city-landing
+ * bubble path below, keyed on the backend's bare `region_key` (no `d:`
+ * prefix). That caller is routed through this same table via
+ * `normalizeCompassRegionCode` rather than a second, independently
+ * maintained mapping.
  */
-function compassCodeFromDirectionNodeKey(nodeKey: string): string {
-  const suffix = nodeKey.startsWith('d:') ? nodeKey.slice(2) : nodeKey;
-  return suffix.toUpperCase();
+const DIRECTION_FULL_WORD_TO_COMPASS_CODE: Readonly<Record<string, string>> = {
+  NORTH: 'N',
+  NORTHEAST: 'NE',
+  EAST: 'E',
+  SOUTHEAST: 'SE',
+  SOUTH: 'S',
+  SOUTHWEST: 'SW',
+  WEST: 'W',
+  NORTHWEST: 'NW',
+};
+
+/**
+ * Reads (never constructs) the compass/region code embedded in EITHER a
+ * server-given DIRECTION nodeKey (`d:<code>`, the canonical Direction-marker
+ * caller) OR a bare macro-region `region_key` (the legacy `isMacroRegion`
+ * city-landing bubble caller — see the block comment at that call site),
+ * normalises it to the abbreviated `CompassDirectionKey` vocabulary
+ * `regionCompassLayout.ts` understands (see
+ * `DIRECTION_FULL_WORD_TO_COMPASS_CODE` above), then picks a presentation
+ * slot on the compass circle. A code that is neither a known full word nor a
+ * known abbreviation (nor the `CENTRAL` sentinel, which also passes through
+ * unchanged) is returned as-is — `compassPointFor`'s own unrecognised-code
+ * handling (a deterministic off-centre fallback + dev diagnostic, never a
+ * silent centre collapse) takes over from there, so this function itself
+ * never throws. Both `compassPointFor` call sites in this component MUST
+ * route through this single normaliser — a second, parallel implementation
+ * would be able to drift from this one and reintroduce the same class of
+ * defect at only one of the two sites.
+ */
+function normalizeCompassRegionCode(rawCode: string): string {
+  const suffix = rawCode.startsWith('d:') ? rawCode.slice(2) : rawCode;
+  const upper = suffix.toUpperCase();
+  return DIRECTION_FULL_WORD_TO_COMPASS_CODE[upper] ?? upper;
 }
 
 function makeDestinationCard(
@@ -766,7 +809,7 @@ export function AreaDestinationMarkerLayer({
     const compassLayout = computeCompassLayout(mapSize.x, mapSize.y);
 
     for (const child of children) {
-      const code = compassCodeFromDirectionNodeKey(child.nodeKey);
+      const code = normalizeCompassRegionCode(child.nodeKey);
       const point = compassPointFor(code, compassLayout);
       const latLng = map.containerPointToLatLng([point.x, point.y]);
       const isSelected = selectedNodeKey === child.nodeKey;
@@ -1239,9 +1282,18 @@ export function AreaMarkerLayer({
       // geo_center_lat/lon. The `area` object passed to onAreaClick/
       // onAreaCameraIntent below is untouched — its real geo_center_lat/lon
       // and bbox still drive click navigation and camera fitting.
+      //
+      // Issue #1956 macro-region sibling ruling (2026-08-03) — region_key is
+      // NOT guaranteed to already be in the CompassDirectionKey abbreviation
+      // vocabulary; like the canonical Direction markers above, the backend
+      // can emit full-word codes (e.g. "southeast"). area.areaKey is routed
+      // through the SAME normalizeCompassRegionCode() normaliser used for
+      // the Direction markers before reaching compassPointFor, so an
+      // unrecognised/unnormalised code can never silently collapse onto the
+      // layout centre here either.
       const [markerLat, markerLon] = area.isMacroRegion
         ? (() => {
-            const point = compassPointFor(area.areaKey, compassLayout);
+            const point = compassPointFor(normalizeCompassRegionCode(area.areaKey), compassLayout);
             const latLng = map.containerPointToLatLng([point.x, point.y]);
             return [latLng.lat, latLng.lng] as const;
           })()

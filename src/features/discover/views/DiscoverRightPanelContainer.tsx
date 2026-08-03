@@ -5,13 +5,9 @@ import {
   useDiscoverShell,
 } from '@/features/discover/context/useDiscoverContext';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
-import {
-  isAreasPreviewCapabilityEnabled,
-  isAreasPreviewJourneyActive,
-} from '@/features/discover/preview/areasPreviewCapability';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { CITY_CONFIG } from '@/lib/localityUtils';
+import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import type { SummaryRegionRef } from '@/utils/macroRegionResolver';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
@@ -38,6 +34,10 @@ import type { ScopeNamespaces } from '@/features/discover/presentation/resolveSc
 import { DiscoverAreasJourneyPanel } from '@/features/discover/views/DiscoverAreasJourneyPanel';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
+import { hasLegacyAreaContext } from '@/features/discover/navigation/legacyAreaContextGuard';
+import { useDiscoverAreaNavigationPathResolver } from '@/features/discover/navigation/useDiscoverAreaNavigationPath';
+import { useToast } from '@/hooks/use-toast';
+import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 
 /**
  * Issue #1824 Slice S11c — the DiscoverRightPanel call-site region, lifted
@@ -273,15 +273,91 @@ export function DiscoverRightPanelContainer({
   const urlActions = useDiscoverActions();
   // Issue #1953 (build step 4, AC28 gap fix) — the mobile shell slice, read
   // directly from the facade (same pattern as urlState/urlActions above)
-  // rather than threaded down from MapDiscovery, so AreaGroupsLandingPanel's
-  // scroll-preserving hook knows when the Map overlay is covering it.
+  // rather than threaded down from MapDiscovery. Issue #1956 PR-6 (final
+  // cutover, Step 3) — its only production consumer (AreaGroupsLandingPanel's
+  // scroll-preserving hook) is deleted; still forwarded unchanged to
+  // DiscoverRightPanel below.
   const { isMobileShell, mobileView } = useDiscoverShell();
   const isMobileMapOpen = isMobileShell && mobileView === 'MAP';
-  // Issue #1956 PR 1 (AC1.2 + AC1.14) — the dual preview gate. The gate reads
-  // only the capability + areasPreview; it is intentionally independent of
-  // `node=` (a direct search or canonical deep link can legitimately carry
-  // `node=` while the journey is incomplete, and a node-sensitive gate would
-  // leak partial work to shoppers).
+  // Issue #1956 PR 6 rework ([rulings.oq_a_v2]) — the areaKey -> node
+  // conversion seam. Only ONE caller: `handleSelectJourney` below.
+  const resolveAreaNavigationPath = useDiscoverAreaNavigationPathResolver();
+  const { toast } = useToast();
+  /**
+   * The single production write path a JourneySwitcher click funnels through
+   * (previously a bare `(j) => urlActions.setJourney(j)`).
+   *
+   * For every journey other than `area-first`, and for `area-first` with no
+   * legacy `groupId`/`areaKey` context, this is behaviourally IDENTICAL to the
+   * old one-liner — a plain `setJourney` PUSH.
+   *
+   * When switching TO `area-first` with legacy context present, this
+   * converts FIRST and writes the URL exactly ONCE (via `enterAreasJourney`,
+   * the existing atomic journey+node writer), per [rulings.oq_a_v2]:
+   *   - `areaKey` present: resolve it through the sanctioned
+   *     `.../navigation-path` server endpoint (never a client-constructed
+   *     node key), then enter the canonical journey AT THAT NODE. The
+   *     `groupId`/`areaKey` params are cleared as part of that SAME write
+   *     (see `enterAreasJourney`'s PR-6 addition in `state/url/navigation.ts`).
+   *     No premature `setJourney` — the URL is untouched, so the current
+   *     (surviving) `AreaSelectedPanel` legacy render stays up throughout the
+   *     round trip, with no flash of a wrong intermediate surface.
+   *   - Unresolved/stale `areaKey` (404): retain the current legacy state —
+   *     no navigation at all, so nothing is silently dropped — and surface an
+   *     honest toast rather than a silent no-op.
+   *   - `groupId` only (no `areaKey`): [orchestrator_judgement_groupid_only]
+   *     — there is no resolved AREA to preserve and no `groupId` -> node
+   *     resolution path exists, so this mounts canonical at the city root
+   *     directly (no network round trip needed).
+   */
+  const handleSelectJourney = (journey: DiscoverJourney) => {
+    if (journey !== 'area-first' || !hasLegacyAreaContext(urlState)) {
+      urlActions.setJourney(journey);
+      return;
+    }
+    if (urlState.areaKey) {
+      if (resolveAreaNavigationPath.isPending) {
+        // A conversion is already in flight for this same click intent —
+        // never fire a second concurrent request/history write.
+        return;
+      }
+      resolveAreaNavigationPath.mutate(
+        { city: urlState.city || DEFAULT_CITY, areaKey: urlState.areaKey },
+        {
+          onSuccess: (path) => {
+            urlActions.enterAreasJourney(path.nodeKey);
+          },
+          onError: () => {
+            toast({
+              variant: 'destructive',
+              title: "Couldn't switch to area view",
+              description: 'This area link looks out of date. Staying on your current view.',
+            });
+          },
+        },
+      );
+      return;
+    }
+    // groupId-only, no areaKey.
+    urlActions.enterAreasJourney(null);
+  };
+  // Issue #1956 PR 6 (final cutover, RULED A1 MINIMAL, restored by the
+  // [rulings.oq_a_v2] rework after the superseded Option A guard) — the
+  // canonical Areas journey is the default whenever the user is in the
+  // area-first journey, unconditionally; the preview-capability +
+  // areasPreview dual gate is removed and no legacy-routing exception
+  // survives here. journey-less URLs are NOT additionally defaulted to
+  // canonical — that is out of scope (follow-up #2059). This is one of THREE
+  // identical gate sites (this file, DiscoverMapCanvas.tsx,
+  // MapDiscovery.tsx) — see DiscoverMapCanvas.tsx's copy of this comment for
+  // why the triplication is deliberate.
+  //
+  // A shopper arriving at `journey=area-first` with a stale `groupId`/
+  // `areaKey` still in the URL (a hand-edited/bookmarked link, never an
+  // in-app click — the click path below converts BEFORE ever writing
+  // `journey=area-first`) mounts canonical at the city root and ignores the
+  // stale params, exactly as A1 MINIMAL always specified; see `handleSelectJourney`
+  // below for the ONLY place `hasLegacyAreaContext` is still consulted.
   //
   // Issue #1956 PR 2 (T1 — the panel-routing seam) — `resolvedPanelContent`
   // is computed upstream from `derivePanelContent`/`computeDiscoverLayer`
@@ -290,15 +366,10 @@ export function DiscoverRightPanelContainer({
   // of which is in this PR's allowed scope to edit. Rather than extending
   // that discriminated union, the canonical Areas journey panel is mounted
   // by a SEPARATE, EARLIER branch that pre-empts the legacy `panelContent`
-  // switch entirely when the dual gate is active and the user is in the
-  // area-first journey — it renders instead of `DiscoverRightPanel`, never
-  // alongside it, so there is exactly one panel mounted at a time.
-  const areasPreviewJourneyActive = isAreasPreviewJourneyActive({
-    capabilityEnabled: isAreasPreviewCapabilityEnabled(),
-    areasPreview: urlState.areasPreview,
-  });
-  const showAreasNavigationJourney =
-    areasPreviewJourneyActive && urlState.journey === 'area-first';
+  // switch entirely when the user is in the area-first journey — it renders
+  // instead of `DiscoverRightPanel`, never alongside it, so there is exactly
+  // one panel mounted at a time.
+  const showAreasNavigationJourney = urlState.journey === 'area-first';
 
   if (showAreasNavigationJourney) {
     return (
@@ -366,25 +437,23 @@ export function DiscoverRightPanelContainer({
       agriAreasData={agriAreasData}
       isLoadingAgriAreas={isLoadingAgriAreas}
       urlAreaKey={urlState.areaKey}
-      onSelectJourney={(j) => urlActions.setJourney(j)}
+      onSelectJourney={handleSelectJourney}
       areaGroups={areaGroupsData?.groups ?? []}
       isLoadingAreaGroups={isLoadingAreaGroups}
-      // Issue #1910 (PR2) — region-scoped area-group projection, forwarded to
-      // every AreaGroupsLandingPanel render site in DiscoverRightPanel.
+      // Issue #1910 (PR2) — region-scoped area-group projection. Its only
+      // production consumer (AreaGroupsLandingPanel) is deleted (Issue #1956
+      // PR-6); still forwarded unchanged.
       regionScopedGroups={regionScopedGroups}
       isLoadingRegionScopedGroups={isLoadingRegionScopedGroups}
-      // Issue #1910 (PR2 review fix, Findings 2 & 3) — real error state +
-      // retry for the projection, plus the alias-aware scope namespaces.
       isRegionScopedGroupsError={isRegionScopedGroupsError}
       onRetryRegionScopedGroups={refetchRegionScopedGroups}
       scopeNamespaces={scopeNamespaces}
-      // Issue #1178 — forward the active groupId so AreaGroupsLandingPanel can
-      // highlight the deep-linked group card / show a non-alarming notice when
-      // the groupId matches no loaded group. Prop wiring only — no routing change.
+      // Issue #1178 — forward the active groupId; used by the area-selected
+      // group-name lookup and the school-first zone panels. Prop wiring only.
       groupId={urlState.groupId ?? null}
       onSelectGroup={(groupId) => urlActions.selectGroup(groupId)}
-      // Issue #1483 — clear groupId to return from Level-2 area list to Level-1 group cards.
-      // Issue #1485 — same callback also used by school-first: school-group-areas → school-browse.
+      // Issue #1483/#1485 — its only production consumer (AreaGroupsLandingPanel)
+      // is deleted (Issue #1956 PR-6); still forwarded unchanged.
       onClearGroup={() => urlActions.selectGroup(null)}
       // Issue #1745 — 4-level residential Discover hierarchy
       scope={urlState.scope ?? null}
@@ -500,6 +569,8 @@ export function DiscoverRightPanelContainer({
       onHoverResultListing={interactionCommands.hoverListing}
       // Issue #1798 PR-B (Unit D/F) — panel↔map area-marker plumbing. Mirrors the
       // onHoverResultListing pattern above: purely ephemeral state, no camera move.
+      // Issue #1815 R3b/R6 exercises onAreaSearchQueryChange directly at the
+      // mocked-prop level — it is NOT solely fed by the deleted AreaGroupsLandingPanel.
       onAreaSearchQueryChange={setAreaSearchQuery}
       onAreaHover={interactionCommands.hoverArea}
       shownAreaCount={areaMarkerCounts.shown}
@@ -548,7 +619,9 @@ export function DiscoverRightPanelContainer({
       totalProperties={cityTotal}
       areasCount={discoverAreas.filter((a) => (a.listingCount ?? 0) > 0).length}
       isCityEmpty={cityHasNoListings}
-      // Issue #1597 — group-results state wiring
+      // Issue #1597 — group-results state wiring. Its only production consumer
+      // (AreaGroupResultsPanel) is deleted (Issue #1956 PR-6); still forwarded
+      // unchanged.
       onEnterGroupResults={urlActions.enterGroupResults}
       groupResultsListings={groupResultsListings}
       isLoadingGroupResults={isLoadingGroupResults}
