@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -96,12 +97,14 @@ class NavigationTreeGeneratorTest {
     // ── Genuine multi-level cluster city ────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("[#1956 D3] 16 areas, max_direct_children=2 -> DIRECTION root at depth 0, a genuine "
-            + "3 CLUSTER-level tree (depths 1,2,3), AREA leaves at depth 4, every node's "
-            + "descendant_area_count and bounds correct — but #1956/#2014's locked product contract "
-            + "permits only ONE CLUSTER level (max public depth 2), so this deep-but-structurally-"
-            + "sound tree now FAILS validation with INVALID_HIERARCHY_SHAPE, not despite it")
-    void genuineThreeClusterLevelCity_producesStructureButFailsContractShapeValidation() {
+    @DisplayName("[#2033 P2 fix] 16 areas, max_direct_children=2, max_safety_depth=10 (deep enough "
+            + "to have produced 3 internal bisection levels pre-fix) -> partition-then-emit still "
+            + "performs the SAME internal bisections (8 depth-1 CLUSTERs of 2 areas each), but "
+            + "emission is now non-recursive: every CLUSTER lands at depth 1, every AREA leaf at "
+            + "depth 2 — no third public CLUSTER level, no node beyond depth 2 — and the tree "
+            + "validates with ZERO errors, where the pre-fix generator produced depths 1,2,3 and "
+            + "leaves at depth 4, tripping INVALID_HIERARCHY_SHAPE")
+    void deepBisection_flattensToSingleClusterLevel_validatesCleanly() {
         List<GeneratorArea> areas = new ArrayList<>();
         for (int i = 0; i < 16; i++) {
             areas.add(area(String.format("city|z%02d", i), "Area " + i, 12.0 + i * 0.1));
@@ -110,39 +113,38 @@ class NavigationTreeGeneratorTest {
         List<GeneratedNode> result = generator.generateRegion(
                 "north", areas, policy, FINGERPRINT, GENERATED_AT, new HashSet<>());
 
-        // The generator itself is UNCHANGED and still recursion-capable: given a policy that
-        // allows it (max_safety_depth=10 here), it still mechanically produces a genuine 3
-        // CLUSTER-level tree. This capability is deliberately still proven below — only the
-        // VALIDATION expectation changed (#1956/#2014 D6(d) ruling), not the generator.
-        Set<Integer> clusterDepths = result.stream()
-                .filter(n -> "CLUSTER".equals(n.nodeType()))
-                .map(GeneratedNode::depth)
-                .collect(Collectors.toSet());
-        assertThat(clusterDepths).containsExactlyInAnyOrder(1, 2, 3);
+        // #2033 P2: emission is non-recursive by construction — every CLUSTER is at depth 1 (never
+        // 2 or 3, even though the internal bisection recursed 3 levels deep to build the bucket
+        // list), and every AREA leaf is at depth 2 (never 4).
+        List<GeneratedNode> clusters = result.stream().filter(n -> "CLUSTER".equals(n.nodeType())).toList();
+        assertThat(clusters).allMatch(n -> n.depth() == 1);
+        // 16 areas bisected down to buckets of size <= max_direct_children=2 takes exactly 3
+        // internal bisection levels (16->8->4->2), yielding 2^3 = 8 flat depth-1 CLUSTERs.
+        assertThat(clusters).hasSize(8);
+        assertThat(clusters).allMatch(n -> n.descendantAreaCount() == 2);
 
         List<GeneratedNode> leaves = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
         assertThat(leaves).hasSize(16);
-        assertThat(leaves).allMatch(n -> n.depth() == 4);
+        assertThat(leaves).allMatch(n -> n.depth() == 2);
 
         assertDescendantCountsAndBoundsCorrectEverywhere(result);
 
-        // #1956/#2014 D6(d), owned ruling: a third public CLUSTER level (depths 2,3 here) and any
-        // node beyond the max public depth of 2 (depth 4 leaves here) is NOT a legal public shape,
-        // regardless of the generator's mechanical capability — NavigationTreeValidationService
-        // check #14 rejects it with INVALID_HIERARCHY_SHAPE, independent of check #11's
-        // policy-driven max_safety_depth (which this test's policy of 10 would otherwise permit).
-        assertFailsWithHierarchyShapeViolation(result);
+        // #1956/#2014 D6(d): the flattened tree is a legal public shape (City -> Direction -> ONE
+        // Local Destination CLUSTER level -> AREA) — it now validates with ZERO errors, unlike the
+        // pre-fix generator's genuinely-nested tree, which check #14 rejected.
+        assertValidatesCleanly(result);
     }
 
     // ── Recursive termination + max-depth guard ─────────────────────────────────────────────
 
     @Test
-    @DisplayName("[#1956 D3/D5] max_safety_depth forces AREA leaves even when member count still "
-            + "exceeds max_direct_children — no node ever exceeds the depth ceiling (now "
-            + "max_safety_depth + 1, since depth 0 is occupied by the DIRECTION root) — but with "
-            + "max_safety_depth=2 the leaves land at depth 3, itself beyond #1956/#2014's max public "
-            + "depth of 2, so this ALSO now fails contract-shape validation")
-    void maxSafetyDepthTerminatesRecursion_producesStructureButFailsContractShapeValidation() {
+    @DisplayName("[#2033 P2 fix] max_safety_depth=2 terminates the INTERNAL bisection recursion "
+            + "(members still exceed max_direct_children=1 when the safety-depth ceiling is hit) — "
+            + "partition() still returns buckets of size 2 (unchanged termination behaviour), but "
+            + "emission is non-recursive: every CLUSTER still lands at depth 1 and every AREA leaf "
+            + "at depth 2 (never depth 3, where the pre-fix generator would have placed them and "
+            + "tripped INVALID_HIERARCHY_SHAPE) — the tree validates with ZERO errors")
+    void maxSafetyDepthTerminatesInternalBisection_flattensToSingleClusterLevel_validatesCleanly() {
         List<GeneratorArea> areas = new ArrayList<>();
         for (int i = 0; i < 8; i++) {
             areas.add(area(String.format("city|d%02d", i), "D" + i, 12.0 + i * 0.1));
@@ -151,21 +153,28 @@ class NavigationTreeGeneratorTest {
         List<GeneratedNode> result = generator.generateRegion(
                 "north", areas, policy, FINGERPRINT, GENERATED_AT, new HashSet<>());
 
-        assertThat(result).allMatch(n -> n.depth() <= 3);
+        // #2033 P2: no node may ever exceed depth 2 regardless of max_safety_depth's internal
+        // bisection-level budget.
+        assertThat(result).allMatch(n -> n.depth() <= 2);
+
+        List<GeneratedNode> clusters = result.stream().filter(n -> "CLUSTER".equals(n.nodeType())).toList();
+        assertThat(clusters).allMatch(n -> n.depth() == 1);
+        // 8 areas, max_direct_children=1 but max_safety_depth=2 caps internal bisection at 2
+        // levels -> 2^2 = 4 flat depth-1 CLUSTERs of 2 areas each (the safety-depth ceiling is hit
+        // before the members would otherwise fit under max_direct_children=1).
+        assertThat(clusters).hasSize(4);
+        assertThat(clusters).allMatch(n -> n.descendantAreaCount() == 2);
+
         List<GeneratedNode> leaves = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
         assertThat(leaves).hasSize(8);
-        // Every leaf sits at exactly the safety depth + 1 (2 areas remained per parent at cluster
-        // depth 2, exceeding max_direct_children=1, yet leafed anyway because cluster depth hit
-        // the max_safety_depth=2 ceiling; +1 for the DIRECTION level now above it). The generator's
-        // recursion-termination behaviour is UNCHANGED and still proven here.
-        assertThat(leaves).allMatch(n -> n.depth() == 3);
+        assertThat(leaves).allMatch(n -> n.depth() == 2);
 
         assertDescendantCountsAndBoundsCorrectEverywhere(result);
 
-        // #1956/#2014 D6(d): depth 3 leaves exceed the max public depth of 2 — a policy of
-        // max_safety_depth=2 is a legal OPERATOR value (check #11 alone would accept depth <= 3),
-        // but the resulting tree is still not a legal PUBLIC shape, so check #14 rejects it too.
-        assertFailsWithHierarchyShapeViolation(result);
+        // #1956/#2014 D6(d): max_safety_depth=2 remains a legal operator value under check #11
+        // (maxAllowedDepth = maxSafetyDepth + 1 = 3 >= actual depth 2), and the flattened tree is
+        // now ALSO a legal public shape under check #14 — zero errors, not the pre-fix violation.
+        assertValidatesCleanly(result);
     }
 
     // ── Meaningless-split fallback (one-child + below-minimum) ──────────────────────────────
@@ -586,6 +595,396 @@ class NavigationTreeGeneratorTest {
         assertThat(directionOrderByRegion.get("north")).isLessThan(directionOrderByRegion.get("east"));
     }
 
+    // ── #2033 P3: realistic-scale regression + edge-case suite ─────────────────────────────────
+
+    /** The REAL seeded {@code city_region_policy} defaults (see {@code V1xx} migration /
+     * {@link NavigationPolicyReader}), not a test-only convenience value. */
+    private static final GeneratorPolicy REAL_SEEDED_POLICY = policy(8, 3, 6, true);
+
+    /** Deterministic SYNTHETIC areas for one region — fixed longitude, latitude spread by index so
+     * LAT stays the split axis, offset per region so distinct regions never share centroids. No
+     * real city names or coordinates appear anywhere in this fixture. */
+    private static List<GeneratorArea> syntheticRegionAreas(String regionKey, int count, double latOffset) {
+        List<GeneratorArea> areas = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            areas.add(area(regionKey + "|a" + String.format("%04d", i), regionKey + "-area-" + i,
+                    latOffset + i * 0.01));
+        }
+        return areas;
+    }
+
+    /** The 9-region, 313-area realistic-scale fixture (68/60/45/38/30/22/15/1/34 = 313),
+     * deliberately unevenly sized to mirror a real city's uneven region membership. Synthetic
+     * keys/coordinates only — no real city names or coordinates. */
+    private static List<GeneratorRegionInput> realisticScaleCityFixture() {
+        int[] sizes = {68, 60, 45, 38, 30, 22, 15, 1, 34};
+        List<GeneratorRegionInput> regions = new ArrayList<>();
+        for (int r = 0; r < sizes.length; r++) {
+            String regionKey = "reg" + r;
+            regions.add(new GeneratorRegionInput(regionKey, syntheticRegionAreas(regionKey, sizes[r], r * 1000.0)));
+        }
+        return regions;
+    }
+
+    /** Runs the SAME 6-arg {@code validate(...)} overload and argument shape
+     * {@link NavigationTreeGenerationService#generateAndStoreForRevision} uses in production
+     * (no overrides), given a generated tree and its originating region inputs. */
+    private ValidationReport validateLikeGenerationService(
+            List<GeneratedNode> generated, List<GeneratorRegionInput> regionInputs, GeneratorPolicy policy) {
+        List<ValidationNode> validationNodes = generated.stream()
+                .map(n -> ValidationNode.fromGeneratedNode(1L, n))
+                .toList();
+        Set<String> areaKeys = regionInputs.stream()
+                .flatMap(r -> r.members().stream())
+                .map(GeneratorArea::areaKey)
+                .collect(Collectors.toSet());
+        Set<String> regionKeys = regionInputs.stream()
+                .map(GeneratorRegionInput::regionKey).collect(Collectors.toSet());
+        return new NavigationTreeValidationService().validate(
+                validationNodes, areaKeys, policy.maxSafetyDepth(), List.of(), regionKeys, areaKeys);
+    }
+
+    @Test
+    @DisplayName("[#2033 P3 AC1/AC10 headline regression] 313 synthetic areas across 9 unevenly-"
+            + "sized regions (68/60/45/38/30/22/15/1/34), REAL seeded policy defaults "
+            + "(max_direct_children=8, min_areas_per_cluster=3, max_safety_depth=6, "
+            + "one_child_prevention=true) -> generateCity(...) + the SAME 6-arg validate(...) "
+            + "overload NavigationTreeGenerationService#generateAndStoreForRevision uses produces "
+            + "ZERO validation errors, max node depth == 2, and every CLUSTER at depth exactly 1")
+    void realisticScaleCity_generatesWithZeroValidationErrorsAndMaxDepthTwo() {
+        List<GeneratorRegionInput> regions = realisticScaleCityFixture();
+        int expectedAreaCount = regions.stream().mapToInt(r -> r.members().size()).sum();
+        assertThat(expectedAreaCount).isEqualTo(313);
+
+        List<GeneratedNode> generated = generator.generateCity(regions, REAL_SEEDED_POLICY, FINGERPRINT, GENERATED_AT);
+
+        List<GeneratedNode> leaves = generated.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
+        assertThat(leaves).hasSize(313);
+
+        ValidationReport report = validateLikeGenerationService(generated, regions, REAL_SEEDED_POLICY);
+        assertThat(report.errors()).as("realistic-scale city must validate with zero errors").isEmpty();
+
+        int maxDepth = generated.stream().mapToInt(GeneratedNode::depth).max().orElseThrow();
+        assertThat(maxDepth).isEqualTo(2);
+        List<GeneratedNode> clusters = generated.stream().filter(n -> "CLUSTER".equals(n.nodeType())).toList();
+        assertThat(clusters).as("the 68/60/45-area regions must actually cluster").isNotEmpty();
+        assertThat(clusters).allMatch(n -> n.depth() == 1);
+    }
+
+    @Test
+    @DisplayName("[#2033 P3 AC2] depth invariance under policy: the realistic-scale fixture, run "
+            + "with max_safety_depth in {0,1,2,6,10}, always produces max node depth <= 2, every "
+            + "CLUSTER at depth exactly 1, and zero validation errors — max_safety_depth can only "
+            + "ever change the internal bucket count, never the public depth")
+    void realisticScaleCity_depthInvariantAcrossMaxSafetyDepthValues() {
+        List<GeneratorRegionInput> regions = realisticScaleCityFixture();
+        for (int maxSafetyDepth : new int[] {0, 1, 2, 6, 10}) {
+            GeneratorPolicy policy = policy(8, 3, maxSafetyDepth, true);
+            List<GeneratedNode> generated = generator.generateCity(regions, policy, FINGERPRINT, GENERATED_AT);
+
+            int maxDepth = generated.stream().mapToInt(GeneratedNode::depth).max().orElseThrow();
+            assertThat(maxDepth).as("max_safety_depth=" + maxSafetyDepth).isLessThanOrEqualTo(2);
+            List<GeneratedNode> clusters = generated.stream().filter(n -> "CLUSTER".equals(n.nodeType())).toList();
+            assertThat(clusters).as("max_safety_depth=" + maxSafetyDepth).allMatch(n -> n.depth() == 1);
+
+            ValidationReport report = validateLikeGenerationService(generated, regions, policy);
+            assertThat(report.errors())
+                    .as("max_safety_depth=" + maxSafetyDepth + " must still validate cleanly")
+                    .isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("[#2033 P3 AC5] determinism: shuffling BOTH the region list order and each "
+            + "region's member order (fixed seed) produces a byte-identical generateCity output")
+    void realisticScaleCity_deterministicUnderShuffledRegionAndMemberOrder() {
+        List<GeneratorRegionInput> ordered = realisticScaleCityFixture();
+        List<GeneratedNode> resultOrdered = generator.generateCity(
+                ordered, REAL_SEEDED_POLICY, FINGERPRINT, GENERATED_AT);
+
+        Random random = new Random(42);
+        List<GeneratorRegionInput> shuffledRegions = new ArrayList<>();
+        for (GeneratorRegionInput region : ordered) {
+            List<GeneratorArea> shuffledMembers = new ArrayList<>(region.members());
+            Collections.shuffle(shuffledMembers, random);
+            shuffledRegions.add(new GeneratorRegionInput(
+                    region.regionKey(), shuffledMembers, region.displayOrder(), region.displayLabel()));
+        }
+        Collections.shuffle(shuffledRegions, random);
+
+        List<GeneratedNode> resultShuffled = generator.generateCity(
+                shuffledRegions, REAL_SEEDED_POLICY, FINGERPRINT, GENERATED_AT);
+
+        assertThat(resultShuffled).isEqualTo(resultOrdered);
+    }
+
+    @Test
+    @DisplayName("[#2033 P3 AC4] partition exhaustiveness/disjointness: for a region large enough "
+            + "to bisect repeatedly, the emitted AREA leaves exactly reproduce the member set (no "
+            + "area_key missing, none duplicated) and no area_key is ever double-counted across "
+            + "sibling CLUSTER buckets")
+    void largeRegion_partitionIsExhaustiveAndDisjoint() {
+        List<GeneratorArea> members = syntheticRegionAreas("partreg", 68, 0.0);
+        List<GeneratedNode> result = generator.generateRegion(
+                "partreg", members, REAL_SEEDED_POLICY, FINGERPRINT, GENERATED_AT, new HashSet<>());
+
+        List<GeneratedNode> leaves = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
+        assertThat(leaves).hasSize(68);
+
+        List<String> leafAreaKeys = leaves.stream().map(GeneratedNode::areaKey).toList();
+        assertThat(new HashSet<>(leafAreaKeys)).as("every leaf area_key must be unique").hasSize(68);
+        Set<String> expectedKeys = members.stream().map(GeneratorArea::areaKey).collect(Collectors.toSet());
+        assertThat(new HashSet<>(leafAreaKeys)).isEqualTo(expectedKeys);
+
+        // Disjointness: group leaves by their immediate parent (a CLUSTER bucket, or the
+        // DIRECTION itself if unclustered) — no area_key may appear under more than one parent.
+        Map<String, List<String>> areaKeysByParent = leaves.stream()
+                .collect(Collectors.groupingBy(GeneratedNode::parentNodeKey,
+                        Collectors.mapping(GeneratedNode::areaKey, Collectors.toList())));
+        Set<String> seenAcrossParents = new HashSet<>();
+        for (List<String> keysUnderOneParent : areaKeysByParent.values()) {
+            for (String key : keysUnderOneParent) {
+                assertThat(seenAcrossParents.add(key))
+                        .as("area_key " + key + " must belong to exactly one bucket/parent").isTrue();
+            }
+        }
+    }
+
+    // ── #2033 P3 AC3/AC7 edge cases (each asserts shape AND zero validation errors) ────────────
+
+    @Test
+    @DisplayName("[#2033 P3 edge (a)] region with exactly 1 area -> DIRECTION + AREA at depth 1, "
+            + "no CLUSTER, validates cleanly")
+    void edgeCase_singleAreaRegion_validatesCleanly() {
+        List<GeneratorArea> members = List.of(area("edgea|a1", "A1", 12.0));
+        List<GeneratedNode> result = generator.generateRegion(
+                "edgea", members, REAL_SEEDED_POLICY, FINGERPRINT, GENERATED_AT, new HashSet<>());
+
+        assertThat(result).hasSize(2);
+        assertThat(result.stream().map(GeneratedNode::nodeType).collect(Collectors.toSet()))
+                .containsExactlyInAnyOrder("DIRECTION", "AREA");
+        GeneratedNode leaf = result.stream().filter(n -> "AREA".equals(n.nodeType())).findFirst().orElseThrow();
+        assertThat(leaf.depth()).isEqualTo(1);
+        assertValidatesCleanly(result);
+    }
+
+    @Test
+    @DisplayName("[#2033 P3 edge (b)] region with exactly max_direct_children areas -> AREAs at "
+            + "depth 1, no CLUSTER, validates cleanly")
+    void edgeCase_exactlyMaxDirectChildren_validatesCleanly() {
+        List<GeneratorArea> members = syntheticRegionAreas("edgeb", 8, 0.0); // == max_direct_children
+        List<GeneratedNode> result = generator.generateRegion(
+                "edgeb", members, REAL_SEEDED_POLICY, FINGERPRINT, GENERATED_AT, new HashSet<>());
+
+        assertThat(result.stream().filter(n -> "CLUSTER".equals(n.nodeType())).toList()).isEmpty();
+        List<GeneratedNode> leaves = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
+        assertThat(leaves).hasSize(8);
+        assertThat(leaves).allMatch(n -> n.depth() == 1);
+        assertValidatesCleanly(result);
+    }
+
+    @Test
+    @DisplayName("[#2033 P3 edge (c)] region with max_direct_children + 1 areas -> splits into "
+            + "depth-1 CLUSTERs, validates cleanly")
+    void edgeCase_maxDirectChildrenPlusOne_validatesCleanly() {
+        List<GeneratorArea> members = syntheticRegionAreas("edgec", 9, 0.0); // == max_direct_children + 1
+        List<GeneratedNode> result = generator.generateRegion(
+                "edgec", members, REAL_SEEDED_POLICY, FINGERPRINT, GENERATED_AT, new HashSet<>());
+
+        List<GeneratedNode> clusters = result.stream().filter(n -> "CLUSTER".equals(n.nodeType())).toList();
+        assertThat(clusters).isNotEmpty();
+        assertThat(clusters).allMatch(n -> n.depth() == 1);
+        List<GeneratedNode> leaves = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
+        assertThat(leaves).hasSize(9);
+        assertValidatesCleanly(result);
+    }
+
+    @Test
+    @DisplayName("[#2033 P3 edge (d)] split rejected at the top level (one_child_prevention) -> "
+            + "AREAs directly under DIRECTION, no CLUSTER, validates cleanly")
+    void edgeCase_splitRejectedAtTopLevel_validatesCleanly() {
+        List<GeneratorArea> members = List.of(
+                area("edged|o1", "O1", 12.0), area("edged|o2", "O2", 12.1), area("edged|o3", "O3", 12.2));
+        // 3 members > max_direct_children(2); bisect gives a 1/2 split -> one-child, rejected.
+        GeneratorPolicy rejectingPolicy = policy(2, 1, 5, true);
+        List<GeneratedNode> result = generator.generateRegion(
+                "edged", members, rejectingPolicy, FINGERPRINT, GENERATED_AT, new HashSet<>());
+
+        assertThat(result.stream().filter(n -> "CLUSTER".equals(n.nodeType())).toList()).isEmpty();
+        List<GeneratedNode> leaves = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
+        assertThat(leaves).hasSize(3);
+        assertThat(leaves).allMatch(n -> n.depth() == 1 && "d:edged".equals(n.parentNodeKey()));
+        assertValidatesCleanly(result);
+    }
+
+    @Test
+    @DisplayName("[#2033 P3 edge (e)] split rejected mid-recursion -> that bucket becomes ONE "
+            + "CLUSTER whose AREA count exceeds max_direct_children, accepted and validating cleanly")
+    void edgeCase_splitRejectedMidRecursion_bucketExceedsMaxDirectChildren_validatesCleanly() {
+        // 10 members, max_direct_children=4, min_areas_per_cluster=4 (floor=4): the top split (5/5)
+        // is accepted, but each 5-member half's own further split (2/3) falls below floor=4 and is
+        // rejected -> each half collapses into ONE CLUSTER of 5 areas, exceeding max_direct_children=4.
+        List<GeneratorArea> members = syntheticRegionAreas("edgee", 10, 0.0);
+        GeneratorPolicy midRejectPolicy = policy(4, 4, 5, true);
+        List<GeneratedNode> result = generator.generateRegion(
+                "edgee", members, midRejectPolicy, FINGERPRINT, GENERATED_AT, new HashSet<>());
+
+        List<GeneratedNode> clusters = result.stream().filter(n -> "CLUSTER".equals(n.nodeType())).toList();
+        assertThat(clusters).hasSize(2);
+        assertThat(clusters).allMatch(n -> n.depth() == 1);
+        assertThat(clusters).allMatch(n -> n.descendantAreaCount() == 5); // > max_direct_children=4
+        assertValidatesCleanly(result);
+    }
+
+    @Test
+    @DisplayName("[#2033 P3 edge (f)] all areas sharing an identical centroid (zero range on both "
+            + "axes) -> partition still terminates (tie-broken lexicographically by area_key), "
+            + "output validates cleanly")
+    void edgeCase_identicalCentroids_partitionTerminatesAndValidatesCleanly() {
+        List<GeneratorArea> members = new ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            members.add(area(String.format("edgef|a%02d", i), "F" + i, 12.0)); // identical lat AND lon
+        }
+        List<GeneratedNode> result = generator.generateRegion(
+                "edgef", members, REAL_SEEDED_POLICY, FINGERPRINT, GENERATED_AT, new HashSet<>());
+
+        List<GeneratedNode> leaves = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
+        assertThat(leaves).hasSize(20);
+        assertThat(result).allMatch(n -> n.depth() <= 2);
+        assertValidatesCleanly(result);
+    }
+
+    @Test
+    @DisplayName("[#2033 P3 edge (h)] a very dense single region (120+ areas) -> many depth-1 "
+            + "CLUSTERs, still zero validation errors, still depth <= 2")
+    void edgeCase_denseSingleRegion_manyClustersButStillValid() {
+        List<GeneratorArea> members = syntheticRegionAreas("edgeh", 130, 0.0);
+        List<GeneratedNode> result = generator.generateRegion(
+                "edgeh", members, REAL_SEEDED_POLICY, FINGERPRINT, GENERATED_AT, new HashSet<>());
+
+        List<GeneratedNode> clusters = result.stream().filter(n -> "CLUSTER".equals(n.nodeType())).toList();
+        assertThat(clusters.size()).as("a 130-area region must produce many depth-1 clusters").isGreaterThan(10);
+        assertThat(clusters).allMatch(n -> n.depth() == 1);
+        List<GeneratedNode> leaves = result.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
+        assertThat(leaves).hasSize(130);
+        assertThat(result).allMatch(n -> n.depth() <= 2);
+        assertValidatesCleanly(result);
+    }
+
+    // Note: edge (g) — max_safety_depth=0 -> no CLUSTER at all, AREAs at depth 1 — is already
+    // covered at full strength by maxSafetyDepthZero_producesDirectionToAreaShapeOnly above
+    // (includes assertValidatesCleanly); not duplicated here.
+
+    @Test
+    @DisplayName("[#2033 P3 AC7 / validator #4] every emitted CLUSTER has >= max(2, "
+            + "min_areas_per_cluster) AREA children, across both the realistic-scale city and a "
+            + "dense single-region fixture")
+    void everyCluster_hasAtLeastFloorAreaChildren() {
+        int floor = Math.max(2, REAL_SEEDED_POLICY.minAreasPerCluster());
+
+        List<GeneratedNode> cityResult = generator.generateCity(
+                realisticScaleCityFixture(), REAL_SEEDED_POLICY, FINGERPRINT, GENERATED_AT);
+        assertClustersMeetFloor(cityResult, floor);
+
+        List<GeneratedNode> denseResult = generator.generateRegion(
+                "floorcheck", syntheticRegionAreas("floorcheck", 130, 0.0), REAL_SEEDED_POLICY,
+                FINGERPRINT, GENERATED_AT, new HashSet<>());
+        assertClustersMeetFloor(denseResult, floor);
+    }
+
+    private void assertClustersMeetFloor(List<GeneratedNode> nodes, int floor) {
+        List<GeneratedNode> clusters = nodes.stream().filter(n -> "CLUSTER".equals(n.nodeType())).toList();
+        assertThat(clusters).isNotEmpty();
+        assertThat(clusters).allMatch(n -> n.descendantAreaCount() >= floor);
+    }
+
+    @Test
+    @DisplayName("[#2033 P3 AC6, R2 guard] display_order is gapless 1..N at all three sibling "
+            + "scopes across a multi-region city: DIRECTIONs city-wide, CLUSTERs under EACH "
+            + "Direction (restarting at 1 per Direction, never running city-wide), and AREAs under "
+            + "each parent")
+    void displayOrder_gaplessAtAllThreeSiblingScopes_multiRegion() {
+        List<GeneratorRegionInput> regions = List.of(
+                new GeneratorRegionInput("north", syntheticRegionAreas("north", 20, 0.0)),
+                new GeneratorRegionInput("south", syntheticRegionAreas("south", 20, 100.0)));
+        GeneratorPolicy policy = policy(2, 1, 5, true);
+        List<GeneratedNode> result = generator.generateCity(regions, policy, FINGERPRINT, GENERATED_AT);
+
+        // 1) DIRECTIONs city-wide: gapless 1..N (N = region count).
+        List<Integer> directionOrders = result.stream()
+                .filter(n -> "DIRECTION".equals(n.nodeType()))
+                .map(GeneratedNode::displayOrder).sorted().toList();
+        assertThat(directionOrders).containsExactly(1, 2);
+
+        // 2) CLUSTERs under EACH Direction: independently gapless 1..M, restarting at 1 per
+        // Direction — the R2 trap this test specifically guards against.
+        Map<String, GeneratedNode> directionsByRegion = result.stream()
+                .filter(n -> "DIRECTION".equals(n.nodeType()))
+                .collect(Collectors.toMap(GeneratedNode::regionKey, n -> n));
+        for (GeneratedNode direction : directionsByRegion.values()) {
+            List<Integer> clusterOrders = result.stream()
+                    .filter(n -> "CLUSTER".equals(n.nodeType()) && direction.nodeKey().equals(n.parentNodeKey()))
+                    .map(GeneratedNode::displayOrder).sorted().toList();
+            assertThat(clusterOrders)
+                    .as("CLUSTER display_order under " + direction.nodeKey() + " must restart at 1")
+                    .isNotEmpty()
+                    .containsExactlyElementsOf(
+                            java.util.stream.IntStream.rangeClosed(1, clusterOrders.size()).boxed().toList());
+        }
+
+        // 3) AREAs under each parent (DIRECTION or CLUSTER): independently gapless 1..K.
+        Map<String, List<GeneratedNode>> areasByParent = result.stream()
+                .filter(n -> "AREA".equals(n.nodeType()))
+                .collect(Collectors.groupingBy(GeneratedNode::parentNodeKey));
+        assertThat(areasByParent).isNotEmpty();
+        for (Map.Entry<String, List<GeneratedNode>> e : areasByParent.entrySet()) {
+            List<Integer> areaOrders = e.getValue().stream().map(GeneratedNode::displayOrder).sorted().toList();
+            assertThat(areaOrders)
+                    .as("AREA display_order under " + e.getKey() + " must be gapless")
+                    .containsExactlyElementsOf(
+                            java.util.stream.IntStream.rangeClosed(1, areaOrders.size()).boxed().toList());
+        }
+
+        assertValidatesCleanly(result);
+    }
+
+    @Test
+    @DisplayName("[#2033 P3 validator #13] ancestorKeys is exact for a depth-1 AREA "
+            + "([directionKey]), a depth-1 CLUSTER ([directionKey]), and a depth-2 AREA "
+            + "([directionKey, clusterKey])")
+    void ancestorKeys_exactAtEveryDepth() {
+        // Region A: 1 area -> depth-1 AREA directly under DIRECTION (no CLUSTER).
+        List<GeneratedNode> shallow = generator.generateRegion(
+                "ancA", List.of(area("ancA|a1", "A1", 12.0)), REAL_SEEDED_POLICY, FINGERPRINT, GENERATED_AT,
+                new HashSet<>());
+        GeneratedNode shallowDirection = shallow.stream()
+                .filter(n -> "DIRECTION".equals(n.nodeType())).findFirst().orElseThrow();
+        GeneratedNode shallowArea = shallow.stream()
+                .filter(n -> "AREA".equals(n.nodeType())).findFirst().orElseThrow();
+        assertThat(shallowArea.depth()).isEqualTo(1);
+        assertThat(shallowArea.ancestorKeys()).containsExactly(shallowDirection.nodeKey());
+
+        // Region B: enough areas to force a CLUSTER layer -> depth-1 CLUSTER, depth-2 AREA.
+        List<GeneratedNode> deep = generator.generateRegion(
+                "ancB", syntheticRegionAreas("ancB", 20, 0.0), policy(2, 1, 5, true), FINGERPRINT,
+                GENERATED_AT, new HashSet<>());
+        GeneratedNode deepDirection = deep.stream()
+                .filter(n -> "DIRECTION".equals(n.nodeType())).findFirst().orElseThrow();
+        GeneratedNode deepCluster = deep.stream()
+                .filter(n -> "CLUSTER".equals(n.nodeType())).findFirst().orElseThrow();
+        assertThat(deepCluster.depth()).isEqualTo(1);
+        assertThat(deepCluster.ancestorKeys()).containsExactly(deepDirection.nodeKey());
+
+        GeneratedNode deepAreaLeaf = deep.stream()
+                .filter(n -> "AREA".equals(n.nodeType()) && deepCluster.nodeKey().equals(n.parentNodeKey()))
+                .findFirst().orElseThrow();
+        assertThat(deepAreaLeaf.depth()).isEqualTo(2);
+        assertThat(deepAreaLeaf.ancestorKeys()).containsExactly(deepDirection.nodeKey(), deepCluster.nodeKey());
+
+        assertValidatesCleanly(shallow);
+        assertValidatesCleanly(deep);
+    }
+
     // ── Shared helpers ────────────────────────────────────────────────────────────────────────
 
     private void assertDescendantCountsAndBoundsCorrectEverywhere(List<GeneratedNode> nodes) {
@@ -629,19 +1028,4 @@ class NavigationTreeGeneratorTest {
         assertThat(report.errors()).as("generated tree should validate cleanly").isEmpty();
     }
 
-    /** [#1956/#2014 D6(d)] Cross-checks a generated tree through the validation service and asserts
-     * it is REJECTED specifically for exceeding the locked product contract's two approved public
-     * shapes (a third CLUSTER level and/or a node beyond max public depth 2) — used by tests that
-     * deliberately construct a policy allowing the generator to recurse deeper than the contract
-     * permits, to prove check #14 (not merely check #11) catches it. */
-    private void assertFailsWithHierarchyShapeViolation(List<GeneratedNode> nodes) {
-        List<ValidationNode> validationNodes = nodes.stream()
-                .map(n -> ValidationNode.fromGeneratedNode(1L, n))
-                .toList();
-        ValidationReport report = new NavigationTreeValidationService().validate(validationNodes);
-        assertThat(report.errors())
-                .as("a tree exceeding the max public depth of 2 must fail hierarchy-shape validation")
-                .extracting(ValidationError::code)
-                .contains("INVALID_HIERARCHY_SHAPE");
-    }
 }

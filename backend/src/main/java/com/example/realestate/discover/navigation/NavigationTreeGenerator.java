@@ -1,5 +1,7 @@
 package com.example.realestate.discover.navigation;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -15,16 +17,17 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * D4: DETERMINISTIC RECURSIVE GEOMETRIC LONGEST-AXIS-MEDIAN BISECTION (#1955 Areas PR A).
+ * D4: DETERMINISTIC GEOMETRIC LONGEST-AXIS-MEDIAN BISECTION, PARTITION-THEN-EMIT (#2033 fix of
+ * #1955 Areas PR A).
  *
  * <p><b>Algorithm choice / rationale.</b> Considered alternatives — k-means-style clustering,
  * quad-tree/grid partitioning, greedy nearest-neighbour agglomeration — all either depend on
  * iteration order, randomized seeding, or convergence tolerances (violating the determinism
  * contract below), or on a tunable target-cluster-count that doesn't compose cleanly with a
  * "collapse to leaves when the split isn't meaningful" rule. A binary longest-axis-median
- * bisection is deterministic given one fixed sort, terminates in O(log n) recursion levels, and
- * its accept/reject-a-split decision ({@code one_child_prevention}, {@code min_areas_per_cluster})
- * is simple to reason about and exhaustively test.
+ * bisection is deterministic given one fixed sort, terminates in O(log n) internal bisection
+ * levels, and its accept/reject-a-split decision ({@code one_child_prevention}, {@code
+ * min_areas_per_cluster}) is simple to reason about and exhaustively test.
  *
  * <p><b>Determinism contract.</b> This class is a PURE function of its geometry+policy inputs —
  * it NEVER reads {@code property_listings} or any other listing-volume signal. Two calls with
@@ -33,22 +36,45 @@ import java.util.stream.Collectors;
  * counts), regardless of listing counts, DB row order, or map iteration order — every collection
  * this class touches is explicitly sorted before use.
  *
- * <p><b>Per-node algorithm</b> (see approved-plan.toml D4):
+ * <p><b>Public shape is fixed at <= 2 levels beneath the city root, by construction.</b> The
+ * hierarchy the validator (see {@code NavigationTreeValidationService} check #14,
+ * {@code MAX_PUBLIC_DEPTH = 2}) permits is exactly {@code City -> Direction -> AREA} (depths 0, 1)
+ * or {@code City -> Direction -> CLUSTER -> AREA} (depths 0, 1, 2); CLUSTER may occupy ONLY depth
+ * 1. To guarantee this for every policy input, node emission is split into two phases:
  * <ol>
- *   <li>Pre-sort member areas by their fixed total order (area_key lexicographic).</li>
- *   <li>If the member count fits within {@code max_direct_children}, OR the recursion has hit
- *       {@code max_safety_depth}, emit each member as an AREA leaf and stop.</li>
- *   <li>Otherwise bisect by LONGEST AXIS at the coordinate MEDIAN of member centroids.</li>
- *   <li>If the split would create a one-child cluster (when {@code one_child_prevention}) or any
- *       partition falls below {@code min_areas_per_cluster}, the split is rejected and this node
- *       instead collapses to AREA leaves (step 2's outcome), even though the member count exceeds
- *       {@code max_direct_children}.</li>
- *   <li>Otherwise emit two CLUSTER children and recurse into each at {@code depth + 1}, up to
- *       {@code max_safety_depth}.</li>
+ *   <li>{@link #partition(List, int, GeneratorPolicy)} — a PURE, internally-recursive function
+ *       that only computes a flat list of member "buckets" (no node emission, no node_keys, no
+ *       depth). It bisects by LONGEST AXIS at the coordinate MEDIAN of member centroids, rejecting
+ *       a split (and returning the members as a single bucket) whenever it would create a
+ *       one-child bucket (when {@code one_child_prevention}), any half falls below {@code
+ *       max(2, min_areas_per_cluster)}, the member count already fits {@code
+ *       max_direct_children}, or the internal recursion has reached {@code max_safety_depth}
+ *       bisection levels.</li>
+ *   <li>A NON-RECURSIVE, exactly-two-level emit beneath each Direction: if partitioning collapsed
+ *       to a single bucket, its members are emitted directly as AREA leaves at depth 1 (no
+ *       CLUSTER). Otherwise each bucket becomes exactly one CLUSTER at depth 1, with its members
+ *       emitted as AREA leaves at depth 2 beneath it. There is no recursive call back into the
+ *       emit step, so a CLUSTER can never nest under another CLUSTER regardless of how many
+ *       internal bisection levels {@code partition} performed to build the bucket list.</li>
  * </ol>
+ *
+ * <p><b>{@code max_safety_depth} changed meaning in #2033.</b> It previously bounded the public
+ * CLUSTER nesting depth directly (the root cause of the #2033 defect: nested CLUSTER levels
+ * exceeded {@code MAX_PUBLIC_DEPTH}). It now bounds only the number of INTERNAL bisection levels
+ * {@link #partition} may recurse through while building the flat bucket list — i.e. it caps the
+ * bucket count at at most {@code 2^max_safety_depth}, independent of public depth, which is fixed
+ * at <= 2 by the two-phase construction above regardless of every policy knob. The V121 migration
+ * column COMMENT for {@code max_safety_depth} describes the pre-#2033 (public-depth-ceiling)
+ * meaning and is now stale; correcting it requires a new migration, which is out of scope for this
+ * change — this javadoc is the current source of truth for the column's semantics.
  */
 @Component
 public class NavigationTreeGenerator {
+
+    private static final Logger log = LoggerFactory.getLogger(NavigationTreeGenerator.class);
+
+    /** Above this many depth-1 CLUSTERs under one Direction, emit a WARN signal (no behaviour change). */
+    private static final int CLUSTER_COUNT_WARN_THRESHOLD = 12;
 
     /** Deterministic rounding scale for all persisted geometry (~0.11m precision at the equator). */
     private static final int BOUNDS_SCALE = 6;
@@ -134,67 +160,115 @@ public class NavigationTreeGenerator {
                 bounds.centreLat(), bounds.centreLon(), bounds.minLat(), bounds.minLon(),
                 bounds.maxLat(), bounds.maxLon(), policyFingerprint, generatedAt));
 
-        expand(regionKey, sortedMembers, 1, List.of(directionKey), directionKey, policy,
-                policyFingerprint, generatedAt, usedClusterKeys, out);
+        emitBeneathDirection(regionKey, sortedMembers, directionKey, policy, policyFingerprint,
+                generatedAt, usedClusterKeys, out);
         return out;
     }
 
     /**
-     * Recursively expands {@code members} beneath {@code parentNodeKey} (always non-null here —
-     * the DIRECTION root is emitted once by {@link #generateRegion}, never by this method).
-     * {@code depth} counts from the DIRECTION's depth 0, so the CLUSTER-level safety ceiling
-     * ({@code max_safety_depth}, #1956 D5 — "how many CLUSTER levels may nest beneath a
-     * Direction") is compared against {@code depth - 1} ("cluster depth"), not {@code depth}
-     * itself, keeping the knob's real-world meaning identical to before this DIRECTION wrapper was
-     * introduced: {@code max_safety_depth} CLUSTER levels are still allowed regardless of the
-     * extra Direction level now sitting above them.
+     * Partitions {@code members} into a flat list of "buckets" (PURE, no node emission, no
+     * node_keys, no depth tracking). Terminates a branch — returning its members as a single
+     * bucket — whenever the member count already fits {@code max_direct_children}, or {@code
+     * level} (the number of INTERNAL bisection levels performed so far, starting at 0 — NOT a
+     * node/public depth) has reached {@code max_safety_depth}, or the resulting split would leave
+     * either half below the effective minimum cluster floor. Otherwise it bisects once (reusing
+     * the existing {@link #bisect(List)}, unchanged) and recurses into each half at {@code level +
+     * 1}. Because this method never emits a node, no caller-visible depth is at stake here at all —
+     * {@link #emitBeneathDirection} is solely responsible for turning the returned bucket list into
+     * exactly one or two levels of nodes.
      */
-    private void expand(
-            String regionKey, List<GeneratorArea> members, int depth, List<String> ancestorKeys,
-            String parentNodeKey, GeneratorPolicy policy, String policyFingerprint, Instant generatedAt,
+    private List<List<GeneratorArea>> partition(List<GeneratorArea> members, int level, GeneratorPolicy policy) {
+        if (members.size() <= policy.maxDirectChildren()) {
+            return List.of(members);
+        }
+        if (level >= policy.maxSafetyDepth()) {
+            return List.of(members);
+        }
+
+        Partition split = bisect(members);
+
+        // Hard floor: a bucket must have at least 2 members (a size-1 "cluster" is never useful
+        // regardless of one_child_prevention) and at least min_areas_per_cluster. This floor
+        // structurally subsumes one_child_prevention (rejecting any split with a first==1 or
+        // second==1 half is exactly what floor >= 2 already guarantees) — one_child_prevention is
+        // still read below so it remains part of the policy_fingerprint, but it can only ever be
+        // AS STRICT as the floor, never looser: this is a tightening, never a weakening.
+        int floor = Math.max(2, policy.minAreasPerCluster());
+        boolean rejectSplit = split.first().size() < floor || split.second().size() < floor
+                || (policy.oneChildPrevention()
+                        && (split.first().size() == 1 || split.second().size() == 1));
+        if (rejectSplit) {
+            return List.of(members);
+        }
+
+        List<List<GeneratorArea>> buckets = new ArrayList<>();
+        buckets.addAll(partition(split.first(), level + 1, policy));
+        buckets.addAll(partition(split.second(), level + 1, policy));
+        return buckets;
+    }
+
+    /**
+     * Emits, NON-RECURSIVELY, exactly one or two levels of nodes beneath {@code directionKey} for
+     * {@code sortedMembers}: computes the flat bucket list via {@link #partition}, then either
+     * emits AREA leaves directly at depth 1 (single bucket — no CLUSTER, so a plain, unclustered
+     * Direction is possible) or emits one depth-1 CLUSTER per bucket with that bucket's members as
+     * depth-2 AREA leaves beneath it. This method never calls itself or {@link #partition}
+     * recursively, so it is structurally incapable of emitting a CLUSTER below depth 1 or any node
+     * below depth 2, independent of any policy value.
+     */
+    private void emitBeneathDirection(
+            String regionKey, List<GeneratorArea> sortedMembers, String directionKey,
+            GeneratorPolicy policy, String policyFingerprint, Instant generatedAt,
             Set<String> usedClusterKeys, List<GeneratedNode> out) {
 
-        if (members.isEmpty()) {
+        List<String> directionAncestors = List.of(directionKey);
+        List<List<GeneratorArea>> buckets = partition(sortedMembers, 0, policy);
+
+        if (buckets.size() <= 1) {
+            emitAreaLeaves(regionKey, sortedMembers, directionKey, directionAncestors, 1,
+                    policyFingerprint, generatedAt, out);
             return;
         }
 
-        int clusterDepth = depth - 1;
-        boolean mustLeaf = members.size() <= policy.maxDirectChildren() || clusterDepth >= policy.maxSafetyDepth();
-        if (!mustLeaf) {
-            Partition partition = bisect(members);
-            boolean rejectSplit = (policy.oneChildPrevention()
-                    && (partition.first().size() == 1 || partition.second().size() == 1))
-                    || partition.first().size() < policy.minAreasPerCluster()
-                    || partition.second().size() < policy.minAreasPerCluster();
-
-            if (!rejectSplit) {
-                int localOrder = 1;
-                for (List<GeneratorArea> part : List.of(partition.first(), partition.second())) {
-                    int order = localOrder++;
-                    List<String> reps = selectRepresentatives(part, policy);
-                    String clusterKey = deriveClusterNodeKey(regionKey, part, reps, usedClusterKeys);
-                    usedClusterKeys.add(clusterKey);
-                    String label = deriveLabel(part, reps);
-                    Bounds bounds = computeBounds(part);
-
-                    out.add(new GeneratedNode(
-                            regionKey, "CLUSTER", clusterKey, parentNodeKey, null, reps, label, order,
-                            depth, ancestorKeys, part.size(),
-                            bounds.centreLat(), bounds.centreLon(), bounds.minLat(), bounds.minLon(),
-                            bounds.maxLat(), bounds.maxLon(), policyFingerprint, generatedAt));
-
-                    List<String> childAncestors = new ArrayList<>(ancestorKeys);
-                    childAncestors.add(clusterKey);
-                    expand(regionKey, part, depth + 1, List.copyOf(childAncestors), clusterKey,
-                            policy, policyFingerprint, generatedAt, usedClusterKeys, out);
-                }
-                return;
-            }
-            // fall through: split rejected, collapse to AREA leaves below.
+        if (buckets.size() > CLUSTER_COUNT_WARN_THRESHOLD) {
+            log.warn("Direction {} in region {} produced {} depth-1 clusters (warn threshold {})",
+                    directionKey, regionKey, buckets.size(), CLUSTER_COUNT_WARN_THRESHOLD);
         }
 
+        // R2: this order counter is scoped to ONE Direction call and reset to 1 here — it must
+        // NEVER be the city-wide rootOrderCounter (that one numbers DIRECTION roots only), or
+        // sibling CLUSTER display_order would collide across regions/directions (validator #8).
+        int clusterOrder = 1;
+        for (List<GeneratorArea> bucket : buckets) {
+            int order = clusterOrder++;
+            List<String> reps = selectRepresentatives(bucket, policy);
+            String clusterKey = deriveClusterNodeKey(regionKey, bucket, reps, usedClusterKeys);
+            usedClusterKeys.add(clusterKey);
+            String label = deriveLabel(bucket, reps);
+            Bounds bounds = computeBounds(bucket);
+
+            out.add(new GeneratedNode(
+                    regionKey, "CLUSTER", clusterKey, directionKey, null, reps, label, order,
+                    1, directionAncestors, bucket.size(),
+                    bounds.centreLat(), bounds.centreLon(), bounds.minLat(), bounds.minLon(),
+                    bounds.maxLat(), bounds.maxLon(), policyFingerprint, generatedAt));
+
+            List<String> clusterAncestors = List.of(directionKey, clusterKey);
+            emitAreaLeaves(regionKey, bucket, clusterKey, clusterAncestors, 2,
+                    policyFingerprint, generatedAt, out);
+        }
+    }
+
+    /** Emits {@code members} (already in a caller-chosen bucket order) as AREA leaves, in
+     * area_key order, beneath {@code parentNodeKey} at {@code depth}. */
+    private void emitAreaLeaves(
+            String regionKey, List<GeneratorArea> members, String parentNodeKey,
+            List<String> ancestorKeys, int depth, String policyFingerprint, Instant generatedAt,
+            List<GeneratedNode> out) {
+
+        List<GeneratorArea> byAreaKey = reorderByAreaKey(members);
         int localOrder = 1;
-        for (GeneratorArea area : members) {
+        for (GeneratorArea area : byAreaKey) {
             int order = localOrder++;
             Bounds bounds = new Bounds(
                     round(area.centreLat()), round(area.centreLon()),
