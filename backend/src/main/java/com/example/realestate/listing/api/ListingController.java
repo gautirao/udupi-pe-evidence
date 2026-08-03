@@ -566,9 +566,19 @@ public class ListingController {
      * (INHERITED, PATTA, SURVEY_SETTLEMENT, KATHA, REVENUE, OTHER) are NOT valid for residential
      * listings, even though they share the same underlying {@code ownershipType} column.
      *
-     * <p>AGRICULTURAL, COMMERCIAL, and PLOT are UNCHANGED from pre-#2048 behavior — they continue
-     * to validate against {@link AgriFieldOptions#VALID_OWNERSHIP_TYPES} (decision D2: only the
-     * narrow residential set is wired; {@link ResidentialFieldOptions} is not promoted generally).
+     * <p>COMMERCIAL uses the narrow {@link CommercialFieldOptions#VALID_COMMERCIAL_OWNERSHIP} set
+     * (FREEHOLD / LEASEHOLD / POWER_OF_ATTORNEY / OTHER) — a further deliberate narrowing (issue
+     * #2063, mirroring #2048/PR #2057 decision D1 for RESIDENTIAL): agri-only ownership values
+     * (INHERITED, PATTA, SURVEY_SETTLEMENT, KATHA, REVENUE) are NOT valid for commercial listings,
+     * even though they share the same underlying {@code ownershipType} column. Note this is a
+     * separate wiring from {@code commercialOwnership} (the typed per-subtype field validated in
+     * {@link #validateCommercialFields}) — both fields happen to validate against the same
+     * {@link CommercialFieldOptions#VALID_COMMERCIAL_OWNERSHIP} constant.
+     *
+     * <p>AGRICULTURAL and PLOT are UNCHANGED from pre-#2048 behavior — they continue to validate
+     * against {@link AgriFieldOptions#VALID_OWNERSHIP_TYPES} (decision D2: only the narrow
+     * residential and commercial sets are wired; the residual PLOT/AGRICULTURAL gap is tracked
+     * separately as issue #2067).
      *
      * <p>Must be called AFTER family resolution ({@link #resolveFamily}) on both the create and
      * update paths, so the correct canonical set is selected before the value is checked.
@@ -580,7 +590,9 @@ public class ListingController {
         switch (family) {
             case RESIDENTIAL -> rejectIfUnknown("ownershipType", ownershipType,
                     ResidentialFieldOptions.VALID_RESIDENTIAL_OWNERSHIP);
-            case AGRICULTURAL, COMMERCIAL, PLOT -> rejectIfUnknown("ownershipType", ownershipType,
+            case COMMERCIAL -> rejectIfUnknown("ownershipType", ownershipType,
+                    CommercialFieldOptions.VALID_COMMERCIAL_OWNERSHIP);
+            case AGRICULTURAL, PLOT -> rejectIfUnknown("ownershipType", ownershipType,
                     AgriFieldOptions.VALID_OWNERSHIP_TYPES);
         }
     }

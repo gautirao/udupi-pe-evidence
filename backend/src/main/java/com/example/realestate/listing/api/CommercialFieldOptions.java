@@ -6,11 +6,20 @@ import java.util.Set;
 /**
  * Canonical option contract for commercial listing fields (M38 design vocabulary, ADR M38-03 §8.2).
  *
- * <p><b>All sets in this class are AUTHOR-ONLY / FORWARD-ONLY.</b> No field in the current flat
- * {@code CreateRequest} / {@code UpdateRequest} is validated against any set here. Wiring requires
- * a post-audit distinct-value confirmation of production stored values for the corresponding field
- * (see {@code no-live-smoke-shared-supabase} memory and M38-FU7 follow-up). The discriminated-union
- * DTO that will consume these sets is planned for #1689 / M38-FU2.
+ * <p><b>Most sets in this class are AUTHOR-ONLY / FORWARD-ONLY — but not all.</b>
+ * {@link #VALID_COMMERCIAL_OWNERSHIP} is WIRED, and wired TWICE:
+ * <ul>
+ *   <li>Since M38-FU2 / #1730 — {@code ListingController.validateCommercialFields} validates the
+ *       typed per-subtype {@code commercialOwnership} field against it.</li>
+ *   <li>Since #2063 — {@code ListingController.validateFamilyOwnershipType} ALSO validates the
+ *       shared flat {@code ownershipType} field against it, for the COMMERCIAL family only (a
+ *       deliberate narrowing mirroring #2048/PR #2057 decision D1 for RESIDENTIAL).</li>
+ * </ul>
+ * No OTHER field in the current flat {@code CreateRequest} / {@code UpdateRequest} is validated
+ * against any other set here. Wiring those requires a post-audit distinct-value confirmation of
+ * production stored values for the corresponding field (see {@code no-live-smoke-shared-supabase}
+ * memory and M38-FU7 follow-up). The discriminated-union DTO that will consume these sets is
+ * planned for #1689 / M38-FU2.
  *
  * <p>Commercial subtypes: shop/showroom, office, building, warehouse, commercial land.
  * Purpose: sale | rent | lease (all three apply to commercial; residential has no lease).
@@ -344,7 +353,15 @@ public final class CommercialFieldOptions {
     );
 
     // -------------------------------------------------------------------------
-    // ownership  (commercial)
+    // ownership  (commercial) — WIRED. Validated at the ListingController request boundary
+    // twice: (1) since #1730, as the typed commercialOwnership field via validateCommercialFields;
+    // (2) since #2063, ALSO as the shared flat ownershipType field via validateFamilyOwnershipType,
+    // for the COMMERCIAL family only. #2063 is a deliberate narrowing (mirroring PR #2057 decision
+    // D1 for RESIDENTIAL): agri-only ownership values (INHERITED, PATTA, SURVEY_SETTLEMENT, KATHA,
+    // REVENUE) are NOT valid for commercial listings, even though AGRICULTURAL/PLOT still share
+    // the same underlying ownershipType column and continue to validate against
+    // AgriFieldOptions.VALID_OWNERSHIP_TYPES unchanged (residual PLOT/AGRICULTURAL gap tracked as
+    // issue #2067).
     // Design: Freehold / Leasehold / Power of attorney / Other
     // -------------------------------------------------------------------------
 
