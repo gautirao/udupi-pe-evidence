@@ -1,0 +1,36 @@
+{
+  "id": "shell-city-switcher-open",
+  "manifestStateId": "shell-city-switcher-open",
+  "aStates": [],
+  "viewport": "desktop",
+  "hash": "#",
+  "requestedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "observedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "verifications": [
+    {
+      "kind": "data-design-screen-attribute",
+      "description": "data-design-screen equals the cited manifest state id",
+      "expected": "areas-city-default",
+      "observed": "areas-city-default",
+      "passed": true,
+      "recordOnly": false
+    },
+    {
+      "kind": "component-visible",
+      "description": "the city-switcher listbox overlay opened",
+      "expected": "visible",
+      "observed": "visible",
+      "passed": true,
+      "recordOnly": false
+    }
+  ],
+  "screenshotPath": "captures/shell-city-switcher-open.png",
+  "notes": "AC13 shell overlay, not a numbered A-state. The manifest itself documents this as \"overlay only; underlying state unchanged\" — this capture verifies that contract directly rather than asserting a screen id the mechanism was never designed to emit.",
+  "capturedAt": "2026-08-04T02:24:53.986Z"
+}

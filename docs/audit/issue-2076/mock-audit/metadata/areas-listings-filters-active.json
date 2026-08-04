@@ -1,0 +1,38 @@
+{
+  "id": "areas-listings-filters-active",
+  "manifestStateId": "areas-listings-filters-active",
+  "aStates": [
+    "A12"
+  ],
+  "viewport": "desktop",
+  "hash": "#a=hebbal",
+  "requestedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "observedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "verifications": [
+    {
+      "kind": "data-design-screen-attribute",
+      "description": "data-design-screen value recorded (not asserted — see manifest-states.ts note for this capture)",
+      "expected": "areas-listings-filters-active",
+      "observed": "areas-area-listings",
+      "passed": true,
+      "recordOnly": true
+    },
+    {
+      "kind": "aria-pressed",
+      "description": "the \"Verified only\" filter chip is pressed after toggling it",
+      "expected": "true",
+      "observed": "true",
+      "passed": true,
+      "recordOnly": false
+    }
+  ],
+  "screenshotPath": "captures/areas-listings-filters-active.png",
+  "notes": "No-self-ID per state-mapping.md (A12): same screenId mechanism as A11 (filters live in ctx.filters, also absent from the screenId branch conditions). Verified instead by the chip's own aria-pressed state, which is a real, mock-authored a11y signal.",
+  "capturedAt": "2026-08-04T02:24:47.783Z"
+}

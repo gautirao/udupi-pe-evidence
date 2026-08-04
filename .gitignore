@@ -58,6 +58,18 @@ e2e/.test-listing-id
 e2e/fixtures/*-auth.json
 coverage/*
 
+# Discover-V2 parity harness (issue #2076) — runtime-resolved node-role map
+# and its own storageState/report output. Node keys are server-generated and
+# environment-specific; never commit a resolved map (see
+# e2e-parity/support/parity-nodes.ts). Auth fixtures never committed for the
+# same reason as e2e/fixtures/*-auth.json above.
+e2e-parity/.parity-node-roles.json
+e2e-parity/fixtures/*-auth.json
+playwright-report-parity/
+test-results-parity/
+playwright-report-mock-capture/
+test-results-mock-capture/
+
 # Local DB dump files — never commit (may contain PII or large data)
 tmp/*.dump
 tmp/*.sql

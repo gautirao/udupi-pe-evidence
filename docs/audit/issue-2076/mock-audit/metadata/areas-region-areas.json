@@ -1,0 +1,39 @@
+{
+  "id": "areas-region-areas",
+  "manifestStateId": "areas-region-areas",
+  "aStates": [
+    "A02",
+    "A04"
+  ],
+  "viewport": "desktop",
+  "hash": "#r=south",
+  "requestedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "observedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "verifications": [
+    {
+      "kind": "data-design-screen-attribute",
+      "description": "data-design-screen equals the cited manifest state id",
+      "expected": "areas-region-areas",
+      "observed": "areas-region-areas",
+      "passed": true,
+      "recordOnly": false
+    },
+    {
+      "kind": "heading-text",
+      "description": "h2 heading text matches the manifest expectedHeading",
+      "expected": "/Areas in South/",
+      "observed": "Areas in South Bangalore",
+      "passed": true,
+      "recordOnly": false
+    }
+  ],
+  "screenshotPath": "captures/areas-region-areas.png",
+  "notes": "Self-identifying. state-mapping.md proved A02 and A04 are the literal same manifest state (live two-level drill-down) — this one capture stands for both A-numbers.",
+  "capturedAt": "2026-08-04T02:24:39.459Z"
+}

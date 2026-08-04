@@ -1,0 +1,46 @@
+{
+  "id": "areas-listings-query-active",
+  "manifestStateId": "areas-listings-query-active",
+  "aStates": [
+    "A11"
+  ],
+  "viewport": "desktop",
+  "hash": "#a=hebbal",
+  "requestedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "observedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "verifications": [
+    {
+      "kind": "data-design-screen-attribute",
+      "description": "data-design-screen value recorded (not asserted — see manifest-states.ts note for this capture)",
+      "expected": "areas-listings-query-active",
+      "observed": "areas-area-listings",
+      "passed": true,
+      "recordOnly": true
+    },
+    {
+      "kind": "input-value",
+      "description": "property-search input retains the submitted query",
+      "expected": "3 bhk",
+      "observed": "3 bhk",
+      "passed": true,
+      "recordOnly": false
+    },
+    {
+      "kind": "dom-text",
+      "description": "\"N of M\" filtered-count header with a Reset action is shown",
+      "expected": "/of \\d+/",
+      "observed": "3 of 8 · Reset",
+      "passed": true,
+      "recordOnly": false
+    }
+  ],
+  "screenshotPath": "captures/areas-listings-query-active.png",
+  "notes": "No-self-ID per state-mapping.md (A11): the manifest id is never the value of data-design-screen at runtime. Verified instead by the search input retaining its value and the filtered \"N of M\" header rendering.",
+  "capturedAt": "2026-08-04T02:24:45.658Z"
+}

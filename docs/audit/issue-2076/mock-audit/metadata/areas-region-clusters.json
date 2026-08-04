@@ -1,0 +1,39 @@
+{
+  "id": "areas-region-clusters",
+  "manifestStateId": "areas-region-clusters",
+  "aStates": [
+    "A03",
+    "A05"
+  ],
+  "viewport": "desktop",
+  "hash": "#r=north",
+  "requestedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "observedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "verifications": [
+    {
+      "kind": "data-design-screen-attribute",
+      "description": "data-design-screen equals the cited manifest state id",
+      "expected": "areas-region-clusters",
+      "observed": "areas-region-clusters",
+      "passed": true,
+      "recordOnly": false
+    },
+    {
+      "kind": "heading-text",
+      "description": "h2 heading text matches the manifest expectedHeading",
+      "expected": "/Inside North Bangalore/",
+      "observed": "Inside North Bangalore",
+      "passed": true,
+      "recordOnly": false
+    }
+  ],
+  "screenshotPath": "captures/areas-region-clusters.png",
+  "notes": "Self-identifying. state-mapping.md proved A03 and A05 are the literal same manifest state (live two-level drill-down) — this one capture stands for both A-numbers.",
+  "capturedAt": "2026-08-04T02:24:37.842Z"
+}

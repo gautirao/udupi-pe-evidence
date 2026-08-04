@@ -1,0 +1,38 @@
+{
+  "id": "areas-area-listings-rent-variant",
+  "manifestStateId": "areas-area-listings",
+  "aStates": [
+    "A09"
+  ],
+  "viewport": "desktop",
+  "hash": "#a=hebbal",
+  "requestedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "observedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "verifications": [
+    {
+      "kind": "data-design-screen-attribute",
+      "description": "data-design-screen value recorded (not asserted — see manifest-states.ts note for this capture)",
+      "expected": "areas-area-listings",
+      "observed": "areas-area-listings",
+      "passed": true,
+      "recordOnly": true
+    },
+    {
+      "kind": "dom-text",
+      "description": "rent-framing copy replaces the sale-framing copy after toggling Rent",
+      "expected": "/rental/i",
+      "observed": "8 rentals",
+      "passed": true,
+      "recordOnly": false
+    }
+  ],
+  "screenshotPath": "captures/areas-area-listings-rent-variant.png",
+  "notes": "A09 is NOT a distinct manifest state id — state-mapping.md proved this by reading the `screenId` IIFE, which never branches on `buyRent`. This capture is evidence of a real rendering variant (verified live: copy changes to \"N rentals\"), not a designed state; the attribute check above is intentionally record-only.",
+  "capturedAt": "2026-08-04T02:24:43.433Z"
+}

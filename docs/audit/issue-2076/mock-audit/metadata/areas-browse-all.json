@@ -1,0 +1,38 @@
+{
+  "id": "areas-browse-all",
+  "manifestStateId": "areas-browse-all",
+  "aStates": [
+    "A14"
+  ],
+  "viewport": "desktop",
+  "hash": "#b=1",
+  "requestedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "observedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "verifications": [
+    {
+      "kind": "data-design-screen-attribute",
+      "description": "data-design-screen equals the cited manifest state id",
+      "expected": "areas-browse-all",
+      "observed": "areas-browse-all",
+      "passed": true,
+      "recordOnly": false
+    },
+    {
+      "kind": "heading-text",
+      "description": "h2 heading text matches the manifest expectedHeading",
+      "expected": "/All homes in Bangalore/",
+      "observed": "All homes in Bangalore",
+      "passed": true,
+      "recordOnly": false
+    }
+  ],
+  "screenshotPath": "captures/areas-browse-all.png",
+  "notes": "Self-identifying.",
+  "capturedAt": "2026-08-04T02:24:51.776Z"
+}

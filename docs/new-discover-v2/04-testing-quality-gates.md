@@ -33,11 +33,22 @@ flagged UNRESOLVED where it wasn't directly visible.
    - **The good model to copy:** `e2e/discover-real-data-smoke.spec.ts` — real `expect()`
      assertions, 4 cross-layer journeys against a **live backend**, no `page.route()` mocks,
      asserts on absence of 401/403 + card render.
-   - **A confirmed, present hazard:** the `capture-*.spec.ts` family
-     (`capture-area-first-screenshots`, `capture-bangalore-1745-evidence`,
-     `capture-discover-*`, `capture-school-first-polish-1770`, and others) contains **zero
-     `expect()` calls** — these are screenshot-capture-only specs that pass unconditionally and
-     run under the `full` project. **Never count a `capture-*` spec as verification of anything.**
+   - **A confirmed, present hazard — corrected 2026-08-03 (issue #2076 Stage 1):** a mechanical
+     census (`docs/audit/issue-2076/evidence/e2e-census.sh`, exit code 0, re-run independently
+     twice and reproducing identically both times) proves the capture-* spec family DOES contain
+     `expect()` calls: `capture-bangalore-1745-evidence.spec.ts` (31), `capture-discover-agri-first-polish-1771.spec.ts`
+     (30), `capture-discover-city-landing-polish.spec.ts` (23), `capture-school-first-polish-1770.spec.ts`
+     (52) — 136 total, none with zero. The "zero `expect()` calls" claim above was stale as of the
+     current branch base and is corrected here rather than repeated. What remains true, and is the
+     actual hazard, is narrower: **the census also confirms 0 of 146 e2e specs use Playwright's
+     `toHaveScreenshot` visual-comparison assertion, and 0 committed `*-snapshots/` baseline
+     directories exist anywhere in the repo** — so the capture-* specs' `expect()` calls are
+     functional/DOM assertions (element visibility, text content, counts), not pixel-diff visual
+     assertions, and they provide **no `toHaveScreenshot`-based visual-regression protection**.
+     **Never count a `capture-*` spec as visual-regression verification** — its functional
+     assertions are real, but they prove nothing about visual composition. See
+     `docs/audit/issue-2076/discrepancy-register.md` F5(a)/F5(b) for the full reproduce-or-refute
+     record this correction is drawn from.
 4. **Visual regression — MISSING.** No Percy, Chromatic, `toHaveScreenshot`, or `toMatchSnapshot`
    usage anywhere in the repo. Playwright's `screenshot: 'only-on-failure'` captures failure
    artifacts only — there is no baseline comparison. **A redesign the size of Discover V2 has no

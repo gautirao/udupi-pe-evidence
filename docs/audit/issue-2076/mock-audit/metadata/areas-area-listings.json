@@ -1,0 +1,47 @@
+{
+  "id": "areas-area-listings",
+  "manifestStateId": "areas-area-listings",
+  "aStates": [
+    "A08",
+    "A20"
+  ],
+  "viewport": "desktop",
+  "hash": "#a=hebbal",
+  "requestedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "observedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "verifications": [
+    {
+      "kind": "data-design-screen-attribute",
+      "description": "data-design-screen equals the cited manifest state id",
+      "expected": "areas-area-listings",
+      "observed": "areas-area-listings",
+      "passed": true,
+      "recordOnly": false
+    },
+    {
+      "kind": "heading-text",
+      "description": "h2 heading text matches the manifest expectedHeading",
+      "expected": "Properties in Hebbal",
+      "observed": "Properties in Hebbal",
+      "passed": true,
+      "recordOnly": false
+    },
+    {
+      "kind": "component-visible",
+      "description": "A20 school-shortcut affordance is present inside this same composition",
+      "expected": "visible",
+      "observed": "visible",
+      "passed": true,
+      "recordOnly": false
+    }
+  ],
+  "screenshotPath": "captures/areas-area-listings.png",
+  "notes": "Self-identifying. Also captures A20 (school-shortcut) inline — it is part of this same composition per the manifest, not a separate designed state; the Schools destination it links to is out of scope per #2076 non-goals.",
+  "capturedAt": "2026-08-04T02:24:41.092Z"
+}

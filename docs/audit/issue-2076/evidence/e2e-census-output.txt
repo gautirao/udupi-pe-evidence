@@ -1,0 +1,184 @@
+== e2e-census ==
+repo_root: /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2076-parity-planning
+git_head: e28ba570dbbf4dda6ec7bd20675b39a7f8dd2d53
+git_branch: issue-2076-parity-planning
+generated_at_utc: 2026-08-03T17:18:25Z
+
+-- total spec files under e2e/ --
+total_specs: 146
+
+-- capture-*.spec.ts files and their expect() counts --
+e2e/capture-bangalore-1745-evidence.spec.ts: expect_count=31
+e2e/capture-discover-agri-first-polish-1771.spec.ts: expect_count=30
+e2e/capture-discover-city-landing-polish.spec.ts: expect_count=23
+e2e/capture-school-first-polish-1770.spec.ts: expect_count=52
+
+-- specs with zero expect() calls, all of e2e/ --
+zero_expect_spec_count: 0
+
+-- specs using toHaveScreenshot --
+tohavescreenshot_spec_count: 0
+
+-- committed Playwright snapshot baseline directories (*-snapshots/) --
+snapshot_baseline_dir_count: 0
+
+-- Udupi-only string references inside e2e/ (F6 signal) --
+e2e/admin-approval.spec.ts
+e2e/agri-group-selected-panel-1425.spec.ts
+e2e/area-intelligence-1528.spec.ts
+e2e/auth-journey-1509.spec.ts
+e2e/broker-address-reconciliation.spec.ts
+e2e/broker-agri-listing.spec.ts
+e2e/broker-area-insights.spec.ts
+e2e/broker-listing-form.spec.ts
+e2e/broker-preferences.spec.ts
+e2e/buyer-area-route-1539.spec.ts
+e2e/capture-discover-agri-first-polish-1771.spec.ts
+e2e/capture-school-first-polish-1770.spec.ts
+e2e/commercial-create-listing-1684.spec.ts
+e2e/discover-1738-regression.spec.ts
+e2e/discover-1942-pin-price-band.spec.ts
+e2e/discover-agri-direction-first-1448.spec.ts
+e2e/discover-agri-grouped-journey-1412.spec.ts
+e2e/discover-agri-journey-1375.spec.ts
+e2e/discover-agri-locality-marker-1468.spec.ts
+e2e/discover-agri-overlay-peek-journey-1431.spec.ts
+e2e/discover-agri-polygons-1373.spec.ts
+e2e/discover-agri-price-gate-1551.spec.ts
+e2e/discover-anon-price-consistency-1941.spec.ts
+e2e/discover-anon-school-radius.spec.ts
+e2e/discover-area-cards.spec.ts
+e2e/discover-area-first-drilldown-1483.spec.ts
+e2e/discover-area-first-grouping-1489.spec.ts
+e2e/discover-area-first-polish-1765.spec.ts
+e2e/discover-area-groups-landing.spec.ts
+e2e/discover-area-keyword-search.spec.ts
+e2e/discover-area-nav-journey.spec.ts
+e2e/discover-area-selected-filters.spec.ts
+e2e/discover-badge.spec.ts
+e2e/discover-batch-b-journeys.spec.ts
+e2e/discover-city-switch.spec.ts
+e2e/discover-correctness-1064.spec.ts
+e2e/discover-correctness-1067.spec.ts
+e2e/discover-correctness-1069.spec.ts
+e2e/discover-filter-chips.spec.ts
+e2e/discover-group-results-1597.spec.ts
+e2e/discover-map-hierarchy.spec.ts
+e2e/discover-opensearch-parity.spec.ts
+e2e/discover-real-data-smoke.spec.ts
+e2e/discover-results-redesign-1547.spec.ts
+e2e/discover-school-anon-parity.spec.ts
+e2e/discover-school-board-filter.spec.ts
+e2e/discover-school-bounded-search.spec.ts
+e2e/discover-school-first-grouping-1485.spec.ts
+e2e/discover-school-first-hardening.spec.ts
+e2e/discover-school-first-journey.spec.ts
+e2e/discover-school-first-markers.spec.ts
+e2e/discover-school-journey.spec.ts
+e2e/discover-school-keyword-radius.spec.ts
+e2e/discover-school-region-scoping-1798.spec.ts
+e2e/discover-school-selected.spec.ts
+e2e/discover-telemetry-consent-1531.spec.ts
+e2e/discover-telemetry-consent-1576.spec.ts
+e2e/discover-to-trends.spec.ts
+e2e/discover-trust-badge-1567.spec.ts
+e2e/discover-url-state.spec.ts
+e2e/discover-viewport-truncation.spec.ts
+e2e/discover-viewport.spec.ts
+e2e/discover/active-context-chips-and-badge.spec.ts
+e2e/discover/anon-zoom-past-area-guidance.spec.ts
+e2e/discover/badge-context-precedence.spec.ts
+e2e/discover/desktop-control-bar-shell-1953.spec.ts
+e2e/discover/discover-mobile-guard.spec.ts
+e2e/discover/issue-1956-pr4-listing-peek-camera-restore.spec.ts
+e2e/discover/journey-switch-overlay-cleanup-1940.spec.ts
+e2e/discover/school-badge-suppression.spec.ts
+e2e/discover/school-deep-link-error.spec.ts
+e2e/discover/school-deep-link-radius.spec.ts
+e2e/discover/school-empty-guidance.spec.ts
+e2e/discover/school-first-marker-parity.spec.ts
+e2e/discover/school-panel-error-states.spec.ts
+e2e/discover/school-radius-marker-click-repro-1738.spec.ts
+e2e/global-setup.ts
+e2e/global-teardown.ts
+e2e/home-discover-trends.spec.ts
+e2e/issue-1065-final.spec.ts
+e2e/journey/admin-duplicates.spec.ts
+e2e/journey/admin-moderation.spec.ts
+e2e/journey/booking-journey.spec.ts
+e2e/journey/broker-listing-creation.spec.ts
+e2e/journey/listing-lifecycle.spec.ts
+e2e/journey/trust-identity-review.spec.ts
+e2e/listing-rejection-resubmit.spec.ts
+e2e/listing-trends-screenshot.spec.ts
+e2e/map-filters.spec.ts
+e2e/poi-display.spec.ts
+e2e/poi-locality-teaser.spec.ts
+e2e/popular-schools.spec.ts
+e2e/probe-issue-1240-zoom-cluster.spec.ts
+e2e/quick-smoke.spec.ts
+e2e/README.md
+e2e/regression-1240-marker-lat-lon.spec.ts
+e2e/residential-create-listing-1722.spec.ts
+e2e/residential-create-parity.spec.ts
+e2e/residential-required-fields-2040.spec.ts
+e2e/saved-homes.spec.ts
+e2e/school-first-back-nav.spec.ts
+e2e/school-first-map-focus.spec.ts
+e2e/trends.spec.ts
+e2e/user-journeys.spec.ts
+e2e/verify-agri-clusters-1372.spec.ts
+e2e/verify-issue-1178-visual.spec.ts
+e2e/view-trends-screenshot.spec.ts
+
+-- Bangalore string references inside e2e/ (F6 signal) --
+e2e/area-intelligence-1528.spec.ts
+e2e/broker-demand-gaps.spec.ts
+e2e/capture-bangalore-1745-evidence.spec.ts
+e2e/capture-discover-agri-first-polish-1771.spec.ts
+e2e/capture-discover-city-landing-polish.spec.ts
+e2e/capture-school-first-polish-1770.spec.ts
+e2e/discover-1939-listing-peek-url-restore.spec.ts
+e2e/discover-2049-resize-marker-skew.spec.ts
+e2e/discover-area-first-polish-1765.spec.ts
+e2e/discover-map-hierarchy.spec.ts
+e2e/discover-school-journey.spec.ts
+e2e/discover-school-region-scoping-1798.spec.ts
+e2e/discover/area-drilldown-stale-viewport-1821.spec.ts
+e2e/discover/control-bar-mobile-reachability-1953.spec.ts
+e2e/discover/desktop-control-bar-shell-1953.spec.ts
+e2e/discover/issue-1956-areas-adaptive-journeys.spec.ts
+e2e/discover/issue-1956-pr2-atomic-transition.spec.ts
+e2e/discover/issue-1956-pr2-breadcrumb.spec.ts
+e2e/discover/issue-1956-pr2-count-copy.spec.ts
+e2e/discover/issue-1956-pr2-destination-surface.spec.ts
+e2e/discover/issue-1956-pr2-filters-survive-navigation.spec.ts
+e2e/discover/issue-1956-pr2-guarded-hierarchy-back.spec.ts
+e2e/discover/issue-1956-pr3-area-clustering.spec.ts
+e2e/discover/issue-1956-pr4-listing-peek-camera-restore.spec.ts
+e2e/discover/issue-1956-pr4-listings-error-state.spec.ts
+e2e/discover/issue-1956-pr4-mobile-listings-scroll.spec.ts
+e2e/discover/issue-1956-pr4-price-auth-contract.spec.ts
+e2e/discover/issue-1956-pr5-desktop-breadcrumb-regression.spec.ts
+e2e/discover/issue-1956-pr5-mobile-cluster-sheet.spec.ts
+e2e/discover/issue-1956-pr5-mobile-list-first.spec.ts
+e2e/discover/issue-1956-pr5-s5-mobile-listing-preview.spec.ts
+e2e/discover/issue-1956-pr6-absence-discipline.spec.ts
+e2e/discover/issue-1956-pr6-canonical-back-rehome.spec.ts
+e2e/discover/issue-1956-pr6-composed-seam.spec.ts
+e2e/discover/issue-1956-pr6-journey-switch-conversion.spec.ts
+e2e/discover/issue-1956-pr6-no-blank-panel.spec.ts
+e2e/discover/journey-switch-overlay-cleanup-1940.spec.ts
+e2e/discover/mobile-landing-journey-switcher-1953.spec.ts
+e2e/discover/mobile-list-map-shell-1953.spec.ts
+e2e/discover/thanisandra-hennur-belt-label-collision-1815.spec.ts
+e2e/discover/thanisandra-hennur-belt-marker-degradation.spec.ts
+
+-- local fixture seed file city coverage (F6 signal) --
+fixture_file: scripts/db/fixtures/discover-smoke-seed.sql
+  32 Kaup
+  32 Malpe
+  15 manipal
+  52 Manipal
+
+== end census ==

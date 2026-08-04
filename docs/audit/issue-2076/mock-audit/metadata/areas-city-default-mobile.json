@@ -1,0 +1,39 @@
+{
+  "id": "areas-city-default-mobile",
+  "manifestStateId": "areas-city-default-mobile",
+  "aStates": [
+    "A01",
+    "A21"
+  ],
+  "viewport": "mobile",
+  "hash": "#",
+  "requestedViewport": {
+    "width": 390,
+    "height": 844
+  },
+  "observedViewport": {
+    "width": 390,
+    "height": 844
+  },
+  "verifications": [
+    {
+      "kind": "data-design-screen-attribute",
+      "description": "data-design-screen value recorded (not asserted — see manifest-states.ts note for this capture)",
+      "expected": "areas-city-default-mobile",
+      "observed": "areas-city-default",
+      "passed": true,
+      "recordOnly": true
+    },
+    {
+      "kind": "heading-text",
+      "description": "h2 heading text matches the manifest expectedHeading",
+      "expected": "Where do you want to explore?",
+      "observed": "Where do you want to explore?",
+      "passed": true,
+      "recordOnly": false
+    }
+  ],
+  "screenshotPath": "captures/areas-city-default-mobile.png",
+  "notes": "No-self-ID by construction (mobile-id-emission finding in state-mapping.md, not a defect in this harness). Verified by the manifest's own expectedHeading text at the mandated 390x844 viewport (hard-asserted separately by the capture runner).",
+  "capturedAt": "2026-08-04T02:24:59.495Z"
+}

@@ -1,0 +1,40 @@
+{
+  "id": "areas-area-listings-mobile",
+  "manifestStateId": "areas-area-listings-mobile",
+  "aStates": [
+    "A08",
+    "A21",
+    "A23"
+  ],
+  "viewport": "mobile",
+  "hash": "#a=hebbal",
+  "requestedViewport": {
+    "width": 390,
+    "height": 844
+  },
+  "observedViewport": {
+    "width": 390,
+    "height": 844
+  },
+  "verifications": [
+    {
+      "kind": "data-design-screen-attribute",
+      "description": "data-design-screen value recorded (not asserted — see manifest-states.ts note for this capture)",
+      "expected": "areas-area-listings-mobile",
+      "observed": "areas-area-listings",
+      "passed": true,
+      "recordOnly": true
+    },
+    {
+      "kind": "heading-text",
+      "description": "h2 heading text matches the manifest expectedHeading",
+      "expected": "Properties in Hebbal",
+      "observed": "Properties in Hebbal",
+      "passed": true,
+      "recordOnly": false
+    }
+  ],
+  "screenshotPath": "captures/areas-area-listings-mobile.png",
+  "notes": "No-self-ID by construction, same mobile-id-emission finding as areas-city-default-mobile. Verified by expectedHeading text at 390x844.",
+  "capturedAt": "2026-08-04T02:25:01.068Z"
+}

@@ -1,0 +1,38 @@
+{
+  "id": "areas-listings-empty-results",
+  "manifestStateId": "areas-listings-query-active",
+  "aStates": [
+    "A13"
+  ],
+  "viewport": "desktop",
+  "hash": "#a=hebbal",
+  "requestedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "observedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "verifications": [
+    {
+      "kind": "data-design-screen-attribute",
+      "description": "data-design-screen value recorded (not asserted — see manifest-states.ts note for this capture)",
+      "expected": "areas-listings-query-active",
+      "observed": "areas-area-listings",
+      "passed": true,
+      "recordOnly": true
+    },
+    {
+      "kind": "dom-text",
+      "description": "the designed \"No homes match\" empty state renders for a query with zero results",
+      "expected": "No homes match",
+      "observed": "No homes match",
+      "passed": true,
+      "recordOnly": false
+    }
+  ],
+  "screenshotPath": "captures/areas-listings-empty-results.png",
+  "notes": "A13 (empty filtered results) is documented inside areas-listings-query-active's manifest notes, not as its own state id, and inherits the same no-self-ID mechanism as A11/A12 per state-mapping.md. Verified by the empty-state title rendering for a query with no matches.",
+  "capturedAt": "2026-08-04T02:24:49.973Z"
+}

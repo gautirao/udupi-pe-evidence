@@ -1,0 +1,38 @@
+{
+  "id": "shell-area-autocomplete-open",
+  "manifestStateId": "shell-area-autocomplete-open",
+  "aStates": [
+    "A19"
+  ],
+  "viewport": "desktop",
+  "hash": "#",
+  "requestedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "observedViewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "verifications": [
+    {
+      "kind": "data-design-screen-attribute",
+      "description": "data-design-screen equals the cited manifest state id",
+      "expected": "areas-city-default",
+      "observed": "areas-city-default",
+      "passed": true,
+      "recordOnly": false
+    },
+    {
+      "kind": "component-visible",
+      "description": "the area-autocomplete results listbox opened for a query with matches",
+      "expected": "visible",
+      "observed": "visible",
+      "passed": true,
+      "recordOnly": false
+    }
+  ],
+  "screenshotPath": "captures/shell-area-autocomplete-open.png",
+  "notes": "A19's PARTIAL/REF half — the autocomplete overlay composition, per state-mapping.md. The node-convergence itself is behavioural and has no composition to capture.",
+  "capturedAt": "2026-08-04T02:24:56.160Z"
+}

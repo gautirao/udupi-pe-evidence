@@ -1,0 +1,629 @@
+{
+  "generatedAt": "2026-08-04T02:25:01.114Z",
+  "issue": 2076,
+  "ac": "AC12",
+  "captures": [
+    {
+      "id": "areas-city-default",
+      "manifestStateId": "areas-city-default",
+      "aStates": [
+        "A01"
+      ],
+      "capturedThisRun": true,
+      "record": {
+        "id": "areas-city-default",
+        "manifestStateId": "areas-city-default",
+        "aStates": [
+          "A01"
+        ],
+        "viewport": "desktop",
+        "hash": "#",
+        "requestedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "observedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "verifications": [
+          {
+            "kind": "data-design-screen-attribute",
+            "description": "data-design-screen equals the cited manifest state id",
+            "expected": "areas-city-default",
+            "observed": "areas-city-default",
+            "passed": true,
+            "recordOnly": false
+          },
+          {
+            "kind": "heading-text",
+            "description": "h2 heading text matches the manifest expectedHeading",
+            "expected": "Where do you want to explore?",
+            "observed": "Where do you want to explore?",
+            "passed": true,
+            "recordOnly": false
+          }
+        ],
+        "screenshotPath": "captures/areas-city-default.png",
+        "notes": "Self-identifying. Canonical desktop city-root landing.",
+        "capturedAt": "2026-08-04T02:24:36.138Z"
+      }
+    },
+    {
+      "id": "areas-region-clusters",
+      "manifestStateId": "areas-region-clusters",
+      "aStates": [
+        "A03",
+        "A05"
+      ],
+      "capturedThisRun": true,
+      "record": {
+        "id": "areas-region-clusters",
+        "manifestStateId": "areas-region-clusters",
+        "aStates": [
+          "A03",
+          "A05"
+        ],
+        "viewport": "desktop",
+        "hash": "#r=north",
+        "requestedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "observedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "verifications": [
+          {
+            "kind": "data-design-screen-attribute",
+            "description": "data-design-screen equals the cited manifest state id",
+            "expected": "areas-region-clusters",
+            "observed": "areas-region-clusters",
+            "passed": true,
+            "recordOnly": false
+          },
+          {
+            "kind": "heading-text",
+            "description": "h2 heading text matches the manifest expectedHeading",
+            "expected": "/Inside North Bangalore/",
+            "observed": "Inside North Bangalore",
+            "passed": true,
+            "recordOnly": false
+          }
+        ],
+        "screenshotPath": "captures/areas-region-clusters.png",
+        "notes": "Self-identifying. state-mapping.md proved A03 and A05 are the literal same manifest state (live two-level drill-down) — this one capture stands for both A-numbers.",
+        "capturedAt": "2026-08-04T02:24:37.842Z"
+      }
+    },
+    {
+      "id": "areas-region-areas",
+      "manifestStateId": "areas-region-areas",
+      "aStates": [
+        "A02",
+        "A04"
+      ],
+      "capturedThisRun": true,
+      "record": {
+        "id": "areas-region-areas",
+        "manifestStateId": "areas-region-areas",
+        "aStates": [
+          "A02",
+          "A04"
+        ],
+        "viewport": "desktop",
+        "hash": "#r=south",
+        "requestedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "observedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "verifications": [
+          {
+            "kind": "data-design-screen-attribute",
+            "description": "data-design-screen equals the cited manifest state id",
+            "expected": "areas-region-areas",
+            "observed": "areas-region-areas",
+            "passed": true,
+            "recordOnly": false
+          },
+          {
+            "kind": "heading-text",
+            "description": "h2 heading text matches the manifest expectedHeading",
+            "expected": "/Areas in South/",
+            "observed": "Areas in South Bangalore",
+            "passed": true,
+            "recordOnly": false
+          }
+        ],
+        "screenshotPath": "captures/areas-region-areas.png",
+        "notes": "Self-identifying. state-mapping.md proved A02 and A04 are the literal same manifest state (live two-level drill-down) — this one capture stands for both A-numbers.",
+        "capturedAt": "2026-08-04T02:24:39.459Z"
+      }
+    },
+    {
+      "id": "areas-area-listings",
+      "manifestStateId": "areas-area-listings",
+      "aStates": [
+        "A08",
+        "A20"
+      ],
+      "capturedThisRun": true,
+      "record": {
+        "id": "areas-area-listings",
+        "manifestStateId": "areas-area-listings",
+        "aStates": [
+          "A08",
+          "A20"
+        ],
+        "viewport": "desktop",
+        "hash": "#a=hebbal",
+        "requestedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "observedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "verifications": [
+          {
+            "kind": "data-design-screen-attribute",
+            "description": "data-design-screen equals the cited manifest state id",
+            "expected": "areas-area-listings",
+            "observed": "areas-area-listings",
+            "passed": true,
+            "recordOnly": false
+          },
+          {
+            "kind": "heading-text",
+            "description": "h2 heading text matches the manifest expectedHeading",
+            "expected": "Properties in Hebbal",
+            "observed": "Properties in Hebbal",
+            "passed": true,
+            "recordOnly": false
+          },
+          {
+            "kind": "component-visible",
+            "description": "A20 school-shortcut affordance is present inside this same composition",
+            "expected": "visible",
+            "observed": "visible",
+            "passed": true,
+            "recordOnly": false
+          }
+        ],
+        "screenshotPath": "captures/areas-area-listings.png",
+        "notes": "Self-identifying. Also captures A20 (school-shortcut) inline — it is part of this same composition per the manifest, not a separate designed state; the Schools destination it links to is out of scope per #2076 non-goals.",
+        "capturedAt": "2026-08-04T02:24:41.092Z"
+      }
+    },
+    {
+      "id": "areas-area-listings-rent-variant",
+      "manifestStateId": "areas-area-listings",
+      "aStates": [
+        "A09"
+      ],
+      "capturedThisRun": true,
+      "record": {
+        "id": "areas-area-listings-rent-variant",
+        "manifestStateId": "areas-area-listings",
+        "aStates": [
+          "A09"
+        ],
+        "viewport": "desktop",
+        "hash": "#a=hebbal",
+        "requestedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "observedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "verifications": [
+          {
+            "kind": "data-design-screen-attribute",
+            "description": "data-design-screen value recorded (not asserted — see manifest-states.ts note for this capture)",
+            "expected": "areas-area-listings",
+            "observed": "areas-area-listings",
+            "passed": true,
+            "recordOnly": true
+          },
+          {
+            "kind": "dom-text",
+            "description": "rent-framing copy replaces the sale-framing copy after toggling Rent",
+            "expected": "/rental/i",
+            "observed": "8 rentals",
+            "passed": true,
+            "recordOnly": false
+          }
+        ],
+        "screenshotPath": "captures/areas-area-listings-rent-variant.png",
+        "notes": "A09 is NOT a distinct manifest state id — state-mapping.md proved this by reading the `screenId` IIFE, which never branches on `buyRent`. This capture is evidence of a real rendering variant (verified live: copy changes to \"N rentals\"), not a designed state; the attribute check above is intentionally record-only.",
+        "capturedAt": "2026-08-04T02:24:43.433Z"
+      }
+    },
+    {
+      "id": "areas-listings-query-active",
+      "manifestStateId": "areas-listings-query-active",
+      "aStates": [
+        "A11"
+      ],
+      "capturedThisRun": true,
+      "record": {
+        "id": "areas-listings-query-active",
+        "manifestStateId": "areas-listings-query-active",
+        "aStates": [
+          "A11"
+        ],
+        "viewport": "desktop",
+        "hash": "#a=hebbal",
+        "requestedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "observedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "verifications": [
+          {
+            "kind": "data-design-screen-attribute",
+            "description": "data-design-screen value recorded (not asserted — see manifest-states.ts note for this capture)",
+            "expected": "areas-listings-query-active",
+            "observed": "areas-area-listings",
+            "passed": true,
+            "recordOnly": true
+          },
+          {
+            "kind": "input-value",
+            "description": "property-search input retains the submitted query",
+            "expected": "3 bhk",
+            "observed": "3 bhk",
+            "passed": true,
+            "recordOnly": false
+          },
+          {
+            "kind": "dom-text",
+            "description": "\"N of M\" filtered-count header with a Reset action is shown",
+            "expected": "/of \\d+/",
+            "observed": "3 of 8 · Reset",
+            "passed": true,
+            "recordOnly": false
+          }
+        ],
+        "screenshotPath": "captures/areas-listings-query-active.png",
+        "notes": "No-self-ID per state-mapping.md (A11): the manifest id is never the value of data-design-screen at runtime. Verified instead by the search input retaining its value and the filtered \"N of M\" header rendering.",
+        "capturedAt": "2026-08-04T02:24:45.658Z"
+      }
+    },
+    {
+      "id": "areas-listings-filters-active",
+      "manifestStateId": "areas-listings-filters-active",
+      "aStates": [
+        "A12"
+      ],
+      "capturedThisRun": true,
+      "record": {
+        "id": "areas-listings-filters-active",
+        "manifestStateId": "areas-listings-filters-active",
+        "aStates": [
+          "A12"
+        ],
+        "viewport": "desktop",
+        "hash": "#a=hebbal",
+        "requestedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "observedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "verifications": [
+          {
+            "kind": "data-design-screen-attribute",
+            "description": "data-design-screen value recorded (not asserted — see manifest-states.ts note for this capture)",
+            "expected": "areas-listings-filters-active",
+            "observed": "areas-area-listings",
+            "passed": true,
+            "recordOnly": true
+          },
+          {
+            "kind": "aria-pressed",
+            "description": "the \"Verified only\" filter chip is pressed after toggling it",
+            "expected": "true",
+            "observed": "true",
+            "passed": true,
+            "recordOnly": false
+          }
+        ],
+        "screenshotPath": "captures/areas-listings-filters-active.png",
+        "notes": "No-self-ID per state-mapping.md (A12): same screenId mechanism as A11 (filters live in ctx.filters, also absent from the screenId branch conditions). Verified instead by the chip's own aria-pressed state, which is a real, mock-authored a11y signal.",
+        "capturedAt": "2026-08-04T02:24:47.783Z"
+      }
+    },
+    {
+      "id": "areas-listings-empty-results",
+      "manifestStateId": "areas-listings-query-active",
+      "aStates": [
+        "A13"
+      ],
+      "capturedThisRun": true,
+      "record": {
+        "id": "areas-listings-empty-results",
+        "manifestStateId": "areas-listings-query-active",
+        "aStates": [
+          "A13"
+        ],
+        "viewport": "desktop",
+        "hash": "#a=hebbal",
+        "requestedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "observedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "verifications": [
+          {
+            "kind": "data-design-screen-attribute",
+            "description": "data-design-screen value recorded (not asserted — see manifest-states.ts note for this capture)",
+            "expected": "areas-listings-query-active",
+            "observed": "areas-area-listings",
+            "passed": true,
+            "recordOnly": true
+          },
+          {
+            "kind": "dom-text",
+            "description": "the designed \"No homes match\" empty state renders for a query with zero results",
+            "expected": "No homes match",
+            "observed": "No homes match",
+            "passed": true,
+            "recordOnly": false
+          }
+        ],
+        "screenshotPath": "captures/areas-listings-empty-results.png",
+        "notes": "A13 (empty filtered results) is documented inside areas-listings-query-active's manifest notes, not as its own state id, and inherits the same no-self-ID mechanism as A11/A12 per state-mapping.md. Verified by the empty-state title rendering for a query with no matches.",
+        "capturedAt": "2026-08-04T02:24:49.973Z"
+      }
+    },
+    {
+      "id": "areas-browse-all",
+      "manifestStateId": "areas-browse-all",
+      "aStates": [
+        "A14"
+      ],
+      "capturedThisRun": true,
+      "record": {
+        "id": "areas-browse-all",
+        "manifestStateId": "areas-browse-all",
+        "aStates": [
+          "A14"
+        ],
+        "viewport": "desktop",
+        "hash": "#b=1",
+        "requestedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "observedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "verifications": [
+          {
+            "kind": "data-design-screen-attribute",
+            "description": "data-design-screen equals the cited manifest state id",
+            "expected": "areas-browse-all",
+            "observed": "areas-browse-all",
+            "passed": true,
+            "recordOnly": false
+          },
+          {
+            "kind": "heading-text",
+            "description": "h2 heading text matches the manifest expectedHeading",
+            "expected": "/All homes in Bangalore/",
+            "observed": "All homes in Bangalore",
+            "passed": true,
+            "recordOnly": false
+          }
+        ],
+        "screenshotPath": "captures/areas-browse-all.png",
+        "notes": "Self-identifying.",
+        "capturedAt": "2026-08-04T02:24:51.776Z"
+      }
+    },
+    {
+      "id": "shell-city-switcher-open",
+      "manifestStateId": "shell-city-switcher-open",
+      "aStates": [],
+      "capturedThisRun": true,
+      "record": {
+        "id": "shell-city-switcher-open",
+        "manifestStateId": "shell-city-switcher-open",
+        "aStates": [],
+        "viewport": "desktop",
+        "hash": "#",
+        "requestedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "observedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "verifications": [
+          {
+            "kind": "data-design-screen-attribute",
+            "description": "data-design-screen equals the cited manifest state id",
+            "expected": "areas-city-default",
+            "observed": "areas-city-default",
+            "passed": true,
+            "recordOnly": false
+          },
+          {
+            "kind": "component-visible",
+            "description": "the city-switcher listbox overlay opened",
+            "expected": "visible",
+            "observed": "visible",
+            "passed": true,
+            "recordOnly": false
+          }
+        ],
+        "screenshotPath": "captures/shell-city-switcher-open.png",
+        "notes": "AC13 shell overlay, not a numbered A-state. The manifest itself documents this as \"overlay only; underlying state unchanged\" — this capture verifies that contract directly rather than asserting a screen id the mechanism was never designed to emit.",
+        "capturedAt": "2026-08-04T02:24:53.986Z"
+      }
+    },
+    {
+      "id": "shell-area-autocomplete-open",
+      "manifestStateId": "shell-area-autocomplete-open",
+      "aStates": [
+        "A19"
+      ],
+      "capturedThisRun": true,
+      "record": {
+        "id": "shell-area-autocomplete-open",
+        "manifestStateId": "shell-area-autocomplete-open",
+        "aStates": [
+          "A19"
+        ],
+        "viewport": "desktop",
+        "hash": "#",
+        "requestedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "observedViewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "verifications": [
+          {
+            "kind": "data-design-screen-attribute",
+            "description": "data-design-screen equals the cited manifest state id",
+            "expected": "areas-city-default",
+            "observed": "areas-city-default",
+            "passed": true,
+            "recordOnly": false
+          },
+          {
+            "kind": "component-visible",
+            "description": "the area-autocomplete results listbox opened for a query with matches",
+            "expected": "visible",
+            "observed": "visible",
+            "passed": true,
+            "recordOnly": false
+          }
+        ],
+        "screenshotPath": "captures/shell-area-autocomplete-open.png",
+        "notes": "A19's PARTIAL/REF half — the autocomplete overlay composition, per state-mapping.md. The node-convergence itself is behavioural and has no composition to capture.",
+        "capturedAt": "2026-08-04T02:24:56.160Z"
+      }
+    },
+    {
+      "id": "areas-city-default-mobile",
+      "manifestStateId": "areas-city-default-mobile",
+      "aStates": [
+        "A01",
+        "A21"
+      ],
+      "capturedThisRun": true,
+      "record": {
+        "id": "areas-city-default-mobile",
+        "manifestStateId": "areas-city-default-mobile",
+        "aStates": [
+          "A01",
+          "A21"
+        ],
+        "viewport": "mobile",
+        "hash": "#",
+        "requestedViewport": {
+          "width": 390,
+          "height": 844
+        },
+        "observedViewport": {
+          "width": 390,
+          "height": 844
+        },
+        "verifications": [
+          {
+            "kind": "data-design-screen-attribute",
+            "description": "data-design-screen value recorded (not asserted — see manifest-states.ts note for this capture)",
+            "expected": "areas-city-default-mobile",
+            "observed": "areas-city-default",
+            "passed": true,
+            "recordOnly": true
+          },
+          {
+            "kind": "heading-text",
+            "description": "h2 heading text matches the manifest expectedHeading",
+            "expected": "Where do you want to explore?",
+            "observed": "Where do you want to explore?",
+            "passed": true,
+            "recordOnly": false
+          }
+        ],
+        "screenshotPath": "captures/areas-city-default-mobile.png",
+        "notes": "No-self-ID by construction (mobile-id-emission finding in state-mapping.md, not a defect in this harness). Verified by the manifest's own expectedHeading text at the mandated 390x844 viewport (hard-asserted separately by the capture runner).",
+        "capturedAt": "2026-08-04T02:24:59.495Z"
+      }
+    },
+    {
+      "id": "areas-area-listings-mobile",
+      "manifestStateId": "areas-area-listings-mobile",
+      "aStates": [
+        "A08",
+        "A21",
+        "A23"
+      ],
+      "capturedThisRun": true,
+      "record": {
+        "id": "areas-area-listings-mobile",
+        "manifestStateId": "areas-area-listings-mobile",
+        "aStates": [
+          "A08",
+          "A21",
+          "A23"
+        ],
+        "viewport": "mobile",
+        "hash": "#a=hebbal",
+        "requestedViewport": {
+          "width": 390,
+          "height": 844
+        },
+        "observedViewport": {
+          "width": 390,
+          "height": 844
+        },
+        "verifications": [
+          {
+            "kind": "data-design-screen-attribute",
+            "description": "data-design-screen value recorded (not asserted — see manifest-states.ts note for this capture)",
+            "expected": "areas-area-listings-mobile",
+            "observed": "areas-area-listings",
+            "passed": true,
+            "recordOnly": true
+          },
+          {
+            "kind": "heading-text",
+            "description": "h2 heading text matches the manifest expectedHeading",
+            "expected": "Properties in Hebbal",
+            "observed": "Properties in Hebbal",
+            "passed": true,
+            "recordOnly": false
+          }
+        ],
+        "screenshotPath": "captures/areas-area-listings-mobile.png",
+        "notes": "No-self-ID by construction, same mobile-id-emission finding as areas-city-default-mobile. Verified by expectedHeading text at 390x844.",
+        "capturedAt": "2026-08-04T02:25:01.068Z"
+      }
+    }
+  ]
+}
