@@ -66,7 +66,14 @@ export interface UseDiscoverCameraOrchestrationParams {
    */
   urlState: Pick<
     DiscoverUrlState,
-    'journey' | 'radiusKm' | 'groupId' | 'areaKey' | 'scope' | 'selectedLocality'
+    | 'journey'
+    | 'radiusKm'
+    | 'groupId'
+    | 'areaKey'
+    | 'scope'
+    | 'selectedLocality'
+    | 'viewport'
+    | 'historyAction'
   >;
   /** useDiscoverPageState — injected values/setters (SCOPE-LOCKED hook, never moved). */
   selectedSchool: SchoolResult | null;
@@ -146,6 +153,16 @@ export interface UseDiscoverCameraOrchestrationResult {
   schoolFocusLat: number | undefined;
   schoolFocusLon: number | undefined;
   agriGroupFocusBounds: [[number, number], [number, number]] | null;
+  /**
+   * Issue #2083 (cycle 5) — E2E-assertability counter, incremented every time
+   * the canonical-node fit-once effect below actually calls `setPanToArea`
+   * (i.e. NOT when the POP-restoration guard skips it). Exposed so a Back
+   * transition landing on a node with a persisted viewport can be asserted to
+   * NOT re-trigger a second, uncoordinated `AreaPanner` bbox refit — see
+   * MapDiscovery.tsx's `window.__debug.mapState.canonicalNodeFitCount` and
+   * issue-2083-home-breadcrumb-back-camera-race.spec.ts.
+   */
+  canonicalNodeFitCount: number;
 }
 
 export function useDiscoverCameraOrchestration({
@@ -428,6 +445,8 @@ export function useDiscoverCameraOrchestration({
   // transition, including a return to a previously-visited node, because the
   // ref is advanced to the INTERVENING key (the child's) in between.
   const prevNavigationNodeKeyRef = useRef<string | null>(null);
+  // Issue #2083 (cycle 5) — see UseDiscoverCameraOrchestrationResult's doc.
+  const [canonicalNodeFitCount, setCanonicalNodeFitCount] = useState(0);
   useEffect(() => {
     if (navigationNodeKey == null) {
       prevNavigationNodeKeyRef.current = null;
@@ -447,6 +466,33 @@ export function useDiscoverCameraOrchestration({
     ) {
       return;
     }
+
+    // Issue #2083 (cycle 5) — a browser Back/Forward (POP) landing on a node
+    // whose URL already carries a restored `lat`/`lon`/`zoom` is NOT a fresh
+    // "selection" this AC3.10 fit-once effect needs to frame from the node's
+    // bbox — it is a history RESTORATION, and PropertyMap's
+    // URLViewportController is the SOLE authority for replaying a persisted
+    // camera (an exact, precise setView, not a bbox+padding+aspect-ratio
+    // recomputation). Without this guard, this effect ALSO fires `setPanToArea`
+    // on the exact same POP transition, driving AreaPanner's `map.fitBounds()`
+    // as a second, uncoordinated camera writer — unlike MapController's
+    // cameraIntent path (lastHandledSeqRef/suppressForSeqRef), this effect has
+    // no seq/suppression coordination with URLViewportController at all. On a
+    // small zoom delta (e.g. a full production dataset's real bounds fit, vs
+    // this repo's fixture data which happens to exceed Leaflet's zoom-
+    // animation threshold and snap instantly) `fitBounds` genuinely animates,
+    // landing a stale/re-derived camera on top of the correct restored one a
+    // few hundred ms to ~2s after Back — camera reverts while the node/panel
+    // stay correct. A forward navigation (PUSH) or a POP to a node with NO
+    // persisted viewport (city root / a Direction — `goToNode` deliberately
+    // strips lat/lon/zoom for hierarchy nodes, see navigation.ts) still falls
+    // through and fits from the bbox exactly as before — this guard is scoped
+    // to precisely the case that already has a precise camera to trust.
+    if (urlState.historyAction === 'POP' && urlState.viewport != null) {
+      return;
+    }
+
+    setCanonicalNodeFitCount((c) => c + 1);
     setPanToArea({
       areaKey: navigationNodeKey,
       areaLabel: navigationNodeKey,
@@ -457,6 +503,16 @@ export function useDiscoverCameraOrchestration({
         [bounds.maxLat, bounds.maxLon],
       ],
     });
+    // urlState.historyAction/urlState.viewport are deliberately NOT dep-array
+    // members: they are read at effect-run time from the SAME render's
+    // closure that produced this navigationNodeKey/navigationNodeBounds
+    // transition (both derive from the identical `location`/`urlParams`
+    // snapshot), so they are never stale here. Adding them would make this
+    // fit-once effect re-run on every ordinary pan/zoom (urlState.viewport
+    // changes on every debounced camera write) even though `transitioned`
+    // stays false and no-ops — harmless but needlessly re-executes a guard
+    // this effect is explicitly designed to fire ONCE per node transition.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigationNodeKey, navigationNodeBounds, setPanToArea]);
 
   // Issue #1410 (B3) — viewport-fit when agri group listings arrive.
@@ -551,5 +607,6 @@ export function useDiscoverCameraOrchestration({
     schoolFocusLat: selectedSchoolLat,
     schoolFocusLon: selectedSchoolLon,
     agriGroupFocusBounds,
+    canonicalNodeFitCount,
   };
 }

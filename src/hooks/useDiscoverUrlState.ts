@@ -71,7 +71,7 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigationType, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type { UrlDebounceTimers, UrlDomainCtx } from '@/features/discover/state/url/_shared';
 import { useViewportUrlDomain } from '@/features/discover/state/url/viewport';
@@ -81,7 +81,10 @@ import { useSchoolUrlDomain } from '@/features/discover/state/url/school';
 import { useAreaUrlDomain } from '@/features/discover/state/url/area';
 import { useAgriculturalUrlDomain } from '@/features/discover/state/url/agricultural';
 import { useCompatibilityUrlDomain } from '@/features/discover/state/url/compatibility';
-import { useNavigationUrlDomain } from '@/features/discover/state/url/navigation';
+import {
+  cancelPendingViewportCommit,
+  useNavigationUrlDomain,
+} from '@/features/discover/state/url/navigation';
 
 // Byte-identical re-export: DEFAULT_MAX_KM is now declared in agricultural.ts
 // (the only domain that uses it), but every existing consumer imports it from
@@ -264,6 +267,19 @@ export interface DiscoverUrlState {
    * existing tests and callers keep compiling.
    */
   rawNodeParam?: string | null;
+  /**
+   * Issue #2083 (cycle 5) — the react-router history action ('POP' | 'PUSH' |
+   * 'REPLACE') that produced the CURRENT render's location. 'POP' covers both
+   * browser Back and Forward (and `navigate(-1)`) — the one transition kind no
+   * app-initiated URL writer intercepts (see useDiscoverUrlState.ts's RC_A part
+   * 1 comment). Consumers use this to distinguish a genuine history restoration
+   * (trust the already-persisted URL camera) from a fresh forward navigation
+   * (fit from scratch) — see useDiscoverCameraOrchestration.ts's canonical-node
+   * fit-once effect for the concrete consumer.
+   * Optional, like the other late-added fields, so partial state literals in
+   * existing tests and callers keep compiling.
+   */
+  historyAction?: 'POP' | 'PUSH' | 'REPLACE';
 }
 
 export interface DiscoverUrlActions {
@@ -521,6 +537,9 @@ export interface DiscoverUrlActions {
 export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   const [urlParams, setUrlParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const location = useLocation();
+  // Issue #2083 (cycle 5) — see DiscoverUrlState.historyAction's doc.
+  const historyAction = useNavigationType();
 
   // Debounce timers — facade-owned (qa-fast R1), injected into every domain via
   // ctx.timers so cross-domain cancellation call sites (clearAllFiltersAndSearch
@@ -555,6 +574,16 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     };
   }, []);
 
+  // Issue #2083 RC_A part 2 — always holds the CURRENT render's `urlParams`.
+  // Mutated directly in the render body (not inside an effect) so it is
+  // guaranteed current before any `setTimeout` scheduled THIS render can
+  // fire — an effect-based update would still be one tick behind a timer
+  // that fires between commit and effect flush. See _shared.ts's
+  // `liveUrlParamsRef` doc for why a debounced flush must read this instead
+  // of `setUrlParams`'s functional-updater `prev`.
+  const liveUrlParamsRef = useRef(urlParams);
+  liveUrlParamsRef.current = urlParams;
+
   // Computed once and threaded to every domain that needs it (city.ts's own
   // state slice, school.ts's setSchoolJourney bbox-fallback cache key) via
   // ctx.reads.city.
@@ -566,7 +595,37 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     timers,
     queryClient,
     reads: { city },
+    liveUrlParamsRef,
   };
+
+  // Issue #2083 RC_A part 1 — UNIVERSAL cancellation of any pending viewport
+  // debounce commit, keyed on a HISTORY TRANSITION (`location.key`), which
+  // changes on every navigation react-router performs — PUSH, REPLACE, and
+  // POP (browser Back/Forward) alike.
+  //
+  // WHY THIS COEXISTS WITH THE PER-WRITER SYNCHRONOUS CANCELS (navigation.ts's
+  // `writeNode`/`enterAreasJourney`, area.ts's `deselectArea`, etc.) RATHER
+  // THAN REPLACING THEM — this looks like duplication but is not, and
+  // removing either half reintroduces the race it closes:
+  //   - The per-writer cancels are SYNCHRONOUS and run BEFORE the navigation
+  //     they guard, closing the gap between "user clicks" and "history
+  //     updates" for app-initiated writes.
+  //   - This effect runs AFTER commit, in response to `location.key` having
+  //     already changed — the only guard available for a transition NO
+  //     writer can intercept: browser Back/Forward (a POP), `navigate(-1)`
+  //     (HierarchyBackButton.tsx), and the `<Link replace>` fallback. None of
+  //     those call any URL-domain writer, so only a POST-transition guard can
+  //     ever see them.
+  // A timer armed a moment before either kind of transition must never land
+  // afterwards and re-add a stale lat/lon/zoom onto the NEW history entry —
+  // that is the bug this pair of guards exists to make structurally
+  // unreachable, not merely unlikely.
+  useEffect(() => {
+    cancelPendingViewportCommit(timers);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `timers` is a
+    // useRef-backed object (stable identity forever, see the comment on its
+    // declaration above); only `location.key` should re-run this effect.
+  }, [location.key]);
 
   // Fixed call order — all eight domain hooks run unconditionally every render.
   const viewportDomain = useViewportUrlDomain(ctx);
@@ -606,6 +665,8 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     node: navigationDomain.state.node,
     // Issue #1956 PR 2 — appended after PR 1's key, same rationale.
     rawNodeParam: navigationDomain.state.rawNodeParam,
+    // Issue #2083 (cycle 5) — appended last, same rationale as the two keys above.
+    historyAction,
   };
 
   // Spread merge is safe under this explicit `DiscoverUrlActions` annotation —

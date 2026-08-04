@@ -76,7 +76,7 @@ class AreaSummaryControllerTest {
                 5L, 400_000L, "rising", "limited",
                 3L, null
         );
-        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull()))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull(), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of(area)));
 
         mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
@@ -92,7 +92,7 @@ class AreaSummaryControllerTest {
 
     @Test
     void getAreas_unknownCity_returnsEmptyList() throws Exception {
-        when(areaSummaryService.getAreasByCity(eq("nowhere"), isNull()))
+        when(areaSummaryService.getAreasByCity(eq("nowhere"), isNull(), isNull()))
                 .thenReturn(new AreaSummaryResponse("nowhere", List.of()));
 
         mockMvc.perform(get("/api/discover/areas").param("city", "nowhere"))
@@ -110,7 +110,7 @@ class AreaSummaryControllerTest {
                 0L, null, null, "fallback",
                 0L, null
         );
-        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull()))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull(), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of(zeroArea)));
 
         mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
@@ -129,7 +129,7 @@ class AreaSummaryControllerTest {
                 2L, 350_000L, "stable", "moderate",
                 0L, null
         );
-        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull()))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull(), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of(noSchoolArea)));
 
         mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
@@ -146,7 +146,7 @@ class AreaSummaryControllerTest {
                 10L, 500_000L, "rising", "high",
                 7L, null
         );
-        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull()))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull(), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of(area)));
 
         mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
@@ -158,7 +158,7 @@ class AreaSummaryControllerTest {
 
     @Test
     void getAreas_responseHasCacheControlPublicMaxAge120() throws Exception {
-        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull()))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull(), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of()));
 
         mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
@@ -172,14 +172,14 @@ class AreaSummaryControllerTest {
 
     @Test
     void getAreas_noPropertyType_callsServiceWithNullFilter() throws Exception {
-        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull()))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull(), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of()));
 
         mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
                 .andExpect(status().isOk());
 
         ArgumentCaptor<String> typeCaptor = ArgumentCaptor.forClass(String.class);
-        verify(areaSummaryService).getAreasByCity(eq("udupi"), typeCaptor.capture());
+        verify(areaSummaryService).getAreasByCity(eq("udupi"), typeCaptor.capture(), isNull());
         assertThat(typeCaptor.getValue()).isNull();
     }
 
@@ -192,7 +192,7 @@ class AreaSummaryControllerTest {
                 1L, null, null, "fallback",
                 0L, 5.0
         );
-        when(areaSummaryService.getAreasByCity(eq("udupi"), eq("agricultural_land")))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), eq("agricultural_land"), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of(agriArea)));
 
         mockMvc.perform(get("/api/discover/areas")
@@ -207,7 +207,7 @@ class AreaSummaryControllerTest {
 
         // Literal must reach the service verbatim — not trimmed away or renamed.
         ArgumentCaptor<String> typeCaptor = ArgumentCaptor.forClass(String.class);
-        verify(areaSummaryService).getAreasByCity(eq("udupi"), typeCaptor.capture());
+        verify(areaSummaryService).getAreasByCity(eq("udupi"), typeCaptor.capture(), isNull());
         assertThat(typeCaptor.getValue()).isEqualTo("agricultural_land");
     }
 
@@ -219,9 +219,9 @@ class AreaSummaryControllerTest {
         AreaSummary agri = new AreaSummary(
                 "IN|KA|Udupi|Manipal", "Manipal", 13.35, 74.79,
                 null, null, null, null, 1L, null, null, "fallback", 0L, 5.0);
-        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull()))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull(), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of(blended)));
-        when(areaSummaryService.getAreasByCity(eq("udupi"), eq("agricultural_land")))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), eq("agricultural_land"), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of(agri)));
 
         // Blended call → blended count, no acreage.
@@ -238,8 +238,8 @@ class AreaSummaryControllerTest {
                 .andExpect(jsonPath("$.areas[0].listingCount", is(1)))
                 .andExpect(jsonPath("$.areas[0].agriAcreage", is(5.0)));
 
-        verify(areaSummaryService).getAreasByCity(eq("udupi"), isNull());
-        verify(areaSummaryService).getAreasByCity(eq("udupi"), eq("agricultural_land"));
+        verify(areaSummaryService).getAreasByCity(eq("udupi"), isNull(), isNull());
+        verify(areaSummaryService).getAreasByCity(eq("udupi"), eq("agricultural_land"), isNull());
     }
 
     @Test
@@ -247,7 +247,7 @@ class AreaSummaryControllerTest {
         // The controller forwards the raw param; blank/whitespace → no-filter is normalised in the
         // service (verified in the IT). Here we assert the controller threads the value through and
         // serves with the standard Cache-Control.
-        when(areaSummaryService.getAreasByCity(eq("udupi"), any()))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), any(), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of()));
 
         mockMvc.perform(get("/api/discover/areas")
@@ -257,7 +257,75 @@ class AreaSummaryControllerTest {
                 .andExpect(header().string("Cache-Control", containsString("max-age=120")));
 
         ArgumentCaptor<String> typeCaptor = ArgumentCaptor.forClass(String.class);
-        verify(areaSummaryService).getAreasByCity(eq("udupi"), typeCaptor.capture());
+        verify(areaSummaryService).getAreasByCity(eq("udupi"), typeCaptor.capture(), isNull());
         assertThat(typeCaptor.getValue()).isEqualTo("   ");
+    }
+
+    // ── #2083 RC_C: optional purpose param contract ───────────────────────────
+
+    @Test
+    void getAreas_noPurpose_callsServiceWithNullPurpose() throws Exception {
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull(), isNull()))
+                .thenReturn(new AreaSummaryResponse("udupi", List.of()));
+
+        mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<String> purposeCaptor = ArgumentCaptor.forClass(String.class);
+        verify(areaSummaryService).getAreasByCity(eq("udupi"), isNull(), purposeCaptor.capture());
+        assertThat(purposeCaptor.getValue()).isNull();
+    }
+
+    @Test
+    void getAreas_purposeRent_passesLiteralRentToService() throws Exception {
+        AreaSummary rentArea = new AreaSummary(
+                "IN|KA|Udupi|Manipal", "Manipal", 13.35, 74.79,
+                null, null, null, null, 2L, null, null, "fallback", 0L, null);
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull(), eq("rent")))
+                .thenReturn(new AreaSummaryResponse("udupi", List.of(rentArea)));
+
+        mockMvc.perform(get("/api/discover/areas")
+                        .param("city", "udupi")
+                        .param("purpose", "rent"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.areas[0].listingCount", is(2)))
+                .andExpect(header().string("Cache-Control", containsString("max-age=120")))
+                .andExpect(header().string("Cache-Control", containsString("public")));
+
+        ArgumentCaptor<String> purposeCaptor = ArgumentCaptor.forClass(String.class);
+        verify(areaSummaryService).getAreasByCity(eq("udupi"), isNull(), purposeCaptor.capture());
+        assertThat(purposeCaptor.getValue()).isEqualTo("rent");
+    }
+
+    @Test
+    void getAreas_purposeAndPropertyType_bothThreadedToServiceIndependently() throws Exception {
+        when(areaSummaryService.getAreasByCity(eq("udupi"), eq("agricultural_land"), eq("sale")))
+                .thenReturn(new AreaSummaryResponse("udupi", List.of()));
+
+        mockMvc.perform(get("/api/discover/areas")
+                        .param("city", "udupi")
+                        .param("propertyType", "agricultural_land")
+                        .param("purpose", "sale"))
+                .andExpect(status().isOk());
+
+        verify(areaSummaryService).getAreasByCity(eq("udupi"), eq("agricultural_land"), eq("sale"));
+    }
+
+    @Test
+    void getAreas_invalidPurpose_reachesServiceForBlendedFallbackHandling() throws Exception {
+        // The controller forwards the raw param verbatim; unrecognised → blended is normalised in
+        // the service via DiscoverFilterNormalizer#normalizePurpose (verified in the IT) — this
+        // endpoint never 400s on an unknown purpose value.
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull(), any()))
+                .thenReturn(new AreaSummaryResponse("udupi", List.of()));
+
+        mockMvc.perform(get("/api/discover/areas")
+                        .param("city", "udupi")
+                        .param("purpose", "not-a-real-purpose"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<String> purposeCaptor = ArgumentCaptor.forClass(String.class);
+        verify(areaSummaryService).getAreasByCity(eq("udupi"), isNull(), purposeCaptor.capture());
+        assertThat(purposeCaptor.getValue()).isEqualTo("not-a-real-purpose");
     }
 }

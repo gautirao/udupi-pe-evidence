@@ -252,7 +252,15 @@ export interface UseDiscoverMapDataParams {
    * the hook makes a SEPARATE agri-scoped useDiscoverAreas call (queryKey includes
    * 'agricultural_land' — AC10 cache-key isolation) and forces propertyType into
    * the area-click listings fetch. The BLENDED useDiscoverAreas (AreaPoint path) is
-   * NEVER affected — AreaPoint.listingCount always reflects the blended count.
+   * NEVER affected by journey/propertyType — AreaPoint.listingCount always
+   * reflects the blended (all-property-type) count.
+   * UPDATE (Issue #2083 RC_C, see the `listingPurpose` param below and its
+   * threading into the blended `useDiscoverAreas` call ~479-483): the blended
+   * path IS now purpose-scoped. When a Buy/Rent intent is active,
+   * AreaPoint.listingCount — and therefore map marker labels and
+   * `cityTotal` — reflects that purpose, not an unconditional Buy+Rent
+   * blend. "Blended" here means "not journey/propertyType-filtered", not
+   * "not purpose-filtered".
    */
   journey?: DiscoverJourney | null;
   /**
@@ -469,7 +477,16 @@ export function useDiscoverMapData({
   // ── Static data ───────────────────────────────────────────────────────────
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
   // Blended areas — feeds AreaPoint.listingCount + map markers. NEVER filtered by propertyType.
-  const { data: discoverAreasData, isLoading: areasLoading } = useDiscoverAreas(isCityValid ? city : '');
+  // Issue #2083 RC_C — threads `listingPurpose` ('sale'|'rent'|undefined) as the
+  // new `purpose` query param so `cityTotal` (derived from this data in
+  // MapDiscovery.tsx) becomes intent-aware against the backend's new
+  // AreaSummaryService purpose filter, instead of always reporting the
+  // blended (Buy+Rent) total regardless of the active Buy/Rent toggle.
+  const { data: discoverAreasData, isLoading: areasLoading } = useDiscoverAreas(
+    isCityValid ? city : '',
+    undefined,
+    listingPurpose,
+  );
 
   // Issue #1371 — agri-scoped area summary. Only enabled in agri-first journey.
   // Uses a SEPARATE cache key (['discover-areas', city, 'agricultural_land']) so React Query

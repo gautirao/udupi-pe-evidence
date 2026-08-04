@@ -26,7 +26,7 @@ type ViewportActions = Pick<DiscoverUrlActions, 'reportViewport'>;
 export function useViewportUrlDomain(
   ctx: UrlDomainCtx,
 ): UrlDomainModule<ViewportState, ViewportActions> {
-  const { urlParams, setUrlParams, timers } = ctx;
+  const { urlParams, setUrlParams, timers, liveUrlParamsRef } = ctx;
 
   const rawLat = urlParams.get('lat');
   const rawLon = urlParams.get('lon');
@@ -43,19 +43,26 @@ export function useViewportUrlDomain(
     (vp: DiscoverViewport) => {
       if (timers.viewport.current) clearTimeout(timers.viewport.current);
       timers.viewport.current = setTimeout(() => {
+        timers.viewport.current = null;
+        // Issue #2083 RC_A part 2 — read the LIVE params via the facade-owned
+        // ref, NOT `setUrlParams`'s functional-updater `prev`. `prev` is the
+        // `searchParams` closed over from the render that produced this
+        // `setUrlParams` identity (react-router-dom 6.30.1), which can be
+        // stale by the time this 300ms timer fires — a stale `prev` would
+        // navigate to the ENTIRE pre-flush query string plus this delta,
+        // reviving params (e.g. filters) the user cleared in the meantime.
+        // See _shared.ts's `liveUrlParamsRef` doc for the full rationale.
+        const next = new URLSearchParams(liveUrlParamsRef.current);
+        next.set('lat', round(vp.lat, LAT_LON_PRECISION).toFixed(LAT_LON_PRECISION));
+        next.set('lon', round(vp.lon, LAT_LON_PRECISION).toFixed(LAT_LON_PRECISION));
+        next.set('zoom', String(Math.round(vp.zoom)));
         setUrlParams(
-          (prev) => {
-            const next = new URLSearchParams(prev);
-            next.set('lat', round(vp.lat, LAT_LON_PRECISION).toFixed(LAT_LON_PRECISION));
-            next.set('lon', round(vp.lon, LAT_LON_PRECISION).toFixed(LAT_LON_PRECISION));
-            next.set('zoom', String(Math.round(vp.zoom)));
-            return next;
-          },
+          next,
           { replace: true }, // REPLACE — viewport is bookmarkable but not a history destination
         );
       }, DEBOUNCE_MS);
     },
-    [setUrlParams, timers],
+    [setUrlParams, timers, liveUrlParamsRef],
   );
 
   return { state: { viewport }, actions: { reportViewport } };

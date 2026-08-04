@@ -265,6 +265,44 @@ describe('useDiscoverAreas — filtered (with propertyType)', () => {
   });
 });
 
+// ─── Issue #2083 RC_C — purpose param (Buy/Rent scoping) ──────────────────
+
+describe('useDiscoverAreas — purpose param (Issue #2083 RC_C)', () => {
+  it('purpose="rent" appends &purpose=rent to the request URL', async () => {
+    mockGet.mockResolvedValue(BLENDED_RESPONSE);
+
+    const { result } = renderHook(
+      () => useDiscoverAreas('udupi', undefined, 'rent'),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('purpose')).toBe('rent');
+    expect(params.get('city')).toBe('udupi');
+  });
+
+  it('queryKey differs between purpose="sale" and purpose="rent" for the same city — no cross-serve on Buy/Rent toggle', () => {
+    mockGet.mockResolvedValue(BLENDED_RESPONSE);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+
+    renderHook(() => useDiscoverAreas('udupi', undefined, 'sale'), { wrapper });
+    renderHook(() => useDiscoverAreas('udupi', undefined, 'rent'), { wrapper });
+
+    const keys = qc.getQueryCache().getAll().map((q) => q.queryKey);
+    expect(keys).toContainEqual(['discover-areas', 'udupi', 'sale']);
+    expect(keys).toContainEqual(['discover-areas', 'udupi', 'rent']);
+    // Regression guard: if `purpose` were ever dropped from the key suffix,
+    // a Buy→Rent toggle would silently serve the stale, wrong-purpose cache
+    // entry instead of registering a distinct one.
+    expect(qc.getQueryCache().getAll().length).toBeGreaterThanOrEqual(2);
+  });
+});
+
 // ─── Issue #1911 PR3 — preview-mode threading (AC10 cache-key isolation) ──
 
 describe('useDiscoverAreas — preview mode (Issue #1911 PR3)', () => {

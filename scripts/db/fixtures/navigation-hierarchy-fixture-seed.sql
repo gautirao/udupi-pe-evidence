@@ -20,15 +20,15 @@
 --     any other table. Every INSERT below is guarded by `ON CONFLICT (city_id, node_key) DO NOTHING`
 --     against the real uq_navigation_nodes_city_node_key constraint (V121), so a second run is a
 --     true no-op — see the idempotency proof in the accompanying workdone evidence.
---   - The four pre-existing navigation_nodes rows (d:w/Basaveshwara Nagar, d:s/Hosahalli — hand-
---     seeded by an earlier, uncommitted PR-2/3/4 session) are NEVER touched. d:s currently has only
---     ONE AREA child (Hosahalli) and its stored descendant_area_count is stale relative to PR-3's
---     spec-documented 4-child shape; safely repairing that would require an UPDATE of an existing
---     row, which this script's additive-only contract forbids. Rather than risk breaking the shared
---     fixture DB (a bad descendant_area_count on ANY node fails validation for the WHOLE city tree
---     — see NavigationTreeValidationService check #9 — for every session sharing this container),
---     this script adds BRAND-NEW Direction nodes under fresh, never-before-used node_keys instead of
---     repairing d:s. See the workdone report for the follow-up recommendation.
+--   - d:w/Basaveshwara Nagar and d:s/Hosahalli, if present at all, are rows hand-seeded into a
+--     disposable container by an earlier, UNCOMMITTED PR-2/3/4 session — they are NOT part of this
+--     committed seed and DO NOT exist on a clean fixture restore. This script never inserts,
+--     restores, or otherwise reproduces them, and never assumes their presence. All root DIRECTION
+--     display_order values below are numbered as a GAPLESS 1..N sequence starting from a clean,
+--     empty navigation_nodes table (1=d:southeast, 2=d:northeast, 3=d:southwest) — not continued
+--     from any prior/uncommitted d:w(1)/d:s(2) numbering, which would leave a non-gapless root
+--     sibling sequence on a clean restore and fail NavigationTreeValidationService's
+--     INVALID_SIBLING_ORDERING check for the whole city tree.
 --
 -- WHAT THIS SCRIPT ADDS — two new DIRECTION (root) trees for Bangalore (city_id resolved by slug),
 -- both structurally valid per NavigationTreeValidationService's checks #1-#14 (verified by hand:
@@ -102,7 +102,7 @@ INSERT INTO public.navigation_nodes
    centre_lat, centre_lon, min_lat, min_lon, max_lat, max_lon,
    policy_fingerprint, generated_at)
 SELECT c.id, 'southeast', 'DIRECTION', NULL, 'd:southeast', NULL, ARRAY[]::text[],
-       'South-East Bangalore', 3, 0, ARRAY[]::text[], 3,
+       'South-East Bangalore', 1, 0, ARRAY[]::text[], 3,
        12.95000, 77.52503, 12.94995, 77.52490, 12.95010, 77.52515,
        'e2e-1956-pr5-fixture-seed-v1', NOW()
 FROM public.cities c
@@ -144,7 +144,7 @@ INSERT INTO public.navigation_nodes
    centre_lat, centre_lon, min_lat, min_lon, max_lat, max_lon,
    policy_fingerprint, generated_at)
 SELECT c.id, 'northeast', 'DIRECTION', NULL, 'd:northeast', NULL, ARRAY[]::text[],
-       'North-East Bangalore', 4, 0, ARRAY[]::text[], 2,
+       'North-East Bangalore', 2, 0, ARRAY[]::text[], 2,
        13.0311553, 77.7610742, 13.0304663, 77.7602705, 13.0318443, 77.7618779,
        'e2e-1956-pr5-fixture-seed-v1', NOW()
 FROM public.cities c
@@ -233,9 +233,11 @@ ON CONFLICT (city_id, node_key) DO NOTHING;
 --                runs BEFORE clustering), but still renders in the un-focused panel's
 --                normal child list as a "No listings yet" leaf AREA card.
 --
---    display_order=5 for d:southwest is the next free slot after d:northeast(=4) in the
---    ROOT sibling group (1,2,3,4 already used by d:w/d:s/d:southeast/d:northeast) — gapless,
---    no renumbering of any existing sibling required.
+--    display_order=3 for d:southwest is the next free slot after d:northeast(=2) in the
+--    ROOT sibling group (1,2 already used by d:southeast/d:northeast on a clean fixture restore)
+--    — gapless 1..N from a clean table, no renumbering of any existing sibling required. (d:w/d:s,
+--    if present at all, are uncommitted hand-seeded rows outside this script's numbering — see the
+--    file header.)
 --
 --    All four area_keys (Deepanjali Nagar, Gnana Bharathi, Chandra Layout Extension,
 --    Avalahalli) are real Bangalore geography rows already present from the V106
@@ -249,7 +251,7 @@ INSERT INTO public.navigation_nodes
    centre_lat, centre_lon, min_lat, min_lon, max_lat, max_lon,
    policy_fingerprint, generated_at)
 SELECT c.id, 'southwest', 'DIRECTION', NULL, 'd:southwest', NULL, ARRAY[]::text[],
-       'South-West Bangalore', 5, 0, ARRAY[]::text[], 4,
+       'South-West Bangalore', 3, 0, ARRAY[]::text[], 4,
        12.9564991, 77.5327964, 12.9459464, 77.5300000, 12.9601000, 77.5409354,
        'e2e-1956-pr5-fixture-seed-v2', NOW()
 FROM public.cities c

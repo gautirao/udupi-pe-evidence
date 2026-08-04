@@ -110,6 +110,12 @@ function makeHarness(initialSearch: string): Harness {
     // harness free of a TanStack provider.
     queryClient: null as unknown as QueryClient,
     reads: { city: 'bangalore' },
+    // Issue #2083 RC_A part 2 — mirrors the facade's "always-current" ref.
+    // Starts equal to `urlParams`; a test that wants to exercise the
+    // stale-`prev`-vs-live-params distinction mutates this directly (see the
+    // AC5 test below), the same way a real navigation would update it on the
+    // facade's next render.
+    liveUrlParamsRef: { current: new URLSearchParams(initialSearch) },
   };
 
   return { ctx, calls, timers, currentParams: () => new URLSearchParams(params) };
@@ -403,6 +409,41 @@ describe('#1956 PR 2 (Slice 5) — camera/pan writes never touch node= (AC5.11)'
     });
     vi.advanceTimersByTime(300);
     expect(h.calls[0].replace, 'viewport commits REPLACE — never a PUSH history entry').toBe(true);
+  });
+});
+
+describe('#2083 RC_A part 2 — reportViewport flush reads LIVE params, never a stale `prev` closure (AC5)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  it('a param cleared AFTER the debounce is armed but BEFORE it flushes does not reappear', () => {
+    const h = makeHarness('city=bangalore&node=d%3Anorth&type=house');
+    renderHook(() => useViewportUrlDomain(h.ctx)).result.current.actions.reportViewport({
+      lat: 12.9716,
+      lon: 77.5946,
+      zoom: 13,
+    });
+
+    // Simulates a real navigation landing on the URL BETWEEN scheduling and
+    // flush — e.g. the user cleared the `type` filter. In react-router-dom
+    // 6.30.1 this changes what the CLOSED-OVER `prev` (from the render that
+    // produced this ctx's `setUrlParams` identity) would see vs. what is
+    // actually live; `liveUrlParamsRef` is what the facade keeps current on
+    // every render, so mutating it here is the correct simulation, not a
+    // synthetic shortcut.
+    h.ctx.liveUrlParamsRef.current = new URLSearchParams('city=bangalore&node=d%3Anorth');
+
+    vi.advanceTimersByTime(300);
+
+    expect(h.calls).toHaveLength(1);
+    // The flush must reflect the LIVE params (type= already gone) — a
+    // stale-`prev` flush would resurrect it.
+    expect(h.calls[0].params.has('type'), 'a cleared filter must not be revived by the flush').toBe(false);
+    expect(h.calls[0].params.get('lat')).toBe('12.97160');
+    expect(h.calls[0].params.get('node')).toBe('d:north');
   });
 });
 

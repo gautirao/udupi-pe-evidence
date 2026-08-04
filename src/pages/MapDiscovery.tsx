@@ -50,7 +50,7 @@ import {
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
-import { useAreaGroups } from '@/hooks/useAreaGroups';
+import { useAreaGroups, type AreaGroup } from '@/hooks/useAreaGroups';
 import { useRegionScopedAreaGroups } from '@/hooks/useRegionScopedAreaGroups';
 import { useRegionalAreaGroups } from '@/hooks/useRegionalAreaGroups';
 import { resolveScope, type ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
@@ -79,6 +79,7 @@ import {
   formatDiscoverBadgeCopy,
 } from '@/features/discover/presentation/discoverBadge';
 import { useAreasNavigationJourney } from '@/features/discover/navigation/useAreasNavigationJourney';
+import type { DiscoverNavigationCountsFilters } from '@/hooks/useDiscoverNavigationCounts';
 import { deriveAreaPointFromNode } from '@/features/discover/navigation/nodeAreaPoint';
 import { isMarkerPopoverEligible as computeMarkerPopoverEligible } from '@/features/discover/navigation/markerPopoverEligibility';
 import {
@@ -88,6 +89,57 @@ import {
 import {
   hasActiveAnonPropertyFilter,
 } from '@/features/discover/presentation/anonPropertyFilters';
+
+/**
+ * Issue #2083 (code-review Finding 1) — the exact "bridge" expression this
+ * component uses to fold the legacy areaKey-driven `selectedArea` and the
+ * canonical node-journey's `nodeAreaPoint` into a single value every
+ * selectedArea-driven consumer (badge/count copy, area-scoped links,
+ * area-scoped filters, map highlight) reads. Extracted to a pure, exported
+ * function — rather than left as an inline `selectedArea ?? nodeAreaPoint`
+ * in the component body — specifically so tests can exercise the REAL
+ * production expression at the REAL call site instead of re-deriving the
+ * formula by hand (see MapDiscovery.issue2083.badgeBridge.test.ts).
+ *
+ * `selectedArea` always wins when both are non-null; per the two sources'
+ * own invariants (nodeAreaPoint.ts's module doc, the call site below) they
+ * are mutually exclusive in practice — the legacy areaKey-driven journeys
+ * never populate `nav.node`, and the canonical node journey never
+ * populates `nav.areaKey` — so the precedence is a defensive default only,
+ * not a meaningful behavioural choice.
+ */
+export function resolveEffectiveSelectedArea(
+  selectedArea: AreaPoint | null | undefined,
+  nodeAreaPoint: AreaPoint | null | undefined,
+): AreaPoint | null {
+  return selectedArea ?? nodeAreaPoint ?? null;
+}
+
+/**
+ * Issue #2083 cycle 4 (code-review BLOCKING fix, 4th recurrence of this bug
+ * class) — the area-first selected-GROUP drill-down guard. Extracted to a
+ * pure, exported function for the same reason as `resolveEffectiveSelectedArea`
+ * above: MapDiscovery cannot be mounted in JSDOM (Leaflet/QueryClient/Router/
+ * Auth), so this lets a regression test exercise the REAL production
+ * predicate at its REAL call site instead of re-deriving the formula by hand.
+ *
+ * Must be gated on `effectiveSelectedArea` (the node+legacy bridge), never
+ * the bare legacy value — see `resolveEffectiveSelectedArea`'s own doc above.
+ * A pure canonical node journey (`?journey=area-first&groupId=<group>&node=
+ * <AREA leaf in that group>`, no legacy areaKey) reaches
+ * `resolvedPanelContent === 'area-groups-landing'` with `focusedGroup`
+ * truthy AND an area resolved via `nodeAreaPoint` — gating on the bare
+ * legacy value would wrongly report "no area selected yet" and surface
+ * group-overview map chrome for a user who has already drilled into a
+ * specific area.
+ */
+export function resolveIsSelectedGroupState(
+  resolvedPanelContent: DiscoverPanelContent,
+  focusedGroup: AreaGroup | null | undefined,
+  effectiveSelectedArea: AreaPoint | null | undefined,
+): boolean {
+  return resolvedPanelContent === 'area-groups-landing' && !!focusedGroup && !effectiveSelectedArea;
+}
 
 export default function MapDiscovery() {
   const navigate = useNavigate();
@@ -168,6 +220,41 @@ export default function MapDiscovery() {
   // (AC4.5 item 4).
   const [focusedClusterMemberAreaKeys, setFocusedClusterMemberAreaKeys] =
     useState<readonly string[] | null>(null);
+  // Issue #1494 — map URL intent ('buy'|'rent') to backend listingPurpose
+  // ('sale'|'rent'). 'buy' is the default; absent/invalid intent → 'sale'.
+  // Never send 'buy' to the backend.
+  // Issue #2083 RC_C — HOISTED up from its original position (further down,
+  // just above the agri map-listings fetch) so it is in scope for the
+  // `navigationCountsFilters` object below, which must be built BEFORE the
+  // `useAreasNavigationJourney` call.
+  const intentListingPurpose: string = nav.intent === 'rent' ? 'rent' : 'sale';
+
+  // Issue #2083 RC_C — the FULL filter set for navigation destination counts,
+  // not purpose alone. Before this fix `useAreasNavigationJourney` below was
+  // called with no `filters` key at all, so it fell back to the hook's
+  // EMPTY_FILTERS default and the counts endpoint was ALWAYS requested
+  // blended (Buy and Rent produced byte-identical counts — F7). Purpose-only
+  // would have fixed that one symptom while leaving counts silently
+  // disagreeing with the visible list whenever any OTHER filter (bedrooms,
+  // propertyTypes, seller type, ready-to-move, etc.) is active — trading one
+  // reported bug for a subtler unreported one (AC10 / the issue's own DoD
+  // names "filters-active" states explicitly). `nav.filters` is the SAME URL
+  // filter state every other Discover data hook on this page reads; the
+  // fields below are exactly the ones `DiscoverNavigationCountsFilters` (and
+  // the shared `DiscoverListingPredicateBuilder` behind it) already accept —
+  // no schema change on either side, only supplying what was already
+  // plumbed and simply never passed here.
+  const navigationCountsFilters: DiscoverNavigationCountsFilters = {
+    purpose: intentListingPurpose,
+    propertyTypes: nav.filters.propertyTypes,
+    bedrooms: nav.filters.bedrooms,
+    sellerTypes: nav.filters.sellerTypes,
+    readyToMove: nav.filters.readyToMove,
+    reraRegistered: nav.filters.reraRegistered,
+    newToMarket: nav.filters.newToMarket,
+    backOnMarket: nav.filters.backOnMarket,
+  };
+
   const areasNavigationJourney = useAreasNavigationJourney({
     // Matches the established `nav.city || DEFAULT_CITY` idiom this early
     // section already uses (see useAreaGroups/useRegionalAreaGroups below) —
@@ -175,6 +262,7 @@ export default function MapDiscovery() {
     city: nav.city || DEFAULT_CITY,
     requestedNodeKey: nav.rawNodeParam ?? null,
     onSelectNode: actions.goToNode,
+    filters: navigationCountsFilters,
     enabled: showAreasNavigationJourney,
   });
 
@@ -339,7 +427,8 @@ export default function MapDiscovery() {
   const selectedGroupAreaKeys = selectedTierData?.areaKeys ?? [];
   // Issue #1494 — map URL intent ('buy'|'rent') to backend listingPurpose ('sale'|'rent').
   // 'buy' is the default; absent/invalid intent → 'sale'. Never send 'buy' to the backend.
-  const intentListingPurpose: string = nav.intent === 'rent' ? 'rent' : 'sale';
+  // Declaration hoisted above (before `areasNavigationJourney`) in #2083 RC_C —
+  // see that hoisted declaration's comment for why.
 
   const {
     data: agriMapListingsData,
@@ -640,7 +729,7 @@ export default function MapDiscovery() {
   }, [mobileView]);
 
   const {
-    filters, selectedArea, panToArea, mapZoom, mapReady, showLoader,
+    filters, selectedArea: legacySelectedArea, panToArea, mapZoom, mapReady, showLoader,
     selectedSchool, schoolBoardFilter, city, fitTick, resetMapTick,
     pendingAreaKeyRef, initialViewportRef, initialViewportWasBareAreaRef, resolveSignal,
     setFilters, setSelectedArea, setPanToArea, setMapReady, setMapZoom,
@@ -659,7 +748,27 @@ export default function MapDiscovery() {
   // two sources can never both be non-null for the same render (the legacy
   // journeys never set nav.node, and the node journey never sets nav.areaKey
   // — see [scope.three_areakeys]).
-  const effectiveSelectedArea = selectedArea ?? nodeAreaPoint;
+  // Issue #2083 (code-review Finding 1) — extracted to the exported, pure
+  // `resolveEffectiveSelectedArea` (named export above, this file) so the
+  // badge-bridge regression test can exercise this REAL production
+  // expression instead of re-deriving `selectedArea ?? nodeAreaPoint` by
+  // hand.
+  const effectiveSelectedArea = resolveEffectiveSelectedArea(legacySelectedArea, nodeAreaPoint);
+  // Issue #2083 (cycle 4, structural guard) — this class of bug recurred four
+  // times because the legacy raw value and the bridged value were trivially
+  // confusable by name (`selectedArea` vs `effectiveSelectedArea`). The raw
+  // legacy value is now named `legacySelectedArea` everywhere on this page so
+  // any future reader/consumer must make a DELIBERATE choice rather than
+  // grabbing the wrong one by habit. ANY new consumer that needs "the area
+  // the user currently has selected, however they got there" — badge/count
+  // copy, area-scoped links, area-scoped filters — MUST read
+  // `effectiveSelectedArea`, never `legacySelectedArea`.
+  // `legacySelectedArea` alone is correct ONLY for a branch that is provably
+  // legacy-areaKey-only (e.g. gated on `nav.journey === 'agri-first'` or
+  // `nav.journey === 'school-first'`, journeys the canonical node hierarchy
+  // never touches) or for a genuinely dead legacy-panel branch (see the
+  // `selectedArea={effectiveSelectedArea}` comment at the
+  // DiscoverRightPanelContainer call site below for that exact case).
 
   // Issue #1882 (Track A PR2 Slice S2c) — backend-owned region summary for the
   // journeyless-landing macro-region bubbles (see overviewAreas below), sourced
@@ -805,7 +914,7 @@ export default function MapDiscovery() {
       nav.journey === 'agri-first' &&
       !nav.selectedRegion &&
       !nav.areaKey &&
-      !selectedArea &&
+      !legacySelectedArea &&
       !nav.selectedLocality &&
       !nav.selectedGroup
     ) return true;
@@ -1130,7 +1239,11 @@ export default function MapDiscovery() {
   } = useSchoolFirstCounts({
     journey: nav.journey,
     groupId: nav.groupId,
-    selectedArea,
+    // Issue #2083 cycle 4 — genuinely legacy-only: every consumer in
+    // schoolFirstCounts.ts early-returns unless journey === 'school-first',
+    // a journey the canonical node hierarchy never sets areaKey/nodeAreaPoint
+    // through, so the legacy value is correct here (verified by code review).
+    selectedArea: legacySelectedArea,
     focusedGroup,
     areasLoading,
     discoverAreas,
@@ -1151,7 +1264,14 @@ export default function MapDiscovery() {
   const discoverBadge = useMemo(
     () =>
       deriveDiscoverBadge({
-        selectedArea,
+        // Issue #2083 (F2 fix) — was the bare `selectedArea`, which is null
+        // under the canonical `node=` journey (only the legacy `areaKey` path
+        // sets it), so the area branch was skipped and the badge fell
+        // through to the city-wide total (discoverBadge.ts's cityTotal
+        // fallback) while the panel correctly showed area-scoped content.
+        // `effectiveSelectedArea` bridges both sources — see its declaration
+        // above.
+        selectedArea: effectiveSelectedArea,
         filters,
         isLoadingAreaListings,
         cityTotal,
@@ -1196,7 +1316,7 @@ export default function MapDiscovery() {
     // (number | null | undefined) so it is safe to use directly as a dep.
     // debouncedSearch: keyword search — badge shows filtered count when active (Issue #1185).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedArea, filters, isLoadingAreaListings, listingDataLoading, isAuthenticated, schoolRadiusListingsLoading, cityTotal, areaListings, schoolRadiusActive, schoolListings.length, groupListingsCount, debouncedSearch, schoolRadiusListings.length],
+    [effectiveSelectedArea, filters, isLoadingAreaListings, listingDataLoading, isAuthenticated, schoolRadiusListingsLoading, cityTotal, areaListings, schoolRadiusActive, schoolListings.length, groupListingsCount, debouncedSearch, schoolRadiusListings.length],
   );
 
   // Issue #1817 (code-review follow-up) — single computed copy string for the
@@ -1205,16 +1325,24 @@ export default function MapDiscovery() {
   // → AreaSelectedPanel's `areaResultSummaryText` prop), so the two surfaces can never
   // diverge — exactly one call to formatDiscoverBadgeCopy, exactly one selector
   // (discoverBadge) behind it.
+  // Issue #2083 (diagnose-then-fix cycle 3, RC_B recurrence) — was gated on the
+  // bare `selectedArea`, which is null under the canonical `node=` journey (only
+  // the legacy `areaKey` path ever sets it — see effectiveSelectedArea's own
+  // declaration/comment above for why "MUST read effectiveSelectedArea, never
+  // the bare selectedArea" applies to every consumer here). That made this
+  // string null at a resolved node-journey AREA leaf, so the map badge fell
+  // through to the generic zero-state/fallback copy instead of area-scoped text
+  // (e.g. missing the area's own name in a genuine zero-listing result).
   const areaResultSummaryText = useMemo(
     () =>
-      selectedArea
+      effectiveSelectedArea
         ? formatDiscoverBadgeCopy(discoverBadge, {
-            scopeLabel: selectedArea.areaLabel,
+            scopeLabel: effectiveSelectedArea.areaLabel,
             noun: 'verified properties',
             searchQuery: nav.q,
           })
         : null,
-    [selectedArea, discoverBadge, nav.q],
+    [effectiveSelectedArea, discoverBadge, nav.q],
   );
 
   // Issue #1817 (AC11) — debounced, polite result-count announcement. A visually-hidden
@@ -1226,7 +1354,13 @@ export default function MapDiscovery() {
   // useDiscoverBadgeAnnounce (verbatim; only nav.q → urlStateQ rename).
   const announcedBadgeText = useDiscoverBadgeAnnounce({
     discoverBadge,
-    selectedArea,
+    // Issue #2083 (F2 class sweep) — same defect as the visible badge above:
+    // this is the a11y-announced MIRROR of that same copy, and it derives
+    // its own scopeLabel independently (useDiscoverBadgeAnnounce.ts) rather
+    // than reusing a shared string, so it needs the SAME bridge or a
+    // screen-reader user hears "properties in Bangalore" while a sighted
+    // user (once the badge above is fixed) sees the area-scoped copy.
+    selectedArea: effectiveSelectedArea,
     focusedGroup,
     city,
     urlStateQ: nav.q,
@@ -1251,8 +1385,14 @@ export default function MapDiscovery() {
     schoolFocusLat: selectedSchoolLat,
     schoolFocusLon: selectedSchoolLon,
     agriGroupFocusBounds,
+    canonicalNodeFitCount,
   } = useDiscoverCameraOrchestration({
-    urlState: nav,
+    // Issue #2083 (cycle 5) — the canonical-node fit-once effect now also
+    // reads `viewport`/`historyAction` (POP-restoration guard); `nav` alone
+    // omits `viewport` (DiscoverNavContextValue = Omit<DiscoverUrlState,
+    // 'viewport'>), so it must be merged in here, same pattern the other
+    // whole-object consumers already use (see the DEVIATION comment above).
+    urlState: { ...nav, viewport },
     selectedSchool,
     setPanToArea,
     isLoadingAreaListings,
@@ -1291,7 +1431,15 @@ export default function MapDiscovery() {
         areaMarkerLen: areaMarkerListings.length,
         markerListings,
         markerLen: markerListings.length,
-        selectedArea,
+        // Issue #2083 cycle 4 (code-review nit) — was the bare legacy value,
+        // which is null under a canonical node journey even though an area IS
+        // selected (see effectiveSelectedArea's declaration above), silently
+        // misleading any E2E assertion against this field. `selectedArea`
+        // keeps its key name (E2E contract, AC4 — shape stays byte-identical)
+        // but now carries the resolved value; `legacySelectedArea` is exposed
+        // alongside it for anyone who specifically needs the raw legacy value.
+        selectedArea: effectiveSelectedArea,
+        legacySelectedArea,
       },
       mapState: {
         zoom: mapZoom,
@@ -1310,9 +1458,14 @@ export default function MapDiscovery() {
         schoolMarkerFocusTick,
         areaRestoreTick: journeyView.areaRestoreTick,
         cityRestoreTick: journeyView.cityRestoreTick,
+        // Issue #2083 (cycle 5) — see UseDiscoverCameraOrchestrationResult's
+        // doc; asserted by issue-2083-home-breadcrumb-back-camera-race.spec.ts
+        // to prove the canonical-node bbox refit does NOT double-fire on a
+        // Back transition that already has a persisted viewport to restore.
+        canonicalNodeFitCount,
       },
     };
-  }, [areaListings, areaMarkerListings, markerListings, selectedArea, mapZoom, city, selectedSchool, schoolMarkerFocusTick, journeyView.areaRestoreTick, journeyView.cityRestoreTick]);
+  }, [areaListings, areaMarkerListings, markerListings, effectiveSelectedArea, legacySelectedArea, mapZoom, city, selectedSchool, schoolMarkerFocusTick, journeyView.areaRestoreTick, journeyView.cityRestoreTick, canonicalNodeFitCount]);
 
   // Issue #1824 Slice S6 — handleRadiusChange, the school-first Back ladder
   // (handleSchoolFirstBackLevel2/1/0 + schoolFirstOnBack derivation), and
@@ -1554,8 +1707,12 @@ export default function MapDiscovery() {
     [schoolListings],
   );
 
-  const trendsHref = selectedArea
-    ? `/trends/${city}/areas/${slugifyFromAreaKey(selectedArea.areaKey)}`
+  // Issue #2083 (F2 class sweep) — was the bare `selectedArea`, so a resolved
+  // canonical-AREA-leaf node journey lost its area-scoped Trends link and
+  // fell back to the generic (undefined / city-wide) trends surface even
+  // though the panel and map both show that area's context.
+  const trendsHref = effectiveSelectedArea
+    ? `/trends/${city}/areas/${slugifyFromAreaKey(effectiveSelectedArea.areaKey)}`
     : undefined;
 
   const filtersContent = (
@@ -1564,7 +1721,7 @@ export default function MapDiscovery() {
       selectedSchool={selectedSchool} onSchoolSelect={journeyCommands.wrappedSchoolSelect}
       schoolBoardFilter={schoolBoardFilter} onSchoolBoardFilterChange={handleBoardFilterChange}
       city={city}
-      trendsAreaKeys={selectedArea ? [selectedArea.areaKey] : trendsAreaKeys}
+      trendsAreaKeys={effectiveSelectedArea ? [effectiveSelectedArea.areaKey] : trendsAreaKeys}
       isFetching={isFetching}
     />
   );
@@ -1586,7 +1743,10 @@ export default function MapDiscovery() {
   // agri-first) keep the generic AreaIndicatorOverlay.
   const showSchoolBreadcrumb =
     nav.journey === 'school-first' &&
-    (!!nav.groupId || !!nav.areaKey || !!selectedArea || !!selectedSchool);
+    // Issue #2083 cycle 4 — genuinely legacy-only: outer-ANDed with
+    // journey === 'school-first', a journey the canonical node hierarchy
+    // never drives (verified by code review).
+    (!!nav.groupId || !!nav.areaKey || !!legacySelectedArea || !!selectedSchool);
 
   // Issue #1588 — public-landing marker set. The public landing shows ONLY areas that
   // have live properties — never muted/transparent 0-property markers. A clean, calm
@@ -1698,16 +1858,36 @@ export default function MapDiscovery() {
   // no specific area selected yet). Drives the mock-aligned map chrome for this step:
   // the city switcher is hidden, the "verified properties in {group}" pill is centred
   // at the bottom, and the Areas legend is shown.
-  const isSelectedGroupState =
-    resolvedPanelContent === 'area-groups-landing' && !!focusedGroup && !selectedArea;
+  // Issue #2083 cycle 4 (code-review BLOCKING fix, 4th recurrence of this bug
+  // class) — was the bare legacy value, which is null under a pure canonical
+  // node journey (?journey=area-first&groupId=<group>&node=<AREA leaf in that
+  // group>, no legacy areaKey). resolvedPanelContent === 'area-groups-landing'
+  // is reached there (discoverPanelState.ts:167) and focusedGroup still
+  // resolves (node/groupId are independent URL axes — navigation.test.ts:72-78,
+  // AC1.4), so this wrongly evaluated true and showed group-overview chrome
+  // for a user who had already drilled into a specific area. Mirrors the
+  // sibling guard isTopGroupedLevel (above), which already reads
+  // effectiveSelectedArea correctly. Formula extracted to the exported, pure
+  // `resolveIsSelectedGroupState` (above) so a regression test can exercise
+  // the REAL production predicate — see
+  // MapDiscovery.issue2083.selectedGroupState.test.ts.
+  const isSelectedGroupState = resolveIsSelectedGroupState(
+    resolvedPanelContent,
+    focusedGroup,
+    effectiveSelectedArea,
+  );
 
   // Issue #1606 — area-first selected-AREA results state (terminal area chosen). Drives
   // the redesigned Manipal-style results panel and the 3-level map breadcrumb. Distinct
   // from isSelectedGroupState (no area yet) — here selectedArea is present.
+  // Issue #2083 cycle 4 — genuinely legacy-only: derivePanelContent only ever
+  // returns 'area-selected' when the legacy areaKey is truthy
+  // (discoverPanelState.ts:123-135), so legacySelectedArea is correct here
+  // (verified by code review).
   const isAreaFirstSelectedAreaState =
     resolvedPanelContent === 'area-selected' &&
     nav.journey === 'area-first' &&
-    !!selectedArea;
+    !!legacySelectedArea;
 
   // Issue #1798 PR-C — canonical listing-marker popover RENDER-eligibility predicate.
   // Previously this gate (formerly isAreaFirstPopoverEligible || isGroupResultsPopoverEligible)
@@ -1960,12 +2140,19 @@ export default function MapDiscovery() {
     noun: 'verified properties',
     searchQuery: nav.q,
   });
+  // Issue #2083 (F2 fix, primary reported symptom) — this is the branch that
+  // actually renders under the canonical node journey (isAreaFirstSelectedAreaState
+  // and isSelectedGroupState are both provably false there — derivePanelContent
+  // never returns 'area-selected' without the legacy `areaKey`, since the node
+  // journey never sets it). Was the bare `selectedArea`, which is null here, so
+  // this fell through straight to the city label — the exact "1,737 properties
+  // in Bangalore" symptom reported against a 9-listing area.
   const fallbackBadgeCopy = formatDiscoverBadgeCopy(discoverBadge, {
     scopeLabel:
-      selectedArea?.areaLabel ??
+      effectiveSelectedArea?.areaLabel ??
       focusedGroup?.name ??
       (CITY_CONFIG[city]?.label ?? city),
-    noun: selectedArea ? 'homes' : 'properties',
+    noun: effectiveSelectedArea ? 'homes' : 'properties',
     searchQuery: nav.q,
   });
   const schoolRadiusPillNoun = deriveSchoolRadiusPillNoun(nav.intent);

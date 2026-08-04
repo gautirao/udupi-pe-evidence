@@ -70,6 +70,7 @@
  * and all three TTLs are config-driven / constant-driven if the window ever needs
  * narrowing.
  */
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '@/lib/api';
 import type {
@@ -382,6 +383,21 @@ export interface UseDiscoverNavigationCountsResult {
   error: ApiError | null;
 }
 
+/**
+ * Issue #2083 RC_C — how long a FILTER-ONLY change (city/node unchanged)
+ * waits before it is allowed to fire a counts request. Mirrors the repo-wide
+ * 300ms URL-write debounce convention (`viewport.ts`'s `DEBOUNCE_MS`).
+ *
+ * `useAreasNavigationJourney`'s `AbortSignal` cancellation already prevents a
+ * superseded response from ever being SHOWN (AC1.13 defence 2), but an
+ * aborted request has already started real server-side work
+ * (`AreaCountQuery`/`DiscoverListingPredicateBuilder`) by the time it is
+ * cancelled. Without this debounce, a fast sequence of filter clicks (or
+ * several filter fields changing in the same tick) fires one request PER
+ * intermediate state instead of one for the settled state.
+ */
+export const NAVIGATION_COUNTS_FILTERS_DEBOUNCE_MS = 300;
+
 export function useDiscoverNavigationCounts({
   city,
   nodeKey,
@@ -393,8 +409,72 @@ export function useDiscoverNavigationCounts({
   // while a deep-equality dep would need a second normaliser that could drift
   // from this one. Building the string IS the normalisation — a handful of
   // string appends, cheap enough to run every render.
+  const filtersRequestKey = buildNavigationCountsRequestParams(filters).toString();
+
+  // Issue #2083 RC_C — debounce a FILTER-ONLY change; a node/city change
+  // (a deliberate navigation — a click) is NEVER debounced, since delaying
+  // its counts would read as UI lag on the very affordance the user just
+  // used. `debouncedFilters` starts equal to the FIRST render's `filters`
+  // (via useState's initializer), so a cold mount / a node-or-city-only
+  // change is also fetched immediately — only a change in `filters` ALONE
+  // (node/city unchanged) is delayed.
+  const [debouncedFilters, setDebouncedFilters] = useState(filters);
+  const [appliedFiltersKey, setAppliedFiltersKey] = useState(filtersRequestKey);
+  const [prevNodeKey, setPrevNodeKey] = useState(nodeKey);
+  const [prevCity, setPrevCity] = useState(city);
+
+  // RENDER-PHASE state adjustment for a node/city change — deliberately NOT
+  // a useEffect. A navigation (nodeKey/city prop change) that ALSO carries a
+  // filter change (e.g. a Buy/Rent toggle fired in the same tick as a click)
+  // must apply BOTH atomically in the render that first observes them: if
+  // this instead lived in an effect, `debouncedFilters` would still hold the
+  // OLD filters on the FIRST render after the navigation (effects run AFTER
+  // render/commit), so the `useQuery` below would briefly key on
+  // (new node, stale filters) — a real, extra, wasted request — before the
+  // effect corrected it a tick later to (new node, new filters). Adjusting
+  // state directly in the render body during a render triggered by a prop
+  // change is the documented React pattern for exactly this ("you might not
+  // need an Effect"): React discards this render's output and re-renders
+  // synchronously with the corrected state before anything commits or any
+  // effect (including `useQuery`'s own fetch-triggering effect) ever runs,
+  // so only ONE request is ever observed for the settled combination.
+  if (nodeKey !== prevNodeKey || city !== prevCity) {
+    setPrevNodeKey(nodeKey);
+    setPrevCity(city);
+    setAppliedFiltersKey(filtersRequestKey);
+    setDebouncedFilters(filters);
+  }
+
+  const filtersTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    // The node/city-change case is fully handled by the render-phase
+    // adjustment above, which ALSO advances `appliedFiltersKey` — so by the
+    // time this effect runs post-commit, `filtersRequestKey === appliedFiltersKey`
+    // already holds for that case, and this effect correctly no-ops. This
+    // effect therefore only ever arms a timer for a FILTER-ONLY change
+    // (node/city unchanged since the last applied state).
+    if (filtersRequestKey === appliedFiltersKey) {
+      return;
+    }
+
+    if (filtersTimerRef.current) clearTimeout(filtersTimerRef.current);
+    filtersTimerRef.current = setTimeout(() => {
+      setAppliedFiltersKey(filtersRequestKey);
+      setDebouncedFilters(filters);
+    }, NAVIGATION_COUNTS_FILTERS_DEBOUNCE_MS);
+
+    return () => {
+      if (filtersTimerRef.current) clearTimeout(filtersTimerRef.current);
+    };
+    // `filters` itself is intentionally excluded — `filtersRequestKey` is its
+    // normalised, reference-stable proxy (see buildNavigationCountsRequestParams's
+    // module doc: "Building the string IS the normalisation").
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersRequestKey, appliedFiltersKey]);
+
   const fingerprint =
-    city && nodeKey ? buildNavigationCountsFingerprint(city, nodeKey, filters) : null;
+    city && nodeKey ? buildNavigationCountsFingerprint(city, nodeKey, debouncedFilters) : null;
 
   const isEnabled = enabled && fingerprint != null;
 
@@ -403,7 +483,11 @@ export function useDiscoverNavigationCounts({
     queryFn: async ({ signal }) => {
       // Non-null by `enabled` — TanStack never invokes queryFn while disabled.
       const requestFingerprint = fingerprint as string;
-      const search = buildNavigationCountsRequestParams(filters).toString();
+      // `debouncedFilters`, not the raw `filters` prop — see the debounce
+      // effect above (#2083 RC_C). `fingerprint` (the query key) is already
+      // derived from `debouncedFilters`, so this keeps the request body and
+      // its own cache key in agreement.
+      const search = buildNavigationCountsRequestParams(debouncedFilters).toString();
       const path =
         `/api/discover/cities/${encodeURIComponent(city)}` +
         `/navigation/${encodeURIComponent(nodeKey as string)}/counts` +

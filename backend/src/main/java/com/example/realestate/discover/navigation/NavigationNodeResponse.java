@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Objects;
 
@@ -32,7 +33,17 @@ import java.util.Objects;
  *                        is a listings page, not more navigation)
  * @param children        direct children, in display order
  * @param revisionId      the production revision this snapshot was built from
- * @param bounds          structural bounds; {@code null} for the synthetic {@code "root"} node
+ * @param bounds          structural bounds. For the synthetic {@code "root"} node (#2083 RC_A part
+ *                        3), this is SERVER-DERIVED — the union (min/max) and centroid (arithmetic
+ *                        mean of centres) of the root's direct children's bounds, computed by
+ *                        {@link #deriveRootBounds}, the SAME fold {@code
+ *                        NavigationTreeGenerator#computeBounds}/{@code
+ *                        NavigationTreeOverrideApplier} use to derive a CLUSTER's own bounds from
+ *                        its members — root is treated as one more aggregate node rather than a
+ *                        structural exception. {@code null} only in the degenerate case where the
+ *                        city has zero root children (nothing to union) — never {@code null} by
+ *                        design the way it was before this fix, which forced every client to
+ *                        special-case the root node's camera framing.
  * @param descendantAreaKeys every AREA leaf's area_key in this node's subtree (#1956 AC19) — OMITTED
  *                        ({@code null}) for the synthetic {@code "root"} node (unfiltered, needs no
  *                        area filter), EMPTY for an AREA node (no descendants below a leaf),
@@ -116,7 +127,10 @@ public record NavigationNodeResponse(
 
     /** {@code "root"} synthetic city-top-level node — no real {@link NavigationNode} row backs it.
      * {@code descendantAreaKeys} is {@code null} (omitted, {@code @JsonInclude(NON_NULL)}): the
-     * root view is unfiltered and needs no area filter (#1956 AC19). */
+     * root view is unfiltered and needs no area filter (#1956 AC19). {@code bounds} (#2083 RC_A
+     * part 3) is derived from the root's direct children via {@link #deriveRootBounds} — see the
+     * record javadoc's {@code bounds} entry for why this replaces the previous always-{@code null}
+     * behaviour. */
     static NavigationNodeResponse forRoot(String citySlug, NavigationGraph graph) {
         List<String> rootKeys = graph.childrenOf(null);
         List<NavigationChildSummary> children = rootKeys.stream()
@@ -124,9 +138,68 @@ public record NavigationNodeResponse(
                 .filter(Objects::nonNull)
                 .toList();
         String nextLevelType = children.isEmpty() ? null : children.get(0).nodeType();
+        NavigationBoundsResponse rootBounds = deriveRootBounds(graph, rootKeys);
         return new NavigationNodeResponse(
                 "root", "ROOT", canonicalCityLabel(citySlug), -1, null, List.of(), nextLevelType, children,
-                graph.revisionId(), null, null, null);
+                graph.revisionId(), rootBounds, null, null);
+    }
+
+    /**
+     * Derives the synthetic root node's bounds as the union (min/max) and centroid (arithmetic mean
+     * of centres) of every root-level child's OWN {@link NavigationGraph.Bounds} (#2083 RC_A part
+     * 3) — the SAME fold {@code NavigationTreeGenerator#computeBounds} uses to derive a CLUSTER's
+     * bounds from its member areas, chosen deliberately so root is one more aggregate node rather
+     * than inventing a second bounds-derivation rule. Reads {@link NavigationGraph#boundsOf}
+     * directly (not the centroid-only {@link NavigationChildSummary}) because min/max is required
+     * for a correct union and {@code NavigationChildSummary} only ever carries a centre point.
+     *
+     * <p>Every root-level child ALREADY has real, persisted bounds (the generator computes bounds
+     * bottom-up for every node it writes, including depth-0 roots — see {@code
+     * NavigationTreeGenerator}), so this is a pure in-memory fold over already-cached data: zero
+     * extra queries, and it runs once per {@code /navigation/root} request, not per child.
+     *
+     * <p>Returns {@code null} only when {@code rootKeys} is empty or every entry is missing bounds
+     * (a city with no navigable hierarchy) — an honest absence, not a fabricated bounding box.
+     */
+    static NavigationBoundsResponse deriveRootBounds(NavigationGraph graph, List<String> rootKeys) {
+        BigDecimal sumLat = BigDecimal.ZERO;
+        BigDecimal sumLon = BigDecimal.ZERO;
+        BigDecimal minLat = null;
+        BigDecimal minLon = null;
+        BigDecimal maxLat = null;
+        BigDecimal maxLon = null;
+        int count = 0;
+        for (String childKey : rootKeys) {
+            NavigationGraph.Bounds b = graph.boundsOf(childKey);
+            if (b == null || b.centreLat() == null || b.centreLon() == null
+                    || b.minLat() == null || b.minLon() == null || b.maxLat() == null || b.maxLon() == null) {
+                // A child missing any bounds component is skipped rather than poisoning the whole
+                // union with a null-propagated BigDecimal operation — mirrors this codebase's
+                // per-row-skip convention elsewhere (e.g. AreaSummaryService#sumParseableAcres).
+                continue;
+            }
+            sumLat = sumLat.add(b.centreLat());
+            sumLon = sumLon.add(b.centreLon());
+            minLat = minLat == null ? b.minLat() : minLat.min(b.minLat());
+            minLon = minLon == null ? b.minLon() : minLon.min(b.minLon());
+            maxLat = maxLat == null ? b.maxLat() : maxLat.max(b.maxLat());
+            maxLon = maxLon == null ? b.maxLon() : maxLon.max(b.maxLon());
+            count++;
+        }
+        if (count == 0) {
+            return null;
+        }
+        // BOUNDS_SCALE=6 + 4 extra digits of division precision before rounding down to 6 — the
+        // exact convention NavigationTreeGenerator#computeBounds uses, so root's centre carries the
+        // same precision contract every other node's centre does.
+        BigDecimal divisor = BigDecimal.valueOf(count);
+        BigDecimal centreLat = sumLat.divide(divisor, 10, RoundingMode.HALF_UP).setScale(6, RoundingMode.HALF_UP);
+        BigDecimal centreLon = sumLon.divide(divisor, 10, RoundingMode.HALF_UP).setScale(6, RoundingMode.HALF_UP);
+        NavigationGraph.Bounds union = new NavigationGraph.Bounds(
+                centreLat, centreLon,
+                minLat.setScale(6, RoundingMode.HALF_UP), minLon.setScale(6, RoundingMode.HALF_UP),
+                maxLat.setScale(6, RoundingMode.HALF_UP), maxLon.setScale(6, RoundingMode.HALF_UP));
+        return NavigationBoundsResponse.from(union);
     }
 
     static NavigationNodeResponse forNode(NavigationGraph graph, NavigationNode node) {

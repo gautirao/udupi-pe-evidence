@@ -25,11 +25,22 @@ public class AreaSummaryService {
     }
 
     /**
-     * Returns all areas for the given city slug with blended (all-property-type) listing counts.
-     * Backwards-compatible overload — equivalent to no {@code propertyType} filter.
+     * Returns all areas for the given city slug with blended (all-property-type, all-purpose)
+     * listing counts. Backwards-compatible overload — equivalent to no {@code propertyType} and no
+     * {@code purpose} filter.
      */
     public AreaSummaryResponse getAreasByCity(String city) {
-        return getAreasByCity(city, null);
+        return getAreasByCity(city, null, null);
+    }
+
+    /**
+     * Backwards-compatible overload — equivalent to no {@code purpose} filter (#1371 callers).
+     *
+     * @param city         city slug
+     * @param propertyType optional singular property type (e.g. {@code agricultural_land}); blank → no filter
+     */
+    public AreaSummaryResponse getAreasByCity(String city, String propertyType) {
+        return getAreasByCity(city, propertyType, null);
     }
 
     /**
@@ -41,21 +52,49 @@ public class AreaSummaryService {
      * {@code land_area}/{@code land_area_unit} via {@link AreaNormalizer}. When blank, the legacy
      * blended path runs byte-identically (no acreage computed, no extra query).
      *
+     * <p>{@code purpose} (#2083 RC_C) is an ORTHOGONAL, independently-optional scope on the SAME
+     * count subquery — {@code sale}/{@code rent} (case-insensitive), normalised via the shared
+     * {@link DiscoverFilterNormalizer#normalizePurpose}, the same helper {@link
+     * com.example.realestate.discover.navigation.AreaCountQuery} and {@code RegionSummaryService}
+     * use, so an unrecognised/blank value drops to blended (never a 400) — matching this
+     * codebase's established convention (AC11: absent → byte-identical to today). Both filters may
+     * be supplied together; each is bound as its own {@code ?} parameter, never string-interpolated.
+     *
      * @param city         city slug
      * @param propertyType optional singular property type (e.g. {@code agricultural_land}); blank → no filter
+     * @param purpose      optional {@code sale}/{@code rent} scope; blank/unrecognised → no filter (blended)
      */
-    public AreaSummaryResponse getAreasByCity(String city, String propertyType) {
+    public AreaSummaryResponse getAreasByCity(String city, String propertyType, String purpose) {
         String typeFilter = normalizeFilter(propertyType);
-        log.debug("getAreasByCity city={} propertyType={} (filterActive={})",
-                city, propertyType, typeFilter != null);
+        String purposeFilter = DiscoverFilterNormalizer.normalizePurpose(purpose);
+        log.debug("getAreasByCity city={} propertyType={} (filterActive={}) purpose={} (filterActive={})",
+                city, propertyType, typeFilter != null, purpose, purposeFilter != null);
 
-        String sql = typeFilter == null ? AREAS_BY_CITY_SQL : AREAS_BY_CITY_TYPE_FILTERED_SQL;
-        // Positional args MUST align with the '?' order in the chosen SQL:
-        //   - blended:  [city]   (single '?' in WHERE c.slug = ?)
-        //   - filtered: [type, city]  (the count subquery's '?' precedes WHERE c.slug = ?)
-        Object[] args = typeFilter == null
-                ? new Object[]{city}
-                : new Object[]{typeFilter, city};
+        String template = typeFilter == null ? AREAS_BY_CITY_SQL : AREAS_BY_CITY_TYPE_FILTERED_SQL;
+        // The purpose clause is a fixed, code-owned literal (never user data) substituted into a
+        // placeholder token — NOT the '?' bind value itself, which is still bound positionally
+        // below. This keeps the clause optional (absent purpose = today's exact SQL text, AC11)
+        // without maintaining four fully-duplicated SQL constants for every propertyType x purpose
+        // combination.
+        String purposeClause = purposeFilter == null
+                ? ""
+                : (typeFilter == null ? "AND listing_purpose = ?" : "AND pl.listing_purpose = ?");
+        String sql = template.replace(PURPOSE_CLAUSE_TOKEN, purposeClause);
+
+        // Positional args MUST align with the '?' order in the chosen SQL, left to right:
+        //   - blended,  no purpose:      [city]
+        //   - blended,  purpose:         [purpose, city]
+        //   - filtered, no purpose:      [type, city]
+        //   - filtered, purpose:         [type, purpose, city]
+        List<Object> argsList = new ArrayList<>();
+        if (typeFilter != null) {
+            argsList.add(typeFilter);
+        }
+        if (purposeFilter != null) {
+            argsList.add(purposeFilter);
+        }
+        argsList.add(city);
+        Object[] args = argsList.toArray();
 
         List<AreaSummary> areas = jdbcOperations.query(sql,
                 (rs, rowNum) -> new AreaSummary(
@@ -78,7 +117,7 @@ public class AreaSummaryService {
                 args);
 
         if (typeFilter != null) {
-            areas = attachAgriAcreage(city, typeFilter, areas);
+            areas = attachAgriAcreage(city, typeFilter, purposeFilter, areas);
         }
 
         log.debug("getAreasByCity city={} returned {} areas", city, areas.size());
@@ -90,14 +129,28 @@ public class AreaSummaryService {
      * with {@code agriAcreage} populated. The acreage column is summed using a PER-ROW-SKIP rule
      * (see {@link #sumParseableAcres}). Areas with no parseable row (or no matching listing) keep a
      * null acreage so {@code @JsonInclude(NON_NULL)} omits the field.
+     *
+     * <p>{@code purposeFilter} (#2083 RC_C), when present, narrows this pass the SAME way it
+     * narrows the count subquery — so the acreage population set stays identical to the counted
+     * set even when {@code propertyType=agricultural_land} and {@code purpose} are both supplied.
      */
-    private List<AreaSummary> attachAgriAcreage(String city, String typeFilter, List<AreaSummary> areas) {
+    private List<AreaSummary> attachAgriAcreage(
+            String city, String typeFilter, String purposeFilter, List<AreaSummary> areas) {
         Map<String, Double> acreageByArea = new HashMap<>();
         Map<String, List<BigDecimal>> parseableByArea = new HashMap<>();
 
-        // Same approved-only + property_type guards as the count subquery, mirrored here so the
-        // acreage population set is identical to the counted set.
-        jdbcOperations.query(AGRI_AREA_LAND_SQL,
+        String purposeClause = purposeFilter == null ? "" : "AND pl.listing_purpose = ?";
+        String sql = AGRI_AREA_LAND_SQL.replace(PURPOSE_CLAUSE_TOKEN, purposeClause);
+        List<Object> argsList = new ArrayList<>();
+        argsList.add(typeFilter);
+        if (purposeFilter != null) {
+            argsList.add(purposeFilter);
+        }
+        argsList.add(city);
+
+        // Same approved-only + property_type (+ purpose, when supplied) guards as the count
+        // subquery, mirrored here so the acreage population set is identical to the counted set.
+        jdbcOperations.query(sql,
                 rs -> {
                     String areaKey = rs.getString("area_key");
                     BigDecimal landArea = rs.getBigDecimal("land_area");
@@ -110,7 +163,7 @@ public class AreaSummaryService {
                         parseableByArea.computeIfAbsent(areaKey, k -> new ArrayList<>()).add(acres);
                     }
                 },
-                typeFilter, city);
+                argsList.toArray());
 
         for (Map.Entry<String, List<BigDecimal>> e : parseableByArea.entrySet()) {
             acreageByArea.put(e.getKey(), sumParseableAcres(e.getValue()));
@@ -187,6 +240,17 @@ public class AreaSummaryService {
              WHERE c.curated_area_key = a.area_key
                AND c.relationship_type IN ('contained','primary','reviewed_override'))""";
 
+    /**
+     * Placeholder token substituted (via {@link String#replace}, never {@link String#format}) with
+     * either {@code ""} or a fixed, code-owned {@code "AND ... listing_purpose = ?"} literal at
+     * request time (#2083 RC_C) — see {@link #getAreasByCity(String, String, String)}. This keeps
+     * the {@code purpose} filter ORTHOGONAL to {@code propertyType} without maintaining four fully
+     * duplicated SQL constants for every propertyType x purpose combination. The token itself never
+     * carries user data — only the {@code ?} bind value it introduces does, and that value is
+     * always bound positionally through {@code jdbcOperations}, never interpolated.
+     */
+    private static final String PURPOSE_CLAUSE_TOKEN = "__PURPOSE_CLAUSE__";
+
     private static final String AREAS_BY_CITY_SQL = ("""
             SELECT
                 a.area_key,
@@ -216,6 +280,7 @@ public class AreaSummaryService {
                   AND archived_at IS NULL
                   AND is_duplicate = false
                   AND LOWER(property_type) != LOWER('%s')
+                  __PURPOSE_CLAUSE__
                 GROUP BY area_key
             ) pl ON pl.area_key = a.area_key
             WHERE c.slug = ?
@@ -266,6 +331,7 @@ public class AreaSummaryService {
                   AND pl.archived_at IS NULL
                   AND pl.is_duplicate = false
                   AND LOWER(pl.property_type) = LOWER(?)
+                  __PURPOSE_CLAUSE__
                 GROUP BY pl.area_key
             ) pl ON pl.area_key = a.area_key
             WHERE c.slug = ?
@@ -289,6 +355,7 @@ public class AreaSummaryService {
               AND pl.archived_at IS NULL
               AND pl.is_duplicate = false
               AND LOWER(pl.property_type) = LOWER(?)
+              __PURPOSE_CLAUSE__
               AND c.slug = ?
               AND c.is_active = true
               AND array_length(string_to_array(pl.area_key, '|'), 1) = 4

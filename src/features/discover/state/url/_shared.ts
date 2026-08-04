@@ -48,6 +48,22 @@ export interface UrlDomainCtx {
   timers: UrlDebounceTimers;
   queryClient: QueryClient;
   reads: UrlCrossDomainReads;
+  /**
+   * Issue #2083 RC_A part 2 (stale-`prev`-closure fix) — a facade-owned ref that
+   * always holds the CURRENT render's `urlParams`, updated synchronously in the
+   * facade's render body (not in an effect, so it is current by the time any
+   * `setTimeout` callback scheduled during this render fires).
+   *
+   * `setUrlParams` is react-router's `setSearchParams`; in react-router-dom
+   * 6.30.1 the `prev` handed to its functional-updater form is NOT the live
+   * URL — it is the `searchParams` closed over from the render that produced
+   * that `setSearchParams` identity. A debounced flush (viewport.ts's
+   * `reportViewport`) that reads `prev` can therefore navigate to an entire
+   * STALE query string plus its own delta, reviving params the user cleared
+   * in between. A domain that flushes a delayed write must read
+   * `liveUrlParamsRef.current` instead of relying on `prev`.
+   */
+  liveUrlParamsRef: MutableRefObject<URLSearchParams>;
 }
 
 /** A domain hook's return shape: a slice of state + a slice of actions. */

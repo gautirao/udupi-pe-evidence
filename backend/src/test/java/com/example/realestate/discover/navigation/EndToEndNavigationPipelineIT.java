@@ -603,7 +603,14 @@ class EndToEndNavigationPipelineIT {
                 .andExpect(jsonPath("$.nodeType").value("ROOT"))
                 // #1956 D3: root's own nextLevelType is unconditionally "DIRECTION" now.
                 .andExpect(jsonPath("$.nextLevelType").value("DIRECTION"))
-                .andExpect(jsonPath("$.bounds").doesNotExist())
+                // #2083 RC_A part 3: root's bounds are now server-derived (union of its direct
+                // children's bounds) instead of always-null — this REPLACES the previous
+                // doesNotExist() assertion, it does not weaken it. Both fixtures here have at least
+                // one root-level DIRECTION child with real generator-computed bounds, so root's own
+                // bounds must exist and carry a real centre.
+                .andExpect(jsonPath("$.bounds").exists())
+                .andExpect(jsonPath("$.bounds.centreLat").exists())
+                .andExpect(jsonPath("$.bounds.centreLon").exists())
                 .andExpect(jsonPath("$.children").isNotEmpty())
                 .andReturn().getResponse().getContentAsString();
 

@@ -37,21 +37,28 @@ export interface DiscoverAreasResponse {
  *   appended as &propertyType=... AND included in the queryKey so React Query cannot
  *   cross-serve the blended and filtered caches (AC10 cache-key requirement).
  *   Omitting it preserves byte-identical behaviour + queryKey vs. the prior signature.
+ * @param purpose - Issue #2083 RC_C — optional 'sale'/'rent' scope, independently
+ *   optional from `propertyType`. Appended as &purpose=... AND included in the
+ *   queryKey (same cache-key discipline as propertyType above) so the blended
+ *   and purpose-filtered responses can never cross-serve. Omitting it preserves
+ *   byte-identical behaviour + queryKey vs. every existing call site.
  */
-export function useDiscoverAreas(city: string, propertyType?: string) {
+export function useDiscoverAreas(city: string, propertyType?: string, purpose?: string) {
   // Issue #1911 PR3 — see useDiscoverRegionSummary.ts for the default-context
   // ({mode:'live'}) byte-identical-live-behaviour rationale.
   const source = useDiscoverSource();
 
+  const keySuffix: string[] = ['discover-areas', city];
+  if (propertyType) keySuffix.push(propertyType);
+  if (purpose) keySuffix.push(purpose);
+
   return useQuery<DiscoverAreasResponse>({
-    queryKey: discoverKey(
-      source,
-      ...(propertyType ? ['discover-areas', city, propertyType] : ['discover-areas', city]),
-    ),
+    queryKey: discoverKey(source, ...keySuffix),
     queryFn: () => {
-      const livePath = propertyType
-        ? `/api/discover/areas?city=${encodeURIComponent(city)}&propertyType=${encodeURIComponent(propertyType)}`
-        : `/api/discover/areas?city=${encodeURIComponent(city)}`;
+      const params = new URLSearchParams({ city });
+      if (propertyType) params.set('propertyType', propertyType);
+      if (purpose) params.set('purpose', purpose);
+      const livePath = `/api/discover/areas?${params.toString()}`;
       const path = discoverPath(source, livePath, { kind: 'areas' });
       return api.get<DiscoverAreasResponse>(path, { skipAuth: source.mode === 'live' });
     },

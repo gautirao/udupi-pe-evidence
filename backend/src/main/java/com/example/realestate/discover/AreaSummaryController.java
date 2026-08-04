@@ -41,14 +41,23 @@ public class AreaSummaryController {
      *                     field is computed. Blank/whitespace → no filter (blended counts,
      *                     today's behaviour). The distinct query string is the HTTP cache key;
      *                     Cache-Control (public, max-age=120) is identical on both variants.
+     * @param purpose      optional {@code sale}/{@code rent} scope (#2083 RC_C), independently
+     *                     optional from {@code propertyType}. Case-insensitive, normalised via the
+     *                     shared {@link DiscoverFilterNormalizer#normalizePurpose}; absent/blank/
+     *                     unrecognised → no filter (blended, today's behaviour, AC11) — this
+     *                     endpoint never 400s on an unknown value, matching the rest of this
+     *                     codebase's Discover filter vocabulary. The client maps its own
+     *                     {@code intent=buy|rent} URL vocabulary to {@code sale|rent} before
+     *                     calling this endpoint; {@code buy} is never sent here.
      */
     @GetMapping("/areas")
     public ResponseEntity<AreaSummaryResponse> getAreas(
             @RequestParam(name = "city") String city,
-            @RequestParam(name = "propertyType", required = false) String propertyType) {
+            @RequestParam(name = "propertyType", required = false) String propertyType,
+            @RequestParam(name = "purpose", required = false) String purpose) {
 
-        log.debug("GET /api/discover/areas city={} propertyType={}", city, propertyType);
-        AreaSummaryResponse response = areaSummaryService.getAreasByCity(city, propertyType);
+        log.debug("GET /api/discover/areas city={} propertyType={} purpose={}", city, propertyType, purpose);
+        AreaSummaryResponse response = areaSummaryService.getAreasByCity(city, propertyType, purpose);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(120, TimeUnit.SECONDS).cachePublic())
                 .body(response);

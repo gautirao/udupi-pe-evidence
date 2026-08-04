@@ -204,6 +204,28 @@ test.describe('@integration-ui #1956 PR-4 — AC4.10 real-timing peek Close rest
   }
 });
 
+/**
+ * ── ISSUE #2083 DISCLOSURE (read before "fixing" this describe block) ──
+ * This AC4.5 scenario ALWAYS keeps `node=` unchanged across the View
+ * details -> Back round trip (asserted below via `nodeAfter === nodeBefore`)
+ * — it is the ONE case identified by #2083's investigation where the
+ * PRE-#2083 stale-`reportViewport`-flush bug (RC_A) and CORRECT behaviour
+ * are indistinguishable by this test's own assertions: because the node is
+ * unchanged, the camera this scenario "should" restore to and the camera a
+ * stale flush would have re-applied are the SAME value, so
+ * `cameraAfter === cameraBefore` passes whether or not RC_A's universal
+ * cancellation (issue-2083-camera-back-determinism.spec.ts's real regression
+ * target) is doing any work here. This test therefore does NOT exercise
+ * RC_A's fix — it is reported "expected to still pass" for that reason, not
+ * "proven unaffected." If a future run of this file shows a DIFFERENT
+ * result, that is not a regression to silently revert: it means the
+ * underlying timing changed, and the correct response is to re-verify
+ * against a real browser, never to edit this describe block's assertions
+ * back to their pre-#2083 shape. The genuinely interesting case — Backing to
+ * a node whose camera CHANGED, i.e. the Direction -> Area -> Back x2
+ * sequence — is covered instead by issue-2083-camera-back-determinism.spec
+ * .ts's guided-path test, which is the one that can actually fail on RC_A.
+ */
 test.describe('@integration-ui #1956 PR-4 — AC4.5 real-timing peek -> View details -> Back restoration (camera asserted, deep-link entry)', () => {
   for (let repeat = 1; repeat <= REPEATS; repeat += 1) {
     test(`AC4.5 repeat ${repeat}/${REPEATS} — deep-link peek -> View details -> Back restores prior context`, async ({

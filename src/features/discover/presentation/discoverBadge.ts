@@ -228,7 +228,20 @@ export function deriveDiscoverBadge({
       // after loading settles, but hide rather than show a stale number).
       return { visible: false, count: null, loading: false, n: null, m: null, hasActiveFilters, hasPropertyFilters, state: 'loading' };
     }
-    const count = selectedArea.listingCount ?? null;
+    // Issue #2083 (RC_B, diagnose-then-fix cycle 3) — `selectedArea.listingCount`
+    // is undefined for a canonical node-journey AreaPoint: `deriveAreaPointFromNode`
+    // (nodeAreaPoint.ts) builds its AreaPoint from `NavigationNodeResponse`, which has
+    // no listingCount field at all (backend navigation nodes never return one — see
+    // types.ts). Previously this fell straight to the "can't verify" branch below and
+    // hid the badge entirely at every resolved node-journey AREA leaf, even though
+    // `areaListings` (this same scope's already-resolved, already-loaded listings
+    // query — see the isLoadingAreaListings guard above) is sitting right there and is
+    // exactly as trustworthy as the hasActiveFilters branch above already treats it.
+    // Falling back to it here closes that gap without weakening the "don't show an
+    // unverified number" guarantee: this is still real, area-scoped, settled data.
+    const count =
+      selectedArea.listingCount ??
+      (Array.isArray(areaListings) ? areaListings.length : null);
     if (count == null) {
       // AC4 safety: don't show a number we can't verify
       return { visible: false, count: null, loading: false, n: null, m: null, hasActiveFilters, hasPropertyFilters, state: 'stale' };

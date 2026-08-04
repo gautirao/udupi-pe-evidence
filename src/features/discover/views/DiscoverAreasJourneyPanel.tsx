@@ -301,6 +301,20 @@ export function DiscoverAreasJourneyPanel({
   }
 
   if (focusedCluster) {
+    // Issue #2083 RC_D — restores the region heading + listing-count
+    // subtitle this early return previously dropped ENTIRELY on a map
+    // cluster-bubble click, leaving the panel with no functional context
+    // (which Direction/region this cluster belongs to, how many listings
+    // in total). Mirrors NavigationLevelPanel's own heading block — SAME
+    // node (`journey.node`), SAME `journey.nodeCount.listingCount` source —
+    // so this can never disagree with what the normal (non-focused) level
+    // panel would show for the same node. Purely additive: the member
+    // list + count-label below (cluster-MEMBERSHIP scoped, legitimately
+    // zoom-derived, and correct per this issue's binding instruction) is
+    // UNCHANGED, and the panel is not otherwise restructured (#2084 owns
+    // that).
+    const clusterHeadingListingsLabel =
+      journey.nodeCount != null ? formatListingCount(journey.nodeCount.listingCount) : null;
     return (
       <div className="p-4" data-testid="areas-cluster-focus-panel">
         <HierarchyBackButton
@@ -309,6 +323,17 @@ export function DiscoverAreasJourneyPanel({
           historyAdjacencyLog={journey.historyAdjacencyLog}
           className="mb-3"
         />
+        <div className="mb-3" data-testid="areas-cluster-focus-heading">
+          <h2 className="text-base font-semibold text-foreground">{journey.node.displayLabel}</h2>
+          {clusterHeadingListingsLabel != null && (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="areas-cluster-focus-heading-listings"
+            >
+              {clusterHeadingListingsLabel}
+            </p>
+          )}
+        </div>
         <p className="text-sm text-muted-foreground mb-3" data-testid="areas-cluster-focus-summary">
           {focusedCluster.countLabel}
         </p>

@@ -146,9 +146,14 @@ interface NavigationCountsResponse {
  * container (exactly the failure mode that made the original "2 listings"
  * assertion on Basaveshwara Nagar go stale).
  */
-async function fetchNodeCounts(page: Page, nodeKey: string): Promise<NavigationCountsResponse> {
+async function fetchNodeCounts(
+  page: Page,
+  nodeKey: string,
+  purpose?: 'sale' | 'rent',
+): Promise<NavigationCountsResponse> {
+  const qs = purpose ? `?purpose=${purpose}` : '';
   const response = await page.request.get(
-    `${API_BASE_URL}/api/discover/cities/${CITY}/navigation/${encodeURIComponent(nodeKey)}/counts`,
+    `${API_BASE_URL}/api/discover/cities/${CITY}/navigation/${encodeURIComponent(nodeKey)}/counts${qs}`,
   );
   expect(response.ok()).toBe(true);
   return response.json();
@@ -461,5 +466,72 @@ test.describe('@integration-ui #1956 PR-3 — no stale AREA/cluster markers afte
     await expect(clusterMarkerLocator(page)).toHaveCount(0);
     await expect(page.locator('[data-testid="area-single-marker"]')).toHaveCount(0);
     await expect(page.locator('[data-testid="area-destination-marker"]')).toHaveCount(0);
+  });
+});
+
+test.describe('@integration-ui #2083 RC_D (AC12) — cluster-focus panel retains region heading + listing-count context', () => {
+  // Issue #2083 RC_D: DiscoverAreasJourneyPanel's cluster-focus early return
+  // previously dropped the region heading and listing-count subtitle
+  // ENTIRELY on a map cluster-bubble click, leaving the panel with no
+  // functional context (which Direction this cluster belongs to, how many
+  // listings total). Fixed additively — the member list + count-label this
+  // file's AC4.4/AC4.12 tests above already cover is UNCHANGED; this only
+  // adds the previously-missing heading block
+  // (`areas-cluster-focus-heading`/`areas-cluster-focus-heading-listings`).
+  //
+  // AC13 — cluster MEMBERSHIP count is legitimately zoom-derived (client-side
+  // pixel-grid clustering — areaClustering.ts). A fixed viewport is pinned
+  // here specifically because this test DOES assert a count, per the task
+  // brief's explicit instruction not to assert an unpinned-zoom count.
+  test.use({ viewport: { width: 1366, height: 768 } });
+
+  test('tapping the South-East Bangalore visual cluster shows the Direction heading + its real listing count, in addition to the existing member summary', async ({
+    page,
+  }) => {
+    await openRoot(page);
+    await goToDirection(page, D_SE);
+
+    const cluster = clusterMarkerLocator(page);
+    await expect(cluster).toHaveCount(1);
+    await clickMarker(cluster);
+
+    const focusPanel = page.getByTestId('areas-cluster-focus-panel');
+    await expect(focusPanel).toBeVisible();
+
+    // Ground truth, not a hardcoded literal — same ADJACENT node's own
+    // counts endpoint the panel itself reads (mirrors
+    // NavigationLevelPanel's heading, which this cluster-focus heading is
+    // documented to mirror byte-for-byte per DiscoverAreasJourneyPanel.tsx's
+    // RC_D comment).
+    // Issue #2083 (diagnose-then-fix cycle 3) — purpose='sale' matches the
+    // page's default `intent` (buy), which RC_C threads through so the counts
+    // endpoint (and everything downstream: map marker, panel, this heading)
+    // is sale-scoped. The un-scoped/blended endpoint call this test used
+    // BEFORE this fix returns 5 (3 sale + 2 rent, from the new rent seed
+    // this cycle added), which is the WRONG ground truth for a buy-intent
+    // page and was comparing the sale-scoped UI against a blended number —
+    // not a product defect, a stale test assumption from before rent
+    // listings existed in this fixture at all.
+    const seCounts = await fetchNodeCounts(page, D_SE, 'sale');
+
+    const heading = page.getByTestId('areas-cluster-focus-heading');
+    await expect(heading).toBeVisible();
+    await expect(heading).toContainText('South-East Bangalore');
+
+    const headingListings = page.getByTestId('areas-cluster-focus-heading-listings');
+    await expect(headingListings).toBeVisible();
+    await expect(headingListings).toContainText(formatListingCount(seCounts.count));
+
+    // The pre-existing member summary (AC4.4/AC4.12, unchanged by RC_D)
+    // still renders alongside the new heading — this is additive, not a
+    // replacement.
+    await expect(page.getByTestId('areas-cluster-focus-summary')).toBeVisible();
+
+    // AC12's other invariants — node=/breadcrumb/history untouched by the
+    // cluster tap — re-asserted here (not merely inherited from the sibling
+    // AC4.4 test above) so this heading-context test stands on its own if
+    // the AC4.4 test is ever skipped/quarantined independently.
+    expect(await currentNodeParam(page)).toBe(D_SE);
+    expect(await breadcrumbText(page)).toBe('South-East Bangalore');
   });
 });

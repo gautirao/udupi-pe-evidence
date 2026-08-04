@@ -332,6 +332,47 @@ describe('DiscoverAreasJourneyPanel', () => {
       expect(screen.getByTestId('areas-cluster-focus-summary')).toHaveTextContent('2 areas with matches');
     });
 
+    // Issue #2083 RC_D / AC12 — a map cluster click must retain region
+    // heading + listing-count context, not just the member list.
+    it('AC12: retains the region heading (journey.node.displayLabel)', () => {
+      renderFocused();
+      expect(screen.getByTestId('areas-cluster-focus-heading')).toHaveTextContent('Bangalore');
+    });
+
+    it('AC12: retains the node-level listing-count subtitle, from the SAME journey.nodeCount source NavigationLevelPanel uses', () => {
+      renderFocused();
+      expect(screen.getByTestId('areas-cluster-focus-heading-listings')).toHaveTextContent('9 listings');
+    });
+
+    it('AC12: omits the listings subtitle (not a fabricated "0 listings") when nodeCount is unavailable', () => {
+      render(
+        <MemoryRouter>
+          <DiscoverAreasJourneyPanel
+            journey={makeJourney({
+              node: makeNode({ children: CLUSTER_RAW_CHILDREN }),
+              nodeCount: null,
+              children: CLUSTER_CHILDREN,
+            })}
+            buildNodeHref={NOOP_BUILD_HREF}
+            focusedClusterMemberAreaKeys={FOCUSED_AREA_KEYS}
+          />
+        </MemoryRouter>,
+      );
+      expect(screen.getByTestId('areas-cluster-focus-heading')).toHaveTextContent('Bangalore');
+      expect(screen.queryByTestId('areas-cluster-focus-heading-listings')).not.toBeInTheDocument();
+    });
+
+    // AC13 — the MEMBER count derivation (areas-cluster-focus-summary) is a
+    // DIFFERENT, cluster-membership-scoped number from the heading's
+    // node-level listing total above (9 listings node-wide vs. "2 areas
+    // with matches" among the focused members) — restoring the heading must
+    // not blend the two or change the member-count derivation.
+    it('AC13: the heading listing total and the member-count summary remain independent numbers', () => {
+      renderFocused();
+      expect(screen.getByTestId('areas-cluster-focus-heading-listings')).toHaveTextContent('9 listings');
+      expect(screen.getByTestId('areas-cluster-focus-summary')).toHaveTextContent('2 areas with matches');
+    });
+
     it('"Show all areas" clears focus by calling onClusterFocusChange(null)', async () => {
       const user = userEvent.setup();
       const onClusterFocusChange = vi.fn();
