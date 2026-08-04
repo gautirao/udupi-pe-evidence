@@ -40,7 +40,21 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   echo "$code_changes" | sed 's/^/  /'
   echo ""
   echo "━━━ pre-push: running e2e tests ━━━"
-  echo "Ensure backend (port 8085) and frontend (port 8080) are running."
+  # Ports are resolved per-worktree by scripts/run-e2e-local.sh itself
+  # (.env.e2e.local when this worktree has explicit assigned ports, else
+  # .env.e2e) — never hard-code them here, or this message drifts from
+  # reality for every worktree that isn't on the repo's static defaults (#2078).
+  E2E_LOCAL_FILE="$(git rev-parse --show-toplevel)/.env.e2e.local"
+  E2E_FILE="$(git rev-parse --show-toplevel)/.env.e2e"
+  RESOLVED_E2E_FILE="$E2E_FILE"
+  [ -f "$E2E_LOCAL_FILE" ] && RESOLVED_E2E_FILE="$E2E_LOCAL_FILE"
+  if [ -f "$RESOLVED_E2E_FILE" ]; then
+    FE_URL=$(grep -E '^PLAYWRIGHT_BASE_URL=' "$RESOLVED_E2E_FILE" | tail -1 | cut -d= -f2-)
+    BE_URL=$(grep -E '^BACKEND_BASE_URL=' "$RESOLVED_E2E_FILE" | tail -1 | cut -d= -f2-)
+    echo "Backend: ${BE_URL:-see $RESOLVED_E2E_FILE}   Frontend: ${FE_URL:-see $RESOLVED_E2E_FILE} ($RESOLVED_E2E_FILE)"
+  else
+    echo "No .env.e2e / .env.e2e.local found — scripts/run-e2e-local.sh will report the error."
+  fi
   echo ""
 
   npm run test:e2e:local
