@@ -541,6 +541,44 @@ describe('AreaSelectedPanel', () => {
     });
   });
 
+  // ── Issue #2084 (AC8) — area-leaf information architecture reorder ────────
+  describe('AC8 — landmark DOM order and school-CTA placement', () => {
+    it('renders school CTA -> search -> filters -> result-count -> cards in that DOM order', () => {
+      renderPanel({ areaListings: [mockListing], onSearchChange: vi.fn() });
+      const schoolCta = screen.getByTestId('add-school-cta');
+      const search = screen.getByTestId('area-search-input');
+      const filterCard = screen.getByTestId('quick-chip-all');
+      const resultSummary = screen.getByTestId('area-result-summary');
+      const cards = screen.getByText('Test Listing');
+
+      const FOLLOWING = Node.DOCUMENT_POSITION_FOLLOWING;
+      expect(schoolCta.compareDocumentPosition(search) & FOLLOWING).toBeTruthy();
+      expect(search.compareDocumentPosition(filterCard) & FOLLOWING).toBeTruthy();
+      expect(filterCard.compareDocumentPosition(resultSummary) & FOLLOWING).toBeTruthy();
+      expect(resultSummary.compareDocumentPosition(cards) & FOLLOWING).toBeTruthy();
+    });
+
+    it('the school CTA is NOT a descendant of the quick-filter box', () => {
+      renderPanel({ areaListings: [mockListing] });
+      const schoolCta = screen.getByTestId('add-school-cta');
+      // Walk up from the property-type "All" chip (a real member of the
+      // filter box) to find its bg-card wrapper, then assert the school CTA
+      // is not contained within that same wrapper.
+      const allChip = screen.getByTestId('quick-chip-all');
+      let filterBox: HTMLElement | null = allChip.parentElement;
+      while (filterBox && !(filterBox.className && filterBox.className.includes('bg-card'))) {
+        filterBox = filterBox.parentElement;
+      }
+      expect(filterBox).not.toBeNull();
+      expect(filterBox!.contains(schoolCta)).toBe(false);
+    });
+
+    it('omits the school CTA card entirely when onAddSchool is not supplied', () => {
+      renderPanel({ onAddSchool: undefined });
+      expect(screen.queryByTestId('add-school-cta')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Breadcrumb (Issue #1606)', () => {
     it('renders Home › City › Group › Area when a group context is present', () => {
       renderPanel({ cityLabel: 'Udupi', groupName: 'University Belt' });

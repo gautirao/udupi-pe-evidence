@@ -487,23 +487,38 @@ export function useAreasNavigationJourney({
    * The CURRENT node's own matching-area count — unlike a child (see
    * `AreasNavigationChild.matchingAreaCount`), the currently-resolved node DOES
    * carry its own `descendantAreaKeys` (populated for DIRECTION/CLUSTER; `null`
-   * only for the synthetic city ROOT, which the backend deliberately omits it
-   * for — "the root view is unfiltered and needs no area filter"). Combined
-   * with the counts snapshot's whole-city per-area map, the real Areas-journey
-   * visibility predicate (`readDestinationCounts` + `listingEligibilityAccessor`,
-   * the SAME functions the map/panel destination-count machinery already uses)
-   * gives an honest, non-invented count. `null` for ROOT (data genuinely
-   * omitted) and for an AREA leaf (not a meaningful question for a single area).
+   * for the synthetic city ROOT, which the backend does not populate it for).
+   * Combined with the counts snapshot's whole-city per-area map, the real
+   * Areas-journey visibility predicate (`readDestinationCounts` +
+   * `listingEligibilityAccessor`, the SAME functions the map/panel
+   * destination-count machinery already uses) gives an honest, non-invented
+   * count.
+   *
+   * Issue #2084 clarification rev 2 — ROOT is NOT unknowable: the counts
+   * snapshot's whole-city `areaListingCounts` map already carries every area
+   * key in the city, so ROOT's member-area set is that map's key set, run
+   * through the SAME predicate used for DIRECTION/CLUSTER below. This is the
+   * only node type where the metrics chip (JourneySwitcher, mounted at the
+   * city ROOT) actually renders, so resolving it here is what makes that
+   * chip show a real number instead of a permanent loading state. `null`
+   * remains for an AREA leaf (not a meaningful question for a single area).
    */
   const nodeMatchingAreaCount = useMemo(() => {
     if (!node || countsResult.snapshot == null) return null;
+    if (node.nodeType === 'AREA') return null;
+    const eligibleCountForArea = listingEligibilityAccessor(countsResult.snapshot);
+    if (node.nodeType === 'ROOT') {
+      const cityAreaKeys = Array.from(countsResult.snapshot.areaListingCounts.keys());
+      return readDestinationCounts(countsResult.snapshot, cityAreaKeys, [], eligibleCountForArea)
+        .visibleMemberCount;
+    }
     if (node.nodeType !== 'DIRECTION' && node.nodeType !== 'CLUSTER') return null;
     if (node.descendantAreaKeys == null) return null;
     return readDestinationCounts(
       countsResult.snapshot,
       node.descendantAreaKeys,
       [],
-      listingEligibilityAccessor(countsResult.snapshot),
+      eligibleCountForArea,
     ).visibleMemberCount;
   }, [node, countsResult.snapshot]);
 

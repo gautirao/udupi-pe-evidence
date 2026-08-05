@@ -123,11 +123,13 @@ describe('useAreasNavigationJourney', () => {
     expect(result.current.node?.nodeKey).toBe('root');
     expect(result.current.levelKind).toBe('directions');
     await waitFor(() => expect(result.current.nodeCount?.listingCount).toBe(500));
-    // node is ROOT here — the server deliberately omits descendantAreaKeys for
-    // ROOT ("the root view is unfiltered and needs no area filter"), so
-    // matchingAreaCount is honestly null rather than falling back to the
-    // listing total. See count_display_defect_2026_07_29.
-    expect(result.current.nodeCount).toEqual({ listingCount: 500, schoolCount: 40, matchingAreaCount: null });
+    // node is ROOT here. `makeCountsResponse()`'s whole-city `areaCounts` map
+    // is empty in this fixture, so the ROOT-branch computation (#2084
+    // clarification rev 2) has zero member areas to consider and correctly
+    // reports 0, not null — see the dedicated ROOT tests below for the
+    // populated-map case (matchingAreaCount resolves to a real, non-zero
+    // number, and changes when the counts response is filter-narrowed).
+    expect(result.current.nodeCount).toEqual({ listingCount: 500, schoolCount: 40, matchingAreaCount: 0 });
   });
 
   it('frontend_consumption_2026_07_29 (regression) — a CHILD\'s matchingAreaCount is the server-computed AREA count, not its listing total', async () => {
@@ -472,5 +474,164 @@ describe('useAreasNavigationJourney', () => {
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
     const resolveCall = mockGet.mock.calls.find(([path]) => (path as string).includes('/navigation/resolve'));
     expect(resolveCall?.[0]).toContain('node=root');
+  });
+
+  // ─── Issue #2084 clarification rev 2 — ROOT-only matchingAreaCount ──────
+  // Before this unlock, `nodeMatchingAreaCount` returned null unconditionally
+  // for ROOT (see the first test above, pre-fix). The metrics chip that
+  // consumes `nodeCount.matchingAreaCount` (JourneySwitcher) only ever mounts
+  // full cards at the city ROOT, so the canonical value never reached the one
+  // place it is displayed. These tests cover the fix: ROOT now resolves a
+  // real count from the SAME `readDestinationCounts` +
+  // `listingEligibilityAccessor` predicate DIRECTION/CLUSTER already use,
+  // reusing the counts snapshot's whole-city `areaListingCounts` map as the
+  // member-area set — no second source of truth, no summed reconstruction of
+  // `listingCount`.
+  it('ROOT (unfiltered) — matchingAreaCount resolves from the whole-city areaListingCounts map', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path.includes('/navigation/resolve')) return makeResolveResponse();
+      if (path.includes('/counts')) {
+        return {
+          ...makeCountsResponse(),
+          // Whole-city per-area listing map: 3 areas have >=1 matching
+          // listing, one has zero and must be EXCLUDED from the count.
+          areaCounts: { 'a:one': 4, 'a:two': 2, 'a:three': 1, 'a:zero': 0 },
+        };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = makeClient();
+    const { result } = renderHook(
+      () =>
+        useAreasNavigationJourney({
+          city: 'bangalore',
+          requestedNodeKey: null,
+          onSelectNode: vi.fn(),
+        }),
+      { wrapper: wrapper(client) },
+    );
+
+    await waitFor(() => expect(result.current.nodeCount).not.toBeNull());
+    expect(result.current.node?.nodeType).toBe('ROOT');
+    expect(result.current.nodeCount?.matchingAreaCount).toBe(3);
+    // The server-computed node total is untouched by this branch — never
+    // summed from the per-area map.
+    expect(result.current.nodeCount?.listingCount).toBe(500);
+  });
+
+  it('ROOT (active filter) — matchingAreaCount CHANGES when the filtered counts response narrows eligible areas', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path.includes('/navigation/resolve')) return makeResolveResponse();
+      if (path.includes('/counts')) {
+        return {
+          ...makeCountsResponse(),
+          // Same city/node, but the server has already applied a filter
+          // (e.g. bedrooms=4) to this per-area map — only 1 of the previous
+          // 3 eligible areas remains eligible under it.
+          areaCounts: { 'a:one': 1, 'a:two': 0, 'a:three': 0, 'a:zero': 0 },
+        };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = makeClient();
+    const { result } = renderHook(
+      () =>
+        useAreasNavigationJourney({
+          city: 'bangalore',
+          requestedNodeKey: null,
+          onSelectNode: vi.fn(),
+          filters: { bedrooms: [4] },
+        }),
+      { wrapper: wrapper(client) },
+    );
+
+    await waitFor(() => expect(result.current.nodeCount).not.toBeNull());
+    // This is exactly the case that was impossible before this unlock: with
+    // no ROOT branch, `matchingAreaCount` was hard-null regardless of
+    // filters. It now tracks the filtered snapshot, same as DIRECTION/CLUSTER.
+    expect(result.current.nodeCount?.matchingAreaCount).toBe(1);
+  });
+
+  it('DIRECTION node matchingAreaCount is unchanged by the ROOT unlock (non-root path proof)', async () => {
+    // Byte-identical-behaviour proof for the DIRECTION path: same fixture and
+    // assertion as the pre-existing 'count_display_defect_2026_07_29'
+    // regression test above, re-asserted after the ROOT branch was added, to
+    // confirm the DIRECTION/CLUSTER computation was not perturbed.
+    mockGet.mockImplementation(async (path: string) => {
+      if (path.includes('/navigation/resolve')) {
+        return makeResolveResponse({
+          node: {
+            nodeKey: 'd:n',
+            nodeType: 'DIRECTION',
+            displayLabel: 'North Bangalore',
+            depth: 0,
+            ancestry: [],
+            nextLevelType: 'AREA',
+            children: [],
+            revisionId: 1,
+            descendantAreaKeys: ['a:one', 'a:two', 'a:three'],
+          },
+        });
+      }
+      if (path.includes('/counts')) {
+        return {
+          nodeKey: 'd:n',
+          count: 1736,
+          schoolCount: 0,
+          areaCounts: { 'a:one': 1000, 'a:two': 736, 'a:three': 0 },
+          areaSchoolCounts: {},
+          children: [],
+          revisionId: 1,
+        };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = makeClient();
+    const { result } = renderHook(
+      () =>
+        useAreasNavigationJourney({
+          city: 'bangalore',
+          requestedNodeKey: 'd:n',
+          onSelectNode: vi.fn(),
+        }),
+      { wrapper: wrapper(client) },
+    );
+
+    await waitFor(() => expect(result.current.nodeCount?.listingCount).toBe(1736));
+    expect(result.current.nodeCount?.matchingAreaCount).toBe(2);
+  });
+
+  it('AREA-leaf node keeps returning null matchingAreaCount (unchanged)', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path.includes('/navigation/resolve')) {
+        return makeResolveResponse({
+          node: {
+            nodeKey: 'a:one',
+            nodeType: 'AREA',
+            displayLabel: 'One',
+            depth: 2,
+            ancestry: [],
+            nextLevelType: null,
+            children: [],
+            revisionId: 1,
+          },
+        });
+      }
+      if (path.includes('/counts')) return { ...makeCountsResponse(), nodeKey: 'a:one' };
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = makeClient();
+    const { result } = renderHook(
+      () =>
+        useAreasNavigationJourney({
+          city: 'bangalore',
+          requestedNodeKey: 'a:one',
+          onSelectNode: vi.fn(),
+        }),
+      { wrapper: wrapper(client) },
+    );
+
+    await waitFor(() => expect(result.current.nodeCount).not.toBeNull());
+    expect(result.current.nodeCount?.matchingAreaCount).toBeNull();
   });
 });

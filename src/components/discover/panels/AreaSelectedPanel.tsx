@@ -348,7 +348,59 @@ export function AreaSelectedPanel({
         )}
       </div>
 
-      {/* Quick filter card — property type + bedrooms + add-school affordance */}
+      {/* Issue #2084 (AC8) — school-shortcut CTA, promoted OUT of the quick-
+          filter box below into its own full-width card, positioned directly
+          under the header (before search/filters). A single modest button
+          row (icon + label + "Optional" hint) — not a hero/image block — so
+          it never competes with the listing list for visual weight. */}
+      {onAddSchool && (
+        <div className="border-b border-border px-4 py-3">
+          <button
+            type="button"
+            onClick={handleAddSchool}
+            data-testid="add-school-cta"
+            className="flex w-full items-center justify-between gap-2 rounded-xl border border-border bg-card p-3 text-left shadow-sm transition-colors hover:border-primary/60"
+          >
+            <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <Plus className="h-4 w-4 text-primary" aria-hidden="true" />
+              Add a school in this area
+            </span>
+            <span className="text-xs text-muted-foreground">Optional</span>
+          </button>
+        </div>
+      )}
+
+      {/* Search — moved ABOVE the quick-filter card (Issue #2084 AC8: heading
+          -> school CTA -> search -> filters -> result-count -> cards). */}
+      {onSearchChange && (
+        <div className="border-b border-border px-4 py-3">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder={`Search properties in ${areaLabel}`}
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="h-9 pl-8 pr-8 text-sm"
+              data-testid="area-search-input"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2"
+                onClick={() => onSearchChange('')}
+                aria-label="Clear search"
+                data-testid="area-search-clear"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Quick filter card — property type + bedrooms (the school CTA above is
+          now a separate, full-width card — see #2084 AC8). */}
       {/* F2 — outer section keeps border-b layout; inner white card matches the controls card surface. */}
       <div className="border-b border-border px-4 py-3">
         <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
@@ -420,51 +472,11 @@ export function AreaSelectedPanel({
                     {bed} BHK
                   </Button>
                 ))}
-                {onAddSchool && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="ml-auto h-8 gap-1.5 px-3 text-xs"
-                    onClick={handleAddSchool}
-                    data-testid="add-school-cta"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add a school in this area
-                  </Button>
-                )}
               </div>
             </div>
           </div>
         </div>
       </div>
-
-      {/* Search */}
-      {onSearchChange && (
-        <div className="border-b border-border px-4 py-3">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder={`Search properties in ${areaLabel}`}
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              className="h-9 pl-8 pr-8 text-sm"
-              data-testid="area-search-input"
-            />
-            {searchQuery && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2"
-                onClick={() => onSearchChange('')}
-                aria-label="Clear search"
-                data-testid="area-search-clear"
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Listings body */}
       <div

@@ -208,6 +208,13 @@ export interface DiscoverAreasJourneyPanelProps {
    * compiling unchanged.
    */
   onSelectedListingPreviewChange?: (preview: SelectedListingPreview | null) => void;
+  /**
+   * Issue #2084 (AC6) — display name of the current city, forwarded unchanged
+   * to `NavigationLevelPanel` for the city-ROOT-only invitational eyebrow.
+   * Optional so every pre-existing render path/test that never resolves the
+   * literal city root keeps compiling and rendering unchanged.
+   */
+  cityLabel?: string;
 }
 
 export function DiscoverAreasJourneyPanel({
@@ -223,6 +230,7 @@ export function DiscoverAreasJourneyPanel({
   onAreaLeafFiltersChange,
   onAddSchool,
   onSelectedListingPreviewChange,
+  cityLabel,
 }: DiscoverAreasJourneyPanelProps) {
   // Issue #1956 PR 3 (bounded state-lift, AC4.12) — derive the focused
   // cluster's member list + count copy from the SAME `journey.node.children`
@@ -420,6 +428,7 @@ export function DiscoverAreasJourneyPanel({
           selectedNodeKey={selectedNodeKey}
           hoveredNodeKey={hoveredNodeKey}
           onHoverChange={onHoverChange}
+          cityLabel={cityLabel}
         />
       </div>
     );
@@ -439,6 +448,7 @@ export function DiscoverAreasJourneyPanel({
         selectedNodeKey={selectedNodeKey}
         hoveredNodeKey={hoveredNodeKey}
         onHoverChange={onHoverChange}
+        cityLabel={cityLabel}
       />
     </div>
   );

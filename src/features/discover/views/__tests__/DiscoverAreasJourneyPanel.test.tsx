@@ -523,4 +523,103 @@ describe('DiscoverAreasJourneyPanel', () => {
       expect(summary.textContent).not.toMatch(/\+\d/);
     });
   });
+
+  // ── Issue #2084 (approved clarification-contract ruling) — Local
+  // Destination (CLUSTER) must receive the SAME structural treatment as
+  // Direction, and must have explicit fixture/DOM coverage even though no
+  // prior local browser fixture exposed one. The DIRECTION success-state
+  // test above (~:97-123) was, until now, the ONLY structural-child fixture
+  // this suite exercised — no fixture here ever set `nodeType: 'CLUSTER'`
+  // as a normal, selectable child rendered through `NavigationLevelPanel` /
+  // `NavigationChildCard` (as opposed to the UNRELATED "focused visual-AREA
+  // cluster" map-click surface covered above, which is a different feature
+  // reusing similar terminology — see that describe block's own doc). Node
+  // shapes below mirror the real Bangalore local-fixture-DB seed
+  // (`scripts/db/fixtures/navigation-hierarchy-fixture-seed.sql`, read-only
+  // reference, not edited here): a `d:northeast` Direction whose
+  // Local-Destination child is
+  // `c:northeast:hoskote-kannamangala-whitefield-hoskote-road`
+  // ("Kannamangala - Hoskote Corridor"), which in the real seed has 2 AREA
+  // children — rather than inventing placeholder keys/labels.
+  describe('Local-Destination (CLUSTER)', () => {
+    const DIRECTION_WITH_CLUSTER_CHILD = makeNode({
+      nodeKey: 'd:northeast',
+      nodeType: 'DIRECTION',
+      displayLabel: 'North-East Bangalore',
+      depth: 0,
+      regionKey: 'northeast',
+      nextLevelType: 'CLUSTER',
+      ancestry: [{ nodeKey: 'root', nodeType: 'ROOT', displayLabel: 'Bangalore', displayOrder: 0 }],
+    });
+    const CLUSTER_CHILD_NODE_KEY = 'c:northeast:hoskote-kannamangala-whitefield-hoskote-road';
+    const CLUSTER_CHILDREN: UseAreasNavigationJourneyResult['children'] = [
+      {
+        nodeKey: CLUSTER_CHILD_NODE_KEY,
+        nodeType: 'CLUSTER',
+        displayLabel: 'Kannamangala - Hoskote Corridor',
+        displayOrder: 1,
+        listingCount: 8,
+        schoolCount: 1,
+        isLeafArea: false,
+        matchingAreaCount: 2,
+      },
+    ];
+
+    function renderClusterLevel(overrides: { selectNode?: ReturnType<typeof vi.fn> } = {}) {
+      return render(
+        <MemoryRouter>
+          <DiscoverAreasJourneyPanel
+            journey={makeJourney({
+              node: DIRECTION_WITH_CLUSTER_CHILD,
+              levelKind: 'clusters',
+              nodeCount: { listingCount: 8, schoolCount: 1, matchingAreaCount: 1 },
+              children: CLUSTER_CHILDREN,
+              selectNode: overrides.selectNode ?? vi.fn(),
+            })}
+            buildNodeHref={(k) => `?node=${k}`}
+          />
+        </MemoryRouter>,
+      );
+    }
+
+    it('mounts the same success-state shell (areas-journey-panel / navigation-level-panel) DIRECTION uses — proves state-invariance across Direction and Local-Destination', () => {
+      renderClusterLevel();
+      expect(screen.getByTestId('areas-journey-panel')).toBeInTheDocument();
+      expect(screen.getByTestId('navigation-level-panel')).toBeInTheDocument();
+    });
+
+    it('renders the CLUSTER child through the SAME NavigationChildCard path as a DIRECTION child', () => {
+      renderClusterLevel();
+      expect(screen.getByTestId(`navigation-child-card-${CLUSTER_CHILD_NODE_KEY}`)).toBeInTheDocument();
+    });
+
+    it('renders the CLUSTER displayLabel', () => {
+      renderClusterLevel();
+      expect(screen.getByTestId(`navigation-child-card-${CLUSTER_CHILD_NODE_KEY}`)).toHaveTextContent(
+        'Kannamangala - Hoskote Corridor',
+      );
+    });
+
+    it('does NOT render the structural "no matching areas" empty state for a CLUSTER child that has matches', () => {
+      renderClusterLevel();
+      expect(screen.queryByTestId('navigation-level-empty')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('areas-journey-panel-empty')).not.toBeInTheDocument();
+    });
+
+    it('does NOT double-render the CLUSTER in both the focused cluster-panel branch and the normal level-panel branch — no map cluster-bubble focus is active for a plain Local-Destination level', () => {
+      renderClusterLevel();
+      expect(screen.queryByTestId('areas-cluster-focus-panel')).not.toBeInTheDocument();
+      expect(screen.getByTestId('navigation-level-panel')).toBeInTheDocument();
+      // Exactly one card for this nodeKey — never rendered twice.
+      expect(screen.getAllByTestId(`navigation-child-card-${CLUSTER_CHILD_NODE_KEY}`)).toHaveLength(1);
+    });
+
+    it('CLUSTER selection dispatches journey.selectNode with its nodeKey — the SAME action DIRECTION children use, no second navigation mechanism', async () => {
+      const user = userEvent.setup();
+      const selectNode = vi.fn();
+      renderClusterLevel({ selectNode });
+      await user.click(screen.getByTestId(`navigation-child-card-${CLUSTER_CHILD_NODE_KEY}`));
+      expect(selectNode).toHaveBeenCalledWith(CLUSTER_CHILD_NODE_KEY);
+    });
+  });
 });

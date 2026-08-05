@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { DiscoverRightPanelProps } from '@/components/discover/DiscoverRightPanel';
 import type { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
 import type {
@@ -30,6 +31,38 @@ import type { DiscoverInteractionCommands } from '@/features/discover/state/useD
 import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
 import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
+
+// Issue #2084 (AC1, 4th area-first state) — the AREA-leaf branch
+// (`AreaLeafListingsSurface`, mounted by `DiscoverAreasJourneyPanel`) calls
+// `useAuth`/`useDiscoverCityListings` directly. These two are mocked (the
+// SAME pattern `discoverAreasJourneyPanelAreaLeaf.test.tsx` already
+// establishes) ONLY so that ONE additional shell-level test below can prove
+// the JourneySwitcher survives into this 4th state without standing up a
+// live Supabase session or backend fetch. Every other test in this file is
+// unaffected (they never resolve an AREA leaf, so this branch's hooks never
+// mount).
+const mockUseAuth = vi.hoisted(() => vi.fn());
+mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: (...args: unknown[]) => mockUseAuth(...args),
+}));
+
+const mockUseDiscoverCityListings = vi.hoisted(() => vi.fn());
+mockUseDiscoverCityListings.mockReturnValue({
+  data: { areas: [] },
+  isLoading: false,
+  isError: false,
+  refetch: vi.fn(),
+});
+vi.mock('@/hooks/useDiscoverCityListings', async () => {
+  const actual = await vi.importActual<typeof import('@/hooks/useDiscoverCityListings')>(
+    '@/hooks/useDiscoverCityListings',
+  );
+  return {
+    ...actual,
+    useDiscoverCityListings: (...args: unknown[]) => mockUseDiscoverCityListings(...args),
+  };
+});
 
 vi.mock('@/components/discover/DiscoverRightPanel', () => ({
   DiscoverRightPanel: (props: DiscoverRightPanelProps) => (
@@ -468,6 +501,100 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
     expect(screen.getByTestId('navigation-level-panel')).toBeInTheDocument();
   });
 
+  // Issue #2084 clarification rev 2 — the switcher's counts must come ONLY
+  // from `areasNavigationJourney.nodeCount`; the legacy `cityTotal`/
+  // `discoverAreas` fallback is gone entirely (loading AND steady state).
+  // These two tests set a large, easily-recognisable legacy `cityTotal` /
+  // `discoverAreas` on `baseProps` and prove neither value is ever reachable
+  // through the switcher's rendered chips.
+  it('nodeCount === null (still resolving) — switcher shows the loading affordance, NEVER the legacy cityTotal/discoverAreas value', () => {
+    BASE_URL_STATE.journey = 'area-first';
+
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanelContainer
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            // Deliberately large, distinctive legacy values that would be
+            // instantly recognisable if they leaked through.
+            cityTotal: 999,
+            discoverAreas: [
+              { areaKey: 'a:one', areaLabel: 'One', geo_center_lat: 0, geo_center_lon: 0, bbox: null, listingCount: 5, schoolCount: 0 },
+              { areaKey: 'a:two', areaLabel: 'Two', geo_center_lat: 0, geo_center_lon: 0, bbox: null, listingCount: 5, schoolCount: 0 },
+            ],
+            areasNavigationJourney: inertAreasNavigationJourney({
+              node: {
+                nodeKey: 'root',
+                nodeType: 'ROOT',
+                displayLabel: 'Bangalore',
+                depth: -1,
+                regionKey: null,
+                ancestry: [],
+                nextLevelType: 'DIRECTION',
+                children: [],
+                revisionId: 1,
+                bounds: null,
+                descendantAreaKeys: null,
+                areaKey: null,
+              },
+              nodeCount: null,
+            }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText('999 properties')).not.toBeInTheDocument();
+    expect(screen.queryByText('2 areas')).not.toBeInTheDocument();
+    expect(screen.queryByText('0 properties')).not.toBeInTheDocument();
+    expect(screen.queryByText('0 areas')).not.toBeInTheDocument();
+    expect(screen.getByText('Loading properties…')).toBeInTheDocument();
+    expect(screen.getByText('Loading areas…')).toBeInTheDocument();
+  });
+
+  it('nodeCount resolved — switcher shows the canonical nodeCount values, NEVER the legacy cityTotal/discoverAreas value', () => {
+    BASE_URL_STATE.journey = 'area-first';
+
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanelContainer
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            // Distinctive legacy values, deliberately DIFFERENT from the
+            // canonical nodeCount values below, so a leak is unmistakable.
+            cityTotal: 999,
+            discoverAreas: [
+              { areaKey: 'a:one', areaLabel: 'One', geo_center_lat: 0, geo_center_lon: 0, bbox: null, listingCount: 5, schoolCount: 0 },
+              { areaKey: 'a:two', areaLabel: 'Two', geo_center_lat: 0, geo_center_lon: 0, bbox: null, listingCount: 5, schoolCount: 0 },
+            ],
+            areasNavigationJourney: inertAreasNavigationJourney({
+              node: {
+                nodeKey: 'root',
+                nodeType: 'ROOT',
+                displayLabel: 'Bangalore',
+                depth: -1,
+                regionKey: null,
+                ancestry: [],
+                nextLevelType: 'DIRECTION',
+                children: [],
+                revisionId: 1,
+                bounds: null,
+                descendantAreaKeys: null,
+                areaKey: null,
+              },
+              nodeCount: { listingCount: 42, schoolCount: 0, matchingAreaCount: 7 },
+            }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('42 properties')).toBeInTheDocument();
+    expect(screen.getByText('7 areas')).toBeInTheDocument();
+    expect(screen.queryByText('999 properties')).not.toBeInTheDocument();
+    expect(screen.queryByText('2 areas')).not.toBeInTheDocument();
+  });
+
   // Issue #1956 PR-6 code review Finding 2 — a hand-typed/bookmarked stale
   // URL (never an in-app JourneySwitcher click, which converts groupId/areaKey
   // to `node=` BEFORE writing journey=area-first via the container's own
@@ -621,5 +748,272 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
     const back = screen.getByTestId('areas-hierarchy-back');
     expect(back).toHaveAttribute('href', '/?node=root');
     expect(URL_ACTIONS.buildNodeHref).toHaveBeenCalledWith('root');
+  });
+
+  // ── Issue #2084 — panel shell + persistent JourneySwitcher restore ──────
+  const ROOT_NODE = {
+    nodeKey: 'root',
+    nodeType: 'ROOT' as const,
+    displayLabel: 'Bangalore',
+    depth: -1,
+    regionKey: null,
+    ancestry: [],
+    nextLevelType: 'DIRECTION' as const,
+    children: [],
+    revisionId: 1,
+    bounds: null,
+    descendantAreaKeys: null,
+    areaKey: null,
+  };
+
+  const DIRECTION_NODE = {
+    nodeKey: 'd:n',
+    nodeType: 'DIRECTION' as const,
+    displayLabel: 'North Bangalore',
+    depth: 0,
+    regionKey: 'north',
+    ancestry: [{ nodeKey: 'root', nodeType: 'ROOT' as const, displayLabel: 'Bangalore', displayOrder: 0 }],
+    nextLevelType: 'AREA' as const,
+    children: [],
+    revisionId: 1,
+    bounds: null,
+    descendantAreaKeys: null,
+    areaKey: null,
+  };
+
+  it('AC4/AC5 — the shell root carries lg:order-2 and lg:w-1/2, and carries NO bare order-* token', () => {
+    BASE_URL_STATE.journey = 'area-first';
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanelContainer
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            areasNavigationJourney: inertAreasNavigationJourney({ node: ROOT_NODE }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+    const shell = screen.getByTestId('discover-areas-journey-panel-shell');
+    const classes = shell.className.split(/\s+/);
+    expect(classes).toContain('lg:order-2');
+    expect(classes).toContain('lg:w-1/2');
+    // R1 (handoff stop_condition, HIGHEST SEVERITY) — an unprefixed `order-*`
+    // would apply at mobile widths and invert this journey's current (and
+    // must-remain) list-before-map mobile ordering into map-before-list.
+    // This is a load-bearing NEGATIVE assertion: it must fail if a future
+    // edit copies the legacy `order-2 lg:order-2` className verbatim.
+    expect(classes.some((c) => /^order-\d/.test(c))).toBe(false);
+    // Code-review fix cycle 1 (blocking finding) — a bare `h-full` gives the
+    // shell a mobile flex-basis equal to the full mobile shell height,
+    // compressing the `h-64` map under flex-shrink by ~30-40%. Only
+    // `lg:h-full` is allowed. `classes.includes('h-full')` (exact-token
+    // match, not a substring/regex test) is what makes this assertion
+    // capable of failing: it does not match `lg:h-full`, so it genuinely
+    // fails if a future edit reintroduces the bare token (verified by a
+    // temporary local repro before this fix: asserting `false` against a
+    // shell carrying literal `h-full` fails as expected, and reverts to
+    // passing once the class reads `lg:h-full`).
+    expect(classes.includes('h-full')).toBe(false);
+    expect(classes).toContain('lg:h-full');
+  });
+
+  it('AC1 — the JourneySwitcher section is present at the area-first city-root state', () => {
+    BASE_URL_STATE.journey = 'area-first';
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanelContainer
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            areasNavigationJourney: inertAreasNavigationJourney({ node: ROOT_NODE }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('journey-switcher-section')).toBeInTheDocument();
+    // CQ2 — FULL cards at the city root.
+    expect(screen.getByTestId('journey-card-area-first')).toBeInTheDocument();
+  });
+
+  it('AC1 — the JourneySwitcher section is present at a Direction (non-root) state', () => {
+    BASE_URL_STATE.journey = 'area-first';
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanelContainer
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            areasNavigationJourney: inertAreasNavigationJourney({ node: DIRECTION_NODE }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('journey-switcher-section')).toBeInTheDocument();
+  });
+
+  it('AC1 — the JourneySwitcher section is present at a cluster-focus (Local-Destination) state', () => {
+    BASE_URL_STATE.journey = 'area-first';
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanelContainer
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            focusedClusterMemberAreaKeys: ['alpha'],
+            areasNavigationJourney: inertAreasNavigationJourney({
+              node: {
+                ...DIRECTION_NODE,
+                children: [
+                  { nodeKey: 'a:alpha', nodeType: 'AREA', displayLabel: 'Alpha', displayOrder: 1, areaKey: 'alpha', centreLat: 12.9, centreLon: 77.6 },
+                ],
+              },
+              children: [
+                { nodeKey: 'a:alpha', nodeType: 'AREA', displayLabel: 'Alpha', displayOrder: 1, listingCount: 5, schoolCount: null, isLeafArea: true, matchingAreaCount: null },
+              ],
+            }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+    // Proves the cluster-focus branch actually mounted (distinct testid from
+    // navigation-level-panel), not the fallback level panel.
+    expect(screen.getByTestId('areas-cluster-focus-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('journey-switcher-section')).toBeInTheDocument();
+  });
+
+  // Issue #2084 (approved clarification-contract ruling) — the test directly
+  // above is named "cluster-focus (Local-Destination)" but actually exercises
+  // the UNRELATED "focused visual-AREA cluster" map-bubble-click branch
+  // (`areas-cluster-focus-panel`), never a plain CLUSTER ("Local Destination")
+  // nodeType rendered as a normal, selectable child the way a DIRECTION child
+  // is at :743. This test closes that gap: it proves the shell + switcher are
+  // state-invariant (AC1) at a genuine Local-Destination level — a DIRECTION
+  // node whose children are CLUSTER nodes, no map-click focus active — and
+  // re-asserts the AC4/AC5 shell class contract (:690) holds there too, since
+  // `DiscoverAreasJourneyPanel`'s own component suite cannot observe the
+  // shell/switcher (they are owned by this container, not that component).
+  it('AC1/AC4/AC5 — the shell + switcher mount, with the full class contract, at a genuine Local-Destination (CLUSTER-as-child) state, never the map-click cluster-focus branch', () => {
+    BASE_URL_STATE.journey = 'area-first';
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanelContainer
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            areasNavigationJourney: inertAreasNavigationJourney({
+              node: { ...DIRECTION_NODE, nextLevelType: 'CLUSTER' as const },
+              levelKind: 'clusters',
+              children: [
+                {
+                  nodeKey: 'c:n:local-destination',
+                  nodeType: 'CLUSTER',
+                  displayLabel: 'North Local Destination',
+                  displayOrder: 1,
+                  listingCount: 8,
+                  schoolCount: 1,
+                  isLeafArea: false,
+                  matchingAreaCount: 2,
+                },
+              ],
+            }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+    // Same structural surface a DIRECTION child renders through — never the
+    // map-click focus panel (no focusedClusterMemberAreaKeys supplied here).
+    expect(screen.queryByTestId('areas-cluster-focus-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('navigation-level-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('navigation-child-card-c:n:local-destination')).toBeInTheDocument();
+    // AC1 — the persistent switcher mounts at this state too.
+    expect(screen.getByTestId('journey-switcher-section')).toBeInTheDocument();
+    // AC4/AC5 — the shell class contract (:690) holds state-invariantly.
+    const shell = screen.getByTestId('discover-areas-journey-panel-shell');
+    const classes = shell.className.split(/\s+/);
+    expect(classes).toContain('lg:order-2');
+    expect(classes).toContain('lg:h-full');
+    expect(classes).toContain('min-h-0');
+    expect(classes.some((c) => /^order-\d/.test(c))).toBe(false);
+    expect(classes.includes('h-full')).toBe(false);
+  });
+
+  it('AC1 — the JourneySwitcher section is present at the AREA-leaf listings state (4th of 4)', () => {
+    BASE_URL_STATE.journey = 'area-first';
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <DiscoverRightPanelContainer
+            {...baseProps({
+              resolvedPanelContent: 'area-selected',
+              areasNavigationJourney: inertAreasNavigationJourney({
+                node: {
+                  nodeKey: 'a:IN|KA|Bangalore|Manipal',
+                  nodeType: 'AREA',
+                  displayLabel: 'Manipal',
+                  depth: 2,
+                  regionKey: 'east',
+                  ancestry: [],
+                  nextLevelType: 'LISTINGS',
+                  children: [],
+                  revisionId: 1,
+                  bounds: {
+                    centreLat: 13.35,
+                    centreLon: 74.79,
+                    minLat: 13.3,
+                    minLon: 74.75,
+                    maxLat: 13.4,
+                    maxLon: 74.83,
+                  },
+                  descendantAreaKeys: null,
+                  areaKey: 'IN|KA|Bangalore|Manipal',
+                },
+              }),
+            })}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    // Proves the AREA-leaf surface actually mounted (its own distinct
+    // testid), not a fallback level panel.
+    expect(screen.getByTestId('areas-journey-panel-listings')).toBeInTheDocument();
+    expect(screen.getByTestId('journey-switcher-section')).toBeInTheDocument();
+  });
+
+  it('AC2/AC3 — selecting a different journey tab dispatches through the SAME handleSelectJourney writer (urlActions.setJourney), no second navigation path', async () => {
+    const user = userEvent.setup();
+    BASE_URL_STATE.journey = 'area-first';
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanelContainer
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            areasNavigationJourney: inertAreasNavigationJourney({ node: ROOT_NODE }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+    const schoolTab = screen.getByTestId('journey-card-school-first');
+    await user.click(schoolTab);
+    // No legacy groupId/areaKey context is present, so `handleSelectJourney`
+    // takes its plain-PUSH arm — the SAME writer every other journey switch
+    // in this app uses, never a second/parallel navigation mechanism.
+    expect(URL_ACTIONS.setJourney).toHaveBeenCalledWith('school-first');
+    expect(URL_ACTIONS.enterAreasJourney).not.toHaveBeenCalled();
+  });
+
+  it('AC2/AC3 — keyboard selection (focus + Enter) dispatches the SAME writer as a click', async () => {
+    const user = userEvent.setup();
+    BASE_URL_STATE.journey = 'area-first';
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanelContainer
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            areasNavigationJourney: inertAreasNavigationJourney({ node: ROOT_NODE }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+    const agriTab = screen.getByTestId('journey-card-agri-first');
+    agriTab.focus();
+    await user.keyboard('{Enter}');
+    expect(URL_ACTIONS.setJourney).toHaveBeenCalledWith('agri-first');
   });
 });

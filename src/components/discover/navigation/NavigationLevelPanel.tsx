@@ -24,6 +24,7 @@ import {
   formatListingCount,
   type UseAreasNavigationJourneyResult,
 } from '@/features/discover/navigation/useAreasNavigationJourney';
+import { ROOT_NODE_KEY } from '@/features/discover/navigation/types';
 
 export interface NavigationLevelPanelProps {
   journey: Pick<
@@ -34,6 +35,15 @@ export interface NavigationLevelPanelProps {
   selectedNodeKey?: string | null;
   hoveredNodeKey?: string | null;
   onHoverChange?: (nodeKey: string | null) => void;
+  /**
+   * Issue #2084 (AC6) — display name of the current city, used ONLY for the
+   * city-ROOT eyebrow ("DISCOVER {cityLabel}"). Optional so every existing
+   * caller/test that never resolves the literal city root (the vast
+   * majority — Direction/Local-Destination/Area headings are unaffected by
+   * this prop) keeps compiling and rendering unchanged. Falls back to a
+   * generic "this city" only for the rare case a root-node caller omits it.
+   */
+  cityLabel?: string;
 }
 
 export function NavigationLevelPanel({
@@ -42,8 +52,9 @@ export function NavigationLevelPanel({
   selectedNodeKey = null,
   hoveredNodeKey = null,
   onHoverChange,
+  cityLabel,
 }: NavigationLevelPanelProps) {
-  const { node, children, resolutionNotice, nodeCount, selectNode } = journey;
+  const { node, levelKind, children, resolutionNotice, nodeCount, selectNode } = journey;
 
   if (!node) {
     return null;
@@ -82,23 +93,81 @@ export function NavigationLevelPanel({
   const headingShowListingsLine = nodeCount != null && !headingPresentation?.isZeroContent;
   const headingListingsLabel = headingShowListingsLine ? formatListingCount(nodeCount.listingCount) : null;
 
+  // Issue #2084 (AC6) — the synthetic city ROOT is the ONE node whose heading
+  // leads with the mock's invitational pattern (eyebrow + question) instead
+  // of the node-scoped name/count heading every other level keeps. City-wide
+  // counts are NOT repeated here — they already live in the persistent
+  // JourneySwitcher's metrics strip (CQ3), one owner, not two.
+  const isCityRoot = node.nodeKey === ROOT_NODE_KEY;
+
+  // Issue #2084 (AC7) — a section eyebrow + count restored above the child
+  // list, at every level this component renders (city-root, Direction,
+  // Local-Destination). Counts `children.length` — the SAME bounded list
+  // rendered below, never `discoverAreas.length`/`cityTotal` (AC10) — so the
+  // label can never disagree with what is actually on screen.
+  const sectionLabel =
+    children.length === 0
+      ? null
+      : levelKind === 'directions'
+        ? 'Directions'
+        : levelKind === 'clusters'
+          ? `Local destinations in ${node.displayLabel}`
+          : levelKind === 'areas'
+            ? `Areas in ${node.displayLabel}`
+            : null;
+
   return (
     <div data-testid="navigation-level-panel" data-node-key={node.nodeKey}>
       <NavigationResolutionNotice notice={resolutionNotice} />
       <div className="mb-3" data-testid="navigation-level-heading">
-        {/* AC3.4 — explicitly names the direction/destination; same node_key + counts as the map. */}
-        <h2 className="text-base font-semibold text-foreground">{node.displayLabel}</h2>
-        {headingAreasLabel != null && (
-          <p className="text-sm text-muted-foreground" data-testid="navigation-level-heading-count">
-            {headingAreasLabel}
-          </p>
-        )}
-        {headingListingsLabel != null && (
-          <p className="text-sm text-muted-foreground" data-testid="navigation-level-heading-listings">
-            {headingListingsLabel}
-          </p>
+        {isCityRoot ? (
+          <>
+            <p
+              className="text-[12px] font-bold uppercase tracking-[0.06em] text-muted-foreground"
+              data-testid="navigation-level-root-eyebrow"
+            >
+              Discover {cityLabel ?? 'this city'}
+            </p>
+            <h2
+              className="mt-1 font-['Fraunces',_ui-serif,_Georgia,_serif] text-xl font-semibold text-foreground"
+              data-testid="navigation-level-root-heading"
+            >
+              Where do you want to explore?
+            </h2>
+          </>
+        ) : (
+          <>
+            {/* AC3.4 — explicitly names the direction/destination; same node_key + counts as the map. */}
+            <h2 className="text-base font-semibold text-foreground">{node.displayLabel}</h2>
+            {headingAreasLabel != null && (
+              <p className="text-sm text-muted-foreground" data-testid="navigation-level-heading-count">
+                {headingAreasLabel}
+              </p>
+            )}
+            {headingListingsLabel != null && (
+              <p className="text-sm text-muted-foreground" data-testid="navigation-level-heading-listings">
+                {headingListingsLabel}
+              </p>
+            )}
+          </>
         )}
       </div>
+      {sectionLabel != null && (
+        <div
+          className="mb-2 flex items-center justify-between border-b border-border pb-2"
+          data-testid="navigation-level-section-label"
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            {sectionLabel}
+          </span>
+          <span
+            className="text-[11px] font-medium text-muted-foreground"
+            data-testid="navigation-level-section-count"
+          >
+            {children.length}
+          </span>
+        </div>
+      )}
       {children.length === 0 ? (
         <p className="text-sm text-muted-foreground" data-testid="navigation-level-empty">
           {NO_MATCHES_WITH_CURRENT_FILTERS}

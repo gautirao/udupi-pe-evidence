@@ -33,6 +33,8 @@ import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCa
 import type { ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
 import { DiscoverAreasJourneyPanel } from '@/features/discover/views/DiscoverAreasJourneyPanel';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
+import { JourneySwitcher } from '@/components/discover/JourneySwitcher';
+import { ROOT_NODE_KEY } from '@/features/discover/navigation/types';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import { hasLegacyAreaContext } from '@/features/discover/navigation/legacyAreaContextGuard';
 import { useDiscoverAreaNavigationPathResolver } from '@/features/discover/navigation/useDiscoverAreaNavigationPath';
@@ -372,39 +374,135 @@ export function DiscoverRightPanelContainer({
   const showAreasNavigationJourney = urlState.journey === 'area-first';
 
   if (showAreasNavigationJourney) {
+    // Issue #2084 — panel SHELL + persistent JourneySwitcher restore. Wrapped
+    // ONCE around the whole `DiscoverAreasJourneyPanel` invocation (never
+    // per-branch inside that panel), so the shell/switcher are
+    // state-invariant across all four area-first panel states (AC1). Mirrors
+    // the legacy `DiscoverRightPanel` root (DiscoverRightPanel.tsx:1713-1794)
+    // — SAME desktop width class + switcher-then-content DOM order (R6) —
+    // with TWO deliberate breakpoint-scoped divergences, per the handoff's R1
+    // stop_condition and its code-review fix cycle 1: `lg:order-2` ONLY,
+    // never a bare `order-2` (the legacy root carries both; at mobile widths
+    // the bare one would apply and invert this journey's CURRENT, must-remain
+    // list-before-map mobile ordering into map-before-list); and `lg:h-full`
+    // ONLY (paired with the existing `lg:border-l`), never a bare `h-full` —
+    // the legacy root has NO height class at any breakpoint, and a bare
+    // `h-full` here would give this shell a mobile flex-basis equal to the
+    // full mobile shell height, starving the `h-64` map of most of its space
+    // under flex-shrink. `min-h-0` (unprefixed) is additionally new versus
+    // the legacy root, but is safe at every breakpoint — it only clears the
+    // default min-height:auto floor, it never forces a size — and is what
+    // lets the desktop `lg:h-full` + `overflow-hidden` pairing actually
+    // bound the inner `overflow-y-auto` wrapper below (R5).
+    const isAreaFirstCityRoot = areasNavigationJourney.node?.nodeKey === ROOT_NODE_KEY;
+    const areaFirstCityLabel = CITY_CONFIG[city]?.label ?? city;
     return (
-      <DiscoverAreasJourneyPanel
-        journey={areasNavigationJourney}
-        hoveredNodeKey={hoveredNavigationNodeKey}
-        onHoverChange={onNavigationNodeHoverChange}
-        focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
-        onClusterFocusChange={onClusterFocusChange}
-        // Issue #1956 PR 2 (Slice 5) — the pure href builder the visible
-        // in-app HierarchyBackButton uses to resolve the canonical parent.
-        buildNodeHref={urlActions.buildNodeHref}
-        // Issue #1956 PR-4 FIX CYCLE 3 (blocking Fix B) — forward the SAME
-        // `filters`/`handleFiltersChange` this container already receives for
-        // the legacy `DiscoverRightPanel` below (see that call site's own
-        // `onFiltersChange={handleFiltersChange}`), so an AREA-leaf chip
-        // toggle writes into the identical page-local filters state the
-        // map's query reads, instead of a parallel URL-only write.
-        areaLeafFilters={filters}
-        onAreaLeafFiltersChange={handleFiltersChange}
-        // Issue #1956 PR-4 FINAL FIX PASS (regression fix) — the canonical
-        // AREA-leaf surface silently dropped the "Add a school in this
-        // area" CTA because this call site never supplied `onAddSchool`
-        // (the prop is optional on both `DiscoverAreasJourneyPanel` and
-        // `AreaSelectedPanel`, so the omission compiled but the button just
-        // never rendered). `urlActions` is already the SAME
-        // `useDiscoverActions()` facade result the legacy `DiscoverRightPanel`
-        // call site below uses for its own `onAddSchool={urlActions.enterSchoolPicking}`
-        // — reusing it here (not a new handler) keeps the area-first
-        // school-picking sub-step (Issue #1157) identical on both surfaces:
-        // `journey` stays `area-first` so Back restores the selected area
-        // instead of deleting it.
-        onAddSchool={urlActions.enterSchoolPicking}
-        onSelectedListingPreviewChange={onSelectedListingPreviewChange}
-      />
+      <div
+        className="flex min-h-0 flex-col overflow-hidden bg-background lg:order-2 lg:h-full lg:w-1/2 lg:border-l lg:border-border"
+        data-testid="discover-areas-journey-panel-shell"
+      >
+        {/* R6 — the switcher mounts FIRST, above panel content, matching the
+            legacy shell's own tab order (DiscoverRightPanel.tsx:1723) so
+            area-first inherits the identical keyboard focus order its
+            sibling journeys already have. The border-b here is also AC7's
+            divider rule separating the switcher block from the list below. */}
+        <div className="shrink-0 border-b border-border px-4 pb-2 pt-4">
+          <JourneySwitcher
+            // CQ2 — FULL cards ONLY at the area-first CITY ROOT (the
+            // guided-entry analogue); COMPACT tab-strip at every deeper node
+            // (Direction/Local-Destination/Area), so the switcher never
+            // consumes ~a third of panel height above a listing surface.
+            compact={!isAreaFirstCityRoot}
+            activeJourney="area-first"
+            onSelectJourney={handleSelectJourney}
+            cityLabel={areaFirstCityLabel}
+            // Issue #2084 ruling 3 / clarification rev 2 — these counts are
+            // sourced ONLY from #2083's scoped/canonical
+            // `areasNavigationJourney.nodeCount` (server-computed,
+            // filter-aware), never the legacy city-wide `cityTotal` /
+            // `discoverAreas` fallback the sibling journey's call site below
+            // (~:719) still uses. `matchingAreaCount` is filter-aware where
+            // the legacy area count was not — with filters active the
+            // displayed area count now tracks them.
+            //
+            // `nodeCount` (and `matchingAreaCount` within it) is nullable
+            // while counts are loading/resolving. A prior version of this
+            // call site papered over that with `?? cityTotal` /
+            // `?? legacy-area-count`, describing it in a comment as
+            // "explicitly transient / loading-only" — that was factually
+            // wrong: `matchingAreaCount` never resolved for the city ROOT at
+            // all (the hook only computed it for DIRECTION/CLUSTER), so the
+            // legacy fallback was live PERMANENTLY, not just during a brief
+            // loading window. That gap is fixed at the source
+            // (`useAreasNavigationJourney`'s ROOT branch), so `nodeCount` now
+            // resolves at ROOT and no fallback is needed. `JourneySwitcher`
+            // itself renders an explicit loading affordance for a null
+            // value, so passing `null` straight through here is correct and
+            // required — never coerce it to a legacy number.
+            totalProperties={areasNavigationJourney.nodeCount?.listingCount ?? null}
+            areasCount={areasNavigationJourney.nodeCount?.matchingAreaCount ?? null}
+            prefersReducedMotion={prefersReducedMotion}
+          />
+        </div>
+        {/* R5 — a bounded scroll container for the panel states whose own
+            root is still a bare `p-4` div with no scroll ancestry of its own
+            (loading/error/cluster-focus/empty/children-list). The AREA-leaf
+            branch (`AreaLeafListingsSurface`) already owns its own
+            `h-full ... overflow-hidden` root + internal `overflow-y-auto`
+            scrolling (DiscoverAreasJourneyPanel.tsx) — nesting it inside this
+            bounded flex item does not change that: its `h-full` resolves
+            against this wrapper's bounded content-box and it remains the
+            actual scroll owner, so this outer `overflow-y-auto` stays inert
+            (no double scrollbar) for that branch.
+
+            DESKTOP: boundedness comes from the shell root's `lg:h-full` +
+            `overflow-hidden` above, so this wrapper scrolls against a real
+            fixed height, exactly as intended.
+
+            MOBILE (code-review fix cycle 1): the shell root no longer
+            carries a bare `h-full`, so on mobile it has no explicit height
+            of its own — identical to the pre-#2084 area-first panel root
+            (a bare `p-4` div with no height class). This wrapper's
+            `flex-1 overflow-y-auto` then resolves against whatever natural
+            (content-driven) height the shell ends up with in the mobile
+            column flex layout, same as before this shell existed — no new
+            scroll dead-zone and no double scrollbar versus today. */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <DiscoverAreasJourneyPanel
+            journey={areasNavigationJourney}
+            cityLabel={areaFirstCityLabel}
+            hoveredNodeKey={hoveredNavigationNodeKey}
+            onHoverChange={onNavigationNodeHoverChange}
+            focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
+            onClusterFocusChange={onClusterFocusChange}
+            // Issue #1956 PR 2 (Slice 5) — the pure href builder the visible
+            // in-app HierarchyBackButton uses to resolve the canonical parent.
+            buildNodeHref={urlActions.buildNodeHref}
+            // Issue #1956 PR-4 FIX CYCLE 3 (blocking Fix B) — forward the SAME
+            // `filters`/`handleFiltersChange` this container already receives for
+            // the legacy `DiscoverRightPanel` below (see that call site's own
+            // `onFiltersChange={handleFiltersChange}`), so an AREA-leaf chip
+            // toggle writes into the identical page-local filters state the
+            // map's query reads, instead of a parallel URL-only write.
+            areaLeafFilters={filters}
+            onAreaLeafFiltersChange={handleFiltersChange}
+            // Issue #1956 PR-4 FINAL FIX PASS (regression fix) — the canonical
+            // AREA-leaf surface silently dropped the "Add a school in this
+            // area" CTA because this call site never supplied `onAddSchool`
+            // (the prop is optional on both `DiscoverAreasJourneyPanel` and
+            // `AreaSelectedPanel`, so the omission compiled but the button just
+            // never rendered). `urlActions` is already the SAME
+            // `useDiscoverActions()` facade result the legacy `DiscoverRightPanel`
+            // call site below uses for its own `onAddSchool={urlActions.enterSchoolPicking}`
+            // — reusing it here (not a new handler) keeps the area-first
+            // school-picking sub-step (Issue #1157) identical on both surfaces:
+            // `journey` stays `area-first` so Back restores the selected area
+            // instead of deleting it.
+            onAddSchool={urlActions.enterSchoolPicking}
+            onSelectedListingPreviewChange={onSelectedListingPreviewChange}
+          />
+        </div>
+      </div>
     );
   }
 

@@ -542,4 +542,51 @@ describe('JourneySwitcher', () => {
       expect(schoolTab).toHaveAttribute('aria-selected', 'false');
     });
   });
+
+  // ─── Issue #2084 clarification rev 2 — null-count loading affordance ────
+  // `totalProperties`/`areasCount` are `number | null | undefined`. `null`/
+  // `undefined` must render an explicit, distinguishable loading state —
+  // never a bare "0" — and a genuine 0 must still render as literal "0".
+  describe('area-first count chips — loading vs. genuine zero (#2084)', () => {
+    it('renders an explicit loading affordance (not "0") when counts are unresolved', () => {
+      render(
+        <JourneySwitcher onSelectJourney={vi.fn()} totalProperties={null} areasCount={null} />,
+      );
+      // No literal "0 areas" / "0 properties" — that would falsely claim a
+      // resolved answer of zero.
+      expect(screen.queryByText('0 areas')).not.toBeInTheDocument();
+      expect(screen.queryByText('0 properties')).not.toBeInTheDocument();
+      // The explicit loading copy renders instead.
+      const loadingAreas = screen.getByText('Loading areas…');
+      const loadingProperties = screen.getByText('Loading properties…');
+      expect(loadingAreas).toBeInTheDocument();
+      expect(loadingProperties).toBeInTheDocument();
+      // Accessibly distinguishable, not just visually: aria-busy on the chip.
+      expect(loadingAreas.closest('[aria-busy]')).toHaveAttribute('aria-busy', 'true');
+      expect(loadingProperties.closest('[aria-busy]')).toHaveAttribute('aria-busy', 'true');
+    });
+
+    it('renders literal "0 areas" / "0 properties" for a genuine zero, distinguishable from the loading state', () => {
+      render(<JourneySwitcher onSelectJourney={vi.fn()} totalProperties={0} areasCount={0} />);
+      const zeroAreas = screen.getByText('0 areas');
+      const zeroProperties = screen.getByText('0 properties');
+      expect(zeroAreas).toBeInTheDocument();
+      expect(zeroProperties).toBeInTheDocument();
+      // Distinguishable from the loading state both visually (this is "0
+      // areas", not "Loading areas…") and accessibly — a settled 0 chip is
+      // NOT aria-busy.
+      expect(screen.queryByText('Loading areas…')).not.toBeInTheDocument();
+      expect(screen.queryByText('Loading properties…')).not.toBeInTheDocument();
+      expect(zeroAreas.closest('[aria-busy]')).toBeNull();
+      expect(zeroProperties.closest('[aria-busy]')).toBeNull();
+    });
+
+    it('undefined counts (prop omitted) render the same loading affordance as null', () => {
+      render(<JourneySwitcher onSelectJourney={vi.fn()} />);
+      expect(screen.queryByText('0 areas')).not.toBeInTheDocument();
+      expect(screen.queryByText('0 properties')).not.toBeInTheDocument();
+      expect(screen.getByText('Loading areas…')).toBeInTheDocument();
+      expect(screen.getByText('Loading properties…')).toBeInTheDocument();
+    });
+  });
 });

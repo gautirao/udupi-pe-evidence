@@ -12,10 +12,19 @@ interface JourneySwitcherProps {
    * landing always passes the live label derived from CITY_CONFIG.
    */
   cityLabel?: string;
-  /** City-wide live property total — drives the area card's "{n} properties" chip. */
-  totalProperties?: number;
-  /** Number of areas with at least one listing — drives the area card's "{n} areas" chip. */
-  areasCount?: number;
+  /**
+   * City-wide live property total — drives the area card's "{n} properties"
+   * chip. `null`/`undefined` means the value has not resolved yet and
+   * renders an explicit loading affordance — it is NEVER coerced to 0, since
+   * a real 0 is a distinct, meaningful answer (see the `Chip`/`loading`
+   * handling below).
+   */
+  totalProperties?: number | null;
+  /**
+   * Number of areas with at least one listing — drives the area card's
+   * "{n} areas" chip. Same null-is-loading contract as `totalProperties`.
+   */
+  areasCount?: number | null;
   /**
    * Issue #1953 build step 6 (AC27/AC9) — this component is now the SOLE,
    * PERSISTENT mode-selection control (previously duplicated: once here, once
@@ -69,7 +78,7 @@ type JourneyDef = {
   title: string;
   primary: boolean;
   desc: string;
-  chips: string[];
+  chips: ChipContent[];
   cta: string;
   // Full LITERAL Tailwind class strings (no runtime concatenation — JIT scans statically).
   cardHover: string;
@@ -86,11 +95,28 @@ type JourneyDef = {
   accentBg: string;
 };
 
+// Issue #2084 clarification rev 2 — a chip is either a resolved label
+// (`loading` omitted/false) or an explicit loading/unknown placeholder
+// (`loading: true`). This lets a null/undefined count render a state that is
+// distinguishable from a genuine 0 both visually (different copy) and
+// accessibly (`aria-busy`, see `Chip` below) — never a bare "0" standing in
+// for "we don't know yet".
+type ChipContent = { label: string; loading?: boolean };
+
 // Chip — small warm mono pill, matched to the ReTrends mock exactly:
 // surface-subtle #EEEDE9 fill, hairline border, Geist Mono 11.5/600, grey-700 text.
-function Chip({ children }: { children: React.ReactNode }) {
+// `loading` renders the same pill shape with `aria-busy="true"` so assistive
+// tech and sighted users alike can tell "still resolving" apart from a
+// settled value (including a settled value of literal 0).
+function Chip({ children, loading = false }: { children: React.ReactNode; loading?: boolean }) {
   return (
-    <span className="inline-flex items-center whitespace-nowrap rounded-full border border-border bg-muted px-[9px] py-[3px] font-mono text-[11.5px] font-semibold text-muted-foreground">
+    <span
+      aria-busy={loading || undefined}
+      className={cn(
+        'inline-flex items-center whitespace-nowrap rounded-full border border-border bg-muted px-[9px] py-[3px] font-mono text-[11.5px] font-semibold text-muted-foreground',
+        loading && 'italic text-muted-foreground/80',
+      )}
+    >
       {children}
     </span>
   );
@@ -99,8 +125,8 @@ function Chip({ children }: { children: React.ReactNode }) {
 export function JourneySwitcher({
   onSelectJourney,
   cityLabel = 'Udupi',
-  totalProperties = 0,
-  areasCount = 0,
+  totalProperties,
+  areasCount,
   activeJourney = null,
   compact = false,
   regionGuideRingActive = false,
@@ -123,7 +149,17 @@ export function JourneySwitcher({
       title: 'Explore by area',
       primary: true,
       desc: `Start with the neighbourhood. Explore ${cityLabel} localities, then open the properties inside the area that fits.`,
-      chips: [`${areasCount} areas`, `${totalProperties} properties`, 'Locality insights'],
+      // `areasCount`/`totalProperties` are `number | null | undefined`:
+      // null/undefined (not yet resolved) renders an explicit loading chip,
+      // never a false "0 areas"/"0 properties"; a genuine 0 renders as the
+      // literal number, same as any other resolved value.
+      chips: [
+        areasCount == null ? { label: 'Loading areas…', loading: true } : { label: `${areasCount} areas` },
+        totalProperties == null
+          ? { label: 'Loading properties…', loading: true }
+          : { label: `${totalProperties} properties` },
+        { label: 'Locality insights' },
+      ],
       cta: 'Explore areas',
       cardHover: 'hover:border-primary',
       tile: 'bg-secondary group-hover:bg-primary',
@@ -141,7 +177,7 @@ export function JourneySwitcher({
       primary: false,
       desc:
         'Pick a school as your anchor and see only the homes within an easy daily commute of it.',
-      chips: ['5 or 10 km radius', 'Homes near schools'],
+      chips: [{ label: '5 or 10 km radius' }, { label: 'Homes near schools' }],
       cta: 'Find homes near schools',
       cardHover: 'hover:border-[hsl(var(--plum))]',
       tile: 'bg-[hsl(var(--plum-tint))] group-hover:bg-[hsl(var(--plum))]',
@@ -159,7 +195,7 @@ export function JourneySwitcher({
       primary: false,
       desc:
         'Looking for farmland instead? Search parcels by corridor, direction and distance from town.',
-      chips: ['By corridor & direction', 'Farmland only'],
+      chips: [{ label: 'By corridor & direction' }, { label: 'Farmland only' }],
       cta: 'Search farmland',
       cardHover: 'hover:border-[hsl(var(--evergreen))]',
       tile: 'bg-[hsl(var(--evergreen-tint))] group-hover:bg-[hsl(var(--evergreen))]',
@@ -405,8 +441,10 @@ export function JourneySwitcher({
                       aria-label is unaffected, and the counts remain available
                       via the landing count pill. */}
                   <div className="hidden gap-1.5 sm:mb-3.5 sm:flex sm:flex-wrap">
-                    {j.chips.map((c) => (
-                      <Chip key={c}>{c}</Chip>
+                    {j.chips.map((c, chipIndex) => (
+                      <Chip key={chipIndex} loading={c.loading}>
+                        {c.label}
+                      </Chip>
                     ))}
                   </div>
 
