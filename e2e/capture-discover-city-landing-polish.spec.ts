@@ -51,8 +51,8 @@ test.describe('Discover City Landing Visual Polish Validation', () => {
     await waitForRealLoadedState(page);
 
     await expect(page.getByTestId('guided-entry-panel')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Find your place in Bangalore, your way.')).toBeVisible();
-    await expect(page.getByText('Choose how you want to search')).toBeVisible();
+    await expect(page.getByText('Where do you want to explore?')).toBeVisible();
+    await expect(page.getByRole('tablist', { name: 'Choose how you want to search' })).toBeVisible();
     await expect(page.getByText('Or start with a region')).toBeVisible();
 
     // Explicit assertions for macro-region entries
@@ -93,7 +93,7 @@ test.describe('Discover City Landing Visual Polish Validation', () => {
     await page.waitForTimeout(500);
     expect(page.url()).toContain('intent=rent');
     await expect(page.getByTestId('guided-entry-panel')).toBeVisible();
-    await expect(page.getByText('Find your place in Bangalore, your way.')).toBeVisible();
+    await expect(page.getByText('Where do you want to explore?')).toBeVisible();
     await expect(page.getByText('Or start with a region')).toBeVisible();
 
     // Hover over journey CTA card

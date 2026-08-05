@@ -1,5 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, Compass, GraduationCap, Layers, Sprout } from 'lucide-react';
+import {
+  ArrowRight,
+  Building,
+  Check,
+  GraduationCap,
+  Layers,
+  MapPin,
+  Sprout,
+  TrendingUp,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 
@@ -93,6 +102,19 @@ type JourneyDef = {
   // never colour alone (mock parity, r9).
   accentBorder: string;
   accentBg: string;
+  // Solid accent fill for the selected-state check badge (Issue #2108 —
+  // desktop mode-selector now carries the same top-right check badge as the
+  // approved mock's ModeCard, in the journey's own accent colour).
+  checkBg: string;
+  // Issue #2108 follow-up — the metadata strip's mode-tinted background,
+  // matched to the approved mock's `CapabilityCues` (NDPanel.jsx `MODE_BG`).
+  // Reuses the SAME accent hue as `checkBg` (copper/plum/evergreen), just at
+  // its existing `-tint` token, already used elsewhere in this file for the
+  // "Recommended" badge (`--copper-tint`) — never a new/invented colour.
+  metaBg: string;
+  // Metadata-strip icon colour — same accent hue as `checkBg`/`metaBg`,
+  // formatted as a literal `text-*` class for icon `currentColor` fills.
+  metaIcon: string;
 };
 
 // Issue #2084 clarification rev 2 — a chip is either a resolved label
@@ -103,20 +125,41 @@ type JourneyDef = {
 // for "we don't know yet".
 type ChipContent = { label: string; loading?: boolean };
 
-// Chip — small warm mono pill, matched to the ReTrends mock exactly:
-// surface-subtle #EEEDE9 fill, hairline border, Geist Mono 11.5/600, grey-700 text.
-// `loading` renders the same pill shape with `aria-busy="true"` so assistive
-// tech and sighted users alike can tell "still resolving" apart from a
-// settled value (including a settled value of literal 0).
-function Chip({ children, loading = false }: { children: React.ReactNode; loading?: boolean }) {
+// Issue #2108 follow-up — metadata-strip item icons, matched to the approved
+// mock's `CapabilityCues` default (area-first) icon set (NDPanel.jsx:
+// map-pin / building / trending-up), cycled by position since the other two
+// journeys' chip counts/order aren't given an explicit per-icon mapping in
+// the mock. MapPin/Building/TrendingUp are the closest lucide-react
+// equivalents to the mock's `NIcon` names.
+const METADATA_ITEM_ICONS = [MapPin, Building, TrendingUp] as const;
+
+// MetaItem — one metadata-strip entry: small icon (mode accent colour) +
+// sans-serif 11.5/600 slate-700 text, matched to the approved mock's
+// `CapabilityCues` item exactly (no pill/border — the pill styling lives on
+// the strip's own container, not per item). `loading` keeps the same
+// `aria-busy` contract the old `Chip` pill carried, so a null/undefined
+// count is still accessibly distinguishable from a settled value (including
+// a settled 0) — see the `ChipContent`/`loading` doc comment above.
+function MetaItem({
+  icon: Icon,
+  iconClassName,
+  loading = false,
+  children,
+}: {
+  icon: typeof Layers;
+  iconClassName: string;
+  loading?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <span
       aria-busy={loading || undefined}
       className={cn(
-        'inline-flex items-center whitespace-nowrap rounded-full border border-border bg-muted px-[9px] py-[3px] font-mono text-[11.5px] font-semibold text-muted-foreground',
-        loading && 'italic text-muted-foreground/80',
+        'inline-flex items-center gap-[5px] whitespace-nowrap text-[11.5px] font-semibold text-[hsl(var(--text-body))]',
+        loading && 'italic opacity-70',
       )}
     >
+      <Icon className={cn('h-[13px] w-[13px] shrink-0', iconClassName)} aria-hidden="true" />
       {children}
     </span>
   );
@@ -167,6 +210,13 @@ export function JourneySwitcher({
       ctaText: '',
       accentBorder: 'border-primary',
       accentBg: 'bg-secondary',
+      // Issue #2108 follow-up — the approved mock's selected-check badge is
+      // always the copper/orange accent, never the dark navy `--primary`
+      // token (which read as a near-black circle). Uses the same
+      // hsl(var(--copper)) token already used by this journey's CTA below.
+      checkBg: 'bg-[hsl(var(--copper))]',
+      metaBg: 'bg-[hsl(var(--copper-tint))]',
+      metaIcon: 'text-[hsl(var(--copper))]',
     },
     {
       key: 'school-first',
@@ -185,6 +235,9 @@ export function JourneySwitcher({
       ctaText: 'group-hover:text-[hsl(var(--plum))]',
       accentBorder: 'border-[hsl(var(--plum))]',
       accentBg: 'bg-[hsl(var(--plum-tint))]',
+      checkBg: 'bg-[hsl(var(--plum))]',
+      metaBg: 'bg-[hsl(var(--plum-tint))]',
+      metaIcon: 'text-[hsl(var(--plum))]',
     },
     {
       key: 'agri-first',
@@ -203,6 +256,9 @@ export function JourneySwitcher({
       ctaText: 'group-hover:text-[hsl(var(--evergreen))]',
       accentBorder: 'border-[hsl(var(--evergreen))]',
       accentBg: 'bg-[hsl(var(--evergreen-tint))]',
+      checkBg: 'bg-[hsl(var(--evergreen))]',
+      metaBg: 'bg-[hsl(var(--evergreen-tint))]',
+      metaIcon: 'text-[hsl(var(--evergreen))]',
     },
   ];
 
@@ -303,6 +359,15 @@ export function JourneySwitcher({
   // layout direction) changes with density.
   const isCompact = compact;
 
+  // Issue #2108 follow-up — the approved mock shows a metadata strip
+  // ("28 areas · 807 listings · …") immediately below the mode-selector row,
+  // driven by the SELECTED journey's own already-computed `chips`. No new
+  // count-fetching path: reuses the same `chips` field each `JourneyDef`
+  // already carries. Falls back to the first (Recommended/area-first)
+  // journey when no journey is selected yet (bare landing), mirroring the
+  // mock's own default branch.
+  const metadataJourney = journeys.find((j) => j.key === activeJourney) ?? journeys[0];
+
   return (
     <div
       key={regionGuideRingActive ? regionGuideNonce : 'static'}
@@ -323,26 +388,25 @@ export function JourneySwitcher({
           {regionGuideHelperText}
         </p>
       )}
-      {!isCompact && (
-        <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-          <Compass className="h-[15px] w-[15px] text-[hsl(var(--copper))]" aria-hidden="true" />
-          <span>Choose how you want to search</span>
-        </div>
-      )}
+      {/* Issue #2108 — the approved mock has no visible "CHOOSE HOW YOU WANT
+          TO SEARCH" eyebrow above the mode-selector row; the tablist's
+          aria-label below still names the control for assistive tech, so
+          removing the visible text does not regress screen-reader users. */}
       <div
         role="tablist"
         aria-label="Choose how you want to search"
         className={
           isCompact
             ? 'flex items-center gap-2 overflow-x-auto'
-            // Issue #1953 follow-up (product-owner BLOCKING defect) — the
-            // landing tablist previously stacked three full-height cards
-            // (~769px, 91% of a 390x844 viewport). It is now a 3-up grid
-            // row at narrow widths (matching the frozen mock's ~122px-tall
-            // side-by-side cards) and reverts to the original stacked
-            // full-card layout at `sm:` (640px) and up — desktop is
-            // unchanged (r10).
-            : 'grid grid-cols-3 gap-2 sm:flex sm:flex-col sm:gap-3'
+            // Issue #1953 follow-up (product-owner BLOCKING defect) established
+            // the 3-up grid row at mobile widths (matching the frozen mock's
+            // ~122px-tall side-by-side cards). Issue #2108 extends that same
+            // compact grid to desktop widths too — the approved mock's
+            // `mode-selector` (NDPanel.jsx `ModeCard`) is a 3-column grid of
+            // small cards at every width; the previous `sm:` reversion to a
+            // tall stacked full-card column with chips/CTA did not match the
+            // mock and is removed.
+            : 'grid grid-cols-3 gap-2'
         }
       >
         {journeys.map((j, index) => {
@@ -374,17 +438,20 @@ export function JourneySwitcher({
                       : 'border-border bg-card text-foreground hover:bg-muted',
                   )
                 : cn(
-                    // Mobile-first: a compact column card (icon, title, one-
-                    // line description) sized to the mock's ~106x122 card.
-                    'group flex min-w-0 flex-col items-start gap-1.5 rounded-lg border-[1.5px] border-border bg-card p-2.5 text-left transition-colors',
+                    // Issue #2108 (follow-up) — a compact ROW card (icon
+                    // tile on the left, title/badge + one-line description
+                    // stacked to its right) sized to the approved mock's
+                    // `ModeCard`/`MBModeCard`, applied at EVERY width — the
+                    // previous `sm:` reversion to a tall stacked card with
+                    // chips/CTA is removed so desktop matches the approved
+                    // mock's 3-up compact grid density instead of a bespoke
+                    // larger treatment.
+                    'group flex min-w-0 items-center gap-2 rounded-lg border-[1.5px] border-border bg-card p-2.5 text-left transition-colors',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    // `sm:` and up: revert to the original full stacked
-                    // card treatment — untouched from before this change.
-                    'sm:block sm:w-full sm:rounded-xl sm:p-5 sm:shadow-sm',
-                    'sm:transition-all sm:duration-200 sm:hover:-translate-y-0.5 sm:hover:shadow-lg',
                     j.cardHover,
-                    // Selected accent — border + tint, never colour alone
-                    // (paired with the "Recommended" badge text below).
+                    // Selected accent — border + tint, paired with the
+                    // check badge (below) and the "Recommended" badge text,
+                    // never colour alone.
                     isSelected && cn(j.accentBorder, j.accentBg),
                   )
             }
@@ -395,68 +462,63 @@ export function JourneySwitcher({
                 <span>{j.title}</span>
               </>
             ) : (
-              <div className="flex flex-col items-start gap-1.5 sm:flex-row sm:gap-3.5">
-                {/* Icon tile — tinted at rest, solid accent on hover.
-                    28x28/16px icon at mobile (mock parity), 46x46/22px at
-                    sm: and up (unchanged desktop size). */}
+              <>
+                {/* Icon tile — tinted at rest, solid accent on hover/selected;
+                    28x28/16px icon, matching the mock's ModeCard icon tile at
+                    every width (desktop no longer scales this up). */}
                 <span
                   className={cn(
-                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors sm:h-[46px] sm:w-[46px]',
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors',
                     j.tile,
                   )}
                 >
-                  <j.Icon className={cn('h-4 w-4 transition-colors sm:h-[22px] sm:w-[22px]', j.glyph)} />
+                  <j.Icon className={cn('h-4 w-4 transition-colors', j.glyph)} />
                 </span>
 
+                {/* Issue #2108 follow-up — text block sits to the RIGHT of
+                    the icon tile (row layout), not stacked below it, matching
+                    the approved mock's `ModeCard`/`MBModeCard` row grammar. */}
                 <div className="min-w-0 flex-1">
-                  <div className="mb-0.5 flex flex-wrap items-center gap-1.5 sm:mb-1 sm:flex-nowrap sm:gap-2.5">
-                    <h3 className="text-[12px] font-bold leading-snug tracking-tight text-foreground sm:text-[16.5px] sm:leading-normal">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <h3 className="text-[12.5px] font-bold leading-snug tracking-tight text-foreground">
                       {j.title}
                     </h3>
                     {j.primary && (
-                      <span className="inline-flex shrink-0 items-center rounded-full bg-[hsl(var(--copper-tint))] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.03em] text-[hsl(var(--copper-hover))] sm:px-2 sm:py-0.5 sm:text-[10.5px] sm:tracking-[0.04em]">
+                      <span className="inline-flex shrink-0 items-center rounded-full bg-[hsl(var(--copper-tint))] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.03em] text-[hsl(var(--copper-hover))]">
                         Recommended
                       </span>
                     )}
                   </div>
-                  {/* Mobile: clamped to one line (mock parity, r3 height
-                      budget) — the full sentence still sits in the DOM/
-                      accessible text, just visually truncated below `sm:`.
-                      Desktop: unchanged, full multi-line copy. */}
-                  <p className="mb-0 line-clamp-1 text-[11px] leading-snug text-muted-foreground sm:mb-3 sm:line-clamp-none sm:text-[13.5px] sm:leading-relaxed">
+                  {/* Clamped to one line at every width (mock parity — the
+                      approved ModeCard's sub-label is a single line). The
+                      full sentence still sits in the DOM/accessible text,
+                      just visually truncated. */}
+                  <p className="mb-0 line-clamp-1 text-[11px] leading-snug text-muted-foreground">
                     {j.desc}
                   </p>
 
-                  {/* Chips and CTA are part of the richer desktop card only —
-                      hidden below `sm:` to keep the mobile row at the mock's
-                      ~122px order of magnitude (r3, r6).
-                      PRECISION, corrected after review: `hidden` is
-                      `display:none`, so below `sm:` these are removed from the
-                      rendered output AND THE ACCESSIBILITY TREE, not merely from
-                      view. An earlier version of this comment said "the text
-                      stays in the DOM" — true of the DOM, false of the a11y
-                      tree, and a future reader could have relied on it for
-                      screen-reader parity. No affordance is lost: the whole card
-                      is the control (the CTA is a decorative span), the button's
-                      aria-label is unaffected, and the counts remain available
-                      via the landing count pill. */}
-                  <div className="hidden gap-1.5 sm:mb-3.5 sm:flex sm:flex-wrap">
-                    {j.chips.map((c, chipIndex) => (
-                      <Chip key={chipIndex} loading={c.loading}>
-                        {c.label}
-                      </Chip>
-                    ))}
-                  </div>
-
+                  {/* Issue #2108 — the CTA text is not part of the approved
+                      mock's ModeCard (its per-card content is icon, title,
+                      Rec badge, one-line sub only). Permanently hidden at
+                      every width rather than deleted: `hidden` is
+                      `display:none` (removed from the a11y tree too), and the
+                      CTA text remains queryable for existing behavioural
+                      coverage without being visually or accessibly present —
+                      no affordance is lost since the whole card is the
+                      control and its `aria-label` already carries the
+                      primary meaning. The per-journey `chips` (counts) moved
+                      out of the card entirely — they now render once, for
+                      the active journey, in the metadata strip below the
+                      card row (see `journey-metadata-strip` below). */}
                   {j.primary ? (
-                    <span className="hidden items-center gap-2 rounded-md bg-[hsl(var(--copper))] px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors group-hover:bg-[hsl(var(--copper-hover))] sm:inline-flex">
+                    <span className="hidden items-center gap-2 rounded-md bg-[hsl(var(--copper))] px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors group-hover:bg-[hsl(var(--copper-hover))]">
                       {j.cta}
                       <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                     </span>
                   ) : (
                     <span
                       className={cn(
-                        'hidden items-center gap-1.5 text-[13.5px] font-semibold text-foreground transition-colors sm:inline-flex',
+                        'hidden items-center gap-1.5 text-[13.5px] font-semibold text-foreground transition-colors',
                         j.ctaText,
                       )}
                     >
@@ -465,12 +527,62 @@ export function JourneySwitcher({
                     </span>
                   )}
                 </div>
-              </div>
+
+                {/* Issue #2108 follow-up — the selected-state check badge now
+                    sits inline at the trailing end of the row (matching the
+                    approved mock's `MBModeCard`), not absolutely positioned
+                    top-right. Selection is still signalled via border + tint
+                    (on the button above) AND this check badge, never colour
+                    alone. */}
+                {isSelected && (
+                  <span
+                    aria-hidden="true"
+                    data-testid={`${j.testId}-selected-check`}
+                    className={cn(
+                      'flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-white',
+                      j.checkBg,
+                    )}
+                  >
+                    <Check className="h-3 w-3" strokeWidth={3} />
+                  </span>
+                )}
+              </>
             )}
           </button>
           );
         })}
       </div>
+      {/* Issue #2108 follow-up — visible metadata strip beneath the card
+          row, reserved for the landing (non-compact) density only, same as
+          the mock's placement directly under its `mode-selector`. Renders
+          ONLY the counts/labels this component already computes (no
+          invented "Up to 3 selected areas"/"Browse all listings" — this app
+          has neither a multi-area-selection feature nor an all-listings
+          browse link in this context). */}
+      {!isCompact && (
+        <div
+          data-testid="journey-metadata-strip"
+          className={cn(
+            'flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-lg px-[11px] py-[7px]',
+            metadataJourney.metaBg,
+          )}
+        >
+          {metadataJourney.chips.map((c, chipIndex) => (
+            <React.Fragment key={chipIndex}>
+              {chipIndex > 0 && (
+                <span aria-hidden="true" className="h-[3px] w-[3px] shrink-0 rounded-full bg-gray-400" />
+              )}
+              <MetaItem
+                icon={METADATA_ITEM_ICONS[chipIndex % METADATA_ITEM_ICONS.length]}
+                iconClassName={metadataJourney.metaIcon}
+                loading={c.loading}
+              >
+                {c.label}
+              </MetaItem>
+            </React.Fragment>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

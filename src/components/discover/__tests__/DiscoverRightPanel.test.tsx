@@ -66,8 +66,12 @@ describe('DiscoverRightPanel', () => {
       <DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} city="udupi" />,
     );
     expect(screen.getByTestId('guided-entry-panel')).toBeInTheDocument();
-    // Public-landing hero copy (ReTrends mock) replaces the old "Find properties your way".
-    expect(screen.getByText('Find your place in Udupi, your way.')).toBeInTheDocument();
+    // Issue #2108 (shell fix) — the oversized city-specific hero was replaced
+    // with the SAME compact eyebrow + heading pattern the area-first ROOT
+    // state uses (NavigationLevelPanel's isCityRoot branch), so the heading
+    // itself is no longer city-dynamic; the eyebrow (asserted below in the
+    // city-dynamic test) still carries the city name.
+    expect(screen.getByText('Where do you want to explore?')).toBeInTheDocument();
     expect(screen.getByTestId('journey-card-area-first')).toBeInTheDocument();
     expect(screen.getByTestId('journey-card-school-first')).toBeInTheDocument();
   });
@@ -76,12 +80,8 @@ describe('DiscoverRightPanel', () => {
     renderPanel(
       <DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} city="bangalore" />,
     );
-    expect(screen.getByText('Find your place in Bangalore, your way.')).toBeInTheDocument();
     expect(screen.getByText('Discover Bangalore')).toBeInTheDocument();
     // The mock's hardcoded Udupi copy must NOT leak into another city.
-    expect(
-      screen.queryByText('Find your place in Udupi, your way.'),
-    ).not.toBeInTheDocument();
     expect(screen.queryByText('Discover Udupi')).not.toBeInTheDocument();
   });
 

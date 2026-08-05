@@ -183,6 +183,21 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
 
+// Issue #2108 (shell fix) — the canonical Areas journey panel branch (the
+// `discover-areas-journey-panel-shell` early return in
+// DiscoverRightPanelContainer.tsx, NOT the mocked `DiscoverRightPanel` above)
+// now mounts DiscoverControlBar directly (desktop-only, mirroring the legacy
+// shell's own new control-bar mount), which calls the real
+// `useDiscoverAreas` — mocked here the same way DiscoverControlBar.test.tsx
+// mocks it, so this suite doesn't need a live QueryClient/Supabase session.
+vi.mock('@/hooks/useDiscoverAreas', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/hooks/useDiscoverAreas')>();
+  return {
+    ...actual,
+    useDiscoverAreas: () => ({ data: { city: 'bangalore', areas: [] }, isLoading: false }),
+  };
+});
+
 import {
   DiscoverRightPanelContainer,
   type DiscoverRightPanelContainerProps,

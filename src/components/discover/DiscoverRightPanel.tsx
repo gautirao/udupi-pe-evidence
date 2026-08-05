@@ -36,6 +36,7 @@ import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PanelHeader } from './PanelHeader';
 import { GuidedEntryPanel } from './panels/GuidedEntryPanel';
 import { JourneySwitcher } from './JourneySwitcher';
+import { DiscoverControlBar } from './DiscoverControlBar';
 import { AreaSelectionPanel } from './panels/AreaSelectionPanel';
 import { AreaSelectedPanel } from './panels/AreaSelectedPanel';
 import { AgriGroupSelectedPanel } from './panels/AgriGroupSelectedPanel';
@@ -565,6 +566,24 @@ export interface DiscoverRightPanelProps {
    * the mobile shell).
    */
   isMobileMapOpen?: boolean;
+  /**
+   * Issue #2108 (shell fix) — the SAME real `isMobileShell` flag
+   * (useDiscoverShell's 820px matchMedia) MapDiscovery.tsx gates its own
+   * mobile-only control-bar row on. Drives whether this component mounts its
+   * OWN desktop copy of DiscoverControlBar (city + Buy/Rent + area search)
+   * above JourneySwitcher — never both, never neither, complementary to that
+   * row. Defaults to `true` (i.e. do NOT mount DiscoverControlBar) rather
+   * than following the `isMobileMapOpen`-style "false is desktop-safe"
+   * convention: DiscoverControlBar reaches directly into the Discover
+   * facade context (useDiscoverNav/useDiscoverActions/useDiscoverAreas),
+   * which the many existing isolated DiscoverRightPanel.*.test.tsx files
+   * (agri/schools states) do not provision — defaulting to "skip it" keeps
+   * every one of those call sites compiling and passing unchanged. The real
+   * production caller (DiscoverRightPanelContainer) always passes the live
+   * value explicitly, so this default only ever applies to test callers
+   * that don't care about the control bar.
+   */
+  isMobileShell?: boolean;
   /** Called when the user selects a group from the landing panel. Still used by the school-first zone panels. */
   onSelectGroup?: (groupId: string) => void;
   /**
@@ -943,6 +962,7 @@ export function DiscoverRightPanel({
   onRetryRegionScopedGroups,
   scopeNamespaces,
   isMobileMapOpen = false,
+  isMobileShell = true,
   onSelectGroup,
   groupId = null,
   onClearGroup,
@@ -1720,7 +1740,26 @@ export function DiscoverRightPanel({
           duplicated inside GuidedEntryPanel's landing-only copy, removed in
           this step) — mounted once here, above the per-panel switch, so it
           is reachable at every panel state, not just the bare landing. */}
-      <div className="px-4 pt-4 pb-2 border-b border-border shrink-0">
+      {/* Issue #2108 follow-up — the redundant divider line that used to sit
+          directly under the metadata strip (`border-b border-border` on this
+          wrapper) is removed: the approved mock has no rule at that position
+          (`CapabilityCues` renders nothing between the strip and whatever
+          follows it). Layout/gap/padding are otherwise unchanged. */}
+      <div className="flex flex-col gap-3 px-4 pt-4 pb-2 shrink-0">
+        {/* Issue #2108 (shell fix) — DESKTOP-ONLY render of the shared city +
+            Buy/Rent + area-search control bar, matching the approved mock's
+            `global-control-bar` (ExpModeBar.jsx): it sits INSIDE the right
+            panel's own column, directly above the mode-selector row, not as a
+            second full-width row above the map. Gated on the real
+            `isMobileShell` prop (not a Tailwind breakpoint) so it and
+            MapDiscovery.tsx's own mobile-only `discover-control-bar-row` are
+            mutually exclusive in BOTH a real browser and jsdom — a CSS-only
+            `hidden lg:block` split was tried first and reverted because
+            jsdom does not evaluate media queries, so both mounts rendered
+            simultaneously in every test (duplicate `discover-control-bar`
+            testids). This instance renders no `mobileMapTrigger` — the
+            mobile Map/List trigger stays owned by that other mount. */}
+        {!isMobileShell && <DiscoverControlBar />}
         <JourneySwitcher
           // Issue #1953 follow-up fix — density must track the ACTUAL
           // rendered panel state, not the raw `journey` URL param.

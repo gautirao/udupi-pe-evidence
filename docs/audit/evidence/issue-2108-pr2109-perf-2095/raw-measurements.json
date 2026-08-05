@@ -1,0 +1,48 @@
+{
+  "pr": 2109,
+  "issue": 2095,
+  "exact_head": "6ff992d4ddc0e1a8977d0539f272d7f891cd2001",
+  "target_branch_baseline": "894d39e5ae9ff15494b001ec4856232e6ff76a14",
+  "scenario": "cold navigation to /discover?city=bangalore (journey=null landing)",
+  "method": "Each server: one discarded cold-start load (Vite dependency pre-optimization on a fresh worktree/server produces a one-time 7-9s artifact unrelated to the app), then 5 warm reloads. Same machine, same .env/Supabase backend for both servers, sequential (not concurrent) measurement.",
+  "navigation_timing_ms": {
+    "baseline_894d39e5": {
+      "domContentLoadedEventEnd": [400, 406, 407, 416, 402],
+      "loadEventEnd": [718, 690, 717, 707, 685],
+      "domContentLoadedEventEnd_median": 406,
+      "domContentLoadedEventEnd_p95_approx": 416,
+      "loadEventEnd_median": 707,
+      "loadEventEnd_p95_approx": 718
+    },
+    "exact_head_6ff992d4": {
+      "domContentLoadedEventEnd": [414, 405, 387, 366, 400],
+      "loadEventEnd": [609, 592, 574, 554, 594],
+      "domContentLoadedEventEnd_median": 400,
+      "domContentLoadedEventEnd_p95_approx": 414,
+      "loadEventEnd_median": 592,
+      "loadEventEnd_p95_approx": 609
+    },
+    "delta_load_median_ms": -115,
+    "delta_load_p95_ms": -109,
+    "interpretation": "Exact head loads faster (lower loadEventEnd) at both median and p95 than the target-branch baseline for this scenario. Consistent with removing a full-width control-bar row (less to lay out above the fold)."
+  },
+  "dom_node_count_ready_gated": {
+    "ready_gate": "document.body.textContent.includes('verified properties'), plus a 2s settle for async map-tile loading",
+    "baseline_894d39e5": [320, 320],
+    "exact_head_6ff992d4": [441, 441],
+    "delta": 121,
+    "tag_breakdown_baseline": {"DIV":85,"BUTTON":13,"svg":28,"path":54,"circle":10,"SPAN":30,"IMG":25,"A":12,"P":12},
+    "tag_breakdown_head": {"DIV":111,"BUTTON":17,"svg":43,"path":78,"circle":15,"SPAN":77,"IMG":25,"A":14,"P":6},
+    "interpretation": "IMG (map tile) count is identical (25=25) between both, ruling out map-tile-loading timing as the cause of the total delta (unlike an earlier, less-settled sample in this same investigation, which showed a spurious IMG-driven gap). The real delta concentrates in SPAN (+47), path (+24), DIV (+26), svg (+15), circle (+5) — consistent with this PR's own explicit, intentional design change: the JourneySwitcher metadata-strip restyle from plain-text Chip pills to icon-per-item (MapPin/Building/TrendingUp, each a multi-path Lucide SVG) plus dot-separator spans. This is a deliberate, bounded visual-design cost approved as part of this PR's own scope, not a duplicate-mount defect (confirmed separately: discover-control-bar-row count is 0 on desktop; no duplicate DiscoverControlBar instances found)."
+  },
+  "bundle_size": {
+    "baseline_894d39e5_index_js_raw_kb": 745.68,
+    "baseline_894d39e5_index_js_gzip_kb": 205.01,
+    "exact_head_6ff992d4_index_js_raw_kb": 745.75,
+    "exact_head_6ff992d4_index_js_gzip_kb": 205.04,
+    "delta_raw_kb": 0.07,
+    "delta_gzip_kb": 0.03,
+    "all_other_chunks": "byte-identical between baseline and exact head (vendor-react, vendor-leaflet, vendor-radix, vendor-supabase, vendor-recharts, DiscoverMapCanvas, etc.) — expected, since this PR touches none of that code"
+  },
+  "verdict": "PASS"
+}

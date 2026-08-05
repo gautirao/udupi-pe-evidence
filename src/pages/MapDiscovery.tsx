@@ -2176,18 +2176,37 @@ export default function MapDiscovery() {
             at <lg widths (no overflow-x needed) and owns the mobile Map/List
             trigger itself as a flex sibling, so the trigger structurally
             cannot overlap the row's own controls. */}
-        <div
-          className="shrink-0 border-b border-border bg-card px-4 py-2.5"
-          data-testid="discover-control-bar-row"
-        >
-          <DiscoverControlBar
-            mobileMapTrigger={
-              isMobileShell && !mobileMapOpen
-                ? { onOpenMap: () => setMobileView('MAP'), triggerRef: mobileMapTriggerRef }
-                : undefined
-            }
-          />
-        </div>
+        {/* Issue #2108 (shell fix) — this row is now MOBILE-ONLY, gated on the
+            SAME real `isMobileShell` flag (useDiscoverShell's 820px
+            matchMedia, not a Tailwind breakpoint) this file already uses for
+            every other mobile-shell decision on this page (mobileMapOpen,
+            the mobile Map/List trigger, etc.). The approved mock has no
+            full-width toolbar row above the map: city + Buy/Rent + area
+            search live inside the right panel's own column, as
+            DiscoverControlBar's desktop render inside DiscoverRightPanel
+            (gated on the same `isMobileShell` prop — see that file).
+            A CSS-only `lg:hidden`/`hidden lg:block` split was tried first and
+            reverted: jsdom does not evaluate media queries, so both mounts
+            rendered simultaneously in every test, producing duplicate
+            `discover-control-bar` testids (Index.invalidCity.test.tsx et al).
+            Gating on the real boolean instead means exactly one control bar
+            ever mounts, in both a real browser and in jsdom — mobile
+            behaviour (this row's markup/testid/mobileMapTrigger wiring) is
+            otherwise unchanged. */}
+        {isMobileShell && (
+          <div
+            className="shrink-0 border-b border-border bg-card px-4 py-2.5"
+            data-testid="discover-control-bar-row"
+          >
+            <DiscoverControlBar
+              mobileMapTrigger={
+                !mobileMapOpen
+                  ? { onOpenMap: () => setMobileView('MAP'), triggerRef: mobileMapTriggerRef }
+                  : undefined
+              }
+            />
+          </div>
+        )}
         <div className="min-h-0 flex-1 flex flex-col lg:flex-row relative">
         {/* Issue #1953 (build step 4) — mobile "Map" trigger. Was a
             page-level `fixed top-20 right-4` button here; moved into

@@ -34,6 +34,7 @@ import type { ScopeNamespaces } from '@/features/discover/presentation/resolveSc
 import { DiscoverAreasJourneyPanel } from '@/features/discover/views/DiscoverAreasJourneyPanel';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import { JourneySwitcher } from '@/components/discover/JourneySwitcher';
+import { DiscoverControlBar } from '@/components/discover/DiscoverControlBar';
 import { ROOT_NODE_KEY } from '@/features/discover/navigation/types';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import { hasLegacyAreaContext } from '@/features/discover/navigation/legacyAreaContextGuard';
@@ -406,7 +407,19 @@ export function DiscoverRightPanelContainer({
             area-first inherits the identical keyboard focus order its
             sibling journeys already have. The border-b here is also AC7's
             divider rule separating the switcher block from the list below. */}
-        <div className="shrink-0 border-b border-border px-4 pb-2 pt-4">
+        <div className="flex flex-col gap-3 shrink-0 border-b border-border px-4 pb-2 pt-4">
+          {/* Issue #2108 (shell fix) — this shell is the canonical area-first
+              navigation journey's OWN copy of the "switcher mounts first"
+              header (R6 above), parallel to the legacy `DiscoverRightPanel`
+              root's identical block. It needs the SAME desktop-only
+              DiscoverControlBar mount that block just got, for the same
+              reason: the approved mock's `global-control-bar` sits above the
+              mode-selector at every journey state, this canonical journey
+              included. Gated on the same real `isMobileShell` flag already
+              read into this component's scope above (not a new call), so it
+              stays mutually exclusive with MapDiscovery.tsx's mobile-only
+              `discover-control-bar-row` exactly like the legacy shell. */}
+          {!isMobileShell && <DiscoverControlBar />}
           <JourneySwitcher
             // CQ2 — FULL cards ONLY at the area-first CITY ROOT (the
             // guided-entry analogue); COMPACT tab-strip at every deeper node
@@ -510,6 +523,14 @@ export function DiscoverRightPanelContainer({
     <DiscoverRightPanel
       panelContent={resolvedPanelContent}
       isMobileMapOpen={isMobileMapOpen}
+      // Issue #2108 (shell fix) — the SAME real `isMobileShell` flag
+      // (useDiscoverShell's 820px matchMedia) MapDiscovery.tsx gates its own
+      // mobile-only control-bar row on, so DiscoverRightPanel can mount its
+      // desktop-only DiscoverControlBar copy on the exact complementary
+      // condition — never both, never neither, and (unlike a CSS-only
+      // breakpoint split) correct in jsdom too, where media queries do not
+      // evaluate.
+      isMobileShell={isMobileShell}
       selectedMarkerListing={selectedMarkerListing}
       onClearAgriSelection={clearSelectedMarkerListing}
       city={city}

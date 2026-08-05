@@ -1,12 +1,12 @@
 import React from 'react';
-import { MapPin, SearchX, X } from 'lucide-react';
+import { ChevronRight, MapPin, SearchX, X } from 'lucide-react';
 import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverActions, useDiscoverNav } from '@/features/discover/context/useDiscoverContext';
 import { useDiscoverRegionSummary } from '@/hooks/useDiscoverRegionSummary';
 import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
-import { TrustStrip } from './_shared';
+import { PanelEyebrow, TrustStrip } from './_shared';
 
 interface GuidedEntryPanelProps {
   onSelectJourney: (journey: DiscoverJourney) => void;
@@ -150,19 +150,22 @@ export function GuidedEntryPanel({
 
   return (
     <div
-      className="flex-1 overflow-y-auto px-5 py-7 lg:px-11 lg:py-10"
+      className="flex-1 overflow-y-auto scrollbar-hide px-5 py-7 lg:px-11 lg:py-5"
       data-testid="guided-entry-panel"
     >
       <div className="mx-auto max-w-[580px]">
-        {/* Eyebrow */}
-        <div className="mb-3.5 flex items-center gap-2">
-          <MapPin className="h-[15px] w-[15px] text-[hsl(var(--copper))]" aria-hidden="true" />
-          <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-            Discover {cityLabel}
-          </span>
-        </div>
-
-        {/* Hero */}
+        {/* Issue #2108 (shell fix) — eyebrow + heading now reuse the SAME
+            compact pattern the area-first ROOT state uses
+            (NavigationLevelPanel's isCityRoot branch: uppercase eyebrow +
+            a single Fraunces `text-xl` question, no descriptive paragraph
+            underneath). Replaces the previous 40px hero + two paragraphs of
+            copy so the macro-region rows below fit without scrolling at
+            1440x900 (VISUAL_RULES.md / approved-mock parity) — this is a
+            copy/layout change only; region-click, Clear, aria-pressed and
+            the region list itself are unchanged below. `PanelEyebrow` is the
+            existing shared component this exact "Discover {city}" row was
+            already extracted into (previously unused here). */}
+        <PanelEyebrow icon={MapPin} label={`Discover ${cityLabel}`} className="mb-1" />
         {/* Issue #1817 (AC8) — id + tabIndex=-1 so "Start over" can programmatically
             move focus here after a reset (design §8: "focus moves to the panel's h1
             so keyboard users land somewhere sensible"). Not in the natural tab order —
@@ -170,19 +173,10 @@ export function GuidedEntryPanel({
         <h1
           id="discover-panel-h1"
           tabIndex={-1}
-          className="mb-3.5 font-['Fraunces',_ui-serif,_Georgia,_serif] text-3xl font-semibold leading-tight tracking-[-0.02em] text-foreground lg:text-[40px] focus:outline-none"
+          className="mb-2 font-['Fraunces',_ui-serif,_Georgia,_serif] text-xl font-semibold leading-tight tracking-[-0.02em] text-foreground focus:outline-none"
         >
-          Find your place in {cityLabel}, your way.
+          Where do you want to explore?
         </h1>
-        <p className="mb-3 max-w-[48ch] text-[15px] leading-relaxed text-muted-foreground lg:text-[16.5px]">
-          Browse verified properties across {cityLabel}. Pick how you&rsquo;d like to
-          start — by neighbourhood, by school, or by farmland.
-        </p>
-        <p className="mb-4 text-[13px] text-muted-foreground">
-          {intent === 'buy'
-            ? 'Showing sale prices in ₹ across every journey.'
-            : 'Showing monthly rents in ₹ — same properties, reworded for renting.'}
-        </p>
 
         {/* Controls card — REMOVED (product-owner ruling, #1953 follow-up).
             City was already removed from this card in build step 6, leaving
@@ -230,11 +224,18 @@ export function GuidedEntryPanel({
             onRegionSelectFromPanel wiring below) — no other change to this
             component. */}
 
-        {/* Section C: Macro regions — secondary "or start with a region" */}
-        <div className="my-8 h-px w-full bg-border" />
+        {/* Section C: Macro regions — secondary "or start with a region".
+            Issue #2108 follow-up (scroll-overflow fix) — divider margin
+            shrunk further (my-5 → my-2), one of several spacing cuts across
+            this component (container lg:py-10 → lg:py-5, heading/eyebrow/
+            subtitle margins, region-row gap, trust-strip margins) that
+            together close the measured overflow: guided-entry-panel
+            scrollHeight was 714 vs clientHeight 606 at 1440x900 before this
+            pass; both are 576 (zero overflow) after. */}
+        <div className="my-2 h-px w-full bg-border" />
 
         <div aria-live="polite">
-          <div className="mb-1.5 flex items-center justify-between">
+          <div className="mb-1 flex items-center justify-between">
             <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
               <MapPin className="h-[15px] w-[15px] text-[hsl(var(--copper))]" aria-hidden="true" />
               <span>Or start with a region</span>
@@ -257,7 +258,7 @@ export function GuidedEntryPanel({
               )}
             </div>
           </div>
-          <p className="mb-4 text-[13.5px] leading-relaxed text-muted-foreground">
+          <p className="mb-1.5 text-[13.5px] leading-relaxed text-muted-foreground">
             Prefer to narrow by part of the city first? Pick a region to scope the map, then choose how to search inside it.
           </p>
 
@@ -284,7 +285,7 @@ export function GuidedEntryPanel({
           {!isSummaryLoading && !isSummaryError && regions.length > 0 && (
             <div
               data-testid="guided-entry-regions-grid"
-              className="flex flex-col gap-3"
+              className="flex flex-col gap-1.5"
             >
               {regions.map((region) => {
                 const isSelected = selectedScope === region.regionKey;
@@ -295,48 +296,47 @@ export function GuidedEntryPanel({
                     type="button"
                     aria-pressed={isSelected}
                     onClick={() => handleRegionClick(region.regionKey)}
-                    className={`group flex items-center justify-between gap-3.5 rounded-xl border-[1.5px] p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                      isSelected
-                        ? 'border-[hsl(var(--copper))] bg-[hsl(var(--copper)/0.08)] shadow-sm'
-                        : 'border-border bg-card hover:border-foreground/30'
+                    // Issue #2108 (shell fix) — row grammar matched to the
+                    // SAME compact density NavigationChildCard.tsx already
+                    // uses for the area-first ROOT state's destination rows
+                    // (icon tile · name + right-aligned stat on one line ·
+                    // secondary caption below · trailing chevron), so five
+                    // region rows fit without scrolling at 1440x900. Click
+                    // handler, aria-pressed and the region list/selection
+                    // logic above are unchanged — this is a classNames-only
+                    // row-density change.
+                    className={`group flex w-full items-center gap-3 rounded-lg border bg-card px-3 py-3 text-left shadow-sm transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      isSelected ? 'border-[hsl(var(--copper))] ring-1 ring-[hsl(var(--copper))] bg-[hsl(var(--copper)/0.08)]' : 'border-border'
                     }`}
                   >
-                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                      <span
-                        className={`flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-lg transition-colors ${
-                          isSelected
-                            ? 'bg-[hsl(var(--copper))] text-white'
-                            : 'bg-secondary text-foreground group-hover:bg-primary group-hover:text-primary-foreground'
-                        }`}
-                      >
-                        <MapPin className="h-[20px] w-[20px]" aria-hidden="true" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-[16px] font-bold tracking-tight text-foreground truncate">
+                    <span
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors ${
+                        isSelected ? 'bg-[hsl(var(--copper))] text-white' : 'bg-secondary text-foreground'
+                      }`}
+                      aria-hidden="true"
+                    >
+                      <MapPin className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="truncate text-sm font-semibold text-foreground">
                           {region.regionLabel}
-                        </h3>
-                        <div className="mt-0.5 text-[13px] text-muted-foreground truncate">
-                          {cue}
-                        </div>
+                        </span>
+                        {/* Count and unit stay two DISTINCT text nodes (not
+                            concatenated into one string) — GuidedEntryPanel.regionGuide.test.tsx
+                            asserts on the bare count via getByText('12'). */}
+                        <span className="shrink-0 whitespace-nowrap flex items-baseline gap-1">
+                          <span className="text-sm font-bold text-foreground">
+                            {region.listingCount.toLocaleString()}
+                          </span>
+                          <span className="text-xs font-medium text-muted-foreground">
+                            {region.listingCount === 1 ? 'property' : 'properties'}
+                          </span>
+                        </span>
                       </div>
+                      <div className="mt-0.5 truncate text-xs text-muted-foreground">{cue}</div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0 text-right">
-                      <div>
-                        <div className="font-mono text-[17px] font-bold text-foreground leading-none">
-                          {region.listingCount.toLocaleString()}
-                        </div>
-                        <div className="mt-1 text-[11.5px] font-medium text-muted-foreground">
-                          {region.listingCount === 1 ? 'property' : 'properties'}
-                        </div>
-                      </div>
-                      <span className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-                        isSelected ? 'bg-[hsl(var(--copper))] text-white' : 'text-muted-foreground group-hover:bg-secondary group-hover:text-foreground'
-                      }`}>
-                        <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                        </svg>
-                      </span>
-                    </div>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                   </button>
                 );
               })}
@@ -344,8 +344,12 @@ export function GuidedEntryPanel({
           )}
         </div>
 
-        {/* Trust strip */}
-        <TrustStrip className="mt-8 pt-6 border-t border-border" />
+        {/* Trust strip — reassurance band below the region cards (VISUAL_RULES.md
+            §"Trust strip": belongs below city-level region cards). Issue #2108
+            follow-up — mt-8 pt-6 shrunk to mt-2 pt-2 to reclaim vertical budget;
+            the strip itself is kept (mock spec calls for it here), the fix is
+            in the surrounding spacing, not removal. */}
+        <TrustStrip className="mt-2 pt-2 border-t border-border" />
       </div>
     </div>
   );

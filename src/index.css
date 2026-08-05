@@ -581,4 +581,20 @@
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background-color: hsl(var(--muted-foreground) / 0.5);
   }
+
+  /* Issue #2108 (right-panel shell fix) — scoped to below Tailwind's `lg`
+     breakpoint (1024px) only. Desktop keeps native `overflow-y-auto`
+     scrollbar behaviour: invisible when content fits (the normal case, now
+     true by design), but a real, visible scrollbar if content or viewport
+     height ever forces scrolling — never a silently-hidden scroll owner. */
+  @media (max-width: 1023.98px) {
+    .scrollbar-hide {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+  }
 }

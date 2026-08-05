@@ -77,7 +77,10 @@ describe('JourneySwitcher', () => {
   });
 
   it('agri-first card uses farmland-specific terminology (regression guard)', () => {
-    render(<JourneySwitcher onSelectJourney={vi.fn()} />);
+    // Issue #2108 follow-up — the "Farmland only" chip now renders in the
+    // metadata strip (only for the ACTIVE journey), not hidden inside every
+    // card, so agri-first must be selected to surface it.
+    render(<JourneySwitcher onSelectJourney={vi.fn()} activeJourney="agri-first" />);
     // ReTrends mock title + farmland CTA — never residential "homes" wording here.
     expect(screen.getByText('Find agricultural land')).toBeInTheDocument();
     expect(screen.getByText('Farmland only')).toBeInTheDocument();
@@ -225,11 +228,13 @@ describe('JourneySwitcher', () => {
     for (const child of children) {
       expect(child.getAttribute('role')).toBe('tab');
     }
-    // The aria-live helper and Compass heading must still render — just as
-    // siblings of the tablist, not as its children.
+    // The aria-live helper must still render — just as a sibling of the
+    // tablist, not as its child. (Issue #2108 removed the visible "Choose
+    // how you want to search" eyebrow heading that used to sit alongside it;
+    // the tablist's aria-label — asserted elsewhere — now solely carries
+    // that accessible name.)
     expect(screen.getByTestId('region-guide-helper')).toBeInTheDocument();
     expect(tablist.contains(screen.getByTestId('region-guide-helper'))).toBe(false);
-    expect(screen.getByText('Choose how you want to search')).toBeInTheDocument();
   });
 
   it('ArrowRight/ArrowLeft/Home/End move roving focus between tabs', async () => {
@@ -315,7 +320,10 @@ describe('JourneySwitcher', () => {
       expect(
         screen.getByText(/Pick a school as your anchor and see only the homes/),
       ).toBeInTheDocument();
-      expect(screen.getByText('Choose how you want to search')).toBeInTheDocument();
+      // Issue #2108 — the approved mock has no visible "Choose how you want
+      // to search" eyebrow; the tablist's aria-label (asserted elsewhere)
+      // carries that accessible name instead.
+      expect(screen.queryByText('Choose how you want to search')).not.toBeInTheDocument();
     });
 
     it('renders compact tabs (no desc/chips/CTA/heading) when compact=true', () => {
@@ -346,7 +354,7 @@ describe('JourneySwitcher', () => {
     it('full cards render even when activeJourney is set, if compact=false (no transient flip on activeJourney alone)', () => {
       render(<JourneySwitcher onSelectJourney={vi.fn()} activeJourney="school-first" compact={false} />);
       expect(screen.getByText('Recommended')).toBeInTheDocument();
-      expect(screen.getByText('Choose how you want to search')).toBeInTheDocument();
+      expect(screen.queryByText('Choose how you want to search')).not.toBeInTheDocument();
     });
 
     it('preserves the three journey-card testids, tablist/tab roles and aria-selected in compact density', () => {
@@ -418,49 +426,105 @@ describe('JourneySwitcher', () => {
     });
   });
 
-  // ─── Mobile landing responsive row layout (#1953 follow-up, PO BLOCKING) ─
+  // ─── Landing row layout (#1953 mobile follow-up, extended desktop-wide by #2108) ─
   // Product-owner measured the landing tablist stacking to 769px (91% of a
-  // 390x844 viewport) with three cards one-per-row. jsdom has no layout
-  // engine, so this cannot assert real pixel heights (that proof lives in
-  // e2e/discover/mobile-landing-journey-switcher-1953.spec.ts, which measures
-  // getBoundingClientRect() in a real browser). What a component test CAN —
-  // and must — verify is that the responsive Tailwind contract is actually
-  // wired: the tablist uses a 3-up grid below `sm:` and only reverts to the
-  // original stacked full-card column at `sm:` and up. Reverting the tablist
-  // className back to the pre-fix `'flex flex-col gap-3'` (no `grid-cols-3`,
-  // no `sm:` reversion) makes this test fail — that revert is the mandatory
-  // positive control for this task (verified locally, not committed).
-  describe('mobile landing one-row layout (#1953 follow-up)', () => {
-    it('landing (compact=false) tablist is a 3-column grid row by default and only stacks at sm: and up', () => {
+  // 390x844 viewport) with three cards one-per-row and BLOCKED that on mobile
+  // (#1953). Issue #2108 (visual reskin to the approved mock's `mode-selector`
+  // density) established that the mock's `ModeCard` (NDPanel.jsx) is the SAME
+  // compact 3-up grid card at every width, with no larger desktop treatment —
+  // so the `sm:` reversion to a stacked full-card column (with chips/CTA) is
+  // removed entirely; the compact grid now applies at every width. jsdom has
+  // no layout engine, so this cannot assert real pixel heights (that proof
+  // lives in e2e/discover/mobile-landing-journey-switcher-1953.spec.ts, which
+  // measures getBoundingClientRect() in a real browser) — what a component
+  // test CAN, and must, verify is that the responsive Tailwind contract is
+  // actually wired: the tablist stays a 3-up grid at every width, never
+  // reverting to a stacked column.
+  describe('landing row layout (#1953, extended desktop-wide by #2108)', () => {
+    it('landing (compact=false) tablist is a 3-column grid at every width — never reverts to a stacked column', () => {
       render(<JourneySwitcher onSelectJourney={vi.fn()} activeJourney={null} compact={false} />);
       const tablist = screen.getByRole('tablist');
       expect(tablist).toHaveClass('grid');
       expect(tablist).toHaveClass('grid-cols-3');
-      expect(tablist).toHaveClass('sm:flex');
-      expect(tablist).toHaveClass('sm:flex-col');
-      // An assertion here previously read `className !== 'flex flex-col gap-3'`.
-      // Removed as a TAUTOLOGY: it cannot fail independently of the four above,
-      // so it contributed the appearance of coverage and none of the substance.
-      // Real layout proof lives in the Playwright spec — jsdom has no layout
-      // engine, so these class assertions are a revert guard, nothing more.
+      // #2108 — no `sm:` reversion to the old stacked full-card layout.
+      expect(tablist.className).not.toContain('sm:flex');
+      expect(tablist.className).not.toContain('sm:flex-col');
     });
 
-    it('landing tab buttons use the compact mobile card sizing (rounded-lg/p-2.5) below sm:, reverting to the rich card (rounded-xl/p-5) at sm: and up', () => {
+    it('landing tab buttons use the compact card sizing (rounded-lg/p-2.5) at every width — never revert to the rich card (rounded-xl/p-5)', () => {
       render(<JourneySwitcher onSelectJourney={vi.fn()} activeJourney={null} compact={false} />);
       const areaTab = screen.getByTestId('journey-card-area-first');
       expect(areaTab).toHaveClass('rounded-lg');
       expect(areaTab).toHaveClass('p-2.5');
-      expect(areaTab).toHaveClass('sm:rounded-xl');
-      expect(areaTab).toHaveClass('sm:p-5');
+      // #2108 — no `sm:` reversion to the larger desktop card.
+      expect(areaTab.className).not.toContain('sm:rounded-xl');
+      expect(areaTab.className).not.toContain('sm:p-5');
     });
 
-    it('chips and CTA are present in the DOM (still readable/testable) but CSS-hidden below sm: to keep the mobile row compact', () => {
+    it('#2108 — the selected landing card carries a trailing check badge (selection signalled beyond colour alone)', () => {
+      render(<JourneySwitcher onSelectJourney={vi.fn()} activeJourney="area-first" compact={false} />);
+      expect(screen.getByTestId('journey-card-area-first-selected-check')).toBeInTheDocument();
+      expect(screen.queryByTestId('journey-card-school-first-selected-check')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('journey-card-agri-first-selected-check')).not.toBeInTheDocument();
+    });
+
+    it('#2108 follow-up — the area-first check badge uses the copper accent token, never the dark navy --primary', () => {
+      render(<JourneySwitcher onSelectJourney={vi.fn()} activeJourney="area-first" compact={false} />);
+      const badge = screen.getByTestId('journey-card-area-first-selected-check');
+      expect(badge.className).toContain('copper');
+      expect(badge.className).not.toContain('bg-primary');
+    });
+
+    it('#2108 — no check badge renders on any landing card when no journey is active', () => {
+      render(<JourneySwitcher onSelectJourney={vi.fn()} activeJourney={null} compact={false} />);
+      expect(screen.queryByTestId('journey-card-area-first-selected-check')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('journey-card-school-first-selected-check')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('journey-card-agri-first-selected-check')).not.toBeInTheDocument();
+    });
+
+    it('chips and CTA are present in the DOM (still readable/testable) but permanently CSS-hidden (#2108 — not part of the approved ModeCard mock at any width)', () => {
       render(<JourneySwitcher onSelectJourney={vi.fn()} activeJourney={null} compact={false} />);
       // Content stays queryable (existing full-card tests above rely on
-      // this), but the wrapping elements carry the mobile-hidden contract.
+      // this), but the wrapping element carries the hidden contract at
+      // every width now — no `sm:inline-flex` reversion.
       const cta = screen.getByText('Explore areas');
       expect(cta.closest('span')).toHaveClass('hidden');
-      expect(cta.closest('span')).toHaveClass('sm:inline-flex');
+      expect(cta.closest('span')?.className).not.toContain('sm:inline-flex');
+    });
+
+    it('#2108 follow-up — a visible metadata strip renders below the card row for the active journey, using only already-computed chip data', () => {
+      render(
+        <JourneySwitcher
+          onSelectJourney={vi.fn()}
+          activeJourney={null}
+          compact={false}
+          totalProperties={30}
+          areasCount={10}
+        />,
+      );
+      const strip = screen.getByTestId('journey-metadata-strip');
+      // Falls back to the area-first (Recommended) journey's chips when no
+      // journey is selected yet, same as the mock's own default branch.
+      expect(strip).toHaveTextContent('10 areas');
+      expect(strip).toHaveTextContent('30 properties');
+      expect(strip).toHaveTextContent('Locality insights');
+      // Never the invented multi-select/browse-all copy from the raw mock —
+      // this app has neither feature in this context.
+      expect(screen.queryByText(/Up to 3 selected areas/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Browse all listings/)).not.toBeInTheDocument();
+    });
+
+    it('#2108 follow-up — the metadata strip reflects the SELECTED journey, not always area-first', () => {
+      render(<JourneySwitcher onSelectJourney={vi.fn()} activeJourney="school-first" compact={false} />);
+      const strip = screen.getByTestId('journey-metadata-strip');
+      expect(strip).toHaveTextContent('5 or 10 km radius');
+      expect(strip).toHaveTextContent('Homes near schools');
+      expect(strip).not.toHaveTextContent('Locality insights');
+    });
+
+    it('#2108 follow-up — the metadata strip is absent in compact (non-landing) density', () => {
+      render(<JourneySwitcher onSelectJourney={vi.fn()} activeJourney="area-first" compact />);
+      expect(screen.queryByTestId('journey-metadata-strip')).not.toBeInTheDocument();
     });
 
     it('compact density (non-landing) is completely unaffected by the responsive landing change', () => {
