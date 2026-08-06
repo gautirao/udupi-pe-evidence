@@ -4,11 +4,11 @@
  * The level dispatcher: renders the CURRENT resolved node's heading (AC3.4 —
  * names the direction/destination explicitly and carries the SAME `node_key`
  * + counts the map uses, because both consume the ONE `node`/`nodeCount`
- * object `useAreasNavigationJourney` returned) plus its bounded destination
- * surface. This is deliberately NOT a generic infinite-cluster picker: the
- * Direction surface is capped at 5, the Local Destination surface at 6 (both
- * enforced upstream by the hook, per AC3.5) and an AREA-level "surface" is a
- * plain child list with no structural count line.
+ * object `useAreasNavigationJourney` returned) plus its destination surface.
+ * Issue #2086 removed the former 5/6 client-side truncation caps — the
+ * surface now renders every server-guaranteed-bounded (<=15) child, sorted by
+ * `displayOrder`, with a CSS-only scroll constraint (see the child-list
+ * container below) standing in for the old caps.
  *
  * Dispatch is on `levelKind` (from `nodeLevelKind`, never on `node.depth`),
  * mirroring the rest of this navigation module's discipline.
@@ -109,7 +109,7 @@ export function NavigationLevelPanel({
     children.length === 0
       ? null
       : levelKind === 'directions'
-        ? 'Directions'
+        ? `Explore ${cityLabel ?? 'this city'}`
         : levelKind === 'clusters'
           ? `Local destinations in ${node.displayLabel}`
           : levelKind === 'areas'
@@ -173,14 +173,20 @@ export function NavigationLevelPanel({
           {NO_MATCHES_WITH_CURRENT_FILTERS}
         </p>
       ) : (
-        <NavigationChildList
-          children={children}
-          representativeAreaNamesByNodeKey={representativeAreaNamesByNodeKey}
-          selectedNodeKey={selectedNodeKey}
-          hoveredNodeKey={hoveredNodeKey}
-          onSelect={selectNode}
-          onHoverChange={onHoverChange}
-        />
+        // Issue #2086 (design.R6) — a CSS-only scroll constraint replacing the
+        // deleted client-side 5/6 truncation caps: the server now guarantees
+        // <=15 children, so a long list scrolls here rather than any child
+        // being hidden. No structural/DOM change to NavigationChildList itself.
+        <div className="max-h-[480px] overflow-y-auto" data-testid="navigation-child-list-scroll">
+          <NavigationChildList
+            children={children}
+            representativeAreaNamesByNodeKey={representativeAreaNamesByNodeKey}
+            selectedNodeKey={selectedNodeKey}
+            hoveredNodeKey={hoveredNodeKey}
+            onSelect={selectNode}
+            onHoverChange={onHoverChange}
+          />
+        </div>
       )}
     </div>
   );

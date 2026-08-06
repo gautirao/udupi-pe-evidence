@@ -247,14 +247,56 @@ public class NavigationTreeOverrideApplier {
                 }
             }
 
+            // #2086 code-review fix (BLOCKING): bearingDegrees is left as a PLACEHOLDER (null) here
+            // — it is recomputed for every node in a second pass below (see recomputeBearings),
+            // once every node's new centreLat/centreLon (computed just above, in this same loop)
+            // is available. It cannot be computed correctly inline here: a MOVE_AREA reparenting
+            // shifts BOTH the source and target CLUSTER/DIRECTION's centres, so every remaining
+            // sibling of the source AND target — not just the moved node itself — needs a
+            // refreshed bearing against its parent's freshly-computed centre, and a node's own
+            // parent may not have finished computing its final centre yet at this point in the
+            // iteration.
             out.put(key, new GeneratedNode(
                     orig.regionKey(), orig.nodeType(), orig.nodeKey(), parentKey, orig.areaKey(),
                     orig.representativeAreaKeys(), orig.displayLabel(), order, depthOf.get(key),
                     ancestorsOf.get(key), "AREA".equals(orig.nodeType()) ? 1 : areaLeafCount.get(key),
                     centreLat, centreLon, boundMinLat, boundMinLon, boundMaxLat, boundMaxLon,
-                    orig.policyFingerprint(), orig.generatedAt()));
+                    null, orig.policyFingerprint(), orig.generatedAt()));
         }
-        return out;
+        return recomputeBearings(out, parentOf);
+    }
+
+    // #2086 code-review fix (BLOCKING, data integrity): recomputes bearingDegrees for EVERY node
+    // with a non-null parent, from that parent's FRESHLY-COMPUTED centre (the fold above has
+    // already finished computing every node's new centreLat/centreLon before this runs). The blast
+    // radius of a MOVE_AREA is wider than the moved node alone — when an area moves from cluster A
+    // to cluster B, BOTH A's and B's centres shift, so every remaining child of A and every child
+    // of B (not just the moved node) needs a refreshed bearing. A node with no parent (a depth-0
+    // DIRECTION root) keeps bearingDegrees = null, matching design.R4's generator contract.
+    private Map<String, GeneratedNode> recomputeBearings(Map<String, GeneratedNode> nodes, Map<String, String> parentOf) {
+        Map<String, GeneratedNode> result = new LinkedHashMap<>();
+        for (Map.Entry<String, GeneratedNode> e : nodes.entrySet()) {
+            GeneratedNode n = e.getValue();
+            String parentKey = parentOf.get(e.getKey());
+            BigDecimal bearing = null;
+            if (parentKey != null) {
+                GeneratedNode parent = nodes.get(parentKey);
+                if (parent != null) {
+                    bearing = NavigationTreeGenerator.computeBearingDegrees(
+                            parent.centreLat(), parent.centreLon(), n.centreLat(), n.centreLon());
+                }
+            }
+            result.put(e.getKey(), withBearing(n, bearing));
+        }
+        return result;
+    }
+
+    private static GeneratedNode withBearing(GeneratedNode n, BigDecimal bearingDegrees) {
+        return new GeneratedNode(
+                n.regionKey(), n.nodeType(), n.nodeKey(), n.parentNodeKey(), n.areaKey(),
+                n.representativeAreaKeys(), n.displayLabel(), n.displayOrder(), n.depth(), n.ancestorKeys(),
+                n.descendantAreaCount(), n.centreLat(), n.centreLon(), n.minLat(), n.minLon(), n.maxLat(), n.maxLon(),
+                bearingDegrees, n.policyFingerprint(), n.generatedAt());
     }
 
     private void postOrderAccumulate(
@@ -310,7 +352,7 @@ public class NavigationTreeOverrideApplier {
                 n.regionKey(), n.nodeType(), n.nodeKey(), n.parentNodeKey(), n.areaKey(),
                 n.representativeAreaKeys(), newLabel, n.displayOrder(), n.depth(), n.ancestorKeys(),
                 n.descendantAreaCount(), n.centreLat(), n.centreLon(), n.minLat(), n.minLon(), n.maxLat(), n.maxLon(),
-                n.policyFingerprint(), n.generatedAt());
+                n.bearingDegrees(), n.policyFingerprint(), n.generatedAt());
     }
 
     private static GeneratedNode withRepresentatives(GeneratedNode n, List<String> newRepresentativeAreaKeys) {
@@ -318,6 +360,6 @@ public class NavigationTreeOverrideApplier {
                 n.regionKey(), n.nodeType(), n.nodeKey(), n.parentNodeKey(), n.areaKey(),
                 List.copyOf(newRepresentativeAreaKeys), n.displayLabel(), n.displayOrder(), n.depth(), n.ancestorKeys(),
                 n.descendantAreaCount(), n.centreLat(), n.centreLon(), n.minLat(), n.minLon(), n.maxLat(), n.maxLon(),
-                n.policyFingerprint(), n.generatedAt());
+                n.bearingDegrees(), n.policyFingerprint(), n.generatedAt());
     }
 }

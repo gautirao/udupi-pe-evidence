@@ -18,15 +18,24 @@ describe('nodeLevelKind', () => {
     expect(nodeLevelKind({ nextLevelType })).toBe(expected);
   });
 
-  it('dispatches on TYPE, not depth — the same nextLevelType at any depth yields the same kind', () => {
-    // The live Bangalore tree is City -> DIRECTION (depth 0) -> AREA (depth 1),
-    // so "depth 1 == AREA" is TRUE today and would still pass a naive test. The
-    // point of this one is that the function cannot see depth at all: the same
-    // 'AREA' next level under a depth-1 CLUSTER must give the identical answer.
+  it('dispatches on TYPE, not depth — a Direction (nextLevelType=AREA, the live Bangalore shape) and a Local Destination (nextLevelType=CLUSTER, one level deeper) genuinely produce DIFFERENT kinds, proving the dispatch actually varies with the input rather than being depth-hardcoded', () => {
+    // Rewritten (Issue #2086 qa-fast finding) — the prior version called
+    // nodeLevelKind TWICE WITH AN IDENTICAL ARGUMENT ({ nextLevelType: 'AREA' })
+    // under two different variable names, so it provided zero coverage of the
+    // dispatch logic: it would pass equally well against a hardcoded
+    // `depth === 0 ? 'directions' : depth === 1 ? 'areas' : ...` implementation
+    // that never reads `nextLevelType` at all, so long as both calls happened
+    // to land on the 'AREA' branch. This version genuinely varies the
+    // scenario — a Direction whose next level is AREA (today's live shape) vs
+    // a Local Destination whose next level is CLUSTER (the deeper shape once
+    // a Local Destination sits under a Direction) — and asserts they resolve
+    // to correspondingly DIFFERENT kinds, which only a real dispatch on
+    // `nextLevelType` can satisfy.
     const underDirection = nodeLevelKind({ nextLevelType: 'AREA' });
-    const underLocalDestination = nodeLevelKind({ nextLevelType: 'AREA' });
+    const underLocalDestination = nodeLevelKind({ nextLevelType: 'CLUSTER' });
     expect(underDirection).toBe('areas');
-    expect(underLocalDestination).toBe('areas');
+    expect(underLocalDestination).toBe('clusters');
+    expect(underDirection).not.toBe(underLocalDestination);
   });
 
   it('accepts an argument that carries no depth field at all', () => {

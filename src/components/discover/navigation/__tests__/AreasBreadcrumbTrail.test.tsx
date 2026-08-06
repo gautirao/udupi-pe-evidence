@@ -86,6 +86,51 @@ describe('AreasBreadcrumbTrail', () => {
     }
   });
 
+  it('AC14 — a real Direction > Local Destination > Area ancestry chain (3 crumbs, through a real CLUSTER level) renders all 3 crumbs; the ancestry survives through a Local Destination', () => {
+    // Fix-verify cycle: the server (NavigationNodeResponse.forNode /
+    // graph.ancestryOf) never synthesizes a "root"/ROOT ancestry entry — no
+    // NavigationNode row backs the city key — and AreasBreadcrumbTrail.tsx:65
+    // is a plain `[...node.ancestry, current]` with no synthesized city
+    // crumb. So the true maximum chain the production contract can produce
+    // is 3 crumbs (Direction, Local Destination, Area), not 4. This fixture
+    // matches that real shape.
+    const node = makeNode({
+      nodeKey: 'a:IN|KA|Bengaluru|Whitefield',
+      nodeType: 'AREA',
+      displayLabel: 'Whitefield',
+      depth: 2,
+      ancestry: [
+        { nodeKey: 'd:north', nodeType: 'DIRECTION', displayLabel: 'North Bangalore', displayOrder: 1 },
+        { nodeKey: 'c:north:hebbal-kempapura', nodeType: 'CLUSTER', displayLabel: 'Hebbal - Kempapura', displayOrder: 1 },
+      ],
+    });
+    renderTrail(node);
+
+    // NOTE — the AREAS_BREADCRUMB_MAX_ITEMS=4 depth guard is intentionally
+    // NOT asserted here. With the real ancestry shape the maximum chain is 3
+    // crumbs, so the guard can never trigger through the server contract;
+    // asserting its absence would be vacuous and would prove nothing.
+
+    const nav = screen.getByTestId('areas-breadcrumb-trail');
+    expect(nav).toBeInTheDocument();
+    // All 3 crumbs, in order, each individually present.
+    const labels = ['North Bangalore', 'Hebbal - Kempapura', 'Whitefield'];
+    for (const label of labels) {
+      expect(nav).toHaveTextContent(label);
+    }
+    // The terminal (3rd) crumb is the current, unlinked one — proving this
+    // really is a 3-deep chain reaching the AREA leaf, not a shorter chain
+    // that happens to mention all three labels somewhere in the DOM.
+    const terminal = screen.getByText('Whitefield');
+    expect(terminal).toHaveAttribute('aria-current', 'page');
+    expect(terminal.closest('a')).toBeNull();
+    // The Local Destination (CLUSTER) crumb is a real, linked ancestor —
+    // this is the genuine proof that ancestry survives THROUGH a Local
+    // Destination (CLUSTER) level, which is what AC14 requires.
+    const localDestinationCrumb = screen.getByText('Hebbal - Kempapura');
+    expect(localDestinationCrumb.closest('a')).toHaveAttribute('href', '/?node=c:north:hebbal-kempapura');
+  });
+
   it('a city-root node (empty ancestry) renders a single, current, unlinked crumb', () => {
     const root = makeNode({
       nodeKey: 'root',

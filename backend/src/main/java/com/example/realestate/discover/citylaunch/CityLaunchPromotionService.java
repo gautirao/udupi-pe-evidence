@@ -541,8 +541,8 @@ public class CityLaunchPromotionService {
                     cityId, n.getRegionKey(), n.getNodeType(), parentProductionId, n.getNodeKey(), n.getAreaKey(),
                     n.getRepresentativeAreaKeys(), n.getDisplayLabel(), n.getDisplayOrder(), n.getDepth(),
                     n.getAncestorKeys(), n.getDescendantAreaCount(), n.getCentreLat(), n.getCentreLon(),
-                    n.getMinLat(), n.getMinLon(), n.getMaxLat(), n.getMaxLon(), n.getPolicyFingerprint(),
-                    n.getGeneratedAt()));
+                    n.getMinLat(), n.getMinLon(), n.getMaxLat(), n.getMaxLon(), n.getBearingDegrees(),
+                    n.getPolicyFingerprint(), n.getGeneratedAt()));
             productionIdBySandboxId.put(n.getId(), saved.getId());
             count++;
         }

@@ -37,6 +37,7 @@ import { HierarchyBackButton } from '../HierarchyBackButton';
 import {
   decideHierarchyBackMechanism,
   useHierarchyBackAdjacencyLog,
+  MAX_ADJACENCY_LOG_LENGTH,
   type HistoryAdjacencyEntry,
 } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
@@ -317,6 +318,10 @@ function Harness({ node, buildHref, navigateRef, backButtonKey = 'stable' }: Har
   return (
     <>
       <LocationProbe />
+      {/* AC14 — exposes the log's current length so a test can assert
+          MAX_ADJACENCY_LOG_LENGTH holds across a full journey, without
+          reaching into Harness's internal ref. */}
+      <div data-testid="adjacency-log-length">{historyAdjacencyLog.length}</div>
       <HierarchyBackButton key={backButtonKey} node={node} buildHref={buildHref} historyAdjacencyLog={historyAdjacencyLog} />
     </>
   );
@@ -728,5 +733,115 @@ describe('guarded conditional POP — component wiring (hierarchy_back_guarded_p
       navigateRef.current?.(1);
     });
     expect(screen.getByTestId('location-probe')).toHaveTextContent('/discover?node=a:whitefield');
+  });
+});
+
+describe('AC14 — two-hop Back through the Local Destination level (real ancestry shape), and MAX_ADJACENCY_LOG_LENGTH over the journey', () => {
+  it('starting AT the Local Destination (CLUSTER) level, two consecutive Back presses land on the GROUP (Direction); at the Direction (empty ancestry) no further Back control exists, and the log never exceeds MAX_ADJACENCY_LOG_LENGTH', () => {
+    // Fix-verify cycle: the server never synthesizes a "root"/ROOT ancestry
+    // entry (no NavigationNode row backs the city key), so the real ancestry
+    // shapes are: DIRECTION -> [] (empty — it IS the top of the real chain),
+    // CLUSTER -> [DIRECTION], AREA -> [DIRECTION, CLUSTER]. There is no
+    // Direction -> City hop in production; the E2E
+    // (issue-2086-bangalore-area-hierarchy.spec.ts:125-143) documents that
+    // absence as pre-existing #1956 behaviour, not a #2086 regression.
+    const groupNode = makeNode({
+      nodeKey: 'd:north',
+      nodeType: 'DIRECTION',
+      displayLabel: 'North Bangalore',
+      ancestry: [],
+    });
+    const localDestinationNode = makeNode({
+      nodeKey: 'c:north-cluster',
+      nodeType: 'CLUSTER',
+      displayLabel: 'Whitefield Belt',
+      ancestry: [{ nodeKey: 'd:north', nodeType: 'DIRECTION', displayLabel: 'North Bangalore', displayOrder: 1 }],
+    });
+    const areaNode = makeNode({
+      ancestry: [
+        { nodeKey: 'd:north', nodeType: 'DIRECTION', displayLabel: 'North Bangalore', displayOrder: 1 },
+        { nodeKey: 'c:north-cluster', nodeType: 'CLUSTER', displayLabel: 'Whitefield Belt', displayOrder: 2 },
+      ],
+    });
+
+    const buildHref = vi.fn((k: string) => `?node=${k}`);
+    const navigateRef: HarnessProps['navigateRef'] = { current: null };
+
+    window.history.replaceState({ idx: 0 }, '', '/discover?node=d:north');
+
+    // Drive the real 3-level journey (Direction -> Local Destination ->
+    // Area, slots 0..2) — there is no City/root hop in the real contract, so
+    // this starts at Direction, not at a fabricated city root.
+    const { rerender } = render(
+      <MemoryRouter initialEntries={['/discover?node=d:north']}>
+        <Harness node={groupNode} buildHref={buildHref} navigateRef={navigateRef} />
+      </MemoryRouter>,
+    );
+    // Pre-existing #1956 behaviour, pinned here for the real journey's own
+    // starting node: a DIRECTION with EMPTY ancestry renders NO Back control
+    // (HierarchyBackButton.tsx:112-116 returns null on empty ancestry; the
+    // generator emits DIRECTION nodes with `ancestorKeys = List.of()`). This
+    // is NOT a #2086 regression.
+    expect(screen.queryByTestId('areas-hierarchy-back')).not.toBeInTheDocument();
+
+    act(() => {
+      navigateRef.current?.('/discover?node=c:north-cluster');
+    });
+    window.history.replaceState({ idx: 1 }, '', '/discover?node=c:north-cluster');
+    rerender(
+      <MemoryRouter initialEntries={['/discover?node=d:north']}>
+        <Harness node={localDestinationNode} buildHref={buildHref} navigateRef={navigateRef} />
+      </MemoryRouter>,
+    );
+
+    act(() => {
+      navigateRef.current?.('/discover?node=a:whitefield');
+    });
+    window.history.replaceState({ idx: 2 }, '', '/discover?node=a:whitefield');
+    rerender(
+      <MemoryRouter initialEntries={['/discover?node=d:north']}>
+        <Harness node={areaNode} buildHref={buildHref} navigateRef={navigateRef} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/discover?node=a:whitefield');
+
+    // The real 3-level drill-down logs at most one entry per level — the log
+    // must never have grown past MAX_ADJACENCY_LOG_LENGTH at any point.
+    expect(Number(screen.getByTestId('adjacency-log-length').textContent)).toBeLessThanOrEqual(
+      MAX_ADJACENCY_LOG_LENGTH,
+    );
+
+    // ── THE TWO-HOP PROOF, through the real Local Destination level ──
+    // Back #1 (from Area): Area -> Local Destination (CLUSTER).
+    window.history.replaceState({ idx: 1 }, '', '/discover?node=c:north-cluster');
+    fireEvent.click(screen.getByTestId('areas-hierarchy-back'));
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/discover?node=c:north-cluster');
+    rerender(
+      <MemoryRouter initialEntries={['/discover?node=d:north']}>
+        <Harness node={localDestinationNode} buildHref={buildHref} navigateRef={navigateRef} />
+      </MemoryRouter>,
+    );
+    expect(Number(screen.getByTestId('adjacency-log-length').textContent)).toBeLessThanOrEqual(
+      MAX_ADJACENCY_LOG_LENGTH,
+    );
+
+    // Back #2 (from Local Destination): Local Destination -> GROUP (Direction)
+    // — the second hop of the two-hop proof: ancestry genuinely survives
+    // through the real CLUSTER level and lands on the Direction, never
+    // jumping past it.
+    window.history.replaceState({ idx: 0 }, '', '/discover?node=d:north');
+    fireEvent.click(screen.getByTestId('areas-hierarchy-back'));
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/discover?node=d:north');
+    expect(screen.getByTestId('location-probe')).not.toHaveTextContent('/discover?node=c:north-cluster');
+    rerender(
+      <MemoryRouter initialEntries={['/discover?node=d:north']}>
+        <Harness node={groupNode} buildHref={buildHref} navigateRef={navigateRef} />
+      </MemoryRouter>,
+    );
+
+    // At the Direction level the real journey ends: no third hop exists in
+    // production (no fabricated Direction -> City Back control) — the Back
+    // control is absent here too, exactly as it was on cold mount above.
+    expect(screen.queryByTestId('areas-hierarchy-back')).not.toBeInTheDocument();
   });
 });

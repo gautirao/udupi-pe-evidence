@@ -1,5 +1,7 @@
 package com.example.realestate.discover.navigation;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayDeque;
@@ -54,9 +56,36 @@ import java.util.stream.Collectors;
  * enforces is a FIXED product rule, independent of check #11's operator-configurable {@code
  * max_safety_depth} — a tree can satisfy #11 (the policy allows deeper recursion) and still fail
  * #14 (the product contract doesn't expose that depth publicly).
+ *
+ * <h2>#15/#16: breadth mandate + label provenance (#2086 design.R3, ADDITIVE)</h2>
+ * Two more checks, added to close the Bangalore defect issue #2086 exists to fix: {@link
+ * #checkBreadthMandate} enforces that no node ever has more than {@link #MANDATORY_MAX_CHILDREN}
+ * (15) children, that any node with more than 15 canonical areas beneath it (the PERSISTED {@code
+ * descendant_area_count} — never a listing-derived count) exposes a Local Destination (CLUSTER)
+ * level rather than direct AREA children, and that no CLUSTER itself exceeds 15 canonical areas.
+ * {@link #checkLabelProvenance} enforces that every node's {@code display_label} is structurally
+ * DERIVABLE from its own {@code representative_area_keys} (resolved against the tree's own AREA
+ * leaves, which — by check #5 — form a complete canonical area-name table), exempting nodes
+ * carrying a RELABEL override for the revision (RELABEL is applied BEFORE validation — see V122).
+ * Also fixed here: check #11 ({@link #checkMaxDepth}) no longer derives its ceiling from the
+ * operator-configurable {@code max_safety_depth} policy knob — see that method's javadoc.
+ *
+ * <h2>{@link ValidationMode} (#2086 rework fix, PR #2111 cycle 1, ADDITIVE)</h2>
+ * Every overload above defaults to {@link ValidationMode#STRICT} (checks #1-#16 all fail-closed) —
+ * generation, admin candidate/preview validation, and promotion are UNCHANGED by this fix. {@link
+ * #validateForRuntimeLoad} is a new, separate entry point, used ONLY by {@link
+ * NavigationGraphLoader}, that runs under {@link ValidationMode#LENIENT_RUNTIME_LOAD}: checks #1-14
+ * still fail-closed, but #15/#16 findings are downgraded to {@link
+ * ValidationReport#lenientWarnings()} instead of blocking {@link ValidationError}s, so an
+ * already-PROMOTED pre-#2086 revision (e.g. a DIRECTION with 36-86 direct AREA children) can still
+ * be loaded and served rather than making a fresh/restarted instance unable to load it at all. See
+ * {@link ValidationMode}'s javadoc for the full rationale, including why this is a call-site
+ * discriminator rather than a revision/version marker.
  */
 @Service
 public class NavigationTreeValidationService {
+
+    private static final Logger log = LoggerFactory.getLogger(NavigationTreeValidationService.class);
 
     /** Convenience overload: no expected-area universe, no depth ceiling, no overrides. */
     public ValidationReport validate(List<ValidationNode> nodes) {
@@ -91,13 +120,76 @@ public class NavigationTreeValidationService {
      * any override is applied — distinct from {@code expectedAreaKeys} (which is POST-exclude, so
      * check #5 doesn't demand a leaf for an area an EXCLUDE_AREA override legitimately removed) —
      * used ONLY by check #12 to confirm an EXCLUDE_AREA/REASSIGN_AREA_REGION override's subject was
-     * a real, active area in the first place.
+     * a real, active area in the first place. Delegates to the 7-arg overload with an empty label
+     * map, so check #16 is a no-op for every pre-#2086 call site (see that overload's javadoc).
      */
     public ValidationReport validate(
             List<ValidationNode> nodes, Set<String> expectedAreaKeys, Integer maxSafetyDepth,
             List<NavigationOverride> overrides, Set<String> validRegionKeys, Set<String> canonicalAreaKeys) {
+        return validate(
+                nodes, expectedAreaKeys, maxSafetyDepth, overrides, validRegionKeys, canonicalAreaKeys, Map.of());
+    }
+
+    /**
+     * #2086: full-semantics overload, adding {@code displayLabelByNodeKey} for check #16 (label
+     * provenance). {@link ValidationNode} carries no label field of its own (only {@code nodeKey},
+     * {@code areaKey}, {@code representativeAreaKeys}, etc.), so a caller that wants #16 enforced
+     * must supply a {@code node_key -> display_label} map built from its own node source (e.g.
+     * {@code GeneratedNode::displayLabel}, {@code NavigationNode::getDisplayLabel}, {@code
+     * SandboxNavigationNode::getDisplayLabel}). An empty/null map makes check #16 a complete no-op,
+     * mirroring check #11's null-{@code maxSafetyDepth} skip pattern — every pre-#2086 call site
+     * stays source- and behaviour-compatible without any change to {@link ValidationNode}.
+     *
+     * <p><b>Wired into real generation (#2086 S1b):</b> {@code
+     * NavigationTreeGenerationService#generateAndStoreForRevision} (see
+     * NavigationTreeGenerationService.java:171-176) builds a {@code node_key -> display_label} map
+     * from the real generated tree — {@code
+     * generated.stream().collect(Collectors.toMap(GeneratedNode::nodeKey, GeneratedNode::displayLabel,
+     * (a, b) -> a))} — and passes it as this method's 7th argument, so check #16 IS enforced on
+     * every generated tree via the production call path, not merely reachable from a test. The
+     * empty-map no-op behaviour documented above exists only for the pre-#2086 6-arg (and shorter)
+     * overloads above, whose call sites predate check #16 and have never been updated to supply a
+     * label map.
+     */
+    public ValidationReport validate(
+            List<ValidationNode> nodes, Set<String> expectedAreaKeys, Integer maxSafetyDepth,
+            List<NavigationOverride> overrides, Set<String> validRegionKeys, Set<String> canonicalAreaKeys,
+            Map<String, String> displayLabelByNodeKey) {
+        return validate(
+                nodes, expectedAreaKeys, maxSafetyDepth, overrides, validRegionKeys, canonicalAreaKeys,
+                displayLabelByNodeKey, ValidationMode.STRICT);
+    }
+
+    /**
+     * #2086 rework fix (PR #2111 cycle 1): RUNTIME LOAD convenience overload — the ONLY entry point
+     * that ever passes {@link ValidationMode#LENIENT_RUNTIME_LOAD}, used exclusively by {@link
+     * NavigationGraphLoader} to load an already-PROMOTED revision. See {@link ValidationMode}'s
+     * javadoc for why leniency is scoped by call site rather than a revision/version marker.
+     * Supplies no expected-area universe, depth ceiling, overrides, or label map — mirroring the
+     * 1-arg {@link #validate(List)} convenience overload every pre-#2086 loader call already used.
+     */
+    public ValidationReport validateForRuntimeLoad(List<ValidationNode> nodes) {
+        return validate(nodes, Set.of(), null, List.of(), Set.of(), Set.of(), Map.of(), ValidationMode.LENIENT_RUNTIME_LOAD);
+    }
+
+    /**
+     * #2086 rework fix (PR #2111 cycle 1): full-semantics overload with an explicit {@link
+     * ValidationMode}. {@link ValidationMode#STRICT} (the default every overload above resolves
+     * to) runs every check (#1-#16) fail-closed, exactly as before this fix. {@link
+     * ValidationMode#LENIENT_RUNTIME_LOAD} still RUNS checks #15/#16 (never skips their execution —
+     * a genuinely corrupt legacy tree that also fails #15/#16 still needs #1-#14 to catch the
+     * corruption, which they do unconditionally either way) but routes any finding they produce
+     * into {@link ValidationReport#lenientWarnings()} instead of {@link ValidationReport#errors()},
+     * so it never fails {@link ValidationReport#isValid()}. Checks #1-#14 are completely unaffected
+     * by {@code mode} — they always add to {@code errors} regardless.
+     */
+    public ValidationReport validate(
+            List<ValidationNode> nodes, Set<String> expectedAreaKeys, Integer maxSafetyDepth,
+            List<NavigationOverride> overrides, Set<String> validRegionKeys, Set<String> canonicalAreaKeys,
+            Map<String, String> displayLabelByNodeKey, ValidationMode mode) {
 
         List<ValidationError> errors = new ArrayList<>();
+        List<String> lenientWarnings = new ArrayList<>();
 
         Map<String, ValidationNode> byKey = new LinkedHashMap<>();
         for (ValidationNode n : nodes) {
@@ -122,8 +214,10 @@ public class NavigationTreeValidationService {
         checkOverrides(byKey, byParent, overrides, canonicalAreaKeys, validRegionKeys, errors); // 12
         checkAncestryMismatch(nodes, byKey, errors);                       // 13
         checkHierarchyShape(nodes, byKey, errors);                        // 14
+        checkBreadthMandate(nodes, byParent, mode, errors, lenientWarnings);                     // 15
+        checkLabelProvenance(nodes, displayLabelByNodeKey, overrides, mode, errors, lenientWarnings); // 16
 
-        return new ValidationReport(List.copyOf(errors));
+        return new ValidationReport(List.copyOf(errors), List.copyOf(lenientWarnings));
     }
 
     // 1: cycles — walking parent_node_key from any node must reach a null parent within the
@@ -390,25 +484,33 @@ public class NavigationTreeValidationService {
 
     // 11: max-depth violations.
     /**
-     * #1956 D5: depth 0 is now always occupied by the region's DIRECTION node (never a CLUSTER or
-     * AREA), so {@code max_safety_depth} — which still means "how many CLUSTER levels may nest
-     * beneath a Direction", an operator-facing meaning UNCHANGED by this issue — caps the tree at
-     * {@code max_safety_depth + 1}, not {@code max_safety_depth}. This is NOT a relaxation of the
-     * policy knob's meaning: it is the same number of allowed CLUSTER levels, shifted by exactly
-     * the one extra DIRECTION level now sitting above them. See {@link
-     * NavigationTreeGenerator#expand}'s {@code clusterDepth = depth - 1} comparison, which this
-     * check mirrors from the validation side.
+     * #2086 design.R2c: {@code max_safety_depth} no longer bounds this check (or anything else in
+     * generation's decision path — {@link NavigationTreeGenerator#partition} now uses a fixed
+     * {@code ABSOLUTE_RECURSION_GUARD} instead). Public depth is a FIXED product contract, capped at
+     * {@link #MAX_PUBLIC_DEPTH} (2) regardless of any policy value — the same ceiling {@link
+     * #checkHierarchyShape} (#14) already enforces structurally. This check now simply re-asserts
+     * {@code depth <= MAX_PUBLIC_DEPTH}; it is kept separate from #14 (rather than folded into it)
+     * to preserve its historical {@code MAX_DEPTH_VIOLATION} error code for existing callers, while
+     * #14 continues to own the fuller hierarchy-shape story (kind validity, DIRECTION-root ancestry,
+     * CLUSTER-only-at-depth-1). {@code maxSafetyDepth} remains a parameter — still read and folded
+     * into the policy fingerprint elsewhere for checksum/compat continuity — but is DELIBERATELY
+     * UNUSED here: the operator-configurable knob can no longer suppress or loosen the
+     * product-fixed public-depth ceiling.
+     *
+     * <p>This is the fix for the blocker S1 discovered (#2086 PRIORITY 0): the OLD {@code
+     * maxSafetyDepth + 1} allowance rejected every depth-2 AREA leaf beneath a CLUSTER whenever
+     * {@code maxSafetyDepth} was 0 or 1 — exactly Bangalore's hosted value (0) — which would have
+     * failed validation for the very depth-2 {@code City -> Direction -> Local Destination -> AREA}
+     * shape #2086 exists to deliver. A depth-2 tree now validates cleanly regardless of {@code
+     * maxSafetyDepth}'s value; only depth > {@link #MAX_PUBLIC_DEPTH} (3+) ever fails.
      */
     private void checkMaxDepth(List<ValidationNode> nodes, Integer maxSafetyDepth, List<ValidationError> errors) {
-        if (maxSafetyDepth == null) {
-            return;
-        }
-        int maxAllowedDepth = maxSafetyDepth + 1;
         for (ValidationNode n : nodes) {
-            if (n.depth() > maxAllowedDepth) {
+            if (n.depth() > MAX_PUBLIC_DEPTH) {
                 errors.add(new ValidationError("MAX_DEPTH_VIOLATION",
-                        "node " + n.nodeKey() + " has depth=" + n.depth() + " exceeding max_safety_depth="
-                                + maxSafetyDepth + " (allowed depth <= " + maxAllowedDepth + ")", n.nodeKey()));
+                        "node " + n.nodeKey() + " has depth=" + n.depth() + " exceeding the max public depth of "
+                                + MAX_PUBLIC_DEPTH + " (City -> Direction -> [Local Destination ->] AREA)",
+                        n.nodeKey()));
             }
         }
     }
@@ -643,6 +745,225 @@ public class NavigationTreeValidationService {
                         "node " + n.nodeKey() + " has region_key=" + n.regionKey() + " but its DIRECTION "
                                 + "ancestor " + rootAncestorKey + " has region_key=" + rootAncestor.regionKey(),
                         n.nodeKey()));
+            }
+        }
+    }
+
+    // 15: breadth / Local Destination mandate (#2086 AC3/AC5/AC17, ADDITIVE, fail-closed).
+    //
+    // CRITICAL (qa-fast R-M1): every assertion below reads the PERSISTED {@code
+    // n.descendantAreaCount()} — canonical membership INCLUDING zero-listing areas, the exact same
+    // source-of-truth check #9 (checkDescendantAreaCount) already verifies structurally. {@link
+    // ValidationNode} carries no listing-derived/filter-sensitive count field at all (no
+    // matchingAreaCount, no counts-endpoint field), so this check is structurally INCAPABLE of
+    // reading anything other than the canonical persisted count — it cannot regress into a
+    // filter-sensitive check even by accident (see the dedicated regression test in
+    // NavigationTreeValidationServiceTest proving behaviour tracks descendantAreaCount alone).
+    private static final int MANDATORY_MAX_CHILDREN = 15;
+
+    // #2086 design.R2f: above this many canonical areas in one first-level group, "<=15 children"
+    // and "every Local Destination holds <=15 areas" cannot both hold at the fixed depth-2 shape
+    // (City -> Direction -> Local Destination -> AREA). 15 x 15 = 225.
+    private static final int GROUP_AREA_CEILING = MANDATORY_MAX_CHILDREN * MANDATORY_MAX_CHILDREN;
+
+    private void checkBreadthMandate(
+            List<ValidationNode> nodes, Map<String, List<ValidationNode>> byParent, ValidationMode mode,
+            List<ValidationError> errors, List<String> lenientWarnings) {
+        for (ValidationNode n : nodes) {
+            List<ValidationNode> children = byParent.getOrDefault(n.nodeKey(), List.of());
+
+            // (1) No node — DIRECTION, CLUSTER, or (vacuously) AREA — may have more than 15 children.
+            if (children.size() > MANDATORY_MAX_CHILDREN) {
+                record(mode, "BREADTH_EXCEEDED",
+                        "node " + n.nodeKey() + " (" + n.nodeType() + ") has " + children.size()
+                                + " children, exceeding the " + MANDATORY_MAX_CHILDREN + "-child ceiling"
+                                + groupCeilingNote(n), n.nodeKey(), errors, lenientWarnings);
+            }
+
+            // (2) A node with more canonical areas than the ceiling must expose a Local Destination
+            // (CLUSTER) level beneath it — it may never emit a non-CLUSTER (AREA) child directly.
+            if (n.descendantAreaCount() > MANDATORY_MAX_CHILDREN
+                    && children.stream().anyMatch(c -> !"CLUSTER".equals(c.nodeType()))) {
+                record(mode, "MISSING_LOCAL_DESTINATION_LEVEL",
+                        "node " + n.nodeKey() + " has descendant_area_count=" + n.descendantAreaCount()
+                                + " (> " + MANDATORY_MAX_CHILDREN + ") but has a direct non-CLUSTER child — "
+                                + "a Local Destination level is mandatory above this size" + groupCeilingNote(n),
+                        n.nodeKey(), errors, lenientWarnings);
+            }
+
+            // (3) Every CLUSTER (Local Destination) must itself hold at most 15 canonical areas.
+            if ("CLUSTER".equals(n.nodeType()) && n.descendantAreaCount() > MANDATORY_MAX_CHILDREN) {
+                record(mode, "LOCAL_DESTINATION_OVERSIZED",
+                        "cluster " + n.nodeKey() + " has descendant_area_count=" + n.descendantAreaCount()
+                                + ", exceeding the " + MANDATORY_MAX_CHILDREN + "-area Local Destination "
+                                + "ceiling", n.nodeKey(), errors, lenientWarnings);
+            }
+        }
+    }
+
+    /**
+     * #2086 rework fix (PR #2111 cycle 1): the single choke point every #15/#16 finding routes
+     * through. {@link ValidationMode#STRICT} (or any future default) adds a blocking {@link
+     * ValidationError} exactly as before this fix. {@link ValidationMode#LENIENT_RUNTIME_LOAD}
+     * downgrades the SAME finding to a {@code code: message} entry in {@code lenientWarnings} —
+     * the check still runs and still produces the finding, only its severity changes. {@link
+     * NavigationGraphLoader} is responsible for logging {@code lenientWarnings} as a WARN naming
+     * the city/revision being served — this service has no citySlug/revisionId of its own to log
+     * (only the scope-agnostic {@link ValidationNode#scopeId()}).
+     */
+    private static void record(
+            ValidationMode mode, String code, String message, String nodeKey,
+            List<ValidationError> errors, List<String> lenientWarnings) {
+        if (mode == ValidationMode.LENIENT_RUNTIME_LOAD) {
+            lenientWarnings.add(code + ": " + message);
+        } else {
+            errors.add(new ValidationError(code, message, nodeKey));
+        }
+    }
+
+    /** #2086 design.R2f: names the region, its canonical area count, and the 225 ceiling whenever a
+     * node's own persisted descendant_area_count exceeds it — the exact diagnostic AC17 requires
+     * for a first-level group too large to satisfy both the breadth and Local-Destination-size
+     * mandates simultaneously at the fixed depth-2 shape. */
+    private static String groupCeilingNote(ValidationNode n) {
+        if (n.descendantAreaCount() > GROUP_AREA_CEILING) {
+            return " — region=" + n.regionKey() + " has " + n.descendantAreaCount() + " canonical areas, "
+                    + "exceeding the " + GROUP_AREA_CEILING + "-area (" + MANDATORY_MAX_CHILDREN + "x"
+                    + MANDATORY_MAX_CHILDREN + ") ceiling a single first-level group can satisfy at the "
+                    + "fixed City -> Direction -> Local Destination -> AREA depth";
+        }
+        return "";
+    }
+
+    // 16: label provenance (#2086 AC6, ADDITIVE, fail-closed, NO wordlist). A node's display_label
+    // must be structurally DERIVABLE from its own persisted representative_area_keys: label ∈
+    // { name(rep0), name(rep0) + " & " + name(rep1) }. "name(areaKey)" is resolved against the
+    // tree's own AREA leaves via displayLabelByNodeKey.get(NavigationKeys.areaNodeKey(areaKey)) —
+    // by check #5 every canonical area appears as EXACTLY ONE AREA leaf whose own display_label IS
+    // that area's name, so the tree itself (once labels are supplied) already IS the canonical
+    // area-name table; no separate lookup table is needed. AREA nodes carry
+    // representativeAreaKeys = [their own areaKey] (see NavigationTreeGenerator#emitAreaLeaves), so
+    // their own label always resolves to their own name and they pass by construction.
+    //
+    // MANDATORY EXEMPTION: a node carrying a RELABEL override for this revision is exempt from the
+    // reps-derivability judgment below, because NavigationTreeOverrideApplier#applyPostBisection
+    // applies RELABEL BEFORE this validation runs (V122:4-9) — without the exemption every curated
+    // label would be rejected. SET_REPRESENTATIVES is NOT exempted: it only swaps
+    // representativeAreaKeys and leaves display_label untouched, so provenance is expected to hold
+    // naturally against the NEW reps for a well-formed override, but is not structurally guaranteed
+    // — an override that changes reps without a companion RELABEL can legitimately fail this check,
+    // which is correct fail-closed behaviour, not a false positive.
+    //
+    // #2086 code-review fix (N7): the RELABEL exemption above is scoped to the reps-derivability
+    // judgment ONLY — the cheap secondary key-leak guard (label literally equal to node_key/
+    // region_key) still applies even to a RELABELed node. A RELABEL override never legitimately
+    // sets a node's curated label to its own internal key, so exempting that combination too would
+    // let a genuine key-leak slip through disguised as a "curated" label.
+    //
+    // #2086 code-review fix (N2): applyPostBisection:139-147 places no nodeType filter on RELABEL,
+    // unlike SET_REPRESENTATIVES (CLUSTER-gated at :155) — so a RELABEL legally targets an AREA
+    // leaf. When it does, that AREA's PARENT resolves its representative name from the AREA's
+    // POST-override (curated) label, which the parent's own label was never derived from — a
+    // legitimate curated path would otherwise fail check #16 wholesale. Fix: when a node's
+    // representative_area_keys resolve to an AREA that itself carries a RELABEL override, the
+    // reps-derivability judgment is skipped for that node too — derivability cannot be judged
+    // against a name that was itself just curated.
+    //
+    // displayLabelByNodeKey empty/null => this whole check is a no-op (see the validate() overload
+    // javadoc for why: ValidationNode itself carries no label field).
+    private void checkLabelProvenance(
+            List<ValidationNode> nodes, Map<String, String> displayLabelByNodeKey,
+            List<NavigationOverride> overrides, ValidationMode mode,
+            List<ValidationError> errors, List<String> lenientWarnings) {
+        if (displayLabelByNodeKey == null || displayLabelByNodeKey.isEmpty()) {
+            return;
+        }
+
+        Set<String> relabeledNodeKeys = new HashSet<>();
+        if (overrides != null) {
+            for (NavigationOverride o : overrides) {
+                if ("RELABEL".equals(o.kind()) && o.subjectNodeKey() != null) {
+                    relabeledNodeKeys.add(o.subjectNodeKey());
+                }
+            }
+        }
+
+        // #2086 design.R1 residual_risk / R8 (LOW, non-blocking): two DIRECTIONs in different
+        // regions can legitimately derive an identical label — node_key stays unique, so this is a
+        // UX wart, not a correctness defect. Collected here, WARNED (never a ValidationError) below.
+        Map<String, List<String>> directionNodeKeysByLabel = new LinkedHashMap<>();
+
+        for (ValidationNode n : nodes) {
+            String label = displayLabelByNodeKey.get(n.nodeKey());
+            if (label == null) {
+                continue; // no label data supplied for this node — nothing to judge it against
+            }
+
+            if ("DIRECTION".equals(n.nodeType())) {
+                directionNodeKeysByLabel.computeIfAbsent(label, k -> new ArrayList<>()).add(n.nodeKey());
+            }
+
+            // Cheap secondary guard (design.R3 check_16_label_provenance): a label must never
+            // literally equal an internal key — that is always a generator-ID leak, never a real
+            // human, area-derived name. #2086 code-review fix (N7): this guard runs BEFORE the
+            // RELABEL exemption below and applies even to a RELABELed node — see the javadoc note
+            // above.
+            if (label.equals(n.nodeKey()) || label.equals(n.regionKey())) {
+                record(mode, "LABEL_NOT_DERIVABLE",
+                        "node " + n.nodeKey() + " has display_label=\"" + label + "\" equal to its own "
+                                + (label.equals(n.nodeKey()) ? "node_key" : "region_key")
+                                + " — labels must be human, area-derived names, never internal keys",
+                        n.nodeKey(), errors, lenientWarnings);
+                continue;
+            }
+
+            if (relabeledNodeKeys.contains(n.nodeKey())) {
+                continue; // MANDATORY EXEMPTION (reps-derivability only) — see method javadoc above.
+            }
+
+            List<String> reps = n.representativeAreaKeys() == null ? List.of() : n.representativeAreaKeys();
+            if (reps.isEmpty()) {
+                continue; // nothing to derive from — cannot judge; check #7's membership rule and
+                          // the generator's own contract are the authorities on reps being present
+            }
+
+            // #2086 code-review fix (N2): a representative AREA that itself carries a RELABEL
+            // override has a curated (non-generator-derived) label — this node's own label can no
+            // longer be judged derivable against that curated name.
+            boolean repIsRelabeled = reps.stream()
+                    .anyMatch(rep -> relabeledNodeKeys.contains(NavigationKeys.areaNodeKey(rep)));
+            if (repIsRelabeled) {
+                continue;
+            }
+
+            Set<String> candidates = new LinkedHashSet<>();
+            String rep0Name = displayLabelByNodeKey.get(NavigationKeys.areaNodeKey(reps.get(0)));
+            if (rep0Name != null) {
+                candidates.add(rep0Name);
+            }
+            if (reps.size() >= 2) {
+                String rep1Name = displayLabelByNodeKey.get(NavigationKeys.areaNodeKey(reps.get(1)));
+                if (rep0Name != null && rep1Name != null) {
+                    candidates.add(rep0Name + " & " + rep1Name);
+                }
+            }
+            if (candidates.isEmpty()) {
+                continue; // representative area names not resolvable from the supplied map —
+                          // cannot judge derivability either way
+            }
+            if (!candidates.contains(label)) {
+                record(mode, "LABEL_NOT_DERIVABLE",
+                        "node " + n.nodeKey() + " has display_label=\"" + label + "\" which is not "
+                                + "derivable from its own representative_area_keys=" + reps
+                                + " (expected one of " + candidates + ")", n.nodeKey(), errors, lenientWarnings);
+            }
+        }
+
+        for (Map.Entry<String, List<String>> e : directionNodeKeysByLabel.entrySet()) {
+            if (e.getValue().size() > 1) {
+                log.warn("NavigationTreeValidationService check #16: duplicate DIRECTION display_label "
+                                + "\"{}\" shared by {} nodes: {} (non-blocking — node_key stays unique)",
+                        e.getKey(), e.getValue().size(), e.getValue());
             }
         }
     }

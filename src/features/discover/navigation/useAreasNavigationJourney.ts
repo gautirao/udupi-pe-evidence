@@ -34,15 +34,16 @@
  * both receive this same reference are provably dispatching the identical
  * function, not two call sites that happen to behave alike today.
  *
- * ── BOUNDED SURFACES, NOT AN INFINITE CLUSTER PICKER (AC3.5) ──
- * `children` is truncated defensively: at most 5 when the level below is
- * DIRECTION (root), at most 6 when it is CLUSTER (Local Destination), and
- * uncapped when it is AREA (the leaf level — AC3.5's "or goes directly to AREA
- * children" arm). This is a client-side safety net over an already-bounded
- * server contract (5 live Directions, 0 CLUSTER instances today), not a
- * fabricated cap that could hide a real destination silently — see
- * `NavigationLevelPanel.tsx` for where these constants are also exposed for
- * direct reuse/testing.
+ * ── ALL SERVER CHILDREN RENDER, SORTED (Issue #2086) ──
+ * `children` renders every child the server returns for the resolved node,
+ * sorted by `displayOrder` — no client-side cap. The former 5/6 defensive
+ * truncation (`MAX_DIRECTION_DESTINATIONS`/`MAX_LOCAL_DESTINATIONS`) was a
+ * client-side workaround for a server that could not yet guarantee a bound;
+ * the server now enforces <=15 children per node fail-closed
+ * (`NavigationTreeValidationService`), so a client-side cap could only ever
+ * hide a valid destination. A long list is handled purely visually — a
+ * scrollable container — not by dropping data. See `navigationModel.ts` for
+ * the dev-only over-15 warning that is the new safety net.
  *
  * Pure data + one React Query pair. No fetch fan-out, no client-side node-key
  * construction, no camera side effect — camera fitting is owned by
@@ -56,12 +57,17 @@ import { api, ApiError } from '@/lib/api';
 import { normalizeNavigationResolveResponse } from './normalize';
 import {
   ROOT_NODE_KEY,
+  type NavigationBounds,
   type NavigationNodeResponse,
   type NavigationNodeType,
   type NavigationResolveResponse,
   type NavigationResolveResponseWire,
 } from './types';
-import { nodeCursorOutcomeFromResolution, type StaleNodeNotice } from './navigationModel';
+import {
+  nodeCursorOutcomeFromResolution,
+  warnIfChildrenExceedServerCap,
+  type StaleNodeNotice,
+} from './navigationModel';
 import { nodeLevelKind, type NodeLevelKind } from './nodeLevelKind';
 import {
   useDiscoverNavigationCounts,
@@ -70,10 +76,6 @@ import {
   NAVIGATION_COUNTS_QUERY_KEY_BASE,
   type DiscoverNavigationCountsFilters,
 } from '@/hooks/useDiscoverNavigationCounts';
-
-/** AC3.5 — the two defensive caps. `Infinity` (AREA/LISTINGS/empty levels) means uncapped. */
-export const MAX_DIRECTION_DESTINATIONS = 5;
-export const MAX_LOCAL_DESTINATIONS = 6;
 
 /**
  * Shared journey-aware LISTING count copy — "N listings" / "1 listing" / the
@@ -347,6 +349,23 @@ export interface AreasNavigationChild {
    * remains here.
    */
   matchingAreaCount: number | null;
+  /**
+   * Canonical descendant AREA count under this child, INCLUDING zero-listing
+   * areas — distinct from {@link matchingAreaCount}, which is listing-derived
+   * and moves with filters. Never conflate the two. `null` when the server
+   * omitted it. Typed seam only — issue #2088 is the first consumer of this.
+   */
+  descendantAreaCount: number | null;
+  /** Never null on the wire (may be empty). Typed seam only — see `descendantAreaCount`. */
+  representativeAreaKeys: string[];
+  /** Same shape as the outer node's bounds. Typed seam only — see `descendantAreaCount`. */
+  bounds: NavigationBounds | null;
+  /**
+   * Bearing in degrees [0,360) from the PARENT node's centre to this child's
+   * centre — never relative to the user or camera. `null` for depth-0
+   * children (Directions under ROOT). Typed seam only — see `descendantAreaCount`.
+   */
+  bearingDegrees: number | null;
 }
 
 export interface UseAreasNavigationJourneyParams {
@@ -380,10 +399,8 @@ export interface UseAreasNavigationJourneyResult {
   node: NavigationNodeResponse | null;
   /** What the level BELOW `node` contains — dispatch on this, never on depth. */
   levelKind: NodeLevelKind;
-  /** `node`'s direct children as the typed destination model, bounded per AC3.5. */
+  /** `node`'s direct children as the typed destination model — every server child, sorted by `displayOrder`, no client-side cap. */
   children: AreasNavigationChild[];
-  /** True when `children` was truncated by the defensive cap (diagnostic only). */
-  wasTruncated: boolean;
   /** Non-blocking stale/invalid-node recovery signal — AC "resolution notice". */
   resolutionNotice: StaleNodeNotice | null;
   /**
@@ -406,12 +423,6 @@ export interface UseAreasNavigationJourneyResult {
    * comment for the full defect writeup.
    */
   historyAdjacencyLog: readonly HistoryAdjacencyEntry[];
-}
-
-function boundFor(levelKind: NodeLevelKind): number {
-  if (levelKind === 'directions') return MAX_DIRECTION_DESTINATIONS;
-  if (levelKind === 'clusters') return MAX_LOCAL_DESTINATIONS;
-  return Number.POSITIVE_INFINITY;
 }
 
 export function useAreasNavigationJourney({
@@ -453,12 +464,11 @@ export function useAreasNavigationJourney({
 
   const levelKind = node ? nodeLevelKind(node) : 'empty';
 
-  const { children, wasTruncated } = useMemo(() => {
-    if (!node) return { children: [] as AreasNavigationChild[], wasTruncated: false };
-    const cap = boundFor(levelKind);
+  const children = useMemo(() => {
+    if (!node) return [] as AreasNavigationChild[];
+    warnIfChildrenExceedServerCap(node.nodeKey, node.children.length);
     const ordered = [...node.children].sort((a, b) => a.displayOrder - b.displayOrder);
-    const bounded = ordered.slice(0, cap);
-    const built: AreasNavigationChild[] = bounded.map((child) => {
+    return ordered.map((child) => {
       const childCounts = countsResult.snapshot?.countsForChild(child.nodeKey);
       const childListingCount = childCounts?.count ?? 0;
       const isLeafArea = child.nodeType === 'AREA';
@@ -473,10 +483,13 @@ export function useAreasNavigationJourney({
         // Server-computed AREA count (see the field doc on
         // AreasNavigationChild.matchingAreaCount) — not applicable to a leaf.
         matchingAreaCount: isLeafArea ? null : childCounts?.matchingAreaCount ?? null,
+        descendantAreaCount: child.descendantAreaCount ?? null,
+        representativeAreaKeys: child.representativeAreaKeys ?? [],
+        bounds: child.bounds ?? null,
+        bearingDegrees: child.bearingDegrees ?? null,
       };
     });
-    return { children: built, wasTruncated: ordered.length > bounded.length };
-  }, [node, levelKind, countsResult.snapshot]);
+  }, [node, countsResult.snapshot]);
 
   const resolutionNotice = useMemo(() => {
     if (!resolved || !node) return null;
@@ -529,7 +542,6 @@ export function useAreasNavigationJourney({
     node,
     levelKind,
     children,
-    wasTruncated,
     resolutionNotice,
     nodeCount:
       countsResult.snapshot != null

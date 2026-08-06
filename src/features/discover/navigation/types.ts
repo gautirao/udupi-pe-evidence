@@ -97,6 +97,19 @@ export type NavigationResolution = 'EXACT' | 'ALIAS' | 'ANCESTOR' | 'CITY_ROOT';
  * record on the wire). No consumer may read `centreLat`/`centreLon`/`areaKey`
  * off an `ancestry` entry — those fields exist for the current node's direct
  * map-rendered children, not for the breadcrumb trail.
+ *
+ * ── ISSUE #2086 WIDENING (S3, additive) ──
+ * `descendantAreaCount`, `representativeAreaKeys`, `bounds` and
+ * `bearingDegrees` mirror `NavigationChildSummary` on the Java side field for
+ * field. `descendantAreaCount` is the CANONICAL area count including
+ * zero-listing areas — never conflate it with the listing-derived
+ * `NavigationNodeCount.matchingAreaCount` on `/counts`; the backend proves
+ * they differ for the same node in the same request. `representativeAreaKeys`
+ * is never null on the wire (may be empty) but is typed optional here for the
+ * same synthetic-literal reason as the coordinate fields above.
+ * `bearingDegrees` is null for depth-0 children (Directions under ROOT), and
+ * within [0,360) below — treat a present-and-null value as a real "no
+ * bearing" answer, not a missing field.
  */
 export interface NavigationChildSummary {
   nodeKey: string;
@@ -109,6 +122,24 @@ export interface NavigationChildSummary {
   centreLat?: number | null;
   /** Centroid longitude of this child's member area centres. `null`/`undefined` together with `centreLat`. */
   centreLon?: number | null;
+  /**
+   * Canonical descendant AREA count under this child, INCLUDING zero-listing
+   * areas. Distinct from the listing-derived `matchingAreaCount` on
+   * `/counts` — never conflate the two. Optional/nullable per the wire
+   * contract.
+   */
+  descendantAreaCount?: number | null;
+  /** Never null on the wire (may be empty); optional here for the synthetic-literal case. */
+  representativeAreaKeys?: string[];
+  /** Same shape as the outer node's bounds. */
+  bounds?: NavigationBounds | null;
+  /**
+   * Bearing in degrees [0,360) from the PARENT node's centre to this child's
+   * centre — never relative to the user or camera. `null` for depth-0
+   * children (Directions under ROOT); present-and-null is a real value, not
+   * an absent field.
+   */
+  bearingDegrees?: number | null;
 }
 
 /**

@@ -88,10 +88,23 @@ public record NavigationNodeResponse(
      * (never just one of the pair) when unavailable. No {@code @JsonInclude} here deliberately —
      * unlike the outer response, nulls on this nested record serialize as present-and-null (e.g.
      * {@code "areaKey": null}), which is the agreed wire contract for the frontend's nullable typing.
+     *
+     * <p>#2086 R5: widened with {@code descendantAreaCount}, {@code representativeAreaKeys}, {@code
+     * bounds}, and {@code bearingDegrees} — all sourced directly from the persisted {@link
+     * NavigationNode} row (V121/V124), zero extra queries. {@code descendantAreaCount} is the
+     * CANONICAL area-membership count (including zero-listing areas) — deliberately named distinctly
+     * from the listing-derived {@code matchingAreaCount} on {@code /counts} so a caller can never
+     * conflate coverage with availability. {@code representativeAreaKeys} is never {@code null} (see
+     * {@link #childSummary}). {@code bounds} reuses the existing {@link NavigationBoundsResponse}.
+     * {@code bearingDegrees} is the great-circle bearing from the PARENT node's centre to this
+     * child's centre — {@code null} only for depth-0 children (Directions under ROOT, which have no
+     * parent node).
      */
     public record NavigationChildSummary(
             String nodeKey, String nodeType, String displayLabel, int displayOrder,
-            String areaKey, Double centreLat, Double centreLon) {}
+            String areaKey, Double centreLat, Double centreLon,
+            Integer descendantAreaCount, List<String> representativeAreaKeys,
+            NavigationBoundsResponse bounds, Double bearingDegrees) {}
 
     /**
      * Fix-cycle-1 S4: {@code graph.ancestryOf}/{@code ancestorKeys} is the persisted {@code
@@ -116,9 +129,16 @@ public record NavigationNodeResponse(
         NavigationGraph.Bounds childBounds = graph.boundsOf(childKey);
         Double centreLat = childBounds == null ? null : toDouble(childBounds.centreLat());
         Double centreLon = childBounds == null ? null : toDouble(childBounds.centreLon());
+        // #2086 R5: all four sourced straight off the persisted NavigationNode row — no extra
+        // lookup/query. representativeAreaKeys must never be null on the wire (qa-fast R-M1 mapper
+        // crash risk): fall back to List.of() if the persisted column is ever null.
+        List<String> representativeAreaKeys = child.getRepresentativeAreaKeys() == null
+                ? List.of() : child.getRepresentativeAreaKeys();
         return new NavigationChildSummary(
                 child.getNodeKey(), child.getNodeType(), child.getDisplayLabel(), child.getDisplayOrder(),
-                childAreaKey, centreLat, centreLon);
+                childAreaKey, centreLat, centreLon,
+                child.getDescendantAreaCount(), representativeAreaKeys,
+                NavigationBoundsResponse.from(childBounds), toDouble(child.getBearingDegrees()));
     }
 
     private static Double toDouble(BigDecimal v) {

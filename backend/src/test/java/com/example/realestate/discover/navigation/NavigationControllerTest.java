@@ -99,9 +99,26 @@ class NavigationControllerTest {
                                                   String label, int displayOrder, int depth, List<String> ancestorKeys,
                                                   int descendantAreaCount, BigDecimal centreLat, BigDecimal centreLon,
                                                   Instant now) {
+        return nodeWithCentreAndBearing(id, parentId, regionKey, nodeType, nodeKey, areaKey, representativeAreaKeys,
+                label, displayOrder, depth, ancestorKeys, descendantAreaCount, centreLat, centreLon, null, now);
+    }
+
+    /**
+     * #2086 R5: same shape as {@link #nodeWithCentre}, plus an explicit {@code bearingDegrees} (V124)
+     * so the widened {@code NavigationChildSummary#bearingDegrees} threading can be asserted against a
+     * KNOWN, distinguishable value rather than the always-null default every other fixture node above
+     * carries (via the pre-#2086 20-arg {@link NavigationNode} constructor).
+     */
+    private static NavigationNode nodeWithCentreAndBearing(long id, Long parentId, String regionKey, String nodeType,
+                                                             String nodeKey, String areaKey,
+                                                             List<String> representativeAreaKeys, String label,
+                                                             int displayOrder, int depth, List<String> ancestorKeys,
+                                                             int descendantAreaCount, BigDecimal centreLat,
+                                                             BigDecimal centreLon, BigDecimal bearingDegrees,
+                                                             Instant now) {
         NavigationNode n = new NavigationNode(1, regionKey, nodeType, parentId, nodeKey, areaKey,
                 representativeAreaKeys, label, displayOrder, depth, ancestorKeys, descendantAreaCount,
-                centreLat, centreLon, centreLat, centreLon, centreLat, centreLon, "fp", now);
+                centreLat, centreLon, centreLat, centreLon, centreLat, centreLon, bearingDegrees, "fp", now);
         try {
             var f = NavigationNode.class.getDeclaredField("id");
             f.setAccessible(true);
@@ -1479,5 +1496,191 @@ class NavigationControllerTest {
         assertThat(areaChildJson.get("areaKey").asText()).isEqualTo("clusterarea");
         assertThat(areaChildJson.get("centreLat").asDouble()).isEqualTo(AREA_LAT.doubleValue());
         assertThat(areaChildJson.get("centreLon").asDouble()).isEqualTo(AREA_LON.doubleValue());
+    }
+
+    // ── #2086 R5: NavigationChildSummary widened with descendantAreaCount/representativeAreaKeys/
+    //    bounds/bearingDegrees ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Same DIRECTION -&gt; CLUSTER -&gt; AREA shape as {@link #buildDirectionClusterAreaGraph()}, but
+     * with a KNOWN, distinguishable {@code bearingDegrees} on the CLUSTER (depth 1) and AREA (depth 2)
+     * rows and an explicit {@code null} on the DIRECTION (depth 0, no parent) — the generator
+     * invariant this fixture exists to prove threads correctly all the way to the wire.
+     */
+    private static final BigDecimal CLUSTER_BEARING = new BigDecimal("45.500");
+    private static final BigDecimal AREA_BEARING = new BigDecimal("270.125");
+
+    private static NavigationGraph buildDirectionClusterAreaGraphWithBearing() {
+        Instant now = Instant.now();
+        NavigationNode direction = nodeWithCentreAndBearing(510L, null, "north", "DIRECTION", "d:north", null,
+                List.of("clusterarea"), "North", 1, 0, List.of(), 1, DIRECTION_LAT, DIRECTION_LON, null, now);
+        NavigationNode cluster = nodeWithCentreAndBearing(511L, 510L, "north", "CLUSTER", "c:north:clusterarea",
+                null, List.of("clusterarea"), "North Cluster", 0, 1, List.of("d:north"), 1,
+                CLUSTER_LAT, CLUSTER_LON, CLUSTER_BEARING, now);
+        NavigationNode area = nodeWithCentreAndBearing(512L, 511L, "north", "AREA", "a:clusterarea", "clusterarea",
+                List.of("clusterarea"), "Cluster Area", 0, 2, List.of("d:north", "c:north:clusterarea"), 0,
+                AREA_LAT, AREA_LON, AREA_BEARING, now);
+        return NavigationGraph.build("bearingcity", 6L, List.of(direction, cluster, area));
+    }
+
+    @Test
+    void getNode_rootChildren_depthZero_bearingDegreesIsNull_noParentToBearFrom() {
+        when(graphCache.getActiveGraph("bearingcity")).thenReturn(Optional.of(buildDirectionClusterAreaGraphWithBearing()));
+
+        NavigationNodeResponse body = controller.getNode("bearingcity", "root", lenientWebRequest()).getBody();
+
+        NavigationNodeResponse.NavigationChildSummary directionChild = body.children().get(0);
+        assertThat(directionChild.nodeKey()).isEqualTo("d:north");
+        assertThat(directionChild.bearingDegrees())
+                .as("a depth-0 DIRECTION child under the synthetic root has no parent node to bear "
+                        + "from -- must be null, never a fabricated 0.0")
+                .isNull();
+    }
+
+    @Test
+    void getNode_childrenBelowDepthZero_bearingDegreesNonNull_withinZeroToThreeSixty() {
+        when(graphCache.getActiveGraph("bearingcity")).thenReturn(Optional.of(buildDirectionClusterAreaGraphWithBearing()));
+
+        NavigationNodeResponse.NavigationChildSummary clusterChild = controller.getNode(
+                        "bearingcity", "d:north", lenientWebRequest()).getBody().children().get(0);
+        assertThat(clusterChild.nodeKey()).isEqualTo("c:north:clusterarea");
+        assertThat(clusterChild.bearingDegrees()).isEqualTo(CLUSTER_BEARING.doubleValue());
+        assertThat(clusterChild.bearingDegrees()).isGreaterThanOrEqualTo(0.0).isLessThan(360.0);
+
+        NavigationNodeResponse.NavigationChildSummary areaChild = controller.getNode(
+                        "bearingcity", "c:north:clusterarea", lenientWebRequest()).getBody().children().get(0);
+        assertThat(areaChild.nodeKey()).isEqualTo("a:clusterarea");
+        assertThat(areaChild.bearingDegrees()).isEqualTo(AREA_BEARING.doubleValue());
+        assertThat(areaChild.bearingDegrees()).isGreaterThanOrEqualTo(0.0).isLessThan(360.0);
+    }
+
+    @Test
+    void getNode_children_descendantAreaCountAndRepresentativeAreaKeysAndBounds_matchPersistedNode() {
+        when(graphCache.getActiveGraph("bearingcity")).thenReturn(Optional.of(buildDirectionClusterAreaGraphWithBearing()));
+
+        NavigationNodeResponse.NavigationChildSummary clusterChild = controller.getNode(
+                        "bearingcity", "d:north", lenientWebRequest()).getBody().children().get(0);
+
+        assertThat(clusterChild.descendantAreaCount())
+                .as("the persisted, CANONICAL descendant_area_count column value -- not recomputed")
+                .isEqualTo(1);
+        assertThat(clusterChild.representativeAreaKeys()).containsExactly("clusterarea");
+        assertThat(clusterChild.bounds()).isNotNull();
+        assertThat(clusterChild.bounds().centreLat()).isEqualTo(CLUSTER_LAT.doubleValue());
+        assertThat(clusterChild.bounds().centreLon()).isEqualTo(CLUSTER_LON.doubleValue());
+        assertThat(clusterChild.bounds().minLat()).isEqualTo(CLUSTER_LAT.doubleValue());
+        assertThat(clusterChild.bounds().maxLat()).isEqualTo(CLUSTER_LAT.doubleValue());
+
+        // AREA leaf: representativeAreaKeys carries its OWN area_key as its single representative.
+        NavigationNodeResponse.NavigationChildSummary areaChild = controller.getNode(
+                        "bearingcity", "c:north:clusterarea", lenientWebRequest()).getBody().children().get(0);
+        assertThat(areaChild.representativeAreaKeys()).containsExactly("clusterarea");
+        assertThat(areaChild.descendantAreaCount()).isEqualTo(0);
+    }
+
+    /**
+     * qa-fast R-M1: {@code representativeAreaKeys} must NEVER be null on the wire even when the
+     * persisted column somehow is (defensive fallback to {@code List.of()} in {@code childSummary}).
+     * Exercised with a directly-mocked {@link NavigationGraph}/{@link NavigationNode} rather than the
+     * real {@link NavigationGraph#build} fixtures above, since a genuinely generator-produced row can
+     * never carry a null list (the column is {@code NOT NULL}) -- this proves the MAPPER'S OWN
+     * defensive guard, not a reachable production state.
+     */
+    @Test
+    void getNode_children_representativeAreaKeysNeverNull_evenWhenPersistedValueIsNull() {
+        NavigationGraph mockedGraph = mock(NavigationGraph.class);
+        NavigationNode nullRepsChild = mock(NavigationNode.class);
+        when(nullRepsChild.getNodeKey()).thenReturn("c:null-reps");
+        when(nullRepsChild.getNodeType()).thenReturn("CLUSTER");
+        when(nullRepsChild.getDisplayLabel()).thenReturn("Null Reps");
+        when(nullRepsChild.getDisplayOrder()).thenReturn(0);
+        when(nullRepsChild.getAreaKey()).thenReturn(null);
+        when(nullRepsChild.getRepresentativeAreaKeys()).thenReturn(null);
+        when(nullRepsChild.getDescendantAreaCount()).thenReturn(0);
+        when(nullRepsChild.getBearingDegrees()).thenReturn(null);
+        when(mockedGraph.revisionId()).thenReturn(1L);
+        when(mockedGraph.nodeByKey("c:null-reps")).thenReturn(nullRepsChild);
+        when(mockedGraph.childrenOf(null)).thenReturn(List.of("c:null-reps"));
+        when(mockedGraph.ancestryOf("root")).thenReturn(List.of());
+        when(mockedGraph.boundsOf(any())).thenReturn(null);
+        when(graphCache.getActiveGraph("nullrepscity")).thenReturn(Optional.of(mockedGraph));
+
+        NavigationNodeResponse body = controller.getNode("nullrepscity", "root", lenientWebRequest()).getBody();
+
+        assertThat(body.children()).hasSize(1);
+        assertThat(body.children().get(0).representativeAreaKeys())
+                .as("never null on the wire -- falls back to an empty list")
+                .isNotNull()
+                .isEmpty();
+    }
+
+    /**
+     * The exact conflation qa-fast flags as the failure mode this field naming guards against:
+     * {@code descendantAreaCount} (canonical area membership, structural) must never be confused with
+     * {@code /counts}' listing-derived {@code matchingAreaCount}. SAME fixture and SAME stubbing as
+     * {@code getCounts_matchingAreaCount_reportsDistinctMatchingAreas_notTheListingTotal} above (leaf1:
+     * 1,730 listings match; leaf2: present, zero listings) -- "mid"'s persisted descendantAreaCount is
+     * 2 (both leaf1 AND leaf2 are canonical members), while its listing-derived matchingAreaCount is 1
+     * (only leaf1 actually matches). Two different endpoints, two different fields, two different
+     * values for the very same node in the very same request context.
+     */
+    @Test
+    void descendantAreaCount_onNavigationEndpoint_distinctFromMatchingAreaCount_onCountsEndpoint() {
+        NavigationGraph graph = buildGraph();
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(graph));
+
+        NavigationNodeResponse.NavigationChildSummary midChild = controller.getNode(
+                        "testcity", "c:north:leaf1-leaf2-leaf3", lenientWebRequest()).getBody().children().get(0);
+        assertThat(midChild.nodeKey()).isEqualTo("c:north:leaf1-leaf2");
+        assertThat(midChild.descendantAreaCount())
+                .as("canonical membership -- leaf1 AND leaf2 both count, regardless of listing volume")
+                .isEqualTo(2);
+
+        Map<String, Long> areaCounts = Map.of("leaf1", 1730L, "leaf2", 0L);
+        when(rollupService.areaCountsForCity(eq("testcity"), eq(42L), any())).thenReturn(areaCounts);
+        when(rollupService.schoolCoverageForCity(eq("testcity"), eq(42L))).thenReturn(AreaSchoolCoverage.empty());
+        when(rollupService.countForNode(any(), any(), eq(areaCounts))).thenReturn(1736L);
+        when(rollupService.schoolCountForNode(any(), any(), any())).thenReturn(0L);
+        when(rollupService.childCounts(any(), isNull(), eq(areaCounts), any()))
+                .thenReturn(List.of(new AreaCountRollupService.NodeCount("c:north:leaf1-leaf2", 1736L, 0L)));
+
+        long matchingAreaCount = controller.getCounts(
+                        "testcity", "root", null, null, null, null, null, null, null, null, null)
+                .getBody().children().get(0).matchingAreaCount();
+
+        assertThat(matchingAreaCount)
+                .as("listing-derived -- only leaf1 actually matches")
+                .isEqualTo(1L)
+                .isNotEqualTo((long) midChild.descendantAreaCount());
+    }
+
+    /**
+     * JSON-level wire-shape proof for the widened fields, following the same {@code
+     * getNode_wireShape_nullFieldsArePresentAndNull_notOmitted} precedent above: {@code
+     * descendantAreaCount}/{@code representativeAreaKeys}/{@code bounds} present-and-populated on
+     * every child, and {@code bearingDegrees} present-and-null (not omitted) for the depth-0 child.
+     */
+    @Test
+    void getNode_wireShape_widenedFields_presentOnEveryChild_bearingPresentAndNullAtDepthZero() throws Exception {
+        when(graphCache.getActiveGraph("bearingcity")).thenReturn(Optional.of(buildDirectionClusterAreaGraphWithBearing()));
+        ObjectMapper mapper = new ObjectMapper();
+
+        NavigationNodeResponse rootBody = controller.getNode("bearingcity", "root", lenientWebRequest()).getBody();
+        JsonNode directionChildJson = mapper.valueToTree(rootBody).get("children").get(0);
+        assertThat(directionChildJson.has("descendantAreaCount")).isTrue();
+        assertThat(directionChildJson.has("representativeAreaKeys")).isTrue();
+        assertThat(directionChildJson.has("bounds")).isTrue();
+        assertThat(directionChildJson.has("bearingDegrees"))
+                .as("present-and-null, never omitted -- the agreed nested-record wire contract")
+                .isTrue();
+        assertThat(directionChildJson.get("bearingDegrees").isNull()).isTrue();
+
+        NavigationNodeResponse clusterBody = controller.getNode(
+                "bearingcity", "d:north", lenientWebRequest()).getBody();
+        JsonNode clusterChildJson = mapper.valueToTree(clusterBody).get("children").get(0);
+        assertThat(clusterChildJson.get("descendantAreaCount").asInt()).isEqualTo(1);
+        assertThat(clusterChildJson.get("representativeAreaKeys").get(0).asText()).isEqualTo("clusterarea");
+        assertThat(clusterChildJson.get("bearingDegrees").isNull()).isFalse();
+        assertThat(clusterChildJson.get("bearingDegrees").asDouble()).isEqualTo(CLUSTER_BEARING.doubleValue());
     }
 }

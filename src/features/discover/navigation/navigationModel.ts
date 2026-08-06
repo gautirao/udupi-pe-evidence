@@ -44,6 +44,30 @@ export function listingAreaKeys(
   return node.descendantAreaKeys ?? [];
 }
 
+/**
+ * Server invariant safety net (Issue #2086) — `NavigationTreeValidationService`
+ * fail-closed enforces at most 15 children per node, which is what let the
+ * frontend delete its own 5/6 defensive truncation caps. This is a NON-BLOCKING
+ * dev-only diagnostic for the case that invariant is ever violated by a stale
+ * or invalid server revision: it warns, it never slices or hides data — a cap
+ * here would just reintroduce the bug class #2086 removed.
+ */
+export const MAX_SERVER_GUARANTEED_CHILDREN = 15;
+
+/**
+ * Warns (dev builds only) when a resolved node's children exceed the server's
+ * guaranteed ceiling. Pure side effect, no return value — callers pass the
+ * children array as read from the resolved node, unmodified.
+ */
+export function warnIfChildrenExceedServerCap(nodeKey: string, childCount: number): void {
+  if (!import.meta.env.DEV) return;
+  if (childCount <= MAX_SERVER_GUARANTEED_CHILDREN) return;
+  // eslint-disable-next-line no-console -- intentional dev-only diagnostic, never a UI cap.
+  console.warn(
+    `[navigation] node ${nodeKey} returned ${childCount} children, exceeding the server-guaranteed max of ${MAX_SERVER_GUARANTEED_CHILDREN}. This indicates a stale or invalid server revision — the frontend renders them all regardless.`,
+  );
+}
+
 /* ────────────────────────── AC1.6 — detect and report ───────────────────────── */
 
 /**

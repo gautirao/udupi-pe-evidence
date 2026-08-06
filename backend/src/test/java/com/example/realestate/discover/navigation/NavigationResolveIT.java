@@ -530,4 +530,74 @@ class NavigationResolveIT {
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound());
     }
+
+    // =========================================================================================
+    // #2086 R5 — NavigationChildSummary widened with descendantAreaCount/representativeAreaKeys/
+    // bounds/bearingDegrees, over a REAL generator-produced tree, with NO Authorization header
+    // (V5 precedent) — the whole point being these are anon-reachable, real-pipeline-sourced values,
+    // not just unit-test-fixture wiring.
+    // =========================================================================================
+
+    @Test
+    @DisplayName("#2086 R5: GET .../navigation/root with NO Authorization header returns 200 with the "
+            + "four widened child fields present, and bearingDegrees null for the depth-0 DIRECTION "
+            + "child (no parent node to bear from)")
+    void navigationRoot_noAuthHeader_widenedChildFields_bearingNullAtDepthZero() throws Exception {
+        // #1956/#2014 D6(d): max_safety_depth=1 so the tree stays within the DIRECTION(0)/CLUSTER(1)/
+        // AREA(2) contract shape — same recipe as resolve_areaKeyField_omittedOnCluster above.
+        CityFixture fixture = seedMultiLevelCity("r5-root-bearing", 16, 2, 1, 1);
+        prepareValidateAndPromote(fixture);
+
+        MvcResult result = mockMvc.perform(get("/api/discover/cities/" + fixture.slug() + "/navigation/root"))
+                // No .header("Authorization", ...) — proves the widened response still serves anon.
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        JsonNode directionChild = body.get("children").get(0);
+
+        assertThat(directionChild.get("nodeType").asText()).isEqualTo("DIRECTION");
+        assertThat(directionChild.has("descendantAreaCount")).isTrue();
+        assertThat(directionChild.get("descendantAreaCount").asInt()).isEqualTo(16);
+        assertThat(directionChild.has("representativeAreaKeys")).isTrue();
+        assertThat(directionChild.get("representativeAreaKeys").isArray()).isTrue();
+        assertThat(directionChild.get("representativeAreaKeys").size()).isGreaterThan(0);
+        assertThat(directionChild.has("bounds")).isTrue();
+        assertThat(directionChild.get("bounds").isNull()).isFalse();
+        assertThat(directionChild.has("bearingDegrees"))
+                .as("present-and-null, never omitted — the agreed nested-record wire contract")
+                .isTrue();
+        assertThat(directionChild.get("bearingDegrees").isNull())
+                .as("depth-0 DIRECTION child under the synthetic root has no parent node to bear from")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("#2086 R5: a CLUSTER child below depth 0 gets a NON-NULL bearingDegrees within "
+            + "[0, 360) from a real generator-produced tree, reachable with no Authorization header")
+    void navigationDirection_noAuthHeader_clusterChild_bearingNonNullWithinRange() throws Exception {
+        CityFixture fixture = seedMultiLevelCity("r5-cluster-bearing", 16, 2, 1, 1);
+        prepareValidateAndPromote(fixture);
+
+        String rootBody = mockMvc.perform(get("/api/discover/cities/" + fixture.slug() + "/navigation/root"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String directionNodeKey = objectMapper.readTree(rootBody).get("children").get(0).get("nodeKey").asText();
+
+        MvcResult result = mockMvc.perform(get("/api/discover/cities/" + fixture.slug()
+                        + "/navigation/" + directionNodeKey))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode directionBody = objectMapper.readTree(result.getResponse().getContentAsString());
+        JsonNode clusterChild = directionBody.get("children").get(0);
+
+        assertThat(clusterChild.get("nodeType").asText()).isEqualTo("CLUSTER");
+        assertThat(clusterChild.get("bearingDegrees").isNull())
+                .as("below depth 0, bearingDegrees is the great-circle bearing from the DIRECTION "
+                        + "parent's centre — never null")
+                .isFalse();
+        double bearing = clusterChild.get("bearingDegrees").asDouble();
+        assertThat(bearing).isGreaterThanOrEqualTo(0.0).isLessThan(360.0);
+        assertThat(clusterChild.get("descendantAreaCount").asInt()).isGreaterThan(0);
+        assertThat(clusterChild.get("representativeAreaKeys").isArray()).isTrue();
+        assertThat(clusterChild.get("bounds").isNull()).isFalse();
+    }
 }

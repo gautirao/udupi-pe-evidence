@@ -226,7 +226,7 @@ describe('NavigationLevelPanel', () => {
       { nodeKey: 'a:charlie', nodeType: 'AREA', displayLabel: 'Charlie', displayOrder: 3, listingCount: 1, schoolCount: null, isLeafArea: true, matchingAreaCount: null },
     ];
 
-    it('city ROOT — "Directions" eyebrow with count = children.length, rendered ABOVE the child list, with a divider', () => {
+    it('city ROOT — "Explore {cityLabel}" eyebrow (Issue #2086 copy change from the former literal "Directions") with count = children.length, rendered ABOVE the child list, with a divider', () => {
       render(
         <NavigationLevelPanel
           journey={makeJourney({
@@ -238,7 +238,11 @@ describe('NavigationLevelPanel', () => {
         />,
       );
       const label = screen.getByTestId('navigation-level-section-label');
-      expect(label).toHaveTextContent('Directions');
+      // Issue #2086 changed this eyebrow from the literal 'Directions' to
+      // `Explore ${cityLabel}` — asserting the NEW copy is the point of this
+      // test, not a reversion to the old literal.
+      expect(label).toHaveTextContent('Explore Bangalore');
+      expect(label).not.toHaveTextContent('Directions');
       expect(screen.getByTestId('navigation-level-section-count')).toHaveTextContent('2');
       // Divider — the section-label row itself carries the border-b rule
       // separating it (and the switcher block above it, mounted by this

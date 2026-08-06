@@ -62,7 +62,7 @@ public class NavigationTreeSandboxWriter {
                     node.representativeAreaKeys(), node.displayLabel(), node.displayOrder(), node.depth(),
                     node.ancestorKeys(), node.descendantAreaCount(), node.centreLat(), node.centreLon(),
                     node.minLat(), node.minLon(), node.maxLat(), node.maxLon(),
-                    node.policyFingerprint(), node.generatedAt()));
+                    node.bearingDegrees(), node.policyFingerprint(), node.generatedAt()));
 
             idByNodeKey.put(node.nodeKey(), saved.getId());
             insertedIds.add(saved.getId());

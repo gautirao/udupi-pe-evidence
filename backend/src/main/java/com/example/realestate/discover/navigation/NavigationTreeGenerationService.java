@@ -83,6 +83,11 @@ public class NavigationTreeGenerationService {
 
         CanonicalGeographyReader.CanonicalGeography geography = geographyReader.loadGeography(cityId);
 
+        // #2086 code-review fix: areaByKey is LOOKUP-ONLY (areaByKey.get(...) below) — its iteration
+        // order is never observed, so it carries no determinism obligation of its own. Determinism
+        // rests entirely on NavigationTreeGenerator's own sorts (generateRegion:183-185,
+        // generateCity:126-129); do NOT add a `.values()`/entrySet() iteration over this map without
+        // re-establishing an explicit sort first.
         Map<String, CanonicalGeographyReader.CanonicalArea> areaByKey = geography.areas().stream()
                 .collect(Collectors.toMap(CanonicalGeographyReader.CanonicalArea::areaKey, a -> a, (a, b) -> a));
 
@@ -122,9 +127,14 @@ public class NavigationTreeGenerationService {
             CanonicalGeographyReader.CanonicalCityRegion regionMeta = regionByKey.get(e.getKey());
             int regionDisplayOrder = regionMeta != null && regionMeta.displayOrder() != null
                     ? regionMeta.displayOrder() : 0;
-            String regionDisplayLabel = regionMeta != null && regionMeta.displayLabel() != null
-                    ? regionMeta.displayLabel() : e.getKey();
-            regionInputs.add(new GeneratorRegionInput(e.getKey(), members, regionDisplayOrder, regionDisplayLabel));
+            // #2086 code-review fix (N4): a region's raw display_label is no longer threaded to the
+            // generator at all — design.R1 derives a DIRECTION's label from member geography via
+            // NavigationTreeGenerator#deriveLabel, and generateRegion's parameter list no longer
+            // accepts a region display label to read (see that method's javadoc). The
+            // GeneratorRegionInput#displayLabel field itself still exists (other callers/tests rely
+            // on its back-compat default), so e.getKey() is passed here as an inert placeholder
+            // rather than removing the field from the record.
+            regionInputs.add(new GeneratorRegionInput(e.getKey(), members, regionDisplayOrder, e.getKey()));
         }
 
         List<SandboxNavigationOverride> overrideRows =
@@ -162,9 +172,18 @@ public class NavigationTreeGenerationService {
                 .collect(Collectors.toSet());
         Set<String> validRegionKeys = areaKeysByRegion.keySet();
 
+        // #2086 S1b: wires check #16 (label provenance) into the real generation path — node_key
+        // is unique by construction (see NavigationTreeGenerator#deriveClusterNodeKey's collision
+        // disambiguation and NavigationKeys#areaNodeKey's per-area_key derivation), so
+        // Collectors.toMap's default (first-wins) merge behaviour can never actually be invoked by a
+        // real collision here; a (a, b) -> a merge function is supplied only as a defensive
+        // fail-soft guard against Collectors.toMap's default throw, never expected to fire.
+        Map<String, String> displayLabelByNodeKey = generated.stream()
+                .collect(Collectors.toMap(GeneratedNode::nodeKey, GeneratedNode::displayLabel, (a, b) -> a));
+
         ValidationReport report = validationService.validate(
                 validationNodes, expectedAreaKeys, policyRow.knobs().maxSafetyDepth(), overrides, validRegionKeys,
-                canonicalAreaKeys);
+                canonicalAreaKeys, displayLabelByNodeKey);
         if (!report.isValid()) {
             throw new NavigationTreeValidationException(report);
         }

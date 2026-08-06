@@ -4,7 +4,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -249,9 +251,30 @@ class NavigationTreeValidationServiceTest {
     }
 
     @Test
-    @DisplayName("11: max-depth violation")
-    void maxDepthViolation() {
+    @DisplayName("11a: a depth-2 tree PASSES check #11 even when the policy's max_safety_depth is "
+            + "0 — the regression test for the blocker S1 discovered: Bangalore's hosted "
+            + "max_safety_depth=0 must NOT reject the exact City -> Direction -> Local Destination -> "
+            + "AREA shape #2086 exists to deliver")
+    void depthTwoPassesEvenWithMaxSafetyDepthZero() {
         ValidationReport report = service.validate(validTree(), Set.of(), 0, List.of());
+        assertThat(report.errors()).extracting(ValidationError::code).doesNotContain("MAX_DEPTH_VIOLATION");
+    }
+
+    @Test
+    @DisplayName("11b: a depth-2 tree PASSES check #11 even when the policy's max_safety_depth is 1")
+    void depthTwoPassesEvenWithMaxSafetyDepthOne() {
+        ValidationReport report = service.validate(validTree(), Set.of(), 1, List.of());
+        assertThat(report.errors()).extracting(ValidationError::code).doesNotContain("MAX_DEPTH_VIOLATION");
+    }
+
+    @Test
+    @DisplayName("11c: a depth-3 tree FAILS check #11 — the fixed product-contract ceiling still "
+            + "applies regardless of max_safety_depth's value")
+    void depthThreeFailsRegardlessOfMaxSafetyDepth() {
+        List<ValidationNode> nodes = new ArrayList<>(validTree());
+        nodes.add(node("c:north:a-b:sub", "a:city|a", "CLUSTER", null, List.of("city|a"), 3,
+                List.of("d:north", "c:north:a-b", "a:city|a"), 1, 1));
+        ValidationReport report = service.validate(nodes, Set.of(), 0, List.of());
         assertThat(report.errors()).extracting(ValidationError::code).contains("MAX_DEPTH_VIOLATION");
     }
 
@@ -494,5 +517,353 @@ class NavigationTreeValidationServiceTest {
                         List.of("d:north", "c:north:top", "c:north:sub"), 1, 2));
         ValidationReport report = service.validate(nodes);
         assertThat(report.errors()).extracting(ValidationError::code).contains("INVALID_HIERARCHY_SHAPE");
+    }
+
+    // ── 15: breadth / Local Destination mandate (#2086 AC3/AC5/AC17) ───────────────────────────
+    // Every fixture here reads the PERSISTED descendantAreaCount field ValidationNode carries —
+    // there is no listing-derived/matchingAreaCount field anywhere on ValidationNode, so these
+    // checks are structurally incapable of consulting anything other than the canonical count.
+
+    /** Builds {@code count} AREA leaves under {@code parentNodeKey}, area_keys {@code prefix0}..
+     * {@code prefix<count-1>}, depth/ancestry consistent with a real generator-produced subtree. */
+    private static List<ValidationNode> areaLeaves(
+            String parentNodeKey, List<String> ancestorKeys, int depth, String prefix, int count) {
+        List<ValidationNode> out = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            String areaKey = prefix + i;
+            out.add(node("a:" + areaKey, parentNodeKey, "AREA", areaKey, List.of(areaKey), depth,
+                    ancestorKeys, 1, i + 1));
+        }
+        return out;
+    }
+
+    @Test
+    @DisplayName("15a: a node with more than 15 children is BREADTH_EXCEEDED")
+    void breadthExceeded() {
+        List<ValidationNode> nodes = new ArrayList<>();
+        nodes.add(node("d:north", null, "DIRECTION", null, List.of("g0", "g1"), 0, List.of(), 16, 1));
+        nodes.addAll(areaLeaves("d:north", List.of("d:north"), 1, "g", 16));
+        ValidationReport report = service.validate(nodes);
+        assertThat(report.errors()).extracting(ValidationError::code).contains("BREADTH_EXCEEDED");
+    }
+
+    @Test
+    @DisplayName("15b: a node with descendant_area_count > 15 that emits a direct non-CLUSTER child "
+            + "is MISSING_LOCAL_DESTINATION_LEVEL")
+    void missingLocalDestinationLevel() {
+        List<ValidationNode> nodes = new ArrayList<>();
+        nodes.add(node("d:north", null, "DIRECTION", null, List.of("g0", "g1"), 0, List.of(), 16, 1));
+        nodes.addAll(areaLeaves("d:north", List.of("d:north"), 1, "g", 16));
+        ValidationReport report = service.validate(nodes);
+        assertThat(report.errors()).extracting(ValidationError::code)
+                .contains("MISSING_LOCAL_DESTINATION_LEVEL");
+    }
+
+    @Test
+    @DisplayName("15c: a CLUSTER whose own descendant_area_count exceeds 15 is LOCAL_DESTINATION_OVERSIZED")
+    void localDestinationOversized() {
+        List<ValidationNode> nodes = new ArrayList<>();
+        nodes.add(node("d:north", null, "DIRECTION", null, List.of("g0", "g1"), 0, List.of(), 16, 1));
+        nodes.add(node("c:north:big", "d:north", "CLUSTER", null, List.of("g0", "g1"), 1,
+                List.of("d:north"), 16, 1));
+        nodes.addAll(areaLeaves("c:north:big", List.of("d:north", "c:north:big"), 2, "g", 16));
+        ValidationReport report = service.validate(nodes);
+        assertThat(report.errors()).extracting(ValidationError::code).contains("LOCAL_DESTINATION_OVERSIZED");
+    }
+
+    @Test
+    @DisplayName("15d: a compliant tree (16 canonical areas split into two 8-area Local Destinations) "
+            + "produces zero check-#15 errors")
+    void breadthMandateCompliantTreePasses() {
+        List<ValidationNode> nodes = new ArrayList<>();
+        nodes.add(node("d:north", null, "DIRECTION", null, List.of("g0-0", "g0-1"), 0, List.of(), 16, 1));
+        nodes.add(node("c:north:g0", "d:north", "CLUSTER", null, List.of("g0-0", "g0-1"), 1,
+                List.of("d:north"), 8, 1));
+        nodes.addAll(areaLeaves("c:north:g0", List.of("d:north", "c:north:g0"), 2, "g0-", 8));
+        nodes.add(node("c:north:g1", "d:north", "CLUSTER", null, List.of("g1-0", "g1-1"), 1,
+                List.of("d:north"), 8, 2));
+        nodes.addAll(areaLeaves("c:north:g1", List.of("d:north", "c:north:g1"), 2, "g1-", 8));
+        ValidationReport report = service.validate(nodes);
+        assertThat(report.errors()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("15e: check #15 is driven purely by the PERSISTED descendant_area_count field — "
+            + "ValidationNode carries no listing-derived count at all, so an otherwise-identical "
+            + "20-leaf CLUSTER (real structural leaf count = persisted count = 20) trips "
+            + "LOCAL_DESTINATION_OVERSIZED, proving the check cannot be reading any filter-sensitive "
+            + "count (no such field exists on ValidationNode to read)")
+    void breadthMandateReadsDescendantAreaCountNotAnyListingDerivedCount() {
+        List<ValidationNode> nodes = new ArrayList<>();
+        nodes.add(node("d:north", null, "DIRECTION", null, List.of("g0", "g1"), 0, List.of(), 20, 1));
+        nodes.add(node("c:north:big", "d:north", "CLUSTER", null, List.of("g0", "g1"), 1,
+                List.of("d:north"), 20, 1));
+        nodes.addAll(areaLeaves("c:north:big", List.of("d:north", "c:north:big"), 2, "g", 20));
+        ValidationReport report = service.validate(nodes);
+        assertThat(report.errors()).extracting(ValidationError::code).contains("LOCAL_DESTINATION_OVERSIZED");
+    }
+
+    @Test
+    @DisplayName("15f: a first-level group exceeding 225 canonical areas produces a diagnostic "
+            + "naming the region, its area count and the 225 ceiling")
+    void groupExceeding225AreasNamesRegionCountAndCeiling() {
+        List<ValidationNode> nodes = new ArrayList<>();
+        nodes.add(node("d:north", null, "DIRECTION", null, List.of("g0", "g1"), 0, List.of(), 226, 1));
+        nodes.addAll(areaLeaves("d:north", List.of("d:north"), 1, "g", 16));
+        ValidationReport report = service.validate(nodes);
+        assertThat(report.errors())
+                .filteredOn(e -> "BREADTH_EXCEEDED".equals(e.code()) || "MISSING_LOCAL_DESTINATION_LEVEL".equals(e.code()))
+                .extracting(ValidationError::message)
+                .anySatisfy(msg -> assertThat(msg)
+                        .contains("region=north")
+                        .contains("226")
+                        .contains("225"));
+    }
+
+    // ── 16: label provenance (#2086 AC6) ────────────────────────────────────────────────────────
+    // These tests exercise the 7-arg overload directly, since ValidationNode itself carries no
+    // display_label field — a nodeKey -> label map must be supplied for check #16 to run at all
+    // (an empty/null map makes it a no-op, exercised implicitly by every other test in this file,
+    // none of which supply a label map and none of which ever see a LABEL_NOT_DERIVABLE error).
+
+    private static final Map<String, String> VALID_TREE_LABELS = Map.of(
+            "d:north", "Area A & Area B",
+            "c:north:a-b", "Area A & Area B",
+            "a:city|a", "Area A",
+            "a:city|b", "Area B");
+
+    @Test
+    @DisplayName("16a: a derivable two-representative \"A & B\" label passes")
+    void twoRepresentativeLabelDerivableIsAccepted() {
+        ValidationReport report = service.validate(
+                validTree(), Set.of(), null, List.of(), Set.of(), Set.of(), VALID_TREE_LABELS);
+        assertThat(report.errors()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("16b: a derivable single-representative label passes")
+    void singleRepresentativeLabelDerivableIsAccepted() {
+        List<ValidationNode> nodes = List.of(
+                node("d:west", null, "DIRECTION", null, List.of("city|only"), 0, List.of(), 1, 1),
+                node("a:city|only", "d:west", "AREA", "city|only", List.of("city|only"), 1,
+                        List.of("d:west"), 1, 1));
+        Map<String, String> labels = Map.of("d:west", "Area Only", "a:city|only", "Area Only");
+        ValidationReport report = service.validate(nodes, Set.of(), null, List.of(), Set.of(), Set.of(), labels);
+        assertThat(report.errors()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("16c: a non-derivable label with NO override FAILS with LABEL_NOT_DERIVABLE — the "
+            + "no-override path, proving the check actually rejects real violations and not just "
+            + "waves through anything carrying an override")
+    void nonDerivableLabelWithNoOverrideFails() {
+        Map<String, String> labels = new java.util.HashMap<>(VALID_TREE_LABELS);
+        labels.put("c:north:a-b", "North"); // not derivable from reps [city|a, city|b]
+        ValidationReport report = service.validate(
+                validTree(), Set.of(), null, List.of(), Set.of(), Set.of(), labels);
+        assertThat(report.errors()).extracting(ValidationError::code).contains("LABEL_NOT_DERIVABLE");
+    }
+
+    @Test
+    @DisplayName("16d: the SAME non-derivable label WITH a matching RELABEL override PASSES — the "
+            + "mandatory exemption, since RELABEL is applied BEFORE validation runs (V122)")
+    void nonDerivableLabelWithRelabelOverridePasses() {
+        Map<String, String> labels = new java.util.HashMap<>(VALID_TREE_LABELS);
+        labels.put("c:north:a-b", "North"); // same non-derivable label as 16c
+        List<NavigationOverride> overrides = List.of(
+                new NavigationOverride("RELABEL", null, "c:north:a-b", null, null, "North", null, 1));
+        ValidationReport report = service.validate(
+                validTree(), Set.of(), null, overrides, Set.of(), Set.of(), labels);
+        assertThat(report.errors()).extracting(ValidationError::code).doesNotContain("LABEL_NOT_DERIVABLE");
+    }
+
+    @Test
+    @DisplayName("16e: a label equal to the node's own region_key is LABEL_NOT_DERIVABLE")
+    void labelEqualToRegionKeyFails() {
+        Map<String, String> labels = new java.util.HashMap<>(VALID_TREE_LABELS);
+        labels.put("d:north", "north"); // == regionKey "north" used by the node() test helper
+        ValidationReport report = service.validate(
+                validTree(), Set.of(), null, List.of(), Set.of(), Set.of(), labels);
+        assertThat(report.errors()).extracting(ValidationError::code).contains("LABEL_NOT_DERIVABLE");
+    }
+
+    @Test
+    @DisplayName("16f: a label equal to the node's own node_key is LABEL_NOT_DERIVABLE")
+    void labelEqualToNodeKeyFails() {
+        Map<String, String> labels = new java.util.HashMap<>(VALID_TREE_LABELS);
+        labels.put("c:north:a-b", "c:north:a-b");
+        ValidationReport report = service.validate(
+                validTree(), Set.of(), null, List.of(), Set.of(), Set.of(), labels);
+        assertThat(report.errors()).extracting(ValidationError::code).contains("LABEL_NOT_DERIVABLE");
+    }
+
+    @Test
+    @DisplayName("16g: duplicate sibling DIRECTION labels across unrelated regions produce NO "
+            + "validation error (WARN only, per design.R1 residual_risk / R8) — node_key stays "
+            + "unique so this is a UX wart, not a blocking defect")
+    void duplicateDirectionLabelsAreWarnNotFailure() {
+        List<ValidationNode> nodes = List.of(
+                node("d:north", null, "DIRECTION", null, List.of("city|a"), 0, List.of(), 1, 1),
+                node("a:city|a", "d:north", "AREA", "city|a", List.of("city|a"), 1, List.of("d:north"), 1, 1),
+                node("d:south", null, "DIRECTION", null, List.of("city|b"), 0, List.of(), 1, 2),
+                node("a:city|b", "d:south", "AREA", "city|b", List.of("city|b"), 1, List.of("d:south"), 1, 1));
+        // Both DIRECTIONs derive to the SAME label from their own (distinct) representative areas.
+        Map<String, String> labels = Map.of(
+                "d:north", "Same Name", "a:city|a", "Same Name",
+                "d:south", "Same Name", "a:city|b", "Same Name");
+        // Give each DIRECTION its own regionKey via a fresh node set (node() defaults to "north" for
+        // every node — override d:south/a:city|b's regionKey directly so check #14 doesn't fire).
+        List<ValidationNode> retagged = nodes.stream()
+                .map(n -> n.nodeKey().equals("d:south") || n.nodeKey().equals("a:city|b")
+                        ? new ValidationNode(
+                                n.scopeId(), n.nodeKey(), n.parentNodeKey(), n.nodeType(), n.areaKey(),
+                                n.representativeAreaKeys(), n.depth(), n.ancestorKeys(), n.descendantAreaCount(),
+                                n.displayOrder(), n.centreLat(), n.centreLon(), n.minLat(), n.minLon(),
+                                n.maxLat(), n.maxLon(), "south")
+                        : n)
+                .toList();
+        ValidationReport report = service.validate(
+                retagged, Set.of(), null, List.of(), Set.of(), Set.of(), labels);
+        assertThat(report.errors()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("[#2086 code-review fix, N2] a RELABEL targeting an AREA leaf exempts its PARENT's "
+            + "derivability judgment too — the parent's reps resolve through the AREA's curated "
+            + "(post-override) label, which the parent's OWN label was never derived from, so a "
+            + "legitimate curated path must not fail check #16 wholesale")
+    void relabelOnAreaLeafExemptsParentClusterDerivabilityJudgment() {
+        Map<String, String> labels = new java.util.HashMap<>(VALID_TREE_LABELS);
+        labels.put("a:city|a", "Custom A"); // AREA leaf's curated post-override label
+        // c:north:a-b's own label is UNCHANGED ("Area A & Area B") — it is not itself RELABELed —
+        // but its reps=[city|a, city|b] now resolve rep0Name via the curated "Custom A"; without
+        // the N2 fix "Area A & Area B" would no longer be among the derivable candidates.
+        List<NavigationOverride> overrides = List.of(
+                new NavigationOverride("RELABEL", null, "a:city|a", null, null, "Custom A", null, 1));
+        ValidationReport report = service.validate(
+                validTree(), Set.of(), null, overrides, Set.of(), Set.of(), labels);
+        assertThat(report.errors()).extracting(ValidationError::code).doesNotContain("LABEL_NOT_DERIVABLE");
+    }
+
+    @Test
+    @DisplayName("[#2086 code-review fix, N7] the key-leak guard (label == node_key/region_key) still "
+            + "fires even for a node carrying a RELABEL override — the RELABEL exemption is scoped to "
+            + "the reps-derivability judgment only, never to this cheap secondary guard")
+    void keyLeakGuardFiresEvenForRelabeledNode() {
+        Map<String, String> labels = new java.util.HashMap<>(VALID_TREE_LABELS);
+        labels.put("c:north:a-b", "c:north:a-b"); // label leaks the node's own node_key
+        List<NavigationOverride> overrides = List.of(
+                new NavigationOverride("RELABEL", null, "c:north:a-b", null, null, "c:north:a-b", null, 1));
+        ValidationReport report = service.validate(
+                validTree(), Set.of(), null, overrides, Set.of(), Set.of(), labels);
+        assertThat(report.errors()).extracting(ValidationError::code).contains("LABEL_NOT_DERIVABLE");
+    }
+
+    @Test
+    @DisplayName("[#2086 code-review fix, N8] a RELABEL override for a DIFFERENT node_key does NOT "
+            + "exempt this node — proves the exemption is subject-scoped, not \"any override present\"")
+    void relabelForDifferentNodeKeyDoesNotExemptThisNode() {
+        Map<String, String> labels = new java.util.HashMap<>(VALID_TREE_LABELS);
+        labels.put("c:north:a-b", "North"); // non-derivable, same fixture as 16c
+        // RELABEL targets a DIFFERENT node (d:north), not c:north:a-b — the exemption must not apply.
+        List<NavigationOverride> overrides = List.of(
+                new NavigationOverride("RELABEL", null, "d:north", null, null, "Area A & Area B", null, 1));
+        ValidationReport report = service.validate(
+                validTree(), Set.of(), null, overrides, Set.of(), Set.of(), labels);
+        assertThat(report.errors()).extracting(ValidationError::code).contains("LABEL_NOT_DERIVABLE");
+    }
+
+    // ── ValidationMode (#2086 rework fix, PR #2111 cycle 1) ─────────────────────────────────────
+    // NavigationGraphLoader — the runtime loader — is the ONLY caller of validateForRuntimeLoad(),
+    // proven end-to-end (real DB, real loader entry point) by
+    // NavigationRuntimeLoadLenientRegressionIT. These unit tests isolate the mode-split LOGIC
+    // itself: LENIENT_RUNTIME_LOAD downgrades ONLY #15/#16 findings to warnings, every other check
+    // (#1-#14) stays fail-closed regardless of mode, and STRICT (every other overload's default)
+    // is completely unaffected.
+
+    @Test
+    @DisplayName("[mode] LENIENT_RUNTIME_LOAD downgrades a #15 BREADTH_EXCEEDED finding to a "
+            + "lenientWarning instead of a blocking error — the same non-compliant tree that 15a "
+            + "proves STRICT rejects")
+    void lenientRuntimeLoad_downgradesBreadthMandateToWarning() {
+        List<ValidationNode> nodes = new ArrayList<>();
+        nodes.add(node("d:north", null, "DIRECTION", null, List.of("g0", "g1"), 0, List.of(), 16, 1));
+        nodes.addAll(areaLeaves("d:north", List.of("d:north"), 1, "g", 16));
+
+        ValidationReport lenient = service.validateForRuntimeLoad(nodes);
+        assertThat(lenient.isValid()).isTrue();
+        assertThat(lenient.errors()).isEmpty();
+        assertThat(lenient.lenientWarnings()).anySatisfy(w -> assertThat(w).contains("BREADTH_EXCEEDED"));
+
+        // The SAME tree, same node data, under the explicit STRICT mode — still rejected. Proves
+        // the generation/candidate path (which always resolves to STRICT) is provably unaffected.
+        ValidationReport strict = service.validate(
+                nodes, Set.of(), null, List.of(), Set.of(), Set.of(), Map.of(), ValidationMode.STRICT);
+        assertThat(strict.isValid()).isFalse();
+        assertThat(strict.errors()).extracting(ValidationError::code).contains("BREADTH_EXCEEDED");
+        assertThat(strict.lenientWarnings()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("[mode] LENIENT_RUNTIME_LOAD downgrades a #16 LABEL_NOT_DERIVABLE finding to a "
+            + "lenientWarning — mirrors the #15 downgrade for the other #2086-ADDITIVE check")
+    void lenientRuntimeLoad_downgradesLabelProvenanceToWarning() {
+        Map<String, String> labels = new java.util.HashMap<>(VALID_TREE_LABELS);
+        labels.put("c:north:a-b", "North"); // same non-derivable label as 16c
+
+        ValidationReport lenient = service.validate(
+                validTree(), Set.of(), null, List.of(), Set.of(), Set.of(), labels,
+                ValidationMode.LENIENT_RUNTIME_LOAD);
+        assertThat(lenient.isValid()).isTrue();
+        assertThat(lenient.lenientWarnings()).anySatisfy(w -> assertThat(w).contains("LABEL_NOT_DERIVABLE"));
+    }
+
+    @Test
+    @DisplayName("[mode] LENIENT_RUNTIME_LOAD still fails closed on a genuinely corrupt legacy tree "
+            + "— checks #1-#14 are completely unaffected by mode, so a cycle in a tree that ALSO "
+            + "violates #15 still throws/reports invalid, with the #15 finding merely downgraded")
+    void lenientRuntimeLoad_stillFailsClosedForStructuralCorruption() {
+        List<ValidationNode> nodes = new ArrayList<>();
+        // A DIRECTION with 16 direct AREA children (violates #15) — AND a cycle between two of them
+        // (violates #1) by making a child claim its own child as parent, i.e. genuine structural
+        // corruption unrelated to the #2086-ADDITIVE checks.
+        nodes.add(node("d:north", null, "DIRECTION", null, List.of("g0", "g1"), 0, List.of(), 16, 1));
+        nodes.addAll(areaLeaves("d:north", List.of("d:north"), 1, "g", 16));
+        ValidationNode corrupted = nodes.stream().filter(n -> n.nodeKey().equals("a:g0")).findFirst().orElseThrow();
+        nodes.set(nodes.indexOf(corrupted), new ValidationNode(
+                corrupted.scopeId(), corrupted.nodeKey(), "a:g1" /* WRONG: parent is its own sibling,
+                forming a 2-node cycle once a:g1 is also repointed */, corrupted.nodeType(),
+                corrupted.areaKey(), corrupted.representativeAreaKeys(), corrupted.depth(),
+                corrupted.ancestorKeys(), corrupted.descendantAreaCount(), corrupted.displayOrder(),
+                corrupted.centreLat(), corrupted.centreLon(), corrupted.minLat(), corrupted.minLon(),
+                corrupted.maxLat(), corrupted.maxLon(), corrupted.regionKey()));
+        ValidationNode g1 = nodes.stream().filter(n -> n.nodeKey().equals("a:g1")).findFirst().orElseThrow();
+        nodes.set(nodes.indexOf(g1), new ValidationNode(
+                g1.scopeId(), g1.nodeKey(), "a:g0", g1.nodeType(), g1.areaKey(),
+                g1.representativeAreaKeys(), g1.depth(), g1.ancestorKeys(), g1.descendantAreaCount(),
+                g1.displayOrder(), g1.centreLat(), g1.centreLon(), g1.minLat(), g1.minLon(),
+                g1.maxLat(), g1.maxLon(), g1.regionKey()));
+
+        ValidationReport report = service.validateForRuntimeLoad(nodes);
+
+        assertThat(report.isValid()).isFalse(); // genuinely corrupt — LENIENT never masks #1-#14
+        assertThat(report.errors()).extracting(ValidationError::code).contains("CYCLE_DETECTED");
+        // d:north's stored descendant_area_count=16 still exceeds 15 even though re-parenting two
+        // leaves into the a:g0<->a:g1 cycle leaves it with only 14 DIRECT children — check #9
+        // (DESCENDANT_COUNT_MISMATCH) fires separately for that now-stale count, and check #15 still
+        // produces its own MISSING_LOCAL_DESTINATION_LEVEL finding on the same node, merely
+        // downgraded to a lenientWarning rather than silently lost.
+        assertThat(report.lenientWarnings())
+                .anySatisfy(w -> assertThat(w).contains("MISSING_LOCAL_DESTINATION_LEVEL"));
+    }
+
+    @Test
+    @DisplayName("[mode] LENIENT_RUNTIME_LOAD on an already-#2086-compliant tree behaves identically "
+            + "to STRICT — zero errors AND zero lenientWarnings, since #15/#16 never fire for a "
+            + "compliant tree regardless of mode")
+    void lenientRuntimeLoad_compliantTree_noErrorsNoWarnings() {
+        ValidationReport report = service.validateForRuntimeLoad(validTree());
+        assertThat(report.isValid()).isTrue();
+        assertThat(report.lenientWarnings()).isEmpty();
     }
 }

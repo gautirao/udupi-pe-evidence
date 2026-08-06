@@ -102,26 +102,26 @@ class NavigationTreeOverrideApplierTest {
         // c:north:a-b { a:city|a, a:city|b }, c:north:c-d { a:city|c, a:city|d }
         GeneratedNode clusterAB = new GeneratedNode(
                 "north", "CLUSTER", "c:north:a-b", null, null, List.of("city|a", "city|b"), "A & B", 1, 0,
-                List.of(), 2, bd(12.0), bd(77.0), bd(11.99), bd(76.99), bd(12.01), bd(77.01), FINGERPRINT, GENERATED_AT);
+                List.of(), 2, bd(12.0), bd(77.0), bd(11.99), bd(76.99), bd(12.01), bd(77.01), null, FINGERPRINT, GENERATED_AT);
         GeneratedNode areaA = new GeneratedNode(
                 "north", "AREA", "a:city|a", "c:north:a-b", "city|a", List.of("city|a"), "A", 1, 1,
                 List.of("c:north:a-b"), 1, bd(12.0), bd(77.0), bd(11.99), bd(76.99), bd(12.01), bd(77.01),
-                FINGERPRINT, GENERATED_AT);
+                null, FINGERPRINT, GENERATED_AT);
         GeneratedNode areaB = new GeneratedNode(
                 "north", "AREA", "a:city|b", "c:north:a-b", "city|b", List.of("city|b"), "B", 2, 1,
                 List.of("c:north:a-b"), 1, bd(12.1), bd(77.0), bd(12.09), bd(76.99), bd(12.11), bd(77.01),
-                FINGERPRINT, GENERATED_AT);
+                null, FINGERPRINT, GENERATED_AT);
         GeneratedNode clusterCD = new GeneratedNode(
                 "north", "CLUSTER", "c:north:c-d", null, null, List.of("city|c", "city|d"), "C & D", 2, 0,
-                List.of(), 2, bd(13.0), bd(77.0), bd(12.99), bd(76.99), bd(13.01), bd(77.01), FINGERPRINT, GENERATED_AT);
+                List.of(), 2, bd(13.0), bd(77.0), bd(12.99), bd(76.99), bd(13.01), bd(77.01), null, FINGERPRINT, GENERATED_AT);
         GeneratedNode areaC = new GeneratedNode(
                 "north", "AREA", "a:city|c", "c:north:c-d", "city|c", List.of("city|c"), "C", 1, 1,
                 List.of("c:north:c-d"), 1, bd(13.0), bd(77.0), bd(12.99), bd(76.99), bd(13.01), bd(77.01),
-                FINGERPRINT, GENERATED_AT);
+                null, FINGERPRINT, GENERATED_AT);
         GeneratedNode areaD = new GeneratedNode(
                 "north", "AREA", "a:city|d", "c:north:c-d", "city|d", List.of("city|d"), "D", 2, 1,
                 List.of("c:north:c-d"), 1, bd(13.1), bd(77.0), bd(13.09), bd(76.99), bd(13.11), bd(77.01),
-                FINGERPRINT, GENERATED_AT);
+                null, FINGERPRINT, GENERATED_AT);
         return List.of(clusterAB, areaA, areaB, clusterCD, areaC, areaD);
     }
 
@@ -205,6 +205,79 @@ class NavigationTreeOverrideApplierTest {
                 twoClusterTree(), List.of(setReps("c:north:a-b", List.of("city|b"))));
         Map<String, GeneratedNode> byKey = result.stream().collect(Collectors.toMap(GeneratedNode::nodeKey, n -> n));
         assertThat(byKey.get("c:north:a-b").representativeAreaKeys()).containsExactly("city|b");
+    }
+
+    // ── applyPostBisection: MOVE_AREA bearing recompute (#2086 code-review fix, BLOCKING) ─────────
+
+    /** A cluster tree where the source cluster (AB) has THREE members (so removing one leaves a
+     * non-degenerate remaining pair whose centre visibly shifts) and the target cluster (CD) has
+     * two — used to prove {@code rebuildAfterMoves} refreshes bearingDegrees for BOTH the moved
+     * node AND a non-moved sibling of the SOURCE cluster, not merely the moved node itself. */
+    private List<GeneratedNode> threeAndTwoClusterTree() {
+        GeneratedNode clusterAB = new GeneratedNode(
+                "north", "CLUSTER", "c:north:a-b", null, null, List.of("city|a", "city|b"), "A & B", 1, 0,
+                List.of(), 3, bd(12.2), bd(77.0), bd(11.99), bd(76.99), bd(12.41), bd(77.01), null, FINGERPRINT, GENERATED_AT);
+        GeneratedNode areaA = new GeneratedNode(
+                "north", "AREA", "a:city|a", "c:north:a-b", "city|a", List.of("city|a"), "A", 1, 1,
+                List.of("c:north:a-b"), 1, bd(12.0), bd(77.0), bd(11.99), bd(76.99), bd(12.01), bd(77.01),
+                null, FINGERPRINT, GENERATED_AT);
+        GeneratedNode areaB = new GeneratedNode(
+                "north", "AREA", "a:city|b", "c:north:a-b", "city|b", List.of("city|b"), "B", 2, 1,
+                List.of("c:north:a-b"), 1, bd(12.2), bd(77.0), bd(12.19), bd(76.99), bd(12.21), bd(77.01),
+                null, FINGERPRINT, GENERATED_AT);
+        GeneratedNode areaE = new GeneratedNode(
+                "north", "AREA", "a:city|e", "c:north:a-b", "city|e", List.of("city|e"), "E", 3, 1,
+                List.of("c:north:a-b"), 1, bd(12.4), bd(77.0), bd(12.39), bd(76.99), bd(12.41), bd(77.01),
+                null, FINGERPRINT, GENERATED_AT);
+        GeneratedNode clusterCD = new GeneratedNode(
+                "north", "CLUSTER", "c:north:c-d", null, null, List.of("city|c", "city|d"), "C & D", 2, 0,
+                List.of(), 2, bd(13.1), bd(77.0), bd(12.99), bd(76.99), bd(13.21), bd(77.01), null, FINGERPRINT, GENERATED_AT);
+        GeneratedNode areaC = new GeneratedNode(
+                "north", "AREA", "a:city|c", "c:north:c-d", "city|c", List.of("city|c"), "C", 1, 1,
+                List.of("c:north:c-d"), 1, bd(13.0), bd(77.0), bd(12.99), bd(76.99), bd(13.01), bd(77.01),
+                null, FINGERPRINT, GENERATED_AT);
+        GeneratedNode areaD = new GeneratedNode(
+                "north", "AREA", "a:city|d", "c:north:c-d", "city|d", List.of("city|d"), "D", 2, 1,
+                List.of("c:north:c-d"), 1, bd(13.2), bd(77.0), bd(13.19), bd(76.99), bd(13.21), bd(77.01),
+                null, FINGERPRINT, GENERATED_AT);
+        return List.of(clusterAB, areaA, areaB, areaE, clusterCD, areaC, areaD);
+    }
+
+    @Test
+    @DisplayName("[#2086 code-review fix, BLOCKING] MOVE_AREA recomputes bearingDegrees for the moved "
+            + "node against its NEW parent's freshly-computed centre, AND for a non-moved sibling of "
+            + "the SOURCE cluster (whose centre also shifted) — proving the fix is not narrowly scoped "
+            + "to only the moved node")
+    void moveAreaRecomputesBearingForMovedNodeAndNonMovedSourceSibling() {
+        List<GeneratedNode> result = applier.applyPostBisection(
+                threeAndTwoClusterTree(), List.of(move("city|a", "c:north:c-d")));
+        Map<String, GeneratedNode> byKey = result.stream()
+                .collect(Collectors.toMap(GeneratedNode::nodeKey, n -> n));
+
+        // Moved node: city|a's new parent is c:north:c-d — its bearing must be computed from that
+        // cluster's FRESHLY-COMPUTED (post-move) centre to city|a's own (unchanged) centre.
+        GeneratedNode movedArea = byKey.get("a:city|a");
+        GeneratedNode newParent = byKey.get("c:north:c-d");
+        assertThat(movedArea.parentNodeKey()).isEqualTo("c:north:c-d");
+        BigDecimal expectedMovedBearing = NavigationTreeGenerator.computeBearingDegrees(
+                newParent.centreLat(), newParent.centreLon(), movedArea.centreLat(), movedArea.centreLon());
+        assertThat(movedArea.bearingDegrees()).isEqualTo(expectedMovedBearing);
+        assertThat(movedArea.bearingDegrees()).isNotNull();
+
+        // Non-moved sibling of the SOURCE cluster: city|b never moved, but c:north:a-b's centre
+        // shifted (from 3 members down to 2: city|b, city|e) once city|a left — this is the case a
+        // narrow "only fix the moved node" implementation would miss.
+        GeneratedNode nonMovedSibling = byKey.get("a:city|b");
+        GeneratedNode sourceCluster = byKey.get("c:north:a-b");
+        assertThat(nonMovedSibling.parentNodeKey()).isEqualTo("c:north:a-b");
+        assertThat(sourceCluster.descendantAreaCount()).isEqualTo(2); // city|a drained out
+        BigDecimal expectedSiblingBearing = NavigationTreeGenerator.computeBearingDegrees(
+                sourceCluster.centreLat(), sourceCluster.centreLon(),
+                nonMovedSibling.centreLat(), nonMovedSibling.centreLon());
+        assertThat(nonMovedSibling.bearingDegrees()).isEqualTo(expectedSiblingBearing);
+        assertThat(nonMovedSibling.bearingDegrees()).isNotNull();
+        // Both fixture inputs had bearingDegrees=null — a non-null result on the untouched sibling
+        // is itself proof the rebuild pass refreshed it, not merely carried the old value forward.
     }
 
     @Test

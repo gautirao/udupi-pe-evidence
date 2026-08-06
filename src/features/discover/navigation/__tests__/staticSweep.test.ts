@@ -418,6 +418,67 @@ describe('static sweep — the frontend NEVER constructs a node key', () => {
   });
 });
 
+describe('static sweep — no production module truncates node.children with .slice( (Issue #2086 durable guard)', () => {
+  // #2086 deleted MAX_DIRECTION_DESTINATIONS/MAX_LOCAL_DESTINATIONS and the
+  // `.slice(0, cap)` truncation that used them — the server now guarantees
+  // <=15 children per node fail-closed, so a client-side cap can only ever
+  // hide a valid destination. This sweep is the durable guard that stops the
+  // cap being silently reintroduced: no production module may call `.slice(`
+  // on a node's `children` array (however it is spelled — `node.children`,
+  // a destructured `children`, or an intermediate `ordered`/`sorted` alias).
+  const CHILDREN_SLICE_PATTERNS: RegExp[] = [
+    // node.children.slice(...) / child.children.slice(...) — any `.children`
+    // member access immediately followed by `.slice(`.
+    /\.children\s*\.slice\(/,
+    // A locally-sorted/ordered copy of children, still keyed by name, e.g.
+    // `const ordered = [...node.children].sort(...)` followed later by
+    // `ordered.slice(0, cap)` — caught via the exact identifiers this PR's
+    // own `useAreasNavigationJourney.ts` uses for the untruncated copy.
+    /\bordered\.slice\(/,
+  ];
+
+  function truncatesChildren(source: string): boolean {
+    return CHILDREN_SLICE_PATTERNS.some((pattern) => pattern.test(source));
+  }
+
+  it('POSITIVE CONTROL — the pattern really does trip on a children-truncation call', () => {
+    const OFFENDING_FIXTURES = [
+      'const capped = node.children.slice(0, MAX_DIRECTION_DESTINATIONS);',
+      'const capped = child.children.slice(0, 6);',
+      'const ordered = [...node.children].sort((a, b) => a.displayOrder - b.displayOrder);\nreturn ordered.slice(0, cap);',
+    ];
+    for (const fixture of OFFENDING_FIXTURES) {
+      expect(truncatesChildren(fixture), `pattern failed to catch: ${fixture}`).toBe(true);
+    }
+
+    // NEGATIVE CONTROL — legitimate, non-truncating uses of `.slice(` must
+    // not trip the sweep, or it becomes noise everyone routes around.
+    const INNOCENT_FIXTURES = [
+      // The real, current, untruncated PR-2086 code: a full array COPY via
+      // spread, never a `.slice(` call, and no cap argument follows.
+      'const ordered = [...node.children].sort((a, b) => a.displayOrder - b.displayOrder);',
+      // An unrelated string slice.
+      "const short = label.slice(0, 20);",
+      // Slicing something that is not a children array at all.
+      'const page = results.slice(offset, offset + pageSize);',
+    ];
+    for (const fixture of INNOCENT_FIXTURES) {
+      expect(truncatesChildren(fixture), `pattern false-positived on: ${fixture}`).toBe(false);
+    }
+  });
+
+  it('no production module truncates node.children with .slice(', () => {
+    const offenders: string[] = [];
+    for (const file of walkTypeScript(SRC_ROOT)) {
+      if (/\.test\.tsx?$/.test(file)) continue;
+      if (truncatesChildren(read(file))) {
+        offenders.push(path.relative(SRC_ROOT, file));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe('static sweep — the legacy Areas panels are permanently deleted (Issue #1956 PR 6, AC6.3)', () => {
   // Issue #1956 PR 6 (final cutover, Step 3) — these three panels (and their
   // dedicated test files) are deleted outright, not merely unmounted. This

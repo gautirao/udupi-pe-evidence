@@ -277,7 +277,14 @@ describe('useAreasNavigationJourney', () => {
     expect(result.current.nodeCount?.matchingAreaCount).toBe(2);
   });
 
-  it('AC3.5 — caps Direction children at 5 even though the server sent 6', async () => {
+  it('AC12 (Issue #2086, inverted from the pre-#2086 5-cap) — ALL 6 server-sent Direction children render, none dropped', async () => {
+    const serverNode = makeResolveResponse().node;
+    // Build the assertion against the fixture's OWN child count, never a
+    // hardcoded literal — a fixture that manually slices its own "server"
+    // array would false-pass this exact check (qa-fast R-F2).
+    const serverChildren = serverNode.children;
+    expect(serverChildren.length).toBe(6);
+
     mockGet.mockImplementation(async (path: string) => {
       if (path.includes('/navigation/resolve')) return makeResolveResponse();
       if (path.includes('/counts')) return makeCountsResponse();
@@ -295,13 +302,23 @@ describe('useAreasNavigationJourney', () => {
     );
 
     await waitFor(() => expect(result.current.children.length).toBeGreaterThan(0));
-    expect(result.current.children).toHaveLength(5);
-    expect(result.current.wasTruncated).toBe(true);
+    // Untruncated: rendered count === the server's own child count, not a
+    // hardcoded 5/6.
+    expect(result.current.children).toHaveLength(serverChildren.length);
+    expect(result.current.children.map((c) => c.nodeKey).sort()).toEqual(
+      serverChildren.map((c) => c.nodeKey).sort(),
+    );
+    // The former MAX_DIRECTION_DESTINATIONS/wasTruncated surface no longer
+    // exists on the result shape at all.
+    expect((result.current as Record<string, unknown>).wasTruncated).toBeUndefined();
     // never fabricates a name — labels are verbatim from the server
     expect(result.current.children[0].displayLabel).toBe('Label for d:n');
   });
 
-  it('AC3.5 — caps Local Destination (CLUSTER) children at 6', async () => {
+  it('AC12 (Issue #2086, inverted from the pre-#2086 6-cap) — ALL 8 server-sent Local Destination (CLUSTER) children render, none dropped', async () => {
+    const serverChildren = Array.from({ length: 8 }, (_, i) => makeChild(`c:n:${i}`, 'CLUSTER', i));
+    expect(serverChildren.length).toBe(8);
+
     mockGet.mockImplementation(async (path: string) => {
       if (path.includes('/navigation/resolve')) {
         return makeResolveResponse({
@@ -312,7 +329,7 @@ describe('useAreasNavigationJourney', () => {
             depth: 0,
             ancestry: [],
             nextLevelType: 'CLUSTER',
-            children: Array.from({ length: 8 }, (_, i) => makeChild(`c:n:${i}`, 'CLUSTER', i)),
+            children: serverChildren,
             revisionId: 1,
           },
         });
@@ -332,8 +349,213 @@ describe('useAreasNavigationJourney', () => {
     );
 
     await waitFor(() => expect(result.current.children.length).toBeGreaterThan(0));
-    expect(result.current.children).toHaveLength(6);
+    // Untruncated: rendered count === the server's own child count (8), not
+    // the old hardcoded cap of 6.
+    expect(result.current.children).toHaveLength(serverChildren.length);
     expect(result.current.levelKind).toBe('clusters');
+  });
+
+  it('AC12 — the server-guaranteed maximum of 15 children ALL render (regression fixture at the ceiling itself)', async () => {
+    const serverChildren = Array.from({ length: 15 }, (_, i) => makeChild(`d:${i}`, 'DIRECTION', i));
+    expect(serverChildren.length).toBe(15);
+
+    mockGet.mockImplementation(async (path: string) => {
+      if (path.includes('/navigation/resolve')) return makeResolveResponse({ node: { ...makeResolveResponse().node, children: serverChildren } });
+      if (path.includes('/counts')) return makeCountsResponse();
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = makeClient();
+    const { result } = renderHook(
+      () =>
+        useAreasNavigationJourney({
+          city: 'bangalore',
+          requestedNodeKey: null,
+          onSelectNode: vi.fn(),
+        }),
+      { wrapper: wrapper(client) },
+    );
+
+    await waitFor(() => expect(result.current.children.length).toBeGreaterThan(0));
+    expect(result.current.children).toHaveLength(serverChildren.length);
+    expect(result.current.children.map((c) => c.nodeKey).sort()).toEqual(
+      serverChildren.map((c) => c.nodeKey).sort(),
+    );
+  });
+
+  it('AC2 — a sparse group whose server response returns AREA children directly (no CLUSTER level) renders straight to Areas', async () => {
+    // Smaller-city / sparse-group case: the server's nextLevelType is 'AREA',
+    // not 'CLUSTER' — no intermediate Local Destination level is invented,
+    // and no client-side grouping happens over the AREA children.
+    mockGet.mockImplementation(async (path: string) => {
+      if (path.includes('/navigation/resolve')) {
+        return makeResolveResponse({
+          node: {
+            nodeKey: 'd:small',
+            nodeType: 'DIRECTION',
+            displayLabel: 'Small Region',
+            depth: 0,
+            ancestry: [],
+            nextLevelType: 'AREA',
+            children: [
+              makeChild('a:one', 'AREA', 1),
+              makeChild('a:two', 'AREA', 2),
+            ],
+            revisionId: 1,
+          },
+        });
+      }
+      if (path.includes('/counts')) return { ...makeCountsResponse(), nodeKey: 'd:small', children: [] };
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = makeClient();
+    const { result } = renderHook(
+      () =>
+        useAreasNavigationJourney({
+          city: 'smalltown',
+          requestedNodeKey: 'd:small',
+          onSelectNode: vi.fn(),
+        }),
+      { wrapper: wrapper(client) },
+    );
+
+    await waitFor(() => expect(result.current.children.length).toBeGreaterThan(0));
+    expect(result.current.levelKind).toBe('areas');
+    expect(result.current.children).toHaveLength(2);
+    expect(result.current.children.every((c) => c.nodeType === 'AREA' && c.isLeafArea)).toBe(true);
+    // No synthetic intermediate node was minted — every rendered child's
+    // nodeType is exactly what the server sent, never a client-invented
+    // CLUSTER wrapper.
+    expect(result.current.children.map((c) => c.nodeKey)).toEqual(['a:one', 'a:two']);
+  });
+
+  it('AC15 — a filter change alters child COUNTS only; labels, ordering, membership and parentage are unchanged (the resolve query key deliberately excludes filters)', async () => {
+    const resolveCalls: string[] = [];
+    mockGet.mockImplementation(async (path: string) => {
+      if (path.includes('/navigation/resolve')) {
+        resolveCalls.push(path);
+        return makeResolveResponse();
+      }
+      if (path.includes('/counts')) {
+        // Simulate the ONLY thing a filter is allowed to change: the numbers.
+        const filtered = path.includes('bedrooms=4');
+        return {
+          ...makeCountsResponse(),
+          children: [
+            { nodeKey: 'd:n', count: filtered ? 2 : 10, schoolCount: 1, matchingAreaCount: filtered ? 1 : 3 },
+            { nodeKey: 'd:e', count: filtered ? 5 : 20, schoolCount: 2, matchingAreaCount: filtered ? 2 : 4 },
+          ],
+        };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    // Two SEPARATE fresh mounts (not a rerender) so each starts with its own
+    // filters from the initial render — this sidesteps
+    // useDiscoverNavigationCounts's 300ms filter-only debounce entirely,
+    // which is orthogonal to what this test is proving.
+    const unfilteredClient = makeClient();
+    const unfilteredHook = renderHook(
+      () =>
+        useAreasNavigationJourney({
+          city: 'bangalore',
+          requestedNodeKey: null,
+          onSelectNode: vi.fn(),
+        }),
+      { wrapper: wrapper(unfilteredClient) },
+    );
+    await waitFor(() => expect(unfilteredHook.result.current.children.length).toBeGreaterThan(0));
+
+    const filteredClient = makeClient();
+    const filteredHook = renderHook(
+      () =>
+        useAreasNavigationJourney({
+          city: 'bangalore',
+          requestedNodeKey: null,
+          onSelectNode: vi.fn(),
+          filters: { bedrooms: [4] },
+        }),
+      { wrapper: wrapper(filteredClient) },
+    );
+    await waitFor(() => expect(filteredHook.result.current.children.length).toBeGreaterThan(0));
+
+    const unfiltered = unfilteredHook.result.current.children;
+    const filtered = filteredHook.result.current.children;
+
+    // STRUCTURE unchanged: same keys, same order, same labels, same nodeType.
+    expect(filtered.map((c) => c.nodeKey)).toEqual(unfiltered.map((c) => c.nodeKey));
+    expect(filtered.map((c) => c.displayLabel)).toEqual(unfiltered.map((c) => c.displayLabel));
+    expect(filtered.map((c) => c.displayOrder)).toEqual(unfiltered.map((c) => c.displayOrder));
+    expect(filtered.map((c) => c.nodeType)).toEqual(unfiltered.map((c) => c.nodeType));
+
+    // COUNTS differ — this is the only thing a filter may change.
+    expect(filtered[0].listingCount).not.toBe(unfiltered[0].listingCount);
+    expect(filtered[0].matchingAreaCount).not.toBe(unfiltered[0].matchingAreaCount);
+
+    // The resolve request itself never carries filter params — the resolve
+    // query key deliberately excludes filters (AREAS_NAVIGATION_RESOLVE_QUERY_KEY_BASE
+    // is [.., city, resolveKey] only), so both mounts' resolve calls are
+    // identical regardless of the filters passed to the hook.
+    expect(resolveCalls.length).toBeGreaterThanOrEqual(2);
+    for (const call of resolveCalls) {
+      expect(call).not.toMatch(/bedrooms/);
+    }
+  });
+
+  it('Issue #2086 (S3 field threading) — descendantAreaCount, representativeAreaKeys, bounds and bearingDegrees are threaded through to the view model, with a present-and-null bearingDegrees at depth 0 preserved as null (never coerced to undefined/absent)', async () => {
+    const bounds = { centreLat: 12.9, centreLon: 77.6, minLat: 12.8, minLon: 77.5, maxLat: 13.0, maxLon: 77.7 };
+    mockGet.mockImplementation(async (path: string) => {
+      if (path.includes('/navigation/resolve')) {
+        return makeResolveResponse({
+          node: {
+            nodeKey: 'root',
+            nodeType: 'ROOT',
+            displayLabel: 'Bangalore',
+            depth: -1,
+            ancestry: [],
+            nextLevelType: 'DIRECTION',
+            children: [
+              {
+                nodeKey: 'd:n',
+                nodeType: 'DIRECTION',
+                displayLabel: 'North Bangalore',
+                displayOrder: 1,
+                descendantAreaCount: 42,
+                representativeAreaKeys: ['a:one', 'a:two'],
+                bounds,
+                // Depth-0 child (a Direction under ROOT) — the wire contract
+                // says bearingDegrees is null here, and it must arrive at the
+                // view model as a REAL null, not stripped/undefined.
+                bearingDegrees: null,
+              },
+            ],
+            revisionId: 1,
+          },
+        });
+      }
+      if (path.includes('/counts')) return makeCountsResponse();
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = makeClient();
+    const { result } = renderHook(
+      () =>
+        useAreasNavigationJourney({
+          city: 'bangalore',
+          requestedNodeKey: null,
+          onSelectNode: vi.fn(),
+        }),
+      { wrapper: wrapper(client) },
+    );
+
+    await waitFor(() => expect(result.current.children.length).toBeGreaterThan(0));
+    const child = result.current.children[0];
+    expect(child.descendantAreaCount).toBe(42);
+    expect(child.representativeAreaKeys).toEqual(['a:one', 'a:two']);
+    expect(child.bounds).toEqual(bounds);
+    // Present-and-null, not absent — `null in child` / `'bearingDegrees' in
+    // child` both hold, and the value itself is exactly null (not undefined).
+    expect('bearingDegrees' in child).toBe(true);
+    expect(child.bearingDegrees).toBeNull();
+    expect(child.bearingDegrees).not.toBeUndefined();
   });
 
   it('AC3.9 — selectNode is the SAME onSelectNode reference passed in, never wrapped', () => {

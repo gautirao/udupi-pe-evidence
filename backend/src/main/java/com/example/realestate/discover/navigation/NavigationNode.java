@@ -93,6 +93,12 @@ public class NavigationNode {
     @Column(name = "max_lon", nullable = false)
     private BigDecimal maxLon;
 
+    /** #2086 V124: great-circle bearing (degrees, [0,360)) from the PARENT node's centre to this
+     * node's centre. NULL for depth-0 DIRECTION nodes (no parent node exists). Additive/nullable —
+     * see V124 migration. */
+    @Column(name = "bearing_degrees")
+    private BigDecimal bearingDegrees;
+
     @Column(name = "policy_fingerprint", nullable = false)
     private String policyFingerprint;
 
@@ -103,6 +109,17 @@ public class NavigationNode {
 
     protected NavigationNode() {}
 
+    /** Pre-#2086 20-arg shape, preserved for callers outside this issue's allowed_file_globs
+     * (e.g. {@code citylaunch} package tests) — delegates with {@code bearingDegrees = null}.
+     *
+     * @deprecated #2086/#2088: prefer the 21-arg constructor below, which takes an explicit {@code
+     *     bearingDegrees}. This overload silently persists {@code bearing_degrees = NULL}, which is
+     *     indistinguishable on the wire from the legitimate depth-0 DIRECTION null — a writer that
+     *     picks this overload by mistake among 20 positional {@code BigDecimal}/{@code String} args
+     *     ships a silently-missing bearing all the way to the anon API and #2088. Not removed: the
+     *     remaining caller ({@code RevisionChecksumTest} in the {@code citylaunch} test package) is
+     *     outside this issue's allowed_file_globs. */
+    @Deprecated
     public NavigationNode(Integer cityId, String regionKey, String nodeType, Long parentNodeId,
                            String nodeKey, String areaKey, List<String> representativeAreaKeys,
                            String displayLabel, Integer displayOrder, Integer depth,
@@ -110,6 +127,18 @@ public class NavigationNode {
                            BigDecimal centreLat, BigDecimal centreLon,
                            BigDecimal minLat, BigDecimal minLon, BigDecimal maxLat, BigDecimal maxLon,
                            String policyFingerprint, Instant generatedAt) {
+        this(cityId, regionKey, nodeType, parentNodeId, nodeKey, areaKey, representativeAreaKeys,
+                displayLabel, displayOrder, depth, ancestorKeys, descendantAreaCount, centreLat, centreLon,
+                minLat, minLon, maxLat, maxLon, null, policyFingerprint, generatedAt);
+    }
+
+    public NavigationNode(Integer cityId, String regionKey, String nodeType, Long parentNodeId,
+                           String nodeKey, String areaKey, List<String> representativeAreaKeys,
+                           String displayLabel, Integer displayOrder, Integer depth,
+                           List<String> ancestorKeys, Integer descendantAreaCount,
+                           BigDecimal centreLat, BigDecimal centreLon,
+                           BigDecimal minLat, BigDecimal minLon, BigDecimal maxLat, BigDecimal maxLon,
+                           BigDecimal bearingDegrees, String policyFingerprint, Instant generatedAt) {
         this.cityId = cityId;
         this.regionKey = regionKey;
         this.nodeType = nodeType;
@@ -128,6 +157,7 @@ public class NavigationNode {
         this.minLon = minLon;
         this.maxLat = maxLat;
         this.maxLon = maxLon;
+        this.bearingDegrees = bearingDegrees;
         this.policyFingerprint = policyFingerprint;
         this.generatedAt = generatedAt;
     }
@@ -153,6 +183,7 @@ public class NavigationNode {
     public BigDecimal getMinLon() { return minLon; }
     public BigDecimal getMaxLat() { return maxLat; }
     public BigDecimal getMaxLon() { return maxLon; }
+    public BigDecimal getBearingDegrees() { return bearingDegrees; }
     public String getPolicyFingerprint() { return policyFingerprint; }
     public Instant getGeneratedAt() { return generatedAt; }
 }
