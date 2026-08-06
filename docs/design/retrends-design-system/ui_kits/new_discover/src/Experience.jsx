@@ -63,7 +63,8 @@ function scenarioState(id) {
 }
 const HINTS = {
   "guided-areas": (st, v) => st.detail ? "Press Back to results — the scope, filters and camera come back unchanged."
-    : v.scopeKind === "CITY" ? "Browse all listings is city-wide. Back returns to the directional Areas root."
+    : v.scopeKind === "HIERARCHY" ? "Browse all is the full " + (st.scope.level === "direction" ? "Direction" : "Local destination") + " — Back restores the exact hierarchy screen, camera and cluster focus."
+      : v.scopeKind === "CITY" ? "Browse all listings is city-wide. Back returns to the directional Areas root."
       : v.level === "city" ? "Three journeys, one shell. Tap the North card on the map — or its row in the panel."
         : v.level === "direction" ? "Continue into Hebbal · Yelahanka."
           : v.level === "local" ? (st.clusterFocus ? "Breadcrumb is unchanged — this was a camera move. Now tap the Hebbal marker." : "Tap the dashed Hebbal · Nagawara cluster: it zooms, it does not navigate.")
@@ -165,7 +166,7 @@ function Experience() {
     const sc = st.scope;
     if (!sc || st.journey !== "areas") return [];
     let list;
-    if (sc.kind === "AREA_SET") list = EX.inAreas(sc.areaKeys, st.filters);
+    if (sc.kind === "AREA_SET" || sc.kind === "HIERARCHY") list = EX.inAreas(sc.areaKeys, st.filters);
     else if (sc.kind === "CITY") list = EX.listings.filter((l) => EX.passes(l, st.filters));
     else if (sc.kind === "POLYGON") list = EX.inPoly(sc.poly, st.filters);
     else if (sc.kind === "VIEWPORT") list = EX.inBounds(sc.bounds, st.filters);
@@ -202,6 +203,15 @@ function Experience() {
     pickArea: (key) => commit({ journey: "areas", nodeKey: key, scope: { kind: "AREA_SET", areaKeys: [key] }, committed: [key], clusterFocus: null, draft: null, focusChip: null, detail: null, preview: null, dirty: false, shown: 8, note: null, query: "" }),
     pickAreas: (keys) => commit({ journey: "areas", nodeKey: keys[keys.length - 1], scope: { kind: "AREA_SET", areaKeys: keys.slice() }, committed: keys.slice(), clusterFocus: null, draft: null, focusChip: null, detail: null, dirty: false, shown: 8, note: null, query: "" }),
     browseAll: () => commit({ journey: "areas", nodeKey: "blr", scope: { kind: "CITY" }, committed: [], clusterFocus: null, draft: null, focusChip: null, detail: null, preview: null, dirty: false, shown: 8, query: "", note: null }),
+    // Browse-all at an intermediate hierarchy level (Direction / Local destination): a
+    // dedicated HIERARCHY scope over every area under the CURRENT node — the node itself
+    // (not a leaf area) stays nodeKey, so the breadcrumb, Back and camera are all exact.
+    // Regardless of the map's cluster/viewport focus, the scope is always the full node.
+    browseHierarchy: () => {
+      const lvl = EX.levelOf(st.nodeKey);
+      const keys = (lvl === "direction" ? EX.areasOfDirection(st.nodeKey) : EX.areasOfLocal(st.nodeKey)).map((a) => a.key);
+      commit({ journey: "areas", scope: { kind: "HIERARCHY", level: lvl, areaKeys: keys }, committed: keys, focusChip: null, draft: null, detail: null, dirty: false, shown: 8, query: "", note: null });
+    },
     pickCluster: (c) => set({ clusterFocus: { key: c.key, members: c.members } }),
     showAllAreas: () => set({ clusterFocus: null }),
     setQuery: (q) => set({ query: q, shown: 8 }),
@@ -218,6 +228,9 @@ function Experience() {
       if (st.detail) return act.backToResults();
       if (st.journey === "schools") return act.schoolsBack();
       if (st.journey === "agri") return act.agriBack();
+      // HIERARCHY results never moved nodeKey — Back just drops the scope, so the exact
+      // Direction/Local screen (rows, camera, cluster focus) reappears unchanged.
+      if (st.scope && st.scope.kind === "HIERARCHY") return commit({ scope: null, committed: [], focusChip: null, draft: null, detail: null, dirty: false, note: null });
       if (st.scope && st.scope.kind === "CITY") return commit({ scope: null, committed: [], nodeKey: "blr", detail: null });
       const p = EX.parentOf(st.nodeKey);
       if (!p) return;
@@ -612,7 +625,7 @@ function buildView(st, results, act) {
     destinations: [], areaList: [], mapClusters: [], areaMarkers: [], pins: [], discs: [],
     poly: st.polyDraft || (scopeKind === "POLYGON" ? st.scope.poly : null), polyDraft: !!st.polyDraft,
     listingCapable: resultsView, maxZoom: 15, sheetRows: [], sheetTitle: "", stickyCta: null,
-    scopeLabel: scopeKind === "AREA_SET" ? st.committed.map((k) => EX.byKey[k].name).join(" · ") : scopeKind === "CITY" ? "All of Bangalore" : scopeKind === "POLYGON" ? "Drawn area" : scopeKind === "VIEWPORT" ? "Visible map area" : "",
+    scopeLabel: scopeKind === "HIERARCHY" ? crumb[crumb.length - 1].label : scopeKind === "AREA_SET" ? st.committed.map((k) => EX.byKey[k].name).join(" · ") : scopeKind === "CITY" ? "All of Bangalore" : scopeKind === "POLYGON" ? "Drawn area" : scopeKind === "VIEWPORT" ? "Visible map area" : "",
     scopeTotal: results.length, showBack: false, backLabel: "", cameraNote: null
   };
 
@@ -652,6 +665,7 @@ function buildView(st, results, act) {
     const areaObjs = st.committed.map((k) => EX.byKey[k]);
     const focusArea = st.focusChip ? EX.byKey[st.focusChip] : null;
     v.areaActions = single;
+    v.hierarchyAreas = scopeKind === "HIERARCHY" ? areaObjs : [];
     v.zeroKeys = scopeKind === "CITY" ? EX.areas.map((a) => a.key) : st.committed;
     // recovery is scope-specific: only an AREA_SET states its own area names as the scope
     v.zeroScopeNames = scopeKind === "AREA_SET" ? areaObjs.map((a) => a.name) : null;
@@ -661,13 +675,16 @@ function buildView(st, results, act) {
       ? { eyebrow: "Areas · " + areaObjs[0].name, title: (rent ? "Homes to rent in " : "Properties in ") + areaObjs[0].name, stat: { v: results.length, l: rent ? (results.length === 1 ? "home to rent" : "homes to rent") : results.length === 1 ? "home for sale" : "homes for sale" } }
       : scopeKind === "CITY"
         ? { eyebrow: "Browse all listings", title: rent ? "All homes to rent in Bangalore" : "All homes in Bangalore", stat: { v: results.length, l: v.noun }, sub: "Every listing in the city on one filterable list — the funnel skipped, filters and alerts unchanged." }
-        : {
-          eyebrow: scopeKind === "AREA_SET" ? "Selected areas · " + st.committed.length : (rent ? "Homes to rent · " : "Homes for sale · ") + (scopeKind === "POLYGON" ? "Drawn area" : "Visible map area"),
-          title: scopeKind === "AREA_SET" ? areaObjs.map((a) => a.name).join(", ") : scopeKind === "POLYGON" ? "Inside your drawn boundary" : "On screen right now",
-          stat: { v: results.length, l: v.noun }
-        };
+        : scopeKind === "HIERARCHY"
+          ? { eyebrow: "Result scope — " + (st.scope.level === "direction" ? "Direction" : "Local destination"), title: (rent ? "Homes to rent in " : "Properties in ") + crumb[crumb.length - 1].label, stat: { v: results.length, l: rent ? (results.length === 1 ? "home to rent" : "homes to rent") : results.length === 1 ? "home for sale" : "homes for sale" }, sub: "Every area in " + crumb[crumb.length - 1].label + " on one filterable list." }
+          : {
+            eyebrow: scopeKind === "AREA_SET" ? "Selected areas · " + st.committed.length : (rent ? "Homes to rent · " : "Homes for sale · ") + (scopeKind === "POLYGON" ? "Drawn area" : "Visible map area"),
+            title: scopeKind === "AREA_SET" ? areaObjs.map((a) => a.name).join(", ") : scopeKind === "POLYGON" ? "Inside your drawn boundary" : "On screen right now",
+            stat: { v: results.length, l: v.noun }
+          };
     if (st.query) v.notes.push({ tone: "info", text: "Filtered to “" + st.query + "” within " + (single ? areaObjs[0].name : v.scopeLabel) + " — " + results.length + " of " + (single ? EX.countIn(st.committed[0], st.filters) : "the") + " homes.", action: "Clear search", onAction: () => act.setQuery("") });
-    if (scopeKind === "AREA_SET" && st.committed.length > 1) v.schoolsBlock = { n: areaObjs.reduce((s, a) => s + a.schools, 0), names: areaObjs.map((a) => a.name).join(", ") };
+    if (scopeKind === "HIERARCHY") v.schoolsBlock = { n: areaObjs.reduce((s, a) => s + a.schools, 0), names: crumb[crumb.length - 1].label };
+    else if (scopeKind === "AREA_SET" && st.committed.length > 1) v.schoolsBlock = { n: areaObjs.reduce((s, a) => s + a.schools, 0), names: areaObjs.map((a) => a.name).join(", ") };
     if (st.focusChip) v.notes.push({ tone: "info", text: "Map focused on " + focusArea.name + ". All " + results.length + " listings from " + st.committed.length + " areas are still in this list." });
     if (st.dirty && !st.confirm) v.notes.push({ tone: "muted", text: "You moved the map. These results still come from " + v.scopeLabel + " — nothing was requested." });
     if (st.polyDraft) v.notes.push({ tone: "muted", text: "Boundary drawn. Results still come from " + v.scopeLabel + ".", action: "Use drawn area", onAction: act.usePoly });
@@ -681,6 +698,10 @@ function buildView(st, results, act) {
       v.fitBounds = EX.city.bounds;
       v.fitKey = "city-all";
       v.maxZoom = 12;
+    } else if (scopeKind === "HIERARCHY") {
+      v.fitBounds = EX.boundsOf(areaObjs);
+      v.fitKey = "hier-" + st.nodeKey + "-" + EX.filterLabels(st.filters).join(",");
+      v.maxZoom = st.scope.level === "direction" ? 13 : 14;
     } else if (scopeKind === "POLYGON") {
       v.fitBounds = st.scope.poly.map((p) => [p[0], p[1]]);
       v.fitKey = "poly-" + st.scope.poly[0].join(",");
@@ -695,6 +716,7 @@ function buildView(st, results, act) {
 
   const parent = EX.parentOf(st.nodeKey);
   if (st.detail) { v.showBack = true; v.backLabel = "Back to results"; }
+  else if (scopeKind === "HIERARCHY") { v.showBack = true; v.backLabel = "Back to " + crumb[crumb.length - 1].label; }
   else if (scopeKind === "CITY") { v.showBack = true; v.backLabel = "Back to Areas in Bangalore"; }
   else if (parent) {
     v.showBack = true;

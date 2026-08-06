@@ -81,7 +81,7 @@ function EPResultHead({ view, st, act }) {
   const keys = draft ? st.draft : view.committed;
   const h = view.heading;
   const total = draft ? (view.draftTotal != null ? view.draftTotal : EP.inAreas(st.draft, st.filters).length) : view.scopeTotal;
-  const eyebrow = draft ? "Draft selection · " + keys.length + " of 3 selected" : kind ? "Result scope — " + SCOPE_TITLE[kind] : h.eyebrow;
+  const eyebrow = draft ? "Draft selection · " + keys.length + " of 3 selected" : kind === "HIERARCHY" ? "Result scope — " + (st.scope.level === "direction" ? "Direction" : "Local destination") : kind ? "Result scope — " + SCOPE_TITLE[kind] : h.eyebrow;
   return (
     <div data-design-component="scope-bar" style={{ display: "flex", flexDirection: "column", gap: "7px", paddingBottom: "2px", borderBottom: draft ? "1.5px dashed var(--ochre-600)" : "none" }}>
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "14px" }}>
@@ -108,6 +108,11 @@ function EPResultHead({ view, st, act }) {
               </span>
             );
           })}
+          {kind === "HIERARCHY" && view.hierarchyAreas.map((a) => (
+            <span key={a.key} style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "5px 8px", borderRadius: "var(--radius-xs)", background: "var(--surface-subtle)", border: "1px solid var(--border)", fontSize: "12.5px", fontWeight: 600, color: "var(--text-body)" }}>
+              <EIcon name="map-pin" size={11} color="var(--copper-500)" />{a.name}
+            </span>
+          ))}
           {kind === "CITY" && <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "5px 8px", borderRadius: "var(--radius-xs)", background: "var(--surface-subtle)", border: "1px solid var(--border)", fontSize: "12.5px", fontWeight: 600, color: "var(--text-strong)" }}><EIcon name="layers" size={12} color="var(--copper-500)" />Every area in Bangalore</span>}
           {kind === "POLYGON" && <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "5px 8px", borderRadius: "var(--radius-xs)", background: "var(--accent-tint)", border: "1px solid var(--accent)", fontSize: "12.5px", fontWeight: 700, color: "var(--copper-600)" }}>Drawn area<button onClick={act.returnToAreas} style={{ border: "none", background: "transparent", cursor: "pointer", color: "inherit", fontSize: "14px", lineHeight: 1 }}>×</button></span>}
           {kind === "VIEWPORT" && <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "5px 8px", borderRadius: "var(--radius-xs)", background: "var(--navy-100)", border: "1px solid var(--navy-600)", fontSize: "12.5px", fontWeight: 700, color: "var(--navy-700)" }}>Visible map area</span>}
@@ -124,6 +129,21 @@ function EPResultHead({ view, st, act }) {
   );
 }
 
+// scope-aware result search — identical treatment to the single-area property-search box,
+// but named for the stable hierarchy node (Direction / Local destination) instead of an area.
+function EPHierarchySearch({ view, st, act }) {
+  const label = view.scopeLabel;
+  const [q, setQ] = React.useState(st.query || "");
+  React.useEffect(() => setQ(st.query || ""), [st.query, label]);
+  return (
+    <div data-design-component="property-search" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0 12px", minHeight: "40px", background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)" }}>
+      <EIcon name="search" size={15} color="var(--grey-400)" />
+      <input value={q} onChange={(e) => { setQ(e.target.value); act.setQuery(e.target.value); }} placeholder={"Search " + label + " by road, project or landmark…"}
+        style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", fontFamily: "var(--font-sans)", fontSize: "13px", color: "var(--text-strong)" }} />
+      {q && <button onClick={() => { setQ(""); act.setQuery(""); }} style={{ border: "none", background: "var(--surface-subtle)", cursor: "pointer", borderRadius: "var(--radius-full)", width: "20px", height: "20px", lineHeight: 1, color: "var(--text-muted)" }}>×</button>}
+    </div>
+  );
+}
 // ---- area landing: compact actions ------------------------------------------
 function EPAreaActions({ view, st, act }) {
   const key = view.committed[0];
@@ -262,7 +282,7 @@ function EPZero({ view, st, act }) {
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
       <div style={{ padding: "14px 16px", borderRadius: "var(--radius-lg)", background: "var(--ochre-50)", border: "1px solid var(--ochre-600)" }}>
         <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--text-strong)", lineHeight: 1.3 }}>
-          {kind === "AREA_SET" ? `No matching ${view.noun || "listings"} in your ${view.committed.length} selected area${view.committed.length > 1 ? "s" : ""}` : kind === "POLYGON" ? `No matching ${view.noun || "listings"} inside your drawn area` : kind === "CITY" ? `No matching ${view.noun || "listings"} anywhere in Bangalore` : `No matching ${view.noun || "listings"} in the visible map area`}
+          {kind === "AREA_SET" ? `No matching ${view.noun || "listings"} in your ${view.committed.length} selected area${view.committed.length > 1 ? "s" : ""}` : kind === "POLYGON" ? `No matching ${view.noun || "listings"} inside your drawn area` : kind === "CITY" ? `No matching ${view.noun || "listings"} anywhere in Bangalore` : kind === "HIERARCHY" ? `No matching ${view.noun || "listings"} in ${view.scopeLabel}` : `No matching ${view.noun || "listings"} in the visible map area`}
         </h3>
         <div style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-body)", marginTop: "5px" }}>{scopeLine} — {EP.filterLabels(st.filters).join(" · ")}</div>
         <div style={{ fontSize: "12.5px", color: "var(--text-muted)", marginTop: "7px" }}>Your search is kept exactly as it is. Nothing here widens it for you.</div>
@@ -432,7 +452,21 @@ function EPDetail({ st, act, view }) {
   );
 }
 
-function EPHeading({ eyebrow, title, sub, stat, tint }) {
+// secondary text action — identical treatment to the journey-root "Browse all listings →"
+// link in ExpModeBar (MB browse-all button): no border/background, muted default,
+// text-strong on hover/focus, trailing arrow icon.
+function EPBrowseAllLink({ onClick, children }) {
+  const [h, setH] = React.useState(false);
+  const [f, setF] = React.useState(false);
+  const on = h || f;
+  return (
+    <button onClick={onClick} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} onFocus={() => setF(true)} onBlur={() => setF(false)}
+      style={{ marginTop: "4px", display: "inline-flex", alignItems: "center", gap: "5px", border: "none", background: "transparent", cursor: "pointer", padding: 0, fontFamily: "var(--font-sans)", fontSize: "12.5px", fontWeight: 600, color: on ? "var(--text-strong)" : "var(--text-muted)", outline: f ? "2px solid var(--accent)" : "none", outlineOffset: "3px", borderRadius: "var(--radius-xs)" }}>
+      {children} <EIcon name="arrow-right" size={14} />
+    </button>
+  );
+}
+function EPHeading({ eyebrow, title, sub, stat, tint, browseAll }) {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "14px" }}>
@@ -440,7 +474,13 @@ function EPHeading({ eyebrow, title, sub, stat, tint }) {
           <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: tint || "var(--accent)" }}>{eyebrow}</div>
           <h2 style={{ margin: "4px 0 0", fontFamily: "var(--font-serif)", fontSize: "22px", fontWeight: 600, letterSpacing: "-0.02em", color: "var(--text-strong)", lineHeight: 1.15 }}>{title}</h2>
         </div>
-        {stat && <div style={{ flex: "none", textAlign: "right" }}><div style={{ fontFamily: "var(--font-mono)", fontSize: "22px", fontWeight: 600, color: "var(--text-strong)" }}>{stat.v}</div><div style={{ fontSize: "12px", color: "var(--text-muted)" }}>{stat.l}</div></div>}
+        {stat && (
+          <div style={{ flex: "none", textAlign: "right" }}>
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: "22px", fontWeight: 600, color: "var(--text-strong)" }}>{stat.v}</div>
+            <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>{stat.l}</div>
+            {browseAll && <EPBrowseAllLink onClick={browseAll.onClick}>{browseAll.label}</EPBrowseAllLink>}
+          </div>
+        )}
       </div>
       {sub && <p style={{ margin: "7px 0 0", fontSize: "13px", lineHeight: 1.45, color: "var(--text-body)", maxWidth: "56ch", textWrap: "pretty" }}>{sub}</p>}
     </div>
@@ -503,7 +543,8 @@ function ExpPanel({ view, st, act, isMobile }) {
               <>
                 {backBtn}
                 {navLevel && !st.draft
-                  ? <EPHeading eyebrow={heading.eyebrow} title={heading.title} sub={heading.sub} stat={heading.stat} />
+                  ? <EPHeading eyebrow={heading.eyebrow} title={heading.title} sub={heading.sub} stat={heading.stat}
+                      browseAll={(view.level === "direction" || view.level === "local") ? { label: "Browse all " + heading.stat.v + " " + heading.stat.l, onClick: act.browseHierarchy } : null} />
                   : <EPResultHead view={view} st={st} act={act} />}
                 {view.notes.map((n, i) => <EPNote key={i} tone={n.tone} action={n.action} onAction={n.onAction}>{n.text}</EPNote>)}
                 {st.confirm && (
@@ -531,12 +572,13 @@ function ExpPanel({ view, st, act, isMobile }) {
                   ) : view.results.length === 0 && st.phase !== "loading" ? <EPZero view={view} st={st} act={act} />
                     : (
                       <>
+                        {view.scopeKind === "HIERARCHY" && <EPHierarchySearch view={view} st={st} act={act} />}
                         {view.areaActions && <EPAreaActions view={view} st={st} act={act} />}
                         {view.schoolsBlock && (
                           <div style={{ display: "flex", alignItems: "center", gap: "11px", padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--plum-tint)", border: "1px solid var(--plum-100)" }}>
                             <span style={{ flex: "none", width: "30px", height: "30px", borderRadius: "var(--radius-md)", background: "var(--plum-600)", display: "grid", placeItems: "center" }}><EIcon name="building" size={16} color="#fff" /></span>
                             <span style={{ flex: 1 }}>
-                              <span style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text-strong)" }}>Schools in selected areas · <span style={{ fontFamily: "var(--font-mono)" }}>{view.schoolsBlock.n}</span></span>
+                              <span style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text-strong)" }}>Schools in {view.scopeKind === "HIERARCHY" ? view.scopeLabel : "selected areas"} · <span style={{ fontFamily: "var(--font-mono)" }}>{view.schoolsBlock.n}</span></span>
                               <span style={{ display: "block", fontSize: "11.5px", color: "var(--text-muted)", lineHeight: 1.4 }}>{view.schoolsBlock.n} schools located inside {view.schoolsBlock.names}. Not a measure of distance from any home.</span>
                             </span>
                             <EPGhost onClick={act.openAreaSchools}>Open Schools</EPGhost>
