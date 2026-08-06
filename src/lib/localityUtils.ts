@@ -15,7 +15,7 @@ export const CITY_CONFIG: Record<string, CityConfig> = {
   bangalore: { label: 'Bangalore', center: [12.9716, 77.5946] as [number, number], zoom: 11 },
 };
 
-export const DEFAULT_CITY = 'udupi';
+export const DEFAULT_CITY = 'bangalore';
 export const LOCALITY_CAP = 3;
 
 /** Maps the district segment (pipe-index 2) of an areaKey to its URL city slug. */

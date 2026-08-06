@@ -276,7 +276,7 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
                   <MapPin className="h-5 w-5 text-primary" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="font-semibold leading-tight">ReTrends</span>
+                  <span className="font-semibold leading-tight">PropertySignal</span>
                   <span className="text-xs text-muted-foreground leading-tight">Real Estate Trends</span>
                 </div>
               </div>
@@ -290,7 +290,7 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
               <MapPin className="h-5 w-5 text-primary" />
             </div>
             <div className="hidden sm:flex flex-col">
-              <span className="font-semibold leading-tight">ReTrends</span>
+              <span className="font-semibold leading-tight">PropertySignal</span>
               <span className="text-xs text-muted-foreground leading-tight">Real Estate Trends</span>
             </div>
           </Link>

@@ -362,11 +362,11 @@ export default function LandingPage() {
             </span>
 
             <h1 className="mt-5 text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-              Coastal Karnataka homes, <span className="text-blue-600">honestly curated</span>
+              Homes in Karnataka , <span className="text-blue-600">honestly curated</span>
             </h1>
 
             <p className="mt-5 max-w-xl text-lg text-muted-foreground">
-              Explore Udupi and Manipal on an interactive map, see the market trends we have, and
+              Explore Bangalore and Udupi on an interactive map, see the market trends we have, and
               talk to founding brokers we&apos;ve personally onboarded. We&apos;re early — and our
               founding team manages the listings we publish by hand.
             </p>
@@ -452,12 +452,12 @@ export default function LandingPage() {
       </section>
 
       {/* ──────────────────────────────────────────────────────────────── */}
-      {/* Why Choose ReTrends? */}
+      {/* Why Choose PropertySignal? */}
       {/* ──────────────────────────────────────────────────────────────── */}
       <section className="container mx-auto max-w-7xl px-4 py-20">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-            Why Choose ReTrends?
+            Why Choose PropertySignal?
           </h2>
           <p className="mt-3 text-muted-foreground">
             We&apos;re not another listings portal. We help you make informed decisions with a
