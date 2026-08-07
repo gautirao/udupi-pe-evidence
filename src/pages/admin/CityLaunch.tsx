@@ -155,7 +155,11 @@ function CityLaunchRow({ city, isPreparing, isExpanded, onPrepare, onToggleExpan
     }
   }
 
-  const actionDisabled = !config.actionEnabled || isPreparing;
+  const isNotReady = !city.geographyReady && city.status === 'not-started';
+  const actionDisabled = !config.actionEnabled || isPreparing || isNotReady;
+  const tooltipText = isNotReady 
+    ? 'City geography is not ready: city regions have not been generated' 
+    : config.actionTooltip;
 
   const actionButton = (
     <Button
@@ -185,7 +189,7 @@ function CityLaunchRow({ city, isPreparing, isExpanded, onPrepare, onToggleExpan
           <GeographyMeter percent={city.geographyPercent} revisionNumber={city.revisionNumber} failed={city.status === 'failed'} />
         </TableCell>
         <TableCell className="text-right">
-          {config.actionTooltip ? (
+          {tooltipText ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 {/* span wrapper: disabled buttons don't fire pointer events for the Radix tooltip trigger */}
@@ -193,7 +197,7 @@ function CityLaunchRow({ city, isPreparing, isExpanded, onPrepare, onToggleExpan
                   {actionButton}
                 </span>
               </TooltipTrigger>
-              <TooltipContent>{config.actionTooltip}</TooltipContent>
+              <TooltipContent>{tooltipText}</TooltipContent>
             </Tooltip>
           ) : (
             actionButton

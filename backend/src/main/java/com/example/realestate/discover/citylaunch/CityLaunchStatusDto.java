@@ -18,6 +18,7 @@ import java.time.Instant;
  * @param failureReason latest revision's failure reason, or {@code null} if it hasn't failed (or
  *                       the city has never been prepared)
  * @param preparedAt latest revision's prepared-at timestamp, or {@code null} if not yet prepared
+ * @param geographyReady true if the city has at least one active area and at least one region, satisfying canonical inputs
  */
 public record CityLaunchStatusDto(
         Integer cityId,
@@ -30,5 +31,6 @@ public record CityLaunchStatusDto(
         String prepState,
         int geographyPercent,
         String failureReason,
-        Instant preparedAt) {
+        Instant preparedAt,
+        boolean geographyReady) {
 }

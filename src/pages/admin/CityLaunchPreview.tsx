@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { AlertCircle, Loader2, ShieldAlert } from 'lucide-react';
 import MapDiscovery from '@/pages/MapDiscovery';
 import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { SimulatedPreviewRibbon } from '@/components/discover/SimulatedPreviewRibbon';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
@@ -252,7 +253,9 @@ export default function CityLaunchPreview() {
         </aside>
 
         <div className="min-w-0 flex-1">
-          <MapDiscovery />
+          <DiscoverProvider>
+            <MapDiscovery />
+          </DiscoverProvider>
         </div>
         </TabsContent>
       </Tabs>

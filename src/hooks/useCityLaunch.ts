@@ -25,6 +25,7 @@ export interface CityLaunchStatusDto {
   geographyPercent: number;
   failureReason: string | null;
   preparedAt: string | null;
+  geographyReady: boolean;
 }
 
 export interface CityLaunchProgressDto {

@@ -607,9 +607,7 @@ describe('CityLaunchPreview — area-groups isolation with the REAL MapDiscovery
             <Route
               path="/admin/city-launch/:cityId/preview/:revisionId"
               element={
-                <RealDiscoverProvider>
-                  <RealCityLaunchPreview />
-                </RealDiscoverProvider>
+                <RealCityLaunchPreview />
               }
             />
           </Routes>
@@ -692,5 +690,20 @@ describe('CityLaunchPreview — area-groups isolation with the REAL MapDiscovery
         ([path]) => path === '/api/admin/city-launch/cities/7/revisions/42/preview/area-groups',
       ),
     ).toBe(false);
+  });
+
+  it('regression: MapDiscovery receives DiscoverProvider context and does not throw missing context errors', async () => {
+    // We render the real preview without wrapping it in an external DiscoverProvider.
+    // If MapDiscovery inside CityLaunchPreview misses DiscoverProvider, it will throw:
+    // "useDiscoverNav must be used within a <DiscoverProvider>"
+    renderRealPreview('7', '42');
+
+    // Wait for a real request to confirm the component successfully mounted and invoked its data hooks.
+    await waitFor(() => {
+      expect(apiGetSpy).toHaveBeenCalledWith(
+        '/api/admin/city-launch/cities/7/revisions/42/preview/area-groups',
+        { skipAuth: false },
+      );
+    });
   });
 });
