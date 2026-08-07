@@ -42,18 +42,7 @@ public class CityLaunchReadService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "No city launch preparation found for this city"));
 
-        return new CityLaunchProgressDto(
-                latest.getId(),
-                latest.getCityId(),
-                latest.getRevisionNumber(),
-                latest.getLifecycleStatus().name(),
-                latest.getPrepState().name(),
-                latest.getPrepStage(),
-                prepStageLabel(latest.getPrepStage()),
-                geographyPercent(latest),
-                latest.getFailureReason(),
-                latest.getCreatedAt(),
-                latest.getPreparedAt());
+        return CityLaunchProgressDto.from(latest);
     }
 
     private CityLaunchStatusDto toStatusDto(CityRow city) {
@@ -68,7 +57,7 @@ public class CityLaunchReadService {
                 city.id(), city.slug(), city.name(),
                 deriveStatus(revision), revision.getId(), revision.getRevisionNumber(),
                 revision.getPrepStage(), revision.getPrepState().name(),
-                geographyPercent(revision), revision.getFailureReason(), revision.getPreparedAt());
+                CityLaunchProgressDto.from(revision).geographyPercent(), revision.getFailureReason(), revision.getPreparedAt());
     }
 
     private Optional<CityLaunchRevision> latestRevision(int cityId) {
@@ -98,25 +87,7 @@ public class CityLaunchReadService {
         };
     }
 
-    private static int geographyPercent(CityLaunchRevision revision) {
-        if (revision.getPrepState() == PrepState.DONE) {
-            return 100;
-        }
-        return Math.round(revision.getPrepStage() / 6f * 100);
-    }
 
-    /** Canonical 6-stage offline prep pipeline label; {@code pending} for 0/unrecognized stages. */
-    private static String prepStageLabel(short prepStage) {
-        return switch (prepStage) {
-            case 1 -> "candidate";
-            case 2 -> "canonical";
-            case 3 -> "regions";
-            case 4 -> "groups";
-            case 5 -> "projections";
-            case 6 -> "ready";
-            default -> "pending";
-        };
-    }
 
     private record CityRow(Integer id, String slug, String name) {}
 }

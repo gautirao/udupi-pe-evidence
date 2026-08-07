@@ -37,14 +37,17 @@ public class CityLaunchPreparationService {
     private final CityLaunchRevisionRepository revisionRepository;
     private final CanonicalGeographyReader geographyReader;
     private final CityLaunchGraphWriter graphWriter;
+    private final CityLaunchSseService sseService;
 
     public CityLaunchPreparationService(
             CityLaunchRevisionRepository revisionRepository,
             CanonicalGeographyReader geographyReader,
-            CityLaunchGraphWriter graphWriter) {
+            CityLaunchGraphWriter graphWriter,
+            CityLaunchSseService sseService) {
         this.revisionRepository = revisionRepository;
         this.geographyReader = geographyReader;
         this.graphWriter = graphWriter;
+        this.sseService = sseService;
     }
 
     /**
@@ -156,6 +159,7 @@ public class CityLaunchPreparationService {
         }
 
         Long revisionId = saved.getId();
+        sseService.emitProgress(saved);
         registerGraphWriteAfterCommit(revisionId, cityId);
 
         return new PrepareResponse(revisionId, "preparing");

@@ -62,6 +62,7 @@ public class CityLaunchGraphWriter {
     private final NavigationTreeGenerationService navigationTreeGenerationService;
     private final SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
     private final SandboxNavigationOverrideRepository sandboxNavigationOverrideRepository;
+    private final CityLaunchSseService sseService;
 
     /**
      * Self-reference to the Spring-proxied instance of this very bean, injected lazily.
@@ -88,6 +89,7 @@ public class CityLaunchGraphWriter {
             NavigationTreeGenerationService navigationTreeGenerationService,
             SandboxNavigationNodeRepository sandboxNavigationNodeRepository,
             SandboxNavigationOverrideRepository sandboxNavigationOverrideRepository,
+            CityLaunchSseService sseService,
             @Lazy CityLaunchGraphWriter self) {
         this.revisionRepository = revisionRepository;
         this.geographyReader = geographyReader;
@@ -101,6 +103,7 @@ public class CityLaunchGraphWriter {
         this.navigationTreeGenerationService = navigationTreeGenerationService;
         this.sandboxNavigationNodeRepository = sandboxNavigationNodeRepository;
         this.sandboxNavigationOverrideRepository = sandboxNavigationOverrideRepository;
+        this.sseService = sseService;
         this.self = self;
     }
 
@@ -151,6 +154,7 @@ public class CityLaunchGraphWriter {
         }
         revision.setPrepStage((short) 1);
         stageReached[0] = 1;
+        sseService.emitProgress(revision);
 
         List<SandboxAreaAlias> savedAliases = new ArrayList<>();
         for (CanonicalGeographyReader.CanonicalAreaAlias alias : geography.aliases()) {
@@ -163,6 +167,7 @@ public class CityLaunchGraphWriter {
         }
         revision.setPrepStage((short) 2);
         stageReached[0] = 2;
+        sseService.emitProgress(revision);
 
         List<SandboxCityRegion> savedRegions = new ArrayList<>();
         for (CanonicalGeographyReader.CanonicalCityRegion region : geography.regions()) {
@@ -174,6 +179,7 @@ public class CityLaunchGraphWriter {
         }
         revision.setPrepStage((short) 3);
         stageReached[0] = 3;
+        sseService.emitProgress(revision);
 
         List<SandboxCityRegionMembership> savedMemberships = new ArrayList<>();
         for (CanonicalGeographyReader.CanonicalCityRegionMembership membership : geography.memberships()) {
@@ -187,6 +193,7 @@ public class CityLaunchGraphWriter {
         }
         revision.setPrepStage((short) 4);
         stageReached[0] = 4;
+        sseService.emitProgress(revision);
 
         Map<String, Long> sandboxGroupIdBySlug = new HashMap<>();
         List<SandboxAreaGroup> savedGroups = new ArrayList<>();
@@ -201,6 +208,7 @@ public class CityLaunchGraphWriter {
         }
         revision.setPrepStage((short) 5);
         stageReached[0] = 5;
+        sseService.emitProgress(revision);
 
         List<SandboxAreaGroupMember> savedGroupMembers = new ArrayList<>();
         for (CanonicalGeographyReader.CanonicalAreaGroupMember member : geography.groupMembers()) {
@@ -214,6 +222,7 @@ public class CityLaunchGraphWriter {
         }
         revision.setPrepStage((short) 6);
         stageReached[0] = 6;
+        sseService.emitProgress(revision);
 
         // #1955 Areas PR A, SLICE 2e (AC5): close the 2c integration seam by generating the
         // navigation tree as part of prepare, BEFORE the checksum anchor below — so a PREPARED
@@ -257,6 +266,7 @@ public class CityLaunchGraphWriter {
         revision.setLifecycleStatus(LifecycleStatus.PREPARED);
         revision.setPrepState(PrepState.DONE);
         revision.setPreparedAt(Instant.now());
+        sseService.emitProgress(revision);
     }
 
     /**
@@ -330,6 +340,7 @@ public class CityLaunchGraphWriter {
             revision.setPrepState(PrepState.FAILED);
             revision.setFailureReason(reason);
             revision.setPrepStage(stageReached);
+            sseService.emitProgress(revision);
         }, () -> log.warn("markFailed: revision {} not found (already deleted?)", revisionId));
     }
 
