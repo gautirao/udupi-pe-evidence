@@ -217,7 +217,7 @@ export function NodeListingsSurface({
         intent={nav.intent}
         onAddSchool={onAddSchool}
       />
-      {isAuthenticated && totalPages > 1 ? (
+      {totalPages > 1 ? (
         <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
           <Button
             variant="outline" size="sm"

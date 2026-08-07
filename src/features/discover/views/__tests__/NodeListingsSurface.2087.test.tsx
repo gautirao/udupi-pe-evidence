@@ -139,12 +139,23 @@ describe('NodeListingsSurface — #2087', () => {
     expect(screen.getByRole('button', { name: /Prev/i })).toBeInTheDocument();
   });
 
-  it('hides pagination controls when unauthenticated (even if totalPages > 1)', () => {
+  it('shows pagination controls when unauthenticated (anonymous pagination support)', async () => {
     mockIsAuthenticated = false;
     mockUseDiscoverListings.mockReturnValue(makeListingsResult(3));
-    renderSurface(makeNode());
-    expect(screen.queryByRole('button', { name: /Next/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Prev/i })).not.toBeInTheDocument();
+    renderSurface(makeNode({ nodeKey: 'c:domlur' }));
+
+    expect(screen.getByRole('button', { name: /Next/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Prev/i })).toBeInTheDocument();
+
+    // Prove an anonymous user can move to page 2 (index 1) and that the request
+    // remains scoped by the same canonical nodeKey.
+    fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+    await waitFor(() => {
+      const calls = mockUseDiscoverListings.mock.calls;
+      const lastCall = calls[calls.length - 1][0] as { page: number; nodeKey: string };
+      expect(lastCall.page).toBe(1);
+      expect(lastCall.nodeKey).toBe('c:domlur');
+    });
   });
 
   it('hides pagination controls when totalPages <= 1 (even if authenticated)', () => {
