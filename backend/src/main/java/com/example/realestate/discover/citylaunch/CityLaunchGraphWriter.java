@@ -14,6 +14,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -266,7 +268,7 @@ public class CityLaunchGraphWriter {
         revision.setLifecycleStatus(LifecycleStatus.PREPARED);
         revision.setPrepState(PrepState.DONE);
         revision.setPreparedAt(Instant.now());
-        sseService.emitProgress(revision);
+        emitTerminalProgressAfterCommit(revision);
     }
 
     /**
@@ -340,8 +342,21 @@ public class CityLaunchGraphWriter {
             revision.setPrepState(PrepState.FAILED);
             revision.setFailureReason(reason);
             revision.setPrepStage(stageReached);
-            sseService.emitProgress(revision);
+            emitTerminalProgressAfterCommit(revision);
         }, () -> log.warn("markFailed: revision {} not found (already deleted?)", revisionId));
+    }
+
+    private void emitTerminalProgressAfterCommit(CityLaunchRevision revision) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    sseService.emitProgress(revision);
+                }
+            });
+        } else {
+            sseService.emitProgress(revision);
+        }
     }
 
     // Never leaks the raw exception class name / message to a persisted column that a preview UI

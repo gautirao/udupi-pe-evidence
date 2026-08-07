@@ -135,7 +135,12 @@ export function useCityLaunchProgress(cityId: number | null, enabled: boolean) {
 
     const abortController = new AbortController();
 
+    let isSubscribed = true;
+    let retryTimeout: ReturnType<typeof setTimeout>;
+
     async function streamEvents() {
+      if (!isSubscribed) return;
+
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
@@ -147,16 +152,22 @@ export function useCityLaunchProgress(cityId: number | null, enabled: boolean) {
           signal: abortController.signal
         });
         
-        if (!response.ok) return;
+        if (!response.ok) {
+          throw new Error(`SSE failed with status: ${response.status}`);
+        }
 
         const reader = response.body?.getReader();
-        if (!reader) return;
+        if (!reader) {
+          throw new Error(`SSE response has no body`);
+        }
         const decoder = new TextDecoder();
         let buffer = '';
 
-        while (true) {
+        while (isSubscribed) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            throw new Error(`SSE stream closed unexpectedly`);
+          }
           buffer += decoder.decode(value, { stream: true });
           
           let eventBoundary = buffer.indexOf('\n\n');
@@ -183,15 +194,23 @@ export function useCityLaunchProgress(cityId: number | null, enabled: boolean) {
           }
         }
       } catch (err: any) {
-        if (err.name !== 'AbortError') {
-           console.error("SSE Error", err);
+        if (err.name === 'AbortError' || !isSubscribed) {
+           return;
         }
+        console.error("SSE Error, reconnecting in 3s...", err);
+        // Authoritative reconciliation before retry
+        queryClient.invalidateQueries({ queryKey: cityLaunchProgressQueryKey(cityId!), exact: true });
+        retryTimeout = setTimeout(() => {
+          streamEvents();
+        }, 3000);
       }
     }
     
     streamEvents();
     
     return () => {
+      isSubscribed = false;
+      clearTimeout(retryTimeout);
       abortController.abort();
     };
   }, [cityId, enabled, isPrepActive, queryClient]);

@@ -186,6 +186,53 @@ describe('useCityLaunchProgress', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('8: recovers from a transient SSE error', async () => {
+    let readerCalled = false;
+    global.fetch = vi.fn().mockImplementation(async () => {
+      return {
+        ok: true,
+        body: {
+          getReader: () => ({
+            read: vi.fn().mockImplementation(async () => {
+              if (!readerCalled) {
+                readerCalled = true;
+                // Simulates stream abort/failure
+                throw new Error("Stream disconnected");
+              }
+              // Return a never-resolving promise so the second stream stays open
+              return new Promise(() => {});
+            }),
+          }),
+        },
+      };
+    });
+
+    mockGet.mockResolvedValue({
+      cityId: 1,
+      revisionId: 5,
+      lifecycleStatus: 'preparing',
+      prepStage: 2,
+      prepStageLabel: 'Resolving areas',
+      prepState: 'RUNNING',
+      geographyPercent: 40,
+      failureReason: null,
+      preparedAt: null,
+    });
+
+    const { result, unmount } = renderHook(() => useCityLaunchProgress(1, true), { wrapper: makeWrapper() });
+    
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    // Reconnect happens after 3s, so wait for it with a longer timeout
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2), { timeout: 4000 });
+    
+    // It should have invalidated the query and called get again
+    expect(mockGet).toHaveBeenCalledTimes(2);
+
+    unmount();
+  }, 10000);
+
   it('does not fetch when disabled', async () => {
     mockGet.mockResolvedValue({});
     renderHook(() => useCityLaunchProgress(1, false), { wrapper: makeWrapper() });

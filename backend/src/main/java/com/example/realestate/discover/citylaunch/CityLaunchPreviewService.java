@@ -318,7 +318,7 @@ public class CityLaunchPreviewService {
     }
 
     private NavigationGraph buildPreviewNavigationGraph(String citySlug, long revisionId) {
-        List<SandboxNavigationNode> sandboxNodes = sandboxNavigationNodeRepository.findByRevisionId(revisionId);
+        List<SandboxNavigationNode> sandboxNodes = sandboxNavigationNodeRepository.findByRevisionIdOrderByDepthAscDisplayOrderAsc(revisionId);
         List<NavigationNode> mappedNodes = sandboxNodes.stream()
                 .map(s -> (NavigationNode) new MockNavigationNode(s))
                 .toList();
