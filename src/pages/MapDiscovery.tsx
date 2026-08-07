@@ -915,6 +915,7 @@ export default function MapDiscovery() {
   // are needed. This boolean mirrors the later isTopGroupedAreaOrSchool / isTopGroupedAgri
   // definitions (line ~2098) but is computed here so it can gate the data hooks.
   const isTopGroupedLevel = (() => {
+    if (nav.nodeListings) return false;
     if (
       (nav.journey === 'area-first' || nav.journey === 'school-first') &&
       !nav.groupId &&
@@ -964,12 +965,16 @@ export default function MapDiscovery() {
   //     unscoped city-wide flash during the cold-load race, R4).
   //   groupId set AND group resolved                     → group.area_keys
   //     (the scoped fetch this fix exists for).
+  // Issue #2087 — Node Listings Surface mode uses the canonical node's descendant areas.
   const groupAreaKeysForMapData = useMemo((): string[] | undefined => {
+    if (nav.nodeListings && areasNavigationJourney.node) {
+      return areasNavigationJourney.node.descendantAreaKeys ?? [];
+    }
     if (!nav.groupId) return undefined;
     if (nav.journey === 'school-first' && nav.schoolId) return undefined;
     const group = resolveDiscoverGroupForAreaKey(areaGroupsData?.groups, nav.groupId, nav.areaKey);
     return group?.area_keys ?? [];
-  }, [nav.groupId, nav.journey, nav.schoolId, nav.areaKey, areaGroupsData?.groups]);
+  }, [nav.nodeListings, areasNavigationJourney.node, nav.groupId, nav.journey, nav.schoolId, nav.areaKey, areaGroupsData?.groups]);
 
   const {
     areasLoading, listingDataLoading, markersLoading, isLoadingAreaListings,
@@ -1035,7 +1040,8 @@ export default function MapDiscovery() {
       // of deriveScopeAwareMarkersEnabled (useDiscoverMapData.ts), which
       // covers the scope.kind==='group'||'area' && shouldShowMarkers(zoom)
       // contract in isolation (scopeAwareMarkers.test.tsx).
-      shouldShowMarkers(mapZoom),
+      // Issue #2087 — Node Listings Surface mode bypasses the zoom gate to show markers immediately.
+      (nav.nodeListings || shouldShowMarkers(mapZoom)),
     // Issue #1655 — suppress the paginated listings fetch at grouped overview level.
     // At top-grouped states the right panel shows groups/zones, not individual listings,
     // so there is no consumer for this data. Drilling down into a group/area/school

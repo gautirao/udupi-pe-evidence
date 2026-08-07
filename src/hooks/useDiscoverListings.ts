@@ -78,6 +78,10 @@ export interface UseDiscoverListingsParams {
    * (enabled guard) to prevent a whole-city leak or a backend 400 error.
    */
   areaKeys?: string[];
+  /**
+   * Issue #2087 — bounded local-scope Browse listings CTA.
+   */
+  nodeKey?: string | null;
 }
 
 export function useDiscoverListings({
@@ -91,6 +95,7 @@ export function useDiscoverListings({
   q,
   listingPurpose,
   areaKeys,
+  nodeKey,
 }: UseDiscoverListingsParams) {
   // Snap bbox to grid for cache efficiency; null when not provided or contains non-finite values.
   const snapped: [number, number, number, number] | null =
@@ -124,6 +129,7 @@ export function useDiscoverListings({
       // Issue #1597: include sorted areaKeys in query key for stable cache hits.
       // null when no areaKeys filter — distinct from [] (empty, fetch disabled).
       sortedAreaKeys,
+      nodeKey,
     ],
     queryFn: ({ signal }) => {
       const params = buildDiscoverSearchParams({
@@ -136,6 +142,7 @@ export function useDiscoverListings({
         sortedAreaKeys,
         trimmedQ,
         listingPurpose,
+        nodeKey,
       });
 
       return api.get<DiscoverListingsPage>(`/api/discover/listings?${params.toString()}`, { signal });

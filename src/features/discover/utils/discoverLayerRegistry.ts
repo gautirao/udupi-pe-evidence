@@ -109,6 +109,7 @@ export interface DiscoverLayerSelection {
   groupId: string | null;
   schoolPicking?: boolean;
   groupResults?: boolean;
+  nodeListings?: boolean;
   /** @deprecated legacy selectedGroup — mirrors DiscoverUrlState.selectedGroup */
   selectedGroup: DiscoverUrlState['selectedGroup'];
   selectedRegion?: DiscoverUrlState['selectedRegion'];
@@ -156,6 +157,7 @@ export function toLayerInput(urlState: DiscoverUrlState): DiscoverLayerInput {
       groupId: urlState.groupId,
       schoolPicking: urlState.schoolPicking,
       groupResults: urlState.groupResults,
+      nodeListings: urlState.nodeListings,
       selectedGroup: urlState.selectedGroup,
       selectedRegion: urlState.selectedRegion,
       selectedMaxKm: urlState.selectedMaxKm,
@@ -182,6 +184,7 @@ export const LAYER_PARAM = {
   groupId: 'groupId',
   schoolPicking: 'schoolPicking',
   groupResults: 'groupResults',
+  nodeListings: 'nodeListings',
   selectedGroup: 'group',
   selectedRegion: 'region',
   selectedMaxKm: 'maxKm',
@@ -229,6 +232,7 @@ export function paramsToLayerInput(params: URLSearchParams): DiscoverLayerInput 
       groupId: params.get(LAYER_PARAM.groupId),
       schoolPicking: params.get(LAYER_PARAM.schoolPicking) === '1' ? true : undefined,
       groupResults: params.get(LAYER_PARAM.groupResults) === '1' ? true : undefined,
+      nodeListings: params.get(LAYER_PARAM.nodeListings) === '1' ? true : undefined,
       selectedGroup,
       // Cast: raw string, not validated against VALID_DIRECTIONS (see
       // docstring above) — safe for the same null-vs-non-null reason.
@@ -309,6 +313,7 @@ export function computeDiscoverLayer(input: DiscoverLayerInput): DiscoverLayer {
     groupId: input.selection.groupId,
     schoolPicking: input.selection.schoolPicking,
     groupResults: input.selection.groupResults,
+    nodeListings: input.selection.nodeListings,
     selectedGroup: input.selection.selectedGroup,
     selectedRegion: input.selection.selectedRegion,
     selectedMaxKm: input.selection.selectedMaxKm,
@@ -417,6 +422,11 @@ export function selectDiscoverMapLayer(
   // levels, and never for school-first (see nodeAreaPoint.ts /
   // markerPopoverEligibility.ts for the shared leaf-resolution contract).
   if (isTopGroupedAreaOrSchool && input.nodeAreaLeaf && journey === 'area-first') {
+    return 'all-areas';
+  }
+  // Issue #2087 — bounded local-scope Browse listings CTA. 
+  // Node listings mode (descendant areas fetched) renders 'all-areas' (the raw markers)
+  if (isTopGroupedAreaOrSchool && input.selection.nodeListings && journey === 'area-first') {
     return 'all-areas';
   }
   if (isTopGroupedAreaOrSchool) return 'area-group-bubbles';

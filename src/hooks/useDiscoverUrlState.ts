@@ -280,6 +280,13 @@ export interface DiscoverUrlState {
    * existing tests and callers keep compiling.
    */
   historyAction?: 'POP' | 'PUSH' | 'REPLACE';
+  /**
+   * Issue #2087 — bounded listings view for a stable node.
+   * When true (URL `nodeListings=1`), the canonical Areas journey shows all listings
+   * across the selected node's descendant Areas. Requires `node` to be present and eligible.
+   * Same presence-flag read style as groupResults (`=== '1' ? true : undefined`).
+   */
+  nodeListings?: boolean;
 }
 
 export interface DiscoverUrlActions {
@@ -530,6 +537,18 @@ export interface DiscoverUrlActions {
    * link affordance and the click affordance cannot diverge.
    */
   buildNodeHref: (nodeKey: string) => string | null;
+  /**
+   * Issue #2087 — enter the bounded node listings view.
+   * Sets `nodeListings=1` while keeping node/journey/filters.
+   * Single PUSH — a shareable destination so browser Back returns to the node drill-down.
+   */
+  enterNodeListings: () => void;
+  /**
+   * Issue #2087 — leave the bounded node listings view.
+   * Deletes `nodeListings`, keeping node/journey/filters.
+   * Single REPLACE.
+   */
+  clearNodeListings: () => void;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -665,6 +684,8 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     node: navigationDomain.state.node,
     // Issue #1956 PR 2 — appended after PR 1's key, same rationale.
     rawNodeParam: navigationDomain.state.rawNodeParam,
+    // Issue #2087 — appended last with historyAction.
+    nodeListings: navigationDomain.state.nodeListings,
     // Issue #2083 (cycle 5) — appended last, same rationale as the two keys above.
     historyAction,
   };

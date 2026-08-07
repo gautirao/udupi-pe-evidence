@@ -276,4 +276,66 @@ describe('NavigationLevelPanel', () => {
       expect(screen.getByTestId('navigation-level-empty')).toBeInTheDocument();
     });
   });
+
+  describe('Issue #2087 — Browse listings CTA eligibility', () => {
+    it('is eligible when the canonical descendant area count is 15 (inclusive boundary)', () => {
+      const onBrowseListings = vi.fn();
+      render(
+        <NavigationLevelPanel
+          journey={makeJourney({
+            node: makeNode({ descendantAreaKeys: new Array(15).fill('a') }),
+          })}
+          onBrowseListings={onBrowseListings}
+        />
+      );
+      expect(screen.getByRole('button', { name: /Browse listings/i })).toBeInTheDocument();
+    });
+
+    it('is ineligible when the canonical descendant area count is 16 (exceeds boundary)', () => {
+      const onBrowseListings = vi.fn();
+      render(
+        <NavigationLevelPanel
+          journey={makeJourney({
+            node: makeNode({ descendantAreaKeys: new Array(16).fill('a') }),
+          })}
+          onBrowseListings={onBrowseListings}
+        />
+      );
+      expect(screen.queryByRole('button', { name: /Browse listings/i })).not.toBeInTheDocument();
+    });
+
+    it('is eligible for a shallow non-root stable node (e.g. Udupi region) if its total descendant areas <= 15', () => {
+      const onBrowseListings = vi.fn();
+      render(
+        <NavigationLevelPanel
+          journey={makeJourney({
+            node: makeNode({
+              nodeKey: 'r:udupi',
+              nodeType: 'DIRECTION',
+              descendantAreaKeys: new Array(10).fill('a'),
+            }),
+          })}
+          onBrowseListings={onBrowseListings}
+        />
+      );
+      expect(screen.getByRole('button', { name: /Browse listings/i })).toBeInTheDocument();
+    });
+
+    it('is never eligible at the city ROOT, even if descendant areas <= 15', () => {
+      const onBrowseListings = vi.fn();
+      render(
+        <NavigationLevelPanel
+          journey={makeJourney({
+            node: makeNode({
+              nodeKey: 'root',
+              nodeType: 'ROOT',
+              descendantAreaKeys: new Array(10).fill('a'),
+            }),
+          })}
+          onBrowseListings={onBrowseListings}
+        />
+      );
+      expect(screen.queryByRole('button', { name: /Browse listings/i })).not.toBeInTheDocument();
+    });
+  });
 });

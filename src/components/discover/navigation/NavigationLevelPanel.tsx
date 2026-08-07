@@ -44,6 +44,7 @@ export interface NavigationLevelPanelProps {
    * generic "this city" only for the rare case a root-node caller omits it.
    */
   cityLabel?: string;
+  onBrowseListings?: () => void;
 }
 
 export function NavigationLevelPanel({
@@ -53,6 +54,7 @@ export function NavigationLevelPanel({
   hoveredNodeKey = null,
   onHoverChange,
   cityLabel,
+  onBrowseListings,
 }: NavigationLevelPanelProps) {
   const { node, levelKind, children, resolutionNotice, nodeCount, selectNode } = journey;
 
@@ -97,8 +99,11 @@ export function NavigationLevelPanel({
   // leads with the mock's invitational pattern (eyebrow + question) instead
   // of the node-scoped name/count heading every other level keeps. City-wide
   // counts are NOT repeated here — they already live in the persistent
-  // JourneySwitcher's metrics strip (CQ3), one owner, not two.
   const isCityRoot = node.nodeKey === ROOT_NODE_KEY;
+
+  // Issue #2087 — bounded local-scope Browse listings CTA. Use canonical descendant scope.
+  const descendantAreaCount = node.descendantAreaKeys?.length ?? 0;
+  const isEligibleForBrowse = !isCityRoot && descendantAreaCount > 0 && descendantAreaCount <= 15;
 
   // Issue #2084 (AC7) — a section eyebrow + count restored above the child
   // list, at every level this component renders (city-root, Direction,
@@ -168,6 +173,20 @@ export function NavigationLevelPanel({
           </span>
         </div>
       )}
+      
+      {isEligibleForBrowse && onBrowseListings != null && (
+        <div className="mb-4 mt-2 px-1">
+          <button
+            type="button"
+            data-testid="browse-node-listings-cta"
+            className="w-full flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+            onClick={onBrowseListings}
+          >
+            Browse listings
+          </button>
+        </div>
+      )}
+      
       {children.length === 0 ? (
         <p className="text-sm text-muted-foreground" data-testid="navigation-level-empty">
           {NO_MATCHES_WITH_CURRENT_FILTERS}

@@ -488,6 +488,9 @@ export function DiscoverRightPanelContainer({
             onHoverChange={onNavigationNodeHoverChange}
             focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
             onClusterFocusChange={onClusterFocusChange}
+            isNodeListingsActive={urlState.nodeListings === true}
+            onClearNodeListings={urlActions.clearNodeListings}
+            onBrowseListings={urlActions.enterNodeListings}
             // Issue #1956 PR 2 (Slice 5) — the pure href builder the visible
             // in-app HierarchyBackButton uses to resolve the canonical parent.
             buildNodeHref={urlActions.buildNodeHref}

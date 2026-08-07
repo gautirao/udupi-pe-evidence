@@ -11,6 +11,7 @@ export interface DiscoverSearchParamsOptions {
   trimmedQ?: string | null;
   listingPurpose?: string | null;
   excludePropertyType?: string | null;
+  nodeKey?: string | null;
 }
 
 /**
@@ -28,6 +29,7 @@ export function buildDiscoverSearchParams({
   trimmedQ,
   listingPurpose,
   excludePropertyType,
+  nodeKey,
 }: DiscoverSearchParamsOptions): URLSearchParams {
   const params = new URLSearchParams();
   params.set('city', city);
@@ -49,6 +51,10 @@ export function buildDiscoverSearchParams({
 
   if (sortedAreaKeys !== null && sortedAreaKeys !== undefined) {
     sortedAreaKeys.forEach((k) => params.append('areaKeys', k));
+  }
+  
+  if (nodeKey) {
+    params.set('nodeKey', nodeKey);
   }
 
   filters.propertyTypes?.forEach((t) => params.append('propertyTypes', t));
