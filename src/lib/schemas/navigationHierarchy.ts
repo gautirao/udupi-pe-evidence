@@ -21,7 +21,9 @@ import { z } from 'zod';
  * persisted, tested source of truth.
  */
 
-export const navigationNodeTypeSchema = z.enum(['CLUSTER', 'AREA']);
+import { PERSISTED_NODE_TYPES } from '@/features/discover/navigation/types';
+
+export const navigationNodeTypeSchema = z.enum(PERSISTED_NODE_TYPES);
 export type NavigationNodeType = z.infer<typeof navigationNodeTypeSchema>;
 
 // ---------------------------------------------------------------------------
@@ -39,28 +41,28 @@ export type NavigationNodeType = z.infer<typeof navigationNodeTypeSchema>;
  * fields are non-null numbers on every node per the shipped backend DTO.
  */
 export const navigationBoundsSchema = z.object({
-  centreLat: z.number(),
-  centreLon: z.number(),
-  minLat: z.number(),
-  minLon: z.number(),
-  maxLat: z.number(),
-  maxLon: z.number(),
+  centreLat: z.number().nullable(),
+  centreLon: z.number().nullable(),
+  minLat: z.number().nullable(),
+  minLon: z.number().nullable(),
+  maxLat: z.number().nullable(),
+  maxLon: z.number().nullable(),
 });
 export type NavigationBounds = z.infer<typeof navigationBoundsSchema>;
 
 export const previewNodeSchema = z.object({
   nodeKey: z.string(),
   nodeType: navigationNodeTypeSchema,
-  parentNodeKey: z.string().nullable(),
-  regionKey: z.string().nullable(),
-  areaKey: z.string().nullable(),
+  parentNodeKey: z.string().nullable().optional(),
+  regionKey: z.string().nullable().optional(),
+  areaKey: z.string().nullable().optional(),
   displayLabel: z.string(),
   depth: z.number().int().nonnegative(),
-  ancestorKeys: z.array(z.string()),
-  representativeAreaKeys: z.array(z.string()),
+  ancestorKeys: z.array(z.string()).nullable().optional(),
+  representativeAreaKeys: z.array(z.string()).nullable().optional(),
   displayOrder: z.number().int(),
   descendantAreaCount: z.number().int().nonnegative(),
-  bounds: navigationBoundsSchema,
+  bounds: navigationBoundsSchema.nullable().optional(),
 });
 export type PreviewNode = z.infer<typeof previewNodeSchema>;
 
