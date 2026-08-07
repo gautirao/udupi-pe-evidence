@@ -38,6 +38,8 @@ import { ApiError } from '@/lib/api';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
+import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
+
 function makeWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -292,3 +294,30 @@ describe('useDiscoverSummary — loading state', () => {
     expect(result.current.isLoading).toBe(false);
   });
 });
+
+describe('useDiscoverSummary — preview cache isolation', () => {
+  it('9: disabled in preview mode and does not expose live cache data', () => {
+    const queryClient = new QueryClient();
+    
+    // 1. Pre-populate the LIVE cache
+    const liveKey = ['discover-summary', 'live', 'udupi', null, 'area_group', 8, null];
+    queryClient.setQueryData(liveKey, SUMMARY_RESPONSE);
+
+    // 2. Render in PREVIEW mode
+    const previewWrapper = ({ children }: { children: React.ReactNode }) => {
+      return React.createElement(QueryClientProvider, { client: queryClient },
+        React.createElement(DiscoverDataSourceProvider, { value: { mode: 'preview', cityId: 1, revisionId: 2 } }, children)
+      );
+    };
+
+    const { result } = renderHook(() => useDiscoverSummary({ city: 'udupi' }), {
+      wrapper: previewWrapper,
+    });
+
+    // 3. Prove it does NOT return the live data and makes no request
+    expect(result.current.data).toBeUndefined();
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+});
+
