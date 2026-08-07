@@ -85,6 +85,7 @@ class AdminCityLaunchPreviewControllerIT {
     @Autowired private SandboxCityRegionMembershipRepository sandboxMembershipRepository;
     @Autowired private SandboxAreaGroupRepository sandboxAreaGroupRepository;
     @Autowired private SandboxAreaGroupMemberRepository sandboxAreaGroupMemberRepository;
+    @Autowired private com.example.realestate.discover.navigation.SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
 
     private static final UUID ADMIN_ID = UUID.fromString("19110101-0000-0000-0000-000000000001");
     private static final UUID BUYER_ID = UUID.fromString("19110102-0000-0000-0000-000000000002");
@@ -171,6 +172,17 @@ class AdminCityLaunchPreviewControllerIT {
     private void seedGroupMember(long revisionId, long groupId, long areaId, int displayOrder) {
         sandboxAreaGroupMemberRepository.save(
                 new SandboxAreaGroupMember(revisionId, groupId, areaId, displayOrder));
+    }
+
+    private com.example.realestate.discover.navigation.SandboxNavigationNode seedNavigationNode(
+            long revisionId, String nodeKey, String nodeType, Long parentNodeId, String regionKey, String areaKey,
+            int displayOrder, int depth, java.util.List<String> ancestorKeys, java.util.List<String> representativeAreaKeys) {
+        com.example.realestate.discover.navigation.SandboxNavigationNode n = new com.example.realestate.discover.navigation.SandboxNavigationNode(
+                revisionId, regionKey, nodeType, parentNodeId, nodeKey, areaKey, representativeAreaKeys,
+                nodeKey + " Label", displayOrder, depth, ancestorKeys, 1,
+                BigDecimal.valueOf(13.0), BigDecimal.valueOf(74.7), BigDecimal.valueOf(13.0), BigDecimal.valueOf(74.7),
+                BigDecimal.valueOf(13.0), BigDecimal.valueOf(74.7), BigDecimal.ZERO, "preview-policy", Instant.now());
+        return sandboxNavigationNodeRepository.save(n);
     }
 
     // =========================================================================================
@@ -676,5 +688,47 @@ class AdminCityLaunchPreviewControllerIT {
                 .andExpect(jsonPath("$.groups[0].slug").value("e7-tie-group"))
                 .andExpect(jsonPath("$.groups[0].areaKeys.length()").value(4))
                 .andExpect(jsonPath("$.groups[0].regionKey").value("south"));
+    }
+
+    // =========================================================================================
+    // E8 — navigation resolve/counts
+    // =========================================================================================
+
+    @Test
+    @DisplayName("E8: resolve fallback to CITY_ROOT instead of stale ladder; counts returns schoolTotal=0")
+    void e8_resolveAndCounts() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        SandboxArea area = seedArea(revisionId, "IN|KA|ACP|Nav1", "Nav1", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+        seedRegion(revisionId, "north", "North", 1);
+        seedMembership(revisionId, area.getId(), "north");
+
+        // Seed direction -> area (direction has no parent)
+        var dir = seedNavigationNode(revisionId, "d:north", "DIRECTION", null, "north", null, 1, 1, java.util.List.of(), java.util.List.of("IN|KA|ACP|Nav1"));
+        var leaf = seedNavigationNode(revisionId, "a:IN|KA|ACP|Nav1", "AREA", dir.getId(), "north", "IN|KA|ACP|Nav1", 1, 2, java.util.List.of("d:north"), java.util.List.of("IN|KA|ACP|Nav1"));
+
+        String base = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview";
+
+        // 1. Resolve exact
+        mockMvc.perform(get(base + "/navigation/resolve?node=d:north").header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resolution").value("EXACT"))
+                .andExpect(jsonPath("$.node.nodeKey").value("d:north"));
+
+        // 2. Resolve missing (stale) falls back to root
+        mockMvc.perform(get(base + "/navigation/resolve?node=a:missing").header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resolution").value("CITY_ROOT"))
+                .andExpect(jsonPath("$.node.nodeType").value("ROOT"));
+
+        // 3. Counts returns 0 for schools, correct count for listings
+        mockMvc.perform(get(base + "/navigation/d:north/counts").header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(1))
+                .andExpect(jsonPath("$.schoolCount").value(0)) // Rule 1: No simulated schools in preview
+                .andExpect(jsonPath("$.areaSchoolCounts").isEmpty())
+                .andExpect(jsonPath("$.areaCounts.['IN|KA|ACP|Nav1']").value(1));
     }
 }

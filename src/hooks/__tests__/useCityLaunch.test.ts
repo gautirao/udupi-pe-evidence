@@ -23,6 +23,7 @@ const mockUseAuth = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api', () => ({
   api: { get: mockGet, post: mockPost },
+  API_BASE_URL: 'http://localhost',
   ApiError: class ApiError extends Error {
     status: number;
     body: unknown;
@@ -126,7 +127,18 @@ describe('usePrepareCity', () => {
 });
 
 describe('useCityLaunchProgress', () => {
-  it('6: polls (refetchInterval truthy) while prepState is RUNNING', async () => {
+  it('6: sets up SSE stream while prepState is RUNNING', async () => {
+    // Setup a dummy fetch mock for the SSE endpoint
+    const abortMock = vi.fn();
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
+        }),
+      },
+    } as any);
+    
     mockGet.mockResolvedValue({
       cityId: 1,
       revisionId: 5,
@@ -139,16 +151,21 @@ describe('useCityLaunchProgress', () => {
       preparedAt: null,
     });
 
-    const { result } = renderHook(() => useCityLaunchProgress(1, true), { wrapper: makeWrapper() });
+    const { result, unmount } = renderHook(() => useCityLaunchProgress(1, true), { wrapper: makeWrapper() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(mockGet).toHaveBeenCalledWith('/api/admin/city-launch/cities/1/prepare');
-    // @tanstack/react-query v5 exposes the resolved interval on the query observer's options
     expect(result.current.data?.prepState).toBe('RUNNING');
+    expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/admin/city-launch/cities/1/prepare/events'),
+        expect.anything()
+    );
+    unmount();
   });
 
-  it('7: stops polling once prepState is DONE', async () => {
+  it('7: does not start SSE stream once prepState is DONE', async () => {
+    global.fetch = vi.fn();
     mockGet.mockResolvedValue({
       cityId: 1,
       revisionId: 5,
@@ -166,7 +183,7 @@ describe('useCityLaunchProgress', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(result.current.data?.prepState).toBe('DONE');
-    // Completion should trigger a list-query invalidation (queryFn side-effect).
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('does not fetch when disabled', async () => {
