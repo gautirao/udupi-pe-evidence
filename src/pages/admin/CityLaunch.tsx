@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -135,16 +136,23 @@ interface CityLaunchRowProps {
 function CityLaunchRow({ city, isPreparing, isExpanded, onPrepare, onToggleExpanded }: CityLaunchRowProps) {
   const config = getCityLaunchStatusConfig(city.status);
   const progress = useCityLaunchProgress(city.cityId, isExpanded);
+  const navigate = useNavigate();
 
   function handleAction() {
-    if (city.status === 'not-started') {
+    if (city.status === 'not-started' || city.status === 'live') {
       onPrepare();
       return;
     }
     if (city.status === 'preparing' || city.status === 'failed') {
       onToggleExpanded();
+      return;
     }
-    // ready-preview / ready-launch / live: inert in this slice.
+    if (city.status === 'ready-preview' || city.status === 'ready-launch') {
+      if (city.revisionId != null) {
+        navigate(`/admin/city-launch/${city.cityId}/preview/${city.revisionId}`);
+      }
+      return;
+    }
   }
 
   const actionDisabled = !config.actionEnabled || isPreparing;
