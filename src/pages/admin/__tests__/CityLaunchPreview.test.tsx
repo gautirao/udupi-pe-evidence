@@ -214,6 +214,9 @@ vi.mock('@/lib/api', () => ({
       if (path.startsWith('/api/admin/city-launch') && path.endsWith('/validation')) {
         return DEFAULT_VALIDATION_STATE_DTO;
       }
+      if (path === '/api/admin/city-launch/cities') {
+        return [{ cityId: 7, cityName: 'Test City' }];
+      }
       return {
         regions: [], groups: [], areas: [], markers: [], listings: [],
         content: [], totalElements: 0, cityId: null, citySlug: '',
@@ -412,6 +415,37 @@ describe('CityLaunchPreview — validation rail (Issue #1911 PR4)', () => {
     expect(screen.getByRole('button', { name: /mark preview validated/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /preview not ready/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /reset validation/i })).toBeDisabled();
+  });
+
+  it('a VALIDATED revision directly opened can get to CityLaunchReadiness', async () => {
+    vi.mocked(api.get).mockImplementation(async (path: string) => {
+      if (path.endsWith('/validation')) {
+        return validationState({
+          lifecycleStatus: 'VALIDATED',
+          allValidated: true,
+          editable: true,
+          checks: { landing: true, regions: true, areaGroups: true, areas: true, listing: true },
+          supersededBy: null,
+        });
+      }
+      if (path === '/api/admin/city-launch/cities') {
+        return [{ cityId: CITY_ID, cityName: 'Test City' }];
+      }
+      return DEFAULT_VALIDATION_STATE_DTO;
+    });
+
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /review & launch/i })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /review & launch/i }));
+
+    expect(screen.getByTestId('city-launch-readiness')).toBeInTheDocument();
+    // Merely rendering Readiness should not invoke promotion
+    expect(api.post).not.toHaveBeenCalled();
+    expect(api.put).not.toHaveBeenCalled();
   });
 });
 

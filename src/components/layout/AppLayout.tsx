@@ -57,6 +57,7 @@ interface AppLayoutProps {
 // ─── Static nav arrays (defined once at module level) ───────────────────────
 
 const adminNavigation = [
+  { name: 'City launch', href: '/admin/city-launch', icon: Building2 },
   { name: 'Feed Runs', href: '/admin/feeds', icon: FileText },
   { name: 'Facebook Groups', href: '/admin/groups', icon: Users },
   { name: 'Manual Posts', href: '/admin/posts', icon: FileText },

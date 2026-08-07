@@ -204,18 +204,29 @@ export default function CityLaunchPreview() {
               </div>
 
               <div className="mt-4 flex flex-col gap-2 border-t pt-4">
-                <Button
-                  type="button"
-                  disabled={!editable || !validation.allValidated || markValidated.isPending}
-                  onClick={handleMarkValidated}
-                >
-                  {markValidated.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Mark preview validated
-                </Button>
-                {!validation.allValidated && (
-                  <p className="text-center text-[10px] text-muted-foreground">
-                    Enabled once all five are checked
-                  </p>
+                {validation.lifecycleStatus === 'VALIDATED' && !superseded ? (
+                  <Button
+                    type="button"
+                    onClick={() => setView('readiness')}
+                  >
+                    Review & launch
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      disabled={!editable || !validation.allValidated || markValidated.isPending}
+                      onClick={handleMarkValidated}
+                    >
+                      {markValidated.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Mark preview validated
+                    </Button>
+                    {!validation.allValidated && (
+                      <p className="text-center text-[10px] text-muted-foreground">
+                        Enabled once all five are checked
+                      </p>
+                    )}
+                  </>
                 )}
                 <Button
                   type="button"

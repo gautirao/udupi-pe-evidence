@@ -49,15 +49,13 @@ const CITY_LAUNCH_STATUS_CONFIG: Record<CityLaunchStatus, CityLaunchStatusConfig
     label: 'Ready for preview',
     badgeClassName: 'bg-teal-100 text-teal-800',
     actionLabel: 'Continue',
-    actionEnabled: false,
-    actionTooltip: 'Available in PR3',
+    actionEnabled: true,
   },
   'ready-launch': {
     label: 'Ready to launch',
     badgeClassName: 'bg-green-100 text-green-800',
     actionLabel: 'Review & launch',
-    actionEnabled: false,
-    actionTooltip: 'Available in PR5',
+    actionEnabled: true,
   },
   failed: {
     label: 'Failed',
@@ -68,9 +66,8 @@ const CITY_LAUNCH_STATUS_CONFIG: Record<CityLaunchStatus, CityLaunchStatusConfig
   live: {
     label: 'Live',
     badgeClassName: 'bg-green-100 text-green-800 border border-green-300',
-    actionLabel: 'Manage from Dashboard',
-    actionEnabled: false,
-    actionTooltip: 'Live cities are managed from Dashboard',
+    actionLabel: 'Generate new revision',
+    actionEnabled: true,
   },
 };
 

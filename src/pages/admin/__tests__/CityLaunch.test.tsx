@@ -24,6 +24,15 @@ import CityLaunch from '../CityLaunch';
 const mockGet = vi.hoisted(() => vi.fn());
 const mockPost = vi.hoisted(() => vi.fn());
 const mockToast = vi.hoisted(() => vi.fn());
+const mockNavigate = vi.hoisted(() => vi.fn());
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 vi.mock('@/lib/api', () => ({
   api: { get: mockGet, post: mockPost },
@@ -102,6 +111,45 @@ const CITIES = [
     failureReason: 'Overpass API timeout while resolving ward boundaries.',
     preparedAt: null,
   },
+  {
+    cityId: 5,
+    citySlug: 'live-city',
+    cityName: 'Live City',
+    status: 'live',
+    revisionId: 20,
+    revisionNumber: 3,
+    prepStage: 5,
+    prepState: 'DONE',
+    geographyPercent: 100,
+    failureReason: null,
+    preparedAt: '2026-07-10T00:00:00Z',
+  },
+  {
+    cityId: 6,
+    citySlug: 'ready-launch-city',
+    cityName: 'Launch City',
+    status: 'ready-launch',
+    revisionId: 22,
+    revisionNumber: 4,
+    prepStage: 5,
+    prepState: 'DONE',
+    geographyPercent: 100,
+    failureReason: null,
+    preparedAt: '2026-07-11T00:00:00Z',
+  },
+  {
+    cityId: 7,
+    citySlug: 'null-rev-city',
+    cityName: 'Null Rev City',
+    status: 'ready-preview',
+    revisionId: null,
+    revisionNumber: null,
+    prepStage: 5,
+    prepState: 'DONE',
+    geographyPercent: 100,
+    failureReason: null,
+    preparedAt: null,
+  }
 ];
 
 function renderPage() {
@@ -156,13 +204,21 @@ describe('CityLaunch', () => {
     expect(screen.getByRole('button', { name: /prepare city/i })).toBeInTheDocument();
 
     expect(screen.getByText('Manipal')).toBeInTheDocument();
-    expect(screen.getByText('Ready for preview')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled();
+    expect(screen.getAllByText('Ready for preview').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /continue/i })[0]).toBeEnabled();
 
     expect(screen.getByText('Mangalore')).toBeInTheDocument();
     expect(screen.getByText('Failed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /see failure/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /rerun/i })).toBeInTheDocument();
+
+    expect(screen.getByText('Live City')).toBeInTheDocument();
+    expect(screen.getByText('Live')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /generate new revision/i })).toBeEnabled();
+
+    expect(screen.getByText('Launch City')).toBeInTheDocument();
+    expect(screen.getByText('Ready to launch')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /review & launch/i })).toBeEnabled();
   });
 
   it('clicking "Prepare city" invokes the POST with no body', async () => {
@@ -256,5 +312,63 @@ describe('CityLaunch', () => {
     await waitFor(() =>
       expect(screen.getByText('Resolving areas — 40%')).toBeInTheDocument(),
     );
+  });
+
+  it('clicking LIVE action invokes prepare mutation for that city ID', async () => {
+    mockGet.mockResolvedValue(CITIES);
+    mockPost.mockResolvedValue({ revisionId: 21, status: 'preparing' });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Live City')).toBeInTheDocument());
+    expect(mockPost).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /generate new revision/i }));
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith('/api/admin/city-launch/cities/5/prepare'),
+    );
+  });
+
+  it('rendering a LIVE row alone does not invoke prepare', async () => {
+    mockGet.mockResolvedValue(CITIES);
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Live City')).toBeInTheDocument());
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it('READY_PREVIEW Continue navigates to the exact current revision', async () => {
+    mockGet.mockResolvedValue(CITIES);
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Manipal')).toBeInTheDocument());
+    // Use getAllByRole to get the first "Continue" button since there might be multiple
+    await user.click(screen.getAllByRole('button', { name: /continue/i })[0]);
+
+    expect(mockNavigate).toHaveBeenCalledWith('/admin/city-launch/2/preview/5');
+  });
+
+  it('missing/null revisionId does not navigate', async () => {
+    mockGet.mockResolvedValue(CITIES);
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Null Rev City')).toBeInTheDocument());
+    // Get the "Continue" button for the city with null revisionId (the second one)
+    await user.click(screen.getAllByRole('button', { name: /continue/i })[1]);
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('READY_LAUNCH Review & launch navigates to existing flow', async () => {
+    mockGet.mockResolvedValue(CITIES);
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Launch City')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /review & launch/i }));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/admin/city-launch/6/preview/22');
   });
 });
