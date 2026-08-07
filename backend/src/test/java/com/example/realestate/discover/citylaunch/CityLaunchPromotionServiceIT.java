@@ -395,6 +395,45 @@ class CityLaunchPromotionServiceIT {
         Boolean isActive = jdbc.queryForObject(
                 "SELECT is_active FROM public.cities WHERE id = ?", Boolean.class, cityId);
         assertThat(isActive).isTrue();
+
+        Integer promotedCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM public.city_launch_revision WHERE city_id = ? AND lifecycle_status = 'PROMOTED'", Integer.class, cityId);
+        assertThat(promotedCount).isEqualTo(1);
+    }
+
+    // =========================================================================================
+    // 1b — relaunchSupersedesOldPromoted
+    // =========================================================================================
+
+    @Test
+    @DisplayName("relaunchSupersedesOldPromoted: launching a second revision for an ALREADY live city "
+            + "supersedes the old PROMOTED revision atomically, back-links superseded_by, and leaves "
+            + "exactly ONE PROMOTED revision")
+    void relaunchSupersedesOldPromoted() {
+        int cityId = seedFullValidGeography("rl5", false);
+        long oldRevisionId = prepareAndValidate(cityId);
+
+        // First launch -> PROMOTED
+        promotionService.launch(cityId, oldRevisionId, ADMIN_ID.toString());
+
+        // Prepare a new candidate
+        long candidateRevisionId = prepareAndValidate(cityId);
+
+        // Second launch -> supersedes old, promotes candidate
+        PromotionReport report = promotionService.launch(cityId, candidateRevisionId, ADMIN_ID.toString());
+        assertThat(report.lifecycleStatus()).isEqualTo("PROMOTED");
+
+        CityLaunchRevision oldRevision = revisionRepository.findById(oldRevisionId).orElseThrow();
+        assertThat(oldRevision.getLifecycleStatus()).isEqualTo(LifecycleStatus.SUPERSEDED);
+        assertThat(oldRevision.getSupersededBy()).isEqualTo(candidateRevisionId);
+
+        CityLaunchRevision newRevision = revisionRepository.findById(candidateRevisionId).orElseThrow();
+        assertThat(newRevision.getLifecycleStatus()).isEqualTo(LifecycleStatus.PROMOTED);
+        assertThat(newRevision.getSupersededBy()).isNull();
+
+        Integer promotedCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM public.city_launch_revision WHERE city_id = ? AND lifecycle_status = 'PROMOTED'", Integer.class, cityId);
+        assertThat(promotedCount).isEqualTo(1);
     }
 
     // =========================================================================================
@@ -679,6 +718,45 @@ class CityLaunchPromotionServiceIT {
         PromotionReport retry = promotionService.launch(cityId, revisionId, ADMIN_ID.toString());
         assertThat(retry.lifecycleStatus()).isEqualTo("PROMOTED");
         assertThat(retry.idempotentNoop()).isFalse();
+    }
+
+    // =========================================================================================
+    // 5b — throwMidWriteRollbackLeavesOldPromotedUntouched
+    // =========================================================================================
+
+    @Test
+    @DisplayName("throwMidWriteRollbackLeavesOldPromotedUntouched: if replacing an ALREADY live city fails "
+            + "mid-write, the WHOLE transaction rolls back; the old revision stays PROMOTED, the candidate "
+            + "stays VALIDATED, and geography is untouched")
+    void throwMidWriteRollbackLeavesOldPromotedUntouched() {
+        int cityId = seedFullValidGeography("rbo5", false);
+        long oldRevisionId = prepareAndValidate(cityId);
+
+        // First launch -> PROMOTED
+        promotionService.launch(cityId, oldRevisionId, ADMIN_ID.toString());
+
+        // Prepare candidate
+        long candidateRevisionId = prepareAndValidate(cityId);
+
+        // Force canonical drift failure
+        jdbc.update("UPDATE public.areas SET district = ? WHERE area_key = ?", "DRIFTED-DISTRICT-ROLLBACK", "rbo5|area-2");
+
+        assertThatThrownBy(() -> promotionService.launch(cityId, candidateRevisionId, ADMIN_ID.toString()))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.type(ResponseStatusException.class))
+                .extracting(ex -> ex.getStatusCode().value())
+                .isEqualTo(422);
+
+        CityLaunchRevision oldRevision = revisionRepository.findById(oldRevisionId).orElseThrow();
+        assertThat(oldRevision.getLifecycleStatus()).isEqualTo(LifecycleStatus.PROMOTED);
+        assertThat(oldRevision.getSupersededBy()).isNull();
+
+        CityLaunchRevision candidateRevision = revisionRepository.findById(candidateRevisionId).orElseThrow();
+        assertThat(candidateRevision.getLifecycleStatus()).isEqualTo(LifecycleStatus.VALIDATED);
+        assertThat(candidateRevision.getSupersededBy()).isNull();
+
+        Integer promotedCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM public.city_launch_revision WHERE city_id = ? AND lifecycle_status = 'PROMOTED'", Integer.class, cityId);
+        assertThat(promotedCount).isEqualTo(1);
     }
 
     // =========================================================================================

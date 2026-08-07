@@ -151,7 +151,7 @@ public record NavigationNodeResponse(
      * part 3) is derived from the root's direct children via {@link #deriveRootBounds} — see the
      * record javadoc's {@code bounds} entry for why this replaces the previous always-{@code null}
      * behaviour. */
-    static NavigationNodeResponse forRoot(String citySlug, NavigationGraph graph) {
+    public static NavigationNodeResponse forRoot(String citySlug, NavigationGraph graph) {
         List<String> rootKeys = graph.childrenOf(null);
         List<NavigationChildSummary> children = rootKeys.stream()
                 .map(k -> childSummary(graph, k))
@@ -222,7 +222,7 @@ public record NavigationNodeResponse(
         return NavigationBoundsResponse.from(union);
     }
 
-    static NavigationNodeResponse forNode(NavigationGraph graph, NavigationNode node) {
+    public static NavigationNodeResponse forNode(NavigationGraph graph, NavigationNode node) {
         List<String> childKeys = graph.childrenOf(node.getNodeKey());
         List<NavigationChildSummary> children = childKeys.stream()
                 .map(k -> childSummary(graph, k))

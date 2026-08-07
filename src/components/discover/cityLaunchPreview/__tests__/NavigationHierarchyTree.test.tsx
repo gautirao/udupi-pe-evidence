@@ -13,6 +13,8 @@ import { NavigationHierarchyTree } from '../NavigationHierarchyTree';
 const mockUseNavigationTree = vi.hoisted(() => vi.fn());
 const mockUseDiscoverAreas = vi.hoisted(() => vi.fn());
 
+import { navigationTreeResponseSchema } from '@/lib/schemas/navigationHierarchy';
+
 vi.mock('@/hooks/useCityLaunchNavigation', () => ({
   useNavigationTree: () => mockUseNavigationTree(),
 }));
@@ -130,5 +132,103 @@ describe('NavigationHierarchyTree', () => {
     });
     render(<NavigationHierarchyTree />);
     expect(screen.getByText(/no navigation nodes yet/i)).toBeInTheDocument();
+  });
+
+  describe('Full recursive hierarchy (Direction -> Local Destination -> Area)', () => {
+    const RECURSIVE_TREE = {
+      revisionId: 42,
+      validationStatus: 'VALID',
+      validationErrors: [],
+      nodes: [
+        {
+          nodeKey: 'd:north',
+          nodeType: 'DIRECTION' as const,
+          parentNodeKey: null,
+          regionKey: 'north',
+          areaKey: null,
+          displayLabel: 'North',
+          depth: 0,
+          ancestorKeys: [],
+          representativeAreaKeys: [],
+          displayOrder: 1,
+          descendantAreaCount: 2,
+          bounds: { centreLat: 13.3, centreLon: 74.7, minLat: 13.0, minLon: 74.0, maxLat: 13.5, maxLon: 75.0 },
+        },
+        {
+          nodeKey: 'c:north:manipal',
+          nodeType: 'CLUSTER' as const,
+          parentNodeKey: 'd:north',
+          regionKey: 'north',
+          areaKey: null,
+          displayLabel: 'Manipal Area',
+          depth: 1,
+          ancestorKeys: ['d:north'],
+          representativeAreaKeys: [],
+          displayOrder: 1,
+          descendantAreaCount: 1,
+          bounds: { centreLat: 13.35, centreLon: 74.79, minLat: 13.3, minLon: 74.7, maxLat: 13.4, maxLon: 74.8 },
+        },
+        {
+          nodeKey: 'a:IN|KA|Udupi|Manipal',
+          nodeType: 'AREA' as const,
+          parentNodeKey: 'c:north:manipal',
+          regionKey: 'north',
+          areaKey: 'IN|KA|Udupi|Manipal',
+          displayLabel: 'Manipal',
+          depth: 2,
+          ancestorKeys: ['d:north', 'c:north:manipal'],
+          representativeAreaKeys: ['IN|KA|Udupi|Manipal'],
+          displayOrder: 1,
+          descendantAreaCount: 0,
+          bounds: { centreLat: 13.351, centreLon: 74.791, minLat: 13.341, minLon: 74.781, maxLat: 13.361, maxLon: 74.801 },
+        },
+      ],
+    };
+
+    it('renders the complete hierarchy without schema or build errors', () => {
+      // Prove navigationTreeResponseSchema parses it successfully
+      expect(() => navigationTreeResponseSchema.parse(RECURSIVE_TREE)).not.toThrow();
+
+      mockUseNavigationTree.mockReturnValue({ isLoading: false, isError: false, data: RECURSIVE_TREE, refetch: vi.fn() });
+      render(<NavigationHierarchyTree />);
+      
+      expect(screen.getByTestId('nav-node-d:north')).toBeInTheDocument();
+      expect(screen.getByTestId('nav-node-c:north:manipal')).toBeInTheDocument();
+      expect(screen.getByTestId('nav-node-a:IN|KA|Udupi|Manipal')).toBeInTheDocument();
+      
+      // Proves it renders rows instead of error state
+      expect(screen.queryByText(/failed to load the hierarchy tree/i)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Omitted/null data shape', () => {
+    const NULLISH_TREE = {
+      revisionId: 42,
+      validationStatus: 'VALID',
+      validationErrors: [],
+      nodes: [
+        {
+          nodeKey: 'c:missing',
+          nodeType: 'CLUSTER' as const,
+          displayLabel: 'Missing Fields Node',
+          depth: 0,
+          displayOrder: 0,
+          descendantAreaCount: 0,
+          // Intentionally omitting optional fields
+        },
+      ],
+    };
+
+    it('renders dashes safely when fields are omitted or null', () => {
+      // Prove the loose schema allows it
+      expect(() => navigationTreeResponseSchema.parse(NULLISH_TREE)).not.toThrow();
+
+      mockUseNavigationTree.mockReturnValue({ isLoading: false, isError: false, data: NULLISH_TREE, refetch: vi.fn() });
+      render(<NavigationHierarchyTree />);
+      
+      expect(screen.getByTestId('nav-node-c:missing')).toBeInTheDocument();
+      // The bounds cell should default to an en-dash
+      expect(screen.getByTestId('nav-node-bounds-c:missing')).toHaveTextContent('—');
+    });
   });
 });

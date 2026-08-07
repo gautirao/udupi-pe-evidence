@@ -33,11 +33,15 @@ public class AdminCityLaunchController {
 
     private final CityLaunchReadService readService;
     private final CityLaunchPreparationService preparationService;
+    private final CityLaunchSseService sseService;
 
     public AdminCityLaunchController(
-            CityLaunchReadService readService, CityLaunchPreparationService preparationService) {
+            CityLaunchReadService readService,
+            CityLaunchPreparationService preparationService,
+            CityLaunchSseService sseService) {
         this.readService = readService;
         this.preparationService = preparationService;
+        this.sseService = sseService;
     }
 
     /** GET /api/admin/city-launch/cities — every city's derived launch status. */
@@ -63,6 +67,15 @@ public class AdminCityLaunchController {
     public CityLaunchProgressDto getProgress(@PathVariable int cityId, CallerInfo caller) {
         log.debug("GET /api/admin/city-launch/cities/{}/prepare adminId={}", cityId, caller.userId());
         return readService.getProgress(cityId);
+    }
+
+    /** GET /api/admin/city-launch/cities/{cityId}/prepare/events — SSE stream for prep progress. */
+    @IsAdmin
+    @GetMapping(value = "/cities/{cityId}/prepare/events", produces = "text/event-stream")
+    public org.springframework.web.servlet.mvc.method.annotation.SseEmitter getProgressEvents(
+            @PathVariable int cityId, CallerInfo caller) {
+        log.debug("GET /api/admin/city-launch/cities/{}/prepare/events adminId={}", cityId, caller.userId());
+        return sseService.subscribe(cityId);
     }
 
     /**

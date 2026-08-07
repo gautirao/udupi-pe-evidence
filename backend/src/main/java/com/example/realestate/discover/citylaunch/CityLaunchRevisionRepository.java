@@ -34,6 +34,10 @@ public interface CityLaunchRevisionRepository extends JpaRepository<CityLaunchRe
     @Query("SELECT r FROM CityLaunchRevision r WHERE r.id = :id")
     Optional<CityLaunchRevision> findByIdForUpdate(@Param("id") Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM CityLaunchRevision r WHERE r.cityId = :cityId AND r.lifecycleStatus = com.example.realestate.discover.citylaunch.LifecycleStatus.PROMOTED")
+    Optional<CityLaunchRevision> findPromotedByCityIdForUpdate(@Param("cityId") Integer cityId);
+
     /**
      * Atomically supersedes {@code oldRevisionId} (must currently be PROMOTED) in favour of
      * {@code newRevisionId}. Guarded by the expected-current-status predicate so a concurrent or

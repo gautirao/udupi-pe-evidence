@@ -23,6 +23,7 @@ const mockUseAuth = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api', () => ({
   api: { get: mockGet, post: mockPost },
+  API_BASE_URL: 'http://localhost',
   ApiError: class ApiError extends Error {
     status: number;
     body: unknown;
@@ -126,7 +127,18 @@ describe('usePrepareCity', () => {
 });
 
 describe('useCityLaunchProgress', () => {
-  it('6: polls (refetchInterval truthy) while prepState is RUNNING', async () => {
+  it('6: sets up SSE stream while prepState is RUNNING', async () => {
+    // Setup a dummy fetch mock for the SSE endpoint
+    const abortMock = vi.fn();
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
+        }),
+      },
+    } as any);
+    
     mockGet.mockResolvedValue({
       cityId: 1,
       revisionId: 5,
@@ -139,16 +151,21 @@ describe('useCityLaunchProgress', () => {
       preparedAt: null,
     });
 
-    const { result } = renderHook(() => useCityLaunchProgress(1, true), { wrapper: makeWrapper() });
+    const { result, unmount } = renderHook(() => useCityLaunchProgress(1, true), { wrapper: makeWrapper() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(mockGet).toHaveBeenCalledWith('/api/admin/city-launch/cities/1/prepare');
-    // @tanstack/react-query v5 exposes the resolved interval on the query observer's options
     expect(result.current.data?.prepState).toBe('RUNNING');
+    expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/admin/city-launch/cities/1/prepare/events'),
+        expect.anything()
+    );
+    unmount();
   });
 
-  it('7: stops polling once prepState is DONE', async () => {
+  it('7: does not start SSE stream once prepState is DONE', async () => {
+    global.fetch = vi.fn();
     mockGet.mockResolvedValue({
       cityId: 1,
       revisionId: 5,
@@ -166,8 +183,73 @@ describe('useCityLaunchProgress', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(result.current.data?.prepState).toBe('DONE');
-    // Completion should trigger a list-query invalidation (queryFn side-effect).
+    expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  it('8: recovers from a transient SSE error', async () => {
+    let readerCalled = false;
+    let chunkSent = false;
+    global.fetch = vi.fn().mockImplementation(async () => {
+      return {
+        ok: true,
+        body: {
+          getReader: () => ({
+            read: vi.fn().mockImplementation(async () => {
+              if (!readerCalled) {
+                readerCalled = true;
+                // Simulates stream abort/failure
+                throw new Error("Stream disconnected");
+              }
+              if (!chunkSent) {
+                chunkSent = true;
+                const payload = {
+                  cityId: 1,
+                  revisionId: 5,
+                  lifecycleStatus: 'ready-preview',
+                  prepStage: 5,
+                  prepStageLabel: 'Complete',
+                  prepState: 'DONE',
+                  geographyPercent: 100,
+                  failureReason: null,
+                  preparedAt: '2026-07-16T00:00:00Z',
+                };
+                return { done: false, value: new TextEncoder().encode(`data: ${JSON.stringify(payload)}\n\n`) };
+              }
+              return new Promise(() => {});
+            }),
+          }),
+        },
+      };
+    });
+
+    mockGet.mockResolvedValue({
+      cityId: 1,
+      revisionId: 5,
+      lifecycleStatus: 'preparing',
+      prepStage: 2,
+      prepStageLabel: 'Resolving areas',
+      prepState: 'RUNNING',
+      geographyPercent: 40,
+      failureReason: null,
+      preparedAt: null,
+    });
+
+    const { result, unmount } = renderHook(() => useCityLaunchProgress(1, true), { wrapper: makeWrapper() });
+    
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    // Reconnect happens after 3s, so wait for it with a longer timeout
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2), { timeout: 4000 });
+    
+    // It should have invalidated the query and called get again
+    expect(mockGet).toHaveBeenCalledTimes(2);
+
+    // Assert that the UI reaches the terminal DONE state
+    await waitFor(() => expect(result.current.data?.prepState).toBe('DONE'));
+
+    unmount();
+  }, 10000);
 
   it('does not fetch when disabled', async () => {
     mockGet.mockResolvedValue({});

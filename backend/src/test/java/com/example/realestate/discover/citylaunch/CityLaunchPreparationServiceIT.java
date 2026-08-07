@@ -12,6 +12,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.TestPropertySource;
@@ -34,6 +35,9 @@ import java.util.ArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 
 /**
  * Testcontainers integration test (real Postgres) proving {@link CityLaunchPreparationService} +
@@ -99,6 +103,9 @@ class CityLaunchPreparationServiceIT {
     @Autowired
     @Qualifier("cityLaunchGraphWriterExecutor")
     private java.util.concurrent.Executor graphWriterExecutor;
+    
+    @SpyBean
+    private CityLaunchSseService sseService;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
     private final List<String> testCitySlugs = new ArrayList<>();
@@ -252,6 +259,39 @@ class CityLaunchPreparationServiceIT {
         CityLaunchProgressDto progress = readService.getProgress(cityId);
         assertThat(progress.prepStage()).isEqualTo((short) 6);
         assertThat(progress.prepStageLabel()).isEqualTo("ready");
+    }
+
+    @Test
+    @DisplayName("sse-1: terminal notification is only emitted after the transaction commits")
+    void sse1_terminalNotification_isEmittedAfterCommit() throws Exception {
+        int cityId = seedFullValidGeography("sse1");
+
+        java.util.concurrent.atomic.AtomicBoolean checked = new java.util.concurrent.atomic.AtomicBoolean(false);
+        java.util.concurrent.atomic.AtomicReference<String> committedState = new java.util.concurrent.atomic.AtomicReference<>();
+        
+        doAnswer(inv -> {
+            CityLaunchRevision rev = inv.getArgument(0);
+            if (rev.getPrepState() == PrepState.DONE || rev.getPrepState() == PrepState.FAILED) {
+                // Prove transaction is committed by spawning a separate thread to read from DB,
+                // completely bypassing any thread-local uncommitted transaction state.
+                Thread checker = new Thread(() -> {
+                    String state = jdbc.queryForObject(
+                        "SELECT prep_state FROM public.city_launch_revision WHERE id = ?",
+                        String.class, rev.getId());
+                    committedState.set(state);
+                    checked.set(true);
+                });
+                checker.start();
+                checker.join();
+            }
+            return inv.callRealMethod();
+        }).when(sseService).emitProgress(any());
+
+        PrepareResponse response = preparationService.prepare(cityId, ADMIN_ID);
+
+        pollUntil(() -> assertThat(checked.get()).isTrue());
+
+        assertThat(committedState.get()).isEqualTo("DONE");
     }
 
     // =========================================================================================
@@ -470,23 +510,17 @@ class CityLaunchPreparationServiceIT {
     // =========================================================================================
 
     @Test
-    @DisplayName("AC4: a city with zero city_regions rows fails validation UP FRONT — revision ends "
-            + "FAILED with zero sandbox rows written (not even the areas stage)")
+    @DisplayName("AC4: a city with zero city_regions rows fails validation UP FRONT — no revision is created")
     void ac4_invalidGeography_zeroRegions_failsValidation_zeroSandboxRows() {
         int cityId = seedCity("ac4");
         seedArea(cityId, "ac4|area-1", 13.01, 74.71);
         // No city_regions seeded at all -> geography.regions() is empty -> GeographyValidationException.
 
-        PrepareResponse response = preparationService.prepare(cityId, ADMIN_ID);
+        assertThatThrownBy(() -> preparationService.prepare(cityId, ADMIN_ID))
+                .isInstanceOf(GeographyValidationException.class)
+                .hasMessageContaining("City geography is not ready");
 
-        pollUntil(() -> {
-            CityLaunchRevision reloaded = revisionRepository.findById(response.revisionId()).orElseThrow();
-            assertThat(reloaded.getLifecycleStatus()).isEqualTo(LifecycleStatus.FAILED);
-            assertThat(reloaded.getPrepState()).isEqualTo(PrepState.FAILED);
-            assertThat(reloaded.getFailureReason()).contains("Geography validation failed");
-            assertThat(reloaded.getPrepStage()).isEqualTo((short) 0);
-        });
-        assertThat(sandboxAreaRepository.findByRevisionId(response.revisionId())).isEmpty();
+        assertThat(revisionRepository.findByCityId(cityId)).isEmpty();
     }
 
     // =========================================================================================
@@ -526,8 +560,7 @@ class CityLaunchPreparationServiceIT {
 
     @Test
     @DisplayName("lifecycle-2: a city whose ONLY areas are non-ACTIVE (all MERGED/INACTIVE) fails AC4 "
-            + "validation -> revision FAILED + failure_reason, zero sandbox rows (must NOT silently "
-            + "succeed by defaulting them to ACTIVE)")
+            + "validation -> no revision created")
     void lifecycleStatus_allAreasNonActive_failsAc4Validation_zeroSandboxRows() {
         int cityId = seedCity("lc2");
         seedArea(cityId, "lc2|area-merged", 13.01, 74.71, "MERGED");
@@ -536,16 +569,11 @@ class CityLaunchPreparationServiceIT {
         seedMembership(cityId, "lc2|area-merged", "lc2-north");
         seedMembership(cityId, "lc2|area-inactive", "lc2-north");
 
-        PrepareResponse response = preparationService.prepare(cityId, ADMIN_ID);
+        assertThatThrownBy(() -> preparationService.prepare(cityId, ADMIN_ID))
+                .isInstanceOf(GeographyValidationException.class)
+                .hasMessageContaining("City geography is not ready");
 
-        pollUntil(() -> {
-            CityLaunchRevision reloaded = revisionRepository.findById(response.revisionId()).orElseThrow();
-            assertThat(reloaded.getLifecycleStatus()).isEqualTo(LifecycleStatus.FAILED);
-            assertThat(reloaded.getPrepState()).isEqualTo(PrepState.FAILED);
-            assertThat(reloaded.getFailureReason()).contains("Geography validation failed");
-            assertThat(reloaded.getPrepStage()).isEqualTo((short) 0);
-        });
-        assertThat(sandboxAreaRepository.findByRevisionId(response.revisionId())).isEmpty();
+        assertThat(revisionRepository.findByCityId(cityId)).isEmpty();
     }
 
     // =========================================================================================
@@ -595,21 +623,19 @@ class CityLaunchPreparationServiceIT {
             + "and the old FAILED row is left completely unchanged")
     void ac7_failThenRerun_newHigherRevisionNumber_oldFailedRowUnchanged() {
         int cityId = seedCity("ac7");
-        seedArea(cityId, "ac7|area-1", 13.01, 74.71);
-        // Zero city_regions -> first prepare() fails validation.
-
-        PrepareResponse first = preparationService.prepare(cityId, ADMIN_ID);
-        pollUntil(() ->
-                assertThat(revisionRepository.findById(first.revisionId()).orElseThrow().getLifecycleStatus())
-                        .isEqualTo(LifecycleStatus.FAILED));
-        CityLaunchRevision failedSnapshot = revisionRepository.findById(first.revisionId()).orElseThrow();
+        
+        // Manually insert a FAILED revision to simulate a past failure
+        insertRevisionRow(cityId, 1, "FAILED", "FAILED", (short) 3);
+        CityLaunchRevision failedSnapshot = revisionRepository.findByCityId(cityId).get(0);
 
         // Fix the geography so the re-run succeeds.
+        seedArea(cityId, "ac7|area-1", 13.01, 74.71);
         seedRegion(cityId, "ac7-north");
         seedMembership(cityId, "ac7|area-1", "ac7-north");
 
+        // Rerun with the new valid geography
         PrepareResponse second = preparationService.prepare(cityId, ADMIN_ID);
-        assertThat(second.revisionId()).isNotEqualTo(first.revisionId());
+        assertThat(second.revisionId()).isNotEqualTo(failedSnapshot.getId());
 
         CityLaunchRevision secondRevision = revisionRepository.findById(second.revisionId()).orElseThrow();
         assertThat(secondRevision.getRevisionNumber()).isEqualTo(failedSnapshot.getRevisionNumber() + 1);
@@ -618,7 +644,7 @@ class CityLaunchPreparationServiceIT {
                 assertThat(revisionRepository.findById(second.revisionId()).orElseThrow().getLifecycleStatus())
                         .isEqualTo(LifecycleStatus.PREPARED));
 
-        CityLaunchRevision oldRowAfter = revisionRepository.findById(first.revisionId()).orElseThrow();
+        CityLaunchRevision oldRowAfter = revisionRepository.findById(failedSnapshot.getId()).orElseThrow();
         assertThat(oldRowAfter.getLifecycleStatus()).isEqualTo(failedSnapshot.getLifecycleStatus());
         assertThat(oldRowAfter.getFailureReason()).isEqualTo(failedSnapshot.getFailureReason());
         assertThat(oldRowAfter.getRevisionNumber()).isEqualTo(failedSnapshot.getRevisionNumber());

@@ -37,14 +37,17 @@ public class CityLaunchPreparationService {
     private final CityLaunchRevisionRepository revisionRepository;
     private final CanonicalGeographyReader geographyReader;
     private final CityLaunchGraphWriter graphWriter;
+    private final CityLaunchSseService sseService;
 
     public CityLaunchPreparationService(
             CityLaunchRevisionRepository revisionRepository,
             CanonicalGeographyReader geographyReader,
-            CityLaunchGraphWriter graphWriter) {
+            CityLaunchGraphWriter graphWriter,
+            CityLaunchSseService sseService) {
         this.revisionRepository = revisionRepository;
         this.geographyReader = geographyReader;
         this.graphWriter = graphWriter;
+        this.sseService = sseService;
     }
 
     /**
@@ -71,6 +74,8 @@ public class CityLaunchPreparationService {
     public PrepareResponse prepare(int cityId, UUID callerId) {
         geographyReader.findCity(cityId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "City not found"));
+
+        validateCanonicalGeographyReady(cityId);
 
         int nextRevisionNumber = nextRevisionNumber(cityId);
         return insertPreparingRevision(cityId, nextRevisionNumber, callerId, null);
@@ -105,6 +110,8 @@ public class CityLaunchPreparationService {
                     "City launch revision is not currently in-flight and cannot be re-run");
         }
 
+        validateCanonicalGeographyReady(cityId);
+
         int nextRevisionNumber = nextRevisionNumber(cityId);
         PrepareResponse response = insertPreparingRevision(cityId, nextRevisionNumber, callerId, currentRevisionId);
 
@@ -124,6 +131,16 @@ public class CityLaunchPreparationService {
                 .map(CityLaunchRevision::getRevisionNumber)
                 .max(Comparator.naturalOrder())
                 .orElse(0) + 1;
+    }
+
+    private void validateCanonicalGeographyReady(int cityId) {
+        CanonicalGeographyReader.CanonicalGeography geography = geographyReader.loadGeography(cityId);
+        boolean hasActiveArea = geography.areas().stream()
+                .anyMatch(area -> "ACTIVE".equals(area.lifecycleStatus()));
+        
+        if (!hasActiveArea || geography.regions().isEmpty()) {
+            throw new GeographyValidationException("City geography is not ready: city regions have not been generated");
+        }
     }
 
     /**
@@ -156,6 +173,7 @@ public class CityLaunchPreparationService {
         }
 
         Long revisionId = saved.getId();
+        sseService.emitProgress(saved);
         registerGraphWriteAfterCommit(revisionId, cityId);
 
         return new PrepareResponse(revisionId, "preparing");

@@ -38,6 +38,7 @@ function parseOrThrow<T>(schema: { parse: (input: unknown) => T }, raw: unknown,
     // overload, which tsconfig.app.json's `lib: ["ES2020", ...]` doesn't
     // include (TS2554). Attach `cause` post-construction instead — same
     // runtime `error.cause` result, no lib/tsconfig change needed.
+    console.error(`[Admin Preview] Schema parsing failed for ${what}:`, cause);
     const error = new Error(`Malformed ${what} response from the server`);
     throw Object.assign(error, { cause });
   }

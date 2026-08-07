@@ -78,6 +78,7 @@ import type {
   NavigationNodeCount,
 } from '@/features/discover/navigation/types';
 import { DISCOVER_CITY_LISTINGS_STALE_TIME_MS } from '@/hooks/useDiscoverCityListings';
+import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 
 /** Query-key base. Never an inline string at the call site. */
 export const NAVIGATION_COUNTS_QUERY_KEY_BASE = ['discover', 'navigation', 'counts'] as const;
@@ -478,8 +479,9 @@ export function useDiscoverNavigationCounts({
 
   const isEnabled = enabled && fingerprint != null;
 
+  const source = useDiscoverSource();
   const query = useQuery<NavigationCountsSnapshot, ApiError>({
-    queryKey: [...NAVIGATION_COUNTS_QUERY_KEY_BASE, fingerprint] as const,
+    queryKey: discoverKey(source, ...NAVIGATION_COUNTS_QUERY_KEY_BASE, fingerprint),
     queryFn: async ({ signal }) => {
       // Non-null by `enabled` — TanStack never invokes queryFn while disabled.
       const requestFingerprint = fingerprint as string;
@@ -488,10 +490,11 @@ export function useDiscoverNavigationCounts({
       // derived from `debouncedFilters`, so this keeps the request body and
       // its own cache key in agreement.
       const search = buildNavigationCountsRequestParams(debouncedFilters).toString();
-      const path =
+      const livePath =
         `/api/discover/cities/${encodeURIComponent(city)}` +
         `/navigation/${encodeURIComponent(nodeKey as string)}/counts` +
         (search ? `?${search}` : '');
+      const path = discoverPath(source, livePath, { kind: 'navigationCounts', nodeKey: nodeKey as string, search });
       // `signal` is forwarded into fetch by `api.get` (ApiRequestOptions extends
       // RequestInit), so a superseded request is genuinely aborted, not just
       // ignored on arrival — AC1.13 defence 2.

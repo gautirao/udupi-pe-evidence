@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, ApiError } from '@/lib/api';
+import { useEffect } from 'react';
+import { api, ApiError, API_BASE_URL } from '@/lib/api';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { ACTIVE_PREP_STATES } from '@/lib/cityLaunchStatus';
@@ -23,6 +25,7 @@ export interface CityLaunchStatusDto {
   geographyPercent: number;
   failureReason: string | null;
   preparedAt: string | null;
+  geographyReady: boolean;
 }
 
 export interface CityLaunchProgressDto {
@@ -95,30 +98,123 @@ export function usePrepareCity() {
   });
 }
 
+
 /**
- * GET /api/admin/city-launch/cities/{cityId}/prepare — polls the in-flight
- * (or most recent) prepare run's progress. Polls every 2s while prepState is
- * RUNNING/PENDING; stops once DONE/FAILED and invalidates the list query so
- * the row's status/badge/geography meter reflect the finished run.
+ * GET /api/admin/city-launch/cities/{cityId}/prepare — fetches the in-flight
+ * (or most recent) prepare run's progress initially.
+ *
+ * Subscribes to SSE stream at /api/admin/city-launch/cities/{cityId}/prepare/events
+ * if prepState is RUNNING/PENDING; stops once DONE/FAILED and invalidates the list query exactly
+ * so the row's status/badge/geography meter reflect the finished run.
  */
 export function useCityLaunchProgress(cityId: number | null, enabled: boolean) {
   const queryClient = useQueryClient();
 
-  return useQuery<CityLaunchProgressDto>({
+  // Initial fetch only
+  const query = useQuery<CityLaunchProgressDto>({
     queryKey: cityLaunchProgressQueryKey(cityId ?? -1),
     queryFn: async () => {
       const result = await api.get<CityLaunchProgressDto>(
         `/api/admin/city-launch/cities/${cityId}/prepare`,
       );
       if (!ACTIVE_PREP_STATES.has(result.prepState)) {
-        queryClient.invalidateQueries({ queryKey: CITY_LAUNCH_LIST_QUERY_KEY });
+        // Exact invalidation to avoid request storms
+        queryClient.invalidateQueries({ queryKey: CITY_LAUNCH_LIST_QUERY_KEY, exact: true });
       }
       return result;
     },
     enabled: enabled && cityId !== null,
-    refetchInterval: (query) => {
-      const prepState = query.state.data?.prepState;
-      return prepState && ACTIVE_PREP_STATES.has(prepState) ? 2000 : false;
-    },
+    staleTime: Infinity,
   });
+
+  const isPrepActive = query.data?.prepState && ACTIVE_PREP_STATES.has(query.data.prepState);
+
+  useEffect(() => {
+    if (!enabled || cityId === null || !isPrepActive) {
+      return;
+    }
+
+    const abortController = new AbortController();
+
+    let isSubscribed = true;
+    let retryTimeout: ReturnType<typeof setTimeout>;
+
+    async function streamEvents() {
+      if (!isSubscribed) return;
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        const headers: Record<string, string> = { Accept: 'text/event-stream' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const response = await fetch(`${API_BASE_URL}/api/admin/city-launch/cities/${cityId}/prepare/events`, {
+          headers,
+          signal: abortController.signal
+        });
+        
+        if (!response.ok) {
+          throw new Error(`SSE failed with status: ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error(`SSE response has no body`);
+        }
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (isSubscribed) {
+          const { done, value } = await reader.read();
+          if (done) {
+            throw new Error(`SSE stream closed unexpectedly`);
+          }
+          buffer += decoder.decode(value, { stream: true });
+          
+          let eventBoundary = buffer.indexOf('\n\n');
+          while (eventBoundary !== -1) {
+            const eventChunk = buffer.slice(0, eventBoundary);
+            buffer = buffer.slice(eventBoundary + 2);
+            eventBoundary = buffer.indexOf('\n\n');
+
+            const dataPrefix = 'data:';
+            const dataLine = eventChunk.split('\n').find(line => line.startsWith(dataPrefix));
+            if (dataLine) {
+              const dataStr = dataLine.slice(dataPrefix.length).trim();
+              if (dataStr) {
+                const data = JSON.parse(dataStr) as CityLaunchProgressDto;
+                queryClient.setQueryData(cityLaunchProgressQueryKey(cityId), data);
+
+                if (!ACTIVE_PREP_STATES.has(data.prepState)) {
+                   abortController.abort();
+                   queryClient.invalidateQueries({ queryKey: CITY_LAUNCH_LIST_QUERY_KEY, exact: true });
+                   return;
+                }
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        if (err.name === 'AbortError' || !isSubscribed) {
+           return;
+        }
+        console.error("SSE Error, reconnecting in 3s...", err);
+        // Authoritative reconciliation before retry
+        queryClient.invalidateQueries({ queryKey: cityLaunchProgressQueryKey(cityId!), exact: true });
+        retryTimeout = setTimeout(() => {
+          streamEvents();
+        }, 3000);
+      }
+    }
+    
+    streamEvents();
+    
+    return () => {
+      isSubscribed = false;
+      clearTimeout(retryTimeout);
+      abortController.abort();
+    };
+  }, [cityId, enabled, isPrepActive, queryClient]);
+
+  return query;
 }

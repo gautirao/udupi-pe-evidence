@@ -23,6 +23,9 @@ public interface SandboxNavigationNodeRepository extends JpaRepository<SandboxNa
     /** Full sandbox tree for a revision — the shape a future promotion step will load. */
     List<SandboxNavigationNode> findByRevisionId(Long revisionId);
 
+    /** Full sandbox tree ordered for NavigationGraph.build consumption. */
+    List<SandboxNavigationNode> findByRevisionIdOrderByDepthAscDisplayOrderAsc(Long revisionId);
+
     /** Direct children of a node (or, with a null parentNodeId, the revision's root nodes). */
     List<SandboxNavigationNode> findByRevisionIdAndParentNodeIdOrderByDisplayOrderAsc(Long revisionId, Long parentNodeId);
 

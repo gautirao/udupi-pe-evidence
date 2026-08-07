@@ -76,6 +76,7 @@ import {
   NAVIGATION_COUNTS_QUERY_KEY_BASE,
   type DiscoverNavigationCountsFilters,
 } from '@/hooks/useDiscoverNavigationCounts';
+import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 
 /**
  * Shared journey-aware LISTING count copy — "N listings" / "1 listing" / the
@@ -436,10 +437,12 @@ export function useAreasNavigationJourney({
   const resolveKey = requestedNodeKey ?? ROOT_NODE_KEY;
   const isResolveEnabled = enabled && Boolean(city);
 
+  const source = useDiscoverSource();
   const resolveQuery = useQuery<NavigationResolveResponse, ApiError>({
-    queryKey: [...AREAS_NAVIGATION_RESOLVE_QUERY_KEY_BASE, city, resolveKey] as const,
+    queryKey: discoverKey(source, ...AREAS_NAVIGATION_RESOLVE_QUERY_KEY_BASE, city, resolveKey),
     queryFn: async ({ signal }) => {
-      const path = `/api/discover/cities/${encodeURIComponent(city)}/navigation/resolve?node=${encodeURIComponent(resolveKey)}`;
+      const livePath = `/api/discover/cities/${encodeURIComponent(city)}/navigation/resolve?node=${encodeURIComponent(resolveKey)}`;
+      const path = discoverPath(source, livePath, { kind: 'navigationResolve', nodeKey: resolveKey });
       const wire = await api.get<NavigationResolveResponseWire>(path, { signal });
       return normalizeNavigationResolveResponse(wire);
     },

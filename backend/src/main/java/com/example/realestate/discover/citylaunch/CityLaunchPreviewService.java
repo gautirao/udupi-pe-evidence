@@ -12,6 +12,14 @@ import com.example.realestate.discover.DiscoverMarker;
 import com.example.realestate.discover.DiscoverMarkersResponse;
 import com.example.realestate.discover.RegionScopedAreaGroup;
 import com.example.realestate.discover.RegionSummaryResponse;
+import com.example.realestate.discover.navigation.NavigationCountsResponse;
+import com.example.realestate.discover.navigation.NavigationGraph;
+import com.example.realestate.discover.navigation.NavigationNode;
+import com.example.realestate.discover.navigation.NavigationNodeResponse;
+import com.example.realestate.discover.navigation.NavigationResolution;
+import com.example.realestate.discover.navigation.NavigationResolveResponse;
+import com.example.realestate.discover.navigation.SandboxNavigationNode;
+import com.example.realestate.discover.navigation.SandboxNavigationNodeRepository;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,6 +81,7 @@ public class CityLaunchPreviewService {
     private final SandboxAreaGroupRepository areaGroupRepository;
     private final SandboxAreaGroupMemberRepository areaGroupMemberRepository;
     private final SandboxAreaRepository areaRepository;
+    private final SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
     private final JdbcOperations jdbcOperations;
 
     public CityLaunchPreviewService(
@@ -82,6 +91,7 @@ public class CityLaunchPreviewService {
             SandboxAreaGroupRepository areaGroupRepository,
             SandboxAreaGroupMemberRepository areaGroupMemberRepository,
             SandboxAreaRepository areaRepository,
+            SandboxNavigationNodeRepository sandboxNavigationNodeRepository,
             JdbcOperations jdbcOperations) {
         this.revisionRepository = revisionRepository;
         this.regionRepository = regionRepository;
@@ -89,6 +99,7 @@ public class CityLaunchPreviewService {
         this.areaGroupRepository = areaGroupRepository;
         this.areaGroupMemberRepository = areaGroupMemberRepository;
         this.areaRepository = areaRepository;
+        this.sandboxNavigationNodeRepository = sandboxNavigationNodeRepository;
         this.jdbcOperations = jdbcOperations;
     }
 
@@ -226,6 +237,116 @@ public class CityLaunchPreviewService {
                 .map(group -> buildUnscopedAreaGroup(group, graph, regionDisplayOrderByKey))
                 .toList();
         return new AreaGroupsResponse(citySlug, groups);
+    }
+
+    // ── E8: navigation endpoints ─────────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public NavigationResolveResponse resolveNavigation(int cityId, long revisionId, String requestedNodeKey) {
+        loadPreviewableRevision(cityId, revisionId);
+        String citySlug = resolveCitySlug(cityId);
+        NavigationGraph graph = buildPreviewNavigationGraph(citySlug, revisionId);
+
+        if ("root".equals(requestedNodeKey)) {
+            return new NavigationResolveResponse(requestedNodeKey, NavigationResolution.EXACT,
+                    NavigationNodeResponse.forRoot(citySlug, graph), revisionId);
+        }
+
+        NavigationNode exact = graph.nodeByKey(requestedNodeKey);
+        if (exact != null) {
+            return new NavigationResolveResponse(requestedNodeKey, NavigationResolution.EXACT,
+                    NavigationNodeResponse.forNode(graph, exact), revisionId);
+        }
+
+        // For preview, we fallback to CITY_ROOT rather than replicating the stale-key ladder.
+        return new NavigationResolveResponse(requestedNodeKey, NavigationResolution.CITY_ROOT,
+                NavigationNodeResponse.forRoot(citySlug, graph), revisionId);
+    }
+
+    @Transactional(readOnly = true)
+    public NavigationCountsResponse getNavigationCounts(int cityId, long revisionId, String nodeKey) {
+        loadPreviewableRevision(cityId, revisionId);
+        PreviewGraph graph = loadGraph(revisionId);
+        NavigationGraph navGraph = buildPreviewNavigationGraph(resolveCitySlug(cityId), revisionId);
+
+        NavigationNode node = null;
+        if (!"root".equals(nodeKey)) {
+            node = navGraph.nodeByKey(nodeKey);
+            if (node == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown navigation node");
+            }
+        }
+
+        Map<String, Long> areaCounts = new HashMap<>();
+        for (ScopedArea scoped : graph.inScopeAreas()) {
+            areaCounts.put(scoped.area().getAreaKey(), 1L);
+        }
+
+        long total = node == null ? areaCounts.size() : sumAreaCountsForNode(navGraph, node, areaCounts);
+        long schoolTotal = 0L; // Schools are not simulated in preview yet
+        Map<String, Long> areaSchoolCounts = Map.of();
+
+        List<NavigationCountsResponse.ChildCount> children = new ArrayList<>();
+        List<String> childKeys = navGraph.childrenOf(node == null ? null : nodeKey);
+        for (String childKey : childKeys) {
+            NavigationNode child = navGraph.nodeByKey(childKey);
+            long childTotal = sumAreaCountsForNode(navGraph, child, areaCounts);
+
+            long matchingAreaCount = 0;
+            for (String descendantAreaKey : navGraph.descendantAreaKeysOf(childKey)) {
+                if (areaCounts.getOrDefault(descendantAreaKey, 0L) > 0) {
+                    matchingAreaCount++;
+                }
+            }
+
+            children.add(new NavigationCountsResponse.ChildCount(childKey, childTotal, 0L, matchingAreaCount));
+        }
+
+        return new NavigationCountsResponse(
+                nodeKey, total, schoolTotal, areaCounts, areaSchoolCounts, children, revisionId);
+    }
+
+    private long sumAreaCountsForNode(NavigationGraph graph, NavigationNode node, Map<String, Long> areaCounts) {
+        if ("AREA".equals(node.getNodeType())) {
+            return areaCounts.getOrDefault(node.getAreaKey(), 0L);
+        }
+        long sum = 0;
+        for (String areaKey : graph.descendantAreaKeysOf(node.getNodeKey())) {
+            sum += areaCounts.getOrDefault(areaKey, 0L);
+        }
+        return sum;
+    }
+
+    private NavigationGraph buildPreviewNavigationGraph(String citySlug, long revisionId) {
+        List<SandboxNavigationNode> sandboxNodes = sandboxNavigationNodeRepository.findByRevisionIdOrderByDepthAscDisplayOrderAsc(revisionId);
+        List<NavigationNode> mappedNodes = sandboxNodes.stream()
+                .map(s -> (NavigationNode) new MockNavigationNode(s))
+                .toList();
+        return NavigationGraph.build(citySlug, revisionId, mappedNodes);
+    }
+
+    private static class MockNavigationNode extends NavigationNode {
+        private final Long mockId;
+
+        public MockNavigationNode(SandboxNavigationNode s) {
+            super(0, s.getRegionKey(), s.getNodeType(), s.getParentNodeId(),
+                    s.getNodeKey(), s.getAreaKey(),
+                    s.getRepresentativeAreaKeys() == null ? List.of() : s.getRepresentativeAreaKeys(),
+                    s.getDisplayLabel(),
+                    s.getDisplayOrder() == null ? 0 : s.getDisplayOrder(),
+                    s.getDepth(),
+                    s.getAncestorKeys() == null ? List.of() : s.getAncestorKeys(),
+                    s.getDescendantAreaCount() == null ? 0 : s.getDescendantAreaCount(),
+                    s.getCentreLat(), s.getCentreLon(),
+                    s.getMinLat(), s.getMinLon(), s.getMaxLat(), s.getMaxLon(),
+                    s.getBearingDegrees(), "preview", s.getGeneratedAt());
+            this.mockId = s.getId();
+        }
+
+        @Override
+        public Long getId() {
+            return mockId;
+        }
     }
 
     // ── Viewability guard ────────────────────────────────────────────────────────────────────

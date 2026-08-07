@@ -69,7 +69,9 @@ export type DiscoverEndpoint =
   | { kind: 'navigationTree' }
   | { kind: 'navigationDiff'; against: 'BASE' | 'PREVIOUS_REVISION' }
   | { kind: 'navigationOverrides' }
-  | { kind: 'navigationOverrideDelete'; overrideId: number };
+  | { kind: 'navigationOverrideDelete'; overrideId: number }
+  | { kind: 'navigationResolve'; nodeKey: string }
+  | { kind: 'navigationCounts'; nodeKey: string; search: string };
 
 /**
  * Resolves the request path for one logical Discover endpoint.
@@ -120,6 +122,10 @@ export function discoverPath(
       return `${revisionBase}/navigation/overrides`;
     case 'navigationOverrideDelete':
       return `${revisionBase}/navigation/overrides/${encodeURIComponent(String(endpoint.overrideId))}`;
+    case 'navigationResolve':
+      return `${base}/navigation/resolve?node=${encodeURIComponent(endpoint.nodeKey)}`;
+    case 'navigationCounts':
+      return `${base}/navigation/${encodeURIComponent(endpoint.nodeKey)}/counts${endpoint.search ? `?${endpoint.search}` : ''}`;
     default: {
       // Exhaustiveness guard — a new DiscoverEndpoint variant must be
       // handled above or this fails to typecheck.

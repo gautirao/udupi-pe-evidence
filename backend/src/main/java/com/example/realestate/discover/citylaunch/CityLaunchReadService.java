@@ -9,6 +9,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Read-only status/progress views over {@link CityLaunchRevision} for the admin city-launch
@@ -33,7 +35,19 @@ public class CityLaunchReadService {
                 "SELECT id, slug, name FROM public.cities ORDER BY name",
                 (rs, rowNum) -> new CityRow(rs.getInt("id"), rs.getString("slug"), rs.getString("name")));
 
-        return cities.stream().map(this::toStatusDto).toList();
+        Map<Integer, Boolean> hasActiveAreas = jdbcOperations.query(
+                "SELECT city_id, count(area_key) as c FROM public.areas WHERE lifecycle_status = 'ACTIVE' GROUP BY city_id",
+                (rs, rowNum) -> Map.entry(rs.getInt("city_id"), rs.getInt("c") > 0))
+                .stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        Map<Integer, Boolean> hasRegions = jdbcOperations.query(
+                "SELECT city_id, count(region_key) as c FROM public.city_regions GROUP BY city_id",
+                (rs, rowNum) -> Map.entry(rs.getInt("city_id"), rs.getInt("c") > 0))
+                .stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        return cities.stream().map(city -> toStatusDto(city, 
+                hasActiveAreas.getOrDefault(city.id(), false) && hasRegions.getOrDefault(city.id(), false)
+        )).toList();
     }
 
     @Transactional(readOnly = true)
@@ -42,33 +56,22 @@ public class CityLaunchReadService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "No city launch preparation found for this city"));
 
-        return new CityLaunchProgressDto(
-                latest.getId(),
-                latest.getCityId(),
-                latest.getRevisionNumber(),
-                latest.getLifecycleStatus().name(),
-                latest.getPrepState().name(),
-                latest.getPrepStage(),
-                prepStageLabel(latest.getPrepStage()),
-                geographyPercent(latest),
-                latest.getFailureReason(),
-                latest.getCreatedAt(),
-                latest.getPreparedAt());
+        return CityLaunchProgressDto.from(latest);
     }
 
-    private CityLaunchStatusDto toStatusDto(CityRow city) {
+    private CityLaunchStatusDto toStatusDto(CityRow city, boolean geographyReady) {
         Optional<CityLaunchRevision> latest = latestRevision(city.id());
         if (latest.isEmpty()) {
             return new CityLaunchStatusDto(
                     city.id(), city.slug(), city.name(), "not-started", null, null,
-                    (short) 0, null, 0, null, null);
+                    (short) 0, null, 0, null, null, geographyReady);
         }
         CityLaunchRevision revision = latest.get();
         return new CityLaunchStatusDto(
                 city.id(), city.slug(), city.name(),
                 deriveStatus(revision), revision.getId(), revision.getRevisionNumber(),
                 revision.getPrepStage(), revision.getPrepState().name(),
-                geographyPercent(revision), revision.getFailureReason(), revision.getPreparedAt());
+                CityLaunchProgressDto.from(revision).geographyPercent(), revision.getFailureReason(), revision.getPreparedAt(), geographyReady);
     }
 
     private Optional<CityLaunchRevision> latestRevision(int cityId) {
@@ -98,25 +101,7 @@ public class CityLaunchReadService {
         };
     }
 
-    private static int geographyPercent(CityLaunchRevision revision) {
-        if (revision.getPrepState() == PrepState.DONE) {
-            return 100;
-        }
-        return Math.round(revision.getPrepStage() / 6f * 100);
-    }
 
-    /** Canonical 6-stage offline prep pipeline label; {@code pending} for 0/unrecognized stages. */
-    private static String prepStageLabel(short prepStage) {
-        return switch (prepStage) {
-            case 1 -> "candidate";
-            case 2 -> "canonical";
-            case 3 -> "regions";
-            case 4 -> "groups";
-            case 5 -> "projections";
-            case 6 -> "ready";
-            default -> "pending";
-        };
-    }
 
     private record CityRow(Integer id, String slug, String name) {}
 }

@@ -9,6 +9,8 @@ import com.example.realestate.discover.RegionScopedAreaGroup;
 import com.example.realestate.discover.RegionSummaryResponse;
 import com.example.realestate.security.CallerInfo;
 import com.example.realestate.security.IsAdmin;
+import com.example.realestate.discover.navigation.NavigationCountsResponse;
+import com.example.realestate.discover.navigation.NavigationResolveResponse;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -130,6 +132,24 @@ public class AdminCityLaunchPreviewController {
             @PathVariable int cityId, @PathVariable long revisionId, CallerInfo caller) {
         log.debug("GET preview/area-groups cityId={} revisionId={} adminId={}", cityId, revisionId, caller.userId());
         return noStore(previewService.getAreaGroups(cityId, revisionId));
+    }
+
+    @IsAdmin
+    @GetMapping("/navigation/resolve")
+    public ResponseEntity<NavigationResolveResponse> resolveNavigation(
+            @PathVariable int cityId, @PathVariable long revisionId,
+            @RequestParam("node") String node, CallerInfo caller) {
+        log.debug("GET preview/navigation/resolve cityId={} revisionId={} node={} adminId={}", cityId, revisionId, node, caller.userId());
+        return noStore(previewService.resolveNavigation(cityId, revisionId, node));
+    }
+
+    @IsAdmin
+    @GetMapping("/navigation/{nodeKey}/counts")
+    public ResponseEntity<NavigationCountsResponse> getNavigationCounts(
+            @PathVariable int cityId, @PathVariable long revisionId,
+            @PathVariable String nodeKey, CallerInfo caller) {
+        log.debug("GET preview/navigation/{}/counts cityId={} revisionId={} adminId={}", nodeKey, cityId, revisionId, caller.userId());
+        return noStore(previewService.getNavigationCounts(cityId, revisionId, nodeKey));
     }
 
     private static <T> ResponseEntity<T> noStore(T body) {
