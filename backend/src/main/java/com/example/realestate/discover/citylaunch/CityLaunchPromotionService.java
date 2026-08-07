@@ -196,6 +196,18 @@ public class CityLaunchPromotionService {
         int navigationNodesPromoted = promoteNavigationNodes(cityId, sandboxNavigationNodes);
 
         Instant now = Instant.now();
+
+        CityLaunchRevision oldPromoted = revisionRepository.findPromotedByCityIdForUpdate(cityId).orElse(null);
+        if (oldPromoted != null && !Objects.equals(oldPromoted.getId(), revisionId)) {
+            int supersededRows = revisionRepository.supersede(oldPromoted.getId(), revisionId);
+            if (supersededRows != 1) {
+                throw new IllegalStateException(
+                        "Failed to supersede old PROMOTED revision " + oldPromoted.getId()
+                                + " in favour of candidate " + revisionId
+                                + " — affected " + supersededRows + " row(s) (expected 1). Aborting, rolling back.");
+            }
+        }
+
         int finalCasRows = revisionRepository.transitionPromotingToPromoted(revisionId, cityId, now, recomputedChecksum);
         if (finalCasRows != 1) {
             // Unreachable in practice: this transaction holds the row (findByIdForUpdate above) and
