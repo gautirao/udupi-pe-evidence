@@ -188,6 +188,7 @@ describe('useCityLaunchProgress', () => {
 
   it('8: recovers from a transient SSE error', async () => {
     let readerCalled = false;
+    let chunkSent = false;
     global.fetch = vi.fn().mockImplementation(async () => {
       return {
         ok: true,
@@ -199,7 +200,21 @@ describe('useCityLaunchProgress', () => {
                 // Simulates stream abort/failure
                 throw new Error("Stream disconnected");
               }
-              // Return a never-resolving promise so the second stream stays open
+              if (!chunkSent) {
+                chunkSent = true;
+                const payload = {
+                  cityId: 1,
+                  revisionId: 5,
+                  lifecycleStatus: 'ready-preview',
+                  prepStage: 5,
+                  prepStageLabel: 'Complete',
+                  prepState: 'DONE',
+                  geographyPercent: 100,
+                  failureReason: null,
+                  preparedAt: '2026-07-16T00:00:00Z',
+                };
+                return { done: false, value: new TextEncoder().encode(`data: ${JSON.stringify(payload)}\n\n`) };
+              }
               return new Promise(() => {});
             }),
           }),
@@ -229,6 +244,9 @@ describe('useCityLaunchProgress', () => {
     
     // It should have invalidated the query and called get again
     expect(mockGet).toHaveBeenCalledTimes(2);
+
+    // Assert that the UI reaches the terminal DONE state
+    await waitFor(() => expect(result.current.data?.prepState).toBe('DONE'));
 
     unmount();
   }, 10000);

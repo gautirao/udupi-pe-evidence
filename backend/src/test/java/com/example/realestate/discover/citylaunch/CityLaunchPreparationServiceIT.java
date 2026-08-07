@@ -12,6 +12,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.TestPropertySource;
@@ -34,6 +35,9 @@ import java.util.ArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 
 /**
  * Testcontainers integration test (real Postgres) proving {@link CityLaunchPreparationService} +
@@ -99,6 +103,9 @@ class CityLaunchPreparationServiceIT {
     @Autowired
     @Qualifier("cityLaunchGraphWriterExecutor")
     private java.util.concurrent.Executor graphWriterExecutor;
+    
+    @SpyBean
+    private CityLaunchSseService sseService;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
     private final List<String> testCitySlugs = new ArrayList<>();
@@ -252,6 +259,39 @@ class CityLaunchPreparationServiceIT {
         CityLaunchProgressDto progress = readService.getProgress(cityId);
         assertThat(progress.prepStage()).isEqualTo((short) 6);
         assertThat(progress.prepStageLabel()).isEqualTo("ready");
+    }
+
+    @Test
+    @DisplayName("sse-1: terminal notification is only emitted after the transaction commits")
+    void sse1_terminalNotification_isEmittedAfterCommit() throws Exception {
+        int cityId = seedFullValidGeography("sse1");
+
+        java.util.concurrent.atomic.AtomicBoolean checked = new java.util.concurrent.atomic.AtomicBoolean(false);
+        java.util.concurrent.atomic.AtomicReference<String> committedState = new java.util.concurrent.atomic.AtomicReference<>();
+        
+        doAnswer(inv -> {
+            CityLaunchRevision rev = inv.getArgument(0);
+            if (rev.getPrepState() == PrepState.DONE || rev.getPrepState() == PrepState.FAILED) {
+                // Prove transaction is committed by spawning a separate thread to read from DB,
+                // completely bypassing any thread-local uncommitted transaction state.
+                Thread checker = new Thread(() -> {
+                    String state = jdbc.queryForObject(
+                        "SELECT prep_state FROM public.city_launch_revision WHERE id = ?",
+                        String.class, rev.getId());
+                    committedState.set(state);
+                    checked.set(true);
+                });
+                checker.start();
+                checker.join();
+            }
+            return inv.callRealMethod();
+        }).when(sseService).emitProgress(any());
+
+        PrepareResponse response = preparationService.prepare(cityId, ADMIN_ID);
+
+        pollUntil(() -> assertThat(checked.get()).isTrue());
+
+        assertThat(committedState.get()).isEqualTo("DONE");
     }
 
     // =========================================================================================

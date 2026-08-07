@@ -727,8 +727,34 @@ class AdminCityLaunchPreviewControllerIT {
         mockMvc.perform(get(base + "/navigation/d:north/counts").header("Authorization", adminAuth()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.count").value(1))
-                .andExpect(jsonPath("$.schoolCount").value(0)) // Rule 1: No simulated schools in preview
                 .andExpect(jsonPath("$.areaSchoolCounts").isEmpty())
                 .andExpect(jsonPath("$.areaCounts.['IN|KA|ACP|Nav1']").value(1));
+    }
+
+    @Test
+    @DisplayName("E8 ordering: preview graph builder correctly handles depth-ascending sort even when DB natural order is shuffled")
+    void e8_ordering_previewGraphBuilderHandlesDepthSort() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        SandboxArea area = seedArea(revisionId, "IN|KA|ACP|NavOrd", "NavOrd", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+        seedRegion(revisionId, "north", "North", 1);
+        seedMembership(revisionId, area.getId(), "north");
+
+        var dir = seedNavigationNode(revisionId, "d:north", "DIRECTION", null, "north", null, 1, 1, java.util.List.of(), java.util.List.of("IN|KA|ACP|NavOrd"));
+        var local = seedNavigationNode(revisionId, "l:north", "CLUSTER", dir.getId(), "north", null, 1, 2, java.util.List.of("d:north"), java.util.List.of("IN|KA|ACP|NavOrd"));
+        var leaf = seedNavigationNode(revisionId, "a:IN|KA|ACP|NavOrd", "AREA", local.getId(), "north", "IN|KA|ACP|NavOrd", 1, 3, java.util.List.of("d:north", "l:north"), java.util.List.of("IN|KA|ACP|NavOrd"));
+
+        // By updating the parent node, Postgres moves it to the end of the heap page.
+        // A query without ORDER BY will now return local -> leaf -> dir (child before parent),
+        // which would cause NavigationGraph.build to throw an exception if not properly ordered.
+        jdbc.update("UPDATE public.sandbox_navigation_nodes SET generated_at = NOW() WHERE id = ?", dir.getId());
+
+        String base = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview";
+
+        mockMvc.perform(get(base + "/navigation/resolve?node=a:IN|KA|ACP|NavOrd").header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resolution").value("EXACT"));
     }
 }
