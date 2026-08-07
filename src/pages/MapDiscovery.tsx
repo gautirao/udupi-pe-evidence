@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
@@ -40,6 +41,10 @@ import { useFilteredAgriListings } from '@/features/discover/presentation/useFil
 import { useSchoolListings } from '@/features/discover/presentation/useSchoolListings';
 import { useSchoolFirstCounts } from '@/features/discover/presentation/useSchoolFirstCounts';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  isSelectedNodeOutOfView as checkIsSelectedNodeOutOfView,
+  getCameraIntentForRecenter,
+} from './MapDiscovery.recenter';
 import type { DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import {
   useDiscoverActions,
@@ -49,6 +54,7 @@ import {
 } from '@/features/discover/context/useDiscoverContext';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
+import type { CameraIntent } from '@/hooks/useDiscoverMapData';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { useAreaGroups, type AreaGroup } from '@/hooks/useAreaGroups';
 import { useRegionScopedAreaGroups } from '@/hooks/useRegionScopedAreaGroups';
@@ -79,6 +85,7 @@ import {
   formatDiscoverBadgeCopy,
 } from '@/features/discover/presentation/discoverBadge';
 import { useAreasNavigationJourney } from '@/features/discover/navigation/useAreasNavigationJourney';
+import { useClusterFocusUrlParam } from '@/features/discover/state/url/clusterFocus';
 import type { DiscoverNavigationCountsFilters } from '@/hooks/useDiscoverNavigationCounts';
 import { deriveAreaPointFromNode } from '@/features/discover/navigation/nodeAreaPoint';
 import { isMarkerPopoverEligible as computeMarkerPopoverEligible } from '@/features/discover/navigation/markerPopoverEligibility';
@@ -215,11 +222,21 @@ export default function MapDiscovery() {
   // never disagree on the focused member set (AC4.12). The member `areaKey`s
   // ARE the identity — the map's own visual clustering (pan/zoom-dependent
   // pixel grouping) picks them; this state does not re-derive or re-cluster,
-  // it only stores what the layer reports back. Plain useState (never the
-  // URL) — focus creates no history entry, no camera fit, no node= write
-  // (AC4.5 item 4).
-  const [focusedClusterMemberAreaKeys, setFocusedClusterMemberAreaKeys] =
-    useState<readonly string[] | null>(null);
+  // it only stores what the layer reports back.
+  //
+  // Issue #2088 (commit 5) — MIGRATED off plain `useState` onto the new
+  // `clusterFocus` URL domain (state/url/clusterFocus.ts), so this
+  // presentation state now survives browser Back/Forward (AC6) instead of
+  // being wiped on every remount. `useClusterFocusUrlParam` always writes
+  // with `{ replace: true }` (D2_binding_requirements BR3/BR6 — never a
+  // hierarchy history entry). The node-change reset effect that used to live
+  // here (REQUIRED CHANGE 7) is RETIRED below: `navigation.ts`'s
+  // `applyNodeDelta` now deletes `clusterFocus` in its own delete-list (BR5),
+  // so every node write carries the same guarantee this effect used to
+  // provide locally — see `clusterFocus.ts`'s module doc for the full
+  // BR1-BR8 accounting.
+  const { clusterFocus: focusedClusterMemberAreaKeys, setClusterFocus: setFocusedClusterMemberAreaKeys } =
+    useClusterFocusUrlParam();
   // Issue #1494 — map URL intent ('buy'|'rent') to backend listingPurpose
   // ('sale'|'rent'). 'buy' is the default; absent/invalid intent → 'sale'.
   // Never send 'buy' to the backend.
@@ -266,19 +283,19 @@ export default function MapDiscovery() {
     enabled: showAreasNavigationJourney,
   });
 
-  // REQUIRED CHANGE 7 (review fix) — focus is explicitly ephemeral (see the
-  // state doc above), so its lifetime is tied to the current navigation
-  // node: clicking a focused member calls selectNode, which changes
-  // areasNavigationJourney.node's identity, but the plain useState above has
-  // no reset of its own and does not self-heal even once the new node's
-  // levelKind is 'clusters'/'directions' (where focus is meaningless). Left
-  // unset, a stale member set chosen for a DIFFERENT parent node would be
-  // re-applied the next time the user returns to any 'areas' node. Scoped to
-  // exactly the node identity — no other MapDiscovery state is touched here.
-  useEffect(() => {
-    setFocusedClusterMemberAreaKeys(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [areasNavigationJourney.node?.nodeKey]);
+  // Issue #2088 (commit 5) — REQUIRED CHANGE 7's reset effect (previously
+  // here: `setFocusedClusterMemberAreaKeys(null)` keyed on
+  // `areasNavigationJourney.node?.nodeKey`) is RETIRED. The behaviour it
+  // protected — a stale member set chosen for a DIFFERENT parent node must
+  // never re-apply once the user returns to any 'areas' node — is now
+  // guaranteed at the URL layer instead: `state/url/navigation.ts`'s
+  // `applyNodeDelta` deletes `clusterFocus` on EVERY node write (BR5), which
+  // covers every path that changes `areasNavigationJourney.node.nodeKey`
+  // (clicking a focused member, a breadcrumb crumb, a map destination card,
+  // browser Back to a DIFFERENT node) — a strictly wider guarantee than this
+  // one component-local effect gave, since it also covers `buildNodeHref`'s
+  // pure href (a copied/shared link can never carry a stale focus either).
+  // See `clusterFocus.ts`'s module doc for the full BR1-BR8 accounting.
 
   // Issue #1956 PR-5 (Slice 5, AC5.10/AC5.10c) — the mobile Map-mode preview
   // sheet's data. Reported UP by DiscoverAreasJourneyPanel's own
@@ -966,6 +983,8 @@ export default function MapDiscovery() {
     markersTruncated, markersReturnedElements, markersTotalFilteredElements,
     agriAreasData, isLoadingAgriAreas,
     cameraIntent, publishCameraIntent, publishClusterCameraIntent,
+    // Issue #2088 (commit 6) — the Recenter affordance's camera producer.
+    publishRecenterCameraIntent,
     // Issue #1956 PR 1 (FE-3, item 2) — threaded straight into
     // useDiscoverMapPresentation below and read by NOTHING else. Additive and
     // inert; it renders nothing in PR 1.
@@ -1028,6 +1047,38 @@ export default function MapDiscovery() {
     // Issue #1494 — thread buy/rent intent as listingPurpose filter
     listingPurpose: intentListingPurpose,
   });
+
+  // ── Issue #2088 (commit 6) — "Recenter on <label>" affordance ────────────
+  //
+  // VISIBILITY: derived from `mapBbox` — the [south, west, north, east]
+  // viewport this page already tracks via the EXISTING `handleBoundsChange`
+  // pipeline (declared above; wired to `DiscoverMapMount`'s `onBoundsChange`,
+  // fed by Leaflet's own `map.getBounds()` inside `PropertyMap.tsx`'s
+  // BoundsWatcher on every moveend/zoomend, 300ms-debounced). This IS "Leaflet
+  // state", reused rather than re-derived: no new prop reaches into
+  // `DiscoverMapCanvas.tsx`/`PropertyMap.tsx` (both outside this issue's
+  // edit boundary) to call `map.getBounds()` a second way.
+  //
+  // `journey.node.bounds.centreLat/centreLon` is present on every resolved
+  // node in the live API response (types.ts's `NavigationBounds`).
+  const selectedNodeBounds = areasNavigationJourney.node?.bounds ?? null;
+
+  const isSelectedNodeOutOfView = useMemo(() => {
+    if (!showAreasNavigationJourney) return false;
+    return checkIsSelectedNodeOutOfView(areasNavigationJourney.node, mapBbox);
+  }, [showAreasNavigationJourney, mapBbox, areasNavigationJourney.node]);
+
+  // ACTION: republishes the existing CameraIntent stream via the new
+  // `publishRecenterCameraIntent` producer (useDiscoverMapData.ts) — writes
+  // NO URL param directly, so the resulting map move flows through the
+  // normal debounced {replace:true} viewport write (viewport.ts) and adds
+  // ZERO history entries, by construction (same mechanism every other
+  // camera-intent-driven move on this page already uses).
+  const handleRecenterOnSelectedNode = useCallback(() => {
+    const intent = getCameraIntentForRecenter(areasNavigationJourney.node);
+    if (!intent) return;
+    publishRecenterCameraIntent(intent.cameraBounds, intent.centre, intent.kind);
+  }, [areasNavigationJourney.node, publishRecenterCameraIntent]);
 
   // Issue #1824 Slice S6 — the window.__debug.mapState effect (Playwright E2E contract)
   // moved a few lines down (after useDiscoverJourneyTransitions), because it now reads
@@ -2428,6 +2479,42 @@ export default function MapDiscovery() {
           handleStepMarkerListing={handleStepMarkerListing}
           showMarkerInList={showMarkerInList}
           />
+          {/* Issue #2088 (commit 6) — "Recenter on <label>" affordance.
+              Portalled into `mapContainerRef.current` — the real DOM node
+              `DiscoverMapCanvas.tsx` (outside this issue's edit boundary)
+              attaches via the `mapContainerRef` prop above, already threaded
+              through this page — rather than adding new JSX inside that
+              forbidden file. `mapReady` gates the portal until that ref is
+              actually populated (mirrors this page's own `setMapReady`
+              contract, used elsewhere on this page as the "the map instance
+              now exists" signal). Renders nothing when no node is selected,
+              no bounds are known, or the node's centre is already in view.
+
+              Issue #2088 live-verify fix — this button WAS mounting (DOM
+              present, visible/opacity/display all fine) but was completely
+              hidden behind `DiscoverMapCountBadge`'s "Showing N verified
+              properties across <City>" pill: that badge anchors to the exact
+              same `absolute bottom-* left-1/2 -translate-x-1/2` spot inside
+              this same `mapContainerRef` box at `z-[1000]`, versus this
+              button's `z-[500]` — same stacking context (both are descendants
+              of the `position: relative` map container), so the badge always
+              painted on top and fully occluded it. `DiscoverMapCountBadge.tsx`
+              is outside this issue's edit boundary, so the fix lives entirely
+              here: `bottom-20` clears the badge's own band (bottom-5, ~38px
+              tall) with margin, so the two never overlap regardless of which
+              one is taller at a given viewport width. */}
+          {mapReady && mapContainerRef.current && isSelectedNodeOutOfView && areasNavigationJourney.node &&
+            createPortal(
+              <button
+                type="button"
+                data-testid="areas-recenter-button"
+                onClick={handleRecenterOnSelectedNode}
+                className="absolute bottom-20 left-1/2 z-[500] -translate-x-1/2 rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md"
+              >
+                Recenter on {areasNavigationJourney.node.displayLabel}
+              </button>,
+              mapContainerRef.current,
+            )}
         </div>
 
         <DiscoverRightPanelContainer

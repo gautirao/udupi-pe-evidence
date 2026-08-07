@@ -31,8 +31,16 @@ test.describe('@integration-ui Discover — viewport restoration on browser Back
     const ENCODED_AREA_KEY = encodeURIComponent(MOCK_AREA_KEY);
 
     // Step 1: Navigate directly to city level (default zoom)
-    await page.goto('/discover?city=udupi');
+    // Issue #2088 item 3 — a bare `/discover?city=...` now defaults `journey`
+    // to `area-first`, which routes MapDiscovery to the NEW canonical
+    // AreaDestinationMarkerLayer instead of the LEGACY `AreaMarkerLayer` this
+    // test's `.area-marker` selector targets (MapDiscovery.tsx's
+    // `showAreasNavigationJourney = nav.journey === 'area-first'` gate). An
+    // explicit `scope=` param suppresses that default, keeping the legacy
+    // ring-marker map genuinely reachable.
+    await page.goto('/discover?city=udupi&scope=');
     await page.waitForLoadState('domcontentloaded');
+    await expect(page).toHaveURL(/[?&]scope=(&|$)/);
     await expect(page.locator(AREA_MARKER).first()).toBeVisible({ timeout: 12_000 });
 
     // Step 2: Navigate to area with explicit zoom (deeper context)
@@ -64,8 +72,11 @@ test.describe('@integration-ui Discover — viewport restoration on browser Back
     const ENCODED_AREA_KEY = encodeURIComponent(MOCK_AREA_KEY);
 
     // Step 1: Navigate to city
-    await page.goto('/discover?city=udupi');
+    // Issue #2088 item 3 re-point — see the previous test's comment above for
+    // the full rationale.
+    await page.goto('/discover?city=udupi&scope=');
     await page.waitForLoadState('domcontentloaded');
+    await expect(page).toHaveURL(/[?&]scope=(&|$)/);
     await expect(page.locator(AREA_MARKER).first()).toBeVisible({ timeout: 12_000 });
 
     // Step 2: Navigate to area with explicit viewport (creates history)

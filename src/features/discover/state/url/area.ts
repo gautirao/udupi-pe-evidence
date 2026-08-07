@@ -5,8 +5,17 @@
  * selection / journey / group / startOver writes. See useDiscoverUrlState.ts's
  * module doc for the full param contract.
  */
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { QueryClient, useQuery } from '@tanstack/react-query';
 import { normalizeDiscoverSearchParams } from '@/hooks/discoverUrlNormalize';
+import { api, ApiError } from '@/lib/api';
+import { normalizeNavigationResolveResponse } from '@/features/discover/navigation/normalize';
+import {
+  ROOT_NODE_KEY,
+  type NavigationResolveResponse,
+  type NavigationResolveResponseWire,
+} from '@/features/discover/navigation/types';
+import { AREAS_NAVIGATION_RESOLVE_QUERY_KEY_BASE } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type {
   DiscoverJourney,
@@ -29,7 +38,8 @@ type AreaActions = Pick<
 >;
 
 export function useAreaUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<AreaState, AreaActions> {
-  const { urlParams, setUrlParams, timers } = ctx;
+  const { urlParams, setUrlParams, timers, queryClient, reads } = ctx;
+  const city = reads.city;
 
   const areaKey = urlParams.get('areaKey');
   const groupId = urlParams.get('groupId');
@@ -40,13 +50,207 @@ export function useAreaUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<AreaState, 
   // Issue #1745 P0 — read boundary routed through the normalization shim: resolves
   // journey short-name aliases (area/school/agri → *-first) before validation. The
   // shim never rewrites the URL itself — canonical long forms and unknown/invalid
-  // values pass through unchanged, so the fallback-to-null behaviour below is
-  // unaffected for anything the shim doesn't recognise as an alias.
+  // values pass through unchanged, so the fallback behaviour below is unaffected
+  // for anything the shim doesn't recognise as an alias.
   const rawJourney = normalizeDiscoverSearchParams(urlParams).get('journey');
-  const journey: DiscoverJourney | null =
+  const explicitJourney: DiscoverJourney | null =
     rawJourney === 'area-first' || rawJourney === 'school-first' || rawJourney === 'agri-first'
       ? rawJourney
       : null;
+  // Issue #2088 item 3 — owner-directed default entry state: a bare /discover
+  // with NO `journey` param now resolves to 'area-first' instead of the old
+  // no-journey landing, so a first-time visitor lands directly in the
+  // canonical node hierarchy without an extra "Explore by area" click.
+  //
+  // Applied ONCE, HERE, at the single URL-read layer — never per-component —
+  // per the qa-fast structural warning: every consumer reads `journey` off
+  // this SAME composed state (see useDiscoverUrlState.ts, `journey:
+  // areaDomain.state.journey`), so a component-level `journey ?? 'area-first'`
+  // fallback anywhere else would be a duplicate, independently-driftable
+  // application of this same rule (the exact map/panel-disagreement bug class
+  // this codebase has hit before) and must not be added.
+  //
+  // VIRTUAL default: the URL itself is never rewritten/redirected to add
+  // `journey=area-first` — only this read resolves the absence. A bare
+  // /discover keeps working as a bookmark/share target that always resolves
+  // to today's default (rather than freezing in a literal `journey=
+  // area-first` written at click time), browser Back to a bare /discover
+  // still lands here without an extra history entry, and existing/new E2E
+  // specs navigating to a bare /discover exercise the SAME code path a real
+  // user does. A materialised (redirect/replace) default was rejected: it
+  // would add a history entry and a visible URL rewrite for a default that
+  // carries no information the user chose — a real user-visible change for
+  // no benefit over the virtual form.
+  //
+  // SUPPRESSION: an explicit `scope=` param (Issue #1745 P2 — owned by
+  // compatibility.ts, which is out of this item's edit scope, so its
+  // presence is read directly off the shared `urlParams` here rather than
+  // through that module) means the caller deliberately deep-linked into the
+  // LEGACY AreaMarkerLayer/setScope landing, which item 3 keeps reachable
+  // rather than deleting. Presence alone suppresses the default (an invalid
+  // `scope` value still means "the caller asked for the legacy landing,
+  // not area-first" — compatibility.ts's own `isValidScope` gating of what
+  // that legacy landing then does with the value is unaffected by this read).
+  const hasExplicitScope = urlParams.has('scope');
+
+  // Issue #2088 QA-FIX (regression: bare /discover?city=udupi hard-erroring) —
+  // the unconditional 'area-first' default above assumed EVERY city has an
+  // active canonical node hierarchy. Bangalore does; Udupi (the launch wedge
+  // city) does not — its resolve call 404s ("City has no active navigation
+  // hierarchy"), and every consumer of `journey` (MapDiscovery.tsx,
+  // DiscoverRightPanelContainer.tsx, DiscoverMapCanvas.tsx — three identical
+  // `nav.journey === 'area-first'` gate sites) then tries to mount the
+  // canonical Areas surface, which has nothing to resolve and renders the
+  // hard error/retry panel instead of the legacy landing.
+  //
+  // Those three gate sites all read the SAME `journey` field — but NOT
+  // directly off this hook's return value at render time. They go through
+  // `DiscoverContext.tsx`'s `nav` value, which is `useMemo`'d with a
+  // DELIBERATE, load-bearing, comment-documented dependency array of
+  // `[searchParamsKey]` alone (`useMemo<DiscoverNavContextValue>(() => {...},
+  // [searchParamsKey])` — a scalar derived from `urlParams.toString()`,
+  // viewport params excluded) — an existing, out-of-scope optimization that
+  // avoids re-rendering the whole Discover subtree on every debounced pan.
+  // That memo's whole premise is "urlState is a pure function of the URL
+  // string", which is exactly what the async part of this fix breaks: a
+  // purely in-memory correction (local component state, a ref latch, or a
+  // query-driven re-render with the URL untouched) computes the right
+  // `journey` value inside `useAreaUrlDomain`, but `searchParamsKey` never
+  // changes, so `nav` never recomputes, so all three gate sites keep reading
+  // the STALE optimistic 'area-first' forever — confirmed live in-browser:
+  // three separate purely-local designs (a plain boolean, a `useEffect`
+  // latch, a `useRef` latch) all computed the correct `journey` value
+  // internally to this hook while every rendered gate site stayed stuck.
+  //
+  // The fix: once hierarchy-unavailable is CONFIRMED (see the probe below),
+  // this hook performs ONE explicit `{ replace: true }` write of `scope=''`
+  // — the empty string, not deleted — the SAME already-existing sentinel
+  // `discover-map-hierarchy.spec.ts`'s own `landingUrl()` helper uses ("An
+  // EMPTY scope value fails isValidScope... presence alone suppresses the
+  // default"). This is a deliberate, narrow, EXPLAINED exception to the
+  // "VIRTUAL, no URL rewrite" rule stated for the plain default above: that
+  // rule covers the ORDINARY case, where nothing beyond the URL itself is
+  // needed to answer "what does an absent journey mean" and a rewrite would
+  // be pure noise. This is different — the correct answer for THIS URL
+  // depends on a fact (does this city have a hierarchy) that cannot be known
+  // from the URL alone and can only be learned asynchronously; once learned,
+  // it is genuinely new information about what this URL should mean, and
+  // persisting it is the ONLY way to reach `nav`'s memo without touching
+  // `DiscoverContext.tsx` (out of this item's edit scope) or duplicating the
+  // default rule at each of the three (two of them also out-of-scope) gate
+  // sites — the exact divergence class this hook's own default-computation
+  // doc comment (above) already forbids. The write is idempotent (a repeat
+  // visit to the corrected URL needs no round trip at all — `hasExplicitScope`
+  // is already true) and a REPLACE (no new history entry, no back-button
+  // surprise); `hasExplicitScope`/`explicitJourney` still win over it
+  // unconditionally since this only fires when neither is already set.
+  //
+  // A synchronous, request-free check is not possible here (no city-level
+  // "has a hierarchy" flag exists anywhere in the API surface — confirmed by
+  // inspection of the areas/area-groups/regions responses), so this probes
+  // the SAME root-resolve endpoint `useAreasNavigationJourney` itself calls.
+  //
+  // DELIBERATELY its OWN query key (`...BASE, city, ROOT_NODE_KEY,
+  // 'defaultJourneyProbe'`), NOT the identical key `useAreasNavigationJourney`
+  // uses for its own resolveQuery, even though that would let TanStack Query
+  // dedupe the two into one network request. Sharing the key was an earlier
+  // attempt here and produced a live, reproduced oscillation bug: the moment
+  // this probe's result flipped the LOCAL `journey` value, `showAreasNavigationJourney`
+  // (three gate sites) would go false and `useAreasNavigationJourney`'s OWN
+  // observer for that shared key would unmount — cancelling/resetting the
+  // in-flight query for both observers, clearing the very error this probe
+  // needs, flipping the local value back to 'area-first' optimistically,
+  // re-mounting that observer, re-fetching, 404ing again, flipping again...
+  // an infinite mount/unmount loop, confirmed live in-browser via a temporary
+  // debug trace before this fix. A separate key makes this probe's query
+  // lifecycle independent of whether the "real" hook is currently mounted, so
+  // it fetches once and settles once — the one extra GET this costs (vs. a
+  // would-be dedupe) is a small, worthwhile trade for a probe that actually
+  // stops flapping (the `scope=` write above then makes it moot anyway after
+  // the first correction, since the probe is `enabled` only pre-correction).
+  //
+  // Default resolution while the probe is loading/unknown, or on any error
+  // OTHER than a 404, stays optimistic ('area-first') — unchanged behaviour
+  // for the common case (hierarchy exists, or a transient failure that the
+  // existing retry/error UI should still surface honestly, not silently
+  // mask). Only a CONFIRMED 404 ("no active navigation hierarchy for this
+  // city") triggers the `scope=''` correction above.
+  //
+  // `ctx.queryClient` is typed as a required `QueryClient`, but
+  // navigationCommandMatrix.test.ts's harness — MUST stay byte-unmodified
+  // per this issue's own scope contract, see that file's header — passes a
+  // `null as unknown as QueryClient` stand-in on the documented assumption
+  // that "no domain under test touches the query client" as a live
+  // subscription. `useQuery` itself has no optional form, so a `null` second
+  // argument would still crash resolving the ambient context. This lazily
+  // creates a throwaway per-instance fallback ONLY to keep that call
+  // well-typed and non-crashing; `enabled` below is ALSO gated on
+  // `Boolean(queryClient)`, so the fallback client's query never actually
+  // fetches — that harness keeps exercising the pre-existing optimistic
+  // 'area-first' default untouched, exactly as before this fix.
+  const [fallbackQueryClient] = useState(() => new QueryClient());
+  const hierarchyProbe = useQuery<NavigationResolveResponse, ApiError>(
+    {
+      queryKey: [
+        ...AREAS_NAVIGATION_RESOLVE_QUERY_KEY_BASE,
+        city,
+        ROOT_NODE_KEY,
+        'defaultJourneyProbe',
+      ] as const,
+      queryFn: async ({ signal }) => {
+        const path = `/api/discover/cities/${encodeURIComponent(city)}/navigation/resolve?node=${encodeURIComponent(ROOT_NODE_KEY)}`;
+        const wire = await api.get<NavigationResolveResponseWire>(path, { signal });
+        return normalizeNavigationResolveResponse(wire);
+      },
+      // Only needed to resolve the DEFAULT (no explicit journey, no explicit
+      // scope) — an explicit journey= or scope= already fully determines
+      // `journey` below without this probe, so skip the extra request there.
+      // Also requires a REAL queryClient (see fallback note above).
+      enabled: Boolean(queryClient) && Boolean(city) && explicitJourney == null && !hasExplicitScope,
+      // A structural, one-shot "does this city have a hierarchy" check —
+      // never needs to re-fire on window refocus/reconnect/remount once
+      // settled (a live-browser trace during development showed this
+      // toggling `journey` between 'area-first' and null on every refocus
+      // without these disabled, since a fresh in-flight fetch transiently
+      // clears `isError` before the repeat 404 lands).
+      staleTime: 30_000,
+      retry: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchOnMount: false,
+    },
+    queryClient ?? fallbackQueryClient,
+  );
+  const hierarchyConfirmedUnavailable =
+    hierarchyProbe.isError && hierarchyProbe.error instanceof ApiError && hierarchyProbe.error.status === 404;
+
+  // The persisted correction described above. Guarded identically to the
+  // probe's own `enabled` (no explicit journey, no explicit scope already) so
+  // this never overwrites a caller's real choice, and fires at most once per
+  // confirmed-unavailable transition — after the write, `hasExplicitScope`
+  // is true on the next render, so `hierarchyConfirmedUnavailable` itself no
+  // longer matters (the probe also stops re-firing, `enabled` follows suit).
+  useEffect(() => {
+    if (hierarchyConfirmedUnavailable && explicitJourney == null && !hasExplicitScope) {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('scope', '');
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, [hierarchyConfirmedUnavailable, explicitJourney, hasExplicitScope, setUrlParams]);
+
+  const journey: DiscoverJourney | null =
+    explicitJourney != null
+      ? explicitJourney
+      : hasExplicitScope
+        ? null
+        : hierarchyConfirmedUnavailable
+          ? null
+          : 'area-first';
 
   const selectArea = useCallback(
     (newAreaKey: string) => {

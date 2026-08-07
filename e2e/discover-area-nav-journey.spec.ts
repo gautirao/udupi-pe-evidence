@@ -122,8 +122,17 @@ test.describe('@integration-ui Journey 1 — area marker click → back → forw
     page,
   }) => {
     await mockDiscoverApis(page);
-    await page.goto('/discover?city=udupi');
+    // Issue #2088 item 3 — a bare `/discover?city=...` now defaults `journey`
+    // to `area-first` (state/url/area.ts), which skips past this test's
+    // subject: the journey-SELECTION guided-entry state (`journey-card-
+    // area-first` + the LEGACY `.area-marker` ring markers, both of which
+    // only render when NO journey has been chosen yet — see MapDiscovery.tsx's
+    // `showAreasNavigationJourney = nav.journey === 'area-first'` gate and
+    // discoverPanelState.ts's `derivePanelContent`). An explicit `scope=`
+    // param is the one thing that suppresses the new default.
+    await page.goto('/discover?city=udupi&scope=');
     await page.waitForLoadState('domcontentloaded');
+    await expect(page).toHaveURL(/[?&]scope=(&|$)/);
 
     const rightPanel = page.getByTestId('discover-right-panel');
     await expect(rightPanel).toBeVisible({ timeout: 10_000 });
@@ -180,8 +189,12 @@ test.describe('Journey 2 — bookmarked URL fidelity', () => {
   // J2a: city-only URL → city overview state
   test('J2a: ?city=udupi → instructional panel, area ring markers visible', async ({ page }) => {
     await mockDiscoverApis(page);
-    await page.goto('/discover?city=udupi');
+    // Issue #2088 item 3 re-point — see Journey 1's comment above for the
+    // full rationale. `scope=` suppresses the new area-first default so this
+    // "no journey chosen yet" guided-entry state stays reachable.
+    await page.goto('/discover?city=udupi&scope=');
     await page.waitForLoadState('domcontentloaded');
+    await expect(page).toHaveURL(/[?&]scope=(&|$)/);
 
     const rightPanel = page.getByTestId('discover-right-panel');
     await expect(rightPanel).toBeVisible({ timeout: 10_000 });
@@ -224,10 +237,14 @@ test.describe('Journey 2 — bookmarked URL fidelity', () => {
     page,
   }) => {
     await mockDiscoverApis(page);
+    // Issue #2088 item 3 re-point — see Journey 1's comment above for the
+    // full rationale. `scope=` suppresses the new area-first default so this
+    // "no journey chosen yet" guided-entry state stays reachable.
     await page.goto(
-      `/discover?city=udupi&lat=${CITY_LAT}&lon=${CITY_LON}&zoom=${CITY_ZOOM}`,
+      `/discover?city=udupi&lat=${CITY_LAT}&lon=${CITY_LON}&zoom=${CITY_ZOOM}&scope=`,
     );
     await page.waitForLoadState('domcontentloaded');
+    await expect(page).toHaveURL(/[?&]scope=(&|$)/);
 
     const rightPanel = page.getByTestId('discover-right-panel');
     await expect(rightPanel).toBeVisible({ timeout: 10_000 });

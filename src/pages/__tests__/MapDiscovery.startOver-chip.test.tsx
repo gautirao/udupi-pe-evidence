@@ -169,7 +169,7 @@ describe('Issue #1153 — Start Over clears ActiveContextChips', () => {
   it('BHK chip disappears after clicking Start Over', async () => {
     const user = userEvent.setup();
     const url =
-      '/discover?city=udupi&journey=area-first' +
+      '/discover?city=udupi&journey=school-first' +
       '&areaKey=' + encodeURIComponent(KUNJIBETTU_AREA_KEY) +
       '&beds=2';
 

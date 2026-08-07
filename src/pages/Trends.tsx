@@ -20,6 +20,7 @@ import { useAreaIntelligence } from '@/hooks/useAreaIntelligence';
 import { AreaGuide } from '@/components/area/AreaGuide';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
 import { usePageMeta } from '@/hooks/usePageMeta';
+import { useDiscoverAreaNavigationPathResolver } from '@/features/discover/navigation/useDiscoverAreaNavigationPath';
 
 // ─── Q1 = Option A (default): area-guide is THE default /trends experience ────
 // The buyer area-guide (AC2–AC16) is what every user sees on /trends, including
@@ -61,6 +62,35 @@ export default function Trends() {
   const rawAreaKeys = searchParams.getAll('areaKey');
   const urlAreaKeys = rawAreaKeys.slice(0, 3); // cap at 3
   const selectedKey = urlAreaKeys[0] ?? '';
+
+  // Issue #2088 QA-FIX — "Explore on Map" used to hand-navigate to
+  // `/discover?city=&areaKey=` with no journey param. Under the new
+  // area-first default (area.ts) that URL resolves to journey=area-first,
+  // and DiscoverRightPanelContainer's documented A1-MINIMAL behaviour
+  // silently ignores a stale areaKey= there (it mounts at the city root
+  // instead), dropping the area the user was just looking at. Resolving
+  // through the SAME canonical navigation-path seam DiscoverControlBar's
+  // area search already uses (`useDiscoverAreaNavigationPathResolver` ->
+  // the `journey=area-first&node=` pair `enterAreasJourney` itself writes)
+  // before navigating means the area survives.
+  const resolveAreaNavigationPath = useDiscoverAreaNavigationPathResolver();
+  const handleExploreOnMap = () => {
+    resolveAreaNavigationPath.mutate(
+      { city, areaKey: selectedKey },
+      {
+        onSuccess: (path) => {
+          const params = new URLSearchParams({ city, journey: 'area-first', node: path.nodeKey });
+          navigate(`/discover?${params.toString()}`);
+        },
+        onError: () => {
+          // Could not resolve to a canonical node (stale/invalid areaKey) —
+          // degrade to the city view rather than writing a legacy areaKey=
+          // the area-first default would silently ignore.
+          navigate(`/discover?${new URLSearchParams({ city }).toString()}`);
+        },
+      },
+    );
+  };
 
   // Q1=Option A: guide is DEFAULT for all normal /trends visits.
   // isAreaGuideMode: full pipe areaKey is present → guide has a real area to display.
@@ -419,7 +449,7 @@ export default function Trends() {
                   View verified listings in this locality on the map
                 </p>
                 <Button
-                  onClick={() => navigate(`/discover?city=${city}&areaKey=${encodeURIComponent(selectedKey)}`)}
+                  onClick={handleExploreOnMap}
                   className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <MapPin className="h-4 w-4" />

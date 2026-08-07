@@ -345,6 +345,18 @@ export function DiscoverAreasJourneyPanel({
         <p className="text-sm text-muted-foreground mb-3" data-testid="areas-cluster-focus-summary">
           {focusedCluster.countLabel}
         </p>
+        {/* Issue #2088 (commit 7, AC4) — "<n> areas in this map view" subset
+            copy: the focused cluster's member subset is a SPATIAL/zoom-driven
+            subset of `journey.children`'s complete set, never a filtered
+            result set of its own — this line makes that relationship
+            explicit rather than leaving the member list looking like the
+            node's full child set. `journey.children.length` is the SAME
+            complete, uncapped direct-child count `NavigationLevelPanel`
+            renders (AC3 — no client-side cap), so "total" here can never
+            drift from what "Show all" below actually restores. */}
+        <p className="text-xs text-muted-foreground mb-3" data-testid="areas-cluster-focus-subset-note">
+          {focusedCluster.members.length} area{focusedCluster.members.length === 1 ? '' : 's'} in this map view
+        </p>
         <ul className="space-y-2">
           {focusedCluster.members.map((member) => (
             <li key={member.nodeKey}>
@@ -368,9 +380,15 @@ export function DiscoverAreasJourneyPanel({
           size="sm"
           className="mt-3"
           data-testid="areas-cluster-focus-clear"
+          // Issue #2088 (commit 7, AC4/BR6) — `onClusterFocusChange(null)` is
+          // now backed by `clusterFocus.ts`'s `applyClusterFocusDelta`, which
+          // treats `null` as a clear (a `{replace:true}` URL write, never a
+          // hierarchy navigation) — this call site itself is unchanged from
+          // before this issue; only what it is WIRED TO (the caller's
+          // `onClusterFocusChange`, MapDiscovery.tsx) changed.
           onClick={() => onClusterFocusChange?.(null)}
         >
-          Show all areas
+          Show all {journey.children.length} area{journey.children.length === 1 ? '' : 's'}
         </Button>
       </div>
     );

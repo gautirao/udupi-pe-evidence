@@ -60,6 +60,37 @@ export interface CameraIntent {
    * `computeCameraPadding`.
    */
   padding?: CameraPadding;
+  /**
+   * Issue #2088 (commit 6) — set ONLY by `publishRecenterCameraIntent` below,
+   * for the "Recenter on <label>" affordance. `Recenter` is an EXPLICIT user
+   * action (a deliberate button press), never an automatic/network-driven
+   * refit, and MUST always actually move the camera when pressed — never
+   * silently no-op right after a pan, which is exactly when a user reaches
+   * for this button.
+   *
+   * VERIFIED FINDING (read against `PropertyMap.tsx`'s `MapController`,
+   * which this project does not edit — see the module doc on
+   * `publishRecenterCameraIntent`): `CAMERA_SUPPRESS_TTL_MS` there gates a
+   * DIFFERENT effect — the network-driven `focusBounds` refit that follows a
+   * leaf area click — never the `cameraIntent` effect itself. That effect's
+   * only guard is `seq <= lastHandledSeqRef.current`, which a fresh,
+   * monotonically-bumped `seq` (every publisher, including this one,
+   * increments the SAME `cameraIntentSeqRef`) always clears. A Recenter
+   * click therefore already moves the camera unconditionally today, with NO
+   * PropertyMap.tsx change required.
+   *
+   * This field exists to make that guarantee an explicit, typed part of the
+   * `CameraIntent` CONTRACT rather than an implicit fact a future
+   * `MapController` change could accidentally undo — a reviewer/consumer can
+   * grep for `bypassSuppression` and see exactly which producer claims
+   * "explicit user action, must not be swallowed" without re-deriving the
+   * suppression-effect analysis above from scratch. `MapController` does not
+   * currently need to READ this field for correctness (see above); if a
+   * future change to that file's suppression logic ever grows a gate on the
+   * `cameraIntent` effect itself, this field is the documented seam for that
+   * change to key off, instead of re-discovering the requirement.
+   */
+  bypassSuppression?: boolean;
 }
 
 /**
@@ -387,6 +418,24 @@ export interface UseDiscoverMapDataResult {
   publishClusterCameraIntent: (
     bounds: CameraIntent['bounds'],
     center: [number, number],
+  ) => void;
+  /**
+   * Issue #2088 (commit 6) — sibling producer to `publishCameraIntent`/
+   * `publishClusterCameraIntent` for the "Recenter on <label>" affordance.
+   * Shares the SAME monotonic `cameraIntentSeqRef`, so `MapController`'s
+   * existing seq-guard treats this producer identically to the other two — a
+   * fresh Recenter click always wins over a stale intent and vice versa.
+   * Always sets `bypassSuppression: true` (see that field's doc on
+   * `CameraIntent` for the verified finding on why no `PropertyMap.tsx`
+   * change is required for this to actually move the camera). `framing` is
+   * caller-supplied (`'leaf'` for a resolved AREA node, `'overview'`
+   * otherwise) rather than hardcoded, since Recenter can be pressed at any
+   * hierarchy level.
+   */
+  publishRecenterCameraIntent: (
+    bounds: CameraIntent['bounds'],
+    center: [number, number],
+    framing: CameraIntent['framing'],
   ) => void;
   /**
    * Issue #1956 PR 1 (FE-3, item 2) — THE shared visible-member set for the
@@ -733,6 +782,28 @@ export function useDiscoverMapData({
     [cityCenter],
   );
 
+  // Issue #2088 (commit 6) — Recenter producer. See the CameraIntent.bypassSuppression
+  // and UseDiscoverMapDataResult.publishRecenterCameraIntent doc comments above.
+  const publishRecenterCameraIntent = useCallback(
+    (bounds: CameraIntent['bounds'], center: [number, number], framing: CameraIntent['framing']) => {
+      const framed = resolveCameraFraming({
+        bbox: bounds,
+        centroid: center,
+        cityCentre: cityCenter,
+      });
+      cameraIntentSeqRef.current += 1;
+      setCameraIntent({
+        seq: cameraIntentSeqRef.current,
+        bounds: framed.bounds,
+        center: framed.center,
+        framing,
+        padding: computeCameraPadding(getViewportWidthPx()),
+        bypassSuppression: true,
+      });
+    },
+    [cityCenter],
+  );
+
   // ── Derived: locality → areaKey map ──────────────────────────────────────
   const localityToAreaKey = useMemo(() => {
     const m = new Map<string, string>();
@@ -818,6 +889,7 @@ export function useDiscoverMapData({
     cameraIntent,
     publishCameraIntent,
     publishClusterCameraIntent,
+    publishRecenterCameraIntent,
     visibleMemberSet,
   };
 }

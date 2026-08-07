@@ -132,8 +132,24 @@ async function stubResidentialRoutes(page: Page): Promise<void> {
 
 const AREA_MARKER = '[data-testid="area-marker"]';
 
+// Issue #2088 item 3 — a bare journeyless URL now defaults to `journey=
+// area-first` (state/url/area.ts), which routes MapDiscovery to the NEW
+// canonical AreaDestinationMarkerLayer (`nav.journey === 'area-first'` ->
+// showAreasNavigationJourney, MapDiscovery.tsx) instead of this suite's
+// subject: the LEGACY scope-driven macro-region-bubbles/region-zone-areas
+// map (selectDiscoverMapLayer requires `journey == null`). An explicit
+// `scope=` param is the ONLY thing that suppresses that default (area.ts's
+// `hasExplicitScope` check — presence alone, value is not validated at that
+// layer). `scope: ''` is the default here so every existing `landingUrl()`
+// call site keeps exercising the legacy landing exactly as before, while a
+// caller that passes its own `scope` (e.g. `{ scope: SOUTH_GROUP }`) simply
+// overrides it. An EMPTY scope value fails `isValidScope` in
+// discoverUrlNormalize.ts, so `scope.region` still resolves falsy and Level 1
+// still renders 'macro-region-bubbles' (not 'region-zone-areas') — this
+// sentinel changes nothing about which map layer level 1 shows, only which
+// `journey` value the URL resolves to.
 function landingUrl(extra: Record<string, string> = {}): string {
-  const sp = new URLSearchParams({ city: CITY, ...extra });
+  const sp = new URLSearchParams({ city: CITY, scope: '', ...extra });
   return `/discover?${sp.toString()}`;
 }
 
@@ -143,6 +159,10 @@ test.describe('Issue #1745 Batch B — map hierarchy (macro-region bubbles / reg
     await page.goto(landingUrl());
     await page.waitForLoadState('domcontentloaded');
 
+    // Issue #2088 item 3 — proves the re-point actually suppressed the new
+    // area-first default: `scope=` really is on the URL, and the LEGACY
+    // guided-entry landing (not the canonical Direction map) really rendered.
+    await expect(page).toHaveURL(/[?&]scope=(&|$)/);
     await expect(page.getByTestId('guided-entry-panel')).toBeVisible({ timeout: 10_000 });
 
     const markers = page.locator(AREA_MARKER);
@@ -171,6 +191,8 @@ test.describe('Issue #1745 Batch B — map hierarchy (macro-region bubbles / reg
     await page.goto(landingUrl());
     await page.waitForLoadState('domcontentloaded');
 
+    // Issue #2088 item 3 — the re-point suppressed the new area-first default.
+    await expect(page).toHaveURL(/[?&]scope=(&|$)/);
     await expect(page.locator(AREA_MARKER)).toHaveCount(2, { timeout: 15_000 });
     await page.screenshot({ path: SS('mh2-before-bubbles'), fullPage: false });
 
@@ -201,6 +223,8 @@ test.describe('Issue #1745 Batch B — map hierarchy (macro-region bubbles / reg
     await page.goto(landingUrl());
     await page.waitForLoadState('domcontentloaded');
 
+    // Issue #2088 item 3 — the re-point suppressed the new area-first default.
+    await expect(page).toHaveURL(/[?&]scope=(&|$)/);
     const bubble = page.locator(AREA_MARKER, { hasText: 'South Udupi' });
     await expect(bubble).toBeVisible({ timeout: 15_000 });
     await bubble.click({ force: true });
@@ -216,9 +240,13 @@ test.describe('Issue #1745 Batch B — map hierarchy (macro-region bubbles / reg
   test('MH-3: back-navigation clears scope and the map reverts to macro-region bubbles', async ({ page }) => {
     await stubResidentialRoutes(page);
 
-    // Entry A: no scope — macro-region bubbles.
+    // Entry A: EMPTY scope (Issue #2088 item 3 re-point — an empty `scope=`
+    // is present only to suppress the new area-first default; it carries no
+    // real region and macro-region bubbles still render, matching this
+    // test's ORIGINAL "no real scope" landing exactly).
     await page.goto(landingUrl());
     await page.waitForLoadState('domcontentloaded');
+    await expect(page).toHaveURL(/[?&]scope=(&|$)/);
     await expect(page.locator(AREA_MARKER)).toHaveCount(2, { timeout: 15_000 });
 
     // Entry B: a full navigation (separate history entry) to scope=south-udupi —
@@ -227,10 +255,15 @@ test.describe('Issue #1745 Batch B — map hierarchy (macro-region bubbles / reg
     await page.waitForLoadState('domcontentloaded');
     await expect(page.locator(AREA_MARKER)).toHaveCount(3, { timeout: 15_000 });
 
-    // Back: scope cleared, bubbles restored.
+    // Back: the REAL region scope is cleared (never `scope=south-udupi` or any
+    // other non-empty value) and bubbles restored. The assertion checks for a
+    // non-empty scope value rather than the param's bare absence — Entry A's
+    // own URL (see above) legitimately carries an EMPTY `scope=` sentinel
+    // post-item-3, so "no real scope" is the correct, still-meaningful
+    // regression check here, not "no scope param at all".
     await page.goBack();
     await page.waitForLoadState('domcontentloaded');
-    await expect(page).not.toHaveURL(/[?&]scope=/);
+    await expect(page).not.toHaveURL(/[?&]scope=[^&]/);
     await expect(page.locator(AREA_MARKER)).toHaveCount(2, { timeout: 15_000 });
     await expect(page.locator(AREA_MARKER, { hasText: 'South Udupi' })).toBeVisible();
     await expect(page.locator(AREA_MARKER, { hasText: 'Coastal Belt' })).toBeVisible();
@@ -317,8 +350,12 @@ test.describe('Issue #1745 Batch B — map hierarchy (macro-region bubbles / reg
     await page.route('**/api/discover/markers**', (r) => fulfillJson(r, 200, { city: 'bangalore', markers: [], truncated: false, returnedElements: 0 }));
 
     // Level 1: City Landing -> Macro-region bubbles only
-    await page.goto('/discover?city=bangalore');
+    // Issue #2088 item 3 re-point — see landingUrl()'s doc comment above: an
+    // empty `scope=` sentinel is required to suppress the new area-first
+    // default and keep exercising the legacy macro-region-bubbles map.
+    await page.goto('/discover?city=bangalore&scope=');
     await page.waitForLoadState('domcontentloaded');
+    await expect(page).toHaveURL(/[?&]scope=(&|$)/);
     await expect(page.locator(AREA_MARKER, { hasText: 'North Bangalore' })).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(AREA_MARKER, { hasText: 'Airport Belt' })).toHaveCount(0);
     await expect(page.locator(AREA_MARKER, { hasText: 'Hebbal Belt' })).toHaveCount(0);

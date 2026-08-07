@@ -12,6 +12,7 @@ import { useTrendingAreas } from '@/hooks/useTrendingAreas';
 import { AREA_DEFAULTS } from '@/constants/areaDefaults';
 import { DISTRICT_TO_CITY_SLUG } from '@/lib/localityUtils';
 import { CITIES, ANY_AREA_SENTINEL } from '@/constants/cities';
+import { useDiscoverAreaNavigationPathResolver } from '@/features/discover/navigation/useDiscoverAreaNavigationPath';
 
 interface HomepageFilterPanelProps {
   city: string;
@@ -27,6 +28,17 @@ export function HomepageFilterPanel({
   onAreaKeyChange,
 }: HomepageFilterPanelProps) {
   const navigate = useNavigate();
+  // Issue #2088 QA-FIX — a bare `/discover?city=&areaKey=` now defaults to
+  // journey=area-first (area.ts), and DiscoverRightPanelContainer's
+  // documented A1-MINIMAL behaviour silently ignores a stale areaKey= on a
+  // hand-navigated area-first URL (it never reads the legacy param), so the
+  // user's chosen area was being dropped on arrival. Resolving through the
+  // SAME canonical navigation-path seam DiscoverControlBar's area search
+  // already uses (`useDiscoverAreaNavigationPathResolver` ->
+  // `enterAreasJourney`'s `journey=area-first&node=` pair) before navigating
+  // means the destination URL is already in the shape the canonical panel
+  // actually reads, so the selection survives.
+  const resolveAreaNavigationPath = useDiscoverAreaNavigationPathResolver();
 
   const { areas: areaOptions, isLoading: areasLoading } = useTrendingAreas();
 
@@ -43,10 +55,27 @@ export function HomepageFilterPanel({
   };
 
   const handleExplore = () => {
-    const params = new URLSearchParams({ city });
     const resolvedArea = areaKey === ANY_AREA_SENTINEL ? '' : areaKey;
-    if (resolvedArea) params.set('areaKey', resolvedArea);
-    navigate(`/discover?${params.toString()}`);
+    if (!resolvedArea) {
+      navigate(`/discover?${new URLSearchParams({ city }).toString()}`);
+      return;
+    }
+    resolveAreaNavigationPath.mutate(
+      { city, areaKey: resolvedArea },
+      {
+        onSuccess: (path) => {
+          const params = new URLSearchParams({ city, journey: 'area-first', node: path.nodeKey });
+          navigate(`/discover?${params.toString()}`);
+        },
+        onError: () => {
+          // The chosen area could not be resolved to a canonical node (stale/
+          // invalid areaKey) — degrade to the city view rather than writing a
+          // legacy areaKey= the canonical area-first default would silently
+          // ignore (the exact defect this fix closes).
+          navigate(`/discover?${new URLSearchParams({ city }).toString()}`);
+        },
+      },
+    );
   };
 
   return (

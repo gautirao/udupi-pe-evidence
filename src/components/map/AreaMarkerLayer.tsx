@@ -34,6 +34,27 @@ import {
   type ProjectFn as AreaClusterProjectFn,
 } from '@/features/discover/navigation/areaClustering';
 import { presentClusterRepresentatives } from '@/features/discover/navigation/representativeNames';
+import {
+  PAPER,
+  NAVY_800,
+  COPPER_600,
+  FONT_SANS,
+  FONT_MONO,
+  RADIUS_FULL,
+  SHADOW_MD,
+  SHADOW_LG,
+  DESTINATION_BORDER_REST,
+  DESTINATION_BORDER_ACTIVE,
+  DESTINATION_PILL_BG,
+  DESTINATION_TEXT_SOFT,
+  DESTINATION_TEXT_SOFT_DIM,
+  DESTINATION_TEXT_MUTED,
+} from './markerTokens';
+import {
+  MARKER_SHELL_STYLE,
+  markerInteractiveAttrs,
+  cardContainerStyle,
+} from './markerPrimitives';
 
 /**
  * One area marker point.
@@ -178,6 +199,18 @@ const C_PLUM = '#5E5286';
 const C_NAVY = '#1B2A45';
 const MONO = `'Geist Mono', ui-monospace, 'SF Mono', monospace`;
 const PILL_SHADOW = '0 4px 10px rgba(17,24,39,0.10), 0 2px 4px rgba(17,24,39,0.05)';
+// Issue #2088 item 2b — markerTokens.ts's FONT_SANS/FONT_MONO are byte-parity-tested
+// against typography.css, which double-quotes its font names (`"Plus Jakarta Sans"`,
+// `"Geist Mono"`, ...) — unlike this file's own single-quoted `MONO` literal above.
+// Embedded RAW into one of this file's double-quoted `style="..."` divIcon HTML
+// attributes, that inner `"` terminates the attribute early (the browser parses
+// `style="font-family:"` and silently drops every declaration after it — the exact
+// defect that made the item 2b destination-card rebuild render with no font/color/
+// size at all on first browser verification). Pre-escaped ONCE here via the same
+// `escapeHtml` every other interpolated value in this file already goes through,
+// never re-typed as a re-quoted duplicate of the markerTokens.ts source of truth.
+const FONT_SANS_ATTR = escapeHtml(FONT_SANS);
+const FONT_MONO_ATTR = escapeHtml(FONT_MONO);
 
 const pinSvg = (color: string) =>
   `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
@@ -650,24 +683,62 @@ function makeDestinationCard(
     child.schoolCount != null && child.schoolCount > 0
       ? escapeHtml(`${child.schoolCount} ${child.schoolCount === 1 ? 'school' : 'schools'}`)
       : null;
-  const borderColor = isSelected ? DESTINATION_ACCENT_ACTIVE : C_BORDER;
-  const borderWidth = isSelected || isHovered ? '2px' : '1px';
-  const countColor = presentation?.isZeroContent ? C_GREY_400 : C_MUTED;
   const ariaLabelParts = [ariaLabelName, areasLabel, listingsLabel, schoolLabel].filter(
     (part): part is string => part != null,
   );
   const ariaLabel = ariaLabelParts.join(', ');
-  const html = `<div data-testid="area-destination-marker" data-node-key="${escapeHtml(child.nodeKey)}" data-selected="${isSelected}" tabindex="0" role="button" aria-label="${ariaLabel}" style="transform:translate(-50%,-100%);font-family:inherit;pointer-events:auto;cursor:pointer;outline:none;">
-    <div${titleAttr} style="display:flex;flex-direction:column;gap:2px;min-width:96px;padding:8px 12px;border-radius:12px;background:${C_PAPER};border:${borderWidth} solid ${borderColor};box-shadow:${PILL_SHADOW};">
-      <div style="display:flex;align-items:center;gap:6px;">
-        ${pinSvg(DESTINATION_ACCENT)}
-        <span style="font-size:12.5px;font-weight:700;color:${C_INK};white-space:nowrap;">${label}</span>
-      </div>
-      ${areasLabel != null ? `<span style="font-size:10.5px;font-weight:600;color:${countColor};">${areasLabel}</span>` : ''}
-      ${listingsLabel != null ? `<span style="font-size:10.5px;font-weight:600;color:${C_MUTED};">${listingsLabel}</span>` : ''}
-      ${schoolLabel != null ? `<span style="font-size:10.5px;font-weight:600;color:${C_MUTED};">${schoolLabel}</span>` : ''}
-      <span style="font-family:${MONO};font-size:9.5px;font-weight:600;color:${DESTINATION_ACCENT};">Tap to zoom &rsaquo;</span>
+  // Issue #2088 (commit 2) — ported to the shared markerPrimitives fragments
+  // + markerTokens constants. markerInteractiveAttrs emits the SAME
+  // attribute set/order the original literal did.
+  const destinationShellAttrs = markerInteractiveAttrs({
+    testId: 'area-destination-marker',
+    nodeKey: escapeHtml(child.nodeKey),
+    selected: isSelected,
+    ariaLabel,
+  });
+  // Issue #2088 item 2b — rebuilt attribute-for-attribute against the
+  // approved mock's `destCardHTML` (docs/design/retrends-design-system/
+  // ui_kits/new_discover/src/ExpMap.jsx). The previous white/copper "Tap to
+  // zoom" card did not match the mock at all; see markerTokens.ts's
+  // DESTINATION_* doc for why the translucent-on-navy values here are
+  // literals rather than parity-tested CSS-var lookups.
+  //
+  // Border: mock keeps a CONSTANT 1.5px width and varies only the white
+  // border's opacity between resting (0.42) and hover/selected (0.9) — a
+  // real attribute change from the old copper card's 1px/2px width swap.
+  const borderColor = isSelected || isHovered ? DESTINATION_BORDER_ACTIVE : DESTINATION_BORDER_REST;
+  const destinationCardStyle = cardContainerStyle({
+    radiusPx: 12,
+    background: NAVY_800,
+    borderCss: `1.5px solid ${borderColor}`,
+    boxShadow: SHADOW_LG,
+    minWidthPx: 96,
+  });
+  // Mock's destCardHTML has NO pin/location icon inside the card at all (see
+  // ExpMap.jsx — only the dashed cluster chip carries a magnifier icon). The
+  // former copper `pinSvg` here is dropped rather than merely recolored, to
+  // match the mock's actual grammar attribute-for-attribute rather than
+  // approximating it.
+  const listingsCountText = listingsLabel != null ? child.listingCount.toLocaleString('en-IN') : null;
+  // Issue #2088 item 2b attribute 5 (fix cycle) — the mock's destCardHTML
+  // (docs/design/retrends-design-system/ui_kits/new_discover/src/ExpMap.jsx,
+  // `const cf = Math.round(22 + Math.min(1, o.n / 240) * 9)`) scales the count
+  // digit size by listing VOLUME rather than using a constant 22px — 22px at
+  // n=0 rising to 31px as n approaches/exceeds 240. `o.n` is the destination's
+  // listing count, i.e. this card's `child.listingCount` (same field the
+  // rendered digits themselves already read).
+  const countFontSizePx = Math.round(22 + Math.min(1, child.listingCount / 240) * 9);
+  const html = `<div ${destinationShellAttrs} style="${MARKER_SHELL_STYLE}">
+    <div${titleAttr} style="${destinationCardStyle}">
+      <span style="font-family:${FONT_SANS_ATTR};font-size:12.5px;font-weight:700;color:${PAPER};white-space:nowrap;letter-spacing:-0.01em;">${label}</span>
+      ${listingsCountText != null ? `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
+        <span style="font-family:${FONT_MONO_ATTR};font-size:${countFontSizePx}px;font-weight:800;line-height:1;letter-spacing:-0.02em;color:${PAPER};">${listingsCountText}</span>
+        <span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${DESTINATION_TEXT_MUTED};">listings</span>
+      </span>` : ''}
+      ${areasLabel != null ? `<span style="font-family:${FONT_SANS_ATTR};margin-top:${listingsCountText != null ? 3 : 4}px;padding:1px 9px;border-radius:${RADIUS_FULL};background:${DESTINATION_PILL_BG};font-size:10px;font-weight:600;color:${listingsCountText != null ? DESTINATION_TEXT_SOFT : DESTINATION_TEXT_SOFT_DIM};white-space:nowrap;">${areasLabel}</span>` : ''}
+      ${schoolLabel != null ? `<span style="font-family:${FONT_SANS_ATTR};font-size:10.5px;font-weight:600;color:${DESTINATION_TEXT_MUTED};white-space:nowrap;">${schoolLabel}</span>` : ''}
     </div>
+    <div style="font-family:${FONT_SANS_ATTR};margin-top:5px;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:${RADIUS_FULL};background:${PAPER};box-shadow:${SHADOW_MD};font-size:10px;font-weight:700;color:${COPPER_600};white-space:nowrap;">Explore <span style="font-size:12px;line-height:1;">&#8250;</span></div>
   </div>`;
   return L.divIcon({ className: 'area-destination-marker-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
 }
@@ -707,15 +778,36 @@ function makeSingleAreaChildCard(
   const ariaLabel = [ariaLabelName, listingsLabel, schoolLabel].filter((p): p is string => p != null).join(', ');
   const cardWidthPx = AREA_CARD_FOOTPRINT_WIDTH_PX;
   const nameMaxWidthPx = cardWidthPx - 24 /* padding */ - 11 /* icon */ - 6 /* gap */ - 2 /* border */;
-  const html = `<div data-testid="area-single-marker" data-node-key="${escapeHtml(child.nodeKey)}" data-selected="${isSelected}" tabindex="0" role="button" aria-label="${ariaLabel}" style="transform:translate(-50%,-100%);font-family:inherit;pointer-events:auto;cursor:pointer;outline:none;">
-    <div${titleAttr} style="box-sizing:border-box;display:flex;flex-direction:column;gap:2px;width:${cardWidthPx}px;padding:8px 12px;border-radius:12px;background:${C_PAPER};border:${borderWidth} solid ${borderColor};box-shadow:${PILL_SHADOW};">
+  // Issue #2088 (commit 2) — ported to the shared markerPrimitives fragments
+  // + markerTokens constants; byte-identical output (see makeDestinationCard's
+  // equivalent comment above).
+  const singleAreaShellAttrs = markerInteractiveAttrs({
+    testId: 'area-single-marker',
+    nodeKey: escapeHtml(child.nodeKey),
+    selected: isSelected,
+    ariaLabel,
+  });
+  const singleAreaCardStyle = cardContainerStyle({
+    radiusPx: 12,
+    background: isSelected ? NAVY_800 : PAPER,
+    borderCss: `${borderWidth} solid ${borderColor}`,
+    boxShadow: PILL_SHADOW,
+    widthPx: cardWidthPx,
+    boxSizingBorderBox: true,
+  });
+  
+  const textColor = isSelected ? PAPER : C_INK;
+  const mutedColor = isSelected ? DESTINATION_TEXT_SOFT : C_MUTED;
+
+  const html = `<div ${singleAreaShellAttrs} style="${MARKER_SHELL_STYLE}">
+    <div${titleAttr} style="${singleAreaCardStyle}">
       <div style="display:flex;align-items:center;gap:6px;">
-        ${pinSvg(DESTINATION_ACCENT)}
-        <span style="font-size:12.5px;font-weight:700;color:${C_INK};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameMaxWidthPx}px;">${label}</span>
+        ${pinSvg(isSelected ? PAPER : DESTINATION_ACCENT)}
+        <span style="font-size:12.5px;font-weight:700;color:${textColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameMaxWidthPx}px;">${label}</span>
       </div>
-      <span style="font-size:10.5px;font-weight:600;color:${C_MUTED};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${listingsLabel}</span>
-      ${schoolLabel != null ? `<span style="font-size:10.5px;font-weight:600;color:${C_MUTED};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${schoolLabel}</span>` : ''}
-      <span style="font-family:${MONO};font-size:9.5px;font-weight:600;color:${DESTINATION_ACCENT};">Tap to view homes &rsaquo;</span>
+      <span style="font-size:10.5px;font-weight:600;color:${mutedColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${listingsLabel}</span>
+      ${schoolLabel != null ? `<span style="font-size:10.5px;font-weight:600;color:${mutedColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${schoolLabel}</span>` : ''}
+      <span style="font-family:${MONO};font-size:9.5px;font-weight:600;color:${isSelected ? PAPER : DESTINATION_ACCENT};">Tap to view homes &rsaquo;</span>
     </div>
   </div>`;
   return L.divIcon({ className: 'area-single-marker-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
@@ -736,6 +828,21 @@ function makeAreaVisualClusterCard(
   countLabel: string,
   totalListingCount: number,
   accent: string,
+  /**
+   * Issue #2088 (commit 3) — a stable DOM identity for this ad-hoc,
+   * client-side visual cluster, so it is no longer the one marker type on
+   * this map with NO `data-node-key`-shaped attribute (every other marker
+   * type carries `tabindex=0 role=button aria-label` + `data-node-key`).
+   * Deliberately prefixed `visual-cluster:` — this is NEVER a real hierarchy
+   * node key (it is not accepted by `isWritableNodeKey`, never appears in a
+   * `node=` URL write, and is not one of this app's `a:`/`c:`/`d:` server
+   * key families) — the prefix keeps it structurally unmistakable for a real
+   * one even by a naive string check. The caller passes the SAME
+   * `membershipKey` (member `areaKey`s joined) already used as this marker's
+   * own registry key, so the attribute is stable across re-renders with
+   * unchanged membership.
+   */
+  membershipKey: string,
 ): L.DivIcon {
   // UD-1/UD-3 (fix-cycle-3) — this is the other grid-clustered card builder;
   // same fixed-width-to-the-shared-footprint-constant + truncation contract
@@ -755,8 +862,28 @@ function makeAreaVisualClusterCard(
   const ariaLabel = `${fullNamesLabel}, ${countLabelHtml}, ${listingsLabel}`;
   const cardWidthPx = AREA_CARD_FOOTPRINT_WIDTH_PX;
   const nameMaxWidthPx = cardWidthPx - 24 /* padding */ - 12 /* icon */ - 6 /* gap */ - 3 /* border */;
-  const html = `<div data-testid="area-visual-cluster-marker" tabindex="0" role="button" aria-label="${ariaLabel}" style="transform:translate(-50%,-100%);font-family:inherit;pointer-events:auto;cursor:pointer;outline:none;">
-    <div${titleAttr} style="box-sizing:border-box;display:flex;flex-direction:column;gap:2px;width:${cardWidthPx}px;padding:8px 12px;border-radius:14px;background:${C_PAPER};border:1.5px dashed ${accent};box-shadow:${PILL_SHADOW};">
+  // Issue #2088 (commits 2+3) — ported to the shared markerPrimitives
+  // fragments + markerTokens constants (byte-identical for every attribute
+  // that existed before this issue), PLUS the new `data-node-key` (commit 3
+  // — see this function's parameter doc above for why it is prefixed and
+  // safe). No `selected` state exists for a visual cluster, so that
+  // attribute is correctly omitted (matches every other marker's contract:
+  // omitted when not applicable).
+  const clusterShellAttrs = markerInteractiveAttrs({
+    testId: 'area-visual-cluster-marker',
+    nodeKey: `visual-cluster:${escapeHtml(membershipKey)}`,
+    ariaLabel,
+  });
+  const clusterCardStyle = cardContainerStyle({
+    radiusPx: 14,
+    background: PAPER,
+    borderCss: `1.5px dashed ${accent}`,
+    boxShadow: PILL_SHADOW,
+    widthPx: cardWidthPx,
+    boxSizingBorderBox: true,
+  });
+  const html = `<div ${clusterShellAttrs} style="${MARKER_SHELL_STYLE}">
+    <div${titleAttr} style="${clusterCardStyle}">
       <div style="display:flex;align-items:center;gap:6px;">
         ${stackSvg(accent)}
         <span style="font-size:12.5px;font-weight:700;color:${C_INK};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameMaxWidthPx}px;">${namesLabel}</span>
@@ -802,49 +929,7 @@ export function AreaDestinationMarkerLayer({
     };
   }, [map]);
 
-  useEffect(() => {
-    if (!node || levelKind !== 'directions' || children.length === 0) return;
-    const markers: L.Marker[] = [];
-    const mapSize = map.getSize();
-    const compassLayout = computeCompassLayout(mapSize.x, mapSize.y);
 
-    for (const child of children) {
-      const code = normalizeCompassRegionCode(child.nodeKey);
-      const point = compassPointFor(code, compassLayout);
-      const latLng = map.containerPointToLatLng([point.x, point.y]);
-      const isSelected = selectedNodeKey === child.nodeKey;
-      const isHovered = hoveredNodeKey === child.nodeKey;
-
-      const marker = L.marker([latLng.lat, latLng.lng], {
-        icon: makeDestinationCard(child, isSelected, isHovered),
-      });
-
-      // AC3.9/T3 — dispatches the SAME selectNode reference the panel card
-      // uses, unwrapped, with the server-given nodeKey only.
-      marker.on('click', () => onSelect(child.nodeKey));
-      marker.on('mouseover', () => onHoverChange?.(child.nodeKey));
-      marker.on('mouseout', () => onHoverChange?.(null));
-      marker.addTo(map);
-
-      // Keyboard-operable, mirroring the existing macro-region/group marker
-      // Enter/Space bridge above (a plain div has no native key->click).
-      const el = marker.getElement()?.querySelector<HTMLElement>('[data-testid="area-destination-marker"]');
-      el?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          el.click();
-        }
-      });
-      el?.addEventListener('focus', () => onHoverChange?.(child.nodeKey));
-      el?.addEventListener('blur', () => onHoverChange?.(null));
-
-      markers.push(marker);
-    }
-
-    return () => {
-      markers.forEach((m) => m.remove());
-    };
-  }, [node, levelKind, children, map, onSelect, selectedNodeKey, hoveredNodeKey, onHoverChange, layoutTick]);
 
   // ── AREA / Local-Destination real geography (Issue #1956 PR 3, Slice 4) ──
   // Recompute grouping on zoom only (grid clustering is a pure function of
@@ -892,7 +977,7 @@ export function AreaDestinationMarkerLayer({
 
   useEffect(() => {
     const registry = areaMarkerRegistryRef.current;
-    if (!node || (levelKind !== 'areas' && levelKind !== 'clusters')) {
+    if (!node || (levelKind !== 'areas' && levelKind !== 'clusters' && levelKind !== 'directions')) {
       // F1 fix (fix-cycle-3) — this effect deliberately has NO cleanup
       // function of its own (see the dedicated true-unmount effect below,
       // and REQUIRED CHANGE 5's comment further down for why): the
@@ -938,6 +1023,66 @@ export function AreaDestinationMarkerLayer({
           html: String(icon.options.html),
           onClick: () => onSelect(child.nodeKey),
           hoverKey: child.nodeKey,
+        });
+      }
+    } else if (levelKind === 'directions') {
+      const cityCenterLat = node.bounds?.centreLat ?? 0;
+      const cityCenterLon = node.bounds?.centreLon ?? 0;
+      const cityPx = map.latLngToContainerPoint([cityCenterLat, cityCenterLon]);
+
+      const pts = children.map(child => {
+        const raw = rawByNodeKey.get(child.nodeKey);
+        return {
+          child,
+          lat: raw?.centreLat ?? 0,
+          lon: raw?.centreLon ?? 0,
+          valid: raw?.centreLat != null && raw?.centreLon != null
+        };
+      });
+
+      const pixelPts = pts.filter(p => p.valid).map(p => ({
+        ...p,
+        px: map.latLngToContainerPoint([p.lat, p.lon])
+      }));
+
+      const minDistance = 80;
+      for (let iter = 0; iter < 10; iter++) {
+        let moved = false;
+        for (let i = 0; i < pixelPts.length; i++) {
+          for (let j = i + 1; j < pixelPts.length; j++) {
+            const p1 = pixelPts[i];
+            const p2 = pixelPts[j];
+            const dx = p1.px.x - p2.px.x;
+            const dy = p1.px.y - p2.px.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 0 && dist < minDistance) {
+              moved = true;
+              for (const p of [p1, p2]) {
+                let vx = p.px.x - cityPx.x;
+                let vy = p.px.y - cityPx.y;
+                let vDist = Math.sqrt(vx * vx + vy * vy);
+                if (vDist < 1) { vx = 0; vy = -1; vDist = 1; }
+                p.px.x += (vx / vDist) * 10;
+                p.px.y += (vy / vDist) * 10;
+              }
+            }
+          }
+        }
+        if (!moved) break;
+      }
+
+      for (const p of pixelPts) {
+        const adjustedLatLng = map.containerPointToLatLng([p.px.x, p.px.y]);
+        const isSelected = selectedNodeKey === p.child.nodeKey;
+        const isHovered = hoveredNodeKey === p.child.nodeKey;
+        const icon = makeDestinationCard(p.child, isSelected, isHovered);
+        
+        desired.set(p.child.nodeKey, {
+          latlng: [adjustedLatLng.lat, adjustedLatLng.lng],
+          icon,
+          html: String(icon.options.html),
+          onClick: () => onSelect(p.child.nodeKey),
+          hoverKey: p.child.nodeKey,
         });
       }
     } else {
@@ -1008,7 +1153,18 @@ export function AreaDestinationMarkerLayer({
         : clusterable;
 
       const clusterResult = clusterVisibleAreaMembers(scoped, eligibilityJourney, project, areasZoomTick);
-      const accent = journey === 'school-first' ? C_PLUM : C_COPPER;
+      // Issue #2088 item 2 (AC8) — the residential dashed visual-cluster
+      // card must use the mock's navy accent (ExpMap.jsx's clusterChipHTML:
+      // `1.5px dashed var(--navy-800)`), not copper. C_NAVY (#1B2A45) is
+      // this file's existing navy literal, already used by the leader-line/
+      // anchor-dot below and equal to markerTokens.NAVY_800. Only THIS
+      // canonical (AreaDestinationMarkerLayer) dashed-cluster call site
+      // changes — the legacy dense-degradation AreaMarkerLayer's separate
+      // `accent` (used by makeDotIcon/makeClusterIcon further below) is
+      // deliberately untouched: that code path is not the mock-governed AC8
+      // grammar this item targets, and Issue #2088 item 3 requires the
+      // legacy path to stay reachable/unmodified.
+      const accent = journey === 'school-first' ? C_PLUM : C_NAVY;
 
       for (const cell of clusterResult.clusters) {
         if (cell.members.length === 1) {
@@ -1032,7 +1188,13 @@ export function AreaDestinationMarkerLayer({
             eligibilityJourney,
           );
           const totalListingCount = cell.members.reduce((sum, m) => sum + m.listingCount, 0);
-          const icon = makeAreaVisualClusterCard(representativeNames, countResult.label, totalListingCount, accent);
+          const icon = makeAreaVisualClusterCard(
+            representativeNames,
+            countResult.label,
+            totalListingCount,
+            accent,
+            membershipKey,
+          );
           desired.set(`cluster:${membershipKey}`, {
             latlng: [cell.anchor.lat, cell.anchor.lon],
             icon,
@@ -1097,12 +1259,15 @@ export function AreaDestinationMarkerLayer({
         // indicator as an INLINE style instead — the only thing guaranteed
         // to win — mirroring every other visual property on this divIcon
         // (literal values, no CSS pipeline). Uses a navy ring (C_NAVY, same
-        // token as this file's leader-line/anchor-dot color), not copper:
-        // this card's resting state already has a permanent dashed COPPER
-        // border, so a copper focus ring would read as "a slightly different
-        // border", not "focus" (design-audit finding). Cleared to '' on blur
-        // (never toggled via a class) so activation (Enter/Space, bound
-        // above) is unaffected either way.
+        // token as this file's leader-line/anchor-dot color). Issue #2088
+        // item 2 made the residential dashed cluster's own resting border
+        // navy too (was copper), but the focus ring stays visually distinct
+        // from it either way: it is a SOLID box-shadow ring offset outward
+        // by a 2px white gap from the card's DASHED border, not a color
+        // repaint of that border — solid-vs-dashed plus the white gap reads
+        // as "focus", not "a slightly different border", for either accent.
+        // Cleared to '' on blur (never toggled via a class) so activation
+        // (Enter/Space, bound above) is unaffected either way.
         el?.addEventListener('focus', () => {
           if (!el) return;
           el.style.borderRadius = '14px';
@@ -1186,6 +1351,7 @@ export function AreaDestinationMarkerLayer({
     journey,
     selectedSchool,
     areasZoomTick,
+    layoutTick,
     focusedMembers,
     onAreaVisualClusterCameraIntent,
   ]);

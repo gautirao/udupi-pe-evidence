@@ -345,8 +345,16 @@ test.describe('@integration-ui Issue #1483 — area-first Level-2 drill-down', (
   test('AC7 regression: school-first journey still renders journey-card-school-first', async ({ page }) => {
     await stubDiscoverApis(page);
 
-    await page.goto(`/discover?city=${CITY}`);
+    // Issue #2088 item 3 — a bare `/discover?city=...` now defaults `journey`
+    // to `area-first` (state/url/area.ts), which would skip straight past the
+    // journey-SELECTION guided-entry state this assertion needs (the
+    // `journey-card-school-first` picker only renders when NO journey has
+    // been chosen yet). An explicit `scope=` param is the one thing that
+    // suppresses that default (area.ts's `hasExplicitScope` check), keeping
+    // this test on the genuinely-still-reachable "no journey chosen" landing.
+    await page.goto(`/discover?city=${CITY}&scope=`);
     await page.waitForLoadState('domcontentloaded');
+    await expect(page).toHaveURL(/[?&]scope=(&|$)/);
     await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 10_000 });
 
     // The guided-entry journey-card for school-first must be selectable

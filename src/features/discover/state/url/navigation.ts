@@ -48,6 +48,7 @@
 import { useCallback } from 'react';
 import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type { DiscoverUrlActions, DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
+import { clearClusterFocusParam } from './clusterFocus';
 
 type NavigationState = Pick<DiscoverUrlState, 'node' | 'rawNodeParam'>;
 type NavigationActions = Pick<
@@ -258,6 +259,16 @@ export function cancelPendingViewportCommit(timers: UrlDomainCtx['timers']): voi
  * `lat`/`lon`/`zoom` go because the new node owns the camera — carrying the old
  * node's viewport into a new level shows the wrong place. `listing` goes because
  * a peek panel pinned to the previous context must not survive a level change.
+ *
+ * Issue #2088 (commit 4) — `clusterFocus` ALSO goes, via `clearClusterFocusParam`
+ * (state/url/clusterFocus.ts), satisfying D2_binding_requirements.BR5 ("cluster
+ * focus is cleared whenever the stable node changes") for EVERY node write —
+ * `goToNode`, `goToAncestorNode`, `clearNode`, `enterAreasJourney`, and
+ * `buildNodeHref`'s pure href — through this ONE shared delta function, rather
+ * than one call site remembering to clear it and another silently not.
+ * `clusterFocus` is never a hierarchy node key and never read here as one
+ * (BR1/BR7) — this is purely a delete, mirroring `lat`/`lon`/`zoom`/`listing`
+ * above.
  */
 function applyNodeDelta(currentParams: URLSearchParams, nextNodeKey: string | null): URLSearchParams {
   const next = new URLSearchParams(currentParams);
@@ -270,6 +281,7 @@ function applyNodeDelta(currentParams: URLSearchParams, nextNodeKey: string | nu
   next.delete('lon');
   next.delete('zoom');
   next.delete('listing');
+  clearClusterFocusParam(next);
   return next;
 }
 

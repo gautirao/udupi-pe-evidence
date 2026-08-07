@@ -513,6 +513,70 @@ describe('static sweep — the legacy Areas panels are permanently deleted (Issu
   });
 });
 
+describe('static sweep — issue #2088 (commit 4/7, BR7): clusterFocus is excluded from KEY_PREFIXES and every hierarchy-request builder', () => {
+  // V-a (issue-2088 orchestrator variance) — the engineer satisfied BR7 only
+  // STRUCTURALLY (clusterFocus.ts lives in state/url/, outside NAV_DIR, so
+  // it never even enters this file's own PURE_NAV_MODULES walk). The
+  // committed BR7 test case requires EXTENDING this sweep with an actual
+  // positive AND negative control: clusterFocus is not in the node-key
+  // KEY_PREFIXES vocabulary above, and no hierarchy-request builder ever
+  // emits it onto a request URL. Both assertions are proven over REAL
+  // production source text (not the pure-module walk, since clusterFocus.ts
+  // is deliberately outside it), read fresh here rather than relying on the
+  // "the sweep actually covers..." list above (that list is scoped to
+  // NAV_DIR only, by design).
+  const clusterFocusSource = read(path.join(URL_DOMAIN_DIR, 'clusterFocus.ts'));
+  const navigationSource = read(path.join(URL_DOMAIN_DIR, 'navigation.ts'));
+  const journeyHookSource = read(path.join(NAV_DIR, 'useAreasNavigationJourney.ts'));
+  const countsHookSource = read(path.join(HOOKS_DIR, 'useDiscoverNavigationCounts.ts'));
+
+  it('POSITIVE CONTROL — clusterFocus really is a DISTINCT param name from the node-key KEY_PREFIXES vocabulary (`a`/`c`/`d`/`root`), so the negative below is not vacuously true', () => {
+    // clusterFocus.ts declares its own param constant, never one of the
+    // prefixed node-key forms this sweep's KEY_PREFIXES section polices.
+    expect(clusterFocusSource).toMatch(/CLUSTER_FOCUS_PARAM\s*=\s*'clusterFocus'/);
+    expect(['a', 'c', 'd']).not.toContain('clusterFocus');
+  });
+
+  it('clusterFocus is never listed as one of the hierarchy node-key prefixes (KEY_PREFIXES) anywhere in the URL navigation domain', () => {
+    // The KEY_PREFIXES array (declared in the describe block above, over
+    // NAV_DIR only) is the authority for what a `node=` value's prefix may
+    // be; `navigation.ts`'s own NODE_KEY_PREFIXED_SHAPE regex is the second,
+    // load-bearing copy of that same vocabulary (`root|[acd]:`). That regex
+    // line itself may never grow a `clusterFocus` alternative — that would
+    // mean a clusterFocus value could be silently accepted and WRITTEN as
+    // `node=`, exactly the BR1 violation this binding requirement exists to
+    // prevent. (navigation.ts legitimately MENTIONS `clusterFocus` elsewhere
+    // — it imports `clearClusterFocusParam` to DELETE the param on every node
+    // write, BR5 — so the assertion is scoped to the shape-regex line only,
+    // not the whole file.)
+    const shapeRegexLine = navigationSource
+      .split('\n')
+      .find((line) => line.includes('NODE_KEY_PREFIXED_SHAPE ='));
+    expect(shapeRegexLine, 'NODE_KEY_PREFIXED_SHAPE declaration not found').toBeDefined();
+    expect(shapeRegexLine).toMatch(/\^\(\?:root\|\[acd\]:/);
+    expect(shapeRegexLine).not.toMatch(/clusterFocus/);
+  });
+
+  it('NEGATIVE CONTROL — no hierarchy-request builder (the navigation-resolve/counts fetchers) ever reads or emits clusterFocus onto a request URL', () => {
+    // `useAreasNavigationJourney.ts` builds the resolve/counts request from
+    // `requestedNodeKey` (rawNodeParam) ONLY (BR7's own module-doc claim,
+    // clusterFocus.ts:39-44); this proves it textually rather than trusting
+    // the doc comment. `useDiscoverNavigationCounts.ts` is the sibling counts
+    // fetcher already swept above ("the counts hook takes a node key as
+    // INPUT and never derives one") — re-checked here for the SPECIFIC
+    // `clusterFocus` identifier, which that earlier assertion does not name.
+    expect(journeyHookSource).not.toMatch(/clusterFocus/i);
+    expect(countsHookSource).not.toMatch(/clusterFocus/i);
+  });
+
+  it('POSITIVE CONTROL for the negative above — the request-builder sweep target text really is non-empty and really does reference the real request-driving field, so an accidental empty-file/wrong-path read cannot make the negative pass vacuously', () => {
+    expect(journeyHookSource.length).toBeGreaterThan(200);
+    expect(journeyHookSource).toMatch(/requestedNodeKey|rawNodeParam/);
+    expect(countsHookSource.length).toBeGreaterThan(50);
+    expect(countsHookSource).toMatch(/nodeKey: string \| null/);
+  });
+});
+
 function walkTypeScript(dir: string, acc: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir)) {
     const full = path.join(dir, entry);
