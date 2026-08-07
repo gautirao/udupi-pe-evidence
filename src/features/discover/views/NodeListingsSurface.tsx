@@ -71,7 +71,22 @@ export function NodeListingsSurface({
       nav.filters.priceMax,
     ],
   );
-  
+
+  // Issue #2087: Reset to page 0 whenever the result set is narrowed/changed so
+  // we never request an out-of-range page after a filter/intent/search update.
+  const resetKey = [
+    intentListingPurpose,
+    effectiveFilters.propertyTypes?.join(',') ?? '',
+    effectiveFilters.bedrooms?.join(',') ?? '',
+    effectiveFilters.priceMin ?? '',
+    effectiveFilters.priceMax ?? '',
+    debouncedSearch ?? '',
+  ].join('|');
+  useEffect(() => {
+    setPage(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey]);
+
   // Issue #2087: Scope listing retrieval by canonical nodeKey at the server boundary.
   const areaListingsQuery = useDiscoverListings({
     city: nav.city,

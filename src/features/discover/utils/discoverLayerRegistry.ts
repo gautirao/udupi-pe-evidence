@@ -424,11 +424,6 @@ export function selectDiscoverMapLayer(
   if (isTopGroupedAreaOrSchool && input.nodeAreaLeaf && journey === 'area-first') {
     return 'all-areas';
   }
-  // Issue #2087 — bounded local-scope Browse listings CTA. 
-  // Node listings mode (descendant areas fetched) renders 'all-areas' (the raw markers)
-  if (isTopGroupedAreaOrSchool && input.selection.nodeListings && journey === 'area-first') {
-    return 'all-areas';
-  }
   if (isTopGroupedAreaOrSchool) return 'area-group-bubbles';
 
   if (journey == null && (computeDiscoverLayer(input) === 'guided-entry' || computeDiscoverLayer(input) === 'area-groups-landing')) {

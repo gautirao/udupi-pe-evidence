@@ -279,6 +279,25 @@ export function DiscoverAreasJourneyPanel({
   // declared before them in this component).
   const selectedAreaPoint = useMemo(() => deriveAreaPointFromNode(journey.node), [journey.node]);
 
+  // Issue #2087: Bounded eligibility guard at the panel level.
+  // If nodeListings=1 is set in the URL but the resolved node is ineligible
+  // (root node or >15 canonical descendant areas), clear the URL flag instead
+  // of rendering NodeListingsSurface. This prevents URL/deep-link bypass of
+  // the <=15 constraint — the server also enforces this, but the UI should
+  // degrade gracefully rather than showing an error.
+  const nodeIsEligibleForBrowse = (() => {
+    if (!journey.node) return false;
+    if (journey.node.nodeKey === ROOT_NODE_KEY) return false;
+    const count = journey.node.descendantAreaKeys?.length ?? 0;
+    return count > 0 && count <= 15;
+  })();
+
+  useEffect(() => {
+    if (isNodeListingsActive && journey.node && !nodeIsEligibleForBrowse) {
+      onClearNodeListings?.();
+    }
+  }, [isNodeListingsActive, nodeIsEligibleForBrowse, journey.node, onClearNodeListings]);
+
   if (journey.isLoading) {
     return (
       <div className="p-4 space-y-3" data-testid="areas-journey-panel-loading">
@@ -402,7 +421,7 @@ export function DiscoverAreasJourneyPanel({
     );
   }
 
-  if (isNodeListingsActive && journey.node) {
+  if (isNodeListingsActive && journey.node && nodeIsEligibleForBrowse) {
     return (
       <NodeListingsSurface
         node={journey.node}

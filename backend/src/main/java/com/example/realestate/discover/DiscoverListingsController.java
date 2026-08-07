@@ -109,7 +109,19 @@ public class DiscoverListingsController {
             if (!graph.containsNodeKey(nodeKey)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_node_key");
             }
-            effectiveAreaKeys = graph.descendantAreaKeysOf(nodeKey);
+            // Issue #2087: Enforce bounded eligibility at the server boundary.
+            // Root node is never eligible (city-wide browse is excluded by the owner contract).
+            // Nodes with more than 15 canonical descendant Areas are also ineligible —
+            // the CTA guards against this on the frontend, but URL/direct-API bypass
+            // must be rejected here so the bounded scope rule is fail-closed.
+            if ("root".equals(nodeKey)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "node_listings_not_eligible: root node is excluded");
+            }
+            List<String> descendantAreas = graph.descendantAreaKeysOf(nodeKey);
+            if (descendantAreas.size() > 15) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "node_listings_not_eligible: descendant area count exceeds 15");
+            }
+            effectiveAreaKeys = descendantAreas;
         }
         
         if (effectiveAreaKeys != null && effectiveAreaKeys.isEmpty()) {
