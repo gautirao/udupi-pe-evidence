@@ -37,7 +37,7 @@ export function buildNavigationForest(nodes: readonly PreviewNode[]): Navigation
     const wrapped = byKey.get(node.nodeKey);
     if (!wrapped) continue; // unreachable: every node above was just inserted under its own key
 
-    const parent = node.parentNodeKey !== null ? byKey.get(node.parentNodeKey) : undefined;
+    const parent = node.parentNodeKey != null ? byKey.get(node.parentNodeKey) : undefined;
     if (parent) {
       parent.children.push(wrapped);
     } else {

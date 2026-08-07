@@ -19,7 +19,7 @@ const QUERY_KEY_BASE = ['trending-areas'] as const;
 export function useTrendingAreas() {
   const source = useDiscoverSource();
   const { data, isLoading, isError } = useQuery<TrendingAreasResponse>({
-    queryKey: [...QUERY_KEY_BASE],
+    queryKey: [...QUERY_KEY_BASE, source.mode],
     queryFn: () =>
       api.get<TrendingAreasResponse>('/api/public/areas/trending?limit=6', {
         skipAuth: true,

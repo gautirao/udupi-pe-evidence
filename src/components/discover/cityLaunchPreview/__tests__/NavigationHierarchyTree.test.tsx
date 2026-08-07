@@ -200,4 +200,35 @@ describe('NavigationHierarchyTree', () => {
       expect(screen.queryByText(/failed to load the hierarchy tree/i)).not.toBeInTheDocument();
     });
   });
+
+  describe('Omitted/null data shape', () => {
+    const NULLISH_TREE = {
+      revisionId: 42,
+      validationStatus: 'VALID',
+      validationErrors: [],
+      nodes: [
+        {
+          nodeKey: 'c:missing',
+          nodeType: 'CLUSTER' as const,
+          displayLabel: 'Missing Fields Node',
+          depth: 0,
+          displayOrder: 0,
+          descendantAreaCount: 0,
+          // Intentionally omitting optional fields
+        },
+      ],
+    };
+
+    it('renders dashes safely when fields are omitted or null', () => {
+      // Prove the loose schema allows it
+      expect(() => navigationTreeResponseSchema.parse(NULLISH_TREE)).not.toThrow();
+
+      mockUseNavigationTree.mockReturnValue({ isLoading: false, isError: false, data: NULLISH_TREE, refetch: vi.fn() });
+      render(<NavigationHierarchyTree />);
+      
+      expect(screen.getByTestId('nav-node-c:missing')).toBeInTheDocument();
+      // The bounds cell should default to an en-dash
+      expect(screen.getByTestId('nav-node-bounds-c:missing')).toHaveTextContent('—');
+    });
+  });
 });

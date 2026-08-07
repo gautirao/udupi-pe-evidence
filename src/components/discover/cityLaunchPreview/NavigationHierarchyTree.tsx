@@ -9,11 +9,17 @@ import { buildNavigationForest, flattenNavigationForest } from '@/features/disco
 import type { NavigationBounds } from '@/lib/schemas/navigationHierarchy';
 
 /** `min, max` lat/lon rounded for a compact table cell; the full precision centre is left in the tooltip title. */
-function formatBoundsCell(bounds: NavigationBounds): string {
+function formatBoundsCell(bounds: NavigationBounds | null | undefined): string {
+  if (!bounds || bounds.minLat == null || bounds.minLon == null || bounds.maxLat == null || bounds.maxLon == null) {
+    return '—';
+  }
   return `${bounds.minLat.toFixed(3)}, ${bounds.minLon.toFixed(3)} — ${bounds.maxLat.toFixed(3)}, ${bounds.maxLon.toFixed(3)}`;
 }
 
-function formatBoundsTitle(bounds: NavigationBounds): string {
+function formatBoundsTitle(bounds: NavigationBounds | null | undefined): string {
+  if (!bounds || bounds.centreLat == null || bounds.centreLon == null) {
+    return '';
+  }
   return `centre ${bounds.centreLat}, ${bounds.centreLon}`;
 }
 
@@ -121,9 +127,9 @@ export function NavigationHierarchyTree() {
               </TableCell>
               <TableCell
                 className="max-w-[220px] truncate"
-                title={node.representativeAreaKeys.join(', ')}
+                title={node.representativeAreaKeys?.join(', ') ?? ''}
               >
-                {node.representativeAreaKeys.length > 0 ? node.representativeAreaKeys.join(', ') : '—'}
+                {node.representativeAreaKeys && node.representativeAreaKeys.length > 0 ? node.representativeAreaKeys.join(', ') : '—'}
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {node.nodeType === 'AREA' && node.areaKey !== null && listingCountByAreaKey.has(node.areaKey)

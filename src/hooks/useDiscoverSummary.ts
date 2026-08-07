@@ -78,6 +78,7 @@ export function useDiscoverSummary({
   return useQuery<DiscoverSummaryResponse>({
     queryKey: [
       'discover-summary',
+      source.mode,
       city,
       trimmedPropertyType ?? null,
       groupBy ?? 'area_group',
