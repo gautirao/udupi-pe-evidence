@@ -167,7 +167,16 @@ export function useDiscoverCityListings({
         const path = discoverPath(source, '', { kind: 'listings' });
         return api.get<DiscoverCityListingsResponse>(`${path}?${previewParams.toString()}`, {
           skipAuth: false,
-        });
+        }).then(response => ({
+          ...response,
+          areas: response.areas.map(area => ({
+            ...area,
+            listings: area.listings.map(listing => ({
+              ...listing,
+              id: listing.id ?? `preview:${source.revisionId}:${area.areaKey}`,
+            })),
+          })),
+        }));
       }
 
       const params = new URLSearchParams();

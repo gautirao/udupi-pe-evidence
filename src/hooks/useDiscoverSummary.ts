@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useDiscoverSource } from '@/features/discover/state/DiscoverDataSourceContext';
 
 export type DiscoverSummaryGroupBy = 'area_group' | 'corridor';
 
@@ -72,6 +73,7 @@ export function useDiscoverSummary({
   const trimmedPropertyType = propertyType?.trim();
   const trimmedListingPurpose = listingPurpose?.trim();
   const effectiveHotspotLimit = clampHotspotLimit(hotspotLimit);
+  const source = useDiscoverSource();
 
   return useQuery<DiscoverSummaryResponse>({
     queryKey: [
@@ -100,7 +102,7 @@ export function useDiscoverSummary({
         skipAuth: true,
       });
     },
-    enabled: city.trim().length > 0,
+    enabled: city.trim().length > 0 && source.mode !== 'preview',
     staleTime: 300_000,
   });
 }
