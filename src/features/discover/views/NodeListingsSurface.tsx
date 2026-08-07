@@ -8,7 +8,7 @@ import { useDiscoverListings } from '@/hooks/useDiscoverListings';
 import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { NavigationNodeResponse, ROOT_NODE_KEY } from '@/features/discover/navigation/types';
 import { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
-import { SelectedListingPreview } from '@/features/discover/components/PropertyPointHoverCard';
+import { type SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import { toSelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import { AreaSelectedPanel } from '@/components/discover/panels/AreaSelectedPanel';
 import { CITY_CONFIG } from '@/lib/localityUtils';
