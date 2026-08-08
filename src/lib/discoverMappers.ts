@@ -105,7 +105,7 @@ export function discoverListingToPropertyListing(
     monthly_rent: null,
     security_deposit_months: null,
     lock_in_months: null,
-    seller_type: l.sellerType ?? null,
+    seller_type: (l.sellerType as any) ?? null,
     raw_post_id: null,
     // Issue #1954 — carry the public trustBadge word through. DiscoverListingItem
     // already exposes it (verified/trusted/listed/null); it was previously dropped

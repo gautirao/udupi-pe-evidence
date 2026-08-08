@@ -563,6 +563,7 @@ export const PANEL_DERIVATION_FIELDS = [
   'groupId',
   'schoolPicking',
   'groupResults',
+  'nodeListings',
   'selectedGroup',
   'selectedRegion',
   'selectedMaxKm',
