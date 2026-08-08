@@ -12,6 +12,7 @@ import { type SelectedListingPreview } from '@/features/discover/navigation/sele
 import { toSelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import { AreaSelectedPanel } from '@/components/discover/panels/AreaSelectedPanel';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { discoverListingToCityListing } from '@/lib/discoverMappers';
 
 export interface NodeListingsSurfaceProps {
   node: NavigationNodeResponse;
@@ -100,9 +101,10 @@ export function NodeListingsSurface({
 
   const areaListingsForPanel = useMemo(() => {
     const listings = areaListingsQuery.data?.content ?? [];
+    const mapped = listings.map((l) => discoverListingToCityListing(l as any));
     return isAuthenticated
-      ? listings
-      : listings.map((l) => ({ ...l, pricePaise: undefined, monthlyRentRupees: undefined }));
+      ? mapped
+      : mapped.map((l) => ({ ...l, pricePaise: undefined, monthlyRentRupees: undefined }));
   }, [areaListingsQuery.data, isAuthenticated]);
 
   const regionAncestor = node.ancestry[0] ?? null;

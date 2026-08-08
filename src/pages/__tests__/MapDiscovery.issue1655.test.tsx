@@ -143,6 +143,15 @@ vi.mock('@/hooks/useSchoolsByArea', () => ({
   })),
 }));
 
+vi.mock('@/features/discover/navigation/useAreasNavigationJourney', () => ({
+  useAreasNavigationJourney: vi.fn(() => ({
+    node: { nodeKey: 'IN|KA|Udupi|Manipal', displayLabel: 'Manipal', bounds: null, children: [], ancestry: [] },
+    children: [],
+    historyAdjacencyLog: { previousParent: null, nextChild: null },
+    selectNode: vi.fn(),
+  })),
+}));
+
 vi.mock('@/hooks/useAreaGroups', () => ({
   useAreaGroups: (...args: unknown[]) => mockUseAreaGroups(...args),
 }));
@@ -191,6 +200,7 @@ function makeDefaultActions() {
     setMaxKm: vi.fn(), clearRegionAndMaxKm: vi.fn(), setSelectedListing: vi.fn(),
     clearSelectedListing: vi.fn(), enterSchoolPicking: vi.fn(), clearSchoolPicking: vi.fn(),
     backToSchoolPicking: vi.fn(), clearSchoolSelection: vi.fn(), clearAreaSelection: vi.fn(),
+    selectNode: vi.fn(), clearNodeListings: vi.fn(), setNodeListings: vi.fn(), setGroupResults: vi.fn(),
   };
 }
 
@@ -470,10 +480,21 @@ describe('Issue #1655 — top-grouped levels avoid individual listing/marker fet
         expect.objectContaining({ enabled: true })
       );
     });
-    // Check that we render the regular area markers (like a normal area leaf) at overview zoom
-    const lastAreas = capturedAreas[capturedAreas.length - 1] as Array<{ areaKey: string }>;
-    expect(lastAreas.length).toBeGreaterThan(0);
-    expect(lastAreas.some(a => a.areaKey === 'IN|KA|Udupi|Manipal')).toBe(true);
+    // Check that we don't render group bubbles when viewing a node's bounded listings
+    expect(capturedAreas[capturedAreas.length - 1]).toEqual([]);
+    
+    // Check that markers are enabled and scoped to the nodeKey
+    expect(mockUseDiscoverFilteredMarkers).toHaveBeenCalledWith(
+      expect.any(String), // city
+      expect.any(Object), // filters
+      true, // markersEnabled
+      null, // bbox
+      undefined, // q
+      'sale', // listingPurpose
+      expect.any(String), // excludePropertyType
+      undefined, // groupAreaKeys
+      'IN|KA|Udupi|Manipal' // nodeKey
+    );
   });
 });
 

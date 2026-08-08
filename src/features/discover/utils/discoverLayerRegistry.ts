@@ -388,7 +388,9 @@ export function selectDiscoverMapLayer(
   // decide whether raw listing markers should stay suppressed even if the user
   // manually zooms in on a grouped/landing state) should pass `zoomBucket: 'overview'`
   // explicitly rather than relying on this function to ignore it.
-  if (zoomBucket === 'detail') return 'zoom-gated';
+  // Issue #2087 — bounded listings bypass the zoom threshold and always show
+  // property markers, so they inherently use the zoom-gated layer.
+  if (zoomBucket === 'detail' || input.selection.nodeListings) return 'zoom-gated';
 
   const { journey, selection, scope } = input;
 
