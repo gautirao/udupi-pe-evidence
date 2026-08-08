@@ -925,7 +925,8 @@ export default function MapDiscovery() {
       // does. See effectiveSelectedArea's declaration above.
       !effectiveSelectedArea &&
       !nav.schoolId &&
-      !selectedSchool
+      !selectedSchool &&
+      !nav.nodeListings
     ) return true;
     if (
       nav.journey === 'agri-first' &&
@@ -998,6 +999,7 @@ export default function MapDiscovery() {
     // Issue #1806 (FIX-1) — see groupAreaKeysForMapData above for the full
     // journey/state → value mapping.
     groupAreaKeys: groupAreaKeysForMapData,
+    nodeKey: nav.nodeListings && areasNavigationJourney.node ? areasNavigationJourney.node.nodeKey : undefined,
     // Issue #1118: do NOT include !!nav.schoolId here. The /api/discover/markers
     // endpoint is auth-gated (returns 401 for anonymous users). Enabling the query for
     // unauthenticated school-first users caused a delayed marker disappearance: placeholderData
@@ -1029,13 +1031,14 @@ export default function MapDiscovery() {
           filters.schoolLat != null &&
           filters.schoolLon != null &&
           boundedSearchTriggered)) &&
-      // Issue #1882 (Track A PR2 Slice S1/S3) — consumes the shared
       // zoomPolicy.shouldShowMarkers gate (same threshold as before:
       // zoom > AREA_LAYER_MAX_ZOOM). This live gate is the tested equivalent
       // of deriveScopeAwareMarkersEnabled (useDiscoverMapData.ts), which
       // covers the scope.kind==='group'||'area' && shouldShowMarkers(zoom)
       // contract in isolation (scopeAwareMarkers.test.tsx).
-      shouldShowMarkers(mapZoom),
+      // Issue #2087 — bounded listings bypass the zoom threshold and always
+      // show property markers to replace the area navigation bubbles.
+      (nav.nodeListings || shouldShowMarkers(mapZoom)),
     // Issue #1655 — suppress the paginated listings fetch at grouped overview level.
     // At top-grouped states the right panel shows groups/zones, not individual listings,
     // so there is no consumer for this data. Drilling down into a group/area/school

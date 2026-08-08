@@ -67,6 +67,8 @@ export function useDiscoverFilteredMarkers(
    * When undefined, no area filter is applied (preserves existing call-site behaviour).
    */
   areaKeys?: string[],
+  /** Optional node key to scope the markers to a canonical discovery node. */
+  nodeKey?: string,
 ) {
   // Issue #1911 PR3 — see useDiscoverRegionSummary.ts for the default-context
   // ({mode:'live'}) byte-identical-live-behaviour rationale.
@@ -86,7 +88,7 @@ export function useDiscoverFilteredMarkers(
   return useQuery<DiscoverFilteredMarkersResponse>({
     queryKey: discoverKey(
       source,
-      'discover-filtered-markers', city, filters, snapped, trimmedQ, listingPurpose ?? null, excludePropertyType ?? null, sortedAreaKeys,
+      'discover-filtered-markers', city, filters, snapped, trimmedQ, listingPurpose ?? null, excludePropertyType ?? null, sortedAreaKeys, nodeKey ?? null,
     ),
     queryFn: ({ signal }) => {
       const params = buildDiscoverSearchParams({
@@ -97,6 +99,7 @@ export function useDiscoverFilteredMarkers(
         trimmedQ,
         listingPurpose,
         excludePropertyType,
+        nodeKey,
       });
 
       const livePath = `/api/discover/markers?${params.toString()}`;

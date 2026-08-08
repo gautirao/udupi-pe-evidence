@@ -50,10 +50,10 @@ import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type { DiscoverUrlActions, DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { clearClusterFocusParam } from './clusterFocus';
 
-type NavigationState = Pick<DiscoverUrlState, 'node' | 'rawNodeParam'>;
+type NavigationState = Pick<DiscoverUrlState, 'node' | 'rawNodeParam' | 'nodeListings'>;
 type NavigationActions = Pick<
   DiscoverUrlActions,
-  'goToNode' | 'goToAncestorNode' | 'clearNode' | 'enterAreasJourney' | 'buildNodeHref'
+  'goToNode' | 'goToAncestorNode' | 'clearNode' | 'enterAreasJourney' | 'buildNodeHref' | 'enterNodeListings' | 'clearNodeListings'
 >;
 
 /**
@@ -281,6 +281,7 @@ function applyNodeDelta(currentParams: URLSearchParams, nextNodeKey: string | nu
   next.delete('lon');
   next.delete('zoom');
   next.delete('listing');
+  next.delete('nodeListings');
   clearClusterFocusParam(next);
   return next;
 }
@@ -314,6 +315,7 @@ export function useNavigationUrlDomain(
 
   const node = readNodeParam(urlParams);
   const rawNodeParam = readRawTrimmedNodeParam(urlParams);
+  const nodeListings = urlParams.get('nodeListings') === '1' ? true : undefined;
 
   /**
    * The shared write path for goToNode / goToAncestorNode / clearNode.
@@ -413,8 +415,30 @@ export function useNavigationUrlDomain(
     [urlParams],
   );
 
+  const enterNodeListings = useCallback(() => {
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('nodeListings', '1');
+        return next;
+      },
+      { replace: false }, // PUSH
+    );
+  }, [setUrlParams]);
+
+  const clearNodeListings = useCallback(() => {
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('nodeListings');
+        return next;
+      },
+      { replace: true }, // REPLACE
+    );
+  }, [setUrlParams]);
+
   return {
-    state: { node, rawNodeParam },
-    actions: { goToNode, goToAncestorNode, clearNode, enterAreasJourney, buildNodeHref },
+    state: { node, rawNodeParam, nodeListings },
+    actions: { goToNode, goToAncestorNode, clearNode, enterAreasJourney, buildNodeHref, enterNodeListings, clearNodeListings },
   };
 }

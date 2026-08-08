@@ -59,6 +59,9 @@ class DiscoverListingsControllerTest {
     @MockitoBean
     private UserRoleService userRoleService;
 
+    @MockitoBean
+    private com.example.realestate.discover.navigation.NavigationGraphCache navigationGraphCache;
+
     @BeforeEach
     void setUp() {
         reset(service, userRoleService);
@@ -246,5 +249,108 @@ class DiscoverListingsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", containsString("no-store")))
                 .andExpect(header().string("Cache-Control", not(containsString("public"))));
+    }
+
+    // ── 12. Valid nodeKey → resolves descendants and passes to service ───────
+
+    @Test
+    void validNodeKey_resolvesDescendants_andPassesToService() throws Exception {
+        com.example.realestate.discover.navigation.NavigationGraph graph = mock(com.example.realestate.discover.navigation.NavigationGraph.class);
+        when(navigationGraphCache.getActiveGraph("udupi")).thenReturn(java.util.Optional.of(graph));
+        when(graph.containsNodeKey("d:n")).thenReturn(true);
+        when(graph.descendantAreaKeysOf("d:n")).thenReturn(List.of("a:alpha", "a:bravo"));
+        
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("nodeKey", "d:n")
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getListings(argThat(q ->
+                q.areaKeys() != null && q.areaKeys().containsAll(List.of("a:alpha", "a:bravo")) && q.areaKeys().size() == 2
+        ));
+    }
+
+    // ── 13. Invalid nodeKey → 400 ────────────────────────────────────────────
+
+    @Test
+    void invalidNodeKey_returns400() throws Exception {
+        com.example.realestate.discover.navigation.NavigationGraph graph = mock(com.example.realestate.discover.navigation.NavigationGraph.class);
+        when(navigationGraphCache.getActiveGraph("udupi")).thenReturn(java.util.Optional.of(graph));
+        when(graph.containsNodeKey("invalid:key")).thenReturn(false);
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("nodeKey", "invalid:key")
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 14. Root nodeKey → 400 (never eligible per owner contract) ───────────
+
+    @Test
+    void rootNodeKey_returns400_neverEligible() throws Exception {
+        com.example.realestate.discover.navigation.NavigationGraph graph = mock(com.example.realestate.discover.navigation.NavigationGraph.class);
+        when(navigationGraphCache.getActiveGraph("udupi")).thenReturn(java.util.Optional.of(graph));
+        when(graph.containsNodeKey("root")).thenReturn(true);
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("nodeKey", "root")
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.containsString("root node is excluded")));
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 15. nodeKey with >15 descendant areas → 400 ──────────────────────────
+
+    @Test
+    void nodeKeyWithMoreThan15DescendantAreas_returns400() throws Exception {
+        com.example.realestate.discover.navigation.NavigationGraph graph = mock(com.example.realestate.discover.navigation.NavigationGraph.class);
+        when(navigationGraphCache.getActiveGraph("udupi")).thenReturn(java.util.Optional.of(graph));
+        when(graph.containsNodeKey("d:broad")).thenReturn(true);
+        // 16 descendant areas exceeds the <=15 contract
+        when(graph.descendantAreaKeysOf("d:broad")).thenReturn(
+                List.of("a1","a2","a3","a4","a5","a6","a7","a8","a9","a10","a11","a12","a13","a14","a15","a16"));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("nodeKey", "d:broad")
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.containsString("descendant area count exceeds 15")));
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 16. nodeKey with exactly 15 descendant areas → 200 (inclusive boundary)
+
+    @Test
+    void nodeKeyWithExactly15DescendantAreas_returns200() throws Exception {
+        com.example.realestate.discover.navigation.NavigationGraph graph = mock(com.example.realestate.discover.navigation.NavigationGraph.class);
+        when(navigationGraphCache.getActiveGraph("udupi")).thenReturn(java.util.Optional.of(graph));
+        when(graph.containsNodeKey("c:fifteen")).thenReturn(true);
+        when(graph.descendantAreaKeysOf("c:fifteen")).thenReturn(
+                List.of("a1","a2","a3","a4","a5","a6","a7","a8","a9","a10","a11","a12","a13","a14","a15"));
+
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("nodeKey", "c:fifteen")
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getListings(argThat(q ->
+                q.areaKeys() != null && q.areaKeys().size() == 15
+        ));
     }
 }

@@ -16,8 +16,8 @@
  * Clear selected areas / Add nearby areas / Draw search area / Search this
  * area / Create alert); those belong to #2016/#2017/#2019.
  */
-import { useEffect, useMemo } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { NavigationLevelPanel } from '@/components/discover/navigation/NavigationLevelPanel';
@@ -33,8 +33,10 @@ import type { NavigationNodeResponse } from '@/features/discover/navigation/type
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverActions, useDiscoverNav } from '@/features/discover/context/useDiscoverContext';
 import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
+import { useDiscoverListings } from '@/hooks/useDiscoverListings';
 import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSearchState';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { NodeListingsSurface } from './NodeListingsSurface';
 import { AreaSelectedPanel } from '@/components/discover/panels/AreaSelectedPanel';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import { toSelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
@@ -215,6 +217,9 @@ export interface DiscoverAreasJourneyPanelProps {
    * literal city root keeps compiling and rendering unchanged.
    */
   cityLabel?: string;
+  isNodeListingsActive?: boolean;
+  onClearNodeListings?: () => void;
+  onBrowseListings?: () => void;
 }
 
 export function DiscoverAreasJourneyPanel({
@@ -231,6 +236,9 @@ export function DiscoverAreasJourneyPanel({
   onAddSchool,
   onSelectedListingPreviewChange,
   cityLabel,
+  isNodeListingsActive,
+  onClearNodeListings,
+  onBrowseListings,
 }: DiscoverAreasJourneyPanelProps) {
   // Issue #1956 PR 3 (bounded state-lift, AC4.12) — derive the focused
   // cluster's member list + count copy from the SAME `journey.node.children`
@@ -270,6 +278,25 @@ export function DiscoverAreasJourneyPanel({
   // hook above the early returns is fine (matches the PR-3 hooks already
   // declared before them in this component).
   const selectedAreaPoint = useMemo(() => deriveAreaPointFromNode(journey.node), [journey.node]);
+
+  // Issue #2087: Bounded eligibility guard at the panel level.
+  // If nodeListings=1 is set in the URL but the resolved node is ineligible
+  // (root node or >15 canonical descendant areas), clear the URL flag instead
+  // of rendering NodeListingsSurface. This prevents URL/deep-link bypass of
+  // the <=15 constraint — the server also enforces this, but the UI should
+  // degrade gracefully rather than showing an error.
+  const nodeIsEligibleForBrowse = (() => {
+    if (!journey.node) return false;
+    if (journey.node.nodeKey === ROOT_NODE_KEY) return false;
+    const count = journey.node.descendantAreaKeys?.length ?? 0;
+    return count > 0 && count <= 15;
+  })();
+
+  useEffect(() => {
+    if (isNodeListingsActive && journey.node && !nodeIsEligibleForBrowse) {
+      onClearNodeListings?.();
+    }
+  }, [isNodeListingsActive, nodeIsEligibleForBrowse, journey.node, onClearNodeListings]);
 
   if (journey.isLoading) {
     return (
@@ -394,6 +421,22 @@ export function DiscoverAreasJourneyPanel({
     );
   }
 
+  if (isNodeListingsActive && journey.node && nodeIsEligibleForBrowse) {
+    return (
+      <NodeListingsSurface
+        node={journey.node}
+        buildNodeHref={buildNodeHref}
+        historyAdjacencyLog={journey.historyAdjacencyLog}
+        committedFilters={areaLeafFilters}
+        onCommittedFiltersChange={onAreaLeafFiltersChange}
+        onAddSchool={onAddSchool}
+        selectNode={journey.selectNode}
+        onSelectedListingPreviewChange={onSelectedListingPreviewChange}
+        onClearNodeListings={onClearNodeListings}
+      />
+    );
+  }
+
   // Issue #1956 PR-4 — has-listings branch, ADDITIVE and inserted BEFORE the
   // structural empty branch below (render order: has-children/focusedCluster
   // [unchanged, above] -> has-listings [this] -> empty [unchanged, below]).
@@ -447,6 +490,7 @@ export function DiscoverAreasJourneyPanel({
           hoveredNodeKey={hoveredNodeKey}
           onHoverChange={onHoverChange}
           cityLabel={cityLabel}
+          onBrowseListings={onBrowseListings}
         />
       </div>
     );
@@ -467,6 +511,7 @@ export function DiscoverAreasJourneyPanel({
         hoveredNodeKey={hoveredNodeKey}
         onHoverChange={onHoverChange}
         cityLabel={cityLabel}
+        onBrowseListings={onBrowseListings}
       />
     </div>
   );

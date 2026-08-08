@@ -109,6 +109,7 @@ export interface DiscoverLayerSelection {
   groupId: string | null;
   schoolPicking?: boolean;
   groupResults?: boolean;
+  nodeListings?: boolean;
   /** @deprecated legacy selectedGroup — mirrors DiscoverUrlState.selectedGroup */
   selectedGroup: DiscoverUrlState['selectedGroup'];
   selectedRegion?: DiscoverUrlState['selectedRegion'];
@@ -156,6 +157,7 @@ export function toLayerInput(urlState: DiscoverUrlState): DiscoverLayerInput {
       groupId: urlState.groupId,
       schoolPicking: urlState.schoolPicking,
       groupResults: urlState.groupResults,
+      nodeListings: urlState.nodeListings,
       selectedGroup: urlState.selectedGroup,
       selectedRegion: urlState.selectedRegion,
       selectedMaxKm: urlState.selectedMaxKm,
@@ -182,6 +184,7 @@ export const LAYER_PARAM = {
   groupId: 'groupId',
   schoolPicking: 'schoolPicking',
   groupResults: 'groupResults',
+  nodeListings: 'nodeListings',
   selectedGroup: 'group',
   selectedRegion: 'region',
   selectedMaxKm: 'maxKm',
@@ -229,6 +232,7 @@ export function paramsToLayerInput(params: URLSearchParams): DiscoverLayerInput 
       groupId: params.get(LAYER_PARAM.groupId),
       schoolPicking: params.get(LAYER_PARAM.schoolPicking) === '1' ? true : undefined,
       groupResults: params.get(LAYER_PARAM.groupResults) === '1' ? true : undefined,
+      nodeListings: params.get(LAYER_PARAM.nodeListings) === '1' ? true : undefined,
       selectedGroup,
       // Cast: raw string, not validated against VALID_DIRECTIONS (see
       // docstring above) — safe for the same null-vs-non-null reason.
@@ -309,6 +313,7 @@ export function computeDiscoverLayer(input: DiscoverLayerInput): DiscoverLayer {
     groupId: input.selection.groupId,
     schoolPicking: input.selection.schoolPicking,
     groupResults: input.selection.groupResults,
+    nodeListings: input.selection.nodeListings,
     selectedGroup: input.selection.selectedGroup,
     selectedRegion: input.selection.selectedRegion,
     selectedMaxKm: input.selection.selectedMaxKm,
@@ -383,7 +388,9 @@ export function selectDiscoverMapLayer(
   // decide whether raw listing markers should stay suppressed even if the user
   // manually zooms in on a grouped/landing state) should pass `zoomBucket: 'overview'`
   // explicitly rather than relying on this function to ignore it.
-  if (zoomBucket === 'detail') return 'zoom-gated';
+  // Issue #2087 — bounded listings bypass the zoom threshold and always show
+  // property markers, so they inherently use the zoom-gated layer.
+  if (zoomBucket === 'detail' || input.selection.nodeListings) return 'zoom-gated';
 
   const { journey, selection, scope } = input;
 
@@ -407,7 +414,8 @@ export function selectDiscoverMapLayer(
     (journey === 'area-first' || journey === 'school-first') &&
     !selection.groupId &&
     !selection.areaKey &&
-    !selection.schoolId;
+    !selection.schoolId &&
+    !selection.nodeListings;
   // Issue #1956 PR-4 — a resolved canonical AREA leaf (the `node=` journey)
   // must NOT collapse to the grouped-overview bubble category just because
   // the legacy `areaKey` URL param is absent (the node journey never writes
@@ -555,6 +563,7 @@ export const PANEL_DERIVATION_FIELDS = [
   'groupId',
   'schoolPicking',
   'groupResults',
+  'nodeListings',
   'selectedGroup',
   'selectedRegion',
   'selectedMaxKm',

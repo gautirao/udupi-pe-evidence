@@ -316,6 +316,10 @@ export interface UseDiscoverMapDataParams {
    * (#1261), not group-scoped.
    */
   groupAreaKeys?: string[];
+  /**
+   * Bounded listings nodeKey. When provided, the map's marker fetch is scoped to this canonical node.
+   */
+  nodeKey?: string;
 }
 
 export interface UseDiscoverMapDataResult {
@@ -465,6 +469,7 @@ export function useDiscoverMapData({
   journey,
   listingPurpose,
   groupAreaKeys,
+  nodeKey,
 }: UseDiscoverMapDataParams): UseDiscoverMapDataResult {
   const isCityValid = city in CITY_CONFIG;
 
@@ -521,6 +526,8 @@ export function useDiscoverMapData({
     // resolved (disables the fetch via the hook's empty-areaKeys guard, never
     // an unscoped flash). [k1, k2..] = scoped to the group's member areas.
     groupAreaKeys,
+    // Issue #2087 — bounded listings canonical node scope.
+    nodeKey,
   );
 
   // ── Static data ───────────────────────────────────────────────────────────

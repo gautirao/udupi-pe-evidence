@@ -114,6 +114,16 @@ describe('NavigationChildCard', () => {
     expect(screen.queryByText('No listings yet')).not.toBeInTheDocument();
   });
 
+  it('renders a singular "1 listing" string when listingCount is 1', () => {
+    render(
+      <NavigationChildCard
+        child={makeChild({ listingCount: 1, matchingAreaCount: 1 })}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('1 listing')).toBeInTheDocument();
+  });
+
   it('an AREA leaf child shows its own listing count and no structural count line', () => {
     render(
       <NavigationChildCard

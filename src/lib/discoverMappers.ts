@@ -105,7 +105,7 @@ export function discoverListingToPropertyListing(
     monthly_rent: null,
     security_deposit_months: null,
     lock_in_months: null,
-    seller_type: l.sellerType ?? null,
+    seller_type: (l.sellerType as any) ?? null,
     raw_post_id: null,
     // Issue #1954 — carry the public trustBadge word through. DiscoverListingItem
     // already exposes it (verified/trusted/listed/null); it was previously dropped
@@ -179,4 +179,17 @@ export function cityListingToPropertyListing(
     // can display the listing image. Mirrors discoverListingToPropertyListing (~L163).
     images: l.primaryImageUrl ? [{ url: l.primaryImageUrl }] : undefined,
   };
+}
+
+/**
+ * Maps a DiscoverListingItem to a DiscoverCityListingItem so it can be rendered by AreaSelectedPanel's PropertyCard.
+ * Addresses the heroImageUrl -> primaryImageUrl discrepancy.
+ */
+export function discoverListingToCityListing(l: DiscoverListingItem): DiscoverCityListingItem {
+  return {
+    ...l,
+    primaryImageUrl: l.heroImageUrl,
+    lat: l.latitude ?? 0,
+    lon: l.longitude ?? 0,
+  } as DiscoverCityListingItem;
 }

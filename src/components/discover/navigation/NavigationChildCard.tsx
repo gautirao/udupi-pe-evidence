@@ -126,60 +126,60 @@ export function NavigationChildCard({
       onFocus={() => onHoverChange?.(child.nodeKey)}
       onBlur={() => onHoverChange?.(null)}
       className={cn(
-        // Issue #2108 (follow-up) — reskinned to the approved mock's
-        // `directional-card`/`EPDestRow` row grammar (VISUAL_RULES.md §
-        // Panel navigation row): icon tile · [name + right-aligned listing
-        // stat, then areas-with-matches caption below] · chevron, whole row
-        // clickable.
-        'flex w-full items-center gap-3 rounded-lg border bg-card px-3 py-3 text-left shadow-sm transition-colors',
-        'hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+        'flex w-full items-center gap-3 rounded-xl border bg-card px-3.5 py-2.5 text-left shadow-sm transition-all',
+        'hover:-translate-y-[1px] hover:shadow-md hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
         isSelected && 'border-primary ring-1 ring-primary',
         isHighlighted && !isSelected && 'border-primary/40 bg-primary/5',
       )}
     >
       <span
         className={cn(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-secondary text-primary transition-colors',
-          isSelected && 'bg-primary text-primary-foreground',
+          'flex shrink-0 items-center justify-center text-primary transition-colors',
+          child.isLeafArea 
+            ? 'h-8 w-8 rounded-full bg-primary/10' 
+            : 'h-9 w-9 rounded-md bg-secondary',
+          isSelected && 'bg-primary text-primary-foreground'
         )}
         aria-hidden="true"
       >
-        <MapPin className="h-4 w-4" />
+        <MapPin className={child.isLeafArea ? "h-4 w-4" : "h-5 w-5"} />
       </span>
-      <div className="min-w-0 flex-1">
-        {/* Issue #2108 follow-up — name (left) and the listing-count stat
-            (right) share the top line, matching the approved mock's
-            `directional-card`/`EPDestRow` row grammar; the areas-with-
-            matches caption moves to its own line below (unchanged content,
-            only its DOM slot moved — see file header for the locked count
-            semantics this must not disturb). */}
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-sm font-semibold text-foreground">{primaryLabel}</span>
-          {listingsLabel != null && (
-            <span
-              data-testid={`navigation-child-card-listings-${child.nodeKey}`}
-              className="shrink-0 whitespace-nowrap text-sm font-bold text-foreground"
-            >
-              {listingsLabel}
-            </span>
-          )}
+      
+      {child.isLeafArea ? (
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+          <span className="truncate text-[14.5px] font-bold text-foreground">{primaryLabel}</span>
+          <span className="shrink-0 font-mono text-[12.5px] text-muted-foreground whitespace-nowrap">
+            {listingsLabel != null ? listingsLabel : '0 listings'}
+            {child.schoolCount != null && child.schoolCount > 0 ? ` · ${child.schoolCount} schools` : ''}
+          </span>
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-          {areasLabel != null && (
-            <span data-testid={`navigation-child-card-count-${child.nodeKey}`}>{areasLabel}</span>
-          )}
-          {/* Issue #2108 follow-up — the approved mock's row has no distinct
-              school-count slot; `schoolCount` (when present) stays in this
-              same secondary caption line rather than the new stat block,
-              since the stat block is reserved for the listing count. */}
-          {child.schoolCount != null && child.schoolCount > 0 && (
-            <span className="inline-flex items-center gap-1">
-              <School className="h-3 w-3" aria-hidden="true" />
-              {child.schoolCount} schools
-            </span>
-          )}
+      ) : (
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-[15.5px] font-bold tracking-tight text-foreground">{primaryLabel}</span>
+            {listingsLabel != null && (
+              <span
+                data-testid={`navigation-child-card-listings-${child.nodeKey}`}
+                className="shrink-0 font-mono text-base font-bold text-foreground whitespace-nowrap"
+              >
+                {listingsLabel}
+              </span>
+            )}
+          </div>
+          <div className="mt-[3px] flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+            {areasLabel != null && (
+              <span data-testid={`navigation-child-card-count-${child.nodeKey}`}>{areasLabel}</span>
+            )}
+            {child.schoolCount != null && child.schoolCount > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <School className="h-3 w-3" aria-hidden="true" />
+                {child.schoolCount} schools
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+      
       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
     </button>
   );

@@ -46,10 +46,13 @@ vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+let capturedShowAreasNavigationDestinations: boolean[] = [];
+
 vi.mock('@/components/map/PropertyMap', () => ({
-  PropertyMap: vi.fn((props: { listings?: unknown[]; areas?: unknown[] }) => {
+  PropertyMap: vi.fn((props: { listings?: unknown[]; areas?: unknown[]; showAreasNavigationDestinations?: boolean }) => {
     capturedListings.push(props.listings ?? []);
     capturedAreas.push(props.areas ?? []);
+    capturedShowAreasNavigationDestinations.push(props.showAreasNavigationDestinations ?? false);
     return <div data-testid="mock-property-map" />;
   }),
   PropertyListingWithImages: vi.fn(),
@@ -143,6 +146,15 @@ vi.mock('@/hooks/useSchoolsByArea', () => ({
   })),
 }));
 
+vi.mock('@/features/discover/navigation/useAreasNavigationJourney', () => ({
+  useAreasNavigationJourney: vi.fn(() => ({
+    node: { nodeKey: 'IN|KA|Udupi|Manipal', displayLabel: 'Manipal', bounds: null, children: [], ancestry: [] },
+    children: [],
+    historyAdjacencyLog: { previousParent: null, nextChild: null },
+    selectNode: vi.fn(),
+  })),
+}));
+
 vi.mock('@/hooks/useAreaGroups', () => ({
   useAreaGroups: (...args: unknown[]) => mockUseAreaGroups(...args),
 }));
@@ -191,6 +203,7 @@ function makeDefaultActions() {
     setMaxKm: vi.fn(), clearRegionAndMaxKm: vi.fn(), setSelectedListing: vi.fn(),
     clearSelectedListing: vi.fn(), enterSchoolPicking: vi.fn(), clearSchoolPicking: vi.fn(),
     backToSchoolPicking: vi.fn(), clearSchoolSelection: vi.fn(), clearAreaSelection: vi.fn(),
+    selectNode: vi.fn(), clearNodeListings: vi.fn(), setNodeListings: vi.fn(), setGroupResults: vi.fn(),
   };
 }
 
@@ -235,6 +248,7 @@ describe('Issue #1655 — top-grouped levels avoid individual listing/marker fet
   beforeEach(() => {
     capturedListings.length = 0;
     capturedAreas.length = 0;
+    capturedShowAreasNavigationDestinations.length = 0;
     mockUseAuth.mockReturnValue({ user: { id: 'u1' }, isLoading: false, isAdmin: false, isDealer: false });
     mockUseDiscoverListings.mockReturnValue({
       data: undefined, isLoading: false, isFetching: false, error: null,
@@ -450,4 +464,60 @@ describe('Issue #1655 — top-grouped levels avoid individual listing/marker fet
     const lastAreas = capturedAreas[capturedAreas.length - 1] as Array<{ areaKey: string }>;
     expect(lastAreas.some((a) => a.areaKey === 'empty-belt')).toBe(false);
   });
+
+  it('T8: nodeListings bounded browse enables individual listings and suppresses group markers', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: 'u1' },
+      isLoading: false,
+      isAdmin: false,
+      isDealer: false,
+    });
+    mockUseDiscoverUrlState.mockReturnValue([
+      makeUrlState({ journey: 'area-first', groupId: null, areaKey: null, schoolId: null, nodeListings: true }),
+      makeDefaultActions(),
+    ]);
+
+    renderAt('/discover?city=udupi&node=d:n&nodeListings=1');
+
+    await waitFor(() => {
+      expect(mockUseDiscoverListings).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: true })
+      );
+    });
+    // Check that we don't render group bubbles when viewing a node's bounded listings
+    expect(capturedAreas[capturedAreas.length - 1]).toEqual([]);
+    
+    // Check that Area navigation markers are suppressed
+    expect(capturedShowAreasNavigationDestinations[capturedShowAreasNavigationDestinations.length - 1]).toBe(false);
+
+    // Check that markers are enabled and scoped to the nodeKey
+    expect(mockUseDiscoverFilteredMarkers).toHaveBeenCalledWith(
+      expect.any(String), // city
+      expect.any(Object), // filters
+      true, // markersEnabled
+      null, // bbox
+      undefined, // q
+      'sale', // listingPurpose
+      expect.any(String), // excludePropertyType
+      undefined, // groupAreaKeys
+      'IN|KA|Udupi|Manipal' // nodeKey
+    );
+  });
+
+  it('T9: exiting bounded Browse restores hierarchy Area markers', async () => {
+    mockUseDiscoverUrlState.mockReturnValue([
+      makeUrlState({ journey: 'area-first', groupId: null, areaKey: null, schoolId: null, nodeListings: false }),
+      makeDefaultActions(),
+    ]);
+
+    renderAt('/discover?city=udupi&node=d:n');
+
+    await waitFor(() => {
+      expect(capturedShowAreasNavigationDestinations.length).toBeGreaterThan(0);
+    });
+
+    // When nodeListings is absent/false, Area navigation markers should render normally
+    expect(capturedShowAreasNavigationDestinations[capturedShowAreasNavigationDestinations.length - 1]).toBe(true);
+  });
 });
+

@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.example.realestate.discover.navigation.NavigationGraphCache;
+import com.example.realestate.discover.navigation.NavigationGraph;
+
 import java.util.List;
 
 /**
@@ -35,10 +38,12 @@ public class DiscoverMarkersController {
 
     private final DiscoverMarkersPort service;
     private final ObjectMapper objectMapper;
+    private final NavigationGraphCache navigationGraphCache;
 
-    public DiscoverMarkersController(DiscoverMarkersPort service, ObjectMapper objectMapper) {
+    public DiscoverMarkersController(DiscoverMarkersPort service, ObjectMapper objectMapper, NavigationGraphCache navigationGraphCache) {
         this.service = service;
         this.objectMapper = objectMapper;
+        this.navigationGraphCache = navigationGraphCache;
     }
 
     @GetMapping
@@ -63,7 +68,8 @@ public class DiscoverMarkersController {
             @RequestParam(name = "q", required = false) String q,
             @RequestParam(name = "listingPurpose", required = false) String listingPurpose,
             @RequestParam(required = false) String excludePropertyType,
-            @RequestParam(name = "areaKeys", required = false) List<String> areaKeys
+            @RequestParam(name = "areaKeys", required = false) List<String> areaKeys,
+            @RequestParam(name = "nodeKey", required = false) String nodeKey
     ) {
         log.debug("GET /api/discover/markers city={}", city);
 
@@ -78,7 +84,22 @@ public class DiscoverMarkersController {
         }
 
         // areaKeys: absent (null) = no area filter; present-but-empty = client bug → reject.
-        if (areaKeys != null && areaKeys.isEmpty()) {
+        List<String> effectiveAreaKeys = areaKeys;
+        if (nodeKey != null) {
+            NavigationGraph graph = navigationGraphCache.getActiveGraph(city)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "city_graph_not_found"));
+            if (!graph.containsNodeKey(nodeKey)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_node_key");
+            }
+            if ("root".equals(nodeKey)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "node_listings_not_eligible: root node is excluded");
+            }
+            List<String> descendantAreas = graph.descendantAreaKeysOf(nodeKey);
+            if (descendantAreas.size() > 15) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "node_listings_not_eligible: descendant area count exceeds 15");
+            }
+            effectiveAreaKeys = descendantAreas;
+        } else if (areaKeys != null && areaKeys.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "area_keys_must_not_be_empty");
         }
 
@@ -115,7 +136,7 @@ public class DiscoverMarkersController {
                 (q != null && !q.isBlank()) ? q.trim() : null,
                 (listingPurpose != null && !listingPurpose.isBlank()) ? listingPurpose.trim() : null,
                 excludeList,
-                areaKeys
+                effectiveAreaKeys
         );
 
         return ResponseEntity.ok()

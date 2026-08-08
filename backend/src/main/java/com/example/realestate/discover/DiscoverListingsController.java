@@ -2,6 +2,8 @@ package com.example.realestate.discover;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.realestate.discover.navigation.NavigationGraphCache;
+import com.example.realestate.discover.navigation.NavigationGraph;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.CacheControl;
@@ -37,10 +39,12 @@ public class DiscoverListingsController {
 
     private final DiscoverListingsPort service;
     private final ObjectMapper objectMapper;
+    private final NavigationGraphCache navigationGraphCache;
 
-    public DiscoverListingsController(DiscoverListingsPort service, ObjectMapper objectMapper) {
+    public DiscoverListingsController(DiscoverListingsPort service, ObjectMapper objectMapper, NavigationGraphCache navigationGraphCache) {
         this.service = service;
         this.objectMapper = objectMapper;
+        this.navigationGraphCache = navigationGraphCache;
     }
 
     @GetMapping
@@ -67,7 +71,8 @@ public class DiscoverListingsController {
             @RequestParam(name = "size", required = false, defaultValue = "20") int size,
             @RequestParam(name = "includeAggregates", required = false, defaultValue = "false") boolean includeAggregates,
             @RequestParam(name = "listingPurpose", required = false) String listingPurpose,
-            @RequestParam(name = "areaKeys", required = false) List<String> areaKeys
+            @RequestParam(name = "areaKeys", required = false) List<String> areaKeys,
+            @RequestParam(name = "nodeKey", required = false) String nodeKey
     ) {
         log.debug("GET /api/discover/listings city={} page={} size={}", city, page, size);
 
@@ -97,7 +102,29 @@ public class DiscoverListingsController {
 
         // areaKeys: absent (null) = no area filter; present-but-empty = client bug → reject.
         // Non-empty list is forwarded as-is and ANDed with the city subselect in the builder.
-        if (areaKeys != null && areaKeys.isEmpty()) {
+        List<String> effectiveAreaKeys = areaKeys;
+        if (nodeKey != null) {
+            NavigationGraph graph = navigationGraphCache.getActiveGraph(city)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "city_graph_not_found"));
+            if (!graph.containsNodeKey(nodeKey)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_node_key");
+            }
+            // Issue #2087: Enforce bounded eligibility at the server boundary.
+            // Root node is never eligible (city-wide browse is excluded by the owner contract).
+            // Nodes with more than 15 canonical descendant Areas are also ineligible —
+            // the CTA guards against this on the frontend, but URL/direct-API bypass
+            // must be rejected here so the bounded scope rule is fail-closed.
+            if ("root".equals(nodeKey)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "node_listings_not_eligible: root node is excluded");
+            }
+            List<String> descendantAreas = graph.descendantAreaKeysOf(nodeKey);
+            if (descendantAreas.size() > 15) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "node_listings_not_eligible: descendant area count exceeds 15");
+            }
+            effectiveAreaKeys = descendantAreas;
+        }
+        
+        if (effectiveAreaKeys != null && effectiveAreaKeys.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "area_keys_must_not_be_empty");
         }
 
@@ -128,7 +155,7 @@ public class DiscoverListingsController {
                 effectiveSize,
                 includeAggregates,
                 listingPurpose,
-                areaKeys
+                effectiveAreaKeys
         );
 
         return ResponseEntity.ok()

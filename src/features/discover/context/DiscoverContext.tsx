@@ -102,6 +102,8 @@ const ACTION_KEYS = [
   'clearNode',
   'enterAreasJourney',
   'buildNodeHref',
+  'enterNodeListings',
+  'clearNodeListings',
 ] as const satisfies readonly (keyof DiscoverUrlActions)[];
 
 // A deliberately-omitted (or renamed/added) DiscoverUrlActions key makes this

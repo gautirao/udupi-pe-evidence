@@ -72,7 +72,9 @@ describe('NavigationLevelPanel', () => {
     render(<NavigationLevelPanel journey={makeJourney()} />);
     const heading = screen.getByTestId('navigation-level-heading');
     expect(heading.textContent).toContain('North Bangalore');
-    expect(screen.getByTestId('navigation-level-heading-count').textContent).toBe('42 areas with matches');
+    expect(screen.getByTestId('navigation-level-heading-count').textContent).toBe(
+      '42 areas with matches here. Crowded markers are grouped on the map for legibility only.',
+    );
     expect(screen.getByTestId('navigation-level-panel')).toHaveAttribute('data-node-key', 'd:n');
   });
 
@@ -82,9 +84,8 @@ describe('NavigationLevelPanel', () => {
         journey={makeJourney({ nodeCount: { listingCount: 999, schoolCount: 0, matchingAreaCount: 0 } })}
       />,
     );
-    expect(screen.getByTestId('navigation-level-heading-count').textContent).toBe(
-      'No matches with current filters',
-    );
+    expect(screen.queryByTestId('navigation-level-heading-count')).not.toBeInTheDocument();
+    expect(screen.getByText('No matches with current filters')).toBeInTheDocument();
   });
 
   it('count_display_defect_2026_07_29 (regression) — heading reads matchingAreaCount, never listingCount', () => {
@@ -93,7 +94,9 @@ describe('NavigationLevelPanel', () => {
         journey={makeJourney({ nodeCount: { listingCount: 1736, schoolCount: 5, matchingAreaCount: 12 } })}
       />,
     );
-    expect(screen.getByTestId('navigation-level-heading-count').textContent).toBe('12 areas with matches');
+    expect(screen.getByTestId('navigation-level-heading-count').textContent).toBe(
+      '12 areas with matches here. Crowded markers are grouped on the map for legibility only.',
+    );
   });
 
   it('omits the areas-with-matches heading line (never falls back to listingCount) when matchingAreaCount is not derivable (e.g. the synthetic city root)', () => {
@@ -112,7 +115,8 @@ describe('NavigationLevelPanel', () => {
       />,
     );
     expect(screen.queryByTestId('navigation-level-heading-count')).not.toBeInTheDocument();
-    expect(screen.getByTestId('navigation-level-heading-listings').textContent).toBe('500 listings');
+    expect(screen.getByText('500')).toBeInTheDocument();
+    expect(screen.getByText('listings')).toBeInTheDocument();
   });
 
   it('count_display_defect_2026_07_29 (pass 4 regression) — a zero matchingAreaCount heading shows ONLY the locked zero literal, never an additional listings line', () => {
@@ -121,9 +125,7 @@ describe('NavigationLevelPanel', () => {
         journey={makeJourney({ nodeCount: { listingCount: 999, schoolCount: 0, matchingAreaCount: 0 } })}
       />,
     );
-    expect(screen.getByTestId('navigation-level-heading-count').textContent).toBe(
-      'No matches with current filters',
-    );
+    expect(screen.getByText('No matches with current filters')).toBeInTheDocument();
     expect(screen.queryByTestId('navigation-level-heading-listings')).not.toBeInTheDocument();
   });
 
@@ -274,6 +276,85 @@ describe('NavigationLevelPanel', () => {
       render(<NavigationLevelPanel journey={makeJourney({ children: [] })} />);
       expect(screen.queryByTestId('navigation-level-section-label')).not.toBeInTheDocument();
       expect(screen.getByTestId('navigation-level-empty')).toBeInTheDocument();
+    });
+  });
+
+  describe('Issue #2087 — Browse listings CTA eligibility', () => {
+    it('is eligible when the canonical descendant area count is 15 (inclusive boundary)', () => {
+      const onBrowseListings = vi.fn();
+      render(
+        <NavigationLevelPanel
+          journey={makeJourney({
+            node: makeNode({ descendantAreaKeys: new Array(15).fill('a') }),
+          })}
+          onBrowseListings={onBrowseListings}
+        />
+      );
+      expect(screen.getByTestId('browse-node-listings-cta')).toBeInTheDocument();
+    });
+
+    it('is ineligible when the canonical descendant area count is 16 (exceeds boundary)', () => {
+      const onBrowseListings = vi.fn();
+      render(
+        <NavigationLevelPanel
+          journey={makeJourney({
+            node: makeNode({ descendantAreaKeys: new Array(16).fill('a') }),
+          })}
+          onBrowseListings={onBrowseListings}
+        />
+      );
+      expect(screen.queryByTestId('browse-node-listings-cta')).not.toBeInTheDocument();
+    });
+
+    it('is eligible for a shallow non-root stable node (e.g. Udupi region) if its total descendant areas <= 15', () => {
+      const onBrowseListings = vi.fn();
+      render(
+        <NavigationLevelPanel
+          journey={makeJourney({
+            node: makeNode({
+              nodeKey: 'r:udupi',
+              nodeType: 'DIRECTION',
+              descendantAreaKeys: new Array(10).fill('a'),
+            }),
+          })}
+          onBrowseListings={onBrowseListings}
+        />
+      );
+      expect(screen.getByTestId('browse-node-listings-cta')).toBeInTheDocument();
+    });
+
+    it('is never eligible at the city ROOT, even if descendant areas <= 15', () => {
+      const onBrowseListings = vi.fn();
+      render(
+        <NavigationLevelPanel
+          journey={makeJourney({
+            node: makeNode({
+              nodeKey: 'root',
+              nodeType: 'ROOT',
+              descendantAreaKeys: new Array(10).fill('a'),
+            }),
+          })}
+          onBrowseListings={onBrowseListings}
+        />
+      );
+      expect(screen.queryByTestId('browse-node-listings-cta')).not.toBeInTheDocument();
+    });
+
+    it('shows the listing count in the CTA using nodeCount.listingCount', () => {
+      const onBrowseListings = vi.fn();
+      const journey = makeJourney({
+        node: makeNode({ descendantAreaKeys: new Array(15).fill('a') }),
+      });
+      // Override the default nodeCount with a specific listingCount
+      journey.nodeCount = { listingCount: 42, matchingAreaCount: 5, schoolCount: 0 };
+      
+      render(
+        <NavigationLevelPanel
+          journey={journey}
+          onBrowseListings={onBrowseListings}
+        />
+      );
+      expect(screen.getByRole('button', { name: /Browse all 42 listings/i })).toBeInTheDocument();
     });
   });
 });

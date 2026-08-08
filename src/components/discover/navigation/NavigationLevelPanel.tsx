@@ -13,6 +13,7 @@
  * Dispatch is on `levelKind` (from `nodeLevelKind`, never on `node.depth`),
  * mirroring the rest of this navigation module's discipline.
  */
+import { ArrowRight } from 'lucide-react';
 import { NavigationChildList } from './NavigationChildList';
 import { NavigationResolutionNotice } from './NavigationResolutionNotice';
 import {
@@ -44,6 +45,7 @@ export interface NavigationLevelPanelProps {
    * generic "this city" only for the rare case a root-node caller omits it.
    */
   cityLabel?: string;
+  onBrowseListings?: () => void;
 }
 
 export function NavigationLevelPanel({
@@ -53,6 +55,7 @@ export function NavigationLevelPanel({
   hoveredNodeKey = null,
   onHoverChange,
   cityLabel,
+  onBrowseListings,
 }: NavigationLevelPanelProps) {
   const { node, levelKind, children, resolutionNotice, nodeCount, selectNode } = journey;
 
@@ -97,14 +100,13 @@ export function NavigationLevelPanel({
   // leads with the mock's invitational pattern (eyebrow + question) instead
   // of the node-scoped name/count heading every other level keeps. City-wide
   // counts are NOT repeated here — they already live in the persistent
-  // JourneySwitcher's metrics strip (CQ3), one owner, not two.
   const isCityRoot = node.nodeKey === ROOT_NODE_KEY;
 
-  // Issue #2084 (AC7) — a section eyebrow + count restored above the child
-  // list, at every level this component renders (city-root, Direction,
-  // Local-Destination). Counts `children.length` — the SAME bounded list
-  // rendered below, never `discoverAreas.length`/`cityTotal` (AC10) — so the
-  // label can never disagree with what is actually on screen.
+  // Issue #2087 — bounded local-scope Browse listings CTA. Use canonical descendant scope.
+  const descendantAreaCount = node.descendantAreaKeys?.length ?? 0;
+  const isEligibleForBrowse = !isCityRoot && descendantAreaCount > 0 && descendantAreaCount <= 15;
+
+  // Issue #2084 (AC7)
   const sectionLabel =
     children.length === 0
       ? null
@@ -115,11 +117,14 @@ export function NavigationLevelPanel({
           : levelKind === 'areas'
             ? `Areas in ${node.displayLabel}`
             : null;
+            
+  const eyebrowText = levelKind === 'clusters' ? 'Local Destination' : levelKind === 'directions' ? 'Direction' : 'Areas';
 
   return (
-    <div data-testid="navigation-level-panel" data-node-key={node.nodeKey}>
+    <div data-testid="navigation-level-panel" data-node-key={node.nodeKey} className="flex flex-col">
       <NavigationResolutionNotice notice={resolutionNotice} />
-      <div className="mb-3" data-testid="navigation-level-heading">
+      
+      <div className="mb-4" data-testid="navigation-level-heading">
         {isCityRoot ? (
           <>
             <p
@@ -136,25 +141,60 @@ export function NavigationLevelPanel({
             </h2>
           </>
         ) : (
-          <>
-            {/* AC3.4 — explicitly names the direction/destination; same node_key + counts as the map. */}
-            <h2 className="text-base font-semibold text-foreground">{node.displayLabel}</h2>
-            {headingAreasLabel != null && (
-              <p className="text-sm text-muted-foreground" data-testid="navigation-level-heading-count">
-                {headingAreasLabel}
+          <div>
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-primary">
+                  {eyebrowText}
+                </div>
+                <h2 className="mt-1 font-['Fraunces',_ui-serif,_Georgia,_serif] text-[22px] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
+                  {node.displayLabel}
+                </h2>
+              </div>
+              
+              {nodeCount != null && (
+                <div className="shrink-0 text-right">
+                  <div className="font-mono text-[22px] font-semibold leading-none text-foreground">
+                    {nodeCount.listingCount}
+                  </div>
+                  <div className="mt-0.5 text-[12px] text-muted-foreground">
+                    listings
+                  </div>
+                  {isEligibleForBrowse && onBrowseListings != null && (
+                    <button
+                      type="button"
+                      onClick={onBrowseListings}
+                      data-testid="browse-node-listings-cta"
+                      className="mt-1.5 inline-flex items-center gap-1 rounded-sm text-[12.5px] font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
+                    >
+                      Browse all {nodeCount.listingCount} listings <ArrowRight className="h-[14px] w-[14px]" />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {levelKind === 'clusters' && (
+              <p className="mt-2 max-w-[56ch] text-pretty text-[13px] leading-relaxed text-muted-foreground">
+                Pick an area to see its homes. The dashed cluster on the map only zooms.
               </p>
             )}
-            {headingListingsLabel != null && (
-              <p className="text-sm text-muted-foreground" data-testid="navigation-level-heading-listings">
-                {headingListingsLabel}
-              </p>
+
+            {nodeCount != null && nodeCount.matchingAreaCount != null && nodeCount.matchingAreaCount > 0 && headingAreasLabel != null && (
+              <div className="mt-3 flex items-center gap-2.5 rounded-md bg-secondary/60 px-3 py-2 text-[12.5px] leading-snug text-foreground/80">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" aria-hidden="true" />
+                <span className="flex-1" data-testid="navigation-level-heading-count">
+                  {headingAreasLabel} here. Crowded markers are grouped on the map for legibility only.
+                </span>
+              </div>
             )}
-          </>
+          </div>
         )}
       </div>
+
       {sectionLabel != null && (
         <div
-          className="mb-2 flex items-center justify-between border-b border-border pb-2"
+          className="mb-3 flex items-center justify-between border-b border-border pb-2"
           data-testid="navigation-level-section-label"
         >
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
@@ -168,16 +208,13 @@ export function NavigationLevelPanel({
           </span>
         </div>
       )}
+      
       {children.length === 0 ? (
         <p className="text-sm text-muted-foreground" data-testid="navigation-level-empty">
           {NO_MATCHES_WITH_CURRENT_FILTERS}
         </p>
       ) : (
-        // Issue #2086 (design.R6) — a CSS-only scroll constraint replacing the
-        // deleted client-side 5/6 truncation caps: the server now guarantees
-        // <=15 children, so a long list scrolls here rather than any child
-        // being hidden. No structural/DOM change to NavigationChildList itself.
-        <div className="max-h-[480px] overflow-y-auto" data-testid="navigation-child-list-scroll">
+        <div className="max-h-[480px] overflow-y-auto px-1 pb-1" data-testid="navigation-child-list-scroll">
           <NavigationChildList
             children={children}
             representativeAreaNamesByNodeKey={representativeAreaNamesByNodeKey}
