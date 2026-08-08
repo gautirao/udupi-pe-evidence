@@ -180,3 +180,16 @@ export function cityListingToPropertyListing(
     images: l.primaryImageUrl ? [{ url: l.primaryImageUrl }] : undefined,
   };
 }
+
+/**
+ * Maps a DiscoverListingItem to a DiscoverCityListingItem so it can be rendered by AreaSelectedPanel's PropertyCard.
+ * Addresses the heroImageUrl -> primaryImageUrl discrepancy.
+ */
+export function discoverListingToCityListing(l: DiscoverListingItem): DiscoverCityListingItem {
+  return {
+    ...l,
+    primaryImageUrl: l.heroImageUrl,
+    lat: l.latitude ?? 0,
+    lon: l.longitude ?? 0,
+  } as DiscoverCityListingItem;
+}
