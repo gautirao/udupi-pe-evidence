@@ -88,7 +88,8 @@ describe('NavigationChildCard', () => {
         onSelect={vi.fn()}
       />,
     );
-    expect(screen.getByText('1736 listings')).toBeInTheDocument();
+    expect(screen.getByTestId('navigation-child-card-listings-d:n').textContent).toContain('1736');
+    expect(screen.getByTestId('navigation-child-card-listings-d:n').textContent).toContain('listings');
     expect(screen.queryByText(/areas with matches/)).not.toBeInTheDocument();
   });
 
@@ -100,7 +101,8 @@ describe('NavigationChildCard', () => {
       />,
     );
     expect(screen.getByText('12 areas with matches')).toBeInTheDocument();
-    expect(screen.getByText('1736 listings')).toBeInTheDocument();
+    expect(screen.getByTestId('navigation-child-card-listings-d:n').textContent).toContain('1736');
+    expect(screen.getByTestId('navigation-child-card-listings-d:n').textContent).toContain('listings');
   });
 
   it('a zero matchingAreaCount renders ONLY the locked zero literal, never an additional "No listings yet" line', () => {
