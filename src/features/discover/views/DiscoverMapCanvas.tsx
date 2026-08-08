@@ -368,7 +368,7 @@ export function DiscoverMapCanvas({
   // the map and panel must never disagree about whether the canonical Areas
   // journey is active, so each site recomputes the SAME condition rather
   // than trusting a threaded boolean.
-  const showAreasNavigationDestinations = nav.journey === 'area-first';
+  const showAreasNavigationDestinations = nav.journey === 'area-first' && !nav.nodeListings;
   return (
     <div ref={mapContainerRef} className="lg:w-1/2 h-64 lg:h-full relative order-1 lg:order-1" style={{ background: 'hsl(var(--map-bg))' }} onClick={
       // a3 — background click dismisses the marker popover. stopPropagation is applied
