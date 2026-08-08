@@ -57,7 +57,10 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
 // Stub the heavy AreaSelectedPanel so it doesn't need its own deps tree.
 vi.mock('@/components/discover/panels/AreaSelectedPanel', () => ({
   AreaSelectedPanel: ({ areaListings }: { areaListings: unknown[] }) => (
-    <div data-testid="area-selected-panel">{areaListings.length} listings</div>
+    <div data-testid="area-selected-panel">
+      {areaListings.length} listings
+      <pre data-testid="listings-json">{JSON.stringify(areaListings)}</pre>
+    </div>
   ),
 }));
 
@@ -254,5 +257,25 @@ describe('NodeListingsSurface — #2087', () => {
       const lastCall = calls[calls.length - 1][0] as { page: number };
       expect(lastCall.page).toBe(1);
     });
+  });
+
+  it('maps heroImageUrl to primaryImageUrl so listing cards render images correctly (Reviewer-24)', () => {
+    mockUseDiscoverListings.mockReturnValue(makeListingsResult(1, [{
+      id: 'listing-1',
+      heroImageUrl: 'https://example.com/hero.jpg',
+      latitude: 12.0,
+      longitude: 77.0,
+    }]));
+
+    renderSurface(makeNode({ nodeKey: 'c:test' }));
+
+    const jsonText = screen.getByTestId('listings-json').textContent;
+    const items = JSON.parse(jsonText!);
+    
+    expect(items).toHaveLength(1);
+    expect(items[0].primaryImageUrl).toBe('https://example.com/hero.jpg');
+    // Ensure the fallback lat/lon were set correctly for AreaSelectedPanel
+    expect(items[0].lat).toBe(12.0);
+    expect(items[0].lon).toBe(77.0);
   });
 });
