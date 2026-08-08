@@ -925,7 +925,8 @@ export default function MapDiscovery() {
       // does. See effectiveSelectedArea's declaration above.
       !effectiveSelectedArea &&
       !nav.schoolId &&
-      !selectedSchool
+      !selectedSchool &&
+      !nav.nodeListings
     ) return true;
     if (
       nav.journey === 'agri-first' &&

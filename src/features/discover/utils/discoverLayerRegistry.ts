@@ -412,7 +412,8 @@ export function selectDiscoverMapLayer(
     (journey === 'area-first' || journey === 'school-first') &&
     !selection.groupId &&
     !selection.areaKey &&
-    !selection.schoolId;
+    !selection.schoolId &&
+    !selection.nodeListings;
   // Issue #1956 PR-4 — a resolved canonical AREA leaf (the `node=` journey)
   // must NOT collapse to the grouped-overview bubble category just because
   // the legacy `areaKey` URL param is absent (the node journey never writes

@@ -83,7 +83,8 @@ export function useDiscoverJourneyPredicates({
     !urlState.areaKey &&
     !selectedArea &&
     !urlState.schoolId &&
-    !selectedSchool;
+    !selectedSchool &&
+    !urlState.nodeListings;
 
   const isTopGroupedAgri =
     isAgriJourney &&
