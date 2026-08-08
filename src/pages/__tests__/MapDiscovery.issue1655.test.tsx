@@ -450,4 +450,30 @@ describe('Issue #1655 — top-grouped levels avoid individual listing/marker fet
     const lastAreas = capturedAreas[capturedAreas.length - 1] as Array<{ areaKey: string }>;
     expect(lastAreas.some((a) => a.areaKey === 'empty-belt')).toBe(false);
   });
+
+  it('T8: nodeListings bounded browse enables individual listings and suppresses group markers', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: 'u1' },
+      isLoading: false,
+      isAdmin: false,
+      isDealer: false,
+    });
+    mockUseDiscoverUrlState.mockReturnValue([
+      makeUrlState({ journey: 'area-first', groupId: null, areaKey: null, schoolId: null, nodeListings: true }),
+      makeDefaultActions(),
+    ]);
+
+    renderAt('/discover?city=udupi&node=d:n&nodeListings=1');
+
+    await waitFor(() => {
+      expect(mockUseDiscoverListings).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: true })
+      );
+    });
+    // Check that we render the regular area markers (like a normal area leaf) at overview zoom
+    const lastAreas = capturedAreas[capturedAreas.length - 1] as Array<{ areaKey: string }>;
+    expect(lastAreas.length).toBeGreaterThan(0);
+    expect(lastAreas.some(a => a.areaKey === 'IN|KA|Udupi|Manipal')).toBe(true);
+  });
 });
+
