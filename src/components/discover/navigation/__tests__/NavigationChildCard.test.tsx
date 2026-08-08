@@ -88,8 +88,7 @@ describe('NavigationChildCard', () => {
         onSelect={vi.fn()}
       />,
     );
-    expect(screen.getByTestId('navigation-child-card-listings-d:n').textContent).toContain('1736');
-    expect(screen.getByTestId('navigation-child-card-listings-d:n').textContent).toContain('listings');
+    expect(screen.getByText('1736 listings')).toBeInTheDocument();
     expect(screen.queryByText(/areas with matches/)).not.toBeInTheDocument();
   });
 
@@ -101,8 +100,7 @@ describe('NavigationChildCard', () => {
       />,
     );
     expect(screen.getByText('12 areas with matches')).toBeInTheDocument();
-    expect(screen.getByTestId('navigation-child-card-listings-d:n').textContent).toContain('1736');
-    expect(screen.getByTestId('navigation-child-card-listings-d:n').textContent).toContain('listings');
+    expect(screen.getByText('1736 listings')).toBeInTheDocument();
   });
 
   it('a zero matchingAreaCount renders ONLY the locked zero literal, never an additional "No listings yet" line', () => {
@@ -114,6 +112,16 @@ describe('NavigationChildCard', () => {
     );
     expect(screen.getByText('No matches with current filters')).toBeInTheDocument();
     expect(screen.queryByText('No listings yet')).not.toBeInTheDocument();
+  });
+
+  it('renders a singular "1 listing" string when listingCount is 1', () => {
+    render(
+      <NavigationChildCard
+        child={makeChild({ listingCount: 1, matchingAreaCount: 1 })}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('1 listing')).toBeInTheDocument();
   });
 
   it('an AREA leaf child shows its own listing count and no structural count line', () => {

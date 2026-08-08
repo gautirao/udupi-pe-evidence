@@ -346,7 +346,7 @@ describe('NavigationLevelPanel', () => {
         node: makeNode({ descendantAreaKeys: new Array(15).fill('a') }),
       });
       // Override the default nodeCount with a specific listingCount
-      journey.nodeCount = { listingCount: 42, matchingAreaCount: 5 };
+      journey.nodeCount = { listingCount: 42, matchingAreaCount: 5, schoolCount: 0 };
       
       render(
         <NavigationLevelPanel

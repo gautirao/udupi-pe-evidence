@@ -162,7 +162,7 @@ export function NavigationChildCard({
                 data-testid={`navigation-child-card-listings-${child.nodeKey}`}
                 className="shrink-0 font-mono text-base font-bold text-foreground whitespace-nowrap"
               >
-                {child.listingCount} <span className="font-sans text-[11px] font-normal text-muted-foreground">listings</span>
+                {listingsLabel}
               </span>
             )}
           </div>
