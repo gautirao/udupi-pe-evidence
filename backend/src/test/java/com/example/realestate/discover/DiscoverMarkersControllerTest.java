@@ -2,6 +2,8 @@ package com.example.realestate.discover;
 
 import com.example.realestate.exception.GlobalExceptionHandler;
 import com.example.realestate.security.UserRoleService;
+import com.example.realestate.discover.navigation.NavigationGraph;
+import com.example.realestate.discover.navigation.NavigationGraphCache;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +58,9 @@ class DiscoverMarkersControllerTest {
 
     @MockitoBean
     private UserRoleService userRoleService;
+
+    @MockitoBean
+    private NavigationGraphCache navigationGraphCache;
 
     @BeforeEach
     void setUp() {
@@ -313,5 +318,60 @@ class DiscoverMarkersControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", containsString("no-store")))
                 .andExpect(header().string("Cache-Control", not(containsString("public"))));
+    }
+
+    @Test
+    void nodeKey_isResolvedToDescendantAreas() throws Exception {
+        DiscoverMarkersResponse mockResp = new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0, 5000, false);
+        when(service.getMarkers(any())).thenReturn(mockResp);
+
+        NavigationGraph mockGraph = mock(NavigationGraph.class);
+        when(mockGraph.containsNodeKey("d:n")).thenReturn(true);
+        when(mockGraph.descendantAreaKeysOf("d:n")).thenReturn(List.of("IN|KA|Udupi|A1", "IN|KA|Udupi|A2"));
+        when(navigationGraphCache.getActiveGraph("udupi")).thenReturn(java.util.Optional.of(mockGraph));
+
+        mockMvc.perform(get("/api/discover/markers")
+                .param("city", "udupi")
+                .param("nodeKey", "d:n")
+                .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getMarkers(argThat(filters ->
+                filters.city().equals("udupi") &&
+                filters.areaKeys() != null &&
+                filters.areaKeys().containsAll(List.of("IN|KA|Udupi|A1", "IN|KA|Udupi|A2"))
+        ));
+    }
+
+    @Test
+    void nodeKey_rejectsRootNode() throws Exception {
+        NavigationGraph mockGraph = mock(NavigationGraph.class);
+        when(mockGraph.containsNodeKey("root")).thenReturn(true);
+        when(navigationGraphCache.getActiveGraph("udupi")).thenReturn(java.util.Optional.of(mockGraph));
+
+        mockMvc.perform(get("/api/discover/markers")
+                .param("city", "udupi")
+                .param("nodeKey", "root")
+                .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("node_listings_not_eligible: root node is excluded"));
+    }
+
+    @Test
+    void nodeKey_rejectsBroadNode() throws Exception {
+        NavigationGraph mockGraph = mock(NavigationGraph.class);
+        when(mockGraph.containsNodeKey("d:n")).thenReturn(true);
+        // Return 16 dummy areas
+        List<String> largeList = java.util.stream.IntStream.range(0, 16)
+                .mapToObj(i -> "Area" + i).toList();
+        when(mockGraph.descendantAreaKeysOf("d:n")).thenReturn(largeList);
+        when(navigationGraphCache.getActiveGraph("udupi")).thenReturn(java.util.Optional.of(mockGraph));
+
+        mockMvc.perform(get("/api/discover/markers")
+                .param("city", "udupi")
+                .param("nodeKey", "d:n")
+                .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("node_listings_not_eligible: descendant area count exceeds 15"));
     }
 }
