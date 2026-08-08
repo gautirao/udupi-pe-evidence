@@ -288,7 +288,7 @@ describe('NavigationLevelPanel', () => {
           onBrowseListings={onBrowseListings}
         />
       );
-      expect(screen.getByRole('button', { name: /Browse listings/i })).toBeInTheDocument();
+      expect(screen.getByTestId('browse-node-listings-cta')).toBeInTheDocument();
     });
 
     it('is ineligible when the canonical descendant area count is 16 (exceeds boundary)', () => {
@@ -301,7 +301,7 @@ describe('NavigationLevelPanel', () => {
           onBrowseListings={onBrowseListings}
         />
       );
-      expect(screen.queryByRole('button', { name: /Browse listings/i })).not.toBeInTheDocument();
+      expect(screen.queryByTestId('browse-node-listings-cta')).not.toBeInTheDocument();
     });
 
     it('is eligible for a shallow non-root stable node (e.g. Udupi region) if its total descendant areas <= 15', () => {
@@ -318,7 +318,7 @@ describe('NavigationLevelPanel', () => {
           onBrowseListings={onBrowseListings}
         />
       );
-      expect(screen.getByRole('button', { name: /Browse listings/i })).toBeInTheDocument();
+      expect(screen.getByTestId('browse-node-listings-cta')).toBeInTheDocument();
     });
 
     it('is never eligible at the city ROOT, even if descendant areas <= 15', () => {
@@ -335,7 +335,24 @@ describe('NavigationLevelPanel', () => {
           onBrowseListings={onBrowseListings}
         />
       );
-      expect(screen.queryByRole('button', { name: /Browse listings/i })).not.toBeInTheDocument();
+      expect(screen.queryByTestId('browse-node-listings-cta')).not.toBeInTheDocument();
+    });
+
+    it('shows the listing count in the CTA using nodeCount.listingCount', () => {
+      const onBrowseListings = vi.fn();
+      const journey = makeJourney({
+        node: makeNode({ descendantAreaKeys: new Array(15).fill('a') }),
+      });
+      // Override the default nodeCount with a specific listingCount
+      journey.nodeCount = { listingCount: 42, matchingAreaCount: 5 };
+      
+      render(
+        <NavigationLevelPanel
+          journey={journey}
+          onBrowseListings={onBrowseListings}
+        />
+      );
+      expect(screen.getByRole('button', { name: /Browse 42 listings/i })).toBeInTheDocument();
     });
   });
 });

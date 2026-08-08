@@ -1035,7 +1035,7 @@ export default function MapDiscovery() {
       // of deriveScopeAwareMarkersEnabled (useDiscoverMapData.ts), which
       // covers the scope.kind==='group'||'area' && shouldShowMarkers(zoom)
       // contract in isolation (scopeAwareMarkers.test.tsx).
-      // Issue #2087 — Node Listings Surface mode bypasses the zoom gate to show markers immediately.
+
       shouldShowMarkers(mapZoom),
     // Issue #1655 — suppress the paginated listings fetch at grouped overview level.
     // At top-grouped states the right panel shows groups/zones, not individual listings,

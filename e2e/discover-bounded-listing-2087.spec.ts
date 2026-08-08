@@ -49,7 +49,7 @@ test.describe('Issue 2087: Bounded Listing Browse', () => {
     }
 
     // ── CTA visibility ──
-    const browseListingsBtn = page.getByRole('button', { name: /Browse listings/i });
+    const browseListingsBtn = page.getByTestId('browse-node-listings-cta');
     await expect(browseListingsBtn).toBeVisible({ timeout: 15000 });
 
     // Reset captured URLs before clicking so we only inspect the triggered call.

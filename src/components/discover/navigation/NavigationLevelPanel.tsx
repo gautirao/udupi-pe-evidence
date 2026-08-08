@@ -182,7 +182,9 @@ export function NavigationLevelPanel({
             className="w-full flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
             onClick={onBrowseListings}
           >
-            Browse listings
+            {nodeCount != null && nodeCount.listingCount > 0 
+              ? `Browse ${formatListingCount(nodeCount.listingCount)}`
+              : 'Browse listings'}
           </button>
         </div>
       )}
