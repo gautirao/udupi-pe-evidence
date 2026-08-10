@@ -147,7 +147,19 @@ test.describe('@integration-ui #1823 — camera fit policy', () => {
     await page.goto(`/discover?${AREA_FIRST_BASE}&node=${encodeURIComponent(AREA_RR_NAGAR)}`);
     await page.waitForLoadState('domcontentloaded');
     await dismissConsentBannerIfPresent(page);
-    await expect(page.getByTestId('navigation-level-panel')).toBeVisible({ timeout: 15_000 });
+    // Fix-verify correction — `navigation-level-panel` only mounts at an
+    // intermediate hierarchy-browsing level (a region/cluster child list);
+    // it genuinely never renders for a cold load straight onto a LEAF Area
+    // node, which skips directly to the listing view. Confirmed live via a
+    // full testid dump at this exact state: `navigation-level-panel` absent,
+    // `discover-areas-journey-panel-shell`/`areas-journey-panel-listings`
+    // present. `discover-areas-journey-panel-shell` is present at BOTH the
+    // leaf-listing state and the hierarchy-browsing state, so it is the
+    // correct universal "the area-first panel has rendered" precondition —
+    // this was a wrong-testid bug in this test itself, not a pre-existing
+    // app instability (that mischaracterization is being corrected in the
+    // PR description separately).
+    await expect(page.getByTestId('discover-areas-journey-panel-shell')).toBeVisible({ timeout: 15_000 });
 
     await expect
       .poll(() => nodeParam(page), { timeout: 10_000 })
@@ -537,7 +549,11 @@ test.describe('@integration-ui #1823 (PR #2128 review cycle 4) — mobile listin
     await page.goto(`/discover?${AREA_FIRST_BASE}&node=${encodeURIComponent(AREA_RR_NAGAR)}`);
     await page.waitForLoadState('domcontentloaded');
     await dismissConsentBannerIfPresent(page);
-    await expect(page.getByTestId('navigation-level-panel')).toBeVisible({ timeout: 15_000 });
+    // Fix-verify correction — see T1's identical comment above.
+    // `navigation-level-panel` never mounts for a cold load straight onto a
+    // LEAF Area node; `discover-areas-journey-panel-shell` is the correct
+    // universal precondition here.
+    await expect(page.getByTestId('discover-areas-journey-panel-shell')).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => nodeParam(page), { timeout: 10_000 }).toBe(AREA_RR_NAGAR);
     await expect
       .poll(() => readCamera(page).lat, { timeout: 10_000 })
