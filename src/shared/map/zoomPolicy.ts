@@ -239,18 +239,25 @@ const MARKER_REVEAL_DENSITY_THRESHOLD_PER_10K_PX = 0.5;
 
 /**
  * Pure evidence-based input for #1762's marker-mode transition (clustered
- * overview vs individual pins). Signals in priority order: (a) the zoom
- * floor — reproduces today's `CLUSTER_DISABLE_AT_ZOOM` boolean exactly at
- * the zoom-only decision boundary (proven by an equivalence test); (b) a
- * low marker count, legible regardless of zoom; (c) pin density vs viewport
- * area as a tiebreaker. Deliberately imports NOTHING from any clustering/
- * rendering module — #1762 wires an actual renderer consumer, this function
- * only decides the mode from already-known inputs.
+ * overview vs individual pins). Signals in priority order: (a) a low marker
+ * count, legible regardless of zoom; (b) pin density vs viewport area — a
+ * dense/high-count set stays clusteredOverview even ABOVE the zoom floor,
+ * since revealing hundreds/thousands of individual pins purely because zoom
+ * crossed a threshold is exactly the unsafe global-zoom-only decision #1823
+ * exists to replace; (c) the zoom floor — reproduces today's
+ * `CLUSTER_DISABLE_AT_ZOOM` boolean at the zoom-only decision boundary for
+ * every NON-dense case (proven by an equivalence test), but density (b) is
+ * checked first so it can override this floor instead of being bypassed by
+ * it. Deliberately imports NOTHING from any clustering/rendering module —
+ * #1762 wires an actual renderer consumer, this function only decides the
+ * mode from already-known inputs.
  *
  * `fittedExtent` is part of the full contract #1762's real consumer will
  * need (e.g. to normalise density against geographic spread rather than
- * pure viewport pixels) but is not yet consulted by this pixel-density-only
- * heuristic — accepted now so the signature doesn't need to change later.
+ * pure viewport pixels) but is DEFERRED — not yet consulted by this
+ * pixel-density-only heuristic. Accepted into the signature now so it
+ * doesn't need to change later, not because it currently contributes to the
+ * decision.
  */
 export function resolveMarkerRevealMode(
   zoomAfterFit: number,
@@ -259,13 +266,28 @@ export function resolveMarkerRevealMode(
   viewportHeightPx: number,
   fittedExtent: [[number, number], [number, number]] | null,
 ): MarkerRevealMode {
-  if (zoomAfterFit >= CLUSTER_DISABLE_AT_ZOOM) return 'individualPins';
   if (markerCount <= MARKER_REVEAL_COUNT_FLOOR) return 'individualPins';
 
   const viewportAreaPx = viewportWidthPx * viewportHeightPx;
+  const markersPer10kPx = viewportAreaPx > 0 ? (markerCount / viewportAreaPx) * 10_000 : 0;
+  const isDense = viewportAreaPx > 0 && markersPer10kPx > MARKER_REVEAL_DENSITY_THRESHOLD_PER_10K_PX;
+
+  // PR #2128 final review (HIGH) — density checked BEFORE the zoom floor,
+  // so a dense/high-count set cannot be forced to individualPins purely by
+  // crossing CLUSTER_DISABLE_AT_ZOOM. Previously the zoom check was an
+  // unconditional early return above every other signal.
+  if (isDense) return 'clusteredOverview';
+  if (zoomAfterFit >= CLUSTER_DISABLE_AT_ZOOM) return 'individualPins';
+  // Degenerate zero-area viewport, NOT dense (isDense is false whenever
+  // viewportAreaPx <= 0) — preserves the original zero-area-at-low-zoom
+  // fallback exactly.
   if (!(viewportAreaPx > 0)) return 'clusteredOverview';
 
   void fittedExtent;
-  const markersPer10kPx = (markerCount / viewportAreaPx) * 10_000;
-  return markersPer10kPx > MARKER_REVEAL_DENSITY_THRESHOLD_PER_10K_PX ? 'clusteredOverview' : 'individualPins';
+  // Real viewport, above the count floor, NOT dense, and zoom below the
+  // reveal threshold — matches the original density ternary's else-branch
+  // (a genuinely low-density set stays legible regardless of zoom; see the
+  // "high marker count spread over a large viewport stays individualPins"
+  // test below, unaffected by this fix).
+  return 'individualPins';
 }
