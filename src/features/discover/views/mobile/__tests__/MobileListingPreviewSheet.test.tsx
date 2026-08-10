@@ -143,4 +143,109 @@ describe('MobileListingPreviewSheet', () => {
       expect(screen.queryByText(forbidden)).not.toBeInTheDocument();
     }
   });
+
+  // Issue #2126 — reskin to the approved "listing-peek" mock. The tests
+  // above already cover the pre-existing data contract (price arms, trust
+  // badge allow-list, Escape/dialog semantics, invariant 8). These new
+  // tests cover structural elements the reskin introduced: the drag handle,
+  // the bottom action row's two buttons (a distinct affordance from the
+  // pre-existing top-right icon-close button already covered above), the
+  // restoration note, and graceful degradation of the summary row when
+  // every optional field is absent alongside a long areaLabel.
+
+  it('renders a drag-handle pill as the sheet\'s first child, above the summary row (mock: 38x4px centered pill)', () => {
+    render(<MobileListingPreviewSheet preview={ANON_PREVIEW} onDismiss={vi.fn()} onViewDetails={vi.fn()} />);
+    const sheet = screen.getByTestId('mobile-listing-preview-sheet');
+    // The drag handle is the sheet's own first child — a decorative,
+    // aria-hidden <div> pill, structurally distinct from (and rendered
+    // before) the thumbnail well and its Building2 fallback icon.
+    const handle = sheet.firstElementChild;
+    expect(handle).not.toBeNull();
+    expect(handle?.tagName).toBe('DIV');
+    expect(handle).toHaveAttribute('aria-hidden', 'true');
+    expect(handle?.tagName).not.toBe('SVG');
+  });
+
+  it('bottom action row renders BOTH "View details" (primary) and "Close" (secondary) as separate, correctly-ordered, 44px-tall touch targets', () => {
+    render(<MobileListingPreviewSheet preview={ANON_PREVIEW} onDismiss={vi.fn()} onViewDetails={vi.fn()} />);
+
+    const viewDetails = screen.getByTestId('mobile-listing-preview-view-details');
+    // The bottom "Close" button is a DISTINCT element from the top-right
+    // icon-close button (data-testid="mobile-listing-preview-close",
+    // aria-label="Close property preview") already covered above — locate
+    // it by its own exact accessible name.
+    const closeAction = screen.getByRole('button', { name: 'Close', exact: true });
+
+    expect(closeAction).not.toBe(screen.getByTestId('mobile-listing-preview-close'));
+
+    // Both meet the ~44px (h-11) minimum mobile touch-target size.
+    expect(viewDetails.className).toContain('h-11');
+    expect(closeAction.className).toContain('h-11');
+
+    // "View details" is primary — Button's default variant is `bg-primary`
+    // with no border. The "Close" action uses Button's `outline` variant,
+    // which renders as `border border-input bg-background` (see
+    // src/components/ui/button.tsx) — a bordered, secondary treatment.
+    expect(viewDetails.className).toContain('bg-primary');
+    expect(closeAction.className).not.toContain('bg-primary');
+    expect(closeAction.className).toContain('border');
+    expect(closeAction.className).toContain('bg-background');
+
+    // DOM order: View details precedes Close in the action row, matching the
+    // approved mock's left-primary/right-secondary layout.
+    expect(
+      viewDetails.compareDocumentPosition(closeAction) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('the bottom "Close" action also calls onDismiss exactly once (same dismissal contract as the icon-close button)', async () => {
+    const user = userEvent.setup();
+    const onDismiss = vi.fn();
+    render(<MobileListingPreviewSheet preview={ANON_PREVIEW} onDismiss={onDismiss} onViewDetails={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: 'Close', exact: true }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the "Back from the details returns to this map view" restoration note', () => {
+    render(<MobileListingPreviewSheet preview={ANON_PREVIEW} onDismiss={vi.fn()} onViewDetails={vi.fn()} />);
+    expect(screen.getByText(/back from the details returns to this map view/i)).toBeInTheDocument();
+  });
+
+  it('degrades gracefully when image, propertyType, bedrooms, and trustBadge are all absent, alongside a long areaLabel', () => {
+    const LONG_AREA_LABEL =
+      'Thanisandra Hennur Belt, North Bengaluru Extended Growth Corridor Sub-Locality';
+    const degraded: SelectedListingPreviewAnon = {
+      ...ANON_PREVIEW,
+      primaryImageUrl: null,
+      propertyType: null,
+      bedrooms: null,
+      trustBadge: null,
+      areaLabel: LONG_AREA_LABEL,
+      priceBand: '₹80L-1Cr',
+    };
+    const { container } = render(
+      <MobileListingPreviewSheet preview={degraded} onDismiss={vi.fn()} onViewDetails={vi.fn()} />,
+    );
+
+    // No <img> is rendered — the thumbnail well falls back to the Building2
+    // placeholder icon instead of an empty/broken <img src="">.
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+    expect(container.querySelector('svg')).toBeInTheDocument();
+
+    // propertyType falls back to the generic "Property" label — never blank,
+    // never "null"/"undefined" leaking into the DOM.
+    expect(screen.getByText('Property')).toBeInTheDocument();
+    expect(screen.queryByTestId('mobile-listing-preview-bedrooms')).not.toBeInTheDocument();
+
+    // No trust badge renders when trustBadge is null.
+    expect(screen.queryByTestId('mobile-listing-preview-trust-badge')).not.toBeInTheDocument();
+
+    // The long areaLabel still renders in full (truncation is CSS-only via
+    // the `truncate` class — the DOM text content itself is never clipped)
+    // on the SAME truncate-class element the short-label tests already rely
+    // on via this testid.
+    const areaLabelEl = screen.getByTestId('mobile-listing-preview-area-label');
+    expect(areaLabelEl).toHaveTextContent(LONG_AREA_LABEL);
+    expect(areaLabelEl.className).toContain('truncate');
+  });
 });

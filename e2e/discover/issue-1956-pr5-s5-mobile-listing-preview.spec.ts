@@ -42,6 +42,48 @@
  * hydration path fires again), not a bug, and is asserted as a pass
  * condition below, never treated as a defect.
  *
+ * ── #2126 fix-verify cycle 2 — compact-geometry regression guards ──
+ * Two tests below assert the sheet's real laid-out geometry (bounding-box
+ * height/position + a real hit-test on a top-quarter control), not just
+ * "visible" — the exact proof a reviewer asked for after the div->section
+ * fix (see MobileListingPreviewSheet.tsx's own root-element comment for the
+ * regression this guards). "Close"/"View details"/Back coverage already
+ * exists below (the two tests immediately following this block) and is
+ * intentionally NOT duplicated.
+ *
+ * ── #2126 — marker-swap-without-closing: INFEASIBLE with current fixtures,
+ * documented rather than faked ──
+ * Investigated live (both via this repo's Postgres fixture rows and a real
+ * rendered map at 390x844) whether a second, genuinely distinct property
+ * marker could be tapped while a preview is already open, to prove the
+ * preview swaps to the new listing without an intermediate close. Two
+ * independent blockers rule this out with the fixtures committed today:
+ *   1. Every AREA leaf in navigation-hierarchy-fixture-listings-seed.sql has
+ *      EXACTLY ONE listing (confirmed via a direct query — no area has 2+).
+ *      The only committed AREA leaf with more than one listing is RR Nagar
+ *      AFTER additionally applying navigation-hierarchy-fixture-rent-
+ *      listings-seed.sql (+2 rent listings, #2083) — but those 2 rent rows
+ *      share the EXACT SAME latitude/longitude as the existing sale row
+ *      (12.9314733, 77.5290964 — see that seed file's own INSERT values).
+ *      Confirmed live: all 3 co-located listings collapse into ONE
+ *      `property-marker` DOM element (PropertyMap.tsx renders one marker per
+ *      unique coordinate), so there is no second, independently
+ *      hit-testable marker to tap even with that seed applied.
+ *   2. No other AREA leaf in the fixture has 2+ listings at distinct
+ *      coordinates, and this journey's canonical `node=` hierarchy is only
+ *      built out for Bangalore — the one Postgres area group with genuinely
+ *      distinct-coordinate multi-listing data (Udupi's Kaup/Malpe/Manipal,
+ *      4 listings each, from the older discover-smoke-seed.sql) has no
+ *      corresponding `navigation_nodes` row, so it is not reachable through
+ *      the `node=` + mobile-Map-mode path this component is used in at all.
+ * A test that clicked whatever OpenSearch/marker-endpoint result happens to
+ * be indexed locally right now (a real tap during investigation resolved to
+ * a listing ID absent from the committed Postgres fixture entirely) would be
+ * non-deterministic and not reproducible from a fresh fixture container —
+ * exactly the failure mode this file's own ENTRY-PATH SUBSTITUTION
+ * convention exists to avoid. Per instruction, this is disclosed rather than
+ * skipped, faked, or worked around with a mocked click.
+ *
  * Run:
  *   PLAYWRIGHT_BASE_URL=http://localhost:<port> npx playwright test \
  *     e2e/discover/issue-1956-pr5-s5-mobile-listing-preview.spec.ts --project=full
@@ -146,6 +188,97 @@ test.describe('@integration-ui #1956 PR-5 — MobileListingPreviewSheet real hit
 
     expect(currentListingParam(page)).toBe(RR_NAGAR_LISTING_ID);
     expect(currentNodeParam(page)).toBe(AREA_RR_NAGAR);
+  });
+
+  // Issue #2126 (fix-verify cycle 2) — the reviewer's BLOCKING finding: before
+  // the div->section fix, MapDiscovery's `[&>div]:!h-full` selector (applied
+  // to the mobile map overlay's direct-child divs, intended only for
+  // DiscoverMapCanvas's own root) ALSO matched this sheet's old plain `<div>`
+  // root, forcing `height:100% !important` onto an `absolute inset-x-0
+  // bottom-0` element with no `top` set — stretching the intended compact
+  // bottom-peek card into a full-viewport opaque layer that hid the map
+  // underneath. These two tests assert the real, laid-out geometry (not just
+  // "visible") so a regression back to a full-height sheet fails loudly.
+  test('the preview sheet is a COMPACT bottom peek, not a full-height overlay (regression guard for the div->section fix)', async ({
+    page,
+  }) => {
+    await gotoAreaLeafMapModeWithListingOpen(page, RR_NAGAR_LISTING_ID);
+    const sheet = page.getByTestId('mobile-listing-preview-sheet');
+    await expect(sheet).toBeVisible({ timeout: 10_000 });
+
+    const box = await sheet.boundingBox();
+    expect(box, 'sheet has a layout box').not.toBeNull();
+
+    // (a) Compact height — well under half the viewport. Live-measured on
+    // this exact fixture/viewport the real height is ~23% of 844px; the
+    // 50% threshold is a generous regression guard, not a tight pixel match,
+    // so it stays robust to legitimate content-driven height changes while
+    // still catching the full-height regression (which would measure ~100%).
+    expect(
+      box!.height,
+      `sheet height (${box!.height}px) must be well under half the ${MOBILE_VIEWPORT.height}px viewport`,
+    ).toBeLessThan(MOBILE_VIEWPORT.height * 0.5);
+
+    // The sheet is bottom-anchored (`inset-x-0 bottom-0`) — its top edge
+    // must sit in the bottom half of the viewport, not near the top.
+    expect(
+      box!.y,
+      'sheet top edge must be in the bottom half of the viewport (bottom-anchored, not full-height)',
+    ).toBeGreaterThan(MOBILE_VIEWPORT.height * 0.5);
+  });
+
+  test('the map surface above the sheet stays visible and hit-testable while the sheet is open (regression guard for the div->section fix)', async ({
+    page,
+  }) => {
+    await gotoAreaLeafMapModeWithListingOpen(page, RR_NAGAR_LISTING_ID);
+    const sheet = page.getByTestId('mobile-listing-preview-sheet');
+    await expect(sheet).toBeVisible({ timeout: 10_000 });
+
+    // `mobile-map-close-list-button` is a REAL, already-interactive control
+    // rendered by MapDiscovery at `absolute right-4 top-4` inside the SAME
+    // z-[60] mobile map overlay the sheet mounts into (z-[1100]) — i.e. a
+    // point firmly in the top quarter of the viewport that a full-height
+    // sheet/backdrop regression would cover. If the div->section fix ever
+    // regressed, this element would still be IN THE DOM (React doesn't know
+    // it's visually hidden) but would no longer be the element a real user's
+    // tap at that point would hit — exactly what elementFromPoint proves.
+    const closeListButton = page.getByTestId('mobile-map-close-list-button');
+    await expect(closeListButton).toBeVisible({ timeout: 5_000 });
+
+    const btnBox = await closeListButton.boundingBox();
+    expect(btnBox, 'close-list button has a layout box').not.toBeNull();
+    expect(
+      btnBox!.y,
+      'close-list button must sit in the top quarter of the viewport for this to be a meaningful proof point',
+    ).toBeLessThan(MOBILE_VIEWPORT.height * 0.25);
+
+    const centreX = btnBox!.x + btnBox!.width / 2;
+    const centreY = btnBox!.y + btnBox!.height / 2;
+    const hitsButtonNotSheet = await sheet.evaluate(
+      (sheetEl, [cx, cy]) => {
+        const atPoint = document.elementFromPoint(cx as number, cy as number);
+        const isSheetOrDescendant = atPoint != null && (atPoint === sheetEl || sheetEl.contains(atPoint));
+        const isCloseListButtonOrDescendant =
+          atPoint != null &&
+          (atPoint.getAttribute('data-testid') === 'mobile-map-close-list-button' ||
+            atPoint.closest('[data-testid="mobile-map-close-list-button"]') != null);
+        return { isSheetOrDescendant, isCloseListButtonOrDescendant };
+      },
+      [centreX, centreY] as const,
+    );
+    expect(
+      hitsButtonNotSheet.isSheetOrDescendant,
+      'REGRESSION GUARD: a point in the top quarter of the viewport must NEVER resolve to the sheet — that would mean a full-height sheet/backdrop is covering the map',
+    ).toBe(false);
+    expect(
+      hitsButtonNotSheet.isCloseListButtonOrDescendant,
+      'the top-quarter control must still genuinely hit-test to itself, proving nothing invisible-but-present covers it either',
+    ).toBe(true);
+
+    // Reachability (no {force:true}) is the same real-click proof the rest
+    // of this file already uses for other controls — confirms the button is
+    // not just "found" but truly clickable at its real screen position.
+    await assertReachable(page, closeListButton);
   });
 
   test('"Close" is reachable (no {force:true}) and returns to the SAME Map state — camera/node/Map-mode unchanged, listing= cleared', async ({

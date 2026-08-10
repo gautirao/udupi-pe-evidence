@@ -71,7 +71,7 @@ export function MobileListingPreviewSheet({
   // calling stopPropagation() stops the native event before it ever reaches
   // that document-level listener — no separate document binding needed, and
   // nothing to clean up on unmount (React removes the handler with the node).
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape') {
       event.stopPropagation();
       onDismiss();
@@ -86,11 +86,27 @@ export function MobileListingPreviewSheet({
   const trust = preview.trustBadge ? TRUST_BADGES[preview.trustBadge] : undefined;
 
   return (
-    <div
+    // Code-review fix (#2126, fix-verify cycle 2) — rendered as a <section>,
+    // not a bare <div>, so it is structurally immune to MapDiscovery's
+    // `[&>div]:!h-full` rule on the mobile map overlay wrapper. That rule
+    // exists to force DiscoverMapCanvas's own root div to fill the overlay;
+    // as a plain direct-child `<div>` this sheet was ALSO caught by the same
+    // `>div` selector, forcing `height:100% !important` onto an
+    // `absolute inset-x-0 bottom-0` element with no `top` — which stretches
+    // it to fill the entire overlay, turning the intended compact
+    // bottom-peek card into a full-viewport opaque layer that hides the map
+    // underneath. Changing the tag name (role="dialog" below already
+    // overrides the implicit semantics, same as MarkerPopoverCard) opts this
+    // element out of the `>div` selector entirely with no change to layout,
+    // stacking, or behaviour.
+    <section
       // Mounted INSIDE MapDiscovery's z-[60] mobile map overlay container —
       // a plain positioned element inheriting that stacking context, same
-      // as MobileClusterSheet.
-      className="absolute inset-x-3 bottom-3 z-[1100] max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
+      // as MobileClusterSheet. Edge-to-edge horizontally + a compact,
+      // intrinsic-height card (no max-h/scroll) per the approved
+      // "listing-peek" mock (Experience.jsx ExpSheet, st.peek branch,
+      // data-design-component="listing-peek").
+      className="absolute inset-x-0 bottom-0 z-[1100] rounded-t-2xl border-t border-border bg-card px-3.5 pb-4 pt-2.5 shadow-[0_-8px_26px_rgba(0,0,0,0.18)]"
       data-testid="mobile-listing-preview-sheet"
       // role="dialog" + aria-modal="false" mirrors MarkerPopoverCard's SAME
       // structural precedent for a non-modal overlay panel inside this map
@@ -103,80 +119,104 @@ export function MobileListingPreviewSheet({
       aria-label={preview.propertyType ? `${typeLabel} preview` : 'Property preview'}
       onKeyDown={handleKeyDown}
     >
-      <div className="relative h-32 w-full shrink-0 overflow-hidden bg-muted flex items-center justify-center">
-        {preview.primaryImageUrl ? (
-          <img
-            src={preview.primaryImageUrl}
-            alt={typeLabel}
-            className="h-full w-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <Building2 className="h-10 w-10 text-muted-foreground/40" aria-hidden="true" />
-        )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute right-2 top-2 h-8 w-8 rounded-full bg-black/40 text-white hover:bg-black/60"
-          onClick={onDismiss}
-          aria-label="Close property preview"
-          data-testid="mobile-listing-preview-close"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
+      {/* Drag handle — mock's 38x4px pill, centered above the summary row. */}
+      <div className="mx-auto mb-2.5 h-1 w-9 rounded-full bg-muted-foreground/30" aria-hidden="true" />
 
-      <div className="flex flex-col gap-1.5 p-3">
-        {/* Issue #1616 three-way price render, mirrored from PropertyCard.tsx
-            and MarkerPopoverCard.tsx: authed arm shows the exact price
-            (pricePaise, structurally present only when kind==='authed');
-            anon arm shows the coarse priceBand or a sign-in prompt. Never
-            both — the union makes reading the wrong field a compile error. */}
-        <p className="text-base font-semibold text-foreground" data-testid="mobile-listing-preview-price">
-          {preview.kind === 'authed' ? (
-            preview.pricePaise != null ? (
-              formatPrice(Math.round(preview.pricePaise / 100), 'INR')
-            ) : (
-              <span className="text-sm italic text-muted-foreground">Price not available</span>
-            )
-          ) : preview.priceBand ? (
-            <span data-testid="mobile-listing-preview-price-band">{preview.priceBand}</span>
+      <div className="flex gap-[11px]">
+        <div className="relative h-[78px] w-[92px] shrink-0 overflow-hidden rounded-md bg-muted">
+          {preview.primaryImageUrl ? (
+            <img
+              src={preview.primaryImageUrl}
+              alt={typeLabel}
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
           ) : (
-            <span className="text-sm italic text-muted-foreground">Sign in to view price</span>
+            <div className="flex h-full w-full items-center justify-center">
+              <Building2 className="h-8 w-8 text-muted-foreground/40" aria-hidden="true" />
+            </div>
           )}
-        </p>
-
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-            {typeLabel}
-          </span>
-          {preview.bedrooms != null && (
-            <span className="text-xs text-muted-foreground" data-testid="mobile-listing-preview-bedrooms">
-              {preview.bedrooms} BHK
-            </span>
-          )}
-          {trust && (
-            <span
-              className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] ${trust.className}`}
-              data-testid="mobile-listing-preview-trust-badge"
-            >
-              <trust.icon className="h-2.5 w-2.5" aria-hidden="true" />
-              {trust.label}
-            </span>
-          )}
-          <span className="ml-auto truncate text-xs text-muted-foreground" data-testid="mobile-listing-preview-area-label">
-            {preview.areaLabel}
-          </span>
         </div>
 
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
+          <div className="flex items-baseline justify-between gap-2">
+            {/* Issue #1616 three-way price render, mirrored from PropertyCard.tsx
+                and MarkerPopoverCard.tsx: authed arm shows the exact price
+                (pricePaise, structurally present only when kind==='authed');
+                anon arm shows the coarse priceBand or a sign-in prompt. Never
+                both — the union makes reading the wrong field a compile error. */}
+            <p
+              className="min-w-0 truncate text-[17px] font-bold text-foreground"
+              data-testid="mobile-listing-preview-price"
+            >
+              {preview.kind === 'authed' ? (
+                preview.pricePaise != null ? (
+                  formatPrice(Math.round(preview.pricePaise / 100), 'INR')
+                ) : (
+                  <span className="text-sm italic text-muted-foreground">Price not available</span>
+                )
+              ) : preview.priceBand ? (
+                <span data-testid="mobile-listing-preview-price-band">{preview.priceBand}</span>
+              ) : (
+                <span className="text-sm italic text-muted-foreground">Sign in to view price</span>
+              )}
+            </p>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0 rounded-full border border-border bg-muted text-muted-foreground hover:bg-muted/80"
+              onClick={onDismiss}
+              aria-label="Close property preview"
+              data-testid="mobile-listing-preview-close"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          <p className="truncate text-[12.5px] font-bold text-foreground">
+            {typeLabel}
+            {preview.bedrooms != null && (
+              <span data-testid="mobile-listing-preview-bedrooms"> · {preview.bedrooms} BHK</span>
+            )}
+          </p>
+
+          <div className="flex min-w-0 items-center gap-1.5">
+            {trust && (
+              <span
+                className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.05em] ${trust.className}`}
+                data-testid="mobile-listing-preview-trust-badge"
+              >
+                <trust.icon className="h-2.5 w-2.5" aria-hidden="true" />
+                {trust.label}
+              </span>
+            )}
+            <span
+              className="min-w-0 truncate text-[11.5px] text-muted-foreground"
+              data-testid="mobile-listing-preview-area-label"
+            >
+              {preview.areaLabel}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-2.5 flex gap-2">
         <Button
-          className="mt-1 h-10 w-full text-sm"
+          className="h-11 flex-1 text-sm"
           onClick={() => onViewDetails(preview.id)}
           data-testid="mobile-listing-preview-view-details"
         >
           View details
         </Button>
+        <Button variant="outline" className="h-11 flex-none px-4 text-sm" onClick={onDismiss}>
+          Close
+        </Button>
       </div>
-    </div>
+
+      <p className="mt-2 text-center text-[11px] text-muted-foreground">
+        Back from the details returns to this map view.
+      </p>
+    </section>
   );
 }

@@ -2338,7 +2338,16 @@ export default function MapDiscovery() {
             stacking-context comparison against the header's z-50 (both are
             top-level positioned elements, no intervening stacking context),
             so raising this above 50 is sufficient and correct — no
-            display:none/visibility trick on the header, true overlay only. */}
+            display:none/visibility trick on the header, true overlay only.
+            Code-review fix (#2126, fix-verify cycle 2) — `[&>div]:!h-full`
+            targets DiscoverMapCanvas's own root div so it fills this overlay.
+            MobileListingPreviewSheet and MobileClusterSheet are ALSO direct
+            children here but must stay compact/intrinsic-height, not stretch
+            to fill it; MobileListingPreviewSheet now renders a <section>
+            root specifically so this `>div` selector never matches it (see
+            that file's root-element comment) — no change to this selector
+            itself, since DiscoverMapCanvas's real map container is out of
+            this fix's edit boundary and still needs it. */}
         <div
           className={
             mobileMapOpen ? 'fixed inset-0 z-[60] bg-background [&>div]:!h-full' : 'contents'
