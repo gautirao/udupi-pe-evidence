@@ -148,12 +148,16 @@ export interface DiscoverMapCanvasProps {
   handleBoundsChange: (bbox: [number, number, number, number]) => void;
   panToArea: AreaPoint | null;
   /**
-   * PR #2128 review cycle 3 (Finding 2, issue #1823) — bottom occlusion (px)
+   * PR #2128 review cycle 4 (Finding 2, issue #1823) — bottom occlusion (px)
    * to add to `computeCameraPadding`'s vertical padding at AreaPanner's fit
-   * call, so a fit that occurs while the mobile compact listing-preview
-   * sheet is open keeps its framed geography clear of it. Threaded straight
-   * to `PropertyMap`'s prop of the same name. Optional/defaults to 0 in
-   * PropertyMap so every existing test fixture keeps compiling unchanged.
+   * call. MapDiscovery.tsx reserves this PROACTIVELY for any mobile-Map
+   * listing-capable state (gated on `isMarkerPopoverEligible`, not on
+   * whether the compact listing-preview sheet happens to be open right
+   * now), so the authoritative fit already keeps its framed geography clear
+   * of where that sheet would render, before any marker tap could open it.
+   * Threaded straight to `PropertyMap`'s prop of the same name. Optional/
+   * defaults to 0 in PropertyMap so every existing test fixture keeps
+   * compiling unchanged.
    */
   bottomOcclusionPx?: number;
   journeyView: DiscoverJourneyTransitionsView;

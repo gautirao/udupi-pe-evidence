@@ -39,6 +39,12 @@
  *        cold load carrying a persisted viewport that WOULD suppress the
  *        guarded canonical-node path — proving group/scope fits are
  *        deliberately NOT restore-guarded (out of #1823's narrowed scope).
+ *   T6 — PR #2128 review cycle 4 (Finding 2): a listing-capable mobile-Map
+ *        state must proactively reserve `bottomOcclusionPx=150` for the
+ *        compact listing-preview sheet BEFORE any marker tap, not reactively
+ *        toggle it on the sheet's own open/closed state — plus real-browser
+ *        coverage of a mobile List->Map->List->Map remount preserving the
+ *        camera (Finding 1, already unit-confirmed).
  *
  * `resolveMarkerRevealMode` (zoomPolicy.ts) is an unwired decision-input for
  * #1762 and is deliberately NOT exercised here.
@@ -472,5 +478,116 @@ test.describe('@integration-ui #1823 — camera fit policy', () => {
     const finalLat = Number(finalCamera.lat);
     expect(finalLat, 'T5: final camera lat must land in the Udupi region (group bounds), not the injected restore value').toBeGreaterThan(12);
     expect(finalLat).toBeLessThan(14);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// T6 — PR #2128 review cycle 4 (Finding 2 + Finding 1 real-browser proof).
+//
+// Finding 2 (still blocking going into this cycle): the reviewer's exact
+// words were "MapDiscovery passes bottomOcclusionPx=150 only when
+// mobileMapOpen AND selectedListingPreview... the ordinary sequence is:
+// enter Area/bounded listing state -> authoritative fit runs with
+// bottomOcclusionPx=0 -> tap a listing -> compact preview opens -> no camera
+// reframe/padding update occurs." The fix moves the gate from
+// `selectedListingPreview` (reactive to the sheet's own open/closed state)
+// to `isMarkerPopoverEligible` (the SAME journey/areaKey/schoolId/
+// isNodeAreaLeaf predicate that already scopes the desktop marker-popover
+// render-eligibility) — reserving the occlusion PROACTIVELY for the
+// authoritative fit itself, before any marker tap could ever open the
+// sheet. This test asserts exactly that: bottomOcclusionPx must already be
+// 150 immediately on entering mobile Map mode for a listing-capable state,
+// with NO marker tapped and NO preview sheet ever opened.
+//
+// Observability choice: window.__debug.mapState.bottomOcclusionPx (this
+// spec file's own established debug-proxy convention — see
+// getCanonicalNodeFitCount/getDebugSchoolCenter above), not raw marker DOM
+// pixel geometry. AREA_RR_NAGAR's marker position is a documented,
+// unrelated, out-of-scope defect at a real 390x844 viewport (PropertyMap.tsx
+// never calls `map.invalidateSize()` after a fit — confirmed live via
+// boundingBox(), see issue-1956-pr5-s5-mobile-listing-preview.spec.ts's own
+// module doc), which would make a pixel-based assertion unreliable for
+// reasons unrelated to this fix.
+//
+// Finding 1 (already reviewer-confirmed fixed at the unit level in
+// PropertyMap.areaPanner.test.tsx): folded in here as real-browser coverage
+// of the SAME remount contract — a mobile List->Map->List->Map toggle
+// (DiscoverMapMount.tsx real-unmounts/remounts PropertyMap/AreaPanner on
+// every List<->Map transition) must not reset or drift the camera away from
+// its pre-toggle value.
+// ─────────────────────────────────────────────────────────────────────────
+test.describe('@integration-ui #1823 (PR #2128 review cycle 4) — mobile listing-capable occlusion is proactive, and survives a List<->Map remount', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  async function readBottomOcclusionPx(page: Page): Promise<number | null> {
+    return page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __debug?: { mapState?: { bottomOcclusionPx?: number } };
+          }
+        ).__debug?.mapState?.bottomOcclusionPx ?? null,
+    );
+  }
+
+  test('T6: entering a listing-capable state in mobile Map mode reserves bottomOcclusionPx=150 BEFORE any marker tap, and it (and the camera) survive a List->Map->List->Map remount', async ({ page }) => {
+    // Cold-load onto the same canonical AREA node T1 uses — a listing-capable
+    // state (isMarkerPopoverEligible=true via areaKey != null), one of the
+    // three canonical listing-capable states #1823's task brief names.
+    await page.goto(`/discover?${AREA_FIRST_BASE}&node=${encodeURIComponent(AREA_RR_NAGAR)}`);
+    await page.waitForLoadState('domcontentloaded');
+    await dismissConsentBannerIfPresent(page);
+    await expect(page.getByTestId('navigation-level-panel')).toBeVisible({ timeout: 15_000 });
+    await expect.poll(() => nodeParam(page), { timeout: 10_000 }).toBe(AREA_RR_NAGAR);
+    await expect
+      .poll(() => readCamera(page).lat, { timeout: 10_000 })
+      .not.toBeNull();
+    await page.waitForTimeout(SETTLE_MS);
+
+    // Enter mobile Map mode (control-bar-map-trigger — the SAME
+    // journey-agnostic mobile List<->Map affordance issue-1956-pr5-mobile-
+    // cluster-sheet.spec.ts / issue-1956-pr2-breadcrumb.spec.ts already use
+    // for the canonical Areas journey). No marker has been tapped and no
+    // preview sheet has ever opened at this point.
+    const mapTrigger = page.getByTestId('control-bar-map-trigger');
+    await expect(mapTrigger).toBeVisible({ timeout: 15_000 });
+    await mapTrigger.click();
+    const closeListButton = page.getByTestId('mobile-map-close-list-button');
+    await expect(closeListButton).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(SETTLE_MS);
+
+    await expect(
+      page.getByTestId('mobile-listing-preview-sheet'),
+      'T6: the preview sheet must NOT be open yet — this assertion proves the occlusion is reserved with no sheet ever having opened',
+    ).toHaveCount(0);
+
+    await expect
+      .poll(() => readBottomOcclusionPx(page), {
+        timeout: 10_000,
+        message:
+          'T6: bottomOcclusionPx must already be 150 for this listing-capable mobile-Map state with NO marker tapped and NO preview sheet open — a value of 0 here is exactly the reactive-gating defect this cycle fixes (reviewer: "authoritative fit runs with bottomOcclusionPx=0 -> tap a listing -> ... no camera reframe/padding update occurs")',
+      })
+      .toBe(150);
+
+    const cameraBeforeToggle = readCamera(page);
+
+    // Finding 1 real-browser coverage — toggle List -> Map -> List -> Map.
+    // DiscoverMapMount.tsx real-unmounts PropertyMap/AreaPanner on List and
+    // remounts fresh on Map every time; the camera must survive unchanged.
+    await closeListButton.click();
+    await expect(mapTrigger).toBeVisible({ timeout: 10_000 });
+    await mapTrigger.click();
+    await expect(page.getByTestId('mobile-map-close-list-button')).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(SETTLE_MS);
+
+    expect(
+      readCamera(page),
+      'T6: camera after a List->Map->List->Map remount must equal the pre-toggle camera — a different value here means the remount reset or replayed the fit instead of preserving it',
+    ).toEqual(cameraBeforeToggle);
+
+    expect(
+      await readBottomOcclusionPx(page),
+      'T6: bottomOcclusionPx must remain proactively reserved after the remount, unaffected by AreaPanner/PropertyMap remounting underneath it',
+    ).toBe(150);
   });
 });

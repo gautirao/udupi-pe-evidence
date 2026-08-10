@@ -529,12 +529,14 @@ interface PropertyMapProps {
       })
     | null;
   /**
-   * PR #2128 review cycle 3 (Finding 2, issue #1823) — additional bottom
-   * padding (px) for AreaPanner's fitBounds call, so a fit that occurs while
-   * viewport chrome overlapping the map (currently: the mobile compact
-   * listing-preview sheet) is open keeps its framed geography clear of it.
-   * Passed straight through to `computeCameraPadding`. Defaults to 0 (every
-   * existing caller omits it, unaffected).
+   * PR #2128 review cycle 4 (Finding 2, issue #1823) — additional bottom
+   * padding (px) for AreaPanner's fitBounds call, reserved by the caller
+   * PROACTIVELY for any mobile-Map listing-capable state (not reactively
+   * toggled by whether the mobile compact listing-preview sheet happens to
+   * be open right now — see MapDiscovery.tsx's call site and AreaPanner's
+   * own effect comment below for why). Passed straight through to
+   * `computeCameraPadding`. Defaults to 0 (every existing caller omits it,
+   * unaffected).
    */
   bottomOcclusionPx?: number;
   /** Incrementing tick that triggers a zoom reset to cityCenter/cityZoom. Incremented by handleAreaBack. */
@@ -1046,13 +1048,16 @@ function AreaPanner({
       map.flyTo([panToArea.geo_center_lat, panToArea.geo_center_lon], LEAF_FIT_MIN_ZOOM);
     }
     // `bottomOcclusionPx` is intentionally NOT a dep: this effect fires only
-    // on a genuine panToArea transition (per the seq guard above), not on
-    // every occlusion change. Opening/closing the mobile preview sheet does
-    // not by itself re-trigger a fit — it only affects the padding applied
-    // to the NEXT fit that happens to occur while it's open. Retroactively
-    // re-framing an already-completed fit when the sheet opens afterward
-    // would be a materially bigger behaviour change (a new camera-move
-    // trigger source) than this fix cycle's scope.
+    // on a genuine panToArea transition (per the seq guard above), never on
+    // an occlusion change alone. That is safe by DESIGN, not by accident —
+    // the caller (MapDiscovery.tsx) reserves this padding PROACTIVELY for
+    // any mobile-Map listing-capable state (gated on isMarkerPopoverEligible,
+    // not on whether the preview sheet happens to be open right now), so the
+    // authoritative fit for that state already bakes in the occlusion BEFORE
+    // any marker tap could open the sheet. A reactive "refit when the sheet
+    // opens/closes" trigger is deliberately NOT implemented here — it would
+    // be a materially bigger behaviour change (a new camera-move source) and
+    // is unnecessary once the padding is reserved up front.
   }, [panToArea, map]);
   return null;
 }
