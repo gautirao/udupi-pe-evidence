@@ -88,8 +88,16 @@ export interface UseDiscoverCameraOrchestrationParams {
    * `AreaPoint | null` values already safely accepts these widened ones —
    * the extra fields simply flow through at runtime for AreaPanner
    * (PropertyMap.tsx) to read off the same object it already receives.
+   *
+   * `consumedSeqRef` (fix cycle 3) is the SAME reasoning applied to
+   * `consumedPanToAreaSeqRef` below — an extra optional field carrying a
+   * live ref object through unaffected by this setter's own type.
    */
-  setPanToArea: React.Dispatch<React.SetStateAction<(AreaPoint & { seq?: number; reason?: AreaPanReason }) | null>>;
+  setPanToArea: React.Dispatch<
+    React.SetStateAction<
+      (AreaPoint & { seq?: number; reason?: AreaPanReason; consumedSeqRef?: React.MutableRefObject<number> }) | null
+    >
+  >;
   /** useDiscoverMapData outputs — injected. */
   isLoadingAreaListings: boolean;
   discoverAreas: AreaPoint[];
@@ -319,10 +327,29 @@ export function useDiscoverCameraOrchestration({
   // only the canonical-node call site below, which already had this guard
   // correctly before this issue.
   const panToAreaSeqRef = useRef(0);
+  // Issue #1823 (fix cycle 3 — PR #2128 review) — tracks the highest seq
+  // AreaPanner (PropertyMap.tsx) has actually fired a fit for, owned HERE
+  // rather than by AreaPanner's own local ref. This hook instance survives
+  // both remounts that previously replayed an already-fired seq: a
+  // PropertyMap-level `mapInstanceKey` bump (PropertyMap stays mounted, only
+  // MapContainer/AreaPanner remount) AND the mobile Map dismiss/reopen,
+  // which real-unmounts PropertyMap itself while MapDiscovery (this hook's
+  // owner) stays mounted. Threaded through on the `panToArea` object itself
+  // (not a new prop/callback) so AreaPanner can gate against consumption
+  // that outlives its own remounts, while a seq published before AreaPanner's
+  // very first-ever mount (the react-leaflet one-commit-later child-mount
+  // race on a warm-cache navigation) still compares against this ref's
+  // per-hook-lifetime initial value of 0 and fires normally.
+  const consumedPanToAreaSeqRef = useRef(0);
   const publishPanToArea = useCallback(
     (area: AreaPoint, reason: AreaPanReason): boolean => {
       panToAreaSeqRef.current += 1;
-      setPanToArea({ ...area, seq: panToAreaSeqRef.current, reason });
+      setPanToArea({
+        ...area,
+        seq: panToAreaSeqRef.current,
+        reason,
+        consumedSeqRef: consumedPanToAreaSeqRef,
+      });
       return true;
     },
     [setPanToArea],

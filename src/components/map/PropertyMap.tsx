@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { MutableRefObject } from 'react';
 import { MapContainer, TileLayer, useMap, Circle, Marker, Polygon, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
@@ -513,8 +514,20 @@ interface PropertyMapProps {
    * group/scope/canonical-node fit effects (via `guardedSetPanToArea`);
    * other callers keep passing a plain `AreaPoint`, which AreaPanner below
    * treats as an un-sequenced, always-fire legacy write.
+   *
+   * `consumedSeqRef` (fix cycle 3 — PR #2128 review) is populated alongside
+   * `seq`/`reason` by the SAME publisher: a ref owned by
+   * useDiscoverCameraOrchestration that survives AreaPanner's own
+   * unmount/remount (mapInstanceKey bump, mobile Map dismiss/reopen). See
+   * AreaPanner below for how it replaces the old locally-scoped guard ref.
    */
-  panToArea?: (AreaPoint & { seq?: number; reason?: AreaPanReason }) | null;
+  panToArea?:
+    | (AreaPoint & {
+        seq?: number;
+        reason?: AreaPanReason;
+        consumedSeqRef?: MutableRefObject<number>;
+      })
+    | null;
   /** Incrementing tick that triggers a zoom reset to cityCenter/cityZoom. Incremented by handleAreaBack. */
   resetMapTick?: number;
   /** Called once when the Leaflet map instance has finished initialising. Use to gate data-readiness checks. */
@@ -952,7 +965,13 @@ function BoundsWatcher({
   return null;
 }
 
-function AreaPanner({ panToArea }: { panToArea?: (AreaPoint & { seq?: number; reason?: AreaPanReason }) | null }) {
+function AreaPanner({
+  panToArea,
+}: {
+  panToArea?:
+    | (AreaPoint & { seq?: number; reason?: AreaPanReason; consumedSeqRef?: MutableRefObject<number> })
+    | null;
+}) {
   const map = useMap();
   // Issue #1823 (fix cycle 1) — plain monotonic seq guard, scoped to ONLY
   // the three sequenced reasons (group/scope/canonicalNode) that carry a
@@ -975,17 +994,28 @@ function AreaPanner({ panToArea }: { panToArea?: (AreaPoint & { seq?: number; re
   // orchestration hook's own prevGroupIdRef/prevScopeRef had already
   // advanced and nothing else re-triggers it.
   //
-  // Accepted trade-off: a PropertyMap-level remount (mapInstanceKey bump, or
-  // mobile map dismiss/reopen) that inherits an already-fired seq will now
-  // replay that fit once more instead of staying silent — a harmless
-  // redundant animation to the position the map is already framed at, never
-  // a dropped/dead camera.
-  const lastHandledSeqRef = useRef(-1);
+  // Issue #1823 (fix cycle 3 — PR #2128 review) — cycle 1/2 accepted a
+  // PropertyMap-level remount (mapInstanceKey bump, or mobile map
+  // dismiss/reopen) replaying an already-fired seq as a "harmless redundant
+  // animation" trade-off. That conflicts with #1823's binding unmount/remount
+  // requirement, so the guard is no longer purely local: `panToArea` now
+  // carries `consumedSeqRef`, a ref owned by useDiscoverCameraOrchestration
+  // (survives AreaPanner's own remounts, since the hook lives in
+  // MapDiscovery, above PropertyMap). Gating against THAT ref instead of a
+  // fresh per-mount local one means an already-consumed seq stays suppressed
+  // across a remount, while a seq published before AreaPanner's very
+  // first-ever mount (the react-leaflet race described above) still compares
+  // against the ref's per-hook-lifetime initial value of 0 and fires.
+  // `localFallbackSeqRef` only matters for a sequenced `panToArea` with no
+  // `consumedSeqRef` attached (i.e. not constructed via publishPanToArea) —
+  // every real sequenced write goes through that publisher.
+  const localFallbackSeqRef = useRef(0);
   useEffect(() => {
     if (!panToArea) return;
     if (panToArea.seq != null) {
-      if (panToArea.seq <= lastHandledSeqRef.current) return;
-      lastHandledSeqRef.current = panToArea.seq;
+      const consumedSeqRef = panToArea.consumedSeqRef ?? localFallbackSeqRef;
+      if (panToArea.seq <= consumedSeqRef.current) return;
+      consumedSeqRef.current = panToArea.seq;
     }
 
     if (panToArea.bbox) {

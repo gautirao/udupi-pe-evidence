@@ -9,6 +9,9 @@ import {
   isRestoreAuthoritative,
   resolveMarkerRevealMode,
   CLUSTER_DISABLE_AT_ZOOM,
+  computeCameraPadding,
+  DESKTOP_CAMERA_PADDING,
+  MOBILE_CAMERA_PADDING,
 } from './zoomPolicy';
 
 describe('Issue #1823 — isRestoreAuthoritative', () => {
@@ -125,5 +128,28 @@ describe('Issue #1823 — resolveMarkerRevealMode', () => {
     expect(
       resolveMarkerRevealMode(CLUSTER_DISABLE_AT_ZOOM - 1, NEUTRAL_MARKER_COUNT, 0, 0, NO_EXTENT),
     ).toBe('clusteredOverview');
+  });
+});
+
+// PR #2128 review cycle 3 (Finding 2) — computeCameraPadding's bottom padding
+// was width-responsive only, with no input for occlusion from viewport chrome
+// (mobile top controls, the compact listing-preview sheet) that can hide
+// fitted result geography. `bottomOcclusionPx` lets a caller that knows about
+// such an overlay add clearance on top of the existing responsive tier,
+// without disturbing every pre-existing call site (all of which omit it).
+describe('Issue #1823 (PR #2128 review cycle 3) — computeCameraPadding bottomOcclusionPx', () => {
+  it('defaults to 0 occlusion — unchanged desktop/mobile tiers', () => {
+    expect(computeCameraPadding(1440)).toEqual(DESKTOP_CAMERA_PADDING);
+    expect(computeCameraPadding(600)).toEqual(MOBILE_CAMERA_PADDING);
+    expect(computeCameraPadding(undefined)).toEqual(DESKTOP_CAMERA_PADDING);
+  });
+
+  it('a nonzero occlusion height adds to the bottom (vertical) padding only, leaving horizontal untouched', () => {
+    expect(computeCameraPadding(600, 160)).toEqual([MOBILE_CAMERA_PADDING[0], MOBILE_CAMERA_PADDING[1] + 160]);
+    expect(computeCameraPadding(1440, 160)).toEqual([DESKTOP_CAMERA_PADDING[0], DESKTOP_CAMERA_PADDING[1] + 160]);
+  });
+
+  it('occlusion of 0 is explicitly a no-op (same as omitting the argument)', () => {
+    expect(computeCameraPadding(600, 0)).toEqual(computeCameraPadding(600));
   });
 });

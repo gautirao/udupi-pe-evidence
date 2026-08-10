@@ -103,7 +103,15 @@ const baseProps = {
   areas: [],
 };
 
-type SeqAreaPoint = AreaPoint & { seq?: number; reason?: 'group' | 'scope' | 'canonicalNode' };
+type SeqAreaPoint = AreaPoint & {
+  seq?: number;
+  reason?: 'group' | 'scope' | 'canonicalNode';
+  // Issue #1823 (fix cycle 3) — mirrors the ref useDiscoverCameraOrchestration
+  // attaches alongside seq/reason in production (publishPanToArea). Plain
+  // `{ current: number }` here since these tests construct panToArea
+  // directly rather than going through the hook.
+  consumedSeqRef?: { current: number };
+};
 
 const renderWithPan = (panToArea: SeqAreaPoint | null) =>
   render(<PropertyMap {...baseProps} panToArea={panToArea} />);
@@ -225,10 +233,11 @@ describe('Issue #1823 — AreaPanner seq/adopt-on-mount', () => {
     // orchestration hook's group/scope effect publishes the first-ever
     // sequenced fit. This must fire — it is not a remount, there was no
     // PRIOR sighting of any panToArea to have already consumed it.
+    const consumedSeqRef = { current: 0 };
     const { rerender } = render(<PropertyMap {...baseProps} panToArea={null} />);
     expect(mapStub.fitBounds).not.toHaveBeenCalled();
 
-    rerender(<PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 1, reason: 'group' }} />);
+    rerender(<PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 1, reason: 'group', consumedSeqRef }} />);
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
   });
 
@@ -248,33 +257,54 @@ describe('Issue #1823 — AreaPanner seq/adopt-on-mount', () => {
     // that first-observed state (the test harness's MapContainer mock
     // renders children synchronously, so a direct initial render is the most
     // faithful way to reproduce "first execution already has a seq").
-    render(<PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 1, reason: 'group' }} />);
+    //
+    // `consumedSeqRef` starts at its per-hook-lifetime initial value (0) —
+    // exactly like a genuine first-ever mount of useDiscoverCameraOrchestration
+    // itself — so seq 1 > 0 fires normally, proving the fix cycle 3 gate
+    // preserves this original guarantee.
+    const consumedSeqRef = { current: 0 };
+    render(<PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 1, reason: 'group', consumedSeqRef }} />);
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
   });
 
-  it('Issue #1823 (fix cycle 1) — a PropertyMap-level remount replays an already-fired seq rather than swallowing it (accepted trade-off, no dead camera)', () => {
-    // Unlike MapController's cameraIntent (which is guaranteed null on a
-    // genuine first-ever mount, so silently adopting whatever the first
-    // effect run observes is always safe), AreaPanner's panToArea has no
-    // such guarantee and no competing restore signal to protect — so a
-    // remount (mapInstanceKey bump, or mobile map dismiss/reopen) that
-    // inherits an already-fired seq now replays that fit once more instead
-    // of staying silent. This is a harmless redundant animation to the
-    // position the map is already framed at, and the strictly safer failure
-    // mode compared to ever dropping a genuine transition.
+  it('Issue #1823 (fix cycle 3 — PR #2128 review) — a PropertyMap-level remount does NOT replay an already-consumed seq, because consumedSeqRef survives the remount', () => {
+    // consumedSeqRef models useDiscoverCameraOrchestration's
+    // consumedPanToAreaSeqRef: owned by a hook instance that lives ABOVE
+    // PropertyMap (in MapDiscovery) and therefore survives exactly the
+    // remounts under test here — a mapInstanceKey bump, or the mobile Map
+    // dismiss/reopen unmounting PropertyMap itself. Reusing the SAME ref
+    // object across the unmount()/render() boundary below is what makes this
+    // test faithful to that survival; a fresh `{ current: 0 }` per render
+    // would just reproduce the old (now-rejected) replay behaviour.
+    const consumedSeqRef = { current: 0 };
     const { unmount } = render(
-      <PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 3, reason: 'scope' }} />,
+      <PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 3, reason: 'scope', consumedSeqRef }} />,
     );
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
     unmount();
     mapStub.fitBounds.mockClear();
 
     const { rerender } = render(
-      <PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 3, reason: 'scope' }} />,
+      <PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 3, reason: 'scope', consumedSeqRef }} />,
     );
-    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1); // replayed, not adopted silently
+    expect(mapStub.fitBounds).not.toHaveBeenCalled(); // already consumed — NOT replayed
 
-    rerender(<PropertyMap {...baseProps} panToArea={{ ...areaB, seq: 4, reason: 'scope' }} />);
-    expect(mapStub.fitBounds).toHaveBeenCalledTimes(2); // seq 4 > 3 — real transition still fires
+    // A genuine new transition (seq 4) still fires through the same persistent ref.
+    rerender(<PropertyMap {...baseProps} panToArea={{ ...areaB, seq: 4, reason: 'scope', consumedSeqRef }} />);
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+  });
+
+  it('Issue #1823 (fix cycle 3) — WITHOUT a consumedSeqRef (direct construction, not via publishPanToArea), the local fallback ref still resets per-mount', () => {
+    // Documents the fallback path's scope: it only matters for a sequenced
+    // panToArea built without going through publishPanToArea. Every real
+    // sequenced write in production always attaches consumedSeqRef, so this
+    // path is a defensive default, not a behaviour real users can hit.
+    const { unmount } = render(<PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 3, reason: 'scope' }} />);
+    unmount();
+    mapStub.fitBounds.mockClear();
+
+    render(<PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 3, reason: 'scope' }} />);
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
   });
 
   it('un-sequenced (legacy) panToArea writes keep firing on every identity change, unaffected by the seq guard', () => {

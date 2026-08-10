@@ -158,11 +158,21 @@ export const DESKTOP_BREAKPOINT_PX = 1024;
 export const MOBILE_CAMERA_PADDING: CameraPadding = [40, 40];
 export const DESKTOP_CAMERA_PADDING: CameraPadding = [120, 40];
 
-export function computeCameraPadding(viewportWidthPx?: number): CameraPadding {
-  if (viewportWidthPx != null && viewportWidthPx < DESKTOP_BREAKPOINT_PX) {
-    return MOBILE_CAMERA_PADDING;
-  }
-  return DESKTOP_CAMERA_PADDING;
+/**
+ * `bottomOcclusionPx` (PR #2128 review cycle 3) — additional bottom padding
+ * for viewport chrome that overlaps the map but carries no fitBounds
+ * awareness of its own: the mobile compact listing-preview sheet
+ * (MobileListingPreviewSheet.tsx) and mobile top controls are the two the
+ * caller is responsible for measuring/estimating and passing in. Defaults to
+ * 0 — every existing call site (none of which currently has an occlusion
+ * signal to pass) is byte-for-byte unaffected.
+ */
+export function computeCameraPadding(viewportWidthPx?: number, bottomOcclusionPx = 0): CameraPadding {
+  const [horizontal, vertical] =
+    viewportWidthPx != null && viewportWidthPx < DESKTOP_BREAKPOINT_PX
+      ? MOBILE_CAMERA_PADDING
+      : DESKTOP_CAMERA_PADDING;
+  return [horizontal, vertical + bottomOcclusionPx];
 }
 
 // ── Issue #1823 — leaf (real-area) fit zoom clamp ────────────────────────
