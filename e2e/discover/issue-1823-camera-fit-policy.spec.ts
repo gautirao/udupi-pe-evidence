@@ -622,12 +622,15 @@ test.describe('@integration-ui #1823 (PR #2128 review cycle 4) — mobile listin
 
     // Fix-verify correction — the fit-populated-lat proof belongs HERE, now
     // that the map has actually mounted (via the map-trigger click above),
-    // not before it existed.
-    const cameraAfterMount = readCamera(page);
-    expect(
-      cameraAfterMount.lat,
-      'T6: camera lat must populate once the map mounts and fits for this listing-capable state — a null value here means the fit never fired',
-    ).not.toBeNull();
+    // not before it existed. `expect.poll` (not a bare read) for robustness
+    // against the fit's own async settle time.
+    await expect
+      .poll(() => readCamera(page).lat, {
+        timeout: 10_000,
+        message:
+          'T6: camera lat must populate once the map mounts and fits for this listing-capable state — a null value here means the fit never fired',
+      })
+      .not.toBeNull();
 
     // Fix-verify correction (scope narrowed) — the List->Map->List->Map
     // remount portion that used to follow here has been REMOVED, not just

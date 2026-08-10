@@ -158,33 +158,22 @@ export const DESKTOP_BREAKPOINT_PX = 1024;
 export const MOBILE_CAMERA_PADDING: CameraPadding = [40, 40];
 export const DESKTOP_CAMERA_PADDING: CameraPadding = [120, 40];
 
-/**
- * `bottomOcclusionPx` (PR #2128 review cycle 3) — additional bottom padding
- * for viewport chrome that overlaps the map but carries no fitBounds
- * awareness of its own: the mobile compact listing-preview sheet
- * (MobileListingPreviewSheet.tsx) and mobile top controls are the two the
- * caller is responsible for measuring/estimating and passing in. Defaults to
- * 0 — every existing call site (none of which currently has an occlusion
- * signal to pass) is byte-for-byte unaffected.
- */
-export function computeCameraPadding(viewportWidthPx?: number, bottomOcclusionPx = 0): CameraPadding {
-  const [horizontal, vertical] =
-    viewportWidthPx != null && viewportWidthPx < DESKTOP_BREAKPOINT_PX
-      ? MOBILE_CAMERA_PADDING
-      : DESKTOP_CAMERA_PADDING;
-  return [horizontal, vertical + bottomOcclusionPx];
+export function computeCameraPadding(viewportWidthPx?: number): CameraPadding {
+  return viewportWidthPx != null && viewportWidthPx < DESKTOP_BREAKPOINT_PX
+    ? MOBILE_CAMERA_PADDING
+    : DESKTOP_CAMERA_PADDING;
 }
 
 /**
- * Issue #1823 (PR #2128 review cycle 3, Finding 2) — deliberate CONSERVATIVE
- * FIXED ESTIMATE of the mobile compact listing-preview sheet's occluded
- * height (MobileListingPreviewSheet.tsx), used as `bottomOcclusionPx` when
- * the sheet is open. NOT measured: that component is explicitly documented
- * as "intrinsic-height (no max-h/scroll)", so there is no fixed CSS value to
- * read, and a live ResizeObserver/ref-measurement round-trip through
- * MapDiscovery.tsx was judged a disproportionately larger, riskier change
- * (a new effect + callback prop on a presentational-only, already-delivered
- * component) for this fix cycle's budget than a documented estimate.
+ * Issue #1823 (PR #2128, Finding 2) — deliberate CONSERVATIVE FIXED ESTIMATE
+ * of the mobile compact listing-preview sheet's occluded height
+ * (MobileListingPreviewSheet.tsx). NOT measured: that component is
+ * explicitly documented as "intrinsic-height (no max-h/scroll)", so there is
+ * no fixed CSS value to read, and a live ResizeObserver/ref-measurement
+ * round-trip through MapDiscovery.tsx was judged a disproportionately
+ * larger, riskier change (a new effect + callback prop on a
+ * presentational-only, already-delivered component) for this fix cycle's
+ * budget than a documented estimate.
  *
  * Derived from the sheet's own rendered content (drag handle 4px + its 10px
  * bottom margin, container pt-2.5/pb-4 = 10px + 16px, and the 78px preview
@@ -195,6 +184,13 @@ export function computeCameraPadding(viewportWidthPx?: number, bottomOcclusionPx
  * If MobileListingPreviewSheet.tsx's layout changes materially (e.g. a
  * taller image, an added row), this constant must be re-derived — it is not
  * self-updating.
+ *
+ * PR #2128 final review (HIGH fix) — this value is no longer passed through
+ * `computeCameraPadding()` (a single `padding: [x, y]` fitBounds tuple is
+ * NOT directional in Leaflet — it applies to both top and bottom). The
+ * caller (AreaPanner in PropertyMap.tsx) instead adds it directly to only
+ * the vertical component of `paddingBottomRight`, Leaflet's actual
+ * asymmetric-padding API.
  */
 export const MOBILE_LISTING_PREVIEW_OCCLUSION_PX = 150;
 

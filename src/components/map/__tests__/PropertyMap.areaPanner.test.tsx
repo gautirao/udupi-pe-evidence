@@ -148,8 +148,13 @@ describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
     const [bbox, opts] = mapStub.fitBounds.mock.calls[0];
     expect(bbox).toEqual(groupBounds.bbox);
+    // PR #2128 final review (HIGH) — a single `padding: [x, y]` tuple is NOT
+    // directional in Leaflet; AreaPanner now uses paddingTopLeft/
+    // paddingBottomRight (bottomOcclusionPx defaults to 0 here, so both
+    // corners carry the same [120, 40] tier).
     expect(opts).toEqual({
-      padding: [120, 40],
+      paddingTopLeft: [120, 40],
+      paddingBottomRight: [120, 40],
       maxZoom: AREA_PANNER_GROUP_MAX_ZOOM,
     });
     expect(AREA_PANNER_GROUP_MAX_ZOOM).toBe(12);
@@ -168,7 +173,7 @@ describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
 
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
     const [, opts] = mapStub.fitBounds.mock.calls[0];
-    expect(opts).toEqual({ padding: [120, 40], maxZoom: 16 });
+    expect(opts).toEqual({ paddingTopLeft: [120, 40], paddingBottomRight: [120, 40], maxZoom: 16 });
   });
 
   it('does not call fitBounds when panToArea is null', () => {
@@ -190,10 +195,10 @@ describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
 
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
     const [, opts] = mapStub.fitBounds.mock.calls[0];
-    expect(opts).toEqual({ padding: [40, 40], maxZoom: 16 });
+    expect(opts).toEqual({ paddingTopLeft: [40, 40], paddingBottomRight: [40, 40], maxZoom: 16 });
   });
 
-  it('PR #2128 review cycle 3 (Finding 2) — forwards a nonzero bottomOcclusionPx prop into AreaPanner\'s computeCameraPadding call', () => {
+  it('PR #2128 final review (HIGH fix) — a nonzero bottomOcclusionPx prop adds ONLY to paddingBottomRight, leaving paddingTopLeft at the plain responsive tier', () => {
     const realArea: AreaPoint = {
       areaKey: 'IN|KA|Udupi|Manipal',
       areaLabel: 'Manipal',
@@ -207,11 +212,17 @@ describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
     const [, opts] = mapStub.fitBounds.mock.calls[0];
     // Desktop tier [120, 40] (innerWidth pinned to 1440 by this block's
-    // beforeEach) + 150px occlusion added to the vertical component only.
-    expect(opts).toEqual({ padding: [120, 190], maxZoom: 16 });
+    // beforeEach); the 150px occlusion adds ONLY to paddingBottomRight's
+    // vertical component — a single `padding: [x, y]` tuple would apply to
+    // BOTH corners (double cost), which is exactly the bug this fixes.
+    expect(opts).toEqual({
+      paddingTopLeft: [120, 40],
+      paddingBottomRight: [120, 190],
+      maxZoom: 16,
+    });
   });
 
-  it('PR #2128 review cycle 3 (Finding 2) — omitting bottomOcclusionPx (the default) is unaffected, matching pre-fix padding', () => {
+  it('omitting bottomOcclusionPx (the default) leaves both corners at the plain responsive tier, unaffected', () => {
     const realArea: AreaPoint = {
       areaKey: 'IN|KA|Udupi|Manipal',
       areaLabel: 'Manipal',
@@ -224,7 +235,7 @@ describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
 
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
     const [, opts] = mapStub.fitBounds.mock.calls[0];
-    expect(opts).toEqual({ padding: [120, 40], maxZoom: 16 });
+    expect(opts).toEqual({ paddingTopLeft: [120, 40], paddingBottomRight: [120, 40], maxZoom: 16 });
   });
 });
 

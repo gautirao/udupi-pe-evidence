@@ -109,6 +109,15 @@ import {
 export type { CameraPadding };
 export { DESKTOP_BREAKPOINT_PX, MOBILE_CAMERA_PADDING, DESKTOP_CAMERA_PADDING, computeCameraPadding };
 
+// PR #2128 (Finding 2, issue #1823) — deliberate scope boundary: the 3
+// producers below (publishCameraIntent/publishClusterCameraIntent/
+// publishRecenterCameraIntent, feeding MapController) are NOT
+// occlusion-aware — only AreaPanner's fitBounds call in PropertyMap.tsx
+// reserves bottomOcclusionPx. #1823's own scope is the three canonical
+// listing-capable Area/Browse/school-radius states AreaPanner fits;
+// widening occlusion-awareness to marker/cluster camera intents here is a
+// separate, uncharted extension, not part of this fix.
+
 /**
  * Real viewport width for camera-padding selection, read at the moment a
  * camera intent is published (inside publishCameraIntent/

@@ -131,25 +131,19 @@ describe('Issue #1823 — resolveMarkerRevealMode', () => {
   });
 });
 
-// PR #2128 review cycle 3 (Finding 2) — computeCameraPadding's bottom padding
-// was width-responsive only, with no input for occlusion from viewport chrome
-// (mobile top controls, the compact listing-preview sheet) that can hide
-// fitted result geography. `bottomOcclusionPx` lets a caller that knows about
-// such an overlay add clearance on top of the existing responsive tier,
-// without disturbing every pre-existing call site (all of which omit it).
-describe('Issue #1823 (PR #2128 review cycle 3) — computeCameraPadding bottomOcclusionPx', () => {
-  it('defaults to 0 occlusion — unchanged desktop/mobile tiers', () => {
+// PR #2128 final review (HIGH fix) — computeCameraPadding no longer accepts
+// a `bottomOcclusionPx` argument: a single `padding: [x, y]` fitBounds tuple
+// is NOT directional in Leaflet (it applies to both top and bottom), so
+// baking occlusion into this tuple applied it at double the intended cost.
+// The real asymmetric-padding assertion (occlusion added to ONLY
+// `paddingBottomRight`, via Leaflet's actual directional API) now lives in
+// PropertyMap.areaPanner.test.tsx, at AreaPanner's real fitBounds call site.
+// This describe block just confirms the plain width-responsive behaviour
+// this function reverted to is unchanged.
+describe('Issue #1823 — computeCameraPadding (width-responsive tiers only)', () => {
+  it('desktop vs mobile tiers, and undefined degrades to desktop', () => {
     expect(computeCameraPadding(1440)).toEqual(DESKTOP_CAMERA_PADDING);
     expect(computeCameraPadding(600)).toEqual(MOBILE_CAMERA_PADDING);
     expect(computeCameraPadding(undefined)).toEqual(DESKTOP_CAMERA_PADDING);
-  });
-
-  it('a nonzero occlusion height adds to the bottom (vertical) padding only, leaving horizontal untouched', () => {
-    expect(computeCameraPadding(600, 160)).toEqual([MOBILE_CAMERA_PADDING[0], MOBILE_CAMERA_PADDING[1] + 160]);
-    expect(computeCameraPadding(1440, 160)).toEqual([DESKTOP_CAMERA_PADDING[0], DESKTOP_CAMERA_PADDING[1] + 160]);
-  });
-
-  it('occlusion of 0 is explicitly a no-op (same as omitting the argument)', () => {
-    expect(computeCameraPadding(600, 0)).toEqual(computeCameraPadding(600));
   });
 });

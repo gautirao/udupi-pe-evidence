@@ -529,14 +529,18 @@ interface PropertyMapProps {
       })
     | null;
   /**
-   * PR #2128 review cycle 4 (Finding 2, issue #1823) — additional bottom
-   * padding (px) for AreaPanner's fitBounds call, reserved by the caller
-   * PROACTIVELY for any mobile-Map listing-capable state (not reactively
-   * toggled by whether the mobile compact listing-preview sheet happens to
-   * be open right now — see MapDiscovery.tsx's call site and AreaPanner's
-   * own effect comment below for why). Passed straight through to
-   * `computeCameraPadding`. Defaults to 0 (every existing caller omits it,
-   * unaffected).
+   * PR #2128 review cycle 4/final (Finding 2, issue #1823) — additional
+   * bottom-ONLY padding (px) added to AreaPanner's `paddingBottomRight`
+   * fitBounds option (Leaflet's actual asymmetric-padding API — a single
+   * `padding: [x, y]` tuple is NOT directional and would apply to both top
+   * and bottom, at double the intended cost). Reserved by the caller
+   * PROACTIVELY for any mobile-Map state where `isMarkerPopoverEligible`
+   * allows a marker tap to open the compact listing-preview sheet (a
+   * superset of the sheet's actual render gate — safe because it never
+   * under-reserves, not because it's an exact match) — not reactively
+   * toggled by whether that sheet happens to be open right now. See
+   * MapDiscovery.tsx's call site and AreaPanner's own effect comment below
+   * for why. Defaults to 0 (every existing caller omits it, unaffected).
    */
   bottomOcclusionPx?: number;
   /** Incrementing tick that triggers a zoom reset to cityCenter/cityZoom. Incremented by handleAreaBack. */
@@ -1040,8 +1044,19 @@ function AreaPanner({
       // fit actually fires — it must never be skippable by that gate.
       const isGroupBounds = panToArea.areaKey === GROUP_BOUNDS_SYNTHETIC_KEY;
       const viewportWidthPx = typeof window !== 'undefined' ? window.innerWidth : undefined;
+      // PR #2128 final review (HIGH) — a single `padding: [x, y]` fitBounds
+      // option is NOT directional: Leaflet's own `_getBoundsCenterZoom`
+      // (leaflet-src.js) defaults BOTH `paddingTopLeft` and
+      // `paddingBottomRight` to it, so passing bottomOcclusionPx baked into
+      // a single tuple (the previous approach) applied it to BOTH the top
+      // AND the bottom — double the intended cost, and centered rather than
+      // reserved at the bottom only. `paddingTopLeft`/`paddingBottomRight`
+      // are Leaflet's actual asymmetric-padding API; only the bottom-right
+      // corner carries the occlusion.
+      const [padH, padV] = computeCameraPadding(viewportWidthPx);
       map.fitBounds(panToArea.bbox, {
-        padding: computeCameraPadding(viewportWidthPx, bottomOcclusionPx),
+        paddingTopLeft: [padH, padV],
+        paddingBottomRight: [padH, padV + bottomOcclusionPx],
         maxZoom: isGroupBounds ? AREA_PANNER_GROUP_MAX_ZOOM : LEAF_FIT_MAX_ZOOM,
       });
     } else {
@@ -1056,8 +1071,10 @@ function AreaPanner({
     // authoritative fit for that state already bakes in the occlusion BEFORE
     // any marker tap could open the sheet. A reactive "refit when the sheet
     // opens/closes" trigger is deliberately NOT implemented here — it would
-    // be a materially bigger behaviour change (a new camera-move source) and
-    // is unnecessary once the padding is reserved up front.
+    // be a materially bigger behaviour change (a new camera-move source),
+    // re-introducing exactly what this fix cycle avoids — and is unnecessary
+    // once the padding is reserved up front.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panToArea, map]);
   return null;
 }
