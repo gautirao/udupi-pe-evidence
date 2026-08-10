@@ -532,6 +532,15 @@ test.describe('@integration-ui #1823 — camera fit policy', () => {
 // module doc), which would make a pixel-based assertion unreliable for
 // reasons unrelated to this fix.
 //
+// FOLLOW-UP RECOMMENDATION (separate from the Finding-2 live-occlusion
+// follow-up noted elsewhere in this PR): the mobile Areas breadcrumb trail
+// can overlap/block the List<->Map toggle button (`mobile-map-close-list-
+// button`) at exactly a 390px viewport width, on a canonical-Area-leaf
+// breadcrumb state — root-caused during this test's own verification (see
+// the `{ force: true }` clicks below for the full evidence). Different
+// root cause from Finding 2 (a responsive-layout overlap, not a camera-fit
+// occlusion-timing gap) — worth a standalone follow-up issue.
+//
 // Finding 1 (already reviewer-confirmed fixed at the unit level in
 // PropertyMap.areaPanner.test.tsx): folded in here as real-browser coverage
 // of the SAME remount contract — a mobile List->Map->List->Map toggle
@@ -616,9 +625,29 @@ test.describe('@integration-ui #1823 (PR #2128 review cycle 4) — mobile listin
     // Finding 1 real-browser coverage — toggle List -> Map -> List -> Map.
     // DiscoverMapMount.tsx real-unmounts PropertyMap/AreaPanner on List and
     // remounts fresh on Map every time; the camera must survive unchanged.
-    await closeListButton.click();
+    //
+    // Fix-verify correction — `{ force: true }` on these toggle clicks:
+    // root-caused (reproduced twice, including via a fresh Playwright run)
+    // as a pre-existing, WIDTH-SPECIFIC responsive-layout bug, not a script
+    // mistake and not caused by #1823. At the true 390px viewport this test
+    // pins, the map's own Areas breadcrumb trail
+    // (`breadcrumb-seg-a:IN|KA|Bengaluru|RR Nagar`, inside a
+    // `lg:w-1/2 h-64 lg:h-full` container) extends far enough right to
+    // intercept pointer events on `mobile-map-close-list-button`'s
+    // top-right corner — confirmed NOT reproducible at a slightly wider
+    // viewport (~606px, still under the `lg:` 1024px breakpoint), so this
+    // is genuinely 390px-specific. The button itself is defined at
+    // MapDiscovery.tsx:2396, nowhere near this PR's changed lines
+    // (bottomOcclusionPx's const/effect at ~L2045-2075, the prop pass at
+    // ~L2481) — a pre-existing bug this is the first test to ever expose,
+    // by being the first to exercise a List<->Map toggle at exactly 390px
+    // on this canonical-Area-leaf breadcrumb state. What THIS test verifies
+    // is camera/remount/occlusion behaviour, not breadcrumb z-index
+    // stacking, so routing around the known overlap is correct here — see
+    // this file's own module doc for the follow-up issue this warrants.
+    await closeListButton.click({ force: true });
     await expect(mapTrigger).toBeVisible({ timeout: 10_000 });
-    await mapTrigger.click();
+    await mapTrigger.click({ force: true });
     await expect(page.getByTestId('mobile-map-close-list-button')).toBeVisible({ timeout: 10_000 });
     await page.waitForTimeout(SETTLE_MS);
 
