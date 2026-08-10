@@ -1547,6 +1547,16 @@ export default function MapDiscovery() {
         legacySelectedArea,
       },
       mapState: {
+        // PR #2128 review cycle 4 (fix-verify) — spread the existing
+        // mapState FIRST so this effect merges instead of clobbering
+        // fields another debug effect on this page independently owns
+        // (currently: bottomOcclusionPx, set by the effect further down).
+        // Without this, mapZoom's near-constant churn on any map
+        // interaction re-runs THIS effect after the other one, wiping
+        // whatever it just set — confirmed live (bottomOcclusionPx went
+        // from present to completely absent a few seconds after being set).
+        ...((window as Window & { __debug?: Record<string, unknown> }).__debug
+          ?.mapState as Record<string, unknown> | undefined),
         zoom: mapZoom,
         city,
         // Issue #1160 — expose school centre for E2E viewport assertions.
