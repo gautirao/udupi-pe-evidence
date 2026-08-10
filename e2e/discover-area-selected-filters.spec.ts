@@ -490,3 +490,207 @@ test.describe('@integration-ui School-first select — journey-gate regression (
     await expect(page.locator('[data-testid="combined-chips"]')).toBeVisible({ timeout: 10_000 });
   });
 });
+
+// ── Issue #2124 fix-cycle — canonical Areas hierarchy (`node=a:...`) coverage ──
+//
+// All the tests above in this file cold-load the LEGACY `areaKey=` URL shape.
+// That was a false-green gap: the canonical Areas journey (`journey=area-first`
+// + `node=a:...`, resolved via DiscoverAreasJourneyPanel/AreaLeafListingsSurface,
+// NOT the legacy DiscoverRightPanel) had its own, separate `onAddSchool` wiring
+// that silently dropped the CTA (fixed under #1956 PR-4 FINAL FIX PASS) and then
+// a separate journey-flip regression in the school-select handler (fixed under
+// this #2124 fix-cycle — see useDiscoverJourneyTransitions.ts's
+// `hasResolvedCanonicalArea` guard). Neither bug was ever caught here because
+// this file only ever drove the legacy surface.
+//
+// Fixture: `IN|KA|Bengaluru|RR Nagar` — a real Bangalore area seeded by the
+// COMMITTED `scripts/db/fixtures/navigation-hierarchy-fixture-seed.sql` (the
+// `d:southeast` Direction tree), reachable via `node=a:IN|KA|Bengaluru|RR Nagar`
+// once `scripts/dev/seed-navigation-hierarchy-fixture.sh` has been applied and
+// the city's `city_launch_revision` row is PROMOTED (both idempotent/additive —
+// see that seed script's own module doc). Two real CBSE schools were seeded
+// directly into `public.schools` at real RR Nagar coordinates (the
+// `assign_school_area_key` trigger resolves their `area_key` from lat/lon, same
+// as every other row in that table) so this file can assert on real rendered
+// school cards, not a mocked/stubbed list.
+test.describe('@integration-ui Issue #2124 — canonical Area (node=) schoolPicking sub-step', () => {
+  const CITY = 'bangalore';
+  const AREA_RR_NAGAR = 'a:IN|KA|Bengaluru|RR Nagar';
+  const CANONICAL_AREA_URL = `/discover?city=${CITY}&journey=area-first&node=${encodeURIComponent(AREA_RR_NAGAR)}`;
+
+  function nodeParam(page: import('@playwright/test').Page): string | null {
+    return new URL(page.url()).searchParams.get('node');
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto(CANONICAL_AREA_URL);
+    await page.waitForLoadState('domcontentloaded');
+    // Confirm we start on the canonical AREA-leaf listings surface (req. #1).
+    await expect(page.getByTestId('areas-journey-panel-listings')).toBeVisible({ timeout: 15_000 });
+    expect(nodeParam(page)).toBe(AREA_RR_NAGAR);
+  });
+
+  // Req #1 — CTA renders at a canonical AREA leaf.
+  test('C1: "Add a school in this area" CTA renders at the canonical AREA leaf', async ({ page }) => {
+    await expect(page.getByTestId('add-school-cta')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('add-school-cta')).toContainText('Add a school in this area');
+  });
+
+  // Req #2 — click writes schoolPicking=1, journey stays area-first, node unchanged.
+  test('C2: CTA click writes schoolPicking=1 without flipping journey or changing node', async ({ page }) => {
+    await page.getByTestId('add-school-cta').click();
+
+    await expect.poll(() => new URL(page.url()).searchParams.get('schoolPicking')).toBe('1');
+    const url = page.url();
+    expect(url).toContain('journey=area-first');
+    expect(url).not.toContain('journey=school-first');
+    expect(nodeParam(page)).toBe(AREA_RR_NAGAR);
+  });
+
+  // Req #3/#4 — the schools-in-area sub-view renders real DOM content, including
+  // at least one real seeded school card (not just a URL change).
+  test('C3/C4: schoolPicking sub-step renders the schools-in-area panel with real school cards', async ({
+    page,
+  }) => {
+    await page.getByTestId('add-school-cta').click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('schoolPicking')).toBe('1');
+
+    // Real DOM content, not just the URL: the canonical schools-in-area wrapper
+    // and its stable board-filter marker (independent of school-data timing).
+    await expect(page.getByTestId('areas-journey-panel-schools-in-area')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('board-chip-cbse')).toBeVisible({ timeout: 15_000 });
+
+    // At least one real seeded school card for this area.
+    const firstCard = page.getByTestId('school-card').first();
+    await expect(firstCard).toBeVisible({ timeout: 15_000 });
+    await expect(firstCard).toContainText('E2E RR Nagar');
+    expect(await page.getByTestId('school-card').count()).toBeGreaterThan(0);
+  });
+
+  // Req #5 — selecting a school writes schoolId, retains the same canonical
+  // node/areaKey context, and mounts the combined area+school panel.
+  test('C5: selecting a school writes schoolId and retains the canonical node context', async ({ page }) => {
+    await page.getByTestId('add-school-cta').click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('schoolPicking')).toBe('1');
+
+    const firstCard = page.getByTestId('school-card').first();
+    await expect(firstCard).toBeVisible({ timeout: 15_000 });
+    await firstCard.click();
+
+    await expect.poll(() => new URL(page.url()).searchParams.get('schoolId')).not.toBeNull();
+    const url = page.url();
+    expect(url).toContain('journey=area-first');
+    expect(url).not.toContain('journey=school-first');
+    expect(url).not.toContain('schoolPicking');
+    expect(nodeParam(page)).toBe(AREA_RR_NAGAR);
+
+    await expect(page.getByTestId('areas-journey-panel-school-combined')).toBeVisible({ timeout: 15_000 });
+    // `combined-chips` does not exist in the current SchoolJourneyPanels.tsx source
+    // (verified by direct search — it's a stale testid from an earlier session, also
+    // referenced by several ALREADY-BROKEN pre-existing tests later in this same file
+    // that this PR does not touch). `combined-selected-scroll` is the real, always-
+    // present wrapper the combined panel renders once mounted.
+    await expect(page.getByTestId('combined-selected-scroll')).toBeVisible({ timeout: 10_000 });
+  });
+
+  // Req #6 — in-app Back (the panel's own Back control) restores the same
+  // canonical AREA state: schoolId/schoolPicking cleared, node unchanged.
+  test('C6: in-app Back from the combined panel restores schools-in-area, then the AREA leaf', async ({
+    page,
+  }) => {
+    await page.getByTestId('add-school-cta').click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('schoolPicking')).toBe('1');
+
+    const firstCard = page.getByTestId('school-card').first();
+    await expect(firstCard).toBeVisible({ timeout: 15_000 });
+    await firstCard.click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('schoolId')).not.toBeNull();
+    await expect(page.getByTestId('areas-journey-panel-school-combined')).toBeVisible({ timeout: 15_000 });
+
+    // In-app Back (rung 1: schoolId -> backToSchoolPicking).
+    await page.getByTestId('panel-header-back-button').click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('schoolId')).toBeNull();
+    expect(new URL(page.url()).searchParams.get('schoolPicking')).toBe('1');
+    expect(nodeParam(page)).toBe(AREA_RR_NAGAR);
+    await expect(page.getByTestId('areas-journey-panel-schools-in-area')).toBeVisible({ timeout: 15_000 });
+
+    // In-app Back again (rung 2: schoolPicking -> clearSchoolPicking) — restores
+    // the same canonical AREA leaf.
+    await page.getByTestId('panel-header-back-button').click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('schoolPicking')).toBeNull();
+    expect(nodeParam(page)).toBe(AREA_RR_NAGAR);
+    await expect(page.getByTestId('areas-journey-panel-listings')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('add-school-cta')).toBeVisible();
+  });
+
+  // Req #7 — native browser Back restores the same canonical AREA state.
+  test('C7: browser Back restores the same canonical AREA state', async ({ page }) => {
+    await page.getByTestId('add-school-cta').click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('schoolPicking')).toBe('1');
+    await expect(page.getByTestId('areas-journey-panel-schools-in-area')).toBeVisible({ timeout: 15_000 });
+
+    // enterSchoolPicking() PUSHes a history entry — browser Back undoes it.
+    await page.goBack();
+
+    await expect.poll(() => new URL(page.url()).searchParams.get('schoolPicking')).toBeNull();
+    const url = page.url();
+    expect(url).toContain('journey=area-first');
+    expect(url).not.toContain('journey=school-first');
+    expect(nodeParam(page)).toBe(AREA_RR_NAGAR);
+    await expect(page.getByTestId('areas-journey-panel-listings')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('add-school-cta')).toBeVisible();
+  });
+
+  // Req #8 — a fresh page load/refresh with node= + schoolPicking=1 already in
+  // the URL restores the schools-in-area UI directly (deep-link/refresh
+  // resilience), not the plain area-selected listings surface.
+  test('C8: a fresh load with node=+schoolPicking=1 cold-starts directly into schools-in-area', async ({
+    page,
+  }) => {
+    await page.goto(`${CANONICAL_AREA_URL}&schoolPicking=1`);
+    await page.waitForLoadState('domcontentloaded');
+
+    expect(nodeParam(page)).toBe(AREA_RR_NAGAR);
+    expect(new URL(page.url()).searchParams.get('schoolPicking')).toBe('1');
+    await expect(page.getByTestId('areas-journey-panel-schools-in-area')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('board-chip-cbse')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('school-card').first()).toBeVisible({ timeout: 15_000 });
+
+    // A hard reload of that exact URL must round-trip to the same state.
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+    expect(nodeParam(page)).toBe(AREA_RR_NAGAR);
+    expect(new URL(page.url()).searchParams.get('schoolPicking')).toBe('1');
+    await expect(page.getByTestId('areas-journey-panel-schools-in-area')).toBeVisible({ timeout: 15_000 });
+  });
+
+  // Req #9 — the journeyless canonical default (no explicit journey= param,
+  // just city= + node=) reaches the SAME working flow. `journey` defaults to
+  // 'area-first' at the single URL-read layer (state/url/area.ts), so this must
+  // not silently bypass the fix.
+  test('C9: a journeyless node= URL (no explicit journey=) still defaults to area-first and supports schoolPicking', async ({
+    page,
+  }) => {
+    await page.goto(`/discover?city=${CITY}&node=${encodeURIComponent(AREA_RR_NAGAR)}`);
+    await page.waitForLoadState('domcontentloaded');
+
+    expect(nodeParam(page)).toBe(AREA_RR_NAGAR);
+    await expect(page.getByTestId('areas-journey-panel-listings')).toBeVisible({ timeout: 15_000 });
+
+    const addSchoolCta = page.getByTestId('add-school-cta');
+    await expect(addSchoolCta).toBeVisible({ timeout: 15_000 });
+    await addSchoolCta.click();
+
+    await expect.poll(() => new URL(page.url()).searchParams.get('schoolPicking')).toBe('1');
+    const url = page.url();
+    // `journey` was never explicitly set in the URL to begin with, so the fix
+    // never WRITES an explicit `journey=area-first` back — it just never flips
+    // to school-first. The behavioural guarantee is "never school-first", which
+    // is what actually matters (confirmed: schoolPicking=1 + node unchanged +
+    // the schools-in-area panel renders, i.e. area-first resolution held).
+    expect(url).not.toContain('journey=school-first');
+    expect(nodeParam(page)).toBe(AREA_RR_NAGAR);
+    await expect(page.getByTestId('areas-journey-panel-schools-in-area')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('school-card').first()).toBeVisible({ timeout: 15_000 });
+  });
+});

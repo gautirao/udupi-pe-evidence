@@ -205,7 +205,8 @@ export default function MapDiscovery() {
   // DiscoverRightPanelContainer.tsx, DiscoverMapCanvas.tsx) — see
   // DiscoverMapCanvas.tsx's own copy of this comment for why the
   // triplication is deliberate.
-  const showAreasNavigationJourney = nav.journey === 'area-first';
+  const isSchoolsNavNodeLevel = nav.journey === 'school-first' && !nav.areaKey && !nav.schoolId;
+  const showAreasNavigationJourney = nav.journey === 'area-first' || isSchoolsNavNodeLevel;
   // Issue #1956 PR 2 (Slice 3, pass 4, AC3.9) — the ONE ephemeral hover/focus
   // node_key, lifted here for the same reason `areasNavigationJourney` is:
   // threaded unchanged to BOTH the map's AreaDestinationMarkerLayer and the
@@ -771,6 +772,7 @@ export default function MapDiscovery() {
   // expression instead of re-deriving `selectedArea ?? nodeAreaPoint` by
   // hand.
   const effectiveSelectedArea = resolveEffectiveSelectedArea(legacySelectedArea, nodeAreaPoint);
+
   // Issue #2083 (cycle 4, structural guard) — this class of bug recurred four
   // times because the legacy raw value and the bridged value were trivially
   // confusable by name (`selectedArea` vs `effectiveSelectedArea`). The raw
@@ -1100,6 +1102,21 @@ export default function MapDiscovery() {
     [nav.filters.boardFilters],
   );
 
+  // Issue #2124 (fix-cycle) — true when journey=area-first and the canonical Areas
+  // hierarchy is resolved to an AREA leaf (node=a:...). `derivePanelContent`
+  // (panelContent below) only ever reads the LEGACY `areaKey`/`groupId` params, which
+  // the canonical journey never sets — so panelContent alone cannot detect the
+  // canonical "schools-in-area" sub-step. This is the server-resolved identity
+  // (areasNavigationJourney.node, never parsed/reconstructed from `node=`) used by
+  // both the schools query below and the school-select journey-flip guard in
+  // useDiscoverJourneyTransitions.
+  const hasResolvedCanonicalArea =
+    nav.journey === 'area-first' && areasNavigationJourney.node?.nodeType === 'AREA';
+  const canonicalSchoolsAreaKey =
+    hasResolvedCanonicalArea && (nav.schoolPicking || nav.schoolId)
+      ? areasNavigationJourney.node?.areaKey ?? undefined
+      : undefined;
+
   // Issue #1798 — gate on panelContent (derivePanelContent's own routing result,
   // already computed above) instead of re-deriving journey === 'area-first' /
   // 'school-first' here. derivePanelContent resolves to 'schools-in-area' for
@@ -1111,8 +1128,11 @@ export default function MapDiscovery() {
   // even though the SchoolsInAreaPanel itself rendered correctly (routed via the same
   // journeyless fallback in derivePanelContent). Reusing panelContent keeps this query
   // byte-for-byte in sync with the single source of truth for panel routing.
+  // Issue #2124 (fix-cycle) — ALSO falls back to canonicalSchoolsAreaKey so the
+  // canonical area-first schools-in-area sub-step gets a real areaKey too.
   const schoolsAreaKey =
-    panelContent === 'schools-in-area' ? (nav.areaKey ?? undefined) : undefined;
+    (panelContent === 'schools-in-area' ? nav.areaKey ?? undefined : undefined) ??
+    canonicalSchoolsAreaKey;
   const schoolsQuery = useSchoolsByArea(
     schoolsAreaKey,
     urlBoardFilters,
@@ -1190,6 +1210,7 @@ export default function MapDiscovery() {
     panelContent,
     city,
     toast,
+    hasResolvedCanonicalArea,
     boundedSearchTriggered,
     setBoundedSearchTriggered,
   });
@@ -1216,6 +1237,35 @@ export default function MapDiscovery() {
   // because it now reads cameraView-derived schoolMarkerFocusTick (S7 owns
   // it; declared via the destructure above). The object SHAPE is
   // byte-identical (AC4).
+
+  // Issue #2124 — Map and panel canonical node equivalence (AREA leaf seam).
+  // The panel uses onSelectAreaKey to enter the SchoolsInArea path when a leaf AREA is clicked,
+  // but the map marker layer (`AreaDestinationMarkerLayer`) fires `journey.selectNode(nodeKey)`.
+  // Here we intercept `selectNode` for the school-first journey so map markers and panel rows
+  // follow the identical semantic path for AREA children.
+  const handleCanonicalNodeSelect = useCallback((nodeKey: string) => {
+    if (nav.journey === 'school-first') {
+      const child = areasNavigationJourney.node?.children.find((c) => c.nodeKey === nodeKey);
+      if (child?.nodeType === 'AREA' && child.areaKey) {
+        // Equivalent to the panel's onSelectAreaKey behaviour:
+        const match = discoverAreas.find((a) => a.areaKey === child.areaKey);
+        if (match) {
+          handleAreaSelect(match);
+        } else {
+          actions.selectArea(child.areaKey);
+        }
+      } else {
+        actions.enterSchoolsJourney(nodeKey);
+      }
+    } else {
+      actions.goToNode(nodeKey);
+    }
+  }, [nav.journey, areasNavigationJourney.node?.children, discoverAreas, handleAreaSelect, actions]);
+
+  const activeAreasNavigationJourney = useMemo(() => ({
+    ...areasNavigationJourney,
+    selectNode: handleCanonicalNodeSelect,
+  }), [areasNavigationJourney, handleCanonicalNodeSelect]);
 
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).
   const isLoading =
@@ -2316,9 +2366,10 @@ export default function MapDiscovery() {
               the panel — no second navigation-journey call, no new state. */}
           {mobileMapOpen && (
             <MobileClusterSheet
-              journey={areasNavigationJourney}
+              journey={activeAreasNavigationJourney}
               focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
               onClusterFocusChange={setFocusedClusterMemberAreaKeys}
+              eligibilityJourney={nav.journey === 'school-first' ? 'schools' : 'areas'}
             />
           )}
           {/* Issue #1956 PR-5 (Slice 5, AC5.10/AC5.10c) — the mobile Map-mode
@@ -2382,7 +2433,7 @@ export default function MapDiscovery() {
           onAreaVisualClusterCameraIntent={publishClusterCameraIntent}
           handleAreaClusterClick={handleAreaClusterClick}
           handleAreaMarkersComputed={handleAreaMarkersComputed}
-          areasNavigationJourney={areasNavigationJourney}
+          areasNavigationJourney={activeAreasNavigationJourney}
           hoveredNavigationNodeKey={hoveredNavigationNodeKey}
           onNavigationNodeHoverChange={setHoveredNavigationNodeKey}
           focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
@@ -2522,7 +2573,7 @@ export default function MapDiscovery() {
 
         <DiscoverRightPanelContainer
           resolvedPanelContent={resolvedPanelContent}
-          areasNavigationJourney={areasNavigationJourney}
+          areasNavigationJourney={activeAreasNavigationJourney}
           hoveredNavigationNodeKey={hoveredNavigationNodeKey}
           onNavigationNodeHoverChange={setHoveredNavigationNodeKey}
           focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}

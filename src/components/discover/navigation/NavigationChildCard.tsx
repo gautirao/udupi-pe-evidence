@@ -64,6 +64,7 @@ export interface NavigationChildCardProps {
   isHighlighted?: boolean;
   onSelect: (nodeKey: string) => void;
   onHoverChange?: (nodeKey: string | null) => void;
+  countKind?: 'listings' | 'schools';
 }
 
 function primaryLabelFor(child: AreasNavigationChild, representativeAreaNames?: string[]): string {
@@ -81,6 +82,7 @@ export function NavigationChildCard({
   isHighlighted = false,
   onSelect,
   onHoverChange,
+  countKind = 'listings',
 }: NavigationChildCardProps) {
   const primaryLabel = primaryLabelFor(child, representativeAreaNames);
 
@@ -103,16 +105,21 @@ export function NavigationChildCard({
     ? null
     : presentStructuralLevel(identity, child.matchingAreaCount);
 
-  // count_display_defect_2026_07_29 (pass 4 follow-up): the areas line being
-  // unavailable must NEVER suppress the journey-aware LISTING count too — the
-  // two are separate lines (locked marker composition: areas line, then
-  // listings line). The only time the listing line is withheld for a
-  // structural child is when the areas line is showing the LOCKED zero
-  // literal, so that literal renders alone rather than alongside a redundant
-  // "No listings yet" (a zero matching-area count guarantees zero listings).
+  // For school-first, we use schoolCount. If schools, we display "N schools".
   const showListingsLine = child.isLeafArea || !structuralPresentation?.isZeroContent;
-  const areasLabel = structuralPresentation?.countLabel ?? null;
-  const listingsLabel = showListingsLine ? formatListingCount(child.listingCount) : null;
+  let primaryCountLabel: string | null = null;
+  if (countKind === 'schools') {
+    primaryCountLabel = child.schoolCount != null ? `${child.schoolCount} ${child.schoolCount === 1 ? 'school' : 'schools'}` : null;
+  } else {
+    primaryCountLabel = showListingsLine ? formatListingCount(child.listingCount) : null;
+  }
+  const emptyCountLabel = countKind === 'schools' ? '0 schools' : '0 listings';
+  
+  const areasLabel = countKind === 'schools'
+    ? (child.matchingAreaCount != null && child.matchingAreaCount > 0
+        ? `${child.matchingAreaCount} area${child.matchingAreaCount === 1 ? '' : 's'} with schools`
+        : 'No areas with schools')
+    : (structuralPresentation?.countLabel ?? null);
 
   return (
     <button
@@ -127,42 +134,54 @@ export function NavigationChildCard({
       onBlur={() => onHoverChange?.(null)}
       className={cn(
         'flex w-full items-center gap-3 rounded-xl border bg-card px-3.5 py-2.5 text-left shadow-sm transition-all',
-        'hover:-translate-y-[1px] hover:shadow-md hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-        isSelected && 'border-primary ring-1 ring-primary',
-        isHighlighted && !isSelected && 'border-primary/40 bg-primary/5',
+        countKind === 'schools'
+          ? 'hover:-translate-y-[1px] hover:shadow-md hover:border-plum/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-plum'
+          : 'hover:-translate-y-[1px] hover:shadow-md hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+        isSelected && (countKind === 'schools' ? 'border-plum ring-1 ring-plum bg-plum/5' : 'border-primary ring-1 ring-primary'),
+        isHighlighted && !isSelected && (countKind === 'schools' ? 'border-plum/40 bg-plum/5' : 'border-primary/40 bg-primary/5'),
       )}
     >
       <span
         className={cn(
-          'flex shrink-0 items-center justify-center text-primary transition-colors',
-          child.isLeafArea 
-            ? 'h-8 w-8 rounded-full bg-primary/10' 
-            : 'h-9 w-9 rounded-md bg-secondary',
-          isSelected && 'bg-primary text-primary-foreground'
+          'flex shrink-0 items-center justify-center transition-colors',
+          countKind === 'schools'
+            ? (child.isLeafArea ? 'h-8 w-8 rounded-full bg-plum/10 text-plum' : 'h-9 w-9 rounded-md bg-plum/10 text-plum')
+            : (child.isLeafArea ? 'h-8 w-8 rounded-full bg-primary/10 text-primary' : 'h-9 w-9 rounded-md bg-secondary text-primary'),
+          isSelected && (countKind === 'schools' ? 'bg-plum text-white' : 'bg-primary text-primary-foreground')
         )}
         aria-hidden="true"
       >
-        <MapPin className={child.isLeafArea ? "h-4 w-4" : "h-5 w-5"} />
+        {countKind === 'schools' && !child.isLeafArea ? (
+          <School className="h-5 w-5" />
+        ) : (
+          <MapPin className={child.isLeafArea ? "h-4 w-4" : "h-5 w-5"} />
+        )}
       </span>
       
       {child.isLeafArea ? (
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-          <span className="truncate text-[14.5px] font-bold text-foreground">{primaryLabel}</span>
-          <span className="shrink-0 font-mono text-[12.5px] text-muted-foreground whitespace-nowrap">
-            {listingsLabel != null ? listingsLabel : '0 listings'}
-            {child.schoolCount != null && child.schoolCount > 0 ? ` · ${child.schoolCount} schools` : ''}
-          </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-[14.5px] font-bold text-foreground">{primaryLabel}</span>
+            <span className="shrink-0 font-mono text-[12.5px] text-muted-foreground whitespace-nowrap">
+              {primaryCountLabel ?? emptyCountLabel}
+            </span>
+          </div>
+          {countKind === 'schools' && (
+            <div className="mt-[2px] text-xs text-muted-foreground">
+              {formatListingCount(child.listingCount)}
+            </div>
+          )}
         </div>
       ) : (
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
             <span className="truncate text-[15.5px] font-bold tracking-tight text-foreground">{primaryLabel}</span>
-            {listingsLabel != null && (
+            {primaryCountLabel != null && (
               <span
                 data-testid={`navigation-child-card-listings-${child.nodeKey}`}
                 className="shrink-0 font-mono text-base font-bold text-foreground whitespace-nowrap"
               >
-                {listingsLabel}
+                {primaryCountLabel ?? emptyCountLabel}
               </span>
             )}
           </div>
@@ -170,10 +189,15 @@ export function NavigationChildCard({
             {areasLabel != null && (
               <span data-testid={`navigation-child-card-count-${child.nodeKey}`}>{areasLabel}</span>
             )}
-            {child.schoolCount != null && child.schoolCount > 0 && (
+            {countKind === 'listings' && child.schoolCount != null && child.schoolCount > 0 && (
               <span className="inline-flex items-center gap-1">
                 <School className="h-3 w-3" aria-hidden="true" />
                 {child.schoolCount} schools
+              </span>
+            )}
+            {countKind === 'schools' && areasLabel == null && (
+              <span className="text-muted-foreground">
+                schools in these areas
               </span>
             )}
           </div>

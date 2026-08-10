@@ -637,6 +637,7 @@ function makeDestinationCard(
   child: AreasNavigationChild,
   isSelected: boolean,
   isHovered: boolean,
+  eligibilityJourney: 'schools' | 'areas',
 ): L.DivIcon {
   // UD-3 (fix-cycle-3) — a real Bangalore/Udupi DIRECTION or CLUSTER label
   // can run well past this card's ~96px footprint with white-space:nowrap
@@ -669,7 +670,7 @@ function makeDestinationCard(
   // split exactly (see that component's doc for the full rule), reading the
   // SAME `formatListingCount` helper so map and panel never diverge on
   // singular/plural copy either.
-  const presentation = child.matchingAreaCount == null
+  const presentation = child.matchingAreaCount == null || eligibilityJourney === 'schools'
     ? null
     : presentStructuralLevel(identity, child.matchingAreaCount);
   const areasLabel = presentation ? escapeHtml(presentation.countLabel) : null;
@@ -702,41 +703,39 @@ function makeDestinationCard(
   // zoom" card did not match the mock at all; see markerTokens.ts's
   // DESTINATION_* doc for why the translucent-on-navy values here are
   // literals rather than parity-tested CSS-var lookups.
-  //
-  // Border: mock keeps a CONSTANT 1.5px width and varies only the white
-  // border's opacity between resting (0.42) and hover/selected (0.9) — a
-  // real attribute change from the old copper card's 1px/2px width swap.
   const borderColor = isSelected || isHovered ? DESTINATION_BORDER_ACTIVE : DESTINATION_BORDER_REST;
+  const isSchools = eligibilityJourney === 'schools';
+  const bg = isSchools ? C_PLUM : NAVY_800;
+  
   const destinationCardStyle = cardContainerStyle({
     radiusPx: 12,
-    background: NAVY_800,
+    background: bg,
     borderCss: `1.5px solid ${borderColor}`,
     boxShadow: SHADOW_LG,
     minWidthPx: 96,
   });
-  // Mock's destCardHTML has NO pin/location icon inside the card at all (see
-  // ExpMap.jsx — only the dashed cluster chip carries a magnifier icon). The
-  // former copper `pinSvg` here is dropped rather than merely recolored, to
-  // match the mock's actual grammar attribute-for-attribute rather than
-  // approximating it.
+
   const listingsCountText = listingsLabel != null ? child.listingCount.toLocaleString('en-IN') : null;
-  // Issue #2088 item 2b attribute 5 (fix cycle) — the mock's destCardHTML
-  // (docs/design/retrends-design-system/ui_kits/new_discover/src/ExpMap.jsx,
-  // `const cf = Math.round(22 + Math.min(1, o.n / 240) * 9)`) scales the count
-  // digit size by listing VOLUME rather than using a constant 22px — 22px at
-  // n=0 rising to 31px as n approaches/exceeds 240. `o.n` is the destination's
-  // listing count, i.e. this card's `child.listingCount` (same field the
-  // rendered digits themselves already read).
-  const countFontSizePx = Math.round(22 + Math.min(1, child.listingCount / 240) * 9);
+  const schoolCountText = child.schoolCount != null ? child.schoolCount.toLocaleString('en-IN') : null;
+  const primaryCountNum = isSchools ? (child.schoolCount ?? 0) : child.listingCount;
+  const primaryCountText = isSchools ? schoolCountText : listingsCountText;
+  const primaryCountLabel = isSchools ? 'schools' : 'listings';
+  const secondaryLabel = isSchools ? listingsLabel : schoolLabel;
+
+  const countFontSizePx = Math.round(22 + Math.min(1, primaryCountNum / (isSchools ? 20 : 240)) * 9);
+  
   const html = `<div ${destinationShellAttrs} style="${MARKER_SHELL_STYLE}">
     <div${titleAttr} style="${destinationCardStyle}">
       <span style="font-family:${FONT_SANS_ATTR};font-size:12.5px;font-weight:700;color:${PAPER};white-space:nowrap;letter-spacing:-0.01em;">${label}</span>
-      ${listingsCountText != null ? `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
-        <span style="font-family:${FONT_MONO_ATTR};font-size:${countFontSizePx}px;font-weight:800;line-height:1;letter-spacing:-0.02em;color:${PAPER};">${listingsCountText}</span>
-        <span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${DESTINATION_TEXT_MUTED};">listings</span>
-      </span>` : ''}
-      ${areasLabel != null ? `<span style="font-family:${FONT_SANS_ATTR};margin-top:${listingsCountText != null ? 3 : 4}px;padding:1px 9px;border-radius:${RADIUS_FULL};background:${DESTINATION_PILL_BG};font-size:10px;font-weight:600;color:${listingsCountText != null ? DESTINATION_TEXT_SOFT : DESTINATION_TEXT_SOFT_DIM};white-space:nowrap;">${areasLabel}</span>` : ''}
-      ${schoolLabel != null ? `<span style="font-family:${FONT_SANS_ATTR};font-size:10.5px;font-weight:600;color:${DESTINATION_TEXT_MUTED};white-space:nowrap;">${schoolLabel}</span>` : ''}
+      ${primaryCountText != null && (!isSchools || child.schoolCount! > 0) ? `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
+        <span style="font-family:${FONT_MONO_ATTR};font-size:${countFontSizePx}px;font-weight:800;line-height:1;letter-spacing:-0.02em;color:${PAPER};">${primaryCountText}</span>
+        <span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${DESTINATION_TEXT_MUTED};">${primaryCountLabel}</span>
+      </span>` : (isSchools ? `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
+        <span style="font-family:${FONT_MONO_ATTR};font-size:16px;font-weight:800;line-height:1;letter-spacing:-0.02em;color:${DESTINATION_TEXT_MUTED};">0</span>
+        <span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${DESTINATION_TEXT_MUTED};">schools</span>
+      </span>` : '')}
+      ${areasLabel != null ? `<span style="font-family:${FONT_SANS_ATTR};margin-top:${primaryCountText != null ? 3 : 4}px;padding:1px 9px;border-radius:${RADIUS_FULL};background:${DESTINATION_PILL_BG};font-size:10px;font-weight:600;color:${primaryCountText != null ? DESTINATION_TEXT_SOFT : DESTINATION_TEXT_SOFT_DIM};white-space:nowrap;">${areasLabel}</span>` : ''}
+      ${secondaryLabel != null && (!isSchools || child.schoolCount! > 0) ? `<span style="font-family:${FONT_SANS_ATTR};font-size:10.5px;font-weight:600;color:${DESTINATION_TEXT_MUTED};white-space:nowrap;">${secondaryLabel}</span>` : ''}
     </div>
     <div style="font-family:${FONT_SANS_ATTR};margin-top:5px;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:${RADIUS_FULL};background:${PAPER};box-shadow:${SHADOW_MD};font-size:10px;font-weight:700;color:${COPPER_600};white-space:nowrap;">Explore <span style="font-size:12px;line-height:1;">&#8250;</span></div>
   </div>`;
@@ -750,10 +749,11 @@ function makeDestinationCard(
  * not a client-side grouping) — "Tap to view homes" instead of "Tap to
  * zoom", since selecting an AREA leaf goes straight to listings.
  */
-function makeSingleAreaChildCard(
+export function makeSingleAreaChildCard(
   child: AreasNavigationChild,
   isSelected: boolean,
   isHovered: boolean,
+  eligibilityJourney: 'schools' | 'areas',
 ): L.DivIcon {
   // UD-1/UD-3 (fix-cycle-3) — this card type is one of the two grid-clustered
   // builders (see areaClustering.ts's AREA_CARD_FOOTPRINT_WIDTH_PX doc): its
@@ -768,14 +768,19 @@ function makeSingleAreaChildCard(
   const label = escapeHtml(shortLabel);
   const ariaLabelName = escapeHtml(child.displayLabel);
   const titleAttr = fullLabel ? ` title="${escapeHtml(fullLabel)}"` : '';
-  const listingsLabel = escapeHtml(formatListingCount(child.listingCount));
-  const schoolLabel =
-    child.schoolCount != null
-      ? escapeHtml(`${child.schoolCount} ${child.schoolCount === 1 ? 'school' : 'schools'}`)
-      : null;
-  const borderColor = isSelected ? DESTINATION_ACCENT_ACTIVE : C_BORDER;
+  const isSchools = eligibilityJourney === 'schools';
+  const primaryCountLabel = isSchools && child.schoolCount != null
+    ? escapeHtml(`${child.schoolCount} ${child.schoolCount === 1 ? 'school' : 'schools'}`)
+    : escapeHtml(formatListingCount(child.listingCount));
+    
+  const secondaryCountLabel = isSchools 
+    ? escapeHtml(formatListingCount(child.listingCount))
+    : (child.schoolCount != null ? escapeHtml(`${child.schoolCount} ${child.schoolCount === 1 ? 'school' : 'schools'}`) : null);
+
+  const primaryAccent = isSchools ? C_PLUM : DESTINATION_ACCENT;
+  const borderColor = isSelected ? (isSchools ? C_PLUM : DESTINATION_ACCENT_ACTIVE) : C_BORDER;
   const borderWidth = isSelected || isHovered ? '2px' : '1px';
-  const ariaLabel = [ariaLabelName, listingsLabel, schoolLabel].filter((p): p is string => p != null).join(', ');
+  const ariaLabel = [ariaLabelName, primaryCountLabel, secondaryCountLabel].filter((p): p is string => p != null).join(', ');
   const cardWidthPx = AREA_CARD_FOOTPRINT_WIDTH_PX;
   const nameMaxWidthPx = cardWidthPx - 24 /* padding */ - 11 /* icon */ - 6 /* gap */ - 2 /* border */;
   // Issue #2088 (commit 2) — ported to the shared markerPrimitives fragments
@@ -789,7 +794,7 @@ function makeSingleAreaChildCard(
   });
   const singleAreaCardStyle = cardContainerStyle({
     radiusPx: 12,
-    background: isSelected ? NAVY_800 : PAPER,
+    background: isSelected ? (isSchools ? C_PLUM : NAVY_800) : PAPER,
     borderCss: `${borderWidth} solid ${borderColor}`,
     boxShadow: PILL_SHADOW,
     widthPx: cardWidthPx,
@@ -798,16 +803,17 @@ function makeSingleAreaChildCard(
   
   const textColor = isSelected ? PAPER : C_INK;
   const mutedColor = isSelected ? DESTINATION_TEXT_SOFT : C_MUTED;
+  const viewActionText = isSchools ? 'Tap to view schools &rsaquo;' : 'Tap to view homes &rsaquo;';
 
   const html = `<div ${singleAreaShellAttrs} style="${MARKER_SHELL_STYLE}">
     <div${titleAttr} style="${singleAreaCardStyle}">
       <div style="display:flex;align-items:center;gap:6px;">
-        ${pinSvg(isSelected ? PAPER : DESTINATION_ACCENT)}
+        ${pinSvg(isSelected ? PAPER : primaryAccent)}
         <span style="font-size:12.5px;font-weight:700;color:${textColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameMaxWidthPx}px;">${label}</span>
       </div>
-      <span style="font-size:10.5px;font-weight:600;color:${mutedColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${listingsLabel}</span>
-      ${schoolLabel != null ? `<span style="font-size:10.5px;font-weight:600;color:${mutedColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${schoolLabel}</span>` : ''}
-      <span style="font-family:${MONO};font-size:9.5px;font-weight:600;color:${isSelected ? PAPER : DESTINATION_ACCENT};">Tap to view homes &rsaquo;</span>
+      <span style="font-size:10.5px;font-weight:600;color:${mutedColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${primaryCountLabel}</span>
+      ${secondaryCountLabel != null ? `<span style="font-size:10.5px;font-weight:600;color:${mutedColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${secondaryCountLabel}</span>` : ''}
+      <span style="font-family:${MONO};font-size:9.5px;font-weight:600;color:${isSelected ? PAPER : primaryAccent};">${viewActionText}</span>
     </div>
   </div>`;
   return L.divIcon({ className: 'area-single-marker-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
@@ -1015,7 +1021,7 @@ export function AreaDestinationMarkerLayer({
         if (!raw || !isUsableCentroid(raw.centreLat, raw.centreLon)) continue;
         const isSelected = selectedNodeKey === child.nodeKey;
         const isHovered = hoveredNodeKey === child.nodeKey;
-        const icon = makeDestinationCard(child, isSelected, isHovered);
+        const icon = makeDestinationCard(child, isSelected, isHovered, eligibilityJourney);
         desired.set(child.nodeKey, {
           // Non-null guaranteed by isUsableCentroid above.
           latlng: [raw.centreLat as number, raw.centreLon as number],
@@ -1075,7 +1081,7 @@ export function AreaDestinationMarkerLayer({
         const adjustedLatLng = map.containerPointToLatLng([p.px.x, p.px.y]);
         const isSelected = selectedNodeKey === p.child.nodeKey;
         const isHovered = hoveredNodeKey === p.child.nodeKey;
-        const icon = makeDestinationCard(p.child, isSelected, isHovered);
+        const icon = makeDestinationCard(p.child, isSelected, isHovered, eligibilityJourney);
         
         desired.set(p.child.nodeKey, {
           latlng: [adjustedLatLng.lat, adjustedLatLng.lng],
@@ -1125,17 +1131,37 @@ export function AreaDestinationMarkerLayer({
       // `setFocusedMembers(null)` state update this triggers reruns the
       // effect with a fresh, unscoped focusedMembers=null.
       if (focusedMembers) {
-        const { visible } = partitionMembersByJourney(
-          clusterable.map((m) => ({
-            areaKey: m.areaKey,
-            displayLabel: m.displayLabel,
-            eligibleListingCount: m.listingCount,
-            eligibleSchoolCount: m.schoolCount ?? 0,
-            displayOrder: m.displayOrder,
-          })),
-          eligibilityJourney,
-        );
-        const visibleAreaKeys = new Set(visible.map((m) => m.areaKey));
+        // Issue #2124/#2125 blocker — mixed-eligibility cluster never opens.
+        // `clusterVisibleAreaMembers` (below, and used for the actual
+        // grouping) already treats every clusterable member as visible for
+        // the 'schools' journey — a zero-school AREA is still valid
+        // canonical geography, not eligibility-hidden (see its own inline
+        // `journey === 'schools' ? true : isMemberEligible(...)` special
+        // case). This reconciliation check must use the SAME visibility
+        // rule: `partitionMembersByJourney`'s raw eligibility (schoolCount >
+        // 0) is a different, narrower notion used elsewhere (panel counts/
+        // +N arithmetic) and must not leak in here. Without this, tapping a
+        // real mixed cluster (e.g. one member schoolCount=0, another >0) set
+        // focus and then this effect immediately cleared it on the very same
+        // render, because `stillAllVisible` saw the zero-school member as
+        // "not visible" — the whole cluster silently became unclickable.
+        // The 'areas' (listings) journey is untouched: it still hides a
+        // zero-listing member here exactly as before.
+        const visibleAreaKeys =
+          eligibilityJourney === 'schools'
+            ? new Set(clusterable.map((m) => m.areaKey))
+            : new Set(
+                partitionMembersByJourney(
+                  clusterable.map((m) => ({
+                    areaKey: m.areaKey,
+                    displayLabel: m.displayLabel,
+                    eligibleListingCount: m.listingCount,
+                    eligibleSchoolCount: m.schoolCount ?? 0,
+                    displayOrder: m.displayOrder,
+                  })),
+                  eligibilityJourney,
+                ).visible.map((m) => m.areaKey),
+              );
         const stillAllVisible = focusedMembers.every((k) => visibleAreaKeys.has(k));
         if (!stillAllVisible) {
           setFocusedMembers(null);
@@ -1173,7 +1199,7 @@ export function AreaDestinationMarkerLayer({
           if (!childCounts) continue;
           const isSelected = selectedNodeKey === member.nodeKey;
           const isHovered = hoveredNodeKey === member.nodeKey;
-          const icon = makeSingleAreaChildCard(childCounts, isSelected, isHovered);
+          const icon = makeSingleAreaChildCard(childCounts, isSelected, isHovered, eligibilityJourney);
           desired.set(member.nodeKey, {
             latlng: [member.lat, member.lon],
             icon,

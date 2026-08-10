@@ -371,6 +371,8 @@ interface PropertyMapProps {
   initialCenter?: [number, number];
   /** Initial map zoom from URL (?zoom=). Paired with initialCenter. */
   initialZoom?: number;
+  /** History action from the router (PUSH, REPLACE, POP), used to guard URL-viewport restores. */
+  historyAction?: string;
   /** Override map center when city changes */
   cityCenter?: [number, number];
   /** Override map zoom when city changes */
@@ -932,6 +934,7 @@ function AreaPanner({ panToArea }: { panToArea?: AreaPoint | null }) {
   const map = useMap();
   useEffect(() => {
     if (!panToArea) return;
+    
     if (panToArea.bbox) {
       // Issue #1069: a synthetic group-bounds AreaPoint (from computeGroupBounds)
       // can fit at a zoom level above AREA_PANNER_GROUP_MAX_ZOOM for narrow groups,
@@ -1271,11 +1274,14 @@ function CityRestorePanner({
 function URLViewportController({
   initialCenter,
   initialZoom,
+  historyAction,
 }: {
   initialCenter?: [number, number];
   initialZoom?: number;
+  historyAction?: string;
 }) {
   const map = useMap();
+  const isFirstRender = useRef(true);
   const lastAppliedViewportRef = useRef<{
     lat: number;
     lon: number;
@@ -1285,6 +1291,12 @@ function URLViewportController({
   useEffect(() => {
     // Skip if no viewport is specified
     if (!initialCenter || initialZoom === undefined) return;
+
+    // Issue #2125: Only apply viewport from URL on mount or browser Back/Forward (POP)
+    if (!isFirstRender.current && historyAction !== 'POP') {
+      return;
+    }
+    isFirstRender.current = false;
 
     const [requestedLat, requestedLon] = initialCenter;
     const currentCenter = map.getCenter();
@@ -1317,13 +1329,14 @@ function URLViewportController({
     }
 
     // Apply viewport without animation to avoid intermediate moveend events
+    
     map.setView([requestedLat, requestedLon], initialZoom);
     lastAppliedViewportRef.current = {
       lat: requestedLat,
       lon: requestedLon,
       zoom: initialZoom,
     };
-  }, [initialCenter, initialZoom, map]);
+  }, [initialCenter, initialZoom, map, historyAction]);
 
   return null;
 }
@@ -1923,6 +1936,7 @@ export function PropertyMap({
   schoolCircle,
   initialCenter,
   initialZoom,
+  historyAction,
   cityCenter,
   cityZoom,
   areas = [],
@@ -2048,7 +2062,7 @@ export function PropertyMap({
         <MapLifecycleGuard onTeardown={handleMapTeardown} />
         <MapContainerResizeSync />
         <MapReadySignal onReady={onReady} />
-        <URLViewportController initialCenter={initialCenter} initialZoom={initialZoom} />
+        <URLViewportController initialCenter={initialCenter} initialZoom={initialZoom} historyAction={historyAction} />
         <MapController
           selectedListing={selectedListing}
           focusBounds={focusBounds}
@@ -2126,6 +2140,7 @@ export function PropertyMap({
             DiscoverRightPanelContainer uses to mount DiscoverAreasJourneyPanel
             is active, this layer takes the area-marker slot instead. */}
         {showAreasNavigationDestinations && areasNavigationJourney ? (
+          // TODO(#2124): Map school-count badges on markers: conservative MVP shows listing count on markers; school-count marker badges are a visual-only follow-up.
           <AreaDestinationMarkerLayer
             node={areasNavigationJourney.node}
             levelKind={areasNavigationJourney.levelKind}
@@ -2133,6 +2148,7 @@ export function PropertyMap({
             onSelect={areasNavigationJourney.selectNode}
             hoveredNodeKey={hoveredNavigationNodeKey}
             onHoverChange={onNavigationNodeHoverChange}
+            journey={journey}
             focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
             onClusterFocusChange={onClusterFocusChange}
             onAreaVisualClusterCameraIntent={onAreaVisualClusterCameraIntent}

@@ -450,6 +450,18 @@ function selectedMarkerLocator(page: Page, listingId: string) {
   );
 }
 
+/**
+ * Matches whichever right-panel surface is mounted for the area-first journey.
+ * The canonical panel (Issues #1956/#2084) uses `discover-areas-journey-panel-shell`;
+ * the legacy DiscoverRightPanel uses `discover-right-panel`. Both satisfy the
+ * intent of "the page's right panel is visible and the page is usable".
+ */
+function panelLocator(page: Page) {
+  return page.locator(
+    '[data-testid="discover-right-panel"], [data-testid="discover-areas-journey-panel-shell"]',
+  ).first();
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -498,7 +510,7 @@ test.describe('@integration-ui Issue #1939 — listing peek popover restores fro
     // Start WITHOUT the listing param — the popover must open from a real click first.
     await page.goto(repoUrl());
     await page.waitForLoadState('networkidle');
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 15_000 });
+    await expect(panelLocator(page)).toBeVisible({ timeout: 15_000 });
 
     const marker = markerLocator(page, LISTING_ID);
     await expect(marker).toBeVisible({ timeout: 20_000 });
@@ -525,7 +537,7 @@ test.describe('@integration-ui Issue #1939 — listing peek popover restores fro
     await stubAll(page);
     await page.goto(repoUrl());
     await page.waitForLoadState('networkidle');
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 15_000 });
+    await expect(panelLocator(page)).toBeVisible({ timeout: 15_000 });
 
     const marker = markerLocator(page, LISTING_ID);
     await expect(marker).toBeVisible({ timeout: 20_000 });
@@ -580,7 +592,7 @@ test.describe('@integration-ui Issue #1939 — listing peek popover restores fro
     // Page stays otherwise functional: the real listing's own marker still renders,
     // and the panel is present — this is not a broken/blank page.
     await expect(markerLocator(page, LISTING_ID)).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible();
+    await expect(panelLocator(page)).toBeVisible();
 
     // No uncaught JS exception / render crash from resolving the bogus id.
     expect(pageErrors, `Unexpected uncaught page error(s): ${pageErrors.join('\n')}`).toEqual([]);
@@ -607,7 +619,7 @@ test.describe('@integration-ui Issue #1939 — listing peek popover restores fro
     // Start with NO listing selected — the popover must open from a real click.
     await page.goto(repoUrl());
     await page.waitForLoadState('networkidle');
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 15_000 });
+    await expect(panelLocator(page)).toBeVisible({ timeout: 15_000 });
     expect(getUrlParam(page, 'listing')).toBeNull();
     await expect(popoverLocator(page)).toBeHidden();
 
@@ -675,7 +687,7 @@ test.describe('@integration-ui Issue #1939 — listing peek popover restores fro
     // Start with NO listing selected — open A via a real click (mirrors F1's setup).
     await page.goto(repoUrl());
     await page.waitForLoadState('networkidle');
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 15_000 });
+    await expect(panelLocator(page)).toBeVisible({ timeout: 15_000 });
 
     const marker = markerLocator(page, LISTING_ID);
     await expect(marker).toBeVisible({ timeout: 20_000 });
@@ -701,7 +713,7 @@ test.describe('@integration-ui Issue #1939 — listing peek popover restores fro
     await expect(popoverLocator(page)).toBeHidden();
 
     // Page stays otherwise usable, and no uncaught error reconciling the transition.
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible();
+    await expect(panelLocator(page)).toBeVisible();
     expect(pageErrors, `Unexpected uncaught page error(s): ${pageErrors.join('\n')}`).toEqual([]);
   });
 

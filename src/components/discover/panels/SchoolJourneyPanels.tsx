@@ -502,10 +502,11 @@ function SchoolBrowseIntro({ displayCity, activeScopeLabel, totalSchoolCount, on
   );
 }
 
-function SchoolCard({ school, onClick }: { school: SchoolResult; onClick: () => void }) {
+export function SchoolCard({ school, onClick }: { school: SchoolResult; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
+      data-testid="school-card"
       className="group w-full text-left rounded-xl border border-border bg-card p-4 transition-all hover:border-plum/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="flex items-start gap-3">

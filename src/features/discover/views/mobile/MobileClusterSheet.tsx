@@ -30,6 +30,7 @@
  * Create alert).
  */
 import { useMemo } from 'react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { formatListingCount } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
@@ -40,15 +41,19 @@ export interface MobileClusterSheetProps {
   journey: Pick<UseAreasNavigationJourneyResult, 'node' | 'children' | 'selectNode'>;
   focusedClusterMemberAreaKeys: readonly string[] | null;
   onClusterFocusChange: (memberAreaKeys: readonly string[] | null) => void;
+  eligibilityJourney?: 'areas' | 'schools';
+  onSelectArea?: (areaKey: string) => void;
 }
 
 export function MobileClusterSheet({
   journey,
   focusedClusterMemberAreaKeys,
   onClusterFocusChange,
+  eligibilityJourney = 'areas',
+  onSelectArea,
 }: MobileClusterSheetProps) {
   const summary = useMemo(
-    () => deriveFocusedAreaClusterSummary(journey, focusedClusterMemberAreaKeys),
+    () => deriveFocusedAreaClusterSummary(journey, focusedClusterMemberAreaKeys, eligibilityJourney),
     [journey, focusedClusterMemberAreaKeys],
   );
 
@@ -72,12 +77,23 @@ export function MobileClusterSheet({
               type="button"
               data-testid={`mobile-cluster-sheet-member-${member.nodeKey}`}
               data-node-key={member.nodeKey}
-              className="w-full text-left rounded-lg border border-border bg-card p-3 shadow-sm hover:border-primary/60"
-              onClick={() => journey.selectNode(member.nodeKey)}
+              className={cn(
+                "w-full text-left rounded-lg border border-border bg-card p-3 shadow-sm",
+                eligibilityJourney === 'schools' ? "hover:border-plum/60" : "hover:border-primary/60"
+              )}
+              onClick={() => {
+                if (onSelectArea && member.areaKey) {
+                  onSelectArea(member.areaKey);
+                } else {
+                  journey.selectNode(member.nodeKey);
+                }
+              }}
             >
               <span className="font-medium text-sm text-foreground">{member.displayLabel}</span>
               <span className="block text-xs text-muted-foreground mt-1">
-                {formatListingCount(member.listingCount)}
+                {eligibilityJourney === 'schools'
+                  ? `${member.schoolCount ?? 0} ${member.schoolCount === 1 ? 'school' : 'schools'}`
+                  : formatListingCount(member.listingCount)}
               </span>
             </button>
           </li>

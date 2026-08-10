@@ -30,6 +30,7 @@ export interface NavigationChildListProps {
   hoveredNodeKey?: string | null;
   onSelect: (nodeKey: string) => void;
   onHoverChange?: (nodeKey: string | null) => void;
+  countKind?: 'listings' | 'schools';
 }
 
 export function NavigationChildList({
@@ -39,6 +40,7 @@ export function NavigationChildList({
   hoveredNodeKey = null,
   onSelect,
   onHoverChange,
+  countKind = 'listings',
 }: NavigationChildListProps) {
   return (
     <div
@@ -55,6 +57,7 @@ export function NavigationChildList({
             isHighlighted={hoveredNodeKey === child.nodeKey}
             onSelect={onSelect}
             onHoverChange={onHoverChange}
+            countKind={countKind}
           />
         </div>
       ))}

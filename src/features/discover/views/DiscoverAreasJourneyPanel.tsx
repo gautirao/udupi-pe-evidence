@@ -38,9 +38,12 @@ import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSea
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { NodeListingsSurface } from './NodeListingsSurface';
 import { AreaSelectedPanel } from '@/components/discover/panels/AreaSelectedPanel';
+import { SchoolsInAreaPanel, AreaSchoolCombinedPanel } from '@/components/discover/panels/SchoolJourneyPanels';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import { toSelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
+import type { SchoolResult } from '@/hooks/useSchoolSearch';
+import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 
 /**
  * One visual AREA cluster's member set, as focused by a map cluster-marker
@@ -58,6 +61,7 @@ export interface FocusedAreaClusterSummary {
     areaKey: string;
     displayLabel: string;
     listingCount: number;
+    schoolCount?: number | null;
   }>;
   /** The exact "+N areas with matches" / "N areas with matches" copy the map cluster marker shows. */
   countLabel: string;
@@ -77,6 +81,7 @@ export interface FocusedAreaClusterSummary {
 export function deriveFocusedAreaClusterSummary(
   journey: Pick<UseAreasNavigationJourneyResult, 'node' | 'children'>,
   focusedClusterMemberAreaKeys: readonly string[] | null | undefined,
+  eligibilityJourney: 'areas' | 'schools' = 'areas',
 ): FocusedAreaClusterSummary | null {
   if (!focusedClusterMemberAreaKeys || focusedClusterMemberAreaKeys.length === 0) return null;
   const rawByNodeKey = new Map((journey.node?.children ?? []).map((c) => [c.nodeKey, c] as const));
@@ -118,7 +123,7 @@ export function deriveFocusedAreaClusterSummary(
         eligibleSchoolCount: m.schoolCount ?? 0,
         displayOrder: m.displayOrder,
       },
-      'areas',
+      eligibilityJourney,
     ),
   );
   if (eligible.length === 0) return null;
@@ -127,13 +132,14 @@ export function deriveFocusedAreaClusterSummary(
   // a hidden "+N" for rows that are ALL already on screen here. The map
   // marker (AreaMarkerLayer.tsx) keeps calling this with the default
   // MAX_REPRESENTATIVE_NAMES cap — unaffected by this change.
-  const { countResult } = presentClusterRepresentatives(eligible, 'areas', eligible.length);
+  const { countResult } = presentClusterRepresentatives(eligible, eligibilityJourney, eligible.length);
   return {
     members: eligible.map((m) => ({
       nodeKey: m.nodeKey,
       areaKey: m.areaKey,
       displayLabel: m.displayLabel,
       listingCount: m.listingCount,
+      schoolCount: m.schoolCount,
     })),
     countLabel: countResult.label,
   };
@@ -220,6 +226,36 @@ export interface DiscoverAreasJourneyPanelProps {
   isNodeListingsActive?: boolean;
   onClearNodeListings?: () => void;
   onBrowseListings?: () => void;
+  /**
+   * Issue #2124 (fix-cycle) — the canonical area-first "schools-in-area" sub-step
+   * (`schoolPicking=1`, journey stays `area-first`, `node=`/canonical area unchanged)
+   * and its follow-on area+school combined view (`schoolId` set). These props mirror
+   * the legacy `DiscoverRightPanel`'s own `schools`/`selectedSchool`/`schoolListings`/
+   * `radiusKm` props byte-for-byte — the SAME MapDiscovery-owned query results and
+   * journeyCommands actions, never re-fetched or re-derived here. All optional so
+   * every pre-existing render path/test that never resolves an AREA leaf (or never
+   * supplies them) keeps compiling and rendering unchanged.
+   */
+  schools?: SchoolResult[];
+  schoolsLoading?: boolean;
+  schoolsError?: boolean;
+  onSchoolsRetry?: () => void;
+  schoolsFetching?: boolean;
+  selectedSchool?: SchoolResult | null;
+  schoolListings?: DiscoverCityListingItem[];
+  schoolListingsLoading?: boolean;
+  radiusKm?: number | null;
+  onRadiusChange?: (radiusKm: number) => void;
+  onClearSchool?: () => void;
+  onSelectSchool?: (schoolId: string) => void;
+  onStartOver?: () => void;
+  /**
+   * Issue #2124 (fix-cycle) — `MapDiscovery.handleAreaFirstBack`'s existing 3-rung
+   * ladder (schoolId -> backToSchoolPicking; schoolPicking -> clearSchoolPicking;
+   * else -> area back), forwarded unchanged. Drives in-app Back from both the
+   * schools-in-area and area+school-combined sub-steps below.
+   */
+  onBackFromSchoolFlow?: () => void;
 }
 
 export function DiscoverAreasJourneyPanel({
@@ -239,6 +275,20 @@ export function DiscoverAreasJourneyPanel({
   isNodeListingsActive,
   onClearNodeListings,
   onBrowseListings,
+  schools,
+  schoolsLoading,
+  schoolsError,
+  onSchoolsRetry,
+  schoolsFetching,
+  selectedSchool,
+  schoolListings,
+  schoolListingsLoading,
+  radiusKm,
+  onRadiusChange,
+  onClearSchool,
+  onSelectSchool,
+  onStartOver,
+  onBackFromSchoolFlow,
 }: DiscoverAreasJourneyPanelProps) {
   // Issue #1956 PR 3 (bounded state-lift, AC4.12) — derive the focused
   // cluster's member list + count copy from the SAME `journey.node.children`
@@ -470,6 +520,20 @@ export function DiscoverAreasJourneyPanel({
         // navigationCommandMatrix.test.ts). No second history mechanism.
         selectNode={journey.selectNode}
         onSelectedListingPreviewChange={onSelectedListingPreviewChange}
+        schools={schools}
+        schoolsLoading={schoolsLoading}
+        schoolsError={schoolsError}
+        onSchoolsRetry={onSchoolsRetry}
+        schoolsFetching={schoolsFetching}
+        selectedSchool={selectedSchool}
+        schoolListings={schoolListings}
+        schoolListingsLoading={schoolListingsLoading}
+        radiusKm={radiusKm}
+        onRadiusChange={onRadiusChange}
+        onClearSchool={onClearSchool}
+        onSelectSchool={onSelectSchool}
+        onStartOver={onStartOver}
+        onBackFromSchoolFlow={onBackFromSchoolFlow}
       />
     );
   }
@@ -541,6 +605,21 @@ interface AreaLeafListingsSurfaceProps {
   selectNode: (nodeKey: string) => void;
   /** See `DiscoverAreasJourneyPanelProps.onSelectedListingPreviewChange`. */
   onSelectedListingPreviewChange?: (preview: SelectedListingPreview | null) => void;
+  /** See `DiscoverAreasJourneyPanelProps` — the #2124 schools-in-area / combined-view props, forwarded unchanged. */
+  schools?: SchoolResult[];
+  schoolsLoading?: boolean;
+  schoolsError?: boolean;
+  onSchoolsRetry?: () => void;
+  schoolsFetching?: boolean;
+  selectedSchool?: SchoolResult | null;
+  schoolListings?: DiscoverCityListingItem[];
+  schoolListingsLoading?: boolean;
+  radiusKm?: number | null;
+  onRadiusChange?: (radiusKm: number) => void;
+  onClearSchool?: () => void;
+  onSelectSchool?: (schoolId: string) => void;
+  onStartOver?: () => void;
+  onBackFromSchoolFlow?: () => void;
 }
 
 /**
@@ -584,6 +663,20 @@ function AreaLeafListingsSurface({
   onAddSchool,
   selectNode,
   onSelectedListingPreviewChange,
+  schools,
+  schoolsLoading,
+  schoolsError,
+  onSchoolsRetry,
+  schoolsFetching,
+  selectedSchool,
+  schoolListings,
+  schoolListingsLoading,
+  radiusKm,
+  onRadiusChange,
+  onClearSchool,
+  onSelectSchool,
+  onStartOver,
+  onBackFromSchoolFlow,
 }: AreaLeafListingsSurfaceProps) {
   const { user, isLoading: authLoading } = useAuth();
   const isAuthenticated = !authLoading && user !== null;
@@ -776,6 +869,93 @@ function AreaLeafListingsSurface({
             Retry
           </Button>
         </div>
+      </div>
+    );
+  }
+
+  // Issue #2124 (fix-cycle) — canonical area-first "schools-in-area" sub-step
+  // (Issue #1157). `schoolId` wins over `schoolPicking` (mirrors
+  // discoverPanelState.ts's legacy precedence: a picked school always routes to
+  // the combined view, never back to the picker) — selecting a school in the
+  // schools-in-area branch below writes `schoolId` via `onSelectSchool`
+  // (`journeyCommands.selectSchoolById`, made canonical-area-aware in
+  // useDiscoverJourneyTransitions.ts) WITHOUT touching `journey`/`node`, so this
+  // branch picks it up on the very next render. Both branches reuse the SAME
+  // `SchoolsInAreaPanel`/`AreaSchoolCombinedPanel` components + MapDiscovery-owned
+  // schools/schoolListings props the legacy `DiscoverRightPanel` already renders
+  // for the identical states — no new panel UI, only new callers of it. Wrapped in
+  // the SAME bounded flex-column container `AreaSelectedPanel` below relies on
+  // (see the FIX CYCLE 4 comment on that wrapper): both panels return a bare
+  // Fragment (PanelHeader + an internal `flex-1 overflow-y-auto` region) that
+  // needs a real flex-column ancestor with a bounded height to lay out correctly,
+  // exactly like `AreaSelectedPanel` needs it in the branch below.
+  if (nav.schoolId) {
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden" data-testid="areas-journey-panel-school-combined">
+        <AreaSchoolCombinedPanel
+          selectedArea={areaPoint}
+          selectedSchool={selectedSchool ?? null}
+          listings={schoolListings ?? []}
+          isLoadingListings={schoolListingsLoading ?? false}
+          isFetching={areaListingsQuery.isFetching}
+          radiusKm={radiusKm ?? null}
+          onRadiusChange={onRadiusChange ?? (() => undefined)}
+          onClearSchool={onClearSchool ?? (() => undefined)}
+          onClearArea={() => undefined}
+          filters={effectiveFilters}
+          onFiltersChange={(next) => {
+            if (onCommittedFiltersChange) {
+              onCommittedFiltersChange({
+                ...(committedFilters ?? {}),
+                propertyTypes: next.propertyTypes,
+                bedrooms: next.bedrooms,
+                priceMin: next.priceMin,
+                priceMax: next.priceMax,
+              });
+              return;
+            }
+            actions.setFiltersCommitted({
+              ...nav.filters,
+              propertyTypes: next.propertyTypes,
+              bedrooms: next.bedrooms,
+              priceMin: next.priceMin,
+              priceMax: next.priceMax,
+            });
+          }}
+          isAuthenticated={isAuthenticated}
+          onStartOver={onStartOver}
+          onBack={onBackFromSchoolFlow}
+          journey="area-first"
+          intent={nav.intent}
+          selectedListingId={nav.selectedListing}
+          onSelectListing={(id) => actions.setSelectedListing(id)}
+        />
+      </div>
+    );
+  }
+
+  if (nav.schoolPicking) {
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden" data-testid="areas-journey-panel-schools-in-area">
+        <SchoolsInAreaPanel
+          selectedArea={areaPoint}
+          onStartOver={onStartOver}
+          onBack={onBackFromSchoolFlow}
+          journey="area-first"
+          schools={schools ?? []}
+          schoolsLoading={schoolsLoading}
+          schoolsError={schoolsError}
+          onSchoolsRetry={onSchoolsRetry}
+          schoolsFetching={schoolsFetching}
+          onSelectSchool={onSelectSchool}
+          areaListings={areaListingsForPanel}
+          isLoadingAreaListings={areaListingsQuery.isLoading}
+          isFetching={areaListingsQuery.isFetching}
+          isAuthenticated={isAuthenticated}
+          intent={nav.intent}
+          selectedListingId={nav.selectedListing}
+          onSelectListing={(id) => actions.setSelectedListing(id)}
+        />
       </div>
     );
   }

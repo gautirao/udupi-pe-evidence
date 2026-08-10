@@ -77,7 +77,11 @@ function makeUrlActions(): DiscoverUrlActions {
     clearNode: vi.fn(),
     enterAreasJourney: vi.fn(),
     buildNodeHref: vi.fn(),
-  } as DiscoverUrlActions;
+    clearAllFiltersAndSearch: vi.fn(),
+    enterSchoolsJourney: vi.fn(),
+    enterNodeListings: vi.fn(),
+    clearNodeListings: vi.fn(),
+  } as unknown as DiscoverUrlActions;
 }
 
 const mockSchool: SchoolResult = {

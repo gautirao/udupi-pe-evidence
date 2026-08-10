@@ -221,6 +221,9 @@ export function useSchoolUrlDomain(
           // sub-step. Drop the transient marker so it cannot linger in the URL after
           // the journey changes (the marker is also inert once journey != area-first).
           next.delete('schoolPicking');
+          // Issue #2124 (fix-cycle-2) — clear stale canonical node context so cross-branch
+          // searches do not accidentally restore the pre-search hierarchy node on Back.
+          next.delete('node');
           return next;
         },
         { replace: false }, // PUSH — school-first journey is a major navigation destination

@@ -176,7 +176,7 @@ describe('DiscoverAreasJourneyPanel', () => {
       // Base (no-media-query) class is single-column — the sm: two-column
       // variant only activates at >=640px, well above the 390px viewport
       // AC5.1 targets, so the rendered stack is list-first by construction.
-      expect(list).toHaveClass('grid-cols-1');
+      expect(list).toHaveClass('flex-col');
       expect(list.getAttribute('role')).toBe('list');
       // Renders EXACTLY the current node's direct children — not a flattened
       // or parent set.

@@ -41,6 +41,7 @@ import { hasLegacyAreaContext } from '@/features/discover/navigation/legacyAreaC
 import { useDiscoverAreaNavigationPathResolver } from '@/features/discover/navigation/useDiscoverAreaNavigationPath';
 import { useToast } from '@/hooks/use-toast';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
+import { SchoolsNavigationJourneyPanel } from '@/features/discover/views/SchoolsNavigationJourneyPanel';
 
 /**
  * Issue #1824 Slice S11c — the DiscoverRightPanel call-site region, lifted
@@ -314,6 +315,21 @@ export function DiscoverRightPanelContainer({
    *     directly (no network round trip needed).
    */
   const handleSelectJourney = (journey: DiscoverJourney) => {
+    const resolvedNode = areasNavigationJourney.node;
+    if (
+      journey === 'school-first' &&
+      urlState.journey === 'area-first' &&
+      !hasLegacyAreaContext(urlState) &&
+      resolvedNode?.nodeType === 'AREA' &&
+      resolvedNode.areaKey
+    ) {
+      // Server-owned identity only — never parse/derive from the URL's
+      // node= encoding (#2124 ownership rule). The canonical resolved node
+      // is the sole source for an AREA leaf's areaKey.
+      urlActions.enterSchoolsJourneyAtArea(resolvedNode.areaKey);
+      return;
+    }
+
     if (journey !== 'area-first' || !hasLegacyAreaContext(urlState)) {
       urlActions.setJourney(journey);
       return;
@@ -516,6 +532,80 @@ export function DiscoverRightPanelContainer({
             // instead of deleting it.
             onAddSchool={urlActions.enterSchoolPicking}
             onSelectedListingPreviewChange={onSelectedListingPreviewChange}
+            // Issue #2124 (fix-cycle) — the canonical area-first "schools-in-area"
+            // sub-step (schoolPicking=1) and its follow-on area+school combined view
+            // (schoolId set). These are the SAME schools/selectedSchool/schoolListings/
+            // radiusKm props (and journeyCommands actions) already threaded to the
+            // legacy `DiscoverRightPanel` call site below for the identical panels —
+            // reused here, never re-fetched, so the canonical and legacy surfaces can
+            // never disagree on schools-in-area data.
+            schools={schools}
+            schoolsLoading={schoolsQuery.isLoading}
+            schoolsError={schoolsQuery.isError}
+            onSchoolsRetry={schoolsQuery.refetch}
+            schoolsFetching={schoolsQuery.isFetching}
+            selectedSchool={selectedSchool}
+            schoolListings={schoolListings}
+            schoolListingsLoading={listingDataLoading}
+            radiusKm={urlState.radiusKm}
+            onRadiusChange={journeyCommands.changeRadius}
+            onClearSchool={journeyCommands.clearSchool}
+            onSelectSchool={journeyCommands.selectSchoolById}
+            onStartOver={journeyCommands.startOver}
+            // Issue #2124 (fix-cycle) — `handleAreaFirstBack` already implements the
+            // exact 3-rung ladder (schoolId -> backToSchoolPicking; schoolPicking ->
+            // clearSchoolPicking; else -> area back) purely off `nav.schoolId`/
+            // `nav.schoolPicking` (URL state, journey-agnostic) — it never reads the
+            // legacy `areaKey` param, so it is already correct for the canonical
+            // journey unchanged.
+            onBackFromSchoolFlow={handleAreaFirstBack}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  const isSchoolsNavNodeLevel = urlState.journey === 'school-first' && !urlState.areaKey && !urlState.schoolId;
+  const showSchoolsNavigationJourney = isSchoolsNavNodeLevel;
+
+  if (showSchoolsNavigationJourney) {
+    const isSchoolsFirstCityRoot = areasNavigationJourney.node?.nodeKey === ROOT_NODE_KEY;
+    const schoolsFirstCityLabel = CITY_CONFIG[city]?.label ?? city;
+    return (
+      <div
+        className="flex min-h-0 flex-col overflow-hidden bg-background lg:order-2 lg:h-full lg:w-1/2 lg:border-l lg:border-border"
+        data-testid="discover-schools-journey-panel-shell"
+      >
+        <div className="flex flex-col gap-3 shrink-0 border-b border-border px-4 pb-2 pt-4">
+          {!isMobileShell && <DiscoverControlBar />}
+          <JourneySwitcher
+            compact={!isSchoolsFirstCityRoot}
+            activeJourney="school-first"
+            onSelectJourney={handleSelectJourney}
+            cityLabel={schoolsFirstCityLabel}
+            totalProperties={areasNavigationJourney.nodeCount?.listingCount ?? null}
+            areasCount={areasNavigationJourney.nodeCount?.matchingAreaCount ?? null}
+            prefersReducedMotion={prefersReducedMotion}
+          />
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <SchoolsNavigationJourneyPanel
+            journey={areasNavigationJourney}
+            onSelectAreaKey={(areaKey) => {
+              // Same handling as Areas
+              const match = discoverAreas.find((a) => a.areaKey === areaKey);
+              if (match) {
+                handleAreaSelect(match);
+              } else {
+                urlActions.selectArea(areaKey);
+              }
+            }}
+            buildNodeHref={urlActions.buildNodeHref}
+            hoveredNodeKey={hoveredNavigationNodeKey}
+            onHoverChange={onNavigationNodeHoverChange}
+            cityLabel={schoolsFirstCityLabel}
+            focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
+            onClusterFocusChange={onClusterFocusChange}
           />
         </div>
       </div>

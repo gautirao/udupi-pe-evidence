@@ -1102,6 +1102,52 @@ describe('AreaDestinationMarkerLayer — dense AREA children (single markers + v
       expect(capturedMarkers.length).toBe(markerCountBefore);
       expect(divIconHtmlCalls.length).toBe(htmlCallCountBefore);
     });
+
+    // Issue #2124/#2125 blocker — mixed-eligibility cluster never opens in
+    // the schools journey. `clusterVisibleAreaMembers` (areaClustering.ts)
+    // already treats every clusterable member as visible for the 'schools'
+    // journey — a zero-school AREA is still valid canonical geography, not
+    // eligibility-hidden — so a cluster mixing a zero-school member with a
+    // non-zero one groups into ONE visual cluster exactly like this test's
+    // co-located fixture. Before the fix, THIS reconciliation effect used
+    // `partitionMembersByJourney`'s raw eligibility (schoolCount > 0) to
+    // decide `stillAllVisible`, disagreeing with the grouping rule above: a
+    // real tap on that cluster set focus, then this effect immediately
+    // decided "not still visible" (the zero-school member) and cleared it on
+    // the very same render — the whole cluster silently became unclickable
+    // in school-first mode, never opening the mobile sheet or desktop
+    // cluster-focus panel. This proves the reconciliation now agrees with
+    // the grouping rule for the schools journey: a mixed-eligibility cluster
+    // keeps its focus (no `onClusterFocusChange(null)`), and every member —
+    // including the zero-school one — stays in the rendered cluster copy.
+    it('school-first journey: a mixed-eligibility cluster (one member schoolCount=0, another >0) keeps its focus instead of being cleared by the reconciliation effect (#2124/#2125)', () => {
+      const onClusterFocusChange = vi.fn();
+      const members = [
+        areaChild('alpha', 13.0, 77.6, { listingCount: 10, schoolCount: 4 }),
+        areaChild('bravo', 13.0, 77.6, { listingCount: 8, schoolCount: 0 }),
+      ];
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+          levelKind="areas"
+          children={members.map((m) => m.typed)}
+          onSelect={vi.fn()}
+          journey="school-first"
+          focusedClusterMemberAreaKeys={['alpha', 'bravo']}
+          onClusterFocusChange={onClusterFocusChange}
+        />,
+      );
+
+      // The reconciliation effect runs on mount (focusedClusterMemberAreaKeys
+      // is already set) — it must NOT decide the zero-school member makes
+      // the set "not still visible" and clear focus.
+      expect(onClusterFocusChange).not.toHaveBeenCalled();
+      // Both co-located members render together as ONE cluster card with
+      // both counted — the zero-school member was never dropped from the
+      // cluster, and the cluster itself stayed open/focused.
+      expect(capturedMarkers).toHaveLength(1);
+      expect(divIconHtmlCalls[divIconHtmlCalls.length - 1]).toContain('2 areas with matches');
+    });
   });
 
   // REQUIRED CHANGE 4 (review fix) — the areas/clusters markers carry

@@ -48,6 +48,7 @@ export default defineConfig({
         '**/broker-dashboard-v2.spec.ts',
         '**/admin-smoke.spec.ts',
         '**/discover-real-data-smoke.spec.ts',
+        '**/discover-schools-canonical-2124.spec.ts',
       ],
     },
     {

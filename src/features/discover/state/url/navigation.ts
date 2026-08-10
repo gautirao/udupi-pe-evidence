@@ -53,7 +53,7 @@ import { clearClusterFocusParam } from './clusterFocus';
 type NavigationState = Pick<DiscoverUrlState, 'node' | 'rawNodeParam' | 'nodeListings'>;
 type NavigationActions = Pick<
   DiscoverUrlActions,
-  'goToNode' | 'goToAncestorNode' | 'clearNode' | 'enterAreasJourney' | 'buildNodeHref' | 'enterNodeListings' | 'clearNodeListings'
+  'goToNode' | 'goToAncestorNode' | 'clearNode' | 'enterAreasJourney' | 'enterSchoolsJourney' | 'enterSchoolsJourneyAtArea' | 'buildNodeHref' | 'enterNodeListings' | 'clearNodeListings'
 >;
 
 /**
@@ -404,6 +404,43 @@ export function useNavigationUrlDomain(
     [setUrlParams, timers],
   );
 
+  const enterSchoolsJourney = useCallback(
+    (nodeKey: string | null) => {
+      cancelPendingViewportCommit(timers);
+      setUrlParams(
+        (prev) => {
+          const next = applyNodeDelta(prev, nodeKey);
+          next.set('journey', 'school-first');
+          next.delete('groupId');
+          next.delete('areaKey');
+          next.delete('schoolId');
+          return next;
+        },
+        { replace: false }, // PUSH — entering a journey is a deliberate destination
+      );
+    },
+    [setUrlParams, timers],
+  );
+
+  const enterSchoolsJourneyAtArea = useCallback(
+    (areaKey: string) => {
+      cancelPendingViewportCommit(timers);
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('node');
+          next.set('journey', 'school-first');
+          next.set('areaKey', areaKey);
+          next.delete('groupId');
+          next.delete('schoolId');
+          return next;
+        },
+        { replace: false }, // PUSH
+      );
+    },
+    [setUrlParams, timers],
+  );
+
   /**
    * Pure data, no navigation and no mutation. Delegates to
    * `buildNodeHrefFromParams` against the CURRENT `urlParams` (a dep, so it is
@@ -439,6 +476,6 @@ export function useNavigationUrlDomain(
 
   return {
     state: { node, rawNodeParam, nodeListings },
-    actions: { goToNode, goToAncestorNode, clearNode, enterAreasJourney, buildNodeHref, enterNodeListings, clearNodeListings },
+    actions: { goToNode, goToAncestorNode, clearNode, enterAreasJourney, enterSchoolsJourney, enterSchoolsJourneyAtArea, buildNodeHref, enterNodeListings, clearNodeListings },
   };
 }

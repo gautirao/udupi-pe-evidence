@@ -174,13 +174,15 @@ describe('clusterVisibleAreaMembers — visibility applied before clustering', (
     expect(result.hidden).toEqual([zeroContent]);
   });
 
-  it('excludes a zero-school-count member from the Schools journey before it reaches the grid', () => {
+  it('includes a zero-school-count member in the Schools journey to preserve canonical geography', () => {
     const eligible = member({ areaKey: 'has-schools', listingCount: 0, schoolCount: 3, lat: 13.0, lon: 77.6 });
-    const zeroContent = member({ areaKey: 'zero-schools', listingCount: 9, schoolCount: 0, lat: 13.0, lon: 77.6 });
+    // Issue 2125 blocker: Do not hide/reparent zero-school nodes merely because Schools is active.
+    const zeroContent = member({ areaKey: 'zero-schools', listingCount: 9, schoolCount: 0, lat: 13.1, lon: 77.7 });
     const result = clusterVisibleAreaMembers([eligible, zeroContent], 'schools', project, 12);
-    expect(result.clusters).toHaveLength(1);
-    expect(result.clusters[0].members).toEqual([eligible]);
-    expect(result.hidden).toEqual([zeroContent]);
+    expect(result.clusters.length).toBeGreaterThanOrEqual(1);
+    expect(result.clusters.flatMap((c) => c.members)).toContainEqual(eligible);
+    expect(result.clusters.flatMap((c) => c.members)).toContainEqual(zeroContent);
+    expect(result.hidden).toEqual([]);
   });
 
   it('a hidden member never appears in a cluster nor in the omitted-centroid list', () => {

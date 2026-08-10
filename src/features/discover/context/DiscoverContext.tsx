@@ -101,6 +101,7 @@ const ACTION_KEYS = [
   'goToAncestorNode',
   'clearNode',
   'enterAreasJourney',
+  'enterSchoolsJourney',
   'buildNodeHref',
   'enterNodeListings',
   'clearNodeListings',

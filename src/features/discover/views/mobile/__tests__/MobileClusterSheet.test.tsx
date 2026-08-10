@@ -20,9 +20,9 @@ const CLUSTER_RAW_CHILDREN: NavigationNodeResponse['children'] = [
   { nodeKey: 'a:charlie', nodeType: 'AREA', displayLabel: 'Charlie', displayOrder: 3, areaKey: 'charlie', centreLat: 12.92, centreLon: 77.62 },
 ];
 const CLUSTER_CHILDREN: UseAreasNavigationJourneyResult['children'] = [
-  { nodeKey: 'a:alpha', nodeType: 'AREA', displayLabel: 'Alpha', displayOrder: 1, listingCount: 5, schoolCount: null, isLeafArea: true, matchingAreaCount: null },
-  { nodeKey: 'a:bravo', nodeType: 'AREA', displayLabel: 'Bravo', displayOrder: 2, listingCount: 3, schoolCount: null, isLeafArea: true, matchingAreaCount: null },
-  { nodeKey: 'a:charlie', nodeType: 'AREA', displayLabel: 'Charlie', displayOrder: 3, listingCount: 1, schoolCount: null, isLeafArea: true, matchingAreaCount: null },
+  { nodeKey: 'a:alpha', nodeType: 'AREA', displayLabel: 'Alpha', displayOrder: 1, listingCount: 5, schoolCount: null, isLeafArea: true, matchingAreaCount: null, descendantAreaCount: null, representativeAreaKeys: [], bounds: null, bearingDegrees: null },
+  { nodeKey: 'a:bravo', nodeType: 'AREA', displayLabel: 'Bravo', displayOrder: 2, listingCount: 3, schoolCount: null, isLeafArea: true, matchingAreaCount: null, descendantAreaCount: null, representativeAreaKeys: [], bounds: null, bearingDegrees: null },
+  { nodeKey: 'a:charlie', nodeType: 'AREA', displayLabel: 'Charlie', displayOrder: 3, listingCount: 1, schoolCount: null, isLeafArea: true, matchingAreaCount: null, descendantAreaCount: null, representativeAreaKeys: [], bounds: null, bearingDegrees: null },
 ];
 
 function makeNode(overrides: Partial<NavigationNodeResponse> = {}): NavigationNodeResponse {

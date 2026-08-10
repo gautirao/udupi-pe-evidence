@@ -45,6 +45,7 @@ const MOCK_AREAS_RESPONSE = {
       name: 'Manipal',
       geoCenterLat: 13.3525,
       geoCenterLon: 74.7925,
+      listingCount: 5,
       listingCount90d: 5,
       trendDirection: 'stable',
     },
@@ -59,6 +60,7 @@ const MOCK_KUNDAPUR_AREAS_RESPONSE = {
       name: 'Kundapur Town',
       geoCenterLat: 13.628,
       geoCenterLon: 74.69,
+      listingCount: 2,
       listingCount90d: 2,
       trendDirection: 'stable',
     },
@@ -89,6 +91,13 @@ const MOCK_CITY_LISTINGS_RESPONSE = {
 // ── Helper ─────────────────────────────────────────────────────────────────
 
 async function mockDiscoverApis(page: import('@playwright/test').Page) {
+  await page.route("**/api/discover/cities/*/regions**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ regions: [] }),
+    })
+  );
   // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/areas**', (route) =>
     route.fulfill({
@@ -122,6 +131,13 @@ test.describe('@integration-ui Journey 1 — area marker click → back → forw
     page,
   }) => {
     await mockDiscoverApis(page);
+  await page.route("**/api/v1/discover/regions/summary**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ regions: [] }),
+    })
+  );
     // Issue #2088 item 3 — a bare `/discover?city=...` now defaults `journey`
     // to `area-first` (state/url/area.ts), which skips past this test's
     // subject: the journey-SELECTION guided-entry state (`journey-card-
@@ -140,7 +156,7 @@ test.describe('@integration-ui Journey 1 — area marker click → back → forw
     // ── Step 1: City overview — area ring markers visible ──────────────────
     // Wait for area markers from mocked /api/discover/areas (className: 'area-marker')
     await expect(page.locator(AREA_MARKER).first()).toBeVisible({ timeout: 12_000 });
-    await expect(rightPanel.getByText('Find properties your way')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByText('Where do you want to explore?')).toBeVisible({ timeout: 8_000 });
     await expect(rightPanel.getByTestId('journey-card-area-first')).toBeVisible();
 
     // ── Step 2: Click the area ring marker ────────────────────────────────
@@ -169,7 +185,7 @@ test.describe('@integration-ui Journey 1 — area marker click → back → forw
     );
 
     // Right panel returns to instructional state
-    await expect(rightPanel.getByText('Find properties your way')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByText('Where do you want to explore?')).toBeVisible({ timeout: 8_000 });
     await expect(rightPanel.getByTestId('journey-card-area-first')).toBeVisible();
 
     // ── Step 4: Browser Forward ───────────────────────────────────────────
@@ -189,6 +205,13 @@ test.describe('Journey 2 — bookmarked URL fidelity', () => {
   // J2a: city-only URL → city overview state
   test('J2a: ?city=udupi → instructional panel, area ring markers visible', async ({ page }) => {
     await mockDiscoverApis(page);
+  await page.route("**/api/v1/discover/regions/summary**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ regions: [] }),
+    })
+  );
     // Issue #2088 item 3 re-point — see Journey 1's comment above for the
     // full rationale. `scope=` suppresses the new area-first default so this
     // "no journey chosen yet" guided-entry state stays reachable.
@@ -200,7 +223,7 @@ test.describe('Journey 2 — bookmarked URL fidelity', () => {
     await expect(rightPanel).toBeVisible({ timeout: 10_000 });
 
     // Instructional state — no area selected
-    await expect(rightPanel.getByText('Find properties your way')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByText('Where do you want to explore?')).toBeVisible({ timeout: 8_000 });
     await expect(rightPanel.getByTestId('journey-card-area-first')).toBeVisible();
     await expect(page.getByTestId('listing-card')).toHaveCount(0);
 
@@ -213,6 +236,13 @@ test.describe('Journey 2 — bookmarked URL fidelity', () => {
     page,
   }) => {
     await mockDiscoverApis(page);
+  await page.route("**/api/v1/discover/regions/summary**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ regions: [] }),
+    })
+  );
     await page.goto(`/discover?city=udupi&areaKey=${ENCODED_AREA_KEY}`);
     await page.waitForLoadState('domcontentloaded');
 
@@ -237,6 +267,13 @@ test.describe('Journey 2 — bookmarked URL fidelity', () => {
     page,
   }) => {
     await mockDiscoverApis(page);
+  await page.route("**/api/v1/discover/regions/summary**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ regions: [] }),
+    })
+  );
     // Issue #2088 item 3 re-point — see Journey 1's comment above for the
     // full rationale. `scope=` suppresses the new area-first default so this
     // "no journey chosen yet" guided-entry state stays reachable.
@@ -250,7 +287,7 @@ test.describe('Journey 2 — bookmarked URL fidelity', () => {
     await expect(rightPanel).toBeVisible({ timeout: 10_000 });
 
     // Instructional state — no areaKey in URL
-    await expect(rightPanel.getByText('Find properties your way')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByText('Where do you want to explore?')).toBeVisible({ timeout: 8_000 });
     await expect(rightPanel.getByTestId('journey-card-area-first')).toBeVisible();
 
     // zoom=11 ≤ AREA_LAYER_MAX_ZOOM=12 → area ring markers visible
@@ -267,6 +304,13 @@ test.describe('Journey 2 — bookmarked URL fidelity', () => {
     page,
   }) => {
     await mockDiscoverApis(page);
+  await page.route("**/api/v1/discover/regions/summary**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ regions: [] }),
+    })
+  );
     await page.goto(
       `/discover?city=udupi&lat=${AREA_LAT}&lon=${AREA_LON}&zoom=${AREA_ZOOM}&areaKey=${ENCODED_AREA_KEY}`,
     );
@@ -293,6 +337,13 @@ test.describe('Journey 3 — panel Back from bookmarked area URL', () => {
     page,
   }) => {
     await mockDiscoverApis(page);
+  await page.route("**/api/v1/discover/regions/summary**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ regions: [] }),
+    })
+  );
 
     // Load a bookmarked URL with both areaKey and explicit viewport at zoom=14
     await page.goto(
@@ -329,7 +380,7 @@ test.describe('Journey 3 — panel Back from bookmarked area URL', () => {
     ).toBe(false);
 
     // (b) Right panel shows instructional state
-    await expect(rightPanel.getByText('Find properties your way')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByText('Where do you want to explore?')).toBeVisible({ timeout: 8_000 });
     await expect(rightPanel.getByTestId('journey-card-area-first')).toBeVisible();
 
     // (c) Still on /discover (deselectArea uses replace, not navigate(-1))
@@ -355,6 +406,13 @@ test.describe('Journey 4 — city switch resets area; Back restores prior state'
     page,
   }) => {
     await mockDiscoverApis(page);
+  await page.route("**/api/v1/discover/regions/summary**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ regions: [] }),
+    })
+  );
 
     // Load Udupi with area selected and zoomed viewport
     await page.goto(
@@ -369,7 +427,7 @@ test.describe('Journey 4 — city switch resets area; Back restores prior state'
     await expect(page.getByTestId('listing-card').first()).toBeVisible({ timeout: 12_000 });
 
     // ── Switch city to Kundapur ───────────────────────────────────────────
-    const cityTrigger = page.locator('[role="combobox"]').filter({ hasText: /udupi/i });
+    const cityTrigger = page.getByTestId('control-bar-city-select').locator('button');
     await expect(cityTrigger).toBeVisible({ timeout: 8_000 });
     await cityTrigger.click();
     await page.getByRole('option', { name: 'Kundapur', exact: true }).click();
@@ -385,7 +443,7 @@ test.describe('Journey 4 — city switch resets area; Back restores prior state'
     // zoom/lat/lon may repopulate for kundapur city level — just verify areaKey is gone
 
     // Right panel returns to instructional state for new city
-    await expect(rightPanel.getByText('Find properties your way')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByText('Where do you want to explore?')).toBeVisible({ timeout: 8_000 });
     await expect(rightPanel.getByTestId('journey-card-area-first')).toBeVisible();
 
     // ── Browser Back: restores Udupi + Manipal selection ────────────────

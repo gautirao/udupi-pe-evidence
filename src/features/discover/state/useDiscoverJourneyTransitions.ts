@@ -130,6 +130,22 @@ export interface UseDiscoverJourneyTransitionsParams {
   toast: ReturnType<typeof useToast>['toast'];
 
   /**
+   * Issue #2124 (fix-cycle) — true when `journey === 'area-first'` AND the
+   * canonical Areas hierarchy is currently resolved to an AREA leaf node
+   * (`node=a:...`). Selecting a school while this is true must NOT flip the
+   * journey to `school-first` (that would abandon the canonical `node=` and
+   * break the #1157 area-first school-picking sub-step's contract) — it must
+   * stay on the `else` branch below, identical to the legacy `areaKey`-present
+   * case. The legacy `urlState.areaKey` check alone cannot detect this: the
+   * canonical journey never sets that param.
+   *
+   * Optional (defaults to `false`) so existing test callers that construct
+   * `UseDiscoverJourneyTransitionsParams` without it keep compiling —
+   * `false` is the exact pre-existing behaviour (legacy-only journey flip).
+   */
+  hasResolvedCanonicalArea?: boolean;
+
+  /**
    * Deviation 2 (see file header) — kept as page-local useState (declared
    * before useDiscoverMapData) and injected here, rather than owned
    * internally, to break a circular dependency with useDiscoverMapData's
@@ -166,6 +182,7 @@ export function useDiscoverJourneyTransitions({
   panelContent,
   city,
   toast,
+  hasResolvedCanonicalArea = false,
   boundedSearchTriggered,
   setBoundedSearchTriggered,
 }: UseDiscoverJourneyTransitionsParams): ControllerResult<
@@ -240,9 +257,14 @@ export function useDiscoverJourneyTransitions({
         queryClient.getQueryData<SchoolResult>(['school-by-id', schoolId]) ??
         null;
 
-      if (urlState.journey !== 'school-first' && !urlState.areaKey) {
+      if (urlState.journey !== 'school-first' && !urlState.areaKey && !hasResolvedCanonicalArea) {
         // If no area is selected, selecting a school flips the journey to school-first
         // (e.g. searching for a school from the area-first landing page via ScopedSearch).
+        // Issue #2124 (fix-cycle) — `hasResolvedCanonicalArea` excludes the canonical
+        // area-first "schools-in-area" sub-step from this branch: an AREA leaf is
+        // already selected via `node=`, so selecting a school must fall to the `else`
+        // branch below (setSchoolParams only), exactly like the legacy areaKey-present
+        // case, never flipping journey or touching `node=`.
         urlActions.setSchoolJourney({
           schoolId,
           radiusKm,
@@ -284,6 +306,7 @@ export function useDiscoverJourneyTransitions({
       urlState.journey,
       urlState.areaKey,
       urlState.viewport,
+      hasResolvedCanonicalArea,
       setBoundedSearchTriggered,
     ],
   );

@@ -530,6 +530,16 @@ export interface DiscoverUrlActions {
    */
   enterAreasJourney: (nodeKey: string | null) => void;
   /**
+   * ATOMIC entry into the canonical Schools journey: sets
+   * `journey=school-first` AND `node=` in ONE write.
+   */
+  enterSchoolsJourney: (nodeKey: string | null) => void;
+  /**
+   * ATOMIC entry into the Schools journey at a specific area: sets
+   * `journey=school-first` AND `areaKey=` while deleting `node` in ONE write.
+   */
+  enterSchoolsJourneyAtArea: (areaKey: string) => void;
+  /**
    * Issue #1956 PR 2 — PURE: returns the query string a middle-click / cmd-click
    * / "copy link address" on a node destination should resolve to, or null when
    * the key is not writable. Writes NOTHING. Guaranteed by a differential test to

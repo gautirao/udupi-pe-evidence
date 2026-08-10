@@ -46,6 +46,7 @@ export interface NavigationLevelPanelProps {
    */
   cityLabel?: string;
   onBrowseListings?: () => void;
+  countKind?: 'listings' | 'schools';
 }
 
 export function NavigationLevelPanel({
@@ -56,6 +57,7 @@ export function NavigationLevelPanel({
   onHoverChange,
   cityLabel,
   onBrowseListings,
+  countKind = 'listings',
 }: NavigationLevelPanelProps) {
   const { node, levelKind, children, resolutionNotice, nodeCount, selectNode } = journey;
 
@@ -94,7 +96,14 @@ export function NavigationLevelPanel({
   // renders when the areas count is not, and the locked zero literal renders
   // alone (no separate "0 listings" line) when the areas count is exactly 0.
   const headingShowListingsLine = nodeCount != null && !headingPresentation?.isZeroContent;
-  const headingListingsLabel = headingShowListingsLine ? formatListingCount(nodeCount.listingCount) : null;
+  
+  let headingPrimaryLabel: string | null = null;
+  if (countKind === 'schools') {
+    headingPrimaryLabel = nodeCount != null && nodeCount.schoolCount != null ? String(nodeCount.schoolCount) : null;
+  } else {
+    headingPrimaryLabel = headingShowListingsLine ? formatListingCount(nodeCount.listingCount) : null;
+  }
+  const headingPrimaryUnit = countKind === 'schools' ? 'schools' : 'listings';
 
   // Issue #2084 (AC6) — the synthetic city ROOT is the ONE node whose heading
   // leads with the mock's invitational pattern (eyebrow + question) instead
@@ -107,7 +116,7 @@ export function NavigationLevelPanel({
   const isEligibleForBrowse = !isCityRoot && descendantAreaCount > 0 && descendantAreaCount <= 15;
 
   // Issue #2084 (AC7)
-  const sectionLabel =
+  const baseSectionLabel =
     children.length === 0
       ? null
       : levelKind === 'directions'
@@ -118,7 +127,18 @@ export function NavigationLevelPanel({
             ? `Areas in ${node.displayLabel}`
             : null;
             
-  const eyebrowText = levelKind === 'clusters' ? 'Local Destination' : levelKind === 'directions' ? 'Direction' : 'Areas';
+  const sectionLabel = countKind === 'schools' && baseSectionLabel != null
+    ? (levelKind === 'directions' ? `Explore schools in ${cityLabel ?? 'this city'}` : `Schools in ${node.displayLabel}`)
+    : baseSectionLabel;
+            
+  const baseEyebrow = levelKind === 'clusters' ? 'Local Destination' : levelKind === 'directions' ? 'Direction' : 'Areas';
+  const eyebrowText = countKind === 'schools' ? `Schools · ${node.displayLabel}` : baseEyebrow;
+  const eyebrowColorClass = countKind === 'schools' ? 'text-[hsl(var(--plum))]' : 'text-primary';
+  // Mock parity (ExpSchools.jsx L131): at an Area-child level the school title
+  // is "Areas with schools in <node>", not the bare node label the eyebrow
+  // above already carries.
+  const nonRootTitle =
+    countKind === 'schools' && levelKind === 'areas' ? `Areas with schools in ${node.displayLabel}` : node.displayLabel;
 
   return (
     <div data-testid="navigation-level-panel" data-node-key={node.nodeKey} className="flex flex-col">
@@ -128,39 +148,44 @@ export function NavigationLevelPanel({
         {isCityRoot ? (
           <>
             <p
-              className="text-[12px] font-bold uppercase tracking-[0.06em] text-muted-foreground"
+              className={`text-[12px] font-bold uppercase tracking-[0.06em] ${countKind === 'schools' ? 'text-[hsl(var(--plum))]' : 'text-muted-foreground'}`}
               data-testid="navigation-level-root-eyebrow"
             >
-              Discover {cityLabel ?? 'this city'}
+              {countKind === 'schools' ? `Schools · ${cityLabel ?? 'this city'}` : `Discover ${cityLabel ?? 'this city'}`}
             </p>
             <h2
               className="mt-1 font-['Fraunces',_ui-serif,_Georgia,_serif] text-xl font-semibold text-foreground"
               data-testid="navigation-level-root-heading"
             >
-              Where do you want to explore?
+              {countKind === 'schools' ? 'Where do you want schools?' : 'Where do you want to explore?'}
             </h2>
+            {countKind === 'schools' && nodeCount?.schoolCount != null && (
+              <p className="mt-1.5 text-[12.5px] text-muted-foreground">
+                <span className="font-semibold text-foreground">{nodeCount.schoolCount} schools in these areas.</span> Pick a direction, or search a school by name in the bar above — knowing the school is always enough.
+              </p>
+            )}
           </>
         ) : (
           <div>
             <div className="flex items-end justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-primary">
+                <div className={`text-[11px] font-bold uppercase tracking-[0.08em] ${eyebrowColorClass}`}>
                   {eyebrowText}
                 </div>
                 <h2 className="mt-1 font-['Fraunces',_ui-serif,_Georgia,_serif] text-[22px] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
-                  {node.displayLabel}
+                  {nonRootTitle}
                 </h2>
               </div>
               
               {nodeCount != null && (
                 <div className="shrink-0 text-right">
                   <div className="font-mono text-[22px] font-semibold leading-none text-foreground">
-                    {nodeCount.listingCount}
+                    {headingPrimaryLabel ?? '0'}
                   </div>
                   <div className="mt-0.5 text-[12px] text-muted-foreground">
-                    listings
+                    {headingPrimaryUnit}
                   </div>
-                  {isEligibleForBrowse && onBrowseListings != null && (
+                  {isEligibleForBrowse && onBrowseListings != null && countKind === 'listings' && (
                     <button
                       type="button"
                       onClick={onBrowseListings}
@@ -174,18 +199,36 @@ export function NavigationLevelPanel({
               )}
             </div>
             
-            {levelKind === 'clusters' && (
+            {levelKind === 'clusters' && countKind !== 'schools' && (
               <p className="mt-2 max-w-[56ch] text-pretty text-[13px] leading-relaxed text-muted-foreground">
                 Pick an area to see its homes. The dashed cluster on the map only zooms.
               </p>
             )}
 
-            {nodeCount != null && nodeCount.matchingAreaCount != null && nodeCount.matchingAreaCount > 0 && headingAreasLabel != null && (
+            {nodeCount != null && nodeCount.matchingAreaCount != null && nodeCount.matchingAreaCount > 0 && headingAreasLabel != null && countKind === 'listings' && (
               <div className="mt-3 flex items-center gap-2.5 rounded-md bg-secondary/60 px-3 py-2 text-[12.5px] leading-snug text-foreground/80">
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" aria-hidden="true" />
                 <span className="flex-1" data-testid="navigation-level-heading-count">
                   {headingAreasLabel} here. Crowded markers are grouped on the map for legibility only.
                 </span>
+              </div>
+            )}
+            {countKind === 'schools' && (
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center gap-2.5 rounded-md bg-secondary/60 px-3 py-2 text-[12.5px] leading-snug text-foreground/80">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[hsl(var(--plum))]" aria-hidden="true" />
+                  <span className="flex-1" data-testid="schools-inside-note">
+                    School counts show schools located inside these areas. They are not a measure of distance from any home.
+                  </span>
+                </div>
+                {levelKind === 'areas' && children.length > 0 && (
+                  <div className="flex items-center gap-2.5 rounded-md bg-secondary/60 px-3 py-2 text-[12.5px] leading-snug text-foreground/80">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[hsl(var(--plum))]" aria-hidden="true" />
+                    <span className="flex-1" data-testid="schools-crowded-note">
+                      {children.length} area{children.length === 1 ? '' : 's'} with schools here. Crowded markers are grouped on the map for legibility only.
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -222,6 +265,7 @@ export function NavigationLevelPanel({
             hoveredNodeKey={hoveredNodeKey}
             onSelect={selectNode}
             onHoverChange={onHoverChange}
+            countKind={countKind}
           />
         </div>
       )}

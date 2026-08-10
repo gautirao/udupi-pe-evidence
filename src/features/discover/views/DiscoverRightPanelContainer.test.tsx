@@ -136,7 +136,11 @@ const { BASE_URL_STATE, URL_ACTIONS } = vi.hoisted(() => {
     goToAncestorNode: vi.fn(),
     clearNode: vi.fn(),
     enterAreasJourney: vi.fn(),
+    enterSchoolsJourney: vi.fn(),
+    enterSchoolsJourneyAtArea: vi.fn(),
     buildNodeHref: vi.fn(),
+    enterNodeListings: vi.fn(),
+    clearNodeListings: vi.fn(),
     setSelectedListing: vi.fn(),
     clearSelectedListing: vi.fn(),
     setLocality: vi.fn(),
@@ -478,6 +482,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
     BASE_URL_STATE.journey = null;
     BASE_URL_STATE.groupId = null;
     BASE_URL_STATE.areaKey = null;
+    BASE_URL_STATE.node = null;
   });
 
   it('mounts DiscoverAreasJourneyPanel instead of the legacy DiscoverRightPanel when journey=area-first', () => {
@@ -698,7 +703,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
                   listingCount: 5,
                   schoolCount: null,
                   isLeafArea: false,
-                  matchingAreaCount: null,
+                  matchingAreaCount: null, descendantAreaCount: null, representativeAreaKeys: [], bounds: null, bearingDegrees: null,
                 },
               ],
             }),
@@ -716,11 +721,11 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
   });
 
   it('keeps rendering the legacy panel when journey is NOT area-first', () => {
-    BASE_URL_STATE.journey = 'school-first';
+    BASE_URL_STATE.journey = 'agri-first';
 
     render(
       <DiscoverRightPanelContainer
-        {...baseProps({ resolvedPanelContent: 'school-browse' })}
+        {...baseProps({ resolvedPanelContent: 'agri-browse' })}
       />,
     );
 
@@ -880,7 +885,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
                 ],
               },
               children: [
-                { nodeKey: 'a:alpha', nodeType: 'AREA', displayLabel: 'Alpha', displayOrder: 1, listingCount: 5, schoolCount: null, isLeafArea: true, matchingAreaCount: null },
+                { nodeKey: 'a:alpha', nodeType: 'AREA', displayLabel: 'Alpha', displayOrder: 1, listingCount: 5, schoolCount: null, isLeafArea: true, matchingAreaCount: null, descendantAreaCount: 1, representativeAreaKeys: ['alpha'], bounds: null, bearingDegrees: null },
               ],
             }),
           })}
@@ -924,6 +929,10 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
                   schoolCount: 1,
                   isLeafArea: false,
                   matchingAreaCount: 2,
+                  descendantAreaCount: 2,
+                  representativeAreaKeys: ['alpha', 'beta'],
+                  bounds: null,
+                  bearingDegrees: null,
                 },
               ],
             }),
@@ -1011,6 +1020,60 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
     // in this app uses, never a second/parallel navigation mechanism.
     expect(URL_ACTIONS.setJourney).toHaveBeenCalledWith('school-first');
     expect(URL_ACTIONS.enterAreasJourney).not.toHaveBeenCalled();
+  });
+
+  it('#2124 PR review fix — switching Areas -> Schools at an AREA leaf uses the resolved node\'s SERVER-supplied areaKey, never a value parsed from node=', async () => {
+    // The URL `node=` param and the resolved canonical node's `nodeKey` are
+    // deliberately made to encode a DIFFERENT area than the resolved node's
+    // own `areaKey` field. If `handleSelectJourney` ever regresses to
+    // stripping the `a:` prefix off `urlState.node` (or off
+    // `areasNavigationJourney.node.nodeKey`) instead of reading the
+    // server-owned `areaKey` field, this assertion catches it — the mutation
+    // would fire with the wrong (URL-derived) area identity.
+    const user = userEvent.setup();
+    BASE_URL_STATE.journey = 'area-first';
+    BASE_URL_STATE.node = 'a:IN|KA|Bangalore|WrongUrlDerivedArea';
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanelContainer
+          {...baseProps({
+            resolvedPanelContent: 'area-selected',
+            areasNavigationJourney: inertAreasNavigationJourney({
+              node: {
+                nodeKey: 'a:IN|KA|Bangalore|AlsoWrongNodeKeyDerivedArea',
+                nodeType: 'AREA',
+                displayLabel: 'Manipal',
+                depth: 2,
+                regionKey: 'east',
+                ancestry: [],
+                nextLevelType: 'LISTINGS',
+                children: [],
+                revisionId: 1,
+                bounds: {
+                  centreLat: 13.35,
+                  centreLon: 74.79,
+                  minLat: 13.3,
+                  minLon: 74.75,
+                  maxLat: 13.4,
+                  maxLon: 74.83,
+                },
+                descendantAreaKeys: null,
+                areaKey: 'IN|KA|Bangalore|Manipal',
+              },
+            }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+    const schoolTab = screen.getByTestId('journey-card-school-first');
+    await user.click(schoolTab);
+    expect(URL_ACTIONS.enterSchoolsJourneyAtArea).toHaveBeenCalledWith('IN|KA|Bangalore|Manipal');
+    expect(URL_ACTIONS.enterSchoolsJourneyAtArea).not.toHaveBeenCalledWith(
+      'IN|KA|Bangalore|WrongUrlDerivedArea',
+    );
+    expect(URL_ACTIONS.enterSchoolsJourneyAtArea).not.toHaveBeenCalledWith(
+      'IN|KA|Bangalore|AlsoWrongNodeKeyDerivedArea',
+    );
   });
 
   it('AC2/AC3 — keyboard selection (focus + Enter) dispatches the SAME writer as a click', async () => {

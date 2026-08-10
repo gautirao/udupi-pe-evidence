@@ -368,7 +368,8 @@ export function DiscoverMapCanvas({
   // the map and panel must never disagree about whether the canonical Areas
   // journey is active, so each site recomputes the SAME condition rather
   // than trusting a threaded boolean.
-  const showAreasNavigationDestinations = nav.journey === 'area-first' && !nav.nodeListings;
+  const isSchoolsNavNodeLevel = nav.journey === 'school-first' && !nav.areaKey && !nav.schoolId;
+  const showAreasNavigationDestinations = (nav.journey === 'area-first' || isSchoolsNavNodeLevel) && !nav.nodeListings;
   return (
     <div ref={mapContainerRef} className="lg:w-1/2 h-64 lg:h-full relative order-1 lg:order-1" style={{ background: 'hsl(var(--map-bg))' }} onClick={
       // a3 — background click dismisses the marker popover. stopPropagation is applied
@@ -408,6 +409,12 @@ export function DiscoverMapCanvas({
           } : undefined}
           initialCenter={memoizedInitialCenter}
           initialZoom={viewport?.zoom}
+          // Issue #2125 — POP-restoration guard (URLViewportController). nav is
+          // DiscoverNavContextValue = Omit<DiscoverUrlState, 'viewport'>, which
+          // retains historyAction ('POP' | 'PUSH' | 'REPLACE' | undefined) from
+          // useNavigationType(); same field useDiscoverCameraOrchestration.ts
+          // already reads via urlState.historyAction for the identical guard.
+          historyAction={nav.historyAction}
           cityCenter={cityCenter}
           cityZoom={cityZoom}
           areas={overviewAreas}
@@ -461,7 +468,7 @@ export function DiscoverMapCanvas({
           onClusterFocusChange={onClusterFocusChange}
           onAreaVisualClusterCameraIntent={onAreaVisualClusterCameraIntent}
           showAreasNavigationDestinations={showAreasNavigationDestinations}
-          schoolZoneLabels={schoolZoneLabels}
+          schoolZoneLabels={isSchoolsNavNodeLevel ? [] : schoolZoneLabels}
           onSelectZone={(groupId) => urlActions.selectGroup(groupId)}
           onZoomChange={setMapZoom}
           onViewportChange={urlActions.reportViewport}

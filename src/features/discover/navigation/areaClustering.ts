@@ -322,9 +322,16 @@ export interface ClusterVisibleAreaMembersResult extends AreaClusteringResult {
  * Composes journey-aware visibility with the grid clusterer: a zero-content
  * member (per `journeyVisibility.isMemberEligible`) is removed BEFORE
  * grouping, so it can never appear inside a cluster's `members` and can never
- * be counted by `representativeNames.ts`'s `+N` arithmetic. This is the ONE
- * call site that should feed dense AREA children into `clusterAreaMembers` —
- * callers must not run visibility afterwards as a "corrective" filter.
+ * be counted by `representativeNames.ts`'s `+N` arithmetic.
+ *
+ * EXCEPTION: In the 'schools' journey, zero-school nodes are INTENTIONALLY
+ * included to preserve the complete canonical geography identity. This ensures
+ * map and panel always display the identical set of canonical children, even
+ * when those children contain zero matches.
+ *
+ * This is the ONE call site that should feed dense AREA children into
+ * `clusterAreaMembers` — callers must not run visibility afterwards as a
+ * "corrective" filter.
  */
 export function clusterVisibleAreaMembers(
   members: readonly ClusterableAreaMember[],
@@ -345,8 +352,8 @@ export function clusterVisibleAreaMembers(
     // 'schools' journey, since the 'areas' journey never reads
     // eligibleSchoolCount.
     const eligible =
-      journey === 'schools' && member.schoolCount == null
-        ? true
+      journey === 'schools'
+        ? true // Issue 2125 blocker: Do not hide/reparent zero-school nodes merely because Schools is active.
         : isMemberEligible(
             {
               areaKey: member.areaKey,
