@@ -187,9 +187,20 @@ test.describe('@integration-ui #1823 — camera fit policy', () => {
     await homeCrumb.click();
     await expect.poll(() => nodeParam(page)).toBe('root');
 
+    // Fix-verify correction — root is NOT a canonical node
+    // (useDiscoverCameraOrchestration.ts's canonical-node fit-once effect
+    // early-returns whenever navigationNodeKey is null, which is exactly
+    // root's own value), so it structurally cannot increment
+    // canonicalNodeFitCount. The previous `toBeGreaterThan` assertion here
+    // was wrong from the moment it was written — unrelated to any of
+    // #1823/PR #2128's changes. Documenting the real invariant instead of
+    // just deleting the check: root's count must equal the cold-load's own
+    // count (unchanged), not exceed it.
     const countAtRoot = await getCanonicalNodeFitCount(page);
-    expect(countAtRoot, 'T1: root PUSH must also fire its own fresh fit').not.toBeNull();
-    expect((countAtRoot as number)).toBeGreaterThan(countAfterColdLoad as number);
+    expect(
+      countAtRoot,
+      'T1: root must NOT fire its own canonical-node fit (navigationNodeKey is null at root) — count must equal the cold-load count, unchanged',
+    ).toBe(countAfterColdLoad);
 
     await page.getByTestId(cardTestId(D_CENTRAL)).click();
     await expect.poll(() => nodeParam(page)).toBe(D_CENTRAL);
@@ -555,9 +566,15 @@ test.describe('@integration-ui #1823 (PR #2128 review cycle 4) — mobile listin
     // universal precondition here.
     await expect(page.getByTestId('discover-areas-journey-panel-shell')).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => nodeParam(page), { timeout: 10_000 }).toBe(AREA_RR_NAGAR);
-    await expect
-      .poll(() => readCamera(page).lat, { timeout: 10_000 })
-      .not.toBeNull();
+    // Fix-verify correction — camera lat is NOT checked here. T6 pins a
+    // mobile viewport, and DiscoverMapMount.tsx real-unmounts the map while
+    // in List mode (the state we're in at this point) — AreaPanner's fit
+    // effect only runs inside the mounted map tree, and ViewportWatcher only
+    // writes lat/lon/zoom in reaction to a real Leaflet moveend, neither of
+    // which can happen before the map exists. Checking lat here is
+    // structurally impossible to satisfy on mobile; the real fit-populated
+    // check happens below, right after the map-trigger click actually
+    // mounts the map.
     await page.waitForTimeout(SETTLE_MS);
 
     // Enter mobile Map mode (control-bar-map-trigger — the SAME
@@ -586,6 +603,15 @@ test.describe('@integration-ui #1823 (PR #2128 review cycle 4) — mobile listin
       .toBe(150);
 
     const cameraBeforeToggle = readCamera(page);
+    // Fix-verify correction — the fit-populated-lat proof belongs HERE, now
+    // that the map has actually mounted (via the map-trigger click above),
+    // not before it existed. Also strengthens the List->Map->List->Map
+    // equality check below: without this, a null lat both before and after
+    // the toggle would make that check pass vacuously.
+    expect(
+      cameraBeforeToggle.lat,
+      'T6: camera lat must populate once the map mounts and fits for this listing-capable state — a null value here means the fit never fired',
+    ).not.toBeNull();
 
     // Finding 1 real-browser coverage — toggle List -> Map -> List -> Map.
     // DiscoverMapMount.tsx real-unmounts PropertyMap/AreaPanner on List and
