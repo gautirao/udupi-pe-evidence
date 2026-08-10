@@ -31,6 +31,12 @@ import {
   CLUSTER_MAX_RADIUS_PX,
   selectPrimaryMapLayer,
 } from '@/lib/map/zoomPolicy';
+import {
+  computeCameraPadding,
+  LEAF_FIT_MIN_ZOOM,
+  LEAF_FIT_MAX_ZOOM,
+  type AreaPanReason,
+} from '@/shared/map/zoomPolicy';
 import { useZoomBand } from '@/hooks/useZoomBand';
 
 /**
@@ -49,6 +55,15 @@ import { useZoomBand } from '@/hooks/useZoomBand';
  * band where the area-overview markers are still rendered (issue #1069).
  */
 export const AREA_PANNER_GROUP_MAX_ZOOM = AREA_LAYER_MAX_ZOOM;
+
+/**
+ * Issue #1823 — naming-only extraction of MapController's agri focusBounds
+ * fitBounds padding. This was an undocumented 4th padding tier (distinct
+ * from MOBILE_CAMERA_PADDING/DESKTOP_CAMERA_PADDING/AreaPanner's own
+ * padding) with no name of its own; zero behaviour change, same [50, 50]
+ * value as before.
+ */
+const LEGACY_FOCUS_BOUNDS_PADDING: [number, number] = [50, 50];
 
 /**
  * Max zoom for SchoolMarkerFocusPanner fitBounds (issue #1240).
@@ -491,8 +506,15 @@ interface PropertyMapProps {
    * Reports { lat, lon, zoom } rounded to map precision (not pre-rounded here).
    */
   onViewportChange?: (viewport: { lat: number; lon: number; zoom: number }) => void;
-  /** When set, pans/fits the map to this area. Driven by right-panel card clicks only — never set by marker clicks. */
-  panToArea?: AreaPoint | null;
+  /**
+   * When set, pans/fits the map to this area. Driven by right-panel card
+   * clicks only — never set by marker clicks. Issue #1823 — the `seq`/
+   * `reason` fields are populated only by useDiscoverCameraOrchestration's
+   * group/scope/canonical-node fit effects (via `guardedSetPanToArea`);
+   * other callers keep passing a plain `AreaPoint`, which AreaPanner below
+   * treats as an un-sequenced, always-fire legacy write.
+   */
+  panToArea?: (AreaPoint & { seq?: number; reason?: AreaPanReason }) | null;
   /** Incrementing tick that triggers a zoom reset to cityCenter/cityZoom. Incremented by handleAreaBack. */
   resetMapTick?: number;
   /** Called once when the Leaflet map instance has finished initialising. Use to gate data-readiness checks. */
@@ -930,23 +952,57 @@ function BoundsWatcher({
   return null;
 }
 
-function AreaPanner({ panToArea }: { panToArea?: AreaPoint | null }) {
+function AreaPanner({ panToArea }: { panToArea?: (AreaPoint & { seq?: number; reason?: AreaPanReason }) | null }) {
   const map = useMap();
+  // Issue #1823 (fix cycle 1) — plain monotonic seq guard, scoped to ONLY
+  // the three sequenced reasons (group/scope/canonicalNode) that carry a
+  // `seq`. A `panToArea` with no `seq` (area-click, deferred areaKey
+  // hydration, handleStartOver's clear-to-null, etc.) is legacy/un-sequenced
+  // and always fires on identity change, exactly as before this issue.
+  //
+  // This deliberately does NOT mirror MapController's adopt-on-mount
+  // MECHANISM (silently absorb whatever seq the first effect run observes,
+  // never firing it). MapController's adopt-on-mount is only sound because
+  // its cameraIntent source is guaranteed to be null on a genuine first-ever
+  // mount — nothing can publish to it before MapController itself renders.
+  // AreaPanner has no such guarantee: react-leaflet mounts children
+  // (including AreaPanner) ONE COMMIT AFTER MapContainer's own ref callback
+  // runs, so on a warm-cache navigation the orchestration hook's
+  // group/scope/canonicalNode fit effect can already have published seq 1
+  // before AreaPanner ever renders — AreaPanner's first observed value IS
+  // the genuine transition, not a stale remount echo. Adopting it silently
+  // (the previous implementation) dropped the fit permanently, since the
+  // orchestration hook's own prevGroupIdRef/prevScopeRef had already
+  // advanced and nothing else re-triggers it.
+  //
+  // Accepted trade-off: a PropertyMap-level remount (mapInstanceKey bump, or
+  // mobile map dismiss/reopen) that inherits an already-fired seq will now
+  // replay that fit once more instead of staying silent — a harmless
+  // redundant animation to the position the map is already framed at, never
+  // a dropped/dead camera.
+  const lastHandledSeqRef = useRef(-1);
   useEffect(() => {
     if (!panToArea) return;
-    
+    if (panToArea.seq != null) {
+      if (panToArea.seq <= lastHandledSeqRef.current) return;
+      lastHandledSeqRef.current = panToArea.seq;
+    }
+
     if (panToArea.bbox) {
       // Issue #1069: a synthetic group-bounds AreaPoint (from computeGroupBounds)
       // can fit at a zoom level above AREA_PANNER_GROUP_MAX_ZOOM for narrow groups,
       // which then trips MapDiscovery's zoom-band gate and hides the area markers
       // the user was meant to see. Clamp group fits to the area-layer threshold.
+      // This clamp is OUTSIDE the seq/adopt gate above and applies whenever a
+      // fit actually fires — it must never be skippable by that gate.
       const isGroupBounds = panToArea.areaKey === GROUP_BOUNDS_SYNTHETIC_KEY;
+      const viewportWidthPx = typeof window !== 'undefined' ? window.innerWidth : undefined;
       map.fitBounds(panToArea.bbox, {
-        padding: [40, 40],
-        maxZoom: isGroupBounds ? AREA_PANNER_GROUP_MAX_ZOOM : 16,
+        padding: computeCameraPadding(viewportWidthPx),
+        maxZoom: isGroupBounds ? AREA_PANNER_GROUP_MAX_ZOOM : LEAF_FIT_MAX_ZOOM,
       });
     } else {
-      map.flyTo([panToArea.geo_center_lat, panToArea.geo_center_lon], 13);
+      map.flyTo([panToArea.geo_center_lat, panToArea.geo_center_lon], LEAF_FIT_MIN_ZOOM);
     }
   }, [panToArea, map]);
   return null;
@@ -1467,11 +1523,11 @@ function MapController({
       // settles, the target zoom is computed and clamped up-front.
       if (cameraIntent.bounds) {
         const rawZoom = map.getBoundsZoom(cameraIntent.bounds, false, L.point(paddingX, paddingY));
-        const clampedZoom = Math.min(16, Math.max(13, rawZoom));
+        const clampedZoom = Math.min(LEAF_FIT_MAX_ZOOM, Math.max(LEAF_FIT_MIN_ZOOM, rawZoom));
         const center = L.latLngBounds(cameraIntent.bounds).getCenter();
         map.setView(center, clampedZoom, { animate: true });
       } else {
-        map.flyTo(cameraIntent.center, 13);
+        map.flyTo(cameraIntent.center, LEAF_FIT_MIN_ZOOM);
       }
     }
   }, [cameraIntent, map]);
@@ -1495,7 +1551,7 @@ function MapController({
       // Single point — fitBounds on a zero-area bounds is degenerate; use flyTo
       map.flyTo([s, w], 15, { duration: 1 });
     } else {
-      map.fitBounds(focusBounds, { padding: [50, 50] });
+      map.fitBounds(focusBounds, { padding: LEGACY_FOCUS_BOUNDS_PADDING });
     }
   }, [focusBounds, map]);
 
