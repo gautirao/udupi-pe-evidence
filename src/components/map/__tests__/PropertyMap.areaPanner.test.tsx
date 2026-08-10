@@ -192,6 +192,40 @@ describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
     const [, opts] = mapStub.fitBounds.mock.calls[0];
     expect(opts).toEqual({ padding: [40, 40], maxZoom: 16 });
   });
+
+  it('PR #2128 review cycle 3 (Finding 2) — forwards a nonzero bottomOcclusionPx prop into AreaPanner\'s computeCameraPadding call', () => {
+    const realArea: AreaPoint = {
+      areaKey: 'IN|KA|Udupi|Manipal',
+      areaLabel: 'Manipal',
+      geo_center_lat: 13.3525,
+      geo_center_lon: 74.7869,
+      bbox: [[13.34, 74.78], [13.37, 74.82]],
+    };
+
+    render(<PropertyMap {...baseProps} panToArea={realArea} bottomOcclusionPx={150} />);
+
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    const [, opts] = mapStub.fitBounds.mock.calls[0];
+    // Desktop tier [120, 40] (innerWidth pinned to 1440 by this block's
+    // beforeEach) + 150px occlusion added to the vertical component only.
+    expect(opts).toEqual({ padding: [120, 190], maxZoom: 16 });
+  });
+
+  it('PR #2128 review cycle 3 (Finding 2) — omitting bottomOcclusionPx (the default) is unaffected, matching pre-fix padding', () => {
+    const realArea: AreaPoint = {
+      areaKey: 'IN|KA|Udupi|Manipal',
+      areaLabel: 'Manipal',
+      geo_center_lat: 13.3525,
+      geo_center_lon: 74.7869,
+      bbox: [[13.34, 74.78], [13.37, 74.82]],
+    };
+
+    renderWithPan(realArea);
+
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    const [, opts] = mapStub.fitBounds.mock.calls[0];
+    expect(opts).toEqual({ padding: [120, 40], maxZoom: 16 });
+  });
 });
 
 // ─── Issue #1823 — AreaPanner seq/adopt-on-mount ──────────────────────────

@@ -175,6 +175,29 @@ export function computeCameraPadding(viewportWidthPx?: number, bottomOcclusionPx
   return [horizontal, vertical + bottomOcclusionPx];
 }
 
+/**
+ * Issue #1823 (PR #2128 review cycle 3, Finding 2) — deliberate CONSERVATIVE
+ * FIXED ESTIMATE of the mobile compact listing-preview sheet's occluded
+ * height (MobileListingPreviewSheet.tsx), used as `bottomOcclusionPx` when
+ * the sheet is open. NOT measured: that component is explicitly documented
+ * as "intrinsic-height (no max-h/scroll)", so there is no fixed CSS value to
+ * read, and a live ResizeObserver/ref-measurement round-trip through
+ * MapDiscovery.tsx was judged a disproportionately larger, riskier change
+ * (a new effect + callback prop on a presentational-only, already-delivered
+ * component) for this fix cycle's budget than a documented estimate.
+ *
+ * Derived from the sheet's own rendered content (drag handle 4px + its 10px
+ * bottom margin, container pt-2.5/pb-4 = 10px + 16px, and the 78px preview
+ * image — the tallest element in its flex row, since the text column beside
+ * it is vertically centered and shorter): ~118px. Rounded up to 150px for
+ * headroom against text wrapping / trust-badge rows on narrow devices.
+ *
+ * If MobileListingPreviewSheet.tsx's layout changes materially (e.g. a
+ * taller image, an added row), this constant must be re-derived — it is not
+ * self-updating.
+ */
+export const MOBILE_LISTING_PREVIEW_OCCLUSION_PX = 150;
+
 // ── Issue #1823 — leaf (real-area) fit zoom clamp ────────────────────────
 // Previously inline literals: PropertyMap.tsx's MapController leaf-framing
 // branch (`Math.min(16, Math.max(13, rawZoom))`) and AreaPanner's fitBounds

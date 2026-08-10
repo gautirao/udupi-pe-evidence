@@ -13,6 +13,7 @@ import {
 } from '@/components/discover/SchoolRadiusMapOverlay';
 import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
 import { AREA_LAYER_MAX_ZOOM, shouldShowMarkers } from '@/lib/map/zoomPolicy';
+import { MOBILE_LISTING_PREVIEW_OCCLUSION_PX } from '@/shared/map/zoomPolicy';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import {
   computeDiscoverLayer,
@@ -2455,6 +2456,13 @@ export default function MapDiscovery() {
           setMapZoom={setMapZoom}
           handleBoundsChange={handleBoundsChange}
           panToArea={panToArea}
+          // PR #2128 review cycle 3 (Finding 2, issue #1823) — a conservative
+          // fixed estimate of the mobile compact listing-preview sheet's
+          // occluded height (see MOBILE_LISTING_PREVIEW_OCCLUSION_PX's own
+          // doc comment for why fixed, not measured), applied only while
+          // that sheet is actually showing — same gate MobileListingPreviewSheet
+          // itself renders behind, just above.
+          bottomOcclusionPx={mobileMapOpen && selectedListingPreview ? MOBILE_LISTING_PREVIEW_OCCLUSION_PX : 0}
           journeyView={journeyView}
           setMapReady={setMapReady}
           schools={schools}

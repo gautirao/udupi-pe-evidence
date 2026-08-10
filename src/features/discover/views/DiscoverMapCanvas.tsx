@@ -147,6 +147,15 @@ export interface DiscoverMapCanvasProps {
   setMapZoom: Dispatch<SetStateAction<number>>;
   handleBoundsChange: (bbox: [number, number, number, number]) => void;
   panToArea: AreaPoint | null;
+  /**
+   * PR #2128 review cycle 3 (Finding 2, issue #1823) — bottom occlusion (px)
+   * to add to `computeCameraPadding`'s vertical padding at AreaPanner's fit
+   * call, so a fit that occurs while the mobile compact listing-preview
+   * sheet is open keeps its framed geography clear of it. Threaded straight
+   * to `PropertyMap`'s prop of the same name. Optional/defaults to 0 in
+   * PropertyMap so every existing test fixture keeps compiling unchanged.
+   */
+  bottomOcclusionPx?: number;
   journeyView: DiscoverJourneyTransitionsView;
   setMapReady: Dispatch<SetStateAction<boolean>>;
   schools: SchoolResult[];
@@ -281,6 +290,7 @@ export function DiscoverMapCanvas({
   setMapZoom,
   handleBoundsChange,
   panToArea,
+  bottomOcclusionPx,
   journeyView,
   setMapReady,
   schools,
@@ -474,6 +484,7 @@ export function DiscoverMapCanvas({
           onViewportChange={urlActions.reportViewport}
           onBoundsChange={handleBoundsChange}
           panToArea={panToArea}
+          bottomOcclusionPx={bottomOcclusionPx}
           resetMapTick={journeyView.composedResetMapTick}
           onReady={() => setMapReady(true)}
           journey={nav.journey}

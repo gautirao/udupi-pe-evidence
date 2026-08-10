@@ -528,6 +528,15 @@ interface PropertyMapProps {
         consumedSeqRef?: MutableRefObject<number>;
       })
     | null;
+  /**
+   * PR #2128 review cycle 3 (Finding 2, issue #1823) — additional bottom
+   * padding (px) for AreaPanner's fitBounds call, so a fit that occurs while
+   * viewport chrome overlapping the map (currently: the mobile compact
+   * listing-preview sheet) is open keeps its framed geography clear of it.
+   * Passed straight through to `computeCameraPadding`. Defaults to 0 (every
+   * existing caller omits it, unaffected).
+   */
+  bottomOcclusionPx?: number;
   /** Incrementing tick that triggers a zoom reset to cityCenter/cityZoom. Incremented by handleAreaBack. */
   resetMapTick?: number;
   /** Called once when the Leaflet map instance has finished initialising. Use to gate data-readiness checks. */
@@ -967,10 +976,12 @@ function BoundsWatcher({
 
 function AreaPanner({
   panToArea,
+  bottomOcclusionPx = 0,
 }: {
   panToArea?:
     | (AreaPoint & { seq?: number; reason?: AreaPanReason; consumedSeqRef?: MutableRefObject<number> })
     | null;
+  bottomOcclusionPx?: number;
 }) {
   const map = useMap();
   // Issue #1823 (fix cycle 1) — plain monotonic seq guard, scoped to ONLY
@@ -1028,12 +1039,20 @@ function AreaPanner({
       const isGroupBounds = panToArea.areaKey === GROUP_BOUNDS_SYNTHETIC_KEY;
       const viewportWidthPx = typeof window !== 'undefined' ? window.innerWidth : undefined;
       map.fitBounds(panToArea.bbox, {
-        padding: computeCameraPadding(viewportWidthPx),
+        padding: computeCameraPadding(viewportWidthPx, bottomOcclusionPx),
         maxZoom: isGroupBounds ? AREA_PANNER_GROUP_MAX_ZOOM : LEAF_FIT_MAX_ZOOM,
       });
     } else {
       map.flyTo([panToArea.geo_center_lat, panToArea.geo_center_lon], LEAF_FIT_MIN_ZOOM);
     }
+    // `bottomOcclusionPx` is intentionally NOT a dep: this effect fires only
+    // on a genuine panToArea transition (per the seq guard above), not on
+    // every occlusion change. Opening/closing the mobile preview sheet does
+    // not by itself re-trigger a fit — it only affects the padding applied
+    // to the NEXT fit that happens to occur while it's open. Retroactively
+    // re-framing an already-completed fit when the sheet opens afterward
+    // would be a materially bigger behaviour change (a new camera-move
+    // trigger source) than this fix cycle's scope.
   }, [panToArea, map]);
   return null;
 }
@@ -2048,6 +2067,7 @@ export function PropertyMap({
   onViewportChange,
   onBoundsChange,
   panToArea,
+  bottomOcclusionPx = 0,
   resetMapTick,
   onReady,
   journey,
@@ -2160,7 +2180,7 @@ export function PropertyMap({
         <ZoomWatcher onZoomChange={onZoomChange} />
         <ViewportWatcher onViewportChange={onViewportChange} />
         <BoundsWatcher onBoundsChange={onBoundsChange} />
-        <AreaPanner panToArea={panToArea} />
+        <AreaPanner panToArea={panToArea} bottomOcclusionPx={bottomOcclusionPx} />
         <SchoolFocusPanner
           schoolFocusTick={schoolFocusTick}
           lat={schoolFocusLat}
