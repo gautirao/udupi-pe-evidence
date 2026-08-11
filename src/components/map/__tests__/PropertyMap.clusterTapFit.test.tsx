@@ -579,7 +579,7 @@ describe('Issue #1762 fix — general moveend listener lifecycle (replaces the o
 });
 
 describe("Issue #1762 — MapController 'cluster' framing branch", () => {
-  it('setView to the fit-to-members center/zoom, clamped to [currentZoom+1, CLUSTER_DISABLE_AT_ZOOM]', () => {
+  it('setView to the fit-to-members center/zoom, capped at min(paddedRawZoom, CLUSTER_DISABLE_AT_ZOOM)', () => {
     mapStub.getZoom.mockReturnValue(13);
     mapStub.getBoundsZoom.mockReturnValue(15);
     const bounds: [[number, number], [number, number]] = [[13.0, 74.7], [13.1, 74.8]];
@@ -601,9 +601,14 @@ describe("Issue #1762 — MapController 'cluster' framing branch", () => {
     expect(mapStub.flyTo).not.toHaveBeenCalled();
   });
 
-  it('clamps the target zoom to at least currentZoom + 1 (never a no-op tap)', () => {
+  it('Issue #1762 fix-cycle 10 — never advances zoom past the padded rawZoom; a tap that would be a no-op at the padded fit re-centers without forcing zoom in', () => {
     mapStub.getZoom.mockReturnValue(14);
-    mapStub.getBoundsZoom.mockReturnValue(14); // would be a no-op without the +1 floor
+    // getBoundsZoom here models an equal-args single stub, i.e. the padded
+    // and unpadded fit agree at 14 — the padded fit does NOT justify
+    // advancing past currentZoom=14, so the corrected consumer must NOT
+    // force a +1 zoom-in (that was the exact bug: an unconditional
+    // Math.max(currentZoom + 1, rawZoom) floor overriding the padded fit).
+    mapStub.getBoundsZoom.mockReturnValue(14);
     const bounds: [[number, number], [number, number]] = [[13.0, 74.7], [13.1, 74.8]];
     const intent: CameraIntent = {
       seq: 1,
@@ -615,8 +620,72 @@ describe("Issue #1762 — MapController 'cluster' framing branch", () => {
     const { rerender } = render(<PropertyMap {...baseProps} cameraIntent={null} focusBounds={null} />);
     rerender(<PropertyMap {...baseProps} cameraIntent={intent} focusBounds={null} />);
 
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
+    const [center, zoom] = mapStub.setView.mock.calls[0];
+    // No-op-on-zoom: stays at currentZoom (does not clip members by forcing
+    // a zoom the padded viewport does not actually support), but still
+    // re-centers on the tapped cluster.
+    expect(zoom).toBe(14);
+    expect(center).toEqual({ lat: 13.05, lng: 74.75 });
+  });
+
+  it('Issue #1762 fix-cycle 10 — padded rawZoom is a hard ceiling: a fractional padded fit below currentZoom+1 is never rounded up past itself', () => {
+    // Reproduces the exact WORKDONE_REVIEW BLOCKING_PARTIAL scenario at this
+    // MapController consumer's single getBoundsZoom call site (always
+    // padded — MarkerClusterLayer's separate unpadded clusterCanSplit
+    // pre-check is a different call site, not exercised by this render
+    // path, so it cannot be distinguished by a padding-conditional mock
+    // here; a single mockReturnValue is the honest way to model this call
+    // site). currentZoom=14, padded rawZoom=14.5 (Leaflet's real
+    // getBoundsZoom can return non-integer zoom levels). The old
+    // `Math.max(currentZoom + 1, rawZoom)` = Math.max(15, 14.5) = 15 would
+    // have pushed the camera a full level past what the padded bounds
+    // actually fit, clipping members. The fix must land at 14.5, and must
+    // NEVER call setView with zoom 15.
+    mapStub.getZoom.mockReturnValue(14);
+    mapStub.getBoundsZoom.mockReturnValue(14.5);
+    const bounds: [[number, number], [number, number]] = [[13.0, 74.7], [13.1, 74.8]];
+    const intent: CameraIntent = {
+      seq: 1,
+      bounds,
+      center: [13.05, 74.75],
+      framing: 'cluster',
+      padding: computeCameraPadding(1440), // desktop padding — non-empty [x, y]
+    };
+    const { rerender } = render(<PropertyMap {...baseProps} cameraIntent={null} focusBounds={null} />);
+    rerender(<PropertyMap {...baseProps} cameraIntent={intent} focusBounds={null} />);
+
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
     const [, zoom] = mapStub.setView.mock.calls[0];
-    expect(zoom).toBe(15);
+    expect(zoom).toBe(14.5);
+    expect(zoom).not.toBe(15);
+
+    mapStub.getBoundsZoom.mockReturnValue(15); // restore this file's default stub behaviour
+  });
+
+  it('Issue #1762 fix-cycle 10 — same padded-ceiling behaviour holds under asymmetric mobile padding', () => {
+    // Mobile CameraIntent padding is asymmetric ([x, y] differ, per
+    // computeCameraPadding) — confirms the fix is not accidentally coupled
+    // to the symmetric desktop padding shape used in the scenario above.
+    mapStub.getZoom.mockReturnValue(14);
+    mapStub.getBoundsZoom.mockReturnValue(14.5);
+    const bounds: [[number, number], [number, number]] = [[13.0, 74.7], [13.1, 74.8]];
+    const intent: CameraIntent = {
+      seq: 1,
+      bounds,
+      center: [13.05, 74.75],
+      framing: 'cluster',
+      padding: computeCameraPadding(390), // mobile width -> asymmetric padding
+    };
+    const { rerender } = render(<PropertyMap {...baseProps} cameraIntent={null} focusBounds={null} />);
+    rerender(<PropertyMap {...baseProps} cameraIntent={intent} focusBounds={null} />);
+
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
+    const [, zoom] = mapStub.setView.mock.calls[0];
+    expect(zoom).toBe(14.5);
+    expect(zoom).not.toBe(15);
+
+    mapStub.getBoundsZoom.mockReturnValue(15); // restore this file's default stub behaviour
   });
 
   it('does NOT arm the leaf-only focusBounds suppression window — a subsequent focusBounds change still fires immediately', () => {

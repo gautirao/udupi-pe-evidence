@@ -1659,19 +1659,39 @@ function MapController({
     } else if (cameraIntent.framing === 'cluster') {
       // Issue #1762 — listing-cluster tap fit-to-members. Mirrors the 'leaf'
       // branch's bounds->zoom computation (same getBoundsZoom + responsive
-      // padding) but with a DIFFERENT clamp: the floor is the CURRENT zoom
-      // + 1 (a cluster tap must never be a no-op — it is only ever published
-      // once MarkerClusterLayer's clusterCanSplit gate has already confirmed
-      // the target zoom exceeds the zoom at click time), and the ceiling is
-      // CLUSTER_DISABLE_AT_ZOOM (16, where leaflet.markercluster itself stops
-      // clustering) rather than the fixed [13,16] leaf band. Deliberately
-      // does NOT arm suppressForSeqRef/suppressArmedAtRef above (that guard
-      // only checks `=== 'leaf'`, so this branch is already excluded) — a
-      // cluster tap never changes scope/node/filters, so there is no
-      // correlated network-driven refit for the suppression to swallow.
+      // padding), with the ceiling CLUSTER_DISABLE_AT_ZOOM (16, where
+      // leaflet.markercluster itself stops clustering) rather than the fixed
+      // [13,16] leaf band. Deliberately does NOT arm
+      // suppressForSeqRef/suppressArmedAtRef above (that guard only checks
+      // `=== 'leaf'`, so this branch is already excluded) — a cluster tap
+      // never changes scope/node/filters, so there is no correlated
+      // network-driven refit for the suppression to swallow.
+      //
+      // Issue #1762 fix-cycle 10 (WORKDONE_REVIEW BLOCKING_PARTIAL) — this
+      // PADDED getBoundsZoom call is the sole authority on how far the
+      // camera may actually advance. The previous
+      // `Math.max(currentZoom + 1, rawZoom)` floor treated "+1" as a hard
+      // guarantee that a tap always zooms in, which could push targetZoom
+      // PAST what the padded viewport fits whenever padding cost more than
+      // one zoom level versus MarkerClusterLayer's handleClusterActivate
+      // unpadded pre-check (line ~2140) — clipping one or more of the
+      // tapped cluster's own members off-screen. rawZoom (capped at
+      // CLUSTER_DISABLE_AT_ZOOM) is now a hard ceiling, never just a floor
+      // competitor: the target zoom only ever advances up to that capped
+      // value, and — per #1762's explicit allowance that a cluster unable
+      // to split while keeping all members inside the usable viewport may
+      // remain clustered — falls back to a same-zoom re-center (no forced
+      // zoom-in) when the padded fit doesn't justify advancing past the
+      // current zoom. Does NOT duplicate this padding policy in
+      // MarkerClusterLayer's cheap unpadded clusterCanSplit pre-check
+      // (still used there only to decide whether to publish a CameraIntent
+      // at all); this branch remains the single authoritative padded-fit
+      // decision.
       if (cameraIntent.bounds) {
         const rawZoom = map.getBoundsZoom(cameraIntent.bounds, false, L.point(paddingX, paddingY));
-        const targetZoom = Math.min(CLUSTER_DISABLE_AT_ZOOM, Math.max(map.getZoom() + 1, rawZoom));
+        const currentZoom = map.getZoom();
+        const cappedRawZoom = Math.min(CLUSTER_DISABLE_AT_ZOOM, rawZoom);
+        const targetZoom = cappedRawZoom > currentZoom ? cappedRawZoom : currentZoom;
         const center = L.latLngBounds(cameraIntent.bounds).getCenter();
         map.setView(center, targetZoom, { animate: true });
       } else {
