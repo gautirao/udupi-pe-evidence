@@ -1128,3 +1128,174 @@ test.describe('Issue #1762 — regression sweep (desktop 1366x768)', () => {
     await expect(popover).toHaveAttribute('role', 'dialog');
   });
 });
+
+// ─── Required Browser Evidence item 8 (issue #1762 mandatory mobile
+// acceptance) — "mobile marker A → marker B preview replacement without
+// intermediate close when two visible distinct markers are available."
+//
+// The mobile branches of the tests above (the "individual marker click"
+// smoke test and the fix-cycle-4/7 spiderfy tests) deliberately keep the
+// legacy `journey=area-first&areaKey=` URL scheme (no `node=`) — per their
+// own "KNOWN GAP" comments, that scheme never populates
+// `useAreasNavigationJourney`'s AREA-node resolution, so
+// MobileListingPreviewSheet structurally can never mount there. Those tests
+// prove only that a tap reaches `onSelectListing` (via the `listing=` URL
+// param) — never that the sheet itself opens or updates. That is exactly
+// the fixture gap the issue text calls out: "improve the fixture rather
+// than using a fake/synthetic click as final acceptance evidence."
+//
+// This block closes that gap using the SAME canonical `node=` navigation
+// stub pattern #2130/PR #2136 already established for
+// e2e/discover-1738-regression.spec.ts's mobile test (`stubNavigationNode`,
+// stubbing `**/navigation/resolve**` + `**/navigation/*/counts**` so
+// `journey.node.nodeType === 'AREA'` genuinely resolves). That helper is
+// not exported from its file, so the same fixture shape is mirrored here
+// rather than cross-imported from another spec file. Two ordinary,
+// non-coincident, individually hit-testable pins (not spiderfied/clustered)
+// prove — against the REAL rendered DOM — that tapping a second visible
+// marker updates the SAME open sheet in place.
+test.describe('Issue #1762 — mobile marker A → marker B preview replacement (required browser evidence item 8)', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  const NODE_KEY = `a:${AREA_KEY}`;
+  const ENCODED_NODE_KEY = encodeURIComponent(NODE_KEY);
+
+  const NAVIGATION_RESOLVE_FIXTURE = {
+    requested: NODE_KEY,
+    resolution: 'EXACT',
+    revisionId: 1,
+    node: {
+      nodeKey: NODE_KEY,
+      nodeType: 'AREA',
+      displayLabel: AREA_NAME,
+      depth: 1,
+      regionKey: null,
+      ancestry: [],
+      nextLevelType: 'LISTINGS',
+      children: [],
+      revisionId: 1,
+      bounds: {
+        centreLat: CENTER_LAT,
+        centreLon: CENTER_LON,
+        minLat: CENTER_LAT - TOP_CELL_SPACING_DEG * 1.5,
+        maxLat: CENTER_LAT + TOP_CELL_SPACING_DEG * 1.5,
+        minLon: CENTER_LON - TOP_CELL_SPACING_DEG * 1.5,
+        maxLon: CENTER_LON + TOP_CELL_SPACING_DEG * 1.5,
+      },
+      descendantAreaKeys: null,
+      areaKey: AREA_KEY,
+    },
+  };
+
+  const NAVIGATION_COUNTS_FIXTURE = {
+    nodeKey: NODE_KEY,
+    count: 2,
+    schoolCount: 0,
+    areaCounts: { [AREA_KEY]: 2 },
+    areaSchoolCounts: { [AREA_KEY]: 0 },
+    children: [],
+    revisionId: 1,
+  };
+
+  async function stubAreaNavigationNode(page: Page): Promise<void> {
+    await page.route('**/api/discover/cities/*/navigation/resolve**', (route) =>
+      fulfillJson(route, 200, NAVIGATION_RESOLVE_FIXTURE),
+    );
+    await page.route('**/api/discover/cities/*/navigation/*/counts**', (route) =>
+      fulfillJson(route, 200, NAVIGATION_COUNTS_FIXTURE),
+    );
+  }
+
+  function areaFirstNodeUrl(zoom = 13): string {
+    return (
+      `/discover?city=${CITY}&journey=area-first&areaKey=${encodeURIComponent(AREA_KEY)}&node=${ENCODED_NODE_KEY}` +
+      `&lat=${CENTER_LAT}&lon=${CENTER_LON}&zoom=${zoom}`
+    );
+  }
+
+  test('tapping a second visible marker replaces the open sheet in place, with no intermediate close', async ({
+    page,
+  }) => {
+    // Two ordinary, individually hit-testable pins — the same ~0.02deg
+    // separation the sparse-fixture smoke test above already establishes as
+    // comfortably outside leaflet.markercluster's cluster radius at zoom 13
+    // (real, non-overlapping click targets, never spiderfied/clustered).
+    // Distinct anon-arm identity (priceBand + bedrooms) on each so the
+    // sheet's own rendered CONTENT — not just the URL — proves which
+    // listing it is showing at every step.
+    const listings: Array<DenseListing & { priceBand: string; bedrooms: number }> = [
+      {
+        id: 'node-marker-a',
+        propertyType: 'house',
+        title: 'Node Marker A',
+        locality: AREA_NAME,
+        pricePaise: 4_500_000_00,
+        priceBand: '₹43L-47L',
+        bedrooms: 2,
+        lat: CENTER_LAT,
+        lon: CENTER_LON,
+        listingPurpose: 'sale',
+      },
+      {
+        id: 'node-marker-b',
+        propertyType: 'apartment',
+        title: 'Node Marker B',
+        locality: AREA_NAME,
+        pricePaise: 8_200_000_00,
+        priceBand: '₹80L-85L',
+        bedrooms: 4,
+        lat: CENTER_LAT + 0.02,
+        lon: CENTER_LON + 0.02,
+        listingPurpose: 'sale',
+      },
+    ];
+    await stubDenseFixture(page, listings);
+    await stubAreaNavigationNode(page);
+
+    const listingsResponse = page.waitForResponse(
+      (res) => res.url().includes('/api/discover/cities/') && res.url().includes('/listings') && res.status() === 200,
+    );
+    await page.goto(areaFirstNodeUrl(13));
+    await listingsResponse;
+    await dismissConsentBannerIfPresent(page);
+    await page.waitForLoadState('networkidle');
+    await ensureMobileMapOpen(page, true);
+
+    const markerA = page.locator('[data-listing-id="node-marker-a"] [data-testid="property-marker"]');
+    const markerB = page.locator('[data-listing-id="node-marker-b"] [data-testid="property-marker"]');
+    await expect(markerA).toBeVisible({ timeout: 15_000 });
+    await expect(markerB).toBeVisible({ timeout: 15_000 });
+
+    const before = readUrlIdentity(page);
+    const sheet = page.getByTestId('mobile-listing-preview-sheet');
+    await expect(sheet).toBeHidden();
+
+    // Tap marker A — the sheet genuinely mounts (real DOM, no mock) showing
+    // A's own identity. The map remains usable throughout: nothing closes
+    // or blocks it.
+    await markerA.click();
+    await expect(sheet).toBeVisible({ timeout: 10_000 });
+    await expect(sheet).toHaveCount(1);
+    await expect.poll(() => new URL(page.url()).searchParams.get('listing')).toBe('node-marker-a');
+    await expect(sheet.getByTestId('mobile-listing-preview-price-band')).toHaveText('₹43L-47L');
+    await expect(sheet.getByTestId('mobile-listing-preview-bedrooms')).toContainText('2 BHK');
+
+    const afterA = readUrlIdentity(page);
+    expect(afterA).toEqual(before);
+
+    // Without closing/dismissing the sheet, tap marker B (a different,
+    // visible marker) — the SAME sheet element updates to B's identity: not
+    // a second sheet, not a closed-then-reopened one.
+    await markerB.click();
+    await expect(sheet).toBeVisible({ timeout: 10_000 });
+    await expect(sheet).toHaveCount(1);
+    await expect.poll(() => new URL(page.url()).searchParams.get('listing')).toBe('node-marker-b');
+    await expect(sheet.getByTestId('mobile-listing-preview-price-band')).toHaveText('₹80L-85L');
+    await expect(sheet.getByTestId('mobile-listing-preview-bedrooms')).toContainText('4 BHK');
+
+    // Canonical/query URL state unchanged apart from `listing=` — no
+    // node=/breadcrumb/journey mutation from this marker-to-marker tap.
+    const afterB = readUrlIdentity(page);
+    expect(afterB).toEqual(afterA);
+  });
+});
