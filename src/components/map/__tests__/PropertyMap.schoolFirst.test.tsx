@@ -50,7 +50,7 @@ vi.mock('leaflet', () => ({
     Icon: { Default: { prototype: {}, mergeOptions: vi.fn() } },
     divIcon: vi.fn(() => ({})),
     marker: vi.fn(() => ({ on: vi.fn().mockReturnThis(), addTo: vi.fn().mockReturnThis(), remove: vi.fn() })),
-    markerClusterGroup: vi.fn(() => ({ addLayer: vi.fn() })),
+    markerClusterGroup: vi.fn(() => ({ addLayer: vi.fn(), on: vi.fn().mockReturnThis(), off: vi.fn().mockReturnThis() })),
     point: vi.fn((x: number, y: number) => ({ x, y })),
     // Fixed, always-valid bounds — sufficient for SchoolMarkerFocusPanner's
     // markerBounds ∩ radiusBounds intersection to be non-degenerate

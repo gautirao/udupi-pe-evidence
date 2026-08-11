@@ -36,8 +36,12 @@ import {
   computeCameraPadding,
   LEAF_FIT_MIN_ZOOM,
   LEAF_FIT_MAX_ZOOM,
+  resolveMarkerRevealMode,
+  computeSpiderfyDistanceMultiplier,
+  SPIDERFY_DISTANCE_MULTIPLIER_BASE,
   type AreaPanReason,
 } from '@/shared/map/zoomPolicy';
+import { clusterCanSplit, hasSpatialSpread } from '@/shared/map/areaClusterSplit';
 import { useZoomBand } from '@/hooks/useZoomBand';
 
 /**
@@ -727,6 +731,19 @@ interface PropertyMapProps {
    * MarkerClusterLayer (residential); agri and school markers are unaffected.
    */
   onMarkerClickWithPosition?: (pos: { x: number; y: number }) => void;
+  /**
+   * Issue #1762 — fired ONLY for a splittable LISTING-marker cluster tap
+   * (the leaflet.markercluster residential layer inside MarkerClusterLayer
+   * below — NOT an area cluster; see `onAreaClusterCameraIntent` for that
+   * producer), with the cluster's own member bounds/center. Passed through
+   * to `MarkerClusterLayer` unchanged; the caller is expected to publish it
+   * via `useDiscoverMapData.publishMarkerClusterCameraIntent` (shared
+   * monotonic `cameraIntentSeqRef`, `framing: 'cluster'`) and feed the
+   * result back down via the existing `cameraIntent` prop — MapController's
+   * new 'cluster' framing branch performs the actual fit-to-members camera
+   * move (never a direct Leaflet `zoomToBounds()` call).
+   */
+  onMarkerClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
 }
 
 /**
@@ -1639,6 +1656,67 @@ function MapController({
       } else {
         map.flyTo(cameraIntent.center, AREA_LAYER_MAX_ZOOM);
       }
+    } else if (cameraIntent.framing === 'cluster') {
+      // Issue #1762 — listing-cluster tap fit-to-members. Mirrors the 'leaf'
+      // branch's bounds->zoom computation (same getBoundsZoom + responsive
+      // padding), with the ceiling CLUSTER_DISABLE_AT_ZOOM (16, where
+      // leaflet.markercluster itself stops clustering) rather than the fixed
+      // [13,16] leaf band. Deliberately does NOT arm
+      // suppressForSeqRef/suppressArmedAtRef above (that guard only checks
+      // `=== 'leaf'`, so this branch is already excluded) — a cluster tap
+      // never changes scope/node/filters, so there is no correlated
+      // network-driven refit for the suppression to swallow.
+      //
+      // Issue #1762 fix-cycle 10 (WORKDONE_REVIEW BLOCKING_PARTIAL) — this
+      // PADDED getBoundsZoom call is the sole authority on how far the
+      // camera may actually advance. The previous
+      // `Math.max(currentZoom + 1, rawZoom)` floor treated "+1" as a hard
+      // guarantee that a tap always zooms in, which could push targetZoom
+      // PAST what the padded viewport fits whenever padding cost more than
+      // one zoom level versus MarkerClusterLayer's handleClusterActivate
+      // unpadded pre-check (line ~2140) — clipping one or more of the
+      // tapped cluster's own members off-screen. rawZoom (capped at
+      // CLUSTER_DISABLE_AT_ZOOM) is now a hard ceiling, never just a floor
+      // competitor: the target zoom only ever advances up to that capped
+      // value, and — per #1762's explicit allowance that a cluster unable
+      // to split while keeping all members inside the usable viewport may
+      // remain clustered — falls back to a same-zoom re-center (no forced
+      // zoom-in) when the padded fit doesn't justify advancing past the
+      // current zoom. Does NOT duplicate this padding policy in
+      // MarkerClusterLayer's cheap unpadded clusterCanSplit pre-check
+      // (still used there only to decide whether to publish a CameraIntent
+      // at all); this branch remains the single authoritative padded-fit
+      // decision.
+      //
+      // Issue #1762 fix-cycle 11 (PR reviewer BLOCKING, narrowed) — holding
+      // at currentZoom when cappedRawZoom < currentZoom is not a true fit:
+      // the tapped cluster's members are only guaranteed to fit the usable
+      // viewport at cappedRawZoom, not at currentZoom. Calling setView at
+      // currentZoom in that case presents an unverified zoom as if it were
+      // the authoritative padded fit. Per the reviewer's narrowed ask
+      // ("perform that fit, or decline/no-op the action before moving it"),
+      // this declines the camera action entirely (no setView, no re-center)
+      // rather than mandate a zoom-out — whether a cluster tap should ever
+      // zoom the camera OUT remains a separate, deliberately-deferred
+      // product/backlog decision.
+      if (cameraIntent.bounds) {
+        const rawZoom = map.getBoundsZoom(cameraIntent.bounds, false, L.point(paddingX, paddingY));
+        const currentZoom = map.getZoom();
+        const cappedRawZoom = Math.min(CLUSTER_DISABLE_AT_ZOOM, rawZoom);
+        if (cappedRawZoom < currentZoom) {
+          // Padded fit is below the current zoom — holding at currentZoom
+          // (or advancing) would not be a verified fit. Decline the camera
+          // action: no setView, no camera movement at all for this intent.
+          return;
+        }
+        const targetZoom = cappedRawZoom;
+        const center = L.latLngBounds(cameraIntent.bounds).getCenter();
+        map.setView(center, targetZoom, { animate: true });
+      } else {
+        // Degenerate/missing bounds fallback (resolveCameraFraming already
+        // guards against a zero-area box) — still guarantee forward progress.
+        map.flyTo(cameraIntent.center, Math.min(CLUSTER_DISABLE_AT_ZOOM, map.getZoom() + 1));
+      }
     } else {
       // Real-area ("leaf") pin — land directly in the [13,16] listing-marker
       // zoom band. This REPLACES the removed map.once('zoomend', ...) → 13
@@ -1729,6 +1807,18 @@ function MapController({
   return null;
 }
 
+/**
+ * Issue #1762 — sentinel `disableClusteringAtZoom` value used to HOLD a
+ * dense cluster in its clustered-overview state past the normal
+ * `CLUSTER_DISABLE_AT_ZOOM` (16) threshold, once `resolveMarkerRevealMode`
+ * decides — after a cluster-tap fit settles — that the revealed marker set
+ * is still too dense for individual pins to read cleanly. Comfortably above
+ * any zoom this app's tile layer reaches (no explicit `maxZoom` is set on
+ * `MapContainer`, so Leaflet's own default of 18 applies), so Leaflet's
+ * `zoom >= disableClusteringAtZoom` declustering never fires while held.
+ */
+const MARKER_REVEAL_HOLD_ZOOM = 24;
+
 // Marker cluster layer component
 function MarkerClusterLayer({
   listings,
@@ -1736,6 +1826,7 @@ function MarkerClusterLayer({
   selectedListingId,
   hoveredListingId,
   onMarkerClickWithPosition,
+  onMarkerClusterCameraIntent,
 }: {
   listings: PropertyListingWithImages[];
   onSelectListing?: (listing: PropertyListingWithImages | null) => void;
@@ -1747,17 +1838,183 @@ function MarkerClusterLayer({
   hoveredListingId?: string | null;
   /** a3 — fires with the pixel position of the marker click relative to the map container. */
   onMarkerClickWithPosition?: (pos: { x: number; y: number }) => void;
+  /**
+   * Issue #1762 — fired ONLY for a splittable cluster click, with the
+   * cluster's own member bounds/center. See PropertyMapProps's doc on the
+   * same-named prop for the full contract.
+   */
+  onMarkerClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
 }) {
   const map = useMap();
 
-  useEffect(() => {
+  // Issue #1762 — dynamic declustering-at-zoom threshold, wired to
+  // resolveMarkerRevealMode (zoomPolicy.ts). Defaults to the existing static
+  // CLUSTER_DISABLE_AT_ZOOM. Recomputed on every settled camera position —
+  // via the general (non-one-shot) `moveend` listener registered below —
+  // from the CURRENT map bounds/zoom/viewport and listing density,
+  // regardless of how that camera was reached (cluster-tap fit, manual
+  // zoom/pan, or a completely fresh navigation). This is what makes a
+  // manual zoom to an equivalent camera converge on the same cluster/pin
+  // result as a cluster-tap: both paths settle on a 'moveend' and both
+  // recompute the SAME decision from the SAME inputs.
+  const [markerRevealDisableAtZoom, setMarkerRevealDisableAtZoom] = useState<number>(CLUSTER_DISABLE_AT_ZOOM);
+  // Tracks whether `listings` changed since the hold was last set, so a
+  // genuinely new listing set (new area/scope/filter fetch) always starts
+  // fresh at CLUSTER_DISABLE_AT_ZOOM rather than inheriting a stale hold
+  // computed against a completely different marker set. The general
+  // moveend-driven recompute below immediately supersedes this default with
+  // the real density-based decision for the new listings/current camera.
+  const prevListingsRef = useRef<PropertyListingWithImages[] | null>(null);
+
+  // Issue #1762 fix cycle 7 — "don't collapse an open spiderfy fan on
+  // repeated clicks within it" (product requirement, verbatim in the issue:
+  // collapse ONLY on a different marker/cluster click or a bare-map click,
+  // both of which Leaflet's own spiderfier already handles natively).
+  //
+  // Root cause: `onSelectListing` (fired by an individual marker's own
+  // click handler below) writes a new `selectedListingId`, which — being a
+  // dependency of the single big effect that builds this whole layer — used
+  // to re-run that ENTIRE effect. Its cleanup unconditionally calls
+  // `map.removeLayer(clusterGroup)`, destroying the live cluster group
+  // (and with it, Leaflet's own `_spiderfied` state) even though nothing
+  // about Leaflet's spiderfy/unspiderfy contract was ever invoked — this is
+  // an accidental side effect of the layer being torn down and rebuilt, not
+  // real unspiderfy behavior.
+  //
+  // Fix: split the effect in two. `buildLayer` (below) does the full
+  // teardown-then-construct work exactly as the original single effect did,
+  // and is the ONLY thing allowed to call `map.removeLayer`/reconstruct
+  // `L.markerClusterGroup`. The first effect calls it for real structural
+  // changes (listings/map/config). A second, separate effect reacts to
+  // `selectedListingId`/`hoveredListingId` alone: when the cluster group is
+  // currently spiderfied, it patches JUST the affected marker(s)' icons in
+  // place via `markersByListingIdRef` — no removeLayer, no rebuild, fan
+  // stays open. When NOT spiderfied, it falls back to calling `buildLayer()`
+  // directly, preserving the exact pre-fix full-rebuild behavior for that
+  // case (e.g. selecting a listing from a list item, not a spiderfied pin).
+  const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
+  const markersByListingIdRef = useRef<
+    Map<string, { marker: L.Marker; listing: PropertyListingWithImages }>
+  >(new Map());
+  const teardownLayerRef = useRef<(() => void) | null>(null);
+  const prevSelectedListingIdRef = useRef<string | null | undefined>(selectedListingId);
+  const prevHoveredListingIdRef = useRef<string | null | undefined>(hoveredListingId);
+  const didMountHighlightEffectRef = useRef(false);
+
+  // Code-review follow-up (APPROVE WITH COMMENTS) — same-commit double-rebuild
+  // guard. If a structural dep (e.g. `listings`) and `selectedListingId`/
+  // `hoveredListingId` both change in the SAME React commit (e.g. a listings
+  // refetch resolving in the same tick as a URL-driven selection change),
+  // both effects below fire in that commit. Without this guard, the
+  // structural effect's `buildLayer()` call runs first and produces a fresh,
+  // non-spiderfied cluster group; the selection/hover effect then also sees
+  // "not spiderfied" and calls `buildLayer()` again — tearing down and
+  // rebuilding the layer it just built (wasted `L.markerClusterGroup`
+  // construction + a visible marker-icon flicker).
+  //
+  // `commitIdRef` is bumped once per COMMIT (via the commit-phase effect
+  // below, not the render body — refs must not be written during render;
+  // see that effect for why), so it is shared by every effect that fires
+  // off that same commit. `buildLayer()` stamps `lastBuildCommitIdRef` with
+  // the current `commitIdRef` value every time it actually runs. The
+  // selection/hover effect below checks: if a build already happened in
+  // THIS commit, that build's closure already captured the CURRENT
+  // selectedListingId/hoveredListingId (buildLayer reads them directly from
+  // the render closure, not from stale refs) — so there is nothing left for
+  // the selection/hover effect to do, and it skips its own patch/rebuild
+  // work entirely rather than duplicating it.
+  const commitIdRef = useRef(0);
+  const lastBuildCommitIdRef = useRef(0);
+
+  const buildLayer = () => {
+    lastBuildCommitIdRef.current = commitIdRef.current;
+    // Tear down whatever layer currently exists (if any) before
+    // constructing the new one — this function owns the full
+    // teardown-then-rebuild lifecycle, whether invoked from the structural
+    // effect below or from the selection/hover effect's non-spiderfied
+    // fallback path.
+    teardownLayerRef.current?.();
+    teardownLayerRef.current = null;
+
+    const listingsChanged = prevListingsRef.current !== null && prevListingsRef.current !== listings;
+    prevListingsRef.current = listings;
+    const effectiveDisableAtZoom = listingsChanged ? CLUSTER_DISABLE_AT_ZOOM : markerRevealDisableAtZoom;
+    if (listingsChanged && markerRevealDisableAtZoom !== CLUSTER_DISABLE_AT_ZOOM) {
+      setMarkerRevealDisableAtZoom(CLUSTER_DISABLE_AT_ZOOM);
+    }
+
     const clusterGroup = L.markerClusterGroup({
       chunkedLoading: true,
       spiderfyOnMaxZoom: true,
       showCoverageOnHover: false,
-      zoomToBoundsOnClick: true,
+      // Issue #1762 — false: Leaflet's own zoomToBounds() bypasses this
+      // app's CameraIntent/MapController camera authority and was landing
+      // on the WRONG bounds on cluster tap (live-reproduced defect). With
+      // this false, leaflet.markercluster's internal `_zoomOrSpiderfy`
+      // becomes a safe no-op except the genuine "already bottomed-out at
+      // max zoom" spiderfy case (verified against the installed
+      // leaflet.markercluster@1.5.3 source — see the approved plan's
+      // revision_1_responses.spiderfy_version_check) — spiderfyOnMaxZoom
+      // stays true and coexists cleanly with the clusterclick/clusterkeypress
+      // handler added below, which is now the SOLE camera mover for a
+      // splittable cluster tap.
+      zoomToBoundsOnClick: false,
       maxClusterRadius: CLUSTER_MAX_RADIUS_PX,
-      disableClusteringAtZoom: CLUSTER_DISABLE_AT_ZOOM,
+      disableClusteringAtZoom: effectiveDisableAtZoom,
+      // Issue #1762 fix cycle 3 — live-reproduced regression: for a cluster
+      // whose members share (near-)identical coordinates (verified via a
+      // temporary debug probe against the real repro — sw/ne bounds were
+      // EXACTLY coincident), `clusterCanSplit` above correctly declines to
+      // move the camera (there is no zoom level that would visually separate
+      // coincident points) — but leaflet.markercluster's OWN
+      // `_zoomOrSpiderfy` listener (bound unconditionally whenever
+      // `spiderfyOnMaxZoom` is true — see the `zoomToBoundsOnClick` comment
+      // below) independently fires `cluster.spiderfy()` for exactly this
+      // "bottomed-out, never splits below the group's max clustering zoom"
+      // case. Leaflet's default `spiderfyDistanceMultiplier` (1) sizes the
+      // circle-fan radius for its own small (~25-40px) pin icons
+      // (`_generatePointsCircle`: legLength = max(circumference/2π, 35),
+      // circumference = multiplier * 25 * (2 + count) — multiplier 1 floors
+      // to a 35px radius for any count ≤ ~7). Our custom price-pill markers
+      // (createMarkerIcon) are ~90px wide, so a 35px-radius fan puts adjacent
+      // pills on top of each other — the exact "opens into stacked/
+      // overlapping pins, not a readable fan" defect. 3.5 raises the radius
+      // to ~97px for a 5-member circle (chord between adjacent pills ≈114px,
+      // clearing the ~90px pill width) and scales the same multiplier into
+      // `_generatePointsSpiral`'s separation for denser (≥9-member) clusters,
+      // without changing the zoom/fit decision above or leaflet.markercluster's
+      // own bottomed-out-cluster gating.
+      //
+      // Issue #1762 fix-cycle 5 — this is now only the CONSTRUCTION-time
+      // default/ceiling (SPIDERFY_DISTANCE_MULTIPLIER_BASE). It is
+      // dynamically narrowed per-click, per-cluster-childCount and
+      // per-current-viewport by handleClusterActivate below (see that
+      // handler's comment) via computeSpiderfyDistanceMultiplier
+      // (zoomPolicy.ts) — a WORKDONE_REVIEW BLOCKING finding that this
+      // flat value had no upper bound tied to viewport size/child count.
+      spiderfyDistanceMultiplier: SPIDERFY_DISTANCE_MULTIPLIER_BASE,
+      // Issue #1762 fix cycle 4 — live-reproduced regression: after a
+      // coincident cluster spiderfies (cycle 3), clicking an individual
+      // spiderfied price-pill marker did nothing (no popover, no URL
+      // change). Leaflet's own spider "leg" polylines default to
+      // `interactive: true` (no `interactive`/`clickable` override in this
+      // group's default `spiderLegPolylineOptions`) and are drawn from the
+      // cluster's origin point to EACH marker's spiderfied position — i.e.
+      // every leg terminates exactly at a marker's anchor point, which for
+      // our ~90-107px-wide price pills (anchored at their bottom-center via
+      // `iconAnchor:[0,0]` + a CSS `translate(-50%,-100%)` wrapper, see
+      // createMarkerIcon) sits directly under a large swath of the pill's
+      // own clickable area. A click landing on that overlap can be captured
+      // by the (invisible, thin but real-hit-area) leg instead of the pill
+      // underneath/behind it, silently swallowing the click — the leg has
+      // no app-level click handler, so nothing happens, and the leg's own
+      // click still bubbles to the map's native 'click' listener that
+      // leaflet.markercluster binds internally for unspiderfying, which is
+      // why the fan can look inert rather than erroring. `interactive:
+      // false` removes spider legs from hit-testing entirely so a click
+      // always reaches the marker underneath; purely visual, no change to
+      // leg rendering/animation.
+      spiderLegPolylineOptions: { interactive: false },
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
         let size: 'small' | 'medium' | 'large' = 'small';
@@ -1810,6 +2067,11 @@ function MarkerClusterLayer({
 
     const validListings = listings.filter((l) => l.latitude && l.longitude);
 
+    // Issue #1762 fix cycle 7 — fresh per-build lookup so the
+    // selection/hover effect can find and patch an individual marker's icon
+    // in place without touching the cluster group itself.
+    const nextMarkersById = new Map<string, { marker: L.Marker; listing: PropertyListingWithImages }>();
+
     validListings.forEach((listing) => {
       // Issue #1547 — copper icon when id matches the URL-selected listing OR the
       // ephemeral hover/focus id. Both conditions use the same copper visual;
@@ -1840,8 +2102,108 @@ function MarkerClusterLayer({
         }
       });
 
+      nextMarkersById.set(listing.id, { marker, listing });
       clusterGroup.addLayer(marker);
     });
+
+    // Issue #1762 — the SOLE cluster-tap camera mover, replacing Leaflet's
+    // disabled zoomToBoundsOnClick above. Bound on 'clusterclick
+    // clusterkeypress' — the SAME two event names leaflet.markercluster's
+    // own internal `_bindEvents`/`_zoomOrSpiderfy` listens on (verified
+    // against the installed leaflet.markercluster@1.5.3 source) — so this
+    // handler runs alongside Leaflet's own (now-inert-for-zoom) listener
+    // rather than replacing it. `@types/leaflet.markercluster` has no typed
+    // overload for these plugin-added event names (only leaflet's own
+    // built-in event map is typed), so the event object needs an
+    // unavoidable cast to read `.layer` (the clicked MarkerCluster) and
+    // `.originalEvent` (the underlying DOM event, present for a real click).
+    const handleClusterActivate = (e: L.LeafletEvent) => {
+      const evt = e as unknown as {
+        type: string;
+        layer?: L.MarkerCluster;
+        originalEvent?: KeyboardEvent;
+      };
+      // Mirrors leaflet.markercluster's own _zoomOrSpiderfy gate: a
+      // 'clusterkeypress' only activates on Enter (keyCode 13). Not
+      // reachable via the existing keydown bridge below today (that bridge
+      // synthesizes a native .click(), which surfaces as 'clusterclick' —
+      // this gate exists for parity with Leaflet's own contract in case
+      // something else ever dispatches a real 'clusterkeypress').
+      if (evt.type === 'clusterkeypress' && evt.originalEvent && evt.originalEvent.keyCode !== 13) {
+        return;
+      }
+      const cluster = evt.layer;
+      if (!cluster) return;
+
+      // Issue #1762 fix-cycle 5 — viewport-aware spiderfy fan clamp
+      // (WORKDONE_REVIEW BLOCKING finding on the fix-cycle-3 flat
+      // spiderfyDistanceMultiplier:3.5). MUST run before the
+      // clusterCanSplit early-return below: leaflet.markercluster's OWN
+      // clusterclick/clusterkeypress listener (`_zoomOrSpiderfy`,
+      // registered via `_bindEvents()` inside `map.addLayer(clusterGroup)`
+      // further down this effect — i.e. AFTER this handler is registered
+      // via `clusterGroup.on(...)` below) independently decides whether to
+      // spiderfy a bottomed-out cluster, regardless of whether
+      // clusterCanSplit declines to move the camera — a non-splittable
+      // (coincident) cluster is exactly the case that spiderfies (see the
+      // fix-cycle-3 comment on `spiderfyDistanceMultiplier` above).
+      // L.Evented fires listeners for one event in registration order
+      // (verified against the installed leaflet.markercluster@1.5.3
+      // source), and `MarkerCluster.spiderfy()` reads
+      // `this._group.options.spiderfyDistanceMultiplier` LIVE at call time
+      // (verified: `_generatePointsCircle`/`_generatePointsSpiral` both
+      // read `this._group.options.spiderfyDistanceMultiplier`, not a value
+      // captured at construction) — so mutating `clusterGroup`'s live
+      // options object here, before Leaflet's own listener runs later in
+      // this SAME event dispatch, changes what that spiderfy call sees.
+      // `@types/leaflet.markercluster`'s `MarkerClusterGroup` class does
+      // not re-declare `options` as the more specific
+      // `MarkerClusterGroupOptions` (it inherits leaflet's untyped
+      // `Layer.options`), so reading/writing this field needs the same
+      // kind of unavoidable cast already used for `_spiderfied` below.
+      const clusterGroupOptions = (clusterGroup as unknown as {
+        options: { spiderfyDistanceMultiplier?: number };
+      }).options;
+      const spiderfyViewport = map.getContainer();
+      clusterGroupOptions.spiderfyDistanceMultiplier = computeSpiderfyDistanceMultiplier(
+        cluster.getChildCount(),
+        spiderfyViewport.clientWidth,
+        spiderfyViewport.clientHeight,
+      );
+
+      const bounds = cluster.getBounds();
+      const sw = bounds.getSouthWest();
+      const ne = bounds.getNorthEast();
+      const currentZoom = map.getZoom();
+      const cappedTargetZoom = Math.min(CLUSTER_DISABLE_AT_ZOOM, map.getBoundsZoom(bounds, false));
+      const hasSpread = hasSpatialSpread([sw.lat, sw.lng], [ne.lat, ne.lng]);
+
+      if (!clusterCanSplit(currentZoom, cappedTargetZoom, hasSpread)) {
+        // Not splittable — publish nothing; leaflet.markercluster's own
+        // spiderfyOnMaxZoom (still enabled) handles the bottomed-out-cluster
+        // case, and the camera never moves for a non-splittable click.
+        return;
+      }
+
+      const center = bounds.getCenter();
+      onMarkerClusterCameraIntent?.(
+        [[sw.lat, sw.lng], [ne.lat, ne.lng]],
+        [center.lat, center.lng],
+      );
+      // Issue #1762 fix — the reveal-mode (clustered-overview vs
+      // individual-pins) recompute used to happen ONLY here, via a one-shot
+      // `map.once('moveend', ...)` armed by this cluster-tap handler. That
+      // meant a manual/fresh navigation to the exact same settled camera
+      // never recomputed the decision and instead inherited whatever
+      // `markerRevealDisableAtZoom` happened to already be — violating the
+      // #1762 AC that cluster-tap and manual navigation to an equivalent
+      // camera must converge on the same result. The fit this handler
+      // triggers still ends in a 'moveend' like any other camera move, so
+      // the general (non-one-shot) `recomputeMarkerRevealMode` listener
+      // registered below now covers this path too — nothing cluster-tap-
+      // specific needs to happen here anymore.
+    };
+    clusterGroup.on('clusterclick clusterkeypress', handleClusterActivate);
 
     map.addLayer(clusterGroup);
 
@@ -1851,9 +2213,10 @@ function MarkerClusterLayer({
     // re-wiring against an untyped plugin event. Delegate once on the map
     // container instead: Enter/Space on a focused .custom-marker-cluster
     // bubbles up here and is forwarded to a native .click() on the element,
-    // which triggers Leaflet.markercluster's own click handling
-    // (zoomToBoundsOnClick) — this makes the existing click path keyboard-
-    // reachable without touching clustering/camera behaviour at all.
+    // which surfaces as a 'clusterclick' event — reaching both Leaflet's own
+    // (now-inert-for-zoom) internal listener and handleClusterActivate above
+    // — this makes the cluster-tap fit-to-members handler keyboard-reachable
+    // without any separate keyboard-specific camera logic.
     const container = map.getContainer();
     const handleClusterKeydown = (e: KeyboardEvent) => {
       if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -1866,11 +2229,171 @@ function MarkerClusterLayer({
     };
     container.addEventListener('keydown', handleClusterKeydown);
 
-    return () => {
+    // Issue #1762 fix — reveal/clustering decision recompute, driven by the
+    // SETTLED camera rather than a cluster-tap-only one-shot listener. Runs
+    // on every 'moveend' this map instance fires (cluster-tap fit, manual
+    // pan/zoom, programmatic CameraIntent-driven moves alike), each time
+    // deriving markerRevealDisableAtZoom from the CURRENT bounds/zoom/
+    // viewport and how many of this layer's own listings fall inside those
+    // bounds — the same inputs resolveMarkerRevealMode always took, just no
+    // longer gated on which handler happened to trigger the move. Also
+    // invoked once synchronously below so a fresh mount/navigation (which
+    // may not fire its own 'moveend') still reflects the settled camera it
+    // mounted with, rather than the CLUSTER_DISABLE_AT_ZOOM default.
+    const recomputeMarkerRevealMode = () => {
+      // Issue #1762 fix cycle 4 — preserved from the prior one-shot
+      // handler: skip the recompute while a spiderfy fan is open. Applying
+      // a reveal-mode change re-renders this component with a new
+      // `markerRevealDisableAtZoom` (an effect dependency below), which
+      // tears down and recreates the whole marker-cluster layer — doing
+      // that while a spiderfy fan is on-screen would silently discard it
+      // out from under the user's next click. `_spiderfied` is
+      // leaflet.markercluster's own live pointer to the currently-open
+      // spiderfy (untyped — @types/leaflet.markercluster has no surface
+      // for plugin-internal state).
+      const clusterGroupInternal = clusterGroup as unknown as { _spiderfied?: unknown };
+      if (clusterGroupInternal._spiderfied) {
+        return;
+      }
+      // NOTE: markerCount here is validListings.length — this layer's whole
+      // loaded data set (already filtered to finite coordinates above), NOT
+      // a viewport-scoped/in-bounds count. resolveMarkerRevealMode's isDense
+      // check is therefore driven by total dataset size + fixed viewport
+      // pixel dimensions, invariant to zoom/pan within that dataset — a
+      // deliberate, currently-untuned broadening beyond the original
+      // per-cluster (getChildCount()) density signal; see PR #2138 review
+      // discussion. Bounds are still read below (getSouth/getWest/getNorth/
+      // getEast, not getSouthWest()/getNorthEast() — this app's map mocks
+      // and the existing BoundsWatcher handler above don't assume those
+      // exist) and passed as fittedExtent, which resolveMarkerRevealMode
+      // currently ignores (documented DEFERRED in zoomPolicy.ts) — kept for
+      // forward compatibility if that parameter is wired up later.
+      const bounds = map.getBounds();
+      const south = bounds.getSouth();
+      const west = bounds.getWest();
+      const north = bounds.getNorth();
+      const east = bounds.getEast();
+      const mapContainer = map.getContainer();
+      const mode = resolveMarkerRevealMode(
+        map.getZoom(),
+        validListings.length,
+        mapContainer.clientWidth,
+        mapContainer.clientHeight,
+        [[south, west], [north, east]],
+      );
+      const nextDisableAtZoom = mode === 'clusteredOverview' ? MARKER_REVEAL_HOLD_ZOOM : CLUSTER_DISABLE_AT_ZOOM;
+      setMarkerRevealDisableAtZoom((prev) => (prev === nextDisableAtZoom ? prev : nextDisableAtZoom));
+    };
+    map.on('moveend', recomputeMarkerRevealMode);
+    recomputeMarkerRevealMode();
+
+    // Issue #1762 fix cycle 7 — publish the newly-built layer/marker lookup
+    // for the selection/hover effect below, and record the teardown this
+    // build owns so a future `buildLayer()` call (or unmount) can undo
+    // exactly this construction.
+    clusterGroupRef.current = clusterGroup;
+    markersByListingIdRef.current = nextMarkersById;
+    teardownLayerRef.current = () => {
+      clusterGroup.off('clusterclick clusterkeypress', handleClusterActivate);
       map.removeLayer(clusterGroup);
       container.removeEventListener('keydown', handleClusterKeydown);
+      map.off('moveend', recomputeMarkerRevealMode);
+      clusterGroupRef.current = null;
+      markersByListingIdRef.current = new Map();
     };
-  }, [listings, map, onSelectListing, selectedListingId, hoveredListingId, onMarkerClickWithPosition]);
+  };
+
+  // Bumps `commitIdRef` once per actual COMMIT (an effect with no
+  // dependency array runs after every commit, exactly once — unlike a
+  // render-body write, which is not guaranteed 1:1 with commits under
+  // concurrent-rendering features). Declared before the structural and
+  // selection/hover effects below so it always runs first within the same
+  // commit (React runs a single component's effects in declaration order),
+  // guaranteeing both of those effects observe the same, already-current
+  // `commitIdRef.current` value for that commit.
+  useEffect(() => {
+    commitIdRef.current += 1;
+  });
+
+  // Structural effect — full teardown/rebuild whenever the layer's real
+  // inputs change (listings, map instance, config-affecting callbacks, or
+  // the reveal-mode zoom threshold). This is the ONLY effect that runs
+  // `buildLayer()` on mount; `selectedListingId`/`hoveredListingId` are
+  // deliberately NOT in this dependency array — see the selection/hover
+  // effect below for why and how those are handled instead.
+  useEffect(() => {
+    buildLayer();
+    return () => {
+      teardownLayerRef.current?.();
+      teardownLayerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    listings,
+    map,
+    onSelectListing,
+    onMarkerClickWithPosition,
+    onMarkerClusterCameraIntent,
+    markerRevealDisableAtZoom,
+  ]);
+
+  // Issue #1762 fix cycle 7 — selection/hover-only effect. Skips the first
+  // (mount) run since the structural effect above already built the layer
+  // with the correct initial highlight state. On every subsequent
+  // selectedListingId/hoveredListingId change: if the cluster group is
+  // currently spiderfied, patch just the affected marker(s)' icons in place
+  // (fan stays open — no removeLayer, no rebuild). Otherwise, fall back to
+  // `buildLayer()` directly, which reproduces the pre-fix full-rebuild
+  // behavior exactly for the non-spiderfied case.
+  useEffect(() => {
+    if (!didMountHighlightEffectRef.current) {
+      didMountHighlightEffectRef.current = true;
+      prevSelectedListingIdRef.current = selectedListingId;
+      prevHoveredListingIdRef.current = hoveredListingId;
+      return;
+    }
+
+    // Same-commit double-rebuild guard — see commitIdRef/lastBuildCommitIdRef
+    // comment above. The structural effect already called `buildLayer()`
+    // during this exact commit, and that build already reflects the current
+    // selectedListingId/hoveredListingId, so skip redundant work.
+    if (lastBuildCommitIdRef.current === commitIdRef.current) {
+      prevSelectedListingIdRef.current = selectedListingId;
+      prevHoveredListingIdRef.current = hoveredListingId;
+      return;
+    }
+
+    const clusterGroup = clusterGroupRef.current;
+    // Same untyped-plugin-internal cast pattern as recomputeMarkerRevealMode
+    // above — `_spiderfied` has no surface in @types/leaflet.markercluster.
+    const clusterGroupInternal = clusterGroup as unknown as { _spiderfied?: unknown } | null;
+    const isSpiderfied = Boolean(clusterGroup && clusterGroupInternal?._spiderfied);
+
+    if (isSpiderfied) {
+      const idsToRefresh = new Set<string>();
+      if (prevSelectedListingIdRef.current) idsToRefresh.add(prevSelectedListingIdRef.current);
+      if (prevHoveredListingIdRef.current) idsToRefresh.add(prevHoveredListingIdRef.current);
+      if (selectedListingId) idsToRefresh.add(selectedListingId);
+      if (hoveredListingId) idsToRefresh.add(hoveredListingId);
+
+      idsToRefresh.forEach((id) => {
+        const entry = markersByListingIdRef.current.get(id);
+        if (!entry) return;
+        const { marker, listing } = entry;
+        const isHighlighted = id === selectedListingId || id === hoveredListingId;
+        const icon = isHighlighted
+          ? createSelectedMarkerIcon(listing.property_type, listing.price, listing.priceBand, listing.monthly_rent, listing.monthlyRentBand)
+          : createMarkerIcon(listing.property_type, listing.price, listing.priceBand, listing.monthly_rent, listing.monthlyRentBand);
+        marker.setIcon(icon);
+      });
+    } else {
+      buildLayer();
+    }
+
+    prevSelectedListingIdRef.current = selectedListingId;
+    prevHoveredListingIdRef.current = hoveredListingId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedListingId, hoveredListingId]);
 
   return null;
 }
@@ -2176,6 +2699,7 @@ export function PropertyMap({
   schoolZoneLabels,
   onSelectZone,
   onMarkerClickWithPosition,
+  onMarkerClusterCameraIntent,
 }: PropertyMapProps) {
   // Issue #1410 — when agriGroupListings is provided (non-null), use the adapted items
   // for AgriMarkerClusterLayer and AgriPolygonLayer instead of the raw `listings` prop.
@@ -2364,6 +2888,7 @@ export function PropertyMap({
               selectedListingId={selectedListingId}
               hoveredListingId={hoveredListingId}
               onMarkerClickWithPosition={onMarkerClickWithPosition}
+              onMarkerClusterCameraIntent={onMarkerClusterCameraIntent}
             />
           )
         )}
