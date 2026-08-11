@@ -14,6 +14,7 @@ import {
 import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
 import { AREA_LAYER_MAX_ZOOM, shouldShowMarkers } from '@/lib/map/zoomPolicy';
 import { MOBILE_LISTING_PREVIEW_OCCLUSION_PX } from '@/shared/map/zoomPolicy';
+import { usePreviewSheetOcclusion } from '@/features/discover/state/usePreviewSheetOcclusion';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import {
   computeDiscoverLayer,
@@ -2063,6 +2064,42 @@ export default function MapDiscovery() {
   // sheet's own open/closed state, which is exactly what this cycle's fix
   // corrects).
   const bottomOcclusionPx = mobileMapOpen && isMarkerPopoverEligible ? MOBILE_LISTING_PREVIEW_OCCLUSION_PX : 0;
+  // Issue #2129 (code-reviewer cycle 1, Finding 1) — the REACTIVE counterpart
+  // to bottomOcclusionPx above. bottomOcclusionPx is a proactive
+  // journey/capability signal, true for the WHOLE mobile Map-mode browsing
+  // session in an eligible journey — correct as AreaPanner's one-time
+  // fit-time padding input (unchanged above), but WRONG as the input to a
+  // PERSISTENT Leaflet-viewport clip (PropertyMap.tsx's usable-viewport
+  // wrapper): using the proactive signal there would visibly shrink the map
+  // for the entire session before any marker is ever tapped — exactly the
+  // regression code-reviewer caught.
+  //
+  // Issue #2129 (code-reviewer cycle 2, ADVISORY-FIX) — `isPreviewSheetOpen`
+  // is the SINGLE named source of truth for "is MobileListingPreviewSheet
+  // actually mounted right now", hoisted here rather than left as two
+  // separately-typed inline expressions (this const + the sheet's own render
+  // gate below). Reviewer flagged the pre-hoist duplication as the exact
+  // drift pattern `isMarkerPopoverEligible` (markerPopoverEligibility.ts,
+  // #1798) was extracted to eliminate: two copies of the same condition can
+  // silently diverge on a future edit to either site, since neither
+  // imports/re-checks the other. Both consumers below now read this one
+  // const, so they cannot drift apart by construction.
+  const isPreviewSheetOpen = mobileMapOpen && !!selectedListingPreview;
+  // Issue #2129 (code-reviewer cycle 3) — previewOcclusionPx is 0 unless the
+  // compact preview sheet is ACTUALLY open (isPreviewSheetOpen above) — see
+  // PropertyMap.tsx's prop of the same name for why the persistent
+  // viewport-clipping wrapper must use this, not the proactive
+  // bottomOcclusionPx. While open, prefers MobileListingPreviewSheet's real
+  // measured height (intrinsic-height content — no max-h/scroll — varies per
+  // listing) over the fixed MOBILE_LISTING_PREVIEW_OCCLUSION_PX guess; see
+  // usePreviewSheetOcclusion's own doc comment for the full rationale,
+  // including cycle 3's HIGH finding that the measurement must reset on a
+  // previewed-listing identity change even while the sheet stays
+  // continuously open (useMarkerSelection.ts's selectMarkerSibling), not
+  // only on close — which is exactly why this hook takes the listing id as
+  // its own reactive input rather than relying on isPreviewSheetOpen alone.
+  const { previewOcclusionPx, onHeightChange: handlePreviewSheetHeightChange } =
+    usePreviewSheetOcclusion(isPreviewSheetOpen, selectedListingPreview?.id ?? null);
   // E2E observability only (Playwright contract, matches the existing
   // canonicalNodeFitCount/schoolCenter convention on this same debug object)
   // — merges into the mapState sub-object built by the earlier debug effect
@@ -2076,9 +2113,10 @@ export default function MapDiscovery() {
       mapState: {
         ...(w.__debug?.mapState as Record<string, unknown> | undefined),
         bottomOcclusionPx,
+        previewOcclusionPx,
       },
     };
-  }, [bottomOcclusionPx]);
+  }, [bottomOcclusionPx, previewOcclusionPx]);
 
   // Issue #1824 Slice S10b — the marker-resolve + stepper cluster (Issue
   // #1810 Stage 2A, MODEL A user-locked model, see approved-plan.toml
@@ -2425,12 +2463,29 @@ export default function MapDiscovery() {
               `listing=` peek (OQ6 — KEEP the existing PUSH writer; no
               suppression seam added). Dismissing routes through the SAME
               clearSelectedListing() every other peek-close affordance uses,
-              so camera/filters/result-count/Map-mode are all unchanged. */}
-          {mobileMapOpen && selectedListingPreview && (
+              so camera/filters/result-count/Map-mode are all unchanged.
+              Issue #2129 (code-reviewer cycle 2, ADVISORY-FIX) — the GATING
+              DECISION now reads the hoisted `isPreviewSheetOpen` const
+              (declared above, alongside previewOcclusionPx) instead of its
+              own inline `mobileMapOpen && selectedListingPreview` copy, so
+              the sheet's actual visibility and the viewport-clip signal
+              that depends on it can never drift apart. The trailing
+              `selectedListingPreview &&` is NOT a duplicate of that
+              decision — isPreviewSheetOpen already logically entails it
+              (its own definition is `mobileMapOpen && !!selectedListingPreview`)
+              — it exists solely so TypeScript narrows selectedListingPreview
+              to non-null for the `preview` prop below (MobileListingPreviewSheetProps.preview
+              is non-optional); it carries no independent business logic that
+              could drift. */}
+          {isPreviewSheetOpen && selectedListingPreview && (
             <MobileListingPreviewSheet
               preview={selectedListingPreview}
               onDismiss={() => actions.clearSelectedListing()}
               onViewDetails={(id) => navigate(`/listing/${id}`)}
+              // Issue #2129 (code-reviewer cycle 3) — feeds
+              // usePreviewSheetOcclusion (previewOcclusionPx's own
+              // declaration above) from this sheet's real rendered height.
+              onHeightChange={handlePreviewSheetHeightChange}
             />
           )}
           <DiscoverMapMount
@@ -2495,6 +2550,9 @@ export default function MapDiscovery() {
           // `bottomOcclusionPx` const's own declaration above for the full
           // proactive-vs-reactive rationale.
           bottomOcclusionPx={bottomOcclusionPx}
+          // Issue #2129 (code-reviewer cycle 1, Finding 1) — see the
+          // `previewOcclusionPx` const's own declaration above.
+          previewOcclusionPx={previewOcclusionPx}
           journeyView={journeyView}
           setMapReady={setMapReady}
           schools={schools}

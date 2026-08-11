@@ -5,7 +5,7 @@
  * `onDismiss`/`onViewDetails`, and makes no assumption about Map/List mode.
  * Real assertions only — no `isVisible().catch(() => false)` guards.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MobileListingPreviewSheet } from '../MobileListingPreviewSheet';
@@ -14,6 +14,24 @@ import type {
   SelectedListingPreviewAnon,
   SelectedListingPreviewAuthed,
 } from '@/features/discover/navigation/selectedListingPreview';
+
+// ─── ResizeObserver stub (Issue #2129 cycle 3) ───────────────────────────
+// jsdom doesn't implement ResizeObserver (same gap the codebase's other
+// stub-based test files, e.g. AppLayout.test.tsx, already work around).
+// This stub captures the single observed callback so tests can fire it
+// manually — the sheet's own effect only ever observes one node — instead
+// of simulating a real layout engine.
+let observedCallback: (() => void) | null = null;
+class ResizeObserverStub {
+  constructor(callback: () => void) {
+    observedCallback = callback;
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {
+    observedCallback = null;
+  }
+}
 
 const ANON_PREVIEW: SelectedListingPreviewAnon = {
   kind: 'anon',
@@ -247,5 +265,127 @@ describe('MobileListingPreviewSheet', () => {
     const areaLabelEl = screen.getByTestId('mobile-listing-preview-area-label');
     expect(areaLabelEl).toHaveTextContent(LONG_AREA_LABEL);
     expect(areaLabelEl.className).toContain('truncate');
+  });
+});
+
+// ─── Issue #2129 — onHeightChange measurement ────────────────────────────
+// A prior cycle drove the caller's viewport-clip reservation off a FIXED
+// 150px guess; this sheet is intrinsic-height (no max-h/scroll — module
+// doc), so its real rendered height varies with content and measured
+// ~194px in browser evidence, leaving part of the map's own reserved
+// viewport still physically covered. These tests prove the sheet's own
+// side of the fix: it reports its real, laid-out border-box height —
+// synchronously on every distinct `preview.id` (cycle 5, BLOCKING fix —
+// closes the gap where a delta-only ResizeObserver never fires because a
+// new preview's height happens to equal the previous one's, leaving the
+// caller pinned on a stale/fallback value across the mounted-sheet swap)
+// AND via ResizeObserver for later in-place reflows of the SAME preview —
+// and is a no-op when the caller doesn't ask for it.
+describe('MobileListingPreviewSheet — onHeightChange (Issue #2129 measurement mechanism)', () => {
+  const originalResizeObserver = globalThis.ResizeObserver;
+  const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+
+  beforeEach(() => {
+    observedCallback = null;
+    globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = originalResizeObserver;
+    Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+    vi.restoreAllMocks();
+  });
+
+  function mockRectHeight(height: number) {
+    return vi
+      .fn()
+      .mockReturnValue({ height, width: 390, top: 0, bottom: 0, left: 0, right: 0, x: 0, y: 0, toJSON() {} });
+  }
+
+  it('reports the root element\'s real border-box height (getBoundingClientRect, not contentRect), tagged with preview.id, SYNCHRONOUSLY on mount — before any ResizeObserver callback', () => {
+    const onHeightChange = vi.fn();
+    Element.prototype.getBoundingClientRect = mockRectHeight(194);
+
+    render(
+      <MobileListingPreviewSheet
+        preview={ANON_PREVIEW}
+        onDismiss={vi.fn()}
+        onViewDetails={vi.fn()}
+        onHeightChange={onHeightChange}
+      />,
+    );
+
+    // useLayoutEffect has already flushed by the time render() returns —
+    // no observedCallback() call needed, and none has happened yet.
+    expect(onHeightChange).toHaveBeenCalledTimes(1);
+    expect(onHeightChange).toHaveBeenCalledWith(ANON_PREVIEW.id, 194);
+  });
+
+  it('reports an UPDATED height, still tagged with the SAME preview.id, on a later ResizeObserver callback (content-driven reflow, e.g. a late-loading image)', () => {
+    const onHeightChange = vi.fn();
+    Element.prototype.getBoundingClientRect = mockRectHeight(150);
+
+    render(
+      <MobileListingPreviewSheet
+        preview={ANON_PREVIEW}
+        onDismiss={vi.fn()}
+        onViewDetails={vi.fn()}
+        onHeightChange={onHeightChange}
+      />,
+    );
+    expect(onHeightChange).toHaveBeenLastCalledWith(ANON_PREVIEW.id, 150);
+
+    Element.prototype.getBoundingClientRect = mockRectHeight(210);
+    expect(observedCallback).not.toBeNull();
+    observedCallback?.();
+
+    expect(onHeightChange).toHaveBeenLastCalledWith(ANON_PREVIEW.id, 210);
+    expect(onHeightChange).toHaveBeenCalledTimes(2);
+  });
+
+  // ─── Issue #2129 cycle 5 BLOCKING finding — the exact regression ───────
+  // The sheet stays MOUNTED (same DOM node, same ResizeObserver instance)
+  // across a direct marker-to-marker swap. If a delta-only ResizeObserver
+  // were the ONLY reporting mechanism, a new preview rendering at the
+  // EXACT SAME height as the previous one would never fire a resize event
+  // at all — this test proves that does NOT happen: a fresh, correctly-
+  // tagged report fires for preview B even though its mocked height is
+  // identical to preview A's, with NO manual observedCallback() call.
+  it('reports AGAIN, tagged with the NEW preview.id, when the previewed listing changes WHILE the sheet stays mounted — even when the new height is IDENTICAL to the old one (no manual ResizeObserver nudge)', () => {
+    const onHeightChange = vi.fn();
+    Element.prototype.getBoundingClientRect = mockRectHeight(194);
+
+    const { rerender } = render(
+      <MobileListingPreviewSheet
+        preview={ANON_PREVIEW}
+        onDismiss={vi.fn()}
+        onViewDetails={vi.fn()}
+        onHeightChange={onHeightChange}
+      />,
+    );
+    expect(onHeightChange).toHaveBeenLastCalledWith(ANON_PREVIEW.id, 194);
+    onHeightChange.mockClear();
+
+    // Same mocked rect height (194) — a real DOM layout box for a
+    // different listing that happens to render at the same height. Direct
+    // marker-to-marker swap: same component instance, same onHeightChange
+    // identity, only `preview` changes — no intermediate unmount/close.
+    rerender(
+      <MobileListingPreviewSheet
+        preview={AUTHED_PREVIEW}
+        onDismiss={vi.fn()}
+        onViewDetails={vi.fn()}
+        onHeightChange={onHeightChange}
+      />,
+    );
+
+    expect(onHeightChange).toHaveBeenCalledWith(AUTHED_PREVIEW.id, 194);
+  });
+
+  it('does not observe or throw when onHeightChange is omitted (every existing caller/fixture)', () => {
+    expect(() =>
+      render(<MobileListingPreviewSheet preview={ANON_PREVIEW} onDismiss={vi.fn()} onViewDetails={vi.fn()} />),
+    ).not.toThrow();
+    expect(observedCallback).toBeNull();
   });
 });
