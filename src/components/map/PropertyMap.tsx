@@ -37,6 +37,8 @@ import {
   LEAF_FIT_MIN_ZOOM,
   LEAF_FIT_MAX_ZOOM,
   resolveMarkerRevealMode,
+  computeSpiderfyDistanceMultiplier,
+  SPIDERFY_DISTANCE_MULTIPLIER_BASE,
   type AreaPanReason,
 } from '@/shared/map/zoomPolicy';
 import { clusterCanSplit, hasSpatialSpread } from '@/shared/map/areaClusterSplit';
@@ -1876,7 +1878,37 @@ function MarkerClusterLayer({
       // `_generatePointsSpiral`'s separation for denser (≥9-member) clusters,
       // without changing the zoom/fit decision above or leaflet.markercluster's
       // own bottomed-out-cluster gating.
-      spiderfyDistanceMultiplier: 3.5,
+      //
+      // Issue #1762 fix-cycle 5 — this is now only the CONSTRUCTION-time
+      // default/ceiling (SPIDERFY_DISTANCE_MULTIPLIER_BASE). It is
+      // dynamically narrowed per-click, per-cluster-childCount and
+      // per-current-viewport by handleClusterActivate below (see that
+      // handler's comment) via computeSpiderfyDistanceMultiplier
+      // (zoomPolicy.ts) — a WORKDONE_REVIEW BLOCKING finding that this
+      // flat value had no upper bound tied to viewport size/child count.
+      spiderfyDistanceMultiplier: SPIDERFY_DISTANCE_MULTIPLIER_BASE,
+      // Issue #1762 fix cycle 4 — live-reproduced regression: after a
+      // coincident cluster spiderfies (cycle 3), clicking an individual
+      // spiderfied price-pill marker did nothing (no popover, no URL
+      // change). Leaflet's own spider "leg" polylines default to
+      // `interactive: true` (no `interactive`/`clickable` override in this
+      // group's default `spiderLegPolylineOptions`) and are drawn from the
+      // cluster's origin point to EACH marker's spiderfied position — i.e.
+      // every leg terminates exactly at a marker's anchor point, which for
+      // our ~90-107px-wide price pills (anchored at their bottom-center via
+      // `iconAnchor:[0,0]` + a CSS `translate(-50%,-100%)` wrapper, see
+      // createMarkerIcon) sits directly under a large swath of the pill's
+      // own clickable area. A click landing on that overlap can be captured
+      // by the (invisible, thin but real-hit-area) leg instead of the pill
+      // underneath/behind it, silently swallowing the click — the leg has
+      // no app-level click handler, so nothing happens, and the leg's own
+      // click still bubbles to the map's native 'click' listener that
+      // leaflet.markercluster binds internally for unspiderfying, which is
+      // why the fan can look inert rather than erroring. `interactive:
+      // false` removes spider legs from hit-testing entirely so a click
+      // always reaches the marker underneath; purely visual, no change to
+      // leg rendering/animation.
+      spiderLegPolylineOptions: { interactive: false },
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
         let size: 'small' | 'medium' | 'large' = 'small';
@@ -1991,6 +2023,42 @@ function MarkerClusterLayer({
       const cluster = evt.layer;
       if (!cluster) return;
 
+      // Issue #1762 fix-cycle 5 — viewport-aware spiderfy fan clamp
+      // (WORKDONE_REVIEW BLOCKING finding on the fix-cycle-3 flat
+      // spiderfyDistanceMultiplier:3.5). MUST run before the
+      // clusterCanSplit early-return below: leaflet.markercluster's OWN
+      // clusterclick/clusterkeypress listener (`_zoomOrSpiderfy`,
+      // registered via `_bindEvents()` inside `map.addLayer(clusterGroup)`
+      // further down this effect — i.e. AFTER this handler is registered
+      // via `clusterGroup.on(...)` below) independently decides whether to
+      // spiderfy a bottomed-out cluster, regardless of whether
+      // clusterCanSplit declines to move the camera — a non-splittable
+      // (coincident) cluster is exactly the case that spiderfies (see the
+      // fix-cycle-3 comment on `spiderfyDistanceMultiplier` above).
+      // L.Evented fires listeners for one event in registration order
+      // (verified against the installed leaflet.markercluster@1.5.3
+      // source), and `MarkerCluster.spiderfy()` reads
+      // `this._group.options.spiderfyDistanceMultiplier` LIVE at call time
+      // (verified: `_generatePointsCircle`/`_generatePointsSpiral` both
+      // read `this._group.options.spiderfyDistanceMultiplier`, not a value
+      // captured at construction) — so mutating `clusterGroup`'s live
+      // options object here, before Leaflet's own listener runs later in
+      // this SAME event dispatch, changes what that spiderfy call sees.
+      // `@types/leaflet.markercluster`'s `MarkerClusterGroup` class does
+      // not re-declare `options` as the more specific
+      // `MarkerClusterGroupOptions` (it inherits leaflet's untyped
+      // `Layer.options`), so reading/writing this field needs the same
+      // kind of unavoidable cast already used for `_spiderfied` below.
+      const clusterGroupOptions = (clusterGroup as unknown as {
+        options: { spiderfyDistanceMultiplier?: number };
+      }).options;
+      const spiderfyViewport = map.getContainer();
+      clusterGroupOptions.spiderfyDistanceMultiplier = computeSpiderfyDistanceMultiplier(
+        cluster.getChildCount(),
+        spiderfyViewport.clientWidth,
+        spiderfyViewport.clientHeight,
+      );
+
       const bounds = cluster.getBounds();
       const sw = bounds.getSouthWest();
       const ne = bounds.getNorthEast();
@@ -2037,6 +2105,28 @@ function MarkerClusterLayer({
       }
       pendingMoveendHandlerRef.current = () => {
         pendingMoveendHandlerRef.current = null;
+        // Issue #1762 fix cycle 4 — a splittable cluster's own fit-to-bounds
+        // pan/zoom can finish its 'moveend' while ANOTHER cluster (or this
+        // same one, re-bottomed-out at the new zoom) is still showing an
+        // active leaflet.markercluster spiderfy fan (spiderfyOnMaxZoom stays
+        // on; see the zoomToBoundsOnClick comment above). Applying a reveal-
+        // mode change here re-renders this component with a new
+        // `markerRevealDisableAtZoom`, which is an effect dependency below —
+        // the whole marker-cluster layer (and every marker instance in it,
+        // spiderfied or not) gets torn down and recreated. Doing that while
+        // a spiderfy is on-screen silently discards the live fan the user is
+        // looking at: the individual pins they see are about to be replaced
+        // out from under their next click, which reads as "clicking a
+        // spiderfied marker does nothing". `_spiderfied` is
+        // leaflet.markercluster's own live pointer to the currently-open
+        // spiderfy (untyped — @types/leaflet.markercluster has no surface
+        // for plugin-internal state); skip the reveal-mode recompute
+        // entirely while it's set; the hold/disable-at-zoom value simply
+        // stays whatever it already was until the user's next cluster tap.
+        const clusterGroupInternal = clusterGroup as unknown as { _spiderfied?: unknown };
+        if (clusterGroupInternal._spiderfied) {
+          return;
+        }
         const mapContainer = map.getContainer();
         const mode = resolveMarkerRevealMode(
           map.getZoom(),

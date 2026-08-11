@@ -291,3 +291,118 @@ export function resolveMarkerRevealMode(
   // test below, unaffected by this fix).
   return 'individualPins';
 }
+
+// ── Issue #1762 fix-cycle 5 — spiderfyDistanceMultiplier viewport clamp ──
+//
+// Fix-cycle 3 set MarkerClusterLayer's spiderfyDistanceMultiplier to a flat
+// 3.5, tuned against a live-reproduced 5-member coincident cluster so
+// leaflet.markercluster's circle-fan chord (2*legLength*sin(pi/count))
+// clears our ~90px-wide price-pill markers (see PropertyMap.tsx's
+// MarkerClusterLayer comment for the full derivation, verified against
+// node_modules/leaflet.markercluster/dist/leaflet.markercluster-src.js
+// _generatePointsCircle/_generatePointsSpiral). That flat value has no
+// upper bound tied to viewport size or child count — the WORKDONE_REVIEW
+// gate elevated code-reviewer's cycle-3 advisory note on this to BLOCKING:
+// for a denser coincident cluster (up to leaflet.markercluster's own
+// circle→spiral switchover at 9 members), the SAME 3.5 multiplier produces
+// a visibly LARGER fan than the 5-member case it was tuned against
+// (circumference = multiplier * 25 * (2 + count) — fan radius scales with
+// childCount too, not just multiplier), and Leaflet's spiderfy never
+// auto-pans to keep the fan on-screen. Tapped near a narrow mobile
+// viewport's edge, an 8-member cluster's fan could theoretically extend
+// off-screen or under the mobile compact-preview sheet.
+//
+// SPIDERFY_DISTANCE_MULTIPLIER_BASE is the fix-cycle-3 value, kept as the
+// CEILING here — computeSpiderfyDistanceMultiplier never scales UP past it
+// (no evidence a larger fan improves anything). It scales DOWN from that
+// ceiling, per the ACTUAL clicked cluster's child count and the map's
+// ACTUAL current viewport, so the fan's diameter stays within
+// SPIDERFY_FAN_SAFE_VIEWPORT_FRACTION of the smaller viewport dimension —
+// but never below a pill-clearance FLOOR re-derived (not assumed) from the
+// same chord formula, for THAT child count: chord =
+// 2*legLength*sin(pi/count) >= SPIDERFY_MIN_PILL_CLEARANCE_PX. That
+// per-count floor is always <= the fix-cycle-3 base (3.5 was one
+// conservative value chosen to cover every count up to the spiral
+// switchover — see the worked example below), so this clamp can only ever
+// narrow the fan toward the safe-viewport bound; it can never widen it
+// past 3.5, and it can never drop the fan below what the live-reproduced
+// stacking bug needs for that specific child count.
+//
+// Worked example (count=8, the densest circle-mode case): legLength at the
+// 3.5 base = max(3.5*25*10/(2*pi), 35) ≈ 139px (diameter ≈ 278px) — fits a
+// typical desktop viewport but can exceed a narrow mobile one. The
+// re-derived per-count pill-clearance floor for count=8 is ≈2.96 (chord
+// 90px), below 3.5 — so on a narrow viewport this clamp can legitimately
+// return something in [2.96, 3.5) instead of always 3.5.
+//
+// Deliberately excludes spiral mode (count >= 9, leaflet.markercluster's
+// own circle→spiral switchover): the spiral formula's legLength grows via
+// an accumulating loop rather than a single closed-form circumference, so
+// a matching per-count floor would require literally replicating that
+// loop rather than reusing the same verified chord formula — a materially
+// larger, less-evidence-based change for a case with no live-reproduced
+// regression. Spiral-mode clusters keep the flat fix-cycle-3 base
+// unchanged (byte-for-byte prior behaviour).
+export const SPIDERFY_DISTANCE_MULTIPLIER_BASE = 3.5;
+const SPIDERFY_FAN_SAFE_VIEWPORT_FRACTION = 0.35;
+const SPIDERFY_MIN_PILL_CLEARANCE_PX = 90;
+/** leaflet.markercluster's own MarkerCluster.Spiderfier _circleFootSeparation. */
+const SPIDERFY_CIRCLE_FOOT_SEPARATION_PX = 25;
+/** leaflet.markercluster's own MarkerCluster.Spiderfier _circleSpiralSwitchover. */
+const SPIDERFY_CIRCLE_SPIRAL_SWITCHOVER_COUNT = 9;
+
+/** Mirrors leaflet.markercluster's own `_generatePointsCircle` leg-length formula exactly. */
+function circleFanLegLengthPx(multiplier: number, childCount: number): number {
+  const circumference = multiplier * SPIDERFY_CIRCLE_FOOT_SEPARATION_PX * (2 + childCount);
+  return Math.max(circumference / (2 * Math.PI), 35);
+}
+
+/**
+ * Issue #1762 fix-cycle 5 — pure viewport-aware clamp for
+ * `spiderfyDistanceMultiplier`. See the module comment above this function
+ * for the full derivation. Pure: no Leaflet/DOM access — callers pass in
+ * the already-read child count and viewport dimensions (e.g. from
+ * `cluster.getChildCount()` and `map.getContainer().clientWidth/clientHeight`).
+ */
+export function computeSpiderfyDistanceMultiplier(
+  childCount: number,
+  viewportWidthPx: number,
+  viewportHeightPx: number,
+): number {
+  if (childCount >= SPIDERFY_CIRCLE_SPIRAL_SWITCHOVER_COUNT || childCount < 2) {
+    // Spiral mode, or a degenerate <2-member "cluster" (spiderfy never
+    // fires for these) — fall back to the proven base unchanged.
+    return SPIDERFY_DISTANCE_MULTIPLIER_BASE;
+  }
+  if (!(viewportWidthPx > 0) || !(viewportHeightPx > 0)) {
+    // No usable viewport reading (e.g. container not yet laid out) —
+    // don't clamp against a zero/invalid bound.
+    return SPIDERFY_DISTANCE_MULTIPLIER_BASE;
+  }
+
+  const legLengthAtBase = circleFanLegLengthPx(SPIDERFY_DISTANCE_MULTIPLIER_BASE, childCount);
+  const safeRadiusPx = (Math.min(viewportWidthPx, viewportHeightPx) * SPIDERFY_FAN_SAFE_VIEWPORT_FRACTION) / 2;
+  if (legLengthAtBase <= safeRadiusPx) {
+    return SPIDERFY_DISTANCE_MULTIPLIER_BASE;
+  }
+
+  // Scale the multiplier down proportionally — legLength is linear in
+  // multiplier for any count/viewport combination that reaches this line
+  // (the 35px leaflet.markercluster floor is never the binding constraint
+  // here: it would require a multiplier well under the pill-clearance
+  // floor derived below).
+  const viewportScaledMultiplier = SPIDERFY_DISTANCE_MULTIPLIER_BASE * (safeRadiusPx / legLengthAtBase);
+
+  // Re-derived (not assumed) per-count pill-clearance floor from the same
+  // chord formula leaflet.markercluster's own circle layout produces:
+  // adjacent spiderfied markers sit chord = 2*legLength*sin(pi/count)
+  // apart.
+  const minChordLegLength = SPIDERFY_MIN_PILL_CLEARANCE_PX / (2 * Math.sin(Math.PI / childCount));
+  const pillClearanceFloorMultiplier =
+    (minChordLegLength * 2 * Math.PI) / (SPIDERFY_CIRCLE_FOOT_SEPARATION_PX * (2 + childCount));
+
+  return Math.min(
+    SPIDERFY_DISTANCE_MULTIPLIER_BASE,
+    Math.max(viewportScaledMultiplier, pillClearanceFloorMultiplier),
+  );
+}

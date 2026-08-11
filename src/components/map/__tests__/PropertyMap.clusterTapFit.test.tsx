@@ -61,7 +61,19 @@ const mapStub = vi.hoisted(() => ({
 // handler, otherwise unreachable (not exported).
 let capturedClusterHandler: ((e: unknown) => void) | undefined;
 let lastClusterGroupOptions:
-  | { disableClusteringAtZoom?: number; spiderfyDistanceMultiplier?: number }
+  | {
+      disableClusteringAtZoom?: number;
+      spiderfyDistanceMultiplier?: number;
+      spiderLegPolylineOptions?: { interactive?: boolean };
+    }
+  | undefined;
+// Issue #1762 fix cycle 4 — the live clusterGroup object handed back by the
+// most recent L.markerClusterGroup() construction, so tests can flip its
+// `_spiderfied` flag (leaflet.markercluster's own live pointer to an
+// open spiderfy) before firing a pending moveend callback, exactly like the
+// real plugin would while a spiderfy fan is on-screen.
+let lastClusterGroupInstance:
+  | { _spiderfied: unknown; options: { spiderfyDistanceMultiplier?: number } }
   | undefined;
 const clusterGroupAddLayer = vi.fn();
 
@@ -70,16 +82,34 @@ vi.mock('leaflet', () => ({
     Icon: { Default: { prototype: {}, mergeOptions: vi.fn() } },
     divIcon: vi.fn(() => ({})),
     marker: vi.fn(() => ({ on: vi.fn().mockReturnThis(), addTo: vi.fn().mockReturnThis(), remove: vi.fn() })),
-    markerClusterGroup: vi.fn((opts: { disableClusteringAtZoom?: number; spiderfyDistanceMultiplier?: number }) => {
-      lastClusterGroupOptions = opts;
-      return {
-        addLayer: clusterGroupAddLayer,
-        on: vi.fn((_types: string, fn: (e: unknown) => void) => {
-          capturedClusterHandler = fn;
-        }),
-        off: vi.fn(),
-      };
-    }),
+    markerClusterGroup: vi.fn(
+      (opts: {
+        disableClusteringAtZoom?: number;
+        spiderfyDistanceMultiplier?: number;
+        spiderLegPolylineOptions?: { interactive?: boolean };
+      }) => {
+        lastClusterGroupOptions = opts;
+        const instance = {
+          addLayer: clusterGroupAddLayer,
+          on: vi.fn((_types: string, fn: (e: unknown) => void) => {
+            capturedClusterHandler = fn;
+          }),
+          off: vi.fn(),
+          _spiderfied: null as unknown,
+          // Issue #1762 fix-cycle 5 — real Leaflet's `L.Util.setOptions`
+          // mutates the instance's own `options` object in place (it is
+          // the SAME object read back via `clusterGroup.options` later),
+          // not a fresh copy per read. handleClusterActivate relies on
+          // this: it mutates `clusterGroup.options.spiderfyDistanceMultiplier`
+          // on every cluster tap. Pointing `options` at the same `opts`
+          // reference `lastClusterGroupOptions` holds means tests can
+          // observe that mutation via `lastClusterGroupOptions` too.
+          options: opts,
+        };
+        lastClusterGroupInstance = instance;
+        return instance;
+      },
+    ),
     point: vi.fn((x: number, y: number) => ({ x, y })),
     latLngBounds: vi.fn((bounds: [[number, number], [number, number]]) => ({
       getCenter: () => ({ lat: (bounds[0][0] + bounds[1][0]) / 2, lng: (bounds[0][1] + bounds[1][1]) / 2 }),
@@ -160,6 +190,7 @@ function makeFakeCluster(opts: {
 beforeEach(() => {
   capturedClusterHandler = undefined;
   lastClusterGroupOptions = undefined;
+  lastClusterGroupInstance = undefined;
   clusterGroupAddLayer.mockClear();
   mapStub.fitBounds.mockClear();
   mapStub.flyTo.mockClear();
@@ -398,6 +429,64 @@ describe('Issue #1762 — resolveMarkerRevealMode wiring (post-fit reveal decisi
   });
 });
 
+describe('Issue #1762 fix cycle 4 — spiderfied individual marker click regression', () => {
+  it('sets spiderLegPolylineOptions.interactive to false so leaflet.markercluster\'s spider leg polylines can never capture a click meant for the marker pill they terminate at', () => {
+    // Live-reproduced regression (2026-08-11): after a coincident cluster
+    // spiderfies (cycle 3), clicking an individual spiderfied price-pill
+    // marker did nothing — no popover, no URL change, no network request.
+    // leaflet.markercluster's default spiderLegPolylineOptions has no
+    // `interactive` override (defaults to true for L.Polyline), and every
+    // leg is drawn terminating exactly at a marker's anchor point — which
+    // for our large (~90-107px) price pills sits directly under a chunk of
+    // the pill's own clickable area, letting the leg silently swallow a
+    // click meant for the marker. This just asserts the construction-time
+    // option that removes legs from hit-testing.
+    render(<PropertyMap {...baseProps} />);
+    expect(lastClusterGroupOptions?.spiderLegPolylineOptions).toEqual({ interactive: false });
+  });
+
+  it('does NOT recompute/apply a reveal-mode change on a moveend that fires while the cluster group is still spiderfied — an in-flight or just-completed spiderfy fan must not be torn down and rebuilt out from under the user', () => {
+    const onMarkerClusterCameraIntent = vi.fn();
+    render(<PropertyMap {...baseProps} onMarkerClusterCameraIntent={onMarkerClusterCameraIntent} />);
+    expect(lastClusterGroupOptions?.disableClusteringAtZoom).toBe(CLUSTER_DISABLE_AT_ZOOM);
+
+    // Same dense/splittable cluster shape as the "dense post-fit reveal"
+    // test above, which (without the cycle-4 guard) DOES change
+    // disableClusteringAtZoom on this exact moveend — i.e. this fixture is
+    // proven to trigger a rebuild when nothing guards it.
+    const cluster = makeFakeCluster({
+      sw: { lat: 13.0, lng: 74.7 },
+      ne: { lat: 13.1, lng: 74.8 },
+      center: { lat: 13.05, lng: 74.75 },
+      childCount: 500,
+    });
+    act(() => {
+      capturedClusterHandler!({ type: 'clusterclick', layer: cluster });
+    });
+    expect(moveendCallbacks.length).toBe(1);
+
+    // Simulate leaflet.markercluster's OWN internal spiderfy still being
+    // active on the live clusterGroup instance when this fit's moveend
+    // fires (spiderfyOnMaxZoom stays on regardless of the CameraIntent fit;
+    // see the zoomToBoundsOnClick comment in MarkerClusterLayer).
+    expect(lastClusterGroupInstance).toBeDefined();
+    lastClusterGroupInstance!._spiderfied = { getAllChildMarkers: () => [] };
+
+    mapStub.getZoom.mockReturnValue(CLUSTER_DISABLE_AT_ZOOM);
+    const optionsBeforeMoveend = lastClusterGroupOptions;
+    act(() => {
+      moveendCallbacks[0]();
+    });
+
+    // No rebuild happened: the cluster group construction options are
+    // byte-identical to before this moveend fired (same object reference —
+    // L.markerClusterGroup was never called again), so the live spiderfy
+    // fan (and every marker's click binding inside it) survives untouched.
+    expect(lastClusterGroupOptions).toBe(optionsBeforeMoveend);
+    expect(lastClusterGroupOptions?.disableClusteringAtZoom).toBe(CLUSTER_DISABLE_AT_ZOOM);
+  });
+});
+
 describe('Issue #1762 fix — pending cluster-tap moveend listener is cancelled on effect teardown', () => {
   it('arms exactly one moveend listener on cluster tap, then cancels it via map.off when the effect re-runs mid-animation (e.g. hoveredListingId changes on hover)', () => {
     const onMarkerClusterCameraIntent = vi.fn();
@@ -575,5 +664,104 @@ describe("Issue #1762 — MapController 'cluster' framing branch", () => {
 
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
     expect(mapStub.fitBounds).toHaveBeenCalledWith(nextFocusBounds, { padding: [50, 50] });
+  });
+});
+
+describe('Issue #1762 fix-cycle 5 — spiderfyDistanceMultiplier viewport clamp wiring', () => {
+  it('a dense (8-member) coincident cluster tapped on a narrow mobile viewport mutates the LIVE cluster-group options to a value below the fix-cycle-3 base, before leaflet.markercluster\'s own spiderfy would read it', () => {
+    // Narrow mobile viewport — swap the stub container's dimensions for
+    // just this test (matches this file's own mobile-viewport convention:
+    // mockClusterContainer is otherwise the shared 800x600 desktop stub).
+    Object.defineProperty(mockClusterContainer, 'clientWidth', { value: 390, configurable: true });
+    Object.defineProperty(mockClusterContainer, 'clientHeight', { value: 844, configurable: true });
+
+    const onMarkerClusterCameraIntent = vi.fn();
+    render(<PropertyMap {...baseProps} onMarkerClusterCameraIntent={onMarkerClusterCameraIntent} />);
+    expect(lastClusterGroupOptions?.spiderfyDistanceMultiplier).toBe(3.5);
+
+    // Coincident (non-splittable) 8-member cluster — the exact "dense
+    // cluster near a narrow mobile edge" shape the WORKDONE_REVIEW
+    // BLOCKING finding described. Non-splittable so onMarkerClusterCameraIntent
+    // never fires and leaflet.markercluster's own bottomed-out spiderfy is
+    // what would actually read this multiplier.
+    const coincidentPoint = { lat: 13.05, lng: 74.75 };
+    const denseCluster = makeFakeCluster({
+      sw: coincidentPoint,
+      ne: coincidentPoint,
+      center: coincidentPoint,
+      childCount: 8,
+    });
+    act(() => {
+      capturedClusterHandler!({ type: 'clusterclick', layer: denseCluster });
+    });
+
+    expect(onMarkerClusterCameraIntent).not.toHaveBeenCalled();
+    // The LIVE options object leaflet.markercluster's spiderfy() would
+    // read from was mutated below the fix-cycle-3 base...
+    expect(lastClusterGroupOptions?.spiderfyDistanceMultiplier).toBeLessThan(3.5);
+    // ...but never below the re-derived per-count pill-clearance floor
+    // (see zoomPolicy.spiderfyClamp.test.ts for the exact derivation).
+    expect(lastClusterGroupOptions?.spiderfyDistanceMultiplier).toBeGreaterThanOrEqual(2.9);
+    // Same object reference throughout — confirms this is a live mutation
+    // of the construction-time options, not a rebuild of the cluster group.
+    expect(lastClusterGroupInstance?.options).toBe(lastClusterGroupOptions);
+
+    // Restore the shared stub's desktop dimensions so later tests/files
+    // that reuse mockClusterContainer aren't affected by this test.
+    Object.defineProperty(mockClusterContainer, 'clientWidth', { value: 800, configurable: true });
+    Object.defineProperty(mockClusterContainer, 'clientHeight', { value: 600, configurable: true });
+  });
+
+  it('the same 8-member cluster on a spacious desktop viewport (1920x1080) is left at the fix-cycle-3 base, unchanged', () => {
+    // 800x600 (this file's default mockClusterContainer size) is narrow
+    // enough that even an 8-member circle-mode fan marginally exceeds the
+    // safe-viewport bound (see zoomPolicy.spiderfyClamp.test.ts's
+    // 1366x768 case for the same effect at a still-modest desktop size) —
+    // use a genuinely spacious viewport here so this test asserts the
+    // "large viewport, never clamps" case unambiguously.
+    Object.defineProperty(mockClusterContainer, 'clientWidth', { value: 1920, configurable: true });
+    Object.defineProperty(mockClusterContainer, 'clientHeight', { value: 1080, configurable: true });
+
+    const onMarkerClusterCameraIntent = vi.fn();
+    render(<PropertyMap {...baseProps} onMarkerClusterCameraIntent={onMarkerClusterCameraIntent} />);
+
+    const coincidentPoint = { lat: 13.05, lng: 74.75 };
+    const denseCluster = makeFakeCluster({
+      sw: coincidentPoint,
+      ne: coincidentPoint,
+      center: coincidentPoint,
+      childCount: 8,
+    });
+    act(() => {
+      capturedClusterHandler!({ type: 'clusterclick', layer: denseCluster });
+    });
+
+    expect(lastClusterGroupOptions?.spiderfyDistanceMultiplier).toBe(3.5);
+
+    Object.defineProperty(mockClusterContainer, 'clientWidth', { value: 800, configurable: true });
+    Object.defineProperty(mockClusterContainer, 'clientHeight', { value: 600, configurable: true });
+  });
+
+  it('a large (500-member) spiral-mode cluster is left at the fix-cycle-3 base even on a narrow mobile viewport — spiral mode is deliberately unclamped', () => {
+    Object.defineProperty(mockClusterContainer, 'clientWidth', { value: 390, configurable: true });
+    Object.defineProperty(mockClusterContainer, 'clientHeight', { value: 844, configurable: true });
+
+    const onMarkerClusterCameraIntent = vi.fn();
+    render(<PropertyMap {...baseProps} onMarkerClusterCameraIntent={onMarkerClusterCameraIntent} />);
+
+    const cluster = makeFakeCluster({
+      sw: { lat: 13.0, lng: 74.7 },
+      ne: { lat: 13.1, lng: 74.8 },
+      center: { lat: 13.05, lng: 74.75 },
+      childCount: 500,
+    });
+    act(() => {
+      capturedClusterHandler!({ type: 'clusterclick', layer: cluster });
+    });
+
+    expect(lastClusterGroupOptions?.spiderfyDistanceMultiplier).toBe(3.5);
+
+    Object.defineProperty(mockClusterContainer, 'clientWidth', { value: 800, configurable: true });
+    Object.defineProperty(mockClusterContainer, 'clientHeight', { value: 600, configurable: true });
   });
 });

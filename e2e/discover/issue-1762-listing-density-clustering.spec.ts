@@ -227,6 +227,40 @@ function anyMarkerLocator(page: Page): Locator {
   return page.locator('.custom-marker-cluster, [data-testid="property-marker"]');
 }
 
+// ── Issue #1762 fix-cycle 5 — coincident-coordinate spiderfy fixture ──
+//
+// The 3x3-grid dense fixture above is deliberately spread out (each top
+// cell is ~3.3km from its neighbours) so cluster-tap fit-to-members has
+// real geographic bounds to fit to. That geometry can NEVER spiderfy —
+// clusterCanSplit only declines a fit when there is truly no spatial
+// spread to zoom into. Fix-cycle 3/4's spiderfy readability/clickability
+// work targets exactly the OTHER case: a cluster whose members share
+// (near-)identical coordinates, where no zoom level can visually separate
+// them, so leaflet.markercluster's own spiderfyOnMaxZoom fans them out
+// in place instead. This fixture is a dedicated, bit-identical-coordinate
+// listing set for that case — 8 members (the densest circle-mode count,
+// one below leaflet.markercluster's own circle->spiral switchover at 9),
+// matching the WORKDONE_REVIEW BLOCKING finding's own "8-9 member
+// coincident cluster" framing for the viewport clamp.
+const SPIDERFY_MEMBER_COUNT = 8;
+
+function makeCoincidentClusterListings(count: number): DenseListing[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `spiderfy-${i + 1}`,
+    propertyType: i % 3 === 0 ? 'apartment' : i % 3 === 1 ? 'house' : 'villa',
+    title: `Spiderfy Listing ${i + 1}`,
+    locality: AREA_NAME,
+    pricePaise: 4_000_000_00 + i * 100_000_00,
+    // Bit-identical coordinates for every member — the same "sw/ne bounds
+    // EXACTLY coincident" shape the fix-cycle-3 live repro used, so
+    // hasSpatialSpread is unambiguously false at any zoom and this test
+    // isn't relying on a borderline/flaky near-miss.
+    lat: CENTER_LAT,
+    lon: CENTER_LON,
+    listingPurpose: 'sale',
+  }));
+}
+
 function fulfillJson(route: Route, status: number, body: unknown): Promise<void> {
   return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 }
@@ -645,6 +679,88 @@ for (const viewport of VIEWPORTS) {
         const popover = page.getByTestId('marker-popover-card');
         await expect(popover).toBeHidden();
         await marker.click();
+        await expect(popover).toBeVisible({ timeout: 10_000 });
+        await expect(popover).toHaveAttribute('role', 'dialog');
+      }
+    });
+
+    test('spiderfied individual marker is clickable — a fanned-out marker from a coincident cluster reaches the SAME onSelectListing path an unclustered marker does (fix-cycle-4 regression coverage)', async ({
+      page,
+    }) => {
+      // WORKDONE_REVIEW BLOCKING finding: no E2E test spiderfies a
+      // coincident cluster and clicks an individual fanned-out member.
+      // Unit coverage (PropertyMap.clusterTapFit.test.tsx) only asserts the
+      // spiderLegPolylineOptions CONFIG value against a fully-mocked
+      // Leaflet — it cannot dispatch a real click and observe whether it
+      // reaches onSelectListing. This test does, against the real Leaflet
+      // + leaflet.markercluster runtime.
+      const spiderfyListings = makeCoincidentClusterListings(SPIDERFY_MEMBER_COUNT);
+      await stubDenseFixture(page, spiderfyListings);
+      const listingsResponse = page.waitForResponse(
+        (res) => res.url().includes('/api/discover/cities/') && res.url().includes('/listings') && res.status() === 200,
+      );
+      await page.goto(areaFirstUrl(13));
+      await listingsResponse;
+      await dismissConsentBannerIfPresent(page);
+      await page.waitForLoadState('networkidle');
+      await ensureMobileMapOpen(page, viewport.isMobile);
+
+      // All 8 members share bit-identical coordinates -> exactly one
+      // cluster bubble, never any individual pin, before the tap.
+      const cluster = clusterLocator(page);
+      await expect(cluster).toHaveCount(1, { timeout: 15_000 });
+      const label = (await cluster.first().getAttribute('aria-label')) ?? '';
+      expect(label).toContain(`${SPIDERFY_MEMBER_COUNT} homes`);
+      await expect(pinLocator(page)).toHaveCount(0);
+
+      await cluster.first().click();
+
+      // Non-splittable coincident cluster: clusterCanSplit declines (no
+      // spatial spread to zoom into, mirrors this file's other
+      // "non-splittable cluster" assertions), so leaflet.markercluster's
+      // own spiderfyOnMaxZoom fans the 8 members out in place instead.
+      // The cluster bubble itself stays in the DOM (leaflet.markercluster
+      // dims it to opacity 0.3 rather than removing it — verified against
+      // _animationSpiderfy in node_modules/leaflet.markercluster's own
+      // source), but 8 individual price-pill markers now appear alongside
+      // it, fanned out — that's the real, assertable evidence a spiderfy
+      // actually happened (not just a config value, unlike the fully-mocked
+      // unit test this E2E spec complements).
+      const spiderfiedMarkers = pinLocator(page);
+      await expect(spiderfiedMarkers).toHaveCount(SPIDERFY_MEMBER_COUNT, { timeout: 10_000 });
+
+      // Click one specific fanned-out marker — the exact fix-cycle-4
+      // regression scenario: leaflet.markercluster's spider leg polylines
+      // are drawn from the cluster's origin to EACH marker's spiderfied
+      // position, terminating directly under a chunk of that marker's own
+      // ~90-107px-wide clickable pill. Without spiderLegPolylineOptions:
+      // {interactive:false} (fix-cycle 4), a click here can be silently
+      // swallowed by the leg instead of reaching the pill underneath.
+      const targetId = 'spiderfy-4';
+      const target = page.locator(`[data-listing-id="${targetId}"] [data-testid="property-marker"]`);
+      await expect(target).toBeVisible({ timeout: 10_000 });
+
+      if (viewport.isMobile) {
+        // Same known gap as the "individual marker click" smoke test above
+        // (MobileListingPreviewSheet needs a node=-deep-link hierarchy this
+        // backend-free fixture doesn't populate — see that test's comment
+        // for the full explanation) — proven instead via the URL gaining
+        // `listing=<id>`, the same real DOM/URL-state assertion that test
+        // already establishes as the robust proxy for "the click reached
+        // onSelectListing" on mobile.
+        const preview = page.getByTestId('mobile-listing-preview-sheet');
+        await expect(preview).toBeHidden();
+        await target.click();
+        await expect
+          .poll(() => new URL(page.url()).searchParams.get('listing'), {
+            timeout: 10_000,
+            message: 'waiting for spiderfied marker click to write listing= to the URL',
+          })
+          .toBe(targetId);
+      } else {
+        const popover = page.getByTestId('marker-popover-card');
+        await expect(popover).toBeHidden();
+        await target.click();
         await expect(popover).toBeVisible({ timeout: 10_000 });
         await expect(popover).toHaveAttribute('role', 'dialog');
       }
