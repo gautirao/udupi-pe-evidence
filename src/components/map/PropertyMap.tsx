@@ -39,6 +39,7 @@ import {
   resolveMarkerRevealMode,
   computeSpiderfyDistanceMultiplier,
   SPIDERFY_DISTANCE_MULTIPLIER_BASE,
+  computeCoincidentMarkerOffsets,
   type AreaPanReason,
 } from '@/shared/map/zoomPolicy';
 import { clusterCanSplit, hasSpatialSpread } from '@/shared/map/areaClusterSplit';
@@ -2067,10 +2068,36 @@ function MarkerClusterLayer({
 
     const validListings = listings.filter((l) => l.latitude && l.longitude);
 
+    // Issue #2139 — coincident-coordinate separation (zoomPolicy.ts). Above
+    // disableClusteringAtZoom, leaflet.markercluster provides ZERO
+    // coincident-point handling (see computeCoincidentMarkerOffsets'
+    // module comment) — this is the sole mechanism keeping listings that
+    // share (near-)identical geocoded coordinates individually visible and
+    // clickable once the map crosses that threshold. `!` is required here:
+    // validListings is already runtime-filtered to truthy latitude/
+    // longitude above, but the PropertyListing type still carries them as
+    // nullable.
+    const coincidentOffsets = computeCoincidentMarkerOffsets(
+      validListings.map((l) => ({ id: l.id, latitude: l.latitude!, longitude: l.longitude! })),
+    );
+
     // Issue #1762 fix cycle 7 — fresh per-build lookup so the
     // selection/hover effect can find and patch an individual marker's icon
     // in place without touching the cluster group itself.
     const nextMarkersById = new Map<string, { marker: L.Marker; listing: PropertyListingWithImages }>();
+    // Issue #2139 code-review fix — the cluster-tap split decision below
+    // (clusterCanSplit/hasSpatialSpread) MUST see each member's ORIGINAL
+    // (pre-offset) coordinates, not the coincident-offset render position.
+    // cluster.getBounds() reads whatever lat/lng each L.marker was actually
+    // constructed with, so applying the offset to marker construction would
+    // otherwise silently flip a genuinely-coincident cluster's bounds from
+    // degenerate (zero spread — #1762's deliberate "no meaningful split"
+    // case) to a tiny nonzero spread, changing clusterCanSplit's verdict for
+    // that cluster. Keeping a raw-coordinate lookup alongside the (offset)
+    // marker keeps #1762's cluster-tap split/fit-to-members behaviour
+    // byte-for-byte unchanged, while still letting the rendered markers
+    // themselves be visually/interactively separated.
+    const rawLatLngByMarker = new Map<L.Marker, { lat: number; lng: number }>();
 
     validListings.forEach((listing) => {
       // Issue #1547 — copper icon when id matches the URL-selected listing OR the
@@ -2085,7 +2112,15 @@ function MarkerClusterLayer({
       const icon = isHighlighted
         ? createSelectedMarkerIcon(listing.property_type, listing.price, listing.priceBand, listing.monthly_rent, listing.monthlyRentBand)
         : createMarkerIcon(listing.property_type, listing.price, listing.priceBand, listing.monthly_rent, listing.monthlyRentBand);
-      const marker = L.marker([listing.latitude!, listing.longitude!], { icon });
+      // Issue #2139 — render at the coincident-offset position (identical
+      // to the raw listing coordinates for any non-coincident listing).
+      const position = coincidentOffsets.get(listing.id) ?? { latitude: listing.latitude!, longitude: listing.longitude! };
+      const marker = L.marker([position.latitude, position.longitude], { icon });
+      // Plain literal, not L.latLng(...) — avoids depending on the real
+      // Leaflet LatLng constructor (this file's test doubles mock only the
+      // specific `leaflet` exports each test needs); a {lat,lng} literal is
+      // a valid LatLngExpression for L.latLngBounds below.
+      rawLatLngByMarker.set(marker, { lat: listing.latitude!, lng: listing.longitude! });
 
       // Attach listing-id to the marker element for E2E selectors.
       marker.on('add', () => {
@@ -2171,7 +2206,35 @@ function MarkerClusterLayer({
         spiderfyViewport.clientHeight,
       );
 
-      const bounds = cluster.getBounds();
+      // Issue #2139 code-review fix — prefer each member's RAW (pre-offset)
+      // coordinate via rawLatLngByMarker for the split decision, NOT
+      // cluster.getBounds() (which reflects the rendered, coincident-offset
+      // marker positions). Without this, a genuinely byte-identical-
+      // coincident cluster's bounds would flip from degenerate/zero-spread
+      // (#1762's deliberate "no meaningful split" case) to a tiny nonzero
+      // spread purely because of the #2139 render-offset, changing
+      // clusterCanSplit's verdict for that cluster. Falls back to
+      // cluster.getBounds() (Leaflet's own) whenever raw coordinates aren't
+      // fully resolvable for every child — a real click always resolves
+      // every child (every marker in this clusterGroup was registered in
+      // rawLatLngByMarker during the forEach above), so this fallback only
+      // engages for test doubles that don't model child markers.
+      const childMarkers = cluster.getAllChildMarkers();
+      const rawLatLngs = childMarkers
+        .map((m) => rawLatLngByMarker.get(m))
+        .filter((ll): ll is { lat: number; lng: number } => ll != null);
+      // Same [[swLat,swLng],[neLat,neLng]] single-array shape this file
+      // already uses for `L.latLngBounds(cameraIntent.bounds)` elsewhere —
+      // deliberately NOT `L.latLngBounds(rawLatLngs)` (an arbitrary-length
+      // point array), so this reuses the exact call shape/contract already
+      // relied on in this file rather than introducing a new one.
+      const bounds =
+        childMarkers.length > 0 && rawLatLngs.length === childMarkers.length
+          ? L.latLngBounds([
+              [Math.min(...rawLatLngs.map((p) => p.lat)), Math.min(...rawLatLngs.map((p) => p.lng))],
+              [Math.max(...rawLatLngs.map((p) => p.lat)), Math.max(...rawLatLngs.map((p) => p.lng))],
+            ])
+          : cluster.getBounds();
       const sw = bounds.getSouthWest();
       const ne = bounds.getNorthEast();
       const currentZoom = map.getZoom();
@@ -2481,6 +2544,24 @@ function AgriMarkerClusterLayer({
 
     const validListings = listings.filter((l) => l.latitude && l.longitude);
 
+    // Issue #2139 — coincident-coordinate separation (zoomPolicy.ts). Same
+    // root cause as MarkerClusterLayer's identically-named block above: this
+    // layer uses the SAME disableClusteringAtZoom/maxClusterRadius constants,
+    // so agri listings sharing (near-)identical fallback-tier geocoded
+    // coordinates are equally exposed once zoom crosses that threshold.
+    // Unlike MarkerClusterLayer, this layer has no clusterCanSplit/
+    // cluster-tap split-decision path (zoomToBoundsOnClick stays Leaflet's
+    // own default `true` here, and no rawLatLngByMarker-style raw-coordinate
+    // lookup exists) — verified via jCodemunch that AgriMarkerClusterLayer
+    // never references clusterCanSplit, so there is no split decision this
+    // render-position offset could disturb. `!` is required here for the
+    // same reason as MarkerClusterLayer: validListings is already
+    // runtime-filtered to truthy latitude/longitude above, but the type
+    // still carries them as nullable.
+    const coincidentOffsets = computeCoincidentMarkerOffsets(
+      validListings.map((l) => ({ id: l.id, latitude: l.latitude!, longitude: l.longitude! })),
+    );
+
     validListings.forEach((listing) => {
       const isHighlighted =
         listing.id === selectedListingId || listing.id === hoveredListingId;
@@ -2490,7 +2571,10 @@ function AgriMarkerClusterLayer({
       const icon = isHighlighted
         ? createSelectedMarkerIcon(listing.property_type, listing.price, listing.priceBand)
         : createMarkerIcon(listing.property_type, listing.price, listing.priceBand);
-      const marker = L.marker([listing.latitude!, listing.longitude!], { icon });
+      // Issue #2139 — render at the coincident-offset position (identical
+      // to the raw listing coordinates for any non-coincident listing).
+      const position = coincidentOffsets.get(listing.id) ?? { latitude: listing.latitude!, longitude: listing.longitude! };
+      const marker = L.marker([position.latitude, position.longitude], { icon });
 
       // Attach listing-id to the marker element for E2E selectors.
       marker.on('add', () => {

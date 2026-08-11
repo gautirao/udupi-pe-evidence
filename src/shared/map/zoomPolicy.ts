@@ -406,3 +406,126 @@ export function computeSpiderfyDistanceMultiplier(
     Math.max(viewportScaledMultiplier, pillClearanceFloorMultiplier),
   );
 }
+
+// ── Issue #2139 — coincident-coordinate marker separation ──
+//
+// leaflet.markercluster sets its own internal `_maxZoom` to
+// `disableClusteringAtZoom - 1` and only builds its distance-grid
+// clustering/spiderfy machinery UP TO that zoom (verified against
+// node_modules/leaflet.markercluster/dist/leaflet.markercluster-src.js:
+// `_maxZoom = this.options.disableClusteringAtZoom - 1`, and `_addLayer`'s
+// zoom-descending grid lookup starts at `_maxZoom`). At or above
+// disableClusteringAtZoom there is no clustering grid at all — every
+// listing renders as a raw individual `L.marker` leaf with ZERO
+// coincident-point handling. Listings whose geocoded coordinates are
+// (near-)identical — a known fallback-tier geocoding artifact for
+// same-area listings sharing weak address data — collapse onto the exact
+// same pixel position once the map crosses that threshold: live-reproduced
+// via DOM inspection (identical `translate3d` transform for distinct
+// listing IDs), all fully present and CSS-visible but 100% occluded and
+// pointer-unreachable except the topmost DOM node.
+//
+// This computes a tiny deterministic per-listing geographic nudge so
+// coincident listings always resolve to distinct pixel positions, at every
+// zoom — including BELOW disableClusteringAtZoom, where leaflet.markercluster
+// still owns real clustering/spiderfy. The offset radius is small enough in
+// real-world terms (tens of metres) to stay well inside a single cluster's
+// grouping radius (CLUSTER_MAX_RADIUS_PX, 50px) at any zoom below the
+// disable threshold, so it never changes which cluster a listing joins or
+// disturbs the spiderfy fan leaflet.markercluster already produces
+// correctly today — it only becomes the SOLE separation mechanism once the
+// map crosses into the zoom band where leaflet.markercluster provides none.
+//
+// Code-review follow-up (#2139) — radiusMeters below scales with
+// Math.sqrt(groupSize / 2) and is capped at COINCIDENT_OFFSET_RADIUS_CAP_METERS.
+// Without a cap, a large enough coincident group could grow the offset
+// radius past the on-screen pixel radius a single CLUSTER_MAX_RADIUS_PX
+// (50px) cluster spans at CLUSTER_DISABLE_AT_ZOOM - 1 (zoom 15, the
+// densest zoom leaflet.markercluster still actively groups at) — roughly
+// ~230m at this project's ~13°N latitude band. The cap (120m) keeps a
+// wide safety margin below that figure even if CLUSTER_MAX_RADIUS_PX or
+// CLUSTER_DISABLE_AT_ZOOM changes later, and is itself asserted by a unit
+// test (see zoomPolicy.coincidentOffset.test.ts) so a future change to
+// either constant that erodes the margin fails loudly instead of silently.
+// Guaranteed bound: safe (never crosses a cluster boundary at zoom 15+)
+// for coincident groups up to ~32 members before the cap engages, and
+// bounded at 120m displacement for any larger group.
+
+/** Metres of geographic separation applied per member of a coincident-coordinate group. */
+const COINCIDENT_OFFSET_RADIUS_METERS = 30;
+/** Hard ceiling on the per-member offset radius, regardless of group size — see comment above. */
+const COINCIDENT_OFFSET_RADIUS_CAP_METERS = 120;
+/** Approx metres per degree of latitude (WGS84) — no higher precision needed for a tens-of-metres nudge. */
+const METERS_PER_DEGREE_LATITUDE = 111_320;
+
+export interface CoincidentOffsetListing {
+  id: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface CoincidentOffsetPosition {
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * Groups listings by rounded coordinate (5 decimal places, ~1m of latitude
+ * — coarser than raw float equality so near-duplicate fallback-tier
+ * geocodes are treated as coincident too, not just byte-identical ones).
+ * Listings alone at their coordinate are returned unchanged. Listings that
+ * share a coordinate with 1+ others are fanned out to small deterministic
+ * positions around that shared point (radius scales mildly with group size
+ * so denser coincident groups still separate). Fan ordering is by listing
+ * id (stable sort) so the same group always produces the same output
+ * across repeated calls/rebuilds — required so a listing's marker doesn't
+ * jump on every unrelated buildLayer() rebuild.
+ *
+ * Every input listing id appears exactly once in the returned map — this
+ * function never adds or drops a listing, only repositions it.
+ */
+export function computeCoincidentMarkerOffsets(
+  listings: readonly CoincidentOffsetListing[],
+): Map<string, CoincidentOffsetPosition> {
+  const groups = new Map<string, CoincidentOffsetListing[]>();
+  for (const listing of listings) {
+    const key = `${listing.latitude.toFixed(5)},${listing.longitude.toFixed(5)}`;
+    const group = groups.get(key);
+    if (group) {
+      group.push(listing);
+    } else {
+      groups.set(key, [listing]);
+    }
+  }
+
+  const offsets = new Map<string, CoincidentOffsetPosition>();
+  for (const group of groups.values()) {
+    if (group.length === 1) {
+      const [listing] = group;
+      offsets.set(listing.id, { latitude: listing.latitude, longitude: listing.longitude });
+      continue;
+    }
+
+    const ordered = [...group].sort((a, b) => a.id.localeCompare(b.id));
+    const originLat = ordered[0].latitude;
+    const originLng = ordered[0].longitude;
+    const radiusMeters = Math.min(
+      COINCIDENT_OFFSET_RADIUS_CAP_METERS,
+      COINCIDENT_OFFSET_RADIUS_METERS * Math.max(1, Math.sqrt(ordered.length / 2)),
+    );
+    const metersPerDegreeLongitude =
+      METERS_PER_DEGREE_LATITUDE * Math.cos((originLat * Math.PI) / 180) || METERS_PER_DEGREE_LATITUDE;
+
+    ordered.forEach((listing, index) => {
+      const angle = (2 * Math.PI * index) / ordered.length;
+      const dLat = (radiusMeters * Math.sin(angle)) / METERS_PER_DEGREE_LATITUDE;
+      const dLng = (radiusMeters * Math.cos(angle)) / metersPerDegreeLongitude;
+      offsets.set(listing.id, {
+        latitude: originLat + dLat,
+        longitude: originLng + dLng,
+      });
+    });
+  }
+
+  return offsets;
+}
