@@ -19,7 +19,7 @@ import {
 } from '@/components/map/AreaMarkerLayer';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { CameraIntent } from '@/hooks/useDiscoverMapData';
-import { SchoolMarkerLayer } from '@/components/map/SchoolMarkerLayer';
+import { SchoolMarkerLayer, SELECTED_SCHOOL_PANE_NAME } from '@/components/map/SchoolMarkerLayer';
 import { SchoolZoneLabelLayer, type ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
@@ -797,6 +797,33 @@ function MapReadySignal({ onReady }: { onReady?: () => void }) {
   useEffect(() => {
     onReadyRef.current?.();
   }, []); // empty deps: fire once on mount; ref always holds the current callback
+  return null;
+}
+
+/**
+ * Issue #2130 — creates the dedicated Leaflet pane for the currently SELECTED
+ * school's marker (SELECTED_SCHOOL_PANE_NAME, zIndex 550 — below the default
+ * markerPane's 600), imperatively via `map.createPane`, matching this file's
+ * existing MapReadySignal/ZoomWatcher useMap()-based controller pattern.
+ * Guarded so it is a silent no-op against any test double whose `useMap()`
+ * stub doesn't implement `createPane`/`getPane` (the common case across this
+ * codebase's many `vi.mock('react-leaflet', ...)` unit tests) — real Leaflet
+ * maps (production, E2E, browser) always implement both. Leaflet's own
+ * `map.createPane` is NOT idempotent — it unconditionally creates a new DOM
+ * div and overwrites the existing pane entry on every call — so this looks
+ * up an existing pane via `getPane` first and only falls back to
+ * `createPane` when none exists yet, making repeated mounts safe without
+ * duplicating panes.
+ */
+function SelectedSchoolPaneSetup() {
+  const map = useMap();
+  useEffect(() => {
+    if (typeof map?.createPane !== 'function') return;
+    const pane = typeof map.getPane === 'function'
+      ? map.getPane(SELECTED_SCHOOL_PANE_NAME) ?? map.createPane(SELECTED_SCHOOL_PANE_NAME)
+      : map.createPane(SELECTED_SCHOOL_PANE_NAME);
+    if (pane) pane.style.zIndex = '550';
+  }, [map]);
   return null;
 }
 
@@ -2246,6 +2273,22 @@ export function PropertyMap({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+        {/* Issue #2130 — dedicated pane (zIndex 550, below the default
+            markerPane's 600) for the currently SELECTED school's marker only
+            (see SchoolMarkerLayer.tsx's SELECTED_SCHOOL_PANE_NAME doc comment).
+            Mounted early so its pane exists before any layer below references
+            it by name. Property/listing markers stay in the default markerPane
+            and therefore always paint — and hit-test — above it, fixing #2130
+            (selected-school marker intercepting taps on an overlapping
+            property marker) without touching schoolPicking/candidate-school
+            marker stacking. Created imperatively via useMap() (matching this
+            file's existing MapReadySignal/ZoomWatcher pattern) rather than
+            react-leaflet's declarative <Pane> — a new named export off
+            'react-leaflet' would need adding to every one of this codebase's
+            many `vi.mock('react-leaflet', ...)` test doubles; the imperative
+            call needs no new export and is a no-op (guarded) on any mock
+            `useMap()` stub that doesn't implement createPane. */}
+        <SelectedSchoolPaneSetup />
         {/* Issue #2049 — lifecycle guard (defect 2 fix) and container-resize
             sync (defect 1 fix). Both mount alongside the existing controllers
             below; neither touches any camera call site. */}
@@ -2415,10 +2458,14 @@ export function PropertyMap({
             />
             {/* School location marker (🎓). The school name is intentionally NOT
                 labelled on the map — the journey breadcrumb overlay already shows it,
-                so a permanent tooltip here would just duplicate it. */}
+                so a permanent tooltip here would just duplicate it.
+                Issue #2130 — rendered into the dedicated selected-school pane
+                (below the default markerPane) so it can never occlude an
+                overlapping property marker's tap target; see the <Pane> above. */}
             <Marker
               position={[schoolCircle.lat, schoolCircle.lon]}
               icon={schoolMarkerIcon}
+              pane={SELECTED_SCHOOL_PANE_NAME}
             />
           </>
         )}

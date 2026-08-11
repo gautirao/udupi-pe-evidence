@@ -37,6 +37,23 @@ export interface SchoolMarkerLayerProps {
 }
 
 /**
+ * Issue #2130 — dedicated Leaflet pane for the currently SELECTED school's
+ * marker (focus mode below), given a zIndex below the default `markerPane`
+ * (600). Property/listing markers (MarkerClusterLayer, AgriMarkerClusterLayer)
+ * and the schoolCircle marker in PropertyMap.tsx all render into this pane too
+ * (see that file), so the selected school's pin can never sit visually or
+ * hit-test-wise on top of a property marker it happens to overlap on screen —
+ * previously, because the selected-school marker mounted LAST in DOM/paint
+ * order, it always won any zIndex tie (Leaflet auto-assigns marker zIndex by
+ * screen Y-position; identical/near-identical positions tie, and DOM order
+ * breaks the tie), permanently blocking taps on an occluded property marker.
+ * Intentionally NOT applied to the schoolPicking/candidate-school markers
+ * below (selectedSchoolId === null) — those keep their existing markerPane
+ * stacking untouched, so school-picking marker taps are unaffected.
+ */
+export const SELECTED_SCHOOL_PANE_NAME = 'selected-school-pane';
+
+/**
  * A school marker icon — plum circle with graduation cap (Issue #1954: recolored
  * from blue #2563eb to the plum design-system token, matching PropertyMap.tsx's
  * schoolMarkerIcon + SchoolRadiusMapOverlay.tsx's legend swatch).
@@ -111,9 +128,16 @@ export function SchoolMarkerLayer({
       // Focus mode: when a school is selected, only render its marker.
       if (selectedSchoolId !== null && school.id !== selectedSchoolId) continue;
 
+      // Issue #2130 — the focus-mode marker (selectedSchoolId === school.id)
+      // is the same selected school PropertyMap.tsx's schoolCircle block also
+      // draws a marker for at the identical coordinates; route it into the
+      // lower selected-school pane so it never occludes an overlapping
+      // property marker. Candidate/school-picking markers (selectedSchoolId
+      // null, all schools rendered) are unaffected — no pane override.
       const marker = L.marker([school.latitude, school.longitude], {
         icon: schoolPinIcon,
         title: escapeHtml(school.name),
+        ...(selectedSchoolId === school.id ? { pane: SELECTED_SCHOOL_PANE_NAME } : {}),
       });
 
       marker.bindTooltip(escapeHtml(school.name), {
