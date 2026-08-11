@@ -688,6 +688,38 @@ describe("Issue #1762 — MapController 'cluster' framing branch", () => {
     mapStub.getBoundsZoom.mockReturnValue(15); // restore this file's default stub behaviour
   });
 
+  it('Issue #1762 fix-cycle 11 — declines the camera action entirely (no setView) when the padded fit is BELOW currentZoom: currentZoom=14, padded getBoundsZoom=13', () => {
+    // PR reviewer's exact narrowed repro (fix-cycle 11): currentZoom=14,
+    // authoritative padded getBoundsZoom=13. The pre-fix code held at
+    // targetZoom=14 (cappedRawZoom > currentZoom ? cappedRawZoom :
+    // currentZoom, i.e. 13 > 14 is false -> holds at 14) and still called
+    // setView at zoom 14 — presenting an unverified zoom as if it were a
+    // real fit: the tapped cluster's members are only guaranteed to fit the
+    // usable viewport at the padded 13, not at 14. Per the reviewer's
+    // narrowed ask ("perform that fit, or decline/no-op the action before
+    // moving it"), this cluster tap must become a true no-op: no setView
+    // call, no camera movement at all. (A zoom-out to 13 is NOT mandated —
+    // that remains a separate, deliberately-deferred product decision.)
+    mapStub.getZoom.mockReturnValue(14);
+    mapStub.getBoundsZoom.mockReturnValue(13);
+    const bounds: [[number, number], [number, number]] = [[13.0, 74.7], [13.1, 74.8]];
+    const intent: CameraIntent = {
+      seq: 1,
+      bounds,
+      center: [13.05, 74.75],
+      framing: 'cluster',
+      padding: computeCameraPadding(1440),
+    };
+    const { rerender } = render(<PropertyMap {...baseProps} cameraIntent={null} focusBounds={null} />);
+    rerender(<PropertyMap {...baseProps} cameraIntent={intent} focusBounds={null} />);
+
+    expect(mapStub.setView).not.toHaveBeenCalled();
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+    expect(mapStub.flyTo).not.toHaveBeenCalled();
+
+    mapStub.getBoundsZoom.mockReturnValue(15); // restore this file's default stub behaviour
+  });
+
   it('does NOT arm the leaf-only focusBounds suppression window — a subsequent focusBounds change still fires immediately', () => {
     const bounds: [[number, number], [number, number]] = [[13.0, 74.7], [13.1, 74.8]];
     const intent: CameraIntent = {

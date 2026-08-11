@@ -1687,11 +1687,29 @@ function MapController({
       // (still used there only to decide whether to publish a CameraIntent
       // at all); this branch remains the single authoritative padded-fit
       // decision.
+      //
+      // Issue #1762 fix-cycle 11 (PR reviewer BLOCKING, narrowed) — holding
+      // at currentZoom when cappedRawZoom < currentZoom is not a true fit:
+      // the tapped cluster's members are only guaranteed to fit the usable
+      // viewport at cappedRawZoom, not at currentZoom. Calling setView at
+      // currentZoom in that case presents an unverified zoom as if it were
+      // the authoritative padded fit. Per the reviewer's narrowed ask
+      // ("perform that fit, or decline/no-op the action before moving it"),
+      // this declines the camera action entirely (no setView, no re-center)
+      // rather than mandate a zoom-out — whether a cluster tap should ever
+      // zoom the camera OUT remains a separate, deliberately-deferred
+      // product/backlog decision.
       if (cameraIntent.bounds) {
         const rawZoom = map.getBoundsZoom(cameraIntent.bounds, false, L.point(paddingX, paddingY));
         const currentZoom = map.getZoom();
         const cappedRawZoom = Math.min(CLUSTER_DISABLE_AT_ZOOM, rawZoom);
-        const targetZoom = cappedRawZoom > currentZoom ? cappedRawZoom : currentZoom;
+        if (cappedRawZoom < currentZoom) {
+          // Padded fit is below the current zoom — holding at currentZoom
+          // (or advancing) would not be a verified fit. Decline the camera
+          // action: no setView, no camera movement at all for this intent.
+          return;
+        }
+        const targetZoom = cappedRawZoom;
         const center = L.latLngBounds(cameraIntent.bounds).getCenter();
         map.setView(center, targetZoom, { animate: true });
       } else {
