@@ -168,6 +168,21 @@ async function stubAll(page: Page): Promise<void> {
   );
 }
 
+/**
+ * Additional stubs for the canonical `node=` navigation subsystem
+ * (`useAreasNavigationJourney` — see the module doc above `MANIPAL_NODE_KEY`).
+ * Only the mobile test below uses these; the other 4 tests in this file keep
+ * the legacy `journey=area-first&areaKey=` scheme and never call this.
+ */
+async function stubNavigationNode(page: Page): Promise<void> {
+  await page.route('**/api/discover/cities/*/navigation/resolve**', (route) =>
+    fulfillJson(route, 200, NAVIGATION_RESOLVE_FIXTURE),
+  );
+  await page.route('**/api/discover/cities/*/navigation/*/counts**', (route) =>
+    fulfillJson(route, 200, NAVIGATION_COUNTS_FIXTURE),
+  );
+}
+
 const markerSelector = `[data-listing-id="${LISTING_ID}"] [data-testid="property-marker"]`;
 
 function popoverLocator(page: Page) {
@@ -180,6 +195,78 @@ function radiusOverlayLocator(page: Page) {
 
 const combinedUrl =
   `/discover?city=udupi&journey=area-first&areaKey=${ENCODED_AREA_KEY}` +
+  `&lat=${MIT_LAT}&lon=${MIT_LON}&zoom=14` +
+  `&schoolId=${MIT_SCHOOL_ID}&radiusKm=${DEFAULT_RADIUS_KM}`;
+
+// ── Canonical node= fixtures (PR #2136 review fix) ──
+// The mobile test below needs `journey.node.nodeType === 'AREA'` to resolve
+// (MapDiscovery.tsx's `nodeAreaPoint`/`selectedListingPreview` bridge — see
+// nodeAreaPoint.ts and useAreasNavigationJourney.ts) so
+// MobileListingPreviewSheet can actually mount. That resolution is driven by
+// a SEPARATE subsystem from the legacy `areaKey=` journey used above:
+// `useAreasNavigationJourney`'s two requests,
+// `GET .../navigation/resolve?node=<key>` (contract: NavigationResolveResponseWire,
+// src/features/discover/navigation/types.ts) and
+// `GET .../navigation/<nodeKey>/counts` (contract: NavigationCountsResponse,
+// same file) — read from source, not assumed. The node-key prefix
+// convention (`a:` + the raw pipe-delimited areaKey, e.g.
+// `a:IN|KA|Bengaluru|RR Nagar`) is confirmed against
+// e2e/discover/issue-1956-pr3-area-clustering.spec.ts and
+// src/features/discover/navigation/__tests__/staticSweep.test.ts.
+const MANIPAL_NODE_KEY = `a:${MANIPAL_AREA_KEY}`;
+const ENCODED_MANIPAL_NODE_KEY = encodeURIComponent(MANIPAL_NODE_KEY);
+
+const NAVIGATION_RESOLVE_FIXTURE = {
+  requested: MANIPAL_NODE_KEY,
+  resolution: 'EXACT',
+  revisionId: 1,
+  node: {
+    nodeKey: MANIPAL_NODE_KEY,
+    nodeType: 'AREA',
+    displayLabel: 'Manipal',
+    depth: 1,
+    regionKey: null,
+    ancestry: [],
+    nextLevelType: 'LISTINGS',
+    children: [],
+    revisionId: 1,
+    bounds: {
+      centreLat: DISCOVER_AREAS_FIXTURE.areas[0].geoCenterLat,
+      centreLon: DISCOVER_AREAS_FIXTURE.areas[0].geoCenterLon,
+      minLat: DISCOVER_AREAS_FIXTURE.areas[0].minLat,
+      minLon: DISCOVER_AREAS_FIXTURE.areas[0].minLon,
+      maxLat: DISCOVER_AREAS_FIXTURE.areas[0].maxLat,
+      maxLon: DISCOVER_AREAS_FIXTURE.areas[0].maxLon,
+    },
+    descendantAreaKeys: null,
+    areaKey: MANIPAL_AREA_KEY,
+  },
+};
+
+const NAVIGATION_COUNTS_FIXTURE = {
+  nodeKey: MANIPAL_NODE_KEY,
+  count: 1,
+  schoolCount: 6,
+  areaCounts: { [MANIPAL_AREA_KEY]: 1 },
+  areaSchoolCounts: { [MANIPAL_AREA_KEY]: 6 },
+  children: [],
+  revisionId: 1,
+};
+
+// KEEPS `areaKey=` alongside the new `node=` param — read from source
+// (discoverLayerRegistry.ts's `computeDiscoverLayer`/`derivePanelContent`):
+// the legacy panel-content state machine that gates `school-radius-legend`
+// (`isSchoolRadiusOverlayState`, SchoolRadiusMapOverlay.tsx) dispatches on
+// `input.selection.areaKey` — i.e. the URL's legacy `areaKey=` field, NOT
+// `node=`/`nodeAreaPoint`. Dropping `areaKey=` broke the existing legend/
+// radius-overlay assertions (confirmed live: panelContent never reached
+// 'area-school-combined' without it, timing out on `school-radius-legend`).
+// Both params name the SAME Manipal area, so this adds the canonical-node
+// resolution the sheet needs without touching the legacy behaviour the
+// other 4 tests in this file (and this test's own legend/radius assertions)
+// already depend on.
+const combinedNodeUrl =
+  `/discover?city=udupi&journey=area-first&areaKey=${ENCODED_AREA_KEY}&node=${ENCODED_MANIPAL_NODE_KEY}` +
   `&lat=${MIT_LAT}&lon=${MIT_LON}&zoom=14` +
   `&schoolId=${MIT_SCHOOL_ID}&radiusKm=${DEFAULT_RADIUS_KM}`;
 
@@ -293,7 +380,17 @@ test.describe('Issue #1738 — marker popover dismiss-cycle + mobile hardening (
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await stubAll(page);
-    await gotoCombinedState(page);
+    // PR #2136 review fix: ADDS the canonical `node=` param (see
+    // MANIPAL_NODE_KEY's module doc) alongside the existing legacy
+    // `areaKey=` so `journey.node.nodeType === 'AREA'` genuinely resolves
+    // and MobileListingPreviewSheet can mount — the prior URL (areaKey=
+    // only, no node=) left `selectedListingPreview` permanently null, so
+    // sheet-visibility could never be asserted here (see git history for
+    // the removed disclosure comment this replaces). `areaKey=` stays
+    // because it (not `node=`) is what the legacy panelContent state
+    // machine still keys the `school-radius-legend` gate on.
+    await stubNavigationNode(page);
+    await gotoCombinedState(page, combinedNodeUrl);
 
     // Issue #2130 fixture fix: LIST is the default mobile view (#1953/#1956) —
     // the map (and everything on it, including the radius legend and
@@ -322,19 +419,28 @@ test.describe('Issue #1738 — marker popover dismiss-cycle + mobile hardening (
     // it. Before the pane-separation fix in PropertyMap.tsx/
     // SchoolMarkerLayer.tsx, the school marker intercepted this exact click
     // and `listing=` never appeared.
-    //
-    // NOT asserted here: MobileListingPreviewSheet's own visibility. Mounting
-    // that sheet requires DiscoverAreasJourneyPanel to resolve a canonical
-    // Areas-journey AREA leaf (`journey.node.nodeType === 'AREA'` via a real
-    // `node=` key + its downstream navigation-counts query) — a separate,
-    // pre-existing subsystem this "Backend-free" spec's legacy
-    // `journey=area-first&areaKey=` URL scheme was never wired to exercise
-    // (predates the #1956 canonical-node rollout) and which is unrelated to
-    // marker z-order/hit-testing. Confirmed live: with the pane fix applied,
-    // the tap already reaches the correct marker on mobile (this assertion)
-    // and desktop (the popover assertions above); the sheet's own mount
-    // chain is flagged as a follow-up in the #2130 PR, not fixed here.
     await expect.poll(() => new URL(page.url()).searchParams.get('listing')).toBe(LISTING_ID);
+
+    // PR #2136 REVIEW FIX (BLOCKING): the URL updating is necessary but not
+    // sufficient — prove the compact preview actually MOUNTS and reflects the
+    // correct listing, not just that the URL param changed underneath an
+    // apparently-ineffective tap. Now that the canonical `node=` journey is
+    // wired above, `journey.node.nodeType === 'AREA'` resolves and
+    // `AreaLeafListingsSurface` derives `selectedListingPreview` from
+    // `nav.selectedListing` against its own already-fetched
+    // `CITY_LISTINGS_FIXTURE` set (see nodeAreaPoint.ts /
+    // useAreasNavigationJourney.ts), so MobileListingPreviewSheet mounts for
+    // real, not via a mock.
+    const previewSheet = page.getByTestId('mobile-listing-preview-sheet');
+    await expect(previewSheet).toBeVisible({ timeout: 10_000 });
+    // Identity: the sheet has no raw listing-id text node (established
+    // pattern in e2e/discover/issue-2129-mobile-marker-occlusion.spec.ts), so
+    // identity is proven by combining the `listing=` URL poll above with
+    // sheet CONTENT derived from this test's own stubbed fixture data — the
+    // area label and price sourced from CITY_LISTINGS_FIXTURE's Manipal
+    // listing, not a generic/empty shell.
+    await expect(previewSheet.getByTestId('mobile-listing-preview-area-label')).toContainText('Manipal');
+    await expect(previewSheet.getByTestId('mobile-listing-preview-price')).toBeVisible();
 
     // Radius legend must still be visible after the tap.
     await expect(page.getByTestId('school-radius-legend')).toBeVisible();
