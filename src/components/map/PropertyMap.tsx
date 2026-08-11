@@ -808,15 +808,20 @@ function MapReadySignal({ onReady }: { onReady?: () => void }) {
  * Guarded so it is a silent no-op against any test double whose `useMap()`
  * stub doesn't implement `createPane`/`getPane` (the common case across this
  * codebase's many `vi.mock('react-leaflet', ...)` unit tests) — real Leaflet
- * maps (production, E2E, browser) always implement both. `map.createPane` is
- * itself idempotent (returns the existing pane if already created), so this
- * safely re-runs on every PropertyMap remount without duplicating panes.
+ * maps (production, E2E, browser) always implement both. Leaflet's own
+ * `map.createPane` is NOT idempotent — it unconditionally creates a new DOM
+ * div and overwrites the existing pane entry on every call — so this looks
+ * up an existing pane via `getPane` first and only falls back to
+ * `createPane` when none exists yet, making repeated mounts safe without
+ * duplicating panes.
  */
 function SelectedSchoolPaneSetup() {
   const map = useMap();
   useEffect(() => {
     if (typeof map?.createPane !== 'function') return;
-    const pane = map.createPane(SELECTED_SCHOOL_PANE_NAME);
+    const pane = typeof map.getPane === 'function'
+      ? map.getPane(SELECTED_SCHOOL_PANE_NAME) ?? map.createPane(SELECTED_SCHOOL_PANE_NAME)
+      : map.createPane(SELECTED_SCHOOL_PANE_NAME);
     if (pane) pane.style.zIndex = '550';
   }, [map]);
   return null;

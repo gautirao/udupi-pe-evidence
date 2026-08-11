@@ -23,6 +23,11 @@ const capturedCircles: Array<{
   pathOptions?: Record<string, unknown>;
 }> = [];
 
+const capturedMarkers: Array<{
+  position: [number, number];
+  pane?: string;
+}> = [];
+
 vi.mock('react-leaflet', () => ({
   MapContainer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TileLayer: () => null,
@@ -39,7 +44,16 @@ vi.mock('react-leaflet', () => ({
     capturedCircles.push({ center, radius, pathOptions });
     return <div data-testid="school-circle" />;
   },
-  Marker: () => null,
+  Marker: ({
+    position,
+    pane,
+  }: {
+    position: [number, number];
+    pane?: string;
+  }) => {
+    capturedMarkers.push({ position, pane });
+    return <div data-testid="school-marker" />;
+  },
   Tooltip: () => null,
   Polygon: () => null,
   useMap: vi.fn(() => ({
@@ -111,10 +125,12 @@ vi.mock('@/components/ui/card', () => ({
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { SELECTED_SCHOOL_PANE_NAME } from '@/components/map/SchoolMarkerLayer';
 
 describe('PropertyMap — schoolCircle pathOptions (Issue #1940 byte-identical guard)', () => {
   beforeEach(() => {
     capturedCircles.length = 0;
+    capturedMarkers.length = 0;
   });
 
   it('renders the school-radius Circle with the exact, unchanged pathOptions', async () => {
@@ -140,6 +156,13 @@ describe('PropertyMap — schoolCircle pathOptions (Issue #1940 byte-identical g
       weight: 2,
       dashArray: '6 4',
     });
+    // Issue #2130 — the school location marker must be routed into the
+    // dedicated selected-school pane (below the default markerPane) so it
+    // can never occlude an overlapping property marker's tap target.
+    expect(screen.getByTestId('school-marker')).toBeTruthy();
+    expect(capturedMarkers).toHaveLength(1);
+    expect(capturedMarkers[0].position).toEqual([13.35, 74.79]);
+    expect(capturedMarkers[0].pane).toBe(SELECTED_SCHOOL_PANE_NAME);
   });
 
   it('renders no Circle when schoolCircle is undefined (post-teardown state)', async () => {

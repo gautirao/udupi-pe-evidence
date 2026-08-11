@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { SchoolMarkerLayer } from './SchoolMarkerLayer';
+import L from 'leaflet';
+import { SchoolMarkerLayer, SELECTED_SCHOOL_PANE_NAME } from './SchoolMarkerLayer';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 
 // Mock Leaflet
@@ -355,6 +356,44 @@ describe('SchoolMarkerLayer', () => {
 
       expect(screen.getByTestId('school-marker-error')).toBeInTheDocument();
       expect(screen.queryByTestId('school-marker-empty')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Issue #2130 — selected-school pane routing', () => {
+    it('routes the focus-mode marker into SELECTED_SCHOOL_PANE_NAME when selectedSchoolId matches', () => {
+      render(
+        <SchoolMarkerLayer
+          schools={mockSchools}
+          journey="school-first"
+          showSchoolMarkers={true}
+          selectedSchoolId="school-1"
+          onSelectSchool={vi.fn()}
+        />
+      );
+
+      expect(L.marker).toHaveBeenCalledTimes(1);
+      expect(L.marker).toHaveBeenCalledWith(
+        [mockSchools[0].latitude, mockSchools[0].longitude],
+        expect.objectContaining({ pane: SELECTED_SCHOOL_PANE_NAME })
+      );
+    });
+
+    it('does not set a pane override on candidate/school-picking markers when selectedSchoolId is null', () => {
+      render(
+        <SchoolMarkerLayer
+          schools={mockSchools}
+          journey="school-first"
+          showSchoolMarkers={true}
+          selectedSchoolId={null}
+          onSelectSchool={vi.fn()}
+        />
+      );
+
+      expect(L.marker).toHaveBeenCalledTimes(mockSchools.length);
+      for (const call of vi.mocked(L.marker).mock.calls) {
+        const options = call[1] as { pane?: string } | undefined;
+        expect(options?.pane).toBeUndefined();
+      }
     });
   });
 });
