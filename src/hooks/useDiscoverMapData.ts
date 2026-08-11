@@ -47,8 +47,16 @@ export interface CameraIntent {
   bounds: [[number, number], [number, number]] | null;
   /** [area.geo_center_lat, area.geo_center_lon] — used when bounds is null. */
   center: [number, number];
-  /** 'overview' for macro-region/group pins (maxZoom 12); 'leaf' for a real area (zoom clamped to [13,16]). */
-  framing: 'overview' | 'leaf';
+  /**
+   * 'overview' for macro-region/group/area-cluster pins (maxZoom 12); 'leaf'
+   * for a real area (zoom clamped to [13,16]); 'cluster' (issue #1762) for a
+   * splittable LISTING-marker cluster tap — fits to that cluster's own
+   * member bounds, clamped to [currentZoom+1, CLUSTER_DISABLE_AT_ZOOM]. This
+   * is a DISTINCT framing from 'overview' (which area clusters use): a
+   * listing cluster is never bounded to AREA_LAYER_MAX_ZOOM (12) the way an
+   * area/group pin is.
+   */
+  framing: 'overview' | 'leaf' | 'cluster';
   /**
    * Issue #1882 (Track A PR2 Slice S4; corrected in the camera-padding
    * rework) — responsive fitBounds padding as a Leaflet-native
@@ -406,6 +414,23 @@ export interface UseDiscoverMapDataResult {
    * no viewportWidthPx argument here either.
    */
   publishClusterCameraIntent: (
+    bounds: CameraIntent['bounds'],
+    center: [number, number],
+  ) => void;
+  /**
+   * Issue #1762 — sibling producer to `publishCameraIntent`/
+   * `publishClusterCameraIntent` for a splittable LISTING-marker cluster tap
+   * (the leaflet.markercluster residential/agri layer, NOT an area cluster —
+   * see `publishClusterCameraIntent` above for that producer). Shares the
+   * SAME monotonic `cameraIntentSeqRef`, so a fresh listing-cluster tap
+   * always wins over a stale intent from either producer and vice versa.
+   * Always `framing: 'cluster'` — see that field's doc on `CameraIntent`.
+   * Caller (MarkerClusterLayer's clusterclick/clusterkeypress handler in
+   * PropertyMap.tsx) has already gated the click as splittable via
+   * `clusterCanSplit`/`hasSpatialSpread` before calling this — this producer
+   * does not re-validate, it only frames+publishes.
+   */
+  publishMarkerClusterCameraIntent: (
     bounds: CameraIntent['bounds'],
     center: [number, number],
   ) => void;
@@ -775,6 +800,35 @@ export function useDiscoverMapData({
     [cityCenter],
   );
 
+  // Issue #1762 — sibling producer for a splittable LISTING-cluster tap.
+  // Shares cameraIntentSeqRef with the other two producers above so
+  // MapController's seq-guard treats all three as one monotonic stream.
+  // Always framing='cluster' — distinct from publishClusterCameraIntent's
+  // 'overview' (area clusters stay bounded to AREA_LAYER_MAX_ZOOM; a listing
+  // cluster's whole point is to zoom PAST that band).
+  const publishMarkerClusterCameraIntent = useCallback(
+    (bounds: CameraIntent['bounds'], center: [number, number]) => {
+      // Same degenerate-bbox fallback chain as the other two producers —
+      // a cluster's own bounds collapsing to a coincident point (already
+      // excluded by the caller's hasSpatialSpread gate, but defence in
+      // depth costs nothing here) never fits a zero-area box.
+      const framed = resolveCameraFraming({
+        bbox: bounds,
+        centroid: center,
+        cityCentre: cityCenter,
+      });
+      cameraIntentSeqRef.current += 1;
+      setCameraIntent({
+        seq: cameraIntentSeqRef.current,
+        bounds: framed.bounds,
+        center: framed.center,
+        framing: 'cluster',
+        padding: computeCameraPadding(getViewportWidthPx()),
+      });
+    },
+    [cityCenter],
+  );
+
   // Issue #2088 (commit 6) — Recenter producer. See the CameraIntent.bypassSuppression
   // and UseDiscoverMapDataResult.publishRecenterCameraIntent doc comments above.
   const publishRecenterCameraIntent = useCallback(
@@ -882,6 +936,7 @@ export function useDiscoverMapData({
     cameraIntent,
     publishCameraIntent,
     publishClusterCameraIntent,
+    publishMarkerClusterCameraIntent,
     publishRecenterCameraIntent,
     visibleMemberSet,
   };

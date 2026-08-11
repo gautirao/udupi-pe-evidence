@@ -36,8 +36,10 @@ import {
   computeCameraPadding,
   LEAF_FIT_MIN_ZOOM,
   LEAF_FIT_MAX_ZOOM,
+  resolveMarkerRevealMode,
   type AreaPanReason,
 } from '@/shared/map/zoomPolicy';
+import { clusterCanSplit, hasSpatialSpread } from '@/shared/map/areaClusterSplit';
 import { useZoomBand } from '@/hooks/useZoomBand';
 
 /**
@@ -727,6 +729,19 @@ interface PropertyMapProps {
    * MarkerClusterLayer (residential); agri and school markers are unaffected.
    */
   onMarkerClickWithPosition?: (pos: { x: number; y: number }) => void;
+  /**
+   * Issue #1762 — fired ONLY for a splittable LISTING-marker cluster tap
+   * (the leaflet.markercluster residential layer inside MarkerClusterLayer
+   * below — NOT an area cluster; see `onAreaClusterCameraIntent` for that
+   * producer), with the cluster's own member bounds/center. Passed through
+   * to `MarkerClusterLayer` unchanged; the caller is expected to publish it
+   * via `useDiscoverMapData.publishMarkerClusterCameraIntent` (shared
+   * monotonic `cameraIntentSeqRef`, `framing: 'cluster'`) and feed the
+   * result back down via the existing `cameraIntent` prop — MapController's
+   * new 'cluster' framing branch performs the actual fit-to-members camera
+   * move (never a direct Leaflet `zoomToBounds()` call).
+   */
+  onMarkerClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
 }
 
 /**
@@ -1639,6 +1654,29 @@ function MapController({
       } else {
         map.flyTo(cameraIntent.center, AREA_LAYER_MAX_ZOOM);
       }
+    } else if (cameraIntent.framing === 'cluster') {
+      // Issue #1762 — listing-cluster tap fit-to-members. Mirrors the 'leaf'
+      // branch's bounds->zoom computation (same getBoundsZoom + responsive
+      // padding) but with a DIFFERENT clamp: the floor is the CURRENT zoom
+      // + 1 (a cluster tap must never be a no-op — it is only ever published
+      // once MarkerClusterLayer's clusterCanSplit gate has already confirmed
+      // the target zoom exceeds the zoom at click time), and the ceiling is
+      // CLUSTER_DISABLE_AT_ZOOM (16, where leaflet.markercluster itself stops
+      // clustering) rather than the fixed [13,16] leaf band. Deliberately
+      // does NOT arm suppressForSeqRef/suppressArmedAtRef above (that guard
+      // only checks `=== 'leaf'`, so this branch is already excluded) — a
+      // cluster tap never changes scope/node/filters, so there is no
+      // correlated network-driven refit for the suppression to swallow.
+      if (cameraIntent.bounds) {
+        const rawZoom = map.getBoundsZoom(cameraIntent.bounds, false, L.point(paddingX, paddingY));
+        const targetZoom = Math.min(CLUSTER_DISABLE_AT_ZOOM, Math.max(map.getZoom() + 1, rawZoom));
+        const center = L.latLngBounds(cameraIntent.bounds).getCenter();
+        map.setView(center, targetZoom, { animate: true });
+      } else {
+        // Degenerate/missing bounds fallback (resolveCameraFraming already
+        // guards against a zero-area box) — still guarantee forward progress.
+        map.flyTo(cameraIntent.center, Math.min(CLUSTER_DISABLE_AT_ZOOM, map.getZoom() + 1));
+      }
     } else {
       // Real-area ("leaf") pin — land directly in the [13,16] listing-marker
       // zoom band. This REPLACES the removed map.once('zoomend', ...) → 13
@@ -1729,6 +1767,18 @@ function MapController({
   return null;
 }
 
+/**
+ * Issue #1762 — sentinel `disableClusteringAtZoom` value used to HOLD a
+ * dense cluster in its clustered-overview state past the normal
+ * `CLUSTER_DISABLE_AT_ZOOM` (16) threshold, once `resolveMarkerRevealMode`
+ * decides — after a cluster-tap fit settles — that the revealed marker set
+ * is still too dense for individual pins to read cleanly. Comfortably above
+ * any zoom this app's tile layer reaches (no explicit `maxZoom` is set on
+ * `MapContainer`, so Leaflet's own default of 18 applies), so Leaflet's
+ * `zoom >= disableClusteringAtZoom` declustering never fires while held.
+ */
+const MARKER_REVEAL_HOLD_ZOOM = 24;
+
 // Marker cluster layer component
 function MarkerClusterLayer({
   listings,
@@ -1736,6 +1786,7 @@ function MarkerClusterLayer({
   selectedListingId,
   hoveredListingId,
   onMarkerClickWithPosition,
+  onMarkerClusterCameraIntent,
 }: {
   listings: PropertyListingWithImages[];
   onSelectListing?: (listing: PropertyListingWithImages | null) => void;
@@ -1747,17 +1798,85 @@ function MarkerClusterLayer({
   hoveredListingId?: string | null;
   /** a3 — fires with the pixel position of the marker click relative to the map container. */
   onMarkerClickWithPosition?: (pos: { x: number; y: number }) => void;
+  /**
+   * Issue #1762 — fired ONLY for a splittable cluster click, with the
+   * cluster's own member bounds/center. See PropertyMapProps's doc on the
+   * same-named prop for the full contract.
+   */
+  onMarkerClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
 }) {
   const map = useMap();
 
+  // Issue #1762 — dynamic declustering-at-zoom threshold, wired to
+  // resolveMarkerRevealMode (zoomPolicy.ts). Defaults to the existing static
+  // CLUSTER_DISABLE_AT_ZOOM — every state that never goes through a
+  // cluster-tap fit (manual zoom/pan, initial load, area/browse/school-radius
+  // entry) is byte-for-byte unaffected. Recomputed ONLY inside the
+  // clusterclick/clusterkeypress handler's `map.once('moveend', ...)` below,
+  // once the cluster-tap fit actually settles.
+  const [markerRevealDisableAtZoom, setMarkerRevealDisableAtZoom] = useState<number>(CLUSTER_DISABLE_AT_ZOOM);
+  // Tracks whether `listings` changed since the hold was last set, so a
+  // genuinely new listing set (new area/scope/filter fetch) always starts
+  // fresh at CLUSTER_DISABLE_AT_ZOOM rather than inheriting a stale hold
+  // computed against a completely different marker set.
+  const prevListingsRef = useRef<PropertyListingWithImages[] | null>(null);
+  // Issue #1762 fix — the pending cluster-tap `moveend` one-shot handler
+  // (if any), so effect teardown can explicitly cancel it via `map.off`.
+  // Without this, a stale closure from a torn-down effect run stays armed
+  // on the persistent `map` instance and fires on an unrelated later
+  // moveend (see effect cleanup below).
+  const pendingMoveendHandlerRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
+    const listingsChanged = prevListingsRef.current !== null && prevListingsRef.current !== listings;
+    prevListingsRef.current = listings;
+    const effectiveDisableAtZoom = listingsChanged ? CLUSTER_DISABLE_AT_ZOOM : markerRevealDisableAtZoom;
+    if (listingsChanged && markerRevealDisableAtZoom !== CLUSTER_DISABLE_AT_ZOOM) {
+      setMarkerRevealDisableAtZoom(CLUSTER_DISABLE_AT_ZOOM);
+    }
+
     const clusterGroup = L.markerClusterGroup({
       chunkedLoading: true,
       spiderfyOnMaxZoom: true,
       showCoverageOnHover: false,
-      zoomToBoundsOnClick: true,
+      // Issue #1762 — false: Leaflet's own zoomToBounds() bypasses this
+      // app's CameraIntent/MapController camera authority and was landing
+      // on the WRONG bounds on cluster tap (live-reproduced defect). With
+      // this false, leaflet.markercluster's internal `_zoomOrSpiderfy`
+      // becomes a safe no-op except the genuine "already bottomed-out at
+      // max zoom" spiderfy case (verified against the installed
+      // leaflet.markercluster@1.5.3 source — see the approved plan's
+      // revision_1_responses.spiderfy_version_check) — spiderfyOnMaxZoom
+      // stays true and coexists cleanly with the clusterclick/clusterkeypress
+      // handler added below, which is now the SOLE camera mover for a
+      // splittable cluster tap.
+      zoomToBoundsOnClick: false,
       maxClusterRadius: CLUSTER_MAX_RADIUS_PX,
-      disableClusteringAtZoom: CLUSTER_DISABLE_AT_ZOOM,
+      disableClusteringAtZoom: effectiveDisableAtZoom,
+      // Issue #1762 fix cycle 3 — live-reproduced regression: for a cluster
+      // whose members share (near-)identical coordinates (verified via a
+      // temporary debug probe against the real repro — sw/ne bounds were
+      // EXACTLY coincident), `clusterCanSplit` above correctly declines to
+      // move the camera (there is no zoom level that would visually separate
+      // coincident points) — but leaflet.markercluster's OWN
+      // `_zoomOrSpiderfy` listener (bound unconditionally whenever
+      // `spiderfyOnMaxZoom` is true — see the `zoomToBoundsOnClick` comment
+      // below) independently fires `cluster.spiderfy()` for exactly this
+      // "bottomed-out, never splits below the group's max clustering zoom"
+      // case. Leaflet's default `spiderfyDistanceMultiplier` (1) sizes the
+      // circle-fan radius for its own small (~25-40px) pin icons
+      // (`_generatePointsCircle`: legLength = max(circumference/2π, 35),
+      // circumference = multiplier * 25 * (2 + count) — multiplier 1 floors
+      // to a 35px radius for any count ≤ ~7). Our custom price-pill markers
+      // (createMarkerIcon) are ~90px wide, so a 35px-radius fan puts adjacent
+      // pills on top of each other — the exact "opens into stacked/
+      // overlapping pins, not a readable fan" defect. 3.5 raises the radius
+      // to ~97px for a 5-member circle (chord between adjacent pills ≈114px,
+      // clearing the ~90px pill width) and scales the same multiplier into
+      // `_generatePointsSpiral`'s separation for denser (≥9-member) clusters,
+      // without changing the zoom/fit decision above or leaflet.markercluster's
+      // own bottomed-out-cluster gating.
+      spiderfyDistanceMultiplier: 3.5,
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
         let size: 'small' | 'medium' | 'large' = 'small';
@@ -1843,6 +1962,97 @@ function MarkerClusterLayer({
       clusterGroup.addLayer(marker);
     });
 
+    // Issue #1762 — the SOLE cluster-tap camera mover, replacing Leaflet's
+    // disabled zoomToBoundsOnClick above. Bound on 'clusterclick
+    // clusterkeypress' — the SAME two event names leaflet.markercluster's
+    // own internal `_bindEvents`/`_zoomOrSpiderfy` listens on (verified
+    // against the installed leaflet.markercluster@1.5.3 source) — so this
+    // handler runs alongside Leaflet's own (now-inert-for-zoom) listener
+    // rather than replacing it. `@types/leaflet.markercluster` has no typed
+    // overload for these plugin-added event names (only leaflet's own
+    // built-in event map is typed), so the event object needs an
+    // unavoidable cast to read `.layer` (the clicked MarkerCluster) and
+    // `.originalEvent` (the underlying DOM event, present for a real click).
+    const handleClusterActivate = (e: L.LeafletEvent) => {
+      const evt = e as unknown as {
+        type: string;
+        layer?: L.MarkerCluster;
+        originalEvent?: KeyboardEvent;
+      };
+      // Mirrors leaflet.markercluster's own _zoomOrSpiderfy gate: a
+      // 'clusterkeypress' only activates on Enter (keyCode 13). Not
+      // reachable via the existing keydown bridge below today (that bridge
+      // synthesizes a native .click(), which surfaces as 'clusterclick' —
+      // this gate exists for parity with Leaflet's own contract in case
+      // something else ever dispatches a real 'clusterkeypress').
+      if (evt.type === 'clusterkeypress' && evt.originalEvent && evt.originalEvent.keyCode !== 13) {
+        return;
+      }
+      const cluster = evt.layer;
+      if (!cluster) return;
+
+      const bounds = cluster.getBounds();
+      const sw = bounds.getSouthWest();
+      const ne = bounds.getNorthEast();
+      const currentZoom = map.getZoom();
+      const cappedTargetZoom = Math.min(CLUSTER_DISABLE_AT_ZOOM, map.getBoundsZoom(bounds, false));
+      const hasSpread = hasSpatialSpread([sw.lat, sw.lng], [ne.lat, ne.lng]);
+
+      if (!clusterCanSplit(currentZoom, cappedTargetZoom, hasSpread)) {
+        // Not splittable — publish nothing; leaflet.markercluster's own
+        // spiderfyOnMaxZoom (still enabled) handles the bottomed-out-cluster
+        // case, and the camera never moves for a non-splittable click.
+        return;
+      }
+
+      const center = bounds.getCenter();
+      onMarkerClusterCameraIntent?.(
+        [[sw.lat, sw.lng], [ne.lat, ne.lng]],
+        [center.lat, center.lng],
+      );
+
+      // Issue #1762 — resolveMarkerRevealMode wiring: once this fit settles,
+      // decide whether the cluster's own members should reveal as
+      // individual pins or stay a clustered overview, based on density (not
+      // purely the zoom this fit lands at) — see MARKER_REVEAL_HOLD_ZOOM's
+      // doc comment above for how that decision is applied.
+      const markerCount = cluster.getChildCount();
+      // Track the pending one-shot listener so effect teardown can cancel
+      // it explicitly. Without this, a stale closure (capturing this
+      // cluster's sw/ne/markerCount) stays armed on the persistent `map`
+      // instance and fires on whatever unrelated moveend happens next if
+      // this effect re-runs (e.g. hoveredListingId changing) before the
+      // fit-to-members animation settles.
+      //
+      // A second cluster tap can also arm a new listener before the first
+      // one's moveend has fired, with no effect re-run in between (the ref
+      // slot alone can't track more than one). Explicitly cancel any
+      // still-pending listener first so at most one from this effect is
+      // ever live on `map` — otherwise both fire on the next moveend, the
+      // first with stale cluster geometry, and its self-clearing first line
+      // can clobber the ref out from under the still-armed second handler.
+      if (pendingMoveendHandlerRef.current) {
+        map.off('moveend', pendingMoveendHandlerRef.current);
+        pendingMoveendHandlerRef.current = null;
+      }
+      pendingMoveendHandlerRef.current = () => {
+        pendingMoveendHandlerRef.current = null;
+        const mapContainer = map.getContainer();
+        const mode = resolveMarkerRevealMode(
+          map.getZoom(),
+          markerCount,
+          mapContainer.clientWidth,
+          mapContainer.clientHeight,
+          [[sw.lat, sw.lng], [ne.lat, ne.lng]],
+        );
+        setMarkerRevealDisableAtZoom(
+          mode === 'clusteredOverview' ? MARKER_REVEAL_HOLD_ZOOM : CLUSTER_DISABLE_AT_ZOOM,
+        );
+      };
+      map.once('moveend', pendingMoveendHandlerRef.current);
+    };
+    clusterGroup.on('clusterclick clusterkeypress', handleClusterActivate);
+
     map.addLayer(clusterGroup);
 
     // Listing-cluster keyboard bridge. Leaflet.markercluster regenerates
@@ -1851,9 +2061,10 @@ function MarkerClusterLayer({
     // re-wiring against an untyped plugin event. Delegate once on the map
     // container instead: Enter/Space on a focused .custom-marker-cluster
     // bubbles up here and is forwarded to a native .click() on the element,
-    // which triggers Leaflet.markercluster's own click handling
-    // (zoomToBoundsOnClick) — this makes the existing click path keyboard-
-    // reachable without touching clustering/camera behaviour at all.
+    // which surfaces as a 'clusterclick' event — reaching both Leaflet's own
+    // (now-inert-for-zoom) internal listener and handleClusterActivate above
+    // — this makes the cluster-tap fit-to-members handler keyboard-reachable
+    // without any separate keyboard-specific camera logic.
     const container = map.getContainer();
     const handleClusterKeydown = (e: KeyboardEvent) => {
       if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -1867,10 +2078,27 @@ function MarkerClusterLayer({
     container.addEventListener('keydown', handleClusterKeydown);
 
     return () => {
+      clusterGroup.off('clusterclick clusterkeypress', handleClusterActivate);
       map.removeLayer(clusterGroup);
       container.removeEventListener('keydown', handleClusterKeydown);
+      // Cancel any still-pending cluster-tap moveend listener so a
+      // mid-animation teardown (e.g. hover changing hoveredListingId)
+      // can't leave a stale closure armed on the persistent map instance.
+      if (pendingMoveendHandlerRef.current) {
+        map.off('moveend', pendingMoveendHandlerRef.current);
+        pendingMoveendHandlerRef.current = null;
+      }
     };
-  }, [listings, map, onSelectListing, selectedListingId, hoveredListingId, onMarkerClickWithPosition]);
+  }, [
+    listings,
+    map,
+    onSelectListing,
+    selectedListingId,
+    hoveredListingId,
+    onMarkerClickWithPosition,
+    onMarkerClusterCameraIntent,
+    markerRevealDisableAtZoom,
+  ]);
 
   return null;
 }
@@ -2176,6 +2404,7 @@ export function PropertyMap({
   schoolZoneLabels,
   onSelectZone,
   onMarkerClickWithPosition,
+  onMarkerClusterCameraIntent,
 }: PropertyMapProps) {
   // Issue #1410 — when agriGroupListings is provided (non-null), use the adapted items
   // for AgriMarkerClusterLayer and AgriPolygonLayer instead of the raw `listings` prop.
@@ -2364,6 +2593,7 @@ export function PropertyMap({
               selectedListingId={selectedListingId}
               hoveredListingId={hoveredListingId}
               onMarkerClickWithPosition={onMarkerClickWithPosition}
+              onMarkerClusterCameraIntent={onMarkerClusterCameraIntent}
             />
           )
         )}

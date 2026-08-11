@@ -49,7 +49,7 @@ vi.mock('leaflet', () => ({
     Icon: { Default: { prototype: {}, mergeOptions: vi.fn() } },
     divIcon: vi.fn(() => ({})),
     marker: vi.fn(() => ({ on: vi.fn().mockReturnThis(), addTo: vi.fn().mockReturnThis(), remove: vi.fn() })),
-    markerClusterGroup: vi.fn(() => ({ addLayer: vi.fn() })),
+    markerClusterGroup: vi.fn(() => ({ addLayer: vi.fn(), on: vi.fn().mockReturnThis(), off: vi.fn().mockReturnThis() })),
     point: vi.fn((x: number, y: number) => ({ x, y })),
     latLngBounds: vi.fn((bounds: [[number, number], [number, number]]) => ({
       getCenter: () => ({ lat: (bounds[0][0] + bounds[1][0]) / 2, lng: (bounds[0][1] + bounds[1][1]) / 2 }),

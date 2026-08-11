@@ -25,6 +25,8 @@ vi.mock('leaflet', () => {
       })),
       markerClusterGroup: vi.fn(() => ({
         addLayer: vi.fn(),
+        on: vi.fn().mockReturnThis(),
+        off: vi.fn().mockReturnThis(),
       })),
       point: vi.fn((x: number, y: number) => ({ x, y })),
     },

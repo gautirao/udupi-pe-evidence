@@ -988,6 +988,9 @@ export default function MapDiscovery() {
     markersTruncated, markersReturnedElements, markersTotalFilteredElements,
     agriAreasData, isLoadingAgriAreas,
     cameraIntent, publishCameraIntent, publishClusterCameraIntent,
+    // Issue #1762 — splittable LISTING-cluster tap camera producer (distinct
+    // from publishClusterCameraIntent, which is area clusters only).
+    publishMarkerClusterCameraIntent,
     // Issue #2088 (commit 6) — the Recenter affordance's camera producer.
     publishRecenterCameraIntent,
     // Issue #1956 PR 1 (FE-3, item 2) — threaded straight into
@@ -2522,6 +2525,9 @@ export default function MapDiscovery() {
           areaSearchMatchKeys={areaSearchMatchKeys}
           hoveredAreaKeyForMap={hoveredAreaKeyForMap}
           publishClusterCameraIntent={publishClusterCameraIntent}
+          // Issue #1762 — listing-cluster tap fit-to-members (distinct from
+          // publishClusterCameraIntent above, which is area clusters only).
+          publishMarkerClusterCameraIntent={publishMarkerClusterCameraIntent}
           // REQUIRED CHANGE 6 (review fix, AC4.4/AC4.5) — the canonical
           // Areas-journey visual-cluster tap reuses the SAME
           // publishClusterCameraIntent producer as the legacy dense-area

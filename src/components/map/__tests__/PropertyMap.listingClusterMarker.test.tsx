@@ -48,6 +48,10 @@ vi.mock('leaflet', () => {
       })),
       markerClusterGroup: vi.fn(() => ({
         addLayer: mockClusterGroupAddLayer,
+        // Issue #1762 — MarkerClusterLayer now registers/unregisters a
+        // clusterclick/clusterkeypress listener on the group itself.
+        on: vi.fn().mockReturnThis(),
+        off: vi.fn().mockReturnThis(),
       })),
       point: vi.fn((x: number, y: number) => ({ x, y })),
     },
@@ -134,7 +138,11 @@ async function renderAndCaptureIconCreateFn() {
     if (opts?.iconCreateFunction) {
       capturedIconCreateFn = opts.iconCreateFunction as typeof capturedIconCreateFn;
     }
-    return { addLayer: mockClusterGroupAddLayer } as unknown as ReturnType<typeof L.markerClusterGroup>;
+    return {
+      addLayer: mockClusterGroupAddLayer,
+      on: vi.fn().mockReturnThis(),
+      off: vi.fn().mockReturnThis(),
+    } as unknown as ReturnType<typeof L.markerClusterGroup>;
   });
 
   render(<PropertyMap listings={[houseListing] as unknown as PropertyListingWithImages[]} />);

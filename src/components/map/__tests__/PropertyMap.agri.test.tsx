@@ -37,6 +37,10 @@ vi.mock('leaflet', () => {
         addLayer: mockClusterGroupAddLayer,
         // iconCreateFunction is stored by the cluster group; we invoke it manually below
         // where we need to inspect the generated HTML.
+        // Issue #1762 — MarkerClusterLayer (residential) now registers/
+        // unregisters a clusterclick/clusterkeypress listener on the group.
+        on: vi.fn().mockReturnThis(),
+        off: vi.fn().mockReturnThis(),
       })),
       point: vi.fn((x: number, y: number) => ({ x, y })),
     },
@@ -161,7 +165,11 @@ describe('PropertyMap — AgriMarkerClusterLayer (Issue #1372)', () => {
       if (opts?.iconCreateFunction) {
         capturedIconCreateFn = opts.iconCreateFunction as typeof capturedIconCreateFn;
       }
-      return { addLayer: mockClusterGroupAddLayer } as unknown as ReturnType<typeof L.markerClusterGroup>;
+      return {
+        addLayer: mockClusterGroupAddLayer,
+        on: vi.fn().mockReturnThis(),
+        off: vi.fn().mockReturnThis(),
+      } as unknown as ReturnType<typeof L.markerClusterGroup>;
     });
 
     render(<PropertyMap listings={[agriListing]} isAgriMode={true} />);
@@ -189,7 +197,11 @@ describe('PropertyMap — AgriMarkerClusterLayer (Issue #1372)', () => {
       if (opts?.iconCreateFunction) {
         capturedIconCreateFn = opts.iconCreateFunction as typeof capturedIconCreateFn;
       }
-      return { addLayer: mockClusterGroupAddLayer } as unknown as ReturnType<typeof L.markerClusterGroup>;
+      return {
+        addLayer: mockClusterGroupAddLayer,
+        on: vi.fn().mockReturnThis(),
+        off: vi.fn().mockReturnThis(),
+      } as unknown as ReturnType<typeof L.markerClusterGroup>;
     });
 
     render(<PropertyMap listings={[houseListing]} isAgriMode={false} />);
@@ -212,7 +224,11 @@ describe('PropertyMap — AgriMarkerClusterLayer (Issue #1372)', () => {
       if (opts?.iconCreateFunction) {
         capturedIconCreateFn = opts.iconCreateFunction as typeof capturedIconCreateFn;
       }
-      return { addLayer: mockClusterGroupAddLayer } as unknown as ReturnType<typeof L.markerClusterGroup>;
+      return {
+        addLayer: mockClusterGroupAddLayer,
+        on: vi.fn().mockReturnThis(),
+        off: vi.fn().mockReturnThis(),
+      } as unknown as ReturnType<typeof L.markerClusterGroup>;
     });
 
     // No isAgriMode prop → defaults to false

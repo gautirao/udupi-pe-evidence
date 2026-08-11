@@ -91,6 +91,17 @@ export interface DiscoverMapCanvasProps {
   areaSearchMatchKeys: string[] | undefined;
   hoveredAreaKeyForMap: string | null;
   publishClusterCameraIntent: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
+  /**
+   * Issue #1762 — sibling producer to `publishClusterCameraIntent` for a
+   * splittable LISTING-marker cluster tap (the leaflet.markercluster
+   * residential layer, NOT an area cluster). Threaded straight to
+   * `PropertyMap`'s `onMarkerClusterCameraIntent` prop, which forwards it to
+   * `MarkerClusterLayer`'s clusterclick/clusterkeypress handler. Optional
+   * (unlike `publishClusterCameraIntent`) purely so existing test fixtures
+   * that predate this prop (outside this PR's scope_lock) keep compiling
+   * unchanged; the real MapDiscovery.tsx call site always supplies it.
+   */
+  publishMarkerClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
   handleAreaClusterClick: (cluster: AreaMarkerClusterInfo) => void;
   handleAreaMarkersComputed: (shownCount: number, totalCount: number) => void;
   /**
@@ -296,6 +307,7 @@ export function DiscoverMapCanvas({
   areaSearchMatchKeys,
   hoveredAreaKeyForMap,
   publishClusterCameraIntent,
+  publishMarkerClusterCameraIntent,
   handleAreaClusterClick,
   handleAreaMarkersComputed,
   areasNavigationJourney,
@@ -561,6 +573,9 @@ export function DiscoverMapCanvas({
           selectedListingId={nav.selectedListing}
           hoveredListingId={hoveredListingId}
           onMarkerClickWithPosition={handleMarkerClickWithPosition}
+          // Issue #1762 — listing-cluster tap fit-to-members. See this
+          // component's `publishMarkerClusterCameraIntent` prop doc above.
+          onMarkerClusterCameraIntent={publishMarkerClusterCameraIntent}
         />
       )}
 
