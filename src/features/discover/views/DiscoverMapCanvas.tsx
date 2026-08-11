@@ -164,6 +164,17 @@ export interface DiscoverMapCanvasProps {
    * unchanged.
    */
   bottomOcclusionPx?: number;
+  /**
+   * Issue #2129 (code-reviewer cycle 1, Finding 1) — the REACTIVE
+   * counterpart to `bottomOcclusionPx` above. 0 unless the compact preview
+   * sheet is ACTUALLY selected/rendered right now (MapDiscovery.tsx:
+   * `mobileMapOpen && selectedListingPreview`, the same condition gating
+   * the sheet's own render) — see PropertyMap.tsx's prop of the same name
+   * for why a persistent viewport clip must use this, not
+   * bottomOcclusionPx. Threaded straight through to PropertyMap. Optional/
+   * defaults to 0 so every existing test fixture keeps compiling unchanged.
+   */
+  previewOcclusionPx?: number;
   journeyView: DiscoverJourneyTransitionsView;
   setMapReady: Dispatch<SetStateAction<boolean>>;
   schools: SchoolResult[];
@@ -299,6 +310,7 @@ export function DiscoverMapCanvas({
   handleBoundsChange,
   panToArea,
   bottomOcclusionPx,
+  previewOcclusionPx,
   journeyView,
   setMapReady,
   schools,
@@ -493,6 +505,7 @@ export function DiscoverMapCanvas({
           onBoundsChange={handleBoundsChange}
           panToArea={panToArea}
           bottomOcclusionPx={bottomOcclusionPx}
+          previewOcclusionPx={previewOcclusionPx}
           resetMapTick={journeyView.composedResetMapTick}
           onReady={() => setMapReady(true)}
           journey={nav.journey}

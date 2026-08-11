@@ -543,6 +543,22 @@ interface PropertyMapProps {
    * for why. Defaults to 0 (every existing caller omits it, unaffected).
    */
   bottomOcclusionPx?: number;
+  /**
+   * Issue #2129 (code-reviewer cycle 1, Finding 1) — the REACTIVE counterpart
+   * to `bottomOcclusionPx` above. `bottomOcclusionPx` is a proactive
+   * journey/capability signal (true for the whole mobile Map-mode browsing
+   * session in an eligible journey, independent of whether the compact
+   * preview sheet is actually mounted) — correct as AreaPanner's one-time
+   * fit-time padding input, but WRONG as the input to a PERSISTENT viewport
+   * clip: using it there would visibly shrink the map for the entire
+   * session before any marker is ever tapped. `previewOcclusionPx` is 0
+   * unless `MobileListingPreviewSheet` is actually selected/rendered right
+   * now (MapDiscovery.tsx: `mobileMapOpen && selectedListingPreview`, the
+   * SAME condition that gates the sheet's own render) — this is the value
+   * the persistent Leaflet-container-clipping wrapper below must use.
+   * Defaults to 0 (every existing caller omits it, unaffected).
+   */
+  previewOcclusionPx?: number;
   /** Incrementing tick that triggers a zoom reset to cityCenter/cityZoom. Incremented by handleAreaBack. */
   resetMapTick?: number;
   /** Called once when the Leaflet map instance has finished initialising. Use to gate data-readiness checks. */
@@ -2090,6 +2106,7 @@ export function PropertyMap({
   onBoundsChange,
   panToArea,
   bottomOcclusionPx = 0,
+  previewOcclusionPx = 0,
   resetMapTick,
   onReady,
   journey,
@@ -2169,6 +2186,42 @@ export function PropertyMap({
 
   return (
     <div className="w-full h-full relative">
+      {/* Issue #2129 — mobile lower-map marker occlusion (follow-up to
+          #1823/PR #2128). AreaPanner's one-time fitBounds padding
+          (bottomOcclusionPx, above) only reserves the bottom band at the
+          MOMENT of a canonical-node fit; a plain user pan/drag AFTER that
+          fit is not re-guarded by anything, so a marker can drift into the
+          band the compact preview sheet (MobileListingPreviewSheet,
+          z-[1100], bottom-anchored in this same stacking context) will
+          later cover. Rather than adding a second camera writer (would
+          violate the #1823 single-writer invariant) or reactively
+          re-fitting on every pan, this wrapper shrinks the LEAFLET
+          CONTAINER's own clipped viewport — but on `previewOcclusionPx`,
+          NOT `bottomOcclusionPx` (code-reviewer cycle 1, Finding 1):
+          bottomOcclusionPx is the proactive journey/capability signal
+          (true for the WHOLE mobile Map-mode browsing session in an
+          eligible journey, before any marker is ever tapped) and is
+          correct as AreaPanner's one-time fit-time padding input, but
+          using it here would visibly shrink the map for the entire
+          session even when the sheet is never open. previewOcclusionPx
+          is 0 unless the sheet is ACTUALLY selected/rendered right now
+          (see this prop's own doc comment above). Leaflet's container has
+          `overflow: hidden`, so once MapContainerResizeSync's existing
+          ResizeObserver (Issue #2049) observes this height change and
+          calls invalidateSize(), NO marker can ever be positioned behind
+          the sheet while it is actually open, for ANY subsequent
+          pan/zoom/drag — the guarantee holds continuously, not just at
+          fit time — while ordinary browsing before any tap keeps the full
+          map height. When previewOcclusionPx is 0 (sheet not open, or
+          desktop) this wrapper is a no-op (100% height, byte-identical to
+          the prior unwrapped layout). data-testid/data-bottom-occlusion-px
+          exposed for the E2E hit-test QA will author separately. */}
+      <div
+        className="w-full"
+        style={{ height: previewOcclusionPx > 0 ? `calc(100% - ${previewOcclusionPx}px)` : '100%' }}
+        data-testid="discover-map-usable-viewport"
+        data-bottom-occlusion-px={previewOcclusionPx}
+      >
       <MapContainer
         key={mapInstanceKey}
         center={initialCenter ?? cityCenter ?? UDUPI_CENTER}
@@ -2361,6 +2414,7 @@ export function PropertyMap({
           </>
         )}
       </MapContainer>
+      </div>
     </div>
   );
 }
