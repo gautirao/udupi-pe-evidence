@@ -1828,7 +1828,76 @@ function MarkerClusterLayer({
   // the real density-based decision for the new listings/current camera.
   const prevListingsRef = useRef<PropertyListingWithImages[] | null>(null);
 
-  useEffect(() => {
+  // Issue #1762 fix cycle 7 — "don't collapse an open spiderfy fan on
+  // repeated clicks within it" (product requirement, verbatim in the issue:
+  // collapse ONLY on a different marker/cluster click or a bare-map click,
+  // both of which Leaflet's own spiderfier already handles natively).
+  //
+  // Root cause: `onSelectListing` (fired by an individual marker's own
+  // click handler below) writes a new `selectedListingId`, which — being a
+  // dependency of the single big effect that builds this whole layer — used
+  // to re-run that ENTIRE effect. Its cleanup unconditionally calls
+  // `map.removeLayer(clusterGroup)`, destroying the live cluster group
+  // (and with it, Leaflet's own `_spiderfied` state) even though nothing
+  // about Leaflet's spiderfy/unspiderfy contract was ever invoked — this is
+  // an accidental side effect of the layer being torn down and rebuilt, not
+  // real unspiderfy behavior.
+  //
+  // Fix: split the effect in two. `buildLayer` (below) does the full
+  // teardown-then-construct work exactly as the original single effect did,
+  // and is the ONLY thing allowed to call `map.removeLayer`/reconstruct
+  // `L.markerClusterGroup`. The first effect calls it for real structural
+  // changes (listings/map/config). A second, separate effect reacts to
+  // `selectedListingId`/`hoveredListingId` alone: when the cluster group is
+  // currently spiderfied, it patches JUST the affected marker(s)' icons in
+  // place via `markersByListingIdRef` — no removeLayer, no rebuild, fan
+  // stays open. When NOT spiderfied, it falls back to calling `buildLayer()`
+  // directly, preserving the exact pre-fix full-rebuild behavior for that
+  // case (e.g. selecting a listing from a list item, not a spiderfied pin).
+  const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
+  const markersByListingIdRef = useRef<
+    Map<string, { marker: L.Marker; listing: PropertyListingWithImages }>
+  >(new Map());
+  const teardownLayerRef = useRef<(() => void) | null>(null);
+  const prevSelectedListingIdRef = useRef<string | null | undefined>(selectedListingId);
+  const prevHoveredListingIdRef = useRef<string | null | undefined>(hoveredListingId);
+  const didMountHighlightEffectRef = useRef(false);
+
+  // Code-review follow-up (APPROVE WITH COMMENTS) — same-commit double-rebuild
+  // guard. If a structural dep (e.g. `listings`) and `selectedListingId`/
+  // `hoveredListingId` both change in the SAME React commit (e.g. a listings
+  // refetch resolving in the same tick as a URL-driven selection change),
+  // both effects below fire in that commit. Without this guard, the
+  // structural effect's `buildLayer()` call runs first and produces a fresh,
+  // non-spiderfied cluster group; the selection/hover effect then also sees
+  // "not spiderfied" and calls `buildLayer()` again — tearing down and
+  // rebuilding the layer it just built (wasted `L.markerClusterGroup`
+  // construction + a visible marker-icon flicker).
+  //
+  // `commitIdRef` is bumped once per COMMIT (via the commit-phase effect
+  // below, not the render body — refs must not be written during render;
+  // see that effect for why), so it is shared by every effect that fires
+  // off that same commit. `buildLayer()` stamps `lastBuildCommitIdRef` with
+  // the current `commitIdRef` value every time it actually runs. The
+  // selection/hover effect below checks: if a build already happened in
+  // THIS commit, that build's closure already captured the CURRENT
+  // selectedListingId/hoveredListingId (buildLayer reads them directly from
+  // the render closure, not from stale refs) — so there is nothing left for
+  // the selection/hover effect to do, and it skips its own patch/rebuild
+  // work entirely rather than duplicating it.
+  const commitIdRef = useRef(0);
+  const lastBuildCommitIdRef = useRef(0);
+
+  const buildLayer = () => {
+    lastBuildCommitIdRef.current = commitIdRef.current;
+    // Tear down whatever layer currently exists (if any) before
+    // constructing the new one — this function owns the full
+    // teardown-then-rebuild lifecycle, whether invoked from the structural
+    // effect below or from the selection/hover effect's non-spiderfied
+    // fallback path.
+    teardownLayerRef.current?.();
+    teardownLayerRef.current = null;
+
     const listingsChanged = prevListingsRef.current !== null && prevListingsRef.current !== listings;
     prevListingsRef.current = listings;
     const effectiveDisableAtZoom = listingsChanged ? CLUSTER_DISABLE_AT_ZOOM : markerRevealDisableAtZoom;
@@ -1960,6 +2029,11 @@ function MarkerClusterLayer({
 
     const validListings = listings.filter((l) => l.latitude && l.longitude);
 
+    // Issue #1762 fix cycle 7 — fresh per-build lookup so the
+    // selection/hover effect can find and patch an individual marker's icon
+    // in place without touching the cluster group itself.
+    const nextMarkersById = new Map<string, { marker: L.Marker; listing: PropertyListingWithImages }>();
+
     validListings.forEach((listing) => {
       // Issue #1547 — copper icon when id matches the URL-selected listing OR the
       // ephemeral hover/focus id. Both conditions use the same copper visual;
@@ -1990,6 +2064,7 @@ function MarkerClusterLayer({
         }
       });
 
+      nextMarkersById.set(listing.id, { marker, listing });
       clusterGroup.addLayer(marker);
     });
 
@@ -2174,22 +2249,113 @@ function MarkerClusterLayer({
     map.on('moveend', recomputeMarkerRevealMode);
     recomputeMarkerRevealMode();
 
-    return () => {
+    // Issue #1762 fix cycle 7 — publish the newly-built layer/marker lookup
+    // for the selection/hover effect below, and record the teardown this
+    // build owns so a future `buildLayer()` call (or unmount) can undo
+    // exactly this construction.
+    clusterGroupRef.current = clusterGroup;
+    markersByListingIdRef.current = nextMarkersById;
+    teardownLayerRef.current = () => {
       clusterGroup.off('clusterclick clusterkeypress', handleClusterActivate);
       map.removeLayer(clusterGroup);
       container.removeEventListener('keydown', handleClusterKeydown);
       map.off('moveend', recomputeMarkerRevealMode);
+      clusterGroupRef.current = null;
+      markersByListingIdRef.current = new Map();
     };
+  };
+
+  // Bumps `commitIdRef` once per actual COMMIT (an effect with no
+  // dependency array runs after every commit, exactly once — unlike a
+  // render-body write, which is not guaranteed 1:1 with commits under
+  // concurrent-rendering features). Declared before the structural and
+  // selection/hover effects below so it always runs first within the same
+  // commit (React runs a single component's effects in declaration order),
+  // guaranteeing both of those effects observe the same, already-current
+  // `commitIdRef.current` value for that commit.
+  useEffect(() => {
+    commitIdRef.current += 1;
+  });
+
+  // Structural effect — full teardown/rebuild whenever the layer's real
+  // inputs change (listings, map instance, config-affecting callbacks, or
+  // the reveal-mode zoom threshold). This is the ONLY effect that runs
+  // `buildLayer()` on mount; `selectedListingId`/`hoveredListingId` are
+  // deliberately NOT in this dependency array — see the selection/hover
+  // effect below for why and how those are handled instead.
+  useEffect(() => {
+    buildLayer();
+    return () => {
+      teardownLayerRef.current?.();
+      teardownLayerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     listings,
     map,
     onSelectListing,
-    selectedListingId,
-    hoveredListingId,
     onMarkerClickWithPosition,
     onMarkerClusterCameraIntent,
     markerRevealDisableAtZoom,
   ]);
+
+  // Issue #1762 fix cycle 7 — selection/hover-only effect. Skips the first
+  // (mount) run since the structural effect above already built the layer
+  // with the correct initial highlight state. On every subsequent
+  // selectedListingId/hoveredListingId change: if the cluster group is
+  // currently spiderfied, patch just the affected marker(s)' icons in place
+  // (fan stays open — no removeLayer, no rebuild). Otherwise, fall back to
+  // `buildLayer()` directly, which reproduces the pre-fix full-rebuild
+  // behavior exactly for the non-spiderfied case.
+  useEffect(() => {
+    if (!didMountHighlightEffectRef.current) {
+      didMountHighlightEffectRef.current = true;
+      prevSelectedListingIdRef.current = selectedListingId;
+      prevHoveredListingIdRef.current = hoveredListingId;
+      return;
+    }
+
+    // Same-commit double-rebuild guard — see commitIdRef/lastBuildCommitIdRef
+    // comment above. The structural effect already called `buildLayer()`
+    // during this exact commit, and that build already reflects the current
+    // selectedListingId/hoveredListingId, so skip redundant work.
+    if (lastBuildCommitIdRef.current === commitIdRef.current) {
+      prevSelectedListingIdRef.current = selectedListingId;
+      prevHoveredListingIdRef.current = hoveredListingId;
+      return;
+    }
+
+    const clusterGroup = clusterGroupRef.current;
+    // Same untyped-plugin-internal cast pattern as recomputeMarkerRevealMode
+    // above — `_spiderfied` has no surface in @types/leaflet.markercluster.
+    const clusterGroupInternal = clusterGroup as unknown as { _spiderfied?: unknown } | null;
+    const isSpiderfied = Boolean(clusterGroup && clusterGroupInternal?._spiderfied);
+
+    if (isSpiderfied) {
+      const idsToRefresh = new Set<string>();
+      if (prevSelectedListingIdRef.current) idsToRefresh.add(prevSelectedListingIdRef.current);
+      if (prevHoveredListingIdRef.current) idsToRefresh.add(prevHoveredListingIdRef.current);
+      if (selectedListingId) idsToRefresh.add(selectedListingId);
+      if (hoveredListingId) idsToRefresh.add(hoveredListingId);
+
+      idsToRefresh.forEach((id) => {
+        const entry = markersByListingIdRef.current.get(id);
+        if (!entry) return;
+        const { marker, listing } = entry;
+        const isHighlighted = id === selectedListingId || id === hoveredListingId;
+        const icon = isHighlighted
+          ? createSelectedMarkerIcon(listing.property_type, listing.price, listing.priceBand, listing.monthly_rent, listing.monthlyRentBand)
+          : createMarkerIcon(listing.property_type, listing.price, listing.priceBand, listing.monthly_rent, listing.monthlyRentBand);
+        marker.setIcon(icon);
+      });
+    } else {
+      buildLayer();
+    }
+
+    prevSelectedListingIdRef.current = selectedListingId;
+    prevHoveredListingIdRef.current = hoveredListingId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedListingId, hoveredListingId]);
 
   return null;
 }

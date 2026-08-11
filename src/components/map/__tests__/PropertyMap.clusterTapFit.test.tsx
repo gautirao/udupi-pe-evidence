@@ -94,7 +94,15 @@ vi.mock('leaflet', () => ({
   default: {
     Icon: { Default: { prototype: {}, mergeOptions: vi.fn() } },
     divIcon: vi.fn(() => ({})),
-    marker: vi.fn(() => ({ on: vi.fn().mockReturnThis(), addTo: vi.fn().mockReturnThis(), remove: vi.fn() })),
+    marker: vi.fn(() => ({
+      on: vi.fn().mockReturnThis(),
+      addTo: vi.fn().mockReturnThis(),
+      remove: vi.fn(),
+      // Issue #1762 fix cycle 7 — the in-place spiderfy-preserving patch path
+      // calls marker.setIcon(...) instead of tearing down/rebuilding the
+      // whole cluster group; tests assert on this mock directly.
+      setIcon: vi.fn(),
+    })),
     markerClusterGroup: vi.fn(
       (opts: {
         disableClusteringAtZoom?: number;
@@ -154,10 +162,11 @@ vi.mock('@/components/ui/card', () => ({
 }));
 
 // ─── Imports after mocks ───────────────────────────────────────
-import { PropertyMap } from '@/components/map/PropertyMap';
+import { PropertyMap, createSelectedMarkerIcon } from '@/components/map/PropertyMap';
 import type { CameraIntent } from '@/hooks/useDiscoverMapData';
 import { computeCameraPadding } from '@/hooks/useDiscoverMapData';
 import { CLUSTER_DISABLE_AT_ZOOM } from '@/shared/map/zoomPolicy';
+import L from 'leaflet';
 
 const CITY_CENTER: [number, number] = [13.3409, 74.7421];
 
@@ -730,5 +739,224 @@ describe('Issue #1762 fix-cycle 5 — spiderfyDistanceMultiplier viewport clamp 
 
     Object.defineProperty(mockClusterContainer, 'clientWidth', { value: 800, configurable: true });
     Object.defineProperty(mockClusterContainer, 'clientHeight', { value: 600, configurable: true });
+  });
+});
+
+describe('Issue #1762 fix cycle 7 — spiderfy fan stays open across repeated clicks', () => {
+  // Product requirement (verbatim): "I don't want the spider web to collapse
+  // on clicking an expanded marker. I want the user to be able to
+  // continuously view all the expanded markers by clicking on each."
+  //
+  // Root cause: `onSelectListing` writing a new `selectedListingId` used to
+  // re-trigger MarkerClusterLayer's single big effect (selectedListingId/
+  // hoveredListingId were in its dependency array), whose cleanup
+  // unconditionally called `map.removeLayer(clusterGroup)` — destroying the
+  // live cluster group (and Leaflet's own `_spiderfied` state) as an
+  // accidental side effect, never via Leaflet's real unspiderfy contract.
+  const listingA = { ...houseListing, id: 'listing-a' };
+  const listingB = { ...houseListing, id: 'listing-b' };
+  // Issue #1762 fix cycle 7 (test-authoring note) — this MUST be a single
+  // stable array reference reused across every render/rerender call within
+  // a test. `listings` is a real dependency of the structural effect; a
+  // fresh `[listingA, listingB]` array literal in each JSX call would change
+  // reference on every rerender (as any inline JSX array literal does) and
+  // spuriously re-trigger the structural rebuild this suite is asserting
+  // does NOT happen — exactly the kind of instability a memoized listings
+  // array from a real data-fetching hook would not have.
+  const twoListings = [listingA, listingB] as never;
+
+  it('does NOT call map.removeLayer or reconstruct the cluster group when clicking marker A, then marker B, in an open spiderfy fan', () => {
+    const onSelectListing = vi.fn();
+    const { rerender } = render(
+      <PropertyMap {...baseProps} listings={twoListings} onSelectListing={onSelectListing} />,
+    );
+
+    // `L.markerClusterGroup` is a module-level mock shared across every test
+    // in this file, so its call count accumulates — assert deltas from this
+    // mount, not an absolute count.
+    const buildCountAfterMount = vi.mocked(L.markerClusterGroup).mock.calls.length;
+    const instanceAfterMount = lastClusterGroupInstance;
+    expect(instanceAfterMount).toBeDefined();
+
+    // Simulate an open spiderfy fan — leaflet.markercluster's own live
+    // pointer to the currently-spiderfied cluster.
+    instanceAfterMount!._spiderfied = {};
+    mapStub.removeLayer.mockClear();
+
+    // Click marker A: the app writes the new selectedListingId to the URL,
+    // which flows back down as this prop change.
+    rerender(
+      <PropertyMap
+        {...baseProps}
+        listings={twoListings}
+        onSelectListing={onSelectListing}
+        selectedListingId="listing-a"
+      />,
+    );
+
+    expect(mapStub.removeLayer).not.toHaveBeenCalled();
+    expect(vi.mocked(L.markerClusterGroup).mock.calls.length).toBe(buildCountAfterMount);
+    expect(lastClusterGroupInstance).toBe(instanceAfterMount);
+    // The fan is still open — nothing cleared `_spiderfied`.
+    expect(instanceAfterMount!._spiderfied).toBeTruthy();
+
+    // Click marker B in the SAME fan.
+    rerender(
+      <PropertyMap
+        {...baseProps}
+        listings={twoListings}
+        onSelectListing={onSelectListing}
+        selectedListingId="listing-b"
+      />,
+    );
+
+    expect(mapStub.removeLayer).not.toHaveBeenCalled();
+    expect(vi.mocked(L.markerClusterGroup).mock.calls.length).toBe(buildCountAfterMount);
+    expect(lastClusterGroupInstance).toBe(instanceAfterMount);
+    expect(instanceAfterMount!._spiderfied).toBeTruthy();
+  });
+
+  it('patches only the affected markers\' icons in place (via setIcon) instead of rebuilding, while spiderfied', () => {
+    const onSelectListing = vi.fn();
+    const { rerender } = render(
+      <PropertyMap {...baseProps} listings={twoListings} onSelectListing={onSelectListing} />,
+    );
+
+    const markerResults = vi.mocked(L.marker).mock.results;
+    // validListings.forEach constructs markers in listing order: A then B.
+    const markerA = markerResults[markerResults.length - 2].value as { setIcon: ReturnType<typeof vi.fn> };
+    const markerB = markerResults[markerResults.length - 1].value as { setIcon: ReturnType<typeof vi.fn> };
+
+    lastClusterGroupInstance!._spiderfied = {};
+
+    rerender(
+      <PropertyMap
+        {...baseProps}
+        listings={twoListings}
+        onSelectListing={onSelectListing}
+        selectedListingId="listing-a"
+      />,
+    );
+
+    // Marker A's icon is patched to reflect the new selection; marker B is
+    // untouched (its highlight state didn't change — it was never selected).
+    expect(markerA.setIcon).toHaveBeenCalledTimes(1);
+    expect(markerB.setIcon).not.toHaveBeenCalled();
+
+    rerender(
+      <PropertyMap
+        {...baseProps}
+        listings={twoListings}
+        onSelectListing={onSelectListing}
+        selectedListingId="listing-b"
+      />,
+    );
+
+    // Selecting B: A reverts to the normal icon, B gets the selected icon —
+    // both marker icons are patched, still no cluster-group rebuild.
+    expect(markerA.setIcon).toHaveBeenCalledTimes(2);
+    expect(markerB.setIcon).toHaveBeenCalledTimes(1);
+  });
+
+  it('still performs a full teardown/rebuild when the selection changes and the cluster group is NOT spiderfied', () => {
+    const onSelectListing = vi.fn();
+    const { rerender } = render(
+      <PropertyMap {...baseProps} listings={twoListings} onSelectListing={onSelectListing} />,
+    );
+
+    const buildCountAfterMount = vi.mocked(L.markerClusterGroup).mock.calls.length;
+    // NOT spiderfied this time.
+    expect(lastClusterGroupInstance!._spiderfied).toBeFalsy();
+    mapStub.removeLayer.mockClear();
+
+    rerender(
+      <PropertyMap
+        {...baseProps}
+        listings={twoListings}
+        onSelectListing={onSelectListing}
+        selectedListingId="listing-a"
+      />,
+    );
+
+    // Pre-fix (and correctly-preserved) behavior: full teardown + rebuild.
+    expect(mapStub.removeLayer).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(L.markerClusterGroup).mock.calls.length).toBe(buildCountAfterMount + 1);
+  });
+
+  it('a real listings change still fully rebuilds the layer even while spiderfied (structural changes are never skipped)', () => {
+    const onSelectListing = vi.fn();
+    const { rerender } = render(
+      <PropertyMap {...baseProps} listings={twoListings} onSelectListing={onSelectListing} />,
+    );
+
+    const buildCountAfterMount = vi.mocked(L.markerClusterGroup).mock.calls.length;
+    lastClusterGroupInstance!._spiderfied = {};
+    mapStub.removeLayer.mockClear();
+
+    const listingC = { ...houseListing, id: 'listing-c' };
+    const threeListings = [listingA, listingB, listingC] as never;
+    rerender(
+      <PropertyMap {...baseProps} listings={threeListings} onSelectListing={onSelectListing} />,
+    );
+
+    expect(mapStub.removeLayer).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(L.markerClusterGroup).mock.calls.length).toBe(buildCountAfterMount + 1);
+  });
+
+  // Code-review follow-up (APPROVE WITH COMMENTS) — same-commit double-rebuild
+  // guard. If a structural dep (`listings`) AND `selectedListingId` both
+  // change in the SAME commit (e.g. a listings refetch resolving in the same
+  // tick as a URL-driven selection change), the structural effect's
+  // `buildLayer()` call already produces a fresh, non-spiderfied cluster
+  // group reflecting the CURRENT selection — the selection/hover effect must
+  // NOT also call `buildLayer()` again for that same commit.
+  it('collapses a same-commit structural + selection change into exactly ONE cluster-group rebuild, reflecting the new selection', () => {
+    const onSelectListing = vi.fn();
+    const { rerender } = render(
+      <PropertyMap {...baseProps} listings={twoListings} onSelectListing={onSelectListing} />,
+    );
+
+    const buildCountAfterMount = vi.mocked(L.markerClusterGroup).mock.calls.length;
+    // NOT spiderfied — this is the interleaving the reviewer flagged: without
+    // the fix, the selection/hover effect would see "not spiderfied" and
+    // redundantly call buildLayer() a second time in the same commit.
+    expect(lastClusterGroupInstance!._spiderfied).toBeFalsy();
+    mapStub.removeLayer.mockClear();
+
+    const listingC = { ...houseListing, id: 'listing-c' };
+    const threeListings = [listingA, listingB, listingC] as never;
+
+    // `listings` (structural dep) AND `selectedListingId` change in the SAME
+    // rerender — i.e. the same React commit.
+    rerender(
+      <PropertyMap
+        {...baseProps}
+        listings={threeListings}
+        onSelectListing={onSelectListing}
+        selectedListingId="listing-b"
+      />,
+    );
+
+    // Exactly ONE `L.markerClusterGroup` construction — not two.
+    expect(vi.mocked(L.markerClusterGroup).mock.calls.length).toBe(buildCountAfterMount + 1);
+    // The single teardown/rebuild pair still happened (structural effect owns
+    // it), never a SECOND removeLayer from a redundant selection-effect call.
+    expect(mapStub.removeLayer).toHaveBeenCalledTimes(1);
+
+    // The single build reflects the NEW selection — listing-b's marker got
+    // the selected icon, not stale/plain.
+    const selectedIcon = createSelectedMarkerIcon(
+      listingB.property_type,
+      listingB.price,
+      undefined,
+      undefined,
+      undefined,
+    );
+    const markerCalls = vi.mocked(L.marker).mock.calls;
+    // validListings.forEach constructs markers in listing order for the
+    // fresh build: A, B, C (the last 3 L.marker() calls).
+    const lastThree = markerCalls.slice(-3);
+    const callB = lastThree[1] as unknown as [unknown, { icon: unknown }];
+    expect(callB[1].icon).toBe(selectedIcon);
   });
 });
