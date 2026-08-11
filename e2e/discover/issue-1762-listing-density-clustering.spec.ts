@@ -167,20 +167,26 @@ function makeDenseListings(total: number): { listings: DenseListing[]; topCells:
  * fresh navigation) computed it. This deliberately keeps the reveal-mode
  * decision IDENTICAL across both paths, isolating the convergence claim
  * (same MarkerClusterGroup config → same bucketing at the same camera) from
- * the orthogonal density-hold behaviour already proven dense (N=1000) by
- * the "cluster tap fits..." and "progressive splitting" tests above — at
- * this app's real viewport-relative fitBounds math, a genuinely dense
- * cluster's fit-to-members always lands at exactly
- * CLUSTER_DISABLE_AT_ZOOM(16) (its clamp ceiling), which is precisely where
- * a dense cluster's post-fit reveal decision (held clustered) and a fresh
- * cold-load's default decision (declustered) intentionally diverge — that
- * divergence is real, current, correct product behaviour (the reveal-hold
- * is deliberately scoped to a post-cluster-tap-fit settle, not a pure
- * function of zoom+extent), not a defect this test should paper over.
- * Unique per-cell counts also let a clicked cluster's own aria-label
- * unambiguously identify which top-cell geometry it corresponds to,
- * without depending on Leaflet's internal DOM/render order matching the
- * fixture's generation order.
+ * the orthogonal density-hold behaviour (MARKER_REVEAL_HOLD_ZOOM) covered by
+ * the SEPARATE genuinely-dense convergence test below (reusing the N=1000
+ * dense fixture from "cluster tap fits..."/"progressive splitting" above).
+ *
+ * Issue #1762 fix — a prior version of this comment framed the dense-vs-fresh
+ * divergence (a dense cluster's post-fit reveal decision staying held-
+ * clustered, while a fresh cold-load to the identical settled camera fell
+ * back to the DEFAULT CLUSTER_DISABLE_AT_ZOOM and declustered) as
+ * intentional, current, correct product behaviour. That was wrong: it
+ * violated this issue's own binding AC that manual/fresh navigation to an
+ * equivalent camera must converge on the same cluster/pin result as
+ * cluster-tap (same MarkerClusterGroup instance/config). The root cause was
+ * that resolveMarkerRevealMode was recomputed ONLY inside a cluster-tap
+ * one-shot `moveend` listener; PropertyMap.tsx's MarkerClusterLayer now
+ * recomputes it from a general (persistent) `moveend` listener that fires
+ * for ANY settled camera, cluster-tap or not — see that file's
+ * `recomputeMarkerRevealMode` for the fix. Unique per-cell counts here also
+ * let a clicked cluster's own aria-label unambiguously identify which
+ * top-cell geometry it corresponds to, without depending on Leaflet's
+ * internal DOM/render order matching the fixture's generation order.
  */
 function makeConvergenceFixture(): { listings: DenseListing[]; topCells: TopCellGeometry[] } {
   const listings: DenseListing[] = [];
@@ -614,6 +620,92 @@ for (const viewport of VIEWPORTS) {
         clusterCounts: (await clusterCounts(page)).slice().sort((a, b) => a - b),
       };
 
+      expect(signatureB).toEqual(signatureA);
+    });
+
+    test('manual navigation to the equivalent DENSE camera converges on the same HELD cluster/pin DOM state as cluster-tap (genuinely dense fixture, not the <=12-member convergence fixture above)', async ({
+      page,
+    }) => {
+      // Issue #1762 fix — the convergence test above deliberately uses a
+      // fixture where every top cell's count is <= MARKER_REVEAL_COUNT_FLOOR
+      // (12), so resolveMarkerRevealMode returns 'individualPins' for BOTH
+      // paths identically regardless of which one computed it — see
+      // makeConvergenceFixture's own doc. That test structurally cannot
+      // catch a cluster-tap-vs-manual-navigation divergence in the
+      // DENSITY-HOLD decision (MARKER_REVEAL_HOLD_ZOOM) itself. This test
+      // reuses the SAME dense N=1000/9-top-cell fixture as the "dense
+      // initial state"/"cluster tap fits..." tests above (~111
+      // members/top-cell) specifically because that count against this
+      // viewport IS dense per resolveMarkerRevealMode — the held-clustered
+      // decision is exactly the thing under test here.
+      const { topCells } = await gotoDenseArea(page, 1000, viewport.isMobile);
+
+      const clickTarget = clusterLocator(page).first();
+      const clickLabel = (await clickTarget.getAttribute('aria-label')) ?? '';
+      const clickedCount = Number(/(\d+)\s+homes?/.exec(clickLabel)?.[1] ?? NaN);
+      const clickedTopCell = topCells.find((c) => c.count === clickedCount);
+      expect(clickedTopCell, `no top cell matches clicked cluster count ${clickedCount}`).toBeDefined();
+
+      await clickTarget.click();
+      // Settle at the split state (4 sub-clusters at the fit-to-members
+      // zoom, matching "cluster tap fits..." above) — the density hold
+      // means these sub-clusters stay clustered rather than declustering
+      // into ~111 raw overlapping pins.
+      await expect
+        .poll(async () => clusterCount(page), { timeout: 10_000, message: 'waiting for cluster split' })
+        .toBe(4);
+      // leaflet.markercluster's chunkedLoading rebuilds the cluster tree in
+      // rAF-scheduled chunks after a zoom/data change — give it a beat past
+      // the zoom settling before reading the DOM (mirrors the <=12-member
+      // convergence test above).
+      await page.waitForTimeout(500);
+
+      const settledZoom = await getMapZoom(page);
+      expect(settledZoom).not.toBeNull();
+      const signatureA = {
+        clusters: await clusterCount(page),
+        pins: await pinCount(page),
+        clusterCounts: (await clusterCounts(page)).slice().sort((a, b) => a - b),
+      };
+      // Pin down that this really is the held-clustered state (not a
+      // coincidental match with the fresh-load default below): a dense
+      // ~111-member top cell stays fully clustered, never raw pins.
+      expect(signatureA.pins).toBe(0);
+      expect(signatureA.clusters).toBeGreaterThan(0);
+
+      // Manual/equivalent path: a completely fresh page load directly to
+      // the SAME settled camera (the tapped top-cell's own centre, at the
+      // settled zoom) with the IDENTICAL listing set — no cluster-tap
+      // involved at all. makeDenseListings is a pure function of `total`
+      // (deterministic hash-based jitter), so this reproduces byte-
+      // identical listing geometry to the one gotoDenseArea already
+      // stubbed above.
+      const { listings: freshListings } = makeDenseListings(1000);
+      await stubDenseFixture(page, freshListings);
+      const listingsResponse2 = page.waitForResponse(
+        (res) => res.url().includes('/api/discover/cities/') && res.url().includes('/listings') && res.status() === 200,
+      );
+      const page2Url = `/discover?city=${CITY}&journey=area-first&areaKey=${encodeURIComponent(AREA_KEY)}&lat=${clickedTopCell!.centerLat}&lon=${clickedTopCell!.centerLon}&zoom=${settledZoom}`;
+      await page.goto(page2Url);
+      await listingsResponse2;
+      await dismissConsentBannerIfPresent(page);
+      await page.waitForLoadState('networkidle');
+      await ensureMobileMapOpen(page, viewport.isMobile);
+      await expect(anyMarkerLocator(page).first()).toBeVisible({ timeout: 15_000 });
+      await page.waitForTimeout(500);
+
+      const signatureB = {
+        clusters: await clusterCount(page),
+        pins: await pinCount(page),
+        clusterCounts: (await clusterCounts(page)).slice().sort((a, b) => a - b),
+      };
+
+      // AC: manual/fresh navigation to the equivalent camera converges on
+      // the SAME cluster/pin result as cluster-tap — the same
+      // MarkerClusterGroup instance/config renders the same density-based
+      // decision regardless of path. Pre-fix, this fails: the fresh load
+      // falls back to the DEFAULT CLUSTER_DISABLE_AT_ZOOM(16) and
+      // declusters into ~111 raw pins instead of staying held-clustered.
       expect(signatureB).toEqual(signatureA);
     });
 

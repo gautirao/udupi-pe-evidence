@@ -1811,23 +1811,22 @@ function MarkerClusterLayer({
 
   // Issue #1762 — dynamic declustering-at-zoom threshold, wired to
   // resolveMarkerRevealMode (zoomPolicy.ts). Defaults to the existing static
-  // CLUSTER_DISABLE_AT_ZOOM — every state that never goes through a
-  // cluster-tap fit (manual zoom/pan, initial load, area/browse/school-radius
-  // entry) is byte-for-byte unaffected. Recomputed ONLY inside the
-  // clusterclick/clusterkeypress handler's `map.once('moveend', ...)` below,
-  // once the cluster-tap fit actually settles.
+  // CLUSTER_DISABLE_AT_ZOOM. Recomputed on every settled camera position —
+  // via the general (non-one-shot) `moveend` listener registered below —
+  // from the CURRENT map bounds/zoom/viewport and listing density,
+  // regardless of how that camera was reached (cluster-tap fit, manual
+  // zoom/pan, or a completely fresh navigation). This is what makes a
+  // manual zoom to an equivalent camera converge on the same cluster/pin
+  // result as a cluster-tap: both paths settle on a 'moveend' and both
+  // recompute the SAME decision from the SAME inputs.
   const [markerRevealDisableAtZoom, setMarkerRevealDisableAtZoom] = useState<number>(CLUSTER_DISABLE_AT_ZOOM);
   // Tracks whether `listings` changed since the hold was last set, so a
   // genuinely new listing set (new area/scope/filter fetch) always starts
   // fresh at CLUSTER_DISABLE_AT_ZOOM rather than inheriting a stale hold
-  // computed against a completely different marker set.
+  // computed against a completely different marker set. The general
+  // moveend-driven recompute below immediately supersedes this default with
+  // the real density-based decision for the new listings/current camera.
   const prevListingsRef = useRef<PropertyListingWithImages[] | null>(null);
-  // Issue #1762 fix — the pending cluster-tap `moveend` one-shot handler
-  // (if any), so effect teardown can explicitly cancel it via `map.off`.
-  // Without this, a stale closure from a torn-down effect run stays armed
-  // on the persistent `map` instance and fires on an unrelated later
-  // moveend (see effect cleanup below).
-  const pendingMoveendHandlerRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const listingsChanged = prevListingsRef.current !== null && prevListingsRef.current !== listings;
@@ -2078,68 +2077,18 @@ function MarkerClusterLayer({
         [[sw.lat, sw.lng], [ne.lat, ne.lng]],
         [center.lat, center.lng],
       );
-
-      // Issue #1762 — resolveMarkerRevealMode wiring: once this fit settles,
-      // decide whether the cluster's own members should reveal as
-      // individual pins or stay a clustered overview, based on density (not
-      // purely the zoom this fit lands at) — see MARKER_REVEAL_HOLD_ZOOM's
-      // doc comment above for how that decision is applied.
-      const markerCount = cluster.getChildCount();
-      // Track the pending one-shot listener so effect teardown can cancel
-      // it explicitly. Without this, a stale closure (capturing this
-      // cluster's sw/ne/markerCount) stays armed on the persistent `map`
-      // instance and fires on whatever unrelated moveend happens next if
-      // this effect re-runs (e.g. hoveredListingId changing) before the
-      // fit-to-members animation settles.
-      //
-      // A second cluster tap can also arm a new listener before the first
-      // one's moveend has fired, with no effect re-run in between (the ref
-      // slot alone can't track more than one). Explicitly cancel any
-      // still-pending listener first so at most one from this effect is
-      // ever live on `map` — otherwise both fire on the next moveend, the
-      // first with stale cluster geometry, and its self-clearing first line
-      // can clobber the ref out from under the still-armed second handler.
-      if (pendingMoveendHandlerRef.current) {
-        map.off('moveend', pendingMoveendHandlerRef.current);
-        pendingMoveendHandlerRef.current = null;
-      }
-      pendingMoveendHandlerRef.current = () => {
-        pendingMoveendHandlerRef.current = null;
-        // Issue #1762 fix cycle 4 — a splittable cluster's own fit-to-bounds
-        // pan/zoom can finish its 'moveend' while ANOTHER cluster (or this
-        // same one, re-bottomed-out at the new zoom) is still showing an
-        // active leaflet.markercluster spiderfy fan (spiderfyOnMaxZoom stays
-        // on; see the zoomToBoundsOnClick comment above). Applying a reveal-
-        // mode change here re-renders this component with a new
-        // `markerRevealDisableAtZoom`, which is an effect dependency below —
-        // the whole marker-cluster layer (and every marker instance in it,
-        // spiderfied or not) gets torn down and recreated. Doing that while
-        // a spiderfy is on-screen silently discards the live fan the user is
-        // looking at: the individual pins they see are about to be replaced
-        // out from under their next click, which reads as "clicking a
-        // spiderfied marker does nothing". `_spiderfied` is
-        // leaflet.markercluster's own live pointer to the currently-open
-        // spiderfy (untyped — @types/leaflet.markercluster has no surface
-        // for plugin-internal state); skip the reveal-mode recompute
-        // entirely while it's set; the hold/disable-at-zoom value simply
-        // stays whatever it already was until the user's next cluster tap.
-        const clusterGroupInternal = clusterGroup as unknown as { _spiderfied?: unknown };
-        if (clusterGroupInternal._spiderfied) {
-          return;
-        }
-        const mapContainer = map.getContainer();
-        const mode = resolveMarkerRevealMode(
-          map.getZoom(),
-          markerCount,
-          mapContainer.clientWidth,
-          mapContainer.clientHeight,
-          [[sw.lat, sw.lng], [ne.lat, ne.lng]],
-        );
-        setMarkerRevealDisableAtZoom(
-          mode === 'clusteredOverview' ? MARKER_REVEAL_HOLD_ZOOM : CLUSTER_DISABLE_AT_ZOOM,
-        );
-      };
-      map.once('moveend', pendingMoveendHandlerRef.current);
+      // Issue #1762 fix — the reveal-mode (clustered-overview vs
+      // individual-pins) recompute used to happen ONLY here, via a one-shot
+      // `map.once('moveend', ...)` armed by this cluster-tap handler. That
+      // meant a manual/fresh navigation to the exact same settled camera
+      // never recomputed the decision and instead inherited whatever
+      // `markerRevealDisableAtZoom` happened to already be — violating the
+      // #1762 AC that cluster-tap and manual navigation to an equivalent
+      // camera must converge on the same result. The fit this handler
+      // triggers still ends in a 'moveend' like any other camera move, so
+      // the general (non-one-shot) `recomputeMarkerRevealMode` listener
+      // registered below now covers this path too — nothing cluster-tap-
+      // specific needs to happen here anymore.
     };
     clusterGroup.on('clusterclick clusterkeypress', handleClusterActivate);
 
@@ -2167,17 +2116,69 @@ function MarkerClusterLayer({
     };
     container.addEventListener('keydown', handleClusterKeydown);
 
+    // Issue #1762 fix — reveal/clustering decision recompute, driven by the
+    // SETTLED camera rather than a cluster-tap-only one-shot listener. Runs
+    // on every 'moveend' this map instance fires (cluster-tap fit, manual
+    // pan/zoom, programmatic CameraIntent-driven moves alike), each time
+    // deriving markerRevealDisableAtZoom from the CURRENT bounds/zoom/
+    // viewport and how many of this layer's own listings fall inside those
+    // bounds — the same inputs resolveMarkerRevealMode always took, just no
+    // longer gated on which handler happened to trigger the move. Also
+    // invoked once synchronously below so a fresh mount/navigation (which
+    // may not fire its own 'moveend') still reflects the settled camera it
+    // mounted with, rather than the CLUSTER_DISABLE_AT_ZOOM default.
+    const recomputeMarkerRevealMode = () => {
+      // Issue #1762 fix cycle 4 — preserved from the prior one-shot
+      // handler: skip the recompute while a spiderfy fan is open. Applying
+      // a reveal-mode change re-renders this component with a new
+      // `markerRevealDisableAtZoom` (an effect dependency below), which
+      // tears down and recreates the whole marker-cluster layer — doing
+      // that while a spiderfy fan is on-screen would silently discard it
+      // out from under the user's next click. `_spiderfied` is
+      // leaflet.markercluster's own live pointer to the currently-open
+      // spiderfy (untyped — @types/leaflet.markercluster has no surface
+      // for plugin-internal state).
+      const clusterGroupInternal = clusterGroup as unknown as { _spiderfied?: unknown };
+      if (clusterGroupInternal._spiderfied) {
+        return;
+      }
+      // NOTE: markerCount here is validListings.length — this layer's whole
+      // loaded data set (already filtered to finite coordinates above), NOT
+      // a viewport-scoped/in-bounds count. resolveMarkerRevealMode's isDense
+      // check is therefore driven by total dataset size + fixed viewport
+      // pixel dimensions, invariant to zoom/pan within that dataset — a
+      // deliberate, currently-untuned broadening beyond the original
+      // per-cluster (getChildCount()) density signal; see PR #2138 review
+      // discussion. Bounds are still read below (getSouth/getWest/getNorth/
+      // getEast, not getSouthWest()/getNorthEast() — this app's map mocks
+      // and the existing BoundsWatcher handler above don't assume those
+      // exist) and passed as fittedExtent, which resolveMarkerRevealMode
+      // currently ignores (documented DEFERRED in zoomPolicy.ts) — kept for
+      // forward compatibility if that parameter is wired up later.
+      const bounds = map.getBounds();
+      const south = bounds.getSouth();
+      const west = bounds.getWest();
+      const north = bounds.getNorth();
+      const east = bounds.getEast();
+      const mapContainer = map.getContainer();
+      const mode = resolveMarkerRevealMode(
+        map.getZoom(),
+        validListings.length,
+        mapContainer.clientWidth,
+        mapContainer.clientHeight,
+        [[south, west], [north, east]],
+      );
+      const nextDisableAtZoom = mode === 'clusteredOverview' ? MARKER_REVEAL_HOLD_ZOOM : CLUSTER_DISABLE_AT_ZOOM;
+      setMarkerRevealDisableAtZoom((prev) => (prev === nextDisableAtZoom ? prev : nextDisableAtZoom));
+    };
+    map.on('moveend', recomputeMarkerRevealMode);
+    recomputeMarkerRevealMode();
+
     return () => {
       clusterGroup.off('clusterclick clusterkeypress', handleClusterActivate);
       map.removeLayer(clusterGroup);
       container.removeEventListener('keydown', handleClusterKeydown);
-      // Cancel any still-pending cluster-tap moveend listener so a
-      // mid-animation teardown (e.g. hover changing hoveredListingId)
-      // can't leave a stale closure armed on the persistent map instance.
-      if (pendingMoveendHandlerRef.current) {
-        map.off('moveend', pendingMoveendHandlerRef.current);
-        pendingMoveendHandlerRef.current = null;
-      }
+      map.off('moveend', recomputeMarkerRevealMode);
     };
   }, [
     listings,

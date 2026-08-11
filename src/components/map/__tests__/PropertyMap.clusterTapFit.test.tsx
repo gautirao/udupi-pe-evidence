@@ -10,10 +10,17 @@
  *      publishes exactly one 'cluster' CameraIntent via
  *      onMarkerClusterCameraIntent (or none when the cluster can't split) —
  *      and NEVER calls onSelectListing (no popover/preview open).
- *   2. resolveMarkerRevealMode wiring: after a cluster-tap fit settles
- *      (map.once('moveend')), a dense reveal decision holds the cluster
- *      group's effective disableClusteringAtZoom above CLUSTER_DISABLE_AT_ZOOM
- *      instead of reverting to the static threshold.
+ *   2. resolveMarkerRevealMode wiring: a dense reveal decision holds the
+ *      cluster group's effective disableClusteringAtZoom above
+ *      CLUSTER_DISABLE_AT_ZOOM instead of reverting to the static threshold.
+ *      Issue #1762 fix (root-cause: manual/fresh navigation to the same
+ *      settled camera as a cluster-tap never recomputed this decision,
+ *      violating the AC that both paths must converge) — this is now driven
+ *      by a GENERAL (persistent) `map.on('moveend', ...)` listener that
+ *      recomputes on every settled camera, not a cluster-tap-only one-shot
+ *      `map.once('moveend', ...)`. See the "general moveend listener
+ *      lifecycle" describe block below for the registration/cleanup
+ *      contract this replaced.
  *   3. MapController's 'cluster' framing branch does not arm the
  *      leaf-only focusBounds suppression window (a subsequent focusBounds
  *      change still fires immediately, unlike the 'leaf' framing case).
@@ -28,6 +35,12 @@ import { act, render } from '@testing-library/react';
 
 // ─── Hoisted stubs ─────────────────────────────────────────────
 const moveendCallbacks: Array<() => void> = [];
+// Issue #1762 fix — MarkerClusterLayer's reveal-mode recompute is now a
+// GENERAL (persistent) 'moveend' listener registered via `map.on`, not a
+// cluster-tap-only one-shot `map.once` listener. Tracked separately from
+// `moveendCallbacks` (which still models `.once`, used elsewhere by other
+// callers in the real map).
+const moveendOnCallbacks: Array<() => void> = [];
 const mockClusterContainer = document.createElement('div');
 Object.defineProperty(mockClusterContainer, 'clientWidth', { value: 800, configurable: true });
 Object.defineProperty(mockClusterContainer, 'clientHeight', { value: 600, configurable: true });
@@ -203,14 +216,22 @@ beforeEach(() => {
   mapStub.once.mockImplementation((type: string, cb: () => void) => {
     if (type === 'moveend') moveendCallbacks.push(cb);
   });
+  mapStub.on.mockClear();
+  moveendOnCallbacks.length = 0;
+  mapStub.on.mockImplementation((type: string, cb: () => void) => {
+    if (type === 'moveend') moveendOnCallbacks.push(cb);
+  });
   mapStub.off.mockClear();
   // Model real Leaflet semantics for `.off('moveend', cb)`: deregister that
-  // exact callback from the pending list, so tests can tell whether a
-  // still-armed listener was actually cancelled (vs. just orphaned).
+  // exact callback from whichever pending list it's in, so tests can tell
+  // whether a still-armed listener was actually cancelled (vs. just
+  // orphaned).
   mapStub.off.mockImplementation((type: string, cb: () => void) => {
     if (type !== 'moveend') return;
-    const idx = moveendCallbacks.indexOf(cb);
-    if (idx !== -1) moveendCallbacks.splice(idx, 1);
+    const onceIdx = moveendCallbacks.indexOf(cb);
+    if (onceIdx !== -1) moveendCallbacks.splice(onceIdx, 1);
+    const onIdx = moveendOnCallbacks.indexOf(cb);
+    if (onIdx !== -1) moveendOnCallbacks.splice(onIdx, 1);
   });
 });
 
@@ -378,37 +399,39 @@ describe('Issue #1762 fix cycle 3 — tight/coincident-coordinate cluster spider
 });
 
 describe('Issue #1762 — resolveMarkerRevealMode wiring (post-fit reveal decision)', () => {
-  it('a dense post-fit reveal (many markers in a small viewport) holds the cluster group above CLUSTER_DISABLE_AT_ZOOM on the next rebuild', () => {
+  it('a dense listing set (many markers in a small viewport) holds the cluster group above CLUSTER_DISABLE_AT_ZOOM from the very first settle — no cluster tap required', () => {
+    // Issue #1762 fix — the root-cause gap this proves closed: previously
+    // resolveMarkerRevealMode was recomputed ONLY inside a cluster-tap's
+    // one-shot moveend listener, so a manual/fresh navigation to a dense
+    // camera never held the cluster group. Now the general moveend
+    // listener (registered on mount, see below) ALSO recomputes it
+    // synchronously once on mount for whatever camera/listings the layer
+    // is rendered with, so a dense set holds immediately, cluster-tap or
+    // not — the two paths converge on the same result by construction.
+    const denseListings = Array.from({ length: 500 }, (_, i) => ({
+      ...houseListing,
+      id: `house-${i}`,
+    }));
+    render(<PropertyMap {...baseProps} listings={denseListings as never} />);
+
+    expect(lastClusterGroupOptions?.disableClusteringAtZoom).toBeGreaterThan(CLUSTER_DISABLE_AT_ZOOM);
+
+    // A subsequent moveend (e.g. a further pan/zoom at the same density)
+    // recomputes to the SAME held value — idempotent, not a one-shot fluke.
+    act(() => {
+      moveendOnCallbacks.forEach((cb) => cb());
+    });
+    expect(lastClusterGroupOptions?.disableClusteringAtZoom).toBeGreaterThan(CLUSTER_DISABLE_AT_ZOOM);
+  });
+
+  it('a sparse listing set (few markers) stays at the default CLUSTER_DISABLE_AT_ZOOM, cluster tap or not', () => {
     const onMarkerClusterCameraIntent = vi.fn();
     render(<PropertyMap {...baseProps} onMarkerClusterCameraIntent={onMarkerClusterCameraIntent} />);
     expect(lastClusterGroupOptions?.disableClusteringAtZoom).toBe(CLUSTER_DISABLE_AT_ZOOM);
 
-    // Splittable cluster with a high child count — dense per
-    // resolveMarkerRevealMode's viewport-density signal (800x600 stub
-    // container from mockClusterContainer above).
-    const cluster = makeFakeCluster({
-      sw: { lat: 13.0, lng: 74.7 },
-      ne: { lat: 13.1, lng: 74.8 },
-      center: { lat: 13.05, lng: 74.75 },
-      childCount: 500,
-    });
-    act(() => {
-      capturedClusterHandler!({ type: 'clusterclick', layer: cluster });
-    });
-    expect(moveendCallbacks.length).toBe(1);
-
-    mapStub.getZoom.mockReturnValue(CLUSTER_DISABLE_AT_ZOOM); // fit settled at the declustering zoom
-    act(() => {
-      moveendCallbacks[0]();
-    });
-
-    expect(lastClusterGroupOptions?.disableClusteringAtZoom).toBeGreaterThan(CLUSTER_DISABLE_AT_ZOOM);
-  });
-
-  it('a sparse post-fit reveal (few markers) keeps the cluster group at the default CLUSTER_DISABLE_AT_ZOOM', () => {
-    const onMarkerClusterCameraIntent = vi.fn();
-    render(<PropertyMap {...baseProps} onMarkerClusterCameraIntent={onMarkerClusterCameraIntent} />);
-
+    // A splittable cluster tap (bounds/center published) still doesn't
+    // change the outcome for this sparse baseProps listing set — the
+    // general moveend listener recomputes the same non-dense decision.
     const cluster = makeFakeCluster({
       sw: { lat: 13.0, lng: 74.7 },
       ne: { lat: 13.1, lng: 74.8 },
@@ -418,11 +441,10 @@ describe('Issue #1762 — resolveMarkerRevealMode wiring (post-fit reveal decisi
     act(() => {
       capturedClusterHandler!({ type: 'clusterclick', layer: cluster });
     });
-    expect(moveendCallbacks.length).toBe(1);
 
     mapStub.getZoom.mockReturnValue(CLUSTER_DISABLE_AT_ZOOM);
     act(() => {
-      moveendCallbacks[0]();
+      moveendOnCallbacks.forEach((cb) => cb());
     });
 
     expect(lastClusterGroupOptions?.disableClusteringAtZoom).toBe(CLUSTER_DISABLE_AT_ZOOM);
@@ -446,36 +468,34 @@ describe('Issue #1762 fix cycle 4 — spiderfied individual marker click regress
   });
 
   it('does NOT recompute/apply a reveal-mode change on a moveend that fires while the cluster group is still spiderfied — an in-flight or just-completed spiderfy fan must not be torn down and rebuilt out from under the user', () => {
-    const onMarkerClusterCameraIntent = vi.fn();
-    render(<PropertyMap {...baseProps} onMarkerClusterCameraIntent={onMarkerClusterCameraIntent} />);
-    expect(lastClusterGroupOptions?.disableClusteringAtZoom).toBe(CLUSTER_DISABLE_AT_ZOOM);
-
-    // Same dense/splittable cluster shape as the "dense post-fit reveal"
-    // test above, which (without the cycle-4 guard) DOES change
-    // disableClusteringAtZoom on this exact moveend — i.e. this fixture is
-    // proven to trigger a rebuild when nothing guards it.
-    const cluster = makeFakeCluster({
-      sw: { lat: 13.0, lng: 74.7 },
-      ne: { lat: 13.1, lng: 74.8 },
-      center: { lat: 13.05, lng: 74.75 },
-      childCount: 500,
-    });
-    act(() => {
-      capturedClusterHandler!({ type: 'clusterclick', layer: cluster });
-    });
-    expect(moveendCallbacks.length).toBe(1);
+    const denseListings = Array.from({ length: 500 }, (_, i) => ({
+      ...houseListing,
+      id: `house-${i}`,
+    }));
+    render(<PropertyMap {...baseProps} listings={denseListings as never} />);
+    // Dense listings against the 800x600 mock viewport hold the cluster
+    // group above CLUSTER_DISABLE_AT_ZOOM from the very first settle (see
+    // the "resolveMarkerRevealMode wiring" describe block above).
+    expect(lastClusterGroupOptions?.disableClusteringAtZoom).toBeGreaterThan(CLUSTER_DISABLE_AT_ZOOM);
 
     // Simulate leaflet.markercluster's OWN internal spiderfy still being
-    // active on the live clusterGroup instance when this fit's moveend
-    // fires (spiderfyOnMaxZoom stays on regardless of the CameraIntent fit;
-    // see the zoomToBoundsOnClick comment in MarkerClusterLayer).
+    // active on the live clusterGroup instance (spiderfyOnMaxZoom stays on
+    // regardless of the CameraIntent fit; see the zoomToBoundsOnClick
+    // comment in MarkerClusterLayer).
     expect(lastClusterGroupInstance).toBeDefined();
     lastClusterGroupInstance!._spiderfied = { getAllChildMarkers: () => [] };
 
-    mapStub.getZoom.mockReturnValue(CLUSTER_DISABLE_AT_ZOOM);
+    // Widen the mock viewport so, absent the spiderfy guard, this SAME
+    // dense listing set would no longer read as dense (500 markers over a
+    // much larger area drops below the density threshold) — proving a real
+    // recompute is being skipped here, not just a no-op re-confirmation of
+    // the same value.
+    Object.defineProperty(mockClusterContainer, 'clientWidth', { value: 8000, configurable: true });
+    Object.defineProperty(mockClusterContainer, 'clientHeight', { value: 6000, configurable: true });
+
     const optionsBeforeMoveend = lastClusterGroupOptions;
     act(() => {
-      moveendCallbacks[0]();
+      moveendOnCallbacks.forEach((cb) => cb());
     });
 
     // No rebuild happened: the cluster group construction options are
@@ -483,20 +503,49 @@ describe('Issue #1762 fix cycle 4 — spiderfied individual marker click regress
     // L.markerClusterGroup was never called again), so the live spiderfy
     // fan (and every marker's click binding inside it) survives untouched.
     expect(lastClusterGroupOptions).toBe(optionsBeforeMoveend);
-    expect(lastClusterGroupOptions?.disableClusteringAtZoom).toBe(CLUSTER_DISABLE_AT_ZOOM);
+    expect(lastClusterGroupOptions?.disableClusteringAtZoom).toBeGreaterThan(CLUSTER_DISABLE_AT_ZOOM);
+
+    // Restore the stub viewport for any later tests in this file.
+    Object.defineProperty(mockClusterContainer, 'clientWidth', { value: 800, configurable: true });
+    Object.defineProperty(mockClusterContainer, 'clientHeight', { value: 600, configurable: true });
   });
 });
 
-describe('Issue #1762 fix — pending cluster-tap moveend listener is cancelled on effect teardown', () => {
-  it('arms exactly one moveend listener on cluster tap, then cancels it via map.off when the effect re-runs mid-animation (e.g. hoveredListingId changes on hover)', () => {
-    const onMarkerClusterCameraIntent = vi.fn();
+describe('Issue #1762 fix — general moveend listener lifecycle (replaces the old cluster-tap-only one-shot listener)', () => {
+  it('registers exactly one persistent moveend listener on mount via map.on, and cancels it via map.off with the SAME reference when the effect re-runs (e.g. hoveredListingId changes on hover)', () => {
     const { rerender } = render(
-      <PropertyMap
-        {...baseProps}
-        hoveredListingId={null}
-        onMarkerClusterCameraIntent={onMarkerClusterCameraIntent}
-      />,
+      <PropertyMap {...baseProps} hoveredListingId={null} />,
     );
+
+    // Exactly one general listener armed for this mount — registered via
+    // `map.on` (persistent), not `map.once` (one-shot).
+    expect(mapStub.on).toHaveBeenCalledTimes(1);
+    expect(mapStub.on).toHaveBeenCalledWith('moveend', expect.any(Function));
+    expect(mapStub.once).not.toHaveBeenCalled();
+    const armedHandler = mapStub.on.mock.calls[0][1];
+    expect(mapStub.off).not.toHaveBeenCalledWith('moveend', armedHandler);
+
+    // Simulate a hover on a different marker — this changes
+    // hoveredListingId, a MarkerClusterLayer effect dependency, tearing the
+    // effect down and rebuilding it.
+    act(() => {
+      rerender(<PropertyMap {...baseProps} hoveredListingId="some-other-listing" />);
+    });
+
+    // The stale listener from the torn-down effect run is explicitly
+    // cancelled with the SAME function reference — no orphaned listener is
+    // left armed on the persistent map instance.
+    expect(mapStub.off).toHaveBeenCalledWith('moveend', armedHandler);
+    // A fresh listener is armed for the new effect run.
+    expect(mapStub.on).toHaveBeenCalledTimes(2);
+    const secondHandler = mapStub.on.mock.calls[1][1];
+    expect(secondHandler).not.toBe(armedHandler);
+  });
+
+  it('a cluster-tap fit is handled by the SAME general listener as any other camera move — the click handler itself arms no separate cluster-tap-only listener', () => {
+    const onMarkerClusterCameraIntent = vi.fn();
+    render(<PropertyMap {...baseProps} onMarkerClusterCameraIntent={onMarkerClusterCameraIntent} />);
+    const onCallsBeforeClick = mapStub.on.mock.calls.length;
 
     const cluster = makeFakeCluster({
       sw: { lat: 13.0, lng: 74.7 },
@@ -508,97 +557,15 @@ describe('Issue #1762 fix — pending cluster-tap moveend listener is cancelled 
       capturedClusterHandler!({ type: 'clusterclick', layer: cluster });
     });
 
-    // Exactly one moveend one-shot listener armed for this cluster tap.
-    expect(mapStub.once).toHaveBeenCalledTimes(1);
-    expect(mapStub.once).toHaveBeenCalledWith('moveend', expect.any(Function));
-    const armedHandler = mapStub.once.mock.calls[0][1];
-    expect(mapStub.off).not.toHaveBeenCalledWith('moveend', armedHandler);
-
-    // Simulate a hover on a different marker while the cluster-tap fit
-    // animation is still in flight — this changes hoveredListingId, a
-    // MarkerClusterLayer effect dependency, tearing the effect down and
-    // rebuilding it BEFORE the real 'moveend' ever fires.
-    act(() => {
-      rerender(
-        <PropertyMap
-          {...baseProps}
-          hoveredListingId="some-other-listing"
-          onMarkerClusterCameraIntent={onMarkerClusterCameraIntent}
-        />,
-      );
-    });
-
-    // The stale one-shot handler must be explicitly cancelled with the
-    // SAME function reference that was armed — leaving no orphaned
-    // listener on the persistent map instance to fire on a later,
-    // unrelated moveend.
-    expect(mapStub.off).toHaveBeenCalledWith('moveend', armedHandler);
-  });
-
-  it('a second cluster tap before the first fit settles (no effect re-run in between) cancels the first pending listener before arming the second, so only the second ever fires', () => {
-    const onMarkerClusterCameraIntent = vi.fn();
-    render(
-      <PropertyMap
-        {...baseProps}
-        hoveredListingId={null}
-        onMarkerClusterCameraIntent={onMarkerClusterCameraIntent}
-      />,
-    );
-
-    const clusterA = makeFakeCluster({
-      sw: { lat: 13.0, lng: 74.7 },
-      ne: { lat: 13.1, lng: 74.8 },
-      center: { lat: 13.05, lng: 74.75 },
-      childCount: 500,
-    });
-    act(() => {
-      capturedClusterHandler!({ type: 'clusterclick', layer: clusterA });
-    });
-    expect(mapStub.once).toHaveBeenCalledTimes(1);
-    const handlerA = mapStub.once.mock.calls[0][1];
-    expect(mapStub.off).not.toHaveBeenCalled();
-
-    // A second cluster tap lands before the first fit's real 'moveend' has
-    // fired, with no rerender/prop change (no effect dependency changed) in
-    // between — this is the same effect closure, so the pending-listener ref
-    // is the only thing that can track it.
-    const clusterB = makeFakeCluster({
-      sw: { lat: 13.2, lng: 74.9 },
-      ne: { lat: 13.3, lng: 75.0 },
-      center: { lat: 13.25, lng: 74.95 },
-      childCount: 4,
-    });
-    act(() => {
-      capturedClusterHandler!({ type: 'clusterclick', layer: clusterB });
-    });
-
-    // The first pending listener must be explicitly cancelled (map.off)
-    // before/while the second is armed — not just silently overwritten in
-    // the ref, which would leave it orphaned on the persistent map instance.
-    expect(mapStub.off).toHaveBeenCalledWith('moveend', handlerA);
-    expect(mapStub.once).toHaveBeenCalledTimes(2);
-    const handlerB = mapStub.once.mock.calls[1][1];
-    expect(handlerB).not.toBe(handlerA);
-
-    // map.off happened strictly before the second map.once — i.e. the old
-    // listener is gone before the new one is registered, so at most one is
-    // ever concurrently live.
-    const offOrder = mapStub.off.mock.invocationCallOrder[0];
-    const secondOnceOrder = mapStub.once.mock.invocationCallOrder[1];
-    expect(offOrder).toBeLessThan(secondOnceOrder);
-
-    // Only the second (live) listener remains armed on `map` — the first was
-    // actually deregistered, not just orphaned.
-    expect(moveendCallbacks).toEqual([handlerB]);
-
-    // Firing the single real 'moveend' invokes only handlerB (sparse
-    // childCount=4 clusterB), never the stale handlerA (which would have
-    // held a dense-reveal decision from clusterA's childCount=500).
-    mapStub.getZoom.mockReturnValue(CLUSTER_DISABLE_AT_ZOOM);
-    act(() => {
-      moveendCallbacks.forEach((cb) => cb());
-    });
-    expect(lastClusterGroupOptions?.disableClusteringAtZoom).toBe(CLUSTER_DISABLE_AT_ZOOM);
+    // Issue #1762 fix — root-cause of the AC gap this closes: the OLD
+    // implementation armed a fresh `map.once('moveend', ...)` from inside
+    // this exact handler on every cluster tap. That mechanism is gone; the
+    // handler now only publishes the CameraIntent (asserted in the
+    // "MarkerClusterLayer clusterclick handler" describe block above) and
+    // leaves the reveal-mode recompute entirely to the general listener
+    // already registered on mount.
+    expect(mapStub.on.mock.calls.length).toBe(onCallsBeforeClick);
+    expect(mapStub.once).not.toHaveBeenCalled();
   });
 });
 

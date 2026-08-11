@@ -74,6 +74,12 @@ vi.mock('react-leaflet', () => ({
     getContainer: vi.fn(() => document.body),
     invalidateSize: vi.fn(),
     remove: vi.fn(),
+    // Issue #1762 fix — MarkerClusterLayer registers a general 'moveend'
+    // listener directly on the map on mount now, not just inside a
+    // cluster-click handler.
+    on: vi.fn(),
+    off: vi.fn(),
+    once: vi.fn(),
   })),
   useMapEvents: vi.fn(() => ({
     getBounds: vi.fn(() => ({
