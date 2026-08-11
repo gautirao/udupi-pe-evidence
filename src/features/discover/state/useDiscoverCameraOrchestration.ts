@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
+import { isRestoreAuthoritative, type AreaPanReason } from '@/shared/map/zoomPolicy';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
@@ -77,7 +78,26 @@ export interface UseDiscoverCameraOrchestrationParams {
   >;
   /** useDiscoverPageState — injected values/setters (SCOPE-LOCKED hook, never moved). */
   selectedSchool: SchoolResult | null;
-  setPanToArea: React.Dispatch<React.SetStateAction<AreaPoint | null>>;
+  /**
+   * Issue #1823 — widened to accept an optional `seq`/`reason` on top of the
+   * plain `AreaPoint` shape the setter's OWN state type declares. This is
+   * type-safe without touching that declaration site (MapDiscovery.tsx/
+   * useDiscoverPageState.ts, out of scope here): `(AreaPoint & { seq?,
+   * reason? }) | null` is structurally assignable to `AreaPoint | null`
+   * (the extra fields are optional), so a setter typed to accept plain
+   * `AreaPoint | null` values already safely accepts these widened ones —
+   * the extra fields simply flow through at runtime for AreaPanner
+   * (PropertyMap.tsx) to read off the same object it already receives.
+   *
+   * `consumedSeqRef` (fix cycle 3) is the SAME reasoning applied to
+   * `consumedPanToAreaSeqRef` below — an extra optional field carrying a
+   * live ref object through unaffected by this setter's own type.
+   */
+  setPanToArea: React.Dispatch<
+    React.SetStateAction<
+      (AreaPoint & { seq?: number; reason?: AreaPanReason; consumedSeqRef?: React.MutableRefObject<number> }) | null
+    >
+  >;
   /** useDiscoverMapData outputs — injected. */
   isLoadingAreaListings: boolean;
   discoverAreas: AreaPoint[];
@@ -292,6 +312,61 @@ export function useDiscoverCameraOrchestration({
   // fitBounds is triggered by calling setPanToArea with a synthetic AreaPoint whose
   // bbox is the union of all member areas' bboxes. This reuses PropertyMap's existing
   // AreaPanner effect (the F7 debounce) with zero new fitBounds machinery.
+  // Issue #1823 (fix cycle 2 — scope correction) — `panToAreaSeqRef` is a
+  // single monotonic counter shared across all three reasons (group/scope/
+  // canonical-node) so AreaPanner (PropertyMap.tsx) can seq-guard itself the
+  // same way MapController does for cameraIntent. `publishPanToArea` is the
+  // UNGUARDED publisher used by group/scope below — #1823's own scope is
+  // limited to the three canonical "listing-capable" states (Area, bounded
+  // Browse, school-radius); group-focus/scope-focus fits are #2076 item 5's
+  // presentation-only Area cluster focus, never chartered to carry the
+  // #2083 restore-wins-on-POP guard. Cycle 1 widened the guard to all three
+  // effects, which suppressed group/scope fits on any ordinary hard load
+  // that happens to carry a persisted viewport (there is no in-scope way to
+  // tell a genuine Back/Forward POP apart from that) — narrowed back to
+  // only the canonical-node call site below, which already had this guard
+  // correctly before this issue.
+  const panToAreaSeqRef = useRef(0);
+  // Issue #1823 (fix cycle 3 — PR #2128 review) — tracks the highest seq
+  // AreaPanner (PropertyMap.tsx) has actually fired a fit for, owned HERE
+  // rather than by AreaPanner's own local ref. This hook instance survives
+  // both remounts that previously replayed an already-fired seq: a
+  // PropertyMap-level `mapInstanceKey` bump (PropertyMap stays mounted, only
+  // MapContainer/AreaPanner remount) AND the mobile Map dismiss/reopen,
+  // which real-unmounts PropertyMap itself while MapDiscovery (this hook's
+  // owner) stays mounted. Threaded through on the `panToArea` object itself
+  // (not a new prop/callback) so AreaPanner can gate against consumption
+  // that outlives its own remounts, while a seq published before AreaPanner's
+  // very first-ever mount (the react-leaflet one-commit-later child-mount
+  // race on a warm-cache navigation) still compares against this ref's
+  // per-hook-lifetime initial value of 0 and fires normally.
+  const consumedPanToAreaSeqRef = useRef(0);
+  const publishPanToArea = useCallback(
+    (area: AreaPoint, reason: AreaPanReason): boolean => {
+      panToAreaSeqRef.current += 1;
+      setPanToArea({
+        ...area,
+        seq: panToAreaSeqRef.current,
+        reason,
+        consumedSeqRef: consumedPanToAreaSeqRef,
+      });
+      return true;
+    },
+    [setPanToArea],
+  );
+  // Issue #2083 (cycle 5) / #1823 — the restore-wins-on-POP guard, scoped to
+  // ONLY the canonical-node fit (see rationale above). Returns whether the
+  // write actually fired, so canonicalNodeFitCount below can gate on that.
+  const guardedSetPanToArea = useCallback(
+    (area: AreaPoint, reason: AreaPanReason): boolean => {
+      if (isRestoreAuthoritative({ historyAction: urlState.historyAction, viewport: urlState.viewport })) {
+        return false;
+      }
+      return publishPanToArea(area, reason);
+    },
+    [publishPanToArea, urlState.historyAction, urlState.viewport],
+  );
+
   const prevGroupIdRef = useRef<string | null>(null);
   const prevAreaKeyRef = useRef<string | null>(null);
 
@@ -332,7 +407,7 @@ export function useDiscoverCameraOrchestration({
     const memberAreas = discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
     const bounds = computeGroupBounds(memberAreas);
     if (bounds) {
-      setPanToArea(bounds);
+      publishPanToArea(bounds, 'group');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlState.groupId, urlState.areaKey, areasLoading, isLoadingAreaGroups, discoverAreas, areaGroupsData]);
@@ -422,7 +497,7 @@ export function useDiscoverCameraOrchestration({
 
     const bounds = computeGroupBounds(memberAreas);
     if (bounds) {
-      setPanToArea(bounds);
+      publishPanToArea(bounds, 'scope');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlState.scope, urlState.groupId, urlState.areaKey, areasLoading, isLoadingAreaGroups, discoverAreas, areaGroupsData, summaryRegions, resolvedScopeNamespaces, regionScopedGroups, isLoadingRegionScopedGroups]);
@@ -467,53 +542,54 @@ export function useDiscoverCameraOrchestration({
       return;
     }
 
-    // Issue #2083 (cycle 5) — a browser Back/Forward (POP) landing on a node
-    // whose URL already carries a restored `lat`/`lon`/`zoom` is NOT a fresh
-    // "selection" this AC3.10 fit-once effect needs to frame from the node's
-    // bbox — it is a history RESTORATION, and PropertyMap's
-    // URLViewportController is the SOLE authority for replaying a persisted
-    // camera (an exact, precise setView, not a bbox+padding+aspect-ratio
-    // recomputation). Without this guard, this effect ALSO fires `setPanToArea`
-    // on the exact same POP transition, driving AreaPanner's `map.fitBounds()`
-    // as a second, uncoordinated camera writer — unlike MapController's
-    // cameraIntent path (lastHandledSeqRef/suppressForSeqRef), this effect has
-    // no seq/suppression coordination with URLViewportController at all. On a
-    // small zoom delta (e.g. a full production dataset's real bounds fit, vs
-    // this repo's fixture data which happens to exceed Leaflet's zoom-
-    // animation threshold and snap instantly) `fitBounds` genuinely animates,
-    // landing a stale/re-derived camera on top of the correct restored one a
-    // few hundred ms to ~2s after Back — camera reverts while the node/panel
-    // stay correct. A forward navigation (PUSH) or a POP to a node with NO
-    // persisted viewport (city root / a Direction — `goToNode` deliberately
-    // strips lat/lon/zoom for hierarchy nodes, see navigation.ts) still falls
-    // through and fits from the bbox exactly as before — this guard is scoped
-    // to precisely the case that already has a precise camera to trust.
-    if (urlState.historyAction === 'POP' && urlState.viewport != null) {
-      return;
+    // Issue #2083 (cycle 5), Issue #1823 (guard consolidated) — a browser
+    // Back/Forward (POP) landing on a node whose URL already carries a
+    // restored `lat`/`lon`/`zoom` is NOT a fresh "selection" this AC3.10
+    // fit-once effect needs to frame from the node's bbox — it is a history
+    // RESTORATION, and PropertyMap's URLViewportController is the SOLE
+    // authority for replaying a persisted camera (an exact, precise setView,
+    // not a bbox+padding+aspect-ratio recomputation). Without suppressing
+    // this write, this effect would ALSO fire a fit on the exact same POP
+    // transition, driving AreaPanner's `map.fitBounds()` as a second,
+    // uncoordinated camera writer. This is now `isRestoreAuthoritative`,
+    // checked inside `guardedSetPanToArea`, scoped to ONLY this canonical-
+    // node call site (fix cycle 2 — group/scope go through the unguarded
+    // `publishPanToArea` instead; see the rationale where both are defined)
+    // instead of duplicated inline here. A forward navigation (PUSH) or a
+    // POP to a node with NO persisted viewport (city root / a Direction —
+    // `goToNode` deliberately strips lat/lon/zoom for hierarchy nodes, see
+    // navigation.ts) still fits from the bbox exactly as before — the guard
+    // is scoped to precisely the case that already has a precise camera to
+    // trust. `prevNavigationNodeKeyRef` above has ALREADY advanced by this
+    // point regardless of whether this write is suppressed, so the next
+    // genuine transition to a DIFFERENT node is still recognised.
+    const fired = guardedSetPanToArea(
+      {
+        areaKey: navigationNodeKey,
+        areaLabel: navigationNodeKey,
+        geo_center_lat: bounds.centreLat ?? (bounds.minLat + bounds.maxLat) / 2,
+        geo_center_lon: bounds.centreLon ?? (bounds.minLon + bounds.maxLon) / 2,
+        bbox: [
+          [bounds.minLat, bounds.minLon],
+          [bounds.maxLat, bounds.maxLon],
+        ],
+      },
+      'canonicalNode',
+    );
+    if (fired) {
+      setCanonicalNodeFitCount((c) => c + 1);
     }
-
-    setCanonicalNodeFitCount((c) => c + 1);
-    setPanToArea({
-      areaKey: navigationNodeKey,
-      areaLabel: navigationNodeKey,
-      geo_center_lat: bounds.centreLat ?? (bounds.minLat + bounds.maxLat) / 2,
-      geo_center_lon: bounds.centreLon ?? (bounds.minLon + bounds.maxLon) / 2,
-      bbox: [
-        [bounds.minLat, bounds.minLon],
-        [bounds.maxLat, bounds.maxLon],
-      ],
-    });
-    // urlState.historyAction/urlState.viewport are deliberately NOT dep-array
-    // members: they are read at effect-run time from the SAME render's
-    // closure that produced this navigationNodeKey/navigationNodeBounds
-    // transition (both derive from the identical `location`/`urlParams`
-    // snapshot), so they are never stale here. Adding them would make this
-    // fit-once effect re-run on every ordinary pan/zoom (urlState.viewport
-    // changes on every debounced camera write) even though `transitioned`
-    // stays false and no-ops — harmless but needlessly re-executes a guard
-    // this effect is explicitly designed to fire ONCE per node transition.
+    // urlState.historyAction/urlState.viewport are not listed directly in
+    // this effect's own dep array, but guardedSetPanToArea (which IS listed)
+    // is a useCallback whose OWN deps include both — so its identity changes
+    // whenever they do, and this effect re-runs on that cadence anyway
+    // (urlState.viewport changes on every debounced camera write). That's
+    // harmless: `transitioned` stays false whenever navigationNodeKey hasn't
+    // changed, so the re-run just re-checks and no-ops without touching any
+    // ref or publishing anything — it still does real work (a fit) only
+    // ONCE per genuine node transition.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigationNodeKey, navigationNodeBounds, setPanToArea]);
+  }, [navigationNodeKey, navigationNodeBounds, guardedSetPanToArea]);
 
   // Issue #1410 (B3) — viewport-fit when agri group listings arrive.
   // Uses a state variable fed into PropertyMap's focusBounds so it's consistent with how

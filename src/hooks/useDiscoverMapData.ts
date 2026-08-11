@@ -93,44 +93,30 @@ export interface CameraIntent {
   bypassSuppression?: boolean;
 }
 
-/**
- * Issue #1882 (Track A PR2 Slice S4; corrected in the camera-padding rework)
- * — responsive fitBounds padding, Leaflet-native `[horizontalPx, verticalPx]`
- * order (Leaflet's Point/padding contract is `[x, y]` = `[horizontal,
- * vertical]` — NOT `[vertical, horizontal]`, which the original S4 cut
- * mistakenly used).
- *
- * Layout finding (verified against the actual JSX, not assumed): the
- * Discover map and right panel are FLEX ROW SIBLINGS at the `lg:` breakpoint
- * (`<div className="h-full flex flex-col lg:flex-row relative">` in
- * MapDiscovery.tsx, wrapping DiscoverMapCanvas's `lg:w-1/2` map container and
- * DiscoverRightPanelContainer's `lg:w-1/2` panel) — the panel never overlays
- * the map at any supported breakpoint; below `lg:` they stack vertically
- * (`flex-col`, map at a fixed `h-64`). So the extra desktop horizontal
- * padding is genuinely just breathing room for the narrower half-width map
- * viewport at desktop widths — NOT occlusion avoidance — and symmetric
- * Leaflet `padding` (rather than asymmetric paddingTopLeft/paddingBottomRight)
- * is the correct tool here.
- *
- * `viewportWidthPx` is optional (omitted in non-browser/test contexts or when
- * the caller has no viewport signal) — undefined degrades to the desktop
- * padding, matching the pre-#1882 default. The breakpoint (1024px) matches
- * the app's existing Tailwind `lg:` breakpoint that actually governs this
- * layout split (DiscoverRightPanel.tsx/DiscoverMapCanvas.tsx's `lg:w-1/2`) —
- * reused here rather than the unrelated 768px `useIsMobile` (src/hooks/
- * use-mobile.tsx) breakpoint, which governs an unrelated sidebar concern.
- */
-export type CameraPadding = [horizontalPx: number, verticalPx: number];
-const DESKTOP_BREAKPOINT_PX = 1024;
-const MOBILE_CAMERA_PADDING: CameraPadding = [40, 40];
-const DESKTOP_CAMERA_PADDING: CameraPadding = [120, 40];
+// Issue #1823 — CameraPadding/computeCameraPadding (and their supporting
+// breakpoint/tier constants) moved to zoomPolicy.ts, the SOLE Discover
+// zoom/camera-policy source; re-exported here for compatibility since
+// nothing outside this file constructed these directly before the move
+// (grepped repo-wide), but this keeps any future external import path
+// working unchanged.
+import {
+  type CameraPadding,
+  DESKTOP_BREAKPOINT_PX,
+  MOBILE_CAMERA_PADDING,
+  DESKTOP_CAMERA_PADDING,
+  computeCameraPadding,
+} from '@/shared/map/zoomPolicy';
+export type { CameraPadding };
+export { DESKTOP_BREAKPOINT_PX, MOBILE_CAMERA_PADDING, DESKTOP_CAMERA_PADDING, computeCameraPadding };
 
-export function computeCameraPadding(viewportWidthPx?: number): CameraPadding {
-  if (viewportWidthPx != null && viewportWidthPx < DESKTOP_BREAKPOINT_PX) {
-    return MOBILE_CAMERA_PADDING;
-  }
-  return DESKTOP_CAMERA_PADDING;
-}
+// PR #2128 (Finding 2, issue #1823) — deliberate scope boundary: the 3
+// producers below (publishCameraIntent/publishClusterCameraIntent/
+// publishRecenterCameraIntent, feeding MapController) are NOT
+// occlusion-aware — only AreaPanner's fitBounds call in PropertyMap.tsx
+// reserves bottomOcclusionPx. #1823's own scope is the three canonical
+// listing-capable Area/Browse/school-radius states AreaPanner fits;
+// widening occlusion-awareness to marker/cluster camera intents here is a
+// separate, uncharted extension, not part of this fix.
 
 /**
  * Real viewport width for camera-padding selection, read at the moment a

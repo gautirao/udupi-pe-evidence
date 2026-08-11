@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { MutableRefObject } from 'react';
 import { MapContainer, TileLayer, useMap, Circle, Marker, Polygon, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
@@ -31,6 +32,12 @@ import {
   CLUSTER_MAX_RADIUS_PX,
   selectPrimaryMapLayer,
 } from '@/lib/map/zoomPolicy';
+import {
+  computeCameraPadding,
+  LEAF_FIT_MIN_ZOOM,
+  LEAF_FIT_MAX_ZOOM,
+  type AreaPanReason,
+} from '@/shared/map/zoomPolicy';
 import { useZoomBand } from '@/hooks/useZoomBand';
 
 /**
@@ -49,6 +56,15 @@ import { useZoomBand } from '@/hooks/useZoomBand';
  * band where the area-overview markers are still rendered (issue #1069).
  */
 export const AREA_PANNER_GROUP_MAX_ZOOM = AREA_LAYER_MAX_ZOOM;
+
+/**
+ * Issue #1823 — naming-only extraction of MapController's agri focusBounds
+ * fitBounds padding. This was an undocumented 4th padding tier (distinct
+ * from MOBILE_CAMERA_PADDING/DESKTOP_CAMERA_PADDING/AreaPanner's own
+ * padding) with no name of its own; zero behaviour change, same [50, 50]
+ * value as before.
+ */
+const LEGACY_FOCUS_BOUNDS_PADDING: [number, number] = [50, 50];
 
 /**
  * Max zoom for SchoolMarkerFocusPanner fitBounds (issue #1240).
@@ -491,8 +507,42 @@ interface PropertyMapProps {
    * Reports { lat, lon, zoom } rounded to map precision (not pre-rounded here).
    */
   onViewportChange?: (viewport: { lat: number; lon: number; zoom: number }) => void;
-  /** When set, pans/fits the map to this area. Driven by right-panel card clicks only — never set by marker clicks. */
-  panToArea?: AreaPoint | null;
+  /**
+   * When set, pans/fits the map to this area. Driven by right-panel card
+   * clicks only — never set by marker clicks. Issue #1823 — the `seq`/
+   * `reason` fields are populated only by useDiscoverCameraOrchestration's
+   * group/scope/canonical-node fit effects (via `guardedSetPanToArea`);
+   * other callers keep passing a plain `AreaPoint`, which AreaPanner below
+   * treats as an un-sequenced, always-fire legacy write.
+   *
+   * `consumedSeqRef` (fix cycle 3 — PR #2128 review) is populated alongside
+   * `seq`/`reason` by the SAME publisher: a ref owned by
+   * useDiscoverCameraOrchestration that survives AreaPanner's own
+   * unmount/remount (mapInstanceKey bump, mobile Map dismiss/reopen). See
+   * AreaPanner below for how it replaces the old locally-scoped guard ref.
+   */
+  panToArea?:
+    | (AreaPoint & {
+        seq?: number;
+        reason?: AreaPanReason;
+        consumedSeqRef?: MutableRefObject<number>;
+      })
+    | null;
+  /**
+   * PR #2128 review cycle 4/final (Finding 2, issue #1823) — additional
+   * bottom-ONLY padding (px) added to AreaPanner's `paddingBottomRight`
+   * fitBounds option (Leaflet's actual asymmetric-padding API — a single
+   * `padding: [x, y]` tuple is NOT directional and would apply to both top
+   * and bottom, at double the intended cost). Reserved by the caller
+   * PROACTIVELY for any mobile-Map state where `isMarkerPopoverEligible`
+   * allows a marker tap to open the compact listing-preview sheet (a
+   * superset of the sheet's actual render gate — safe because it never
+   * under-reserves, not because it's an exact match) — not reactively
+   * toggled by whether that sheet happens to be open right now. See
+   * MapDiscovery.tsx's call site and AreaPanner's own effect comment below
+   * for why. Defaults to 0 (every existing caller omits it, unaffected).
+   */
+  bottomOcclusionPx?: number;
   /** Incrementing tick that triggers a zoom reset to cityCenter/cityZoom. Incremented by handleAreaBack. */
   resetMapTick?: number;
   /** Called once when the Leaflet map instance has finished initialising. Use to gate data-readiness checks. */
@@ -930,24 +980,101 @@ function BoundsWatcher({
   return null;
 }
 
-function AreaPanner({ panToArea }: { panToArea?: AreaPoint | null }) {
+function AreaPanner({
+  panToArea,
+  bottomOcclusionPx = 0,
+}: {
+  panToArea?:
+    | (AreaPoint & { seq?: number; reason?: AreaPanReason; consumedSeqRef?: MutableRefObject<number> })
+    | null;
+  bottomOcclusionPx?: number;
+}) {
   const map = useMap();
+  // Issue #1823 (fix cycle 1) — plain monotonic seq guard, scoped to ONLY
+  // the three sequenced reasons (group/scope/canonicalNode) that carry a
+  // `seq`. A `panToArea` with no `seq` (area-click, deferred areaKey
+  // hydration, handleStartOver's clear-to-null, etc.) is legacy/un-sequenced
+  // and always fires on identity change, exactly as before this issue.
+  //
+  // This deliberately does NOT mirror MapController's adopt-on-mount
+  // MECHANISM (silently absorb whatever seq the first effect run observes,
+  // never firing it). MapController's adopt-on-mount is only sound because
+  // its cameraIntent source is guaranteed to be null on a genuine first-ever
+  // mount — nothing can publish to it before MapController itself renders.
+  // AreaPanner has no such guarantee: react-leaflet mounts children
+  // (including AreaPanner) ONE COMMIT AFTER MapContainer's own ref callback
+  // runs, so on a warm-cache navigation the orchestration hook's
+  // group/scope/canonicalNode fit effect can already have published seq 1
+  // before AreaPanner ever renders — AreaPanner's first observed value IS
+  // the genuine transition, not a stale remount echo. Adopting it silently
+  // (the previous implementation) dropped the fit permanently, since the
+  // orchestration hook's own prevGroupIdRef/prevScopeRef had already
+  // advanced and nothing else re-triggers it.
+  //
+  // Issue #1823 (fix cycle 3 — PR #2128 review) — cycle 1/2 accepted a
+  // PropertyMap-level remount (mapInstanceKey bump, or mobile map
+  // dismiss/reopen) replaying an already-fired seq as a "harmless redundant
+  // animation" trade-off. That conflicts with #1823's binding unmount/remount
+  // requirement, so the guard is no longer purely local: `panToArea` now
+  // carries `consumedSeqRef`, a ref owned by useDiscoverCameraOrchestration
+  // (survives AreaPanner's own remounts, since the hook lives in
+  // MapDiscovery, above PropertyMap). Gating against THAT ref instead of a
+  // fresh per-mount local one means an already-consumed seq stays suppressed
+  // across a remount, while a seq published before AreaPanner's very
+  // first-ever mount (the react-leaflet race described above) still compares
+  // against the ref's per-hook-lifetime initial value of 0 and fires.
+  // `localFallbackSeqRef` only matters for a sequenced `panToArea` with no
+  // `consumedSeqRef` attached (i.e. not constructed via publishPanToArea) —
+  // every real sequenced write goes through that publisher.
+  const localFallbackSeqRef = useRef(0);
   useEffect(() => {
     if (!panToArea) return;
-    
+    if (panToArea.seq != null) {
+      const consumedSeqRef = panToArea.consumedSeqRef ?? localFallbackSeqRef;
+      if (panToArea.seq <= consumedSeqRef.current) return;
+      consumedSeqRef.current = panToArea.seq;
+    }
+
     if (panToArea.bbox) {
       // Issue #1069: a synthetic group-bounds AreaPoint (from computeGroupBounds)
       // can fit at a zoom level above AREA_PANNER_GROUP_MAX_ZOOM for narrow groups,
       // which then trips MapDiscovery's zoom-band gate and hides the area markers
       // the user was meant to see. Clamp group fits to the area-layer threshold.
+      // This clamp is OUTSIDE the seq/adopt gate above and applies whenever a
+      // fit actually fires — it must never be skippable by that gate.
       const isGroupBounds = panToArea.areaKey === GROUP_BOUNDS_SYNTHETIC_KEY;
+      const viewportWidthPx = typeof window !== 'undefined' ? window.innerWidth : undefined;
+      // PR #2128 final review (HIGH) — a single `padding: [x, y]` fitBounds
+      // option is NOT directional: Leaflet's own `_getBoundsCenterZoom`
+      // (leaflet-src.js) defaults BOTH `paddingTopLeft` and
+      // `paddingBottomRight` to it, so passing bottomOcclusionPx baked into
+      // a single tuple (the previous approach) applied it to BOTH the top
+      // AND the bottom — double the intended cost, and centered rather than
+      // reserved at the bottom only. `paddingTopLeft`/`paddingBottomRight`
+      // are Leaflet's actual asymmetric-padding API; only the bottom-right
+      // corner carries the occlusion.
+      const [padH, padV] = computeCameraPadding(viewportWidthPx);
       map.fitBounds(panToArea.bbox, {
-        padding: [40, 40],
-        maxZoom: isGroupBounds ? AREA_PANNER_GROUP_MAX_ZOOM : 16,
+        paddingTopLeft: [padH, padV],
+        paddingBottomRight: [padH, padV + bottomOcclusionPx],
+        maxZoom: isGroupBounds ? AREA_PANNER_GROUP_MAX_ZOOM : LEAF_FIT_MAX_ZOOM,
       });
     } else {
-      map.flyTo([panToArea.geo_center_lat, panToArea.geo_center_lon], 13);
+      map.flyTo([panToArea.geo_center_lat, panToArea.geo_center_lon], LEAF_FIT_MIN_ZOOM);
     }
+    // `bottomOcclusionPx` is intentionally NOT a dep: this effect fires only
+    // on a genuine panToArea transition (per the seq guard above), never on
+    // an occlusion change alone. That is safe by DESIGN, not by accident —
+    // the caller (MapDiscovery.tsx) reserves this padding PROACTIVELY for
+    // any mobile-Map listing-capable state (gated on isMarkerPopoverEligible,
+    // not on whether the preview sheet happens to be open right now), so the
+    // authoritative fit for that state already bakes in the occlusion BEFORE
+    // any marker tap could open the sheet. A reactive "refit when the sheet
+    // opens/closes" trigger is deliberately NOT implemented here — it would
+    // be a materially bigger behaviour change (a new camera-move source),
+    // re-introducing exactly what this fix cycle avoids — and is unnecessary
+    // once the padding is reserved up front.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panToArea, map]);
   return null;
 }
@@ -1467,11 +1594,11 @@ function MapController({
       // settles, the target zoom is computed and clamped up-front.
       if (cameraIntent.bounds) {
         const rawZoom = map.getBoundsZoom(cameraIntent.bounds, false, L.point(paddingX, paddingY));
-        const clampedZoom = Math.min(16, Math.max(13, rawZoom));
+        const clampedZoom = Math.min(LEAF_FIT_MAX_ZOOM, Math.max(LEAF_FIT_MIN_ZOOM, rawZoom));
         const center = L.latLngBounds(cameraIntent.bounds).getCenter();
         map.setView(center, clampedZoom, { animate: true });
       } else {
-        map.flyTo(cameraIntent.center, 13);
+        map.flyTo(cameraIntent.center, LEAF_FIT_MIN_ZOOM);
       }
     }
   }, [cameraIntent, map]);
@@ -1495,7 +1622,7 @@ function MapController({
       // Single point — fitBounds on a zero-area bounds is degenerate; use flyTo
       map.flyTo([s, w], 15, { duration: 1 });
     } else {
-      map.fitBounds(focusBounds, { padding: [50, 50] });
+      map.fitBounds(focusBounds, { padding: LEGACY_FOCUS_BOUNDS_PADDING });
     }
   }, [focusBounds, map]);
 
@@ -1962,6 +2089,7 @@ export function PropertyMap({
   onViewportChange,
   onBoundsChange,
   panToArea,
+  bottomOcclusionPx = 0,
   resetMapTick,
   onReady,
   journey,
@@ -2074,7 +2202,7 @@ export function PropertyMap({
         <ZoomWatcher onZoomChange={onZoomChange} />
         <ViewportWatcher onViewportChange={onViewportChange} />
         <BoundsWatcher onBoundsChange={onBoundsChange} />
-        <AreaPanner panToArea={panToArea} />
+        <AreaPanner panToArea={panToArea} bottomOcclusionPx={bottomOcclusionPx} />
         <SchoolFocusPanner
           schoolFocusTick={schoolFocusTick}
           lat={schoolFocusLat}

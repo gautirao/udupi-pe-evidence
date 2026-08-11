@@ -147,6 +147,23 @@ export interface DiscoverMapCanvasProps {
   setMapZoom: Dispatch<SetStateAction<number>>;
   handleBoundsChange: (bbox: [number, number, number, number]) => void;
   panToArea: AreaPoint | null;
+  /**
+   * PR #2128 review cycle 4/final (Finding 2, issue #1823) — bottom-ONLY
+   * occlusion (px) added to AreaPanner's `paddingBottomRight` fitBounds
+   * option (Leaflet's real asymmetric-padding API — a single
+   * `padding: [x, y]` tuple is NOT directional and would apply to both top
+   * and bottom). MapDiscovery.tsx reserves this PROACTIVELY for any
+   * mobile-Map state where `isMarkerPopoverEligible` allows a marker tap to
+   * open the compact listing-preview sheet (a superset of the sheet's
+   * actual render gate — safe because it never under-reserves), not
+   * reactively on whether that sheet happens to be open right now, so the
+   * authoritative fit already keeps its framed geography clear of where the
+   * sheet would render, before any marker tap could open it. Threaded
+   * straight to `PropertyMap`'s prop of the same name. Optional/defaults to
+   * 0 in PropertyMap so every existing test fixture keeps compiling
+   * unchanged.
+   */
+  bottomOcclusionPx?: number;
   journeyView: DiscoverJourneyTransitionsView;
   setMapReady: Dispatch<SetStateAction<boolean>>;
   schools: SchoolResult[];
@@ -281,6 +298,7 @@ export function DiscoverMapCanvas({
   setMapZoom,
   handleBoundsChange,
   panToArea,
+  bottomOcclusionPx,
   journeyView,
   setMapReady,
   schools,
@@ -474,6 +492,7 @@ export function DiscoverMapCanvas({
           onViewportChange={urlActions.reportViewport}
           onBoundsChange={handleBoundsChange}
           panToArea={panToArea}
+          bottomOcclusionPx={bottomOcclusionPx}
           resetMapTick={journeyView.composedResetMapTick}
           onReady={() => setMapReady(true)}
           journey={nav.journey}

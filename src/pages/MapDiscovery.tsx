@@ -13,6 +13,7 @@ import {
 } from '@/components/discover/SchoolRadiusMapOverlay';
 import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
 import { AREA_LAYER_MAX_ZOOM, shouldShowMarkers } from '@/lib/map/zoomPolicy';
+import { MOBILE_LISTING_PREVIEW_OCCLUSION_PX } from '@/shared/map/zoomPolicy';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import {
   computeDiscoverLayer,
@@ -1546,6 +1547,16 @@ export default function MapDiscovery() {
         legacySelectedArea,
       },
       mapState: {
+        // PR #2128 review cycle 4 (fix-verify) — spread the existing
+        // mapState FIRST so this effect merges instead of clobbering
+        // fields another debug effect on this page independently owns
+        // (currently: bottomOcclusionPx, set by the effect further down).
+        // Without this, mapZoom's near-constant churn on any map
+        // interaction re-runs THIS effect after the other one, wiping
+        // whatever it just set — confirmed live (bottomOcclusionPx went
+        // from present to completely absent a few seconds after being set).
+        ...((window as Window & { __debug?: Record<string, unknown> }).__debug
+          ?.mapState as Record<string, unknown> | undefined),
         zoom: mapZoom,
         city,
         // Issue #1160 — expose school centre for E2E viewport assertions.
@@ -2044,6 +2055,31 @@ export default function MapDiscovery() {
     isNodeAreaLeaf: isNodeAreaLeafActive,
   });
 
+  // PR #2128 review cycle 4 (Finding 2, issue #1823) — see this value's own
+  // prop-doc comment (DiscoverMapCanvas.tsx/PropertyMap.tsx) for the full
+  // proactive-vs-reactive rationale. Reuses the SAME `isMarkerPopoverEligible`
+  // predicate as the desktop marker-popover render-eligibility gate above —
+  // deliberately NOT `selectedListingPreview` (that would be reactive to the
+  // sheet's own open/closed state, which is exactly what this cycle's fix
+  // corrects).
+  const bottomOcclusionPx = mobileMapOpen && isMarkerPopoverEligible ? MOBILE_LISTING_PREVIEW_OCCLUSION_PX : 0;
+  // E2E observability only (Playwright contract, matches the existing
+  // canonicalNodeFitCount/schoolCenter convention on this same debug object)
+  // — merges into the mapState sub-object built by the earlier debug effect
+  // above without needing to move this value's own declaration earlier in
+  // the component (isMarkerPopoverEligible/isNodeAreaLeafActive are not
+  // available at that effect's point in the file).
+  useEffect(() => {
+    const w = window as Window & { __debug?: Record<string, unknown> };
+    w.__debug = {
+      ...w.__debug,
+      mapState: {
+        ...(w.__debug?.mapState as Record<string, unknown> | undefined),
+        bottomOcclusionPx,
+      },
+    };
+  }, [bottomOcclusionPx]);
+
   // Issue #1824 Slice S10b — the marker-resolve + stepper cluster (Issue
   // #1810 Stage 2A, MODEL A user-locked model, see approved-plan.toml
   // [user_decision]) is extracted verbatim into the pure resolveMarkerPopover
@@ -2455,6 +2491,10 @@ export default function MapDiscovery() {
           setMapZoom={setMapZoom}
           handleBoundsChange={handleBoundsChange}
           panToArea={panToArea}
+          // PR #2128 review cycle 4 (Finding 2, issue #1823) — see the
+          // `bottomOcclusionPx` const's own declaration above for the full
+          // proactive-vs-reactive rationale.
+          bottomOcclusionPx={bottomOcclusionPx}
           journeyView={journeyView}
           setMapReady={setMapReady}
           schools={schools}

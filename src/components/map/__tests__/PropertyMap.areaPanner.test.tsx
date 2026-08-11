@@ -10,7 +10,7 @@
  * For real (non-synthetic) areas the behaviour must remain unchanged
  * (maxZoom=16) so single-area focus continues to frame tightly.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render } from '@testing-library/react';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
@@ -103,13 +103,34 @@ const baseProps = {
   areas: [],
 };
 
-const renderWithPan = (panToArea: AreaPoint | null) =>
+type SeqAreaPoint = AreaPoint & {
+  seq?: number;
+  reason?: 'group' | 'scope' | 'canonicalNode';
+  // Issue #1823 (fix cycle 3) — mirrors the ref useDiscoverCameraOrchestration
+  // attaches alongside seq/reason in production (publishPanToArea). Plain
+  // `{ current: number }` here since these tests construct panToArea
+  // directly rather than going through the hook.
+  consumedSeqRef?: { current: number };
+};
+
+const renderWithPan = (panToArea: SeqAreaPoint | null) =>
   render(<PropertyMap {...baseProps} panToArea={panToArea} />);
 
 describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
+  const originalInnerWidth = window.innerWidth;
+
   beforeEach(() => {
     mapStub.fitBounds.mockClear();
     mapStub.flyTo.mockClear();
+    // Issue #1823 AC3 — AreaPanner padding is now responsive
+    // (computeCameraPadding), not a hardcoded [40, 40]. Pin a desktop width
+    // as this describe block's baseline; the dedicated responsive-padding
+    // tests below cover both tiers explicitly.
+    Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'innerWidth', { value: originalInnerWidth, configurable: true });
   });
 
   it('clamps maxZoom to AREA_PANNER_GROUP_MAX_ZOOM for synthetic group bounds', () => {
@@ -127,8 +148,13 @@ describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
     const [bbox, opts] = mapStub.fitBounds.mock.calls[0];
     expect(bbox).toEqual(groupBounds.bbox);
+    // PR #2128 final review (HIGH) — a single `padding: [x, y]` tuple is NOT
+    // directional in Leaflet; AreaPanner now uses paddingTopLeft/
+    // paddingBottomRight (bottomOcclusionPx defaults to 0 here, so both
+    // corners carry the same [120, 40] tier).
     expect(opts).toEqual({
-      padding: [40, 40],
+      paddingTopLeft: [120, 40],
+      paddingBottomRight: [120, 40],
       maxZoom: AREA_PANNER_GROUP_MAX_ZOOM,
     });
     expect(AREA_PANNER_GROUP_MAX_ZOOM).toBe(12);
@@ -147,12 +173,209 @@ describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
 
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
     const [, opts] = mapStub.fitBounds.mock.calls[0];
-    expect(opts).toEqual({ padding: [40, 40], maxZoom: 16 });
+    expect(opts).toEqual({ paddingTopLeft: [120, 40], paddingBottomRight: [120, 40], maxZoom: 16 });
   });
 
   it('does not call fitBounds when panToArea is null', () => {
     renderWithPan(null);
     expect(mapStub.fitBounds).not.toHaveBeenCalled();
+  });
+
+  it('Issue #1823 AC3 — uses mobile padding [40, 40] below the desktop breakpoint', () => {
+    Object.defineProperty(window, 'innerWidth', { value: 480, configurable: true });
+    const realArea: AreaPoint = {
+      areaKey: 'IN|KA|Udupi|Manipal',
+      areaLabel: 'Manipal',
+      geo_center_lat: 13.3525,
+      geo_center_lon: 74.7869,
+      bbox: [[13.34, 74.78], [13.37, 74.82]],
+    };
+
+    renderWithPan(realArea);
+
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    const [, opts] = mapStub.fitBounds.mock.calls[0];
+    expect(opts).toEqual({ paddingTopLeft: [40, 40], paddingBottomRight: [40, 40], maxZoom: 16 });
+  });
+
+  it('PR #2128 final review (HIGH fix) — a nonzero bottomOcclusionPx prop adds ONLY to paddingBottomRight, leaving paddingTopLeft at the plain responsive tier', () => {
+    const realArea: AreaPoint = {
+      areaKey: 'IN|KA|Udupi|Manipal',
+      areaLabel: 'Manipal',
+      geo_center_lat: 13.3525,
+      geo_center_lon: 74.7869,
+      bbox: [[13.34, 74.78], [13.37, 74.82]],
+    };
+
+    render(<PropertyMap {...baseProps} panToArea={realArea} bottomOcclusionPx={150} />);
+
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    const [, opts] = mapStub.fitBounds.mock.calls[0];
+    // Desktop tier [120, 40] (innerWidth pinned to 1440 by this block's
+    // beforeEach); the 150px occlusion adds ONLY to paddingBottomRight's
+    // vertical component — a single `padding: [x, y]` tuple would apply to
+    // BOTH corners (double cost), which is exactly the bug this fixes.
+    expect(opts).toEqual({
+      paddingTopLeft: [120, 40],
+      paddingBottomRight: [120, 190],
+      maxZoom: 16,
+    });
+  });
+
+  it('omitting bottomOcclusionPx (the default) leaves both corners at the plain responsive tier, unaffected', () => {
+    const realArea: AreaPoint = {
+      areaKey: 'IN|KA|Udupi|Manipal',
+      areaLabel: 'Manipal',
+      geo_center_lat: 13.3525,
+      geo_center_lon: 74.7869,
+      bbox: [[13.34, 74.78], [13.37, 74.82]],
+    };
+
+    renderWithPan(realArea);
+
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    const [, opts] = mapStub.fitBounds.mock.calls[0];
+    expect(opts).toEqual({ paddingTopLeft: [120, 40], paddingBottomRight: [120, 40], maxZoom: 16 });
+  });
+});
+
+// ─── Issue #1823 — AreaPanner seq/adopt-on-mount ──────────────────────────
+// Mirrors MapController's lastHandledSeqRef (RH1) pattern, but scoped ONLY
+// to the three sequenced fit reasons (group/scope/canonicalNode) that
+// useDiscoverCameraOrchestration's guardedSetPanToArea publishes with a
+// `seq`. A `panToArea` with no `seq` (every other existing caller) is
+// legacy/un-sequenced and must keep firing on every identity change.
+describe('Issue #1823 — AreaPanner seq/adopt-on-mount', () => {
+  const originalInnerWidth = window.innerWidth;
+
+  beforeEach(() => {
+    mapStub.fitBounds.mockClear();
+    mapStub.flyTo.mockClear();
+    Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'innerWidth', { value: originalInnerWidth, configurable: true });
+  });
+
+  const areaA: SeqAreaPoint = {
+    areaKey: 'IN|KA|Udupi|Manipal',
+    areaLabel: 'Manipal',
+    geo_center_lat: 13.3525,
+    geo_center_lon: 74.7869,
+    bbox: [[13.34, 74.78], [13.37, 74.82]],
+  };
+  const areaB: SeqAreaPoint = {
+    areaKey: 'IN|KA|Udupi|Katapadi',
+    areaLabel: 'Katapadi',
+    geo_center_lat: 13.36,
+    geo_center_lon: 74.82,
+    bbox: [[13.35, 74.8], [13.38, 74.84]],
+  };
+
+  it('a genuinely fresh mount fires on the FIRST sequenced value it ever observes (cold load with a group/scope selection already in the URL)', () => {
+    // AreaPanner mounts with panToArea=null (data not yet resolved), then the
+    // orchestration hook's group/scope effect publishes the first-ever
+    // sequenced fit. This must fire — it is not a remount, there was no
+    // PRIOR sighting of any panToArea to have already consumed it.
+    const consumedSeqRef = { current: 0 };
+    const { rerender } = render(<PropertyMap {...baseProps} panToArea={null} />);
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+
+    rerender(<PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 1, reason: 'group', consumedSeqRef }} />);
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+  });
+
+  it('Issue #1823 (fix cycle 1) — a mount whose FIRST-EVER render already carries a sequenced value fires (warm-cache navigation where the parent published before AreaPanner\'s own first render)', () => {
+    // Reproduces react-leaflet's real one-commit-later child-mount ordering:
+    // MapContainer only renders children (AreaPanner included) in the commit
+    // AFTER its own mapRef callback sets context. On a warm-cache navigation
+    // (React Query already serving cached data), the orchestration hook's
+    // group/scope effect can publish seq 1 in the commit BEFORE AreaPanner
+    // ever mounts — so AreaPanner's effect runs for the very first time with
+    // panToArea.seq already set, having never observed panToArea==null. The
+    // previous adopt-on-mount implementation mistook this for a stale
+    // remount echo and silently swallowed it, producing a permanent dead
+    // camera (nothing else re-triggers the fit once the orchestration hook's
+    // prevGroupIdRef/prevScopeRef has advanced). Mounting PropertyMap
+    // directly with a pre-seeded seq puts AreaPanner's effect into exactly
+    // that first-observed state (the test harness's MapContainer mock
+    // renders children synchronously, so a direct initial render is the most
+    // faithful way to reproduce "first execution already has a seq").
+    //
+    // `consumedSeqRef` starts at its per-hook-lifetime initial value (0) —
+    // exactly like a genuine first-ever mount of useDiscoverCameraOrchestration
+    // itself — so seq 1 > 0 fires normally, proving the fix cycle 3 gate
+    // preserves this original guarantee.
+    const consumedSeqRef = { current: 0 };
+    render(<PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 1, reason: 'group', consumedSeqRef }} />);
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+  });
+
+  it('Issue #1823 (fix cycle 3 — PR #2128 review) — a PropertyMap-level remount does NOT replay an already-consumed seq, because consumedSeqRef survives the remount', () => {
+    // consumedSeqRef models useDiscoverCameraOrchestration's
+    // consumedPanToAreaSeqRef: owned by a hook instance that lives ABOVE
+    // PropertyMap (in MapDiscovery) and therefore survives exactly the
+    // remounts under test here — a mapInstanceKey bump, or the mobile Map
+    // dismiss/reopen unmounting PropertyMap itself. Reusing the SAME ref
+    // object across the unmount()/render() boundary below is what makes this
+    // test faithful to that survival; a fresh `{ current: 0 }` per render
+    // would just reproduce the old (now-rejected) replay behaviour.
+    const consumedSeqRef = { current: 0 };
+    const { unmount } = render(
+      <PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 3, reason: 'scope', consumedSeqRef }} />,
+    );
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    unmount();
+    mapStub.fitBounds.mockClear();
+
+    const { rerender } = render(
+      <PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 3, reason: 'scope', consumedSeqRef }} />,
+    );
+    expect(mapStub.fitBounds).not.toHaveBeenCalled(); // already consumed — NOT replayed
+
+    // A genuine new transition (seq 4) still fires through the same persistent ref.
+    rerender(<PropertyMap {...baseProps} panToArea={{ ...areaB, seq: 4, reason: 'scope', consumedSeqRef }} />);
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+  });
+
+  it('Issue #1823 (fix cycle 3) — WITHOUT a consumedSeqRef (direct construction, not via publishPanToArea), the local fallback ref still resets per-mount', () => {
+    // Documents the fallback path's scope: it only matters for a sequenced
+    // panToArea built without going through publishPanToArea. Every real
+    // sequenced write in production always attaches consumedSeqRef, so this
+    // path is a defensive default, not a behaviour real users can hit.
+    const { unmount } = render(<PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 3, reason: 'scope' }} />);
+    unmount();
+    mapStub.fitBounds.mockClear();
+
+    render(<PropertyMap {...baseProps} panToArea={{ ...areaA, seq: 3, reason: 'scope' }} />);
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+  });
+
+  it('un-sequenced (legacy) panToArea writes keep firing on every identity change, unaffected by the seq guard', () => {
+    const { rerender } = render(<PropertyMap {...baseProps} panToArea={areaA} />);
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+
+    rerender(<PropertyMap {...baseProps} panToArea={areaB} />);
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(2);
+  });
+
+  it("issue #1069's AREA_PANNER_GROUP_MAX_ZOOM clamp still applies to a sequenced group fit (the clamp is outside the seq gate)", () => {
+    const groupBounds: SeqAreaPoint = {
+      areaKey: GROUP_BOUNDS_SYNTHETIC_KEY,
+      areaLabel: '',
+      geo_center_lat: 13.355,
+      geo_center_lon: 74.79,
+      bbox: [[13.34, 74.76], [13.37, 74.82]],
+      seq: 1,
+      reason: 'group',
+    };
+    const { rerender } = render(<PropertyMap {...baseProps} panToArea={null} />);
+    rerender(<PropertyMap {...baseProps} panToArea={groupBounds} />);
+
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    const [, opts] = mapStub.fitBounds.mock.calls[0];
+    expect(opts).toMatchObject({ maxZoom: AREA_PANNER_GROUP_MAX_ZOOM });
   });
 });
 

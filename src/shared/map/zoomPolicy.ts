@@ -134,3 +134,160 @@ export function selectPrimaryMapLayer(input: SelectPrimaryMapLayerInput): Primar
   if (!input.hasAreas) return 'residentialMarkers';
   return input.band === 'overview' ? 'area' : 'residentialMarkers';
 }
+
+// ── Issue #1823 — responsive fitBounds padding (moved from
+// useDiscoverMapData.ts, which now re-exports these for compatibility) ──
+//
+// Issue #1882 (Track A PR2 Slice S4; corrected in the camera-padding rework)
+// — Leaflet-native `[horizontalPx, verticalPx]` order (Leaflet's
+// Point/padding contract is `[x, y]` = `[horizontal, vertical]`).
+//
+// Layout finding (verified against the actual JSX, not assumed): the
+// Discover map and right panel are FLEX ROW SIBLINGS at the `lg:` breakpoint
+// — the panel never overlays the map at any supported breakpoint; below
+// `lg:` they stack vertically. So the extra desktop horizontal padding is
+// breathing room for the narrower half-width map viewport at desktop widths
+// — NOT occlusion avoidance.
+//
+// `viewportWidthPx` is optional (omitted in non-browser/test contexts or
+// when the caller has no viewport signal) — undefined degrades to the
+// desktop padding. The breakpoint (1024px) matches the app's existing
+// Tailwind `lg:` breakpoint that governs this layout split.
+export type CameraPadding = [horizontalPx: number, verticalPx: number];
+export const DESKTOP_BREAKPOINT_PX = 1024;
+export const MOBILE_CAMERA_PADDING: CameraPadding = [40, 40];
+export const DESKTOP_CAMERA_PADDING: CameraPadding = [120, 40];
+
+export function computeCameraPadding(viewportWidthPx?: number): CameraPadding {
+  return viewportWidthPx != null && viewportWidthPx < DESKTOP_BREAKPOINT_PX
+    ? MOBILE_CAMERA_PADDING
+    : DESKTOP_CAMERA_PADDING;
+}
+
+/**
+ * Issue #1823 (PR #2128, Finding 2) — deliberate CONSERVATIVE FIXED ESTIMATE
+ * of the mobile compact listing-preview sheet's occluded height
+ * (MobileListingPreviewSheet.tsx). NOT measured: that component is
+ * explicitly documented as "intrinsic-height (no max-h/scroll)", so there is
+ * no fixed CSS value to read, and a live ResizeObserver/ref-measurement
+ * round-trip through MapDiscovery.tsx was judged a disproportionately
+ * larger, riskier change (a new effect + callback prop on a
+ * presentational-only, already-delivered component) for this fix cycle's
+ * budget than a documented estimate.
+ *
+ * Derived from the sheet's own rendered content (drag handle 4px + its 10px
+ * bottom margin, container pt-2.5/pb-4 = 10px + 16px, and the 78px preview
+ * image — the tallest element in its flex row, since the text column beside
+ * it is vertically centered and shorter): ~118px. Rounded up to 150px for
+ * headroom against text wrapping / trust-badge rows on narrow devices.
+ *
+ * If MobileListingPreviewSheet.tsx's layout changes materially (e.g. a
+ * taller image, an added row), this constant must be re-derived — it is not
+ * self-updating.
+ *
+ * PR #2128 final review (HIGH fix) — this value is no longer passed through
+ * `computeCameraPadding()` (a single `padding: [x, y]` fitBounds tuple is
+ * NOT directional in Leaflet — it applies to both top and bottom). The
+ * caller (AreaPanner in PropertyMap.tsx) instead adds it directly to only
+ * the vertical component of `paddingBottomRight`, Leaflet's actual
+ * asymmetric-padding API.
+ */
+export const MOBILE_LISTING_PREVIEW_OCCLUSION_PX = 150;
+
+// ── Issue #1823 — leaf (real-area) fit zoom clamp ────────────────────────
+// Previously inline literals: PropertyMap.tsx's MapController leaf-framing
+// branch (`Math.min(16, Math.max(13, rawZoom))`) and AreaPanner's fitBounds
+// maxZoom for non-group bounds. Named here so both consumers share one
+// source instead of duplicating the [13,16] band.
+export const LEAF_FIT_MIN_ZOOM = 13;
+export const LEAF_FIT_MAX_ZOOM = 16;
+
+// ── Issue #1823 — AreaPanner seq/reason discriminant ─────────────────────
+// Shared between useDiscoverCameraOrchestration.ts (the publisher) and
+// PropertyMap.tsx's AreaPanner (the consumer) via this neutral module,
+// rather than one importing the other's feature-layer type directly.
+export type AreaPanReason = 'group' | 'scope' | 'canonicalNode';
+
+// ── Issue #1823 — restore-wins-on-POP guard ──────────────────────────────
+export interface IsRestoreAuthoritativeInput {
+  historyAction: string | null | undefined;
+  viewport: unknown;
+}
+
+/**
+ * True when a browser Back/Forward (POP) landed on a URL that already
+ * carries a persisted viewport — in that case PropertyMap's
+ * URLViewportController is the sole authority for replaying the camera, and
+ * any one-shot bbox-derived fit (group/scope/canonical-node) must suppress
+ * its own write rather than race it (#2083). Enforced once at the
+ * setPanToArea publish boundary (see useDiscoverCameraOrchestration.ts)
+ * instead of being copied into each fit effect.
+ */
+export function isRestoreAuthoritative({ historyAction, viewport }: IsRestoreAuthoritativeInput): boolean {
+  return historyAction === 'POP' && viewport != null;
+}
+
+// ── Issue #1823 — marker-mode transition input (ships unwired; #1762 wires
+// an actual renderer consumer) ───────────────────────────────────────────
+export type MarkerRevealMode = 'clusteredOverview' | 'individualPins';
+
+/** Below this many markers, individual pins stay legible at any zoom. */
+const MARKER_REVEAL_COUNT_FLOOR = 12;
+
+/** Density tiebreaker threshold — markers per 10,000px^2 of viewport. */
+const MARKER_REVEAL_DENSITY_THRESHOLD_PER_10K_PX = 0.5;
+
+/**
+ * Pure evidence-based input for #1762's marker-mode transition (clustered
+ * overview vs individual pins). Signals in priority order: (a) a low marker
+ * count, legible regardless of zoom; (b) pin density vs viewport area — a
+ * dense/high-count set stays clusteredOverview even ABOVE the zoom floor,
+ * since revealing hundreds/thousands of individual pins purely because zoom
+ * crossed a threshold is exactly the unsafe global-zoom-only decision #1823
+ * exists to replace; (c) the zoom floor — reproduces today's
+ * `CLUSTER_DISABLE_AT_ZOOM` boolean at the zoom-only decision boundary for
+ * every NON-dense case (proven by an equivalence test), but density (b) is
+ * checked first so it can override this floor instead of being bypassed by
+ * it. Deliberately imports NOTHING from any clustering/rendering module —
+ * #1762 wires an actual renderer consumer, this function only decides the
+ * mode from already-known inputs.
+ *
+ * `fittedExtent` is part of the full contract #1762's real consumer will
+ * need (e.g. to normalise density against geographic spread rather than
+ * pure viewport pixels) but is DEFERRED — not yet consulted by this
+ * pixel-density-only heuristic. Accepted into the signature now so it
+ * doesn't need to change later, not because it currently contributes to the
+ * decision.
+ */
+export function resolveMarkerRevealMode(
+  zoomAfterFit: number,
+  markerCount: number,
+  viewportWidthPx: number,
+  viewportHeightPx: number,
+  fittedExtent: [[number, number], [number, number]] | null,
+): MarkerRevealMode {
+  if (markerCount <= MARKER_REVEAL_COUNT_FLOOR) return 'individualPins';
+
+  const viewportAreaPx = viewportWidthPx * viewportHeightPx;
+  const markersPer10kPx = viewportAreaPx > 0 ? (markerCount / viewportAreaPx) * 10_000 : 0;
+  const isDense = viewportAreaPx > 0 && markersPer10kPx > MARKER_REVEAL_DENSITY_THRESHOLD_PER_10K_PX;
+
+  // PR #2128 final review (HIGH) — density checked BEFORE the zoom floor,
+  // so a dense/high-count set cannot be forced to individualPins purely by
+  // crossing CLUSTER_DISABLE_AT_ZOOM. Previously the zoom check was an
+  // unconditional early return above every other signal.
+  if (isDense) return 'clusteredOverview';
+  if (zoomAfterFit >= CLUSTER_DISABLE_AT_ZOOM) return 'individualPins';
+  // Degenerate zero-area viewport, NOT dense (isDense is false whenever
+  // viewportAreaPx <= 0) — preserves the original zero-area-at-low-zoom
+  // fallback exactly.
+  if (!(viewportAreaPx > 0)) return 'clusteredOverview';
+
+  void fittedExtent;
+  // Real viewport, above the count floor, NOT dense, and zoom below the
+  // reveal threshold — matches the original density ternary's else-branch
+  // (a genuinely low-density set stays legible regardless of zoom; see the
+  // "high marker count spread over a large viewport stays individualPins"
+  // test below, unaffected by this fix).
+  return 'individualPins';
+}
