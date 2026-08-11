@@ -557,6 +557,15 @@ interface PropertyMapProps {
    * SAME condition that gates the sheet's own render) — this is the value
    * the persistent Leaflet-container-clipping wrapper below must use.
    * Defaults to 0 (every existing caller omits it, unaffected).
+   *
+   * Issue #2129 (code-reviewer cycle 3) — while the sheet is open, the
+   * caller now sources this from the sheet's own measured real height
+   * (intrinsic-height content — no max-h/scroll — varies per listing), NOT
+   * always the fixed `MOBILE_LISTING_PREVIEW_OCCLUSION_PX` guess; that fixed
+   * value remains only the caller's safe first-frame fallback before the
+   * sheet's ResizeObserver reports its first real measurement. This
+   * component treats the number opaquely either way — it only ever needs
+   * "how many px to reserve right now", never which source produced it.
    */
   previewOcclusionPx?: number;
   /** Incrementing tick that triggers a zoom reset to cityCenter/cityZoom. Incremented by handleAreaBack. */

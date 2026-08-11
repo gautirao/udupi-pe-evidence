@@ -26,6 +26,38 @@
 --   Deepanjali Nagar, Gnana Bharathi, Chandra Layout Extension (d:southwest children — dense-cluster
 --     scenario, mirrors the d:southeast pattern)
 --
+-- Issue #2129 (PR #2134 follow-up) — SECOND independently hit-testable listing marker within the
+-- RR Nagar AREA leaf itself (id ...0009). Every other AREA leaf in this file has exactly ONE
+-- listing, which made a real marker-A -> preview-A -> marker-B (no Close) -> preview-B Playwright
+-- proof structurally infeasible: there was no second, independently hit-testable LISTING marker
+-- inside any single AREA leaf's own map view to tap (the only place 2+ AREA leaves' markers
+-- coexist is their shared DIRECTION parent, where markers are deliberately ~10-15m apart so the
+-- client-side clusterer merges them at any zoom — see this file's header discussion above and
+-- navigation-hierarchy-fixture-seed.sql's own header).
+--
+-- Live-verified camera behaviour for THIS node (re-checked directly against the running app, not
+-- assumed from source reading alone): RR Nagar's own `navigation_nodes` row has a DEGENERATE
+-- (zero-area, single-point) bbox — `min_lat/min_lon` equal `max_lat/max_lon` equal
+-- `centre_lat/centre_lon` (12.94995, 77.52490) — and `AreaPoint.bbox` (built from `public.areas`'
+-- own min/max columns, `useDiscoverMapData.ts`'s `discoverAreas` derivation) is likewise
+-- degenerate for this area. `AreaPanner` (src/components/map/PropertyMap.tsx) therefore ALWAYS
+-- takes its `fitBounds` branch (not the flat `flyTo` branch — bbox is present, just zero-area),
+-- which zero-area `fitBounds` call always lands at the `maxZoom` cap, `LEAF_FIT_MAX_ZOOM`=16
+-- (src/shared/map/zoomPolicy.ts) — NOT the [13,16] range a non-degenerate bbox would allow.
+-- Listing ...0001 above (`geo_center_lat/lon` from `public.areas`, ~2057m south of the node's own
+-- centre point) already proves individual listing markers well outside that centre still render
+-- correctly at this zoom. Listing ...0009 is offset +300m EAST of listing ...0001 (same latitude,
+-- so the offset is purely horizontal) — live-verified in a real browser to render as a second,
+-- fully independent, non-clustered `property-marker` DOM node (an EARLIER, larger 2km-east offset
+-- was tried first and, live-verified, did NOT render as a marker at all — empirically too far
+-- from the fitBounds-derived viewport for leaflet.markercluster's chunked-loading marker
+-- construction to include it; do not re-widen this offset without re-verifying live). At zoom 16
+-- (~2.33 m/px at this latitude) 300m is ~129px on screen — comfortably clear of
+-- leaflet.markercluster's maxClusterRadius=50px (`CLUSTER_MAX_RADIUS_PX`, zoomPolicy.ts), and
+-- disableClusteringAtZoom=16 (`CLUSTER_DISABLE_AT_ZOOM`) independently forces individual pins at
+-- this exact zoom regardless. Deterministic and reproducible from a fresh fixture restore — no
+-- reliance on incidental clustering/viewport behaviour.
+--
 -- Deepanjali Nagar/Gnana Bharathi/Chandra Layout Extension get a listing each; Avalahalli
 -- (d:southwest's 4th AREA child, in navigation-hierarchy-fixture-seed.sql) deliberately gets NONE —
 -- it is the invariant-6/journeyVisibility zero-listing-sibling exclusion case, and must stay at
@@ -105,7 +137,18 @@ VALUES
    'apartment', '[E2E] Chandra Layout Extension Fixture Apartment', 'Chandra Layout Extension',
    0, 12.958707, 77.520393,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-   58000000, 'IN|KA|Bengaluru|Chandra Layout Extension', true, true, NOW(), NOW())
+   58000000, 'IN|KA|Bengaluru|Chandra Layout Extension', true, true, NOW(), NOW()),
+
+  -- Issue #2129 follow-up — second, independently hit-testable RR Nagar listing marker (see
+  -- header note above, incl. the live-verified zoom-16/degenerate-bbox camera behaviour and why
+  -- 300m (not the initially-tried 2km) is the right offset). Same latitude as listing ...0001,
+  -- +0.002696 deg longitude (~300m EAST) — purely HORIZONTAL so it stays vertically level with
+  -- listing ...0001.
+  ('f1956005-0000-0000-0000-000000000009',
+   'house', '[E2E] RR Nagar Fixture House Two', 'RR Nagar',
+   0, 12.9314733, 77.5318614,
+   'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+   72000000, 'IN|KA|Bengaluru|RR Nagar', true, true, NOW(), NOW())
 
 -- NOTE: deliberately NO row for area_key 'IN|KA|Bengaluru|Avalahalli' — see file header.
 
@@ -120,11 +163,17 @@ DECLARE
   v_ne_live_count       INTEGER;
   v_sw_live_count       INTEGER;
   v_sw_zero_live_count  INTEGER;
+  v_rr_nagar_live_count INTEGER;
 BEGIN
   SELECT COUNT(*) INTO v_se_live_count
     FROM public.property_listings
     WHERE status = 'LIVE' AND archived_at IS NULL AND is_duplicate = false
       AND area_key IN ('IN|KA|Bengaluru|RR Nagar', 'IN|KA|Bengaluru|Vijayanagar', 'IN|KA|Bengaluru|Nagarbhavi');
+
+  SELECT COUNT(*) INTO v_rr_nagar_live_count
+    FROM public.property_listings
+    WHERE status = 'LIVE' AND archived_at IS NULL AND is_duplicate = false
+      AND area_key = 'IN|KA|Bengaluru|RR Nagar';
 
   SELECT COUNT(*) INTO v_ne_live_count
     FROM public.property_listings
@@ -142,9 +191,15 @@ BEGIN
     WHERE status = 'LIVE' AND archived_at IS NULL AND is_duplicate = false
       AND area_key = 'IN|KA|Bengaluru|Avalahalli';
 
-  IF v_se_live_count < 3 THEN
-    RAISE EXCEPTION 'Seed assertion failed: expected 3 LIVE listings across the d:southeast AREA '
-      'leaves, got %', v_se_live_count;
+  IF v_se_live_count < 4 THEN
+    RAISE EXCEPTION 'Seed assertion failed: expected at least 4 LIVE listings across the '
+      'd:southeast AREA leaves (3 original + the #2129 second RR Nagar listing), got %',
+      v_se_live_count;
+  END IF;
+
+  IF v_rr_nagar_live_count < 2 THEN
+    RAISE EXCEPTION 'Seed assertion failed: expected 2 LIVE listings for RR Nagar (issue #2129 '
+      'two-independent-marker scenario), got %', v_rr_nagar_live_count;
   END IF;
 
   IF v_ne_live_count < 2 THEN
@@ -163,9 +218,10 @@ BEGIN
   END IF;
 
   RAISE NOTICE 'navigation-hierarchy-fixture-listings-seed assertions passed: % LIVE listings across '
-    'd:southeast AREA leaves, % LIVE listings across d:northeast Local Destination AREA leaves, % '
-    'LIVE listings across d:southwest AREA leaves, % for zero-listing Avalahalli',
-    v_se_live_count, v_ne_live_count, v_sw_live_count, v_sw_zero_live_count;
+    'd:southeast AREA leaves (% of which are RR Nagar), % LIVE listings across d:northeast Local '
+    'Destination AREA leaves, % LIVE listings across d:southwest AREA leaves, % for zero-listing '
+    'Avalahalli',
+    v_se_live_count, v_rr_nagar_live_count, v_ne_live_count, v_sw_live_count, v_sw_zero_live_count;
 END $$;
 
 COMMIT;

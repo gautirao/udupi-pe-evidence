@@ -28,6 +28,7 @@
  * Create alert).
  */
 import type React from 'react';
+import { useEffect, useRef } from 'react';
 import { Building2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatPrice } from '@/lib/formatters';
@@ -52,16 +53,51 @@ export interface MobileListingPreviewSheetProps {
   onDismiss: () => void;
   /** Opens the EXISTING full listing detail (`navigate('/listing/:id')`) — never a new detail view. */
   onViewDetails: (id: string) => void;
+  /**
+   * Issue #2129 (code-reviewer cycle 3) — reports this sheet's real, laid-out
+   * border-box height (px) to the caller whenever it changes. This component
+   * is deliberately intrinsic-height (no max-h/scroll — see the module doc)
+   * so its rendered height varies with content (trust badge row, price band
+   * vs sign-in prompt, bedroom count, …); a caller that needs to reserve
+   * exactly that much space in a sibling layout (MapDiscovery.tsx's
+   * `previewOcclusionPx`, driving PropertyMap.tsx's usable-viewport clip)
+   * cannot use a fixed guess without either over- or under-reserving.
+   * Measurement-only — fires no state of its own, renders nothing
+   * differently, and is a no-op when omitted. Optional so every existing
+   * caller/test fixture keeps compiling unchanged.
+   */
+  onHeightChange?: (heightPx: number) => void;
 }
 
 export function MobileListingPreviewSheet({
   preview,
   onDismiss,
   onViewDetails,
+  onHeightChange,
 }: MobileListingPreviewSheetProps) {
   const typeLabel = preview.propertyType
     ? (PROPERTY_TYPE_LABELS[preview.propertyType] ?? preview.propertyType)
     : 'Property';
+
+  // Issue #2129 (code-reviewer cycle 3) — ResizeObserver on this sheet's own
+  // root node, same pattern as PropertyMap.tsx's MapContainerResizeSync
+  // (#2049): a layout-driven size change (not a camera/state change) can
+  // only be observed, not derived from props. getBoundingClientRect() (not
+  // ResizeObserver's own contentRect) is used deliberately — it reports the
+  // BORDER-box height (padding + border included), the actual visual extent
+  // that occludes the map beneath it, matching what a real hit-test/geometry
+  // measurement (e.g. the E2E spec's boundingBox()) would read.
+  const rootRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!onHeightChange || typeof ResizeObserver === 'undefined') return;
+    const node = rootRef.current;
+    if (!node) return;
+    const ro = new ResizeObserver(() => {
+      onHeightChange(node.getBoundingClientRect().height);
+    });
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, [onHeightChange]);
 
   // Code-review fix (#1956 PR-5) — Escape must dismiss THIS sheet, not the
   // parent mobile Map overlay. `useMobileMapOverlayShell` binds its own
@@ -100,6 +136,7 @@ export function MobileListingPreviewSheet({
     // element out of the `>div` selector entirely with no change to layout,
     // stacking, or behaviour.
     <section
+      ref={rootRef}
       // Mounted INSIDE MapDiscovery's z-[60] mobile map overlay container —
       // a plain positioned element inheriting that stacking context, same
       // as MobileClusterSheet. Edge-to-edge horizontally + a compact,

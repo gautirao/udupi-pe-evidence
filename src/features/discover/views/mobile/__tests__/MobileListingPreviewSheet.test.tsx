@@ -5,7 +5,7 @@
  * `onDismiss`/`onViewDetails`, and makes no assumption about Map/List mode.
  * Real assertions only — no `isVisible().catch(() => false)` guards.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MobileListingPreviewSheet } from '../MobileListingPreviewSheet';
@@ -14,6 +14,24 @@ import type {
   SelectedListingPreviewAnon,
   SelectedListingPreviewAuthed,
 } from '@/features/discover/navigation/selectedListingPreview';
+
+// ─── ResizeObserver stub (Issue #2129 cycle 3) ───────────────────────────
+// jsdom doesn't implement ResizeObserver (same gap the codebase's other
+// stub-based test files, e.g. AppLayout.test.tsx, already work around).
+// This stub captures the single observed callback so tests can fire it
+// manually — the sheet's own effect only ever observes one node — instead
+// of simulating a real layout engine.
+let observedCallback: (() => void) | null = null;
+class ResizeObserverStub {
+  constructor(callback: () => void) {
+    observedCallback = callback;
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {
+    observedCallback = null;
+  }
+}
 
 const ANON_PREVIEW: SelectedListingPreviewAnon = {
   kind: 'anon',
@@ -247,5 +265,87 @@ describe('MobileListingPreviewSheet', () => {
     const areaLabelEl = screen.getByTestId('mobile-listing-preview-area-label');
     expect(areaLabelEl).toHaveTextContent(LONG_AREA_LABEL);
     expect(areaLabelEl.className).toContain('truncate');
+  });
+});
+
+// ─── Issue #2129 (code-reviewer cycle 3) — onHeightChange measurement ────
+// A prior cycle drove the caller's viewport-clip reservation off a FIXED
+// 150px guess; this sheet is intrinsic-height (no max-h/scroll — module
+// doc), so its real rendered height varies with content and measured
+// ~194px in browser evidence, leaving part of the map's own reserved
+// viewport still physically covered. These tests prove the sheet's own
+// side of the fix: it reports its real, laid-out border-box height via
+// ResizeObserver, and is a no-op when the caller doesn't ask for it.
+describe('MobileListingPreviewSheet — onHeightChange (Issue #2129 cycle 3 measurement mechanism)', () => {
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    observedCallback = null;
+    globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = originalResizeObserver;
+    vi.restoreAllMocks();
+  });
+
+  it('reports the root element\'s real border-box height (getBoundingClientRect, not contentRect) on the observer\'s first callback', () => {
+    const onHeightChange = vi.fn();
+    render(
+      <MobileListingPreviewSheet
+        preview={ANON_PREVIEW}
+        onDismiss={vi.fn()}
+        onViewDetails={vi.fn()}
+        onHeightChange={onHeightChange}
+      />,
+    );
+    const sheet = screen.getByTestId('mobile-listing-preview-sheet');
+    vi.spyOn(sheet, 'getBoundingClientRect').mockReturnValue({
+      height: 194,
+      width: 390,
+      top: 650,
+      bottom: 844,
+      left: 0,
+      right: 390,
+      x: 0,
+      y: 650,
+      toJSON() {},
+    });
+
+    expect(observedCallback).not.toBeNull();
+    observedCallback?.();
+
+    expect(onHeightChange).toHaveBeenCalledTimes(1);
+    expect(onHeightChange).toHaveBeenCalledWith(194);
+  });
+
+  it('reports an UPDATED height on a later callback (content-driven reflow, e.g. trust badge row toggling)', () => {
+    const onHeightChange = vi.fn();
+    render(
+      <MobileListingPreviewSheet
+        preview={ANON_PREVIEW}
+        onDismiss={vi.fn()}
+        onViewDetails={vi.fn()}
+        onHeightChange={onHeightChange}
+      />,
+    );
+    const sheet = screen.getByTestId('mobile-listing-preview-sheet');
+    const rectSpy = vi
+      .spyOn(sheet, 'getBoundingClientRect')
+      .mockReturnValue({ height: 150, width: 390, top: 0, bottom: 0, left: 0, right: 0, x: 0, y: 0, toJSON() {} });
+    observedCallback?.();
+    expect(onHeightChange).toHaveBeenLastCalledWith(150);
+
+    rectSpy.mockReturnValue({ height: 210, width: 390, top: 0, bottom: 0, left: 0, right: 0, x: 0, y: 0, toJSON() {} });
+    observedCallback?.();
+    expect(onHeightChange).toHaveBeenLastCalledWith(210);
+    expect(onHeightChange).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not observe or throw when onHeightChange is omitted (every existing caller/fixture)', () => {
+    expect(() =>
+      render(<MobileListingPreviewSheet preview={ANON_PREVIEW} onDismiss={vi.fn()} onViewDetails={vi.fn()} />),
+    ).not.toThrow();
+    expect(observedCallback).toBeNull();
   });
 });

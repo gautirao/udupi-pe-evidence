@@ -14,6 +14,7 @@ import {
 import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
 import { AREA_LAYER_MAX_ZOOM, shouldShowMarkers } from '@/lib/map/zoomPolicy';
 import { MOBILE_LISTING_PREVIEW_OCCLUSION_PX } from '@/shared/map/zoomPolicy';
+import { usePreviewSheetOcclusion } from '@/features/discover/state/usePreviewSheetOcclusion';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import {
   computeDiscoverLayer,
@@ -2084,11 +2085,21 @@ export default function MapDiscovery() {
   // imports/re-checks the other. Both consumers below now read this one
   // const, so they cannot drift apart by construction.
   const isPreviewSheetOpen = mobileMapOpen && !!selectedListingPreview;
-  // previewOcclusionPx is 0 unless the compact preview sheet is ACTUALLY
-  // open (isPreviewSheetOpen above) — see PropertyMap.tsx's prop of the
-  // same name for why the persistent viewport-clipping wrapper must use
-  // this, not the proactive bottomOcclusionPx.
-  const previewOcclusionPx = isPreviewSheetOpen ? MOBILE_LISTING_PREVIEW_OCCLUSION_PX : 0;
+  // Issue #2129 (code-reviewer cycle 3) — previewOcclusionPx is 0 unless the
+  // compact preview sheet is ACTUALLY open (isPreviewSheetOpen above) — see
+  // PropertyMap.tsx's prop of the same name for why the persistent
+  // viewport-clipping wrapper must use this, not the proactive
+  // bottomOcclusionPx. While open, prefers MobileListingPreviewSheet's real
+  // measured height (intrinsic-height content — no max-h/scroll — varies per
+  // listing) over the fixed MOBILE_LISTING_PREVIEW_OCCLUSION_PX guess; see
+  // usePreviewSheetOcclusion's own doc comment for the full rationale,
+  // including cycle 3's HIGH finding that the measurement must reset on a
+  // previewed-listing identity change even while the sheet stays
+  // continuously open (useMarkerSelection.ts's selectMarkerSibling), not
+  // only on close — which is exactly why this hook takes the listing id as
+  // its own reactive input rather than relying on isPreviewSheetOpen alone.
+  const { previewOcclusionPx, onHeightChange: handlePreviewSheetHeightChange } =
+    usePreviewSheetOcclusion(isPreviewSheetOpen, selectedListingPreview?.id ?? null);
   // E2E observability only (Playwright contract, matches the existing
   // canonicalNodeFitCount/schoolCenter convention on this same debug object)
   // — merges into the mapState sub-object built by the earlier debug effect
@@ -2471,6 +2482,10 @@ export default function MapDiscovery() {
               preview={selectedListingPreview}
               onDismiss={() => actions.clearSelectedListing()}
               onViewDetails={(id) => navigate(`/listing/${id}`)}
+              // Issue #2129 (code-reviewer cycle 3) — feeds
+              // usePreviewSheetOcclusion (previewOcclusionPx's own
+              // declaration above) from this sheet's real rendered height.
+              onHeightChange={handlePreviewSheetHeightChange}
             />
           )}
           <DiscoverMapMount
