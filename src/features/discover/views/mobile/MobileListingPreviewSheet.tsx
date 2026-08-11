@@ -28,7 +28,7 @@
  * Create alert).
  */
 import type React from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { Building2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatPrice } from '@/lib/formatters';
@@ -62,11 +62,26 @@ export interface MobileListingPreviewSheetProps {
    * exactly that much space in a sibling layout (MapDiscovery.tsx's
    * `previewOcclusionPx`, driving PropertyMap.tsx's usable-viewport clip)
    * cannot use a fixed guess without either over- or under-reserving.
+   *
+   * Issue #2129 (code-reviewer cycle 5, BLOCKING, fixed) — takes the
+   * reporting preview's own `id` as the first argument. This sheet stays
+   * MOUNTED (same DOM node, same effects) across a direct marker-to-marker
+   * swap (`useMarkerSelection.ts`'s `selectMarkerSibling`), so a
+   * delta-only ResizeObserver alone can never be trusted to fire again for
+   * a NEW preview whose real height happens to equal the PREVIOUS preview's
+   * (very plausible — same property type, both authed-with-price, etc.).
+   * This component therefore reports synchronously on every distinct
+   * `preview.id` regardless of whether the box size actually changed (see
+   * the effects below); the id lets the caller (usePreviewSheetOcclusion)
+   * structurally reject any report that arrives for a preview that is no
+   * longer current, rather than relying on effect-ordering to avoid a
+   * stale/erased value.
+   *
    * Measurement-only — fires no state of its own, renders nothing
    * differently, and is a no-op when omitted. Optional so every existing
    * caller/test fixture keeps compiling unchanged.
    */
-  onHeightChange?: (heightPx: number) => void;
+  onHeightChange?: (listingId: string, heightPx: number) => void;
 }
 
 export function MobileListingPreviewSheet({
@@ -79,21 +94,47 @@ export function MobileListingPreviewSheet({
     ? (PROPERTY_TYPE_LABELS[preview.propertyType] ?? preview.propertyType)
     : 'Property';
 
-  // Issue #2129 (code-reviewer cycle 3) — ResizeObserver on this sheet's own
-  // root node, same pattern as PropertyMap.tsx's MapContainerResizeSync
-  // (#2049): a layout-driven size change (not a camera/state change) can
-  // only be observed, not derived from props. getBoundingClientRect() (not
-  // ResizeObserver's own contentRect) is used deliberately — it reports the
-  // BORDER-box height (padding + border included), the actual visual extent
-  // that occludes the map beneath it, matching what a real hit-test/geometry
+  // getBoundingClientRect() (not ResizeObserver's own contentRect) is used
+  // deliberately throughout both effects below — it reports the BORDER-box
+  // height (padding + border included), the actual visual extent that
+  // occludes the map beneath it, matching what a real hit-test/geometry
   // measurement (e.g. the E2E spec's boundingBox()) would read.
   const rootRef = useRef<HTMLElement>(null);
+
+  // Issue #2129 (code-reviewer cycle 5, BLOCKING, fixed) — GUARANTEED
+  // synchronous report for every distinct `preview.id`, independent of
+  // whether the box size actually changed from the previous preview's.
+  // `useLayoutEffect` (not `useEffect`) so this fires synchronously right
+  // after THIS identity's content is committed to the DOM, before the
+  // browser paints — closing the exact gap a delta-only ResizeObserver
+  // leaves open (see this prop's own doc comment above and
+  // usePreviewSheetOcclusion.ts's module doc for the full defect history).
+  useLayoutEffect(() => {
+    if (!onHeightChange) return;
+    const node = rootRef.current;
+    if (!node) return;
+    onHeightChange(preview.id, node.getBoundingClientRect().height);
+  }, [preview.id, onHeightChange]);
+
+  // ResizeObserver on this sheet's own root node, same pattern as
+  // PropertyMap.tsx's MapContainerResizeSync (#2049) — for a layout-driven
+  // size change of the SAME preview's content AFTER its initial report
+  // above (e.g. a late-loading thumbnail image altering the well's
+  // intrinsic size). Deliberately NOT re-keyed on `preview.id`: this
+  // observer instance stays attached across an identity swap (same DOM
+  // node reused), so `previewIdRef` (always in sync with the latest render,
+  // updated below) is read inside the callback instead of the id this
+  // effect closed over at setup time — otherwise a resize firing for
+  // listing B while this effect's closure still remembered listing A would
+  // mis-tag the report.
+  const previewIdRef = useRef(preview.id);
+  previewIdRef.current = preview.id;
   useEffect(() => {
     if (!onHeightChange || typeof ResizeObserver === 'undefined') return;
     const node = rootRef.current;
     if (!node) return;
     const ro = new ResizeObserver(() => {
-      onHeightChange(node.getBoundingClientRect().height);
+      onHeightChange(previewIdRef.current, node.getBoundingClientRect().height);
     });
     ro.observe(node);
     return () => ro.disconnect();

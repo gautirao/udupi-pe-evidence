@@ -1,10 +1,9 @@
 /**
- * Issue #2129 (code-reviewer cycle 3) — usePreviewSheetOcclusion.
+ * Issue #2129 — usePreviewSheetOcclusion.
  *
- * Extracted out of MapDiscovery.tsx specifically so the reset-on-identity-
- * change invariant below is unit-testable in isolation (MapDiscovery's own
- * render tree is not practically unit-testable — react-leaflet mocked, huge
- * component graph).
+ * Extracted out of MapDiscovery.tsx specifically so the invariants below are
+ * unit-testable in isolation (MapDiscovery's own render tree is not
+ * practically unit-testable — react-leaflet mocked, huge component graph).
  */
 import { describe, it, expect } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
@@ -28,14 +27,14 @@ describe('usePreviewSheetOcclusion', () => {
     expect(result.current.previewOcclusionPx).toBe(MOBILE_LISTING_PREVIEW_OCCLUSION_PX);
   });
 
-  it('adopts the real measured height once onHeightChange fires, rounding up (never under-reserving)', () => {
+  it('adopts the real measured height once onHeightChange fires for the CURRENT listing, rounding up (never under-reserving)', () => {
     const { result } = renderHook(
       ({ isOpen, id }) => usePreviewSheetOcclusion(isOpen, id),
       { initialProps: { isOpen: true, id: 'listing-a' as string | null } },
     );
 
     act(() => {
-      result.current.onHeightChange(193.2);
+      result.current.onHeightChange('listing-a', 193.2);
     });
 
     expect(result.current.previewOcclusionPx).toBe(194);
@@ -44,13 +43,9 @@ describe('usePreviewSheetOcclusion', () => {
   // ─── Issue #2129 cycle 3 HIGH finding — direct marker-to-marker swap ───
   // useMarkerSelection.ts's selectMarkerSibling swaps the previewed listing
   // id WITHOUT ever closing the sheet (isPreviewSheetOpen stays true the
-  // whole time). A reset effect keyed only on isPreviewSheetOpen would never
-  // fire here, letting listing A's stale measured height leak into listing
-  // B's newly-rendered (possibly taller) content — reproducing the original
-  // #2129 under-reservation for the transient window before B's own
-  // ResizeObserver callback lands. This is the exact regression this test
-  // proves does NOT happen.
-  it('resets the measured height when the previewed listing identity changes WHILE the sheet stays continuously open (direct marker-to-marker swap)', () => {
+  // whole time). A stale measurement from the PREVIOUS listing must never
+  // leak into the new one's reservation.
+  it('ignores a stale measurement from a PREVIOUS listing once the previewed identity changes WHILE the sheet stays continuously open', () => {
     const { result, rerender } = renderHook(
       ({ isOpen, id }) => usePreviewSheetOcclusion(isOpen, id),
       { initialProps: { isOpen: true, id: 'listing-a' as string | null } },
@@ -58,33 +53,80 @@ describe('usePreviewSheetOcclusion', () => {
 
     // Listing A opens and measures a real height (e.g. a full-content card).
     act(() => {
-      result.current.onHeightChange(220);
+      result.current.onHeightChange('listing-a', 220);
     });
     expect(result.current.previewOcclusionPx).toBe(220);
 
     // selectMarkerSibling swaps straight to listing B — isPreviewSheetOpen
     // NEVER flips false; only the previewed listing's identity changes.
+    // No onHeightChange call yet for B.
     rerender({ isOpen: true, id: 'listing-b' });
 
     // Must NOT still be A's stale 220px — falls back to the safe constant
-    // until B's own ResizeObserver reports its real height.
+    // until B's own measurement arrives.
     expect(result.current.previewOcclusionPx).toBe(MOBILE_LISTING_PREVIEW_OCCLUSION_PX);
-
-    // B's sheet instance measures its own (here, shorter) real content.
-    act(() => {
-      result.current.onHeightChange(160);
-    });
-    expect(result.current.previewOcclusionPx).toBe(160);
   });
 
-  it('does NOT reset the measured height on a re-render with the SAME open state and listing id (no spurious remeasure-fallback flicker)', () => {
+  // ─── Issue #2129 cycle 5 BLOCKING finding — the fix itself ─────────────
+  // Cycle 3's first fix used a separate reset-on-identity-change effect,
+  // which only cleared the stale value but relied on the SHEET to guarantee
+  // a fresh report always arrives afterward (a delta-only ResizeObserver
+  // does not, when the new listing's height matches the old one's — see
+  // MobileListingPreviewSheet.test.tsx for that half of the fix). This
+  // hook's own half of the fix is structural: a measurement is accepted
+  // the instant it arrives FOR THE CURRENT listing, with no separate reset
+  // effect that could race ahead of and erase it.
+  it('accepts a measurement for the NEW listing the instant it arrives, even when reported in the SAME update as the identity change (no reset-effect race)', () => {
     const { result, rerender } = renderHook(
       ({ isOpen, id }) => usePreviewSheetOcclusion(isOpen, id),
       { initialProps: { isOpen: true, id: 'listing-a' as string | null } },
     );
 
     act(() => {
-      result.current.onHeightChange(180);
+      result.current.onHeightChange('listing-a', 220);
+    });
+    expect(result.current.previewOcclusionPx).toBe(220);
+
+    rerender({ isOpen: true, id: 'listing-b' });
+    // B's own measurement — SAME height as A's, the exact case a delta-only
+    // ResizeObserver would never re-fire for (covered structurally here,
+    // independent of the sheet's own reporting mechanism).
+    act(() => {
+      result.current.onHeightChange('listing-b', 220);
+    });
+
+    expect(result.current.previewOcclusionPx).toBe(220);
+  });
+
+  it('rejects (ignores) a late-arriving measurement tagged for a listing that is NO LONGER the current one', () => {
+    const { result, rerender } = renderHook(
+      ({ isOpen, id }) => usePreviewSheetOcclusion(isOpen, id),
+      { initialProps: { isOpen: true, id: 'listing-a' as string | null } },
+    );
+
+    act(() => {
+      result.current.onHeightChange('listing-a', 220);
+    });
+    rerender({ isOpen: true, id: 'listing-b' });
+
+    // A late ResizeObserver callback for the OLD listing id arrives after
+    // the swap (e.g. a reflow that was already in flight) — must not be
+    // read as B's height.
+    act(() => {
+      result.current.onHeightChange('listing-a', 999);
+    });
+
+    expect(result.current.previewOcclusionPx).toBe(MOBILE_LISTING_PREVIEW_OCCLUSION_PX);
+  });
+
+  it('does NOT lose the measured height on a re-render with the SAME open state and listing id (no spurious fallback flicker)', () => {
+    const { result, rerender } = renderHook(
+      ({ isOpen, id }) => usePreviewSheetOcclusion(isOpen, id),
+      { initialProps: { isOpen: true, id: 'listing-a' as string | null } },
+    );
+
+    act(() => {
+      result.current.onHeightChange('listing-a', 180);
     });
     expect(result.current.previewOcclusionPx).toBe(180);
 
@@ -94,22 +136,22 @@ describe('usePreviewSheetOcclusion', () => {
     expect(result.current.previewOcclusionPx).toBe(180);
   });
 
-  it('resets on close (isPreviewSheetOpen -> false) so the NEXT open never starts from a stale height', () => {
+  it('falls back to the safe constant on close, so the NEXT open never starts from a stale height', () => {
     const { result, rerender } = renderHook(
       ({ isOpen, id }) => usePreviewSheetOcclusion(isOpen, id),
       { initialProps: { isOpen: true, id: 'listing-a' as string | null } },
     );
 
     act(() => {
-      result.current.onHeightChange(220);
+      result.current.onHeightChange('listing-a', 220);
     });
     expect(result.current.previewOcclusionPx).toBe(220);
 
     rerender({ isOpen: false, id: null });
     expect(result.current.previewOcclusionPx).toBe(0);
 
-    // Reopening with a DIFFERENT (shorter) listing must start from the
-    // fallback, not the previous session's 220px.
+    // Reopening with a DIFFERENT listing, no measurement yet, must start
+    // from the fallback, not the previous session's 220px.
     rerender({ isOpen: true, id: 'listing-c' });
     expect(result.current.previewOcclusionPx).toBe(MOBILE_LISTING_PREVIEW_OCCLUSION_PX);
   });
