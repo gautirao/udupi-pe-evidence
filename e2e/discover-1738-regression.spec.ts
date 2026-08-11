@@ -101,6 +101,15 @@ const CITY_LISTINGS_FIXTURE = {
           title: 'House Near MIT',
           locality: 'Manipal',
           pricePaise: 500000000,
+          // Code-review fix (PR #2136, cycle 2) — this test runs anonymous
+          // (no auth stub anywhere in this file), so toSelectedListingPreview's
+          // anon branch (selectedListingPreview.ts) reads `priceBand`, NOT
+          // `pricePaise` — without this field the mobile sheet's price node
+          // rendered the generic "Sign in to view price" fallback regardless
+          // of which listing was tapped, so the price assertion below proved
+          // nothing listing-specific. Set to a band consistent with
+          // pricePaise (500000000 paise = ₹50L).
+          priceBand: '₹45L-55L',
           lat: MIT_LAT,
           lon: MIT_LON,
           listingPurpose: 'sale',
@@ -437,10 +446,16 @@ test.describe('Issue #1738 — marker popover dismiss-cycle + mobile hardening (
     // pattern in e2e/discover/issue-2129-mobile-marker-occlusion.spec.ts), so
     // identity is proven by combining the `listing=` URL poll above with
     // sheet CONTENT derived from this test's own stubbed fixture data — the
-    // area label and price sourced from CITY_LISTINGS_FIXTURE's Manipal
-    // listing, not a generic/empty shell.
+    // area label AND the exact `priceBand` string (see CITY_LISTINGS_FIXTURE's
+    // code-review-fix comment) render from the SAME listing this test tapped,
+    // not a generic/empty shell. This test runs anonymous (no auth stub in
+    // this file), so the sheet's anon arm renders `priceBand` inside
+    // `mobile-listing-preview-price-band` (MobileListingPreviewSheet.tsx) —
+    // asserting its exact text, not just `.toBeVisible()`, is what makes this
+    // listing-specific rather than passing regardless of which listing/price
+    // state was hit.
     await expect(previewSheet.getByTestId('mobile-listing-preview-area-label')).toContainText('Manipal');
-    await expect(previewSheet.getByTestId('mobile-listing-preview-price')).toBeVisible();
+    await expect(previewSheet.getByTestId('mobile-listing-preview-price-band')).toHaveText('₹45L-55L');
 
     // Radius legend must still be visible after the tap.
     await expect(page.getByTestId('school-radius-legend')).toBeVisible();
