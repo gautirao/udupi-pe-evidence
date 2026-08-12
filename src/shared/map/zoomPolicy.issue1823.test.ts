@@ -4,9 +4,10 @@
  * to a single publish-boundary check) and `resolveMarkerRevealMode` (a
  * pure, unwired input function for #1762's marker-mode transition).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
   isRestoreAuthoritative,
+  getPageNavigationType,
   resolveMarkerRevealMode,
   CLUSTER_DISABLE_AT_ZOOM,
   computeCameraPadding,
@@ -15,30 +16,119 @@ import {
 } from './zoomPolicy';
 
 describe('Issue #1823 — isRestoreAuthoritative', () => {
-  it('POP + a persisted viewport -> true (restore is authoritative, suppress the fit)', () => {
+  it('POP + a persisted viewport + a warm (non-cold) session -> true (restore is authoritative, suppress the fit)', () => {
     expect(
-      isRestoreAuthoritative({ historyAction: 'POP', viewport: { lat: 1, lon: 1, zoom: 10 } }),
+      isRestoreAuthoritative({
+        historyAction: 'POP',
+        viewport: { lat: 1, lon: 1, zoom: 10 },
+        isColdNavigate: false,
+      }),
     ).toBe(true);
   });
 
   it('POP + no viewport -> false (nothing to restore, fit normally)', () => {
-    expect(isRestoreAuthoritative({ historyAction: 'POP', viewport: null })).toBe(false);
-    expect(isRestoreAuthoritative({ historyAction: 'POP', viewport: undefined })).toBe(false);
+    expect(isRestoreAuthoritative({ historyAction: 'POP', viewport: null, isColdNavigate: false })).toBe(
+      false,
+    );
+    expect(
+      isRestoreAuthoritative({ historyAction: 'POP', viewport: undefined, isColdNavigate: false }),
+    ).toBe(false);
   });
 
   it('PUSH + a viewport -> false (a forward navigation is never a restoration)', () => {
     expect(
-      isRestoreAuthoritative({ historyAction: 'PUSH', viewport: { lat: 1, lon: 1, zoom: 10 } }),
+      isRestoreAuthoritative({
+        historyAction: 'PUSH',
+        viewport: { lat: 1, lon: 1, zoom: 10 },
+        isColdNavigate: false,
+      }),
     ).toBe(false);
   });
 
   it('PUSH + no viewport -> false', () => {
-    expect(isRestoreAuthoritative({ historyAction: 'PUSH', viewport: null })).toBe(false);
+    expect(
+      isRestoreAuthoritative({ historyAction: 'PUSH', viewport: null, isColdNavigate: false }),
+    ).toBe(false);
   });
 
   it('undefined historyAction (no history metadata at all) -> false', () => {
     expect(
-      isRestoreAuthoritative({ historyAction: undefined, viewport: { lat: 1, lon: 1, zoom: 10 } }),
+      isRestoreAuthoritative({
+        historyAction: undefined,
+        viewport: { lat: 1, lon: 1, zoom: 10 },
+        isColdNavigate: false,
+      }),
+    ).toBe(false);
+  });
+
+  // Issue #2143 — react-router reports 'POP' as the INITIAL action on every
+  // hard page load (typed URL, bookmark, new tab), indistinguishable from a
+  // genuine Back/Forward by historyAction alone. isColdNavigate is the
+  // caller-computed signal that tells them apart.
+  it('#2143: POP + a viewport + a cold navigation -> false (never trust an inherited viewport on a fresh hard load)', () => {
+    expect(
+      isRestoreAuthoritative({
+        historyAction: 'POP',
+        viewport: { lat: 1, lon: 1, zoom: 10 },
+        isColdNavigate: true,
+      }),
+    ).toBe(false);
+  });
+});
+
+// Issue #2143 — getPageNavigationType's degrade-to-undefined fallback. Callers
+// (useDiscoverCameraOrchestration.ts's isColdNavigate composite) must treat
+// undefined the same as 'navigate' (untrusted/cold) — never crash and never
+// silently trust a viewport just because the API was unavailable.
+describe('Issue #2143 — getPageNavigationType (Performance API unavailable/throwing fallback)', () => {
+  const performanceDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'performance');
+
+  afterEach(() => {
+    if (performanceDescriptor) {
+      Object.defineProperty(globalThis, 'performance', performanceDescriptor);
+    }
+  });
+
+  it('returns undefined when performance.getEntriesByType is missing (older browser / minimal test env)', () => {
+    Object.defineProperty(globalThis, 'performance', {
+      configurable: true,
+      value: { ...globalThis.performance, getEntriesByType: undefined },
+    });
+    expect(getPageNavigationType()).toBeUndefined();
+  });
+
+  it('returns undefined (does not throw) when performance.getEntriesByType itself throws', () => {
+    Object.defineProperty(globalThis, 'performance', {
+      configurable: true,
+      value: {
+        ...globalThis.performance,
+        getEntriesByType: () => {
+          throw new Error('Navigation Timing unavailable in this environment');
+        },
+      },
+    });
+    expect(() => getPageNavigationType()).not.toThrow();
+    expect(getPageNavigationType()).toBeUndefined();
+  });
+
+  it('composed with isRestoreAuthoritative: an undefined page navigation type resolves conservatively (isColdNavigate stays true, fit still fires)', () => {
+    Object.defineProperty(globalThis, 'performance', {
+      configurable: true,
+      value: { ...globalThis.performance, getEntriesByType: undefined },
+    });
+    const pageNavType = getPageNavigationType();
+    // Mirrors useDiscoverCameraOrchestration.ts's composite: no in-app
+    // transition observed yet, and the page's own nav type is neither
+    // 'reload' nor 'back_forward' (undefined falls into that "neither" case).
+    const isColdNavigate =
+      pageNavType !== 'reload' && pageNavType !== ('back_forward' as typeof pageNavType);
+    expect(isColdNavigate).toBe(true);
+    expect(
+      isRestoreAuthoritative({
+        historyAction: 'POP',
+        viewport: { lat: 1, lon: 1, zoom: 10 },
+        isColdNavigate,
+      }),
     ).toBe(false);
   });
 });

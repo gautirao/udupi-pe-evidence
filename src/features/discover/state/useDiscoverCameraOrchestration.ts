@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
-import { isRestoreAuthoritative, type AreaPanReason } from '@/shared/map/zoomPolicy';
+import { getPageNavigationType, isRestoreAuthoritative, type AreaPanReason } from '@/shared/map/zoomPolicy';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
@@ -183,6 +183,18 @@ export interface UseDiscoverCameraOrchestrationResult {
    * issue-2083-home-breadcrumb-back-camera-race.spec.ts.
    */
   canonicalNodeFitCount: number;
+  /**
+   * Issue #2143 (PR follow-up) — true when the CURRENT render cannot be a
+   * genuine restore: no in-app PUSH/REPLACE observed yet this mounted
+   * session, and the page's own Navigation Timing type isn't 'reload'/
+   * 'back_forward'. Exposed so PropertyMap.tsx's URLViewportController (a
+   * SEPARATE camera writer, gated only on `historyAction`/`isFirstRender`
+   * today) can skip its own unconditional apply for a cold canonical-node
+   * transition instead of racing this hook's fit-once effect — see that
+   * component's own gate for the exact condition. Same signal `guardedSetPanToArea`
+   * uses internally; never recompute a second one from this value's inputs.
+   */
+  isColdNavigate: boolean;
 }
 
 export function useDiscoverCameraOrchestration({
@@ -354,17 +366,63 @@ export function useDiscoverCameraOrchestration({
     },
     [setPanToArea],
   );
+  // Issue #2143 — companion signal to the restore-wins-on-POP guard below.
+  // `historyAction === 'POP'` alone cannot tell a genuine in-app Back/
+  // Forward (or a full-page reload/back_forward-cache restore of an
+  // already-app-navigated URL) apart from a COLD hard load straight to
+  // `node=<AREA>&lat=&lon=&zoom=` (typed URL, bookmark, new tab, external
+  // link) — react-router's `useNavigationType()` reports 'POP' as the
+  // INITIAL action on every hard page load regardless of how it was
+  // reached. `hasObservedInAppTransitionRef` flips true the first time this
+  // mounted session sees a REAL in-app history write (PUSH from goToNode,
+  // or REPLACE from reportViewport's debounced pan writes) — a genuine POP
+  // restoring an app-created entry can only happen AFTER such a write.
+  // `pageNavigationTypeRef` covers the complementary first-render case: the
+  // page's OWN Navigation Timing entry (captured once, it never changes for
+  // the life of the document) tells 'reload'/'back_forward' apart from a
+  // fresh 'navigate' even before any in-app transition has occurred.
+  const hasObservedInAppTransitionRef = useRef(false);
+  useEffect(() => {
+    if (urlState.historyAction === 'PUSH' || urlState.historyAction === 'REPLACE') {
+      hasObservedInAppTransitionRef.current = true;
+    }
+  }, [urlState.historyAction]);
+  const pageNavigationTypeRef = useRef(getPageNavigationType());
+
+  // Issue #2143 (PR follow-up) — hoisted OUT of guardedSetPanToArea so a
+  // SECOND camera writer (PropertyMap.tsx's URLViewportController, which
+  // unconditionally applies the raw URL viewport on every mount/remount —
+  // notably including the mobile List<->Map toggle's real unmount/remount of
+  // the whole map, NOT just the page's initial load) can consult the exact
+  // same signal instead of recomputing a divergent one. Returned below in
+  // UseDiscoverCameraOrchestrationResult; MapDiscovery.tsx threads it through
+  // DiscoverMapMount -> DiscoverMapCanvas -> PropertyMap -> URLViewportController.
+  // Only ONE of these two writers may ever apply a camera write for a given
+  // cold canonical-node transition — AreaPanner (guarded below) owns it when
+  // isColdNavigate is true and a node is in play; URLViewportController must
+  // skip its own unconditional apply in exactly that case (see its own gate).
+  const isColdNavigate =
+    !hasObservedInAppTransitionRef.current &&
+    pageNavigationTypeRef.current !== 'reload' &&
+    pageNavigationTypeRef.current !== 'back_forward';
+
   // Issue #2083 (cycle 5) / #1823 — the restore-wins-on-POP guard, scoped to
   // ONLY the canonical-node fit (see rationale above). Returns whether the
   // write actually fired, so canonicalNodeFitCount below can gate on that.
   const guardedSetPanToArea = useCallback(
     (area: AreaPoint, reason: AreaPanReason): boolean => {
-      if (isRestoreAuthoritative({ historyAction: urlState.historyAction, viewport: urlState.viewport })) {
+      if (
+        isRestoreAuthoritative({
+          historyAction: urlState.historyAction,
+          viewport: urlState.viewport,
+          isColdNavigate,
+        })
+      ) {
         return false;
       }
       return publishPanToArea(area, reason);
     },
-    [publishPanToArea, urlState.historyAction, urlState.viewport],
+    [publishPanToArea, urlState.historyAction, urlState.viewport, isColdNavigate],
   );
 
   const prevGroupIdRef = useRef<string | null>(null);
@@ -684,5 +742,6 @@ export function useDiscoverCameraOrchestration({
     schoolFocusLon: selectedSchoolLon,
     agriGroupFocusBounds,
     canonicalNodeFitCount,
+    isColdNavigate,
   };
 }

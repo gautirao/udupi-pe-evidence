@@ -18,7 +18,7 @@
  * zero root children) as a no-fit no-op — both are correct, for different
  * inputs.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useDiscoverCameraOrchestration } from '../useDiscoverCameraOrchestration';
 import type {
@@ -279,5 +279,200 @@ describe('Issue #1823 fix cycle 2 — group/scope fits are NOT restore-guarded',
 
     expect(setPanToArea).toHaveBeenCalledTimes(1);
     expect(setPanToArea.mock.calls[0][0]).toMatchObject({ reason: 'scope' });
+  });
+});
+
+// ─── Issue #2143 — cold `node=` navigation with a stale/foreign viewport ──
+// Repro: a direct/typed navigation to `?node=<AREA>&lat=&lon=&zoom=` never
+// fits the camera — react-router's `useNavigationType()` reports 'POP' as
+// the INITIAL action on every hard page load (typed URL, bookmark, new tab),
+// which `isRestoreAuthoritative` used to treat identically to a genuine
+// Back/Forward restore. `useDiscoverCameraOrchestration` now composes an
+// `isColdNavigate` signal (no PUSH/REPLACE observed yet in this mounted
+// session AND the page's own Navigation Timing type isn't 'reload'/
+// 'back_forward') so a cold hard-load fit-once effect always fires, while a
+// genuine restore (in-session POP, or a real reload/back_forward page load)
+// still suppresses it.
+describe('Issue #2143 — cold-navigation fit-once guard no longer swallowed by hard-load POP', () => {
+  const NODE_BOUNDS = {
+    centreLat: 12.874,
+    centreLon: 77.678,
+    minLat: 12.865,
+    minLon: 77.669,
+    maxLat: 12.883,
+    maxLon: 77.687,
+  };
+
+  const performanceDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'performance');
+
+  afterEach(() => {
+    if (performanceDescriptor) {
+      Object.defineProperty(globalThis, 'performance', performanceDescriptor);
+    }
+  });
+
+  function mockNavigationType(type: string | undefined) {
+    Object.defineProperty(globalThis, 'performance', {
+      configurable: true,
+      value: {
+        ...globalThis.performance,
+        getEntriesByType: (entryType: string) =>
+          entryType === 'navigation' && type !== undefined ? [{ type }] : [],
+      },
+    });
+  }
+
+  // A throwing Navigation Timing implementation must degrade the same as an
+  // unavailable one (getPageNavigationType's try/catch) — never crash the
+  // hook, never silently trust an inherited viewport.
+  function mockThrowingNavigationType() {
+    Object.defineProperty(globalThis, 'performance', {
+      configurable: true,
+      value: {
+        ...globalThis.performance,
+        getEntriesByType: () => {
+          throw new Error('Navigation Timing unavailable in this environment');
+        },
+      },
+    });
+  }
+
+  it('fires the fit on a cold hard load to node=<AREA> carrying historyAction=POP + a foreign/stale viewport (the exact #2143 repro shape)', () => {
+    mockNavigationType('navigate');
+    const setPanToArea = vi.fn();
+    const params = makeParams({
+      setPanToArea,
+      navigationNodeKey: 'a:IN|KA|Bengaluru|Rayasandra',
+      navigationNodeBounds: NODE_BOUNDS,
+      urlState: {
+        journey: 'area-first',
+        radiusKm: null,
+        groupId: null,
+        areaKey: null,
+        scope: null,
+        selectedLocality: null,
+        historyAction: 'POP',
+        viewport: { lat: 12.87402, lon: 77.67845, zoom: 16 },
+      },
+    });
+
+    renderHook((p) => useDiscoverCameraOrchestration(p), { initialProps: params });
+
+    expect(setPanToArea).toHaveBeenCalledTimes(1);
+    expect(setPanToArea.mock.calls[0][0]).toMatchObject({ reason: 'canonicalNode' });
+  });
+
+  it('a hard reload (Navigation Timing type "reload") of an already-persisted node+viewport still suppresses the fit', () => {
+    mockNavigationType('reload');
+    const setPanToArea = vi.fn();
+    const params = makeParams({
+      setPanToArea,
+      navigationNodeKey: 'a:IN|KA|Bengaluru|Rayasandra',
+      navigationNodeBounds: NODE_BOUNDS,
+      urlState: {
+        journey: 'area-first',
+        radiusKm: null,
+        groupId: null,
+        areaKey: null,
+        scope: null,
+        selectedLocality: null,
+        historyAction: 'POP',
+        viewport: { lat: 12.87402, lon: 77.67845, zoom: 16 },
+      },
+    });
+
+    renderHook((p) => useDiscoverCameraOrchestration(p), { initialProps: params });
+
+    expect(setPanToArea).not.toHaveBeenCalled();
+  });
+
+  it('a full-page browser Back/Forward (Navigation Timing type "back_forward") still suppresses the fit', () => {
+    mockNavigationType('back_forward');
+    const setPanToArea = vi.fn();
+    const params = makeParams({
+      setPanToArea,
+      navigationNodeKey: 'a:IN|KA|Bengaluru|Rayasandra',
+      navigationNodeBounds: NODE_BOUNDS,
+      urlState: {
+        journey: 'area-first',
+        radiusKm: null,
+        groupId: null,
+        areaKey: null,
+        scope: null,
+        selectedLocality: null,
+        historyAction: 'POP',
+        viewport: { lat: 12.87402, lon: 77.67845, zoom: 16 },
+      },
+    });
+
+    renderHook((p) => useDiscoverCameraOrchestration(p), { initialProps: params });
+
+    expect(setPanToArea).not.toHaveBeenCalled();
+  });
+
+  it('an in-session PUSH followed by a real POP (Navigation Timing type "navigate", the page never reloaded) still suppresses the fit — genuine Back/Forward is unaffected', () => {
+    mockNavigationType('navigate');
+    const setPanToArea = vi.fn();
+    const initialParams = makeParams({
+      setPanToArea,
+      navigationNodeKey: 'a:NodeA',
+      navigationNodeBounds: NODE_BOUNDS,
+      urlState: {
+        journey: 'area-first',
+        radiusKm: null,
+        groupId: null,
+        areaKey: null,
+        scope: null,
+        selectedLocality: null,
+        historyAction: 'PUSH',
+        viewport: null,
+      },
+    });
+
+    const { rerender } = renderHook((p) => useDiscoverCameraOrchestration(p), {
+      initialProps: initialParams,
+    });
+    expect(setPanToArea).toHaveBeenCalledTimes(1);
+
+    rerender({
+      ...initialParams,
+      navigationNodeKey: 'a:NodeB',
+      navigationNodeBounds: { ...NODE_BOUNDS, centreLat: 12.9 },
+      urlState: {
+        ...initialParams.urlState,
+        historyAction: 'POP',
+        viewport: { lat: 12.9, lon: 77.7, zoom: 14 },
+      },
+    });
+
+    // Still 1 — the real in-app PUSH before this POP makes it authoritative.
+    expect(setPanToArea).toHaveBeenCalledTimes(1);
+  });
+
+  it('a throwing/unavailable Performance API resolves conservatively (isColdNavigate stays true) — the cold-load fit still fires, matching the exact #2143 repro shape', () => {
+    mockThrowingNavigationType();
+    const setPanToArea = vi.fn();
+    const params = makeParams({
+      setPanToArea,
+      navigationNodeKey: 'a:IN|KA|Bengaluru|Rayasandra',
+      navigationNodeBounds: NODE_BOUNDS,
+      urlState: {
+        journey: 'area-first',
+        radiusKm: null,
+        groupId: null,
+        areaKey: null,
+        scope: null,
+        selectedLocality: null,
+        historyAction: 'POP',
+        viewport: { lat: 12.87402, lon: 77.67845, zoom: 16 },
+      },
+    });
+
+    expect(() =>
+      renderHook((p) => useDiscoverCameraOrchestration(p), { initialProps: params }),
+    ).not.toThrow();
+
+    expect(setPanToArea).toHaveBeenCalledTimes(1);
+    expect(setPanToArea.mock.calls[0][0]).toMatchObject({ reason: 'canonicalNode' });
   });
 });

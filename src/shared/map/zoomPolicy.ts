@@ -212,6 +212,23 @@ export type AreaPanReason = 'group' | 'scope' | 'canonicalNode';
 export interface IsRestoreAuthoritativeInput {
   historyAction: string | null | undefined;
   viewport: unknown;
+  /**
+   * Issue #2143 — true when this POP cannot possibly be a genuine
+   * restoration: no in-app PUSH/REPLACE has happened yet in this mounted
+   * session AND the page's own Navigation Timing entry (when available)
+   * reports a fresh 'navigate' rather than 'reload'/'back_forward'.
+   *
+   * react-router's `useNavigationType()` reports 'POP' as the INITIAL
+   * action on every hard page load, regardless of how the page was
+   * reached (typed URL, bookmark, new tab, or an actual browser
+   * Back/Forward) — see useDiscoverCameraOrchestration.rootFit.test.tsx's
+   * fix-cycle-2 comment. Without this flag, a cold navigation straight to
+   * `node=<AREA>&lat=&lon=&zoom=` (#2143) is indistinguishable from a
+   * genuine restore and the guard below wrongly suppresses the fit-once
+   * effect, leaving the camera framed on whatever the URL's (untrusted)
+   * viewport happened to be.
+   */
+  isColdNavigate: boolean;
 }
 
 /**
@@ -222,9 +239,47 @@ export interface IsRestoreAuthoritativeInput {
  * its own write rather than race it (#2083). Enforced once at the
  * setPanToArea publish boundary (see useDiscoverCameraOrchestration.ts)
  * instead of being copied into each fit effect.
+ *
+ * Issue #2143 — `isColdNavigate` narrows this further: a POP report that
+ * cannot be a genuine restore (cold hard-load) never suppresses the fit.
  */
-export function isRestoreAuthoritative({ historyAction, viewport }: IsRestoreAuthoritativeInput): boolean {
-  return historyAction === 'POP' && viewport != null;
+export function isRestoreAuthoritative({
+  historyAction,
+  viewport,
+  isColdNavigate,
+}: IsRestoreAuthoritativeInput): boolean {
+  return historyAction === 'POP' && viewport != null && !isColdNavigate;
+}
+
+// ── Issue #2143 — page-load Navigation Timing type ───────────────────────
+export type PageNavigationType = 'navigate' | 'reload' | 'back_forward' | 'prerender' | undefined;
+
+/**
+ * Reads the CURRENT document's own Navigation Timing entry type, once per
+ * page load: 'navigate' for a typed URL / bookmark / new tab / external
+ * link, 'reload' for a hard refresh, 'back_forward' for a full-page
+ * browser Back/Forward (e.g. leaving the SPA to another site, then
+ * returning). This is the SPA's document load, NOT client-side
+ * pushState/popstate — an in-app Back button press after in-app
+ * navigation never creates a new entry, so this alone cannot classify a
+ * genuine in-session POP (see `isColdNavigate`'s composite in
+ * useDiscoverCameraOrchestration.ts). Returns undefined when the API is
+ * unavailable (older browsers, some test environments) — callers must
+ * treat that the same as 'navigate' (untrusted).
+ */
+export function getPageNavigationType(): PageNavigationType {
+  if (typeof performance === 'undefined' || typeof performance.getEntriesByType !== 'function') {
+    return undefined;
+  }
+  try {
+    const [entry] = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+    return entry?.type as PageNavigationType;
+  } catch {
+    // A throwing Navigation Timing implementation is treated the same as an
+    // unavailable one — undefined degrades callers to the conservative
+    // (untrusted / cold) branch, never a crash.
+    return undefined;
+  }
 }
 
 // ── Issue #1823 — marker-mode transition input (ships unwired; #1762 wires
