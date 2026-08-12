@@ -69,7 +69,26 @@ export function DiscoverMapContextOverlay({
   buildNavigationNodeHref,
 }: DiscoverMapContextOverlayProps) {
   return (
-    <div className="absolute top-4 left-4 z-[1000]">
+    // Issue #2089 (#2133) — below the `lg` split-view breakpoint (this file's
+    // siblings use the same 1024px cut, e.g. MapDiscovery.tsx's
+    // `lg:flex-row`), the map canvas is a FULL-VIEWPORT mobile overlay and the
+    // "List" toggle (`mobile-map-close-list-button`, `absolute right-4 top-4`)
+    // shares this same top row. This wrapper's own max-width previously let
+    // the breadcrumb's already-bounded (`max-w-[min(88vw,520px)]`) pill grow
+    // wide enough to sit UNDER the button at 390px — a genuinely deep Areas
+    // trail (4 segments) or a long Schools-journey label reached that width,
+    // and because the pill's `z-[1000]` sits above the button's `z-50`, it
+    // silently ate the button's tap target (confirmed via
+    // `document.elementFromPoint` at the button's own center). Reserving
+    // ~176px (this wrapper's own `left-4` offset + the button's width/padding
+    // + its `right-4` offset + a safety gap) makes the EXISTING per-crumb
+    // truncation mechanism (AC5.14 — `truncate` + each breadcrumb's own
+    // max-width) engage sooner, so the pill itself is never wide enough to
+    // reach the button, at any depth or label length. Scoped to below `lg`
+    // only — the toggle button never renders at `lg`+ (desktop always shows
+    // the map as a flex sibling, never this overlay), so desktop keeps its
+    // unmodified 88vw/520px cap.
+    <div className="absolute top-4 left-4 z-[1000] [@media(max-width:1023px)]:max-w-[calc(100vw-176px)]">
       {canonicalNavigationNode ? (
         <AreasBreadcrumbTrail
           node={canonicalNavigationNode}

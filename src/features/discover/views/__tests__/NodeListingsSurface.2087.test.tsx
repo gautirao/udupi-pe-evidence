@@ -30,6 +30,14 @@ vi.mock('@/hooks/useDiscoverListings', () => ({
   useDiscoverListings: (...args: unknown[]) => mockUseDiscoverListings(...args),
 }));
 
+// Issue #2089 — /api/discover/listings (useDiscoverListings above) is
+// authenticated-only; anon sessions are served by the public per-area teaser
+// endpoint instead. Capture calls so anon-scoping (areaKeys) can be asserted.
+const mockUseDiscoverCityListings = vi.fn();
+vi.mock('@/hooks/useDiscoverCityListings', () => ({
+  useDiscoverCityListings: (...args: unknown[]) => mockUseDiscoverCityListings(...args),
+}));
+
 vi.mock('@/features/discover/state/useDiscoverSearchState', () => ({
   useDiscoverSearchState: () => ({
     searchQuery: '',
@@ -117,10 +125,20 @@ function renderSurface(node: NavigationNodeResponse, onClearNodeListings = vi.fn
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
+function makeCityListingsResult(areas: Array<{ areaKey: string; listings: unknown[] }> = []) {
+  return {
+    isLoading: false,
+    isError: false,
+    data: { areas },
+    refetch: vi.fn(),
+  };
+}
+
 describe('NodeListingsSurface — #2087', () => {
   beforeEach(() => {
     mockIsAuthenticated = true;
     mockUseDiscoverListings.mockReturnValue(makeListingsResult(1));
+    mockUseDiscoverCityListings.mockReturnValue(makeCityListingsResult());
   });
 
   it('calls useDiscoverListings with the canonical nodeKey (not areaKeys)', () => {
@@ -142,23 +160,56 @@ describe('NodeListingsSurface — #2087', () => {
     expect(screen.getByRole('button', { name: /Prev/i })).toBeInTheDocument();
   });
 
-  it('shows pagination controls when unauthenticated (anonymous pagination support)', async () => {
+  it('issue #2089: disables the authed useDiscoverListings query when unauthenticated', () => {
+    // /api/discover/listings (useDiscoverListings) is authenticated-only and
+    // 401s for anon — it must never fire for an anon session.
     mockIsAuthenticated = false;
     mockUseDiscoverListings.mockReturnValue(makeListingsResult(3));
     renderSurface(makeNode({ nodeKey: 'c:domlur' }));
 
-    expect(screen.getByRole('button', { name: /Next/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Prev/i })).toBeInTheDocument();
+    expect(mockUseDiscoverListings).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+  });
 
-    // Prove an anonymous user can move to page 2 (index 1) and that the request
-    // remains scoped by the same canonical nodeKey.
-    fireEvent.click(screen.getByRole('button', { name: /Next/i }));
-    await waitFor(() => {
-      const calls = mockUseDiscoverListings.mock.calls;
-      const lastCall = calls[calls.length - 1][0] as { page: number; nodeKey: string };
-      expect(lastCall.page).toBe(1);
-      expect(lastCall.nodeKey).toBe('c:domlur');
-    });
+  it('issue #2089: anon fetches the public teaser endpoint scoped by the node descendantAreaKeys', () => {
+    mockIsAuthenticated = false;
+    renderSurface(makeNode({
+      nodeKey: 'c:domlur',
+      descendantAreaKeys: ['a:domlur', 'a:kodihalli', 'a:indiranagar'],
+    }));
+
+    expect(mockUseDiscoverCityListings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        areaKeys: ['a:domlur', 'a:kodihalli', 'a:indiranagar'],
+      }),
+    );
+  });
+
+  it('issue #2089: anon renders listings returned by the public teaser endpoint', () => {
+    mockIsAuthenticated = false;
+    mockUseDiscoverCityListings.mockReturnValue(
+      makeCityListingsResult([
+        {
+          areaKey: 'a:domlur',
+          listings: [
+            { id: 'anon-1', propertyType: 'apartment', lat: 12.9, lon: 77.6 },
+          ],
+        },
+      ]),
+    );
+    renderSurface(makeNode({ nodeKey: 'c:domlur' }));
+
+    expect(screen.getByTestId('area-selected-panel')).toHaveTextContent('1 listings');
+  });
+
+  it('issue #2089: hides pagination controls for anon (per-area teaser has no server pagination)', () => {
+    mockIsAuthenticated = false;
+    mockUseDiscoverListings.mockReturnValue(makeListingsResult(3));
+    renderSurface(makeNode({ nodeKey: 'c:domlur' }));
+
+    expect(screen.queryByRole('button', { name: /Next/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Prev/i })).not.toBeInTheDocument();
   });
 
   it('hides pagination controls when totalPages <= 1 (even if authenticated)', () => {

@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import type { RefObject, Dispatch, SetStateAction } from 'react';
 import { useDiscoverActions, useDiscoverNav, useDiscoverViewport } from '@/features/discover/context/useDiscoverContext';
 import { PropertyMap, type PropertyListingWithImages } from '@/components/map/PropertyMap';
@@ -268,6 +269,12 @@ export interface DiscoverMapCanvasProps {
   // ── MapEmptyGuidance (L2143-2150) ──
   isLoading: boolean;
   mapZoom: number;
+  /** Issue #2089 — group-results (#1597) or bounded-Browse node-listings state.
+   *  Neither state has a single `selectedArea` (both can span multiple member
+   *  areas), so `hasAreaSelected` alone under-counts them and the anon
+   *  "Select an area…or sign in" prompt incorrectly renders over an already
+   *  correctly-scoped set of markers. */
+  isBoundedBrowseState: boolean;
 
   // ── DiscoverMapMarkerPopover (L2157-2168) ──
   isMarkerPopoverEligible: boolean;
@@ -381,6 +388,7 @@ export function DiscoverMapCanvas({
   markersTotalFilteredElements,
   isLoading,
   mapZoom,
+  isBoundedBrowseState,
   isMarkerPopoverEligible,
   markerPopoverStepper,
   navigate,
@@ -412,11 +420,89 @@ export function DiscoverMapCanvas({
   // than trusting a threaded boolean.
   const isSchoolsNavNodeLevel = nav.journey === 'school-first' && !nav.areaKey && !nav.schoolId;
   const showAreasNavigationDestinations = (nav.journey === 'area-first' || isSchoolsNavNodeLevel) && !nav.nodeListings;
+
+  // Issue #2089 — Leaflet's own click-after-drag suppression only covers
+  // Leaflet's INTERNAL 'click' event system; it does not stop the browser's
+  // real native `click` DOM event (which still fires on mouseup after a
+  // pan/zoom drag) from bubbling up past the Leaflet container to THIS
+  // wrapping div's onClick. Without a guard, that spurious click was
+  // wrongly read as "user clicked the map background to dismiss the
+  // popover" — clearing selectedMarkerListing/markerPixelPos AND (via
+  // handlePopoverDismiss's clearSelectedListing() call) the shared `listing`
+  // URL param, closing the mobile listing-preview sheet on every pan.
+  //
+  // A prior attempt gated the dismiss on "was there a moveend/zoomend
+  // (onViewportChange) in the last 400ms". Real-browser instrumentation
+  // (mousedown/dragstart/dragend/moveend/native-click timestamps captured
+  // during an actual drag gesture) proved that guard structurally cannot
+  // work: Leaflet's default inertial panning fires `dragend` and the
+  // trailing native `click` back-to-back on mouseup, but defers `moveend`
+  // until the inertia animation finishes — 200-350ms LATER, after the click
+  // (and this dismiss handler) has already run. `lastViewportChangeAtRef`
+  // was therefore still stamped from an earlier, unrelated viewport change
+  // and outside the window, so the guard never engaged for a real drag.
+  //
+  // Fix: detect "was this click the tail of a drag" directly from the
+  // gesture's own pixel movement — record the pointer's down position on
+  // this div and compare it to the click's own coordinates (a real native
+  // `click` event's clientX/clientY reflect the mouseup/touchend position).
+  // This is independent of Leaflet's internal event timing/inertia entirely,
+  // so there is no race: a genuine stationary tap has ~0px of movement and
+  // still dismisses; a drag of any length is rejected.
+  const backgroundPointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
+  const BACKGROUND_TAP_DRAG_THRESHOLD_PX = 10;
+
+  const handleBackgroundPointerDown = (e: React.MouseEvent | React.TouchEvent) => {
+    const point = 'touches' in e ? e.touches[0] : e;
+    if (point) {
+      backgroundPointerDownPosRef.current = { x: point.clientX, y: point.clientY };
+    }
+  };
+
+  // Issue #2089 code-review fix — mousedown/touchstart is only ever cleared
+  // inside handleBackgroundClick below, so a gesture that never produces a
+  // matching `click` (pointer released off this element, an interrupted touch
+  // gesture, etc.) leaves a stale down-position that can wrongly misclassify
+  // the NEXT genuine tap as a drag-tail. Clear it here too, deferred one tick
+  // so a same-gesture `click` (dispatched synchronously right after
+  // mouseup/touchend, before this macrotask runs) still reads the position
+  // first — this only clears state for gestures where no click ever lands.
+  const clearBackgroundPointerDownPos = () => {
+    setTimeout(() => {
+      backgroundPointerDownPosRef.current = null;
+    }, 0);
+  };
+
+  const handleBackgroundClick = (e: React.MouseEvent) => {
+    const downPos = backgroundPointerDownPosRef.current;
+    backgroundPointerDownPosRef.current = null;
+    if (downPos) {
+      const dx = e.clientX - downPos.x;
+      const dy = e.clientY - downPos.y;
+      if (Math.hypot(dx, dy) > BACKGROUND_TAP_DRAG_THRESHOLD_PX) {
+        // This click is the tail end of a pan/zoom drag, not a genuine
+        // stationary tap on the map background — leave the popover open.
+        return;
+      }
+    }
+    handlePopoverDismiss();
+  };
+
   return (
-    <div ref={mapContainerRef} className="lg:w-1/2 h-64 lg:h-full relative order-1 lg:order-1" style={{ background: 'hsl(var(--map-bg))' }} onClick={
+    <div
+      ref={mapContainerRef}
+      className="lg:w-1/2 h-64 lg:h-full relative order-1 lg:order-1"
+      style={{ background: 'hsl(var(--map-bg))' }}
+      onMouseDown={handleBackgroundPointerDown}
+      onTouchStart={handleBackgroundPointerDown}
+      onMouseUp={clearBackgroundPointerDownPos}
+      onTouchEnd={clearBackgroundPointerDownPos}
+      onClick={
       // a3 — background click dismisses the marker popover. stopPropagation is applied
       // inside the card itself so clicks inside the card do not trigger this.
-      markerPixelPos != null ? handlePopoverDismiss : undefined
+      // Issue #2089 — see handleBackgroundClick above: a drag-tail click is
+      // rejected via pixel-delta, a genuine stationary tap still dismisses.
+      markerPixelPos != null ? handleBackgroundClick : undefined
     }>
       {/* Issue #1824 Slice S8 — loader overlay extracted to DiscoverMapStatusHints.
           The error-card branch below is DELIBERATELY left inline: it is the
@@ -738,7 +824,7 @@ export function DiscoverMapCanvas({
         filters={filters} city={city} isLoading={isLoading}
         isAuthenticated={isAuthenticated}
         mapZoom={mapZoom}
-        hasAreaSelected={!!selectedArea}
+        hasAreaSelected={!!selectedArea || isBoundedBrowseState}
         areaLayerMaxZoom={areaLayerMaxZoom}
       />
 

@@ -70,6 +70,7 @@ import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import { useDiscoverListings } from '@/hooks/useDiscoverListings';
 import { useDiscoverFilteredMarkers } from '@/hooks/useDiscoverFilteredMarkers';
 import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
+import { filteredMarkerToPropertyListing, cityListingToPropertyListing } from '@/lib/discoverMappers';
 import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { slugifyFromAreaKey } from '@/lib/areaSlug';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
@@ -576,6 +577,87 @@ export default function MapDiscovery() {
     refetchGroupResultsAnon,
     anonGroupFilters,
   });
+
+  // ── Issue #2089 — bounded Browse (node + nodeListings=1) node-scoped markers ──
+  // Mirrors the isGroupResultsState pattern directly above: this branch has
+  // first-priority in resolveMarkerListings (before journey/selectedArea) so a
+  // bounded node whose scope isn't a single "selectedArea" (e.g. a group/region
+  // node with multiple descendantAreaKeys) never falls through to the unscoped
+  // city-wide markerListings tail branch — the exact silent scope leak this
+  // selector's frozen-contract comment warns about.
+  const isNodeListingsState = !!nav.nodeListings;
+  const nodeListingsAreaKeys: string[] = useMemo(() => {
+    if (!isNodeListingsState) return [];
+    const node = areasNavigationJourney.node;
+    if (!node) return [];
+    if (node.descendantAreaKeys && node.descendantAreaKeys.length > 0) return node.descendantAreaKeys;
+    return node.areaKey ? [node.areaKey] : [];
+  }, [isNodeListingsState, areasNavigationJourney.node]);
+
+  // Authenticated path: /api/discover/markers (full predicate, list+map consistent).
+  // Issue #2087/#2089 code-review fix — scope via the canonical `nodeKey` param
+  // (server-side hierarchy resolution), NOT client-derived `areaKeys`, so this
+  // query shares the exact same scope-derivation mechanism as
+  // NodeListingsSurface.tsx's authenticated List query (`useDiscoverListings`
+  // called with `nodeKey: node.nodeKey`, no areaKeys). Two mechanisms deriving
+  // "the same" scope independently risked Map silently under/over-scoping if
+  // `descendantAreaKeys` ever drifted from the backend's own hierarchy
+  // resolution. `enabled` additionally requires the node to have resolved
+  // (mirrors the previous empty-areaKeys guard's loading-race handling) so an
+  // unresolved node never fires an unscoped, city-wide-leaking request.
+  const { data: nodeListingsMarkersData } = useDiscoverFilteredMarkers(
+    nav.city,
+    urlDiscoverFilters,
+    isNodeListingsState && isAuthenticated && !!areasNavigationJourney.node?.nodeKey,
+    null,        // bbox — no viewport clipping for bounded Browse
+    undefined,   // q — no keyword search in the bounded-Browse map scope
+    intentListingPurpose,
+    undefined,   // excludePropertyType — not applicable
+    undefined,   // areaKeys — intentionally omitted; nodeKey below is the canonical scope
+    areasNavigationJourney.node?.nodeKey,
+  );
+
+  // Anonymous path: /api/discover/cities/{city}/listings (public, multi-areaKeys
+  // teaser). This endpoint has no nodeKey-based scoping support, so it
+  // structurally still needs client-derived areaKeys — the same divergence
+  // NodeListingsSurface.tsx's own anon fallback (`nodeAreaKeys`) accepts for
+  // its equivalent public-teaser query.
+  const { data: nodeListingsAnonData } = useDiscoverCityListings({
+    city: nav.city,
+    areaKeys: isNodeListingsState && !isAuthenticated ? nodeListingsAreaKeys : [],
+    limitPerArea: 20, // server caps at 20 anyway (MAX_LIMIT in CityAreaListingsService)
+    propertyType: urlDiscoverFilters.propertyTypes?.[0],
+    bedrooms: urlDiscoverFilters.bedrooms?.[0],
+    minPrice: urlDiscoverFilters.priceMin != null ? urlDiscoverFilters.priceMin * 100 : undefined,
+    maxPrice: urlDiscoverFilters.priceMax != null ? urlDiscoverFilters.priceMax * 100 : undefined,
+    listingPurpose: intentListingPurpose,
+  });
+
+  // Unified node-listings marker surface (auth or anon). [] while resolving or
+  // when the node genuinely has no listings — same empty-areaKeys-guard shape
+  // as groupResultsMarkers above (never an unscoped city-wide flash).
+  const nodeListingsMarkers = useMemo(() => {
+    if (!isNodeListingsState) return [];
+    if (isAuthenticated) {
+      if (!nodeListingsMarkersData?.markers) return [];
+      const now = new Date().toISOString();
+      return nodeListingsMarkersData.markers.map((m) => filteredMarkerToPropertyListing(m, now));
+    }
+    // Issue #2089 — the public /api/discover/cities/{city}/listings response
+    // sends coordinates as `latitude`/`longitude` (confirmed against the live
+    // backend), NOT `lat`/`lon` — the anon LIST-panel mapping already falls
+    // back to `latitude`/`longitude` (see nodeListingsAnonListings in
+    // NodeListingsSurface.tsx / groupResultsAnonListings), but this MARKER
+    // derivation previously checked `lat`/`lon` only, silently filtering out
+    // every listing and leaving the map blank despite the List surface
+    // correctly showing results.
+    const raw = (nodeListingsAnonData?.areas ?? []).flatMap((a) => a.listings);
+    const now = new Date().toISOString();
+    return raw
+      .map((l) => ({ ...l, lat: l.lat ?? l.latitude, lon: l.lon ?? l.longitude }))
+      .filter((l): l is typeof l & { lat: number; lon: number } => l.lat != null && l.lon != null)
+      .map((l) => cityListingToPropertyListing({ ...l, lat: l.lat, lon: l.lon }, now));
+  }, [isNodeListingsState, isAuthenticated, nodeListingsMarkersData, nodeListingsAnonData]);
 
   // Issue #1430 — derive the AgriMapListingItem for the selected listing peek.
   // Finds the matching item from the already-loaded agri map listings.
@@ -2137,12 +2219,14 @@ export default function MapDiscovery() {
     mapLayerCategory: effectiveMapLayerCategory,
     selectedArea: effectiveSelectedArea,
     isGroupResultsState,
+    isNodeListingsState,
     mapZoom,
     areaLayerMaxZoom: AREA_LAYER_MAX_ZOOM,
     isAuthenticated,
     journey: nav.journey,
     schoolId: nav.schoolId,
     groupResultsMarkers,
+    nodeListingsMarkers,
     markerListings,
     areaMarkerListings,
     schoolRadiusFallbackMarkers,
@@ -2522,6 +2606,11 @@ export default function MapDiscovery() {
           // area-marker fade/highlight) treats a resolved canonical AREA leaf
           // identically to a legacy areaKey selection.
           selectedArea={effectiveSelectedArea}
+          // Issue #2089 — group-results (#1597) and bounded-Browse node-listings
+          // are both multi-area scoped states with no single `selectedArea`;
+          // MapEmptyGuidance's anon "select an area…or sign in" prompt must stay
+          // suppressed in either, same as it already is when selectedArea is set.
+          isBoundedBrowseState={isGroupResultsState || isNodeListingsState}
           areaSearchMatchKeys={areaSearchMatchKeys}
           hoveredAreaKeyForMap={hoveredAreaKeyForMap}
           publishClusterCameraIntent={publishClusterCameraIntent}

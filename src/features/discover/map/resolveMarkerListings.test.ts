@@ -82,12 +82,14 @@ function baseInput(overrides: Partial<ResolveMarkerListingsInput> = {}): Resolve
     mapLayerCategory: 'all-areas',
     selectedArea: null,
     isGroupResultsState: false,
+    isNodeListingsState: false,
     mapZoom: 14,
     areaLayerMaxZoom: AREA_LAYER_MAX_ZOOM,
     isAuthenticated: true,
     journey: 'area-first',
     schoolId: null,
     groupResultsMarkers: [],
+    nodeListingsMarkers: [],
     markerListings: [],
     areaMarkerListings: [],
     schoolRadiusFallbackMarkers: [],
@@ -152,6 +154,61 @@ describe('resolveMarkerListings', () => {
         }),
       );
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('Issue #2089 bounded-Browse node-scope', () => {
+    it('isNodeListingsState returns nodeListingsMarkers, never the city-wide markerListings', () => {
+      const nodeListingsMarkers = makeMarkers(2);
+      const cityWideMarkerListings = makeMarkers(5);
+      const result = resolveMarkerListings(
+        baseInput({
+          isNodeListingsState: true,
+          nodeListingsMarkers,
+          markerListings: cityWideMarkerListings,
+        }),
+      );
+      expect(result).toBe(nodeListingsMarkers);
+      expect(result).not.toBe(cityWideMarkerListings);
+    });
+
+    it('isNodeListingsState with empty nodeListingsMarkers returns [] (no fallthrough to other branches)', () => {
+      const cityWideMarkerListings = makeMarkers(5);
+      const result = resolveMarkerListings(
+        baseInput({
+          isNodeListingsState: true,
+          nodeListingsMarkers: [],
+          markerListings: cityWideMarkerListings,
+        }),
+      );
+      expect(result).toEqual([]);
+    });
+
+    it('isNodeListingsState bypasses the zoom-suppression threshold (no selectedArea, zoom <= areaLayerMaxZoom)', () => {
+      const nodeListingsMarkers = makeMarkers(3);
+      const result = resolveMarkerListings(
+        baseInput({
+          isNodeListingsState: true,
+          nodeListingsMarkers,
+          selectedArea: null,
+          mapZoom: 10,
+        }),
+      );
+      expect(result).toBe(nodeListingsMarkers);
+    });
+
+    it('isGroupResultsState (the pre-existing #1597 branch) still wins when both flags are somehow true — node-listings does not preempt it', () => {
+      const nodeListingsMarkers = makeMarkers(1);
+      const groupResultsMarkers = makeMarkers(4);
+      const result = resolveMarkerListings(
+        baseInput({
+          isGroupResultsState: true,
+          groupResultsMarkers,
+          isNodeListingsState: true,
+          nodeListingsMarkers,
+        }),
+      );
+      expect(result).toBe(groupResultsMarkers);
     });
   });
 
