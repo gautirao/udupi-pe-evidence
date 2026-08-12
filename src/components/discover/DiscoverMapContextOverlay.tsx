@@ -69,32 +69,45 @@ export function DiscoverMapContextOverlay({
   buildNavigationNodeHref,
 }: DiscoverMapContextOverlayProps) {
   return (
-    // Issue #2089 (#2133) — below the `lg` split-view breakpoint (this file's
-    // siblings use the same 1024px cut, e.g. MapDiscovery.tsx's
-    // `lg:flex-row`), the map canvas is a FULL-VIEWPORT mobile overlay and the
-    // "List" toggle (`mobile-map-close-list-button`, `absolute right-4 top-4`)
-    // shares this same top row. This wrapper's own max-width previously let
-    // the breadcrumb's already-bounded (`max-w-[min(88vw,520px)]`) pill grow
-    // wide enough to sit UNDER the button at 390px — a genuinely deep Areas
-    // trail (4 segments) or a long Schools-journey label reached that width,
-    // and because the pill's `z-[1000]` sits above the button's `z-50`, it
-    // silently ate the button's tap target (confirmed via
-    // `document.elementFromPoint` at the button's own center). Reserving
-    // ~176px (this wrapper's own `left-4` offset + the button's width/padding
-    // + its `right-4` offset + a safety gap) makes the EXISTING per-crumb
-    // truncation mechanism (AC5.14 — `truncate` + each breadcrumb's own
-    // max-width) engage sooner, so the pill itself is never wide enough to
-    // reach the button, at any depth or label length. Scoped to below `lg`
-    // only — the toggle button never renders at `lg`+ (desktop always shows
-    // the map as a flex sibling, never this overlay), so desktop keeps its
-    // unmodified 88vw/520px cap.
-    <div className="absolute top-4 left-4 z-[1000] [@media(max-width:1023px)]:max-w-[calc(100vw-176px)]">
-      {canonicalNavigationNode ? (
-        <AreasBreadcrumbTrail
-          node={canonicalNavigationNode}
-          buildHref={buildNavigationNodeHref ?? (() => null)}
-        />
-      ) : isAreaFirstCityLanding ? (
+    // Issue #2089 (#2133 follow-up, PR #2141) — below the `lg` split-view
+    // breakpoint (this file's siblings use the same 1024px cut, e.g.
+    // MapDiscovery.tsx's `lg:flex-row`), the map canvas is a FULL-VIEWPORT
+    // mobile overlay and the "List" toggle (`mobile-map-close-list-button`,
+    // MapDiscovery.tsx-owned, `absolute right-4 top-4`) shares this same top
+    // row. The PREVIOUS fix reserved a flat ~176px via an outer
+    // `max-w-[calc(100vw-176px)]` shrink, which over-reserved space (the
+    // real button is far narrower) and made the breadcrumb clip too
+    // aggressively, losing location context at 390px. This wrapper is now a
+    // REAL flex row: the breadcrumb side gets `min-w-0 flex-1` (claims
+    // whatever width is genuinely free) and an invisible `shrink-0` spacer —
+    // sized IDENTICALLY to the real button's own classes/label, never a
+    // guessed pixel constant — reserves its EXACT footprint. The real button
+    // itself lives in MapDiscovery.tsx (a file this fix does not touch — a
+    // concurrent PR owns it), so this pixel-exact spacer, rather than a
+    // single shared JSX parent, is what keeps the two from fighting for the
+    // same pixels, matching Fix 2's "one flex composition" intent as closely
+    // as is possible without editing that file. Scoped to below `lg` only —
+    // the toggle button never renders at `lg`+ (desktop always shows the map
+    // as a flex sibling, never this overlay), so desktop keeps its
+    // unmodified, unbounded layout.
+    <div className="pointer-events-none absolute top-4 left-4 z-[1000] [@media(max-width:1023px)]:right-4 [@media(max-width:1023px)]:flex [@media(max-width:1023px)]:items-start [@media(max-width:1023px)]:gap-2">
+      {/* The wrapper spans the FULL row (including the reserved-space gap
+          over the real toggle button below `lg`) so the ghost spacer can sit
+          at its end — `pointer-events-none` above stops that transparent
+          span from swallowing clicks meant for the real button underneath;
+          this child re-enables pointer events for the actual breadcrumb
+          content only. */}
+      <div className="pointer-events-auto min-w-0 [@media(max-width:1023px)]:flex-1">
+        {canonicalNavigationNode ? (
+          <AreasBreadcrumbTrail
+            node={canonicalNavigationNode}
+            buildHref={buildNavigationNodeHref ?? (() => null)}
+            // PR #2141 follow-up (Fix 1) — the real display label for the
+            // synthesized City-root crumb, matching the label every other
+            // branch in this file already uses for the city.
+            cityLabel={CITY_CONFIG[city]?.label ?? city}
+          />
+        ) : isAreaFirstCityLanding ? (
         // Issue #1607 — the area-first city-level landing shows the
         // "Home › City › Areas" breadcrumb (mock placement). Home and the city
         // crumb route progressively; "Areas" is the terminal (current) page.
@@ -145,7 +158,24 @@ export function DiscoverMapContextOverlay({
           focusedGroup={focusedGroup}
           selectedArea={selectedArea}
         />
-      )}
+        )}
+      </div>
+      {/* Mobile-only ghost spacer (Fix 2) — reserves the List/Map toggle
+          button's EXACT rendered footprint so the breadcrumb's flex-1 side
+          never grows under it. Deliberately mirrors the real button's own
+          classes/label (MapDiscovery.tsx's `mobile-map-close-list-button`:
+          `rounded-full border border-border px-4 py-2 text-sm font-medium`,
+          text "List") rather than a guessed pixel width, so this stays
+          pixel-accurate without this file needing to import or render the
+          real button. `invisible` keeps it out of the accessibility tree and
+          visual rendering while still occupying layout space; `shrink-0`
+          stops the flex row from compressing it. */}
+      <div
+        aria-hidden="true"
+        className="hidden [@media(max-width:1023px)]:block [@media(max-width:1023px)]:shrink-0 invisible pointer-events-none rounded-full border border-border px-4 py-2 text-sm font-medium"
+      >
+        List
+      </div>
     </div>
   );
 }

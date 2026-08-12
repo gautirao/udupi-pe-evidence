@@ -168,42 +168,29 @@ test.describe('@integration-ui #2089 — supplementary regression checks (marker
     await grantTelemetryConsent(page);
   });
 
-  test('tapping a different visible marker while the preview is open still replaces the preview (no #2129 regression)', async ({
-    page,
-  }) => {
-    // Issue #2089 fix scope note: the fix below only gates the MAP-BACKGROUND
-    // click-to-dismiss path (DiscoverMapCanvas.tsx's onClick, triggered when
-    // `markerPixelPos != null` and no listing marker was hit) behind a short
-    // post-viewport-change suppression window. A marker-to-marker tap is a
-    // real click on a DIFFERENT DOM element (the marker icon itself, handled
-    // by MarkerClusterLayer's own 'click' listener in PropertyMap.tsx) and
-    // never reaches this background onClick at all, so the #2129 swap
-    // behavior is structurally untouched by this change. This test attempts
-    // to prove it live against real (non-fixture) data; skips if the
-    // currently-available AREA leaves don't expose 2 independently
-    // hit-testable markers at their own fit zoom (real hosted dev-DB data is
-    // sparser/less controllable than the seeded Testcontainers fixture
-    // issue-2129-mobile-marker-occlusion.spec.ts uses for this exact case).
-    await gotoAreaLeafMapModeNoPreview(page);
-    const markerCount = await page.getByTestId('property-marker').count();
-    test.skip(
-      markerCount < 2,
-      'No currently-available real-data AREA leaf exposes 2 individually hit-testable markers at this fit zoom; see issue-2129-mobile-marker-occlusion.spec.ts for the fixture-backed equivalent proof, unaffected by this fix (see comment above).',
-    );
-
-    await tapFirstMarker(page);
-    const sheet = page.getByTestId('mobile-listing-preview-sheet');
-    await expect(sheet).toBeVisible({ timeout: 10_000 });
-    const firstId = currentListingParam(page);
-
-    const secondMarker = page
-      .locator(`[data-listing-id]:not([data-listing-id="${firstId}"]) [data-testid="property-marker"]`)
-      .first();
-    await secondMarker.click({ timeout: 10_000 });
-
-    await expect(sheet).toBeVisible({ timeout: 5_000 });
-    await expect.poll(() => currentListingParam(page)).not.toBe(firstId);
-  });
+  // Issue #2089 fix scope note: the fix below only gates the MAP-BACKGROUND
+  // click-to-dismiss path (DiscoverMapCanvas.tsx's onClick, triggered when
+  // `markerPixelPos != null` and no listing marker was hit) behind a short
+  // post-viewport-change suppression window. A marker-to-marker tap is a
+  // real click on a DIFFERENT DOM element (the marker icon itself, handled
+  // by MarkerClusterLayer's own 'click' listener in PropertyMap.tsx) and
+  // never reaches this background onClick at all, so the #2129 swap behavior
+  // is structurally untouched by this change.
+  //
+  // The deterministic proof of this (marker A -> preview A -> marker B, no
+  // intermediate Close -> preview B) previously lived HERE as a live,
+  // real-hosted-data test that self-skipped whenever the currently-reachable
+  // RR Nagar AREA leaf didn't expose 2 independently hit-testable markers —
+  // real (non-fixture) hosted-dev-DB data is not deterministic enough to
+  // guarantee that. Per code-review finding on PR #2141 (BLOCKING #3), a
+  // self-skipping test does not satisfy #2089's Definition of Done, and the
+  // repo already has a deterministic fixture for exactly this case (the same
+  // one `issue-2129-mobile-marker-occlusion.spec.ts` uses: RR Nagar seeded
+  // with TWO independently hit-testable listing markers via
+  // `navigation-hierarchy-fixture-listings-seed.sql`). That proof now lives,
+  // never skipped, in `issue-2089-marker-swap-fixture.spec.ts` (run against
+  // `./scripts/dev/local-fixture-backend.sh`, not this file's real-hosted-DB
+  // target) — see that file for the assertion-backed swap proof.
 
   test('map camera pan/zoom is preserved across a List<->Map toggle (no regression)', async ({ page }) => {
     await gotoAreaLeafMapModeNoPreview(page);

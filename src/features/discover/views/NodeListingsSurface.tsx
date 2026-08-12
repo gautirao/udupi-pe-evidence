@@ -143,9 +143,22 @@ export function NodeListingsSurface({
   const nodeListingsAnonListings: DiscoverListingItem[] = useMemo(() => {
     if (isAuthenticated) return [];
     const raw = (nodeListingsAnonData?.areas ?? []).flatMap((a) => a.listings);
+    // Issue #2089 fix-cycle (PR #2141 finding 2) — priceMin/priceMax are already sent
+    // to the public /api/discover/cities/{city}/listings endpoint above (minPrice/maxPrice)
+    // and authoritatively filtered server-side. Do NOT re-run the price-range branches of
+    // applyAnonPropertyFilters here: that helper's price checks require `pricePaise`, but the
+    // anon (unauthenticated) response contract deliberately returns `priceBand` instead
+    // (never `pricePaise` — see DiscoverCityListingItem's mutually-exclusive contract), so
+    // re-applying it would wrongly discard every server-correct row a second time whenever a
+    // min/max price filter is active. propertyTypes/bedrooms are still applied here because the
+    // server call above only forwards the FIRST selected value of each (single-value params),
+    // while the user may have selected multiple — so client-side filtering still needs to
+    // enforce the full multi-select set.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { priceMin: _priceMin, priceMax: _priceMax, ...nonPriceFilters } = effectiveFilters;
     const filtered = applyAnonPropertyFilters(
       raw as Parameters<typeof applyAnonPropertyFilters>[0],
-      effectiveFilters,
+      nonPriceFilters,
     );
     return filtered.map((l): DiscoverListingItem => ({
       id: l.id,

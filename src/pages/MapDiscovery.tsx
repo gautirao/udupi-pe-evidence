@@ -585,6 +585,18 @@ export default function MapDiscovery() {
   // node with multiple descendantAreaKeys) never falls through to the unscoped
   // city-wide markerListings tail branch — the exact silent scope leak this
   // selector's frozen-contract comment warns about.
+  // Issue #1824 Slice S4 — search-keyword state (searchQuery/debouncedSearch,
+  // reverse URL-sync, 250ms debounce, handleSearchChange) now lives in
+  // useDiscoverSearchState. See the hook's header comment for the KNOWN,
+  // INTENTIONAL split-brain (debouncedSearch drives badge+markers here;
+  // nav.q drives ActiveContextChips) — do NOT unify. Declared here (moved up from
+  // its original post-node-listings-marker-fetch position) so debouncedSearch is
+  // available to the bounded-Browse marker-fetch calls below (Issue #2089 fix-cycle
+  // PR #2141 finding 1 — Map markers must share the same debounced search term as
+  // the List surface's own useDiscoverSearchState call, both driven by the same nav.q).
+  const { searchQuery, debouncedSearch, handleSearchChange } =
+    useDiscoverSearchState({ urlQ: nav.q, setUrlSearch: actions.setSearchQuery });
+
   const isNodeListingsState = !!nav.nodeListings;
   const nodeListingsAreaKeys: string[] = useMemo(() => {
     if (!isNodeListingsState) return [];
@@ -610,7 +622,10 @@ export default function MapDiscovery() {
     urlDiscoverFilters,
     isNodeListingsState && isAuthenticated && !!areasNavigationJourney.node?.nodeKey,
     null,        // bbox — no viewport clipping for bounded Browse
-    undefined,   // q — no keyword search in the bounded-Browse map scope
+    // Issue #2089 fix-cycle (PR #2141 finding 1) — thread the same debounced search
+    // term the List surface (NodeListingsSurface.tsx) sends to its own bounded-Browse
+    // fetch, so a typed search narrows the Map markers exactly like it narrows the List.
+    debouncedSearch?.trim() || undefined,
     intentListingPurpose,
     undefined,   // excludePropertyType — not applicable
     undefined,   // areaKeys — intentionally omitted; nodeKey below is the canonical scope
@@ -630,6 +645,8 @@ export default function MapDiscovery() {
     bedrooms: urlDiscoverFilters.bedrooms?.[0],
     minPrice: urlDiscoverFilters.priceMin != null ? urlDiscoverFilters.priceMin * 100 : undefined,
     maxPrice: urlDiscoverFilters.priceMax != null ? urlDiscoverFilters.priceMax * 100 : undefined,
+    // Issue #2089 fix-cycle (PR #2141 finding 1) — see the auth call above for rationale.
+    q: debouncedSearch?.trim() || undefined,
     listingPurpose: intentListingPurpose,
   });
 
@@ -677,14 +694,6 @@ export default function MapDiscovery() {
     filters: nav.filters,
     isAuthenticated,
   });
-
-  // Issue #1824 Slice S4 — search-keyword state (searchQuery/debouncedSearch,
-  // reverse URL-sync, 250ms debounce, handleSearchChange) now lives in
-  // useDiscoverSearchState. See the hook's header comment for the KNOWN,
-  // INTENTIONAL split-brain (debouncedSearch drives badge+markers here;
-  // nav.q drives ActiveContextChips) — do NOT unify.
-  const { searchQuery, debouncedSearch, handleSearchChange } =
-    useDiscoverSearchState({ urlQ: nav.q, setUrlSearch: actions.setSearchQuery });
 
   const [nearSchoolOpen, setNearSchoolOpen] = useState(false);
 

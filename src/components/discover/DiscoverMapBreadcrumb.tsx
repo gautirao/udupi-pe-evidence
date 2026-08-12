@@ -82,7 +82,12 @@ export function DiscoverMapBreadcrumb({
         className={cn('h-3.5 w-3.5 shrink-0', leadingIconClassName)}
         aria-hidden="true"
       />
-      <ol className={cn('flex items-center overflow-hidden', segmentGapClass)}>
+      {/* Issue #2089 (#2133 follow-up, PR #2141) — `flex-wrap` (not
+          `overflow-hidden`) lets a deep/long trail wrap onto a second line
+          instead of being silently clipped; each crumb's own `truncate` +
+          `maxWidthClass` (unchanged) remains the backstop once wrapping
+          alone isn't enough, so the ancestor set itself is never dropped. */}
+      <ol className={cn('flex flex-wrap items-center', segmentGapClass)}>
         {segments.map((seg, i) => {
           const emphasisClass =
             seg.emphasis === 'strong'

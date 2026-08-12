@@ -35,9 +35,28 @@
  * chose to hide. Instead, an over-depth resolution is DETECTED and SURFACED
  * as a distinct, visibly-different notice rather than ever rendered as a
  * normal trail.
+ *
+ * ── FOLLOW-UP (PR #2141) — THE SYNTHETIC CITY ROOT IS NEVER A PERSISTED
+ *    ANCESTOR, SO THIS COMPONENT SYNTHESIZES IT ──
+ * `node.ancestry` is server-declared and never re-derived — but the server
+ * never backs the synthetic city root with a real `NavigationNode` row, so
+ * `ancestry` never contains a `root`/`ROOT_NODE_KEY` entry (confirmed against
+ * `HierarchyBackButton`'s own AC14 fixture and the #2086 ruling it cites).
+ * Building the chain as a plain `[...ancestry, current]` therefore left a
+ * DIRECTION node (empty ancestry) rendering as a single, unlinked crumb —
+ * trapped below City root with no guided way back up — and left every
+ * deeper node's trail one segment short of AC5.1's own "City > Direction >
+ * Local Destination > Area" contract. This component now prepends a
+ * synthetic City crumb whenever the top of the real chain is not already the
+ * root, linking it through the SAME `buildHref` data path every other
+ * ancestor crumb uses (never a second URL-construction site) — restoring the
+ * bounded 4-item contract exactly as documented above, and giving every
+ * non-root node a real, tappable way back to City root without touching
+ * `HierarchyBackButton`'s separate, differently-scoped guarded-POP mechanism.
  */
 import { AlertTriangle, MapPin } from 'lucide-react';
 import { DiscoverMapBreadcrumb, type DiscoverMapCrumb } from '@/components/discover/DiscoverMapBreadcrumb';
+import { ROOT_NODE_KEY } from '@/features/discover/navigation/types';
 import type { NavigationChildSummary, NavigationNodeResponse } from '@/features/discover/navigation/types';
 
 /** AC5.1 — City > Direction > Local Destination > Area, four items maximum. */
@@ -51,9 +70,16 @@ export interface AreasBreadcrumbTrailProps {
    * passed through unchanged. Never invoked for the terminal (current) crumb.
    */
   buildHref: (nodeKey: string) => string | null;
+  /**
+   * Display label for the synthesized City-root crumb (PR #2141 follow-up).
+   * Defaults to the literal "City" so existing callers/tests that never pass
+   * it keep a sensible (if generic) label; real call sites should pass the
+   * resolved city display label (e.g. `CITY_CONFIG[city]?.label ?? city`).
+   */
+  cityLabel?: string;
 }
 
-export function AreasBreadcrumbTrail({ node, buildHref }: AreasBreadcrumbTrailProps) {
+export function AreasBreadcrumbTrail({ node, buildHref, cityLabel = 'City' }: AreasBreadcrumbTrailProps) {
   if (!node) return null;
 
   const currentAsSummary: NavigationChildSummary = {
@@ -62,7 +88,20 @@ export function AreasBreadcrumbTrail({ node, buildHref }: AreasBreadcrumbTrailPr
     displayLabel: node.displayLabel,
     displayOrder: 0,
   };
-  const chain: NavigationChildSummary[] = [...node.ancestry, currentAsSummary];
+  // The real chain never starts at root (see the module doc above) unless
+  // the node itself IS root, or an ancestry entry already happens to carry
+  // it (defensive — matches older/synthetic fixtures). Prepend a synthetic
+  // City crumb in every other case so the trail always reaches root.
+  const topOfChain = node.ancestry[0] ?? null;
+  const needsCityCrumb = node.nodeKey !== ROOT_NODE_KEY && topOfChain?.nodeKey !== ROOT_NODE_KEY;
+  const cityCrumb: NavigationChildSummary | null = needsCityCrumb
+    ? { nodeKey: ROOT_NODE_KEY, nodeType: 'ROOT', displayLabel: cityLabel, displayOrder: -1 }
+    : null;
+  const chain: NavigationChildSummary[] = [
+    ...(cityCrumb ? [cityCrumb] : []),
+    ...node.ancestry,
+    currentAsSummary,
+  ];
 
   if (chain.length > AREAS_BREADCRUMB_MAX_ITEMS) {
     // Deliberate, actionable diagnostic — no PII/token content.
