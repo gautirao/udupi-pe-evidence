@@ -84,9 +84,24 @@ export function DiscoverMapBreadcrumb({
   // the two wrapped rows) — compact: 2*16+4=36px; default: 2*18+6=42px —
   // plus a couple px of slack so browser/OS font-metric sub-pixel rounding
   // can't clip descenders off row 2 (code review, PR #2141 fix cycle 2).
-  // `overflow-hidden` on the `<ol>` below then clips anything past exactly
-  // two rows; per-crumb `truncate`/`maxWidthClass` (unchanged) remains the
-  // backstop for an individual label too long for even its own row.
+  //
+  // Issue #2089 fix cycle 3 — `overflow-hidden` + `maxTwoRowsClass` is kept as
+  // a DEFENSIVE BACKSTOP (never remove it — real defense-in-depth against a
+  // future caller regression), but it is deliberately NOT the mechanism this
+  // component relies on to keep a trail to two rows. Hiding an entire
+  // wrapped-off 3rd row would silently drop a whole ancestor crumb, not just
+  // truncate a label — exactly what must never happen (owner ruling). The
+  // real guarantee instead lives with every CALLER: each one now sizes every
+  // segment's `maxWidthClass` (in px) so that its own worst-case segment
+  // count, laid out at every segment's max width simultaneously, provably
+  // fits within 2 rows for that caller's `containerClassName` — see the
+  // per-segment-array comments in `useDiscoverMapPresentation.ts`
+  // (`areaJourneySegmentsRaw`/`schoolJourneySegmentsRaw`) and
+  // `AreasBreadcrumbTrail.tsx` for the worked arithmetic. With every caller
+  // correctly sized, `overflow-hidden` here should mathematically never clip
+  // a real crumb in normal operation; per-crumb `truncate`/`maxWidthClass`
+  // remains the (expected, intended) mechanism for shortening an individual
+  // label's TEXT, which is never the same thing as hiding the crumb itself.
   const rowLineHeightClass = isCompact ? 'leading-4' : 'leading-[18px]';
   const maxTwoRowsClass = isCompact ? 'max-h-[38px]' : 'max-h-[44px]';
 
