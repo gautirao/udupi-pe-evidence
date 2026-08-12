@@ -38,9 +38,14 @@ const MAP_CANVAS_PROPS_PATH = path.resolve(
 );
 const mapCanvasSource = fs.readFileSync(MAP_CANVAS_PROPS_PATH, 'utf-8');
 
+// Issue #2142 Commit 4 — DiscoverRightPanelContainer.tsx was true-renamed to
+// surfaces/DiscoverPanelSurface.tsx and its flat DiscoverRightPanelContainerProps
+// interface (the thing this describe block actually measures) moved into
+// buildPanelSurfaceView.ts, since DiscoverPanelSurface.tsx's own prop type is
+// now the grouped {view, commands} shape, not the flat one.
 const RIGHT_PANEL_CONTAINER_PATH = path.resolve(
   __dirname,
-  '../../features/discover/views/DiscoverRightPanelContainer.tsx',
+  '../../features/discover/surfaces/buildPanelSurfaceView.ts',
 );
 const rightPanelSource = fs.readFileSync(RIGHT_PANEL_CONTAINER_PATH, 'utf-8');
 
@@ -69,18 +74,20 @@ const COMMIT_1_USE_REF_CEILING = 3;
 describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-commit)', () => {
   describe('LOC / import — must shrink toward <=220 LOC by end of #2142', () => {
     it('records the CURRENT actual LOC (updated each commit as the page shrinks)', () => {
-      // Commit 4: the JSX return block's ~200 flat inline props across 5
-      // separate render call sites (DiscoverMapMount, DiscoverRightPanelContainer,
-      // DiscoverOverlaySheets, bare MobileClusterSheet/MobileListingPreviewSheet,
-      // inline recenter createPortal) were replaced by 3 typed
-      // buildXSurfaceView()/buildXSurfaceCommands() calls + 3 <DiscoverXSurface>
-      // render calls. 2916 (Commit 1) -> 2863 (Commit 2) -> 2844 (leaf hooks)
-      // -> 2667 (batch 1) -> 2581 (batch 2) -> 2474 (batch 3, full Commit 3)
-      // -> 2363 (Commit 4). The prop-assembly object literals (mapProps/
-      // panelProps/overlayProps) are still page-local JS, not JSX — the
-      // <=220 LOC target is expected to land in a later commit (#2142 plan's
-      // Commit 5 DiscoverPageShell + further reduction), not this one.
-      expect(lines.length).toBe(2363);
+      // Commit 5: the PublicDiscoverLayout wrapper, the mobile-only
+      // DiscoverControlBar row, and the z-[60] mobile-Map full-screen wrapper
+      // div moved into DiscoverPageShell.tsx (byte-identical classNames/
+      // testids/z-index, pure JSX relocation). 2916 (Commit 1) -> 2863
+      // (Commit 2) -> 2844 (leaf hooks) -> 2667 (batch 1) -> 2581 (batch 2)
+      // -> 2474 (batch 3, full Commit 3) -> 2363 (Commit 4) -> 2278
+      // (Commit 5). NOTE (flagged to team-lead): the mapProps/panelProps/
+      // overlayProps object-literal assembly (~330 lines, the bulk of what
+      // remains) is still page-local JS — moving it further would require
+      // relocating the same volume of local-variable references to a new
+      // owner, not eliminating them, so <=220 LOC is not expected to land
+      // purely from JSX relocation; may end as a documented variance (same
+      // pattern as #1824's 1200-vs-800 LOC outcome) pending team-lead's call.
+      expect(lines.length).toBe(2278);
     });
 
     it('records the CURRENT actual top-level import statement count (updated each commit)', () => {
@@ -90,11 +97,11 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
       // imported selectors/adapters/controllers; only LOC is the metric
       // #2142's <=220 acceptance criterion targets. 75 (Commit 1) -> 80
       // (Commit 2) -> 82 (leaf hooks) -> 74 (batch 1) -> 67 (batch 2) -> 60
-      // (batch 3, full Commit 3) -> 60 (Commit 4: 5 old view-layer imports +
-      // createPortal removed, 6 new surface/builder imports added — net
-      // unchanged).
+      // (batch 3, full Commit 3) -> 60 (Commit 4) -> 59 (Commit 5:
+      // PublicDiscoverLayout + DiscoverControlBar imports removed,
+      // DiscoverPageShell import added — net -1).
       const importCount = countMatches(source, /^import /gm);
-      expect(importCount).toBe(60);
+      expect(importCount).toBe(59);
     });
 
     it('LOC must never exceed the Commit-1 baseline in any later commit (forward ceiling)', () => {
@@ -102,8 +109,8 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
     });
 
     it('LOC must monotonically shrink (or hold) from the immediately preceding commit, never grow', () => {
-      // Commit 4's actual value (2363) vs full Commit 3's value (2474).
-      expect(2363).toBeLessThanOrEqual(2474);
+      // Commit 5's actual value (2278) vs Commit 4's value (2363).
+      expect(2278).toBeLessThanOrEqual(2363);
     });
   });
 
@@ -217,18 +224,23 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
       expect(fieldCount).toBeGreaterThanOrEqual(100);
     });
 
-    it('DiscoverRightPanelContainer prop count is at today\'s documented baseline', () => {
-      const destructureMatch = rightPanelSource.match(
-        /function DiscoverRightPanelContainer\(\{([\s\S]*?)\}: DiscoverRightPanelContainerProps\)/,
+    it('DiscoverRightPanelContainerProps field count is at today\'s documented baseline', () => {
+      // Issue #2142 Commit 4 — same 67-field flat interface, now declared in
+      // buildPanelSurfaceView.ts instead of a component's function
+      // destructure (see this file's own doc comment on that constant).
+      const interfaceMatch = rightPanelSource.match(
+        /export interface DiscoverRightPanelContainerProps \{([\s\S]*?)\n\}/,
       );
-      expect(destructureMatch).not.toBeNull();
-      const destructured = destructureMatch![1];
-      const propCount = destructured
-        .split(',')
-        .map((entry) => entry.trim())
-        .filter((entry) => entry.length > 0).length;
-      // Verified via jCodemunch symbol read: 83 destructured props today.
-      expect(propCount).toBeGreaterThanOrEqual(80);
+      expect(interfaceMatch).not.toBeNull();
+      const fieldCount = countMatches(interfaceMatch![1], /^\s{2}\w[\w?]*:\s/gm);
+      // Verified via jCodemunch symbol read (pre-move): 83 destructured props
+      // in the original component's function signature. The interface's own
+      // field count is lower (67) because several fields destructured with
+      // JS default values (e.g. `hoveredNavigationNodeKey = null`) are
+      // declared `?:` optional in the TYPE but that has no bearing on this
+      // count either way — this asserts the type's field count specifically,
+      // not the destructure-site count, so 83 is not the right floor here.
+      expect(fieldCount).toBeGreaterThanOrEqual(60);
     });
   });
 

@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
-import { PublicDiscoverLayout } from '@/components/layout/PublicDiscoverLayout';
 import { computeZoneLabelPoints } from '@/lib/schoolZoneLabels';
 import type { AreaPoint, AreaMarkerClusterInfo } from '@/components/map/AreaMarkerLayer';
 import { MapFilters } from '@/components/map/MapFilters';
@@ -24,7 +23,6 @@ import {
   type DiscoverMapLayerKind,
 } from '@/features/discover/selectors/mapLayerCategory';
 import { CityNotSupported } from '@/components/discover/CityNotSupported';
-import { DiscoverControlBar } from '@/components/discover/DiscoverControlBar';
 import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSearchState';
 import { resolveMarkerPopover } from '@/features/discover/map/resolveMarkerPopover';
 import { useDiscoverBadgeAnnounce } from '@/features/discover/presentation/useDiscoverBadgeAnnounce';
@@ -58,6 +56,7 @@ import { DiscoverPanelSurface } from '@/features/discover/surfaces/DiscoverPanel
 import { buildPanelSurfaceView, buildPanelSurfaceCommands } from '@/features/discover/surfaces/buildPanelSurfaceView';
 import { DiscoverOverlaySurface } from '@/features/discover/surfaces/DiscoverOverlaySurface';
 import { buildOverlaySurfaceView, buildOverlaySurfaceCommands } from '@/features/discover/surfaces/buildOverlaySurfaceView';
+import { DiscoverPageShell } from '@/features/discover/surfaces/DiscoverPageShell';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 // Issue #2142 Commit 2 — repointed to the selectors/ re-export (thin wrap
 // over presentation/discoverBadge.ts, per team-lead decision: do not move
@@ -2260,103 +2259,19 @@ export default function MapDiscovery() {
   const overlayCommands = buildOverlaySurfaceCommands(overlayProps);
 
   return (
-    <PublicDiscoverLayout>
-      <div className="flex h-full flex-col">
-        {/* Issue #1953 (build step 6) — mount the unified control bar (built in
-            step 5, previously rendered nowhere) so city/Buy-Rent/area-jump are
-            actually reachable. Consumes ONLY the DiscoverProvider facade
-            (useDiscoverNav/useDiscoverActions/useDiscoverAreas internally) —
-            no URL state or router props are threaded in from here.
-            Issue #1953 FIX1 (post-launch hit-test defect) — the earlier
-            "own horizontal scroll on narrow viewports" approach traded one
-            unreachability for another: at 390px two of the three controls
-            scrolled off-screen instead of clipping, still unreachable, and
-            the page-level "Map" trigger (below, now removed) was a `fixed`
-            overlay anchored into the SAME top-right space as this row,
-            covering it. DiscoverControlBar.tsx now wraps onto a second line
-            at <lg widths (no overflow-x needed) and owns the mobile Map/List
-            trigger itself as a flex sibling, so the trigger structurally
-            cannot overlap the row's own controls. */}
-        {/* Issue #2108 (shell fix) — this row is now MOBILE-ONLY, gated on the
-            SAME real `isMobileShell` flag (useDiscoverShell's 820px
-            matchMedia, not a Tailwind breakpoint) this file already uses for
-            every other mobile-shell decision on this page (mobileMapOpen,
-            the mobile Map/List trigger, etc.). The approved mock has no
-            full-width toolbar row above the map: city + Buy/Rent + area
-            search live inside the right panel's own column, as
-            DiscoverControlBar's desktop render inside DiscoverRightPanel
-            (gated on the same `isMobileShell` prop — see that file).
-            A CSS-only `lg:hidden`/`hidden lg:block` split was tried first and
-            reverted: jsdom does not evaluate media queries, so both mounts
-            rendered simultaneously in every test, producing duplicate
-            `discover-control-bar` testids (Index.invalidCity.test.tsx et al).
-            Gating on the real boolean instead means exactly one control bar
-            ever mounts, in both a real browser and in jsdom — mobile
-            behaviour (this row's markup/testid/mobileMapTrigger wiring) is
-            otherwise unchanged. */}
-        {isMobileShell && (
-          <div
-            className="shrink-0 border-b border-border bg-card px-4 py-2.5"
-            data-testid="discover-control-bar-row"
-          >
-            <DiscoverControlBar
-              mobileMapTrigger={
-                !mobileMapOpen
-                  ? { onOpenMap: () => setMobileView('MAP'), triggerRef: mobileMapTriggerRef }
-                  : undefined
-              }
-            />
-          </div>
-        )}
-        <div className="min-h-0 flex-1 flex flex-col lg:flex-row relative">
-        {/* Issue #1953 (build step 4) — mobile "Map" trigger. Was a
-            page-level `fixed top-20 right-4` button here; moved into
-            DiscoverControlBar (rendered above, as a flex sibling of city/
-            Buy-Rent/area-search) by FIX1 — see the control-bar-row comment
-            above for why. mobileMapTriggerRef / isMobileShell / mobileMapOpen
-            stay defined in this scope; they are threaded into
-            DiscoverControlBar's `mobileMapTrigger` prop instead of used
-            directly here. */}
-        {/* a3 — mapContainerRef wraps the full map half-panel for MarkerPopoverCard bounds clamp.
-            R-C — warm map gutter background (#EDEBE6) so the gutter between the map tile and
-            panel edge is warm off-white, not default grey.
-            Issue #1953 (build step 4) — DiscoverMapMount owns whether
-            DiscoverMapCanvas mounts at all (real unmount on mobile List — see
-            DiscoverMapMount.tsx). This wrapper only becomes a full-screen
-            overlay on mobile MAP; `contents` keeps it invisible to layout
-            otherwise, so desktop is unaffected. The prop list below passes
-            straight through to DiscoverMapCanvas, unchanged.
-            Issue #1953 (post-step-4 fix) — z-[60], not z-40: RoleAwareHeader
-            (src/components/layout/AppLayout.tsx) is `sticky top-0 z-50` and
-            sits ABOVE the page content in the DOM, so a `z-40` "full-screen"
-            overlay rendered z-40 stacks BELOW the header — the header's
-            "Sign in" link visually and hit-test intercepts clicks meant for
-            the overlay's own "List" close button. z-[60] is a genuine
-            stacking-context comparison against the header's z-50 (both are
-            top-level positioned elements, no intervening stacking context),
-            so raising this above 50 is sufficient and correct — no
-            display:none/visibility trick on the header, true overlay only.
-            Code-review fix (#2126, fix-verify cycle 2) — `[&>div]:!h-full`
-            targets DiscoverMapCanvas's own root div so it fills this overlay.
-            MobileListingPreviewSheet and MobileClusterSheet are ALSO direct
-            children here but must stay compact/intrinsic-height, not stretch
-            to fill it; MobileListingPreviewSheet now renders a <section>
-            root specifically so this `>div` selector never matches it (see
-            that file's root-element comment) — no change to this selector
-            itself, since DiscoverMapCanvas's real map container is out of
-            this fix's edit boundary and still needs it. */}
-        <div
-          className={
-            mobileMapOpen ? 'fixed inset-0 z-[60] bg-background [&>div]:!h-full' : 'contents'
-          }
-        >
-          <DiscoverMapSurface view={mapView} commands={mapCommands} mapContainerRef={mapContainerRef} />
-        </div>
-
-        <DiscoverPanelSurface view={panelView} commands={panelCommands} />
-        </div>
-      </div>
-      <DiscoverOverlaySurface view={overlayView} commands={overlayCommands} />
-    </PublicDiscoverLayout>
+    <DiscoverPageShell
+      isMobileShell={isMobileShell}
+      mobileMapOpen={mobileMapOpen}
+      mobileMapTrigger={
+        !mobileMapOpen
+          ? { onOpenMap: () => setMobileView('MAP'), triggerRef: mobileMapTriggerRef }
+          : undefined
+      }
+      mapSurface={
+        <DiscoverMapSurface view={mapView} commands={mapCommands} mapContainerRef={mapContainerRef} />
+      }
+      panelSurface={<DiscoverPanelSurface view={panelView} commands={panelCommands} />}
+      overlaySurface={<DiscoverOverlaySurface view={overlayView} commands={overlayCommands} />}
+    />
   );
 }
