@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { MapPin, GraduationCap } from 'lucide-react';
 import { DiscoverMapBreadcrumb, type DiscoverMapCrumb } from '@/components/discover/DiscoverMapBreadcrumb';
 import { AreasBreadcrumbTrail } from '@/components/discover/navigation/AreasBreadcrumbTrail';
@@ -55,6 +56,17 @@ export interface DiscoverMapContextOverlayProps {
    * Required whenever `canonicalNavigationNode` is supplied; unused otherwise.
    */
   buildNavigationNodeHref?: (nodeKey: string) => string | null;
+  /**
+   * PR #2141 fix cycle 2 (reviewer-required shared composition) — the real
+   * mobile "List" toggle button (MapDiscovery.tsx-owned, threaded through
+   * `DiscoverMapCanvas` unchanged). Rendered as this row's second flex
+   * child so the breadcrumb (`min-w-0 flex-1`) and the real button
+   * (`shrink-0`) share ONE flex composition and ONE sizing authority — no
+   * duplicate/ghost spacer standing in for the real element.
+   * `undefined`/`null` on desktop and whenever the mobile Map overlay isn't
+   * open, in which case this row renders exactly as it always has.
+   */
+  mobileListButton?: ReactNode;
 }
 
 export function DiscoverMapContextOverlay({
@@ -67,36 +79,30 @@ export function DiscoverMapContextOverlay({
   city,
   canonicalNavigationNode = null,
   buildNavigationNodeHref,
+  mobileListButton,
 }: DiscoverMapContextOverlayProps) {
   return (
-    // Issue #2089 (#2133 follow-up, PR #2141) — below the `lg` split-view
-    // breakpoint (this file's siblings use the same 1024px cut, e.g.
-    // MapDiscovery.tsx's `lg:flex-row`), the map canvas is a FULL-VIEWPORT
-    // mobile overlay and the "List" toggle (`mobile-map-close-list-button`,
-    // MapDiscovery.tsx-owned, `absolute right-4 top-4`) shares this same top
-    // row. The PREVIOUS fix reserved a flat ~176px via an outer
-    // `max-w-[calc(100vw-176px)]` shrink, which over-reserved space (the
-    // real button is far narrower) and made the breadcrumb clip too
-    // aggressively, losing location context at 390px. This wrapper is now a
-    // REAL flex row: the breadcrumb side gets `min-w-0 flex-1` (claims
-    // whatever width is genuinely free) and an invisible `shrink-0` spacer —
-    // sized IDENTICALLY to the real button's own classes/label, never a
-    // guessed pixel constant — reserves its EXACT footprint. The real button
-    // itself lives in MapDiscovery.tsx (a file this fix does not touch — a
-    // concurrent PR owns it), so this pixel-exact spacer, rather than a
-    // single shared JSX parent, is what keeps the two from fighting for the
-    // same pixels, matching Fix 2's "one flex composition" intent as closely
-    // as is possible without editing that file. Scoped to below `lg` only —
-    // the toggle button never renders at `lg`+ (desktop always shows the map
-    // as a flex sibling, never this overlay), so desktop keeps its
-    // unmodified, unbounded layout.
+    // Issue #2089 (#2133 follow-up, PR #2141, fix cycle 2) — below the `lg`
+    // split-view breakpoint (this file's siblings use the same 1024px cut,
+    // e.g. MapDiscovery.tsx's `lg:flex-row`), the map canvas is a
+    // FULL-VIEWPORT mobile overlay and the real "List" toggle
+    // (`mobileListButton`, MapDiscovery.tsx-owned) shares this same top row.
+    // This wrapper is a REAL flex row with a SINGLE sizing authority: the
+    // breadcrumb side gets `min-w-0 flex-1` (claims whatever width is
+    // genuinely free, wraps up to two rows — see DiscoverMapBreadcrumb.tsx)
+    // and `mobileListButton` renders as this row's own second child with
+    // `shrink-0` (applied by the caller). A prior fix instead reserved the
+    // button's footprint via an independently `absolute`-positioned button
+    // plus an invisible ghost spacer sized to mirror its classes/label —
+    // two separately-owned elements kept in sync only by convention, which
+    // the reviewer correctly flagged as the same hidden-coupling class of
+    // bug this issue exists to fix. `pointer-events-none` here (re-enabled
+    // per-child below) stops the transparent parts of this row from
+    // swallowing clicks meant for the map underneath. Scoped to below `lg`
+    // only — `mobileListButton` is always null/undefined at `lg`+ (desktop
+    // always shows the map as a flex sibling, never this overlay), so
+    // desktop keeps its unmodified, unbounded layout.
     <div className="pointer-events-none absolute top-4 left-4 z-[1000] [@media(max-width:1023px)]:right-4 [@media(max-width:1023px)]:flex [@media(max-width:1023px)]:items-start [@media(max-width:1023px)]:gap-2">
-      {/* The wrapper spans the FULL row (including the reserved-space gap
-          over the real toggle button below `lg`) so the ghost spacer can sit
-          at its end — `pointer-events-none` above stops that transparent
-          span from swallowing clicks meant for the real button underneath;
-          this child re-enables pointer events for the actual breadcrumb
-          content only. */}
       <div className="pointer-events-auto min-w-0 [@media(max-width:1023px)]:flex-1">
         {canonicalNavigationNode ? (
           <AreasBreadcrumbTrail
@@ -160,22 +166,7 @@ export function DiscoverMapContextOverlay({
         />
         )}
       </div>
-      {/* Mobile-only ghost spacer (Fix 2) — reserves the List/Map toggle
-          button's EXACT rendered footprint so the breadcrumb's flex-1 side
-          never grows under it. Deliberately mirrors the real button's own
-          classes/label (MapDiscovery.tsx's `mobile-map-close-list-button`:
-          `rounded-full border border-border px-4 py-2 text-sm font-medium`,
-          text "List") rather than a guessed pixel width, so this stays
-          pixel-accurate without this file needing to import or render the
-          real button. `invisible` keeps it out of the accessibility tree and
-          visual rendering while still occupying layout space; `shrink-0`
-          stops the flex row from compressing it. */}
-      <div
-        aria-hidden="true"
-        className="hidden [@media(max-width:1023px)]:block [@media(max-width:1023px)]:shrink-0 invisible pointer-events-none rounded-full border border-border px-4 py-2 text-sm font-medium"
-      >
-        List
-      </div>
+      {mobileListButton}
     </div>
   );
 }

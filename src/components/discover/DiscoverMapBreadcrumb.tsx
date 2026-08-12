@@ -71,6 +71,24 @@ export function DiscoverMapBreadcrumb({
 
   const isCompact = density === 'compact';
   const segmentGapClass = isCompact ? 'gap-1' : 'gap-1.5';
+  // PR #2141 fix cycle 2 (reviewer-required two-row cap) — `leading-*` pins
+  // each crumb row's line-box height to a value this component controls
+  // explicitly, rather than relying on the browser/Tailwind-preflight
+  // default (which flex-wrap row height would otherwise inherit from):
+  // compact = text-xs (12px) with `leading-4` (16px, Tailwind's own default
+  // pairing for text-xs); default = text-[13px] (an arbitrary value with no
+  // baked-in line-height) explicitly paired with `leading-[18px]`, wide
+  // enough to contain the leading icon/chevrons (h-3/h-3.5 = 12/14px).
+  // `maxTwoRowsClass` = 2 * that row height + one row-gap (`segmentGapClass`
+  // applies to both axes under flex-wrap, so it also sets the gap BETWEEN
+  // the two wrapped rows) — compact: 2*16+4=36px; default: 2*18+6=42px —
+  // plus a couple px of slack so browser/OS font-metric sub-pixel rounding
+  // can't clip descenders off row 2 (code review, PR #2141 fix cycle 2).
+  // `overflow-hidden` on the `<ol>` below then clips anything past exactly
+  // two rows; per-crumb `truncate`/`maxWidthClass` (unchanged) remains the
+  // backstop for an individual label too long for even its own row.
+  const rowLineHeightClass = isCompact ? 'leading-4' : 'leading-[18px]';
+  const maxTwoRowsClass = isCompact ? 'max-h-[38px]' : 'max-h-[44px]';
 
   return (
     <nav
@@ -82,12 +100,26 @@ export function DiscoverMapBreadcrumb({
         className={cn('h-3.5 w-3.5 shrink-0', leadingIconClassName)}
         aria-hidden="true"
       />
-      {/* Issue #2089 (#2133 follow-up, PR #2141) — `flex-wrap` (not
-          `overflow-hidden`) lets a deep/long trail wrap onto a second line
-          instead of being silently clipped; each crumb's own `truncate` +
-          `maxWidthClass` (unchanged) remains the backstop once wrapping
-          alone isn't enough, so the ancestor set itself is never dropped. */}
-      <ol className={cn('flex flex-wrap items-center', segmentGapClass)}>
+      {/* Issue #2089 (#2133 follow-up, PR #2141) — `flex-wrap` (not a
+          single-line `overflow-hidden`) lets a deep/long trail wrap onto a
+          second line instead of being silently clipped; each crumb's own
+          `truncate` + `maxWidthClass` (unchanged) remains the backstop once
+          wrapping alone isn't enough, so the ancestor set itself is never
+          dropped.
+          PR #2141 fix cycle 2 — the owner ruling caps this mobile
+          composition at TWO rows maximum. `rowLineHeightClass` pins a known
+          row height, `maxTwoRowsClass` bounds the `<ol>` to exactly two of
+          those rows (+ one inter-row gap), and `overflow-hidden` clips a
+          theoretical third+ row rather than letting it grow the row
+          unbounded — see the consts' own doc above for the derivation. */}
+      <ol
+        className={cn(
+          'flex flex-wrap items-center overflow-hidden',
+          rowLineHeightClass,
+          maxTwoRowsClass,
+          segmentGapClass,
+        )}
+      >
         {segments.map((seg, i) => {
           const emphasisClass =
             seg.emphasis === 'strong'

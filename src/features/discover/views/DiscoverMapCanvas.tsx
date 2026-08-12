@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import type { RefObject, Dispatch, SetStateAction } from 'react';
+import type { ReactNode, RefObject, Dispatch, SetStateAction } from 'react';
 import { useDiscoverActions, useDiscoverNav, useDiscoverViewport } from '@/features/discover/context/useDiscoverContext';
 import { PropertyMap, type PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { Card } from '@/components/ui/card';
@@ -212,6 +212,14 @@ export interface DiscoverMapCanvasProps {
   schoolJourneySegments: DiscoverMapCrumb[];
   focusedGroup: AreaGroup | null;
   city: string;
+  /**
+   * PR #2141 fix cycle 2 — the real mobile "List" toggle button, owned by
+   * MapDiscovery.tsx, threaded straight through to
+   * `DiscoverMapContextOverlay` unchanged (this component adds no logic of
+   * its own around it). `undefined`/`null` on desktop and whenever the
+   * mobile Map overlay isn't open.
+   */
+  mobileListButton?: ReactNode;
 
   // ── DiscoverMapLegend#1 schoolRadiusChrome (L2016) ──
   schoolRadiusOverlay: boolean;
@@ -353,6 +361,7 @@ export function DiscoverMapCanvas({
   schoolJourneySegments,
   focusedGroup,
   city,
+  mobileListButton,
   schoolRadiusOverlay,
   resolvedPanelContent,
   isSelectedGroupState,
@@ -683,6 +692,7 @@ export function DiscoverMapCanvas({
         // re-derived projection.
         canonicalNavigationNode={areasNavigationJourney?.node ?? null}
         buildNavigationNodeHref={buildNavigationNodeHref}
+        mobileListButton={mobileListButton}
       />
 
       {/* Discover map marker redesign — "EXPLORE THE MAP" guidance card, shown

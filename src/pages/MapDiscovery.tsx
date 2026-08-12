@@ -2523,16 +2523,6 @@ export default function MapDiscovery() {
             mobileMapOpen ? 'fixed inset-0 z-[60] bg-background [&>div]:!h-full' : 'contents'
           }
         >
-          {mobileMapOpen && (
-            <button
-              type="button"
-              onClick={() => setMobileView('LIST')}
-              data-testid="mobile-map-close-list-button"
-              className="absolute right-4 top-4 z-50 rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md"
-            >
-              List
-            </button>
-          )}
           {/* Issue #1956 PR-5 (Slice 3, AC5.6/AC5.7) — the MAP-mode counterpart
               of DiscoverAreasJourneyPanel's own (LIST-mode-only-visible)
               focused-cluster branch. Mounted INSIDE this SAME z-[60] overlay
@@ -2586,6 +2576,28 @@ export default function MapDiscovery() {
           )}
           <DiscoverMapMount
           mapContainerRef={mapContainerRef}
+          // PR #2141 fix cycle 2 (reviewer-required shared composition) — the
+          // real "List" toggle, owned here (unchanged onClick/behavior/
+          // testid), now rendered as the mobile context overlay's own flex
+          // row's second child (DiscoverMapContextOverlay.tsx) instead of an
+          // independently `absolute`-positioned sibling with a duplicated
+          // ghost spacer. `pointer-events-auto` is required because that
+          // overlay's row wrapper is `pointer-events-none` (so the
+          // transparent span never swallows clicks meant for the map/
+          // breadcrumb below it); `shrink-0 self-start` gives this button
+          // sole sizing authority over its own footprint in that row.
+          mobileListButton={
+            mobileMapOpen ? (
+              <button
+                type="button"
+                onClick={() => setMobileView('LIST')}
+                data-testid="mobile-map-close-list-button"
+                className="pointer-events-auto shrink-0 self-start rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md"
+              >
+                List
+              </button>
+            ) : null
+          }
           markerPixelPos={markerPixelPos}
           handlePopoverDismiss={handlePopoverDismiss}
           showLoader={showLoader}
