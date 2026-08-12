@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
-import { isRestoreAuthoritative, type AreaPanReason } from '@/shared/map/zoomPolicy';
+import { getPageNavigationType, isRestoreAuthoritative, type AreaPanReason } from '@/shared/map/zoomPolicy';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
@@ -354,12 +354,45 @@ export function useDiscoverCameraOrchestration({
     },
     [setPanToArea],
   );
+  // Issue #2143 — companion signal to the restore-wins-on-POP guard below.
+  // `historyAction === 'POP'` alone cannot tell a genuine in-app Back/
+  // Forward (or a full-page reload/back_forward-cache restore of an
+  // already-app-navigated URL) apart from a COLD hard load straight to
+  // `node=<AREA>&lat=&lon=&zoom=` (typed URL, bookmark, new tab, external
+  // link) — react-router's `useNavigationType()` reports 'POP' as the
+  // INITIAL action on every hard page load regardless of how it was
+  // reached. `hasObservedInAppTransitionRef` flips true the first time this
+  // mounted session sees a REAL in-app history write (PUSH from goToNode,
+  // or REPLACE from reportViewport's debounced pan writes) — a genuine POP
+  // restoring an app-created entry can only happen AFTER such a write.
+  // `pageNavigationTypeRef` covers the complementary first-render case: the
+  // page's OWN Navigation Timing entry (captured once, it never changes for
+  // the life of the document) tells 'reload'/'back_forward' apart from a
+  // fresh 'navigate' even before any in-app transition has occurred.
+  const hasObservedInAppTransitionRef = useRef(false);
+  useEffect(() => {
+    if (urlState.historyAction === 'PUSH' || urlState.historyAction === 'REPLACE') {
+      hasObservedInAppTransitionRef.current = true;
+    }
+  }, [urlState.historyAction]);
+  const pageNavigationTypeRef = useRef(getPageNavigationType());
+
   // Issue #2083 (cycle 5) / #1823 — the restore-wins-on-POP guard, scoped to
   // ONLY the canonical-node fit (see rationale above). Returns whether the
   // write actually fired, so canonicalNodeFitCount below can gate on that.
   const guardedSetPanToArea = useCallback(
     (area: AreaPoint, reason: AreaPanReason): boolean => {
-      if (isRestoreAuthoritative({ historyAction: urlState.historyAction, viewport: urlState.viewport })) {
+      const isColdNavigate =
+        !hasObservedInAppTransitionRef.current &&
+        pageNavigationTypeRef.current !== 'reload' &&
+        pageNavigationTypeRef.current !== 'back_forward';
+      if (
+        isRestoreAuthoritative({
+          historyAction: urlState.historyAction,
+          viewport: urlState.viewport,
+          isColdNavigate,
+        })
+      ) {
         return false;
       }
       return publishPanToArea(area, reason);
