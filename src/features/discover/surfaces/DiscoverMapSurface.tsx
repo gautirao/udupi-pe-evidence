@@ -21,13 +21,13 @@ import type { DiscoverMapSurfaceView, DiscoverMapSurfaceCommands } from './build
  * commands contract before spreading it through.
  */
 const LazyDiscoverMapCanvas = lazy(() =>
-  import('@/features/discover/views/DiscoverMapCanvas').then((mod) => ({
+  import('../views/DiscoverMapCanvas').then((mod) => ({
     default: mod.DiscoverMapCanvas,
   })),
 );
 
 if (typeof window !== 'undefined' && window.innerWidth > 820) {
-  void import('@/features/discover/views/DiscoverMapCanvas');
+  void import('../views/DiscoverMapCanvas');
 }
 
 export interface DiscoverMapSurfaceProps {

@@ -69,13 +69,18 @@ const COMMIT_1_USE_REF_CEILING = 3;
 describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-commit)', () => {
   describe('LOC / import — must shrink toward <=220 LOC by end of #2142', () => {
     it('records the CURRENT actual LOC (updated each commit as the page shrinks)', () => {
-      // Commit 3 COMPLETE (all 3 batches): 2 leaf hooks + all 8 capability
-      // controllers (geography/navigation/results, then marker/mobile/
-      // school/agri, then the code-review-flagged 8th controller
-      // mapPresentation), all moved verbatim. 2916 (Commit 1) -> 2863
-      // (Commit 2) -> 2844 (leaf hooks) -> 2667 (batch 1) -> 2581 (batch 2)
-      // -> 2474 (batch 3, full Commit 3, 8/8 controllers).
-      expect(lines.length).toBe(2474);
+      // Commit 4: the JSX return block's ~200 flat inline props across 5
+      // separate render call sites (DiscoverMapMount, DiscoverRightPanelContainer,
+      // DiscoverOverlaySheets, bare MobileClusterSheet/MobileListingPreviewSheet,
+      // inline recenter createPortal) were replaced by 3 typed
+      // buildXSurfaceView()/buildXSurfaceCommands() calls + 3 <DiscoverXSurface>
+      // render calls. 2916 (Commit 1) -> 2863 (Commit 2) -> 2844 (leaf hooks)
+      // -> 2667 (batch 1) -> 2581 (batch 2) -> 2474 (batch 3, full Commit 3)
+      // -> 2363 (Commit 4). The prop-assembly object literals (mapProps/
+      // panelProps/overlayProps) are still page-local JS, not JSX — the
+      // <=220 LOC target is expected to land in a later commit (#2142 plan's
+      // Commit 5 DiscoverPageShell + further reduction), not this one.
+      expect(lines.length).toBe(2363);
     });
 
     it('records the CURRENT actual top-level import statement count (updated each commit)', () => {
@@ -85,8 +90,9 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
       // imported selectors/adapters/controllers; only LOC is the metric
       // #2142's <=220 acceptance criterion targets. 75 (Commit 1) -> 80
       // (Commit 2) -> 82 (leaf hooks) -> 74 (batch 1) -> 67 (batch 2) -> 60
-      // (batch 3, full Commit 3: net decrease — 1 controller import added,
-      // 9 more now-unused hook/selector imports removed).
+      // (batch 3, full Commit 3) -> 60 (Commit 4: 5 old view-layer imports +
+      // createPortal removed, 6 new surface/builder imports added — net
+      // unchanged).
       const importCount = countMatches(source, /^import /gm);
       expect(importCount).toBe(60);
     });
@@ -96,8 +102,8 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
     });
 
     it('LOC must monotonically shrink (or hold) from the immediately preceding commit, never grow', () => {
-      // Full Commit 3's actual value (2474) vs batch 2's value (2581).
-      expect(2474).toBeLessThanOrEqual(2581);
+      // Commit 4's actual value (2363) vs full Commit 3's value (2474).
+      expect(2363).toBeLessThanOrEqual(2474);
     });
   });
 
