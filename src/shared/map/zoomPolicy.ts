@@ -436,27 +436,76 @@ export function computeSpiderfyDistanceMultiplier(
 // correctly today — it only becomes the SOLE separation mechanism once the
 // map crosses into the zoom band where leaflet.markercluster provides none.
 //
-// Code-review follow-up (#2139) — radiusMeters below scales with
-// Math.sqrt(groupSize / 2) and is capped at COINCIDENT_OFFSET_RADIUS_CAP_METERS.
-// Without a cap, a large enough coincident group could grow the offset
-// radius past the on-screen pixel radius a single CLUSTER_MAX_RADIUS_PX
-// (50px) cluster spans at CLUSTER_DISABLE_AT_ZOOM - 1 (zoom 15, the
-// densest zoom leaflet.markercluster still actively groups at) — roughly
-// ~230m at this project's ~13°N latitude band. The cap (120m) keeps a
-// wide safety margin below that figure even if CLUSTER_MAX_RADIUS_PX or
-// CLUSTER_DISABLE_AT_ZOOM changes later, and is itself asserted by a unit
-// test (see zoomPolicy.coincidentOffset.test.ts) so a future change to
-// either constant that erodes the margin fails loudly instead of silently.
-// Guaranteed bound: safe (never crosses a cluster boundary at zoom 15+)
-// for coincident groups up to ~32 members before the cap engages, and
-// bounded at 120m displacement for any larger group.
+// Code-review follow-up (#2139, corrected again in #2140) — radiusMeters
+// below scales with Math.sqrt(groupSize / 2) and is capped so a large
+// coincident group can't grow the offset past a safe bound.
+//
+// #2140 finding: the ORIGINAL cap compared radiusMeters (the distance from
+// the shared origin to EACH member) against the ~230m zoom-15
+// cluster-grouping distance (CLUSTER_MAX_RADIUS_PX at CLUSTER_DISABLE_AT_ZOOM
+// - 1) as if radius were the relevant figure. It isn't: every member sits
+// `radiusMeters` from a shared origin on a circle, so two members on
+// OPPOSITE sides of that circle can be up to `2 * radiusMeters` — the fan
+// DIAMETER — apart. Comparing the diameter (not the radius) against the
+// grouping distance is what actually determines whether the offset can
+// split a coincident group across leaflet.markercluster's own internal
+// distance-grid clustering, which still groups markers by their ACTUAL
+// (offset) rendered position independently of the raw-coordinate shadow map
+// that only protects #1762's tap-fit/split decision.
+//
+// maxSafeCoincidentOffsetRadiusMeters (below) derives the real danger
+// distance in metres-per-pixel terms at the given latitude (reusing the
+// same cos(latitude) longitude-scaling this function already needs, rather
+// than a single hardcoded ~13°N approximation) and keeps the DIAMETER at
+// half that distance — a 2x safety margin that absorbs the approximation
+// error in "danger distance" itself and any future modest change to
+// CLUSTER_MAX_RADIUS_PX/CLUSTER_DISABLE_AT_ZOOM without silently eroding to
+// zero headroom. Asserted by a unit test that runs offset positions through
+// a REAL `L.markerClusterGroup` at zoom 15 (see
+// zoomPolicy.coincidentClusterMembership.test.ts) — a pure-formula check
+// alone previously passed while the underlying diameter/radius bug shipped.
 
 /** Metres of geographic separation applied per member of a coincident-coordinate group. */
 const COINCIDENT_OFFSET_RADIUS_METERS = 30;
-/** Hard ceiling on the per-member offset radius, regardless of group size — see comment above. */
-const COINCIDENT_OFFSET_RADIUS_CAP_METERS = 120;
 /** Approx metres per degree of latitude (WGS84) — no higher precision needed for a tens-of-metres nudge. */
 const METERS_PER_DEGREE_LATITUDE = 111_320;
+/**
+ * Keeps the fan DIAMETER (2 * radiusMeters) at half of the real zoom-15
+ * cluster-grouping distance in metres — see the module comment above for
+ * the radius-vs-diameter derivation.
+ */
+const COINCIDENT_OFFSET_DIAMETER_SAFETY_MARGIN = 0.5;
+/**
+ * Standard Web Mercator (256px tile) ground resolution constant: metres
+ * represented by one screen pixel at zoom 0 on the equator. Resolution at
+ * any zoom/latitude is `EQUATOR_METERS_PER_PIXEL_AT_ZOOM_0 * cos(latitude) /
+ * 2^zoom` — the same slippy-map tile math Leaflet itself uses internally.
+ */
+const EQUATOR_METERS_PER_PIXEL_AT_ZOOM_0 = 156_543.03392;
+
+/**
+ * The real-world cluster-grouping danger distance (metres) at the given
+ * latitude, at CLUSTER_DISABLE_AT_ZOOM - 1 — the densest zoom
+ * leaflet.markercluster still actively groups markers at (see the module
+ * comment above `computeCoincidentMarkerOffsets`). Latitude-aware (not a
+ * single hardcoded ~13°N figure) so the bound stays correct if this
+ * function is ever reused outside this project's current latitude band.
+ */
+function coincidentClusterDangerRadiusMeters(latitudeDegrees: number): number {
+  const metersPerPixel =
+    (EQUATOR_METERS_PER_PIXEL_AT_ZOOM_0 * Math.cos((latitudeDegrees * Math.PI) / 180)) /
+    2 ** (CLUSTER_DISABLE_AT_ZOOM - 1);
+  return CLUSTER_MAX_RADIUS_PX * metersPerPixel;
+}
+
+/**
+ * Maximum per-member offset RADIUS (not diameter) that keeps
+ * `2 * radiusMeters` at or below half of `coincidentClusterDangerRadiusMeters`
+ * for the given latitude.
+ */
+function maxSafeCoincidentOffsetRadiusMeters(latitudeDegrees: number): number {
+  return (coincidentClusterDangerRadiusMeters(latitudeDegrees) * COINCIDENT_OFFSET_DIAMETER_SAFETY_MARGIN) / 2;
+}
 
 export interface CoincidentOffsetListing {
   id: string;
@@ -510,7 +559,7 @@ export function computeCoincidentMarkerOffsets(
     const originLat = ordered[0].latitude;
     const originLng = ordered[0].longitude;
     const radiusMeters = Math.min(
-      COINCIDENT_OFFSET_RADIUS_CAP_METERS,
+      maxSafeCoincidentOffsetRadiusMeters(originLat),
       COINCIDENT_OFFSET_RADIUS_METERS * Math.max(1, Math.sqrt(ordered.length / 2)),
     );
     const metersPerDegreeLongitude =
