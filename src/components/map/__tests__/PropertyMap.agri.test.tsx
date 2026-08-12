@@ -248,6 +248,85 @@ describe('PropertyMap — AgriMarkerClusterLayer (Issue #1372)', () => {
   });
 });
 
+// ─── Issue #2139 code-review follow-up: AgriMarkerClusterLayer coincident- ──
+// ─── coordinate marker separation ───────────────────────────────────────────
+
+describe('PropertyMap — AgriMarkerClusterLayer coincident-coordinate marker separation (Issue #2139)', () => {
+  // Mirrors the residential MarkerClusterLayer coverage in
+  // PropertyMap.clusterTapFit.test.tsx ("Issue #2139 — coincident-coordinate
+  // marker separation wiring"). AgriMarkerClusterLayer uses the SAME
+  // disableClusteringAtZoom/maxClusterRadius constants as the residential
+  // layer, so agri listings sharing (near-)identical fallback-tier geocoded
+  // coordinates are equally exposed to full occlusion once zoom crosses
+  // disableClusteringAtZoom — this proves the fix is wired end-to-end via
+  // the actual `L.marker` construction calls for the agri layer too.
+  const agriListingA = { ...agriListing, id: 'agri-a' };
+  const agriListingB = { ...agriListing, id: 'agri-b' };
+  const agriListingC = { ...agriListing, id: 'agri-c' };
+
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+    mockAddLayer.mockClear();
+    mockRemoveLayer.mockClear();
+    mockClusterGroupAddLayer.mockClear();
+    vi.mocked(L.marker).mockClear();
+  });
+
+  it('3 agri listings sharing identical coordinates are constructed as 3 markers at 3 distinct [lat,lng] positions', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    render(
+      <PropertyMap
+        listings={[agriListingA, agriListingB, agriListingC]}
+        isAgriMode={true}
+      />,
+    );
+
+    const markerCalls = vi.mocked(L.marker).mock.calls;
+    const lastThree = markerCalls.slice(-3) as unknown as Array<[[number, number], unknown]>;
+
+    // All 3 listings share agriListing's exact [13.4, 74.8] — assert the fix
+    // actually moved them apart (the pre-fix behaviour would construct all
+    // 3 at the byte-identical raw coordinate).
+    const positions = lastThree.map((call) => call[0]);
+    expect(positions[0]).not.toEqual([agriListing.latitude, agriListing.longitude]);
+    expect(positions[1]).not.toEqual([agriListing.latitude, agriListing.longitude]);
+    expect(positions[2]).not.toEqual([agriListing.latitude, agriListing.longitude]);
+    expect(positions[0]).not.toEqual(positions[1]);
+    expect(positions[0]).not.toEqual(positions[2]);
+    expect(positions[1]).not.toEqual(positions[2]);
+  });
+
+  it('a single non-coincident agri listing still renders at its exact original coordinates, unaffected by the fix', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    render(<PropertyMap listings={[agriListing]} isAgriMode={true} />);
+
+    const markerCalls = vi.mocked(L.marker).mock.calls;
+    const lastCall = markerCalls[markerCalls.length - 1] as unknown as [[number, number], unknown];
+    expect(lastCall[0]).toEqual([agriListing.latitude, agriListing.longitude]);
+  });
+
+  it('does not add or drop agri markers — a mix of one coincident pair and one distinct listing still constructs exactly 3 markers, one per listing', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+    const distinctListing = { ...agriListing, id: 'agri-distinct', latitude: 13.6, longitude: 74.9 };
+
+    render(
+      <PropertyMap
+        listings={[agriListingA, agriListingB, distinctListing]}
+        isAgriMode={true}
+      />,
+    );
+
+    const markerCalls = vi.mocked(L.marker).mock.calls;
+    const lastThree = markerCalls.slice(-3) as unknown as Array<[[number, number], unknown]>;
+    // The distinct listing's own coordinates are untouched.
+    expect(lastThree[2][0]).toEqual([13.6, 74.9]);
+    // The coincident pair separated from each other.
+    expect(lastThree[0][0]).not.toEqual(lastThree[1][0]);
+  });
+});
+
 // ─── AC4: SectorOverlay conditional render guard (Issue #1429) ───────────────
 
 describe('PropertyMap — SectorOverlay conditional render (Issue #1429 AC4)', () => {

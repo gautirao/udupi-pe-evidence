@@ -132,8 +132,15 @@ vi.mock('leaflet', () => ({
       },
     ),
     point: vi.fn((x: number, y: number) => ({ x, y })),
+    // Issue #2139 — getSouthWest/getNorthEast added (purely additive; the
+    // shape/signature and existing getCenter behavior are unchanged) so the
+    // new coincident-offset cluster-tap-split regression tests below can
+    // exercise handleClusterActivate's raw-bounds branch, which reads these
+    // two methods off whatever L.latLngBounds(...) returns.
     latLngBounds: vi.fn((bounds: [[number, number], [number, number]]) => ({
       getCenter: () => ({ lat: (bounds[0][0] + bounds[1][0]) / 2, lng: (bounds[0][1] + bounds[1][1]) / 2 }),
+      getSouthWest: () => ({ lat: bounds[0][0], lng: bounds[0][1] }),
+      getNorthEast: () => ({ lat: bounds[1][0], lng: bounds[1][1] }),
     })),
   },
 }));
@@ -1059,5 +1066,120 @@ describe('Issue #1762 fix cycle 7 — spiderfy fan stays open across repeated cl
     const lastThree = markerCalls.slice(-3);
     const callB = lastThree[1] as unknown as [unknown, { icon: unknown }];
     expect(callB[1].icon).toBe(selectedIcon);
+  });
+});
+
+describe('Issue #2139 — coincident-coordinate marker separation wiring', () => {
+  // Root cause: leaflet.markercluster provides zero coincident-point
+  // handling once the map crosses disableClusteringAtZoom (see the module
+  // comment above computeCoincidentMarkerOffsets in shared/map/zoomPolicy.ts
+  // for the full derivation). buildLayer now renders each listing at its
+  // computeCoincidentMarkerOffsets position instead of its raw
+  // latitude/longitude — this proves that wiring end-to-end via the actual
+  // `L.marker` construction calls, not just the pure function in isolation.
+  const listingA = { ...houseListing, id: 'listing-a' };
+  const listingB = { ...houseListing, id: 'listing-b' };
+  const listingC = { ...houseListing, id: 'listing-c' };
+
+  it('AC1: 3 listings sharing identical coordinates are constructed as 3 markers at 3 distinct [lat,lng] positions', () => {
+    const onSelectListing = vi.fn();
+    const threeCoincidentListings = [listingA, listingB, listingC] as never;
+    render(
+      <PropertyMap {...baseProps} listings={threeCoincidentListings} onSelectListing={onSelectListing} />,
+    );
+
+    const markerCalls = vi.mocked(L.marker).mock.calls;
+    const lastThree = markerCalls.slice(-3) as unknown as Array<[[number, number], unknown]>;
+
+    // All 3 listings share houseListing's exact [13.35, 74.75] — assert the
+    // fix actually moved them apart (the pre-fix behaviour would construct
+    // all 3 at the byte-identical raw coordinate).
+    const positions = lastThree.map((call) => call[0]);
+    expect(positions[0]).not.toEqual([houseListing.latitude, houseListing.longitude]);
+    expect(positions[1]).not.toEqual([houseListing.latitude, houseListing.longitude]);
+    expect(positions[2]).not.toEqual([houseListing.latitude, houseListing.longitude]);
+    expect(positions[0]).not.toEqual(positions[1]);
+    expect(positions[0]).not.toEqual(positions[2]);
+    expect(positions[1]).not.toEqual(positions[2]);
+  });
+
+  it('AC2 regression: a single non-coincident listing still renders at its exact original coordinates, unaffected by the fix', () => {
+    const onSelectListing = vi.fn();
+    render(<PropertyMap {...baseProps} onSelectListing={onSelectListing} />);
+
+    const markerCalls = vi.mocked(L.marker).mock.calls;
+    const lastCall = markerCalls[markerCalls.length - 1] as unknown as [[number, number], unknown];
+    expect(lastCall[0]).toEqual([houseListing.latitude, houseListing.longitude]);
+  });
+
+  it('does not add or drop markers — a mix of one coincident pair and one distinct listing still constructs exactly 3 markers, one per listing', () => {
+    const onSelectListing = vi.fn();
+    const distinctListing = { ...houseListing, id: 'listing-distinct', latitude: 13.5, longitude: 74.9 };
+    const mixedListings = [listingA, listingB, distinctListing] as never;
+    render(<PropertyMap {...baseProps} listings={mixedListings} onSelectListing={onSelectListing} />);
+
+    const markerCalls = vi.mocked(L.marker).mock.calls;
+    const lastThree = markerCalls.slice(-3) as unknown as Array<[[number, number], unknown]>;
+    // The distinct listing's own coordinates are untouched.
+    expect(lastThree[2][0]).toEqual([13.5, 74.9]);
+    // The coincident pair separated from each other.
+    expect(lastThree[0][0]).not.toEqual(lastThree[1][0]);
+  });
+
+  // Code-review follow-up (BLOCKING) — the #2139 render-offset must NOT
+  // change #1762's cluster-tap split decision. cluster.getBounds() reflects
+  // whatever lat/lng each L.marker was actually constructed with; since
+  // markers now render at their coincident-offset position (tens of
+  // metres apart) instead of the raw (possibly byte-identical) coordinate,
+  // naively using cluster.getBounds() for the split decision would flip a
+  // genuinely-coincident cluster from degenerate/zero-spread (#1762's
+  // deliberate "no meaningful split" case) to a tiny nonzero spread,
+  // wrongly making it "splittable". PropertyMap.tsx's handleClusterActivate
+  // now derives the split-decision bounds from each member's RAW
+  // (pre-offset) coordinate via rawLatLngByMarker instead.
+  it('a cluster whose members share byte-identical RAW coordinates still declines to split (no CameraIntent), even though its rendered markers were separated by the coincident-offset fix', () => {
+    const onMarkerClusterCameraIntent = vi.fn();
+    const onSelectListing = vi.fn();
+    const threeCoincidentListings = [listingA, listingB, listingC] as never;
+    render(
+      <PropertyMap
+        {...baseProps}
+        listings={threeCoincidentListings}
+        onSelectListing={onSelectListing}
+        onMarkerClusterCameraIntent={onMarkerClusterCameraIntent}
+      />,
+    );
+
+    expect(capturedClusterHandler).toBeDefined();
+
+    // The 3 rendered markers (offset apart on screen) ARE this cluster's
+    // real children — getAllChildMarkers() must return the SAME marker
+    // instances handleClusterActivate registered raw coordinates for.
+    const markerResults = vi.mocked(L.marker).mock.results;
+    const childMarkers = markerResults.slice(-3).map((r) => r.value);
+    const cluster = {
+      getChildCount: () => 3,
+      getAllChildMarkers: () => childMarkers,
+      // Deliberately WRONG if reached: a real (non-degenerate) bounds a
+      // naive offset-based implementation would compute. If the fix
+      // regresses to using this instead of raw coordinates, this test
+      // fails by asserting onMarkerClusterCameraIntent WAS called.
+      getBounds: () => ({
+        getSouthWest: () => ({ lat: 13.34, lng: 74.74 }),
+        getNorthEast: () => ({ lat: 13.35, lng: 74.75 }),
+        getCenter: () => ({ lat: 13.345, lng: 74.745 }),
+      }),
+    };
+
+    act(() => {
+      capturedClusterHandler!({ type: 'clusterclick', layer: cluster });
+    });
+
+    // All 3 listings share houseListing's exact raw coordinate — the split
+    // decision must see that degenerate (zero-spread) raw bounds and
+    // decline to split, exactly as #1762 requires for a truly coincident
+    // cluster, regardless of the #2139 render-offset applied to the
+    // markers themselves.
+    expect(onMarkerClusterCameraIntent).not.toHaveBeenCalled();
   });
 });
