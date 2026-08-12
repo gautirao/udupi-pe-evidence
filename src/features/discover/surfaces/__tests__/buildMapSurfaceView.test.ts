@@ -19,80 +19,125 @@ function makeJourney(
   } as unknown as UseAreasNavigationJourneyResult;
 }
 
+function makeNavigationController(): BuildMapSurfaceViewParams['navigationController'] &
+  BuildMapSurfaceCommandsParams['navigationController'] {
+  return {
+    hoveredNavigationNodeKey: null,
+    setHoveredNavigationNodeKey: vi.fn(),
+    focusedClusterMemberAreaKeys: null,
+    setFocusedClusterMemberAreaKeys: vi.fn(),
+  };
+}
+
+function makeAgriController(): BuildMapSurfaceViewParams['agriController'] {
+  return { selectedRegion: null, selectedMaxKm: null, filteredAgriListings: null };
+}
+
+function makeSchoolController(): BuildMapSurfaceViewParams['schoolController'] &
+  BuildMapSurfaceCommandsParams['schoolController'] {
+  return {
+    schoolZoneLabels: [],
+    schools: [],
+    schoolsQuery: {} as BuildMapSurfaceViewParams['schoolController']['schoolsQuery'],
+    schoolFirstAreaSchoolCount: null,
+    schoolFirstZoneSchoolCount: null,
+    schoolFirstLandingSchoolCount: null,
+    schoolListings: [],
+    journeyView: {} as BuildMapSurfaceViewParams['schoolController']['journeyView'],
+    journeyCommands: {} as BuildMapSurfaceViewParams['schoolController']['journeyCommands'],
+  };
+}
+
+function makeMapPresentationController(): BuildMapSurfaceViewParams['mapPresentationController'] &
+  BuildMapSurfaceCommandsParams['mapPresentationController'] {
+  return {
+    agriGroupFocusBounds: null,
+    isColdNavigate: false,
+    overviewAreas: [],
+    handleOverviewAreaClick: vi.fn(),
+    areaSearchMatchKeys: undefined,
+    hoveredAreaKeyForMap: null,
+    handleAreaClusterClick: vi.fn(),
+    resolvedRegionLabel: null,
+    regionSelectNonce: 0,
+    regionOverviewMarkerKind: 'default' as BuildMapSurfaceViewParams['mapPresentationController']['regionOverviewMarkerKind'],
+    prefersReducedMotion: false,
+    dismissRegionGuide: vi.fn(),
+    isRegionOverview: false,
+    regionOverviewShortLabel: null,
+    areaJourneySegments: [],
+    schoolJourneySegments: [],
+    hoveredListingId: null,
+    isAreaFirstCityLanding: false,
+    isSelectedNodeOutOfView: false,
+    handleRecenterOnSelectedNode: vi.fn(),
+    schoolFocusTick: 0,
+    selectedSchoolLat: undefined,
+    selectedSchoolLon: undefined,
+  };
+}
+
+function makeMobilePresentationController(): BuildMapSurfaceViewParams['mobilePresentationController'] &
+  BuildMapSurfaceCommandsParams['mobilePresentationController'] {
+  return { bottomOcclusionPx: 0, previewOcclusionPx: 0, handlePreviewSheetHeightChange: vi.fn() };
+}
+
+function makeViewportTrackerController(): BuildMapSurfaceViewParams['viewportTrackerController'] {
+  return { handleBoundsChange: vi.fn() };
+}
+
+function makeMarkerController(): BuildMapSurfaceViewParams['markerController'] &
+  BuildMapSurfaceCommandsParams['markerController'] {
+  return {
+    markerPixelPos: null,
+    selectedMarkerListing: null,
+    handlePopoverDismiss: vi.fn(),
+    handleSelectMarkerListing: vi.fn(),
+    handleMarkerClickWithPosition: vi.fn(),
+  };
+}
+
 function makeViewParams(
   overrides: Partial<BuildMapSurfaceViewParams> = {},
 ): BuildMapSurfaceViewParams {
   const mapContainerRef = { current: document.createElement('div') };
   return {
     // camera
-    agriGroupFocusBounds: null,
     activeFocusBounds: null,
     memoizedInitialCenter: undefined,
-    isColdNavigate: false,
     cityCenter: undefined,
     cityZoom: undefined,
     cameraIntent: null,
     panToArea: null,
-    bottomOcclusionPx: 0,
-    previewOcclusionPx: 0,
-    prefersReducedMotion: false,
     mapZoom: 12,
     // layers
     currentMapMarkerListings: [],
-    selectedRegion: null,
-    selectedMaxKm: null,
-    filteredAgriListings: null,
     filters: {} as BuildMapSurfaceViewParams['filters'],
     isLandingState: false,
-    overviewAreas: [],
     focusedGroupAreas: undefined,
     areaLayerMaxZoom: 15,
     selectedArea: null,
-    areaSearchMatchKeys: undefined,
-    hoveredAreaKeyForMap: null,
     isAgriJourney: false,
     areaMarkerListings: [],
-    schoolZoneLabels: [],
     schoolRadiusOverlay: false,
-    isRegionOverview: false,
-    regionOverviewShortLabel: null,
     isBoundedBrowseState: false,
     areaRestoreArea: null,
     // navigation
-    areasNavigationJourney: makeJourney(),
-    hoveredNavigationNodeKey: null,
-    focusedClusterMemberAreaKeys: null,
-    isAreaFirstCityLanding: false,
     showSchoolBreadcrumb: false,
-    areaJourneySegments: [],
-    schoolJourneySegments: [],
     focusedGroup: null,
     city: 'bangalore',
     resolvedPanelContent: 'landing' as BuildMapSurfaceViewParams['resolvedPanelContent'],
     isSelectedGroupState: false,
     isAreaFirstSelectedAreaState: false,
-    journeyView: {} as BuildMapSurfaceViewParams['journeyView'],
     // schools
     selectedSchool: null,
-    schools: [],
     showSchoolMarkers: false,
-    schoolsQuery: {} as BuildMapSurfaceViewParams['schoolsQuery'],
-    schoolFocusTick: 0,
-    selectedSchoolLat: undefined,
-    selectedSchoolLon: undefined,
     schoolMarkerFocusTick: 0,
     schoolMarkerPositions: [],
     schoolRadiusActive: false,
     schoolRadiusPillNoun: 'homes',
-    schoolFirstAreaSchoolCount: null,
-    schoolFirstZoneSchoolCount: null,
-    schoolFirstLandingSchoolCount: null,
     schoolRadiusHasMore: false,
-    schoolListings: [],
     // markers
-    markerPixelPos: null,
-    selectedMarkerListing: null,
-    hoveredListingId: null,
     isMarkerPopoverEligible: false,
     markerPopoverStepper: null,
     markersTruncated: false,
@@ -114,32 +159,21 @@ function makeViewParams(
     mobileListButton: null,
     // regionGuide
     regionGuideVisible: false,
-    resolvedRegionLabel: null,
-    regionSelectNonce: 0,
-    regionOverviewMarkerKind: 'default' as BuildMapSurfaceViewParams['regionOverviewMarkerKind'],
     regionGuideRingActive: false,
     // commands (unused by view builder but required by the shared param type)
-    handlePopoverDismiss: vi.fn(),
     handlePolygonDrawn: vi.fn(),
     handlePolygonCleared: vi.fn(),
-    handleOverviewAreaClick: vi.fn(),
     publishCameraIntent: vi.fn(),
     publishClusterCameraIntent: vi.fn(),
     publishMarkerClusterCameraIntent: vi.fn(),
-    handleAreaClusterClick: vi.fn(),
     handleAreaMarkersComputed: vi.fn(),
     onNavigationNodeHoverChange: vi.fn(),
     onClusterFocusChange: vi.fn(),
     onAreaVisualClusterCameraIntent: vi.fn(),
     buildNavigationNodeHref: vi.fn(),
     setMapZoom: vi.fn(),
-    handleBoundsChange: vi.fn(),
     setMapReady: vi.fn(),
-    journeyCommands: {} as BuildMapSurfaceViewParams['journeyCommands'],
-    handleSelectMarkerListing: vi.fn(),
-    handleMarkerClickWithPosition: vi.fn(),
     handleCityChange: vi.fn(),
-    dismissRegionGuide: vi.fn(),
     navigate: vi.fn(),
     handleStepMarkerListing: vi.fn(),
     showMarkerInList: vi.fn(),
@@ -151,7 +185,14 @@ function makeViewParams(
     isPreviewSheetOpen: false,
     selectedListingPreview: null,
     mapReady: false,
-    isSelectedNodeOutOfView: false,
+    // controller result objects
+    navigationController: makeNavigationController(),
+    agriController: makeAgriController(),
+    schoolController: makeSchoolController(),
+    mapPresentationController: makeMapPresentationController(),
+    mobilePresentationController: makeMobilePresentationController(),
+    viewportTrackerController: makeViewportTrackerController(),
+    markerController: makeMarkerController(),
     ...overrides,
   };
 }
@@ -199,7 +240,7 @@ describe('buildMapSurfaceView', () => {
     });
     const baseTrue = {
       mapReady: true,
-      isSelectedNodeOutOfView: true,
+      mapPresentationController: { ...makeMapPresentationController(), isSelectedNodeOutOfView: true },
       activeAreasNavigationJourney: journeyWithNode,
     };
     expect(buildMapSurfaceView(makeViewParams(baseTrue)).overlays.recenter.visible).toBe(true);
@@ -207,8 +248,12 @@ describe('buildMapSurfaceView', () => {
       buildMapSurfaceView(makeViewParams({ ...baseTrue, mapReady: false })).overlays.recenter.visible,
     ).toBe(false);
     expect(
-      buildMapSurfaceView(makeViewParams({ ...baseTrue, isSelectedNodeOutOfView: false })).overlays
-        .recenter.visible,
+      buildMapSurfaceView(
+        makeViewParams({
+          ...baseTrue,
+          mapPresentationController: { ...makeMapPresentationController(), isSelectedNodeOutOfView: false },
+        }),
+      ).overlays.recenter.visible,
     ).toBe(false);
     expect(
       buildMapSurfaceView(makeViewParams({ ...baseTrue, activeAreasNavigationJourney: makeJourney() }))
@@ -234,31 +279,25 @@ describe('buildMapSurfaceCommands', () => {
     return {
       publishCameraIntent: vi.fn(),
       setMapZoom: vi.fn(),
-      handleBoundsChange: vi.fn(),
       handlePolygonDrawn: vi.fn(),
       handlePolygonCleared: vi.fn(),
-      handleOverviewAreaClick: vi.fn(),
       publishClusterCameraIntent: vi.fn(),
       onAreaVisualClusterCameraIntent: vi.fn(),
-      handleAreaClusterClick: vi.fn(),
       handleAreaMarkersComputed: vi.fn(),
-      onNavigationNodeHoverChange: vi.fn(),
-      onClusterFocusChange: vi.fn(),
-      buildNavigationNodeHref: vi.fn(),
       handleCityChange: vi.fn(),
-      journeyCommands: {} as BuildMapSurfaceCommandsParams['journeyCommands'],
-      handlePopoverDismiss: vi.fn(),
-      handleSelectMarkerListing: vi.fn(),
-      handleMarkerClickWithPosition: vi.fn(),
       publishMarkerClusterCameraIntent: vi.fn(),
       navigate: vi.fn(),
-      handleStepMarkerListing: vi.fn(),
-      showMarkerInList: vi.fn(),
+      buildNavigationNodeHref: vi.fn(),
       setMapReady: vi.fn(),
-      dismissRegionGuide: vi.fn(),
+      showMarkerInList: vi.fn(),
+      handleStepMarkerListing: vi.fn(),
       clearSelectedListing: vi.fn(),
-      handlePreviewSheetHeightChange: vi.fn(),
-      handleRecenterOnSelectedNode: vi.fn(),
+      navigationController: makeNavigationController(),
+      schoolController: makeSchoolController(),
+      mapPresentationController: makeMapPresentationController(),
+      mobilePresentationController: makeMobilePresentationController(),
+      viewportTrackerController: makeViewportTrackerController(),
+      markerController: makeMarkerController(),
       ...overrides,
     };
   }
@@ -268,15 +307,24 @@ describe('buildMapSurfaceCommands', () => {
     const commands = buildMapSurfaceCommands(params);
     expect(commands.camera.publishCameraIntent).toBe(params.publishCameraIntent);
     expect(commands.drawing.handlePolygonDrawn).toBe(params.handlePolygonDrawn);
-    expect(commands.navigation.handleOverviewAreaClick).toBe(params.handleOverviewAreaClick);
-    expect(commands.markers.handleSelectMarkerListing).toBe(params.handleSelectMarkerListing);
-    expect(commands.regionGuide.dismissRegionGuide).toBe(params.dismissRegionGuide);
+    expect(commands.navigation.handleOverviewAreaClick).toBe(
+      params.mapPresentationController.handleOverviewAreaClick,
+    );
+    expect(commands.markers.handleSelectMarkerListing).toBe(
+      params.markerController.handleSelectMarkerListing,
+    );
+    expect(commands.regionGuide.dismissRegionGuide).toBe(
+      params.mapPresentationController.dismissRegionGuide,
+    );
   });
 
   it('overlays.onClusterFocusChange reuses the SAME command as navigation.onClusterFocusChange', () => {
     const params = makeCommandsParams();
     const commands = buildMapSurfaceCommands(params);
     expect(commands.overlays.onClusterFocusChange).toBe(commands.navigation.onClusterFocusChange);
+    expect(commands.overlays.onClusterFocusChange).toBe(
+      params.navigationController.setFocusedClusterMemberAreaKeys,
+    );
   });
 
   it('overlays.onDismissPreview/onRecenter/onPreviewHeightChange wire to the passed-in handlers', () => {
@@ -284,7 +332,17 @@ describe('buildMapSurfaceCommands', () => {
     const handleRecenterOnSelectedNode = vi.fn();
     const handlePreviewSheetHeightChange = vi.fn();
     const commands = buildMapSurfaceCommands(
-      makeCommandsParams({ clearSelectedListing, handleRecenterOnSelectedNode, handlePreviewSheetHeightChange }),
+      makeCommandsParams({
+        clearSelectedListing,
+        mapPresentationController: {
+          ...makeMapPresentationController(),
+          handleRecenterOnSelectedNode,
+        },
+        mobilePresentationController: {
+          ...makeMobilePresentationController(),
+          handlePreviewSheetHeightChange,
+        },
+      }),
     );
     expect(commands.overlays.onDismissPreview).toBe(clearSelectedListing);
     expect(commands.overlays.onRecenter).toBe(handleRecenterOnSelectedNode);

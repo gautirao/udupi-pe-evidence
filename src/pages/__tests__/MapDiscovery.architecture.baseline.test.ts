@@ -74,20 +74,27 @@ const COMMIT_1_USE_REF_CEILING = 3;
 describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-commit)', () => {
   describe('LOC / import — must shrink toward <=220 LOC by end of #2142', () => {
     it('records the CURRENT actual LOC (updated each commit as the page shrinks)', () => {
-      // Commit 5: the PublicDiscoverLayout wrapper, the mobile-only
-      // DiscoverControlBar row, and the z-[60] mobile-Map full-screen wrapper
-      // div moved into DiscoverPageShell.tsx (byte-identical classNames/
-      // testids/z-index, pure JSX relocation). 2916 (Commit 1) -> 2863
-      // (Commit 2) -> 2844 (leaf hooks) -> 2667 (batch 1) -> 2581 (batch 2)
-      // -> 2474 (batch 3, full Commit 3) -> 2363 (Commit 4) -> 2278
-      // (Commit 5). NOTE (flagged to team-lead): the mapProps/panelProps/
-      // overlayProps object-literal assembly (~330 lines, the bulk of what
-      // remains) is still page-local JS — moving it further would require
-      // relocating the same volume of local-variable references to a new
-      // owner, not eliminating them, so <=220 LOC is not expected to land
-      // purely from JSX relocation; may end as a documented variance (same
-      // pattern as #1824's 1200-vs-800 LOC outcome) pending team-lead's call.
-      expect(lines.length).toBe(2278);
+      // Commit 5a: DiscoverPageShell.tsx extraction (layout JSX only).
+      // Commit 5b (team-lead ruling, "one attempt" experiment): the 3
+      // builders' input params were tightened from ~65 individually-flat
+      // fields to nested controller-result-object references
+      // (navigationController/agriController/schoolController/
+      // mapPresentationController/mobilePresentationController/
+      // viewportTrackerController/markerController) for the MAP surface
+      // only. 2916 (Commit 1) -> 2863 (Commit 2) -> 2844 (leaf hooks) ->
+      // 2667 (batch 1) -> 2581 (batch 2) -> 2474 (batch 3, full Commit 3) ->
+      // 2363 (Commit 4) -> 2278 (Commit 5a, layout shell) -> 2256
+      // (Commit 5b, controller-grouping experiment). NOTE (flagged to
+      // team-lead, empirically measured): the experiment saved only ~22 net
+      // lines for the Map surface (39-field mapPresentationController
+      // grouped down to 1 line, offset by +1 "const xController = ..."
+      // line per each of the 8 controller call sites needing to preserve
+      // BOTH the whole object and this page's existing flat destructuring
+      // for its own internal use). <=220 LOC is not reachable this way —
+      // accepted as a documented variance pending team-lead's decision on
+      // whether to repeat this for the Panel surface too (same pattern as
+      // #1824's 1200-vs-800 LOC outcome).
+      expect(lines.length).toBe(2256);
     });
 
     it('records the CURRENT actual top-level import statement count (updated each commit)', () => {
@@ -97,9 +104,10 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
       // imported selectors/adapters/controllers; only LOC is the metric
       // #2142's <=220 acceptance criterion targets. 75 (Commit 1) -> 80
       // (Commit 2) -> 82 (leaf hooks) -> 74 (batch 1) -> 67 (batch 2) -> 60
-      // (batch 3, full Commit 3) -> 60 (Commit 4) -> 59 (Commit 5:
+      // (batch 3, full Commit 3) -> 60 (Commit 4) -> 59 (Commit 5a:
       // PublicDiscoverLayout + DiscoverControlBar imports removed,
-      // DiscoverPageShell import added — net -1).
+      // DiscoverPageShell import added — net -1) -> 59 (Commit 5b:
+      // unchanged, no new imports needed for the controller-grouping change).
       const importCount = countMatches(source, /^import /gm);
       expect(importCount).toBe(59);
     });
@@ -109,8 +117,8 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
     });
 
     it('LOC must monotonically shrink (or hold) from the immediately preceding commit, never grow', () => {
-      // Commit 5's actual value (2278) vs Commit 4's value (2363).
-      expect(2278).toBeLessThanOrEqual(2363);
+      // Commit 5b's actual value (2256) vs Commit 5a's value (2278).
+      expect(2256).toBeLessThanOrEqual(2278);
     });
   });
 

@@ -2,6 +2,13 @@ import type { RefObject } from 'react';
 import type { DiscoverMapCanvasProps } from '@/features/discover/views/DiscoverMapCanvas';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
+import type { useDiscoverNavigationController } from '@/features/discover/controllers/useDiscoverNavigationController';
+import type { useDiscoverAgriController } from '@/features/discover/controllers/useDiscoverAgriController';
+import type { useDiscoverSchoolController } from '@/features/discover/controllers/useDiscoverSchoolController';
+import type { useDiscoverMapPresentationController } from '@/features/discover/controllers/useDiscoverMapPresentationController';
+import type { useDiscoverMobilePresentationController } from '@/features/discover/controllers/useDiscoverMobilePresentationController';
+import type { useDiscoverViewportTracker } from '@/features/discover/controllers/useDiscoverViewportTracker';
+import type { useDiscoverMarkerController } from '@/features/discover/controllers/useDiscoverMarkerController';
 
 /**
  * Issue #2142 Commit 4 — typed view/commands contract for DiscoverMapSurface
@@ -23,23 +30,32 @@ import type { SelectedListingPreview } from '@/features/discover/navigation/sele
  * a DOM ref the page creates and this surface both forwards to DiscoverMapCanvas
  * and reads (`.current`) to compute the recenter portal target and to gate the
  * mobile full-screen wrapper — not view data or a command.
+ *
+ * Issue #2142 Commit 5 (team-lead ruling, 2026-08-12) — BuildMapSurfaceViewParams
+ * accepts the CONTROLLERS' OWN result objects (or small Picked subsets of them)
+ * as nested params, instead of ~65 individually-named flat fields duplicating
+ * what MapDiscovery.tsx's own controller-destructure already named. Only the
+ * genuinely page-local fields (state this page owns directly, or derived
+ * consts with no controller source — filters, city, badge copy, etc.) stay
+ * flat. This is an input-shape tightening of the already-approved Commit 4
+ * builder boundary, not a new abstraction: the `view`/`commands` OUTPUT shape
+ * below is completely unchanged, and every downstream line in
+ * buildMapSurfaceView()/buildMapSurfaceCommands() is untouched — only the
+ * destructuring prelude at the top of each function changed source.
  */
 
 type MapCameraView = Pick<
   DiscoverMapCanvasProps,
-  | 'agriGroupFocusBounds'
   | 'activeFocusBounds'
   | 'memoizedInitialCenter'
-  | 'isColdNavigate'
   | 'cityCenter'
   | 'cityZoom'
   | 'cameraIntent'
   | 'panToArea'
-  | 'bottomOcclusionPx'
-  | 'previewOcclusionPx'
-  | 'prefersReducedMotion'
   | 'mapZoom'
->;
+> &
+  Pick<DiscoverMapCanvasProps, 'agriGroupFocusBounds' | 'isColdNavigate' | 'prefersReducedMotion'> &
+  Pick<DiscoverMapCanvasProps, 'bottomOcclusionPx' | 'previewOcclusionPx'>;
 type MapCameraCommands = Pick<
   DiscoverMapCanvasProps,
   'publishCameraIntent' | 'setMapZoom' | 'handleBoundsChange'
@@ -48,100 +64,66 @@ type MapCameraCommands = Pick<
 type MapLayersView = Pick<
   DiscoverMapCanvasProps,
   | 'currentMapMarkerListings'
-  | 'selectedRegion'
-  | 'selectedMaxKm'
-  | 'filteredAgriListings'
   | 'filters'
   | 'isLandingState'
-  | 'overviewAreas'
   | 'focusedGroupAreas'
   | 'areaLayerMaxZoom'
   | 'selectedArea'
-  | 'areaSearchMatchKeys'
-  | 'hoveredAreaKeyForMap'
   | 'isAgriJourney'
   | 'areaMarkerListings'
-  | 'schoolZoneLabels'
   | 'schoolRadiusOverlay'
-  | 'isRegionOverview'
-  | 'regionOverviewShortLabel'
   | 'isBoundedBrowseState'
   | 'areaRestoreArea'
->;
+> &
+  Pick<DiscoverMapCanvasProps, 'selectedRegion' | 'selectedMaxKm' | 'filteredAgriListings'> &
+  Pick<DiscoverMapCanvasProps, 'overviewAreas' | 'areaSearchMatchKeys' | 'hoveredAreaKeyForMap'> &
+  Pick<DiscoverMapCanvasProps, 'schoolZoneLabels'> &
+  Pick<DiscoverMapCanvasProps, 'isRegionOverview' | 'regionOverviewShortLabel'>;
 type MapDrawingCommands = Pick<DiscoverMapCanvasProps, 'handlePolygonDrawn' | 'handlePolygonCleared'>;
 
-type MapNavigationView = Pick<
-  DiscoverMapCanvasProps,
-  | 'areasNavigationJourney'
-  | 'hoveredNavigationNodeKey'
-  | 'focusedClusterMemberAreaKeys'
-  | 'isAreaFirstCityLanding'
-  | 'showSchoolBreadcrumb'
-  | 'areaJourneySegments'
-  | 'schoolJourneySegments'
-  | 'focusedGroup'
-  | 'city'
-  | 'resolvedPanelContent'
-  | 'isSelectedGroupState'
-  | 'isAreaFirstSelectedAreaState'
-  | 'journeyView'
->;
+type MapNavigationView = Pick<DiscoverMapCanvasProps, 'showSchoolBreadcrumb' | 'focusedGroup' | 'city'> &
+  Pick<
+    DiscoverMapCanvasProps,
+    'areasNavigationJourney' | 'hoveredNavigationNodeKey' | 'focusedClusterMemberAreaKeys'
+  > &
+  Pick<
+    DiscoverMapCanvasProps,
+    | 'isAreaFirstCityLanding'
+    | 'areaJourneySegments'
+    | 'schoolJourneySegments'
+    | 'resolvedPanelContent'
+    | 'isSelectedGroupState'
+    | 'isAreaFirstSelectedAreaState'
+  > &
+  Pick<DiscoverMapCanvasProps, 'journeyView'>;
 type MapNavigationCommands = Pick<
   DiscoverMapCanvasProps,
-  | 'handleOverviewAreaClick'
-  | 'publishClusterCameraIntent'
-  | 'onAreaVisualClusterCameraIntent'
-  | 'handleAreaClusterClick'
-  | 'handleAreaMarkersComputed'
-  | 'onNavigationNodeHoverChange'
-  | 'onClusterFocusChange'
-  | 'buildNavigationNodeHref'
-  | 'handleCityChange'
-  | 'journeyCommands'
->;
+  'publishClusterCameraIntent' | 'onAreaVisualClusterCameraIntent' | 'handleAreaMarkersComputed' | 'handleCityChange'
+> &
+  Pick<DiscoverMapCanvasProps, 'onNavigationNodeHoverChange' | 'onClusterFocusChange'> &
+  Pick<DiscoverMapCanvasProps, 'handleOverviewAreaClick' | 'handleAreaClusterClick' | 'buildNavigationNodeHref'> &
+  Pick<DiscoverMapCanvasProps, 'journeyCommands'>;
 
-type MapSchoolsView = Pick<
-  DiscoverMapCanvasProps,
-  | 'selectedSchool'
-  | 'schools'
-  | 'showSchoolMarkers'
-  | 'schoolsQuery'
-  | 'schoolFocusTick'
-  | 'selectedSchoolLat'
-  | 'selectedSchoolLon'
-  | 'schoolMarkerFocusTick'
-  | 'schoolMarkerPositions'
-  | 'schoolRadiusActive'
-  | 'schoolRadiusPillNoun'
-  | 'schoolFirstAreaSchoolCount'
-  | 'schoolFirstZoneSchoolCount'
-  | 'schoolFirstLandingSchoolCount'
-  | 'schoolRadiusHasMore'
-  | 'schoolListings'
->;
+type MapSchoolsView = Pick<DiscoverMapCanvasProps, 'selectedSchool' | 'showSchoolMarkers' | 'schoolMarkerFocusTick' | 'schoolMarkerPositions' | 'schoolRadiusActive' | 'schoolRadiusPillNoun' | 'schoolRadiusHasMore'> &
+  Pick<
+    DiscoverMapCanvasProps,
+    | 'schools'
+    | 'schoolsQuery'
+    | 'schoolFocusTick'
+    | 'selectedSchoolLat'
+    | 'selectedSchoolLon'
+    | 'schoolFirstAreaSchoolCount'
+    | 'schoolFirstZoneSchoolCount'
+    | 'schoolFirstLandingSchoolCount'
+    | 'schoolListings'
+  >;
 
-type MapMarkersView = Pick<
-  DiscoverMapCanvasProps,
-  | 'markerPixelPos'
-  | 'selectedMarkerListing'
-  | 'hoveredListingId'
-  | 'isMarkerPopoverEligible'
-  | 'markerPopoverStepper'
-  | 'markersTruncated'
-  | 'markersReturnedElements'
-  | 'markersTotalFilteredElements'
->;
-type MapMarkersCommands = Pick<
-  DiscoverMapCanvasProps,
-  | 'handlePopoverDismiss'
-  | 'handleSelectMarkerListing'
-  | 'handleMarkerClickWithPosition'
-  | 'publishMarkerClusterCameraIntent'
-  | 'navigate'
-  | 'handleStepMarkerListing'
-  | 'showMarkerInList'
-  | 'setMapReady'
->;
+type MapMarkersView = Pick<DiscoverMapCanvasProps, 'isMarkerPopoverEligible' | 'markerPopoverStepper' | 'markersTruncated' | 'markersReturnedElements' | 'markersTotalFilteredElements'> &
+  Pick<DiscoverMapCanvasProps, 'markerPixelPos' | 'selectedMarkerListing'> &
+  Pick<DiscoverMapCanvasProps, 'hoveredListingId'>;
+type MapMarkersCommands = Pick<DiscoverMapCanvasProps, 'publishMarkerClusterCameraIntent' | 'navigate' | 'setMapReady'> &
+  Pick<DiscoverMapCanvasProps, 'handlePopoverDismiss' | 'handleSelectMarkerListing' | 'handleMarkerClickWithPosition'> &
+  Pick<DiscoverMapCanvasProps, 'handleStepMarkerListing' | 'showMarkerInList'>;
 
 type MapStatusView = Pick<
   DiscoverMapCanvasProps,
@@ -160,14 +142,8 @@ type MapStatusView = Pick<
 
 type MapMobileView = Pick<DiscoverMapCanvasProps, 'mobileListButton'>;
 
-type MapRegionGuideView = Pick<
-  DiscoverMapCanvasProps,
-  | 'regionGuideVisible'
-  | 'resolvedRegionLabel'
-  | 'regionSelectNonce'
-  | 'regionOverviewMarkerKind'
-  | 'regionGuideRingActive'
->;
+type MapRegionGuideView = Pick<DiscoverMapCanvasProps, 'regionGuideVisible' | 'regionGuideRingActive'> &
+  Pick<DiscoverMapCanvasProps, 'resolvedRegionLabel' | 'regionSelectNonce' | 'regionOverviewMarkerKind'>;
 type MapRegionGuideCommands = Pick<DiscoverMapCanvasProps, 'dismissRegionGuide'>;
 
 export interface DiscoverMapOverlaysView {
@@ -216,7 +192,81 @@ export interface DiscoverMapSurfaceCommands {
   overlays: DiscoverMapOverlaysCommands;
 }
 
-export type BuildMapSurfaceViewParams = Omit<DiscoverMapCanvasProps, 'mapContainerRef'> & {
+/** The subset of useDiscoverMapPresentationController's 39-field return this surface reads. */
+type MapPresentationControllerSlice = Pick<
+  ReturnType<typeof useDiscoverMapPresentationController>,
+  | 'agriGroupFocusBounds'
+  | 'isColdNavigate'
+  | 'overviewAreas'
+  | 'handleOverviewAreaClick'
+  | 'areaSearchMatchKeys'
+  | 'hoveredAreaKeyForMap'
+  | 'handleAreaClusterClick'
+  | 'resolvedRegionLabel'
+  | 'regionSelectNonce'
+  | 'regionOverviewMarkerKind'
+  | 'prefersReducedMotion'
+  | 'dismissRegionGuide'
+  | 'isRegionOverview'
+  | 'regionOverviewShortLabel'
+  | 'areaJourneySegments'
+  | 'schoolJourneySegments'
+  | 'hoveredListingId'
+  | 'isAreaFirstCityLanding'
+  | 'isSelectedNodeOutOfView'
+  | 'handleRecenterOnSelectedNode'
+  | 'schoolFocusTick'
+  | 'selectedSchoolLat'
+  | 'selectedSchoolLon'
+>;
+
+export type BuildMapSurfaceViewParams = Omit<
+  DiscoverMapCanvasProps,
+  | 'mapContainerRef'
+  | 'hoveredNavigationNodeKey'
+  | 'focusedClusterMemberAreaKeys'
+  | 'selectedRegion'
+  | 'selectedMaxKm'
+  | 'filteredAgriListings'
+  | 'schoolZoneLabels'
+  | 'schools'
+  | 'schoolsQuery'
+  | 'schoolFocusTick'
+  | 'selectedSchoolLat'
+  | 'selectedSchoolLon'
+  | 'schoolFirstAreaSchoolCount'
+  | 'schoolFirstZoneSchoolCount'
+  | 'schoolFirstLandingSchoolCount'
+  | 'schoolListings'
+  | 'journeyView'
+  | 'journeyCommands'
+  | 'agriGroupFocusBounds'
+  | 'isColdNavigate'
+  | 'overviewAreas'
+  | 'handleOverviewAreaClick'
+  | 'areaSearchMatchKeys'
+  | 'hoveredAreaKeyForMap'
+  | 'handleAreaClusterClick'
+  | 'resolvedRegionLabel'
+  | 'regionSelectNonce'
+  | 'regionOverviewMarkerKind'
+  | 'prefersReducedMotion'
+  | 'dismissRegionGuide'
+  | 'isRegionOverview'
+  | 'regionOverviewShortLabel'
+  | 'areaJourneySegments'
+  | 'schoolJourneySegments'
+  | 'hoveredListingId'
+  | 'isAreaFirstCityLanding'
+  | 'bottomOcclusionPx'
+  | 'previewOcclusionPx'
+  | 'handleBoundsChange'
+  | 'markerPixelPos'
+  | 'selectedMarkerListing'
+  | 'handlePopoverDismiss'
+  | 'handleSelectMarkerListing'
+  | 'handleMarkerClickWithPosition'
+> & {
   mapContainerRef: RefObject<HTMLDivElement | null>;
   mobileMapOpen: boolean;
   activeAreasNavigationJourney: UseAreasNavigationJourneyResult;
@@ -224,75 +274,107 @@ export type BuildMapSurfaceViewParams = Omit<DiscoverMapCanvasProps, 'mapContain
   isPreviewSheetOpen: boolean;
   selectedListingPreview: SelectedListingPreview | null;
   mapReady: boolean;
-  isSelectedNodeOutOfView: boolean;
+
+  navigationController: Pick<
+    ReturnType<typeof useDiscoverNavigationController>,
+    'hoveredNavigationNodeKey' | 'focusedClusterMemberAreaKeys'
+  >;
+  agriController: Pick<
+    ReturnType<typeof useDiscoverAgriController>,
+    'selectedRegion' | 'selectedMaxKm' | 'filteredAgriListings'
+  >;
+  schoolController: Pick<
+    ReturnType<typeof useDiscoverSchoolController>,
+    | 'schoolZoneLabels'
+    | 'schools'
+    | 'schoolsQuery'
+    | 'schoolFirstAreaSchoolCount'
+    | 'schoolFirstZoneSchoolCount'
+    | 'schoolFirstLandingSchoolCount'
+    | 'schoolListings'
+    | 'journeyView'
+    | 'journeyCommands'
+  >;
+  mapPresentationController: MapPresentationControllerSlice;
+  mobilePresentationController: Pick<
+    ReturnType<typeof useDiscoverMobilePresentationController>,
+    'bottomOcclusionPx' | 'previewOcclusionPx'
+  >;
+  viewportTrackerController: Pick<ReturnType<typeof useDiscoverViewportTracker>, 'handleBoundsChange'>;
+  markerController: Pick<
+    ReturnType<typeof useDiscoverMarkerController>,
+    'markerPixelPos' | 'selectedMarkerListing' | 'handlePopoverDismiss' | 'handleSelectMarkerListing' | 'handleMarkerClickWithPosition'
+  >;
 };
 
 export function buildMapSurfaceView(params: BuildMapSurfaceViewParams): DiscoverMapSurfaceView {
   const {
-    agriGroupFocusBounds,
+    navigationController: { hoveredNavigationNodeKey, focusedClusterMemberAreaKeys },
+    agriController: { selectedRegion, selectedMaxKm, filteredAgriListings },
+    schoolController: {
+      schoolZoneLabels,
+      schools,
+      schoolsQuery,
+      schoolFirstAreaSchoolCount,
+      schoolFirstZoneSchoolCount,
+      schoolFirstLandingSchoolCount,
+      schoolListings,
+      journeyView,
+    },
+    mapPresentationController: {
+      agriGroupFocusBounds,
+      isColdNavigate,
+      overviewAreas,
+      areaSearchMatchKeys,
+      hoveredAreaKeyForMap,
+      resolvedRegionLabel,
+      regionSelectNonce,
+      regionOverviewMarkerKind,
+      prefersReducedMotion,
+      isRegionOverview,
+      regionOverviewShortLabel,
+      areaJourneySegments,
+      schoolJourneySegments,
+      hoveredListingId,
+      isAreaFirstCityLanding,
+      isSelectedNodeOutOfView,
+      schoolFocusTick,
+      selectedSchoolLat,
+      selectedSchoolLon,
+    },
+    mobilePresentationController: { bottomOcclusionPx, previewOcclusionPx },
+    markerController: { markerPixelPos, selectedMarkerListing },
     activeFocusBounds,
     memoizedInitialCenter,
-    isColdNavigate,
     cityCenter,
     cityZoom,
     cameraIntent,
     panToArea,
-    bottomOcclusionPx,
-    previewOcclusionPx,
-    prefersReducedMotion,
     mapZoom,
     currentMapMarkerListings,
-    selectedRegion,
-    selectedMaxKm,
-    filteredAgriListings,
     filters,
     isLandingState,
-    overviewAreas,
     focusedGroupAreas,
     areaLayerMaxZoom,
     selectedArea,
-    areaSearchMatchKeys,
-    hoveredAreaKeyForMap,
     isAgriJourney,
     areaMarkerListings,
-    schoolZoneLabels,
     schoolRadiusOverlay,
-    isRegionOverview,
-    regionOverviewShortLabel,
     isBoundedBrowseState,
     areaRestoreArea,
-    areasNavigationJourney,
-    hoveredNavigationNodeKey,
-    focusedClusterMemberAreaKeys,
-    isAreaFirstCityLanding,
     showSchoolBreadcrumb,
-    areaJourneySegments,
-    schoolJourneySegments,
     focusedGroup,
     city,
     resolvedPanelContent,
     isSelectedGroupState,
     isAreaFirstSelectedAreaState,
-    journeyView,
     selectedSchool,
-    schools,
     showSchoolMarkers,
-    schoolsQuery,
-    schoolFocusTick,
-    selectedSchoolLat,
-    selectedSchoolLon,
     schoolMarkerFocusTick,
     schoolMarkerPositions,
     schoolRadiusActive,
     schoolRadiusPillNoun,
-    schoolFirstAreaSchoolCount,
-    schoolFirstZoneSchoolCount,
-    schoolFirstLandingSchoolCount,
     schoolRadiusHasMore,
-    schoolListings,
-    markerPixelPos,
-    selectedMarkerListing,
-    hoveredListingId,
     isMarkerPopoverEligible,
     markerPopoverStepper,
     markersTruncated,
@@ -311,9 +393,6 @@ export function buildMapSurfaceView(params: BuildMapSurfaceViewParams): Discover
     announcedBadgeText,
     mobileListButton,
     regionGuideVisible,
-    resolvedRegionLabel,
-    regionSelectNonce,
-    regionOverviewMarkerKind,
     regionGuideRingActive,
     mobileMapOpen,
     activeAreasNavigationJourney,
@@ -322,7 +401,6 @@ export function buildMapSurfaceView(params: BuildMapSurfaceViewParams): Discover
     selectedListingPreview,
     mapReady,
     mapContainerRef,
-    isSelectedNodeOutOfView,
   } = params;
 
   return {
@@ -363,7 +441,7 @@ export function buildMapSurfaceView(params: BuildMapSurfaceViewParams): Discover
       areaRestoreArea,
     },
     navigation: {
-      areasNavigationJourney,
+      areasNavigationJourney: activeAreasNavigationJourney,
       hoveredNavigationNodeKey,
       focusedClusterMemberAreaKeys,
       isAreaFirstCityLanding,
@@ -455,32 +533,38 @@ export type BuildMapSurfaceCommandsParams = Pick<
   DiscoverMapCanvasProps,
   | 'publishCameraIntent'
   | 'setMapZoom'
-  | 'handleBoundsChange'
   | 'handlePolygonDrawn'
   | 'handlePolygonCleared'
-  | 'handleOverviewAreaClick'
   | 'publishClusterCameraIntent'
   | 'onAreaVisualClusterCameraIntent'
-  | 'handleAreaClusterClick'
   | 'handleAreaMarkersComputed'
-  | 'onNavigationNodeHoverChange'
-  | 'onClusterFocusChange'
-  | 'buildNavigationNodeHref'
   | 'handleCityChange'
-  | 'journeyCommands'
-  | 'handlePopoverDismiss'
-  | 'handleSelectMarkerListing'
-  | 'handleMarkerClickWithPosition'
   | 'publishMarkerClusterCameraIntent'
   | 'navigate'
-  | 'handleStepMarkerListing'
-  | 'showMarkerInList'
-  | 'setMapReady'
-  | 'dismissRegionGuide'
 > & {
+  navigationController: Pick<
+    ReturnType<typeof useDiscoverNavigationController>,
+    'setHoveredNavigationNodeKey' | 'setFocusedClusterMemberAreaKeys'
+  >;
+  schoolController: Pick<ReturnType<typeof useDiscoverSchoolController>, 'journeyCommands'>;
+  mapPresentationController: Pick<
+    ReturnType<typeof useDiscoverMapPresentationController>,
+    'handleOverviewAreaClick' | 'handleAreaClusterClick' | 'dismissRegionGuide' | 'handleRecenterOnSelectedNode'
+  >;
+  mobilePresentationController: Pick<
+    ReturnType<typeof useDiscoverMobilePresentationController>,
+    'handlePreviewSheetHeightChange'
+  >;
+  viewportTrackerController: Pick<ReturnType<typeof useDiscoverViewportTracker>, 'handleBoundsChange'>;
+  markerController: Pick<
+    ReturnType<typeof useDiscoverMarkerController>,
+    'handlePopoverDismiss' | 'handleSelectMarkerListing' | 'handleMarkerClickWithPosition'
+  >;
+  buildNavigationNodeHref: DiscoverMapCanvasProps['buildNavigationNodeHref'];
+  setMapReady: DiscoverMapCanvasProps['setMapReady'];
+  showMarkerInList: DiscoverMapCanvasProps['showMarkerInList'];
+  handleStepMarkerListing: DiscoverMapCanvasProps['handleStepMarkerListing'];
   clearSelectedListing: () => void;
-  handlePreviewSheetHeightChange: (listingId: string, heightPx: number) => void;
-  handleRecenterOnSelectedNode: () => void;
 };
 
 export function buildMapSurfaceCommands(
@@ -489,31 +573,30 @@ export function buildMapSurfaceCommands(
   const {
     publishCameraIntent,
     setMapZoom,
-    handleBoundsChange,
     handlePolygonDrawn,
     handlePolygonCleared,
-    handleOverviewAreaClick,
     publishClusterCameraIntent,
     onAreaVisualClusterCameraIntent,
-    handleAreaClusterClick,
     handleAreaMarkersComputed,
-    onNavigationNodeHoverChange,
-    onClusterFocusChange,
-    buildNavigationNodeHref,
     handleCityChange,
-    journeyCommands,
-    handlePopoverDismiss,
-    handleSelectMarkerListing,
-    handleMarkerClickWithPosition,
     publishMarkerClusterCameraIntent,
     navigate,
-    handleStepMarkerListing,
-    showMarkerInList,
+    navigationController: { setHoveredNavigationNodeKey, setFocusedClusterMemberAreaKeys },
+    schoolController: { journeyCommands },
+    mapPresentationController: {
+      handleOverviewAreaClick,
+      handleAreaClusterClick,
+      dismissRegionGuide,
+      handleRecenterOnSelectedNode,
+    },
+    mobilePresentationController: { handlePreviewSheetHeightChange },
+    viewportTrackerController: { handleBoundsChange },
+    markerController: { handlePopoverDismiss, handleSelectMarkerListing, handleMarkerClickWithPosition },
+    buildNavigationNodeHref,
     setMapReady,
-    dismissRegionGuide,
+    showMarkerInList,
+    handleStepMarkerListing,
     clearSelectedListing,
-    handlePreviewSheetHeightChange,
-    handleRecenterOnSelectedNode,
   } = params;
 
   return {
@@ -525,8 +608,8 @@ export function buildMapSurfaceCommands(
       onAreaVisualClusterCameraIntent,
       handleAreaClusterClick,
       handleAreaMarkersComputed,
-      onNavigationNodeHoverChange,
-      onClusterFocusChange,
+      onNavigationNodeHoverChange: setHoveredNavigationNodeKey,
+      onClusterFocusChange: setFocusedClusterMemberAreaKeys,
       buildNavigationNodeHref,
       handleCityChange,
       journeyCommands,
@@ -543,7 +626,7 @@ export function buildMapSurfaceCommands(
     },
     regionGuide: { dismissRegionGuide },
     overlays: {
-      onClusterFocusChange,
+      onClusterFocusChange: setFocusedClusterMemberAreaKeys,
       onDismissPreview: clearSelectedListing,
       onViewDetails: (id: string) => navigate(`/listing/${id}`),
       onPreviewHeightChange: handlePreviewSheetHeightChange,

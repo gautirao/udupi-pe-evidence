@@ -225,18 +225,26 @@ describe('C4 controller-ordering contract — useDiscoverMapPresentationControll
   it('the window.__debug.mapState effect (reads schoolMarkerFocusTick/canonicalNodeFitCount) is declared AFTER the useDiscoverMapPresentationController call closes, not before', () => {
     const controllerCallLine = firstLineIndexMatching(/useDiscoverMapPresentationController\(\{/);
     expect(controllerCallLine).toBeGreaterThan(-1);
-    // The controller's own destructure (its RESULT names, e.g.
-    // `schoolMarkerFocusTick,`) appears BEFORE the call site — search only
-    // from the call site onward so this can't match that destructure and
-    // silently pass for the wrong reason.
+    // Issue #2142 Commit 5 (team-lead ruling) — the controller's result is
+    // now captured as ONE object (`const mapPresentationController = use...`)
+    // and destructured into this page's flat field names in a SEPARATE
+    // statement immediately AFTER the call, so `schoolMarkerFocusTick,`
+    // appears TWICE after the call site: once in that destructure (close to
+    // the call), and once inside the actual window.__debug.mapState effect
+    // (much further down). Anchor the field search at the debug-effect OPEN
+    // marker itself (found first, independently), not the call site, so it
+    // can only match the real occurrence inside that block.
     const afterCallSite = lines.slice(controllerCallLine);
-    const debugEffectFieldOffset = afterCallSite.findIndex((line) => line.includes('schoolMarkerFocusTick,'));
     const debugEffectOpenOffset = afterCallSite.findIndex((line) => line.trim() === 'w.__debug = {' || line.includes('.__debug = {'));
-    expect(debugEffectFieldOffset).toBeGreaterThan(-1);
     expect(debugEffectOpenOffset).toBeGreaterThan(-1);
+    const afterDebugEffectOpen = afterCallSite.slice(debugEffectOpenOffset);
+    const debugEffectFieldOffset = afterDebugEffectOpen.findIndex((line) => line.includes('schoolMarkerFocusTick,'));
+    expect(debugEffectFieldOffset).toBeGreaterThan(-1);
     // The debug object's opening assignment must come before the field
-    // reference inside it (sanity the regex found the right block).
-    expect(debugEffectOpenOffset).toBeLessThan(debugEffectFieldOffset);
+    // reference inside it (sanity the regex found the right block) — always
+    // true by construction now (debugEffectFieldOffset is searched relative
+    // to debugEffectOpenOffset), kept as an explicit assertion for clarity.
+    expect(debugEffectFieldOffset).toBeGreaterThanOrEqual(0);
   });
 
   it('threads the SAME scopeNamespaces reference into both useDiscoverCameraOrchestration and useDiscoverMapPresentation (single source of truth, issue #1910) — behavioral proof', () => {
