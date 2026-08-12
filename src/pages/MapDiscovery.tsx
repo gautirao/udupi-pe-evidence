@@ -1586,6 +1586,7 @@ export default function MapDiscovery() {
     schoolFocusLon: selectedSchoolLon,
     agriGroupFocusBounds,
     canonicalNodeFitCount,
+    isColdNavigate,
   } = useDiscoverCameraOrchestration({
     // Issue #2083 (cycle 5) — the canonical-node fit-once effect now also
     // reads `viewport`/`historyAction` (POP-restoration guard); `nav` alone
@@ -2614,6 +2615,14 @@ export default function MapDiscovery() {
           handlePolygonCleared={handlePolygonCleared}
           selectedSchool={selectedSchool}
           memoizedInitialCenter={memoizedInitialCenter}
+          // Issue #2143 (PR follow-up) — same isColdNavigate signal
+          // useDiscoverCameraOrchestration's guardedSetPanToArea already
+          // uses, threaded down to URLViewportController (PropertyMap.tsx)
+          // so its own unconditional-on-mount viewport apply can skip
+          // exactly the cold canonical-node case AreaPanner now owns,
+          // instead of racing it. navigationNodeKey travels separately via
+          // the existing areasNavigationJourney prop below.
+          isColdNavigate={isColdNavigate}
           cityCenter={cityCenter}
           cityZoom={cityZoom}
           overviewAreas={overviewAreas}

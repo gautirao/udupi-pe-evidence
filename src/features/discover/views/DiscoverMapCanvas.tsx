@@ -79,6 +79,17 @@ export interface DiscoverMapCanvasProps {
   handlePolygonCleared: () => void;
   selectedSchool: SchoolResult | null;
   memoizedInitialCenter: [number, number] | undefined;
+  /**
+   * Issue #2143 (PR follow-up) — the SAME isColdNavigate signal
+   * useDiscoverCameraOrchestration's guardedSetPanToArea uses internally,
+   * threaded through to PropertyMap's URLViewportController so it can skip
+   * its own unconditional-on-mount viewport apply for a cold canonical-node
+   * transition (AreaPanner owns the fit in that case) instead of racing it.
+   * Optional purely so existing test fixtures that predate this prop keep
+   * compiling unchanged; the real MapDiscovery.tsx call site always
+   * supplies it.
+   */
+  isColdNavigate?: boolean;
   cityCenter: [number, number] | undefined;
   cityZoom: number | undefined;
   overviewAreas: AreaPoint[];
@@ -310,6 +321,7 @@ export function DiscoverMapCanvas({
   handlePolygonCleared,
   selectedSchool,
   memoizedInitialCenter,
+  isColdNavigate,
   cityCenter,
   cityZoom,
   overviewAreas,
@@ -552,6 +564,19 @@ export function DiscoverMapCanvas({
           // useNavigationType(); same field useDiscoverCameraOrchestration.ts
           // already reads via urlState.historyAction for the identical guard.
           historyAction={nav.historyAction}
+          // Issue #2143 (PR follow-up) — same two signals guardedSetPanToArea
+          // consults, so URLViewportController can skip its own unconditional
+          // viewport apply for exactly the cold canonical-node case AreaPanner
+          // now owns (see that component's gate). Deliberately `nav.rawNodeParam`
+          // (synchronous, parsed straight from the URL on first render) and NOT
+          // `areasNavigationJourney?.node?.nodeKey` (async — resolves a render
+          // later via useQuery, so on a genuine cold load it's still null on
+          // URLViewportController's first invocation and the isFirstRender-gated
+          // skip could never engage for the case it targets). No node in play
+          // at all leaves current behaviour untouched — the gate below requires
+          // BOTH signals to be present.
+          navigationNodeKey={nav.rawNodeParam ?? null}
+          isColdNavigate={isColdNavigate}
           cityCenter={cityCenter}
           cityZoom={cityZoom}
           areas={overviewAreas}

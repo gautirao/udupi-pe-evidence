@@ -394,6 +394,21 @@ interface PropertyMapProps {
   initialZoom?: number;
   /** History action from the router (PUSH, REPLACE, POP), used to guard URL-viewport restores. */
   historyAction?: string;
+  /**
+   * Issue #2143 (PR follow-up) — the canonical Areas navigation node's OWN
+   * key, when a canonical Areas journey is active (same value
+   * useDiscoverCameraOrchestration.ts's fit-once effect keys its transition
+   * detection on). Paired with `isColdNavigate` to let URLViewportController
+   * skip its own unconditional-on-mount viewport apply for exactly the cold
+   * canonical-node case AreaPanner already owns — see that component's gate.
+   */
+  navigationNodeKey?: string | null;
+  /**
+   * Issue #2143 (PR follow-up) — the SAME isColdNavigate signal
+   * useDiscoverCameraOrchestration.ts's guardedSetPanToArea uses internally.
+   * Never recomputed here — this component only consults the value.
+   */
+  isColdNavigate?: boolean;
   /** Override map center when city changes */
   cityCenter?: [number, number];
   /** Override map zoom when city changes */
@@ -1099,39 +1114,99 @@ function AreaPanner({
   const localFallbackSeqRef = useRef(0);
   useEffect(() => {
     if (!panToArea) return;
-    if (panToArea.seq != null) {
-      const consumedSeqRef = panToArea.consumedSeqRef ?? localFallbackSeqRef;
-      if (panToArea.seq <= consumedSeqRef.current) return;
-      consumedSeqRef.current = panToArea.seq;
+
+    // Issue #2143 (PR follow-up, third defect) — mobile List<->Map toggle
+    // real-unmounts/remounts the whole map (DiscoverMapMount returns null in
+    // List view). Two distinct problems on that remount path, both
+    // confirmed live with instrumentation:
+    //
+    // (a) Leaflet's DEFAULT animated fitBounds/flyTo silently fails to
+    //     complete on a just-attached container — `map.getCenter()`/
+    //     `getZoom()` showed ZERO change even seconds after the call,
+    //     although `map.getSize()` and the bbox/options passed in were all
+    //     correct. `animate: false` (the same pattern URLViewportController
+    //     already uses for its own programmatic viewport restore, "to
+    //     avoid intermediate moveend events") makes the write apply
+    //     synchronously and reliably instead.
+    // (b) Belt-and-braces: if this effect's ONE fit opportunity ever DOES
+    //     fire while the container is still genuinely 0x0 (a real
+    //     `getSize()` reading of zero — a distinct Leaflet pitfall from (a)
+    //     that `MapContainerResizeSync`'s ResizeObserver/invalidateSize
+    //     (issue #2049) is designed to detect but never retries the
+    //     ORIGINAL fitBounds/flyTo target for), the seq must NOT be marked
+    //     consumed — only the branch that actually writes to a live, sized
+    //     map may consume it. `map.getSize` is guarded — test stubs that
+    //     omit it are treated as always-ready (unchanged pre-existing test
+    //     behaviour); real Leaflet always has it.
+    const isMapSized = (): boolean => {
+      if (typeof map.getSize !== 'function') return true;
+      const size = map.getSize();
+      return size.x > 0 && size.y > 0;
+    };
+
+    const applyFit = () => {
+      if (panToArea.bbox) {
+        // Issue #1069: a synthetic group-bounds AreaPoint (from computeGroupBounds)
+        // can fit at a zoom level above AREA_PANNER_GROUP_MAX_ZOOM for narrow groups,
+        // which then trips MapDiscovery's zoom-band gate and hides the area markers
+        // the user was meant to see. Clamp group fits to the area-layer threshold.
+        // This clamp is OUTSIDE the seq/adopt gate and applies whenever a
+        // fit actually fires — it must never be skippable by that gate.
+        const isGroupBounds = panToArea.areaKey === GROUP_BOUNDS_SYNTHETIC_KEY;
+        const viewportWidthPx = typeof window !== 'undefined' ? window.innerWidth : undefined;
+        // PR #2128 final review (HIGH) — a single `padding: [x, y]` fitBounds
+        // option is NOT directional: Leaflet's own `_getBoundsCenterZoom`
+        // (leaflet-src.js) defaults BOTH `paddingTopLeft` and
+        // `paddingBottomRight` to it, so passing bottomOcclusionPx baked into
+        // a single tuple (the previous approach) applied it to BOTH the top
+        // AND the bottom — double the intended cost, and centered rather than
+        // reserved at the bottom only. `paddingTopLeft`/`paddingBottomRight`
+        // are Leaflet's actual asymmetric-padding API; only the bottom-right
+        // corner carries the occlusion.
+        const [padH, padV] = computeCameraPadding(viewportWidthPx);
+        map.fitBounds(panToArea.bbox, {
+          paddingTopLeft: [padH, padV],
+          paddingBottomRight: [padH, padV + bottomOcclusionPx],
+          maxZoom: isGroupBounds ? AREA_PANNER_GROUP_MAX_ZOOM : LEAF_FIT_MAX_ZOOM,
+          // Issue #2143 (PR follow-up) — see rationale (a) above.
+          animate: false,
+        });
+      } else {
+        map.flyTo([panToArea.geo_center_lat, panToArea.geo_center_lon], LEAF_FIT_MIN_ZOOM, {
+          animate: false,
+        });
+      }
+    };
+
+    const seq = panToArea.seq;
+    const consumedSeqRef = seq != null ? (panToArea.consumedSeqRef ?? localFallbackSeqRef) : null;
+    const isSuperseded = () => consumedSeqRef != null && seq != null && seq <= consumedSeqRef.current;
+    const consume = () => {
+      if (consumedSeqRef != null && seq != null) consumedSeqRef.current = seq;
+    };
+
+    if (isSuperseded()) return;
+
+    if (isMapSized()) {
+      consume();
+      applyFit();
+      return;
     }
 
-    if (panToArea.bbox) {
-      // Issue #1069: a synthetic group-bounds AreaPoint (from computeGroupBounds)
-      // can fit at a zoom level above AREA_PANNER_GROUP_MAX_ZOOM for narrow groups,
-      // which then trips MapDiscovery's zoom-band gate and hides the area markers
-      // the user was meant to see. Clamp group fits to the area-layer threshold.
-      // This clamp is OUTSIDE the seq/adopt gate above and applies whenever a
-      // fit actually fires — it must never be skippable by that gate.
-      const isGroupBounds = panToArea.areaKey === GROUP_BOUNDS_SYNTHETIC_KEY;
-      const viewportWidthPx = typeof window !== 'undefined' ? window.innerWidth : undefined;
-      // PR #2128 final review (HIGH) — a single `padding: [x, y]` fitBounds
-      // option is NOT directional: Leaflet's own `_getBoundsCenterZoom`
-      // (leaflet-src.js) defaults BOTH `paddingTopLeft` and
-      // `paddingBottomRight` to it, so passing bottomOcclusionPx baked into
-      // a single tuple (the previous approach) applied it to BOTH the top
-      // AND the bottom — double the intended cost, and centered rather than
-      // reserved at the bottom only. `paddingTopLeft`/`paddingBottomRight`
-      // are Leaflet's actual asymmetric-padding API; only the bottom-right
-      // corner carries the occlusion.
-      const [padH, padV] = computeCameraPadding(viewportWidthPx);
-      map.fitBounds(panToArea.bbox, {
-        paddingTopLeft: [padH, padV],
-        paddingBottomRight: [padH, padV + bottomOcclusionPx],
-        maxZoom: isGroupBounds ? AREA_PANNER_GROUP_MAX_ZOOM : LEAF_FIT_MAX_ZOOM,
-      });
-    } else {
-      map.flyTo([panToArea.geo_center_lat, panToArea.geo_center_lon], LEAF_FIT_MIN_ZOOM);
-    }
+    // Container not ready — do NOT consume the seq. Retry once on the next
+    // real Leaflet resize; re-check both readiness and the seq guard at
+    // that point (a newer panToArea/seq may have superseded this one in
+    // the meantime, e.g. a fast second navigation before the container
+    // ever settled).
+    const handleResize = () => {
+      if (!isMapSized()) return;
+      map.off('resize', handleResize);
+      if (isSuperseded()) return;
+      consume();
+      applyFit();
+    };
+    map.on('resize', handleResize);
+    return () => map.off('resize', handleResize);
     // `bottomOcclusionPx` is intentionally NOT a dep: this effect fires only
     // on a genuine panToArea transition (per the seq guard above), never on
     // an occlusion change alone. That is safe by DESIGN, not by accident —
@@ -1472,10 +1547,14 @@ function URLViewportController({
   initialCenter,
   initialZoom,
   historyAction,
+  navigationNodeKey,
+  isColdNavigate,
 }: {
   initialCenter?: [number, number];
   initialZoom?: number;
   historyAction?: string;
+  navigationNodeKey?: string | null;
+  isColdNavigate?: boolean;
 }) {
   const map = useMap();
   const isFirstRender = useRef(true);
@@ -1491,6 +1570,30 @@ function URLViewportController({
 
     // Issue #2125: Only apply viewport from URL on mount or browser Back/Forward (POP)
     if (!isFirstRender.current && historyAction !== 'POP') {
+      return;
+    }
+
+    // Issue #2143 (PR follow-up) — a (re)mount (isFirstRender still true;
+    // this component genuinely remounts on the mobile List<->Map toggle's
+    // real unmount/remount of the whole map, not just the page's initial
+    // load) whose viewport is a COLD canonical-node transition must NOT
+    // apply this raw, possibly-stale/foreign URL viewport at all: the
+    // useDiscoverCameraOrchestration fit-once effect (AreaPanner) already
+    // owns that exact transition and will fit fresh to the node's own
+    // bounds. Applying it here first would either get silently overwritten
+    // a moment later (harmless but wasteful) or — since AreaPanner's fit
+    // depends on an async node-bounds resolution while this effect is
+    // synchronous — LAND AFTER it and clobber the correct fit with the
+    // stale viewport, a non-deterministic race (confirmed live: repeated
+    // identical cold `node=` loads sometimes fit correctly, sometimes
+    // stayed pinned at the URL's stale zoom with markers off-screen).
+    // Every other case is unchanged: no node in play at all (a plain
+    // viewport-only deep link, #2125's original intent) still applies
+    // unconditionally on mount; a genuine restore/reload/back-forward
+    // (isColdNavigate false) is correct to trust here since AreaPanner
+    // won't be firing a competing fit for it either.
+    if (isFirstRender.current && navigationNodeKey != null && isColdNavigate) {
+      isFirstRender.current = false;
       return;
     }
     isFirstRender.current = false;
@@ -1533,7 +1636,7 @@ function URLViewportController({
       lon: requestedLon,
       zoom: initialZoom,
     };
-  }, [initialCenter, initialZoom, map, historyAction]);
+  }, [initialCenter, initialZoom, map, historyAction, navigationNodeKey, isColdNavigate]);
 
   return null;
 }
@@ -2723,6 +2826,8 @@ export function PropertyMap({
   initialCenter,
   initialZoom,
   historyAction,
+  navigationNodeKey,
+  isColdNavigate,
   cityCenter,
   cityZoom,
   areas = [],
@@ -2903,7 +3008,13 @@ export function PropertyMap({
         <MapLifecycleGuard onTeardown={handleMapTeardown} />
         <MapContainerResizeSync />
         <MapReadySignal onReady={onReady} />
-        <URLViewportController initialCenter={initialCenter} initialZoom={initialZoom} historyAction={historyAction} />
+        <URLViewportController
+          initialCenter={initialCenter}
+          initialZoom={initialZoom}
+          historyAction={historyAction}
+          navigationNodeKey={navigationNodeKey}
+          isColdNavigate={isColdNavigate}
+        />
         <MapController
           selectedListing={selectedListing}
           focusBounds={focusBounds}

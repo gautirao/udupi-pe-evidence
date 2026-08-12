@@ -156,6 +156,11 @@ describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
       paddingTopLeft: [120, 40],
       paddingBottomRight: [120, 40],
       maxZoom: AREA_PANNER_GROUP_MAX_ZOOM,
+      // Issue #2143 (PR follow-up) — animate:false so the fit applies
+      // synchronously (a Leaflet-animated fitBounds silently failed to
+      // complete on a just-remounted container; see AreaPanner's own
+      // comment for the confirmed mechanism).
+      animate: false,
     });
     expect(AREA_PANNER_GROUP_MAX_ZOOM).toBe(12);
   });
@@ -173,7 +178,7 @@ describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
 
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
     const [, opts] = mapStub.fitBounds.mock.calls[0];
-    expect(opts).toEqual({ paddingTopLeft: [120, 40], paddingBottomRight: [120, 40], maxZoom: 16 });
+    expect(opts).toEqual({ paddingTopLeft: [120, 40], paddingBottomRight: [120, 40], maxZoom: 16, animate: false });
   });
 
   it('does not call fitBounds when panToArea is null', () => {
@@ -195,7 +200,7 @@ describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
 
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
     const [, opts] = mapStub.fitBounds.mock.calls[0];
-    expect(opts).toEqual({ paddingTopLeft: [40, 40], paddingBottomRight: [40, 40], maxZoom: 16 });
+    expect(opts).toEqual({ paddingTopLeft: [40, 40], paddingBottomRight: [40, 40], maxZoom: 16, animate: false });
   });
 
   it('PR #2128 final review (HIGH fix) — a nonzero bottomOcclusionPx prop adds ONLY to paddingBottomRight, leaving paddingTopLeft at the plain responsive tier', () => {
@@ -219,6 +224,7 @@ describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
       paddingTopLeft: [120, 40],
       paddingBottomRight: [120, 190],
       maxZoom: 16,
+      animate: false,
     });
   });
 
@@ -235,7 +241,7 @@ describe('Issue #1069 — AreaPanner.fitBounds maxZoom clamp', () => {
 
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
     const [, opts] = mapStub.fitBounds.mock.calls[0];
-    expect(opts).toEqual({ paddingTopLeft: [120, 40], paddingBottomRight: [120, 40], maxZoom: 16 });
+    expect(opts).toEqual({ paddingTopLeft: [120, 40], paddingBottomRight: [120, 40], maxZoom: 16, animate: false });
   });
 });
 
@@ -643,5 +649,190 @@ describe('Issue #1173 — SchoolFocusPanner radius-change zoom stability', () =>
     );
 
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── Issue #2143 (PR follow-up) — URLViewportController vs AreaPanner race ──
+// Two independent camera writers can both fire on the same (re)mount:
+// URLViewportController (setView, from the raw URL viewport) and AreaPanner
+// (fitBounds, from panToArea/CameraIntent). Before this fix, a cold
+// canonical-node transition let BOTH fire, and whichever landed last on the
+// real Leaflet instance won — non-deterministic (confirmed live: repeated
+// identical cold `node=` loads sometimes fit correctly, sometimes stayed
+// pinned at the stale URL viewport with markers off-screen). These tests
+// assert only ONE writer ever acts for a given transition, deterministically.
+describe('Issue #2143 — URLViewportController skips its unconditional apply for a cold canonical-node transition (AreaPanner owns it)', () => {
+  beforeEach(() => {
+    mapStub.fitBounds.mockClear();
+    mapStub.flyTo.mockClear();
+    mapStub.setView.mockClear();
+    Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
+  });
+
+  const rayasandra: SeqAreaPoint = {
+    areaKey: 'IN|KA|Bengaluru|Rayasandra',
+    areaLabel: 'Rayasandra',
+    geo_center_lat: 12.874,
+    geo_center_lon: 77.678,
+    bbox: [[12.865, 77.669], [12.883, 77.687]],
+    seq: 1,
+    reason: 'canonicalNode',
+    consumedSeqRef: { current: 0 },
+  };
+
+  it('cold node= transition (isColdNavigate=true, navigationNodeKey present): AreaPanner fits, URLViewportController does NOT apply the stale URL viewport', () => {
+    render(
+      <PropertyMap
+        {...baseProps}
+        panToArea={rayasandra}
+        initialCenter={[12.87402, 77.67845]}
+        initialZoom={16}
+        historyAction="POP"
+        navigationNodeKey="a:IN|KA|Bengaluru|Rayasandra"
+        isColdNavigate={true}
+      />,
+    );
+
+    // AreaPanner is the sole writer: fits fresh to the node's own bounds.
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    expect(mapStub.fitBounds.mock.calls[0][0]).toEqual(rayasandra.bbox);
+    // URLViewportController must NOT also apply the raw, stale URL viewport —
+    // this is the exact non-determinism this fix removes.
+    expect(mapStub.setView).not.toHaveBeenCalled();
+  });
+
+  it('no node in play (navigationNodeKey null/undefined): URLViewportController still applies the URL viewport unconditionally on mount (#2125 original intent preserved)', () => {
+    render(
+      <PropertyMap
+        {...baseProps}
+        panToArea={null}
+        initialCenter={[12.87402, 77.67845]}
+        initialZoom={16}
+        historyAction="POP"
+        navigationNodeKey={null}
+        isColdNavigate={true}
+      />,
+    );
+
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
+    expect(mapStub.setView).toHaveBeenCalledWith([12.87402, 77.67845], 16);
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+  });
+
+  it('genuine restore (isColdNavigate=false) with a node in play: URLViewportController still applies the URL viewport — AreaPanner is not competing for this transition', () => {
+    render(
+      <PropertyMap
+        {...baseProps}
+        panToArea={null}
+        initialCenter={[12.87402, 77.67845]}
+        initialZoom={16}
+        historyAction="POP"
+        navigationNodeKey="a:IN|KA|Bengaluru|Rayasandra"
+        isColdNavigate={false}
+      />,
+    );
+
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
+    expect(mapStub.setView).toHaveBeenCalledWith([12.87402, 77.67845], 16);
+  });
+});
+
+// ─── Issue #2143 (PR follow-up, third defect) — container-not-ready race ──
+// Confirmed live with instrumentation: on the mobile List<->Map toggle,
+// DiscoverMapMount real-unmounts/remounts the whole map. AreaPanner's
+// fit-once effect DID run and DID call fitBounds — but the Leaflet
+// container wasn't laid out to its final size yet, so fitBounds computed
+// against 0x0 dimensions and the camera silently stayed at the raw stale
+// URL viewport. The seq guard previously marked the seq "consumed" the
+// instant the effect ran, regardless of whether the fit could actually
+// apply — permanently wasting the one fit opportunity. These tests assert
+// the seq is only consumed once a real, sized map instance is written to.
+describe('Issue #2143 (PR follow-up) — AreaPanner defers (does not consume) a fit while the map container is not yet sized', () => {
+  beforeEach(() => {
+    mapStub.fitBounds.mockClear();
+    mapStub.flyTo.mockClear();
+    mapStub.on.mockClear();
+    mapStub.off.mockClear();
+    Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
+  });
+
+  afterEach(() => {
+    delete (mapStub as { getSize?: unknown }).getSize;
+  });
+
+  const rayasandra: SeqAreaPoint = {
+    areaKey: 'IN|KA|Bengaluru|Rayasandra',
+    areaLabel: 'Rayasandra',
+    geo_center_lat: 12.874,
+    geo_center_lon: 77.678,
+    bbox: [[12.865, 77.669], [12.883, 77.687]],
+    seq: 1,
+    reason: 'canonicalNode',
+  };
+
+  it('container 0x0 on mount: does NOT fit and does NOT consume the seq; a later real Leaflet resize retries and THEN fits/consumes', () => {
+    const consumedSeqRef = { current: 0 };
+    (mapStub as { getSize: () => { x: number; y: number } }).getSize = vi.fn(() => ({ x: 0, y: 0 }));
+
+    renderWithPan({ ...rayasandra, consumedSeqRef });
+
+    // Container not ready — no fit fired, seq left outstanding.
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+    expect(consumedSeqRef.current).toBe(0);
+    expect(mapStub.on).toHaveBeenCalledWith('resize', expect.any(Function));
+
+    // Container reaches its real size; MapContainerResizeSync's
+    // ResizeObserver->invalidateSize() fires Leaflet's own 'resize' event.
+    (mapStub as { getSize: () => { x: number; y: number } }).getSize = vi.fn(() => ({ x: 500, y: 500 }));
+    const resizeHandler = mapStub.on.mock.calls.find((call) => call[0] === 'resize')?.[1] as () => void;
+    resizeHandler();
+
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    expect(mapStub.fitBounds.mock.calls[0][0]).toEqual(rayasandra.bbox);
+    expect(consumedSeqRef.current).toBe(1);
+    expect(mapStub.off).toHaveBeenCalledWith('resize', resizeHandler);
+  });
+
+  it('container already sized on mount (the common case): fits immediately, no resize listener left armed', () => {
+    const consumedSeqRef = { current: 0 };
+    (mapStub as { getSize: () => { x: number; y: number } }).getSize = vi.fn(() => ({ x: 500, y: 500 }));
+
+    renderWithPan({ ...rayasandra, consumedSeqRef });
+
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    expect(consumedSeqRef.current).toBe(1);
+    // No deferred-retry path taken — no resize listener needed.
+    expect(mapStub.on).not.toHaveBeenCalledWith('resize', expect.any(Function));
+  });
+
+  it('test stubs without getSize are treated as always-ready (pre-existing test behaviour unaffected)', () => {
+    const consumedSeqRef = { current: 0 };
+    renderWithPan({ ...rayasandra, consumedSeqRef });
+
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    expect(consumedSeqRef.current).toBe(1);
+  });
+
+  // Issue #1823 fix-cycle-3 invariant, re-verified under the new gate: a
+  // remount whose seq WAS already genuinely applied to a real, sized map
+  // must NOT replay the fit (would fight a manual pan). Distinguishing
+  // signal is "was this seq actually written to a live map", not "did the
+  // effect merely run" — confirmed still true here.
+  it('#1823 preserved: a remount replaying an already-genuinely-applied seq does NOT re-fit', () => {
+    const consumedSeqRef = { current: 0 };
+    (mapStub as { getSize: () => { x: number; y: number } }).getSize = vi.fn(() => ({ x: 500, y: 500 }));
+
+    const { unmount } = renderWithPan({ ...rayasandra, consumedSeqRef });
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    expect(consumedSeqRef.current).toBe(1);
+    mapStub.fitBounds.mockClear();
+
+    // Real unmount/remount (mirrors DiscoverMapMount's mobile List<->Map
+    // toggle) with the SAME seq/consumedSeqRef — the seq was genuinely
+    // applied last time, so this must be a no-op, not a replay.
+    unmount();
+    renderWithPan({ ...rayasandra, consumedSeqRef });
+
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
   });
 });
