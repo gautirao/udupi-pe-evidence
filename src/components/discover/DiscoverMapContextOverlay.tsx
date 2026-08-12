@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { MapPin, GraduationCap } from 'lucide-react';
 import { DiscoverMapBreadcrumb, type DiscoverMapCrumb } from '@/components/discover/DiscoverMapBreadcrumb';
 import { AreasBreadcrumbTrail } from '@/components/discover/navigation/AreasBreadcrumbTrail';
@@ -55,6 +56,17 @@ export interface DiscoverMapContextOverlayProps {
    * Required whenever `canonicalNavigationNode` is supplied; unused otherwise.
    */
   buildNavigationNodeHref?: (nodeKey: string) => string | null;
+  /**
+   * PR #2141 fix cycle 2 (reviewer-required shared composition) — the real
+   * mobile "List" toggle button (MapDiscovery.tsx-owned, threaded through
+   * `DiscoverMapCanvas` unchanged). Rendered as this row's second flex
+   * child so the breadcrumb (`min-w-0 flex-1`) and the real button
+   * (`shrink-0`) share ONE flex composition and ONE sizing authority — no
+   * duplicate/ghost spacer standing in for the real element.
+   * `undefined`/`null` on desktop and whenever the mobile Map overlay isn't
+   * open, in which case this row renders exactly as it always has.
+   */
+  mobileListButton?: ReactNode;
 }
 
 export function DiscoverMapContextOverlay({
@@ -67,15 +79,41 @@ export function DiscoverMapContextOverlay({
   city,
   canonicalNavigationNode = null,
   buildNavigationNodeHref,
+  mobileListButton,
 }: DiscoverMapContextOverlayProps) {
   return (
-    <div className="absolute top-4 left-4 z-[1000]">
-      {canonicalNavigationNode ? (
-        <AreasBreadcrumbTrail
-          node={canonicalNavigationNode}
-          buildHref={buildNavigationNodeHref ?? (() => null)}
-        />
-      ) : isAreaFirstCityLanding ? (
+    // Issue #2089 (#2133 follow-up, PR #2141, fix cycle 2) — below the `lg`
+    // split-view breakpoint (this file's siblings use the same 1024px cut,
+    // e.g. MapDiscovery.tsx's `lg:flex-row`), the map canvas is a
+    // FULL-VIEWPORT mobile overlay and the real "List" toggle
+    // (`mobileListButton`, MapDiscovery.tsx-owned) shares this same top row.
+    // This wrapper is a REAL flex row with a SINGLE sizing authority: the
+    // breadcrumb side gets `min-w-0 flex-1` (claims whatever width is
+    // genuinely free, wraps up to two rows — see DiscoverMapBreadcrumb.tsx)
+    // and `mobileListButton` renders as this row's own second child with
+    // `shrink-0` (applied by the caller). A prior fix instead reserved the
+    // button's footprint via an independently `absolute`-positioned button
+    // plus an invisible ghost spacer sized to mirror its classes/label —
+    // two separately-owned elements kept in sync only by convention, which
+    // the reviewer correctly flagged as the same hidden-coupling class of
+    // bug this issue exists to fix. `pointer-events-none` here (re-enabled
+    // per-child below) stops the transparent parts of this row from
+    // swallowing clicks meant for the map underneath. Scoped to below `lg`
+    // only — `mobileListButton` is always null/undefined at `lg`+ (desktop
+    // always shows the map as a flex sibling, never this overlay), so
+    // desktop keeps its unmodified, unbounded layout.
+    <div className="pointer-events-none absolute top-4 left-4 z-[1000] [@media(max-width:1023px)]:right-4 [@media(max-width:1023px)]:flex [@media(max-width:1023px)]:items-start [@media(max-width:1023px)]:gap-2">
+      <div className="pointer-events-auto min-w-0 [@media(max-width:1023px)]:flex-1">
+        {canonicalNavigationNode ? (
+          <AreasBreadcrumbTrail
+            node={canonicalNavigationNode}
+            buildHref={buildNavigationNodeHref ?? (() => null)}
+            // PR #2141 follow-up (Fix 1) — the real display label for the
+            // synthesized City-root crumb, matching the label every other
+            // branch in this file already uses for the city.
+            cityLabel={CITY_CONFIG[city]?.label ?? city}
+          />
+        ) : isAreaFirstCityLanding ? (
         // Issue #1607 — the area-first city-level landing shows the
         // "Home › City › Areas" breadcrumb (mock placement). Home and the city
         // crumb route progressively; "Areas" is the terminal (current) page.
@@ -126,7 +164,9 @@ export function DiscoverMapContextOverlay({
           focusedGroup={focusedGroup}
           selectedArea={selectedArea}
         />
-      )}
+        )}
+      </div>
+      {mobileListButton}
     </div>
   );
 }

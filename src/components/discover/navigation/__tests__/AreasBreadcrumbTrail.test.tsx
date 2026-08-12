@@ -86,14 +86,14 @@ describe('AreasBreadcrumbTrail', () => {
     }
   });
 
-  it('AC14 — a real Direction > Local Destination > Area ancestry chain (3 crumbs, through a real CLUSTER level) renders all 3 crumbs; the ancestry survives through a Local Destination', () => {
-    // Fix-verify cycle: the server (NavigationNodeResponse.forNode /
-    // graph.ancestryOf) never synthesizes a "root"/ROOT ancestry entry — no
-    // NavigationNode row backs the city key — and AreasBreadcrumbTrail.tsx:65
-    // is a plain `[...node.ancestry, current]` with no synthesized city
-    // crumb. So the true maximum chain the production contract can produce
-    // is 3 crumbs (Direction, Local Destination, Area), not 4. This fixture
-    // matches that real shape.
+  it('AC14 — a real Direction > Local Destination > Area ancestry chain (through a real CLUSTER level) renders City + all 3 real crumbs (4 total); the ancestry survives through a Local Destination', () => {
+    // The server (NavigationNodeResponse.forNode / graph.ancestryOf) never
+    // synthesizes a "root"/ROOT ancestry entry — no NavigationNode row backs
+    // the city key — so the real ancestry shape omits root. PR #2141
+    // follow-up: AreasBreadcrumbTrail now SYNTHESIZES the leading City crumb
+    // itself in that case (see the module doc), so the real production chain
+    // is City + Direction + Local Destination + Area = 4, landing exactly on
+    // AC5.1's own "four items maximum" contract instead of stopping at 3.
     const node = makeNode({
       nodeKey: 'a:IN|KA|Bengaluru|Whitefield',
       nodeType: 'AREA',
@@ -104,23 +104,25 @@ describe('AreasBreadcrumbTrail', () => {
         { nodeKey: 'c:north:hebbal-kempapura', nodeType: 'CLUSTER', displayLabel: 'Hebbal - Kempapura', displayOrder: 1 },
       ],
     });
-    renderTrail(node);
-
-    // NOTE — the AREAS_BREADCRUMB_MAX_ITEMS=4 depth guard is intentionally
-    // NOT asserted here. With the real ancestry shape the maximum chain is 3
-    // crumbs, so the guard can never trigger through the server contract;
-    // asserting its absence would be vacuous and would prove nothing.
+    const buildHref = vi.fn((k: string) => `?node=${k}`);
+    render(
+      <MemoryRouter>
+        <AreasBreadcrumbTrail node={node} buildHref={buildHref} cityLabel="Bangalore" />
+      </MemoryRouter>,
+    );
 
     const nav = screen.getByTestId('areas-breadcrumb-trail');
     expect(nav).toBeInTheDocument();
-    // All 3 crumbs, in order, each individually present.
-    const labels = ['North Bangalore', 'Hebbal - Kempapura', 'Whitefield'];
+    // All 4 crumbs, in order, each individually present — the depth guard
+    // (AREAS_BREADCRUMB_MAX_ITEMS=4) does NOT trigger at exactly the cap.
+    const labels = ['Bangalore', 'North Bangalore', 'Hebbal - Kempapura', 'Whitefield'];
     for (const label of labels) {
       expect(nav).toHaveTextContent(label);
     }
-    // The terminal (3rd) crumb is the current, unlinked one — proving this
-    // really is a 3-deep chain reaching the AREA leaf, not a shorter chain
-    // that happens to mention all three labels somewhere in the DOM.
+    expect(screen.queryByTestId('areas-breadcrumb-depth-guard')).not.toBeInTheDocument();
+    // The terminal (4th) crumb is the current, unlinked one — proving this
+    // really is a 4-deep chain reaching the AREA leaf, not a shorter chain
+    // that happens to mention all labels somewhere in the DOM.
     const terminal = screen.getByText('Whitefield');
     expect(terminal).toHaveAttribute('aria-current', 'page');
     expect(terminal.closest('a')).toBeNull();
@@ -129,6 +131,36 @@ describe('AreasBreadcrumbTrail', () => {
     // Destination (CLUSTER) level, which is what AC14 requires.
     const localDestinationCrumb = screen.getByText('Hebbal - Kempapura');
     expect(localDestinationCrumb.closest('a')).toHaveAttribute('href', '/?node=c:north:hebbal-kempapura');
+    // The synthesized City crumb is a real, linked ancestor pointing at the
+    // synthetic root via the SAME buildHref data path — this is the actual
+    // "back to City root" affordance PR #2141's Fix 1 requires.
+    const cityCrumb = screen.getByText('Bangalore');
+    expect(cityCrumb.closest('a')).toHaveAttribute('href', '/?node=root');
+    expect(buildHref).toHaveBeenCalledWith('root');
+  });
+
+  it('PR #2141 Fix 1 — a Direction node (empty ancestry, the trap case) still renders a tappable City crumb back to root', () => {
+    const buildHref = vi.fn((k: string) => `?node=${k}`);
+    render(
+      <MemoryRouter>
+        <AreasBreadcrumbTrail
+          node={makeNode({ ancestry: [] })}
+          buildHref={buildHref}
+          cityLabel="Bangalore"
+        />
+      </MemoryRouter>,
+    );
+    const nav = screen.getByTestId('areas-breadcrumb-trail');
+    expect(nav).toHaveTextContent('Bangalore');
+    expect(nav).toHaveTextContent('North Bangalore');
+    const cityCrumb = screen.getByText('Bangalore');
+    expect(cityCrumb.closest('a')).toHaveAttribute('href', '/?node=root');
+    expect(buildHref).toHaveBeenCalledWith('root');
+    // The terminal Direction crumb stays current/unlinked — City is the only
+    // navigable ancestor at this level.
+    const terminal = screen.getByText('North Bangalore');
+    expect(terminal).toHaveAttribute('aria-current', 'page');
+    expect(terminal.closest('a')).toBeNull();
   });
 
   it('a city-root node (empty ancestry) renders a single, current, unlinked crumb', () => {

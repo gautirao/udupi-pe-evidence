@@ -178,6 +178,7 @@ function baseProps(overrides: Partial<DiscoverMapCanvasProps> = {}): DiscoverMap
     markersTotalFilteredElements: undefined,
     isLoading: false,
     mapZoom: 10,
+    isBoundedBrowseState: false,
     isMarkerPopoverEligible: false,
     markerPopoverStepper: null,
     navigate: vi.fn(),

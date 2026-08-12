@@ -21,6 +21,32 @@ import {
   type VisibleMemberSet,
 } from '@/features/discover/navigation/visibleMemberSet';
 
+// Issue #2089 fix cycle 4 (reviewer MEDIUM finding) — exported so
+// `DiscoverMapBreadcrumb.twoRowGuarantee.test.tsx` can import and assert
+// against the REAL shipped `maxWidthClass` values instead of restating its
+// own hand-copied literals, which could otherwise silently drift out of sync
+// with a future edit to the values below (the same "value drifts, nothing
+// catches it" failure mode that let fix cycle 3's unproven 110px ship). See
+// the derivation comment beside `areaJourneySegmentsRaw`'s own use of this
+// object for the full row-budget arithmetic.
+export const MAP_GROUP_BREADCRUMB_MAX_WIDTHS = {
+  city: 'max-w-[100px]',
+  region: 'max-w-[80px]',
+  group: 'max-w-[80px]',
+  area: 'max-w-[80px]',
+} as const;
+
+// Issue #2089 fix cycle 4 — same rationale as `MAP_GROUP_BREADCRUMB_MAX_WIDTHS`
+// above, for the school journey's 5-segment worst case. See the derivation
+// comment beside `schoolJourneySegmentsRaw`'s own use of this object.
+export const SCHOOL_BREADCRUMB_MAX_WIDTHS = {
+  city: 'max-w-[72px]',
+  region: 'max-w-[48px]',
+  zone: 'max-w-[48px]',
+  area: 'max-w-[48px]',
+  school: 'max-w-[48px]',
+} as const;
+
 export interface UseDiscoverMapPresentationParams {
   mapLayerKind: DiscoverMapLayerKind;
   isLoadingAreaGroups: boolean;
@@ -584,30 +610,92 @@ export function useDiscoverMapPresentation({
       })()
     : null;
 
+  // Issue #2089 fix cycle 3 (reviewer-required real 2-row guarantee, not a
+  // bigger overflow-hidden safety margin) — every segment below now carries a
+  // `maxWidthClass` sized so the WORST CASE (all 4 segments simultaneously at
+  // their max width) mathematically cannot need more than 2 wrapped rows
+  // inside DiscoverMapBreadcrumb's `map-group-breadcrumb` container
+  // (`containerClassName="max-w-[min(88vw,520px)] shadow-md"`, default
+  // (non-compact) density).
+  //
+  // Issue #2089 fix cycle 4 (reviewer REQUEST CHANGES on the math itself) —
+  // fix cycle 3 analyzed only a 390px viewport, but `max-w-[min(88vw,520px)]`
+  // has NO fixed floor: real Android devices commonly report CSS widths as
+  // low as 320-360px, and the pill's OWN chrome (padding/icon/gap — all
+  // Tailwind `rem`-based classes) grows under OS/browser text-zoom while
+  // these `maxWidthClass` values are literal, non-scaling `px`. Both effects
+  // shrink the same margin fix cycle 3 relied on. VALID ASSUMPTION FOR THIS
+  // DERIVATION: viewport width >= 320px (the standard "smallest supported
+  // mobile" floor) WITH UP TO ~20% text-zoom (a conservative stand-in for
+  // Android/iOS "Larger Text" accessibility settings, which commonly reach
+  // 115-130%) applied to every rem-based dimension below. `vw`-based
+  // container width itself is NOT rem-based and is unaffected by text-zoom.
+  //
+  // Row budget: container = min(0.88 * 320, 520) = 281.6px. Subtract the
+  // pill's rem-based chrome, each scaled by the 1.2x zoom margin —
+  // BASE_CONTAINER's `px-3` padding (12px * 2 = 24px nominal -> 28.8px at
+  // 1.2x) and the leading icon `h-3.5 w-3.5` (14px) + its `gap-1.5` (6px) to
+  // the `<ol>` (20px nominal -> 24px at 1.2x; NOT density-dependent) —
+  // leaving a per-row `<ol>` budget of 281.6 - 28.8 - 24 = 228.8px.
+  //
+  // Default density: chevron `h-3.5 w-3.5` = 14px nominal -> 16.8px at 1.2x;
+  // `segmentGapClass` = `gap-1.5` = 6px nominal -> 7.2px at 1.2x (both the
+  // ol's inter-item gap AND each li's own chevron-to-label gap). A non-first
+  // segment's own footprint is therefore `16.8 + 7.2 + labelWidth` =
+  // `24 + labelWidth` (labelWidth itself is the literal, non-scaling
+  // `maxWidthClass` px value).
+  //
+  // Sufficient condition for "N=4 segments never need a 3rd row": guarantee
+  // ANY 2 max-width segments (worst case: both carrying the chevron
+  // overhead) fit in one row, so greedy flex-wrap always places >=2 per row,
+  // leaving <=2 for the next row (which then trivially fits by the same
+  // bound) — 4 segments therefore always resolve to exactly 2 rows.
+  // `2 * (24 + 80) + 7.2(inter-item gap) = 215.2 <= 228.8` (13.6px slack).
+  // The `city` segment (no chevron: its own width alone must clear the same
+  // bound) gets a slightly larger 100px, verified against the actual worst
+  // packing below — comfortably inside the same budget (this shrank from
+  // fix cycle 3's 120/110px down to 100/80px — an expected, accepted
+  // tradeoff of correctness over cosmetics at the real supported-viewport
+  // floor, not a product-sign-off decision):
+  //   row = {city, region}: 100 + (24 + 80) + 7.2(gap)     = 211.2 <= 228.8
+  //   row = {group, area}:  (24 + 80) + (24 + 80) + 7.2    = 215.2 <= 228.8
+  //
+  // LOW (fix cycle 4 review) — this arithmetic doesn't separately subtract
+  // BASE_CONTAINER's `border border-border` (a further ~2px of real
+  // container width). Not worth its own fix cycle: 13.6-33.2px of slack
+  // exists everywhere in this derivation, so the border is folded into that
+  // existing margin without changing any conclusion.
+  //
+  // Issue #2089 fix cycle 4 review (MEDIUM) — these values come from the
+  // module-level `MAP_GROUP_BREADCRUMB_MAX_WIDTHS` export (top of file)
+  // specifically so `DiscoverMapBreadcrumb.twoRowGuarantee.test.tsx` imports
+  // and asserts against the REAL shipped values, not a hand-copied literal
+  // that could silently drift out of sync with a future edit here.
   const areaJourneySegmentsRaw: { key: string; label: string | null | undefined; emphasis?: DiscoverMapCrumb['emphasis']; maxWidthClass?: string; href?: string }[] = [
     {
       key: 'city',
       label: CITY_CONFIG[city]?.label ?? city,
       href: (resolvedRegionLabel || focusedGroup || selectedArea || urlState.groupId || urlState.areaKey) ? `/discover?city=${encodeURIComponent(city)}&journey=${encodeURIComponent(urlState.journey || 'area-first')}` : undefined,
+      maxWidthClass: MAP_GROUP_BREADCRUMB_MAX_WIDTHS.city,
     },
     {
       key: 'region',
       label: resolvedRegionLabel,
       href: (focusedGroup || selectedArea || urlState.groupId || urlState.areaKey) && resolvedScopeKeyForHref ? `/discover?city=${encodeURIComponent(city)}&journey=${encodeURIComponent(urlState.journey || 'area-first')}&scope=${encodeURIComponent(resolvedScopeKeyForHref)}` : undefined,
-      maxWidthClass: 'max-w-[140px]',
+      maxWidthClass: MAP_GROUP_BREADCRUMB_MAX_WIDTHS.region,
       emphasis: (focusedGroup || selectedArea || urlState.groupId || urlState.areaKey) ? ('muted' as const) : ('strong' as const),
     },
     {
       key: 'group',
       label: focusedGroup?.name ?? (urlState.groupId ? prettifyZoneSlug(urlState.groupId) : null),
       href: (selectedArea || urlState.areaKey) && (focusedGroup?.id || urlState.groupId) ? `/discover?city=${encodeURIComponent(city)}&journey=${encodeURIComponent(urlState.journey || 'area-first')}&groupId=${encodeURIComponent(focusedGroup?.id ?? urlState.groupId!)}` : undefined,
-      maxWidthClass: 'max-w-[160px]',
+      maxWidthClass: MAP_GROUP_BREADCRUMB_MAX_WIDTHS.group,
       emphasis: (selectedArea || urlState.areaKey) ? ('muted' as const) : ('strong' as const),
     },
     {
       key: 'area',
       label: selectedArea?.areaLabel ?? areaKeyToLabel(urlState.areaKey),
-      maxWidthClass: 'max-w-[160px]',
+      maxWidthClass: MAP_GROUP_BREADCRUMB_MAX_WIDTHS.area,
       emphasis: 'strong' as const,
     },
   ];
@@ -626,16 +714,66 @@ export function useDiscoverMapPresentation({
   // further down (rules-of-hooks violations predating #1745 P4 — out of scope here), so a
   // useMemo placed after them would itself become conditional. The computation below is a
   // handful of string comparisons — cheap enough to run on every render without memoizing.
+  // Issue #2089 fix cycle 3 — same real 2-row guarantee as `areaJourneySegmentsRaw`
+  // above, computed for the school journey's own container (`compact`
+  // density, same `max-w-[min(88vw,520px)]` containerClassName) and its
+  // WORST CASE of 5 segments (the 4-segment "half the row width" shortcut is
+  // insufficient here — ceil(5/2) = 3 rows — so this needs the tighter
+  // "3 max-width segments fit in one row" bound, verified below).
+  //
+  // Issue #2089 fix cycle 4 (reviewer REQUEST CHANGES on the math itself) —
+  // same VALID ASSUMPTION as `areaJourneySegmentsRaw` above: viewport width
+  // >= 320px (not 390px — no fixed floor exists on `min(88vw,520px)`) WITH
+  // UP TO ~20% text-zoom applied to every rem-based dimension (padding, the
+  // leading icon, the chevron, and `segmentGapClass` — all Tailwind `rem`
+  // classes that scale with OS/browser text-zoom, unlike the literal,
+  // non-scaling `maxWidthClass` px caps below).
+  //
+  // Row budget: identical derivation to the map-group case — container =
+  // min(0.88*320, 520) = 281.6px, minus the pill's rem-based chrome scaled by
+  // 1.2x — `px-3` padding (24px nominal -> 28.8px) and the leading icon+gap
+  // (20px nominal -> 24px) — leaving 281.6 - 28.8 - 24 = 228.8px per row.
+  //
+  // Compact density: chevron `h-3 w-3` = 12px nominal -> 14.4px at 1.2x;
+  // `segmentGapClass` = `gap-1` = 4px nominal -> 4.8px at 1.2x (both the
+  // ol's inter-item gap and each li's chevron-to-label gap). A non-first
+  // segment's footprint is therefore `14.4 + 4.8 + labelWidth` =
+  // `19.2 + labelWidth`.
+  //
+  // Sufficient condition for "5 segments never need a 3rd row": guarantee ANY
+  // 3 max-width segments (worst case: all 3 carrying the chevron overhead)
+  // fit in one row, so greedy flex-wrap always places >=3 per row, leaving
+  // <=2 for the next row (which trivially fits, since 2 <= 3 by the same
+  // bound) — 5 segments therefore always resolve to exactly 2 rows.
+  // `3 * (19.2 + 48) + 2 * 4.8(inter-item gaps) = 211.2 <= 228.8` (17.6px
+  // slack). `city` (no chevron) gets a slightly smaller-than-map-group's-city
+  // 72px (this journey has one more segment competing for the same budget),
+  // verified against the actual worst packing below — an expected,
+  // deliberate shrink from fix cycle 3's 88/72px down to 72/48px:
+  //   row = {city, region, zone}: 72 + (19.2+48) + (19.2+48) + 2*4.8(gaps) = 216 <= 228.8
+  //   row = {area, school}:       (19.2+48) + (19.2+48) + 4.8(gap)         = 139.2 <= 228.8
+  // (a {city, region} + {zone, area, school} 2+3 split is checked too, and is
+  // slacker still: 72 + (19.2+48) + 4.8 = 144; (19.2+48)*3 + 2*4.8 = 211.2 —
+  // both rows clear the 228.8px budget either way the greedy pack falls.)
+  //
+  // Issue #2089 fix cycle 4 review (MEDIUM) — these values come from the
+  // module-level `SCHOOL_BREADCRUMB_MAX_WIDTHS` export (top of file) for the
+  // same test-drift-prevention reason documented on
+  // `MAP_GROUP_BREADCRUMB_MAX_WIDTHS`.
   const schoolJourneySegmentsRaw: { key: string; label: string | null | undefined; emphasis?: DiscoverMapCrumb['emphasis']; maxWidthClass?: string }[] = [
-    { key: 'city', label: CITY_CONFIG[city]?.label ?? city },
-    { key: 'region', label: resolvedRegionLabel, maxWidthClass: 'max-w-[140px]' },
-    { key: 'zone', label: focusedGroup?.name ?? prettifyZoneSlug(urlState.groupId) },
-    { key: 'area', label: selectedArea?.areaLabel ?? areaKeyToLabel(urlState.areaKey) },
+    { key: 'city', label: CITY_CONFIG[city]?.label ?? city, maxWidthClass: SCHOOL_BREADCRUMB_MAX_WIDTHS.city },
+    { key: 'region', label: resolvedRegionLabel, maxWidthClass: SCHOOL_BREADCRUMB_MAX_WIDTHS.region },
+    { key: 'zone', label: focusedGroup?.name ?? prettifyZoneSlug(urlState.groupId), maxWidthClass: SCHOOL_BREADCRUMB_MAX_WIDTHS.zone },
+    {
+      key: 'area',
+      label: selectedArea?.areaLabel ?? areaKeyToLabel(urlState.areaKey),
+      maxWidthClass: SCHOOL_BREADCRUMB_MAX_WIDTHS.area,
+    },
     {
       key: 'school',
       label: urlState.schoolId ? (selectedSchool?.name ?? null) : null,
       emphasis: 'school',
-      maxWidthClass: 'max-w-[180px]',
+      maxWidthClass: SCHOOL_BREADCRUMB_MAX_WIDTHS.school,
     },
   ];
   const schoolJourneySegments: DiscoverMapCrumb[] = schoolJourneySegmentsRaw

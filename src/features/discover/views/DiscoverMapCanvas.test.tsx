@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRef } from 'react';
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
 import type { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
 import type {
@@ -269,6 +270,7 @@ function baseProps(overrides: Partial<DiscoverMapCanvasProps> = {}): DiscoverMap
     markersTotalFilteredElements: undefined,
     isLoading: false,
     mapZoom: 10,
+    isBoundedBrowseState: false,
     isMarkerPopoverEligible: false,
     markerPopoverStepper: null,
     navigate: vi.fn(),
@@ -345,6 +347,33 @@ describe('DiscoverMapCanvas', () => {
     const badges = screen.getAllByTestId('discover-badge');
     expect(badges.length).toBeGreaterThan(0);
     expect(screen.getByText(/42/)).toBeInTheDocument();
+  });
+
+  // Issue #2089 code-review fix (Finding 4) — isBoundedBrowseState must reach
+  // MapEmptyGuidance's hasAreaSelected prop as true (`!!selectedArea ||
+  // isBoundedBrowseState`, see the JSX call site) even when selectedArea is
+  // null, so the anon "select an area…or sign in" prompt (which only shows
+  // when hasAreaSelected === false) stays suppressed for an anon user who is
+  // zoomed past AREA_LAYER_MAX_ZOOM in a bounded-Browse node scope — that
+  // scope already has real, correctly-filtered markers, and the prompt would
+  // be a lie in that state.
+  it('suppresses the anon "select an area / sign in" guidance when isBoundedBrowseState is true, even with selectedArea: null', () => {
+    render(
+      <MemoryRouter>
+        <DiscoverMapCanvas
+          {...baseProps({
+            isBoundedBrowseState: true,
+            selectedArea: null,
+            isAuthenticated: false,
+            mapZoom: 20,
+            areaLayerMaxZoom: 12,
+            cityTotal: 10,
+          })}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText(/Select an area to see properties/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
   });
 
   it('never renders the marker popover when isMarkerPopoverEligible is false, even with a pixel position', () => {

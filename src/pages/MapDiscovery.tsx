@@ -70,6 +70,7 @@ import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import { useDiscoverListings } from '@/hooks/useDiscoverListings';
 import { useDiscoverFilteredMarkers } from '@/hooks/useDiscoverFilteredMarkers';
 import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
+import { filteredMarkerToPropertyListing, cityListingToPropertyListing } from '@/lib/discoverMappers';
 import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { slugifyFromAreaKey } from '@/lib/areaSlug';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
@@ -577,6 +578,104 @@ export default function MapDiscovery() {
     anonGroupFilters,
   });
 
+  // ── Issue #2089 — bounded Browse (node + nodeListings=1) node-scoped markers ──
+  // Mirrors the isGroupResultsState pattern directly above: this branch has
+  // first-priority in resolveMarkerListings (before journey/selectedArea) so a
+  // bounded node whose scope isn't a single "selectedArea" (e.g. a group/region
+  // node with multiple descendantAreaKeys) never falls through to the unscoped
+  // city-wide markerListings tail branch — the exact silent scope leak this
+  // selector's frozen-contract comment warns about.
+  // Issue #1824 Slice S4 — search-keyword state (searchQuery/debouncedSearch,
+  // reverse URL-sync, 250ms debounce, handleSearchChange) now lives in
+  // useDiscoverSearchState. See the hook's header comment for the KNOWN,
+  // INTENTIONAL split-brain (debouncedSearch drives badge+markers here;
+  // nav.q drives ActiveContextChips) — do NOT unify. Declared here (moved up from
+  // its original post-node-listings-marker-fetch position) so debouncedSearch is
+  // available to the bounded-Browse marker-fetch calls below (Issue #2089 fix-cycle
+  // PR #2141 finding 1 — Map markers must share the same debounced search term as
+  // the List surface's own useDiscoverSearchState call, both driven by the same nav.q).
+  const { searchQuery, debouncedSearch, handleSearchChange } =
+    useDiscoverSearchState({ urlQ: nav.q, setUrlSearch: actions.setSearchQuery });
+
+  const isNodeListingsState = !!nav.nodeListings;
+  const nodeListingsAreaKeys: string[] = useMemo(() => {
+    if (!isNodeListingsState) return [];
+    const node = areasNavigationJourney.node;
+    if (!node) return [];
+    if (node.descendantAreaKeys && node.descendantAreaKeys.length > 0) return node.descendantAreaKeys;
+    return node.areaKey ? [node.areaKey] : [];
+  }, [isNodeListingsState, areasNavigationJourney.node]);
+
+  // Authenticated path: /api/discover/markers (full predicate, list+map consistent).
+  // Issue #2087/#2089 code-review fix — scope via the canonical `nodeKey` param
+  // (server-side hierarchy resolution), NOT client-derived `areaKeys`, so this
+  // query shares the exact same scope-derivation mechanism as
+  // NodeListingsSurface.tsx's authenticated List query (`useDiscoverListings`
+  // called with `nodeKey: node.nodeKey`, no areaKeys). Two mechanisms deriving
+  // "the same" scope independently risked Map silently under/over-scoping if
+  // `descendantAreaKeys` ever drifted from the backend's own hierarchy
+  // resolution. `enabled` additionally requires the node to have resolved
+  // (mirrors the previous empty-areaKeys guard's loading-race handling) so an
+  // unresolved node never fires an unscoped, city-wide-leaking request.
+  const { data: nodeListingsMarkersData } = useDiscoverFilteredMarkers(
+    nav.city,
+    urlDiscoverFilters,
+    isNodeListingsState && isAuthenticated && !!areasNavigationJourney.node?.nodeKey,
+    null,        // bbox — no viewport clipping for bounded Browse
+    // Issue #2089 fix-cycle (PR #2141 finding 1) — thread the same debounced search
+    // term the List surface (NodeListingsSurface.tsx) sends to its own bounded-Browse
+    // fetch, so a typed search narrows the Map markers exactly like it narrows the List.
+    debouncedSearch?.trim() || undefined,
+    intentListingPurpose,
+    undefined,   // excludePropertyType — not applicable
+    undefined,   // areaKeys — intentionally omitted; nodeKey below is the canonical scope
+    areasNavigationJourney.node?.nodeKey,
+  );
+
+  // Anonymous path: /api/discover/cities/{city}/listings (public, multi-areaKeys
+  // teaser). This endpoint has no nodeKey-based scoping support, so it
+  // structurally still needs client-derived areaKeys — the same divergence
+  // NodeListingsSurface.tsx's own anon fallback (`nodeAreaKeys`) accepts for
+  // its equivalent public-teaser query.
+  const { data: nodeListingsAnonData } = useDiscoverCityListings({
+    city: nav.city,
+    areaKeys: isNodeListingsState && !isAuthenticated ? nodeListingsAreaKeys : [],
+    limitPerArea: 20, // server caps at 20 anyway (MAX_LIMIT in CityAreaListingsService)
+    propertyType: urlDiscoverFilters.propertyTypes?.[0],
+    bedrooms: urlDiscoverFilters.bedrooms?.[0],
+    minPrice: urlDiscoverFilters.priceMin != null ? urlDiscoverFilters.priceMin * 100 : undefined,
+    maxPrice: urlDiscoverFilters.priceMax != null ? urlDiscoverFilters.priceMax * 100 : undefined,
+    // Issue #2089 fix-cycle (PR #2141 finding 1) — see the auth call above for rationale.
+    q: debouncedSearch?.trim() || undefined,
+    listingPurpose: intentListingPurpose,
+  });
+
+  // Unified node-listings marker surface (auth or anon). [] while resolving or
+  // when the node genuinely has no listings — same empty-areaKeys-guard shape
+  // as groupResultsMarkers above (never an unscoped city-wide flash).
+  const nodeListingsMarkers = useMemo(() => {
+    if (!isNodeListingsState) return [];
+    if (isAuthenticated) {
+      if (!nodeListingsMarkersData?.markers) return [];
+      const now = new Date().toISOString();
+      return nodeListingsMarkersData.markers.map((m) => filteredMarkerToPropertyListing(m, now));
+    }
+    // Issue #2089 — the public /api/discover/cities/{city}/listings response
+    // sends coordinates as `latitude`/`longitude` (confirmed against the live
+    // backend), NOT `lat`/`lon` — the anon LIST-panel mapping already falls
+    // back to `latitude`/`longitude` (see nodeListingsAnonListings in
+    // NodeListingsSurface.tsx / groupResultsAnonListings), but this MARKER
+    // derivation previously checked `lat`/`lon` only, silently filtering out
+    // every listing and leaving the map blank despite the List surface
+    // correctly showing results.
+    const raw = (nodeListingsAnonData?.areas ?? []).flatMap((a) => a.listings);
+    const now = new Date().toISOString();
+    return raw
+      .map((l) => ({ ...l, lat: l.lat ?? l.latitude, lon: l.lon ?? l.longitude }))
+      .filter((l): l is typeof l & { lat: number; lon: number } => l.lat != null && l.lon != null)
+      .map((l) => cityListingToPropertyListing({ ...l, lat: l.lat, lon: l.lon }, now));
+  }, [isNodeListingsState, isAuthenticated, nodeListingsMarkersData, nodeListingsAnonData]);
+
   // Issue #1430 — derive the AgriMapListingItem for the selected listing peek.
   // Finds the matching item from the already-loaded agri map listings.
   // Returns null when selectedListing is absent or not found (safe fallback).
@@ -595,14 +694,6 @@ export default function MapDiscovery() {
     filters: nav.filters,
     isAuthenticated,
   });
-
-  // Issue #1824 Slice S4 — search-keyword state (searchQuery/debouncedSearch,
-  // reverse URL-sync, 250ms debounce, handleSearchChange) now lives in
-  // useDiscoverSearchState. See the hook's header comment for the KNOWN,
-  // INTENTIONAL split-brain (debouncedSearch drives badge+markers here;
-  // nav.q drives ActiveContextChips) — do NOT unify.
-  const { searchQuery, debouncedSearch, handleSearchChange } =
-    useDiscoverSearchState({ urlQ: nav.q, setUrlSearch: actions.setSearchQuery });
 
   const [nearSchoolOpen, setNearSchoolOpen] = useState(false);
 
@@ -2137,12 +2228,14 @@ export default function MapDiscovery() {
     mapLayerCategory: effectiveMapLayerCategory,
     selectedArea: effectiveSelectedArea,
     isGroupResultsState,
+    isNodeListingsState,
     mapZoom,
     areaLayerMaxZoom: AREA_LAYER_MAX_ZOOM,
     isAuthenticated,
     journey: nav.journey,
     schoolId: nav.schoolId,
     groupResultsMarkers,
+    nodeListingsMarkers,
     markerListings,
     areaMarkerListings,
     schoolRadiusFallbackMarkers,
@@ -2430,16 +2523,6 @@ export default function MapDiscovery() {
             mobileMapOpen ? 'fixed inset-0 z-[60] bg-background [&>div]:!h-full' : 'contents'
           }
         >
-          {mobileMapOpen && (
-            <button
-              type="button"
-              onClick={() => setMobileView('LIST')}
-              data-testid="mobile-map-close-list-button"
-              className="absolute right-4 top-4 z-50 rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md"
-            >
-              List
-            </button>
-          )}
           {/* Issue #1956 PR-5 (Slice 3, AC5.6/AC5.7) — the MAP-mode counterpart
               of DiscoverAreasJourneyPanel's own (LIST-mode-only-visible)
               focused-cluster branch. Mounted INSIDE this SAME z-[60] overlay
@@ -2493,6 +2576,28 @@ export default function MapDiscovery() {
           )}
           <DiscoverMapMount
           mapContainerRef={mapContainerRef}
+          // PR #2141 fix cycle 2 (reviewer-required shared composition) — the
+          // real "List" toggle, owned here (unchanged onClick/behavior/
+          // testid), now rendered as the mobile context overlay's own flex
+          // row's second child (DiscoverMapContextOverlay.tsx) instead of an
+          // independently `absolute`-positioned sibling with a duplicated
+          // ghost spacer. `pointer-events-auto` is required because that
+          // overlay's row wrapper is `pointer-events-none` (so the
+          // transparent span never swallows clicks meant for the map/
+          // breadcrumb below it); `shrink-0 self-start` gives this button
+          // sole sizing authority over its own footprint in that row.
+          mobileListButton={
+            mobileMapOpen ? (
+              <button
+                type="button"
+                onClick={() => setMobileView('LIST')}
+                data-testid="mobile-map-close-list-button"
+                className="pointer-events-auto shrink-0 self-start rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md"
+              >
+                List
+              </button>
+            ) : null
+          }
           markerPixelPos={markerPixelPos}
           handlePopoverDismiss={handlePopoverDismiss}
           showLoader={showLoader}
@@ -2522,6 +2627,11 @@ export default function MapDiscovery() {
           // area-marker fade/highlight) treats a resolved canonical AREA leaf
           // identically to a legacy areaKey selection.
           selectedArea={effectiveSelectedArea}
+          // Issue #2089 — group-results (#1597) and bounded-Browse node-listings
+          // are both multi-area scoped states with no single `selectedArea`;
+          // MapEmptyGuidance's anon "select an area…or sign in" prompt must stay
+          // suppressed in either, same as it already is when selectedArea is set.
+          isBoundedBrowseState={isGroupResultsState || isNodeListingsState}
           areaSearchMatchKeys={areaSearchMatchKeys}
           hoveredAreaKeyForMap={hoveredAreaKeyForMap}
           publishClusterCameraIntent={publishClusterCameraIntent}

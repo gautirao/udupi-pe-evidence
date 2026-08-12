@@ -18,6 +18,10 @@ export interface ResolveMarkerListingsInput {
   mapLayerCategory: DiscoverMapLayerKind;
   selectedArea: AreaPoint | null;
   isGroupResultsState: boolean;
+  /** Issue #2089 — bounded Browse state (`node`+`nodeListings=1`). True as soon as
+   *  the URL flag is set, independent of whether the node/areaKeys have resolved
+   *  yet (mirrors isGroupResultsState's loading-race handling). */
+  isNodeListingsState: boolean;
   mapZoom: number;
   /** MapDiscovery's local AREA_LAYER_MAX_ZOOM const, passed in rather than duplicated
    *  or centralized (issue #1823 is an open, separate centralization effort). */
@@ -26,6 +30,10 @@ export interface ResolveMarkerListingsInput {
   journey: DiscoverJourney | null;
   schoolId: string | null;
   groupResultsMarkers: PropertyListingWithImages[];
+  /** Issue #2089 — bounded Browse node-scoped markers (descendantAreaKeys / areaKey
+   *  of the active `node`). [] while resolving or when the node has no listings;
+   *  same empty-areaKeys-guard shape as groupResultsMarkers. */
+  nodeListingsMarkers: PropertyListingWithImages[];
   markerListings: PropertyListingWithImages[];
   areaMarkerListings: PropertyListingWithImages[];
   schoolRadiusFallbackMarkers: PropertyListingWithImages[];
@@ -39,12 +47,14 @@ export function resolveMarkerListings(input: ResolveMarkerListingsInput): Proper
     mapLayerCategory,
     selectedArea,
     isGroupResultsState,
+    isNodeListingsState,
     mapZoom,
     areaLayerMaxZoom,
     isAuthenticated,
     journey,
     schoolId,
     groupResultsMarkers,
+    nodeListingsMarkers,
     markerListings,
     areaMarkerListings,
     schoolRadiusFallbackMarkers,
@@ -69,13 +79,27 @@ export function resolveMarkerListings(input: ResolveMarkerListingsInput): Proper
     mapLayerCategory === 'macro-region-bubbles' ||
     mapLayerCategory === 'region-zone-areas'
   ) return [];
-  if (!selectedArea && !isGroupResultsState && mapZoom <= areaLayerMaxZoom) return [];
+  // Issue #2089 — bounded Browse bypasses the zoom-suppression threshold, same
+  // as the group-results carve-out below (#2087 already does this for the
+  // markersEnabled gate upstream; this mirrors it in the selector itself so a
+  // bounded-Browse session opened at/below areaLayerMaxZoom is not silently
+  // suppressed to []).
+  if (!selectedArea && !isGroupResultsState && !isNodeListingsState && mapZoom <= areaLayerMaxZoom) return [];
   // Issue #1597 — area-group-results state: serve ONLY the group-filtered
   // markers. Must come before the area-first/school-first branches so no
   // unfiltered city-wide markerListings leak as ghost/shadow markers.
   // groupResultsMarkers is [] when the query is pending or the group has no
   // resolved area_keys (empty-areaKeys guard prevents the fetch).
   if (isGroupResultsState) return groupResultsMarkers;
+  // Issue #2089 — bounded Browse (node + nodeListings=1): serve ONLY the
+  // node-scoped markers. Intentionally checked AFTER isGroupResultsState above
+  // (isGroupResultsState wins if both are somehow true) — must come before
+  // journey/selectedArea branches (same no-leakage ordering rationale as
+  // isGroupResultsState above) so a bounded
+  // node whose scope isn't a single "selectedArea" (e.g. a group/region node
+  // with multiple descendant areas) never falls through to the unscoped
+  // city-wide markerListings tail branch.
+  if (isNodeListingsState) return nodeListingsMarkers;
   // school-first journey
   if (journey === 'school-first') {
     // schoolId set: proximity markerListings drive the school-radius surface.
