@@ -51,6 +51,15 @@ import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 interface SelectedListingPreviewBase {
   /** Listing identity. */
   id: string;
+  /**
+   * Issue #2150 (owner review B) — the listing's own title, when the source
+   * carries one. Both desktop surfaces this preview is meant to match
+   * (`MarkerPopoverCard.tsx`'s `listing.title` line, the Area-first
+   * `PropertyCard.tsx`'s `listing.title` heading) already show it; the
+   * mobile sheet previously had no field to render one from. Null (never a
+   * fabricated placeholder) when the source listing has none.
+   */
+  title: string | null;
   primaryImageUrl: string | null;
   propertyType: string | null;
   bedrooms: number | null;
@@ -97,6 +106,7 @@ export function toSelectedListingPreview(
 ): SelectedListingPreview {
   const base: SelectedListingPreviewBase = {
     id: listing.id,
+    title: listing.title ?? null,
     primaryImageUrl: listing.primaryImageUrl ?? null,
     propertyType: listing.propertyType ?? null,
     bedrooms: listing.bedrooms ?? null,
@@ -149,6 +159,7 @@ export function toSelectedListingPreviewFromMarkerListing(
 ): SelectedListingPreview {
   const base: SelectedListingPreviewBase = {
     id: listing.id,
+    title: listing.title ?? null,
     primaryImageUrl: listing.images?.[0]?.url ?? null,
     propertyType: listing.property_type ?? null,
     bedrooms: listing.bedrooms ?? null,

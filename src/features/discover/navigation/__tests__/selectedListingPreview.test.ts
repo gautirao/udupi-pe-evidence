@@ -18,6 +18,7 @@ function makeListing(overrides: Partial<DiscoverCityListingItem> = {}): Discover
     bedrooms: 3,
     primaryImageUrl: 'https://example.test/img.jpg',
     trustBadge: 'verified',
+    title: 'Sunrise Apartments',
     ...overrides,
   };
 }
@@ -69,6 +70,12 @@ describe('toSelectedListingPreview', () => {
     expect(preview.trustBadge).toBe('trusted');
   });
 
+  it('carries the listing title through verbatim (Issue #2150 — identity parity with MarkerPopoverCard/PropertyCard)', () => {
+    const listing = makeListing({ title: 'Sunrise Apartments, 3BHK' });
+    const preview = toSelectedListingPreview(listing, { isAuthenticated: false, areaLabel: 'Manipal' });
+    expect(preview.title).toBe('Sunrise Apartments, 3BHK');
+  });
+
   it('null-safe defaults for optional fields absent on the source listing', () => {
     const listing: DiscoverCityListingItem = { id: 'x' };
     const preview = toSelectedListingPreview(listing, { isAuthenticated: false, areaLabel: 'Manipal' });
@@ -76,6 +83,7 @@ describe('toSelectedListingPreview', () => {
     expect(preview.propertyType).toBeNull();
     expect(preview.bedrooms).toBeNull();
     expect(preview.trustBadge).toBeNull();
+    expect(preview.title).toBeNull();
     expect(preview.areaLabel).toBe('Manipal');
     expect(preview.id).toBe('x');
   });
@@ -93,6 +101,7 @@ function makeMarkerListing(overrides: Partial<PropertyListingWithImages> = {}): 
     bedrooms: 2,
     images: [{ url: 'https://example.test/marker-img.jpg' }],
     trustBadge: 'verified',
+    title: 'Marker Listing Title',
     ...overrides,
   } as PropertyListingWithImages;
 }
@@ -180,6 +189,15 @@ describe('toSelectedListingPreviewFromMarkerListing', () => {
     expect(preview.trustBadge).toBe('trusted');
   });
 
+  it('carries the listing title through verbatim (Issue #2150 — identity parity with MarkerPopoverCard)', () => {
+    const listing = makeMarkerListing({ title: 'Koramangala Duplex' });
+    const preview = toSelectedListingPreviewFromMarkerListing(listing, {
+      isAuthenticated: false,
+      cityLabel: 'Bangalore',
+    });
+    expect(preview.title).toBe('Koramangala Duplex');
+  });
+
   it('null-safe defaults for optional fields absent on the source listing', () => {
     const listing = { id: 'm2' } as PropertyListingWithImages;
     const preview = toSelectedListingPreviewFromMarkerListing(listing, {
@@ -190,6 +208,7 @@ describe('toSelectedListingPreviewFromMarkerListing', () => {
     expect(preview.propertyType).toBeNull();
     expect(preview.bedrooms).toBeNull();
     expect(preview.trustBadge).toBeNull();
+    expect(preview.title).toBeNull();
     expect(preview.areaLabel).toBe('Bangalore');
     expect(preview.id).toBe('m2');
   });

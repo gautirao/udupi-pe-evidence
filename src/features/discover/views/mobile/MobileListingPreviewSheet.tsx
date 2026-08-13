@@ -252,6 +252,18 @@ export function MobileListingPreviewSheet({
             </Button>
           </div>
 
+          {/* Title — Issue #2150 (owner review B). Mirrors MarkerPopoverCard.tsx's
+              own `listing.title` line: rendered only when the source listing
+              carries one, never a fabricated placeholder. */}
+          {preview.title && (
+            <p
+              className="line-clamp-1 text-[13px] font-semibold text-foreground"
+              data-testid="mobile-listing-preview-title"
+            >
+              {preview.title}
+            </p>
+          )}
+
           <p className="truncate text-[12.5px] font-bold text-foreground">
             {typeLabel}
             {preview.bedrooms != null && (

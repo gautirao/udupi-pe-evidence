@@ -344,6 +344,7 @@ describe('LegacyRightPanelBridge — issue #2149 school-first marker -> mobile p
       expect.objectContaining({
         kind: 'authed',
         id: 'listing-1',
+        title: 'Cozy 2BHK',
         propertyType: 'apartment',
         bedrooms: 2,
         // RUPEES `price` (5,000,000) converted to PAISE (x100) — the exact

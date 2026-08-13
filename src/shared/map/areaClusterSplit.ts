@@ -25,12 +25,31 @@ export { AREA_LAYER_MAX_ZOOM } from './zoomPolicy';
  * its member areas are not all at (effectively) the exact same coordinate.
  * A coincident-centre cluster has no meaningful "split": zooming in further
  * would not visually separate its members.
+ *
+ * Issue #2150 — EPS was 1e-9 (sub-millimetre), which only ever caught
+ * byte-identical coordinates. Real geocoded "coincident" listings carry
+ * sub-metre jitter (e.g. two units in the same building resolving to
+ * slightly different lat/lon) — see the #2150 regression spec's own
+ * `makeCoincidentListings` fixture, which deliberately spaces members by
+ * ~1e-7 degrees per member and documents that as "never a real spatial
+ * spread". With the old EPS, that fixture read as "has spread", so the
+ * cluster-tap handler (PropertyMap.tsx's handleClusterActivate) published a
+ * real camera fit-to-bounds for what should have been treated as
+ * non-splittable — racing leaflet.markercluster's OWN independent
+ * `_zoomOrSpiderfy` decision to spiderfy that same bottomed-out cluster on
+ * the same click, and (live-reproduced) corrupting the spiderfy render:
+ * the fan opened with the `spiderfied` event firing, but the marker layer
+ * ended up empty seconds later. 1e-5 degrees (~1.1m at the equator) matches
+ * the SAME "coincident" threshold this codebase already uses for the
+ * identical concept in `computeCoincidentMarkerOffsets` (zoomPolicy.ts),
+ * which rounds to 5 decimal places for exactly this reason — real,
+ * genuinely-distinct listings are never within a metre of each other.
  */
 export function hasSpatialSpread(
   southWest: [number, number],
   northEast: [number, number],
 ): boolean {
-  const EPS = 1e-9;
+  const EPS = 1e-5;
   return (
     Math.abs(northEast[0] - southWest[0]) > EPS ||
     Math.abs(northEast[1] - southWest[1]) > EPS

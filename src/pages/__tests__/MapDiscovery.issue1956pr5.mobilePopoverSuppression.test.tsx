@@ -228,6 +228,7 @@ const makeListing = (id: string, title: string): PropertyListingWithImages =>
 const PREVIEW_FIXTURE: SelectedListingPreviewAnon = {
   kind: 'anon',
   id: 'listing-1',
+  title: 'Preview Fixture Listing',
   primaryImageUrl: null,
   propertyType: 'apartment',
   bedrooms: 3,

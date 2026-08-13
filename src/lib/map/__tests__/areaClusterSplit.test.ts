@@ -18,6 +18,30 @@ describe('hasSpatialSpread', () => {
   it('distinct southWest/northEast → true', () => {
     expect(hasSpatialSpread([13.3, 74.7], [13.4, 74.8])).toBe(true);
   });
+
+  // Issue #2150 — real geocoded "coincident" listings carry sub-metre jitter
+  // (never byte-identical). The #2150 regression spec's own
+  // `makeCoincidentListings` fixture spaces 8 members by 1e-7 degrees per
+  // member (max spread ~7e-7 degrees, well under a metre) and documents that
+  // spread as "never a real spatial spread". Before this fix, EPS=1e-9 read
+  // that fixture as "has spread", which made PropertyMap's cluster-tap
+  // handler publish a real camera fit-to-bounds for a cluster that should
+  // have been treated as non-splittable — racing leaflet.markercluster's own
+  // independent decision to spiderfy that same bottomed-out cluster on the
+  // same click, and (live-reproduced via e2e) corrupting the render: the
+  // spiderfy fan opened, then the marker layer emptied within ~300ms.
+  it('sub-metre (geocoding-jitter-scale) difference → false (Issue #2150 — realistic coincident listings, not byte-identical)', () => {
+    // 7e-7 degrees ≈ 7.8cm at this project's latitude band — matches the
+    // #2150 fixture's max per-cluster spread (8 members × 1e-7 degrees).
+    expect(hasSpatialSpread([13.05, 77.65], [13.05 + 7e-7, 77.65 + 7e-7])).toBe(false);
+  });
+
+  it('metre-plus difference → true (comfortably above the coincident-jitter threshold)', () => {
+    // ~1.1e-5 degrees ≈ 1.2m — matches computeCoincidentMarkerOffsets'
+    // (zoomPolicy.ts) own 5-decimal-place "coincident" rounding precedent;
+    // anything spread wider than that is a genuinely distinct location.
+    expect(hasSpatialSpread([13.05, 77.65], [13.05 + 2e-5, 77.65])).toBe(true);
+  });
 });
 
 describe('clusterCanSplit', () => {
