@@ -130,6 +130,34 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
       expect(lines.length).toBeLessThanOrEqual(220);
     });
 
+    it('imports ONLY the composition hook, the surfaces, and the route-level unsupported-city gate', () => {
+      // Issue #2142 Commit 4 — the import-COUNT assertion above says how many;
+      // this says which, which is the part that actually constrains the layer.
+      // Anything outside these three prefixes means the page has started
+      // reaching past its own layer again (a hook, a view, a selector, a
+      // controller), which is how a composition root grows back into a god
+      // component regardless of its line count.
+      //
+      // The Discover CONTEXT PROVIDER is deliberately absent from this list:
+      // MapDiscovery.tsx does not mount it — <DiscoverProvider> wraps the route
+      // in App.tsx (verified), so the page consumes no provider module at all.
+      const ALLOWED_PREFIXES = [
+        '@/features/discover/composition/',
+        '@/features/discover/surfaces/',
+        // The unsupported-city gate's renderer — the one thing the page's own
+        // route guard renders, and the reason `if (` count is 1 rather than 0.
+        '@/components/discover/CityNotSupported',
+      ];
+      const specifiers = [...source.matchAll(/^import[\s\S]*?from '([^']+)';/gm)].map((m) => m[1]);
+      const strays = specifiers.filter(
+        (spec) => !ALLOWED_PREFIXES.some((prefix) => spec.startsWith(prefix)),
+      );
+      expect(strays).toEqual([]);
+      // ...and the scan really saw the imports (guard against a regex that
+      // silently matches nothing).
+      expect(specifiers.length).toBe(6);
+    });
+
     it('the page is a composition ROOT, not a re-exported god component: it renders surfaces and nothing else', () => {
       // Structural, not cosmetic — these three together are what "thin"
       // actually means here.

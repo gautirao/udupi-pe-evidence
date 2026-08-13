@@ -6,6 +6,8 @@ import type { UseAreasNavigationJourneyResult } from '@/features/discover/naviga
 import type { useDiscoverPageContext } from '@/features/discover/controllers/useDiscoverPageContext';
 import type { useDiscoverPageStateController } from '@/features/discover/controllers/useDiscoverPageStateController';
 import type { useDiscoverNavigationController } from '@/features/discover/controllers/useDiscoverNavigationController';
+import type { useDiscoverJourneySwitchController } from '@/features/discover/controllers/useDiscoverJourneySwitchController';
+import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { useDiscoverOverviewNavigationController } from '@/features/discover/controllers/useDiscoverOverviewNavigationController';
 import type { useDiscoverAreaGroupsController } from '@/features/discover/controllers/useDiscoverAreaGroupsController';
 import type { useDiscoverGeographyController } from '@/features/discover/controllers/useDiscoverGeographyController';
@@ -55,7 +57,30 @@ import type { useDiscoverMobilePresentationController } from '@/features/discove
  * prop parity now, in place of the deleted interface's redundant restatement.
  */
 
-type PageContextSlice = Pick<ReturnType<typeof useDiscoverPageContext>, 'navigate' | 'isAuthenticated'>;
+/**
+ * Issue #2142 SOLID follow-up (commit 2, PLAN REVIEW correction 3) — `nav`,
+ * `actions`, `isMobileShell` and `mobileView` are now carried through this
+ * contract instead of being read out of the Discover context facade by the
+ * panel renderers themselves.
+ *
+ * Those four values were ALWAYS available on `useDiscoverPageContext()` (this
+ * page's one ambient-provider adapter); the panel simply reached for them
+ * directly, as a documented #1953 deviation. That made the renderers service
+ * locators: their type signature understated what they depended on, and the
+ * ambient read could not be checked by the compiler. Threading them here makes
+ * the dependency explicit and each renderer a pure function of its props.
+ *
+ * `nav`/`actions` are carried as the WHOLE context objects rather than
+ * field-by-field, because the URL-state facade already IS this app's stable
+ * navigation port (architect's plan §4, DIP). Each renderer then `Pick`s only
+ * the fields it actually reads off them (see AreaFirstJourneyPanel /
+ * SchoolFirstJourneyPanel), so ISP is enforced at the renderer boundary
+ * instead of by fragmenting the port here.
+ */
+type PageContextSlice = Pick<
+  ReturnType<typeof useDiscoverPageContext>,
+  'navigate' | 'isAuthenticated' | 'nav' | 'actions' | 'isMobileShell' | 'mobileView'
+>;
 type PageStateSlice = Pick<
   ReturnType<typeof useDiscoverPageStateController>,
   | 'city'
@@ -75,6 +100,15 @@ type NavigationSlice = Pick<
   | 'setHoveredNavigationNodeKey'
   | 'focusedClusterMemberAreaKeys'
   | 'setFocusedClusterMemberAreaKeys'
+  // Issue #2142 SOLID follow-up (commit 2) — the two journey predicates the
+  // panel surface used to recompute off its own `useDiscoverNav()` read.
+  | 'isAreaFirstJourneyActive'
+  | 'isSchoolsNavNodeLevel'
+>;
+/** Issue #2142 SOLID follow-up (commit 2) — the JourneySwitcher write path. */
+type JourneySwitchSlice = Pick<
+  ReturnType<typeof useDiscoverJourneySwitchController>,
+  'handleSelectJourney'
 >;
 type OverviewNavigationSlice = Pick<
   ReturnType<typeof useDiscoverOverviewNavigationController>,
@@ -178,6 +212,7 @@ export interface BuildPanelSurfaceModelParams {
   pageContext: PageContextSlice;
   pageState: PageStateSlice;
   navigation: NavigationSlice;
+  journeySwitch: JourneySwitchSlice;
   overviewNavigation: OverviewNavigationSlice;
   areaGroups: AreaGroupsSlice;
   geography: GeographySlice;
@@ -213,6 +248,8 @@ export interface PanelRenamedFields {
   onNavigationNodeHoverChange: (nodeKey: string | null) => void;
   onClusterFocusChange: (memberAreaKeys: readonly string[] | null) => void;
   onSelectedListingPreviewChange: (preview: SelectedListingPreview | null) => void;
+  /** ← journeySwitch.handleSelectJourney (the legacy -> canonical conversion writer). */
+  selectJourney: (journey: DiscoverJourney) => void;
   /** Panel-facing alias for the chip row / filters panel ReactNodes. */
   activeContextChips: ReactNode;
   filtersContent: ReactNode;
@@ -255,9 +292,9 @@ type PanelFields = PageContextSlice &
  * (city/cityTotal/navigate/trendsHref — the architect's own named group) and
  * commands groups add `routing`/`geography` (the architect listed commands as
  * navigation/results/filters/schools/agri/interaction only). Real field usage
- * shows `geography`'s 31 view fields carry 6 real callbacks
+ * shows `geography`'s view fields carry 5 real callbacks
  * (handleAreaSelect/handleAreaFirstBack/setAreaSearchQuery/
- * refetchRegionScopedGroups/armRegionSelect/refetchRegionalAreaGroups) that
+ * refetchRegionScopedGroups/armRegionSelect) that
  * have nowhere sound to live in the architect's 6 commands groups without
  * either duplicating them under an unrelated group or breaking the 1:1
  * view/commands group symmetry every other surface in this PR uses. Mirroring
@@ -265,7 +302,23 @@ type PanelFields = PageContextSlice &
  * asymmetric original spec — same "field-usage over spec-literal" judgment
  * already applied to Commits 2-3's corridorGroups/Agri and this commit's
  * DiscoverMapSurface `overlays` addition.
+ *
+ * Issue #2142 SOLID follow-up (commit 3) — `regionGuide` is the one view group
+ * with no commands counterpart: its three fields
+ * (regionGuideRingActive/regionOverviewMarkerKind/regionSelectNonce) are
+ * read-only signals, and the region-PICK writer `armRegionSelect` stays in
+ * `commands.geography` where its consumers already reach for it.
  */
+
+/**
+ * Issue #2142 SOLID follow-up (commit 2, PLAN REVIEW correction 3) — the
+ * ambient page context, made explicit. `view.pageContext` carries the READ
+ * side (URL state + mobile shell), `commands.pageContext` the WRITE side (the
+ * URL-action facade), keeping the 1:1 view/commands group symmetry every other
+ * group in this file uses.
+ */
+type PanelPageContextView = Pick<PanelFields, 'nav' | 'isMobileShell' | 'mobileView'>;
+type PanelPageContextCommands = Pick<PanelFields, 'actions'>;
 
 type PanelRoutingView = Pick<
   PanelFields,
@@ -290,16 +343,8 @@ type PanelGeographyView = Pick<
   | 'isRegionScopedGroupsError'
   | 'areaGroupsData'
   | 'isLoadingAreaGroups'
-  | 'regionGuideRingActive'
-  | 'regionOverviewMarkerKind'
-  | 'regionSelectNonce'
   | 'summaryRegions'
   | 'selectedGroupName'
-  | 'corridorGroups'
-  | 'isLoadingRegionalAreaGroups'
-  | 'isRegionalAreaGroupsError'
-  | 'selectedRegion'
-  | 'selectedMaxKm'
 >;
 type PanelGeographyCommands = Pick<
   PanelFields,
@@ -308,7 +353,23 @@ type PanelGeographyCommands = Pick<
   | 'setAreaSearchQuery'
   | 'refetchRegionScopedGroups'
   | 'armRegionSelect'
-  | 'refetchRegionalAreaGroups'
+>;
+
+/**
+ * Issue #2142 SOLID follow-up (commit 3) — the #1808 region-guidance signals,
+ * previously carried by `geography` for no reason other than that the deleted
+ * flat interface listed them adjacently. All three are produced by the
+ * RegionGuide/MapLayer controllers and consumed only by the guided-entry
+ * attention ring, so they get their own group.
+ *
+ * There is deliberately NO `regionGuide` COMMANDS group: all three fields are
+ * read-only signals. The one region-guide writer, `armRegionSelect`, is a
+ * geography-scoped region PICK (it arms the next region selection made from the
+ * panel or the map) and stays in `commands.geography`, unmoved.
+ */
+type PanelRegionGuideView = Pick<
+  PanelFields,
+  'regionGuideRingActive' | 'regionOverviewMarkerKind' | 'regionSelectNonce'
 >;
 
 type PanelResultsView = Pick<
@@ -339,8 +400,22 @@ type PanelAgriView = Pick<
   | 'isLoadingAgriGroupListings'
   | 'isAgriGroupListingsError'
   | 'agriGroupLabel'
+  // Issue #2142 SOLID follow-up (commit 3) — the agri CORRIDOR fields, moved
+  // here from `geography`. Every one of them is produced by
+  // `useDiscoverAgriController` and consumed only by the agri corridor panels
+  // (CorridorLandingPanel + the corridor/max-km selectors); grouping them under
+  // `geography` described where they used to sit in the deleted flat interface,
+  // not what they are.
+  | 'corridorGroups'
+  | 'isLoadingRegionalAreaGroups'
+  | 'isRegionalAreaGroupsError'
+  | 'selectedRegion'
+  | 'selectedMaxKm'
 >;
-type PanelAgriCommands = Pick<PanelFields, 'refetchAgriGroupListings'>;
+type PanelAgriCommands = Pick<
+  PanelFields,
+  'refetchAgriGroupListings' | 'refetchRegionalAreaGroups'
+>;
 
 type PanelSchoolsView = Pick<
   PanelFields,
@@ -360,10 +435,16 @@ type PanelNavigationView = Pick<
   | 'focusedClusterMemberAreaKeys'
   | 'journeyView'
   | 'resolvedPanelContent'
+  | 'isAreaFirstJourneyActive'
+  | 'isSchoolsNavNodeLevel'
 >;
 type PanelNavigationCommands = Pick<
   PanelFields,
-  'onNavigationNodeHoverChange' | 'onClusterFocusChange' | 'journeyCommands' | 'onSelectedListingPreviewChange'
+  | 'onNavigationNodeHoverChange'
+  | 'onClusterFocusChange'
+  | 'journeyCommands'
+  | 'onSelectedListingPreviewChange'
+  | 'selectJourney'
 >;
 
 type PanelInteractionView = Pick<
@@ -376,8 +457,10 @@ type PanelInteractionCommands = Pick<
 >;
 
 export interface DiscoverPanelSurfaceView {
+  pageContext: PanelPageContextView;
   routing: PanelRoutingView;
   geography: PanelGeographyView;
+  regionGuide: PanelRegionGuideView;
   results: PanelResultsView;
   agri: PanelAgriView;
   schools: PanelSchoolsView;
@@ -387,6 +470,7 @@ export interface DiscoverPanelSurfaceView {
 }
 
 export interface DiscoverPanelSurfaceCommands {
+  pageContext: PanelPageContextCommands;
   routing: PanelRoutingCommands;
   geography: PanelGeographyCommands;
   results: PanelResultsCommands;
@@ -400,9 +484,14 @@ export interface DiscoverPanelSurfaceCommands {
 
 export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): DiscoverPanelSurfaceView {
   const {
-    pageContext: { isAuthenticated },
+    pageContext: { isAuthenticated, nav, isMobileShell, mobileView },
     pageState: { city, filters, selectedSchool, page, resolvedPanelContent, effectiveSelectedArea },
-    navigation: { hoveredNavigationNodeKey, focusedClusterMemberAreaKeys },
+    navigation: {
+      hoveredNavigationNodeKey,
+      focusedClusterMemberAreaKeys,
+      isAreaFirstJourneyActive,
+      isSchoolsNavNodeLevel,
+    },
     overviewNavigation: { activeAreasNavigationJourney },
     areaGroups: { areaGroupsData, isLoadingAreaGroups, selectedGroupName },
     geography: {
@@ -464,6 +553,7 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
 
 
   return {
+    pageContext: { nav, isMobileShell, mobileView },
     routing: { city, cityTotal, cityHasNoListings, trendsHref },
     geography: {
       discoverAreas,
@@ -481,17 +571,10 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       isRegionScopedGroupsError,
       areaGroupsData,
       isLoadingAreaGroups,
-      regionGuideRingActive,
-      regionOverviewMarkerKind,
-      regionSelectNonce,
       summaryRegions,
       selectedGroupName,
-      corridorGroups,
-      isLoadingRegionalAreaGroups,
-      isRegionalAreaGroupsError,
-      selectedRegion,
-      selectedMaxKm,
     },
+    regionGuide: { regionGuideRingActive, regionOverviewMarkerKind, regionSelectNonce },
     results: {
       groupResultsListings,
       isLoadingGroupResults,
@@ -513,6 +596,11 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       isLoadingAgriGroupListings,
       isAgriGroupListingsError,
       agriGroupLabel,
+      corridorGroups,
+      isLoadingRegionalAreaGroups,
+      isRegionalAreaGroupsError,
+      selectedRegion,
+      selectedMaxKm,
     },
     schools: { selectedSchool, schools, schoolsQuery, schoolListings },
     filters: { filters, filtersContent, searchQuery },
@@ -522,6 +610,8 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       focusedClusterMemberAreaKeys,
       journeyView,
       resolvedPanelContent,
+      isAreaFirstJourneyActive,
+      isSchoolsNavNodeLevel,
     },
     interaction: { selectedMarkerListing, activeContextChips, prefersReducedMotion, isAuthenticated },
   };
@@ -532,9 +622,10 @@ export function buildPanelSurfaceCommands(
   params: BuildPanelSurfaceModelParams,
 ): DiscoverPanelSurfaceCommands {
   const {
-    pageContext: { navigate },
+    pageContext: { navigate, actions },
     pageState: { handleCityChange, handleAreaSelect, handleFiltersChange, setPage },
     navigation: { setHoveredNavigationNodeKey, setFocusedClusterMemberAreaKeys },
+    journeySwitch: { handleSelectJourney },
     geography: { refetchRegionScopedGroups },
     agri: { refetchRegionalAreaGroups, refetchAgriGroupListings },
     results: { refetchGroupResults },
@@ -551,9 +642,12 @@ export function buildPanelSurfaceCommands(
   const onNavigationNodeHoverChange = setHoveredNavigationNodeKey;
   const onClusterFocusChange = setFocusedClusterMemberAreaKeys;
   const onSelectedListingPreviewChange = setSelectedListingPreview;
+  // Panel-facing name for the journey-switch controller's writer.
+  const selectJourney = handleSelectJourney;
 
 
   return {
+    pageContext: { actions },
     routing: { handleCityChange, navigate },
     geography: {
       handleAreaSelect,
@@ -561,16 +655,16 @@ export function buildPanelSurfaceCommands(
       setAreaSearchQuery,
       refetchRegionScopedGroups,
       armRegionSelect,
-      refetchRegionalAreaGroups,
     },
     results: { refetchGroupResults, setPage, handleBoundedSearch },
-    agri: { refetchAgriGroupListings },
+    agri: { refetchAgriGroupListings, refetchRegionalAreaGroups },
     filters: { handleFiltersChange, handleSearchChange },
     navigation: {
       onNavigationNodeHoverChange,
       onClusterFocusChange,
       journeyCommands,
       onSelectedListingPreviewChange,
+      selectJourney,
     },
     interaction: { clearSelectedMarkerListing, interactionCommands },
   };

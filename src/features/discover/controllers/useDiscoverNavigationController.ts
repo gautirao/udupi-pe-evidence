@@ -19,6 +19,17 @@ export interface UseDiscoverNavigationControllerParams {
 
 export interface UseDiscoverNavigationControllerResult {
   showAreasNavigationJourney: boolean;
+  /**
+   * Issue #2142 SOLID follow-up (commit 2) — the panel surface used to
+   * recompute this from `useDiscoverNav()` itself. It is NOT the same
+   * predicate as `showAreasNavigationJourney` above (which also covers the
+   * school-first node level, because BOTH journeys need the canonical
+   * hierarchy fetched) — it is the narrower "the canonical AREA-first panel
+   * is the one to mount" gate, and the two must stay distinct.
+   */
+  isAreaFirstJourneyActive: boolean;
+  /** Issue #2142 SOLID follow-up (commit 2) — likewise recomputed by the panel surface until now. */
+  isSchoolsNavNodeLevel: boolean;
   areasNavigationJourney: UseAreasNavigationJourneyResult;
   hoveredNavigationNodeKey: string | null;
   setHoveredNavigationNodeKey: Dispatch<SetStateAction<string | null>>;
@@ -62,7 +73,12 @@ export function useDiscoverNavigationController({
   // see DiscoverMapCanvas.tsx's own copy of this comment for why the
   // triplication is deliberate.
   const isSchoolsNavNodeLevel = nav.journey === 'school-first' && !nav.areaKey && !nav.schoolId;
-  const showAreasNavigationJourney = nav.journey === 'area-first' || isSchoolsNavNodeLevel;
+  // Issue #2142 SOLID follow-up (commit 2) — moved verbatim from
+  // DiscoverPanelSurface.tsx, which derived the identical expression off its
+  // own `useDiscoverNav()` read. Same input, same value; the surface now
+  // consumes it through the panel model instead of re-deriving it.
+  const isAreaFirstJourneyActive = nav.journey === 'area-first';
+  const showAreasNavigationJourney = isAreaFirstJourneyActive || isSchoolsNavNodeLevel;
 
   // Issue #1956 PR 2 (Slice 3, pass 4, AC3.9) — the ONE ephemeral hover/focus
   // node_key, threaded unchanged to BOTH the map's AreaDestinationMarkerLayer
@@ -139,6 +155,8 @@ export function useDiscoverNavigationController({
 
   return {
     showAreasNavigationJourney,
+    isAreaFirstJourneyActive,
+    isSchoolsNavNodeLevel,
     areasNavigationJourney,
     hoveredNavigationNodeKey,
     setHoveredNavigationNodeKey,

@@ -30,7 +30,16 @@ type DeepPartial<T> = { [K in keyof T]?: Partial<T[K]> };
 
 function makeParams(overrides: DeepPartial<BuildPanelSurfaceModelParams> = {}): BuildPanelSurfaceModelParams {
   const base: BuildPanelSurfaceModelParams = {
-    pageContext: { navigate: vi.fn(), isAuthenticated: false },
+    pageContext: {
+      navigate: vi.fn(),
+      isAuthenticated: false,
+      // Issue #2142 SOLID follow-up (commit 2) — the ambient values the panel
+      // renderers used to read off the context facade themselves.
+      nav: {} as BuildPanelSurfaceModelParams['pageContext']['nav'],
+      actions: {} as BuildPanelSurfaceModelParams['pageContext']['actions'],
+      isMobileShell: false,
+      mobileView: 'LIST',
+    },
     pageState: {
       city: 'bangalore',
       filters: {},
@@ -48,7 +57,10 @@ function makeParams(overrides: DeepPartial<BuildPanelSurfaceModelParams> = {}): 
       setHoveredNavigationNodeKey: vi.fn(),
       focusedClusterMemberAreaKeys: null,
       setFocusedClusterMemberAreaKeys: vi.fn(),
+      isAreaFirstJourneyActive: false,
+      isSchoolsNavNodeLevel: false,
     },
+    journeySwitch: { handleSelectJourney: vi.fn() },
     overviewNavigation: { activeAreasNavigationJourney: makeJourney() },
     areaGroups: { areaGroupsData: undefined, isLoadingAreaGroups: false, selectedGroupName: null },
     geography: {
@@ -182,6 +194,59 @@ describe('buildPanelSurfaceModel', () => {
     ).toBeUndefined();
   });
 
+  // ── Issue #2142 SOLID follow-up (commit 3) — the agri/regionGuide regrouping ──
+  // The five corridor fields + their refetch command are produced by
+  // useDiscoverAgriController and consumed only by the agri corridor panels;
+  // they used to be exposed under `geography` for no reason but adjacency in the
+  // deleted flat interface. Values are unchanged — only the group path is.
+  it('exposes the agri CORRIDOR fields under `agri`, not `geography`', () => {
+    const corridorGroups = [{ directionCode: 'N' }] as never;
+    const view = buildPanelSurfaceModel(
+      makeParams({
+        agri: {
+          corridorGroups,
+          isLoadingRegionalAreaGroups: true,
+          isRegionalAreaGroupsError: true,
+          selectedRegion: 'N',
+          selectedMaxKm: 25,
+        },
+      }),
+    );
+
+    expect(view.agri.corridorGroups).toBe(corridorGroups);
+    expect(view.agri.isLoadingRegionalAreaGroups).toBe(true);
+    expect(view.agri.isRegionalAreaGroupsError).toBe(true);
+    expect(view.agri.selectedRegion).toBe('N');
+    expect(view.agri.selectedMaxKm).toBe(25);
+
+    for (const field of [
+      'corridorGroups',
+      'isLoadingRegionalAreaGroups',
+      'isRegionalAreaGroupsError',
+      'selectedRegion',
+      'selectedMaxKm',
+    ]) {
+      expect(view.geography).not.toHaveProperty(field);
+    }
+  });
+
+  it('exposes the #1808 region-guidance signals under their own `regionGuide` group, not `geography`', () => {
+    const view = buildPanelSurfaceModel(
+      makeParams({
+        regionGuide: { regionGuideRingActive: true, regionSelectNonce: 7 },
+        mapLayer: { regionOverviewMarkerKind: 'zones' as never },
+      }),
+    );
+
+    expect(view.regionGuide.regionGuideRingActive).toBe(true);
+    expect(view.regionGuide.regionSelectNonce).toBe(7);
+    expect(view.regionGuide.regionOverviewMarkerKind).toBe('zones');
+
+    for (const field of ['regionGuideRingActive', 'regionSelectNonce', 'regionOverviewMarkerKind']) {
+      expect(view.geography).not.toHaveProperty(field);
+    }
+  });
+
   it('carries the #2124 selectNode interception through by using the ACTIVE journey, not a raw one', () => {
     const active = makeJourney();
     const view = buildPanelSurfaceModel(
@@ -199,6 +264,12 @@ describe('buildPanelSurfaceCommands', () => {
     expect(commands.geography.handleAreaSelect).toBe(params.pageState.handleAreaSelect);
     expect(commands.results.setPage).toBe(params.pageState.setPage);
     expect(commands.agri.refetchAgriGroupListings).toBe(params.agri.refetchAgriGroupListings);
+    // Issue #2142 SOLID follow-up (commit 3) — the corridor refetch follows its
+    // five view fields out of `geography` and into `agri`. `armRegionSelect`
+    // does NOT: it is a region-PICK writer and stays in `commands.geography`.
+    expect(commands.agri.refetchRegionalAreaGroups).toBe(params.agri.refetchRegionalAreaGroups);
+    expect(commands.geography).not.toHaveProperty('refetchRegionalAreaGroups');
+    expect(commands.geography.armRegionSelect).toBe(params.regionGuide.armRegionSelect);
     expect(commands.filters.handleFiltersChange).toBe(params.pageState.handleFiltersChange);
     expect(commands.interaction.clearSelectedMarkerListing).toBe(params.marker.clearSelectedMarkerListing);
   });
@@ -215,5 +286,50 @@ describe('buildPanelSurfaceCommands', () => {
     expect(commands.navigation.onSelectedListingPreviewChange).toBe(
       params.mobilePresentation.setSelectedListingPreview,
     );
+  });
+
+  // Issue #2142 SOLID follow-up (commit 2) — the JourneySwitcher writer is now
+  // a controller output threaded through this builder, not a closure the
+  // surface builds itself.
+  it('renames journeySwitch.handleSelectJourney onto the panel-facing `selectJourney`, by reference', () => {
+    const params = makeParams();
+    const commands = buildPanelSurfaceCommands(params);
+    expect(commands.navigation.selectJourney).toBe(params.journeySwitch.handleSelectJourney);
+  });
+
+  // Issue #2142 SOLID follow-up (commit 2, PLAN REVIEW correction 3) — the
+  // ambient page context is now carried by the contract, so the panel
+  // renderers can stop reaching into the Discover context facade.
+  it('carries the SAME nav/actions references through view.pageContext / commands.pageContext (no copy, no re-derivation)', () => {
+    const params = makeParams();
+    expect(buildPanelSurfaceModel(params).pageContext.nav).toBe(params.pageContext.nav);
+    expect(buildPanelSurfaceCommands(params).pageContext.actions).toBe(params.pageContext.actions);
+  });
+
+  it('carries the mobile shell slice through view.pageContext', () => {
+    const view = buildPanelSurfaceModel(
+      makeParams({ pageContext: { isMobileShell: true, mobileView: 'MAP' } }),
+    );
+    expect(view.pageContext.isMobileShell).toBe(true);
+    expect(view.pageContext.mobileView).toBe('MAP');
+  });
+});
+
+// Issue #2142 SOLID follow-up (commit 2) — the two journey predicates the panel
+// surface used to recompute from `useDiscoverNav()`; they now reach it through
+// the navigation controller, unchanged in value.
+describe('buildPanelSurfaceModel — journey predicates', () => {
+  it('carries the navigation controller\'s isAreaFirstJourneyActive/isSchoolsNavNodeLevel into view.navigation', () => {
+    const view = buildPanelSurfaceModel(
+      makeParams({ navigation: { isAreaFirstJourneyActive: true, isSchoolsNavNodeLevel: false } }),
+    );
+    expect(view.navigation.isAreaFirstJourneyActive).toBe(true);
+    expect(view.navigation.isSchoolsNavNodeLevel).toBe(false);
+
+    const schoolsView = buildPanelSurfaceModel(
+      makeParams({ navigation: { isAreaFirstJourneyActive: false, isSchoolsNavNodeLevel: true } }),
+    );
+    expect(schoolsView.navigation.isAreaFirstJourneyActive).toBe(false);
+    expect(schoolsView.navigation.isSchoolsNavNodeLevel).toBe(true);
   });
 });
