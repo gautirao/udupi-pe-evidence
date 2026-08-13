@@ -51,15 +51,34 @@
  *     (`SchoolMarkerFocusPanner`, PropertyMap.tsx) on load and overwrites any
  *     lat/lon/zoom URL hint — REPRO_URL deliberately omits lat/lon/zoom.
  *
- * MARKER CLICK MECHANISM — live-verified necessary, not a style choice:
- * neither `locator.click()` nor a real synthetic `page.mouse` move/down/up at
- * the marker's own bounding-box centre reliably reaches this marker's click
- * handling on this live data (confirmed directly with a standalone repro
- * script against this exact URL: both resolved without throwing yet the
- * preview sheet never mounted). `locator.dispatchEvent('click')` — a real
- * 'click' DOM event dispatched straight at the marker element, run through
- * the exact same listener chain a genuine tap ultimately triggers — DID
- * reliably open the sheet in the same repro. Used throughout below.
+ * MARKER CLICK MECHANISM:
+ * Desktop's `clickAnyMarker` still uses `locator.dispatchEvent('click')` — a
+ * real 'click' DOM event dispatched straight at the marker element, run
+ * through the exact same listener chain a genuine click ultimately triggers
+ * (live-verified necessary there: neither `locator.click()` nor a synthetic
+ * `page.mouse` move/down/up at the marker's own bounding-box centre reliably
+ * reached the click handler on desktop's data/layout).
+ *
+ * The two mobile tests below instead use `tapMarkerViaTouchscreen`, a real
+ * `page.touchscreen.tap(x, y)` — a genuine touch action that goes through
+ * actual browser hit-testing/actionability, added per PR #2150 review
+ * (the committed evidence's prior mobile use of `dispatchEvent` bypassed
+ * hit-testing and didn't actually exercise a real tap). Live-verified
+ * (2026-08-13, this exact repro URL, real local backend at :8085 against the
+ * shared hosted Supabase DB, 2 consecutive full runs): a real
+ * `page.touchscreen.tap()` at a marker's live-measured bounding-box centre
+ * DOES reliably reach the school-first marker click handler on this data —
+ * both runs passed all 3 tests first-try (~2s per mobile test, no retries
+ * needed). The earlier "neither click() nor mouse reliably reaches the
+ * handler" finding was specific to a different, now-superseded mobile
+ * mechanism explored during the original fix — it does not hold for
+ * `touchscreen.tap`. `tapMarkerViaTouchscreen` still defends against
+ * flakiness from live, re-clustering data: it re-reads the marker set and
+ * re-measures the bounding box on every attempt, and — before tapping —
+ * asserts via `document.elementFromPoint(x, y)` that the tap point actually
+ * resolves to the intended marker element (or a descendant of it), retrying
+ * with a freshly re-acquired marker/coordinates rather than ever falling
+ * back to a synthetic dispatch if that check fails.
  *
  * MARKER "SELECTED" STATE — not asserted here, deliberately: the copper
  * `data-selected="true"` marker highlight (`PropertyMap.tsx`
@@ -130,6 +149,12 @@ async function visibleMarkerListingIds(page: Page): Promise<string[]> {
  *
  * See module doc "MARKER CLICK MECHANISM" for why `dispatchEvent('click')`
  * is used instead of `locator.click()` / `page.mouse`.
+ *
+ * DESKTOP-ONLY as of the #2149 PR-review fix-up below: the mobile tests now
+ * use `tapMarkerViaTouchscreen`, a real `page.touchscreen.tap()` that passes
+ * genuine browser hit-testing, so this dispatchEvent path only remains for
+ * the desktop regression test (unflagged by review — desktop never had a
+ * hit-testing problem, only school-first mobile did).
  */
 async function clickAnyMarker(page: Page, exclude: string[] = []): Promise<string> {
   let lastError: unknown;
@@ -150,6 +175,77 @@ async function clickAnyMarker(page: Page, exclude: string[] = []): Promise<strin
     }
   }
   throw lastError instanceof Error ? lastError : new Error('clickAnyMarker: exhausted retries');
+}
+
+/**
+ * Taps a currently-present marker with a real `page.touchscreen.tap(x, y)` —
+ * a genuine touch action that goes through actual browser hit-testing, not a
+ * synthesized DOM event. Re-reads the live marker set and re-measures its
+ * bounding box on every attempt (real map data can re-cluster/move a marker
+ * between when it was first seen and when this runs), and — per PR review —
+ * verifies with `document.elementFromPoint(x, y)` that the tap point
+ * actually resolves to the intended marker element (or a descendant of it)
+ * BEFORE tapping, so a stale/wrong bounding box is caught deterministically
+ * instead of silently mis-tapping. If the point resolves to something else
+ * (stale box, re-clustering, an overlay on top of the pin), this reacquires
+ * a currently-visible marker and retries — it never falls back to a
+ * synthetic dispatch.
+ */
+async function tapMarkerViaTouchscreen(page: Page, exclude: string[] = []): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const currentIds = await visibleMarkerListingIds(page);
+    const id = currentIds.find((candidate) => !exclude.includes(candidate));
+    if (!id) {
+      lastError = new Error(`No marker available among [${currentIds.join(', ')}] excluding [${exclude.join(', ')}]`);
+      await page.waitForTimeout(300);
+      continue;
+    }
+
+    const marker = markerLocatorFor(page, id);
+    const box = await marker.boundingBox().catch(() => null);
+    if (!box) {
+      lastError = new Error(`Marker ${id} has no bounding box (not attached/visible)`);
+      await page.waitForTimeout(300);
+      continue;
+    }
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+
+    const markerHandle = await marker.elementHandle().catch(() => null);
+    if (!markerHandle) {
+      lastError = new Error(`Marker ${id} elementHandle not resolvable`);
+      await page.waitForTimeout(300);
+      continue;
+    }
+
+    const hitsIntendedMarker = await page.evaluate(
+      ({ px, py, markerEl }) => {
+        const hit = document.elementFromPoint(px, py);
+        if (!hit) return false;
+        return hit === markerEl || markerEl.contains(hit);
+      },
+      { px: x, py: y, markerEl: markerHandle },
+    );
+    await markerHandle.dispose();
+
+    if (!hitsIntendedMarker) {
+      lastError = new Error(
+        `elementFromPoint(${x}, ${y}) did not resolve to marker ${id} or a descendant — stale box, re-clustering, or an overlay on top of the pin`,
+      );
+      await page.waitForTimeout(300);
+      continue;
+    }
+
+    try {
+      await page.touchscreen.tap(x, y);
+      return id;
+    } catch (err) {
+      lastError = err;
+      await page.waitForTimeout(300);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('tapMarkerViaTouchscreen: exhausted retries');
 }
 
 /**
@@ -241,8 +337,8 @@ test.describe('@integration-ui #2149 — mobile school-first marker tap opens th
     await setUpMapWithMarkers(page);
 
     const sheet = page.getByTestId('mobile-listing-preview-sheet');
-    const idA = await clickAnyMarker(page);
-    await expect(sheet, '#2149: the info sheet must open on a school-first marker tap').toBeVisible({
+    const idA = await tapMarkerViaTouchscreen(page);
+    await expect(sheet, '#2149: the info sheet must open on a real touchscreen.tap on a school-first marker').toBeVisible({
       timeout: 10_000,
     });
     const identityA = await sheetIdentityText(page);
@@ -280,13 +376,13 @@ test.describe('@integration-ui #2149 — mobile school-first marker tap opens th
     const ids = await setUpMapWithMarkers(page);
 
     const sheet = page.getByTestId('mobile-listing-preview-sheet');
-    const idA = await clickAnyMarker(page);
+    const idA = await tapMarkerViaTouchscreen(page);
     await expect(sheet, 'precondition: marker A must open the sheet').toBeVisible({ timeout: 10_000 });
     const identityA = await sheetIdentityText(page);
 
     await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
 
-    const idB = await clickAnyMarker(page, [idA]);
+    const idB = await tapMarkerViaTouchscreen(page, [idA]);
     expect(idB, 'sanity: the second tap must have hit a different marker than the first').not.toBe(idA);
     expect(ids.length).toBeGreaterThanOrEqual(2);
 
@@ -299,6 +395,17 @@ test.describe('@integration-ui #2149 — mobile school-first marker tap opens th
         timeout: 10_000,
       })
       .not.toBe(identityA);
+
+    // PR-review AC4: the swap must not have perturbed the school-first URL
+    // contract, and the mobile sheet must remain the sole mobile info
+    // surface (no desktop popover rendering alongside it).
+    const afterB = schoolAndRadiusParams(page);
+    expect(afterB.schoolId, 'schoolId must be unchanged after the marker-B tap').toBe(SCHOOL_ID);
+    expect(afterB.radiusKm, 'radiusKm must be unchanged after the marker-B tap').toBe(RADIUS_KM);
+    await expect(
+      page.getByTestId('marker-popover-card'),
+      'the desktop popover must never render alongside the mobile sheet',
+    ).toHaveCount(0);
   });
 });
 
