@@ -405,6 +405,7 @@ export function DiscoverAreasJourneyPanel({
         <HierarchyBackButton
           node={journey.node}
           buildHref={buildNodeHref}
+          cityLabel={cityLabel ?? 'the city'}
           historyAdjacencyLog={journey.historyAdjacencyLog}
           className="mb-3"
         />
@@ -544,6 +545,7 @@ export function DiscoverAreasJourneyPanel({
         <HierarchyBackButton
           node={journey.node}
           buildHref={buildNodeHref}
+          cityLabel={cityLabel ?? 'the city'}
           historyAdjacencyLog={journey.historyAdjacencyLog}
           className="mb-3"
         />
@@ -565,6 +567,7 @@ export function DiscoverAreasJourneyPanel({
       <HierarchyBackButton
         node={journey.node}
         buildHref={buildNodeHref}
+        cityLabel={cityLabel ?? 'the city'}
         historyAdjacencyLog={journey.historyAdjacencyLog}
         className="mb-3"
       />
@@ -854,6 +857,7 @@ function AreaLeafListingsSurface({
         <HierarchyBackButton
           node={node}
           buildHref={buildNodeHref}
+          cityLabel={CITY_CONFIG[nav.city]?.label ?? nav.city}
           historyAdjacencyLog={historyAdjacencyLog}
           className="mb-3"
         />
@@ -992,6 +996,7 @@ function AreaLeafListingsSurface({
       <HierarchyBackButton
         node={node}
         buildHref={buildNodeHref}
+        cityLabel={CITY_CONFIG[nav.city]?.label ?? nav.city}
         historyAdjacencyLog={historyAdjacencyLog}
         className="mb-3 shrink-0"
       />

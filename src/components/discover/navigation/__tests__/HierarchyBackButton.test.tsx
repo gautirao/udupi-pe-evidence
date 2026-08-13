@@ -63,10 +63,14 @@ function makeNode(overrides: Partial<NavigationNodeResponse>): NavigationNodeRes
   };
 }
 
-const renderBack = (node: NavigationNodeResponse | null, buildHref = vi.fn((k: string) => `?node=${k}`)) =>
+const renderBack = (
+  node: NavigationNodeResponse | null,
+  buildHref = vi.fn((k: string) => `?node=${k}`),
+  cityLabel = 'Bangalore',
+) =>
   render(
     <MemoryRouter>
-      <HierarchyBackButton node={node} buildHref={buildHref} historyAdjacencyLog={[]} />
+      <HierarchyBackButton node={node} buildHref={buildHref} cityLabel={cityLabel} historyAdjacencyLog={[]} />
     </MemoryRouter>,
   );
 
@@ -99,6 +103,24 @@ describe('HierarchyBackButton', () => {
     expect(link).toHaveAttribute('href', '/?node=d:north');
     expect(link).toHaveTextContent('North Bangalore');
     expect(link).toHaveAttribute('aria-label', 'Back to North Bangalore');
+  });
+
+  it('bug fix — a top-level Direction with EMPTY ancestry (live server shape for d:central) renders "Back to <city>", not nothing', () => {
+    // Pre-#2147 regression, verified pre-existing on main: a top-level
+    // Direction (depth 0, `ancestry: []` on the wire) used to be
+    // indistinguishable from the true city root under the old
+    // `ancestry.length === 0` guard, so this control silently vanished.
+    const buildHref = vi.fn((k: string) => `?node=${k}`);
+    renderBack(
+      makeNode({ nodeKey: 'd:central', nodeType: 'DIRECTION', displayLabel: 'Central Bangalore', ancestry: [] }),
+      buildHref,
+      'Bangalore',
+    );
+    expect(buildHref).toHaveBeenCalledWith('root');
+    const link = screen.getByTestId('areas-hierarchy-back');
+    expect(link).toHaveAttribute('href', '/?node=root');
+    expect(link).toHaveTextContent('Back to Bangalore');
+    expect(link).toHaveAttribute('aria-label', 'Back to Bangalore');
   });
 
   it('uses a single-level ancestor for a Direction node (parent is the city root)', () => {
@@ -298,6 +320,7 @@ interface HarnessProps {
    * the pre-cycle-3 tests below (which never force a remount) are unaffected.
    */
   backButtonKey?: string;
+  cityLabel?: string;
 }
 
 /**
@@ -311,7 +334,7 @@ interface HarnessProps {
  * `window.history.state.idx` (fix-verify cycle 4), which tests drive
  * explicitly alongside each simulated `navigate()` call — see the module doc.
  */
-function Harness({ node, buildHref, navigateRef, backButtonKey = 'stable' }: HarnessProps) {
+function Harness({ node, buildHref, navigateRef, backButtonKey = 'stable', cityLabel = 'Bangalore' }: HarnessProps) {
   const navigate = useNavigate();
   navigateRef.current = navigate;
   const historyAdjacencyLog = useHierarchyBackAdjacencyLog(node);
@@ -322,7 +345,13 @@ function Harness({ node, buildHref, navigateRef, backButtonKey = 'stable' }: Har
           MAX_ADJACENCY_LOG_LENGTH holds across a full journey, without
           reaching into Harness's internal ref. */}
       <div data-testid="adjacency-log-length">{historyAdjacencyLog.length}</div>
-      <HierarchyBackButton key={backButtonKey} node={node} buildHref={buildHref} historyAdjacencyLog={historyAdjacencyLog} />
+      <HierarchyBackButton
+        key={backButtonKey}
+        node={node}
+        buildHref={buildHref}
+        cityLabel={cityLabel}
+        historyAdjacencyLog={historyAdjacencyLog}
+      />
     </>
   );
 }
@@ -737,7 +766,7 @@ describe('guarded conditional POP — component wiring (hierarchy_back_guarded_p
 });
 
 describe('AC14 — two-hop Back through the Local Destination level (real ancestry shape), and MAX_ADJACENCY_LOG_LENGTH over the journey', () => {
-  it('starting AT the Local Destination (CLUSTER) level, two consecutive Back presses land on the GROUP (Direction); at the Direction (empty ancestry) no further Back control exists, and the log never exceeds MAX_ADJACENCY_LOG_LENGTH', () => {
+  it('starting AT the Local Destination (CLUSTER) level, two consecutive Back presses land on the GROUP (Direction); the Direction (empty ancestry) now itself renders a Back control to the city root, and the log never exceeds MAX_ADJACENCY_LOG_LENGTH', () => {
     // Fix-verify cycle: the server never synthesizes a "root"/ROOT ancestry
     // entry (no NavigationNode row backs the city key), so the real ancestry
     // shapes are: DIRECTION -> [] (empty — it IS the top of the real chain),
@@ -777,12 +806,11 @@ describe('AC14 — two-hop Back through the Local Destination level (real ancest
         <Harness node={groupNode} buildHref={buildHref} navigateRef={navigateRef} />
       </MemoryRouter>,
     );
-    // Pre-existing #1956 behaviour, pinned here for the real journey's own
-    // starting node: a DIRECTION with EMPTY ancestry renders NO Back control
-    // (HierarchyBackButton.tsx:112-116 returns null on empty ancestry; the
-    // generator emits DIRECTION nodes with `ancestorKeys = List.of()`). This
-    // is NOT a #2086 regression.
-    expect(screen.queryByTestId('areas-hierarchy-back')).not.toBeInTheDocument();
+    // Bug fix (pre-existing on main, not a #2147 regression): a top-level
+    // DIRECTION with EMPTY ancestry is NOT the city root — it now renders a
+    // Back control pointing at the synthetic root, via
+    // `resolveHierarchyBackDestination`'s DIRECTION fallback.
+    expect(screen.getByTestId('areas-hierarchy-back')).toHaveAttribute('href', '/discover?node=root');
 
     act(() => {
       navigateRef.current?.('/discover?node=c:north-cluster');
@@ -839,9 +867,13 @@ describe('AC14 — two-hop Back through the Local Destination level (real ancest
       </MemoryRouter>,
     );
 
-    // At the Direction level the real journey ends: no third hop exists in
-    // production (no fabricated Direction -> City Back control) — the Back
-    // control is absent here too, exactly as it was on cold mount above.
-    expect(screen.queryByTestId('areas-hierarchy-back')).not.toBeInTheDocument();
+    // Back #3 (from the Direction): Direction -> synthetic city root — the
+    // hop this bug fix restores. `resolveHierarchyBackDestination` supplies
+    // this destination purely from `nodeType`/`ROOT_NODE_KEY`; no ancestry is
+    // fabricated or mutated to produce it.
+    expect(screen.getByTestId('areas-hierarchy-back')).toHaveAttribute('href', '/discover?node=root');
+    expect(Number(screen.getByTestId('adjacency-log-length').textContent)).toBeLessThanOrEqual(
+      MAX_ADJACENCY_LOG_LENGTH,
+    );
   });
 });

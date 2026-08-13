@@ -146,6 +146,7 @@ export function SchoolsNavigationJourneyPanel({
         <HierarchyBackButton
           node={journey.node}
           buildHref={buildNodeHref}
+          cityLabel={cityLabel || 'this city'}
           historyAdjacencyLog={journey.historyAdjacencyLog}
           className="mb-3"
         />
@@ -215,6 +216,7 @@ export function SchoolsNavigationJourneyPanel({
         <HierarchyBackButton
           node={journey.node}
           buildHref={buildNodeHref}
+          cityLabel={cityLabel || 'this city'}
           historyAdjacencyLog={journey.historyAdjacencyLog}
           className="mb-4"
         />
