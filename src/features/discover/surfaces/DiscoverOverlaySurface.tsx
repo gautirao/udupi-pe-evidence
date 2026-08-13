@@ -5,7 +5,7 @@ import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import type {
   DiscoverOverlaySurfaceView,
   DiscoverOverlaySurfaceCommands,
-} from './buildOverlaySurfaceView';
+} from './buildOverlaySurfaceModel';
 
 export interface DiscoverOverlaySurfaceProps {
   view: DiscoverOverlaySurfaceView;
@@ -16,7 +16,7 @@ export interface DiscoverOverlaySurfaceProps {
  * Issue #2142 Commit 4 — absorbs DiscoverOverlaySheets' outer chrome
  * (NearSchoolSheet + DiscoverConsentBanner + DiscoverPrivacyToggle), rendered
  * at the SAME top-level-sibling position as today, after the map+panel row.
- * See buildOverlaySurfaceView.ts's doc comment for why MobileClusterSheet,
+ * See buildOverlaySurfaceModel.ts's doc comment for why MobileClusterSheet,
  * MobileListingPreviewSheet, and the recenter portal live in DiscoverMapSurface
  * instead (DOM/stacking-context coupling, not this surface).
  */

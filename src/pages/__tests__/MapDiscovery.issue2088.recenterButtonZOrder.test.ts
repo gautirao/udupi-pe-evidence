@@ -44,7 +44,7 @@ import { dirname, resolve } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Issue #2142 Commit 4 — the recenter button's JSX moved from MapDiscovery.tsx
 // into DiscoverMapSurface.tsx (DiscoverMapMount's true-rename target), which
-// now owns it directly (see buildMapSurfaceView.ts's doc comment). Repointed
+// now owns it directly (see buildMapSurfaceModel.ts's doc comment). Repointed
 // here; the assertions/behaviour this file checks are unchanged.
 const MAP_DISCOVERY_PATH = resolve(
   __dirname,

@@ -25,12 +25,12 @@ import { useDiscoverOverviewNavigationController } from '@/features/discover/con
 import { useDiscoverMarkerPopoverController } from '@/features/discover/controllers/useDiscoverMarkerPopoverController';
 import { useDiscoverMobilePresentationController } from '@/features/discover/controllers/useDiscoverMobilePresentationController';
 import { useDiscoverDebugBridge } from '@/features/discover/controllers/useDiscoverDebugBridge';
-import { buildMapSurfaceView, buildMapSurfaceCommands } from '@/features/discover/surfaces/buildMapSurfaceView';
-import { buildPanelSurfaceView, buildPanelSurfaceCommands } from '@/features/discover/surfaces/buildPanelSurfaceView';
-import { buildOverlaySurfaceView, buildOverlaySurfaceCommands } from '@/features/discover/surfaces/buildOverlaySurfaceView';
-import type { DiscoverMapSurfaceView, DiscoverMapSurfaceCommands } from '@/features/discover/surfaces/buildMapSurfaceView';
-import type { DiscoverPanelSurfaceView, DiscoverPanelSurfaceCommands } from '@/features/discover/surfaces/buildPanelSurfaceView';
-import type { DiscoverOverlaySurfaceView, DiscoverOverlaySurfaceCommands } from '@/features/discover/surfaces/buildOverlaySurfaceView';
+import { buildMapSurfaceModel, buildMapSurfaceCommands } from '@/features/discover/surfaces/buildMapSurfaceModel';
+import { buildPanelSurfaceModel, buildPanelSurfaceCommands } from '@/features/discover/surfaces/buildPanelSurfaceModel';
+import { buildOverlaySurfaceModel, buildOverlaySurfaceCommands } from '@/features/discover/surfaces/buildOverlaySurfaceModel';
+import type { DiscoverMapSurfaceView, DiscoverMapSurfaceCommands } from '@/features/discover/surfaces/buildMapSurfaceModel';
+import type { DiscoverPanelSurfaceView, DiscoverPanelSurfaceCommands } from '@/features/discover/surfaces/buildPanelSurfaceModel';
+import type { DiscoverOverlaySurfaceView, DiscoverOverlaySurfaceCommands } from '@/features/discover/surfaces/buildOverlaySurfaceModel';
 /**
  * Issue #2142 (correction pass) — THE DISCOVER PAGE'S COMPOSITION HOOK.
  *
@@ -75,6 +75,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   // container ref, and the four page-global pure-URL derivations
   // (panelContent, intentListingPurpose, isAgriJourney, urlDiscoverFilters)
   // moved verbatim into controllers/useDiscoverPageContext.ts.
+  const pageContextController = useDiscoverPageContext();
   const {
     navigate,
     authLoading,
@@ -94,7 +95,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     intentListingPurpose,
     isAgriJourney,
     urlDiscoverFilters,
-  } = useDiscoverPageContext();
+  } = pageContextController;
 
   // Issue #1956 PR 6 (final cutover, RULED A1 MINIMAL, restored by the
   // [rulings.oq_a_v2] rework after the superseded Option A guard) — the ONE
@@ -122,7 +123,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   // nodeAreaPoint/isNodeAreaLeafActive below and useDiscoverMapData's nodeKey
   // param further down, both of which also need to resolve early.
   // Issue #2142 Commit 5 (team-lead ruling) — kept as ONE object (not
-  // destructured away) so buildMapSurfaceView/buildPanelSurfaceView can
+  // destructured away) so buildMapSurfaceModel/buildPanelSurfaceModel can
   // accept this controller's own result object directly instead of ~6
   // individually flat-named fields; individual fields are still destructured
   // below for this file's own internal use (unchanged from before).
@@ -134,10 +135,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   const {
     showAreasNavigationJourney,
     areasNavigationJourney,
-    hoveredNavigationNodeKey,
-    setHoveredNavigationNodeKey,
-    focusedClusterMemberAreaKeys,
-    setFocusedClusterMemberAreaKeys,
     nodeAreaPoint,
     isNodeAreaLeafActive,
   } = navigationController;
@@ -184,7 +181,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     focusedGroup,
     focusedGroupAreas,
     groupAreaKeysForMapData,
-    selectedGroupName,
   } = areaGroupsController;
 
   // Issue #2142 Commit 3 (C6) — corridorGroups + selectedCorridorData/
@@ -203,17 +199,9 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   const {
     corridorGroups,
     isLoadingRegionalAreaGroups,
-    isRegionalAreaGroupsError,
-    refetchRegionalAreaGroups,
     selectedRegion,
     selectedMaxKm,
     agriMapListingsData,
-    isLoadingAgriGroupListings,
-    isAgriGroupListingsError,
-    refetchAgriGroupListings,
-    agriGroupLabel,
-    selectedGroupListingItem,
-    filteredAgriListings,
   } = agriController;
 
   // Issue #1597 — group-results state: server-filtered listings + markers across all
@@ -235,15 +223,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   // position as before, before useDiscoverPageState/`city` resolves) since
   // panelContent (used by isGroupResultsState) and areaGroupsData are both
   // already available, and urlDiscoverFilters has no dependency on `city`.
-  const {
-    isGroupResultsState,
-    groupResultsListings,
-    groupResultsTotalElements,
-    isLoadingGroupResults,
-    isGroupResultsError,
-    refetchGroupResults,
-    groupResultsMarkers,
-  } = useDiscoverResultsController({
+  const resultsController = useDiscoverResultsController({
     panelContent,
     city: nav.city,
     groupId: nav.groupId,
@@ -252,6 +232,10 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     urlDiscoverFilters,
     isAuthenticated,
   });
+  const {
+    isGroupResultsState,
+    groupResultsMarkers,
+  } = resultsController;
 
   // Issue #2142 (correction pass) — the issue #2089 bounded-Browse
   // (node + nodeListings=1) node-scoped marker block, together with the
@@ -270,9 +254,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     isAuthenticated,
   });
   const {
-    searchQuery,
     debouncedSearch,
-    handleSearchChange,
     isNodeListingsState,
     nodeListingsMarkers,
   } = boundedBrowseController;
@@ -282,7 +264,8 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
 
   // Issue #2142 (correction pass) — the NearSchoolSheet's open state moved into
   // controllers/useNearSchoolSheetState.ts.
-  const { nearSchoolOpen, setNearSchoolOpen } = useNearSchoolSheetState();
+  const nearSchoolSheetState = useNearSchoolSheetState();
+  const { nearSchoolOpen, setNearSchoolOpen } = nearSchoolSheetState;
 
   // Issue #2142 Commit 3 (C7) — the EARLY marker-selection cluster
   // (selectedMarkerListing, markerPixelPos, handleSelectMarkerListing/
@@ -303,7 +286,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   const {
     selectedMarkerListing,
     showMarkerInList,
-    clearSelectedMarkerListing,
   } = markerController;
 
   // Issue #2142 (correction pass) — resolvedPanelContent (issue #1374's
@@ -327,8 +309,8 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   // journey hook's commands (injected setter) — only this controller call is here.
   //
   // Issue #2142 Commit 3 — moved into controllers/useBoundedSearchTrigger.ts verbatim.
-  const { boundedSearchTriggered, setBoundedSearchTriggered, handleBoundedSearch } =
-    useBoundedSearchTrigger();
+  const boundedSearchController = useBoundedSearchTrigger();
+  const { boundedSearchTriggered, setBoundedSearchTriggered } = boundedSearchController;
 
   // Issue #2142 Commit 3 (C4) — useDiscoverInteractionState/useAreaSearchState/
   // useRegionGuideState/useReducedMotion (all self-contained, no-arg) +
@@ -364,6 +346,13 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   // SOLE producer of the bridge and deliberately does not re-expose the
   // confusable raw `selectedArea` name at all — see its file header for the
   // (four-times-recurring) bug class this closes.
+  const pageStateController = useDiscoverPageStateController({
+    urlState: { ...nav, viewport } satisfies DiscoverUrlState,
+    urlActions: actions,
+    nodeAreaPoint,
+    panelContent,
+    selectedMarkerListing,
+  });
   const {
     filters, legacySelectedArea, panToArea, mapZoom, mapReady, showLoader,
     selectedSchool, schoolBoardFilter, city, fitTick, resetMapTick,
@@ -373,15 +362,9 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     handleCityChange, handleSchoolSelect, handleFiltersChange,
     handlePolygonDrawn, handlePolygonCleared,
     handleAreaClick, handleAreaSelect, handleAreaBack,
-    page, setPage,
+    page,
     effectiveSelectedArea, isCityValid, resolvedPanelContent,
-  } = useDiscoverPageStateController({
-    urlState: { ...nav, viewport } satisfies DiscoverUrlState,
-    urlActions: actions,
-    nodeAreaPoint,
-    panelContent,
-    selectedMarkerListing,
-  });
+  } = pageStateController;
 
   // Issue #2142 Commit 3 — controllers/useDiscoverViewportTracker.ts, called here
   // (right after `city` becomes available) rather than at its pre-refactor position
@@ -400,17 +383,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   // see the controller's own file-header comment for why) or
   // useRegionalAreaGroups/corridorGroups (documented deviation ->
   // useDiscoverAgriController, second batch).
-  const {
-    areaMarkerCounts,
-    handleAreaMarkersComputed,
-    summaryRegions,
-    scopeNamespaces,
-    regionScopedGroupsData,
-    isLoadingRegionScopedGroups,
-    isRegionScopedGroupsError,
-    refetchRegionScopedGroups,
-    discoverAreasForPanel,
-  } = useDiscoverGeographyController({
+  const geographyController = useDiscoverGeographyController({
     city,
     isCityValid,
     navCity: nav.city || DEFAULT_CITY,
@@ -418,6 +391,13 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     intentListingPurpose,
     areaGroupsData,
   });
+  const {
+    handleAreaMarkersComputed,
+    summaryRegions,
+    scopeNamespaces,
+    regionScopedGroupsData,
+    isLoadingRegionScopedGroups,
+  } = geographyController;
 
   // Issue #1824 Slice S6 — composedResetMapTick + handleStartOver now live in
   // useDiscoverJourneyTransitions; see journeyView/journeyCommands below (declared
@@ -466,9 +446,8 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     schoolRadiusListings, schoolRadiusListingsLoading, schoolRadiusHasMore,
     activeFocusBounds, trendsAreaKeys,
     cityCenter, cityZoom, schoolById, schoolByIdError, error,
-    totalElements, totalPages,
     markersTruncated, markersReturnedElements, markersTotalFilteredElements,
-    agriAreasData, isLoadingAgriAreas,
+    agriAreasData,
     cameraIntent, publishCameraIntent, publishClusterCameraIntent,
     // Issue #1762 — splittable LISTING-cluster tap camera producer (distinct
     // from publishClusterCameraIntent, which is area clusters only).
@@ -590,10 +569,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     focusedGroup,
   });
   const {
-    schoolsQuery,
-    schools,
     handleBoardFilterChange,
-    handleAreaFirstBack,
     journeyView,
     journeyCommands,
     schoolListings,
@@ -647,7 +623,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   });
   const {
     isLandingState,
-    trendsHref,
     showSchoolMarkers,
     showSchoolBreadcrumb,
     schoolRadiusOverlay,
@@ -673,7 +648,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     trendsAreaKeys,
     isFetching,
   });
-  const { activeContextChips, filtersContent } = filterChromeController;
 
   // Issue #2142 (correction pass) — the Start-Over a11y focus effect (#1817 AC8)
   // moved into controllers/useDiscoverSchoolController.ts, immediately after the
@@ -778,10 +752,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   // cityTotal/isAgriJourney, all only resolved by this point).
   const interactionController = useDiscoverInteractionController();
   const {
-    highlightedAreaKeys,
-    interactionCommands,
     debouncedAreaSearchQuery,
-    setAreaSearchQuery,
   } = interactionController;
 
   const cameraController = useDiscoverCameraController({
@@ -848,17 +819,13 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   const {
     mapLayerKind,
     mapLayerCategory,
-    cityHasNoListings,
     isTopGroupedAgri,
     isRegionOverview,
-    regionOverviewMarkerKind,
   } = mapLayerController;
 
   const regionGuideController = useDiscoverRegionGuideController({ isRegionOverview });
   const {
-    regionSelectNonce,
     armRegionSelect,
-    prefersReducedMotion,
     regionGuideVisible,
     regionGuideRingActive,
   } = regionGuideController;
@@ -934,7 +901,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   });
   const {
     selectedListingPreview,
-    setSelectedListingPreview,
     mobileMapTriggerRef,
     isPreviewSheetOpen,
   } = mobilePresentationController;
@@ -979,13 +945,13 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   // surface-only additions (mobileMapOpen, activeAreasNavigationJourney,
   // navJourney, isPreviewSheetOpen, selectedListingPreview, mapReady,
   // isSelectedNodeOutOfView) and the 3 command-only handlers the overlays
-  // group needs. Passed to BOTH buildMapSurfaceView and
+  // group needs. Passed to BOTH buildMapSurfaceModel and
   // buildMapSurfaceCommands — each Picks only the fields it needs.
   // Issue #2142 Commit 5 (team-lead ruling) — nests the controllers' OWN
   // result objects (or small Picked subsets) instead of re-listing every
   // one of their fields individually; only genuinely page-local fields
   // (state this page owns directly, or derived consts with no controller
-  // source) stay flat. buildMapSurfaceView/buildMapSurfaceCommands
+  // source) stay flat. buildMapSurfaceModel/buildMapSurfaceCommands
   // destructure the needed fields back out — same OUTPUT view/commands
   // shape as before, only the INPUT shape changed.
   const mapProps = {
@@ -1076,106 +1042,38 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     viewportTrackerController,
     markerController,
   };
-  const mapView = buildMapSurfaceView(mapProps);
+  const mapView = buildMapSurfaceModel(mapProps);
   const mapCommands = buildMapSurfaceCommands(mapProps);
 
-  // Issue #2142 Commit 4 — one flat object matching
-  // DiscoverRightPanelContainerProps (every field DiscoverRightPanelContainer's
-  // JSX passed straight through), passed to both buildPanelSurfaceView and
-  // buildPanelSurfaceCommands.
+  // Issue #2142 (correction pass) — the panel surface's input is now the
+  // CONTROLLERS' OWN result objects, not a 67-field flat literal transcribed
+  // here and immediately re-grouped by the builders. Renames and derivations
+  // (effectiveSelectedArea -> selectedArea, regionScopedGroupsData?.groups ->
+  // regionScopedGroups, the three lifted-state setters -> their on* callback
+  // names) are the BUILDER's job, so this stays reference-passing only.
   const panelProps = {
-    resolvedPanelContent,
-    areasNavigationJourney: activeAreasNavigationJourney,
-    hoveredNavigationNodeKey,
-    onNavigationNodeHoverChange: setHoveredNavigationNodeKey,
-    focusedClusterMemberAreaKeys,
-    onClusterFocusChange: setFocusedClusterMemberAreaKeys,
-    onSelectedListingPreviewChange: setSelectedListingPreview,
-    selectedMarkerListing,
-    clearSelectedMarkerListing,
-    city,
-    activeContextChips,
-    discoverAreas,
-    // Issue #1956 PR-4 — harmless-but-consistent bridge: the legacy
-    // DiscoverRightPanel branch this prop feeds is UNREACHABLE while
-    // the canonical Areas journey is mounted (see
-    // DiscoverPanelSurface's showAreasNavigationJourney
-    // early-return, [scope.must_not_change]), so this has no visible
-    // effect today — kept in sync with every other selectedArea
-    // consumer on this page rather than silently left stale.
-    selectedArea: effectiveSelectedArea,
-    areaListings,
-    isLoadingAreaListings,
-    isAuthenticated,
-    handleAreaSelect,
-    areaResultSummaryText,
-    journeyView,
-    handleAreaFirstBack,
-    journeyCommands,
-    areasLoading,
-    agriAreasData,
-    isLoadingAgriAreas,
-    areaGroupsData,
-    isLoadingAreaGroups,
-    regionScopedGroups: regionScopedGroupsData?.groups,
-    isLoadingRegionScopedGroups,
-    isRegionScopedGroupsError,
-    refetchRegionScopedGroups,
-    scopeNamespaces,
-    armRegionSelect,
-    regionGuideRingActive,
-    regionOverviewMarkerKind,
-    regionSelectNonce,
-    prefersReducedMotion,
-    summaryRegions,
-    selectedGroupName,
-    corridorGroups,
-    isLoadingRegionalAreaGroups,
-    isRegionalAreaGroupsError,
-    refetchRegionalAreaGroups,
-    selectedRegion,
-    selectedMaxKm,
-    filteredAgriListings,
-    agriMapListingsData,
-    isLoadingAgriGroupListings,
-    isAgriGroupListingsError,
-    agriGroupLabel,
-    refetchAgriGroupListings,
-    discoverAreasForPanel,
-    filtersContent,
-    trendsHref,
-    isFetching,
-    isLoading,
-    searchQuery,
-    handleSearchChange,
-    filters,
-    handleFiltersChange,
-    selectedSchool,
-    schools,
-    schoolsQuery,
-    schoolListings,
-    listingDataLoading,
-    handleBoundedSearch,
-    interactionCommands,
-    setAreaSearchQuery,
-    areaMarkerCounts,
-    highlightedAreaKeys,
-    selectedGroupListingItem,
-    navigate,
-    cityTotal,
-    cityHasNoListings,
-    handleCityChange,
-    groupResultsListings,
-    isLoadingGroupResults,
-    isGroupResultsError,
-    groupResultsTotalElements,
-    refetchGroupResults,
-    page,
-    totalPages,
-    totalElements,
-    setPage,
+    pageContext: pageContextController,
+    pageState: pageStateController,
+    navigation: navigationController,
+    overviewNavigation: overviewNavigationController,
+    areaGroups: areaGroupsController,
+    geography: geographyController,
+    mapData: mapDataController,
+    agri: agriController,
+    results: resultsController,
+    school: schoolController,
+    badge: badgeController,
+    journeyChrome: journeyChromeController,
+    filterChrome: filterChromeController,
+    interaction: interactionController,
+    regionGuide: regionGuideController,
+    mapLayer: mapLayerController,
+    boundedBrowse: boundedBrowseController,
+    boundedSearch: boundedSearchController,
+    marker: markerController,
+    mobilePresentation: mobilePresentationController,
   };
-  const panelView = buildPanelSurfaceView(panelProps);
+  const panelView = buildPanelSurfaceModel(panelProps);
   const panelCommands = buildPanelSurfaceCommands(panelProps);
 
   const overlayProps = {
@@ -1191,7 +1089,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     isCityValid,
     city,
   };
-  const overlayView = buildOverlaySurfaceView(overlayProps);
+  const overlayView = buildOverlaySurfaceModel(overlayProps);
   const overlayCommands = buildOverlaySurfaceCommands(overlayProps);
 
   return {

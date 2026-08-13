@@ -49,7 +49,7 @@ export interface BuildOverlaySurfaceViewParams {
   city: string;
 }
 
-export function buildOverlaySurfaceView(
+export function buildOverlaySurfaceModel(
   params: BuildOverlaySurfaceViewParams,
 ): DiscoverOverlaySurfaceView {
   const { isAgriJourney, nearSchoolOpen, selectedSchool, filters, schoolBoardFilter, isCityValid, city } =

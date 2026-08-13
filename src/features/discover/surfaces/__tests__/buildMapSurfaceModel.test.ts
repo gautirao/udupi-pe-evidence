@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  buildMapSurfaceView,
+  buildMapSurfaceModel,
   buildMapSurfaceCommands,
   type BuildMapSurfaceViewParams,
   type BuildMapSurfaceCommandsParams,
-} from '../buildMapSurfaceView';
+} from '../buildMapSurfaceModel';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 
@@ -222,16 +222,16 @@ function makeViewParams(
   };
 }
 
-describe('buildMapSurfaceView', () => {
+describe('buildMapSurfaceModel', () => {
   it('groups every field into its section without loss', () => {
-    const view = buildMapSurfaceView(makeViewParams({ cityTotal: 42 }));
+    const view = buildMapSurfaceModel(makeViewParams({ cityTotal: 42 }));
     expect(view.camera.mapZoom).toBe(12);
     expect(view.navigation.city).toBe('bangalore');
     expect(view.status.cityTotal).toBe(42);
   });
 
   it('mobileCluster.visible mirrors mobileMapOpen and derives eligibilityJourney from navJourney', () => {
-    const view = buildMapSurfaceView(
+    const view = buildMapSurfaceModel(
       makeViewParams({ mobileMapOpen: true, navJourney: 'school-first' }),
     );
     expect(view.overlays.mobileCluster.visible).toBe(true);
@@ -239,22 +239,22 @@ describe('buildMapSurfaceView', () => {
   });
 
   it('eligibilityJourney defaults to areas for any non-school-first journey', () => {
-    const view = buildMapSurfaceView(makeViewParams({ navJourney: 'agri-first' }));
+    const view = buildMapSurfaceModel(makeViewParams({ navJourney: 'agri-first' }));
     expect(view.overlays.mobileCluster.eligibilityJourney).toBe('areas');
   });
 
   it('listingPreview.visible requires both isPreviewSheetOpen and a non-null preview', () => {
     const preview = { id: 'listing-1' } as unknown as SelectedListingPreview;
     expect(
-      buildMapSurfaceView(makeViewParams({ isPreviewSheetOpen: true, selectedListingPreview: null }))
+      buildMapSurfaceModel(makeViewParams({ isPreviewSheetOpen: true, selectedListingPreview: null }))
         .overlays.listingPreview.visible,
     ).toBe(false);
     expect(
-      buildMapSurfaceView(makeViewParams({ isPreviewSheetOpen: false, selectedListingPreview: preview }))
+      buildMapSurfaceModel(makeViewParams({ isPreviewSheetOpen: false, selectedListingPreview: preview }))
         .overlays.listingPreview.visible,
     ).toBe(false);
     expect(
-      buildMapSurfaceView(makeViewParams({ isPreviewSheetOpen: true, selectedListingPreview: preview }))
+      buildMapSurfaceModel(makeViewParams({ isPreviewSheetOpen: true, selectedListingPreview: preview }))
         .overlays.listingPreview.visible,
     ).toBe(true);
   });
@@ -268,12 +268,12 @@ describe('buildMapSurfaceView', () => {
       cameraController: { ...makeCameraController(), isSelectedNodeOutOfView: true },
       activeAreasNavigationJourney: journeyWithNode,
     };
-    expect(buildMapSurfaceView(makeViewParams(baseTrue)).overlays.recenter.visible).toBe(true);
+    expect(buildMapSurfaceModel(makeViewParams(baseTrue)).overlays.recenter.visible).toBe(true);
     expect(
-      buildMapSurfaceView(makeViewParams({ ...baseTrue, mapReady: false })).overlays.recenter.visible,
+      buildMapSurfaceModel(makeViewParams({ ...baseTrue, mapReady: false })).overlays.recenter.visible,
     ).toBe(false);
     expect(
-      buildMapSurfaceView(
+      buildMapSurfaceModel(
         makeViewParams({
           ...baseTrue,
           cameraController: { ...makeCameraController(), isSelectedNodeOutOfView: false },
@@ -281,7 +281,7 @@ describe('buildMapSurfaceView', () => {
       ).overlays.recenter.visible,
     ).toBe(false);
     expect(
-      buildMapSurfaceView(makeViewParams({ ...baseTrue, activeAreasNavigationJourney: makeJourney() }))
+      buildMapSurfaceModel(makeViewParams({ ...baseTrue, activeAreasNavigationJourney: makeJourney() }))
         .overlays.recenter.visible,
     ).toBe(false);
   });
@@ -290,7 +290,7 @@ describe('buildMapSurfaceView', () => {
     const journeyWithNode = makeJourney({
       node: { nodeKey: 'n1', displayLabel: 'Indiranagar' } as UseAreasNavigationJourneyResult['node'],
     });
-    const view = buildMapSurfaceView(
+    const view = buildMapSurfaceModel(
       makeViewParams({ activeAreasNavigationJourney: journeyWithNode }),
     );
     expect(view.overlays.recenter.label).toBe('Indiranagar');

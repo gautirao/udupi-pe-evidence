@@ -29,7 +29,7 @@ import type { useDiscoverMarkerController } from '@/features/discover/controller
  * same z-[60] mobile-map wrapper), but per team-lead ruling (2026-08-12) they
  * belong on this surface rather than DiscoverOverlaySurface, since their DOM
  * position depends on the SAME map-canvas stacking context this surface owns
- * — see buildOverlaySurfaceView.ts's doc comment for the full rationale.
+ * — see buildOverlaySurfaceModel.ts's doc comment for the full rationale.
  *
  * `mapContainerRef` is deliberately kept OUTSIDE the view/commands split: it's
  * a DOM ref the page creates and this surface both forwards to DiscoverMapCanvas
@@ -45,7 +45,7 @@ import type { useDiscoverMarkerController } from '@/features/discover/controller
  * flat. This is an input-shape tightening of the already-approved Commit 4
  * builder boundary, not a new abstraction: the `view`/`commands` OUTPUT shape
  * below is completely unchanged, and every downstream line in
- * buildMapSurfaceView()/buildMapSurfaceCommands() is untouched — only the
+ * buildMapSurfaceModel()/buildMapSurfaceCommands() is untouched — only the
  * destructuring prelude at the top of each function changed source.
  */
 
@@ -281,7 +281,7 @@ export type BuildMapSurfaceViewParams = Omit<
   | 'handleMarkerClickWithPosition'
   // Issue #2142 (correction pass) — these four are now DERIVED here rather
   // than by the caller, so the composition root stays free of conditionals
-  // and constants. See the derivations at the top of buildMapSurfaceView().
+  // and constants. See the derivations at the top of buildMapSurfaceModel().
   | 'mobileListButton'
   | 'isBoundedBrowseState'
   | 'isMarkerPopoverEligible'
@@ -335,7 +335,7 @@ export type BuildMapSurfaceViewParams = Omit<
   >;
 };
 
-export function buildMapSurfaceView(params: BuildMapSurfaceViewParams): DiscoverMapSurfaceView {
+export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): DiscoverMapSurfaceView {
   // Issue #2142 (correction pass) — the four surface-shaping derivations that
   // used to sit inline in MapDiscovery.tsx's `mapProps` literal. They live
   // here because they are purely about what THIS surface renders; none is a

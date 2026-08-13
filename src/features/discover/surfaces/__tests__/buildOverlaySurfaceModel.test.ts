@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  buildOverlaySurfaceView,
+  buildOverlaySurfaceModel,
   buildOverlaySurfaceCommands,
   type BuildOverlaySurfaceViewParams,
   type BuildOverlaySurfaceCommandsParams,
-} from '../buildOverlaySurfaceView';
+} from '../buildOverlaySurfaceModel';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverJourneyTransitionsCommands } from '@/features/discover/state/useDiscoverJourneyTransitions';
@@ -28,10 +28,10 @@ function makeViewParams(
   };
 }
 
-describe('buildOverlaySurfaceView', () => {
+describe('buildOverlaySurfaceModel', () => {
   it('marks nearSchool visible when not an agri journey and passes through fields verbatim', () => {
     const school: SchoolResult = { id: 'sch-1' } as SchoolResult;
-    const view = buildOverlaySurfaceView(
+    const view = buildOverlaySurfaceModel(
       makeViewParams({ selectedSchool: school, nearSchoolOpen: false }),
     );
     expect(view.nearSchool.visible).toBe(true);
@@ -41,17 +41,17 @@ describe('buildOverlaySurfaceView', () => {
   });
 
   it('hides nearSchool during the agri-first journey', () => {
-    const view = buildOverlaySurfaceView(makeViewParams({ isAgriJourney: true }));
+    const view = buildOverlaySurfaceModel(makeViewParams({ isAgriJourney: true }));
     expect(view.nearSchool.visible).toBe(false);
   });
 
   it('resolves city to null when the city is not valid', () => {
-    const view = buildOverlaySurfaceView(makeViewParams({ isCityValid: false, city: 'nowhere' }));
+    const view = buildOverlaySurfaceModel(makeViewParams({ isCityValid: false, city: 'nowhere' }));
     expect(view.nearSchool.city).toBeNull();
   });
 
   it('keeps city when valid', () => {
-    const view = buildOverlaySurfaceView(makeViewParams({ isCityValid: true, city: 'bangalore' }));
+    const view = buildOverlaySurfaceModel(makeViewParams({ isCityValid: true, city: 'bangalore' }));
     expect(view.nearSchool.city).toBe('bangalore');
   });
 });

@@ -41,11 +41,11 @@ const mapCanvasSource = fs.readFileSync(MAP_CANVAS_PROPS_PATH, 'utf-8');
 // Issue #2142 Commit 4 — DiscoverRightPanelContainer.tsx was true-renamed to
 // surfaces/DiscoverPanelSurface.tsx and its flat DiscoverRightPanelContainerProps
 // interface (the thing this describe block actually measures) moved into
-// buildPanelSurfaceView.ts, since DiscoverPanelSurface.tsx's own prop type is
+// buildPanelSurfaceModel.ts, since DiscoverPanelSurface.tsx's own prop type is
 // now the grouped {view, commands} shape, not the flat one.
 const RIGHT_PANEL_CONTAINER_PATH = path.resolve(
   __dirname,
-  '../../features/discover/surfaces/buildPanelSurfaceView.ts',
+  '../../features/discover/surfaces/buildPanelSurfaceModel.ts',
 );
 const rightPanelSource = fs.readFileSync(RIGHT_PANEL_CONTAINER_PATH, 'utf-8');
 
@@ -254,23 +254,29 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
       expect(fieldCount).toBeGreaterThanOrEqual(100);
     });
 
-    it('DiscoverRightPanelContainerProps field count is at today\'s documented baseline', () => {
-      // Issue #2142 Commit 4 — same 67-field flat interface, now declared in
-      // buildPanelSurfaceView.ts instead of a component's function
-      // destructure (see this file's own doc comment on that constant).
-      const interfaceMatch = rightPanelSource.match(
-        /export interface DiscoverRightPanelContainerProps \{([\s\S]*?)\n\}/,
+    it('the flat DiscoverRightPanelContainerProps interface is GONE, replaced by controller-derived types', () => {
+      // CORRECTION PASS (owner corrective point #3) — this used to assert a
+      // field COUNT on a hand-written 67-field flat interface that the
+      // composition root had to transcribe and the builders immediately
+      // re-grouped: three hand-maintained copies of one field list, none of
+      // them the source of truth. The interface is deleted; what replaces the
+      // count assertion is a structural one.
+      expect(rightPanelSource).not.toMatch(/interface DiscoverRightPanelContainerProps/);
+    });
+
+    it('the panel model derives its field set from the CONTROLLERS, not from a hand-written interface', () => {
+      // The view/commands groups must Pick off PanelFields, and PanelFields
+      // must be built from ReturnType<typeof useXController> slices — so a
+      // controller renaming an output is a compile error here rather than a
+      // silent drift.
+      expect(rightPanelSource).toMatch(/type PanelFields =/);
+      const controllerSlices = rightPanelSource.match(
+        /ReturnType<typeof use[A-Za-z]+>/g,
       );
-      expect(interfaceMatch).not.toBeNull();
-      const fieldCount = countMatches(interfaceMatch![1], /^\s{2}\w[\w?]*:\s/gm);
-      // Verified via jCodemunch symbol read (pre-move): 83 destructured props
-      // in the original component's function signature. The interface's own
-      // field count is lower (67) because several fields destructured with
-      // JS default values (e.g. `hoveredNavigationNodeKey = null`) are
-      // declared `?:` optional in the TYPE but that has no bearing on this
-      // count either way — this asserts the type's field count specifically,
-      // not the destructure-site count, so 83 is not the right floor here.
-      expect(fieldCount).toBeGreaterThanOrEqual(60);
+      expect(controllerSlices).not.toBeNull();
+      expect(new Set(controllerSlices).size).toBeGreaterThanOrEqual(15);
+      // ...and the builders take those grouped controller results as input.
+      expect(rightPanelSource).toMatch(/export interface BuildPanelSurfaceModelParams \{/);
     });
   });
 

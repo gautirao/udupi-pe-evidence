@@ -6,7 +6,7 @@ import { MapSkeleton } from '@/components/discover/MapSkeleton';
 import { MobileClusterSheet } from '@/features/discover/views/mobile/MobileClusterSheet';
 import { MobileListingPreviewSheet } from '@/features/discover/views/mobile/MobileListingPreviewSheet';
 import type { DiscoverMapCanvasProps } from '@/features/discover/views/DiscoverMapCanvas';
-import type { DiscoverMapSurfaceView, DiscoverMapSurfaceCommands } from './buildMapSurfaceView';
+import type { DiscoverMapSurfaceView, DiscoverMapSurfaceCommands } from './buildMapSurfaceModel';
 
 /**
  * Issue #2142 Commit 4 — renamed from DiscoverMapMount.tsx (per the approved
@@ -14,7 +14,7 @@ import type { DiscoverMapSurfaceView, DiscoverMapSurfaceCommands } from './build
  * below is preserved VERBATIM from that file (see its own prior doc comment,
  * git history). This surface additionally now owns MobileClusterSheet,
  * MobileListingPreviewSheet, and the recenter-button portal — see
- * buildMapSurfaceView.ts's doc comment for why those live here rather than on
+ * buildMapSurfaceModel.ts's doc comment for why those live here rather than on
  * DiscoverOverlaySurface (DOM/stacking-context coupling with the map canvas,
  * team-lead ruling 2026-08-12). DiscoverMapCanvas itself is UNCHANGED: this
  * surface only reconstructs its exact flat prop shape from the grouped view/

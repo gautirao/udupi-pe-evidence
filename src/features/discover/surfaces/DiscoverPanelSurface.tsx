@@ -17,7 +17,7 @@ import { useDiscoverAreaNavigationPathResolver } from '@/features/discover/navig
 import { useToast } from '@/hooks/use-toast';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import { SchoolsNavigationJourneyPanel } from '@/features/discover/views/SchoolsNavigationJourneyPanel';
-import type { DiscoverPanelSurfaceView, DiscoverPanelSurfaceCommands } from './buildPanelSurfaceView';
+import type { DiscoverPanelSurfaceView, DiscoverPanelSurfaceCommands } from './buildPanelSurfaceModel';
 
 /**
  * Issue #2142 Commit 4 — renamed from DiscoverRightPanelContainer.tsx (per the

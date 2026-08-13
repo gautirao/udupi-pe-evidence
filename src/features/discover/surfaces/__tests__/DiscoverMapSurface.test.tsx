@@ -12,7 +12,7 @@
  * `baseProps()` still returns the same flat `DiscoverMapCanvasProps`-shaped
  * fixture (plus the surface-only additions DiscoverMapSurfaceProps needs);
  * `renderSurface()` pipes it through the REAL production
- * `buildMapSurfaceView`/`buildMapSurfaceCommands` builders (not a parallel
+ * `buildMapSurfaceModel`/`buildMapSurfaceCommands` builders (not a parallel
  * test-only mapping) before rendering, so this suite also exercises those
  * builders, not just the component.
  */
@@ -47,8 +47,8 @@ vi.mock('../../views/DiscoverMapCanvas', () => ({
 }));
 
 import { DiscoverMapSurface } from '../DiscoverMapSurface';
-import { buildMapSurfaceView, buildMapSurfaceCommands } from '../buildMapSurfaceView';
-import type { BuildMapSurfaceViewParams, BuildMapSurfaceCommandsParams } from '../buildMapSurfaceView';
+import { buildMapSurfaceModel, buildMapSurfaceCommands } from '../buildMapSurfaceModel';
+import type { BuildMapSurfaceViewParams, BuildMapSurfaceCommandsParams } from '../buildMapSurfaceModel';
 
 const JOURNEY_VIEW: DiscoverJourneyTransitionsView = {
   startOverTick: 0,
@@ -259,7 +259,7 @@ function renderSurface(
   overrides: Partial<BuildMapSurfaceViewParams & BuildMapSurfaceCommandsParams> = {},
 ) {
   const props = baseProps(overrides);
-  const view = buildMapSurfaceView(props);
+  const view = buildMapSurfaceModel(props);
   const commands = buildMapSurfaceCommands(props);
   return render(
     <DiscoverMapSurface view={view} commands={commands} mapContainerRef={props.mapContainerRef} />,

@@ -205,10 +205,51 @@ vi.mock('@/hooks/useDiscoverAreas', async (importOriginal) => {
 
 import { DiscoverPanelSurface } from '../DiscoverPanelSurface';
 import {
-  buildPanelSurfaceView,
+  buildPanelSurfaceModel,
   buildPanelSurfaceCommands,
-  type BuildPanelSurfaceViewParams,
-} from '../buildPanelSurfaceView';
+  type BuildPanelSurfaceModelParams,
+  type PanelRenamedFields,
+} from '../buildPanelSurfaceModel';
+
+/**
+ * Issue #2142 (correction pass) — the builder's INPUT is now the controllers'
+ * own result objects, not a flat 67-field object. This file keeps a FLAT
+ * fixture shape on purpose: its 23 `baseProps({ ... })` call sites read far
+ * better with flat overrides, and a test fixture is exactly the right place
+ * for that convenience now that production no longer depends on it.
+ *
+ * `toModelParams` below is the only new code — a mechanical regrouping, with
+ * no defaults and no logic of its own, so the assertions still run against the
+ * REAL production builders and not a parallel mapping.
+ */
+type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (x: infer I) => void
+  ? I
+  : never;
+
+/** Every controller field the panel model consumes, flattened back out. */
+type ControllerFlat = UnionToIntersection<
+  BuildPanelSurfaceModelParams[keyof BuildPanelSurfaceModelParams]
+>;
+
+/**
+ * The flat fixture shape: controller field names, except for the six the panel
+ * surface renames. Derived from BuildPanelSurfaceModelParams so this fixture
+ * still fails to compile if a controller output changes type — the type
+ * coverage the deleted production interface used to give is kept HERE, where
+ * it belongs, rather than lost.
+ */
+type PanelFlatFixture = Omit<
+  ControllerFlat,
+  | 'effectiveSelectedArea'
+  | 'activeAreasNavigationJourney'
+  | 'regionScopedGroupsData'
+  | 'setHoveredNavigationNodeKey'
+  | 'setFocusedClusterMemberAreaKeys'
+  | 'setSelectedListingPreview'
+> &
+  // The six renames, taken from the model's own exported declaration so the
+  // fixture cannot drift from the surface contract.
+  PanelRenamedFields;
 
 const JOURNEY_VIEW: DiscoverJourneyTransitionsView = {
   startOverTick: 0,
@@ -276,10 +317,11 @@ function inertAreasNavigationJourney(
   };
 }
 
-function baseProps(
-  overrides: Partial<BuildPanelSurfaceViewParams> = {},
-): BuildPanelSurfaceViewParams {
-  return {
+function baseProps(overrides: Partial<PanelFlatFixture> = {}): PanelFlatFixture {
+  // Typed defaults, so every field below is still type-checked against the
+  // controllers. Object.assign (not a spread) because TS models a spread of a
+  // Partial as re-optionalising those keys.
+  const defaults: PanelFlatFixture = {
     resolvedPanelContent: 'guided-entry',
     selectedMarkerListing: null,
     clearSelectedMarkerListing: vi.fn(),
@@ -359,8 +401,16 @@ function baseProps(
     totalElements: 0,
     setPage: vi.fn(),
     areasNavigationJourney: inertAreasNavigationJourney(),
-    ...overrides,
+    // Issue #2142 (correction pass) — the deleted flat interface declared these
+    // two OPTIONAL; the navigation controller always produces them, so the
+    // controller-derived fixture type requires them. A genuine tightening.
+    hoveredNavigationNodeKey: null,
+    focusedClusterMemberAreaKeys: null,
+    onNavigationNodeHoverChange: vi.fn(),
+    onClusterFocusChange: vi.fn(),
+    onSelectedListingPreviewChange: vi.fn(),
   };
+  return Object.assign({}, defaults, overrides);
 }
 
 /**
@@ -368,14 +418,132 @@ function baseProps(
  * `<DiscoverPanelSurfaceHarness {...baseProps(overrides)} />` call sites
  * (every one of them is exactly that spread, verified by hand) keep working
  * unchanged: it pipes the SAME flat props through the REAL production
- * `buildPanelSurfaceView`/`buildPanelSurfaceCommands` builders (no parallel
+ * `buildPanelSurfaceModel`/`buildPanelSurfaceCommands` builders (no parallel
  * test-only mapping logic) before rendering the renamed `DiscoverPanelSurface`.
  */
-function DiscoverPanelSurfaceHarness(props: BuildPanelSurfaceViewParams) {
+function toModelParams(g: PanelFlatFixture): BuildPanelSurfaceModelParams {
+  return {
+    pageContext: { navigate: g.navigate, isAuthenticated: g.isAuthenticated },
+    pageState: {
+      city: g.city,
+      filters: g.filters,
+      handleFiltersChange: g.handleFiltersChange,
+      handleCityChange: g.handleCityChange,
+      handleAreaSelect: g.handleAreaSelect,
+      selectedSchool: g.selectedSchool,
+      page: g.page,
+      setPage: g.setPage,
+      resolvedPanelContent: g.resolvedPanelContent,
+      effectiveSelectedArea: g.selectedArea,
+    },
+    navigation: {
+      hoveredNavigationNodeKey: g.hoveredNavigationNodeKey,
+      setHoveredNavigationNodeKey: g.onNavigationNodeHoverChange,
+      focusedClusterMemberAreaKeys: g.focusedClusterMemberAreaKeys,
+      setFocusedClusterMemberAreaKeys: g.onClusterFocusChange,
+    },
+    overviewNavigation: { activeAreasNavigationJourney: g.areasNavigationJourney },
+    areaGroups: {
+      areaGroupsData: g.areaGroupsData,
+      isLoadingAreaGroups: g.isLoadingAreaGroups,
+      selectedGroupName: g.selectedGroupName,
+    },
+    geography: {
+      discoverAreasForPanel: g.discoverAreasForPanel,
+      areaMarkerCounts: g.areaMarkerCounts,
+      scopeNamespaces: g.scopeNamespaces,
+      summaryRegions: g.summaryRegions,
+      regionScopedGroupsData: g.regionScopedGroups
+        ? ({ groups: g.regionScopedGroups } as ControllerFlat['regionScopedGroupsData'])
+        : undefined,
+      isLoadingRegionScopedGroups: g.isLoadingRegionScopedGroups,
+      isRegionScopedGroupsError: g.isRegionScopedGroupsError,
+      refetchRegionScopedGroups: g.refetchRegionScopedGroups,
+    },
+    mapData: {
+      discoverAreas: g.discoverAreas,
+      areaListings: g.areaListings,
+      isLoadingAreaListings: g.isLoadingAreaListings,
+      areasLoading: g.areasLoading,
+      agriAreasData: g.agriAreasData,
+      isLoadingAgriAreas: g.isLoadingAgriAreas,
+      isFetching: g.isFetching,
+      isLoading: g.isLoading,
+      listingDataLoading: g.listingDataLoading,
+      totalPages: g.totalPages,
+      totalElements: g.totalElements,
+    },
+    agri: {
+      corridorGroups: g.corridorGroups,
+      isLoadingRegionalAreaGroups: g.isLoadingRegionalAreaGroups,
+      isRegionalAreaGroupsError: g.isRegionalAreaGroupsError,
+      refetchRegionalAreaGroups: g.refetchRegionalAreaGroups,
+      selectedRegion: g.selectedRegion,
+      selectedMaxKm: g.selectedMaxKm,
+      filteredAgriListings: g.filteredAgriListings,
+      agriMapListingsData: g.agriMapListingsData,
+      isLoadingAgriGroupListings: g.isLoadingAgriGroupListings,
+      isAgriGroupListingsError: g.isAgriGroupListingsError,
+      agriGroupLabel: g.agriGroupLabel,
+      refetchAgriGroupListings: g.refetchAgriGroupListings,
+      selectedGroupListingItem: g.selectedGroupListingItem,
+    },
+    results: {
+      groupResultsListings: g.groupResultsListings,
+      isLoadingGroupResults: g.isLoadingGroupResults,
+      isGroupResultsError: g.isGroupResultsError,
+      groupResultsTotalElements: g.groupResultsTotalElements,
+      refetchGroupResults: g.refetchGroupResults,
+    },
+    school: {
+      journeyView: g.journeyView,
+      journeyCommands: g.journeyCommands,
+      handleAreaFirstBack: g.handleAreaFirstBack,
+      schools: g.schools,
+      schoolsQuery: g.schoolsQuery,
+      schoolListings: g.schoolListings,
+    },
+    badge: { areaResultSummaryText: g.areaResultSummaryText, cityTotal: g.cityTotal },
+    journeyChrome: { trendsHref: g.trendsHref },
+    filterChrome: { activeContextChips: g.activeContextChips, filtersContent: g.filtersContent },
+    interaction: {
+      interactionCommands: g.interactionCommands,
+      setAreaSearchQuery: g.setAreaSearchQuery,
+      highlightedAreaKeys: g.highlightedAreaKeys,
+    },
+    regionGuide: {
+      armRegionSelect: g.armRegionSelect,
+      regionGuideRingActive: g.regionGuideRingActive,
+      regionSelectNonce: g.regionSelectNonce,
+      prefersReducedMotion: g.prefersReducedMotion,
+    },
+    mapLayer: {
+      regionOverviewMarkerKind: g.regionOverviewMarkerKind,
+      cityHasNoListings: g.cityHasNoListings,
+    },
+    boundedBrowse: { searchQuery: g.searchQuery, handleSearchChange: g.handleSearchChange },
+    boundedSearch: { handleBoundedSearch: g.handleBoundedSearch },
+    marker: {
+      selectedMarkerListing: g.selectedMarkerListing,
+      clearSelectedMarkerListing: g.clearSelectedMarkerListing,
+    },
+    mobilePresentation: { setSelectedListingPreview: g.onSelectedListingPreviewChange },
+  };
+}
+
+/**
+ * Thin harness so this file's 23 existing
+ * `<DiscoverPanelSurfaceHarness {...baseProps(overrides)} />` call sites keep
+ * working unchanged: it regroups the flat fixture and pipes it through the
+ * REAL production builders (no parallel test-only view/commands mapping)
+ * before rendering DiscoverPanelSurface.
+ */
+function DiscoverPanelSurfaceHarness(props: PanelFlatFixture) {
+  const params = toModelParams(props);
   return (
     <DiscoverPanelSurface
-      view={buildPanelSurfaceView(props)}
-      commands={buildPanelSurfaceCommands(props)}
+      view={buildPanelSurfaceModel(params)}
+      commands={buildPanelSurfaceCommands(params)}
     />
   );
 }
