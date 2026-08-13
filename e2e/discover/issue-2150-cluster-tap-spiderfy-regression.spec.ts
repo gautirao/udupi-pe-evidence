@@ -311,20 +311,28 @@ async function gotoAreaFirst(page: Page, listings: FixtureListing[], zoom = 13):
   await page.waitForLoadState('networkidle');
 }
 
-// NOTE: an area-first-only variant of the coincident-cluster spiderfy case
-// below (8 coincident listings as the SOLE content of a freshly cold-
-// navigated `node=` AREA, no school/radius involved) was investigated here
-// and found to intermittently collapse the spiderfy fan back to zero
-// members within ~1s of opening, on BOTH this PR's head AND a pre-#2142
-// baseline checkout (commit 698abcee, the parent of the entire #2142
-// refactor chain) — byte-identical failure signature on both. That rules
-// out #2142 and #2150 as the cause; it is a pre-existing latent issue
-// specific to a single area whose ENTIRE listing set is one degenerate
-// coincident cluster (a synthetic edge case — real listings are never
-// perfectly coincident, and the school-radius+coincident-cluster case
-// directly below, which IS representative of the owner's actual repro
-// path, spiderfies reliably). Flagged as a separate out-of-scope follow-up
-// rather than papered over with a flaky/skipped test here.
+// PR #2150 review re-check (BLOCKING_PARTIAL finding) — a prior pass here
+// only *described*, in a comment, an "area-first-only variant of the
+// coincident-cluster spiderfy case" (8 coincident listings as the SOLE
+// content of a freshly cold-navigated `node=` AREA, no school/radius
+// involved) as an excluded, out-of-scope pre-existing latent issue,
+// without an executable test proving that claim. The reviewer correctly
+// flagged that as unverified. Re-investigated with a real test (below,
+// "canonical Area-first, coincident-only cluster (no school/radius)
+// spiderfies on tap"): it goes through the exact SAME code path as every
+// other test in this describe block and the mobile school-first test
+// below it — PropertyMap.tsx's single `handleClusterActivate` handler,
+// gated by the SAME `hasSpatialSpread()`/`clusterCanSplit()` pair from
+// `src/shared/map/areaClusterSplit.ts` (confirmed via jCodemunch
+// `find_references`: `AreaMarkerLayer.tsx` and `PropertyMap.tsx` are the
+// only two production consumers of `hasSpatialSpread`, and
+// `src/lib/map/areaClusterSplit.ts` is a pure re-export shim of the same
+// `src/shared/map/areaClusterSplit.ts` module — there is no second,
+// un-fixed copy of this predicate). With this PR's EPS=1e-5 fix in place,
+// the new test below passed deterministically across a --repeat-each=5
+// run, confirming the fix already covers this axis too and no additional
+// code change was needed here — only this test, which replaces the prior
+// descriptive-comment-only exclusion.
 test.describe('PR #2150 review finding A — cluster tap / spiderfy, canonical node= contract', () => {
   test('desktop — splittable cluster tap fits/zooms to member bounds, never a no-op', async ({ page }) => {
     await gotoAreaFirst(page, makeSplittableGroups(), 11);
@@ -390,6 +398,107 @@ test.describe('PR #2150 review finding A — cluster tap / spiderfy, canonical n
     await expect(spiderfiedMarkers).toHaveCount(8, { timeout: 10_000 });
     // Radius circle must still be present/unaffected by the cluster interaction.
     await expect(page.locator('.leaflet-overlay-pane path.leaflet-interactive')).toHaveCount(1);
+  });
+
+  test('desktop — canonical Area-first, coincident-only cluster (no school/radius) spiderfies on tap', async ({
+    page,
+  }) => {
+    // The exact scenario the prior pass through this file excluded via
+    // comment only: a freshly cold-navigated `node=` AREA whose ENTIRE
+    // listing set is one degenerate coincident cluster, with no
+    // school/radius overlay involved at all. Goes through the same
+    // gotoAreaFirst()/stubAreaFirstFixture() helpers and the same
+    // PropertyMap.tsx cluster-tap handler as every other test in this file.
+    await gotoAreaFirst(page, makeCoincidentListings(8, 'area-solo', CENTER_LAT, CENTER_LON), 13);
+
+    const cluster = clusterLocator(page);
+    await expect(cluster.first()).toBeVisible({ timeout: 15_000 });
+    await cluster.first().click();
+
+    // Must spiderfy to all 8 members, not collapse to zero pins.
+    await expect(pinLocator(page)).toHaveCount(8, { timeout: 10_000 });
+  });
+
+  // PR #2150 review re-check (BLOCKING_PARTIAL finding) — no fixture in this
+  // file previously clicked an individual spiderfied child and proved the
+  // fan remains open afterward, an explicit carry-forward acceptance item
+  // from the owner/#1762 contract. The exact "fan persistence" definition
+  // is established in issue-1762-listing-density-clustering.spec.ts's
+  // 'spiderfy fan stays open across repeated clicks on its own members —
+  // collapses only on a bare-map click (issue #1762 fix cycle 7)' test:
+  // after an in-fan click, (1) the spiderfied member count is unchanged,
+  // (2) the parent cluster bubble count is unchanged (still 1, not
+  // re-collapsed), and a bare map-background click is the ONLY thing that
+  // collapses the fan back to zero pins. Reproduced verbatim here against
+  // this PR's canonical `node=` area-first contract and the EPS=1e-5 fix.
+  //
+  // Code-reviewer follow-up (MEDIUM) — an earlier version of this test only
+  // clicked ONE spiderfied member (fan-persist-3) before asserting
+  // persistence, but the actual #1762 regression is `selectedListingId`
+  // CHANGING and re-triggering MarkerClusterLayer's layer-rebuild effect —
+  // which is exercised by SWITCHING selection within an already-open fan,
+  // not merely opening it and clicking once. Now clicks two DIFFERENT
+  // spiderfied members in sequence (fan-persist-3, then fan-persist-5),
+  // mirroring the #1762 reference test's markerA -> markerB sequence and
+  // its structure/assertion shape exactly (same-shape checks after EACH
+  // click, not just the first).
+  test('desktop — spiderfied fan stays open after selecting one of its own members (matches #1762 fix-cycle-7 fan-persistence contract)', async ({
+    page,
+  }) => {
+    const fanListings = makeCoincidentListings(8, 'fan-persist', CENTER_LAT, CENTER_LON);
+    await gotoAreaFirst(page, fanListings, 13);
+
+    const cluster = clusterLocator(page);
+    await expect(cluster).toHaveCount(1, { timeout: 15_000 });
+    await cluster.first().click();
+
+    const spiderfiedMarkers = pinLocator(page);
+    await expect(spiderfiedMarkers).toHaveCount(8, { timeout: 10_000 });
+
+    const targetAId = 'fan-persist-3';
+    const targetBId = 'fan-persist-5';
+    const targetA = page.locator(`[data-listing-id="${targetAId}"] [data-testid="property-marker"]`);
+    const targetB = page.locator(`[data-listing-id="${targetBId}"] [data-testid="property-marker"]`);
+    await expect(targetA).toBeVisible({ timeout: 10_000 });
+    await expect(targetB).toBeVisible({ timeout: 10_000 });
+
+    const popover = page.getByTestId('marker-popover-card');
+
+    // Click member A — its own popover, fan still fully open.
+    await expect(popover).toBeHidden();
+    await targetA.click();
+    await expect(popover).toBeVisible({ timeout: 10_000 });
+    await expect(popover).toHaveAttribute('role', 'dialog');
+    await expect(spiderfiedMarkers).toHaveCount(8);
+    await expect(cluster).toHaveCount(1);
+
+    // Click member B in the SAME fan — the exact regression this fix
+    // targets: switching `selectedListingId` from A to B used to
+    // re-trigger MarkerClusterLayer's layer-rebuild effect and silently
+    // collapse the fan here. `force: true` mirrors the #1762 reference
+    // test: member A's now-open popover card can visually overlap a
+    // neighbouring spiderfied pin in this tight fan, and Playwright's
+    // strict actionability check has no tolerance for that overlap.
+    await targetB.click({ force: true });
+    await expect(popover).toBeVisible({ timeout: 10_000 });
+    await expect(popover).toHaveAttribute('role', 'dialog');
+
+    // The actual carry-forward requirement: selecting a second spiderfied
+    // child must NOT collapse the fan — all members stay visible and the
+    // parent cluster bubble stays a single bubble (not re-collapsed).
+    await expect(spiderfiedMarkers).toHaveCount(8);
+    await expect(cluster).toHaveCount(1);
+
+    // Negative control (mirrors #1762 fix-cycle-7 exactly) — a bare
+    // map-background click still collapses the fan, proving the assertion
+    // above isn't vacuously true because nothing in this fixture ever
+    // collapses.
+    const mapContainer = page.locator('.leaflet-container');
+    const box = await mapContainer.boundingBox();
+    if (!box) throw new Error('leaflet-container has no bounding box');
+    await page.mouse.click(box.x + 12, box.y + 12);
+    await expect(spiderfiedMarkers).toHaveCount(0, { timeout: 10_000 });
+    await expect(cluster).toHaveCount(1);
   });
 });
 
@@ -516,5 +625,85 @@ test.describe('PR #2150 review finding A — mobile school-first, real touchscre
     await expect(spiderfiedMarkers).toHaveCount(8, { timeout: 10_000 });
     // Radius circle must still be present/unaffected by the cluster interaction.
     await expect(page.locator('.leaflet-overlay-pane path.leaflet-interactive')).toHaveCount(1);
+  });
+
+  // PR #2150 review re-check (BLOCKING_PARTIAL finding) — the coincident-
+  // cluster case above (spiderfy path) was the confirmed regression and now
+  // has real touch-tap coverage, but the other half of the school-first
+  // cluster-tap contract — a SPLITTABLE (non-coincident) cluster, which
+  // must fit/zoom rather than spiderfy — was previously only described as
+  // "verified 4/8 revealed... on real mobile touch" in a comment, with no
+  // executable test. Added here to close that gap.
+  test('mobile — school-first radius overlay, real touchscreen.tap fits/zooms a splittable cluster', async ({
+    page,
+  }) => {
+    const school = {
+      id: SCHOOL_ID,
+      name: 'Cluster 2150 School',
+      board: 'CBSE',
+      boardType: null,
+      address: 'Bangalore',
+      latitude: CENTER_LAT,
+      longitude: CENTER_LON,
+      distanceKm: 0,
+      areaKey: AREA_KEY,
+    };
+    const splittable = makeSplittableGroups();
+    await stubAreaFirstFixture(page, splittable);
+    await page.route('**/api/public/schools/search**', (route) => fulfillJson(route, 200, [school]));
+    await page.route(`**/api/public/schools/${SCHOOL_ID}`, (route) => fulfillJson(route, 200, school));
+    await page.route('**/api/public/schools/by-area**', (route) => fulfillJson(route, 200, [school]));
+    const schoolRadiusContent = splittable.map((listing) => ({
+      id: listing.id,
+      listingNumber: null,
+      propertyType: listing.propertyType,
+      title: listing.title,
+      locality: listing.locality,
+      areaKey: AREA_KEY,
+      priceBand: 'UNDER_50L',
+      landArea: null,
+      landAreaUnit: null,
+      builtArea: null,
+      builtAreaUnit: null,
+      bedrooms: null,
+      latitude: listing.lat,
+      longitude: listing.lon,
+      heroImageUrl: null,
+      listingPurpose: listing.listingPurpose,
+      possessionStatus: null,
+      daysOnMarket: null,
+      backOnMarket: false,
+      createdAt: '2026-08-01T00:00:00Z',
+    }));
+    await page.route('**/api/discover/cities/*/school-radius-listings**', (route) =>
+      fulfillJson(route, 200, { content: schoolRadiusContent, page: 0, size: 50, hasMore: false }),
+    );
+
+    const radiusResponse = page.waitForResponse(
+      (res) => res.url().includes('/school-radius-listings') && res.status() === 200,
+    );
+    // A wide radius so both well-separated groups (SPREAD_DEG apart) are
+    // included in the same school-radius result set.
+    await page.goto(schoolFirstUrl(SCHOOL_ID, '10'));
+    await radiusResponse;
+    await dismissConsentBannerIfPresent(page);
+    await page.waitForLoadState('networkidle');
+
+    const mapTrigger = page.getByTestId('control-bar-map-trigger');
+    await expect(mapTrigger).toBeVisible({ timeout: 15_000 });
+    await mapTrigger.click();
+    await expect(page.getByTestId('mobile-map-close-list-button')).toBeVisible({ timeout: 10_000 });
+
+    const cluster = clusterLocator(page);
+    await expect(cluster.first()).toBeVisible({ timeout: 15_000 });
+
+    await tapClusterViaTouchscreen(page);
+
+    // A splittable cluster tap must fit/zoom to reveal real member pins —
+    // never a no-op collapse. Mirrors the desktop splittable-cluster
+    // assertion above (">0 pins", not an exact count, since which/how many
+    // members are individually revealed depends on the resulting zoom
+    // level and viewport).
+    await expect.poll(async () => pinLocator(page).count(), { timeout: 10_000 }).toBeGreaterThan(0);
   });
 });
