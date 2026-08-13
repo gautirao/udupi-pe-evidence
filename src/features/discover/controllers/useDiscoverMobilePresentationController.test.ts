@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -29,7 +29,6 @@ describe('useDiscoverMobilePresentationController (#2142 Commit 3 — moved verb
         mobileMapOpen: true,
         setMobileView,
         isMarkerPopoverEligible: false,
-        selectedListingPreview: null,
       }),
     );
     expect(mockUseMobileMapOverlayShell).toHaveBeenCalledWith(
@@ -46,7 +45,6 @@ describe('useDiscoverMobilePresentationController (#2142 Commit 3 — moved verb
         mobileMapOpen: false,
         setMobileView: vi.fn(),
         isMarkerPopoverEligible: false,
-        selectedListingPreview: null,
       }),
     );
     expect(neither.current.bottomOcclusionPx).toBe(0);
@@ -56,7 +54,6 @@ describe('useDiscoverMobilePresentationController (#2142 Commit 3 — moved verb
         mobileMapOpen: true,
         setMobileView: vi.fn(),
         isMarkerPopoverEligible: false,
-        selectedListingPreview: null,
       }),
     );
     expect(mapOnly.current.bottomOcclusionPx).toBe(0);
@@ -66,23 +63,39 @@ describe('useDiscoverMobilePresentationController (#2142 Commit 3 — moved verb
         mobileMapOpen: true,
         setMobileView: vi.fn(),
         isMarkerPopoverEligible: true,
-        selectedListingPreview: null,
       }),
     );
     expect(both.current.bottomOcclusionPx).toBe(150);
   });
 
+  // Issue #2142 (correction pass) — selectedListingPreview is now this
+  // controller's OWN state rather than a caller input, so the test drives it
+  // through the exported setter (the same path the panel surface uses).
   it('isPreviewSheetOpen is true only when mobileMapOpen AND a selectedListingPreview exists', () => {
     const { result } = renderHook(() =>
       useDiscoverMobilePresentationController({
         mobileMapOpen: true,
         setMobileView: vi.fn(),
         isMarkerPopoverEligible: false,
-        selectedListingPreview: { id: 'listing-1' } as never,
       }),
     );
+    expect(result.current.isPreviewSheetOpen).toBe(false);
+    act(() => result.current.setSelectedListingPreview({ id: 'listing-1' } as never));
     expect(result.current.isPreviewSheetOpen).toBe(true);
-    expect(mockUsePreviewSheetOcclusion).toHaveBeenCalledWith(true, 'listing-1');
+    expect(mockUsePreviewSheetOcclusion).toHaveBeenLastCalledWith(true, 'listing-1');
+  });
+
+  it('isPreviewSheetOpen stays false on desktop even once a preview is reported up', () => {
+    const { result } = renderHook(() =>
+      useDiscoverMobilePresentationController({
+        mobileMapOpen: false,
+        setMobileView: vi.fn(),
+        isMarkerPopoverEligible: true,
+      }),
+    );
+    act(() => result.current.setSelectedListingPreview({ id: 'listing-1' } as never));
+    expect(result.current.isPreviewSheetOpen).toBe(false);
+    expect(mockUsePreviewSheetOcclusion).toHaveBeenLastCalledWith(false, 'listing-1');
   });
 
   it('previewedListingId passed to usePreviewSheetOcclusion is null when no preview is selected', () => {
@@ -91,7 +104,6 @@ describe('useDiscoverMobilePresentationController (#2142 Commit 3 — moved verb
         mobileMapOpen: true,
         setMobileView: vi.fn(),
         isMarkerPopoverEligible: false,
-        selectedListingPreview: null,
       }),
     );
     expect(mockUsePreviewSheetOcclusion).toHaveBeenCalledWith(false, null);

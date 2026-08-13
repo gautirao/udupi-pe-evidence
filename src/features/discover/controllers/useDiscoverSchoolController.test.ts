@@ -55,16 +55,15 @@ function baseParams(
     schoolByIdError: null,
     discoverAreas: [],
     areasLoading: false,
-    urlBoardFilters: [],
+    nav: { journey: null, areaKey: null, schoolId: null, schoolPicking: null, filters: {} } as never,
+    areasNavigationJourney: { node: null, children: [], isLoading: false, error: null, selectNode: vi.fn() } as never,
+    handleAreaBack: vi.fn(),
     schoolBoardFilter: [],
     panelContent: 'guided-entry' as never,
     city: 'udupi',
     toast: vi.fn(),
-    hasResolvedCanonicalArea: false,
     boundedSearchTriggered: false,
     setBoundedSearchTriggered: vi.fn(),
-    schoolsAreaKey: undefined,
-    categoryFilters: [],
     isAuthenticated: true,
     areaListings: [],
     schoolRadiusListings: [],
@@ -83,27 +82,62 @@ describe('useDiscoverSchoolController (#2142 Commit 3 — moved verbatim from Ma
     mockUseSchoolFirstCounts.mockReset().mockReturnValue(SCHOOL_FIRST_COUNTS_RESULT);
   });
 
-  it('useSchoolsByArea is called with schoolsAreaKey/urlBoardFilters/categoryFilters/size=20', () => {
+  // Issue #2142 (correction pass) — schoolsAreaKey/urlBoardFilters/categoryFilters
+  // are no longer caller inputs; they are derived INSIDE the controller from
+  // nav + panelContent. These assertions now drive those real derivations
+  // rather than injecting their outputs, which is strictly stronger coverage.
+  it('useSchoolsByArea is called with the DERIVED schoolsAreaKey/urlBoardFilters/categoryFilters and size=20', () => {
     renderHook(() =>
       useDiscoverSchoolController(
-        baseParams({ schoolsAreaKey: 'IN|KA|Udupi|Manipal', urlBoardFilters: ['CBSE'], categoryFilters: ['primary'] }),
+        baseParams({
+          panelContent: 'schools-in-area' as never,
+          nav: {
+            journey: 'school-first',
+            areaKey: 'IN|KA|Udupi|Manipal',
+            schoolId: null,
+            schoolPicking: null,
+            filters: { boardFilters: ['CBSE'], categoryFilters: ['primary'] },
+          } as never,
+        }),
       ),
     );
     expect(mockUseSchoolsByArea).toHaveBeenCalledWith('IN|KA|Udupi|Manipal', ['CBSE'], ['primary'], 20);
   });
 
+  it('derives schoolsAreaKey from the canonical AREA leaf when panelContent is NOT schools-in-area (#2124)', () => {
+    renderHook(() =>
+      useDiscoverSchoolController(
+        baseParams({
+          panelContent: 'guided-entry' as never,
+          nav: { journey: 'area-first', areaKey: null, schoolId: null, schoolPicking: 1, filters: {} } as never,
+          areasNavigationJourney: {
+            node: { nodeType: 'AREA', areaKey: 'IN|KA|Udupi|Manipal' },
+            children: [],
+            isLoading: false,
+            error: null,
+            selectNode: vi.fn(),
+          } as never,
+        }),
+      ),
+    );
+    expect(mockUseSchoolsByArea).toHaveBeenCalledWith('IN|KA|Udupi|Manipal', [], [], 20);
+    expect(mockUseDiscoverJourneyTransitions).toHaveBeenCalledWith(
+      expect.objectContaining({ hasResolvedCanonicalArea: true }),
+    );
+  });
+
   it('schools defaults to all fetched schools when urlBoardFilters is empty', () => {
-    const { result } = renderHook(() => useDiscoverSchoolController(baseParams({ urlBoardFilters: [] })));
+    const { result } = renderHook(() => useDiscoverSchoolController(baseParams({ nav: { journey: null, areaKey: null, schoolId: null, schoolPicking: null, filters: {} } as never })));
     expect(result.current.schools).toEqual([SCHOOL_A, SCHOOL_B]);
   });
 
   it('schools is client-side filtered by urlBoardFilters (case-insensitive board match)', () => {
-    const { result } = renderHook(() => useDiscoverSchoolController(baseParams({ urlBoardFilters: ['cbse'] })));
+    const { result } = renderHook(() => useDiscoverSchoolController(baseParams({ nav: { journey: null, areaKey: null, schoolId: null, schoolPicking: null, filters: { boardFilters: ['cbse'] } } as never })));
     expect(result.current.schools).toEqual([SCHOOL_A]);
   });
 
   it('passes the internally-computed schools (not a caller field) into useDiscoverJourneyTransitions', () => {
-    renderHook(() => useDiscoverSchoolController(baseParams({ urlBoardFilters: ['ICSE'] })));
+    renderHook(() => useDiscoverSchoolController(baseParams({ nav: { journey: null, areaKey: null, schoolId: null, schoolPicking: null, filters: { boardFilters: ['ICSE'] } } as never })));
     expect(mockUseDiscoverJourneyTransitions).toHaveBeenCalledWith(
       expect.objectContaining({ schools: [SCHOOL_B] }),
     );

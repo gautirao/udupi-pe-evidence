@@ -256,29 +256,35 @@ describe('controller-ordering contract — camera / map-layer controllers', () =
     expect(regionGuideCallLine).toBeLessThan(overviewNavCallLine);
   });
 
-  it('the window.__debug.mapState effect (reads schoolMarkerFocusTick/canonicalNodeFitCount) is declared AFTER the useDiscoverCameraController call closes, not before', () => {
+  it('the window.__debug bridge (reads schoolMarkerFocusTick/canonicalNodeFitCount) is invoked AFTER the useDiscoverCameraController call closes, not before', () => {
+    // Issue #2142 (correction pass) — the two __debug effects moved into
+    // controllers/useDiscoverDebugBridge.ts, so the thing whose position must
+    // be after the camera controller is now that controller's CALL SITE. The
+    // property is unchanged: the bridge cannot publish schoolMarkerFocusTick /
+    // canonicalNodeFitCount before the camera controller has produced them.
     const controllerCallLine = firstLineIndexMatching(/useDiscoverCameraController\(\{/);
+    const bridgeCallLine = firstLineIndexMatching(/useDiscoverDebugBridge\(\{/);
     expect(controllerCallLine).toBeGreaterThan(-1);
-    // Issue #2142 Commit 5 (team-lead ruling) — the controller's result is
-    // now captured as ONE object (`const mapPresentationController = use...`)
-    // and destructured into this page's flat field names in a SEPARATE
-    // statement immediately AFTER the call, so `schoolMarkerFocusTick,`
-    // appears TWICE after the call site: once in that destructure (close to
-    // the call), and once inside the actual window.__debug.mapState effect
-    // (much further down). Anchor the field search at the debug-effect OPEN
-    // marker itself (found first, independently), not the call site, so it
-    // can only match the real occurrence inside that block.
-    const afterCallSite = lines.slice(controllerCallLine);
-    const debugEffectOpenOffset = afterCallSite.findIndex((line) => line.trim() === 'w.__debug = {' || line.includes('.__debug = {'));
-    expect(debugEffectOpenOffset).toBeGreaterThan(-1);
-    const afterDebugEffectOpen = afterCallSite.slice(debugEffectOpenOffset);
-    const debugEffectFieldOffset = afterDebugEffectOpen.findIndex((line) => line.includes('schoolMarkerFocusTick,'));
-    expect(debugEffectFieldOffset).toBeGreaterThan(-1);
-    // The debug object's opening assignment must come before the field
-    // reference inside it (sanity the regex found the right block) — always
-    // true by construction now (debugEffectFieldOffset is searched relative
-    // to debugEffectOpenOffset), kept as an explicit assertion for clarity.
-    expect(debugEffectFieldOffset).toBeGreaterThanOrEqual(0);
+    expect(bridgeCallLine).toBeGreaterThan(-1);
+    expect(bridgeCallLine).toBeGreaterThan(controllerCallLine);
+    // ...and the bridge is actually fed those two values, not silently dropped.
+    const bridgeWindow = lines.slice(bridgeCallLine, bridgeCallLine + 25).join('\n');
+    expect(bridgeWindow).toMatch(/^\s*schoolMarkerFocusTick,$/m);
+    expect(bridgeWindow).toMatch(/^\s*canonicalNodeFitCount,$/m);
+  });
+
+  it('the debug bridge is the ONLY __debug writer — the composition root itself writes none', () => {
+    // Issue #2142 (correction pass) — replaces the former "find the __debug
+    // effect body inside MapDiscovery.tsx" anchor, which is now unfindable by
+    // construction. The stronger property: there is exactly one __debug write
+    // site in the whole Discover surface, and it is the bridge controller.
+    expect(source).not.toMatch(/__debug\s*=/);
+    const bridgeSource = fs.readFileSync(
+      path.resolve(__dirname, '../useDiscoverDebugBridge.ts'),
+      'utf-8',
+    );
+    const writeSites = bridgeSource.split('\n').filter((line) => /__debug = \{/.test(line));
+    expect(writeSites.length).toBe(2);
   });
 
   it('the camera and map-layer controllers receive the SAME scopeNamespaces reference (single source of truth, issue #1910) — behavioral proof across the split', () => {

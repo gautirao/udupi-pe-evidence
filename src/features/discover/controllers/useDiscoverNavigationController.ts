@@ -1,4 +1,6 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { deriveAreaPointFromNode } from '@/features/discover/navigation/nodeAreaPoint';
+import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { useAreasNavigationJourney } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import { useClusterFocusUrlParam } from '@/features/discover/state/url/clusterFocus';
@@ -22,6 +24,10 @@ export interface UseDiscoverNavigationControllerResult {
   setHoveredNavigationNodeKey: Dispatch<SetStateAction<string | null>>;
   focusedClusterMemberAreaKeys: readonly string[] | null;
   setFocusedClusterMemberAreaKeys: (keys: readonly string[] | null) => void;
+  /** Issue #1956 PR-4 (Option C) — the resolved canonical AREA leaf as an in-memory AreaPoint. */
+  nodeAreaPoint: AreaPoint | null;
+  /** Issue #1956 PR-4 — the ONE leaf-identity boolean; see the derivation comment for the R1 lock-step rule. */
+  isNodeAreaLeafActive: boolean;
 }
 
 /**
@@ -84,6 +90,53 @@ export function useDiscoverNavigationController({
     enabled: showAreasNavigationJourney,
   });
 
+  // Issue #1956 PR-4 (Option C) — pure bridge: the resolved canonical AREA
+  // leaf -> an in-memory AreaPoint, feeding the EXISTING selectedArea-driven
+  // listing/marker/popover machinery (see nodeAreaPoint.ts's module doc for
+  // the full transitional-state contract). Only ever non-null while the
+  // canonical Areas journey is active AND resolved to an AREA leaf — every
+  // legacy areaKey-driven journey sees `null` here, unchanged.
+  const nodeAreaPoint = useMemo(
+    () => (showAreasNavigationJourney ? deriveAreaPointFromNode(areasNavigationJourney.node) : null),
+    [showAreasNavigationJourney, areasNavigationJourney.node],
+  );
+
+  // Issue #1956 PR-4 — the ONE leaf-identity boolean shared by the
+  // layer-registry containment field, the widened isMarkerPopoverEligible
+  // render gate, and useMarkerSelection's capture gate/URL-write gate
+  // (risk R1 — these MUST move in lock-step).
+  //
+  // FIX CYCLE 2 (opus review, blocking Finding 1) — this MUST derive from
+  // `nodeAreaPoint != null`, not from `isResolvedAreaLeafNode` alone.
+  // `isResolvedAreaLeafNode` only checks `nodeType === 'AREA' && areaKey !=
+  // null`; it says nothing about `bounds`, which is independently nullable
+  // (`NavigationBounds | null`, navigation/types.ts) and whose
+  // centreLat/centreLon are themselves independently nullable. A resolved
+  // AREA leaf with `bounds: null` (or a bounds object with a null centre)
+  // satisfied the old `isResolvedAreaLeafNode` check while `nodeAreaPoint`
+  // (nodeAreaPoint.ts, transitional states (c)/(d)) was already null for it
+  // — so this boolean and the bridge disagreed, admitting the marker
+  // popover and the 'all-areas' layer category with NO area context to back
+  // them.
+  //
+  // Deliberate choice for the bounds-less leaf: it stays a NON-LEAF for
+  // every purpose this boolean gates (popover eligibility, layer category,
+  // URL-write gate) rather than rendering a partial/degraded listing
+  // surface. Rationale: `nodeAreaPoint.ts` already treats a bounds-less
+  // resolved AREA leaf as "no safe AreaPoint" (its own module doc, (c)/(d))
+  // because `AreaPoint.geo_center_lat/lon` are non-nullable — there is no
+  // safe centre to fit the map to or scope a listings query with. Treating
+  // it as a leaf here would admit `effectiveMapLayerCategory ===
+  // 'all-areas'` and a `listing=` URL write while every downstream
+  // consumer that actually NEEDS geo data (fitBounds, area-scoped
+  // listings) still has nothing to work with — worse than the current
+  // "falls back to area-group-bubbles" state, which is at least a coherent,
+  // navigable UI. `nodeAreaPoint != null` already implies
+  // `isResolvedAreaLeafNode` (it calls that predicate internally), so this
+  // is strictly narrower and requires no new import.
+  const isNodeAreaLeafActive =
+    showAreasNavigationJourney && nav.journey === 'area-first' && nodeAreaPoint != null;
+
   return {
     showAreasNavigationJourney,
     areasNavigationJourney,
@@ -91,5 +144,7 @@ export function useDiscoverNavigationController({
     setHoveredNavigationNodeKey,
     focusedClusterMemberAreaKeys,
     setFocusedClusterMemberAreaKeys,
+    nodeAreaPoint,
+    isNodeAreaLeafActive,
   };
 }

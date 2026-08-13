@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useDiscoverRegionSummary } from '@/hooks/useDiscoverRegionSummary';
 import { useRegionScopedAreaGroups } from '@/hooks/useRegionScopedAreaGroups';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
@@ -117,7 +117,23 @@ export function useDiscoverGeographyController({
   const { data: _areasDataForPanel } = useDiscoverAreas(isCityValid ? city : '');
   const discoverAreasForPanel = _areasDataForPanel?.areas ?? [];
 
+  // "Showing X of N areas on the map" — sourced from AreaMarkerLayer's own
+  // onMarkersComputed callback (never fetched/fabricated independently).
+  //
+  // Issue #2142 (correction pass) — moved here from MapDiscovery.tsx. It is a
+  // report-up of how many AREA markers the map actually rendered, which is
+  // this controller's own subject matter; the panel is its only reader.
+  const [areaMarkerCounts, setAreaMarkerCounts] = useState<{ shown: number; total: number }>({
+    shown: 0,
+    total: 0,
+  });
+  const handleAreaMarkersComputed = useCallback((shown: number, total: number) => {
+    setAreaMarkerCounts((prev) => (prev.shown === shown && prev.total === total ? prev : { shown, total }));
+  }, []);
+
   return {
+    areaMarkerCounts,
+    handleAreaMarkersComputed,
     summaryRegions,
     scopeNamespaces,
     resolvedUrlScope,

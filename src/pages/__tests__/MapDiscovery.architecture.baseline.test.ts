@@ -55,6 +55,14 @@ const DISCOVER_CONTEXT_PATH = path.resolve(
 );
 const discoverContextSource = fs.readFileSync(DISCOVER_CONTEXT_PATH, 'utf-8');
 
+// Issue #2142 (correction pass) — the two window.__debug write effects moved
+// out of MapDiscovery.tsx into their own single-owner controller.
+const DEBUG_BRIDGE_PATH = path.resolve(
+  __dirname,
+  '../../features/discover/controllers/useDiscoverDebugBridge.ts',
+);
+const debugBridgeSource = fs.readFileSync(DEBUG_BRIDGE_PATH, 'utf-8');
+
 function countMatches(text: string, regex: RegExp): number {
   const matches = text.match(regex);
   return matches ? matches.length : 0;
@@ -84,7 +92,10 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
       //     one controller call site + destructure becomes five)
       //   C2 (page-context / area-groups / bounded-browse / page-state /
       //       map-data extraction)                     2276 -> 1944
-      expect(lines.length).toBe(1944);
+      //   C3 (badge / journey-chrome / filter-chrome / marker-popover /
+      //       debug-bridge + navigation, geography, school and
+      //       mobile-presentation absorption)          1944 -> 1263
+      expect(lines.length).toBe(1263);
     });
 
     it('records the CURRENT actual top-level import statement count (updated each commit)', () => {
@@ -103,7 +114,7 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
       // capability-controller imports) -> 53 (correction pass C2: the page no
       // longer imports the data hooks/selectors those controllers now own).
       const importCount = countMatches(source, /^import /gm);
-      expect(importCount).toBe(53);
+      expect(importCount).toBe(58);
     });
 
     it('LOC must never exceed the Commit-1 baseline in any later commit (forward ceiling)', () => {
@@ -140,26 +151,20 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
     // trap and was cross-checked by hand against every useState/useRef
     // call site in the file (jCodemunch search_text, verified individually
     // at lines 219, 318, 701, 754, 791, 809, 810, 698, 1321).
-    it('records the CURRENT page-local useState count (updated each commit)', () => {
-      // Commit 3: leaf hooks moved boundedSearchTriggered/mapBbox out (6 -> 4);
-      // the navigation controller then moved hoveredNavigationNodeKey out too
-      // (4 -> 3). nearSchoolOpen/selectedListingPreview remain page-local.
-      const useStateCount = countMatches(source, /\buseState[(<]/g);
-      expect(useStateCount).toBe(2);
+    // CORRECTION PASS — all three are now ZERO, and that is the real
+    // acceptance property, not a recorded number: a composition root owns no
+    // state, runs no effect and holds no ref of its own. Every one of them
+    // belongs to a named capability controller.
+    it('the page holds NO local useState (every piece of state has a named controller owner)', () => {
+      expect(countMatches(source, /\buseState[(<]/g)).toBe(0);
     });
 
-    it('records the CURRENT page-local useEffect count (updated each commit)', () => {
-      // Commit 3 moved 3 effects (bbox unmount cleanup, MAP->LIST cleanup,
-      // city-change reset) into useDiscoverViewportTracker: 8 -> 5.
-      const useEffectCount = countMatches(source, /\buseEffect\(/g);
-      expect(useEffectCount).toBe(4);
+    it('the page runs NO local useEffect (every effect has a named controller owner)', () => {
+      expect(countMatches(source, /\buseEffect\(/g)).toBe(0);
     });
 
-    it('records the CURRENT page-local useRef count (updated each commit)', () => {
-      // Commit 3 moved bboxTimerRef into useDiscoverViewportTracker: 3 -> 2
-      // (mapContainerRef, prevStartOverTickRef remain page-local).
-      const useRefCount = countMatches(source, /\buseRef[(<]/g);
-      expect(useRefCount).toBe(1);
+    it('the page holds NO local useRef', () => {
+      expect(countMatches(source, /\buseRef[(<]/g)).toBe(0);
     });
 
     it('page-local hook counts must never exceed the Commit-1 baseline (forward ceiling)', () => {
@@ -188,36 +193,44 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
   });
 
   describe('window.__debug shape contract (Playwright E2E contract, AC4 in prior #1824 work)', () => {
-    // The page currently writes to window.__debug in two places: a
-    // `propertyMapListings` key (set once, spreading any prior __debug) and
-    // a `mapState` key (set later, spreading any prior __debug.mapState).
-    // Later commits must preserve this exact shape byte-for-byte; this test
-    // proves today's shape from the actual source so future commits have
-    // something concrete to diff against.
-    it('sets window.__debug.propertyMapListings', () => {
-      expect(source).toMatch(
+    // CORRECTION PASS — the two write sites moved off MapDiscovery.tsx into
+    // controllers/useDiscoverDebugBridge.ts, so these assertions are REPOINTED
+    // at that file rather than deleted. The contract they protect is unchanged:
+    // a `propertyMapListings` key (set once, spreading any prior __debug) and a
+    // `mapState` key (set later, spreading any prior __debug.mapState), in that
+    // order.
+    //
+    // Additionally guarded here: the page itself must now contain ZERO
+    // __debug write sites, so there can never be a second, unowned bridge.
+    it('MapDiscovery.tsx no longer writes window.__debug at all (single owner)', () => {
+      expect(source).not.toMatch(/__debug\s*=/);
+    });
+
+    it('the debug bridge sets window.__debug.propertyMapListings', () => {
+      expect(debugBridgeSource).toMatch(
         /\(window as Window & \{ __debug\?: Record<string, unknown> \}\)\.__debug = \{[\s\S]{0,200}propertyMapListings:/,
       );
     });
 
-    it('sets window.__debug.mapState via a spread-preserving assignment', () => {
-      expect(source).toMatch(/w\.__debug = \{\s*\.\.\.w\.__debug,\s*mapState: \{/);
+    it('the debug bridge sets window.__debug.mapState via a spread-preserving assignment', () => {
+      expect(debugBridgeSource).toMatch(/w\.__debug = \{\s*\.\.\.w\.__debug,\s*mapState: \{/);
     });
 
     it('the mapState assignment spreads the prior mapState value (does not clobber sibling keys)', () => {
-      expect(source).toMatch(
+      expect(debugBridgeSource).toMatch(
         /\.\.\.\(w\.__debug\?\.mapState as Record<string, unknown> \| undefined\)/,
       );
     });
 
     it('records the two known __debug write sites by line number (forward diff anchor)', () => {
+      const bridgeLines = debugBridgeSource.split('\n');
       const propertyMapListingsLine =
-        lines.findIndex((line) => line.includes('.__debug = {') && line.includes('window as Window')) + 1;
-      const mapStateLine = lines.findIndex((line) => line.trim() === 'w.__debug = {') + 1;
+        bridgeLines.findIndex((line) => line.includes('.__debug = {') && line.includes('window as Window')) + 1;
+      const mapStateLine = bridgeLines.findIndex((line) => line.trim() === 'w.__debug = {') + 1;
       expect(propertyMapListingsLine).toBeGreaterThan(0);
       expect(mapStateLine).toBeGreaterThan(0);
-      // mapState write must come after the propertyMapListings write today —
-      // this is the same textual ordering constraint exercised in
+      // mapState write must come after the propertyMapListings write — this is
+      // the same textual ordering constraint exercised in
       // controllerOrdering.contract.test.ts.
       expect(mapStateLine).toBeGreaterThan(propertyMapListingsLine);
     });

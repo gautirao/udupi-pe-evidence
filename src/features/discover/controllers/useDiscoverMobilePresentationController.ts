@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useMobileMapOverlayShell } from '@/hooks/useMobileMapOverlayShell';
 import { usePreviewSheetOcclusion } from '@/features/discover/state/usePreviewSheetOcclusion';
 import { MOBILE_LISTING_PREVIEW_OCCLUSION_PX } from '@/shared/map/zoomPolicy';
@@ -15,7 +16,6 @@ export interface UseDiscoverMobilePresentationControllerParams {
    * desktop marker concern, not mobile-specific), threaded in as an input.
    */
   isMarkerPopoverEligible: boolean;
-  selectedListingPreview: SelectedListingPreview | null;
 }
 
 /**
@@ -48,8 +48,27 @@ export function useDiscoverMobilePresentationController({
   mobileMapOpen,
   setMobileView,
   isMarkerPopoverEligible,
-  selectedListingPreview,
 }: UseDiscoverMobilePresentationControllerParams) {
+  // Issue #1956 PR-5 (Slice 5, AC5.10/AC5.10c) — the mobile Map-mode preview
+  // sheet's data. Reported UP by DiscoverAreasJourneyPanel's own
+  // AreaLeafListingsSurface (via the panel surface's
+  // onSelectedListingPreviewChange), which derives it from its own
+  // ALREADY-FETCHED DiscoverCityListingItem[] — this page issues NO second
+  // query and does not re-derive the preview itself. Plain useState (never
+  // the URL): the underlying selection is URL-backed (`nav.selectedListing`,
+  // OQ6 ruling — KEEP the existing listing= PUSH peek), so this state is a
+  // pure, harmless PROJECTION of that URL value re-synced by the panel's own
+  // effect whenever nav.selectedListing/the area's result set changes; it is
+  // never itself written to the URL/history.
+  //
+  // Issue #2142 (correction pass) — moved here from MapDiscovery.tsx. This
+  // controller is the #2129 mobile-preview-occlusion owner and every other
+  // consumer of this state is downstream of it, so the state and the geometry
+  // it drives now sit together; the setter is re-exported for the panel
+  // surface's report-up callback.
+  const [selectedListingPreview, setSelectedListingPreview] =
+    useState<SelectedListingPreview | null>(null);
+
   const { triggerRef: mobileMapTriggerRef } = useMobileMapOverlayShell({
     isOpen: mobileMapOpen,
     onClose: () => setMobileView('LIST'),
@@ -69,6 +88,8 @@ export function useDiscoverMobilePresentationController({
     usePreviewSheetOcclusion(isPreviewSheetOpen, selectedListingPreview?.id ?? null);
 
   return {
+    selectedListingPreview,
+    setSelectedListingPreview,
     mobileMapTriggerRef,
     bottomOcclusionPx,
     isPreviewSheetOpen,

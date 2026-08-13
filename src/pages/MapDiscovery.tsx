@@ -53,6 +53,11 @@ import { useDiscoverBoundedBrowseController } from '@/features/discover/controll
 import { useNearSchoolSheetState } from '@/features/discover/controllers/useNearSchoolSheetState';
 import { useDiscoverMarkerController } from '@/features/discover/controllers/useDiscoverMarkerController';
 import { useDiscoverPageStateController } from '@/features/discover/controllers/useDiscoverPageStateController';
+import { useDiscoverBadgeController } from '@/features/discover/controllers/useDiscoverBadgeController';
+import { useDiscoverJourneyChromeController } from '@/features/discover/controllers/useDiscoverJourneyChromeController';
+import { useDiscoverFilterChromeController } from '@/features/discover/controllers/useDiscoverFilterChromeController';
+import { useDiscoverMarkerPopoverController } from '@/features/discover/controllers/useDiscoverMarkerPopoverController';
+import { useDiscoverDebugBridge } from '@/features/discover/controllers/useDiscoverDebugBridge';
 import { useDiscoverMapDataController } from '@/features/discover/controllers/useDiscoverMapDataController';
 import { useDiscoverMobilePresentationController } from '@/features/discover/controllers/useDiscoverMobilePresentationController';
 import { useDiscoverSchoolController } from '@/features/discover/controllers/useDiscoverSchoolController';
@@ -130,6 +135,8 @@ export default function MapDiscovery() {
     setHoveredNavigationNodeKey,
     focusedClusterMemberAreaKeys,
     setFocusedClusterMemberAreaKeys,
+    nodeAreaPoint,
+    isNodeAreaLeafActive,
   } = navigationController;
 
   // Issue #2088 (commit 5) — REQUIRED CHANGE 7's reset effect (previously
@@ -146,67 +153,13 @@ export default function MapDiscovery() {
   // pure href (a copied/shared link can never carry a stale focus either).
   // See `clusterFocus.ts`'s module doc for the full BR1-BR8 accounting.
 
-  // Issue #1956 PR-5 (Slice 5, AC5.10/AC5.10c) — the mobile Map-mode preview
-  // sheet's data. Reported UP by DiscoverAreasJourneyPanel's own
-  // AreaLeafListingsSurface (via DiscoverRightPanelContainer's
-  // onSelectedListingPreviewChange), which derives it from its own
-  // ALREADY-FETCHED DiscoverCityListingItem[] — this page issues NO second
-  // query and does not re-derive the preview itself. Plain useState (never
-  // the URL): the underlying selection is URL-backed (`nav.selectedListing`,
-  // OQ6 ruling — KEEP the existing listing= PUSH peek), so this state is a
-  // pure, harmless PROJECTION of that URL value re-synced by the panel's own
-  // effect whenever nav.selectedListing/the area's result set changes; it is
-  // never itself written to the URL/history. Distinct from the cluster-focus
-  // state above — this addition does not touch that state or its clearing
-  // effect.
-  const [selectedListingPreview, setSelectedListingPreview] =
-    useState<SelectedListingPreview | null>(null);
+  // Issue #2142 (correction pass) — selectedListingPreview moved into
+  // controllers/useDiscoverMobilePresentationController.ts, the #2129
+  // preview-occlusion owner and its only downstream consumer.
 
-  // Issue #1956 PR-4 (Option C) — pure bridge: the resolved canonical AREA
-  // leaf -> an in-memory AreaPoint, feeding the EXISTING selectedArea-driven
-  // listing/marker/popover machinery (see nodeAreaPoint.ts's module doc for
-  // the full transitional-state contract). Only ever non-null while the
-  // canonical Areas journey is active AND resolved to an AREA leaf — every
-  // legacy areaKey-driven journey sees `null` here, unchanged.
-  const nodeAreaPoint = useMemo(
-    () => (showAreasNavigationJourney ? deriveAreaPointFromNode(areasNavigationJourney.node) : null),
-    [showAreasNavigationJourney, areasNavigationJourney.node],
-  );
-  // Issue #1956 PR-4 — the ONE leaf-identity boolean shared by the
-  // layer-registry containment field (below), the widened
-  // isMarkerPopoverEligible render gate, and useMarkerSelection's capture
-  // gate/URL-write gate (risk R1 — these MUST move in lock-step).
-  //
-  // FIX CYCLE 2 (opus review, blocking Finding 1) — this MUST derive from
-  // `nodeAreaPoint != null`, not from `isResolvedAreaLeafNode` alone.
-  // `isResolvedAreaLeafNode` only checks `nodeType === 'AREA' && areaKey !=
-  // null`; it says nothing about `bounds`, which is independently nullable
-  // (`NavigationBounds | null`, navigation/types.ts) and whose
-  // centreLat/centreLon are themselves independently nullable. A resolved
-  // AREA leaf with `bounds: null` (or a bounds object with a null centre)
-  // satisfied the old `isResolvedAreaLeafNode` check while `nodeAreaPoint`
-  // (nodeAreaPoint.ts, transitional states (c)/(d)) was already null for it
-  // — so this boolean and the bridge disagreed, admitting the marker
-  // popover and the 'all-areas' layer category with NO area context to back
-  // them.
-  //
-  // Deliberate choice for the bounds-less leaf: it stays a NON-LEAF for
-  // every purpose this boolean gates (popover eligibility, layer category,
-  // URL-write gate) rather than rendering a partial/degraded listing
-  // surface. Rationale: `nodeAreaPoint.ts` already treats a bounds-less
-  // resolved AREA leaf as "no safe AreaPoint" (its own module doc, (c)/(d))
-  // because `AreaPoint.geo_center_lat/lon` are non-nullable — there is no
-  // safe centre to fit the map to or scope a listings query with. Treating
-  // it as a leaf here would admit `effectiveMapLayerCategory ===
-  // 'all-areas'` and a `listing=` URL write while every downstream
-  // consumer that actually NEEDS geo data (fitBounds, area-scoped
-  // listings) still has nothing to work with — worse than the current
-  // "falls back to area-group-bubbles" state, which is at least a coherent,
-  // navigable UI. `nodeAreaPoint != null` already implies
-  // `isResolvedAreaLeafNode` (it calls that predicate internally), so this
-  // is strictly narrower and requires no new import.
-  const isNodeAreaLeafActive =
-    showAreasNavigationJourney && nav.journey === 'area-first' && nodeAreaPoint != null;
+  // Issue #2142 (correction pass) — nodeAreaPoint and isNodeAreaLeafActive
+  // (issue #1956 PR-4) moved into controllers/useDiscoverNavigationController.ts,
+  // which already owns the resolved node they derive from.
 
   // Issue #2142 (correction pass) — useAreaGroups + focusedGroup +
   // focusedGroupAreas + groupAreaKeysForMapData + selectedGroupName (the four
@@ -391,15 +344,9 @@ export default function MapDiscovery() {
   // map-presentation cluster into ONE call further below — see that call
   // site's own comment for why consolidation picks the latest position.
 
-  // "Showing X of N areas on the map" — sourced from AreaMarkerLayer's own
-  // onMarkersComputed callback (never fetched/fabricated independently).
-  const [areaMarkerCounts, setAreaMarkerCounts] = useState<{ shown: number; total: number }>({
-    shown: 0,
-    total: 0,
-  });
-  const handleAreaMarkersComputed = useCallback((shown: number, total: number) => {
-    setAreaMarkerCounts((prev) => (prev.shown === shown && prev.total === total ? prev : { shown, total }));
-  }, []);
+  // Issue #2142 (correction pass) — areaMarkerCounts/handleAreaMarkersComputed
+  // moved into controllers/useDiscoverGeographyController.ts (how many AREA
+  // markers the map actually rendered is that controller's own subject).
 
   // Issue #1824 Slice S7 — schoolFocusTick + schoolMarkerFocusTick now live in
   // useDiscoverCameraOrchestration; see cameraView below (called after
@@ -461,6 +408,8 @@ export default function MapDiscovery() {
   // useRegionalAreaGroups/corridorGroups (documented deviation ->
   // useDiscoverAgriController, second batch).
   const {
+    areaMarkerCounts,
+    handleAreaMarkersComputed,
     summaryRegions,
     scopeNamespaces,
     resolvedUrlScope,
@@ -551,50 +500,13 @@ export default function MapDiscovery() {
   // moved a few lines down (after useDiscoverJourneyTransitions), because it now reads
   // journeyView.areaRestoreTick/cityRestoreTick. The object SHAPE is byte-identical.
 
-  // Schools for SchoolMarkerLayer — fetched only in school-first journey when an area is selected.
-  // Single owner: MapDiscovery fetches once and passes down to both SchoolMarkerLayer and
-  // SchoolsInAreaPanel (via DiscoverRightPanel) to avoid duplicate API calls.
-  // Issue #1131 — URL-backed board filter for schools. The board filters live in
-  // nav.filters.boardFilters (parsed from repeated ?board=CBSE&board=ICSE params).
-  // The previous code read `nav.boardFilters`, which is undefined on the URL state
-  // shape — boardFilters live under `filters`. That bug meant the URL never reached the
-  // schools query.
-  const urlBoardFilters = useMemo(
-    () => nav.filters.boardFilters ?? [],
-    [nav.filters.boardFilters],
-  );
+  // Issue #2142 (correction pass) — urlBoardFilters (#1131),
+  // hasResolvedCanonicalArea/canonicalSchoolsAreaKey/schoolsAreaKey (#2124,
+  // #1798) and categoryFilters all moved INTO
+  // controllers/useDiscoverSchoolController.ts. They were five page-level
+  // consts whose only consumers were that controller's schools query and its
+  // journey-flip guard.
 
-  // Issue #2124 (fix-cycle) — true when journey=area-first and the canonical Areas
-  // hierarchy is resolved to an AREA leaf (node=a:...). `derivePanelContent`
-  // (panelContent below) only ever reads the LEGACY `areaKey`/`groupId` params, which
-  // the canonical journey never sets — so panelContent alone cannot detect the
-  // canonical "schools-in-area" sub-step. This is the server-resolved identity
-  // (areasNavigationJourney.node, never parsed/reconstructed from `node=`) used by
-  // both the schools query below and the school-select journey-flip guard in
-  // useDiscoverJourneyTransitions.
-  const hasResolvedCanonicalArea =
-    nav.journey === 'area-first' && areasNavigationJourney.node?.nodeType === 'AREA';
-  const canonicalSchoolsAreaKey =
-    hasResolvedCanonicalArea && (nav.schoolPicking || nav.schoolId)
-      ? areasNavigationJourney.node?.areaKey ?? undefined
-      : undefined;
-
-  // Issue #1798 — gate on panelContent (derivePanelContent's own routing result,
-  // already computed above) instead of re-deriving journey === 'area-first' /
-  // 'school-first' here. derivePanelContent resolves to 'schools-in-area' for
-  // school-first+areaKey AND for area-first+schoolPicking AND for the "journeyless"
-  // cold-load case (areaKey + schoolPicking with no explicit journey param — e.g.
-  // /discover?areaKey=...&groupId=... with no journey=, per #1745 Batch B). The prior
-  // literal `journey === 'area-first' && schoolPicking` check missed that third case,
-  // so area-first "Add school" silently returned 0 schools for journeyless area URLs
-  // even though the SchoolsInAreaPanel itself rendered correctly (routed via the same
-  // journeyless fallback in derivePanelContent). Reusing panelContent keeps this query
-  // byte-for-byte in sync with the single source of truth for panel routing.
-  // Issue #2124 (fix-cycle) — ALSO falls back to canonicalSchoolsAreaKey so the
-  // canonical area-first schools-in-area sub-step gets a real areaKey too.
-  const schoolsAreaKey =
-    (panelContent === 'schools-in-area' ? nav.areaKey ?? undefined : undefined) ??
-    canonicalSchoolsAreaKey;
   // Issue #2142 Commit 3 — useSchoolsByArea/allSchools/schools/
   // useDiscoverJourneyTransitions/useSchoolListings/useSchoolFirstCounts
   // consolidated into ONE controllers/useDiscoverSchoolController.ts call,
@@ -602,15 +514,8 @@ export default function MapDiscovery() {
   // call site's own comment for why this consolidation moves the call
   // later than several of these hooks' individual pre-refactor positions.
 
-  // Single setter consumed by chip UI: updates URL (canonical) and local state (mirror).
-  // Always uses REPLACE semantics (actions.setBoardFilters is REPLACE-only).
-  const handleBoardFilterChange = useCallback(
-    (boards: string[]) => {
-      setSchoolBoardFilter(boards);
-      actions.setBoardFilters(boards);
-    },
-    [setSchoolBoardFilter, actions],
-  );
+  // Issue #2142 (correction pass) — handleBoardFilterChange moved into
+  // controllers/useDiscoverSchoolController.ts.
 
   // Issue #1824 Slice S7 — the window.__debug.mapState effect (Playwright E2E
   // contract) moved a few lines down (after useDiscoverCameraOrchestration),
@@ -631,48 +536,9 @@ export default function MapDiscovery() {
   // effect moved into controllers/useDiscoverMapDataController.ts, next to the
   // query that produces every one of their inputs.
 
-  // Discover count source of truth: /api/discover/areas (public, no auth).
-  // cityTotal is the sum of per-area listingCount (live LIVE+not-archived+not-duplicate).
-  // Do NOT use auth-gated Supabase arrays (listingsWithCoords / filteredListings)
-  // for public Discover empty-state or city count display.
-  const cityTotal = useMemo(
-    () => discoverAreas.reduce((sum, a) => sum + (a.listingCount ?? 0), 0),
-    [discoverAreas],
-  );
-
-  // Issue #1261 rev2 (AC11) — pure helper that converts the already-fetched + already-
-  // client-filtered anon school-radius listings into Leaflet-pin shape for PropertyMap.
-  // Exported for unit-test parity with the marker derivation flow. Mirrors the
-  // areaMarkerListings useMemo in useDiscoverMapData.ts (filter null coords →
-  // normalise lat/lon → cityListingToPropertyListing). Reuses the existing mapper so
-  // the marker shape, popup, and clustering pipeline are identical to anon area pins.
-  //
-  // ANON-SAFE: consumes only fields from the 20-field public contract (id/propertyType/
-  // title/locality/pricePaise/primaryImageUrl/listingPurpose/bedrooms/builtArea/landArea + units/
-  // createdAt/lat/lon). Does NOT read trustTier/reraNumber/reraValid/sellerType/status/
-  // updatedAt/lastUpdatedAt/firstPublishedAt. cityListingToPropertyListing synthesises
-  // status='LIVE' and seller_type=null LOCALLY (no server private-field exposure).
-  //
-  // DECISION-1 parity: callers pass the post-applyAnonPropertyFilters set so map/panel/
-  // badge all reflect the same filtered universe.
-
-  // Issue #2142 (correction pass) — focusedGroup moved into
-  // controllers/useDiscoverAreaGroupsController.ts (called above), alongside
-  // the three other derivations that share its resolver and inputs.
-
-  // Issue #1175 v3 — group aggregate count for the badge.
-  // Only active when groupId is set and no area/school is selected (those take precedence).
-  // null  = group metadata still loading (isLoadingAreaGroups=true).
-  // O(k) where k = member area count (bounded, typically 2–6).
-  const groupListingsCount = useMemo((): number | null | undefined => {
-    if (!nav.groupId) return undefined;          // no group active
-    if (!focusedGroup) return null;                   // null when areaGroupsData still loading OR when groupId no longer exists — both intentionally hide the badge
-    // Use a Set for O(1) membership checks → overall O(N + k) not O(N·k)
-    const memberKeySet = new Set(focusedGroup.area_keys);
-    return discoverAreas
-      .filter((a) => memberKeySet.has(a.areaKey))
-      .reduce((sum, a) => sum + (a.listingCount ?? 0), 0);
-  }, [nav.groupId, focusedGroup, discoverAreas]);
+  // Issue #2142 (correction pass) — cityTotal and groupListingsCount moved into
+  // controllers/useDiscoverBadgeController.ts, alongside every other value
+  // derived from the ONE deriveDiscoverBadge() call (#1817 no-fork contract).
 
   // Issue #2142 Commit 3 (C5) — useSchoolsByArea + useDiscoverJourneyTransitions
   // (issue #1824 Slice S6) + useSchoolListings (Slice S11b C3) +
@@ -711,16 +577,15 @@ export default function MapDiscovery() {
     schoolByIdError,
     discoverAreas,
     areasLoading,
-    urlBoardFilters,
+    nav,
+    areasNavigationJourney,
+    handleAreaBack,
     schoolBoardFilter,
     panelContent,
     city,
     toast,
-    hasResolvedCanonicalArea,
     boundedSearchTriggered,
     setBoundedSearchTriggered,
-    schoolsAreaKey,
-    categoryFilters: nav.filters.categoryFilters ?? [],
     isAuthenticated,
     areaListings,
     schoolRadiusListings,
@@ -735,6 +600,8 @@ export default function MapDiscovery() {
   const {
     schoolsQuery,
     schools,
+    handleBoardFilterChange,
+    handleAreaFirstBack,
     journeyView,
     journeyCommands,
     schoolListings,
@@ -745,139 +612,84 @@ export default function MapDiscovery() {
     schoolZoneLabels,
   } = schoolController;
 
-  // Issue #1817 (AC8) — after Start Over, move focus to the panel's h1 (city hero) so
-  // keyboard users land somewhere sensible (design §8). Start Over always lands on the
-  // guided-entry city landing (bare ?city=...), whose h1 carries id="discover-panel-h1"
-  // (GuidedEntryPanel). Runs on the next paint after startOverTick changes, since the
-  // panel tree must re-render to guided-entry (and mount the new h1) before it can be
-  // focused; a plain synchronous focus() call would target the about-to-unmount node.
-  // Issue #1824 Slice S6 — reads journeyView.startOverTick (moved-tick owner).
-  const prevStartOverTickRef = useRef(journeyView.startOverTick);
-  useEffect(() => {
-    if (journeyView.startOverTick === prevStartOverTickRef.current) return;
-    prevStartOverTickRef.current = journeyView.startOverTick;
-    const raf = requestAnimationFrame(() => {
-      document.getElementById('discover-panel-h1')?.focus();
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [journeyView.startOverTick]);
-
-  // Issue #1152 — derive the correct badge count given area/filter/loading context.
-  // Uses raw filters, not effectiveFilters: the bbox polygon injected by effectiveFilters is system-managed; badge takes the area path when selectedArea != null regardless.
-  // Cycle 7: areaListings re-added (Option B). areaListings comes from useDiscoverCityListings
-  // which already applies bedrooms/propertyType/price at the backend, so its .length matches
-  // the right panel exactly — satisfying AC4. The Cycle 3 failure was a test-side bug
-  // (?bedrooms= vs ?beds= URL param); that URL contract is fixed in Cycle 5/6.
-  // Issue #1175 v2 — schoolListingsCount carries the already-computed schoolListings.length
-  // so badge follows the active school-radius count instead of being suppressed.
-  // When school-radius is active but area listings are still loading, null is passed to
-  // hide the badge temporarily (avoids flashing a stale area/city total).
-  const schoolRadiusActive =
-    filters.schoolLat != null && filters.schoolLon != null && filters.schoolRadiusKm != null;
-  const discoverBadge = useMemo(
-    () =>
-      deriveDiscoverBadge({
-        // Issue #2083 (F2 fix) — was the bare `selectedArea`, which is null
-        // under the canonical `node=` journey (only the legacy `areaKey` path
-        // sets it), so the area branch was skipped and the badge fell
-        // through to the city-wide total (discoverBadge.ts's cityTotal
-        // fallback) while the panel correctly showed area-scoped content.
-        // `effectiveSelectedArea` bridges both sources — see its declaration
-        // above.
-        selectedArea: effectiveSelectedArea,
-        filters,
-        isLoadingAreaListings,
-        cityTotal,
-        areaListings,
-        schoolListingsCount: schoolRadiusActive
-          // Issue #1175 v2 corrective: on the auth path, filteredListings comes from
-          // useDiscoverListings (backend proximity query), not from useDiscoverCityListings.
-          // isLoadingAreaListings only tracks the public city-listings query and can be false
-          // while the backend proximity query is still in-flight (listingDataLoading=true),
-          // which would cause schoolListings.length to return 0 from an empty filteredListings
-          // and the badge would briefly show "0 properties" instead of hiding.
-          // Fix: also hide when the auth-path listing query is in-flight.
-          // Issue #1261: on the anon path, schoolListings now comes from the public
-          // /school-radius-listings endpoint, so hide while THAT query is in-flight too
-          // (schoolRadiusListingsLoading) to avoid a transient "0 properties" flash.
-          ? (isLoadingAreaListings
-              || (isAuthenticated && listingDataLoading)
-              || (!isAuthenticated && schoolRadiusListingsLoading))
-            ? null
-            : schoolListings.length
-          : undefined,
-        groupListingsCount,
-        // Issue #1824 S4 — KNOWN, INTENTIONAL split-brain: this badge reads
-        // debouncedSearch (local 250ms, from useDiscoverSearchState), NOT
-        // nav.q (which drives ActiveContextChips). Do NOT unify — see
-        // useDiscoverSearchState's header comment.
-        searchQuery: debouncedSearch,
-        // Issue #1817 — anon path only: schoolRadiusListings is the FULL radius set
-        // BEFORE applyAnonPropertyFilters (schoolListings, above, is the post-filter
-        // set), so its length is the honest unfiltered N. The authenticated proximity
-        // endpoint pre-filters server-side and has no equivalent unfiltered total —
-        // left undefined there so the selector falls back to the no-number state (AC6).
-        schoolRadiusUnfilteredCount:
-          schoolRadiusActive && !isAuthenticated && !schoolRadiusListingsLoading
-            ? schoolRadiusListings.length
-            : undefined,
-      }),
-    // schoolListings.length is a number primitive — safe dep (no spurious identity changes).
-    // schoolRadiusActive is derived from filters (already a dep), but listed explicitly for clarity.
-    // listingDataLoading added for auth-path loading guard (Issue #1175 v2 corrective).
-    // groupListingsCount: derived from focusedGroup + discoverAreas — listed as a primitive
-    // (number | null | undefined) so it is safe to use directly as a dep.
-    // debouncedSearch: keyword search — badge shows filtered count when active (Issue #1185).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [effectiveSelectedArea, filters, isLoadingAreaListings, listingDataLoading, isAuthenticated, schoolRadiusListingsLoading, cityTotal, areaListings, schoolRadiusActive, schoolListings.length, groupListingsCount, debouncedSearch, schoolRadiusListings.length],
-  );
-
-  // Issue #1817 (code-review follow-up) — single computed copy string for the
-  // area-selected scope, shared verbatim by the map badge (isAreaFirstSelectedAreaState
-  // branch below) AND the AreaSelectedPanel result-summary stat (via DiscoverRightPanel
-  // → AreaSelectedPanel's `areaResultSummaryText` prop), so the two surfaces can never
-  // diverge — exactly one call to formatDiscoverBadgeCopy, exactly one selector
-  // (discoverBadge) behind it.
-  // Issue #2083 (diagnose-then-fix cycle 3, RC_B recurrence) — was gated on the
-  // bare `selectedArea`, which is null under the canonical `node=` journey (only
-  // the legacy `areaKey` path ever sets it — see effectiveSelectedArea's own
-  // declaration/comment above for why "MUST read effectiveSelectedArea, never
-  // the bare selectedArea" applies to every consumer here). That made this
-  // string null at a resolved node-journey AREA leaf, so the map badge fell
-  // through to the generic zero-state/fallback copy instead of area-scoped text
-  // (e.g. missing the area's own name in a genuine zero-listing result).
-  const areaResultSummaryText = useMemo(
-    () =>
-      effectiveSelectedArea
-        ? formatDiscoverBadgeCopy(discoverBadge, {
-            scopeLabel: effectiveSelectedArea.areaLabel,
-            noun: 'verified properties',
-            searchQuery: nav.q,
-          })
-        : null,
-    [effectiveSelectedArea, discoverBadge, nav.q],
-  );
-
-  // Issue #1817 (AC11) — debounced, polite result-count announcement. A visually-hidden
-  // mirror of the badge copy, updated ~500ms after the badge SETTLES (not while loading),
-  // so screen-reader users hear one announcement per fetch settle — never per keystroke,
-  // never mid-refetch. Uses the same shared copy contract as the generic map-badge branch
-  // (formatDiscoverBadgeCopy) for an honest, if not always verbatim, summary of every scope.
-  // Issue #1824 Slice S10a — the debounced state/effect body extracted to
-  // useDiscoverBadgeAnnounce (verbatim; only nav.q → urlStateQ rename).
-  const announcedBadgeText = useDiscoverBadgeAnnounce({
-    discoverBadge,
-    // Issue #2083 (F2 class sweep) — same defect as the visible badge above:
-    // this is the a11y-announced MIRROR of that same copy, and it derives
-    // its own scopeLabel independently (useDiscoverBadgeAnnounce.ts) rather
-    // than reusing a shared string, so it needs the SAME bridge or a
-    // screen-reader user hears "properties in Bangalore" while a sighted
-    // user (once the badge above is fixed) sees the area-scoped copy.
-    selectedArea: effectiveSelectedArea,
+  // Issue #2142 (correction pass) — the ONE deriveDiscoverBadge() call and
+  // every string derived from it (#1817 no-fork contract), moved verbatim off
+  // this page into controllers/useDiscoverBadgeController.ts. Called after the
+  // School controller because the badge count reads schoolListings.length.
+  const badgeController = useDiscoverBadgeController({
+    effectiveSelectedArea,
     focusedGroup,
+    groupId: nav.groupId,
+    discoverAreas,
     city,
-    urlStateQ: nav.q,
+    filters,
+    areaListings,
+    isLoadingAreaListings,
+    listingDataLoading,
+    isAuthenticated,
+    schoolListings,
+    schoolRadiusListings,
+    schoolRadiusListingsLoading,
+    debouncedSearch,
+    navQ: nav.q,
+    intent: nav.intent,
   });
+  const {
+    cityTotal,
+    discoverBadge,
+    areaResultSummaryText,
+    announcedBadgeText,
+    groupSelectedBadgeCopy,
+    fallbackBadgeCopy,
+    schoolRadiusActive,
+    schoolRadiusPillNoun,
+    hasActiveAnonFilter,
+  } = badgeController;
+
+  // Issue #2142 (correction pass) — the seven pure journey-chrome predicates,
+  // moved into controllers/useDiscoverJourneyChromeController.ts.
+  const journeyChromeController = useDiscoverJourneyChromeController({
+    nav,
+    resolvedPanelContent,
+    effectiveSelectedArea,
+    legacySelectedArea,
+    focusedGroup,
+    selectedSchool,
+    city,
+  });
+  const {
+    isLandingState,
+    trendsHref,
+    showSchoolMarkers,
+    showSchoolBreadcrumb,
+    schoolRadiusOverlay,
+    isSelectedGroupState,
+    isAreaFirstSelectedAreaState,
+  } = journeyChromeController;
+
+  // Issue #2142 (correction pass) — the two rendered filter surfaces plus
+  // issue #1854's atomic Clear-all, moved into
+  // controllers/useDiscoverFilterChromeController.tsx.
+  const filterChromeController = useDiscoverFilterChromeController({
+    nav,
+    actions,
+    filters,
+    setFilters,
+    handleFiltersChange,
+    selectedSchool,
+    onSchoolSelect: journeyCommands.wrappedSchoolSelect,
+    schoolBoardFilter,
+    onSchoolBoardFilterChange: handleBoardFilterChange,
+    city,
+    effectiveSelectedArea,
+    trendsAreaKeys,
+    isFetching,
+  });
+  const { activeContextChips, filtersContent } = filterChromeController;
+
+  // Issue #2142 (correction pass) — the Start-Over a11y focus effect (#1817 AC8)
+  // moved into controllers/useDiscoverSchoolController.ts, immediately after the
+  // hook that owns the startOverTick it reads.
 
   // Issue #2142 Commit 3 (C4) — useDiscoverCameraOrchestration (issue #1823/
   // #2143 invariant owner) moved into
@@ -894,73 +706,13 @@ export default function MapDiscovery() {
   // (journeyCommands.changeRadius/backLevel2/backLevel1/backLevel0/clearSchool/
   // clearArea; journeyView.schoolFirstOnBack).
 
-  // Issue #1157 rev-5 DEFECT A — gate for mounting the school-marker layer.
-  // school-first keeps markers (first OR term). Additionally surface markers in the
-  // area-first school-picking sub-step (schoolPicking) and in area-school-combined
-  // (area-first + areaKey + schoolId), so the area-first flow shows both school
-  // CARDS and map MARKERS. Reuses the schools[] already passed to PropertyMap —
-  // no extra fetch.
-  //
-  // Visual-parity polish (cycle 3) — the school-first term is additionally gated on
-  // `areaKey` being resolved. `schools` (allSchools, above) is fetched via
-  // useSchoolsByArea(schoolsAreaKey, ...), and schoolsAreaKey is `undefined` for
-  // school-first until an area is selected — so on the landing (school-browse) and
-  // zone-selected (school-group-areas) states `schools` is ALWAYS empty regardless
-  // of this gate. Un-gated, SchoolMarkerLayer still mounted at those two states
-  // (journey === 'school-first' alone was true) and rendered its "No schools found
-  // in this area" empty-state overlay even though the map is correctly showing zone/
-  // area clusters, not individual school pins, at that zoom level — a stale/confusing
-  // toast pre-dating this branch. Requiring `areaKey` removes the toast at exactly the
-  // two states where there was never any real school-marker data to report, while
-  // leaving schools-in-area / school-selected / area-school-combined (all of which
-  // resolve an areaKey by construction — see setSchoolJourney) byte-for-byte unchanged.
-  const showSchoolMarkers = deriveShowSchoolMarkers({
-    journey: nav.journey,
-    areaKey: nav.areaKey,
-    schoolPicking: nav.schoolPicking,
-    schoolId: nav.schoolId,
-  });
-
   // Issue #2142 (correction pass) — isAgriJourney (a pure nav derivation read
   // by three separate controllers plus both surfaces) moved into
   // controllers/useDiscoverPageContext.ts.
 
-  // Issue #1157 — area-first Back wrapper. Ordering is significant (DEFECT B):
-  //   1. schoolId set (area-school-combined) → backToSchoolPicking: drop schoolId +
-  //      radiusKm, set schoolPicking=1, AND clear local school state (mirrors
-  //      onClearSchool) so the radius circle + selected marker actually unmount and
-  //      the area's schools-in-area markers reappear. journey/areaKey preserved.
-  //   2. schoolPicking set (no schoolId) → clearSchoolPicking: return to area-selected.
-  //   3. otherwise → canonical handleAreaBack (area dismissal). handleAreaBack is NOT
-  //      modified.
-  // schoolId is checked FIRST so combined → Back lands on schools-in-area, not
-  // area-selected (the rev-4 ladder skipped this rung and fell through to area
-  // dismissal without clearing the school).
-  const handleAreaFirstBack = useCallback(() => {
-    if (nav.schoolId) {
-      // URL: drop schoolId + radiusKm, set schoolPicking=1 (single REPLACE).
-      actions.backToSchoolPicking();
-      // Local cleanup (modelled on onClearSchool): without this the cold-load/restore
-      // effect would re-inject selectedSchool from a lingering urlSchoolId and the
-      // schoolCircle (keyed off local selectedSchool + filters.schoolLat/Lon) would
-      // stay drawn. After the REPLACE removes schoolId the restore effect is inert,
-      // but the local clear must happen in the same handler.
-      setSelectedSchool(null);
-      setFilters((prev) => {
-        const next = { ...prev };
-        delete next.schoolLat;
-        delete next.schoolLon;
-        delete next.schoolRadiusKm;
-        return next;
-      });
-      // Issue #1115 — school cleared; reset so CTA reappears on next school select.
-      setBoundedSearchTriggered(false);
-    } else if (nav.schoolPicking) {
-      actions.clearSchoolPicking();
-    } else {
-      handleAreaBack();
-    }
-  }, [nav.schoolId, nav.schoolPicking, actions, handleAreaBack, setSelectedSchool, setFilters]);
+  // Issue #2142 (correction pass) — handleAreaFirstBack (#1157) moved into
+  // controllers/useDiscoverSchoolController.ts, which already owns every piece
+  // of local school state it clears.
 
   // Issue #1824 Slice S6 — the schoolById restore/error effects, the cityRef/urlCityRef
   // refs (FLAG-1), and the deferred areaKey hydration effect all moved into
@@ -996,91 +748,9 @@ export default function MapDiscovery() {
   // from that controller's call above. The undefined branch for anon users is applied at
   // the JSX call-site, not here.
 
-  // activeContextChips is memoised so its identity only changes when a relevant
-  // dimension actually changes — prevents unnecessary re-renders of DiscoverRightPanel.
-  // Hoisted above the isCityValid early return to satisfy Rules of Hooks.
-  // Issue #1854 — "Clear all" previously composed handleFiltersChange({}) (which
-  // schedules a 300 ms-debounced setFiltersLive URL write) with a separate immediate
-  // setSearchQuery('') write. Both writes close over the SAME pre-click URL snapshot
-  // (react-router's useSearchParams setter is not a functional-setState queue), so the
-  // immediate `q` clear lands first, then the still-pending debounced filters write
-  // fires ~300 ms later against its stale snapshot and silently revives the old `q`.
-  // actions.clearAllFiltersAndSearch() does both in a single atomic REPLACE, and
-  // cancels any in-flight setFiltersLive/setSearchQuery timers first so nothing can
-  // race in afterward. Local `filters` state is cleared directly (not via
-  // handleFiltersChange, which would re-arm the debounced URL write). Journey, scope,
-  // areaKey/schoolId, and the map camera are untouched (design §9: "Clear all drops all
-  // filter+q keys but keeps city, journey, and scope keys").
-  const handleClearAllFiltersAndSearch = useCallback(() => {
-    setFilters({});
-    actions.clearAllFiltersAndSearch();
-  }, [setFilters, actions]);
-
-  const activeContextChips = useMemo(
-    () => (
-      <ActiveContextChips
-        // Issue #1824 S4 — KNOWN, INTENTIONAL split-brain: chips read
-        // nav.q (URL-side debounce), NOT debouncedSearch (which drives
-        // the badge + map markers via useDiscoverSearchState). Do NOT unify.
-        searchQuery={nav.q}
-        onClearSearch={() => actions.setSearchQuery('')}
-        filters={{
-          ...filters,
-          // Issue #1132 — board/category filters are written directly to URL by
-          // onClearBoard/onClearCategory (via actions) without going through
-          // setFilters, so local `filters` state can lag behind. Always pass the
-          // URL-authoritative values here so ActiveContextChips renders the correct
-          // chip set without a useEffect sync (which caused an infinite re-render
-          // loop because nav.filters.boardFilters is a new array ref each render).
-          boardFilters: nav.filters.boardFilters,
-          categoryFilters: nav.filters.categoryFilters,
-          dateFrom: filters.dateFrom
-            ? typeof filters.dateFrom === 'string'
-              ? filters.dateFrom
-              : filters.dateFrom.toISOString().slice(0, 10)
-            : undefined,
-          dateTo: filters.dateTo
-            ? typeof filters.dateTo === 'string'
-              ? filters.dateTo
-              : filters.dateTo.toISOString().slice(0, 10)
-            : undefined,
-        }}
-        onClearPropertyType={() =>
-          handleFiltersChange({ ...filters, propertyTypes: undefined })
-        }
-        onClearBhk={() =>
-          handleFiltersChange({ ...filters, bedrooms: undefined })
-        }
-        onClearPrice={() =>
-          handleFiltersChange({ ...filters, priceMin: undefined, priceMax: undefined })
-        }
-        onClearBoard={(board) => {
-          const next = (nav.filters.boardFilters ?? []).filter(
-            (b) => b.toLowerCase() !== board.toLowerCase(),
-          );
-          actions.setBoardFilters(next);
-        }}
-        onClearCategory={(category) => {
-          const next = (nav.filters.categoryFilters ?? []).filter(
-            (c) => c.toLowerCase() !== category.toLowerCase(),
-          );
-          actions.setCategoryFilters(next);
-        }}
-        onClearSeller={() =>
-          handleFiltersChange({ ...filters, sellerTypes: undefined })
-        }
-        onClearDateRange={() =>
-          handleFiltersChange({ ...filters, dateFrom: undefined, dateTo: undefined })
-        }
-        onClearBoolean={(key) =>
-          handleFiltersChange({ ...filters, [key]: undefined })
-        }
-        onClearAll={handleClearAllFiltersAndSearch}
-      />
-    ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [nav.q, nav.filters.boardFilters, nav.filters.categoryFilters, filters, actions, handleClearAllFiltersAndSearch],
-  );
+  // Issue #2142 (correction pass) — handleClearAllFiltersAndSearch (#1854's
+  // atomic clear), activeContextChips and filtersContent moved into
+  // controllers/useDiscoverFilterChromeController.tsx.
 
   // Issue #2142 (correction pass) — memoizedInitialCenter/areaRestoreArea/
   // schoolMarkerPositions moved verbatim into
@@ -1090,53 +760,10 @@ export default function MapDiscovery() {
   // camera owner rather than in a surface builder — see that file's own
   // "IDENTITY STABILISERS" note.
 
-  // Issue #2083 (F2 class sweep) — was the bare `selectedArea`, so a resolved
-  // canonical-AREA-leaf node journey lost its area-scoped Trends link and
-  // fell back to the generic (undefined / city-wide) trends surface even
-  // though the panel and map both show that area's context.
-  const trendsHref = effectiveSelectedArea
-    ? `/trends/${city}/areas/${slugifyFromAreaKey(effectiveSelectedArea.areaKey)}`
-    : undefined;
-
-  const filtersContent = (
-    <MapFilters
-      filters={filters} onFiltersChange={handleFiltersChange}
-      selectedSchool={selectedSchool} onSchoolSelect={journeyCommands.wrappedSchoolSelect}
-      schoolBoardFilter={schoolBoardFilter} onSchoolBoardFilterChange={handleBoardFilterChange}
-      city={city}
-      trendsAreaKeys={effectiveSelectedArea ? [effectiveSelectedArea.areaKey] : trendsAreaKeys}
-      isFetching={isFetching}
-    />
-  );
-
-  // Issue #1160 GAP 2 — city coords for CityRestorePanner.
-  // cityCenter and cityZoom from useDiscoverMapData are the canonical city-level viewport.
-  // These are already available as props in MapDiscovery; just alias them for clarity.
-  // CityRestorePanner uses them when cityRestoreTick increments (Back from schools-in-area).
-
-  // Selected-school radius map overlays (radius legend) only render when a school is
-  // selected AND the panel is school-selected/area-school-combined.
-  const schoolRadiusOverlay = isSchoolRadiusOverlayState(resolvedPanelContent, !!selectedSchool);
-
-  // The journey breadcrumb (City › Zone › Area › School) renders progressively across
-  // ALL school-first drill-down states — zone selected, area selected, and school
-  // selected — not only the radius state. The breadcrumb component omits segments whose
-  // label is null, so a zone-only context reads "Udupi › University Belt" and an
-  // area context reads "Udupi › University Belt › Manipal". Other journeys (area-first,
-  // agri-first) keep the generic AreaIndicatorOverlay.
-  const showSchoolBreadcrumb =
-    nav.journey === 'school-first' &&
-    // Issue #2083 cycle 4 — genuinely legacy-only: outer-ANDed with
-    // journey === 'school-first', a journey the canonical node hierarchy
-    // never drives (verified by code review).
-    (!!nav.groupId || !!nav.areaKey || !!legacySelectedArea || !!selectedSchool);
-
-  // Issue #1588 — public-landing marker set. The public landing shows ONLY areas that
-  // have live properties — never muted/transparent 0-property markers. A clean, calm
-  // empty map (with the centered empty-state message) is preferred over decorative pins,
-  // so a city with no live properties (e.g. Bangalore) renders no area markers at all.
-  // Drill-down states keep the full area set (unchanged).
-  const isLandingState = resolvedPanelContent === 'guided-entry';
+  // Issue #2142 (correction pass) — trendsHref, schoolRadiusOverlay,
+  // showSchoolBreadcrumb and isLandingState moved into
+  // controllers/useDiscoverJourneyChromeController.ts (together with
+  // showSchoolMarkers, isSelectedGroupState and isAreaFirstSelectedAreaState).
 
   // Issue #2142 (correction pass) — the former single
   // `useDiscoverMapPresentationController` (340 LOC / 57-field params /
@@ -1286,212 +913,32 @@ export default function MapDiscovery() {
   });
   const { handleOverviewAreaClick, activeAreasNavigationJourney } = overviewNavigationController;
 
-  // Debug: expose areaListings and related data to window.__debug for Playwright tests.
-  // Issue #1824 Slice S7 — schoolMarkerFocusTick now sourced from
-  // useDiscoverCameraOrchestration (via the controller above); areaRestoreTick/
-  // cityRestoreTick still read from journeyView (S6 owns them). The object
-  // SHAPE is byte-identical (E2E contract, AC4).
-  useEffect(() => {
-    (window as Window & { __debug?: Record<string, unknown> }).__debug = {
-      ...(window as Window & { __debug?: Record<string, unknown> }).__debug,
-      propertyMapListings: {
-        areaListings,
-        areaMarkerListings,
-        areaLen: areaListings.length,
-        areaMarkerLen: areaMarkerListings.length,
-        markerListings,
-        markerLen: markerListings.length,
-        // Issue #2083 cycle 4 (code-review nit) — was the bare legacy value,
-        // which is null under a canonical node journey even though an area IS
-        // selected (see effectiveSelectedArea's declaration above), silently
-        // misleading any E2E assertion against this field. `selectedArea`
-        // keeps its key name (E2E contract, AC4 — shape stays byte-identical)
-        // but now carries the resolved value; `legacySelectedArea` is exposed
-        // alongside it for anyone who specifically needs the raw legacy value.
-        selectedArea: effectiveSelectedArea,
-        legacySelectedArea,
-      },
-      mapState: {
-        // PR #2128 review cycle 4 (fix-verify) — spread the existing
-        // mapState FIRST so this effect merges instead of clobbering
-        // fields another debug effect on this page independently owns
-        // (currently: bottomOcclusionPx, set by the effect further down).
-        // Without this, mapZoom's near-constant churn on any map
-        // interaction re-runs THIS effect after the other one, wiping
-        // whatever it just set — confirmed live (bottomOcclusionPx went
-        // from present to completely absent a few seconds after being set).
-        ...((window as Window & { __debug?: Record<string, unknown> }).__debug
-          ?.mapState as Record<string, unknown> | undefined),
-        zoom: mapZoom,
-        city,
-        // Issue #1160 — expose school centre for E2E viewport assertions.
-        // SchoolFocusPanner pans the Leaflet map imperatively (no URL write),
-        // so E2E must read the map centre from this debug object rather than
-        // from URL params.
-        schoolCenter: selectedSchool
-          ? { lat: selectedSchool.latitude, lon: selectedSchool.longitude }
-          : null,
-        // Issue #1160 GAP 1+2 — expose restoration ticks for E2E assertability.
-        // MF-6 asserts schoolMarkerFocusTick > 0 after listings settle.
-        // MF-7 asserts areaRestoreTick incremented on Back from school-selected.
-        // MF-8 asserts cityRestoreTick incremented on Back from schools-in-area.
-        schoolMarkerFocusTick,
-        areaRestoreTick: journeyView.areaRestoreTick,
-        cityRestoreTick: journeyView.cityRestoreTick,
-        // Issue #2083 (cycle 5) — see UseDiscoverCameraOrchestrationResult's
-        // doc; asserted by issue-2083-home-breadcrumb-back-camera-race.spec.ts
-        // to prove the canonical-node bbox refit does NOT double-fire on a
-        // Back transition that already has a persisted viewport to restore.
-        canonicalNodeFitCount,
-      },
-    };
-  }, [areaListings, areaMarkerListings, markerListings, effectiveSelectedArea, legacySelectedArea, mapZoom, city, selectedSchool, schoolMarkerFocusTick, journeyView.areaRestoreTick, journeyView.cityRestoreTick, canonicalNodeFitCount]);
-
-  // Issue #1595 — the area-first selected-group drill-down state (a group is focused,
-  // no specific area selected yet). Drives the mock-aligned map chrome for this step:
-  // the city switcher is hidden, the "verified properties in {group}" pill is centred
-  // at the bottom, and the Areas legend is shown.
-  // Issue #2083 cycle 4 (code-review BLOCKING fix, 4th recurrence of this bug
-  // class) — was the bare legacy value, which is null under a pure canonical
-  // node journey (?journey=area-first&groupId=<group>&node=<AREA leaf in that
-  // group>, no legacy areaKey). resolvedPanelContent === 'area-groups-landing'
-  // is reached there (discoverPanelState.ts:167) and focusedGroup still
-  // resolves (node/groupId are independent URL axes — navigation.test.ts:72-78,
-  // AC1.4), so this wrongly evaluated true and showed group-overview chrome
-  // for a user who had already drilled into a specific area. Mirrors the
-  // sibling guard isTopGroupedLevel (above), which already reads
-  // effectiveSelectedArea correctly. Formula extracted to the exported, pure
-  // `resolveIsSelectedGroupState` (above) so a regression test can exercise
-  // the REAL production predicate — see
-  // MapDiscovery.issue2083.selectedGroupState.test.ts.
-  const isSelectedGroupState = resolveIsSelectedGroupState(
-    resolvedPanelContent,
-    focusedGroup,
-    effectiveSelectedArea,
-  );
-
-  // Issue #1606 — area-first selected-AREA results state (terminal area chosen). Drives
-  // the redesigned Manipal-style results panel and the 3-level map breadcrumb. Distinct
-  // from isSelectedGroupState (no area yet) — here selectedArea is present.
-  // Issue #2083 cycle 4 — genuinely legacy-only: derivePanelContent only ever
-  // returns 'area-selected' when the legacy areaKey is truthy
-  // (discoverPanelState.ts:123-135), so legacySelectedArea is correct here
-  // (verified by code review).
-  const isAreaFirstSelectedAreaState =
-    resolvedPanelContent === 'area-selected' &&
-    nav.journey === 'area-first' &&
-    !!legacySelectedArea;
-
-  // Issue #1798 PR-C — canonical listing-marker popover RENDER-eligibility predicate.
-  // Previously this gate (formerly isAreaFirstPopoverEligible || isGroupResultsPopoverEligible)
-  // required journey === 'area-first' plus specific panelContent values — strictly narrower
-  // than the click-CAPTURE gate below (handleMarkerClickWithPosition), which already permits
-  // journeyless and other non-agri-first states. That drift meant a listing marker click
-  // could already write markerPixelPos/selectedMarkerListing and drive the #1547 right-panel
-  // scroll+highlight, yet the popup itself would silently never render — the reported #1798
-  // "popup missing" bug. Fixed by reusing the SAME condition as the capture gate so the two
-  // can no longer drift apart. Still excludes agri-first (own peek/panel flow).
+  // Issue #2142 (correction pass) — the two window.__debug write effects moved
+  // into controllers/useDiscoverDebugBridge.ts (called at the very end of the
+  // controller chain, preserving their relative order and spread-merge
+  // semantics — that ordering IS the Playwright contract).
   //
-  // Issue #1973 — the pure school-first journey (a school + radius selected, no area) is
-  // cross-area: areaKey is null in that state, so the original single-clause predicate
-  // (which required areaKey != null) rejected it even after a naive schoolId/journey
-  // clause flip. Extended to an additive OR: the ORIGINAL area-gated clause is unchanged
-  // (still covers area-first, and area-first area+school combined per #1738), plus a new
-  // areaKey-FREE branch admitting school-first once a school is selected. Area/cluster/count
-  // marker clicks are unaffected: they never set markerPixelPos, so the
-  // `selectedMarkerListing != null && markerPixelPos != null` conjunction at the render site
-  // below still keeps them popup-free regardless of this predicate. MUST stay byte-identical
-  // to the capture-gate predicate in useMarkerSelection.ts's handleMarkerClickWithPosition —
-  // see that function's comment — or the two can drift apart again (the exact #1798 bug).
-  // Issue #1956 PR-4 (gate 2) — useDiscoverJourneyPredicates (out of this
-  // PR's allowed scope) derives mapLayerCategory purely from URL state via
-  // toLayerInput/selectDiscoverMapLayer internally, so it cannot see the
-  // in-memory node bridge above and still resolves 'area-group-bubbles' for
-  // a canonical AREA leaf (legacy `areaKey` URL param null). Recomputes the
-  // SAME real selectDiscoverMapLayer with the CONTAINED `nodeAreaLeaf` field
-  // (discoverLayerRegistry.ts) set, used ONLY for the resolveMarkerPopover
-  // call below — mapLayerKind/mapLayerCategory themselves are left
-  // untouched for their other pre-existing consumers.
-  const effectiveMapLayerCategory: DiscoverMapLayerKind = isNodeAreaLeafActive
-    ? selectDiscoverMapLayer(
-        { ...toLayerInput({ ...nav, viewport } satisfies DiscoverUrlState), nodeAreaLeaf: true },
-        'overview',
-      )
-    : mapLayerCategory;
+  // isSelectedGroupState/isAreaFirstSelectedAreaState moved into
+  // controllers/useDiscoverJourneyChromeController.ts; effectiveMapLayerCategory
+  // and isMarkerPopoverEligible into
+  // controllers/useDiscoverMarkerPopoverController.ts.
 
-  // Issue #1798 PR-C — canonical listing-marker popover RENDER-eligibility
-  // predicate, now the ONE shared `isMarkerPopoverEligible` export (Issue
-  // #1956 PR-4 scope amendment n=1 — see markerPopoverEligibility.ts's
-  // module doc for the full four-site extraction history and the new
-  // AREA-leaf arm). MUST stay in lock-step with useMarkerSelection.ts's
-  // capture gate (risk R1) — both import the same function and are fed the
-  // same `isNodeAreaLeafActive` value.
-  const isMarkerPopoverEligible = computeMarkerPopoverEligible({
-    journey: nav.journey,
-    areaKey: nav.areaKey,
-    schoolId: nav.schoolId,
-    isNodeAreaLeaf: isNodeAreaLeafActive,
-  });
-
-  // Issue #2142 Commit 3 (C8) — bottomOcclusionPx/isPreviewSheetOpen/
-  // previewOcclusionPx/handlePreviewSheetHeightChange + useMobileMapOverlayShell
-  // (call site moved down from its early position, see comment there) moved
-  // verbatim into controllers/useDiscoverMobilePresentationController.ts.
-  // Called HERE (same late position as before) because it needs
-  // isMarkerPopoverEligible, itself only available at this point.
-  const mobilePresentationController = useDiscoverMobilePresentationController({
-    mobileMapOpen,
-    setMobileView,
-    isMarkerPopoverEligible,
-    selectedListingPreview,
-  });
-  const {
-    mobileMapTriggerRef,
-    bottomOcclusionPx,
-    isPreviewSheetOpen,
-    previewOcclusionPx,
-    handlePreviewSheetHeightChange,
-  } = mobilePresentationController;
-  // E2E observability only (Playwright contract, matches the existing
-  // canonicalNodeFitCount/schoolCenter convention on this same debug object)
-  // — merges into the mapState sub-object built by the earlier debug effect
-  // above without needing to move this value's own declaration earlier in
-  // the component (isMarkerPopoverEligible/isNodeAreaLeafActive are not
-  // available at that effect's point in the file).
-  useEffect(() => {
-    const w = window as Window & { __debug?: Record<string, unknown> };
-    w.__debug = {
-      ...w.__debug,
-      mapState: {
-        ...(w.__debug?.mapState as Record<string, unknown> | undefined),
-        bottomOcclusionPx,
-        previewOcclusionPx,
-      },
-    };
-  }, [bottomOcclusionPx, previewOcclusionPx]);
-
-  // Issue #1824 Slice S10b — the marker-resolve + stepper cluster (Issue
-  // #1810 Stage 2A, MODEL A user-locked model, see approved-plan.toml
-  // [user_decision]) is extracted verbatim into the pure resolveMarkerPopover
-  // module. Issue #1939 — RELOCATED from just after the isCityValid early
-  // return below (its original S10b position) to HERE, immediately after
-  // isMarkerPopoverEligible. Still a plain const, not a hook, so this move
-  // changes nothing about the computed value — only WHEN it is available.
-  // It has to move because the new URL-hydration useEffect right below DOES
-  // need currentMapMarkerListings as a real reactive dependency, and a
-  // useEffect cannot be declared after a conditional return (Rules of
-  // Hooks). Every field this call closes over was already available earlier
-  // in the component before this move (per the original S10b comment).
-  const { currentMapMarkerListings, markerPopoverStepper } = resolveMarkerPopover({
-    mapLayerCategory: effectiveMapLayerCategory,
-    selectedArea: effectiveSelectedArea,
+  // Issue #2142 (correction pass) — the marker-popover capability
+  // (eligibility gate, the node-leaf-aware layer recompute, resolveMarkerPopover
+  // and its #2139 ordered set, the #1939 URL<->popover reconciliation effect,
+  // and the #1810 stepper) moved verbatim into
+  // controllers/useDiscoverMarkerPopoverController.ts.
+  const markerPopoverController = useDiscoverMarkerPopoverController({
+    nav,
+    viewport,
+    isNodeAreaLeafActive,
+    mapLayerCategory,
+    effectiveSelectedArea,
     isGroupResultsState,
     isNodeListingsState,
     mapZoom,
-    areaLayerMaxZoom: AREA_LAYER_MAX_ZOOM,
+    mapReady,
     isAuthenticated,
-    journey: nav.journey,
-    schoolId: nav.schoolId,
     groupResultsMarkers,
     nodeListingsMarkers,
     markerListings,
@@ -1500,140 +947,53 @@ export default function MapDiscovery() {
     isLoadingAreaListings,
     isErrorAreaListings,
     markersLoading,
-    isMarkerPopoverEligible,
-    selectedMarkerListing,
+    markerSelection: markerController,
   });
-
-  // Issue #1939 — resolves the URL `listing` param against the SAME ordered
-  // marker set PropertyMap renders (currentMapMarkerListings) and the panel
-  // scroll/stepper already trust (Issue #1810 MODEL A). null whenever the id
-  // is absent, not (yet) present in the loaded set, or filtered off the map
-  // — the hydration effect below treats all of those as LEAVE_PARAM_NO_POPOVER
-  // (safe no-op), never an error/toast. Gives the effect a stable,
-  // identity-comparable dependency instead of the raw currentMapMarkerListings
-  // array, which re-allocates on every filter/journey/area change (qa-fast
-  // risk register item 3) — recomputing this memo on those changes is cheap
-  // (an O(n) find over a small array); the EFFECT below only re-runs when the
-  // *resolved result* actually changes.
-  const urlHydratedMarkerListing = useMemo(
-    () =>
-      nav.selectedListing
-        ? (currentMapMarkerListings.find((l) => l.id === nav.selectedListing) ?? null)
-        : null,
-    [nav.selectedListing, currentMapMarkerListings],
-  );
-
-  // Issue #1939 — URL → popover restore (Back/Forward/hard-refresh/deep-link).
-  // The click/sibling/show-in-list handlers (useMarkerSelection) only ever
-  // SET selectedMarkerListing/markerPixelPos from a user gesture; nothing
-  // hydrated them from nav.selectedListing on mount or on a later
-  // data/map-ready transition, so a deep-linked/refreshed `?listing=<uuid>`
-  // restored the marker highlight (URL-driven — DiscoverMapCanvas passes
-  // nav.selectedListing straight through to PropertyMap's
-  // selectedListingId prop, no local state involved) but never the popover
-  // card itself (gated on the two local states above).
-  //
-  // Reactive by construction: fires again whenever urlHydratedMarkerListing
-  // (marker-data availability), isMarkerPopoverEligible (atomic journey
-  // gate — school/agri-first never call hydrateSelectedMarkerFromUrl, so
-  // neither local state is ever set for them), or mapReady flips — so a cold
-  // hard-refresh where markers/area data resolve a render or two after mount
-  // still restores the card once they do, instead of only checking once on
-  // mount. hydrateSelectedMarkerFromUrl itself is idempotent (no-op if
-  // already selected) and PERSISTENTLY suppressed (not just for one cycle)
-  // right after showMarkerInList closes the card for the same id — including
-  // across repeated re-fires of this effect caused by resolveMarkerPopover's
-  // deliberately non-memoized currentMapMarkerListings — until
-  // nav.selectedListing genuinely changes away from that id. See
-  // useMarkerSelection's listTransitionSuppressIdRef for the full contract.
-  //
-  // Issue #1939 code-review F1 — REVERSE sync. When the URL genuinely no
-  // longer carries a `listing` id (nav.selectedListing == null — e.g.
-  // Back navigation past the point the id was pushed), the popover must
-  // close even though nothing here ever called handlePopoverDismiss (which
-  // owns the FORWARD direction: local state → URL). Deliberately keyed off
-  // nav.selectedListing, not urlHydratedMarkerListing, so a same-id
-  // marker that's momentarily absent from currentMapMarkerListings (e.g.
-  // mid-filter-recompute) does NOT close a popover the URL still claims —
-  // that transient-miss case is instead covered by
-  // hydrateSelectedMarkerFromUrl's own bounded rAF retry (F2) for the DOM
-  // node not being painted yet.
-  //
-  // Issue #1973 rev-2 (A1 fix) — this comment's original "cannot race the
-  // click path" claim was WRONG for pure school-first: handleSelectMarkerListing
-  // deliberately does NOT write the URL `listing` param there (the
-  // #1547-deferred design), so a school-first click sets selectedMarkerListing
-  // while nav.selectedListing stays null — landing exactly in this
-  // branch and wiping the click-set popover (the reverse-sync clear-race).
-  // The rev-1 gate fix (admitting pure school-first into isMarkerPopoverEligible)
-  // is what made this branch reachable for that state at all; previously the
-  // effect early-returned via the eligibility check above. Fixed by
-  // isMarkerPopoverUrlBacked(): only clear here when the popover currently
-  // tracked is URL-backed (source !== 'click') — i.e. skip the clear ONLY for
-  // a pure click-set popover. Area-first (and agri-first/#1738 combined)
-  // clicks ARE URL-backed (they write `listing`), so this guard does NOT
-  // regress their Back-navigation close — see
-  // MapDiscovery.issue1973.schoolFirstMarkerPopup.test.tsx AC11.
-  //
-  // Issue #1939 rework F3 — third reconciliation branch: the URL names a
-  // listing id (nav.selectedListing != null) that is NOT (yet)
-  // resolvable against the current marker set (urlHydratedMarkerListing ==
-  // null), AND a DIFFERENT listing's popover is currently showing locally
-  // (selectedMarkerListing != null && selectedMarkerListing.id !==
-  // nav.selectedListing). Without this branch the effect did nothing
-  // in this state, leaving the screen showing the OLD listing's popover
-  // while the URL/selection had already moved to a new, unresolvable one.
-  //
-  // The `selectedMarkerListing?.id !== nav.selectedListing`
-  // discriminator is what separates this (F3: a genuinely DIFFERENT id,
-  // stale) from F2's bounded rAF retry (SAME id, still resolving/painting —
-  // must be left alone to keep polling). Two sub-cases both correctly fall
-  // out of requiring selectedMarkerListing to be non-null AND mismatched:
-  //   - Same id mid-retry (F2): selectedMarkerListing is either still null
-  //     (nothing painted yet) or already equals the target id once F2
-  //     succeeds — this branch's `!= null` guard or id-equality guard skips
-  //     it either way, so F2's retry is never torn down here.
-  //   - Fresh deep-link to an unresolvable id with no popover open yet:
-  //     selectedMarkerListing is null, so `selectedMarkerListing != null`
-  //     is false and this branch is a no-op — it must NOT cancel a
-  //     legitimately in-flight F2 retry for that same fresh id.
-  // Only when a DIFFERENT listing is genuinely still displayed does this
-  // branch fire, clearing it via clearMarkerPopoverFromUrl (which itself
-  // cancels any in-flight retry for the OLD id FIRST, then clears local
-  // state — see that method's JSDoc) while deliberately leaving the URL's
-  // `listing` param untouched (no clearSelectedListing call) so that once
-  // the new id resolves (urlHydratedMarkerListing becomes non-null on a
-  // later render), the existing happy-path branch above hydrates it
-  // normally, with its own F2 retry if needed.
-  useEffect(() => {
-    if (!isMarkerPopoverEligible || !mapReady) return;
-    if (urlHydratedMarkerListing) {
-      hydrateSelectedMarkerFromUrl(urlHydratedMarkerListing);
-      return;
-    }
-    if (nav.selectedListing == null) {
-      // Issue #1973 rev-2 (A1) — skip the clear ONLY for a pure click-set
-      // (school-first) popover, which was never URL-backed to begin with.
-      // A URL-backed popover (area-first/#1738 combined, or a hydrated
-      // deep-link) still closes here, unconditionally.
-      if (isMarkerPopoverUrlBacked()) {
-        clearMarkerPopoverFromUrl();
-      }
-      return;
-    }
-    if (selectedMarkerListing != null && selectedMarkerListing.id !== nav.selectedListing) {
-      clearMarkerPopoverFromUrl();
-    }
-  }, [
+  const {
     isMarkerPopoverEligible,
-    mapReady,
-    urlHydratedMarkerListing,
-    hydrateSelectedMarkerFromUrl,
-    nav.selectedListing,
-    clearMarkerPopoverFromUrl,
-    isMarkerPopoverUrlBacked,
-    selectedMarkerListing,
-  ]);
+    currentMapMarkerListings,
+    markerPopoverStepper,
+    handleStepMarkerListing,
+  } = markerPopoverController;
+
+  // Issue #2142 Commit 3 (C8) — the mobile Map-mode overlay shell + the #2129
+  // occlusion pair. Issue #2142 (correction pass) — now ALSO owns the
+  // selectedListingPreview state, and is called AFTER the marker-popover
+  // controller (it consumes isMarkerPopoverEligible). Nothing between the
+  // popover controller and here reads this controller's outputs (verified),
+  // so the reposition is behaviour-preserving.
+  const mobilePresentationController = useDiscoverMobilePresentationController({
+    mobileMapOpen,
+    setMobileView,
+    isMarkerPopoverEligible,
+  });
+  const {
+    selectedListingPreview,
+    setSelectedListingPreview,
+    mobileMapTriggerRef,
+    isPreviewSheetOpen,
+  } = mobilePresentationController;
+
+  // Issue #2142 (correction pass) — the window.__debug Playwright bridge.
+  // Called LAST so both of its effects run after every producer they read;
+  // their relative order and spread-merge semantics are the contract (see the
+  // controller's own file header).
+  useDiscoverDebugBridge({
+    areaListings,
+    areaMarkerListings,
+    markerListings,
+    effectiveSelectedArea,
+    legacySelectedArea,
+    mapZoom,
+    city,
+    selectedSchool,
+    schoolMarkerFocusTick,
+    areaRestoreTick: journeyView.areaRestoreTick,
+    cityRestoreTick: journeyView.cityRestoreTick,
+    canonicalNodeFitCount,
+    bottomOcclusionPx: mobilePresentationController.bottomOcclusionPx,
+    previewOcclusionPx: mobilePresentationController.previewOcclusionPx,
+  });
 
   // Issue #2142 (correction pass) — selectedGroupName moved into
   // controllers/useDiscoverAreaGroupsController.ts next to focusedGroup.
@@ -1644,47 +1004,6 @@ export default function MapDiscovery() {
   // read, so #1808 has exactly one owner.
 
   if (!isCityValid) return <CityNotSupported city={city} />;
-
-  // Issue #1810 (Stage 2A) — steps the popup to the sibling at index±1 within
-  // the ratified MODEL A set. Updates selectedMarkerListing + the shared
-  // `listing` URL param (so the panel card highlight/scroll follows), and
-  // makes NO camera call of any kind — MODEL B (on-map markers + panInside)
-  // was explicitly rejected by the user; this function must never gain one.
-  const handleStepMarkerListing = (direction: -1 | 1) => {
-    if (markerPopoverStepper == null) return;
-    const sibling = currentMapMarkerListings[markerPopoverStepper.index + direction];
-    if (!sibling) return;
-    selectMarkerSibling(sibling);
-  };
-
-  // Issue #1824 Slice S8 — the DiscoverMapCountBadge/DiscoverMapStatusHints
-  // copy-fork guard (AC4): the SAME formatDiscoverBadgeCopy()/
-  // deriveSchoolRadiusPillNoun()/hasActiveAnonPropertyFilter() calls that
-  // previously lived inline in the JSX below, now computed once here and
-  // passed by prop — the extracted components never import these page-owned
-  // helpers, so the copy contract cannot fork (slice-s8-design.md FLAG-A/B).
-  const groupSelectedBadgeCopy = formatDiscoverBadgeCopy(discoverBadge, {
-    scopeLabel: focusedGroup?.name ?? '',
-    noun: 'verified properties',
-    searchQuery: nav.q,
-  });
-  // Issue #2083 (F2 fix, primary reported symptom) — this is the branch that
-  // actually renders under the canonical node journey (isAreaFirstSelectedAreaState
-  // and isSelectedGroupState are both provably false there — derivePanelContent
-  // never returns 'area-selected' without the legacy `areaKey`, since the node
-  // journey never sets it). Was the bare `selectedArea`, which is null here, so
-  // this fell through straight to the city label — the exact "1,737 properties
-  // in Bangalore" symptom reported against a 9-listing area.
-  const fallbackBadgeCopy = formatDiscoverBadgeCopy(discoverBadge, {
-    scopeLabel:
-      effectiveSelectedArea?.areaLabel ??
-      focusedGroup?.name ??
-      (CITY_CONFIG[city]?.label ?? city),
-    noun: effectiveSelectedArea ? 'homes' : 'properties',
-    searchQuery: nav.q,
-  });
-  const schoolRadiusPillNoun = deriveSchoolRadiusPillNoun(nav.intent);
-  const hasActiveAnonFilter = hasActiveAnonPropertyFilter(filters);
 
   // Issue #2142 Commit 4 — the mobile "List" toggle button, previously an
   // inline JSX conditional passed directly as DiscoverMapMount's
