@@ -88,7 +88,11 @@ import { useDiscoverAgriController } from '@/features/discover/controllers/useDi
 import { useDiscoverMarkerController } from '@/features/discover/controllers/useDiscoverMarkerController';
 import { useDiscoverMobilePresentationController } from '@/features/discover/controllers/useDiscoverMobilePresentationController';
 import { useDiscoverSchoolController } from '@/features/discover/controllers/useDiscoverSchoolController';
-import { useDiscoverMapPresentationController } from '@/features/discover/controllers/useDiscoverMapPresentationController';
+import { useDiscoverInteractionController } from '@/features/discover/controllers/useDiscoverInteractionController';
+import { useDiscoverCameraController } from '@/features/discover/controllers/useDiscoverCameraController';
+import { useDiscoverMapLayerController } from '@/features/discover/controllers/useDiscoverMapLayerController';
+import { useDiscoverRegionGuideController } from '@/features/discover/controllers/useDiscoverRegionGuideController';
+import { useDiscoverOverviewNavigationController } from '@/features/discover/controllers/useDiscoverOverviewNavigationController';
 
 export default function MapDiscovery() {
   const navigate = useNavigate();
@@ -918,34 +922,14 @@ export default function MapDiscovery() {
   // it; declared via the destructure above). The object SHAPE is
   // byte-identical (AC4).
 
-  // Issue #2124 — Map and panel canonical node equivalence (AREA leaf seam).
-  // The panel uses onSelectAreaKey to enter the SchoolsInArea path when a leaf AREA is clicked,
-  // but the map marker layer (`AreaDestinationMarkerLayer`) fires `journey.selectNode(nodeKey)`.
-  // Here we intercept `selectNode` for the school-first journey so map markers and panel rows
-  // follow the identical semantic path for AREA children.
-  const handleCanonicalNodeSelect = useCallback((nodeKey: string) => {
-    if (nav.journey === 'school-first') {
-      const child = areasNavigationJourney.node?.children.find((c) => c.nodeKey === nodeKey);
-      if (child?.nodeType === 'AREA' && child.areaKey) {
-        // Equivalent to the panel's onSelectAreaKey behaviour:
-        const match = discoverAreas.find((a) => a.areaKey === child.areaKey);
-        if (match) {
-          handleAreaSelect(match);
-        } else {
-          actions.selectArea(child.areaKey);
-        }
-      } else {
-        actions.enterSchoolsJourney(nodeKey);
-      }
-    } else {
-      actions.goToNode(nodeKey);
-    }
-  }, [nav.journey, areasNavigationJourney.node?.children, discoverAreas, handleAreaSelect, actions]);
-
-  const activeAreasNavigationJourney = useMemo(() => ({
-    ...areasNavigationJourney,
-    selectNode: handleCanonicalNodeSelect,
-  }), [areasNavigationJourney, handleCanonicalNodeSelect]);
+  // Issue #2142 (correction pass) — handleCanonicalNodeSelect (issue #2124
+  // AREA-leaf seam) and activeAreasNavigationJourney moved verbatim into
+  // controllers/useDiscoverOverviewNavigationController.ts, called below
+  // alongside handleOverviewAreaClick (its sibling "picked a destination off
+  // the map" concern). Repositioning is behaviour-preserving: both are pure
+  // useCallback/useMemo, and the only consumers of either value are the
+  // map/panel prop objects at the very bottom of this file (verified — no
+  // consumer exists between this position and the new one).
 
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).
   const isLoading =
@@ -1426,33 +1410,13 @@ export default function MapDiscovery() {
     [nav.q, nav.filters.boardFilters, nav.filters.categoryFilters, filters, actions, handleClearAllFiltersAndSearch],
   );
 
-  // Memoize initialCenter to prevent URLViewportController effect re-runs on every parent render.
-  // Hoisted above the isCityValid early return to satisfy Rules of Hooks.
-  const memoizedInitialCenter = useMemo(
-    () => viewport ? [viewport.lat, viewport.lon] as [number, number] : undefined,
-    [viewport],
-  );
-
-  // Issue #1160 GAP 2 — derive area coordinates for AreaRestorePanner.
-  // Re-derived from discoverAreas at render time (not captured at click time) so the
-  // panner always has fresh coords. If discoverAreas hasn't loaded yet, the panner
-  // receives null values and skips the restore (no crash).
-  // Hoisted above the isCityValid early return to satisfy Rules of Hooks.
-  const areaRestoreArea = useMemo(() => {
-    if (!nav.areaKey) return null;
-    return discoverAreasData?.areas?.find((a) => a.areaKey === nav.areaKey) ?? null;
-  }, [nav.areaKey, discoverAreasData]);
-
-  // Issue #1547 ITEM 6 — memoize school marker positions to prevent SchoolMarkerFocusPanner
-  // from re-running its useEffect on every render due to inline array recreation.
-  // schoolListings is already a memoized array; filter+map creates a new identity each render.
-  const schoolMarkerPositions = useMemo(
-    () =>
-      schoolListings
-        .filter((l) => l.lat != null && l.lon != null)
-        .map((l) => ({ lat: l.lat as number, lon: l.lon as number })),
-    [schoolListings],
-  );
+  // Issue #2142 (correction pass) — memoizedInitialCenter/areaRestoreArea/
+  // schoolMarkerPositions moved verbatim into
+  // controllers/useDiscoverCameraController.ts. They are referential-identity
+  // stabilisers for the three imperative panner effects (URLViewportController /
+  // AreaRestorePanner / SchoolMarkerFocusPanner), so they belong with the
+  // camera owner rather than in a surface builder — see that file's own
+  // "IDENTITY STABILISERS" note.
 
   // Issue #2083 (F2 class sweep) — was the bare `selectedArea`, so a resolved
   // canonical-AREA-leaf node journey lost its area-scoped Trends link and
@@ -1502,27 +1466,46 @@ export default function MapDiscovery() {
   // Drill-down states keep the full area set (unchanged).
   const isLandingState = resolvedPanelContent === 'guided-entry';
 
-  // Issue #2142 Commit 3 (C4) — useDiscoverInteractionState/useAreaSearchState/
-  // useRegionGuideState/useReducedMotion/handleAreaClusterClick (moved from
-  // their early positions, see the earlier removed-block comment) + the
-  // recenter affordance + useDiscoverCameraOrchestration (#1823/#2143
-  // invariant owner) + useDiscoverJourneyPredicates (issue #1824 Slice S11d)
-  // + useDiscoverMapPresentation (issue #1824 Slice S9b1/S9b2) +
-  // handleOverviewAreaClick (issue #1910 PR2), ALL consolidated into ONE
-  // controllers/useDiscoverMapPresentationController.ts call — this is the
-  // 8th and final approved controller (C4), flagged as missing during the
-  // Commit 1-3 code-review gate and built as a continuation of Commit 3.
+  // Issue #2142 (correction pass) — the former single
+  // `useDiscoverMapPresentationController` (340 LOC / 57-field params /
+  // 39-field return) is split into FIVE capability controllers, called here in
+  // dependency order:
+  //   1. Interaction   — hover/emphasis + area-search box + cluster-chip click.
+  //                      Must never touch the camera (static guard).
+  //   2. Camera        — #1823 camera-fit policy + #2143 canonical-node
+  //                      cold-navigate/POP-restore. Sole importer of
+  //                      useDiscoverCameraOrchestration (static guard).
+  //   3. MapLayer      — journey predicates + map presentation (#1762
+  //                      clustering inputs, Schools-canonical segments).
+  //   4. RegionGuide   — #1808 guidance state + the deep-link-vs-pick rule.
+  //                      Now called AFTER MapLayer because it owns
+  //                      regionGuideVisible/regionGuideRingActive, which need
+  //                      isRegionOverview; nothing consumed its outputs at its
+  //                      former earlier position (verified).
+  //   5. OverviewNav   — overview-area click classification (#1910) +
+  //                      canonical-node select interception (#2124).
   //
-  // Called HERE — this was already the latest of the 3 late hooks'
-  // pre-refactor positions (useDiscoverMapPresentation needs isLandingState/
-  // mapLayerKind, the latter itself a useDiscoverJourneyPredicates output,
-  // itself needing cityTotal/isAgriJourney, all only resolved by this point).
-  const mapPresentationController = useDiscoverMapPresentationController({
+  // Called HERE — this was already the latest of the late hooks' pre-refactor
+  // positions (useDiscoverMapPresentation needs isLandingState/mapLayerKind,
+  // the latter itself a useDiscoverJourneyPredicates output, itself needing
+  // cityTotal/isAgriJourney, all only resolved by this point).
+  const interactionController = useDiscoverInteractionController();
+  const {
+    hoveredListingId,
+    hoveredAreaKeyForMap,
+    highlightedAreaKeys,
+    interactionCommands,
+    handleAreaClusterClick,
+    areaSearchQuery,
+    debouncedAreaSearchQuery,
+    setAreaSearchQuery,
+  } = interactionController;
+
+  const cameraController = useDiscoverCameraController({
     showAreasNavigationJourney,
     areasNavigationJourney,
     mapBbox,
     publishRecenterCameraIntent,
-    urlState: { ...nav, viewport } satisfies DiscoverUrlState,
     cameraOrchestrationUrlState: { ...nav, viewport },
     selectedSchool,
     setPanToArea,
@@ -1538,39 +1521,14 @@ export default function MapDiscovery() {
     selectedRegion,
     selectedMaxKm,
     schoolListings,
+    scopeNamespaces,
     regionScopedGroupsData,
     isLoadingRegionScopedGroups,
-    scopeNamespaces,
-    resolvedPanelContent,
-    effectiveSelectedArea,
-    cityTotal,
-    isAgriJourney,
-    mapZoom,
-    isLoadingRegionalAreaGroups,
-    isLandingState,
-    corridorGroups,
-    agriAreasData,
-    city,
-    selectedMarkerListing,
-    visibleMemberSet,
-    actions,
-    handleAreaClick,
+    viewport,
+    areaKey: nav.areaKey,
+    discoverAreasData,
   });
   const {
-    hoveredListingId,
-    hoveredAreaKeyForMap,
-    highlightedAreaKeys,
-    interactionCommands,
-    handleAreaClusterClick,
-    areaSearchQuery,
-    debouncedAreaSearchQuery,
-    setAreaSearchQuery,
-    regionSelectSource,
-    regionSelectNonce,
-    regionGuideDismissed,
-    armRegionSelect,
-    dismissRegionGuide,
-    prefersReducedMotion,
     isSelectedNodeOutOfView,
     handleRecenterOnSelectedNode,
     schoolFocusTick,
@@ -1580,6 +1538,38 @@ export default function MapDiscovery() {
     agriGroupFocusBounds,
     canonicalNodeFitCount,
     isColdNavigate,
+    memoizedInitialCenter,
+    areaRestoreArea,
+    schoolMarkerPositions,
+  } = cameraController;
+
+  const mapLayerController = useDiscoverMapLayerController({
+    resolvedPanelContent,
+    focusedGroup,
+    effectiveSelectedArea,
+    selectedSchool,
+    discoverAreas,
+    areasLoading,
+    cityTotal,
+    urlState: { ...nav, viewport } satisfies DiscoverUrlState,
+    isAgriJourney,
+    mapZoom,
+    isLoadingAreaGroups,
+    isLoadingRegionalAreaGroups,
+    isLandingState,
+    areaGroupsData,
+    corridorGroups,
+    agriAreasData,
+    summaryRegions,
+    cityCenter,
+    debouncedAreaSearchQuery,
+    city,
+    selectedMarkerListing,
+    scopeNamespaces,
+    regionScopedGroupsData,
+    visibleMemberSet,
+  });
+  const {
     mapLayerKind,
     mapLayerCategory,
     isAreaFirstCityLanding,
@@ -1595,8 +1585,34 @@ export default function MapDiscovery() {
     regionOverviewShortLabel,
     areaJourneySegments,
     schoolJourneySegments,
-    handleOverviewAreaClick,
-  } = mapPresentationController;
+  } = mapLayerController;
+
+  const regionGuideController = useDiscoverRegionGuideController({ isRegionOverview });
+  const {
+    regionSelectSource,
+    regionSelectNonce,
+    regionGuideDismissed,
+    armRegionSelect,
+    dismissRegionGuide,
+    prefersReducedMotion,
+    regionGuideVisible,
+    regionGuideRingActive,
+  } = regionGuideController;
+
+  const overviewNavigationController = useDiscoverOverviewNavigationController({
+    isTopGroupedAgri,
+    corridorGroups,
+    scopeNamespaces,
+    mapLayerKind,
+    armRegionSelect,
+    handleAreaClick,
+    journey: nav.journey,
+    areasNavigationJourney,
+    discoverAreas,
+    handleAreaSelect,
+    actions,
+  });
+  const { handleOverviewAreaClick, activeAreasNavigationJourney } = overviewNavigationController;
 
   // Debug: expose areaListings and related data to window.__debug for Playwright tests.
   // Issue #1824 Slice S7 — schoolMarkerFocusTick now sourced from
@@ -1954,10 +1970,10 @@ export default function MapDiscovery() {
   const selectedGroupName =
     focusedGroup?.name ?? (nav.groupId ? prettifyZoneSlug(nav.groupId) : null);
 
-  // Issue #1808 — the ring/helper (not the card/legend) fire only on an actual
-  // map/panel pick, never on deep-link/refresh (design §5/§9, AC5).
-  const regionGuideVisible = isRegionOverview && !regionGuideDismissed;
-  const regionGuideRingActive = regionGuideVisible && regionSelectSource !== 'deeplink';
+  // Issue #2142 (correction pass) — regionGuideVisible/regionGuideRingActive
+  // (issue #1808 deep-link-vs-pick rule) moved into
+  // controllers/useDiscoverRegionGuideController.ts, next to the state they
+  // read, so #1808 has exactly one owner.
 
   if (!isCityValid) return <CityNotSupported city={city} />;
 
@@ -2113,7 +2129,11 @@ export default function MapDiscovery() {
     navigationController,
     agriController,
     schoolController,
-    mapPresentationController,
+    interactionController,
+    cameraController,
+    mapLayerController,
+    regionGuideController,
+    overviewNavigationController,
     mobilePresentationController,
     viewportTrackerController,
     markerController,

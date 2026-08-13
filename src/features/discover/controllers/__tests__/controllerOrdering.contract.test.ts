@@ -1,24 +1,14 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { renderHook, act } from '@testing-library/react';
 import { useDiscoverViewportTracker } from '../useDiscoverViewportTracker';
 import { useBoundedSearchTrigger } from '../useBoundedSearchTrigger';
 
-const mockUseDiscoverInteractionState = vi.hoisted(() => vi.fn());
-const mockUseAreaSearchState = vi.hoisted(() => vi.fn());
-const mockUseRegionGuideState = vi.hoisted(() => vi.fn());
-const mockUseReducedMotion = vi.hoisted(() => vi.fn());
 const mockUseDiscoverCameraOrchestration = vi.hoisted(() => vi.fn());
 const mockUseDiscoverJourneyPredicates = vi.hoisted(() => vi.fn());
 const mockUseDiscoverMapPresentation = vi.hoisted(() => vi.fn());
 
-vi.mock('@/features/discover/state/useDiscoverInteractionState', () => ({
-  useDiscoverInteractionState: mockUseDiscoverInteractionState,
-}));
-vi.mock('@/features/discover/state/useAreaSearchState', () => ({ useAreaSearchState: mockUseAreaSearchState }));
-vi.mock('@/features/discover/state/useRegionGuideState', () => ({ useRegionGuideState: mockUseRegionGuideState }));
-vi.mock('@/features/discover/state/useReducedMotion', () => ({ useReducedMotion: mockUseReducedMotion }));
 vi.mock('@/features/discover/state/useDiscoverCameraOrchestration', () => ({
   useDiscoverCameraOrchestration: mockUseDiscoverCameraOrchestration,
 }));
@@ -29,7 +19,8 @@ vi.mock('@/features/discover/presentation/useDiscoverMapPresentation', () => ({
   useDiscoverMapPresentation: mockUseDiscoverMapPresentation,
 }));
 
-import { useDiscoverMapPresentationController } from '../useDiscoverMapPresentationController';
+import { useDiscoverCameraController } from '../useDiscoverCameraController';
+import { useDiscoverMapLayerController } from '../useDiscoverMapLayerController';
 
 /**
  * Issue #2142 — S6/S7 controller-ordering safety.
@@ -187,17 +178,19 @@ describe('S6/S7 controller-ordering contract — behavioral composition guard (N
 });
 
 /**
- * NEW for Commit 3 batch 3 — ordering coverage for the 8th controller
- * (useDiscoverMapPresentationController, C4), flagged as missing during the
- * Commit 1-3 code-review gate. Proves the same class of property as the
- * S6/S7 guards above: the values this controller's #1823/#2143 invariant
- * owner (useDiscoverCameraOrchestration) needs — mapZoom, discoverAreas,
- * cityCenter, schoolListings, etc. — are all produced by useDiscoverMapData/
- * useDiscoverPageState BEFORE this controller's call site, and its own
- * outputs (schoolMarkerFocusTick, canonicalNodeFitCount) are produced
- * BEFORE the window.__debug.mapState effect that reads them.
+ * Ordering coverage for the camera/map-layer controllers.
+ *
+ * Issue #2142 (correction pass) — these assertions previously targeted the
+ * single `useDiscoverMapPresentationController`, now split five ways. They are
+ * repointed (not deleted) at the two controllers that actually carry the
+ * property being asserted: `useDiscoverCameraController` (the #1823/#2143
+ * owner, whose inputs mapZoom/discoverAreas/cityCenter/schoolListings must be
+ * produced by useDiscoverMapData/useDiscoverPageState first, and whose
+ * schoolMarkerFocusTick/canonicalNodeFitCount outputs must be produced before
+ * the window.__debug.mapState effect reads them) and
+ * `useDiscoverMapLayerController` (which needs Geography's scopeNamespaces).
  */
-describe('C4 controller-ordering contract — useDiscoverMapPresentationController (NEW for Commit 3 batch 3)', () => {
+describe('controller-ordering contract — camera / map-layer controllers', () => {
   const PAGE_PATH = path.resolve(__dirname, '../../../../pages/MapDiscovery.tsx');
   const source = fs.readFileSync(PAGE_PATH, 'utf-8');
   const lines = source.split('\n');
@@ -206,24 +199,43 @@ describe('C4 controller-ordering contract — useDiscoverMapPresentationControll
     return lines.findIndex((line) => regex.test(line));
   }
 
-  it('useDiscoverMapData is called before useDiscoverMapPresentationController (mapZoom/discoverAreas/cityCenter producer -> consumer)', () => {
+  it('useDiscoverMapData is called before useDiscoverCameraController (mapZoom/discoverAreas/cityCenter producer -> consumer)', () => {
     const mapDataCallLine = firstLineIndexMatching(/useDiscoverMapData\(\{/);
-    const controllerCallLine = firstLineIndexMatching(/useDiscoverMapPresentationController\(\{/);
+    const controllerCallLine = firstLineIndexMatching(/useDiscoverCameraController\(\{/);
     expect(mapDataCallLine).toBeGreaterThan(-1);
     expect(controllerCallLine).toBeGreaterThan(-1);
     expect(mapDataCallLine).toBeLessThan(controllerCallLine);
   });
 
-  it('useDiscoverGeographyController (scopeNamespaces/summaryRegions producer) is called before useDiscoverMapPresentationController', () => {
+  it('useDiscoverGeographyController (scopeNamespaces/summaryRegions producer) is called before useDiscoverCameraController and useDiscoverMapLayerController', () => {
     const geographyCallLine = firstLineIndexMatching(/useDiscoverGeographyController\(\{/);
-    const controllerCallLine = firstLineIndexMatching(/useDiscoverMapPresentationController\(\{/);
+    const cameraCallLine = firstLineIndexMatching(/useDiscoverCameraController\(\{/);
+    const mapLayerCallLine = firstLineIndexMatching(/useDiscoverMapLayerController\(\{/);
     expect(geographyCallLine).toBeGreaterThan(-1);
-    expect(controllerCallLine).toBeGreaterThan(-1);
-    expect(geographyCallLine).toBeLessThan(controllerCallLine);
+    expect(cameraCallLine).toBeGreaterThan(-1);
+    expect(mapLayerCallLine).toBeGreaterThan(-1);
+    expect(geographyCallLine).toBeLessThan(cameraCallLine);
+    expect(geographyCallLine).toBeLessThan(mapLayerCallLine);
   });
 
-  it('the window.__debug.mapState effect (reads schoolMarkerFocusTick/canonicalNodeFitCount) is declared AFTER the useDiscoverMapPresentationController call closes, not before', () => {
-    const controllerCallLine = firstLineIndexMatching(/useDiscoverMapPresentationController\(\{/);
+  it('useDiscoverMapLayerController (isRegionOverview producer) is called before useDiscoverRegionGuideController', () => {
+    const mapLayerCallLine = firstLineIndexMatching(/useDiscoverMapLayerController\(\{/);
+    const regionGuideCallLine = firstLineIndexMatching(/useDiscoverRegionGuideController\(\{/);
+    expect(mapLayerCallLine).toBeGreaterThan(-1);
+    expect(regionGuideCallLine).toBeGreaterThan(-1);
+    expect(mapLayerCallLine).toBeLessThan(regionGuideCallLine);
+  });
+
+  it('useDiscoverRegionGuideController (armRegionSelect producer) is called before useDiscoverOverviewNavigationController', () => {
+    const regionGuideCallLine = firstLineIndexMatching(/useDiscoverRegionGuideController\(\{/);
+    const overviewNavCallLine = firstLineIndexMatching(/useDiscoverOverviewNavigationController\(\{/);
+    expect(regionGuideCallLine).toBeGreaterThan(-1);
+    expect(overviewNavCallLine).toBeGreaterThan(-1);
+    expect(regionGuideCallLine).toBeLessThan(overviewNavCallLine);
+  });
+
+  it('the window.__debug.mapState effect (reads schoolMarkerFocusTick/canonicalNodeFitCount) is declared AFTER the useDiscoverCameraController call closes, not before', () => {
+    const controllerCallLine = firstLineIndexMatching(/useDiscoverCameraController\(\{/);
     expect(controllerCallLine).toBeGreaterThan(-1);
     // Issue #2142 Commit 5 (team-lead ruling) — the controller's result is
     // now captured as ONE object (`const mapPresentationController = use...`)
@@ -247,23 +259,18 @@ describe('C4 controller-ordering contract — useDiscoverMapPresentationControll
     expect(debugEffectFieldOffset).toBeGreaterThanOrEqual(0);
   });
 
-  it('threads the SAME scopeNamespaces reference into both useDiscoverCameraOrchestration and useDiscoverMapPresentation (single source of truth, issue #1910) — behavioral proof', () => {
-    mockUseDiscoverInteractionState.mockReturnValue({ view: {}, commands: { setHighlightedAreas: vi.fn() } });
-    mockUseAreaSearchState.mockReturnValue({ areaSearchQuery: '', debouncedAreaSearchQuery: '', setAreaSearchQuery: vi.fn() });
-    mockUseRegionGuideState.mockReturnValue({ view: {}, commands: { armRegionSelect: vi.fn(), dismissRegionGuide: vi.fn() } });
-    mockUseReducedMotion.mockReturnValue(false);
+  it('the camera and map-layer controllers receive the SAME scopeNamespaces reference (single source of truth, issue #1910) — behavioral proof across the split', () => {
     mockUseDiscoverCameraOrchestration.mockReset().mockReturnValue({});
-    mockUseDiscoverJourneyPredicates.mockReturnValue({});
+    mockUseDiscoverJourneyPredicates.mockReset().mockReturnValue({});
     mockUseDiscoverMapPresentation.mockReset().mockReturnValue({});
 
     const scopeNamespaces = { regionKeys: new Set<string>(), groupSlugs: new Set<string>() };
-    renderHook(() =>
-      useDiscoverMapPresentationController({
+    renderHook(() => {
+      useDiscoverCameraController({
         showAreasNavigationJourney: false,
         areasNavigationJourney: { node: null, children: [], isLoading: false, error: null, selectNode: vi.fn() } as never,
         mapBbox: null,
         publishRecenterCameraIntent: vi.fn(),
-        urlState: {} as never,
         cameraOrchestrationUrlState: {} as never,
         selectedSchool: null,
         setPanToArea: vi.fn(),
@@ -279,25 +286,40 @@ describe('C4 controller-ordering contract — useDiscoverMapPresentationControll
         selectedRegion: null,
         selectedMaxKm: null,
         schoolListings: [],
+        scopeNamespaces,
         regionScopedGroupsData: undefined,
         isLoadingRegionScopedGroups: false,
-        scopeNamespaces,
+        viewport: null,
+        areaKey: null,
+        discoverAreasData: undefined,
+      });
+      useDiscoverMapLayerController({
         resolvedPanelContent: 'guided-entry' as never,
+        focusedGroup: null,
         effectiveSelectedArea: null,
+        selectedSchool: null,
+        discoverAreas: [],
+        areasLoading: false,
         cityTotal: 0,
+        urlState: {} as never,
         isAgriJourney: false,
         mapZoom: 12,
+        isLoadingAreaGroups: false,
         isLoadingRegionalAreaGroups: false,
         isLandingState: false,
+        areaGroupsData: undefined,
         corridorGroups: [],
         agriAreasData: undefined,
+        summaryRegions: [],
+        cityCenter: undefined,
+        debouncedAreaSearchQuery: '',
         city: 'udupi',
         selectedMarkerListing: null,
+        scopeNamespaces,
+        regionScopedGroupsData: undefined,
         visibleMemberSet: undefined,
-        actions: {} as never,
-        handleAreaClick: vi.fn(),
-      }),
-    );
+      });
+    });
     expect(mockUseDiscoverCameraOrchestration).toHaveBeenCalledWith(
       expect.objectContaining({ scopeNamespaces }),
     );

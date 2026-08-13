@@ -48,33 +48,56 @@ function makeSchoolController(): BuildMapSurfaceViewParams['schoolController'] &
   };
 }
 
-function makeMapPresentationController(): BuildMapSurfaceViewParams['mapPresentationController'] &
-  BuildMapSurfaceCommandsParams['mapPresentationController'] {
+// Issue #2142 (correction pass) — the former single makeMapPresentationController()
+// factory is split into one factory per owning controller, mirroring the
+// five-way split of useDiscoverMapPresentationController.
+function makeInteractionController(): BuildMapSurfaceViewParams['interactionController'] &
+  BuildMapSurfaceCommandsParams['interactionController'] {
+  return {
+    hoveredListingId: null,
+    hoveredAreaKeyForMap: null,
+    handleAreaClusterClick: vi.fn(),
+  };
+}
+
+function makeCameraController(): BuildMapSurfaceViewParams['cameraController'] &
+  BuildMapSurfaceCommandsParams['cameraController'] {
   return {
     agriGroupFocusBounds: null,
     isColdNavigate: false,
+    isSelectedNodeOutOfView: false,
+    schoolFocusTick: 0,
+    selectedSchoolLat: undefined,
+    selectedSchoolLon: undefined,
+    handleRecenterOnSelectedNode: vi.fn(),
+  };
+}
+
+function makeMapLayerController(): BuildMapSurfaceViewParams['mapLayerController'] {
+  return {
     overviewAreas: [],
-    handleOverviewAreaClick: vi.fn(),
     areaSearchMatchKeys: undefined,
-    hoveredAreaKeyForMap: null,
-    handleAreaClusterClick: vi.fn(),
     resolvedRegionLabel: null,
-    regionSelectNonce: 0,
-    regionOverviewMarkerKind: 'default' as BuildMapSurfaceViewParams['mapPresentationController']['regionOverviewMarkerKind'],
-    prefersReducedMotion: false,
-    dismissRegionGuide: vi.fn(),
+    regionOverviewMarkerKind: 'default' as BuildMapSurfaceViewParams['mapLayerController']['regionOverviewMarkerKind'],
     isRegionOverview: false,
     regionOverviewShortLabel: null,
     areaJourneySegments: [],
     schoolJourneySegments: [],
-    hoveredListingId: null,
     isAreaFirstCityLanding: false,
-    isSelectedNodeOutOfView: false,
-    handleRecenterOnSelectedNode: vi.fn(),
-    schoolFocusTick: 0,
-    selectedSchoolLat: undefined,
-    selectedSchoolLon: undefined,
   };
+}
+
+function makeRegionGuideController(): BuildMapSurfaceViewParams['regionGuideController'] &
+  BuildMapSurfaceCommandsParams['regionGuideController'] {
+  return {
+    regionSelectNonce: 0,
+    prefersReducedMotion: false,
+    dismissRegionGuide: vi.fn(),
+  };
+}
+
+function makeOverviewNavigationController(): BuildMapSurfaceCommandsParams['overviewNavigationController'] {
+  return { handleOverviewAreaClick: vi.fn() };
 }
 
 function makeMobilePresentationController(): BuildMapSurfaceViewParams['mobilePresentationController'] &
@@ -189,7 +212,10 @@ function makeViewParams(
     navigationController: makeNavigationController(),
     agriController: makeAgriController(),
     schoolController: makeSchoolController(),
-    mapPresentationController: makeMapPresentationController(),
+    interactionController: makeInteractionController(),
+    cameraController: makeCameraController(),
+    mapLayerController: makeMapLayerController(),
+    regionGuideController: makeRegionGuideController(),
     mobilePresentationController: makeMobilePresentationController(),
     viewportTrackerController: makeViewportTrackerController(),
     markerController: makeMarkerController(),
@@ -240,7 +266,7 @@ describe('buildMapSurfaceView', () => {
     });
     const baseTrue = {
       mapReady: true,
-      mapPresentationController: { ...makeMapPresentationController(), isSelectedNodeOutOfView: true },
+      cameraController: { ...makeCameraController(), isSelectedNodeOutOfView: true },
       activeAreasNavigationJourney: journeyWithNode,
     };
     expect(buildMapSurfaceView(makeViewParams(baseTrue)).overlays.recenter.visible).toBe(true);
@@ -251,7 +277,7 @@ describe('buildMapSurfaceView', () => {
       buildMapSurfaceView(
         makeViewParams({
           ...baseTrue,
-          mapPresentationController: { ...makeMapPresentationController(), isSelectedNodeOutOfView: false },
+          cameraController: { ...makeCameraController(), isSelectedNodeOutOfView: false },
         }),
       ).overlays.recenter.visible,
     ).toBe(false);
@@ -294,7 +320,10 @@ describe('buildMapSurfaceCommands', () => {
       clearSelectedListing: vi.fn(),
       navigationController: makeNavigationController(),
       schoolController: makeSchoolController(),
-      mapPresentationController: makeMapPresentationController(),
+      interactionController: makeInteractionController(),
+      cameraController: makeCameraController(),
+      regionGuideController: makeRegionGuideController(),
+      overviewNavigationController: makeOverviewNavigationController(),
       mobilePresentationController: makeMobilePresentationController(),
       viewportTrackerController: makeViewportTrackerController(),
       markerController: makeMarkerController(),
@@ -308,13 +337,16 @@ describe('buildMapSurfaceCommands', () => {
     expect(commands.camera.publishCameraIntent).toBe(params.publishCameraIntent);
     expect(commands.drawing.handlePolygonDrawn).toBe(params.handlePolygonDrawn);
     expect(commands.navigation.handleOverviewAreaClick).toBe(
-      params.mapPresentationController.handleOverviewAreaClick,
+      params.overviewNavigationController.handleOverviewAreaClick,
+    );
+    expect(commands.navigation.handleAreaClusterClick).toBe(
+      params.interactionController.handleAreaClusterClick,
     );
     expect(commands.markers.handleSelectMarkerListing).toBe(
       params.markerController.handleSelectMarkerListing,
     );
     expect(commands.regionGuide.dismissRegionGuide).toBe(
-      params.mapPresentationController.dismissRegionGuide,
+      params.regionGuideController.dismissRegionGuide,
     );
   });
 
@@ -334,8 +366,8 @@ describe('buildMapSurfaceCommands', () => {
     const commands = buildMapSurfaceCommands(
       makeCommandsParams({
         clearSelectedListing,
-        mapPresentationController: {
-          ...makeMapPresentationController(),
+        cameraController: {
+          ...makeCameraController(),
           handleRecenterOnSelectedNode,
         },
         mobilePresentationController: {

@@ -5,7 +5,11 @@ import type { SelectedListingPreview } from '@/features/discover/navigation/sele
 import type { useDiscoverNavigationController } from '@/features/discover/controllers/useDiscoverNavigationController';
 import type { useDiscoverAgriController } from '@/features/discover/controllers/useDiscoverAgriController';
 import type { useDiscoverSchoolController } from '@/features/discover/controllers/useDiscoverSchoolController';
-import type { useDiscoverMapPresentationController } from '@/features/discover/controllers/useDiscoverMapPresentationController';
+import type { useDiscoverInteractionController } from '@/features/discover/controllers/useDiscoverInteractionController';
+import type { useDiscoverCameraController } from '@/features/discover/controllers/useDiscoverCameraController';
+import type { useDiscoverMapLayerController } from '@/features/discover/controllers/useDiscoverMapLayerController';
+import type { useDiscoverRegionGuideController } from '@/features/discover/controllers/useDiscoverRegionGuideController';
+import type { useDiscoverOverviewNavigationController } from '@/features/discover/controllers/useDiscoverOverviewNavigationController';
 import type { useDiscoverMobilePresentationController } from '@/features/discover/controllers/useDiscoverMobilePresentationController';
 import type { useDiscoverViewportTracker } from '@/features/discover/controllers/useDiscoverViewportTracker';
 import type { useDiscoverMarkerController } from '@/features/discover/controllers/useDiscoverMarkerController';
@@ -192,32 +196,40 @@ export interface DiscoverMapSurfaceCommands {
   overlays: DiscoverMapOverlaysCommands;
 }
 
-/** The subset of useDiscoverMapPresentationController's 39-field return this surface reads. */
-type MapPresentationControllerSlice = Pick<
-  ReturnType<typeof useDiscoverMapPresentationController>,
+/**
+ * Issue #2142 (correction pass) — the former single 39-field
+ * `MapPresentationControllerSlice` is replaced by one narrow slice per owning
+ * controller, so a controller/surface drift is a compile error attributable to
+ * a specific capability rather than to one anonymous mega-object.
+ */
+type MapInteractionSlice = Pick<
+  ReturnType<typeof useDiscoverInteractionController>,
+  'hoveredListingId' | 'hoveredAreaKeyForMap'
+>;
+type MapCameraSlice = Pick<
+  ReturnType<typeof useDiscoverCameraController>,
   | 'agriGroupFocusBounds'
   | 'isColdNavigate'
+  | 'isSelectedNodeOutOfView'
+  | 'schoolFocusTick'
+  | 'selectedSchoolLat'
+  | 'selectedSchoolLon'
+>;
+type MapLayerSlice = Pick<
+  ReturnType<typeof useDiscoverMapLayerController>,
   | 'overviewAreas'
-  | 'handleOverviewAreaClick'
   | 'areaSearchMatchKeys'
-  | 'hoveredAreaKeyForMap'
-  | 'handleAreaClusterClick'
   | 'resolvedRegionLabel'
-  | 'regionSelectNonce'
   | 'regionOverviewMarkerKind'
-  | 'prefersReducedMotion'
-  | 'dismissRegionGuide'
   | 'isRegionOverview'
   | 'regionOverviewShortLabel'
   | 'areaJourneySegments'
   | 'schoolJourneySegments'
-  | 'hoveredListingId'
   | 'isAreaFirstCityLanding'
-  | 'isSelectedNodeOutOfView'
-  | 'handleRecenterOnSelectedNode'
-  | 'schoolFocusTick'
-  | 'selectedSchoolLat'
-  | 'selectedSchoolLon'
+>;
+type MapRegionGuideSlice = Pick<
+  ReturnType<typeof useDiscoverRegionGuideController>,
+  'regionSelectNonce' | 'prefersReducedMotion'
 >;
 
 export type BuildMapSurfaceViewParams = Omit<
@@ -295,7 +307,10 @@ export type BuildMapSurfaceViewParams = Omit<
     | 'journeyView'
     | 'journeyCommands'
   >;
-  mapPresentationController: MapPresentationControllerSlice;
+  interactionController: MapInteractionSlice;
+  cameraController: MapCameraSlice;
+  mapLayerController: MapLayerSlice;
+  regionGuideController: MapRegionGuideSlice;
   mobilePresentationController: Pick<
     ReturnType<typeof useDiscoverMobilePresentationController>,
     'bottomOcclusionPx' | 'previewOcclusionPx'
@@ -321,27 +336,27 @@ export function buildMapSurfaceView(params: BuildMapSurfaceViewParams): Discover
       schoolListings,
       journeyView,
     },
-    mapPresentationController: {
+    interactionController: { hoveredListingId, hoveredAreaKeyForMap },
+    cameraController: {
       agriGroupFocusBounds,
       isColdNavigate,
-      overviewAreas,
-      areaSearchMatchKeys,
-      hoveredAreaKeyForMap,
-      resolvedRegionLabel,
-      regionSelectNonce,
-      regionOverviewMarkerKind,
-      prefersReducedMotion,
-      isRegionOverview,
-      regionOverviewShortLabel,
-      areaJourneySegments,
-      schoolJourneySegments,
-      hoveredListingId,
-      isAreaFirstCityLanding,
       isSelectedNodeOutOfView,
       schoolFocusTick,
       selectedSchoolLat,
       selectedSchoolLon,
     },
+    mapLayerController: {
+      overviewAreas,
+      areaSearchMatchKeys,
+      resolvedRegionLabel,
+      regionOverviewMarkerKind,
+      isRegionOverview,
+      regionOverviewShortLabel,
+      areaJourneySegments,
+      schoolJourneySegments,
+      isAreaFirstCityLanding,
+    },
+    regionGuideController: { regionSelectNonce, prefersReducedMotion },
     mobilePresentationController: { bottomOcclusionPx, previewOcclusionPx },
     markerController: { markerPixelPos, selectedMarkerListing },
     activeFocusBounds,
@@ -547,9 +562,21 @@ export type BuildMapSurfaceCommandsParams = Pick<
     'setHoveredNavigationNodeKey' | 'setFocusedClusterMemberAreaKeys'
   >;
   schoolController: Pick<ReturnType<typeof useDiscoverSchoolController>, 'journeyCommands'>;
-  mapPresentationController: Pick<
-    ReturnType<typeof useDiscoverMapPresentationController>,
-    'handleOverviewAreaClick' | 'handleAreaClusterClick' | 'dismissRegionGuide' | 'handleRecenterOnSelectedNode'
+  interactionController: Pick<
+    ReturnType<typeof useDiscoverInteractionController>,
+    'handleAreaClusterClick'
+  >;
+  cameraController: Pick<
+    ReturnType<typeof useDiscoverCameraController>,
+    'handleRecenterOnSelectedNode'
+  >;
+  regionGuideController: Pick<
+    ReturnType<typeof useDiscoverRegionGuideController>,
+    'dismissRegionGuide'
+  >;
+  overviewNavigationController: Pick<
+    ReturnType<typeof useDiscoverOverviewNavigationController>,
+    'handleOverviewAreaClick'
   >;
   mobilePresentationController: Pick<
     ReturnType<typeof useDiscoverMobilePresentationController>,
@@ -583,12 +610,10 @@ export function buildMapSurfaceCommands(
     navigate,
     navigationController: { setHoveredNavigationNodeKey, setFocusedClusterMemberAreaKeys },
     schoolController: { journeyCommands },
-    mapPresentationController: {
-      handleOverviewAreaClick,
-      handleAreaClusterClick,
-      dismissRegionGuide,
-      handleRecenterOnSelectedNode,
-    },
+    interactionController: { handleAreaClusterClick },
+    cameraController: { handleRecenterOnSelectedNode },
+    regionGuideController: { dismissRegionGuide },
+    overviewNavigationController: { handleOverviewAreaClick },
     mobilePresentationController: { handlePreviewSheetHeightChange },
     viewportTrackerController: { handleBoundsChange },
     markerController: { handlePopoverDismiss, handleSelectMarkerListing, handleMarkerClickWithPosition },
