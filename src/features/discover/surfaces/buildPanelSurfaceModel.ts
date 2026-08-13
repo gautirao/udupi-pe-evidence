@@ -292,9 +292,9 @@ type PanelFields = PageContextSlice &
  * (city/cityTotal/navigate/trendsHref — the architect's own named group) and
  * commands groups add `routing`/`geography` (the architect listed commands as
  * navigation/results/filters/schools/agri/interaction only). Real field usage
- * shows `geography`'s 31 view fields carry 6 real callbacks
+ * shows `geography`'s view fields carry 5 real callbacks
  * (handleAreaSelect/handleAreaFirstBack/setAreaSearchQuery/
- * refetchRegionScopedGroups/armRegionSelect/refetchRegionalAreaGroups) that
+ * refetchRegionScopedGroups/armRegionSelect) that
  * have nowhere sound to live in the architect's 6 commands groups without
  * either duplicating them under an unrelated group or breaking the 1:1
  * view/commands group symmetry every other surface in this PR uses. Mirroring
@@ -302,6 +302,12 @@ type PanelFields = PageContextSlice &
  * asymmetric original spec — same "field-usage over spec-literal" judgment
  * already applied to Commits 2-3's corridorGroups/Agri and this commit's
  * DiscoverMapSurface `overlays` addition.
+ *
+ * Issue #2142 SOLID follow-up (commit 3) — `regionGuide` is the one view group
+ * with no commands counterpart: its three fields
+ * (regionGuideRingActive/regionOverviewMarkerKind/regionSelectNonce) are
+ * read-only signals, and the region-PICK writer `armRegionSelect` stays in
+ * `commands.geography` where its consumers already reach for it.
  */
 
 /**
@@ -337,16 +343,8 @@ type PanelGeographyView = Pick<
   | 'isRegionScopedGroupsError'
   | 'areaGroupsData'
   | 'isLoadingAreaGroups'
-  | 'regionGuideRingActive'
-  | 'regionOverviewMarkerKind'
-  | 'regionSelectNonce'
   | 'summaryRegions'
   | 'selectedGroupName'
-  | 'corridorGroups'
-  | 'isLoadingRegionalAreaGroups'
-  | 'isRegionalAreaGroupsError'
-  | 'selectedRegion'
-  | 'selectedMaxKm'
 >;
 type PanelGeographyCommands = Pick<
   PanelFields,
@@ -355,7 +353,23 @@ type PanelGeographyCommands = Pick<
   | 'setAreaSearchQuery'
   | 'refetchRegionScopedGroups'
   | 'armRegionSelect'
-  | 'refetchRegionalAreaGroups'
+>;
+
+/**
+ * Issue #2142 SOLID follow-up (commit 3) — the #1808 region-guidance signals,
+ * previously carried by `geography` for no reason other than that the deleted
+ * flat interface listed them adjacently. All three are produced by the
+ * RegionGuide/MapLayer controllers and consumed only by the guided-entry
+ * attention ring, so they get their own group.
+ *
+ * There is deliberately NO `regionGuide` COMMANDS group: all three fields are
+ * read-only signals. The one region-guide writer, `armRegionSelect`, is a
+ * geography-scoped region PICK (it arms the next region selection made from the
+ * panel or the map) and stays in `commands.geography`, unmoved.
+ */
+type PanelRegionGuideView = Pick<
+  PanelFields,
+  'regionGuideRingActive' | 'regionOverviewMarkerKind' | 'regionSelectNonce'
 >;
 
 type PanelResultsView = Pick<
@@ -386,8 +400,22 @@ type PanelAgriView = Pick<
   | 'isLoadingAgriGroupListings'
   | 'isAgriGroupListingsError'
   | 'agriGroupLabel'
+  // Issue #2142 SOLID follow-up (commit 3) — the agri CORRIDOR fields, moved
+  // here from `geography`. Every one of them is produced by
+  // `useDiscoverAgriController` and consumed only by the agri corridor panels
+  // (CorridorLandingPanel + the corridor/max-km selectors); grouping them under
+  // `geography` described where they used to sit in the deleted flat interface,
+  // not what they are.
+  | 'corridorGroups'
+  | 'isLoadingRegionalAreaGroups'
+  | 'isRegionalAreaGroupsError'
+  | 'selectedRegion'
+  | 'selectedMaxKm'
 >;
-type PanelAgriCommands = Pick<PanelFields, 'refetchAgriGroupListings'>;
+type PanelAgriCommands = Pick<
+  PanelFields,
+  'refetchAgriGroupListings' | 'refetchRegionalAreaGroups'
+>;
 
 type PanelSchoolsView = Pick<
   PanelFields,
@@ -432,6 +460,7 @@ export interface DiscoverPanelSurfaceView {
   pageContext: PanelPageContextView;
   routing: PanelRoutingView;
   geography: PanelGeographyView;
+  regionGuide: PanelRegionGuideView;
   results: PanelResultsView;
   agri: PanelAgriView;
   schools: PanelSchoolsView;
@@ -542,17 +571,10 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       isRegionScopedGroupsError,
       areaGroupsData,
       isLoadingAreaGroups,
-      regionGuideRingActive,
-      regionOverviewMarkerKind,
-      regionSelectNonce,
       summaryRegions,
       selectedGroupName,
-      corridorGroups,
-      isLoadingRegionalAreaGroups,
-      isRegionalAreaGroupsError,
-      selectedRegion,
-      selectedMaxKm,
     },
+    regionGuide: { regionGuideRingActive, regionOverviewMarkerKind, regionSelectNonce },
     results: {
       groupResultsListings,
       isLoadingGroupResults,
@@ -574,6 +596,11 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       isLoadingAgriGroupListings,
       isAgriGroupListingsError,
       agriGroupLabel,
+      corridorGroups,
+      isLoadingRegionalAreaGroups,
+      isRegionalAreaGroupsError,
+      selectedRegion,
+      selectedMaxKm,
     },
     schools: { selectedSchool, schools, schoolsQuery, schoolListings },
     filters: { filters, filtersContent, searchQuery },
@@ -628,10 +655,9 @@ export function buildPanelSurfaceCommands(
       setAreaSearchQuery,
       refetchRegionScopedGroups,
       armRegionSelect,
-      refetchRegionalAreaGroups,
     },
     results: { refetchGroupResults, setPage, handleBoundedSearch },
-    agri: { refetchAgriGroupListings },
+    agri: { refetchAgriGroupListings, refetchRegionalAreaGroups },
     filters: { handleFiltersChange, handleSearchChange },
     navigation: {
       onNavigationNodeHoverChange,

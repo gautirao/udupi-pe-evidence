@@ -26,9 +26,7 @@ import { useDiscoverJourneySwitchController } from '@/features/discover/controll
 import { useDiscoverMarkerPopoverController } from '@/features/discover/controllers/useDiscoverMarkerPopoverController';
 import { useDiscoverMobilePresentationController } from '@/features/discover/controllers/useDiscoverMobilePresentationController';
 import { useDiscoverDebugBridge } from '@/features/discover/controllers/useDiscoverDebugBridge';
-import { buildMapSurfaceModel, buildMapSurfaceCommands } from '@/features/discover/surfaces/buildMapSurfaceModel';
-import { buildPanelSurfaceModel, buildPanelSurfaceCommands } from '@/features/discover/surfaces/buildPanelSurfaceModel';
-import { buildOverlaySurfaceModel, buildOverlaySurfaceCommands } from '@/features/discover/surfaces/buildOverlaySurfaceModel';
+import { assembleDiscoverSurfaceProps } from '@/features/discover/composition/assembleDiscoverSurfaceProps';
 import type { DiscoverMapSurfaceView, DiscoverMapSurfaceCommands } from '@/features/discover/surfaces/buildMapSurfaceModel';
 import type { DiscoverPanelSurfaceView, DiscoverPanelSurfaceCommands } from '@/features/discover/surfaces/buildPanelSurfaceModel';
 import type { DiscoverOverlaySurfaceView, DiscoverOverlaySurfaceCommands } from '@/features/discover/surfaces/buildOverlaySurfaceModel';
@@ -216,7 +214,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   } = boundedBrowseController;
 
   const nearSchoolSheetState = useNearSchoolSheetState();
-  const { nearSchoolOpen, setNearSchoolOpen } = nearSchoolSheetState;
 
   // Does NOT include resolveMarkerPopover — same late-dependency pattern as
   // useDiscoverJourneyTransitions; see that controller's own file-header
@@ -332,7 +329,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     trendsAreaKeys,
     cityCenter, schoolById, schoolByIdError,
     agriAreasData,
-    publishClusterCameraIntent,
     // Issue #1762 — splittable LISTING-cluster tap camera producer (distinct
     // from publishClusterCameraIntent, which is area clusters only).
     // Issue #2088 (commit 6) — the Recenter affordance's camera producer.
@@ -641,93 +637,40 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   // JSX-free.
   if (!isCityValid) return { status: 'unsupported-city', city } as const;
 
-  // The map surface's input is the CONTROLLERS' OWN result objects. Only
-  // the genuinely surface-only values stay flat: the container ref, the
-  // mobile-shell pair the surface's own derivations need, the two
-  // bounded-Browse scope booleans it ORs together, the active journey, and
-  // the two commands that are plain action references.
-  const mapProps = {
-    mapContainerRef,
-    mobileMapOpen,
-    setMobileView,
-    isMarkerPopoverEligible,
-    isGroupResultsState,
-    isNodeListingsState,
-    activeAreasNavigationJourney,
-    navJourney: nav.journey,
-    buildNavigationNodeHref: actions.buildNodeHref,
-    onAreaVisualClusterCameraIntent: publishClusterCameraIntent,
-    clearSelectedListing: actions.clearSelectedListing,
-    pageContextController,
-    pageStateController,
-    mapDataController,
-    areaGroupsController,
-    geographyController,
-    badgeController,
-    journeyChromeController,
-    markerPopoverController,
-    navigationController,
-    agriController,
-    schoolController,
-    interactionController,
-    cameraController,
-    mapLayerController,
-    regionGuideController,
-    overviewNavigationController,
-    mobilePresentationController,
-    viewportTrackerController,
-    markerController,
-  };
-  const mapView = buildMapSurfaceModel(mapProps);
-  const mapCommands = buildMapSurfaceCommands(mapProps);
-
-  // The panel surface's input is the CONTROLLERS' OWN result objects, not a
-  // flat literal transcribed here and re-grouped by the builders. Renames
-  // and derivations (effectiveSelectedArea -> selectedArea,
-  // regionScopedGroupsData?.groups -> regionScopedGroups, the three
-  // lifted-state setters -> their on* callback names) are the BUILDER's
-  // job, so this stays reference-passing only.
-  const panelProps = {
-    pageContext: pageContextController,
-    pageState: pageStateController,
-    navigation: navigationController,
-    journeySwitch: journeySwitchController,
-    overviewNavigation: overviewNavigationController,
-    areaGroups: areaGroupsController,
-    geography: geographyController,
-    mapData: mapDataController,
-    agri: agriController,
-    results: resultsController,
-    school: schoolController,
-    badge: badgeController,
-    journeyChrome: journeyChromeController,
-    filterChrome: filterChromeController,
-    interaction: interactionController,
-    regionGuide: regionGuideController,
-    mapLayer: mapLayerController,
-    boundedBrowse: boundedBrowseController,
-    boundedSearch: boundedSearchController,
-    marker: markerController,
-    mobilePresentation: mobilePresentationController,
-  };
-  const panelView = buildPanelSurfaceModel(panelProps);
-  const panelCommands = buildPanelSurfaceCommands(panelProps);
-
-  const overlayProps = {
-    isAgriJourney,
-    nearSchoolOpen,
-    setNearSchoolOpen,
-    selectedSchool,
-    journeyCommands,
-    filters,
-    handleFiltersChange,
-    schoolBoardFilter,
-    handleBoardFilterChange,
-    isCityValid,
-    city,
-  };
-  const overlayView = buildOverlaySurfaceModel(overlayProps);
-  const overlayCommands = buildOverlaySurfaceCommands(overlayProps);
+  // Issue #2142 SOLID follow-up (commit 3) — the three surface-prop literals
+  // and the six builder calls that used to sit here are pure, hook-free object
+  // assembly, so they moved VERBATIM to
+  // `composition/assembleDiscoverSurfaceProps.ts`. This hook's remaining job is
+  // exactly its stated one: call the controllers in order, apply the
+  // unsupported-city gate, and hand the controller registry to the assembler.
+  const { mapView, mapCommands, panelView, panelCommands, overlayView, overlayCommands } =
+    assembleDiscoverSurfaceProps({
+      pageContextController,
+      navigationController,
+      areaGroupsController,
+      agriController,
+      resultsController,
+      boundedBrowseController,
+      nearSchoolSheetState,
+      markerController,
+      boundedSearchController,
+      pageStateController,
+      viewportTrackerController,
+      geographyController,
+      mapDataController,
+      schoolController,
+      badgeController,
+      journeyChromeController,
+      filterChromeController,
+      interactionController,
+      cameraController,
+      mapLayerController,
+      regionGuideController,
+      overviewNavigationController,
+      journeySwitchController,
+      markerPopoverController,
+      mobilePresentationController,
+    });
 
   return {
     status: 'ready',

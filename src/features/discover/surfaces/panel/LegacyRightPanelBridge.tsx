@@ -52,24 +52,19 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
     isRegionScopedGroupsError,
     areaGroupsData,
     isLoadingAreaGroups,
-    regionGuideRingActive,
-    regionOverviewMarkerKind,
-    regionSelectNonce,
     summaryRegions,
     selectedGroupName,
-    corridorGroups,
-    isLoadingRegionalAreaGroups,
-    isRegionalAreaGroupsError,
-    selectedRegion,
-    selectedMaxKm,
   } = view.geography;
+  // Issue #2142 SOLID follow-up (commit 3) — the #1808 region-guidance signals
+  // moved out of `geography` into their own `regionGuide` view group. Same
+  // three values, same producers, same JSX below; only the group path changed.
+  const { regionGuideRingActive, regionOverviewMarkerKind, regionSelectNonce } = view.regionGuide;
   const {
     handleAreaSelect,
     handleAreaFirstBack,
     setAreaSearchQuery,
     refetchRegionScopedGroups,
     armRegionSelect,
-    refetchRegionalAreaGroups,
   } = commands.geography;
   const {
     groupResultsListings,
@@ -93,8 +88,16 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
     isLoadingAgriGroupListings,
     isAgriGroupListingsError,
     agriGroupLabel,
+    // Issue #2142 SOLID follow-up (commit 3) — the agri corridor fields, moved
+    // here from `view.geography`. Same values, same producer
+    // (useDiscoverAgriController), same JSX below.
+    corridorGroups,
+    isLoadingRegionalAreaGroups,
+    isRegionalAreaGroupsError,
+    selectedRegion,
+    selectedMaxKm,
   } = view.agri;
-  const { refetchAgriGroupListings } = commands.agri;
+  const { refetchAgriGroupListings, refetchRegionalAreaGroups } = commands.agri;
   const { selectedSchool, schools, schoolsQuery, schoolListings } = view.schools;
   const { filters, filtersContent, searchQuery } = view.filters;
   const { handleFiltersChange, handleSearchChange } = commands.filters;

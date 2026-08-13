@@ -194,6 +194,59 @@ describe('buildPanelSurfaceModel', () => {
     ).toBeUndefined();
   });
 
+  // ── Issue #2142 SOLID follow-up (commit 3) — the agri/regionGuide regrouping ──
+  // The five corridor fields + their refetch command are produced by
+  // useDiscoverAgriController and consumed only by the agri corridor panels;
+  // they used to be exposed under `geography` for no reason but adjacency in the
+  // deleted flat interface. Values are unchanged — only the group path is.
+  it('exposes the agri CORRIDOR fields under `agri`, not `geography`', () => {
+    const corridorGroups = [{ directionCode: 'N' }] as never;
+    const view = buildPanelSurfaceModel(
+      makeParams({
+        agri: {
+          corridorGroups,
+          isLoadingRegionalAreaGroups: true,
+          isRegionalAreaGroupsError: true,
+          selectedRegion: 'N',
+          selectedMaxKm: 25,
+        },
+      }),
+    );
+
+    expect(view.agri.corridorGroups).toBe(corridorGroups);
+    expect(view.agri.isLoadingRegionalAreaGroups).toBe(true);
+    expect(view.agri.isRegionalAreaGroupsError).toBe(true);
+    expect(view.agri.selectedRegion).toBe('N');
+    expect(view.agri.selectedMaxKm).toBe(25);
+
+    for (const field of [
+      'corridorGroups',
+      'isLoadingRegionalAreaGroups',
+      'isRegionalAreaGroupsError',
+      'selectedRegion',
+      'selectedMaxKm',
+    ]) {
+      expect(view.geography).not.toHaveProperty(field);
+    }
+  });
+
+  it('exposes the #1808 region-guidance signals under their own `regionGuide` group, not `geography`', () => {
+    const view = buildPanelSurfaceModel(
+      makeParams({
+        regionGuide: { regionGuideRingActive: true, regionSelectNonce: 7 },
+        mapLayer: { regionOverviewMarkerKind: 'zones' as never },
+      }),
+    );
+
+    expect(view.regionGuide.regionGuideRingActive).toBe(true);
+    expect(view.regionGuide.regionSelectNonce).toBe(7);
+    expect(view.regionGuide.regionOverviewMarkerKind).toBe('zones');
+
+    for (const field of ['regionGuideRingActive', 'regionSelectNonce', 'regionOverviewMarkerKind']) {
+      expect(view.geography).not.toHaveProperty(field);
+    }
+  });
+
   it('carries the #2124 selectNode interception through by using the ACTIVE journey, not a raw one', () => {
     const active = makeJourney();
     const view = buildPanelSurfaceModel(
@@ -211,6 +264,12 @@ describe('buildPanelSurfaceCommands', () => {
     expect(commands.geography.handleAreaSelect).toBe(params.pageState.handleAreaSelect);
     expect(commands.results.setPage).toBe(params.pageState.setPage);
     expect(commands.agri.refetchAgriGroupListings).toBe(params.agri.refetchAgriGroupListings);
+    // Issue #2142 SOLID follow-up (commit 3) — the corridor refetch follows its
+    // five view fields out of `geography` and into `agri`. `armRegionSelect`
+    // does NOT: it is a region-PICK writer and stays in `commands.geography`.
+    expect(commands.agri.refetchRegionalAreaGroups).toBe(params.agri.refetchRegionalAreaGroups);
+    expect(commands.geography).not.toHaveProperty('refetchRegionalAreaGroups');
+    expect(commands.geography.armRegionSelect).toBe(params.regionGuide.armRegionSelect);
     expect(commands.filters.handleFiltersChange).toBe(params.pageState.handleFiltersChange);
     expect(commands.interaction.clearSelectedMarkerListing).toBe(params.marker.clearSelectedMarkerListing);
   });
