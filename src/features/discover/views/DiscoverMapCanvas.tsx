@@ -495,6 +495,33 @@ export function DiscoverMapCanvas({
   };
 
   const handleBackgroundClick = (e: React.MouseEvent) => {
+    // Issue #2149 (fix-cycle) — a real touch tap on a listing marker
+    // (`hasTouch`/`isMobile` Playwright contexts; live-verified against a
+    // real mobile browser via three independent tap mechanisms) synthesizes
+    // a native `click` DOM event that bubbles all the way up to THIS div,
+    // just like the drag-tail click #2089 already guards against — but
+    // Leaflet's own 'click' listener on the marker (bound in
+    // MarkerClusterLayer, `PropertyMap.tsx`) already ran first and called
+    // `onSelectListing`/`onMarkerClickWithPosition` for the NEW marker. This
+    // handler previously had no way to tell "a tap that just selected a
+    // marker" apart from "a genuine tap on open map background", so on every
+    // click AFTER the first marker selection (once `markerPixelPos != null`
+    // wires this handler up at all) it immediately called
+    // `handlePopoverDismiss()` and wiped the selection the marker's own click
+    // handler had just set in the very same event — reproducing as "any
+    // second marker tap (even the same marker) closes the sheet/popover"
+    // (mouse-driven clicks in desktop/#2089's fixture do not exhibit this;
+    // only real touch taps do). Fixed by checking whether the click actually
+    // originated on a marker element (every listing marker carries
+    // `data-listing-id`, set by MarkerClusterLayer's `marker.on('add', ...)`)
+    // before treating it as a background tap — if so, the marker's own click
+    // handler already owns this gesture and the background-dismiss must be a
+    // no-op.
+    const target = e.target as Element | null;
+    if (target?.closest('[data-listing-id]')) {
+      return;
+    }
+
     const downPos = backgroundPointerDownPosRef.current;
     backgroundPointerDownPosRef.current = null;
     if (downPos) {

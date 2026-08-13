@@ -46,6 +46,7 @@
  * card/sheet from `SelectedListingPreview`) is what wires it up.
  */
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 
 interface SelectedListingPreviewBase {
   /** Listing identity. */
@@ -104,6 +105,62 @@ export function toSelectedListingPreview(
   };
   if (isAuthenticated) {
     return { ...base, kind: 'authed', pricePaise: listing.pricePaise ?? null };
+  }
+  return { ...base, kind: 'anon', priceBand: listing.priceBand ?? null };
+}
+
+export interface ToSelectedListingPreviewFromMarkerListingOptions {
+  isAuthenticated: boolean;
+  /**
+   * Fallback area label used when the marker listing carries no `locality`.
+   * School-first is cross-area (no single canonical AREA node the way
+   * area-first is), so there is no `AreaPoint.areaLabel`/node.displayLabel to
+   * reuse here — callers pass the journey's already-threaded city label.
+   */
+  cityLabel: string;
+}
+
+/**
+ * Issue #2149 — school-first counterpart to `toSelectedListingPreview` above.
+ *
+ * Projects a `PropertyListingWithImages` (the shape `selectedMarkerListing`
+ * carries — `src/components/map/PropertyMap.tsx` / `src/hooks/
+ * usePropertyListings.ts`, NOT `DiscoverCityListingItem`) down to the same
+ * `SelectedListingPreview` union `toSelectedListingPreview` produces, so both
+ * journeys feed the one mobile preview sheet through an identical contract.
+ *
+ * A second function rather than a `toSelectedListingPreview` overload: the
+ * two source shapes disagree on several fields (snake_case
+ * `property_type`/`price_unit` vs camelCase `propertyType`/`pricePaise`, and
+ * — critically — `price` here is already RUPEES, matching
+ * `MarkerPopoverCard.tsx`'s `formatPrice(listing.price, listing.price_unit)`
+ * call with no division, whereas `SelectedListingPreviewAuthed.pricePaise` is
+ * PAISE). Do not skip the `* 100` conversion below or the mobile sheet (which
+ * divides by 100 via `formatPrice(preview.pricePaise / 100, 'INR')`) will
+ * render a price 100x too small. `toSelectedListingPreview`'s own contract
+ * (area-first, `DiscoverCityListingItem`, already-paise `pricePaise`) is
+ * untouched by this addition.
+ *
+ * Pure module: no React, no hooks, no import-time side effects.
+ */
+export function toSelectedListingPreviewFromMarkerListing(
+  listing: PropertyListingWithImages,
+  { isAuthenticated, cityLabel }: ToSelectedListingPreviewFromMarkerListingOptions,
+): SelectedListingPreview {
+  const base: SelectedListingPreviewBase = {
+    id: listing.id,
+    primaryImageUrl: listing.images?.[0]?.url ?? null,
+    propertyType: listing.property_type ?? null,
+    bedrooms: listing.bedrooms ?? null,
+    areaLabel: listing.locality ?? cityLabel,
+    trustBadge: listing.trustBadge ?? null,
+  };
+  if (isAuthenticated) {
+    return {
+      ...base,
+      kind: 'authed',
+      pricePaise: listing.price != null ? Math.round(listing.price * 100) : null,
+    };
   }
   return { ...base, kind: 'anon', priceBand: listing.priceBand ?? null };
 }
