@@ -39,6 +39,7 @@
  */
 
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { grantDiscoverConsent } from './helpers';
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -289,6 +290,7 @@ function fulfillJson(route: Route, status: number, body: unknown) {
  * Does NOT stub /api/discover/agri-areas (installed per-test when specific counts needed).
  */
 async function stubCommonRoutes(page: Page) {
+  await grantDiscoverConsent(page);
   await page.route('**/api/trends/options**', (r) => fulfillJson(r, 200, TRENDS_OPTIONS_FIXTURE));
   await page.route('**/api/discover/areas**', (r) => fulfillJson(r, 200, DISCOVER_AREAS_FIXTURE));
   await page.route('**/api/discover/cities/*/listings**', (r) => fulfillJson(r, 200, CITY_LISTINGS_FIXTURE));
