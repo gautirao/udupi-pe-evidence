@@ -292,6 +292,22 @@ async function tapClusterViaTouchscreen(page: Page): Promise<void> {
   throw lastError instanceof Error ? lastError : new Error('tapClusterViaTouchscreen: exhausted retries');
 }
 
+/**
+ * Reads the canonical `node=` param straight off the live URL — same
+ * pattern as `currentNodeParam(page)` in
+ * issue-2142-hierarchy-back-direction-root.spec.ts and the other
+ * `#1956`/`#2088` history-contract specs: proves the canonical Area-first
+ * navigation state survives an interaction, not just that some marker
+ * count changed.
+ */
+function currentNodeParam(page: Page): string | null {
+  return new URL(page.url()).searchParams.get('node');
+}
+
+function currentAreaKeyParam(page: Page): string | null {
+  return new URL(page.url()).searchParams.get('areaKey');
+}
+
 async function dismissConsentBannerIfPresent(page: Page): Promise<void> {
   const banner = page.getByTestId('discover-consent-banner');
   if (await banner.isVisible({ timeout: 3_000 }).catch(() => false)) {
@@ -705,5 +721,82 @@ test.describe('PR #2150 review finding A — mobile school-first, real touchscre
     // members are individually revealed depends on the resulting zoom
     // level and viewport).
     await expect.poll(async () => pinLocator(page).count(), { timeout: 10_000 }).toBeGreaterThan(0);
+  });
+
+  // Owner's review bot (BLOCKING_PARTIAL) — this file's real-touch mobile
+  // coverage was school-first only; the canonical Area-first (`node=`)
+  // journey, already proven on desktop above via `.click()`
+  // ("canonical Area-first, coincident-only cluster (no school/radius)
+  // spiderfies on tap" and "splittable cluster tap fits/zooms"), had no
+  // real 390x844 touchscreen equivalent. Reuses the exact same fixture
+  // builders (`makeCoincidentListings`/`makeSplittableGroups`), the same
+  // `AREA_KEY`/`NODE_KEY`, and the same `gotoAreaFirst`/`tapClusterViaTouchscreen`
+  // helpers as the rest of this file — apples-to-apples with the desktop
+  // Area-first coverage, just with real touch input instead of `.click()`.
+  test('mobile — canonical Area-first (node=), real touchscreen.tap spiderfies a coincident cluster and preserves node=', async ({
+    page,
+  }) => {
+    await gotoAreaFirst(page, makeCoincidentListings(8, 'area-mobile-coincident', CENTER_LAT, CENTER_LON), 13);
+
+    expect(currentNodeParam(page)).toBe(NODE_KEY);
+    expect(currentAreaKeyParam(page)).toBe(AREA_KEY);
+
+    // LIST is the default mobile view (same as school-first above) — switch
+    // into the mobile MAP overlay via the same universal control-bar-map-trigger
+    // before the cluster layer mounts.
+    const mapTrigger = page.getByTestId('control-bar-map-trigger');
+    await expect(mapTrigger).toBeVisible({ timeout: 15_000 });
+    await mapTrigger.click();
+    await expect(page.getByTestId('mobile-map-close-list-button')).toBeVisible({ timeout: 10_000 });
+
+    const cluster = clusterLocator(page);
+    await expect(cluster.first()).toBeVisible({ timeout: 15_000 });
+
+    await tapClusterViaTouchscreen(page);
+
+    // Must spiderfy to all 8 members, not collapse to zero pins — the
+    // original #2150 regression shape, now proven on a real mobile touch
+    // tap against the canonical Area-first (`node=`) journey.
+    await expect(pinLocator(page)).toHaveCount(8, { timeout: 10_000 });
+
+    // The canonical Area-first navigation state must be untouched by the
+    // cluster-tap interaction — same node/areaKey as before the tap, not
+    // reset or corrupted.
+    expect(currentNodeParam(page)).toBe(NODE_KEY);
+    expect(currentAreaKeyParam(page)).toBe(AREA_KEY);
+  });
+
+  test('mobile — canonical Area-first (node=), real touchscreen.tap fits/zooms a splittable cluster and preserves node=', async ({
+    page,
+  }) => {
+    await gotoAreaFirst(page, makeSplittableGroups(), 11);
+
+    expect(currentNodeParam(page)).toBe(NODE_KEY);
+    expect(currentAreaKeyParam(page)).toBe(AREA_KEY);
+
+    // LIST is the default mobile view (same as school-first above) — switch
+    // into the mobile MAP overlay via the same universal control-bar-map-trigger
+    // before the cluster layer mounts.
+    const mapTrigger = page.getByTestId('control-bar-map-trigger');
+    await expect(mapTrigger).toBeVisible({ timeout: 15_000 });
+    await mapTrigger.click();
+    await expect(page.getByTestId('mobile-map-close-list-button')).toBeVisible({ timeout: 10_000 });
+
+    const cluster = clusterLocator(page);
+    await expect(cluster.first()).toBeVisible({ timeout: 15_000 });
+
+    await tapClusterViaTouchscreen(page);
+
+    // A splittable cluster tap must fit/zoom to reveal real member pins —
+    // never a no-op collapse. Mirrors the desktop splittable-cluster
+    // assertion (">0 pins", not an exact count, since which/how many
+    // members are individually revealed depends on the resulting zoom
+    // level and viewport).
+    await expect.poll(async () => pinLocator(page).count(), { timeout: 10_000 }).toBeGreaterThan(0);
+
+    // Canonical Area-first navigation state preserved through the
+    // fit/zoom interaction.
+    expect(currentNodeParam(page)).toBe(NODE_KEY);
+    expect(currentAreaKeyParam(page)).toBe(AREA_KEY);
   });
 });
