@@ -308,7 +308,11 @@ async function ensureAuthenticated(page: Page): Promise<boolean> {
   const authIndicator = page.locator(
     'nav a[href="/broker/listings"], nav a[href*="dashboard"], [data-testid="user-menu"], header [aria-label*="menu"]',
   );
-  const isLoggedIn = await authIndicator.first().isVisible({ timeout: 5_000 }).catch(() => false);
+  const isLoggedIn = await authIndicator
+    .first()
+    .waitFor({ state: 'visible', timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
   if (isLoggedIn) {
     console.log('[1375] Auth verified via nav indicator');
     return true;
