@@ -30,7 +30,16 @@ type DeepPartial<T> = { [K in keyof T]?: Partial<T[K]> };
 
 function makeParams(overrides: DeepPartial<BuildPanelSurfaceModelParams> = {}): BuildPanelSurfaceModelParams {
   const base: BuildPanelSurfaceModelParams = {
-    pageContext: { navigate: vi.fn(), isAuthenticated: false },
+    pageContext: {
+      navigate: vi.fn(),
+      isAuthenticated: false,
+      // Issue #2142 SOLID follow-up (commit 2) — the ambient values the panel
+      // renderers used to read off the context facade themselves.
+      nav: {} as BuildPanelSurfaceModelParams['pageContext']['nav'],
+      actions: {} as BuildPanelSurfaceModelParams['pageContext']['actions'],
+      isMobileShell: false,
+      mobileView: 'LIST',
+    },
     pageState: {
       city: 'bangalore',
       filters: {},
@@ -48,7 +57,10 @@ function makeParams(overrides: DeepPartial<BuildPanelSurfaceModelParams> = {}): 
       setHoveredNavigationNodeKey: vi.fn(),
       focusedClusterMemberAreaKeys: null,
       setFocusedClusterMemberAreaKeys: vi.fn(),
+      isAreaFirstJourneyActive: false,
+      isSchoolsNavNodeLevel: false,
     },
+    journeySwitch: { handleSelectJourney: vi.fn() },
     overviewNavigation: { activeAreasNavigationJourney: makeJourney() },
     areaGroups: { areaGroupsData: undefined, isLoadingAreaGroups: false, selectedGroupName: null },
     geography: {
@@ -215,5 +227,50 @@ describe('buildPanelSurfaceCommands', () => {
     expect(commands.navigation.onSelectedListingPreviewChange).toBe(
       params.mobilePresentation.setSelectedListingPreview,
     );
+  });
+
+  // Issue #2142 SOLID follow-up (commit 2) — the JourneySwitcher writer is now
+  // a controller output threaded through this builder, not a closure the
+  // surface builds itself.
+  it('renames journeySwitch.handleSelectJourney onto the panel-facing `selectJourney`, by reference', () => {
+    const params = makeParams();
+    const commands = buildPanelSurfaceCommands(params);
+    expect(commands.navigation.selectJourney).toBe(params.journeySwitch.handleSelectJourney);
+  });
+
+  // Issue #2142 SOLID follow-up (commit 2, PLAN REVIEW correction 3) — the
+  // ambient page context is now carried by the contract, so the panel
+  // renderers can stop reaching into the Discover context facade.
+  it('carries the SAME nav/actions references through view.pageContext / commands.pageContext (no copy, no re-derivation)', () => {
+    const params = makeParams();
+    expect(buildPanelSurfaceModel(params).pageContext.nav).toBe(params.pageContext.nav);
+    expect(buildPanelSurfaceCommands(params).pageContext.actions).toBe(params.pageContext.actions);
+  });
+
+  it('carries the mobile shell slice through view.pageContext', () => {
+    const view = buildPanelSurfaceModel(
+      makeParams({ pageContext: { isMobileShell: true, mobileView: 'MAP' } }),
+    );
+    expect(view.pageContext.isMobileShell).toBe(true);
+    expect(view.pageContext.mobileView).toBe('MAP');
+  });
+});
+
+// Issue #2142 SOLID follow-up (commit 2) — the two journey predicates the panel
+// surface used to recompute from `useDiscoverNav()`; they now reach it through
+// the navigation controller, unchanged in value.
+describe('buildPanelSurfaceModel — journey predicates', () => {
+  it('carries the navigation controller\'s isAreaFirstJourneyActive/isSchoolsNavNodeLevel into view.navigation', () => {
+    const view = buildPanelSurfaceModel(
+      makeParams({ navigation: { isAreaFirstJourneyActive: true, isSchoolsNavNodeLevel: false } }),
+    );
+    expect(view.navigation.isAreaFirstJourneyActive).toBe(true);
+    expect(view.navigation.isSchoolsNavNodeLevel).toBe(false);
+
+    const schoolsView = buildPanelSurfaceModel(
+      makeParams({ navigation: { isAreaFirstJourneyActive: false, isSchoolsNavNodeLevel: true } }),
+    );
+    expect(schoolsView.navigation.isAreaFirstJourneyActive).toBe(false);
+    expect(schoolsView.navigation.isSchoolsNavNodeLevel).toBe(true);
   });
 });

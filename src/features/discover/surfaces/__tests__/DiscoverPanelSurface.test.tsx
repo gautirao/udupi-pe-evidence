@@ -168,15 +168,12 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
   }),
 }));
 
-// Issue #1956 PR 6 rework ([rulings.oq_a_v2]) — the container now calls
-// `useDiscoverAreaNavigationPathResolver` (a `useMutation`) unconditionally
-// for the JourneySwitcher conversion seam. This suite mocks it the same way
-// it mocks every other data-layer dependency (the facade above,
-// `DiscoverRightPanel` itself) rather than standing up a real QueryClient —
-// the conversion seam's own behaviour has dedicated coverage in
-// `useDiscoverAreaNavigationPath.ts`'s consumer (real-browser E2E,
-// `issue-1956-pr6-journey-switch-conversion.spec.ts`); this file only needs
-// the hook to not throw for "no QueryClientProvider in this tree".
+// Issue #2142 SOLID follow-up (commit 2) — the JourneySwitcher conversion seam
+// that USED to make this mock necessary moved into
+// controllers/useDiscoverJourneySwitchController.ts (which owns and mocks it in
+// its own suite). The mock stays because `DiscoverControlBar` — mounted by the
+// canonical journey shell — calls the same `useMutation`-backed resolver, and
+// this suite deliberately renders without a QueryClientProvider.
 vi.mock('@/features/discover/navigation/useDiscoverAreaNavigationPath', () => ({
   useDiscoverAreaNavigationPathResolver: () => ({
     mutate: vi.fn(),
@@ -246,6 +243,22 @@ type PanelFlatFixture = Omit<
   | 'setHoveredNavigationNodeKey'
   | 'setFocusedClusterMemberAreaKeys'
   | 'setSelectedListingPreview'
+  // Issue #2142 SOLID follow-up (commit 2) — `handleSelectJourney` is supplied
+  // through the fixture's renamed `selectJourney` field (PanelRenamedFields);
+  // the two journey predicates are derived in `toModelParams` from the SAME
+  // mocked `useDiscoverNav()` state the production controller reads, so the
+  // existing `BASE_URL_STATE.journey = ...` call sites keep working unchanged.
+  | 'handleSelectJourney'
+  | 'isAreaFirstJourneyActive'
+  | 'isSchoolsNavNodeLevel'
+  // PLAN REVIEW correction 3 — the ambient page-context values the renderers
+  // now receive as props. `toModelParams` supplies them from the mocked
+  // facade (BASE_URL_STATE / URL_ACTIONS), which IS what production reads, so
+  // they are not fixture knobs.
+  | 'nav'
+  | 'actions'
+  | 'isMobileShell'
+  | 'mobileView'
 > &
   // The six renames, taken from the model's own exported declaration so the
   // fixture cannot drift from the surface contract.
@@ -409,6 +422,12 @@ function baseProps(overrides: Partial<PanelFlatFixture> = {}): PanelFlatFixture 
     onNavigationNodeHoverChange: vi.fn(),
     onClusterFocusChange: vi.fn(),
     onSelectedListingPreviewChange: vi.fn(),
+    // Issue #2142 SOLID follow-up (commit 2) — the JourneySwitcher writer is
+    // now produced by useDiscoverJourneySwitchController and injected as a
+    // command. Its own branch behaviour is covered by that controller's
+    // colocated suite; this file asserts the WIRING (the switcher dispatches
+    // through this exact reference, with the clicked journey).
+    selectJourney: vi.fn(),
   };
   return Object.assign({}, defaults, overrides);
 }
@@ -423,7 +442,19 @@ function baseProps(overrides: Partial<PanelFlatFixture> = {}): PanelFlatFixture 
  */
 function toModelParams(g: PanelFlatFixture): BuildPanelSurfaceModelParams {
   return {
-    pageContext: { navigate: g.navigate, isAuthenticated: g.isAuthenticated },
+    pageContext: {
+      navigate: g.navigate,
+      isAuthenticated: g.isAuthenticated,
+      // Issue #2142 SOLID follow-up (commit 2, PLAN REVIEW correction 3) — the
+      // renderers no longer call useDiscoverNav()/useDiscoverActions()/
+      // useDiscoverShell(); these arrive through the contract instead. Sourced
+      // from the SAME mocked facade values this suite already installs, so
+      // every existing assertion keeps exercising the identical objects.
+      nav: BASE_URL_STATE,
+      actions: URL_ACTIONS,
+      isMobileShell: false,
+      mobileView: 'LIST',
+    },
     pageState: {
       city: g.city,
       filters: g.filters,
@@ -441,7 +472,17 @@ function toModelParams(g: PanelFlatFixture): BuildPanelSurfaceModelParams {
       setHoveredNavigationNodeKey: g.onNavigationNodeHoverChange,
       focusedClusterMemberAreaKeys: g.focusedClusterMemberAreaKeys,
       setFocusedClusterMemberAreaKeys: g.onClusterFocusChange,
+      // The SAME derivations useDiscoverNavigationController performs, off the
+      // SAME mocked useDiscoverNav() value — so `BASE_URL_STATE.journey = ...`
+      // still selects the branch under test, exactly as it did when the
+      // surface derived these itself.
+      isAreaFirstJourneyActive: BASE_URL_STATE.journey === 'area-first',
+      isSchoolsNavNodeLevel:
+        BASE_URL_STATE.journey === 'school-first' &&
+        !BASE_URL_STATE.areaKey &&
+        !BASE_URL_STATE.schoolId,
     },
+    journeySwitch: { handleSelectJourney: g.selectJourney },
     overviewNavigation: { activeAreasNavigationJourney: g.areasNavigationJourney },
     areaGroups: {
       areaGroupsData: g.areaGroupsData,
@@ -1188,14 +1229,24 @@ describe('DiscoverPanelSurface — canonical Areas journey panel (default for jo
     expect(screen.getByTestId('journey-switcher-section')).toBeInTheDocument();
   });
 
-  it('AC2/AC3 — selecting a different journey tab dispatches through the SAME handleSelectJourney writer (urlActions.setJourney), no second navigation path', async () => {
+  // Issue #2142 SOLID follow-up (commit 2) — `handleSelectJourney` moved into
+  // controllers/useDiscoverJourneySwitchController.ts. Its BRANCH behaviour
+  // (the plain setJourney PUSH, the #2124 server-areaKey school shortcut, the
+  // legacy-context conversion + its 404 toast, the groupId-only mount) is
+  // covered, assertion-for-assertion, by that controller's colocated suite.
+  // What remains this surface's job — and is what these two tests now assert —
+  // is that the switcher is wired to that ONE injected writer, for both input
+  // modalities, with the clicked journey and no second navigation path.
+  it('AC2/AC3 — selecting a different journey tab dispatches through the SAME injected selectJourney command, no second navigation path', async () => {
     const user = userEvent.setup();
     BASE_URL_STATE.journey = 'area-first';
+    const selectJourney = vi.fn();
     render(
       <MemoryRouter>
         <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-groups-landing',
+            selectJourney,
             areasNavigationJourney: inertAreasNavigationJourney({ node: ROOT_NODE }),
           })}
         />
@@ -1203,75 +1254,26 @@ describe('DiscoverPanelSurface — canonical Areas journey panel (default for jo
     );
     const schoolTab = screen.getByTestId('journey-card-school-first');
     await user.click(schoolTab);
-    // No legacy groupId/areaKey context is present, so `handleSelectJourney`
-    // takes its plain-PUSH arm — the SAME writer every other journey switch
-    // in this app uses, never a second/parallel navigation mechanism.
-    expect(URL_ACTIONS.setJourney).toHaveBeenCalledWith('school-first');
-    expect(URL_ACTIONS.enterAreasJourney).not.toHaveBeenCalled();
+    expect(selectJourney).toHaveBeenCalledWith('school-first');
+    // The surface itself never writes the URL — every journey switch funnels
+    // through the injected command, never a parallel mechanism. (Asserted with
+    // `toHaveBeenCalledWith` rather than `toHaveBeenCalled` because these
+    // facade spies are module-level and this suite does not reset them.)
+    expect(URL_ACTIONS.setJourney).not.toHaveBeenCalledWith('school-first');
+    expect(URL_ACTIONS.enterAreasJourney).not.toHaveBeenCalledWith(expect.anything());
+    expect(URL_ACTIONS.enterSchoolsJourneyAtArea).not.toHaveBeenCalledWith(expect.anything());
   });
 
-  it('#2124 PR review fix — switching Areas -> Schools at an AREA leaf uses the resolved node\'s SERVER-supplied areaKey, never a value parsed from node=', async () => {
-    // The URL `node=` param and the resolved canonical node's `nodeKey` are
-    // deliberately made to encode a DIFFERENT area than the resolved node's
-    // own `areaKey` field. If `handleSelectJourney` ever regresses to
-    // stripping the `a:` prefix off `urlState.node` (or off
-    // `areasNavigationJourney.node.nodeKey`) instead of reading the
-    // server-owned `areaKey` field, this assertion catches it — the mutation
-    // would fire with the wrong (URL-derived) area identity.
+  it('AC2/AC3 — keyboard selection (focus + Enter) dispatches the SAME command as a click', async () => {
     const user = userEvent.setup();
     BASE_URL_STATE.journey = 'area-first';
-    BASE_URL_STATE.node = 'a:IN|KA|Bangalore|WrongUrlDerivedArea';
-    render(
-      <MemoryRouter>
-        <DiscoverPanelSurfaceHarness
-          {...baseProps({
-            resolvedPanelContent: 'area-selected',
-            areasNavigationJourney: inertAreasNavigationJourney({
-              node: {
-                nodeKey: 'a:IN|KA|Bangalore|AlsoWrongNodeKeyDerivedArea',
-                nodeType: 'AREA',
-                displayLabel: 'Manipal',
-                depth: 2,
-                regionKey: 'east',
-                ancestry: [],
-                nextLevelType: 'LISTINGS',
-                children: [],
-                revisionId: 1,
-                bounds: {
-                  centreLat: 13.35,
-                  centreLon: 74.79,
-                  minLat: 13.3,
-                  minLon: 74.75,
-                  maxLat: 13.4,
-                  maxLon: 74.83,
-                },
-                descendantAreaKeys: null,
-                areaKey: 'IN|KA|Bangalore|Manipal',
-              },
-            }),
-          })}
-        />
-      </MemoryRouter>,
-    );
-    const schoolTab = screen.getByTestId('journey-card-school-first');
-    await user.click(schoolTab);
-    expect(URL_ACTIONS.enterSchoolsJourneyAtArea).toHaveBeenCalledWith('IN|KA|Bangalore|Manipal');
-    expect(URL_ACTIONS.enterSchoolsJourneyAtArea).not.toHaveBeenCalledWith(
-      'IN|KA|Bangalore|WrongUrlDerivedArea',
-    );
-    expect(URL_ACTIONS.enterSchoolsJourneyAtArea).not.toHaveBeenCalledWith(
-      'IN|KA|Bangalore|AlsoWrongNodeKeyDerivedArea',
-    );
-  });
-
-  it('AC2/AC3 — keyboard selection (focus + Enter) dispatches the SAME writer as a click', async () => {
-    const user = userEvent.setup();
-    BASE_URL_STATE.journey = 'area-first';
+    const selectJourney = vi.fn();
     render(
       <MemoryRouter>
         <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-groups-landing',
+            selectJourney,
             areasNavigationJourney: inertAreasNavigationJourney({ node: ROOT_NODE }),
           })}
         />
@@ -1280,6 +1282,6 @@ describe('DiscoverPanelSurface — canonical Areas journey panel (default for jo
     const agriTab = screen.getByTestId('journey-card-agri-first');
     agriTab.focus();
     await user.keyboard('{Enter}');
-    expect(URL_ACTIONS.setJourney).toHaveBeenCalledWith('agri-first');
+    expect(selectJourney).toHaveBeenCalledWith('agri-first');
   });
 });

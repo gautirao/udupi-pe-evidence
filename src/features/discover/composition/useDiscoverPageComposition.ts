@@ -22,6 +22,7 @@ import { useDiscoverCameraController } from '@/features/discover/controllers/use
 import { useDiscoverMapLayerController } from '@/features/discover/controllers/useDiscoverMapLayerController';
 import { useDiscoverRegionGuideController } from '@/features/discover/controllers/useDiscoverRegionGuideController';
 import { useDiscoverOverviewNavigationController } from '@/features/discover/controllers/useDiscoverOverviewNavigationController';
+import { useDiscoverJourneySwitchController } from '@/features/discover/controllers/useDiscoverJourneySwitchController';
 import { useDiscoverMarkerPopoverController } from '@/features/discover/controllers/useDiscoverMarkerPopoverController';
 import { useDiscoverMobilePresentationController } from '@/features/discover/controllers/useDiscoverMobilePresentationController';
 import { useDiscoverDebugBridge } from '@/features/discover/controllers/useDiscoverDebugBridge';
@@ -561,6 +562,18 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   });
   const { activeAreasNavigationJourney } = overviewNavigationController;
 
+  // Issue #2142 SOLID follow-up (commit 2) — the JourneySwitcher write path
+  // (`handleSelectJourney`), lifted out of DiscoverPanelSurface.tsx. Called
+  // HERE because it reads `activeAreasNavigationJourney` — the SAME object the
+  // panel renders from, so its #2124 server-owned AREA identity can never come
+  // from a second copy.
+  const journeySwitchController = useDiscoverJourneySwitchController({
+    nav,
+    actions,
+    areasNavigationJourney: activeAreasNavigationJourney,
+    toast,
+  });
+
   // The marker-popover capability: eligibility gate, the node-leaf-aware
   // layer recompute, resolveMarkerPopover and its #2139 ordered set, the
   // #1939 URL<->popover reconciliation effect, and the #1810 stepper.
@@ -678,6 +691,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     pageContext: pageContextController,
     pageState: pageStateController,
     navigation: navigationController,
+    journeySwitch: journeySwitchController,
     overviewNavigation: overviewNavigationController,
     areaGroups: areaGroupsController,
     geography: geographyController,

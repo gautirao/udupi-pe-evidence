@@ -6,6 +6,8 @@ import type { UseAreasNavigationJourneyResult } from '@/features/discover/naviga
 import type { useDiscoverPageContext } from '@/features/discover/controllers/useDiscoverPageContext';
 import type { useDiscoverPageStateController } from '@/features/discover/controllers/useDiscoverPageStateController';
 import type { useDiscoverNavigationController } from '@/features/discover/controllers/useDiscoverNavigationController';
+import type { useDiscoverJourneySwitchController } from '@/features/discover/controllers/useDiscoverJourneySwitchController';
+import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { useDiscoverOverviewNavigationController } from '@/features/discover/controllers/useDiscoverOverviewNavigationController';
 import type { useDiscoverAreaGroupsController } from '@/features/discover/controllers/useDiscoverAreaGroupsController';
 import type { useDiscoverGeographyController } from '@/features/discover/controllers/useDiscoverGeographyController';
@@ -55,7 +57,30 @@ import type { useDiscoverMobilePresentationController } from '@/features/discove
  * prop parity now, in place of the deleted interface's redundant restatement.
  */
 
-type PageContextSlice = Pick<ReturnType<typeof useDiscoverPageContext>, 'navigate' | 'isAuthenticated'>;
+/**
+ * Issue #2142 SOLID follow-up (commit 2, PLAN REVIEW correction 3) — `nav`,
+ * `actions`, `isMobileShell` and `mobileView` are now carried through this
+ * contract instead of being read out of the Discover context facade by the
+ * panel renderers themselves.
+ *
+ * Those four values were ALWAYS available on `useDiscoverPageContext()` (this
+ * page's one ambient-provider adapter); the panel simply reached for them
+ * directly, as a documented #1953 deviation. That made the renderers service
+ * locators: their type signature understated what they depended on, and the
+ * ambient read could not be checked by the compiler. Threading them here makes
+ * the dependency explicit and each renderer a pure function of its props.
+ *
+ * `nav`/`actions` are carried as the WHOLE context objects rather than
+ * field-by-field, because the URL-state facade already IS this app's stable
+ * navigation port (architect's plan §4, DIP). Each renderer then `Pick`s only
+ * the fields it actually reads off them (see AreaFirstJourneyPanel /
+ * SchoolFirstJourneyPanel), so ISP is enforced at the renderer boundary
+ * instead of by fragmenting the port here.
+ */
+type PageContextSlice = Pick<
+  ReturnType<typeof useDiscoverPageContext>,
+  'navigate' | 'isAuthenticated' | 'nav' | 'actions' | 'isMobileShell' | 'mobileView'
+>;
 type PageStateSlice = Pick<
   ReturnType<typeof useDiscoverPageStateController>,
   | 'city'
@@ -75,6 +100,15 @@ type NavigationSlice = Pick<
   | 'setHoveredNavigationNodeKey'
   | 'focusedClusterMemberAreaKeys'
   | 'setFocusedClusterMemberAreaKeys'
+  // Issue #2142 SOLID follow-up (commit 2) — the two journey predicates the
+  // panel surface used to recompute off its own `useDiscoverNav()` read.
+  | 'isAreaFirstJourneyActive'
+  | 'isSchoolsNavNodeLevel'
+>;
+/** Issue #2142 SOLID follow-up (commit 2) — the JourneySwitcher write path. */
+type JourneySwitchSlice = Pick<
+  ReturnType<typeof useDiscoverJourneySwitchController>,
+  'handleSelectJourney'
 >;
 type OverviewNavigationSlice = Pick<
   ReturnType<typeof useDiscoverOverviewNavigationController>,
@@ -178,6 +212,7 @@ export interface BuildPanelSurfaceModelParams {
   pageContext: PageContextSlice;
   pageState: PageStateSlice;
   navigation: NavigationSlice;
+  journeySwitch: JourneySwitchSlice;
   overviewNavigation: OverviewNavigationSlice;
   areaGroups: AreaGroupsSlice;
   geography: GeographySlice;
@@ -213,6 +248,8 @@ export interface PanelRenamedFields {
   onNavigationNodeHoverChange: (nodeKey: string | null) => void;
   onClusterFocusChange: (memberAreaKeys: readonly string[] | null) => void;
   onSelectedListingPreviewChange: (preview: SelectedListingPreview | null) => void;
+  /** ← journeySwitch.handleSelectJourney (the legacy -> canonical conversion writer). */
+  selectJourney: (journey: DiscoverJourney) => void;
   /** Panel-facing alias for the chip row / filters panel ReactNodes. */
   activeContextChips: ReactNode;
   filtersContent: ReactNode;
@@ -266,6 +303,16 @@ type PanelFields = PageContextSlice &
  * already applied to Commits 2-3's corridorGroups/Agri and this commit's
  * DiscoverMapSurface `overlays` addition.
  */
+
+/**
+ * Issue #2142 SOLID follow-up (commit 2, PLAN REVIEW correction 3) — the
+ * ambient page context, made explicit. `view.pageContext` carries the READ
+ * side (URL state + mobile shell), `commands.pageContext` the WRITE side (the
+ * URL-action facade), keeping the 1:1 view/commands group symmetry every other
+ * group in this file uses.
+ */
+type PanelPageContextView = Pick<PanelFields, 'nav' | 'isMobileShell' | 'mobileView'>;
+type PanelPageContextCommands = Pick<PanelFields, 'actions'>;
 
 type PanelRoutingView = Pick<
   PanelFields,
@@ -360,10 +407,16 @@ type PanelNavigationView = Pick<
   | 'focusedClusterMemberAreaKeys'
   | 'journeyView'
   | 'resolvedPanelContent'
+  | 'isAreaFirstJourneyActive'
+  | 'isSchoolsNavNodeLevel'
 >;
 type PanelNavigationCommands = Pick<
   PanelFields,
-  'onNavigationNodeHoverChange' | 'onClusterFocusChange' | 'journeyCommands' | 'onSelectedListingPreviewChange'
+  | 'onNavigationNodeHoverChange'
+  | 'onClusterFocusChange'
+  | 'journeyCommands'
+  | 'onSelectedListingPreviewChange'
+  | 'selectJourney'
 >;
 
 type PanelInteractionView = Pick<
@@ -376,6 +429,7 @@ type PanelInteractionCommands = Pick<
 >;
 
 export interface DiscoverPanelSurfaceView {
+  pageContext: PanelPageContextView;
   routing: PanelRoutingView;
   geography: PanelGeographyView;
   results: PanelResultsView;
@@ -387,6 +441,7 @@ export interface DiscoverPanelSurfaceView {
 }
 
 export interface DiscoverPanelSurfaceCommands {
+  pageContext: PanelPageContextCommands;
   routing: PanelRoutingCommands;
   geography: PanelGeographyCommands;
   results: PanelResultsCommands;
@@ -400,9 +455,14 @@ export interface DiscoverPanelSurfaceCommands {
 
 export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): DiscoverPanelSurfaceView {
   const {
-    pageContext: { isAuthenticated },
+    pageContext: { isAuthenticated, nav, isMobileShell, mobileView },
     pageState: { city, filters, selectedSchool, page, resolvedPanelContent, effectiveSelectedArea },
-    navigation: { hoveredNavigationNodeKey, focusedClusterMemberAreaKeys },
+    navigation: {
+      hoveredNavigationNodeKey,
+      focusedClusterMemberAreaKeys,
+      isAreaFirstJourneyActive,
+      isSchoolsNavNodeLevel,
+    },
     overviewNavigation: { activeAreasNavigationJourney },
     areaGroups: { areaGroupsData, isLoadingAreaGroups, selectedGroupName },
     geography: {
@@ -464,6 +524,7 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
 
 
   return {
+    pageContext: { nav, isMobileShell, mobileView },
     routing: { city, cityTotal, cityHasNoListings, trendsHref },
     geography: {
       discoverAreas,
@@ -522,6 +583,8 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       focusedClusterMemberAreaKeys,
       journeyView,
       resolvedPanelContent,
+      isAreaFirstJourneyActive,
+      isSchoolsNavNodeLevel,
     },
     interaction: { selectedMarkerListing, activeContextChips, prefersReducedMotion, isAuthenticated },
   };
@@ -532,9 +595,10 @@ export function buildPanelSurfaceCommands(
   params: BuildPanelSurfaceModelParams,
 ): DiscoverPanelSurfaceCommands {
   const {
-    pageContext: { navigate },
+    pageContext: { navigate, actions },
     pageState: { handleCityChange, handleAreaSelect, handleFiltersChange, setPage },
     navigation: { setHoveredNavigationNodeKey, setFocusedClusterMemberAreaKeys },
+    journeySwitch: { handleSelectJourney },
     geography: { refetchRegionScopedGroups },
     agri: { refetchRegionalAreaGroups, refetchAgriGroupListings },
     results: { refetchGroupResults },
@@ -551,9 +615,12 @@ export function buildPanelSurfaceCommands(
   const onNavigationNodeHoverChange = setHoveredNavigationNodeKey;
   const onClusterFocusChange = setFocusedClusterMemberAreaKeys;
   const onSelectedListingPreviewChange = setSelectedListingPreview;
+  // Panel-facing name for the journey-switch controller's writer.
+  const selectJourney = handleSelectJourney;
 
 
   return {
+    pageContext: { actions },
     routing: { handleCityChange, navigate },
     geography: {
       handleAreaSelect,
@@ -571,6 +638,7 @@ export function buildPanelSurfaceCommands(
       onClusterFocusChange,
       journeyCommands,
       onSelectedListingPreviewChange,
+      selectJourney,
     },
     interaction: { clearSelectedMarkerListing, interactionCommands },
   };
