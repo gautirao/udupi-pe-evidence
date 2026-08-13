@@ -77,7 +77,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   // moved verbatim into controllers/useDiscoverPageContext.ts.
   const pageContextController = useDiscoverPageContext();
   const {
-    navigate,
     authLoading,
     isAuthenticated,
     toast,
@@ -179,7 +178,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     areaGroupsData,
     isLoadingAreaGroups,
     focusedGroup,
-    focusedGroupAreas,
     groupAreaKeysForMapData,
   } = areaGroupsController;
 
@@ -285,7 +283,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   });
   const {
     selectedMarkerListing,
-    showMarkerInList,
   } = markerController;
 
   // Issue #2142 (correction pass) — resolvedPanelContent (issue #1374's
@@ -354,13 +351,12 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     selectedMarkerListing,
   });
   const {
-    filters, legacySelectedArea, panToArea, mapZoom, mapReady, showLoader,
+    filters, legacySelectedArea, mapZoom, mapReady,
     selectedSchool, schoolBoardFilter, city, fitTick, resetMapTick,
     pendingAreaKeyRef, initialViewportRef, initialViewportWasBareAreaRef, resolveSignal,
-    setFilters, setSelectedArea, setPanToArea, setMapReady, setMapZoom,
+    setFilters, setSelectedArea, setPanToArea,
     setShowLoader, setSchoolBoardFilter, setSelectedSchool,
-    handleCityChange, handleSchoolSelect, handleFiltersChange,
-    handlePolygonDrawn, handlePolygonCleared,
+    handleSchoolSelect, handleFiltersChange,
     handleAreaClick, handleAreaSelect, handleAreaBack,
     page,
     effectiveSelectedArea, isCityValid, resolvedPanelContent,
@@ -392,7 +388,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     areaGroupsData,
   });
   const {
-    handleAreaMarkersComputed,
     summaryRegions,
     scopeNamespaces,
     regionScopedGroupsData,
@@ -443,21 +438,18 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     isFetching,
     discoverAreas, discoverAreasData, filteredListings,
     markerListings, areaListings, isErrorAreaListings, areaMarkerListings,
-    schoolRadiusListings, schoolRadiusListingsLoading, schoolRadiusHasMore,
-    activeFocusBounds, trendsAreaKeys,
-    cityCenter, cityZoom, schoolById, schoolByIdError, error,
-    markersTruncated, markersReturnedElements, markersTotalFilteredElements,
+    schoolRadiusListings, schoolRadiusListingsLoading,
+    trendsAreaKeys,
+    cityCenter, schoolById, schoolByIdError,
     agriAreasData,
-    cameraIntent, publishCameraIntent, publishClusterCameraIntent,
+    publishClusterCameraIntent,
     // Issue #1762 — splittable LISTING-cluster tap camera producer (distinct
     // from publishClusterCameraIntent, which is area clusters only).
-    publishMarkerClusterCameraIntent,
     // Issue #2088 (commit 6) — the Recenter affordance's camera producer.
     publishRecenterCameraIntent,
     // Issue #1956 PR 1 (FE-3, item 2) — threaded straight into
     // useDiscoverMapLayerController and read by NOTHING else.
     visibleMemberSet,
-    isLoading,
   } = mapDataController;
 
   // Issue #2142 Commit 3 (C4) — the "Recenter on <label>" affordance (issue
@@ -600,14 +592,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   });
   const {
     cityTotal,
-    discoverBadge,
-    areaResultSummaryText,
-    announcedBadgeText,
-    groupSelectedBadgeCopy,
-    fallbackBadgeCopy,
-    schoolRadiusActive,
-    schoolRadiusPillNoun,
-    hasActiveAnonFilter,
   } = badgeController;
 
   // Issue #2142 (correction pass) — the seven pure journey-chrome predicates,
@@ -623,11 +607,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   });
   const {
     isLandingState,
-    showSchoolMarkers,
-    showSchoolBreadcrumb,
-    schoolRadiusOverlay,
-    isSelectedGroupState,
-    isAreaFirstSelectedAreaState,
   } = journeyChromeController;
 
   // Issue #2142 (correction pass) — the two rendered filter surfaces plus
@@ -785,9 +764,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   const {
     schoolMarkerFocusTick,
     canonicalNodeFitCount,
-    memoizedInitialCenter,
-    areaRestoreArea,
-    schoolMarkerPositions,
   } = cameraController;
 
   const mapLayerController = useDiscoverMapLayerController({
@@ -826,8 +802,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   const regionGuideController = useDiscoverRegionGuideController({ isRegionOverview });
   const {
     armRegionSelect,
-    regionGuideVisible,
-    regionGuideRingActive,
   } = regionGuideController;
 
   const overviewNavigationController = useDiscoverOverviewNavigationController({
@@ -883,9 +857,6 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   });
   const {
     isMarkerPopoverEligible,
-    currentMapMarkerListings,
-    markerPopoverStepper,
-    handleStepMarkerListing,
   } = markerPopoverController;
 
   // Issue #2142 Commit 3 (C8) — the mobile Map-mode overlay shell + the #2129
@@ -900,9 +871,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     isMarkerPopoverEligible,
   });
   const {
-    selectedListingPreview,
     mobileMapTriggerRef,
-    isPreviewSheetOpen,
   } = mobilePresentationController;
 
   // Issue #2142 (correction pass) — the window.__debug Playwright bridge.
@@ -940,96 +909,32 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   // JSX-free.
   if (!isCityValid) return { status: 'unsupported-city', city } as const;
 
-  // Issue #2142 Commit 4 — one flat object matching DiscoverMapCanvasProps
-  // (every field DiscoverMapMount's JSX passed straight through) plus the
-  // surface-only additions (mobileMapOpen, activeAreasNavigationJourney,
-  // navJourney, isPreviewSheetOpen, selectedListingPreview, mapReady,
-  // isSelectedNodeOutOfView) and the 3 command-only handlers the overlays
-  // group needs. Passed to BOTH buildMapSurfaceModel and
-  // buildMapSurfaceCommands — each Picks only the fields it needs.
-  // Issue #2142 Commit 5 (team-lead ruling) — nests the controllers' OWN
-  // result objects (or small Picked subsets) instead of re-listing every
-  // one of their fields individually; only genuinely page-local fields
-  // (state this page owns directly, or derived consts with no controller
-  // source) stay flat. buildMapSurfaceModel/buildMapSurfaceCommands
-  // destructure the needed fields back out — same OUTPUT view/commands
-  // shape as before, only the INPUT shape changed.
+  // Issue #2142 (correction pass) — like the panel surface, the map surface's
+  // input is now the CONTROLLERS' OWN result objects. Only the genuinely
+  // surface-only values stay flat: the container ref, the mobile-shell pair the
+  // surface's own derivations need, the two bounded-Browse scope booleans it
+  // ORs together, the active journey, and the two commands that are plain
+  // action references.
   const mapProps = {
     mapContainerRef,
-    showLoader,
-    error,
-    currentMapMarkerListings,
-    activeFocusBounds,
-    filters,
-    isLandingState,
-    handlePolygonDrawn,
-    handlePolygonCleared,
-    selectedSchool,
-    memoizedInitialCenter,
-    cityCenter,
-    cityZoom,
-    publishCameraIntent,
-    cameraIntent,
-    focusedGroupAreas,
-    selectedArea: effectiveSelectedArea,
-    isGroupResultsState,
-    isNodeListingsState,
-    publishClusterCameraIntent,
-    publishMarkerClusterCameraIntent,
-    handleAreaMarkersComputed,
-    onAreaVisualClusterCameraIntent: publishClusterCameraIntent,
-    buildNavigationNodeHref: actions.buildNodeHref,
-    setMapZoom,
-    panToArea,
-    setMapReady,
-    showSchoolMarkers,
-    schoolMarkerFocusTick,
-    schoolMarkerPositions,
-    areaRestoreArea,
-    isAgriJourney,
-    showSchoolBreadcrumb,
-    focusedGroup,
-    city,
-    schoolRadiusOverlay,
-    resolvedPanelContent,
-    isSelectedGroupState,
-    handleCityChange,
-    regionGuideVisible,
-    regionGuideRingActive,
-    areaMarkerListings,
-    announcedBadgeText,
-    discoverBadge,
-    areaResultSummaryText,
-    groupSelectedBadgeCopy,
-    fallbackBadgeCopy,
-    isAreaFirstSelectedAreaState,
-    schoolRadiusActive,
-    schoolRadiusPillNoun,
-    cityTotal,
-    isAuthenticated,
-    schoolRadiusHasMore,
-    hasActiveAnonFilter,
-    markersTruncated,
-    markersReturnedElements,
-    markersTotalFilteredElements,
-    isLoading,
-    mapZoom,
-    isMarkerPopoverEligible,
-    markerPopoverStepper,
-    navigate,
-    handleStepMarkerListing,
-    showMarkerInList,
-    // surface-only additions (not part of DiscoverMapCanvasProps)
     mobileMapOpen,
     setMobileView,
+    isMarkerPopoverEligible,
+    isGroupResultsState,
+    isNodeListingsState,
     activeAreasNavigationJourney,
     navJourney: nav.journey,
-    isPreviewSheetOpen,
-    selectedListingPreview,
-    mapReady,
-    // command-only additions the overlays group needs
-    clearSelectedListing: () => actions.clearSelectedListing(),
-    // controller result objects (grouped, not individually flattened)
+    buildNavigationNodeHref: actions.buildNodeHref,
+    onAreaVisualClusterCameraIntent: publishClusterCameraIntent,
+    clearSelectedListing: actions.clearSelectedListing,
+    pageContextController,
+    pageStateController,
+    mapDataController,
+    areaGroupsController,
+    geographyController,
+    badgeController,
+    journeyChromeController,
+    markerPopoverController,
     navigationController,
     agriController,
     schoolController,

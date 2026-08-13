@@ -8,6 +8,70 @@ import {
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 
+/**
+ * Issue #2142 (correction pass) — the map builder's input is now the
+ * controllers' own result objects. These fixtures keep a FLAT shape on purpose
+ * (many call sites read better with flat overrides) and regroup mechanically
+ * here, so the assertions still run through the REAL production builders.
+ */
+function toMapParams<T extends Record<string, unknown>>(f: T) {
+  const g = f as Record<string, never>;
+  return {
+    ...f,
+    areaGroupsController: { focusedGroupAreas: g.focusedGroupAreas, focusedGroup: g.focusedGroup },
+    badgeController: { announcedBadgeText: g.announcedBadgeText, discoverBadge: g.discoverBadge, areaResultSummaryText: g.areaResultSummaryText, groupSelectedBadgeCopy: g.groupSelectedBadgeCopy, fallbackBadgeCopy: g.fallbackBadgeCopy, schoolRadiusActive: g.schoolRadiusActive, schoolRadiusPillNoun: g.schoolRadiusPillNoun, cityTotal: g.cityTotal, hasActiveAnonFilter: g.hasActiveAnonFilter },
+    journeyChromeController: { isLandingState: g.isLandingState, showSchoolMarkers: g.showSchoolMarkers, showSchoolBreadcrumb: g.showSchoolBreadcrumb, schoolRadiusOverlay: g.schoolRadiusOverlay, isSelectedGroupState: g.isSelectedGroupState, isAreaFirstSelectedAreaState: g.isAreaFirstSelectedAreaState },
+    geographyController: { handleAreaMarkersComputed: g.handleAreaMarkersComputed },
+    pageContextController: {
+      isAuthenticated: g.isAuthenticated,
+      isAgriJourney: g.isAgriJourney,
+      navigate: g.navigate,
+      setMobileView: g.setMobileView,
+    },
+    pageStateController: {
+      showLoader: g.showLoader,
+      filters: g.filters,
+      selectedSchool: g.selectedSchool,
+      panToArea: g.panToArea,
+      mapZoom: g.mapZoom,
+      mapReady: g.mapReady,
+      city: g.city,
+      resolvedPanelContent: g.resolvedPanelContent,
+      effectiveSelectedArea: g.selectedArea,
+      handlePolygonDrawn: g.handlePolygonDrawn,
+      handlePolygonCleared: g.handlePolygonCleared,
+      setMapZoom: g.setMapZoom,
+      setMapReady: g.setMapReady,
+      handleCityChange: g.handleCityChange,
+    },
+    mapDataController: {
+      error: g.error,
+      activeFocusBounds: g.activeFocusBounds,
+      cityCenter: g.cityCenter,
+      cityZoom: g.cityZoom,
+      cameraIntent: g.cameraIntent,
+      areaMarkerListings: g.areaMarkerListings,
+      schoolRadiusHasMore: g.schoolRadiusHasMore,
+      markersTruncated: g.markersTruncated,
+      markersReturnedElements: g.markersReturnedElements,
+      markersTotalFilteredElements: g.markersTotalFilteredElements,
+      isLoading: g.isLoading,
+      publishCameraIntent: g.publishCameraIntent,
+      publishClusterCameraIntent: g.publishClusterCameraIntent,
+      publishMarkerClusterCameraIntent: g.publishMarkerClusterCameraIntent,
+    },
+    markerPopoverController: {
+      currentMapMarkerListings: g.currentMapMarkerListings,
+      markerPopoverStepper: g.markerPopoverStepper,
+      handleStepMarkerListing: g.handleStepMarkerListing,
+    },
+    cameraController: { ...(f.cameraController as object), memoizedInitialCenter: g.memoizedInitialCenter, schoolMarkerFocusTick: g.schoolMarkerFocusTick, schoolMarkerPositions: g.schoolMarkerPositions, areaRestoreArea: g.areaRestoreArea },
+    regionGuideController: { ...(f.regionGuideController as object), regionGuideVisible: g.regionGuideVisible, regionGuideRingActive: g.regionGuideRingActive },
+    mobilePresentationController: { ...(f.mobilePresentationController as object), isPreviewSheetOpen: g.isPreviewSheetOpen, selectedListingPreview: g.selectedListingPreview },
+    markerController: { ...(f.markerController as object), showMarkerInList: g.showMarkerInList },
+  } as never;
+}
+
 function makeJourney(
   overrides: Partial<UseAreasNavigationJourneyResult> = {},
 ): UseAreasNavigationJourneyResult {
@@ -19,8 +83,7 @@ function makeJourney(
   } as unknown as UseAreasNavigationJourneyResult;
 }
 
-function makeNavigationController(): BuildMapSurfaceViewParams['navigationController'] &
-  BuildMapSurfaceCommandsParams['navigationController'] {
+function makeNavigationController(): Record<string, unknown> {
   return {
     hoveredNavigationNodeKey: null,
     setHoveredNavigationNodeKey: vi.fn(),
@@ -29,30 +92,28 @@ function makeNavigationController(): BuildMapSurfaceViewParams['navigationContro
   };
 }
 
-function makeAgriController(): BuildMapSurfaceViewParams['agriController'] {
+function makeAgriController(): Record<string, unknown> {
   return { selectedRegion: null, selectedMaxKm: null, filteredAgriListings: null };
 }
 
-function makeSchoolController(): BuildMapSurfaceViewParams['schoolController'] &
-  BuildMapSurfaceCommandsParams['schoolController'] {
+function makeSchoolController(): Record<string, unknown> {
   return {
     schoolZoneLabels: [],
     schools: [],
-    schoolsQuery: {} as BuildMapSurfaceViewParams['schoolController']['schoolsQuery'],
+    schoolsQuery: {} as never,
     schoolFirstAreaSchoolCount: null,
     schoolFirstZoneSchoolCount: null,
     schoolFirstLandingSchoolCount: null,
     schoolListings: [],
-    journeyView: {} as BuildMapSurfaceViewParams['schoolController']['journeyView'],
-    journeyCommands: {} as BuildMapSurfaceViewParams['schoolController']['journeyCommands'],
+    journeyView: {} as never,
+    journeyCommands: {} as never,
   };
 }
 
 // Issue #2142 (correction pass) — the former single makeMapPresentationController()
 // factory is split into one factory per owning controller, mirroring the
 // five-way split of useDiscoverMapPresentationController.
-function makeInteractionController(): BuildMapSurfaceViewParams['interactionController'] &
-  BuildMapSurfaceCommandsParams['interactionController'] {
+function makeInteractionController(): Record<string, unknown> {
   return {
     hoveredListingId: null,
     hoveredAreaKeyForMap: null,
@@ -60,8 +121,7 @@ function makeInteractionController(): BuildMapSurfaceViewParams['interactionCont
   };
 }
 
-function makeCameraController(): BuildMapSurfaceViewParams['cameraController'] &
-  BuildMapSurfaceCommandsParams['cameraController'] {
+function makeCameraController(): Record<string, unknown> {
   return {
     agriGroupFocusBounds: null,
     isColdNavigate: false,
@@ -73,12 +133,12 @@ function makeCameraController(): BuildMapSurfaceViewParams['cameraController'] &
   };
 }
 
-function makeMapLayerController(): BuildMapSurfaceViewParams['mapLayerController'] {
+function makeMapLayerController(): Record<string, unknown> {
   return {
     overviewAreas: [],
     areaSearchMatchKeys: undefined,
     resolvedRegionLabel: null,
-    regionOverviewMarkerKind: 'default' as BuildMapSurfaceViewParams['mapLayerController']['regionOverviewMarkerKind'],
+    regionOverviewMarkerKind: 'default' as never,
     isRegionOverview: false,
     regionOverviewShortLabel: null,
     areaJourneySegments: [],
@@ -87,8 +147,7 @@ function makeMapLayerController(): BuildMapSurfaceViewParams['mapLayerController
   };
 }
 
-function makeRegionGuideController(): BuildMapSurfaceViewParams['regionGuideController'] &
-  BuildMapSurfaceCommandsParams['regionGuideController'] {
+function makeRegionGuideController(): Record<string, unknown> {
   return {
     regionSelectNonce: 0,
     prefersReducedMotion: false,
@@ -96,21 +155,19 @@ function makeRegionGuideController(): BuildMapSurfaceViewParams['regionGuideCont
   };
 }
 
-function makeOverviewNavigationController(): BuildMapSurfaceCommandsParams['overviewNavigationController'] {
+function makeOverviewNavigationController(): Record<string, unknown> {
   return { handleOverviewAreaClick: vi.fn() };
 }
 
-function makeMobilePresentationController(): BuildMapSurfaceViewParams['mobilePresentationController'] &
-  BuildMapSurfaceCommandsParams['mobilePresentationController'] {
+function makeMobilePresentationController(): Record<string, unknown> {
   return { bottomOcclusionPx: 0, previewOcclusionPx: 0, handlePreviewSheetHeightChange: vi.fn() };
 }
 
-function makeViewportTrackerController(): BuildMapSurfaceViewParams['viewportTrackerController'] {
+function makeViewportTrackerController(): Record<string, unknown> {
   return { handleBoundsChange: vi.fn() };
 }
 
-function makeMarkerController(): BuildMapSurfaceViewParams['markerController'] &
-  BuildMapSurfaceCommandsParams['markerController'] {
+function makeMarkerController(): Record<string, unknown> {
   return {
     markerPixelPos: null,
     selectedMarkerListing: null,
@@ -121,10 +178,10 @@ function makeMarkerController(): BuildMapSurfaceViewParams['markerController'] &
 }
 
 function makeViewParams(
-  overrides: Partial<BuildMapSurfaceViewParams> = {},
-): BuildMapSurfaceViewParams {
+  overrides: Record<string, unknown> = {},
+) {
   const mapContainerRef = { current: document.createElement('div') };
-  return {
+  return toMapParams({
     // camera
     activeFocusBounds: null,
     memoizedInitialCenter: undefined,
@@ -135,7 +192,7 @@ function makeViewParams(
     mapZoom: 12,
     // layers
     currentMapMarkerListings: [],
-    filters: {} as BuildMapSurfaceViewParams['filters'],
+    filters: {} as never,
     isLandingState: false,
     focusedGroupAreas: undefined,
     selectedArea: null,
@@ -147,7 +204,7 @@ function makeViewParams(
     showSchoolBreadcrumb: false,
     focusedGroup: null,
     city: 'bangalore',
-    resolvedPanelContent: 'landing' as BuildMapSurfaceViewParams['resolvedPanelContent'],
+    resolvedPanelContent: 'landing' as never,
     isSelectedGroupState: false,
     isAreaFirstSelectedAreaState: false,
     // schools
@@ -168,7 +225,7 @@ function makeViewParams(
     showLoader: false,
     error: null,
     isLoading: false,
-    discoverBadge: {} as BuildMapSurfaceViewParams['discoverBadge'],
+    discoverBadge: {} as never,
     areaResultSummaryText: null,
     groupSelectedBadgeCopy: '',
     fallbackBadgeCopy: '',
@@ -219,7 +276,7 @@ function makeViewParams(
     viewportTrackerController: makeViewportTrackerController(),
     markerController: makeMarkerController(),
     ...overrides,
-  };
+  });
 }
 
 describe('buildMapSurfaceModel', () => {
@@ -299,9 +356,9 @@ describe('buildMapSurfaceModel', () => {
 
 describe('buildMapSurfaceCommands', () => {
   function makeCommandsParams(
-    overrides: Partial<BuildMapSurfaceCommandsParams> = {},
-  ): BuildMapSurfaceCommandsParams {
-    return {
+    overrides: Record<string, unknown> = {},
+  ) {
+    return toMapParams({
       publishCameraIntent: vi.fn(),
       setMapZoom: vi.fn(),
       handlePolygonDrawn: vi.fn(),
@@ -327,14 +384,14 @@ describe('buildMapSurfaceCommands', () => {
       viewportTrackerController: makeViewportTrackerController(),
       markerController: makeMarkerController(),
       ...overrides,
-    };
+    });
   }
 
   it('groups commands into their sections verbatim (same function references)', () => {
-    const params = makeCommandsParams();
-    const commands = buildMapSurfaceCommands(params);
-    expect(commands.camera.publishCameraIntent).toBe(params.publishCameraIntent);
-    expect(commands.drawing.handlePolygonDrawn).toBe(params.handlePolygonDrawn);
+    const params = makeCommandsParams() as never as Record<string, Record<string, unknown>>;
+    const commands = buildMapSurfaceCommands(params as never as Parameters<typeof buildMapSurfaceCommands>[0]);
+    expect(commands.camera.publishCameraIntent).toBe(params.mapDataController.publishCameraIntent);
+    expect(commands.drawing.handlePolygonDrawn).toBe(params.pageStateController.handlePolygonDrawn);
     expect(commands.navigation.handleOverviewAreaClick).toBe(
       params.overviewNavigationController.handleOverviewAreaClick,
     );
@@ -350,8 +407,8 @@ describe('buildMapSurfaceCommands', () => {
   });
 
   it('overlays.onClusterFocusChange reuses the SAME command as navigation.onClusterFocusChange', () => {
-    const params = makeCommandsParams();
-    const commands = buildMapSurfaceCommands(params);
+    const params = makeCommandsParams() as never as Record<string, Record<string, unknown>>;
+    const commands = buildMapSurfaceCommands(params as never as Parameters<typeof buildMapSurfaceCommands>[0]);
     expect(commands.overlays.onClusterFocusChange).toBe(commands.navigation.onClusterFocusChange);
     expect(commands.overlays.onClusterFocusChange).toBe(
       params.navigationController.setFocusedClusterMemberAreaKeys,

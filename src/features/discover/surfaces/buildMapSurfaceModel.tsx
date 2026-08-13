@@ -14,6 +14,14 @@ import type { useDiscoverOverviewNavigationController } from '@/features/discove
 import type { useDiscoverMobilePresentationController } from '@/features/discover/controllers/useDiscoverMobilePresentationController';
 import type { useDiscoverViewportTracker } from '@/features/discover/controllers/useDiscoverViewportTracker';
 import type { useDiscoverMarkerController } from '@/features/discover/controllers/useDiscoverMarkerController';
+import type { useDiscoverPageContext } from '@/features/discover/controllers/useDiscoverPageContext';
+import type { useDiscoverPageStateController } from '@/features/discover/controllers/useDiscoverPageStateController';
+import type { useDiscoverMapDataController } from '@/features/discover/controllers/useDiscoverMapDataController';
+import type { useDiscoverAreaGroupsController } from '@/features/discover/controllers/useDiscoverAreaGroupsController';
+import type { useDiscoverBadgeController } from '@/features/discover/controllers/useDiscoverBadgeController';
+import type { useDiscoverJourneyChromeController } from '@/features/discover/controllers/useDiscoverJourneyChromeController';
+import type { useDiscoverMarkerPopoverController } from '@/features/discover/controllers/useDiscoverMarkerPopoverController';
+import type { useDiscoverGeographyController } from '@/features/discover/controllers/useDiscoverGeographyController';
 
 /**
  * Issue #2142 Commit 4 — typed view/commands contract for DiscoverMapSurface
@@ -209,6 +217,10 @@ type MapInteractionSlice = Pick<
 >;
 type MapCameraSlice = Pick<
   ReturnType<typeof useDiscoverCameraController>,
+  | 'memoizedInitialCenter'
+  | 'schoolMarkerFocusTick'
+  | 'schoolMarkerPositions'
+  | 'areaRestoreArea'
   | 'agriGroupFocusBounds'
   | 'isColdNavigate'
   | 'isSelectedNodeOutOfView'
@@ -230,7 +242,7 @@ type MapLayerSlice = Pick<
 >;
 type MapRegionGuideSlice = Pick<
   ReturnType<typeof useDiscoverRegionGuideController>,
-  'regionSelectNonce' | 'prefersReducedMotion'
+  'regionSelectNonce' | 'prefersReducedMotion' | 'regionGuideVisible' | 'regionGuideRingActive'
 >;
 
 export type BuildMapSurfaceViewParams = Omit<
@@ -286,6 +298,69 @@ export type BuildMapSurfaceViewParams = Omit<
   | 'isBoundedBrowseState'
   | 'isMarkerPopoverEligible'
   | 'areaLayerMaxZoom'
+  | 'selectedArea'
+  // Issue #2142 (correction pass) — every field below now arrives as part of
+  // its OWNING CONTROLLER's result object (the grouped params after this
+  // Omit), so the composition root passes references instead of transcribing
+  // ~55 individually-named fields it would otherwise keep in sync by hand.
+  // Same change, and same rationale, as buildPanelSurfaceModel.ts.
+  | 'isAuthenticated'
+  | 'isAgriJourney'
+  | 'showLoader'
+  | 'filters'
+  | 'selectedSchool'
+  | 'panToArea'
+  | 'mapZoom'
+  | 'city'
+  | 'resolvedPanelContent'
+  | 'error'
+  | 'activeFocusBounds'
+  | 'cityCenter'
+  | 'cityZoom'
+  | 'cameraIntent'
+  | 'areaMarkerListings'
+  | 'schoolRadiusHasMore'
+  | 'markersTruncated'
+  | 'markersReturnedElements'
+  | 'markersTotalFilteredElements'
+  | 'isLoading'
+  | 'focusedGroupAreas'
+  | 'focusedGroup'
+  | 'announcedBadgeText'
+  | 'discoverBadge'
+  | 'areaResultSummaryText'
+  | 'groupSelectedBadgeCopy'
+  | 'fallbackBadgeCopy'
+  | 'schoolRadiusActive'
+  | 'schoolRadiusPillNoun'
+  | 'cityTotal'
+  | 'hasActiveAnonFilter'
+  | 'isLandingState'
+  | 'showSchoolMarkers'
+  | 'showSchoolBreadcrumb'
+  | 'schoolRadiusOverlay'
+  | 'isSelectedGroupState'
+  | 'isAreaFirstSelectedAreaState'
+  | 'currentMapMarkerListings'
+  | 'markerPopoverStepper'
+  | 'memoizedInitialCenter'
+  | 'schoolMarkerFocusTick'
+  | 'schoolMarkerPositions'
+  | 'areaRestoreArea'
+  | 'regionGuideVisible'
+  | 'regionGuideRingActive'
+  | 'navigate'
+  | 'handlePolygonDrawn'
+  | 'handlePolygonCleared'
+  | 'setMapZoom'
+  | 'setMapReady'
+  | 'handleCityChange'
+  | 'publishCameraIntent'
+  | 'publishClusterCameraIntent'
+  | 'publishMarkerClusterCameraIntent'
+  | 'handleAreaMarkersComputed'
+  | 'handleStepMarkerListing'
+  | 'showMarkerInList'
 > & {
   mapContainerRef: RefObject<HTMLDivElement | null>;
   mobileMapOpen: boolean;
@@ -296,9 +371,6 @@ export type BuildMapSurfaceViewParams = Omit<
   isNodeListingsState: boolean;
   activeAreasNavigationJourney: UseAreasNavigationJourneyResult;
   navJourney: string;
-  isPreviewSheetOpen: boolean;
-  selectedListingPreview: SelectedListingPreview | null;
-  mapReady: boolean;
 
   navigationController: Pick<
     ReturnType<typeof useDiscoverNavigationController>,
@@ -320,13 +392,75 @@ export type BuildMapSurfaceViewParams = Omit<
     | 'journeyView'
     | 'journeyCommands'
   >;
+  pageContextController: Pick<
+    ReturnType<typeof useDiscoverPageContext>,
+    | 'isAuthenticated'
+    | 'isAgriJourney'
+  >;
+  pageStateController: Pick<
+    ReturnType<typeof useDiscoverPageStateController>,
+    | 'showLoader'
+    | 'filters'
+    | 'selectedSchool'
+    | 'panToArea'
+    | 'mapZoom'
+    | 'mapReady'
+    | 'city'
+    | 'resolvedPanelContent'
+    | 'effectiveSelectedArea'
+  >;
+  mapDataController: Pick<
+    ReturnType<typeof useDiscoverMapDataController>,
+    | 'error'
+    | 'activeFocusBounds'
+    | 'cityCenter'
+    | 'cityZoom'
+    | 'cameraIntent'
+    | 'areaMarkerListings'
+    | 'schoolRadiusHasMore'
+    | 'markersTruncated'
+    | 'markersReturnedElements'
+    | 'markersTotalFilteredElements'
+    | 'isLoading'
+  >;
+  areaGroupsController: Pick<
+    ReturnType<typeof useDiscoverAreaGroupsController>,
+    | 'focusedGroupAreas'
+    | 'focusedGroup'
+  >;
+  badgeController: Pick<
+    ReturnType<typeof useDiscoverBadgeController>,
+    | 'announcedBadgeText'
+    | 'discoverBadge'
+    | 'areaResultSummaryText'
+    | 'groupSelectedBadgeCopy'
+    | 'fallbackBadgeCopy'
+    | 'schoolRadiusActive'
+    | 'schoolRadiusPillNoun'
+    | 'cityTotal'
+    | 'hasActiveAnonFilter'
+  >;
+  journeyChromeController: Pick<
+    ReturnType<typeof useDiscoverJourneyChromeController>,
+    | 'isLandingState'
+    | 'showSchoolMarkers'
+    | 'showSchoolBreadcrumb'
+    | 'schoolRadiusOverlay'
+    | 'isSelectedGroupState'
+    | 'isAreaFirstSelectedAreaState'
+  >;
+  markerPopoverController: Pick<
+    ReturnType<typeof useDiscoverMarkerPopoverController>,
+    | 'currentMapMarkerListings'
+    | 'markerPopoverStepper'
+  >;
   interactionController: MapInteractionSlice;
   cameraController: MapCameraSlice;
   mapLayerController: MapLayerSlice;
   regionGuideController: MapRegionGuideSlice;
   mobilePresentationController: Pick<
     ReturnType<typeof useDiscoverMobilePresentationController>,
-    'bottomOcclusionPx' | 'previewOcclusionPx'
+    'bottomOcclusionPx' | 'previewOcclusionPx' | 'isPreviewSheetOpen' | 'selectedListingPreview'
   >;
   viewportTrackerController: Pick<ReturnType<typeof useDiscoverViewportTracker>, 'handleBoundsChange'>;
   markerController: Pick<
@@ -377,6 +511,13 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
   const areaLayerMaxZoom = AREA_LAYER_MAX_ZOOM;
 
   const {
+    pageContextController: { isAuthenticated, isAgriJourney },
+    pageStateController: { showLoader, filters, selectedSchool, panToArea, mapZoom, mapReady, city, resolvedPanelContent, effectiveSelectedArea: selectedArea },
+    mapDataController: { error, activeFocusBounds, cityCenter, cityZoom, cameraIntent, areaMarkerListings, schoolRadiusHasMore, markersTruncated, markersReturnedElements, markersTotalFilteredElements, isLoading },
+    areaGroupsController: { focusedGroupAreas, focusedGroup },
+    badgeController: { announcedBadgeText, discoverBadge, areaResultSummaryText, groupSelectedBadgeCopy, fallbackBadgeCopy, schoolRadiusActive, schoolRadiusPillNoun, cityTotal, hasActiveAnonFilter },
+    journeyChromeController: { isLandingState, showSchoolMarkers, showSchoolBreadcrumb, schoolRadiusOverlay, isSelectedGroupState, isAreaFirstSelectedAreaState },
+    markerPopoverController: { currentMapMarkerListings, markerPopoverStepper },
     navigationController: { hoveredNavigationNodeKey, focusedClusterMemberAreaKeys },
     agriController: { selectedRegion, selectedMaxKm, filteredAgriListings },
     schoolController: {
@@ -391,6 +532,10 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
     },
     interactionController: { hoveredListingId, hoveredAreaKeyForMap },
     cameraController: {
+      memoizedInitialCenter,
+      schoolMarkerFocusTick,
+      schoolMarkerPositions,
+      areaRestoreArea,
       agriGroupFocusBounds,
       isColdNavigate,
       isSelectedNodeOutOfView,
@@ -409,61 +554,12 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       schoolJourneySegments,
       isAreaFirstCityLanding,
     },
-    regionGuideController: { regionSelectNonce, prefersReducedMotion },
-    mobilePresentationController: { bottomOcclusionPx, previewOcclusionPx },
+    regionGuideController: { regionSelectNonce, prefersReducedMotion, regionGuideVisible, regionGuideRingActive },
+    mobilePresentationController: { bottomOcclusionPx, previewOcclusionPx, isPreviewSheetOpen, selectedListingPreview },
     markerController: { markerPixelPos, selectedMarkerListing },
-    activeFocusBounds,
-    memoizedInitialCenter,
-    cityCenter,
-    cityZoom,
-    cameraIntent,
-    panToArea,
-    mapZoom,
-    currentMapMarkerListings,
-    filters,
-    isLandingState,
-    focusedGroupAreas,
-    selectedArea,
-    isAgriJourney,
-    areaMarkerListings,
-    schoolRadiusOverlay,
-    areaRestoreArea,
-    showSchoolBreadcrumb,
-    focusedGroup,
-    city,
-    resolvedPanelContent,
-    isSelectedGroupState,
-    isAreaFirstSelectedAreaState,
-    selectedSchool,
-    showSchoolMarkers,
-    schoolMarkerFocusTick,
-    schoolMarkerPositions,
-    schoolRadiusActive,
-    schoolRadiusPillNoun,
-    schoolRadiusHasMore,
-    markerPopoverStepper,
-    markersTruncated,
-    markersReturnedElements,
-    markersTotalFilteredElements,
-    showLoader,
-    error,
-    isLoading,
-    discoverBadge,
-    areaResultSummaryText,
-    groupSelectedBadgeCopy,
-    fallbackBadgeCopy,
-    cityTotal,
-    isAuthenticated,
-    hasActiveAnonFilter,
-    announcedBadgeText,
-    regionGuideVisible,
-    regionGuideRingActive,
     mobileMapOpen,
     activeAreasNavigationJourney,
     navJourney,
-    isPreviewSheetOpen,
-    selectedListingPreview,
-    mapReady,
     mapContainerRef,
   } = params;
 
@@ -595,17 +691,31 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
 
 export type BuildMapSurfaceCommandsParams = Pick<
   DiscoverMapCanvasProps,
-  | 'publishCameraIntent'
-  | 'setMapZoom'
-  | 'handlePolygonDrawn'
-  | 'handlePolygonCleared'
-  | 'publishClusterCameraIntent'
-  | 'onAreaVisualClusterCameraIntent'
-  | 'handleAreaMarkersComputed'
-  | 'handleCityChange'
-  | 'publishMarkerClusterCameraIntent'
-  | 'navigate'
+  'onAreaVisualClusterCameraIntent'
 > & {
+  pageContextController: Pick<ReturnType<typeof useDiscoverPageContext>, 'navigate'>;
+  pageStateController: Pick<
+    ReturnType<typeof useDiscoverPageStateController>,
+    | 'handlePolygonDrawn'
+    | 'handlePolygonCleared'
+    | 'setMapZoom'
+    | 'setMapReady'
+    | 'handleCityChange'
+  >;
+  mapDataController: Pick<
+    ReturnType<typeof useDiscoverMapDataController>,
+    | 'publishCameraIntent'
+    | 'publishClusterCameraIntent'
+    | 'publishMarkerClusterCameraIntent'
+  >;
+  geographyController: Pick<
+    ReturnType<typeof useDiscoverGeographyController>,
+    | 'handleAreaMarkersComputed'
+  >;
+  markerPopoverController: Pick<
+    ReturnType<typeof useDiscoverMarkerPopoverController>,
+    | 'handleStepMarkerListing'
+  >;
   navigationController: Pick<
     ReturnType<typeof useDiscoverNavigationController>,
     'setHoveredNavigationNodeKey' | 'setFocusedClusterMemberAreaKeys'
@@ -634,12 +744,12 @@ export type BuildMapSurfaceCommandsParams = Pick<
   viewportTrackerController: Pick<ReturnType<typeof useDiscoverViewportTracker>, 'handleBoundsChange'>;
   markerController: Pick<
     ReturnType<typeof useDiscoverMarkerController>,
-    'handlePopoverDismiss' | 'handleSelectMarkerListing' | 'handleMarkerClickWithPosition'
+    | 'handlePopoverDismiss'
+    | 'handleSelectMarkerListing'
+    | 'handleMarkerClickWithPosition'
+    | 'showMarkerInList'
   >;
   buildNavigationNodeHref: DiscoverMapCanvasProps['buildNavigationNodeHref'];
-  setMapReady: DiscoverMapCanvasProps['setMapReady'];
-  showMarkerInList: DiscoverMapCanvasProps['showMarkerInList'];
-  handleStepMarkerListing: DiscoverMapCanvasProps['handleStepMarkerListing'];
   clearSelectedListing: () => void;
 };
 
@@ -647,16 +757,12 @@ export function buildMapSurfaceCommands(
   params: BuildMapSurfaceCommandsParams,
 ): DiscoverMapSurfaceCommands {
   const {
-    publishCameraIntent,
-    setMapZoom,
-    handlePolygonDrawn,
-    handlePolygonCleared,
-    publishClusterCameraIntent,
+    pageContextController: { navigate },
+    pageStateController: { handlePolygonDrawn, handlePolygonCleared, setMapZoom, setMapReady, handleCityChange },
+    mapDataController: { publishCameraIntent, publishClusterCameraIntent, publishMarkerClusterCameraIntent },
+    geographyController: { handleAreaMarkersComputed },
+    markerPopoverController: { handleStepMarkerListing },
     onAreaVisualClusterCameraIntent,
-    handleAreaMarkersComputed,
-    handleCityChange,
-    publishMarkerClusterCameraIntent,
-    navigate,
     navigationController: { setHoveredNavigationNodeKey, setFocusedClusterMemberAreaKeys },
     schoolController: { journeyCommands },
     interactionController: { handleAreaClusterClick },
@@ -665,11 +771,13 @@ export function buildMapSurfaceCommands(
     overviewNavigationController: { handleOverviewAreaClick },
     mobilePresentationController: { handlePreviewSheetHeightChange },
     viewportTrackerController: { handleBoundsChange },
-    markerController: { handlePopoverDismiss, handleSelectMarkerListing, handleMarkerClickWithPosition },
+    markerController: {
+      handlePopoverDismiss,
+      handleSelectMarkerListing,
+      handleMarkerClickWithPosition,
+      showMarkerInList,
+    },
     buildNavigationNodeHref,
-    setMapReady,
-    showMarkerInList,
-    handleStepMarkerListing,
     clearSelectedListing,
   } = params;
 

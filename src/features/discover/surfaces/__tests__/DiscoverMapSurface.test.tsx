@@ -50,6 +50,70 @@ import { DiscoverMapSurface } from '../DiscoverMapSurface';
 import { buildMapSurfaceModel, buildMapSurfaceCommands } from '../buildMapSurfaceModel';
 import type { BuildMapSurfaceViewParams, BuildMapSurfaceCommandsParams } from '../buildMapSurfaceModel';
 
+/**
+ * Issue #2142 (correction pass) — the map builder's input is now the
+ * controllers' own result objects. These fixtures keep a FLAT shape on purpose
+ * (many call sites read better with flat overrides) and regroup mechanically
+ * here, so the assertions still run through the REAL production builders.
+ */
+function toMapParams<T extends Record<string, unknown>>(f: T) {
+  const g = f as Record<string, never>;
+  return {
+    ...f,
+    areaGroupsController: { focusedGroupAreas: g.focusedGroupAreas, focusedGroup: g.focusedGroup },
+    badgeController: { announcedBadgeText: g.announcedBadgeText, discoverBadge: g.discoverBadge, areaResultSummaryText: g.areaResultSummaryText, groupSelectedBadgeCopy: g.groupSelectedBadgeCopy, fallbackBadgeCopy: g.fallbackBadgeCopy, schoolRadiusActive: g.schoolRadiusActive, schoolRadiusPillNoun: g.schoolRadiusPillNoun, cityTotal: g.cityTotal, hasActiveAnonFilter: g.hasActiveAnonFilter },
+    journeyChromeController: { isLandingState: g.isLandingState, showSchoolMarkers: g.showSchoolMarkers, showSchoolBreadcrumb: g.showSchoolBreadcrumb, schoolRadiusOverlay: g.schoolRadiusOverlay, isSelectedGroupState: g.isSelectedGroupState, isAreaFirstSelectedAreaState: g.isAreaFirstSelectedAreaState },
+    geographyController: { handleAreaMarkersComputed: g.handleAreaMarkersComputed },
+    pageContextController: {
+      isAuthenticated: g.isAuthenticated,
+      isAgriJourney: g.isAgriJourney,
+      navigate: g.navigate,
+      setMobileView: g.setMobileView,
+    },
+    pageStateController: {
+      showLoader: g.showLoader,
+      filters: g.filters,
+      selectedSchool: g.selectedSchool,
+      panToArea: g.panToArea,
+      mapZoom: g.mapZoom,
+      mapReady: g.mapReady,
+      city: g.city,
+      resolvedPanelContent: g.resolvedPanelContent,
+      effectiveSelectedArea: g.selectedArea,
+      handlePolygonDrawn: g.handlePolygonDrawn,
+      handlePolygonCleared: g.handlePolygonCleared,
+      setMapZoom: g.setMapZoom,
+      setMapReady: g.setMapReady,
+      handleCityChange: g.handleCityChange,
+    },
+    mapDataController: {
+      error: g.error,
+      activeFocusBounds: g.activeFocusBounds,
+      cityCenter: g.cityCenter,
+      cityZoom: g.cityZoom,
+      cameraIntent: g.cameraIntent,
+      areaMarkerListings: g.areaMarkerListings,
+      schoolRadiusHasMore: g.schoolRadiusHasMore,
+      markersTruncated: g.markersTruncated,
+      markersReturnedElements: g.markersReturnedElements,
+      markersTotalFilteredElements: g.markersTotalFilteredElements,
+      isLoading: g.isLoading,
+      publishCameraIntent: g.publishCameraIntent,
+      publishClusterCameraIntent: g.publishClusterCameraIntent,
+      publishMarkerClusterCameraIntent: g.publishMarkerClusterCameraIntent,
+    },
+    markerPopoverController: {
+      currentMapMarkerListings: g.currentMapMarkerListings,
+      markerPopoverStepper: g.markerPopoverStepper,
+      handleStepMarkerListing: g.handleStepMarkerListing,
+    },
+    cameraController: { ...(f.cameraController as object), memoizedInitialCenter: g.memoizedInitialCenter, schoolMarkerFocusTick: g.schoolMarkerFocusTick, schoolMarkerPositions: g.schoolMarkerPositions, areaRestoreArea: g.areaRestoreArea },
+    regionGuideController: { ...(f.regionGuideController as object), regionGuideVisible: g.regionGuideVisible, regionGuideRingActive: g.regionGuideRingActive },
+    mobilePresentationController: { ...(f.mobilePresentationController as object), isPreviewSheetOpen: g.isPreviewSheetOpen, selectedListingPreview: g.selectedListingPreview },
+    markerController: { ...(f.markerController as object), showMarkerInList: g.showMarkerInList },
+  } as never;
+}
+
 const JOURNEY_VIEW: DiscoverJourneyTransitionsView = {
   startOverTick: 0,
   composedResetMapTick: 0,
@@ -109,9 +173,9 @@ const JOURNEY: UseAreasNavigationJourneyResult = {
 };
 
 function baseProps(
-  overrides: Partial<BuildMapSurfaceViewParams & BuildMapSurfaceCommandsParams> = {},
-): BuildMapSurfaceViewParams & BuildMapSurfaceCommandsParams {
-  return {
+  overrides: Record<string, unknown> = {},
+) {
+  return toMapParams({
     mapContainerRef: createRef<HTMLDivElement>(),
     showLoader: false,
     error: null,
@@ -252,17 +316,17 @@ function baseProps(
       handleMarkerClickWithPosition: vi.fn(),
     },
     ...overrides,
-  };
+  });
 }
 
 function renderSurface(
-  overrides: Partial<BuildMapSurfaceViewParams & BuildMapSurfaceCommandsParams> = {},
+  overrides: Record<string, unknown> = {},
 ) {
   const props = baseProps(overrides);
   const view = buildMapSurfaceModel(props);
   const commands = buildMapSurfaceCommands(props);
   return render(
-    <DiscoverMapSurface view={view} commands={commands} mapContainerRef={props.mapContainerRef} />,
+    <DiscoverMapSurface view={view} commands={commands} mapContainerRef={(props as { mapContainerRef: React.RefObject<HTMLDivElement> }).mapContainerRef} />,
   );
 }
 
