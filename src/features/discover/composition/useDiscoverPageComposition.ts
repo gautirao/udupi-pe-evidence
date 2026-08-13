@@ -213,6 +213,22 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     nodeListingsMarkers,
   } = boundedBrowseController;
 
+  // Issue #2150 — a marker tap inside a Bounded-Browse node that is NOT a
+  // resolved AREA leaf (e.g. a GROUP node reached via `node=`+`nodeListings=1`,
+  // NodeListingsSurface's own state) never wrote the shared `listing` URL
+  // param and was never popover-eligible, because both consumers below only
+  // ever admitted `isNodeAreaLeafActive` (true for a resolved AREA leaf
+  // only). NodeListingsSurface renders — and shows real property markers —
+  // for ANY node once `nodeListings=1` is set, not just leaves, so a marker
+  // click there must be admitted too: mobile's `selectedListingPreview`
+  // (LegacyRightPanelBridge/NodeListingsSurface) and the panel's
+  // selected-listing highlight both derive from `nav.selectedListing`,
+  // which is only ever written by `useMarkerSelection`'s
+  // `hasMarkerAreaContext` gate. Widened ONCE here (rather than at each call
+  // site) so the #1956 PR-4 lock-step invariant below — capture gate and
+  // render gate must never drift — holds for this arm too.
+  const isNodeAreaLeafOrListingsActive = isNodeAreaLeafActive || isNodeListingsState;
+
   const nearSchoolSheetState = useNearSchoolSheetState();
 
   // Does NOT include resolveMarkerPopover — same late-dependency pattern as
@@ -225,7 +241,9 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     // Issue #1956 PR-4 (risk R1) — the SAME leaf-identity boolean fed to the
     // page-level isMarkerPopoverEligible render gate below, so the capture
     // gate (in the hook) and the render gate can never drift on this arm.
-    isNodeAreaLeaf: isNodeAreaLeafActive,
+    // Issue #2150 — widened to also admit Bounded-Browse node-listings
+    // state; see isNodeAreaLeafOrListingsActive above.
+    isNodeAreaLeaf: isNodeAreaLeafOrListingsActive,
   });
   const {
     selectedMarkerListing,
@@ -576,7 +594,10 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   const markerPopoverController = useDiscoverMarkerPopoverController({
     nav,
     viewport,
-    isNodeAreaLeafActive,
+    // Issue #2150 — same widened boolean fed to useDiscoverMarkerController
+    // above, so the capture gate and this render gate never drift (the
+    // #1956 PR-4 lock-step invariant) for Bounded-Browse node-listings state.
+    isNodeAreaLeafActive: isNodeAreaLeafOrListingsActive,
     mapLayerCategory,
     effectiveSelectedArea,
     isGroupResultsState,

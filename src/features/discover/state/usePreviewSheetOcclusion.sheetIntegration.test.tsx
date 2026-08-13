@@ -42,6 +42,7 @@ class InertResizeObserverStub {
 const LISTING_A: SelectedListingPreviewAnon = {
   kind: 'anon',
   id: 'listing-a',
+  title: 'Listing A',
   primaryImageUrl: null,
   propertyType: 'apartment',
   bedrooms: 2,
@@ -53,6 +54,7 @@ const LISTING_A: SelectedListingPreviewAnon = {
 const LISTING_B: SelectedListingPreviewAuthed = {
   kind: 'authed',
   id: 'listing-b',
+  title: 'Listing B',
   primaryImageUrl: null,
   propertyType: 'house',
   bedrooms: 3,

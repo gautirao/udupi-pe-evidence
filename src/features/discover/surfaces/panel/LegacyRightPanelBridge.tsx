@@ -1,7 +1,10 @@
+import { useEffect, useMemo } from 'react';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { toSelectedListingPreviewFromMarkerListing } from '@/features/discover/navigation/selectedListingPreview';
+import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import type { AgriFilterValues } from '@/components/discover/panels/AgriFiltersPanel';
 import type {
   DiscoverPanelSurfaceView,
@@ -102,7 +105,7 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
   const { filters, filtersContent, searchQuery } = view.filters;
   const { handleFiltersChange, handleSearchChange } = commands.filters;
   const { journeyView, resolvedPanelContent } = view.navigation;
-  const { journeyCommands, selectJourney } = commands.navigation;
+  const { journeyCommands, selectJourney, onSelectedListingPreviewChange } = commands.navigation;
   const { selectedMarkerListing, activeContextChips, prefersReducedMotion, isAuthenticated } =
     view.interaction;
   const { clearSelectedMarkerListing, interactionCommands } = commands.interaction;
@@ -120,6 +123,42 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
   const { nav: urlState, isMobileShell, mobileView } = view.pageContext;
   const { actions: urlActions } = commands.pageContext;
   const isMobileMapOpen = isMobileShell && mobileView === 'MAP';
+  const cityLabel = CITY_CONFIG[city]?.label ?? city;
+
+  // Issue #2149 — school-first's counterpart to AreaLeafListingsSurface/
+  // NodeListingsSurface's own `onSelectedListingPreviewChange` report-up
+  // effect (see those files). Area-first can derive its preview from
+  // `nav.selectedListing` because an area-first marker click writes the
+  // `listing=` URL param; a pure school-first click deliberately does NOT
+  // (issue #1547-deferred design, #1973 rev-2), so it only ever sets local
+  // `selectedMarkerListing` (owned by useMarkerSelection, threaded here via
+  // `view.interaction`). Deriving the preview from that local state instead
+  // is what makes the mobile listing-preview sheet work for school-first at
+  // all — without this, `useDiscoverMobilePresentationController`'s
+  // `selectedListingPreview` never gets set, and both the desktop popover
+  // (deliberately suppressed on mobile since #1956 PR-5) and the mobile sheet
+  // stay empty on marker tap.
+  //
+  // Scoped to `journey === 'school-first' && schoolId != null` — the ONE
+  // state this bridge renders where a marker click sets `selectedMarkerListing`
+  // without also being covered by area-first's own reporting path
+  // (`isAreaFirstJourneyActive` routes every `journey === 'area-first'` state
+  // to `AreaFirstJourneyPanel` instead, per `useDiscoverNavigationController`,
+  // so this bridge never doubles up with that surface's effect). Tapping a
+  // second marker replaces the preview naturally: this effect is keyed on
+  // `selectedMarkerListing` itself, not on any "already open" gate.
+  const schoolFirstMarkerListingPreview = useMemo<SelectedListingPreview | null>(() => {
+    if (urlState.journey !== 'school-first' || urlState.schoolId == null) return null;
+    if (!selectedMarkerListing) return null;
+    return toSelectedListingPreviewFromMarkerListing(selectedMarkerListing, {
+      isAuthenticated,
+      cityLabel,
+    });
+  }, [urlState.journey, urlState.schoolId, selectedMarkerListing, isAuthenticated, cityLabel]);
+
+  useEffect(() => {
+    onSelectedListingPreviewChange(schoolFirstMarkerListingPreview);
+  }, [schoolFirstMarkerListingPreview, onSelectedListingPreviewChange]);
 
   return (
     <DiscoverRightPanel
@@ -136,7 +175,7 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
       selectedMarkerListing={selectedMarkerListing}
       onClearAgriSelection={clearSelectedMarkerListing}
       city={city}
-      cityLabel={CITY_CONFIG[city]?.label ?? city}
+      cityLabel={cityLabel}
       journey={urlState.journey}
       activeContextChips={activeContextChips}
       areas={discoverAreas}

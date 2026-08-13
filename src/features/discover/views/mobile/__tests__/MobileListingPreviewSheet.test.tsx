@@ -36,6 +36,7 @@ class ResizeObserverStub {
 const ANON_PREVIEW: SelectedListingPreviewAnon = {
   kind: 'anon',
   id: 'listing-1',
+  title: 'Sunrise Apartments, 3BHK',
   primaryImageUrl: null,
   propertyType: 'apartment',
   bedrooms: 3,
@@ -47,6 +48,7 @@ const ANON_PREVIEW: SelectedListingPreviewAnon = {
 const AUTHED_PREVIEW: SelectedListingPreviewAuthed = {
   kind: 'authed',
   id: 'listing-2',
+  title: 'Malpe Beach Villa',
   primaryImageUrl: 'https://example.com/img.jpg',
   propertyType: 'house',
   bedrooms: 4,
@@ -64,6 +66,22 @@ describe('MobileListingPreviewSheet', () => {
     // ("Verified"), not the raw contract value ("verified"), matching PropertyCard.
     expect(screen.getByTestId('mobile-listing-preview-trust-badge')).toHaveTextContent('Verified');
     expect(screen.getByTestId('mobile-listing-preview-bedrooms')).toHaveTextContent('3 BHK');
+  });
+
+  it('renders the listing title — Issue #2150, matches MarkerPopoverCard/PropertyCard identity parity', () => {
+    render(<MobileListingPreviewSheet preview={ANON_PREVIEW} onDismiss={vi.fn()} onViewDetails={vi.fn()} />);
+    expect(screen.getByTestId('mobile-listing-preview-title')).toHaveTextContent('Sunrise Apartments, 3BHK');
+  });
+
+  it('renders no title node when the preview carries none (never a fabricated placeholder)', () => {
+    render(
+      <MobileListingPreviewSheet
+        preview={{ ...ANON_PREVIEW, title: null }}
+        onDismiss={vi.fn()}
+        onViewDetails={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('mobile-listing-preview-title')).not.toBeInTheDocument();
   });
 
   it('renders the authed arm — formatted exact price from pricePaise', () => {
@@ -234,6 +252,7 @@ describe('MobileListingPreviewSheet', () => {
       'Thanisandra Hennur Belt, North Bengaluru Extended Growth Corridor Sub-Locality';
     const degraded: SelectedListingPreviewAnon = {
       ...ANON_PREVIEW,
+      title: null,
       primaryImageUrl: null,
       propertyType: null,
       bedrooms: null,
@@ -257,6 +276,9 @@ describe('MobileListingPreviewSheet', () => {
 
     // No trust badge renders when trustBadge is null.
     expect(screen.queryByTestId('mobile-listing-preview-trust-badge')).not.toBeInTheDocument();
+
+    // No title node renders when title is null — never a fabricated placeholder.
+    expect(screen.queryByTestId('mobile-listing-preview-title')).not.toBeInTheDocument();
 
     // The long areaLabel still renders in full (truncation is CSS-only via
     // the `truncate` class — the DOM text content itself is never clipped)

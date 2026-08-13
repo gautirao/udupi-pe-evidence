@@ -250,6 +250,7 @@ describe('DiscoverAreasJourneyPanel — AC5.10/AC5.10c selected-listing preview 
           listings: [
             {
               id: 'listing-1',
+              title: 'Sunrise Apartments, 3BHK',
               priceBand: '₹1-2Cr',
               propertyType: 'apartment',
               bedrooms: 3,
@@ -272,6 +273,7 @@ describe('DiscoverAreasJourneyPanel — AC5.10/AC5.10c selected-listing preview 
       expect.objectContaining({
         kind: 'anon',
         id: 'listing-1',
+        title: 'Sunrise Apartments, 3BHK',
         priceBand: '₹1-2Cr',
         propertyType: 'apartment',
         bedrooms: 3,
