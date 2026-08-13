@@ -76,11 +76,18 @@ vi.mock('@/components/map/PropertyMap', () => ({
 // container otherwise requires. Everything else this container renders is
 // out of scope for this defect (which is purely about which MAP-side preview
 // surface renders).
-vi.mock('@/features/discover/views/DiscoverRightPanelContainer', () => ({
-  DiscoverRightPanelContainer: (props: {
-    onSelectedListingPreviewChange?: (preview: SelectedListingPreviewAnon | null) => void;
+// Issue #2142 Commit 4 — repointed from DiscoverRightPanelContainer (renamed
+// to DiscoverPanelSurface) to the new module path; the callback now arrives
+// grouped under `commands.navigation` instead of as a flat prop.
+vi.mock('@/features/discover/surfaces/DiscoverPanelSurface', () => ({
+  DiscoverPanelSurface: (props: {
+    commands: {
+      navigation: {
+        onSelectedListingPreviewChange?: (preview: SelectedListingPreviewAnon | null) => void;
+      };
+    };
   }) => {
-    capturedOnSelectedListingPreviewChange = props.onSelectedListingPreviewChange;
+    capturedOnSelectedListingPreviewChange = props.commands.navigation.onSelectedListingPreviewChange;
     return null;
   },
 }));

@@ -1,5 +1,6 @@
 /**
- * Issue #1824 Slice S11c — render tests for DiscoverRightPanelContainer (the
+ * Issue #1824 Slice S11c / #2142 Commit 4 — render tests for DiscoverPanelSurface
+ * (renamed from DiscoverRightPanelContainer), the
  * DiscoverRightPanel call-site sub-view lifted out of MapDiscovery.tsx).
  * Covers: forwarding of representative props across panel-content variants,
  * the footer pager (page/totalPages/prev-next disabled state), and the S8
@@ -202,10 +203,53 @@ vi.mock('@/hooks/useDiscoverAreas', async (importOriginal) => {
   };
 });
 
+import { DiscoverPanelSurface } from '../DiscoverPanelSurface';
 import {
-  DiscoverRightPanelContainer,
-  type DiscoverRightPanelContainerProps,
-} from './DiscoverRightPanelContainer';
+  buildPanelSurfaceModel,
+  buildPanelSurfaceCommands,
+  type BuildPanelSurfaceModelParams,
+  type PanelRenamedFields,
+} from '../buildPanelSurfaceModel';
+
+/**
+ * Issue #2142 (correction pass) — the builder's INPUT is now the controllers'
+ * own result objects, not a flat 67-field object. This file keeps a FLAT
+ * fixture shape on purpose: its 23 `baseProps({ ... })` call sites read far
+ * better with flat overrides, and a test fixture is exactly the right place
+ * for that convenience now that production no longer depends on it.
+ *
+ * `toModelParams` below is the only new code — a mechanical regrouping, with
+ * no defaults and no logic of its own, so the assertions still run against the
+ * REAL production builders and not a parallel mapping.
+ */
+type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (x: infer I) => void
+  ? I
+  : never;
+
+/** Every controller field the panel model consumes, flattened back out. */
+type ControllerFlat = UnionToIntersection<
+  BuildPanelSurfaceModelParams[keyof BuildPanelSurfaceModelParams]
+>;
+
+/**
+ * The flat fixture shape: controller field names, except for the six the panel
+ * surface renames. Derived from BuildPanelSurfaceModelParams so this fixture
+ * still fails to compile if a controller output changes type — the type
+ * coverage the deleted production interface used to give is kept HERE, where
+ * it belongs, rather than lost.
+ */
+type PanelFlatFixture = Omit<
+  ControllerFlat,
+  | 'effectiveSelectedArea'
+  | 'activeAreasNavigationJourney'
+  | 'regionScopedGroupsData'
+  | 'setHoveredNavigationNodeKey'
+  | 'setFocusedClusterMemberAreaKeys'
+  | 'setSelectedListingPreview'
+> &
+  // The six renames, taken from the model's own exported declaration so the
+  // fixture cannot drift from the surface contract.
+  PanelRenamedFields;
 
 const JOURNEY_VIEW: DiscoverJourneyTransitionsView = {
   startOverTick: 0,
@@ -273,10 +317,11 @@ function inertAreasNavigationJourney(
   };
 }
 
-function baseProps(
-  overrides: Partial<DiscoverRightPanelContainerProps> = {},
-): DiscoverRightPanelContainerProps {
-  return {
+function baseProps(overrides: Partial<PanelFlatFixture> = {}): PanelFlatFixture {
+  // Typed defaults, so every field below is still type-checked against the
+  // controllers. Object.assign (not a spread) because TS models a spread of a
+  // Partial as re-optionalising those keys.
+  const defaults: PanelFlatFixture = {
     resolvedPanelContent: 'guided-entry',
     selectedMarkerListing: null,
     clearSelectedMarkerListing: vi.fn(),
@@ -356,13 +401,156 @@ function baseProps(
     totalElements: 0,
     setPage: vi.fn(),
     areasNavigationJourney: inertAreasNavigationJourney(),
-    ...overrides,
+    // Issue #2142 (correction pass) — the deleted flat interface declared these
+    // two OPTIONAL; the navigation controller always produces them, so the
+    // controller-derived fixture type requires them. A genuine tightening.
+    hoveredNavigationNodeKey: null,
+    focusedClusterMemberAreaKeys: null,
+    onNavigationNodeHoverChange: vi.fn(),
+    onClusterFocusChange: vi.fn(),
+    onSelectedListingPreviewChange: vi.fn(),
+  };
+  return Object.assign({}, defaults, overrides);
+}
+
+/**
+ * Issue #2142 Commit 4 — thin flat-props harness so this file's 22 existing
+ * `<DiscoverPanelSurfaceHarness {...baseProps(overrides)} />` call sites
+ * (every one of them is exactly that spread, verified by hand) keep working
+ * unchanged: it pipes the SAME flat props through the REAL production
+ * `buildPanelSurfaceModel`/`buildPanelSurfaceCommands` builders (no parallel
+ * test-only mapping logic) before rendering the renamed `DiscoverPanelSurface`.
+ */
+function toModelParams(g: PanelFlatFixture): BuildPanelSurfaceModelParams {
+  return {
+    pageContext: { navigate: g.navigate, isAuthenticated: g.isAuthenticated },
+    pageState: {
+      city: g.city,
+      filters: g.filters,
+      handleFiltersChange: g.handleFiltersChange,
+      handleCityChange: g.handleCityChange,
+      handleAreaSelect: g.handleAreaSelect,
+      selectedSchool: g.selectedSchool,
+      page: g.page,
+      setPage: g.setPage,
+      resolvedPanelContent: g.resolvedPanelContent,
+      effectiveSelectedArea: g.selectedArea,
+    },
+    navigation: {
+      hoveredNavigationNodeKey: g.hoveredNavigationNodeKey,
+      setHoveredNavigationNodeKey: g.onNavigationNodeHoverChange,
+      focusedClusterMemberAreaKeys: g.focusedClusterMemberAreaKeys,
+      setFocusedClusterMemberAreaKeys: g.onClusterFocusChange,
+    },
+    overviewNavigation: { activeAreasNavigationJourney: g.areasNavigationJourney },
+    areaGroups: {
+      areaGroupsData: g.areaGroupsData,
+      isLoadingAreaGroups: g.isLoadingAreaGroups,
+      selectedGroupName: g.selectedGroupName,
+    },
+    geography: {
+      discoverAreasForPanel: g.discoverAreasForPanel,
+      areaMarkerCounts: g.areaMarkerCounts,
+      scopeNamespaces: g.scopeNamespaces,
+      summaryRegions: g.summaryRegions,
+      regionScopedGroupsData: g.regionScopedGroups
+        ? ({ groups: g.regionScopedGroups } as ControllerFlat['regionScopedGroupsData'])
+        : undefined,
+      isLoadingRegionScopedGroups: g.isLoadingRegionScopedGroups,
+      isRegionScopedGroupsError: g.isRegionScopedGroupsError,
+      refetchRegionScopedGroups: g.refetchRegionScopedGroups,
+    },
+    mapData: {
+      discoverAreas: g.discoverAreas,
+      areaListings: g.areaListings,
+      isLoadingAreaListings: g.isLoadingAreaListings,
+      areasLoading: g.areasLoading,
+      agriAreasData: g.agriAreasData,
+      isLoadingAgriAreas: g.isLoadingAgriAreas,
+      isFetching: g.isFetching,
+      isLoading: g.isLoading,
+      listingDataLoading: g.listingDataLoading,
+      totalPages: g.totalPages,
+      totalElements: g.totalElements,
+    },
+    agri: {
+      corridorGroups: g.corridorGroups,
+      isLoadingRegionalAreaGroups: g.isLoadingRegionalAreaGroups,
+      isRegionalAreaGroupsError: g.isRegionalAreaGroupsError,
+      refetchRegionalAreaGroups: g.refetchRegionalAreaGroups,
+      selectedRegion: g.selectedRegion,
+      selectedMaxKm: g.selectedMaxKm,
+      filteredAgriListings: g.filteredAgriListings,
+      agriMapListingsData: g.agriMapListingsData,
+      isLoadingAgriGroupListings: g.isLoadingAgriGroupListings,
+      isAgriGroupListingsError: g.isAgriGroupListingsError,
+      agriGroupLabel: g.agriGroupLabel,
+      refetchAgriGroupListings: g.refetchAgriGroupListings,
+      selectedGroupListingItem: g.selectedGroupListingItem,
+    },
+    results: {
+      groupResultsListings: g.groupResultsListings,
+      isLoadingGroupResults: g.isLoadingGroupResults,
+      isGroupResultsError: g.isGroupResultsError,
+      groupResultsTotalElements: g.groupResultsTotalElements,
+      refetchGroupResults: g.refetchGroupResults,
+    },
+    school: {
+      journeyView: g.journeyView,
+      journeyCommands: g.journeyCommands,
+      handleAreaFirstBack: g.handleAreaFirstBack,
+      schools: g.schools,
+      schoolsQuery: g.schoolsQuery,
+      schoolListings: g.schoolListings,
+    },
+    badge: { areaResultSummaryText: g.areaResultSummaryText, cityTotal: g.cityTotal },
+    journeyChrome: { trendsHref: g.trendsHref },
+    filterChrome: { activeContextChips: g.activeContextChips, filtersContent: g.filtersContent },
+    interaction: {
+      interactionCommands: g.interactionCommands,
+      setAreaSearchQuery: g.setAreaSearchQuery,
+      highlightedAreaKeys: g.highlightedAreaKeys,
+    },
+    regionGuide: {
+      armRegionSelect: g.armRegionSelect,
+      regionGuideRingActive: g.regionGuideRingActive,
+      regionSelectNonce: g.regionSelectNonce,
+      prefersReducedMotion: g.prefersReducedMotion,
+    },
+    mapLayer: {
+      regionOverviewMarkerKind: g.regionOverviewMarkerKind,
+      cityHasNoListings: g.cityHasNoListings,
+    },
+    boundedBrowse: { searchQuery: g.searchQuery, handleSearchChange: g.handleSearchChange },
+    boundedSearch: { handleBoundedSearch: g.handleBoundedSearch },
+    marker: {
+      selectedMarkerListing: g.selectedMarkerListing,
+      clearSelectedMarkerListing: g.clearSelectedMarkerListing,
+    },
+    mobilePresentation: { setSelectedListingPreview: g.onSelectedListingPreviewChange },
   };
 }
 
-describe('DiscoverRightPanelContainer', () => {
+/**
+ * Thin harness so this file's 23 existing
+ * `<DiscoverPanelSurfaceHarness {...baseProps(overrides)} />` call sites keep
+ * working unchanged: it regroups the flat fixture and pipes it through the
+ * REAL production builders (no parallel test-only view/commands mapping)
+ * before rendering DiscoverPanelSurface.
+ */
+function DiscoverPanelSurfaceHarness(props: PanelFlatFixture) {
+  const params = toModelParams(props);
+  return (
+    <DiscoverPanelSurface
+      view={buildPanelSurfaceModel(params)}
+      commands={buildPanelSurfaceCommands(params)}
+    />
+  );
+}
+
+describe('DiscoverPanelSurface', () => {
   it('renders the DiscoverRightPanel root with the guided-entry panelContent variant', () => {
-    render(<DiscoverRightPanelContainer {...baseProps({ resolvedPanelContent: 'guided-entry' })} />);
+    render(<DiscoverPanelSurfaceHarness {...baseProps({ resolvedPanelContent: 'guided-entry' })} />);
     const mock = screen.getByTestId('discover-right-panel-mock');
     expect(mock).toBeInTheDocument();
     expect(mock).toHaveAttribute('data-panel-content', 'guided-entry');
@@ -370,7 +558,7 @@ describe('DiscoverRightPanelContainer', () => {
 
   it('renders the DiscoverRightPanel root with the area-selected panelContent variant and forwards derived props', () => {
     render(
-      <DiscoverRightPanelContainer
+      <DiscoverPanelSurfaceHarness
         {...baseProps({
           resolvedPanelContent: 'area-selected',
           city: 'udupi',
@@ -392,7 +580,7 @@ describe('DiscoverRightPanelContainer', () => {
 
   it('renders the footer pager with page/totalPages/totalElements and correct prev/next disabled state', () => {
     render(
-      <DiscoverRightPanelContainer
+      <DiscoverPanelSurfaceHarness
         {...baseProps({
           isAuthenticated: true,
           selectedArea: null,
@@ -409,7 +597,7 @@ describe('DiscoverRightPanelContainer', () => {
 
   it('disables Prev on the first page and Next on the last page', () => {
     render(
-      <DiscoverRightPanelContainer
+      <DiscoverPanelSurfaceHarness
         {...baseProps({
           isAuthenticated: true,
           selectedArea: null,
@@ -425,7 +613,7 @@ describe('DiscoverRightPanelContainer', () => {
 
   it('omits the footer pager when there is only one page (footerContent is null)', () => {
     render(
-      <DiscoverRightPanelContainer
+      <DiscoverPanelSurfaceHarness
         {...baseProps({ isAuthenticated: true, selectedArea: null, page: 0, totalPages: 1 })}
       />,
     );
@@ -435,7 +623,7 @@ describe('DiscoverRightPanelContainer', () => {
 
   it('omits the footer pager for anonymous users even with multiple pages', () => {
     render(
-      <DiscoverRightPanelContainer
+      <DiscoverPanelSurfaceHarness
         {...baseProps({ isAuthenticated: false, selectedArea: null, page: 0, totalPages: 3 })}
       />,
     );
@@ -444,7 +632,7 @@ describe('DiscoverRightPanelContainer', () => {
 
   it('does not import the S8 badge-copy helper modules (fork guard)', () => {
     const thisFile = fileURLToPath(import.meta.url);
-    const sourcePath = path.join(path.dirname(thisFile), 'DiscoverRightPanelContainer.tsx');
+    const sourcePath = path.join(path.dirname(thisFile), '..', 'DiscoverPanelSurface.tsx');
     const source = readFileSync(sourcePath, 'utf-8');
     // Static-import check scoped to actual import statements (not doc-comment prose,
     // which legitimately names these helpers when explaining the guard). The three
@@ -473,7 +661,7 @@ describe('DiscoverRightPanelContainer', () => {
  * entirely when `journey==='area-first'` — canonical is now the default, the
  * preview-capability + areasPreview dual gate no longer exists.
  */
-describe('DiscoverRightPanelContainer — canonical Areas journey panel (default for journey=area-first)', () => {
+describe('DiscoverPanelSurface — canonical Areas journey panel (default for journey=area-first)', () => {
   beforeEach(() => {
     BASE_URL_STATE.journey = null;
   });
@@ -490,7 +678,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
 
     render(
       <MemoryRouter>
-        <DiscoverRightPanelContainer
+        <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-groups-landing',
             areasNavigationJourney: inertAreasNavigationJourney({
@@ -532,7 +720,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
 
     render(
       <MemoryRouter>
-        <DiscoverRightPanelContainer
+        <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-groups-landing',
             // Deliberately large, distinctive legacy values that would be
@@ -577,7 +765,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
 
     render(
       <MemoryRouter>
-        <DiscoverRightPanelContainer
+        <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-groups-landing',
             // Distinctive legacy values, deliberately DIFFERENT from the
@@ -631,7 +819,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
 
     render(
       <MemoryRouter>
-        <DiscoverRightPanelContainer
+        <DiscoverPanelSurfaceHarness
           {...baseProps({
             // What derivePanelContent actually computes for this exact stale
             // URL state (areaKey present + journey=area-first resolves to
@@ -675,7 +863,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
 
     render(
       <MemoryRouter>
-        <DiscoverRightPanelContainer
+        <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-groups-landing',
             onNavigationNodeHoverChange,
@@ -724,7 +912,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
     BASE_URL_STATE.journey = 'agri-first';
 
     render(
-      <DiscoverRightPanelContainer
+      <DiscoverPanelSurfaceHarness
         {...baseProps({ resolvedPanelContent: 'agri-browse' })}
       />,
     );
@@ -741,7 +929,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
 
     render(
       <MemoryRouter>
-        <DiscoverRightPanelContainer
+        <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-groups-landing',
             areasNavigationJourney: inertAreasNavigationJourney({
@@ -805,7 +993,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
     BASE_URL_STATE.journey = 'area-first';
     render(
       <MemoryRouter>
-        <DiscoverRightPanelContainer
+        <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-groups-landing',
             areasNavigationJourney: inertAreasNavigationJourney({ node: ROOT_NODE }),
@@ -841,7 +1029,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
     BASE_URL_STATE.journey = 'area-first';
     render(
       <MemoryRouter>
-        <DiscoverRightPanelContainer
+        <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-groups-landing',
             areasNavigationJourney: inertAreasNavigationJourney({ node: ROOT_NODE }),
@@ -858,7 +1046,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
     BASE_URL_STATE.journey = 'area-first';
     render(
       <MemoryRouter>
-        <DiscoverRightPanelContainer
+        <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-groups-landing',
             areasNavigationJourney: inertAreasNavigationJourney({ node: DIRECTION_NODE }),
@@ -873,7 +1061,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
     BASE_URL_STATE.journey = 'area-first';
     render(
       <MemoryRouter>
-        <DiscoverRightPanelContainer
+        <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-groups-landing',
             focusedClusterMemberAreaKeys: ['alpha'],
@@ -913,7 +1101,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
     BASE_URL_STATE.journey = 'area-first';
     render(
       <MemoryRouter>
-        <DiscoverRightPanelContainer
+        <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-groups-landing',
             areasNavigationJourney: inertAreasNavigationJourney({
@@ -963,7 +1151,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <DiscoverRightPanelContainer
+          <DiscoverPanelSurfaceHarness
             {...baseProps({
               resolvedPanelContent: 'area-selected',
               areasNavigationJourney: inertAreasNavigationJourney({
@@ -1005,7 +1193,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
     BASE_URL_STATE.journey = 'area-first';
     render(
       <MemoryRouter>
-        <DiscoverRightPanelContainer
+        <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-groups-landing',
             areasNavigationJourney: inertAreasNavigationJourney({ node: ROOT_NODE }),
@@ -1035,7 +1223,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
     BASE_URL_STATE.node = 'a:IN|KA|Bangalore|WrongUrlDerivedArea';
     render(
       <MemoryRouter>
-        <DiscoverRightPanelContainer
+        <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-selected',
             areasNavigationJourney: inertAreasNavigationJourney({
@@ -1081,7 +1269,7 @@ describe('DiscoverRightPanelContainer — canonical Areas journey panel (default
     BASE_URL_STATE.journey = 'area-first';
     render(
       <MemoryRouter>
-        <DiscoverRightPanelContainer
+        <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-groups-landing',
             areasNavigationJourney: inertAreasNavigationJourney({ node: ROOT_NODE }),

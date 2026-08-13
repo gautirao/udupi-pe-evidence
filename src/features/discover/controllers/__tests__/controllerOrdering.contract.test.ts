@@ -1,0 +1,367 @@
+import { describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import { renderHook, act } from '@testing-library/react';
+import { useDiscoverViewportTracker } from '../useDiscoverViewportTracker';
+import { useBoundedSearchTrigger } from '../useBoundedSearchTrigger';
+
+const mockUseDiscoverCameraOrchestration = vi.hoisted(() => vi.fn());
+const mockUseDiscoverJourneyPredicates = vi.hoisted(() => vi.fn());
+const mockUseDiscoverMapPresentation = vi.hoisted(() => vi.fn());
+
+vi.mock('@/features/discover/state/useDiscoverCameraOrchestration', () => ({
+  useDiscoverCameraOrchestration: mockUseDiscoverCameraOrchestration,
+}));
+vi.mock('@/features/discover/presentation/useDiscoverJourneyPredicates', () => ({
+  useDiscoverJourneyPredicates: mockUseDiscoverJourneyPredicates,
+}));
+vi.mock('@/features/discover/presentation/useDiscoverMapPresentation', () => ({
+  useDiscoverMapPresentation: mockUseDiscoverMapPresentation,
+}));
+
+import { useDiscoverCameraController } from '../useDiscoverCameraController';
+import { useDiscoverMapLayerController } from '../useDiscoverMapLayerController';
+
+/**
+ * Issue #2142 — S6/S7 controller-ordering safety.
+ *
+ * HISTORY / SUPERSESSION NOTE (per team-lead ruling on the Commit-1 version
+ * of this file, accepted rather than reopening PLAN_REVIEW): the ORIGINAL
+ * Commit-1 version of this file was a static regex proof against
+ * MapDiscovery.tsx's raw source — it asserted `const [boundedSearchTriggered,
+ * setBoundedSearchTriggered] = useState(false)` and `const [mapBbox,
+ * setMapBbox] = useState(...)` were textually declared before the
+ * `useDiscoverMapData({` call site. That was accurate for PRE-Commit-3
+ * MapDiscovery.tsx, where those useState pairs lived inline in the page.
+ *
+ * Commit 3 moved both into controllers/useDiscoverViewportTracker.ts and
+ * controllers/useBoundedSearchTrigger.ts. The raw `useState(false)`/
+ * `useState<...>(null)` patterns those old assertions searched for no
+ * longer exist in MapDiscovery.tsx AT ALL (they exist inside the
+ * controller files instead) — so 3 of the 5 original assertions started
+ * failing the moment Commit 3 landed, exactly as anticipated in that
+ * version's own "Re-run note for Commit 3" comment.
+ *
+ * This is NOT a regression: the underlying ordering PROPERTY (viewport/
+ * bounded-search state must be produced before the controller/call site
+ * that composes the map-data query consumes it) still holds — it is now
+ * enforced by TypeScript, not just by source-line order:
+ *   - useDiscoverViewportTracker requires `city` (a value only available
+ *     after useDiscoverPageState resolves) as a REQUIRED param — the
+ *     composition root cannot call it, or read its `mapBbox`/
+ *     `handleBoundsChange` outputs, without `city` already in scope.
+ *   - useBoundedSearchTrigger has no such requirement (it's fully
+ *     self-contained), but its `boundedSearchTriggered` output must still
+ *     be destructured before the useDiscoverMapData call site consumes it
+ *     — a plain JS temporal-dead-zone constraint the compiler enforces
+ *     the same way it always has for local consts.
+ *
+ * The two assertions below that DID keep passing unchanged (bbox threading,
+ * markersEnabled referencing boundedSearchTriggered) still search
+ * MapDiscovery.tsx's source directly, because the CONSUMPTION site
+ * (useDiscoverMapData's call) has not moved yet — that's Commit 4/5's job.
+ * The three that broke are updated to point at the new PRODUCTION sites
+ * (the controller call sites in MapDiscovery.tsx, and the single `true`-
+ * setter's new home inside useBoundedSearchTrigger.ts itself) rather than
+ * deleted, per team-lead's explicit instruction not to lose this coverage.
+ *
+ * NEW equivalent guard (supersedes, does not duplicate, the old static
+ * proof): a renderHook-based composition test proving the two controllers,
+ * wired together exactly as MapDiscovery.tsx wires them, reproduce the
+ * exact behavioral contract the old static test could only infer from
+ * source position — mapBbox/boundedSearchTriggered start at their
+ * no-op/false defaults (no auto-fire on mount) and are independently
+ * controllable, matching src/hooks/__tests__/useDiscoverMapData.markersEnabled.test.ts's
+ * existing (untouched, zero-assertion-change per [rollback]) hook-level
+ * proof that useDiscoverMapData correctly gates once GIVEN these values.
+ */
+
+// Issue #2142 (correction pass) — the controller COMPOSITION moved off
+// MapDiscovery.tsx into useDiscoverPageComposition.ts, so every "X is called
+// before Y" assertion below now reads that file. The page itself is checked
+// separately (it must contain no composition at all).
+const COMPOSITION_PATH = path.resolve(
+  __dirname,
+  '../../composition/useDiscoverPageComposition.ts',
+);
+const source = fs.readFileSync(COMPOSITION_PATH, 'utf-8');
+const lines = source.split('\n');
+
+const PAGE_PATH = path.resolve(__dirname, '../../../../pages/MapDiscovery.tsx');
+const pageSource = fs.readFileSync(PAGE_PATH, 'utf-8');
+
+const BOUNDED_SEARCH_TRIGGER_PATH = path.resolve(__dirname, '../useBoundedSearchTrigger.ts');
+const boundedSearchTriggerSource = fs.readFileSync(BOUNDED_SEARCH_TRIGGER_PATH, 'utf-8');
+
+// Issue #2142 (correction pass) — the useDiscoverMapData CONSUMPTION SITE has
+// now moved off MapDiscovery.tsx into useDiscoverMapDataController.ts, exactly
+// as this file's header anticipated ("that's Commit 4/5's job"). The two
+// assertions that read the call site's own body are repointed at the
+// controller's source; the two producer->consumer ordering assertions stay on
+// MapDiscovery.tsx, which is still where BOTH producers and the consuming
+// controller are composed.
+const MAP_DATA_CONTROLLER_PATH = path.resolve(__dirname, '../useDiscoverMapDataController.ts');
+const mapDataControllerSource = fs.readFileSync(MAP_DATA_CONTROLLER_PATH, 'utf-8');
+
+function firstLineIndexMatching(regex: RegExp): number {
+  return lines.findIndex((line) => regex.test(line));
+}
+
+describe('S6/S7 controller-ordering contract — static source-order guard', () => {
+  it('useDiscoverViewportTracker is called before the useDiscoverMapDataController call site (mapBbox producer -> consumer)', () => {
+    const controllerCallLine = firstLineIndexMatching(/useDiscoverViewportTracker\(\{/);
+    const mapDataCallLine = firstLineIndexMatching(/useDiscoverMapDataController\(\{/);
+    expect(controllerCallLine).toBeGreaterThan(-1);
+    expect(mapDataCallLine).toBeGreaterThan(-1);
+    expect(controllerCallLine).toBeLessThan(mapDataCallLine);
+  });
+
+  it('useBoundedSearchTrigger is called before the useDiscoverMapDataController call site (boundedSearchTriggered producer -> consumer)', () => {
+    const controllerCallLine = firstLineIndexMatching(/useBoundedSearchTrigger\(\)/);
+    const mapDataCallLine = firstLineIndexMatching(/useDiscoverMapDataController\(\{/);
+    expect(controllerCallLine).toBeGreaterThan(-1);
+    expect(mapDataCallLine).toBeGreaterThan(-1);
+    expect(controllerCallLine).toBeLessThan(mapDataCallLine);
+  });
+
+  it('the composition root threads mapBbox into the map-data controller, and the controller threads it on as useDiscoverMapData\'s bbox', () => {
+    const callSiteLine = firstLineIndexMatching(/useDiscoverMapDataController\(\{/);
+    expect(callSiteLine).toBeGreaterThan(-1);
+    const windowText = lines.slice(callSiteLine, callSiteLine + 40).join('\n');
+    expect(windowText).toMatch(/^\s*mapBbox,$/m);
+    expect(mapDataControllerSource).toMatch(/bbox:\s*mapBbox,/);
+  });
+
+  it('the markersEnabled expression passed to useDiscoverMapData still references boundedSearchTriggered (school-first bounded-search gate, #1115)', () => {
+    const callSiteIndex = mapDataControllerSource.indexOf('useDiscoverMapData({');
+    expect(callSiteIndex).toBeGreaterThan(-1);
+    const callSiteBody = mapDataControllerSource.slice(callSiteIndex);
+    // Delimit on the NEXT named param (`listingsEnabled:`) rather than on a
+    // trailing-comment shape, which is brittle to comment reflow.
+    const markersEnabledMatch = callSiteBody.match(
+      /\n\s*markersEnabled:([\s\S]*?)\n\s*listingsEnabled:/,
+    );
+    expect(markersEnabledMatch).not.toBeNull();
+    expect(markersEnabledMatch![1]).toMatch(/boundedSearchTriggered/);
+    // ...and MapDiscovery.tsx must thread the flag INTO the controller, so the
+    // gate cannot be silently satisfied by a controller-local default.
+    const pageCallSiteLine = firstLineIndexMatching(/useDiscoverMapDataController\(\{/);
+    const pageWindow = lines.slice(pageCallSiteLine, pageCallSiteLine + 40).join('\n');
+    expect(pageWindow).toMatch(/^\s*boundedSearchTriggered,$/m);
+  });
+
+  it('setBoundedSearchTriggered(true) is only reachable from inside useBoundedSearchTrigger.ts, not re-implemented in the composition root (#1115 no-autofire guard, updated for Commit 3)', () => {
+    // MapDiscovery.tsx itself must contain ZERO direct `setBoundedSearchTriggered(true)`
+    // call sites post-Commit-3 — the only `true`-setter lives inside the controller.
+    expect(pageSource).not.toMatch(/setBoundedSearchTriggered\(true\)/);
+
+    const setTrueSites = boundedSearchTriggerSource
+      .split('\n')
+      .map((line, index) => ({ line, index }))
+      .filter(({ line }) => line.includes('setBoundedSearchTriggered(true)'));
+    expect(setTrueSites.length).toBe(1);
+    const [{ index: setTrueLine }] = setTrueSites;
+    const controllerLines = boundedSearchTriggerSource.split('\n');
+    const precedingContext = controllerLines.slice(Math.max(0, setTrueLine - 10), setTrueLine).join('\n');
+    // Still inside a useCallback (an explicit user-triggered handler), not a
+    // bare useEffect body that would fire on mount/dependency-change.
+    expect(precedingContext).toMatch(/useCallback\(/);
+  });
+});
+
+describe('S6/S7 controller-ordering contract — behavioral composition guard (NEW for Commit 3, supersedes the static-only proof)', () => {
+  it('both controllers, composed together exactly as MapDiscovery.tsx composes them, start at their no-op defaults (no auto-fire on mount)', () => {
+    const { result } = renderHook(() => {
+      const viewport = useDiscoverViewportTracker({ mobileView: 'LIST', city: 'udupi' });
+      const boundedSearch = useBoundedSearchTrigger();
+      return { viewport, boundedSearch };
+    });
+    expect(result.current.viewport.mapBbox).toBeNull();
+    expect(result.current.boundedSearch.boundedSearchTriggered).toBe(false);
+  });
+
+  it('boundedSearchTriggered and mapBbox are independently controllable (no accidental coupling introduced by extraction)', () => {
+    const { result } = renderHook(() => {
+      const viewport = useDiscoverViewportTracker({ mobileView: 'LIST', city: 'udupi' });
+      const boundedSearch = useBoundedSearchTrigger();
+      return { viewport, boundedSearch };
+    });
+    act(() => {
+      result.current.boundedSearch.handleBoundedSearch();
+    });
+    expect(result.current.boundedSearch.boundedSearchTriggered).toBe(true);
+    // Triggering the bounded-search commit action must not, as a side
+    // effect, produce a bbox — these are two independent producers feeding
+    // the SAME useDiscoverMapData call site, not a single merged state.
+    expect(result.current.viewport.mapBbox).toBeNull();
+  });
+
+  it('a TypeScript-required input (city) gates useDiscoverViewportTracker — this is the ordering enforcement mechanism replacing source-line position', () => {
+    // This is a compile-time proof, not a runtime one: UseDiscoverViewportTrackerParams
+    // requires `city: string` (no `?`). The line below would fail `tsc --noEmit`
+    // if `city` were made optional or removed — see MapDiscovery.tsx's own call
+    // site, which cannot compile without `city` already resolved from
+    // useDiscoverPageState. Asserting the hook's return shape here keeps this
+    // property under a running test rather than relying on tsc alone.
+    const { result } = renderHook(() => useDiscoverViewportTracker({ mobileView: 'LIST', city: 'udupi' }));
+    expect(result.current).toHaveProperty('mapBbox');
+    expect(result.current).toHaveProperty('handleBoundsChange');
+  });
+});
+
+/**
+ * Ordering coverage for the camera/map-layer controllers.
+ *
+ * Issue #2142 (correction pass) — these assertions previously targeted the
+ * single `useDiscoverMapPresentationController`, now split five ways. They are
+ * repointed (not deleted) at the two controllers that actually carry the
+ * property being asserted: `useDiscoverCameraController` (the #1823/#2143
+ * owner, whose inputs mapZoom/discoverAreas/cityCenter/schoolListings must be
+ * produced by useDiscoverMapData/useDiscoverPageState first, and whose
+ * schoolMarkerFocusTick/canonicalNodeFitCount outputs must be produced before
+ * the window.__debug.mapState effect reads them) and
+ * `useDiscoverMapLayerController` (which needs Geography's scopeNamespaces).
+ */
+describe('controller-ordering contract — camera / map-layer controllers', () => {
+  // Uses the module-level `source`/`lines`/`firstLineIndexMatching` above,
+  // which now read useDiscoverPageComposition.ts (the composition root's
+  // actual controller-call order). This block used to shadow them with its
+  // own MapDiscovery.tsx reader; that shadow is removed rather than repointed,
+  // so there is exactly ONE definition of "the composition order" in this file.
+
+  it('useDiscoverMapDataController is called before useDiscoverCameraController (mapZoom/discoverAreas/cityCenter producer -> consumer)', () => {
+    const mapDataCallLine = firstLineIndexMatching(/useDiscoverMapDataController\(\{/);
+    const controllerCallLine = firstLineIndexMatching(/useDiscoverCameraController\(\{/);
+    expect(mapDataCallLine).toBeGreaterThan(-1);
+    expect(controllerCallLine).toBeGreaterThan(-1);
+    expect(mapDataCallLine).toBeLessThan(controllerCallLine);
+  });
+
+  it('useDiscoverGeographyController (scopeNamespaces/summaryRegions producer) is called before useDiscoverCameraController and useDiscoverMapLayerController', () => {
+    const geographyCallLine = firstLineIndexMatching(/useDiscoverGeographyController\(\{/);
+    const cameraCallLine = firstLineIndexMatching(/useDiscoverCameraController\(\{/);
+    const mapLayerCallLine = firstLineIndexMatching(/useDiscoverMapLayerController\(\{/);
+    expect(geographyCallLine).toBeGreaterThan(-1);
+    expect(cameraCallLine).toBeGreaterThan(-1);
+    expect(mapLayerCallLine).toBeGreaterThan(-1);
+    expect(geographyCallLine).toBeLessThan(cameraCallLine);
+    expect(geographyCallLine).toBeLessThan(mapLayerCallLine);
+  });
+
+  it('useDiscoverMapLayerController (isRegionOverview producer) is called before useDiscoverRegionGuideController', () => {
+    const mapLayerCallLine = firstLineIndexMatching(/useDiscoverMapLayerController\(\{/);
+    const regionGuideCallLine = firstLineIndexMatching(/useDiscoverRegionGuideController\(\{/);
+    expect(mapLayerCallLine).toBeGreaterThan(-1);
+    expect(regionGuideCallLine).toBeGreaterThan(-1);
+    expect(mapLayerCallLine).toBeLessThan(regionGuideCallLine);
+  });
+
+  it('useDiscoverRegionGuideController (armRegionSelect producer) is called before useDiscoverOverviewNavigationController', () => {
+    const regionGuideCallLine = firstLineIndexMatching(/useDiscoverRegionGuideController\(\{/);
+    const overviewNavCallLine = firstLineIndexMatching(/useDiscoverOverviewNavigationController\(\{/);
+    expect(regionGuideCallLine).toBeGreaterThan(-1);
+    expect(overviewNavCallLine).toBeGreaterThan(-1);
+    expect(regionGuideCallLine).toBeLessThan(overviewNavCallLine);
+  });
+
+  it('the window.__debug bridge (reads schoolMarkerFocusTick/canonicalNodeFitCount) is invoked AFTER the useDiscoverCameraController call closes, not before', () => {
+    // Issue #2142 (correction pass) — the two __debug effects moved into
+    // controllers/useDiscoverDebugBridge.ts, so the thing whose position must
+    // be after the camera controller is now that controller's CALL SITE. The
+    // property is unchanged: the bridge cannot publish schoolMarkerFocusTick /
+    // canonicalNodeFitCount before the camera controller has produced them.
+    const controllerCallLine = firstLineIndexMatching(/useDiscoverCameraController\(\{/);
+    const bridgeCallLine = firstLineIndexMatching(/useDiscoverDebugBridge\(\{/);
+    expect(controllerCallLine).toBeGreaterThan(-1);
+    expect(bridgeCallLine).toBeGreaterThan(-1);
+    expect(bridgeCallLine).toBeGreaterThan(controllerCallLine);
+    // ...and the bridge is actually fed those two values, not silently dropped.
+    const bridgeWindow = lines.slice(bridgeCallLine, bridgeCallLine + 25).join('\n');
+    expect(bridgeWindow).toMatch(/^\s*schoolMarkerFocusTick,$/m);
+    expect(bridgeWindow).toMatch(/^\s*canonicalNodeFitCount,$/m);
+  });
+
+  it('the debug bridge is the ONLY __debug writer — the composition root itself writes none', () => {
+    // Issue #2142 (correction pass) — replaces the former "find the __debug
+    // effect body inside MapDiscovery.tsx" anchor, which is now unfindable by
+    // construction. The stronger property: there is exactly one __debug write
+    // site in the whole Discover surface, and it is the bridge controller.
+    expect(pageSource).not.toMatch(/__debug\s*=/);
+    expect(source).not.toMatch(/__debug\s*=/);
+    const bridgeSource = fs.readFileSync(
+      path.resolve(__dirname, '../useDiscoverDebugBridge.ts'),
+      'utf-8',
+    );
+    const writeSites = bridgeSource.split('\n').filter((line) => /__debug = \{/.test(line));
+    expect(writeSites.length).toBe(2);
+  });
+
+  it('the camera and map-layer controllers receive the SAME scopeNamespaces reference (single source of truth, issue #1910) — behavioral proof across the split', () => {
+    mockUseDiscoverCameraOrchestration.mockReset().mockReturnValue({});
+    mockUseDiscoverJourneyPredicates.mockReset().mockReturnValue({});
+    mockUseDiscoverMapPresentation.mockReset().mockReturnValue({});
+
+    const scopeNamespaces = { regionKeys: new Set<string>(), groupSlugs: new Set<string>() };
+    renderHook(() => {
+      useDiscoverCameraController({
+        showAreasNavigationJourney: false,
+        areasNavigationJourney: { node: null, children: [], isLoading: false, error: null, selectNode: vi.fn() } as never,
+        mapBbox: null,
+        publishRecenterCameraIntent: vi.fn(),
+        cameraOrchestrationUrlState: {} as never,
+        selectedSchool: null,
+        setPanToArea: vi.fn(),
+        isLoadingAreaListings: false,
+        discoverAreas: [],
+        areasLoading: false,
+        areaGroupsData: undefined,
+        isLoadingAreaGroups: false,
+        agriMapListingsData: undefined,
+        cityCenter: undefined,
+        focusedGroup: null,
+        summaryRegions: [],
+        selectedRegion: null,
+        selectedMaxKm: null,
+        schoolListings: [],
+        scopeNamespaces,
+        regionScopedGroupsData: undefined,
+        isLoadingRegionScopedGroups: false,
+        viewport: null,
+        areaKey: null,
+        discoverAreasData: undefined,
+      });
+      useDiscoverMapLayerController({
+        resolvedPanelContent: 'guided-entry' as never,
+        focusedGroup: null,
+        effectiveSelectedArea: null,
+        selectedSchool: null,
+        discoverAreas: [],
+        areasLoading: false,
+        cityTotal: 0,
+        urlState: {} as never,
+        isAgriJourney: false,
+        mapZoom: 12,
+        isLoadingAreaGroups: false,
+        isLoadingRegionalAreaGroups: false,
+        isLandingState: false,
+        areaGroupsData: undefined,
+        corridorGroups: [],
+        agriAreasData: undefined,
+        summaryRegions: [],
+        cityCenter: undefined,
+        debouncedAreaSearchQuery: '',
+        city: 'udupi',
+        selectedMarkerListing: null,
+        scopeNamespaces,
+        regionScopedGroupsData: undefined,
+        visibleMemberSet: undefined,
+      });
+    });
+    expect(mockUseDiscoverCameraOrchestration).toHaveBeenCalledWith(
+      expect.objectContaining({ scopeNamespaces }),
+    );
+    expect(mockUseDiscoverMapPresentation).toHaveBeenCalledWith(
+      expect.objectContaining({ scopeNamespaces }),
+    );
+  });
+});

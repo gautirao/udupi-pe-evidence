@@ -12,17 +12,19 @@
  * instead of importing the real bridge expression — meaning a revert of the
  * one-line fix at MapDiscovery.tsx's bridge site would NOT fail this suite.
  * Fixed by extracting the bridge into an exported, pure
- * `resolveEffectiveSelectedArea` (named export alongside the default export
- * in MapDiscovery.tsx itself, so this test importing it stays within the
- * allowed-files boundary for this task) that MapDiscovery.tsx now calls at
- * its bridge site, and importing THAT function here instead of re-deriving
- * the formula. This proves the FORMULA and its consumption by
- * the real `deriveDiscoverBadge`/`formatDiscoverBadgeCopy` functions against
- * a node-journey fixture: `selectedArea` null, `nodeAreaPoint` populated.
+ * `resolveEffectiveSelectedArea` that MapDiscovery.tsx now calls at its
+ * bridge site, and importing THAT function here instead of re-deriving the
+ * formula. This proves the FORMULA and its consumption by the real
+ * `deriveDiscoverBadge`/`formatDiscoverBadgeCopy` functions against a
+ * node-journey fixture: `selectedArea` null, `nodeAreaPoint` populated.
+ *
+ * Issue #2142 Commit 2 — import path repointed to
+ * `selectors/effectiveArea.ts`, where this function now lives (moved
+ * unchanged out of MapDiscovery.tsx). No assertion changes.
  */
 import { describe, it, expect } from 'vitest';
 import { deriveDiscoverBadge, formatDiscoverBadgeCopy } from '@/features/discover/presentation/discoverBadge';
-import { resolveEffectiveSelectedArea } from '@/pages/MapDiscovery';
+import { resolveEffectiveSelectedArea } from '@/features/discover/selectors/effectiveArea';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 
 describe('#2083 RC_B — badge reads the node-bridged area, not the bare legacy selectedArea', () => {

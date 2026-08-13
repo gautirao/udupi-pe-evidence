@@ -1,4 +1,3 @@
-import type { ReactNode, Dispatch, SetStateAction } from 'react';
 import {
   useDiscoverActions,
   useDiscoverNav,
@@ -8,266 +7,118 @@ import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
-import type { SummaryRegionRef } from '@/utils/macroRegionResolver';
-import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
-import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
-import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
-import type { AreaGroup } from '@/hooks/useAreaGroups';
-import type { RegionScopedAreaGroup } from '@/hooks/useRegionScopedAreaGroups';
-import type { CorridorGroupData } from '@/hooks/useRegionalAreaGroups';
-import type { AgriMapListingItem, AgriMapListingsResponse } from '@/hooks/useAgriMapListings';
 import type { AgriFilterValues } from '@/components/discover/panels/AgriFiltersPanel';
-import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
-import type { DiscoverListingItem } from '@/hooks/useDiscoverListings';
-import type { SchoolResult } from '@/hooks/useSchoolSearch';
-import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
-import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
-import type { PropertyFilters } from '@/hooks/usePropertyListings';
-import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
-import type {
-  DiscoverJourneyTransitionsView,
-  DiscoverJourneyTransitionsCommands,
-} from '@/features/discover/state/useDiscoverJourneyTransitions';
-import type { DiscoverInteractionCommands } from '@/features/discover/state/useDiscoverInteractionState';
-import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
-import type { ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
 import { DiscoverAreasJourneyPanel } from '@/features/discover/views/DiscoverAreasJourneyPanel';
-import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import { JourneySwitcher } from '@/components/discover/JourneySwitcher';
 import { DiscoverControlBar } from '@/components/discover/DiscoverControlBar';
 import { ROOT_NODE_KEY } from '@/features/discover/navigation/types';
-import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import { hasLegacyAreaContext } from '@/features/discover/navigation/legacyAreaContextGuard';
 import { useDiscoverAreaNavigationPathResolver } from '@/features/discover/navigation/useDiscoverAreaNavigationPath';
 import { useToast } from '@/hooks/use-toast';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import { SchoolsNavigationJourneyPanel } from '@/features/discover/views/SchoolsNavigationJourneyPanel';
+import type { DiscoverPanelSurfaceView, DiscoverPanelSurfaceCommands } from './buildPanelSurfaceModel';
 
 /**
- * Issue #1824 Slice S11c — the DiscoverRightPanel call-site region, lifted
- * VERBATIM out of MapDiscovery.tsx (@ 7e598574 L1684-1908), incl. every
- * DiscoverRightPanel prop + the ~25 inline closures (onSelectAreaKey,
- * onApplyAgriFilters, onBackToRegion, etc.) + the inline footer pager JSX
- * (footerContent) + the cityLabel/onBack expressions. Every value the moved
- * JSX/closures/footer read is received as a PROP — no derived-const/handler/
- * hook/badge-helper moves (see
- * docs/audit/evidence/issue-1824-map-discovery-decomposition/slice-s11c-implementation.md).
- *
- * S8 BADGE-FORK GUARD (preserved) — this component receives the precomputed
- * copy (areaResultSummaryText, etc.) as PROPS ONLY. It never imports
- * formatDiscoverBadgeCopy / deriveSchoolRadiusPillNoun / hasActiveAnonPropertyFilter.
- *
- * The inline-computed prop expressions below (cityLabel, onBack, the ~25
- * closures, footerContent) recompute from the raw props on every render —
- * IDENTICAL to their pre-extraction behaviour inline in MapDiscovery — this
- * component is NOT React.memo'd (render-neutral, mirrors the S11a
- * DiscoverMapCanvas pattern).
+ * Issue #2142 Commit 4 — renamed from DiscoverRightPanelContainer.tsx (per the
+ * approved plan's rollback file-set). Every closure/JSX line below (the ~25
+ * inline closures, the footer pager, the cityLabel/onBack expressions, the
+ * three-branch canonical/school/legacy panel selection) is preserved BYTE-
+ * IDENTICAL to that file — see its own #1824 Slice S11c doc comment (git
+ * history) for the full "moved VERBATIM, every value received as a PROP"
+ * rationale, which still applies here. The ONLY change is the outer
+ * function signature: instead of ~55 flat destructured props, this surface
+ * accepts the grouped `{ view, commands }` contract and reconstructs the
+ * exact same local variable names (including the same `= null` defaults for
+ * the two optional fields) in one destructuring prelude below, so every line
+ * after that prelude is untouched.
  */
-export interface DiscoverRightPanelContainerProps {
-  resolvedPanelContent: DiscoverPanelContent;
-  selectedMarkerListing: PropertyListingWithImages | null;
-  clearSelectedMarkerListing: () => void;
-  city: string;
-  activeContextChips: ReactNode;
-  discoverAreas: AreaPoint[];
-  selectedArea: AreaPoint | null;
-  areaListings: DiscoverCityListingItem[];
-  isLoadingAreaListings: boolean;
-  isAuthenticated: boolean;
-  handleAreaSelect: (area: AreaPoint) => void;
-  areaResultSummaryText: string | null;
-  journeyView: DiscoverJourneyTransitionsView;
-  handleAreaFirstBack: () => void;
-  journeyCommands: DiscoverJourneyTransitionsCommands;
-  areasLoading: boolean;
-  agriAreasData: DiscoverArea[] | undefined;
-  isLoadingAgriAreas: boolean;
-  /** AreaGroupsResponse's shape ({ groups: AreaGroup[] }) — that response type itself is not exported by useAreaGroups.ts. */
-  areaGroupsData: { groups: AreaGroup[] } | undefined;
-  isLoadingAreaGroups: boolean;
-  /** Issue #1910 (PR2) — region-scoped area-group projection for the currently active region scope. */
-  regionScopedGroups: RegionScopedAreaGroup[] | undefined;
-  isLoadingRegionScopedGroups: boolean;
-  /**
-   * Issue #1910 (PR2 review fix, Finding 3) — true when the region-scoped
-   * projection fetch failed. Forwarded to AreaGroupsLandingPanel so a real
-   * backend failure renders an honest error+retry state instead of being
-   * indistinguishable from "this region legitimately has zero groups".
-   */
-  isRegionScopedGroupsError: boolean;
-  refetchRegionScopedGroups: () => void;
-  /**
-   * Issue #1910 (PR2 review fix, Finding 2) — the single source-of-truth,
-   * alias-aware scope namespaces built once in MapDiscovery (includes
-   * groupNameSlugs), forwarded so AreaGroupsLandingPanel's own resolveScope
-   * call classifies the active scope identically to every other call site
-   * instead of rebuilding a reduced local namespace.
-   */
-  scopeNamespaces: ScopeNamespaces;
-  armRegionSelect: (source: 'map' | 'panel') => void;
-  regionGuideRingActive: boolean;
-  regionOverviewMarkerKind: RegionOverviewMarkerKind;
-  regionSelectNonce: number;
-  prefersReducedMotion: boolean;
-  summaryRegions: SummaryRegionRef[];
-  selectedGroupName: string | null;
-  corridorGroups: CorridorGroupData[];
-  isLoadingRegionalAreaGroups: boolean;
-  isRegionalAreaGroupsError: boolean;
-  refetchRegionalAreaGroups: () => void;
-  selectedRegion: string | null;
-  selectedMaxKm: 10 | 25 | 50 | 100 | null;
-  filteredAgriListings: AgriMapListingItem[] | null;
-  agriMapListingsData: AgriMapListingsResponse | undefined;
-  isLoadingAgriGroupListings: boolean;
-  isAgriGroupListingsError: boolean;
-  agriGroupLabel: string | null;
-  refetchAgriGroupListings: () => void;
-  discoverAreasForPanel: DiscoverArea[];
-  filtersContent: ReactNode;
-  trendsHref: string;
-  isFetching: boolean;
-  isLoading: boolean;
-  searchQuery: string;
-  handleSearchChange: (q: string) => void;
-  filters: PropertyFilters;
-  handleFiltersChange: (next: PropertyFilters) => void;
-  selectedSchool: SchoolResult | null;
-  schools: SchoolResult[];
-  schoolsQuery: UseInfiniteQueryResult<InfiniteData<SchoolsByAreaResponse>, Error>;
-  schoolListings: DiscoverCityListingItem[];
-  listingDataLoading: boolean;
-  handleBoundedSearch: () => void;
-  interactionCommands: DiscoverInteractionCommands;
-  setAreaSearchQuery: Dispatch<SetStateAction<string>>;
-  areaMarkerCounts: { shown: number; total: number };
-  highlightedAreaKeys: string[];
-  selectedGroupListingItem: AgriMapListingItem | null;
-  navigate: (path: string) => void;
-  cityTotal: number;
-  cityHasNoListings: boolean;
-  handleCityChange: (newCity: string) => void;
-  groupResultsListings: DiscoverListingItem[];
-  isLoadingGroupResults: boolean;
-  isGroupResultsError: boolean;
-  groupResultsTotalElements: number | undefined;
-  refetchGroupResults: () => void;
-  page: number;
-  totalPages: number;
-  totalElements: number;
-  setPage: Dispatch<SetStateAction<number>>;
-  /**
-   * Issue #1956 PR 2 — the ONE `useAreasNavigationJourney` result MapDiscovery
-   * resolved, threaded down unchanged so this container never re-derives its
-   * own node/counts (AC3.4/AC3.9/T3 — map and panel share this by reference).
-   */
-  areasNavigationJourney: UseAreasNavigationJourneyResult;
-  hoveredNavigationNodeKey?: string | null;
-  onNavigationNodeHoverChange?: (nodeKey: string | null) => void;
-  /**
-   * Issue #1956 PR 3 (bounded state-lift, AC4.12/AC4.5) — the ONE focused
-   * visual-AREA-cluster identity MapDiscovery owns alongside
-   * `hoveredNavigationNodeKey`, threaded through unchanged so this
-   * container's `DiscoverAreasJourneyPanel` and the map's
-   * `AreaDestinationMarkerLayer` can never disagree on the focused member
-   * set. Never written to the URL — no history entry, no camera fit.
-   */
-  focusedClusterMemberAreaKeys?: readonly string[] | null;
-  onClusterFocusChange?: (memberAreaKeys: readonly string[] | null) => void;
-  /**
-   * Issue #1956 PR-5 (Slice 5, AC5.10/AC5.10c) — forwarded unchanged to
-   * `DiscoverAreasJourneyPanel`. MapDiscovery stores the reported preview
-   * in state and renders the mobile Map-mode preview sheet from it; this
-   * container has no opinion on Map/List mode or mobile/desktop.
-   */
-  onSelectedListingPreviewChange?: (preview: SelectedListingPreview | null) => void;
+export interface DiscoverPanelSurfaceProps {
+  view: DiscoverPanelSurfaceView;
+  commands: DiscoverPanelSurfaceCommands;
 }
 
-export function DiscoverRightPanelContainer({
-  resolvedPanelContent,
-  selectedMarkerListing,
-  clearSelectedMarkerListing,
-  city,
-  activeContextChips,
-  discoverAreas,
-  selectedArea,
-  areaListings,
-  isLoadingAreaListings,
-  isAuthenticated,
-  handleAreaSelect,
-  areaResultSummaryText,
-  journeyView,
-  handleAreaFirstBack,
-  journeyCommands,
-  areasLoading,
-  agriAreasData,
-  isLoadingAgriAreas,
-  areaGroupsData,
-  isLoadingAreaGroups,
-  regionScopedGroups,
-  isLoadingRegionScopedGroups,
-  isRegionScopedGroupsError,
-  refetchRegionScopedGroups,
-  scopeNamespaces,
-  armRegionSelect,
-  regionGuideRingActive,
-  regionOverviewMarkerKind,
-  regionSelectNonce,
-  prefersReducedMotion,
-  summaryRegions,
-  selectedGroupName,
-  corridorGroups,
-  isLoadingRegionalAreaGroups,
-  isRegionalAreaGroupsError,
-  refetchRegionalAreaGroups,
-  selectedRegion,
-  selectedMaxKm,
-  filteredAgriListings,
-  agriMapListingsData,
-  isLoadingAgriGroupListings,
-  isAgriGroupListingsError,
-  agriGroupLabel,
-  refetchAgriGroupListings,
-  discoverAreasForPanel,
-  filtersContent,
-  trendsHref,
-  isFetching,
-  isLoading,
-  searchQuery,
-  handleSearchChange,
-  filters,
-  handleFiltersChange,
-  selectedSchool,
-  schools,
-  schoolsQuery,
-  schoolListings,
-  listingDataLoading,
-  handleBoundedSearch,
-  interactionCommands,
-  setAreaSearchQuery,
-  areaMarkerCounts,
-  highlightedAreaKeys,
-  selectedGroupListingItem,
-  navigate,
-  cityTotal,
-  cityHasNoListings,
-  handleCityChange,
-  groupResultsListings,
-  isLoadingGroupResults,
-  isGroupResultsError,
-  groupResultsTotalElements,
-  refetchGroupResults,
-  page,
-  totalPages,
-  totalElements,
-  setPage,
-  areasNavigationJourney,
-  hoveredNavigationNodeKey = null,
-  onNavigationNodeHoverChange,
-  focusedClusterMemberAreaKeys = null,
-  onClusterFocusChange,
-  onSelectedListingPreviewChange,
-}: DiscoverRightPanelContainerProps) {
+export function DiscoverPanelSurface({ view, commands }: DiscoverPanelSurfaceProps) {
+  const { city, cityTotal, cityHasNoListings, trendsHref } = view.routing;
+  const { handleCityChange, navigate } = commands.routing;
+  const {
+    discoverAreas,
+    selectedArea,
+    areaListings,
+    isLoadingAreaListings,
+    areaResultSummaryText,
+    areasLoading,
+    discoverAreasForPanel,
+    areaMarkerCounts,
+    highlightedAreaKeys,
+    scopeNamespaces,
+    regionScopedGroups,
+    isLoadingRegionScopedGroups,
+    isRegionScopedGroupsError,
+    areaGroupsData,
+    isLoadingAreaGroups,
+    regionGuideRingActive,
+    regionOverviewMarkerKind,
+    regionSelectNonce,
+    summaryRegions,
+    selectedGroupName,
+    corridorGroups,
+    isLoadingRegionalAreaGroups,
+    isRegionalAreaGroupsError,
+    selectedRegion,
+    selectedMaxKm,
+  } = view.geography;
+  const {
+    handleAreaSelect,
+    handleAreaFirstBack,
+    setAreaSearchQuery,
+    refetchRegionScopedGroups,
+    armRegionSelect,
+    refetchRegionalAreaGroups,
+  } = commands.geography;
+  const {
+    groupResultsListings,
+    isLoadingGroupResults,
+    isGroupResultsError,
+    groupResultsTotalElements,
+    page,
+    totalPages,
+    totalElements,
+    selectedGroupListingItem,
+    isFetching,
+    isLoading,
+    listingDataLoading,
+  } = view.results;
+  const { refetchGroupResults, setPage, handleBoundedSearch } = commands.results;
+  const {
+    agriAreasData,
+    isLoadingAgriAreas,
+    filteredAgriListings,
+    agriMapListingsData,
+    isLoadingAgriGroupListings,
+    isAgriGroupListingsError,
+    agriGroupLabel,
+  } = view.agri;
+  const { refetchAgriGroupListings } = commands.agri;
+  const { selectedSchool, schools, schoolsQuery, schoolListings } = view.schools;
+  const { filters, filtersContent, searchQuery } = view.filters;
+  const { handleFiltersChange, handleSearchChange } = commands.filters;
+  const {
+    areasNavigationJourney,
+    hoveredNavigationNodeKey = null,
+    focusedClusterMemberAreaKeys = null,
+    journeyView,
+    resolvedPanelContent,
+  } = view.navigation;
+  const {
+    onNavigationNodeHoverChange,
+    onClusterFocusChange,
+    journeyCommands,
+    onSelectedListingPreviewChange,
+  } = commands.navigation;
+  const { selectedMarkerListing, activeContextChips, prefersReducedMotion, isAuthenticated } =
+    view.interaction;
+  const { clearSelectedMarkerListing, interactionCommands } = commands.interaction;
   // Issue #1953 (build step 2) — consumes the DiscoverProvider facade
   // directly rather than receiving urlState/urlActions as props (D2 prop
   // migration rule: these are the two facade-owned props dropped from the

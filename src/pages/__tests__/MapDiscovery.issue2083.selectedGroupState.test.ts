@@ -26,11 +26,17 @@
  * MapDiscovery cannot be mounted in JSDOM (Leaflet/QueryClient/Router/Auth —
  * see MapDiscovery.issue2083.badgeBridge.test.ts for the same constraint), so
  * this exercises the REAL production predicate via the exported, pure
- * `resolveIsSelectedGroupState` (MapDiscovery.tsx) at its REAL call site
- * formula, not a hand-derived re-implementation.
+ * `resolveIsSelectedGroupState` at its REAL call site formula, not a
+ * hand-derived re-implementation.
+ *
+ * Issue #2142 Commit 2 — import paths repointed to
+ * `selectors/displayEligibility.ts` and `selectors/effectiveArea.ts`, where
+ * these functions now live (moved unchanged out of MapDiscovery.tsx). No
+ * assertion changes.
  */
 import { describe, it, expect } from 'vitest';
-import { resolveIsSelectedGroupState, resolveEffectiveSelectedArea } from '@/pages/MapDiscovery';
+import { resolveIsSelectedGroupState } from '@/features/discover/selectors/displayEligibility';
+import { resolveEffectiveSelectedArea } from '@/features/discover/selectors/effectiveArea';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 
 describe('#2083 cycle 4 — isSelectedGroupState must not fire once a node-journey area is resolved', () => {
