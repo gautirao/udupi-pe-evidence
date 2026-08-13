@@ -13,9 +13,14 @@
  * INDEPENDENTLY PROVEN to equal the canonical parent is not the same thing.
  *
  * ── HIDDEN AT THE CITY ROOT (AC5.7) ──
- * A node with an empty `ancestry` (the synthetic city root, or any node the
- * server reports with no parent) renders NO control at all — Back must never
- * leave Discover.
+ * The synthetic city root renders NO control at all — Back must never leave
+ * Discover. The DESTINATION (root vs. a real ancestor vs. the synthetic root
+ * for a top-level Direction) is decided entirely by
+ * `resolveHierarchyBackDestination` (`hierarchyBackDestination.ts`) — this
+ * component never inspects `node.ancestry.length` itself. See that module's
+ * doc for why an empty `ancestry` does NOT always mean "city root": a
+ * top-level DIRECTION is also `ancestry: []` on the wire but its canonical
+ * parent is the synthetic root, not nothing.
  *
  * ── THE DEFECT THIS GUARD FIXES ──
  * `goToNode`/`goToAncestorNode` (`state/url/navigation.ts`) are PUSHes (pinned
@@ -85,6 +90,7 @@ import { ChevronLeft } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
+import { resolveHierarchyBackDestination } from '@/features/discover/navigation/hierarchyBackDestination';
 import {
   decideHierarchyBackMechanism,
   readBrowserHistoryIndex,
@@ -97,6 +103,12 @@ export interface HierarchyBackButtonProps {
   /** Pure href builder for the canonical parent's node key — `urlActions.buildNodeHref`. */
   buildHref: (nodeKey: string) => string | null;
   /**
+   * The current city's display name — used ONLY when
+   * `resolveHierarchyBackDestination` falls through to the synthetic city
+   * root (a top-level DIRECTION with no server-declared ancestry entry).
+   */
+  cityLabel: string;
+  /**
    * Fix-verify cycle 3 — the journey-owned history-adjacency log
    * (`useAreasNavigationJourney`'s `historyAdjacencyLog`). This component
    * reads it to decide the POP/REPLACE mechanism only; it never mutates or
@@ -106,17 +118,23 @@ export interface HierarchyBackButtonProps {
   className?: string;
 }
 
-export function HierarchyBackButton({ node, buildHref, historyAdjacencyLog, className }: HierarchyBackButtonProps) {
+export function HierarchyBackButton({
+  node,
+  buildHref,
+  cityLabel,
+  historyAdjacencyLog,
+  className,
+}: HierarchyBackButtonProps) {
   const navigate = useNavigate();
 
-  if (!node || node.ancestry.length === 0) {
-    // AC5.7 — the city root (and any node the server reports with no
-    // ancestry) has no active hierarchy Back control.
+  const destination = node ? resolveHierarchyBackDestination(node, cityLabel) : null;
+  if (!destination) {
+    // No canonical parent to go back to — the true city root, or a node the
+    // server reports with neither an ancestry parent nor a DIRECTION fallback.
     return null;
   }
 
-  const parent = node.ancestry[node.ancestry.length - 1];
-  const href = buildHref(parent.nodeKey);
+  const href = buildHref(destination.nodeKey);
   if (!href) {
     // Defensive: a malformed/oversized parent key would never be writable
     // anyway (isWritableNodeKey) — render nothing rather than a dead link.
@@ -127,7 +145,7 @@ export function HierarchyBackButton({ node, buildHref, historyAdjacencyLog, clas
   // so this decision and the log's own bookkeeping never observe two
   // different values for "the slot right now".
   const currentHistoryIndex = readBrowserHistoryIndex();
-  const mechanism = decideHierarchyBackMechanism(historyAdjacencyLog, currentHistoryIndex, parent.nodeKey);
+  const mechanism = decideHierarchyBackMechanism(historyAdjacencyLog, currentHistoryIndex, destination.nodeKey);
 
   return (
     <Link
@@ -153,7 +171,7 @@ export function HierarchyBackButton({ node, buildHref, historyAdjacencyLog, clas
           : undefined
       }
       data-testid="areas-hierarchy-back"
-      aria-label={`Back to ${parent.displayLabel}`}
+      aria-label={`Back to ${destination.displayLabel}`}
       className={cn(
         'inline-flex items-center gap-1 text-sm font-medium text-muted-foreground',
         'hover:text-foreground transition-colors rounded',
@@ -162,7 +180,7 @@ export function HierarchyBackButton({ node, buildHref, historyAdjacencyLog, clas
       )}
     >
       <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
-      <span className="truncate">Back to {parent.displayLabel}</span>
+      <span className="truncate">Back to {destination.displayLabel}</span>
     </Link>
   );
 }
