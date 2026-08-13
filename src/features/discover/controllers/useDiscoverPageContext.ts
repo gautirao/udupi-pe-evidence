@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -59,6 +59,11 @@ export function useDiscoverPageContext() {
   // overlay shell.
   const { mobileView, isMobileShell, setMobileView } = useDiscoverShell();
   const mobileMapOpen = isMobileShell && mobileView === 'MAP';
+  // A stable command, so the page shell's trigger prop does not get a fresh
+  // identity every render. Presentation-only: mobileView is plain component
+  // state and this never touches the URL or history (issue #2088/#1953 —
+  // "Map/List is not a second navigation model").
+  const openMobileMap = useCallback(() => setMobileView('MAP'), [setMobileView]);
   const isAuthenticated = !authLoading && user !== null;
   // Issue #1160 v3 Bug A1 — TanStack Query client used to read cached useSchoolById
   // result synchronously inside handleSelectSchoolById. See that callback for details.
@@ -140,6 +145,7 @@ export function useDiscoverPageContext() {
     isMobileShell,
     setMobileView,
     mobileMapOpen,
+    openMobileMap,
     mapContainerRef,
     panelContent,
     intentListingPurpose,

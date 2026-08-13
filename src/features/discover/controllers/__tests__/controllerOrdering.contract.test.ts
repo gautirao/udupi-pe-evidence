@@ -76,9 +76,19 @@ import { useDiscoverMapLayerController } from '../useDiscoverMapLayerController'
  * proof that useDiscoverMapData correctly gates once GIVEN these values.
  */
 
-const PAGE_PATH = path.resolve(__dirname, '../../../../pages/MapDiscovery.tsx');
-const source = fs.readFileSync(PAGE_PATH, 'utf-8');
+// Issue #2142 (correction pass) — the controller COMPOSITION moved off
+// MapDiscovery.tsx into useDiscoverPageComposition.ts, so every "X is called
+// before Y" assertion below now reads that file. The page itself is checked
+// separately (it must contain no composition at all).
+const COMPOSITION_PATH = path.resolve(
+  __dirname,
+  '../../composition/useDiscoverPageComposition.ts',
+);
+const source = fs.readFileSync(COMPOSITION_PATH, 'utf-8');
 const lines = source.split('\n');
+
+const PAGE_PATH = path.resolve(__dirname, '../../../../pages/MapDiscovery.tsx');
+const pageSource = fs.readFileSync(PAGE_PATH, 'utf-8');
 
 const BOUNDED_SEARCH_TRIGGER_PATH = path.resolve(__dirname, '../useBoundedSearchTrigger.ts');
 const boundedSearchTriggerSource = fs.readFileSync(BOUNDED_SEARCH_TRIGGER_PATH, 'utf-8');
@@ -114,7 +124,7 @@ describe('S6/S7 controller-ordering contract — static source-order guard', () 
     expect(controllerCallLine).toBeLessThan(mapDataCallLine);
   });
 
-  it('MapDiscovery.tsx threads mapBbox into the map-data controller, and the controller threads it on as useDiscoverMapData\'s bbox', () => {
+  it('the composition root threads mapBbox into the map-data controller, and the controller threads it on as useDiscoverMapData\'s bbox', () => {
     const callSiteLine = firstLineIndexMatching(/useDiscoverMapDataController\(\{/);
     expect(callSiteLine).toBeGreaterThan(-1);
     const windowText = lines.slice(callSiteLine, callSiteLine + 40).join('\n');
@@ -140,10 +150,10 @@ describe('S6/S7 controller-ordering contract — static source-order guard', () 
     expect(pageWindow).toMatch(/^\s*boundedSearchTriggered,$/m);
   });
 
-  it('setBoundedSearchTriggered(true) is only reachable from inside useBoundedSearchTrigger.ts, not re-implemented in MapDiscovery.tsx (#1115 no-autofire guard, updated for Commit 3)', () => {
+  it('setBoundedSearchTriggered(true) is only reachable from inside useBoundedSearchTrigger.ts, not re-implemented in the composition root (#1115 no-autofire guard, updated for Commit 3)', () => {
     // MapDiscovery.tsx itself must contain ZERO direct `setBoundedSearchTriggered(true)`
     // call sites post-Commit-3 — the only `true`-setter lives inside the controller.
-    expect(source).not.toMatch(/setBoundedSearchTriggered\(true\)/);
+    expect(pageSource).not.toMatch(/setBoundedSearchTriggered\(true\)/);
 
     const setTrueSites = boundedSearchTriggerSource
       .split('\n')
@@ -213,13 +223,11 @@ describe('S6/S7 controller-ordering contract — behavioral composition guard (N
  * `useDiscoverMapLayerController` (which needs Geography's scopeNamespaces).
  */
 describe('controller-ordering contract — camera / map-layer controllers', () => {
-  const PAGE_PATH = path.resolve(__dirname, '../../../../pages/MapDiscovery.tsx');
-  const source = fs.readFileSync(PAGE_PATH, 'utf-8');
-  const lines = source.split('\n');
-
-  function firstLineIndexMatching(regex: RegExp): number {
-    return lines.findIndex((line) => regex.test(line));
-  }
+  // Uses the module-level `source`/`lines`/`firstLineIndexMatching` above,
+  // which now read useDiscoverPageComposition.ts (the composition root's
+  // actual controller-call order). This block used to shadow them with its
+  // own MapDiscovery.tsx reader; that shadow is removed rather than repointed,
+  // so there is exactly ONE definition of "the composition order" in this file.
 
   it('useDiscoverMapDataController is called before useDiscoverCameraController (mapZoom/discoverAreas/cityCenter producer -> consumer)', () => {
     const mapDataCallLine = firstLineIndexMatching(/useDiscoverMapDataController\(\{/);
@@ -278,6 +286,7 @@ describe('controller-ordering contract — camera / map-layer controllers', () =
     // effect body inside MapDiscovery.tsx" anchor, which is now unfindable by
     // construction. The stronger property: there is exactly one __debug write
     // site in the whole Discover surface, and it is the bridge controller.
+    expect(pageSource).not.toMatch(/__debug\s*=/);
     expect(source).not.toMatch(/__debug\s*=/);
     const bridgeSource = fs.readFileSync(
       path.resolve(__dirname, '../useDiscoverDebugBridge.ts'),

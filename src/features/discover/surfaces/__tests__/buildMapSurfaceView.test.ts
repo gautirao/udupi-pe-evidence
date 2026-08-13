@@ -138,12 +138,10 @@ function makeViewParams(
     filters: {} as BuildMapSurfaceViewParams['filters'],
     isLandingState: false,
     focusedGroupAreas: undefined,
-    areaLayerMaxZoom: 15,
     selectedArea: null,
     isAgriJourney: false,
     areaMarkerListings: [],
     schoolRadiusOverlay: false,
-    isBoundedBrowseState: false,
     areaRestoreArea: null,
     // navigation
     showSchoolBreadcrumb: false,
@@ -178,8 +176,6 @@ function makeViewParams(
     isAuthenticated: false,
     hasActiveAnonFilter: false,
     announcedBadgeText: '',
-    // mobile
-    mobileListButton: null,
     // regionGuide
     regionGuideVisible: false,
     regionGuideRingActive: false,
@@ -203,6 +199,9 @@ function makeViewParams(
     // surface-only additions
     mapContainerRef,
     mobileMapOpen: false,
+    setMobileView: vi.fn(),
+    isGroupResultsState: false,
+    isNodeListingsState: false,
     activeAreasNavigationJourney: makeJourney(),
     navJourney: 'area-first',
     isPreviewSheetOpen: false,

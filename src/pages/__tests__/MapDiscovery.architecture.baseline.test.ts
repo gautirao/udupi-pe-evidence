@@ -95,7 +95,8 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
       //   C3 (badge / journey-chrome / filter-chrome / marker-popover /
       //       debug-bridge + navigation, geography, school and
       //       mobile-presentation absorption)          1944 -> 1263
-      expect(lines.length).toBe(1263);
+      //   C4 (useDiscoverPageComposition + thin root)  1263 ->   59
+      expect(lines.length).toBe(59);
     });
 
     it('records the CURRENT actual top-level import statement count (updated each commit)', () => {
@@ -114,29 +115,30 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
       // capability-controller imports) -> 53 (correction pass C2: the page no
       // longer imports the data hooks/selectors those controllers now own).
       const importCount = countMatches(source, /^import /gm);
-      expect(importCount).toBe(58);
+      expect(importCount).toBe(6);
     });
 
     it('LOC must never exceed the Commit-1 baseline in any later commit (forward ceiling)', () => {
       expect(lines.length).toBeLessThanOrEqual(COMMIT_1_LOC_CEILING);
     });
 
-    it('LOC must end the correction pass below the first pass\'s BLOCKING-rejected 2256, not merely below the Commit-1 ceiling', () => {
-      // CORRECTION PASS: the first pass ended at 2256 and was rejected —
-      // "a result that leaves MapDiscovery.tsx at thousands of lines is not
-      // acceptable as complete" (#2142). A per-commit monotonic-shrink
-      // assertion is the wrong shape for this pass: C1 (the god-hook split)
-      // legitimately grows the page before the composition root removes it
-      // all. What must hold at the END is a hard, non-negotiable target, so
-      // the assertion is pinned to that instead of to the previous commit.
-      const REJECTED_FIRST_PASS_LOC = 2256;
-      const CORRECTION_PASS_INTERMEDIATE_ALLOWANCE = 2300;
-      expect(lines.length).toBeLessThanOrEqual(CORRECTION_PASS_INTERMEDIATE_ALLOWANCE);
-      // Sanity: the allowance is a short-lived intermediate ceiling that only
-      // exists between C1 and the composition-root commit, and it is only
-      // barely above the rejected value — it can never be mistaken for a new
-      // accepted resting point.
-      expect(CORRECTION_PASS_INTERMEDIATE_ALLOWANCE - REJECTED_FIRST_PASS_LOC).toBeLessThan(100);
+    it('LOC is comfortably inside the <=220 acceptance criterion (#2142 DoD)', () => {
+      // The first pass ended at 2256 and was BLOCKING-rejected — "a result
+      // that leaves MapDiscovery.tsx at thousands of lines is not acceptable
+      // as complete" (#2142). The intermediate allowance that covered C1's
+      // temporary growth is retired now that the composition root has landed.
+      expect(lines.length).toBeLessThanOrEqual(220);
+    });
+
+    it('the page is a composition ROOT, not a re-exported god component: it renders surfaces and nothing else', () => {
+      // Structural, not cosmetic — these three together are what "thin"
+      // actually means here.
+      expect(source).toMatch(/useDiscoverPageComposition\(\)/);
+      // Exactly one gate: the unsupported-city route guard.
+      expect(countMatches(source, /\bif\s*\(/g)).toBe(1);
+      // No data access of any kind.
+      expect(source).not.toMatch(/from '@\/hooks\//);
+      expect(source).not.toMatch(/from '@tanstack\/react-query'/);
     });
   });
 

@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import { AREA_LAYER_MAX_ZOOM } from '@/lib/map/zoomPolicy';
 import type { DiscoverMapCanvasProps } from '@/features/discover/views/DiscoverMapCanvas';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
@@ -278,9 +279,21 @@ export type BuildMapSurfaceViewParams = Omit<
   | 'handlePopoverDismiss'
   | 'handleSelectMarkerListing'
   | 'handleMarkerClickWithPosition'
+  // Issue #2142 (correction pass) — these four are now DERIVED here rather
+  // than by the caller, so the composition root stays free of conditionals
+  // and constants. See the derivations at the top of buildMapSurfaceView().
+  | 'mobileListButton'
+  | 'isBoundedBrowseState'
+  | 'isMarkerPopoverEligible'
+  | 'areaLayerMaxZoom'
 > & {
   mapContainerRef: RefObject<HTMLDivElement | null>;
   mobileMapOpen: boolean;
+  setMobileView: (view: 'LIST' | 'MAP') => void;
+  /** Raw (un-narrowed) popover eligibility; the `!mobileMapOpen` narrowing is applied below. */
+  isMarkerPopoverEligible: boolean;
+  isGroupResultsState: boolean;
+  isNodeListingsState: boolean;
   activeAreasNavigationJourney: UseAreasNavigationJourneyResult;
   navJourney: string;
   isPreviewSheetOpen: boolean;
@@ -323,6 +336,46 @@ export type BuildMapSurfaceViewParams = Omit<
 };
 
 export function buildMapSurfaceView(params: BuildMapSurfaceViewParams): DiscoverMapSurfaceView {
+  // Issue #2142 (correction pass) — the four surface-shaping derivations that
+  // used to sit inline in MapDiscovery.tsx's `mapProps` literal. They live
+  // here because they are purely about what THIS surface renders; none is a
+  // domain decision, and keeping them out of the composition root is what lets
+  // that root stay conditional-free.
+  const {
+    mobileMapOpen: _mobileMapOpen,
+    setMobileView,
+    isGroupResultsState,
+    isNodeListingsState,
+    isMarkerPopoverEligible: rawIsMarkerPopoverEligible,
+  } = params;
+
+  // The mobile "List" toggle button. Same JSX/onClick/testid/className it has
+  // had since it was an inline conditional on DiscoverMapMount's
+  // `mobileListButton` prop.
+  const mobileListButton = _mobileMapOpen ? (
+    <button
+      type="button"
+      onClick={() => setMobileView('LIST')}
+      data-testid="mobile-map-close-list-button"
+      className="pointer-events-auto shrink-0 self-start rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md"
+    >
+      List
+    </button>
+  ) : null;
+
+  // Issue #2089 — bounded Browse covers BOTH the group-results and the
+  // node-listings scopes; the map layer treats them identically.
+  const isBoundedBrowseState = isGroupResultsState || isNodeListingsState;
+
+  // Issue #1956 PR-5 defect fix (Phase 7A) — the desktop marker popover is
+  // suppressed while the mobile full-screen Map overlay is open (the mobile
+  // preview sheet takes over that role there).
+  const isMarkerPopoverEligible = rawIsMarkerPopoverEligible && !_mobileMapOpen;
+
+  // The zoom policy constant the map layer switches on. A constant, not a
+  // caller decision — sourced here so the composition root never carries it.
+  const areaLayerMaxZoom = AREA_LAYER_MAX_ZOOM;
+
   const {
     navigationController: { hoveredNavigationNodeKey, focusedClusterMemberAreaKeys },
     agriController: { selectedRegion, selectedMaxKm, filteredAgriListings },
@@ -370,12 +423,10 @@ export function buildMapSurfaceView(params: BuildMapSurfaceViewParams): Discover
     filters,
     isLandingState,
     focusedGroupAreas,
-    areaLayerMaxZoom,
     selectedArea,
     isAgriJourney,
     areaMarkerListings,
     schoolRadiusOverlay,
-    isBoundedBrowseState,
     areaRestoreArea,
     showSchoolBreadcrumb,
     focusedGroup,
@@ -390,7 +441,6 @@ export function buildMapSurfaceView(params: BuildMapSurfaceViewParams): Discover
     schoolRadiusActive,
     schoolRadiusPillNoun,
     schoolRadiusHasMore,
-    isMarkerPopoverEligible,
     markerPopoverStepper,
     markersTruncated,
     markersReturnedElements,
@@ -406,7 +456,6 @@ export function buildMapSurfaceView(params: BuildMapSurfaceViewParams): Discover
     isAuthenticated,
     hasActiveAnonFilter,
     announcedBadgeText,
-    mobileListButton,
     regionGuideVisible,
     regionGuideRingActive,
     mobileMapOpen,
