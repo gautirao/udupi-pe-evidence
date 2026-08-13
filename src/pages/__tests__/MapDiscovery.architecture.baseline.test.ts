@@ -79,15 +79,12 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
       // (Commit 4) -> 2278 (Commit 5a, layout shell) -> 2256 (Commit 5b).
       //
       // CORRECTION PASS (owner BLOCKING review of PR #2146): the first pass's
-      // "2256 is an accepted documented variance" framing is WITHDRAWN — see
-      // this describe block's `it('LOC must monotonically shrink...')` note.
-      // The correction pass's C1 (splitting the 340-LOC
-      // useDiscoverMapPresentationController into five capability
-      // controllers) TEMPORARILY GROWS this file: 2256 -> 2276, because one
-      // controller call site + destructure becomes five. That is expected and
-      // recorded honestly here rather than hidden; the reduction lands in the
-      // later commits that move page-resident domain logic out.
-      expect(lines.length).toBe(2276);
+      // "2256 is an accepted documented variance" framing is WITHDRAWN.
+      //   C1 (five-way god-hook split)                 2256 -> 2276 (grows:
+      //     one controller call site + destructure becomes five)
+      //   C2 (page-context / area-groups / bounded-browse / page-state /
+      //       map-data extraction)                     2276 -> 1944
+      expect(lines.length).toBe(1944);
     });
 
     it('records the CURRENT actual top-level import statement count (updated each commit)', () => {
@@ -103,9 +100,10 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
       // unchanged, no new imports needed for the controller-grouping change).
       // ... -> 59 (Commit 5b) -> 63 (correction pass C1: one
       // useDiscoverMapPresentationController import replaced by five
-      // capability-controller imports).
+      // capability-controller imports) -> 53 (correction pass C2: the page no
+      // longer imports the data hooks/selectors those controllers now own).
       const importCount = countMatches(source, /^import /gm);
-      expect(importCount).toBe(63);
+      expect(importCount).toBe(53);
     });
 
     it('LOC must never exceed the Commit-1 baseline in any later commit (forward ceiling)', () => {
@@ -147,21 +145,21 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
       // the navigation controller then moved hoveredNavigationNodeKey out too
       // (4 -> 3). nearSchoolOpen/selectedListingPreview remain page-local.
       const useStateCount = countMatches(source, /\buseState[(<]/g);
-      expect(useStateCount).toBe(3);
+      expect(useStateCount).toBe(2);
     });
 
     it('records the CURRENT page-local useEffect count (updated each commit)', () => {
       // Commit 3 moved 3 effects (bbox unmount cleanup, MAP->LIST cleanup,
       // city-change reset) into useDiscoverViewportTracker: 8 -> 5.
       const useEffectCount = countMatches(source, /\buseEffect\(/g);
-      expect(useEffectCount).toBe(5);
+      expect(useEffectCount).toBe(4);
     });
 
     it('records the CURRENT page-local useRef count (updated each commit)', () => {
       // Commit 3 moved bboxTimerRef into useDiscoverViewportTracker: 3 -> 2
       // (mapContainerRef, prevStartOverTickRef remain page-local).
       const useRefCount = countMatches(source, /\buseRef[(<]/g);
-      expect(useRefCount).toBe(2);
+      expect(useRefCount).toBe(1);
     });
 
     it('page-local hook counts must never exceed the Commit-1 baseline (forward ceiling)', () => {

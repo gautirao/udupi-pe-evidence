@@ -83,39 +83,61 @@ const lines = source.split('\n');
 const BOUNDED_SEARCH_TRIGGER_PATH = path.resolve(__dirname, '../useBoundedSearchTrigger.ts');
 const boundedSearchTriggerSource = fs.readFileSync(BOUNDED_SEARCH_TRIGGER_PATH, 'utf-8');
 
+// Issue #2142 (correction pass) — the useDiscoverMapData CONSUMPTION SITE has
+// now moved off MapDiscovery.tsx into useDiscoverMapDataController.ts, exactly
+// as this file's header anticipated ("that's Commit 4/5's job"). The two
+// assertions that read the call site's own body are repointed at the
+// controller's source; the two producer->consumer ordering assertions stay on
+// MapDiscovery.tsx, which is still where BOTH producers and the consuming
+// controller are composed.
+const MAP_DATA_CONTROLLER_PATH = path.resolve(__dirname, '../useDiscoverMapDataController.ts');
+const mapDataControllerSource = fs.readFileSync(MAP_DATA_CONTROLLER_PATH, 'utf-8');
+
 function firstLineIndexMatching(regex: RegExp): number {
   return lines.findIndex((line) => regex.test(line));
 }
 
-describe('S6/S7 controller-ordering contract — static source-order guard (updated for Commit 3)', () => {
-  it('useDiscoverViewportTracker is called before the useDiscoverMapData call site (mapBbox producer -> consumer)', () => {
+describe('S6/S7 controller-ordering contract — static source-order guard', () => {
+  it('useDiscoverViewportTracker is called before the useDiscoverMapDataController call site (mapBbox producer -> consumer)', () => {
     const controllerCallLine = firstLineIndexMatching(/useDiscoverViewportTracker\(\{/);
-    const mapDataCallLine = firstLineIndexMatching(/useDiscoverMapData\(\{/);
+    const mapDataCallLine = firstLineIndexMatching(/useDiscoverMapDataController\(\{/);
     expect(controllerCallLine).toBeGreaterThan(-1);
     expect(mapDataCallLine).toBeGreaterThan(-1);
     expect(controllerCallLine).toBeLessThan(mapDataCallLine);
   });
 
-  it('useBoundedSearchTrigger is called before the useDiscoverMapData call site (boundedSearchTriggered producer -> consumer)', () => {
+  it('useBoundedSearchTrigger is called before the useDiscoverMapDataController call site (boundedSearchTriggered producer -> consumer)', () => {
     const controllerCallLine = firstLineIndexMatching(/useBoundedSearchTrigger\(\)/);
-    const mapDataCallLine = firstLineIndexMatching(/useDiscoverMapData\(\{/);
+    const mapDataCallLine = firstLineIndexMatching(/useDiscoverMapDataController\(\{/);
     expect(controllerCallLine).toBeGreaterThan(-1);
     expect(mapDataCallLine).toBeGreaterThan(-1);
     expect(controllerCallLine).toBeLessThan(mapDataCallLine);
   });
 
-  it('the useDiscoverMapData call site actually threads bbox: mapBbox through (unchanged from Commit 1 — consumption site has not moved)', () => {
-    const callSiteLine = firstLineIndexMatching(/useDiscoverMapData\(\{/);
-    const windowText = lines.slice(callSiteLine, callSiteLine + 200).join('\n');
-    expect(windowText).toMatch(/bbox:\s*mapBbox,/);
+  it('MapDiscovery.tsx threads mapBbox into the map-data controller, and the controller threads it on as useDiscoverMapData\'s bbox', () => {
+    const callSiteLine = firstLineIndexMatching(/useDiscoverMapDataController\(\{/);
+    expect(callSiteLine).toBeGreaterThan(-1);
+    const windowText = lines.slice(callSiteLine, callSiteLine + 40).join('\n');
+    expect(windowText).toMatch(/^\s*mapBbox,$/m);
+    expect(mapDataControllerSource).toMatch(/bbox:\s*mapBbox,/);
   });
 
-  it('the markersEnabled expression passed to useDiscoverMapData references boundedSearchTriggered (school-first bounded-search gate, #1115; unchanged from Commit 1)', () => {
-    const callSiteLine = firstLineIndexMatching(/useDiscoverMapData\(\{/);
-    const windowText = lines.slice(callSiteLine, callSiteLine + 200).join('\n');
-    const markersEnabledMatch = windowText.match(/markersEnabled:\s*\n([\s\S]*?)\n\s*(?:\)|,\s*\n\s*\/\/ Issue #1655)/);
+  it('the markersEnabled expression passed to useDiscoverMapData still references boundedSearchTriggered (school-first bounded-search gate, #1115)', () => {
+    const callSiteIndex = mapDataControllerSource.indexOf('useDiscoverMapData({');
+    expect(callSiteIndex).toBeGreaterThan(-1);
+    const callSiteBody = mapDataControllerSource.slice(callSiteIndex);
+    // Delimit on the NEXT named param (`listingsEnabled:`) rather than on a
+    // trailing-comment shape, which is brittle to comment reflow.
+    const markersEnabledMatch = callSiteBody.match(
+      /\n\s*markersEnabled:([\s\S]*?)\n\s*listingsEnabled:/,
+    );
     expect(markersEnabledMatch).not.toBeNull();
     expect(markersEnabledMatch![1]).toMatch(/boundedSearchTriggered/);
+    // ...and MapDiscovery.tsx must thread the flag INTO the controller, so the
+    // gate cannot be silently satisfied by a controller-local default.
+    const pageCallSiteLine = firstLineIndexMatching(/useDiscoverMapDataController\(\{/);
+    const pageWindow = lines.slice(pageCallSiteLine, pageCallSiteLine + 40).join('\n');
+    expect(pageWindow).toMatch(/^\s*boundedSearchTriggered,$/m);
   });
 
   it('setBoundedSearchTriggered(true) is only reachable from inside useBoundedSearchTrigger.ts, not re-implemented in MapDiscovery.tsx (#1115 no-autofire guard, updated for Commit 3)', () => {
@@ -199,8 +221,8 @@ describe('controller-ordering contract — camera / map-layer controllers', () =
     return lines.findIndex((line) => regex.test(line));
   }
 
-  it('useDiscoverMapData is called before useDiscoverCameraController (mapZoom/discoverAreas/cityCenter producer -> consumer)', () => {
-    const mapDataCallLine = firstLineIndexMatching(/useDiscoverMapData\(\{/);
+  it('useDiscoverMapDataController is called before useDiscoverCameraController (mapZoom/discoverAreas/cityCenter producer -> consumer)', () => {
+    const mapDataCallLine = firstLineIndexMatching(/useDiscoverMapDataController\(\{/);
     const controllerCallLine = firstLineIndexMatching(/useDiscoverCameraController\(\{/);
     expect(mapDataCallLine).toBeGreaterThan(-1);
     expect(controllerCallLine).toBeGreaterThan(-1);
