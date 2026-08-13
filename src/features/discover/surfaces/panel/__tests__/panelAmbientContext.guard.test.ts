@@ -21,9 +21,18 @@ import path from 'node:path';
  * than a one-off cleanup.
  *
  * SCOPE. Deliberately narrow: only `surfaces/panel/**`. Commit 4's
- * `surfaceLayering.guard.test.ts` generalises this across all of `surfaces/**`
- * alongside the router/query-client rules; this file is not that guard and
- * should not grow into it.
+ * `surfaces/__tests__/surfaceLayering.guard.test.ts` generalises this across
+ * all of `surfaces/**` alongside the router/query-client rules; this file is
+ * not that guard and should not grow into it.
+ *
+ * COMMIT 4 UPDATE. The module-specifier assertion that used to live here ("no
+ * production file VALUE-imports useDiscoverContext") was DELETED when that
+ * guard landed: it asserts the identical rule over a strict superset of these
+ * files, and one rule with two owners is drift waiting to happen. What remains
+ * below is what is unique to this file and NOT covered there — the
+ * identifier-level facade-hook CALL scan (which also catches a re-export or a
+ * relative-path import that a module-specifier check would miss) and the
+ * DiscoverJourneyPanelShell prop-shape check.
  */
 
 const PANEL_DIR = path.resolve(__dirname, '..');
@@ -56,18 +65,9 @@ describe('surfaces/panel/** never reaches into the Discover context facade', () 
     expect(names).toContain('LegacyRightPanelBridge.tsx');
   });
 
-  it('no production file VALUE-imports useDiscoverContext', () => {
-    const offenders = PANEL_PRODUCTION_FILES.filter((file) => {
-      const source = fs.readFileSync(file, 'utf-8');
-      // `import type { ... } from '.../useDiscoverContext'` carries no
-      // behaviour and is allowed; a value import is what this forbids.
-      return /^import\s+(?!type\b)[\s\S]*?from\s+'@\/features\/discover\/context\/useDiscoverContext';/m.test(
-        source,
-      );
-    }).map((f) => path.relative(SRC_ROOT, f));
-
-    expect(offenders).toEqual([]);
-  });
+  // The module-specifier assertion that stood here now lives in
+  // surfaces/__tests__/surfaceLayering.guard.test.ts rule (d), which scans this
+  // same file set (and the rest of surfaces/**) for the same thing.
 
   it('no production file calls a Discover context facade hook', () => {
     // Belt-and-suspenders against a re-export or a relative-path import
