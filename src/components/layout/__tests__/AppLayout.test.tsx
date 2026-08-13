@@ -286,6 +286,21 @@ describe('AppLayout — anonymous user menu', () => {
     expect(screen.queryByRole('link', { name: /^sign in$/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^US$/i })).toBeInTheDocument();
   });
+
+  // Issue #1926 — E2E auth-indicator selector expects a stable
+  // data-testid="user-menu" on the account/avatar dropdown trigger.
+  it('renders data-testid="user-menu" on the account trigger when authenticated', () => {
+    mockAuth = baseAuth({ user: { email: 'user@test.com' }, userRole: 'user' });
+    renderLayout();
+
+    expect(screen.getByTestId('user-menu')).toBeInTheDocument();
+  });
+
+  it('does not render data-testid="user-menu" when user is anonymous', () => {
+    renderLayout();
+
+    expect(screen.queryByTestId('user-menu')).not.toBeInTheDocument();
+  });
 });
 
 describe('AppLayout — onboarding redirect for dealers', () => {
