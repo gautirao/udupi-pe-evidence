@@ -210,6 +210,28 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
 
     // ── Regions: corridor (#1955 Areas PR A, SLICE 2e: rolled up from the shared area-count map) ──
 
+    /**
+     * #2151 PR B correction pass (B3, FULL REVERT — deliberate, not a partial fix).
+     *
+     * <p>This method was cut over to the Agri-only, revision-scoped {@code
+     * agri_destination_classification} table. {@code /api/discover/summary?groupBy=corridor} is
+     * selected purely on {@code groupBy} and folds counts for WHATEVER {@code propertyType} the
+     * caller sent (including blended/null) — it is property-type-AGNOSTIC, exactly like {@link
+     * CityRegionOnboardingService}, which the Main Agent ruled must stay on the legacy {@code
+     * regional_area_classifications} table for this same reason (a property-type-agnostic
+     * consumer must not depend on an Agri-only, promotion-gated source). A propertyType-based
+     * split ({@code "agricultural_land"} → new table, everything else → legacy) was considered
+     * and rejected: it would still leave the Agri branch dependent on a promotion having run
+     * (the exact B1 empty-table-on-deploy risk) for a code path that has no product requirement
+     * to read the new table at all — {@link RegionalAreaGroupsService}/{@link AgriDestinationPort}
+     * is the actual, purpose-built Agri corridor surface (see its own controller); this endpoint's
+     * corridor grouping predates #2151 and is not part of that journey. Reverting to the legacy
+     * table restores the pre-#2151 behaviour verbatim, including for {@code
+     * propertyType=agricultural_land} — {@code DiscoverSummaryServiceIT#corridorRegions_afterBackfill_northDirectionHasBrahmavarCount}
+     * (a PRE-EXISTING test, unmodified by this correction pass) already covers this method against
+     * a {@code RegionalClassificationBackfillService}-seeded fixture, not an Agri-promotion-seeded
+     * one, confirming the legacy table is the correct source here.
+     */
     private List<DiscoverSummaryResponse.RegionCount> queryCorridorRegions(String city, Map<String, Long> areaCounts) {
         // #1935: regional_area_classifications.city_key stores the city SLUG (see
         // RegionalClassificationBackfillService.UPSERT_SQL) but has NO FK/join to cities —

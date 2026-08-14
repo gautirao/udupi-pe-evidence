@@ -103,8 +103,13 @@ class ZeroListingAreaVisibilityIT {
     @DisplayName("documented: the zero-listing area is intentionally ABSENT from "
             + "RegionalAreaGroupsService.getRegionalGroups (unconditional density filter, unchanged by #1887 PR3)")
     void zeroListingArea_absentFromRegionalAreaGroups() {
+        // #2151 PR B (mechanical compile fix — out-of-glob file, flagged in the PR B report): the
+        // service now reads agri_destination_classification via AgriDestinationPort, not the
+        // legacy table this fixture may populate — see RegionalClassificationBackfillIT comment.
+        CityActivationGuard guard = new CityActivationGuard(jdbcTemplate);
         RegionalAreaGroupsService regionalAreaGroupsService =
-                new RegionalAreaGroupsService(jdbcTemplate, new CityActivationGuard(jdbcTemplate));
+                new RegionalAreaGroupsService(jdbcTemplate, guard,
+                        new AgriDestinationPortPostgresAdapter(jdbcTemplate, guard));
 
         RegionalAreaGroupsResponse response = regionalAreaGroupsService.getRegionalGroups("udupi", "house");
 

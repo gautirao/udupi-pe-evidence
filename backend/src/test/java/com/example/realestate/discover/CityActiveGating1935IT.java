@@ -112,9 +112,14 @@ class CityActiveGating1935IT {
         areaGroupsService = new AreaGroupsService(jdbcTemplate);
         areaSummaryService = new AreaSummaryService(jdbcTemplate);
         cityAreaListingsService = new CityAreaListingsService(jdbcTemplate);
-        discoverAgriMapListingsService = new DiscoverAgriMapListingsService(jdbcTemplate);
+        // #2151 PR B: DiscoverAgriMapListingsService/RegionalAreaGroupsService are now composers
+        // over AgriDestinationPort; construct the real Postgres adapter for this real-DB IT.
+        AgriDestinationPort agriDestinationPort =
+                new AgriDestinationPortPostgresAdapter(jdbcTemplate, cityActivationGuard);
+        discoverAgriMapListingsService = new DiscoverAgriMapListingsService(agriDestinationPort);
         regionSummaryService = new RegionSummaryService(jdbcTemplate);
-        regionalAreaGroupsService = new RegionalAreaGroupsService(jdbcTemplate, cityActivationGuard);
+        regionalAreaGroupsService =
+                new RegionalAreaGroupsService(jdbcTemplate, cityActivationGuard, agriDestinationPort);
         areaOverviewService = new AreaOverviewService(
                 jdbcTemplate, namedJdbcTemplate,
                 // Real SchoolService — never actually invoked in this suite's assertions because
@@ -130,6 +135,9 @@ class CityActiveGating1935IT {
         jdbcTemplate.update("DELETE FROM property_listings WHERE area_key LIKE 'QA|QA|%' ESCAPE ''");
         jdbcTemplate.update("DELETE FROM area_intelligence_snapshot WHERE city_slug LIKE 'qa1935%'");
         jdbcTemplate.update("DELETE FROM regional_area_classifications WHERE city_key LIKE 'qa1935%'");
+        jdbcTemplate.update(
+                "DELETE FROM agri_destination_classification adc "
+                        + "USING cities c WHERE c.id = adc.city_id AND c.slug LIKE 'qa1935%'");
         jdbcTemplate.update("DELETE FROM city_regional_direction_labels WHERE city_key LIKE 'qa1935%'");
         jdbcTemplate.update("DELETE FROM area_overview_stats WHERE area_key LIKE 'QA|QA|%' ESCAPE ''");
         jdbcTemplate.update("DELETE FROM area_group_members WHERE area_key LIKE 'QA|QA|%' ESCAPE ''");
@@ -151,6 +159,15 @@ class CityActiveGating1935IT {
 
         insertRegionalClassification(ACTIVE_CITY, ACTIVE_AREA);
         insertRegionalClassification(INACTIVE_CITY, INACTIVE_AREA);
+
+        // #2151 PR B correction pass (sibling of B2): RegionalAreaGroupsService now reads the
+        // promoted agri_destination_classification table exclusively (see AgriDestinationPort) —
+        // insertRegionalClassification above (the legacy regional_area_classifications table)
+        // no longer feeds test 7 below. Seed the new table too so that pre-existing #1935
+        // active/inactive/unknown parity assertion keeps proving what it always proved, rather
+        // than silently going red the moment #2151 PR B merged.
+        insertAgriDestinationClassification(activeCityId, ACTIVE_AREA);
+        insertAgriDestinationClassification(inactiveCityId, INACTIVE_AREA);
 
         insertAreaIntelligenceSnapshot(ACTIVE_CITY, ACTIVE_AREA);
         insertAreaIntelligenceSnapshot(INACTIVE_CITY, INACTIVE_AREA);
@@ -203,6 +220,16 @@ class CityActiveGating1935IT {
                 "INSERT INTO regional_area_classifications (city_key, area_key, direction_key, "
                         + "distance_band_key, bearing_deg, distance_km) VALUES (?, ?, 'N', '0_10', 10.0, 5.0)",
                 citySlug, areaKey);
+    }
+
+    /** #2151 PR B: seeds the promoted table {@link RegionalAreaGroupsService} actually reads today. */
+    private void insertAgriDestinationClassification(int cityId, String areaKey) {
+        jdbcTemplate.update(
+                "INSERT INTO public.agri_destination_classification "
+                        + "(city_id, area_key, origin_lat, origin_lon, distance_km, bearing_deg, "
+                        + " direction_key, distance_band_key, generator_version, generated_at) "
+                        + "VALUES (?, ?, 13.0, 74.0, 5.0, 10.0, 'N', '0_10', 'test-generator-v1', now())",
+                cityId, areaKey);
     }
 
     private void insertAreaIntelligenceSnapshot(String citySlug, String areaKey) {
@@ -354,11 +381,11 @@ class CityActiveGating1935IT {
     @DisplayName("agri-map-listings: inactive city == unknown city (empty listings); active city returns the agri listing")
     void agriMapListings_inactiveEqualsUnknown_activeReturnsData() {
         AgriMapListingsResponse active = discoverAgriMapListingsService.findAgriMapListings(
-                ACTIVE_CITY, List.of(ACTIVE_AREA), Optional.empty(), true, null);
+                ACTIVE_CITY, null, List.of(ACTIVE_AREA), Optional.empty(), true, null);
         AgriMapListingsResponse inactive = discoverAgriMapListingsService.findAgriMapListings(
-                INACTIVE_CITY, List.of(INACTIVE_AREA), Optional.empty(), true, null);
+                INACTIVE_CITY, null, List.of(INACTIVE_AREA), Optional.empty(), true, null);
         AgriMapListingsResponse unknown = discoverAgriMapListingsService.findAgriMapListings(
-                UNKNOWN_CITY, List.of(UNKNOWN_AREA), Optional.empty(), true, null);
+                UNKNOWN_CITY, null, List.of(UNKNOWN_AREA), Optional.empty(), true, null);
 
         assertThat(active.listings()).hasSize(1);
         assertThat(inactive.listings()).isEmpty();

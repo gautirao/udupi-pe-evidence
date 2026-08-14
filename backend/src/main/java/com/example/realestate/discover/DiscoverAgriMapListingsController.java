@@ -37,16 +37,23 @@ public class DiscoverAgriMapListingsController {
     }
 
     /**
-     * Returns LIVE agricultural_land listings for the given city and area keys.
+     * Returns LIVE agricultural_land listings for the given city and scope.
+     *
+     * <p>#2151 PR B: {@code areaKey} is the CANONICAL stable drill-down scope. {@code areaKeys[]}
+     * is retained as LEGACY/DEPRECATED (removed in PR C). Exactly one must be present; both
+     * present and disagreeing is rejected with 400 (validated in
+     * {@link DiscoverAgriMapListingsService#findAgriMapListings}).
      *
      * @param city     city slug (e.g. "udupi")
-     * @param areaKeys one or more area keys (IN-clause filter, max 50)
+     * @param areaKey  CANONICAL single stable destination area key
+     * @param areaKeys LEGACY area keys (IN-clause filter, max 50) — deprecated, removed in PR C
      * @param bbox     optional bounding box "minLat,minLon,maxLat,maxLon"
      */
     @GetMapping("/agri-map-listings")
     public ResponseEntity<AgriMapListingsResponse> getAgriMapListings(
             @RequestParam String city,
-            @RequestParam List<String> areaKeys,
+            @RequestParam(required = false) String areaKey,
+            @RequestParam(required = false) List<String> areaKeys,
             @RequestParam(required = false) String bbox,
             @RequestParam(required = false) String listingPurpose) {
 
@@ -58,11 +65,11 @@ public class DiscoverAgriMapListingsController {
                 && auth.isAuthenticated()
                 && !(auth instanceof AnonymousAuthenticationToken);
 
-        log.debug("GET /api/discover/agri-map-listings city={} areaKeys={} bboxPresent={} authenticated={}",
-                city, areaKeys != null ? areaKeys.size() : 0, bbox != null, isAuthenticated);
+        log.debug("GET /api/discover/agri-map-listings city={} areaKey={} areaKeys={} bboxPresent={} authenticated={}",
+                city, areaKey != null, areaKeys != null ? areaKeys.size() : 0, bbox != null, isAuthenticated);
 
         AgriMapListingsResponse result = service.findAgriMapListings(
-                city, areaKeys, Optional.ofNullable(bbox), isAuthenticated, listingPurpose);
+                city, areaKey, areaKeys, Optional.ofNullable(bbox), isAuthenticated, listingPurpose);
 
         // #1454 cache semantics: the authenticated response carries full-precision lat/lng and
         // pricePaise — it MUST NOT be stored by a shared/CDN cache (a cached authed body could be

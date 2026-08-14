@@ -365,6 +365,51 @@ class DiscoverSummaryServiceIT {
         assertThat(regionSum).isEqualTo(response.totalActiveListings());
     }
 
+    /**
+     * #2151 PR B correction pass (B3): pins that {@code groupBy=corridor} for a NON-Agri
+     * {@code propertyType} (here {@code house}) resolves entirely from the legacy {@code
+     * regional_area_classifications} table and is genuinely independent of {@code
+     * agri_destination_classification} — the table has ZERO rows for this city in this test (no
+     * Agri promotion ever ran here), yet the corridor group for a 'house' listing is still
+     * correctly populated. This is the regression B3 exists to prevent: a property-type-agnostic
+     * consumer must never depend on the Agri-only, promotion-gated table (same boundary the Main
+     * Agent already ruled for {@link CityRegionOnboardingService}).
+     */
+    @Test
+    @DisplayName("corridor regions for a NON-Agri propertyType (house) resolve from the legacy table "
+            + "and are unaffected by agri_destination_classification having zero rows")
+    void corridorRegions_nonAgriPropertyType_resolvesFromLegacyTable_independentOfAgriTable() {
+        insertListing(BRAHMAVAR, "house", "LIVE", false, false); // non-Agri listing, North of city
+
+        int upserted = backfillService.runBackfill();
+        assertThat(upserted).as("classifications computed for seeded Udupi areas").isGreaterThan(0);
+
+        Integer agriRowCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM agri_destination_classification adc "
+                        + "JOIN cities c ON c.id = adc.city_id WHERE c.slug = ?",
+                Integer.class, CITY);
+        assertThat(agriRowCount)
+                .as("no Agri promotion has run for this city — the new table must be empty for "
+                        + "this assertion to prove independence, not coincidence")
+                .isZero();
+
+        DiscoverSummaryResponse response = service.getSummary(
+                new SummaryQuery(CITY, "house", "corridor", 8));
+
+        assertThat(response.groupBy()).isEqualTo("corridor");
+        assertThat(response.propertyType()).isEqualTo("house");
+        assertThat(response.totalActiveListings()).isEqualTo(1L);
+
+        Optional<DiscoverSummaryResponse.RegionCount> north = response.regions().stream()
+                .filter(r -> "N".equals(r.regionKey()))
+                .findFirst();
+        assertThat(north)
+                .as("N direction region must be present from the legacy classification, "
+                        + "despite zero agri_destination_classification rows")
+                .isPresent();
+        assertThat(north.get().listingCount()).isEqualTo(1L);
+    }
+
     // ── listingPurpose (#1745 P5-addendum): independent filter, separate from propertyType ────
 
     /**

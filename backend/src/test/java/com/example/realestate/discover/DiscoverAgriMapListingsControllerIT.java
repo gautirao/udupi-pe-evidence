@@ -138,7 +138,7 @@ class DiscoverAgriMapListingsControllerIT {
     @DisplayName("anon: pricePaise null, coords coarsened to 2dp, new non-PII fields pass through")
     void anonCaller_anonProjection_priceNullCoordsCoarsenedNewFieldsPresent() throws Exception {
         when(agriMapListingsService.findAgriMapListings(
-                eq("udupi"), anyList(), any(Optional.class), eq(false), any()))
+                eq("udupi"), any(), anyList(), any(Optional.class), eq(false), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(ANON_ITEM), false, 250));
 
         mockMvc.perform(get(URL)
@@ -174,7 +174,7 @@ class DiscoverAgriMapListingsControllerIT {
     @DisplayName("authed: pricePaise present, exact coords, new fields present, Cache-Control no-store")
     void authedCaller_authedProjection_pricePresentExactCoordsNewFieldsPresent() throws Exception {
         when(agriMapListingsService.findAgriMapListings(
-                eq("udupi"), anyList(), any(Optional.class), eq(true), any()))
+                eq("udupi"), any(), anyList(), any(Optional.class), eq(true), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(AUTHED_ITEM), false, 250));
 
         mockMvc.perform(get(URL)
@@ -212,7 +212,7 @@ class DiscoverAgriMapListingsControllerIT {
                 null, null, null, null, null  // all new fields null
         );
         when(agriMapListingsService.findAgriMapListings(
-                eq("udupi"), anyList(), any(Optional.class), eq(false), any()))
+                eq("udupi"), any(), anyList(), any(Optional.class), eq(false), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(noNewFields), false, 250));
 
         mockMvc.perform(get(URL)
@@ -235,7 +235,7 @@ class DiscoverAgriMapListingsControllerIT {
     @DisplayName("real security chain: this endpoint is permitAll — anonymous GET returns 200")
     void anonymousGet_publicEndpoint_returns200() throws Exception {
         when(agriMapListingsService.findAgriMapListings(
-                anyString(), anyList(), any(Optional.class), eq(false), any()))
+                anyString(), any(), anyList(), any(Optional.class), eq(false), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(), false, 250));
 
         mockMvc.perform(get(URL)

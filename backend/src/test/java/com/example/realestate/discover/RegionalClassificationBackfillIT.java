@@ -17,17 +17,31 @@ import org.testcontainers.utility.DockerImageName;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Repository-level integration test for {@link RegionalClassificationBackfillService} and
- * {@link RegionalAreaGroupsService} (#1642).
+ * Repository-level integration test for {@link RegionalClassificationBackfillService} (#1642).
  *
  * <p>Proves that after the regional classification backfill runner/service executes against a real
- * PostGIS database containing LIVE agricultural land listings, non-empty regional corridor groups
- * are returned for discovery queries.
+ * PostGIS database containing LIVE listings, correctly classified rows land in the legacy {@code
+ * regional_area_classifications} table it owns.
+ *
+ * <p><b>#2151 PR B correction pass (B2).</b> This class previously also queried {@link
+ * RegionalAreaGroupsService#getRegionalGroups} as an end-to-end proof that the backfill "enables
+ * non-empty regional agri groups". That premise is no longer true: {@code
+ * RegionalAreaGroupsService} now reads the promoted, Agri-only {@code
+ * agri_destination_classification} table exclusively for {@code agricultural_land} (#2151 PR A/B)
+ * — this legacy backfill no longer feeds that read path at all, and nothing in this test seeds the
+ * new table, so the old assertion would have been red the moment #2151 PR B merged (retiring it is
+ * the correct call, not a red-test cover-up; see {@code AgriDestinationEquivalenceIT} / {@code
+ * AgriDestinationPortContractIT} for the new path's own coverage). What this class's tests now
+ * assert is exactly what {@link RegionalClassificationBackfillService} is still responsible for
+ * and still consumed by (via {@code DiscoverSummaryService#queryCorridorRegions}, reverted to this
+ * table by B3, and {@code CityRegionOnboardingService}): correct, idempotent rows in {@code
+ * regional_area_classifications} itself.
  */
 @DataJpaTest
 @Testcontainers(disabledWithoutDocker = true)
@@ -52,19 +66,20 @@ class RegionalClassificationBackfillIT {
     private JdbcTemplate jdbcTemplate;
 
     private RegionalClassificationBackfillService backfillService;
-    private RegionalAreaGroupsService regionalAreaGroupsService;
 
     @BeforeEach
     void setUp() {
         backfillService = new RegionalClassificationBackfillService(jdbcTemplate);
-        regionalAreaGroupsService = new RegionalAreaGroupsService(jdbcTemplate, new CityActivationGuard(jdbcTemplate));
         jdbcTemplate.update("DELETE FROM property_listings");
     }
 
     @Test
-    @DisplayName("backfill computes classifications and enables non-empty regional agri groups")
-    void backfillAndQuery_returnsNonEmptyRegionalGroups() {
-        // Insert a LIVE agricultural listing in Brahmavar (North of Udupi city)
+    @DisplayName("backfill computes correct direction/distance classifications for seeded Udupi areas "
+            + "in the legacy regional_area_classifications table")
+    void backfillAndQuery_computesClassificationsInLegacyTable() {
+        // Insert a LIVE listing in Brahmavar (North of Udupi city) — property type is irrelevant to
+        // this backfill (it classifies AREAS, not listings; retained as 'agricultural_land' only to
+        // keep the fixture minimally changed from its pre-#2151 form).
         OffsetDateTime now = OffsetDateTime.now();
         jdbcTemplate.update(
                 "INSERT INTO public.property_listings "
@@ -78,17 +93,21 @@ class RegionalClassificationBackfillIT {
         int upserted = backfillService.runBackfill();
         assertThat(upserted).as("classifications computed for seeded Udupi areas").isGreaterThanOrEqualTo(12);
 
-        // Query regional area groups for Udupi agricultural listings
-        RegionalAreaGroupsResponse response = regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land");
+        // Assert directly on regional_area_classifications — the table this service OWNS and the
+        // only source of truth for what runBackfill() actually did. Brahmavar is independently
+        // established as North of Udupi's city centre elsewhere in this suite (DiscoverSummaryServiceIT's
+        // "north-udupi"/"N towards Brahmavar" fixtures) and by RegionalGeo's bearing/direction math.
+        Map<String, Object> brahmavarRow = jdbcTemplate.queryForMap(
+                "SELECT direction_key, distance_band_key, distance_km, bearing_deg "
+                        + "FROM regional_area_classifications WHERE city_key = ? AND area_key = ?",
+                "udupi", BRAHMAVAR);
 
-        assertThat(response).isNotNull();
-        assertThat(response.city()).isEqualTo("udupi");
-        assertThat(response.groups()).isNotEmpty();
-
-        // Verify that North direction group exists and has our listing
-        boolean foundNorthGroup = response.groups().stream()
-                .anyMatch(g -> "N".equals(g.directionCode()) && !g.availableMaxDistances().isEmpty());
-        assertThat(foundNorthGroup).as("North corridor group contains live agri listing").isTrue();
+        assertThat(brahmavarRow.get("direction_key"))
+                .as("Brahmavar must classify North of Udupi's city centre")
+                .isEqualTo("N");
+        assertThat(brahmavarRow.get("distance_band_key")).isNotNull();
+        assertThat(((Number) brahmavarRow.get("distance_km")).doubleValue()).isGreaterThan(0.0);
+        assertThat(brahmavarRow.get("bearing_deg")).isNotNull();
     }
 
     // ── #1899: AREAS_FOR_CITY_SQL excludes non-active / missing-geometry areas ────

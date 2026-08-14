@@ -85,7 +85,7 @@ class RegionalAreaGroupsSecurityIT {
 
     @Test
     void regionalAreaGroups_noAuthHeader_returns200WithRealJwtConfig() throws Exception {
-        when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land"))
+        when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land", null))
                 .thenReturn(new RegionalAreaGroupsResponse("udupi", List.of()));
 
         mockMvc.perform(get("/api/discover/regional-area-groups")

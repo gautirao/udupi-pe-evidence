@@ -76,7 +76,7 @@ class RegionalAreaGroupsControllerTest {
 
     @Test
     void getRegionalAreaGroups_anonymousRequest_returns200() throws Exception {
-        when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land"))
+        when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land", null))
                 .thenReturn(new RegionalAreaGroupsResponse("udupi", List.of()));
 
         // No Authorization header — must succeed (public endpoint)
@@ -97,7 +97,7 @@ class RegionalAreaGroupsControllerTest {
                 List.of("IN|KA|Udupi|Brahmavar")
         );
         CorridorGroup group = new CorridorGroup("N", "N towards Brahmavar", List.of(tier));
-        when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land"))
+        when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land", null))
                 .thenReturn(new RegionalAreaGroupsResponse("udupi", List.of(group)));
 
         mockMvc.perform(get("/api/discover/regional-area-groups")
@@ -126,7 +126,7 @@ class RegionalAreaGroupsControllerTest {
                 List.of("IN|KA|Udupi|Area1")
         );
         CorridorGroup group = new CorridorGroup("N", "N corridor", List.of(tier));
-        when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land"))
+        when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land", null))
                 .thenReturn(new RegionalAreaGroupsResponse("udupi", List.of(group)));
 
         mockMvc.perform(get("/api/discover/regional-area-groups")
@@ -149,10 +149,10 @@ class RegionalAreaGroupsControllerTest {
                 List.of("IN|KA|Bengaluru|Whitefield")
         );
 
-        when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land"))
+        when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land", null))
                 .thenReturn(new RegionalAreaGroupsResponse("udupi",
                         List.of(new CorridorGroup("N", "N towards Brahmavar", List.of(udupiTier)))));
-        when(regionalAreaGroupsService.getRegionalGroups("bangalore", "agricultural_land"))
+        when(regionalAreaGroupsService.getRegionalGroups("bangalore", "agricultural_land", null))
                 .thenReturn(new RegionalAreaGroupsResponse("bangalore",
                         List.of(new CorridorGroup("E", "E corridor", List.of(bangaloreTier)))));
 
@@ -178,7 +178,7 @@ class RegionalAreaGroupsControllerTest {
 
     @Test
     void getRegionalAreaGroups_responseHasCacheControlPublicMaxAge120() throws Exception {
-        when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land"))
+        when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land", null))
                 .thenReturn(new RegionalAreaGroupsResponse("udupi", List.of()));
 
         mockMvc.perform(get("/api/discover/regional-area-groups")
@@ -211,7 +211,7 @@ class RegionalAreaGroupsControllerTest {
 
     @Test
     void getRegionalAreaGroups_unknownCity_returnsEmptyGroups() throws Exception {
-        when(regionalAreaGroupsService.getRegionalGroups("nowhere", "agricultural_land"))
+        when(regionalAreaGroupsService.getRegionalGroups("nowhere", "agricultural_land", null))
                 .thenReturn(new RegionalAreaGroupsResponse("nowhere", List.of()));
 
         mockMvc.perform(get("/api/discover/regional-area-groups")
