@@ -86,7 +86,7 @@ class DiscoverAgriMapListingsControllerTest {
 
     @Test
     void getAgriMapListings_anonymousRequest_returns200() throws Exception {
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(), false, 250));
 
         // No Authorization header — must succeed (public endpoint)
@@ -111,7 +111,7 @@ class DiscoverAgriMapListingsControllerTest {
                 null, null, null, null,
                 null, null, null, null, null
         );
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item), false, 250));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
@@ -145,7 +145,7 @@ class DiscoverAgriMapListingsControllerTest {
                 null, null, null, null,
                 null, null, null, null, null
         );
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item), false, 250));
 
         String responseBody = mockMvc.perform(get("/api/discover/agri-map-listings")
@@ -175,7 +175,7 @@ class DiscoverAgriMapListingsControllerTest {
 
     @Test
     void getAgriMapListings_responseHasCacheControlPublicMaxAge120() throws Exception {
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(), false, 250));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
@@ -192,7 +192,7 @@ class DiscoverAgriMapListingsControllerTest {
 
     @Test
     void getAgriMapListings_responseIsJson() throws Exception {
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(), false, 250));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
@@ -211,10 +211,19 @@ class DiscoverAgriMapListingsControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
-    // ── AC6: 400 on missing areaKeys param ────────────────────────────────────
+    // ── AC6: 400 when neither areaKey nor areaKeys is present ─────────────────
+    //
+    // #2151 PR B: areaKeys is no longer a Spring-required param (areaKey is the new canonical
+    // alternative), so this validation now happens in the (mocked, in this WebMvcTest slice)
+    // service rather than via Spring's automatic missing-required-param 400 — mirrors the
+    // AC7 "service throws 400" pattern below. Real validation is covered by
+    // DiscoverAgriMapListingsServiceTest#findAgriMapListings_emptyAreaKeys_throws400.
 
     @Test
     void getAgriMapListings_missingAreaKeys_returns400() throws Exception {
+        when(agriMapListingsService.findAgriMapListings(anyString(), any(), any(), any(), anyBoolean(), any()))
+                .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "area_keys_must_not_be_empty"));
+
         mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi"))
                 .andExpect(status().isBadRequest());
@@ -224,7 +233,7 @@ class DiscoverAgriMapListingsControllerTest {
 
     @Test
     void getAgriMapListings_serviceThrows400_returns400() throws Exception {
-        when(agriMapListingsService.findAgriMapListings(anyString(), anyList(), any(), anyBoolean(), any()))
+        when(agriMapListingsService.findAgriMapListings(anyString(), any(), anyList(), any(), anyBoolean(), any()))
                 .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "area_keys_must_not_be_empty"));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
@@ -250,7 +259,7 @@ class DiscoverAgriMapListingsControllerTest {
                 null, null, null, null,
                 null, null, null, null, null);
 
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item1, item2), false, 250));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
@@ -276,7 +285,7 @@ class DiscoverAgriMapListingsControllerTest {
                 null, null, null, null,
                 null, null, null, null, null
         );
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item), false, 250));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")

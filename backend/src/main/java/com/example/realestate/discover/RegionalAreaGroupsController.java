@@ -37,17 +37,23 @@ public class RegionalAreaGroupsController {
      * Only groups with at least one live listing are included.
      * Cache-Control: public, max-age=120 (matches curated area-groups pattern).
      *
-     * @param city         city slug (e.g. {@code udupi}, {@code bangalore})
-     * @param propertyType property type filter (e.g. {@code agricultural_land})
+     * @param city           city slug (e.g. {@code udupi}, {@code bangalore})
+     * @param propertyType   property type filter (e.g. {@code agricultural_land})
+     * @param listingPurpose OPTIONAL, additive (#2151 AC7 ruling): {@code "sale"} or
+     *                       {@code "rent"}. Absent = today's behaviour exactly preserved
+     *                       (no intent filter). Not yet sent by the current frontend — see
+     *                       #2151 PR C carry-over.
      */
     @GetMapping("/regional-area-groups")
     public ResponseEntity<RegionalAreaGroupsResponse> getRegionalAreaGroups(
             @RequestParam(name = "city") String city,
-            @RequestParam(name = "propertyType") String propertyType) {
+            @RequestParam(name = "propertyType") String propertyType,
+            @RequestParam(name = "listingPurpose", required = false) String listingPurpose) {
 
-        log.debug("GET /api/discover/regional-area-groups city={} propertyType={}", city, propertyType);
+        log.debug("GET /api/discover/regional-area-groups city={} propertyType={} listingPurpose={}",
+                city, propertyType, listingPurpose);
         RegionalAreaGroupsResponse response =
-                regionalAreaGroupsService.getRegionalGroups(city, propertyType);
+                regionalAreaGroupsService.getRegionalGroups(city, propertyType, listingPurpose);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(120, TimeUnit.SECONDS).cachePublic())
                 .body(response);

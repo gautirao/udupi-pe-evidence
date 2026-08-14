@@ -9,19 +9,29 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * ApplicationRunner that triggers the regional classification backfill on startup.
+ * ApplicationRunner that triggers the LEGACY regional classification backfill on startup.
+ *
+ * <p><b>DEMOTED, RECOVERY/ADMIN-ONLY (#2151 PR B).</b> As of #2151 PR B, {@code
+ * regional_area_classifications} — the table this runner populates — is NO LONGER a production
+ * read source: {@link RegionalAreaGroupsService} and {@link DiscoverSummaryService} both read the
+ * revision-scoped, checksum-bound {@code agri_destination_classification} table (#2151 PR A)
+ * exclusively, via {@link AgriDestinationPort}. This runner and {@link
+ * RegionalClassificationBackfillService} are retained ONLY as a recovery/admin tool for the
+ * legacy table (e.g. for any code path not yet migrated, or historical debugging) — NOT deleted,
+ * per #2151 PR B scope. Do NOT wire any new production read to {@code
+ * regional_area_classifications}; the current production path is City Launch prepare/promote
+ * (see {@code docs/architecture/agri-opensearch-query-contract.md} and the City Launch pipeline
+ * in {@code com.example.realestate.discover.citylaunch}).
  *
  * <p>Gated by {@code app.regional-classification.backfill-enabled=true} (default: false).
  * The bean is not created at all when the property is absent or false, so there is
  * zero startup overhead in normal operation.
  *
  * <p>Optionally scoped to a single city via {@code app.regional-classification.city-slug}
- * (default: empty/unset, which processes all active cities). Set this when running the
- * backfill against production to fix a specific city's stale classifications without
- * touching every other city.
+ * (default: empty/unset, which processes all active cities).
  *
- * <p>There is NO HTTP endpoint for this runner. To trigger a backfill, set the
- * property to true and restart the application (or use an admin tool outside this
+ * <p>There is NO HTTP endpoint for this runner. To trigger a (legacy, non-production-read) backfill,
+ * set the property to true and restart the application (or use an admin tool outside this
  * service — an admin endpoint would require auth hardening out of scope here).
  */
 @Component
