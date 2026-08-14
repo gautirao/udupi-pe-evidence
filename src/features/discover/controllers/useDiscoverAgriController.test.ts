@@ -142,6 +142,17 @@ describe('useDiscoverAgriController (#2142 Commit 3 — moved verbatim from MapD
     expect(mockUseAgriMapListings).toHaveBeenCalledWith('bangalore', '', 'sale', true);
   });
 
+  it('useRegionalAreaGroups is called with city and intentListingPurpose (#2151 PR C carry-over, C-F3)', () => {
+    renderHook(() =>
+      useDiscoverAgriController({
+        nav: makeNav({ city: 'bangalore' }),
+        intentListingPurpose: 'rent',
+        isAuthenticated: true,
+      }),
+    );
+    expect(mockUseRegionalAreaGroups).toHaveBeenCalledWith('bangalore', 'rent');
+  });
+
   it('useAgriDestinations is called with city/selectedRegion/selectedMaxKm/intentListingPurpose and its result is exposed as agriDestinations (#2151 PR C, C-F4/C-F7)', () => {
     const { result } = renderHook(() =>
       useDiscoverAgriController({
