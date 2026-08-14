@@ -140,4 +140,27 @@ class CityLaunchPreparationServiceTest {
         verifyNoInteractions(regionalClassificationBackfillService, cityRegionOnboardingService);
         verify(revisionRepository, never()).saveAndFlush(any());
     }
+
+    @Test
+    @DisplayName("prepare() on a city whose only ACTIVE area is coarser than locality-level (a "
+            + "3-segment area_key) fails fast with CityPrerequisiteGenerationException/"
+            + "NO_ACTIVE_AREAS, WITHOUT ever invoking the backfill or onboarding services — a "
+            + "non-4-segment ACTIVE area is not eligible for classification (mirrors "
+            + "RegionalClassificationBackfillService/CityRegionOnboardingService's own "
+            + "array_length(...) = 4 filter), so it must not satisfy the guard")
+    void prepare_onlyCoarseGrainedActiveArea_failsFast_withoutInvokingDownstreamServices() {
+        stubAdvisoryLock();
+        when(geographyReader.findCity(CITY_ID)).thenReturn(Optional.of(city()));
+        CanonicalGeographyReader.CanonicalGeography geography = new CanonicalGeographyReader.CanonicalGeography(
+                List.of(activeArea("citytest|d|g")), List.of(), List.of(), List.of(), List.of(), List.of());
+        when(geographyReader.loadGeography(CITY_ID)).thenReturn(geography);
+
+        assertThatThrownBy(() -> service.prepare(CITY_ID, CALLER_ID))
+                .isInstanceOf(CityPrerequisiteGenerationException.class)
+                .satisfies(ex -> assertThat(((CityPrerequisiteGenerationException) ex).reason())
+                        .isEqualTo("NO_ACTIVE_AREAS"));
+
+        verifyNoInteractions(regionalClassificationBackfillService, cityRegionOnboardingService);
+        verify(revisionRepository, never()).saveAndFlush(any());
+    }
 }

@@ -201,7 +201,7 @@ public class CityLaunchPreparationService {
 
         CanonicalGeographyReader.CanonicalGeography geography = geographyReader.loadGeography(cityId);
         boolean hasActiveArea = geography.areas().stream()
-                .anyMatch(area -> "ACTIVE".equals(area.lifecycleStatus()));
+                .anyMatch(area -> "ACTIVE".equals(area.lifecycleStatus()) && isLocalityLevelAreaKey(area.areaKey()));
         if (!hasActiveArea) {
             throw new CityPrerequisiteGenerationException(
                     "NO_ACTIVE_AREAS",
@@ -217,7 +217,7 @@ public class CityLaunchPreparationService {
         if (classificationCount == null || classificationCount == 0) {
             int upserted = regionalClassificationBackfillService.runBackfill(city.slug());
             long activeAreaCount = geography.areas().stream()
-                    .filter(area -> "ACTIVE".equals(area.lifecycleStatus()))
+                    .filter(area -> "ACTIVE".equals(area.lifecycleStatus()) && isLocalityLevelAreaKey(area.areaKey()))
                     .count();
             if (upserted != activeAreaCount) {
                 log.warn("City launch prerequisite backfill: cityId={} slug={} upserted={} activeAreas={} "
@@ -232,6 +232,18 @@ public class CityLaunchPreparationService {
             throw new CityPrerequisiteGenerationException(
                     e.reason().name(), e.getMessage(), remediationFor(e.reason()));
         }
+    }
+
+    /**
+     * Mirrors the {@code array_length(string_to_array(area_key, '|'), 1) = 4} locality-level
+     * eligibility filter used by {@link RegionalClassificationBackfillService#runBackfill} and
+     * {@link CityRegionOnboardingService}'s classification query (#2163 review fix): a coarser
+     * (e.g. area-group-level) ACTIVE area must not count toward either the {@code NO_ACTIVE_AREAS}
+     * fast-path guard or the backfill sanity comparison, since neither of those downstream queries
+     * ever consider it.
+     */
+    private static boolean isLocalityLevelAreaKey(String areaKey) {
+        return areaKey != null && areaKey.split("\\|", -1).length == 4;
     }
 
     private static String remediationFor(RegionOnboardingBlockedException.Reason reason) {
