@@ -45,6 +45,43 @@ interface PrepareCityResponse {
   status: string;
 }
 
+/**
+ * Body shape of the 422 CITY_PREREQUISITES_NOT_GENERATED contract returned
+ * by POST .../prepare when the backend's self-materialization (Issue #2163)
+ * cannot generate missing geography prerequisites (missing policy,
+ * degenerate group, namespace collision, etc). Distinct from the
+ * (now-defensive) GEOGRAPHY_VALIDATION_FAILED 422 and the 409
+ * PREPARATION_IN_PROGRESS conflict, both unchanged.
+ */
+export interface PrepareErrorBody {
+  error: string;
+  reason: string;
+  message: string;
+  remediation: string;
+}
+
+/**
+ * Narrows a prepare-mutation error down to the structured
+ * CITY_PREREQUISITES_NOT_GENERATED contract, or returns null for every
+ * other error shape (409 in-flight, defensive GEOGRAPHY_VALIDATION_FAILED,
+ * network errors, etc). Exported so CityLaunch.tsx can render inline
+ * message/remediation/retry UI without duplicating the parsing logic.
+ */
+export function getPrepareCityErrorDetails(error: unknown): PrepareErrorBody | null {
+  if (!(error instanceof ApiError) || error.status !== 422) {
+    return null;
+  }
+  const body = error.body;
+  if (
+    typeof body === 'object' &&
+    body !== null &&
+    (body as { error?: unknown }).error === 'CITY_PREREQUISITES_NOT_GENERATED'
+  ) {
+    return body as PrepareErrorBody;
+  }
+  return null;
+}
+
 export const CITY_LAUNCH_LIST_QUERY_KEY = ['admin', 'city-launch', 'cities'] as const;
 
 function cityLaunchProgressQueryKey(cityId: number) {
@@ -87,6 +124,15 @@ export function usePrepareCity() {
           description: 'This city already has a preparation run in flight.',
         });
         queryClient.invalidateQueries({ queryKey: CITY_LAUNCH_LIST_QUERY_KEY });
+        return;
+      }
+      const prereqError = getPrepareCityErrorDetails(err);
+      if (prereqError) {
+        toast({
+          title: 'Cannot prepare city',
+          description: `${prereqError.message} ${prereqError.remediation}`,
+          variant: 'destructive',
+        });
         return;
       }
       toast({

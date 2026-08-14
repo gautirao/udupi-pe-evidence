@@ -84,6 +84,9 @@ const CITIES = [
     geographyPercent: 0,
     failureReason: null,
     preparedAt: null,
+    // Issue #2163: geographyReady=false must NOT disable the Prepare action
+    // any more — the backend self-materializes prerequisites now.
+    geographyReady: false,
   },
   {
     cityId: 2,
@@ -97,6 +100,7 @@ const CITIES = [
     geographyPercent: 100,
     failureReason: null,
     preparedAt: '2026-07-16T00:00:00Z',
+    geographyReady: true,
   },
   {
     cityId: 3,
@@ -110,6 +114,7 @@ const CITIES = [
     geographyPercent: 30,
     failureReason: 'Overpass API timeout while resolving ward boundaries.',
     preparedAt: null,
+    geographyReady: false,
   },
   {
     cityId: 5,
@@ -123,6 +128,7 @@ const CITIES = [
     geographyPercent: 100,
     failureReason: null,
     preparedAt: '2026-07-10T00:00:00Z',
+    geographyReady: true,
   },
   {
     cityId: 6,
@@ -136,6 +142,7 @@ const CITIES = [
     geographyPercent: 100,
     failureReason: null,
     preparedAt: '2026-07-11T00:00:00Z',
+    geographyReady: true,
   },
   {
     cityId: 7,
@@ -149,6 +156,7 @@ const CITIES = [
     geographyPercent: 100,
     failureReason: null,
     preparedAt: null,
+    geographyReady: true,
   }
 ];
 
@@ -235,6 +243,55 @@ describe('CityLaunch', () => {
       expect(mockPost).toHaveBeenCalledWith('/api/admin/city-launch/cities/1/prepare'),
     );
     expect(mockPost.mock.calls[0]).toHaveLength(1);
+  });
+
+  it('Issue #2163: a not-started city with geographyReady=false renders Prepare as ENABLED', async () => {
+    mockGet.mockResolvedValue(CITIES);
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Udupi')).toBeInTheDocument());
+
+    const prepareButton = screen.getByRole('button', { name: /prepare city/i });
+    expect(prepareButton).toBeEnabled();
+  });
+
+  it('Issue #2163: a 422 CITY_PREREQUISITES_NOT_GENERATED shows message/remediation and a Retry action', async () => {
+    mockGet.mockResolvedValue(CITIES);
+    const ApiErrorMod = await import('@/lib/api');
+    mockPost.mockRejectedValueOnce(
+      new ApiErrorMod.ApiError('Unprocessable Entity', 422, {
+        error: 'CITY_PREREQUISITES_NOT_GENERATED',
+        reason: 'MISSING_POLICY',
+        message: 'No area classification policy exists for this city.',
+        remediation: 'Configure an area classification policy, then retry.',
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Udupi')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /prepare city/i }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('No area classification policy exists for this city.'),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText('Configure an area classification policy, then retry.'),
+    ).toBeInTheDocument();
+
+    const retryButton = screen.getByRole('button', { name: /retry/i });
+    expect(retryButton).toBeEnabled();
+
+    // Retry just re-triggers prepare — no new backend call shape.
+    mockPost.mockResolvedValueOnce({ revisionId: 11, status: 'preparing' });
+    await user.click(retryButton);
+
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith('/api/admin/city-launch/cities/1/prepare'),
+    );
+    expect(mockPost).toHaveBeenCalledTimes(2);
   });
 
   it('a 409 from prepare shows the "already in progress" toast', async () => {
