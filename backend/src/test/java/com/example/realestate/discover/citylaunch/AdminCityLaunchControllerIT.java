@@ -98,11 +98,28 @@ class AdminCityLaunchControllerIT {
                 "INSERT INTO public.cities (slug, name, geo_center_lat, geo_center_lon, is_active) "
                         + "VALUES ('acl-it', 'ACL IT Test City', 13.0, 74.7, true) RETURNING id",
                 Integer.class);
+        // #2163: prepare() now self-materializes canonical geography prerequisites before admitting
+        // a revision. Seed one ACTIVE area (4-segment area_key, required by
+        // RegionalClassificationBackfillService's array_length(...) = 4 filter) plus a
+        // city_region_policy row so the existing 202-expecting cases below still succeed.
+        jdbc.update(
+                "INSERT INTO public.areas (area_key, city_id, name, geo_center_lat, geo_center_lon, lifecycle_status) "
+                        + "VALUES (?, ?, ?, ?, ?, 'ACTIVE')",
+                "acl-it|d|g|area-1", testCityId, "ACL IT Area 1", 13.01, 74.71);
+        jdbc.update(
+                "INSERT INTO public.city_region_policy (city_id, region_model, central_radius_km) "
+                        + "VALUES (?, 'CENTRAL_CARDINAL_4', 4)",
+                testCityId);
     }
 
     @AfterEach
     void cleanup() {
         jdbc.update("DELETE FROM public.city_launch_revision WHERE city_id = ?", testCityId);
+        jdbc.update("DELETE FROM public.city_region_memberships WHERE city_id = ?", testCityId);
+        jdbc.update("DELETE FROM public.city_regions WHERE city_id = ?", testCityId);
+        jdbc.update("DELETE FROM public.city_region_policy WHERE city_id = ?", testCityId);
+        jdbc.update("DELETE FROM public.regional_area_classifications WHERE city_key = 'acl-it'");
+        jdbc.update("DELETE FROM public.areas WHERE city_id = ?", testCityId);
         jdbc.update("DELETE FROM public.cities WHERE id = ?", testCityId);
         jdbc.update("DELETE FROM auth.users WHERE id IN (?,?,?,?)", ADMIN_ID, BUYER_ID, SELLER_ID, ADMIN_2_ID);
     }
@@ -288,5 +305,67 @@ class AdminCityLaunchControllerIT {
                 .andExpect(content().string(not(containsString("com.example.realestate"))))
                 .andExpect(content().string(not(containsString("uq_clr_inflight"))))
                 .andExpect(content().string(not(containsString("SELECT"))));
+    }
+
+    // =========================================================================================
+    // Case 10 — POST /prepare for a city missing its city_region_policy row -> 422 with the exact
+    // 4-key CityPrerequisiteGenerationException contract the frontend's useCityLaunch.ts parses
+    // (#2163)
+    // =========================================================================================
+
+    @Test
+    @DisplayName("Case 10: POST /prepare for a city with an ACTIVE area but no city_region_policy row "
+            + "-> 422 CITY_PREREQUISITES_NOT_GENERATED/MISSING_POLICY, body has exactly 4 keys")
+    void case10_postPrepare_missingPolicy_422_exactFourKeyContract() throws Exception {
+        seedRole(ADMIN_ID, "admin");
+
+        Integer noPolicyCityId = jdbc.queryForObject(
+                "INSERT INTO public.cities (slug, name, geo_center_lat, geo_center_lon, is_active) "
+                        + "VALUES ('acl-it-mp', 'ACL IT No-Policy Test City', 13.0, 74.7, true) RETURNING id",
+                Integer.class);
+        jdbc.update(
+                "INSERT INTO public.areas (area_key, city_id, name, geo_center_lat, geo_center_lon, lifecycle_status) "
+                        + "VALUES (?, ?, ?, ?, ?, 'ACTIVE')",
+                "acl-it-mp|d|g|area-1", noPolicyCityId, "ACL IT MP Area 1", 13.01, 74.71);
+        // Deliberately no city_region_policy row inserted for noPolicyCityId.
+
+        try {
+            String body = mockMvc.perform(post("/api/admin/city-launch/cities/" + noPolicyCityId + "/prepare")
+                            .header("Authorization", "Bearer " + ADMIN_ID))
+                    .andExpect(status().isUnprocessableEntity())
+                    .andExpect(jsonPath("$.error").value("CITY_PREREQUISITES_NOT_GENERATED"))
+                    .andExpect(jsonPath("$.reason").value("MISSING_POLICY"))
+                    .andReturn().getResponse().getContentAsString();
+
+            Map<String, Object> responseBody = objectMapper.readValue(body, new TypeReference<>() {});
+            assertThat(responseBody.keySet()).containsExactlyInAnyOrder("error", "reason", "message", "remediation");
+
+            Integer revisionCount = jdbc.queryForObject(
+                    "SELECT count(*) FROM public.city_launch_revision WHERE city_id = ?",
+                    Integer.class, noPolicyCityId);
+            assertThat(revisionCount).isZero();
+        } finally {
+            jdbc.update("DELETE FROM public.city_launch_revision WHERE city_id = ?", noPolicyCityId);
+            jdbc.update("DELETE FROM public.city_region_memberships WHERE city_id = ?", noPolicyCityId);
+            jdbc.update("DELETE FROM public.city_regions WHERE city_id = ?", noPolicyCityId);
+            jdbc.update("DELETE FROM public.city_region_policy WHERE city_id = ?", noPolicyCityId);
+            jdbc.update("DELETE FROM public.regional_area_classifications WHERE city_key = 'acl-it-mp'");
+            jdbc.update("DELETE FROM public.areas WHERE city_id = ?", noPolicyCityId);
+            jdbc.update("DELETE FROM public.cities WHERE id = ?", noPolicyCityId);
+        }
+    }
+
+    // =========================================================================================
+    // Case 11 — POST /prepare as non-admin -> 403 (the @IsAdmin authz gate, kept explicit here as
+    // a controller-level check independent of the geography-prerequisite plumbing above)
+    // =========================================================================================
+
+    @Test
+    @DisplayName("Case 11: POST /prepare as non-admin -> 403, unaffected by #2163 prerequisite generation")
+    void case11_postPrepare_nonAdmin_returns403() throws Exception {
+        seedRole(SELLER_ID, "broker");
+        mockMvc.perform(post("/api/admin/city-launch/cities/" + testCityId + "/prepare")
+                        .header("Authorization", "Bearer " + SELLER_ID))
+                .andExpect(status().isForbidden());
     }
 }
