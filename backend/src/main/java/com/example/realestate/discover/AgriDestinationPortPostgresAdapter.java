@@ -119,12 +119,19 @@ public class AgriDestinationPortPostgresAdapter implements AgriDestinationPort {
             rs.getObject("updated_at", OffsetDateTime.class)
     );
 
+    /** Error code returned in the 503 body when an active city has never been promoted through
+     *  Agri City Launch — see {@link #findDestinations} javadoc (#2151 PR B correction pass, B2). */
+    static final String AGRI_DESTINATIONS_NOT_YET_PROMOTED = "AGRI_DESTINATIONS_NOT_YET_PROMOTED";
+
     private final JdbcOperations jdbc;
     private final CityActivationGuard cityActivationGuard;
+    private final AgriDestinationPortReadinessCheck readinessCheck;
 
-    public AgriDestinationPortPostgresAdapter(JdbcOperations jdbc, CityActivationGuard cityActivationGuard) {
+    public AgriDestinationPortPostgresAdapter(JdbcOperations jdbc, CityActivationGuard cityActivationGuard,
+                                               AgriDestinationPortReadinessCheck readinessCheck) {
         this.jdbc = jdbc;
         this.cityActivationGuard = cityActivationGuard;
+        this.readinessCheck = readinessCheck;
     }
 
     @Override
@@ -144,6 +151,21 @@ public class AgriDestinationPortPostgresAdapter implements AgriDestinationPort {
         if (cityId == null) {
             // Guard said active but the id lookup raced/failed — fail closed, same empty shape.
             return new DestinationScope(citySlug, List.of());
+        }
+
+        // #2151 PR B correction pass (B2, BLOCKING review finding on PR #2158): an active city with
+        // ZERO agri_destination_classification rows has NEVER been promoted through Agri City
+        // Launch — it is NOT the same thing as a promoted city whose current direction/maxKm/filter
+        // combination legitimately matches no destinations. Silently returning the same empty
+        // DestinationScope for both makes the public regional-area-groups endpoint indistinguishable
+        // from a genuine zero-corridor city. Fail closed with a distinguishable signal instead; the
+        // legacy regional_area_classifications table is deliberately NOT read here as a fallback —
+        // see this class' javadoc and AgriDestinationPortReadinessCheck's javadoc for why.
+        if (readinessCheck.cityHasZeroAgriDestinationRows(citySlug)) {
+            log.warn("findDestinations city={} — ACTIVE city has ZERO agri_destination_classification "
+                    + "rows; failing closed rather than serving an indistinguishable empty result",
+                    citySlug);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, AGRI_DESTINATIONS_NOT_YET_PROMOTED);
         }
 
         StringBuilder sql = new StringBuilder(DESTINATION_GEOMETRY_SQL);

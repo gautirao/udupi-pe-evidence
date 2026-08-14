@@ -23,12 +23,22 @@ import org.testcontainers.utility.DockerImageName;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * #2151 PR B correction pass (B1): proves {@link AgriDestinationPortReadinessCheck} correctly
+ * #2151 PR B correction pass (B1 + B2): proves {@link AgriDestinationPortReadinessCheck} correctly
  * distinguishes an active city with ZERO {@code agri_destination_classification} rows (must
  * ERROR-log, by name) from one with rows (must NOT be flagged), against a real Testcontainers
  * Postgres database.
+ *
+ * <p><b>B2 (BLOCKING review finding on PR #2158).</b> The B1 startup check alone ERROR-logs the gap
+ * but still lets the app start and serve a normal 200 {@code {"groups":[]}} for a never-promoted
+ * active city — indistinguishable from a city that genuinely has zero Agri corridors. The tests
+ * below prove {@link AgriDestinationPortPostgresAdapter#findDestinations} now fails CLOSED with a
+ * distinguishable 503 for the never-promoted case (reusing this same class' row-count logic via
+ * {@link AgriDestinationPortReadinessCheck#cityHasZeroAgriDestinationRows}), while a promoted city's
+ * genuinely-empty-under-these-filters case still returns a normal 200 empty list — the honest-zero
+ * behaviour established elsewhere in #2151 PR B is not broken by this correction.
  */
 @DataJpaTest
 @Testcontainers(disabledWithoutDocker = true)
@@ -141,5 +151,52 @@ class AgriDestinationPortReadinessCheckIT {
         // active in the database.
         List<String> missing = readinessCheck.findActiveCitiesMissingAgriDestinationRows();
         assertThat(missing).doesNotContain(CITY_WITH_ROWS);
+    }
+
+    // ── B2: findDestinations fails closed for a never-promoted active city ─────────────────────
+
+    @Test
+    @DisplayName("findDestinations: an ACTIVE city with ZERO agri_destination_classification rows "
+            + "at all gets a distinguishable 503 AGRI_DESTINATIONS_NOT_YET_PROMOTED, not a silent "
+            + "200 empty groups list")
+    void findDestinations_activeCityNeverPromoted_failsClosedWith503() {
+        CityActivationGuard guard = new CityActivationGuard(jdbcTemplate);
+        AgriDestinationPort port = new AgriDestinationPortPostgresAdapter(jdbcTemplate, guard, readinessCheck);
+
+        AgriDestinationPort.DestinationScopeQuery query = new AgriDestinationPort.DestinationScopeQuery(
+                CITY_WITHOUT_ROWS, null, null, new AgriDestinationPort.AgriDestinationFilters(null), false);
+
+        assertThatThrownBy(() -> port.findDestinations(query))
+                .as("a never-promoted active city must fail closed, NOT return the same empty shape "
+                        + "as a genuinely zero-corridor promoted city")
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .satisfies(ex -> {
+                    org.springframework.web.server.ResponseStatusException rse =
+                            (org.springframework.web.server.ResponseStatusException) ex;
+                    assertThat(rse.getStatusCode().value()).isEqualTo(503);
+                    assertThat(rse.getReason()).isEqualTo("AGRI_DESTINATIONS_NOT_YET_PROMOTED");
+                });
+    }
+
+    @Test
+    @DisplayName("findDestinations: an ACTIVE, PROMOTED city with a direction filter that legitimately "
+            + "matches zero destinations still returns a normal 200 empty list — the honest-zero "
+            + "behaviour is NOT broken by the B2 fail-closed guard")
+    void findDestinations_promotedCityLegitimateZeroMatch_stillReturns200Empty() {
+        CityActivationGuard guard = new CityActivationGuard(jdbcTemplate);
+        AgriDestinationPort port = new AgriDestinationPortPostgresAdapter(jdbcTemplate, guard, readinessCheck);
+
+        // CITY_WITH_ROWS has exactly one classification row, direction_key='N' (see setUp). A
+        // direction filter for 'S' is a legitimate zero-match query against a PROMOTED city — must
+        // NOT be conflated with "never promoted at all".
+        AgriDestinationPort.DestinationScopeQuery query = new AgriDestinationPort.DestinationScopeQuery(
+                CITY_WITH_ROWS, "S", null, new AgriDestinationPort.AgriDestinationFilters(null), false);
+
+        AgriDestinationPort.DestinationScope scope = port.findDestinations(query);
+
+        assertThat(scope.destinations())
+                .as("a promoted city's genuine zero-match-for-this-filter case must stay a normal "
+                        + "empty 200, not be upgraded to a 503")
+                .isEmpty();
     }
 }

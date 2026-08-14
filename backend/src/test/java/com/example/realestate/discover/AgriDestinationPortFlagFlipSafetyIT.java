@@ -112,7 +112,8 @@ class AgriDestinationPortFlagFlipSafetyIT {
             + "Testcontainers DB with the SAME seeded rows return byte-identical results")
     void findDestinationsAndFindParcels_areDeterministic_acrossRepeatedCallsOnTheSameSeededData() {
         CityActivationGuard guard = new CityActivationGuard(jdbcTemplate);
-        AgriDestinationPort port = new AgriDestinationPortPostgresAdapter(jdbcTemplate, guard);
+        AgriDestinationPort port = new AgriDestinationPortPostgresAdapter(
+                jdbcTemplate, guard, new AgriDestinationPortReadinessCheck(jdbcTemplate));
 
         AgriDestinationPort.DestinationScopeQuery destinationQuery = new AgriDestinationPort.DestinationScopeQuery(
                 CITY, null, null, new AgriDestinationPort.AgriDestinationFilters(null), true);

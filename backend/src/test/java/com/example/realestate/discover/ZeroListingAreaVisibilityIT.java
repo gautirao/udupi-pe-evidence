@@ -109,7 +109,8 @@ class ZeroListingAreaVisibilityIT {
         CityActivationGuard guard = new CityActivationGuard(jdbcTemplate);
         RegionalAreaGroupsService regionalAreaGroupsService =
                 new RegionalAreaGroupsService(jdbcTemplate, guard,
-                        new AgriDestinationPortPostgresAdapter(jdbcTemplate, guard));
+                        new AgriDestinationPortPostgresAdapter(
+                                jdbcTemplate, guard, new AgriDestinationPortReadinessCheck(jdbcTemplate)));
 
         RegionalAreaGroupsResponse response = regionalAreaGroupsService.getRegionalGroups("udupi", "house");
 

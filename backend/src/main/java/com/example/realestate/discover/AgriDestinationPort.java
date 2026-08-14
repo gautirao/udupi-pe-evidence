@@ -49,6 +49,11 @@ public interface AgriDestinationPort {
      * @return the destination scope; {@code destinations} is empty (never null) for an
      *         inactive/unknown city, a direction/maxKm combination with zero eligible destinations,
      *         or a destination set with zero eligible parcels under the given filters
+     * @throws org.springframework.web.server.ResponseStatusException 503 (Agri destinations not yet
+     *         promoted) when the given city is ACTIVE but has never been promoted through Agri City
+     *         Launch at all — see {@link AgriDestinationPortPostgresAdapter#AGRI_DESTINATIONS_NOT_YET_PROMOTED}.
+     *         This is deliberately distinguishable from the empty-{@code destinations} cases above,
+     *         which all represent a genuine (promoted) zero-match state (#2151 PR B correction pass, B2)
      */
     DestinationScope findDestinations(DestinationScopeQuery query);
 

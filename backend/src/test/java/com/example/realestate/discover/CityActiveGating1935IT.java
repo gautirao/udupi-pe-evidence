@@ -115,7 +115,8 @@ class CityActiveGating1935IT {
         // #2151 PR B: DiscoverAgriMapListingsService/RegionalAreaGroupsService are now composers
         // over AgriDestinationPort; construct the real Postgres adapter for this real-DB IT.
         AgriDestinationPort agriDestinationPort =
-                new AgriDestinationPortPostgresAdapter(jdbcTemplate, cityActivationGuard);
+                new AgriDestinationPortPostgresAdapter(jdbcTemplate, cityActivationGuard,
+                        new AgriDestinationPortReadinessCheck(jdbcTemplate));
         discoverAgriMapListingsService = new DiscoverAgriMapListingsService(agriDestinationPort);
         regionSummaryService = new RegionSummaryService(jdbcTemplate);
         regionalAreaGroupsService =

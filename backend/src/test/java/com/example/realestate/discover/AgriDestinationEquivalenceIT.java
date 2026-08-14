@@ -93,7 +93,8 @@ class AgriDestinationEquivalenceIT {
     void setUp() {
         backfillService = new RegionalClassificationBackfillService(jdbcTemplate);
         CityActivationGuard guard = new CityActivationGuard(jdbcTemplate);
-        agriDestinationPort = new AgriDestinationPortPostgresAdapter(jdbcTemplate, guard);
+        agriDestinationPort = new AgriDestinationPortPostgresAdapter(
+                jdbcTemplate, guard, new AgriDestinationPortReadinessCheck(jdbcTemplate));
         jdbcTemplate.update("DELETE FROM property_listings");
     }
 

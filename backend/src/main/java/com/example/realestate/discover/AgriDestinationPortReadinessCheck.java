@@ -54,6 +54,19 @@ public class AgriDestinationPortReadinessCheck {
             ORDER BY c.slug
             """;
 
+    /**
+     * Single-city existence check, parameterised by {@code cities.slug} rather than iterating every
+     * active city — the query {@link #cityHasZeroAgriDestinationRows} runs per-request, so it stays
+     * a targeted {@code NOT EXISTS} rather than the bulk sweep above.
+     */
+    private static final String CITY_HAS_ZERO_AGRI_DESTINATION_ROWS_SQL = """
+            SELECT NOT EXISTS (
+                SELECT 1 FROM agri_destination_classification adc
+                JOIN cities c ON c.id = adc.city_id
+                WHERE c.slug = ?
+            )
+            """;
+
     private final JdbcOperations jdbcOperations;
 
     public AgriDestinationPortReadinessCheck(JdbcOperations jdbcOperations) {
@@ -91,5 +104,26 @@ public class AgriDestinationPortReadinessCheck {
     /** Package-private for direct assertion in tests, independent of the ApplicationReadyEvent wiring. */
     List<String> findActiveCitiesMissingAgriDestinationRows() {
         return jdbcOperations.queryForList(CITIES_MISSING_AGRI_DESTINATION_ROWS_SQL, String.class);
+    }
+
+    /**
+     * Single-city variant of the same row-count check, reused by read paths that must FAIL CLOSED
+     * rather than silently render a 200 empty state indistinguishable from a genuine
+     * zero-corridor city (#2151 PR B correction pass, B2 — see {@link AgriDestinationPortPostgresAdapter
+     * #findDestinations}).
+     *
+     * <p>Does NOT check {@code is_active} itself — every caller of this method has already run
+     * {@link CityActivationGuard#isActiveCitySlug} first and short-circuited the inactive/unknown
+     * case with the existing empty-shape response, mirroring every other guard placement in this
+     * package. This method answers a narrower question: for a city already known to be active, has
+     * it EVER been promoted through Agri City Launch at all?
+     *
+     * @param citySlug city slug, already lower-cased by the caller
+     * @return {@code true} iff the city has ZERO {@code agri_destination_classification} rows
+     */
+    boolean cityHasZeroAgriDestinationRows(String citySlug) {
+        Boolean missing = jdbcOperations.queryForObject(
+                CITY_HAS_ZERO_AGRI_DESTINATION_ROWS_SQL, Boolean.class, citySlug);
+        return missing != null && missing;
     }
 }

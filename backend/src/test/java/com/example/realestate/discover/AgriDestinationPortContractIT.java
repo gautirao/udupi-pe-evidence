@@ -72,7 +72,8 @@ class AgriDestinationPortContractIT {
     @BeforeEach
     void setUp() {
         CityActivationGuard guard = new CityActivationGuard(jdbcTemplate);
-        port = new AgriDestinationPortPostgresAdapter(jdbcTemplate, guard);
+        port = new AgriDestinationPortPostgresAdapter(
+                jdbcTemplate, guard, new AgriDestinationPortReadinessCheck(jdbcTemplate));
         jdbcTemplate.update("DELETE FROM property_listings");
         jdbcTemplate.update("DELETE FROM agri_destination_classification");
         jdbcTemplate.update("DELETE FROM areas WHERE city_id IN (SELECT id FROM cities WHERE slug = ?)", CITY);
