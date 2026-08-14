@@ -100,8 +100,23 @@ export function useAgriculturalUrlDomain(
   // tick before the migration effect below has had a chance to run (it fires on mount and
   // REPLACEs `destKey` in, so this fallback is never hit again after that first render).
   // useSearchParams.get() returns the already-decoded value (no manual decodeURIComponent needed).
+  //
+  // GitHub-reviewer-24-confirmed bug fix (#2151 PR C follow-up) — this is the READ side of the
+  // same bug the migration effect below already fixed on the WRITE side: a legacy value can be
+  // either a real areas.area_key OR free-text display text (e.g. "Manipal"). The migration effect
+  // only ever persists an area_key-shaped legacy value into destKey, but this render-scope
+  // fallback used to expose ANY non-empty legacy value as `selectedLocality` unconditionally —
+  // including free text — on the very first render, before the migration effect has run. Any
+  // downstream consumer treating a non-null selectedLocality as "ready to fetch" could scope a
+  // request by an invalid areaKey (e.g. "Manipal") on that first render. Apply the same
+  // AREA_KEY_FORMAT guard here: a legacy value that isn't area_key-shaped is treated as absent,
+  // exactly like the migration effect already treats it on the write side.
   const rawDestKey = urlParams.get(PARAM_DEST_KEY);
-  const rawLocalityLegacy = urlParams.get(PARAM_LOCALITY) || urlParams.get('town');
+  const rawLocalityLegacyCandidate = urlParams.get(PARAM_LOCALITY) || urlParams.get('town');
+  const rawLocalityLegacy =
+    rawLocalityLegacyCandidate && AREA_KEY_FORMAT.test(rawLocalityLegacyCandidate)
+      ? rawLocalityLegacyCandidate
+      : null;
   const selectedLocality: string | null =
     rawDestKey && rawDestKey.length > 0
       ? rawDestKey

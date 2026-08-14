@@ -24,6 +24,11 @@
  *   (no permanent dual-canonical state).
  * - setLocality writes the canonical param and clears legacy params.
  * - clearLocality removes the canonical param.
+ * - GitHub-reviewer-24 follow-up finding (same PR #2160): the render-scope `selectedLocality`
+ *   fallback used above the migration effects must apply the SAME AREA_KEY_FORMAT guard as the
+ *   migration effect — a free-text legacy value must never be exposed as `selectedLocality`, not
+ *   even transiently on the very first render before the migration effect has had a chance to
+ *   run (the read side of the bug; the write side was fixed first).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -177,5 +182,52 @@ describe('agricultural URL domain — destination-key migration (C-F1)', () => {
 
     expect(result.current.urlState[0].selectedLocality).toBeNull();
     expect(result.current.location.search).not.toContain('destKey=');
+  });
+
+  describe('render-scope selectedLocality fallback — free text must never leak, not even on the first render (reviewer-24 finding)', () => {
+    it('a free-text legacy locality= is null on the VERY FIRST render, before the migration effect has run', () => {
+      // Captures selectedLocality on every render pass, in render-body scope (not inside an
+      // effect/act flush) — the first entry reflects the value the rest of the app would read
+      // on mount, before the migration effect below has had any chance to clean up the URL.
+      // This is the exact scenario reviewer-24 flagged: a query hook gated on
+      // `enabled: !!selectedLocality` could fire with `areaKey=Manipal` on this first render.
+      const renders: Array<string | null> = [];
+      function useProbe() {
+        const urlState = useDiscoverUrlState();
+        renders.push(urlState[0].selectedLocality);
+        return urlState;
+      }
+
+      const { result } = renderHook(() => useProbe(), {
+        wrapper: wrapper('/discover?city=udupi&journey=agri-first&region=N&maxKm=25&locality=Manipal'),
+      });
+
+      // First render must never expose the free-text value as a "ready" destination identity.
+      expect(renders[0]).toBeNull();
+      // And the settled state (post-migration) stays null too — no regression vs. the existing
+      // write-side coverage above.
+      expect(result.current[0].selectedLocality).toBeNull();
+      expect(result.current[1]).toBeDefined(); // actions object still present/usable
+    });
+
+    it('an area_key-shaped legacy town= is still exposed on the first render (preserves existing migration fallback)', () => {
+      const renders: Array<string | null> = [];
+      function useProbe() {
+        const urlState = useDiscoverUrlState();
+        renders.push(urlState[0].selectedLocality);
+        return urlState;
+      }
+
+      renderHook(() => useProbe(), {
+        wrapper: wrapper(
+          '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&town=IN%7CKA%7CUdupi%7CKota',
+        ),
+      });
+
+      // A real area_key-shaped legacy value must still work as the first-render fallback —
+      // this is the explicitly-required "preserve migration of already-area-key-shaped legacy
+      // values" behaviour.
+      expect(renders[0]).toBe('IN|KA|Udupi|Kota');
+    });
   });
 });
