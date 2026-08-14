@@ -25,13 +25,23 @@ public record ValidationStateDto(
         Instant validatedAt,
         Long supersededBy) {
 
-    /** Nested per-section checklist flags, serialized under the {@code checks} JSON key. */
+    /**
+     * Nested per-section checklist flags, serialized under the {@code checks} JSON key.
+     *
+     * <p>{@code agriDestinations} (#2151 PR A) is appended as a NEW field rather than inserted
+     * among the original five, so any existing frontend/client deserializer that reads this record
+     * positionally (rather than by JSON field name) keeps working — this record's fields are
+     * serialized by name (Jackson), so ordering is cosmetic, but keeping new fields trailing
+     * matches this codebase's other additive-DTO-extension conventions (e.g. {@code
+     * RevisionChecksum}'s trailing-section discipline).
+     */
     public record ValidationChecks(
             boolean landing,
             boolean regions,
             boolean areaGroups,
             boolean areas,
-            boolean listing) {}
+            boolean listing,
+            boolean agriDestinations) {}
 
     static ValidationStateDto from(CityLaunchRevision revision, boolean editable) {
         ValidationChecks checks = new ValidationChecks(
@@ -39,12 +49,14 @@ public record ValidationStateDto(
                 revision.isRegionsValidated(),
                 revision.isAreaGroupsValidated(),
                 revision.isAreasValidated(),
-                revision.isListingValidated());
+                revision.isListingValidated(),
+                revision.isAgriValidated());
         boolean allValidated = checks.landing()
                 && checks.regions()
                 && checks.areaGroups()
                 && checks.areas()
-                && checks.listing();
+                && checks.listing()
+                && checks.agriDestinations();
         return new ValidationStateDto(
                 revision.getId(),
                 revision.getCityId(),

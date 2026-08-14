@@ -116,6 +116,21 @@ class AdminCityLaunchValidationControllerIT {
                 Long.class, cityId, revisionNumber, lifecycleStatus, ADMIN_ID);
     }
 
+    /**
+     * Inserts one sandbox Agri classification row for a revision (correction pass, #2151 AC2) —
+     * used to satisfy {@code setAgriValidatedTrue}'s EXISTS guard in tests that need
+     * agriDestinations to be settable. Cascades away automatically when the parent revision is
+     * deleted in {@link #cleanup()} (ON DELETE CASCADE, V125).
+     */
+    private void seedAgriRow(long revisionId) {
+        jdbc.update(
+                "INSERT INTO public.sandbox_agri_destination_classification "
+                        + "(revision_id, area_key, origin_lat, origin_lon, distance_km, bearing_deg, "
+                        + "direction_key, distance_band_key, generator_version, generated_at) "
+                        + "VALUES (?, 'aclv-test-area', 13.0, 74.7, 5.0, 10.0, 'N', '0_10', 'test-v1', now())",
+                revisionId);
+    }
+
     private String validationUrl(int cityId, long revisionId) {
         return "/api/admin/city-launch/cities/" + cityId + "/revisions/" + revisionId + "/validation";
     }
@@ -235,6 +250,11 @@ class AdminCityLaunchValidationControllerIT {
         assertThat(lifecycleAfterFour).isEqualTo("PREPARED");
 
         toggle(revisionId, "listing", true);
+        // #2151 PR A adds a 6th checklist column (agriDestinations); markValidated's WHERE clause
+        // now requires all six. Correction pass (AC2): setting it true requires at least one
+        // sandbox Agri row for this revision, enforced in the UPDATE's WHERE/EXISTS clause.
+        seedAgriRow(revisionId);
+        toggle(revisionId, "agriDestinations", true);
 
         mockMvc.perform(post(validationUrl(cityAId, revisionId) + "/mark-validated")
                         .header("Authorization", "Bearer " + ADMIN_ID))
@@ -260,7 +280,11 @@ class AdminCityLaunchValidationControllerIT {
             + "for all five columns")
     void ac3_untickAndReset_atomicDemoteFromValidated() throws Exception {
         long revisionId = seedRevision(cityAId, 1, "PREPARED");
-        for (String key : new String[] {"landing", "regions", "areaGroups", "areas", "listing"}) {
+        // #2151 PR A adds a 6th checklist column (agriDestinations); markValidated's WHERE clause
+        // now requires all six. Correction pass (AC2): agriDestinations=true requires a sandbox
+        // Agri row to exist for this revision first.
+        seedAgriRow(revisionId);
+        for (String key : new String[] {"landing", "regions", "areaGroups", "areas", "listing", "agriDestinations"}) {
             toggle(revisionId, key, true);
         }
         mockMvc.perform(post(validationUrl(cityAId, revisionId) + "/mark-validated")
@@ -293,6 +317,97 @@ class AdminCityLaunchValidationControllerIT {
                 .andExpect(jsonPath("$.checks.areaGroups").value(false))
                 .andExpect(jsonPath("$.checks.areas").value(false))
                 .andExpect(jsonPath("$.checks.listing").value(false))
+                .andExpect(jsonPath("$.lifecycleStatus").value("PREPARED"))
+                .andExpect(jsonPath("$.validatedAt").doesNotExist());
+    }
+
+    // =========================================================================================
+    // AC2 guard (correction pass) — agri_validated is ENFORCED (zero rows -> cannot set true),
+    // not a pure attestation, per approved handoff AC2.
+    // =========================================================================================
+
+    @Test
+    @DisplayName("AC2 guard: a revision with ZERO sandbox Agri rows cannot have agriDestinations set "
+            + "true (422, unchanged state) and therefore cannot reach VALIDATED even with the other "
+            + "five checks complete")
+    void ac2Guard_zeroAgriRows_cannotSetAgriValidatedTrue_orReachValidated() throws Exception {
+        long revisionId = seedRevision(cityAId, 1, "PREPARED");
+        toggle(revisionId, "landing", true);
+        toggle(revisionId, "regions", true);
+        toggle(revisionId, "areaGroups", true);
+        toggle(revisionId, "areas", true);
+        toggle(revisionId, "listing", true);
+        // No seedAgriRow() call — this revision has zero sandbox Agri rows by construction.
+
+        mockMvc.perform(put(validationUrl(cityAId, revisionId) + "/checks/agriDestinations")
+                        .header("Authorization", "Bearer " + ADMIN_ID)
+                        .contentType("application/json")
+                        .content(putBody(true)))
+                .andExpect(status().isUnprocessableEntity());
+
+        Boolean agriValidated = jdbc.queryForObject(
+                "SELECT agri_validated FROM public.city_launch_revision WHERE id = ?", Boolean.class, revisionId);
+        assertThat(agriValidated).isFalse();
+
+        // Five of six checked, agri_validated still false -> markValidated's all-six WHERE clause
+        // cannot match; stays PREPARED.
+        mockMvc.perform(post(validationUrl(cityAId, revisionId) + "/mark-validated")
+                        .header("Authorization", "Bearer " + ADMIN_ID))
+                .andExpect(status().isUnprocessableEntity());
+
+        String lifecycleStatus = jdbc.queryForObject(
+                "SELECT lifecycle_status FROM public.city_launch_revision WHERE id = ?", String.class, revisionId);
+        assertThat(lifecycleStatus).isEqualTo("PREPARED");
+    }
+
+    @Test
+    @DisplayName("AC2 guard positive path: a revision WITH a sandbox Agri row can set agriDestinations "
+            + "true, and with all six checks reaches VALIDATED")
+    void ac2Guard_withAgriRow_canSetAgriValidatedTrue_andReachValidated() throws Exception {
+        long revisionId = seedRevision(cityAId, 1, "PREPARED");
+        seedAgriRow(revisionId);
+
+        mockMvc.perform(put(validationUrl(cityAId, revisionId) + "/checks/agriDestinations")
+                        .header("Authorization", "Bearer " + ADMIN_ID)
+                        .contentType("application/json")
+                        .content(putBody(true)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.checks.agriDestinations").value(true));
+
+        toggle(revisionId, "landing", true);
+        toggle(revisionId, "regions", true);
+        toggle(revisionId, "areaGroups", true);
+        toggle(revisionId, "areas", true);
+        toggle(revisionId, "listing", true);
+
+        mockMvc.perform(post(validationUrl(cityAId, revisionId) + "/mark-validated")
+                        .header("Authorization", "Bearer " + ADMIN_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lifecycleStatus").value("VALIDATED"))
+                .andExpect(jsonPath("$.allValidated").value(true));
+    }
+
+    @Test
+    @DisplayName("AC2 guard demotion: unticking agriDestinations on a VALIDATED revision atomically "
+            + "demotes lifecycle to PREPARED in the same UPDATE, unconditionally (no re-check of the "
+            + "sandbox Agri row set on the set-false path)")
+    void ac2Guard_untickAgriDestinations_demotesValidatedToPrepared() throws Exception {
+        long revisionId = seedRevision(cityAId, 1, "PREPARED");
+        seedAgriRow(revisionId);
+        for (String key : new String[] {"landing", "regions", "areaGroups", "areas", "listing", "agriDestinations"}) {
+            toggle(revisionId, key, true);
+        }
+        mockMvc.perform(post(validationUrl(cityAId, revisionId) + "/mark-validated")
+                        .header("Authorization", "Bearer " + ADMIN_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lifecycleStatus").value("VALIDATED"));
+
+        mockMvc.perform(put(validationUrl(cityAId, revisionId) + "/checks/agriDestinations")
+                        .header("Authorization", "Bearer " + ADMIN_ID)
+                        .contentType("application/json")
+                        .content(putBody(false)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.checks.agriDestinations").value(false))
                 .andExpect(jsonPath("$.lifecycleStatus").value("PREPARED"))
                 .andExpect(jsonPath("$.validatedAt").doesNotExist());
     }

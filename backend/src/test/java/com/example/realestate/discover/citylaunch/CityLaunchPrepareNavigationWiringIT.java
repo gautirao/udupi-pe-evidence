@@ -83,6 +83,7 @@ class CityLaunchPrepareNavigationWiringIT {
     @Autowired private SandboxCityRegionMembershipRepository sandboxCityRegionMembershipRepository;
     @Autowired private SandboxAreaGroupRepository sandboxAreaGroupRepository;
     @Autowired private SandboxAreaGroupMemberRepository sandboxAreaGroupMemberRepository;
+    @Autowired private SandboxAgriDestinationClassificationRepository sandboxAgriDestinationClassificationRepository;
     @Autowired private JdbcTemplate jdbc;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
@@ -203,14 +204,26 @@ class CityLaunchPrepareNavigationWiringIT {
                 sandboxCityRegionMembershipRepository.findByRevisionId(revisionId);
         List<SandboxAreaGroup> sandboxGroups = sandboxAreaGroupRepository.findByRevisionId(revisionId);
         List<SandboxAreaGroupMember> sandboxGroupMembers = sandboxAreaGroupMemberRepository.findByRevisionId(revisionId);
+        // #2151 PR A: prepare now ALSO generates sandbox_agri_destination_classification during the
+        // same run, and the persisted checksum is the NINE-arg digest (areas..groupMembers +
+        // navigationNodes + overrides + agriDestinations) — see RevisionChecksum class javadoc.
+        List<SandboxAgriDestinationClassification> sandboxAgriDestinations =
+                sandboxAgriDestinationClassificationRepository.findByRevisionId(revisionId);
 
         String sevenArgChecksum = RevisionChecksum.compute(
                 sandboxAreas, sandboxAliases, sandboxRegions, sandboxMemberships, sandboxGroups,
                 sandboxGroupMembers, navNodes);
         String sixArgChecksum = RevisionChecksum.compute(
                 sandboxAreas, sandboxAliases, sandboxRegions, sandboxMemberships, sandboxGroups, sandboxGroupMembers);
+        String nineArgChecksum = RevisionChecksum.compute(
+                sandboxAreas, sandboxAliases, sandboxRegions, sandboxMemberships, sandboxGroups,
+                sandboxGroupMembers, navNodes, List.of(), sandboxAgriDestinations);
 
-        assertThat(revision.getPersistedRevisionChecksum()).isEqualTo(sevenArgChecksum);
+        assertThat(revision.getPersistedRevisionChecksum()).isEqualTo(nineArgChecksum);
         assertThat(sevenArgChecksum).isNotEqualTo(sixArgChecksum);
+        assertThat(nineArgChecksum)
+                .as("Agri destination classification rows must genuinely participate in the persisted "
+                        + "checksum, not just an ignored no-op trailing section")
+                .isNotEqualTo(sevenArgChecksum);
     }
 }

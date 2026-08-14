@@ -83,7 +83,14 @@ const VALIDATED_STATE: ValidationStateDto = {
   cityId: 7,
   revisionNumber: 3,
   lifecycleStatus: 'VALIDATED',
-  checks: { landing: true, regions: true, areaGroups: true, areas: true, listing: true },
+  checks: {
+    landing: true,
+    regions: true,
+    areaGroups: true,
+    areas: true,
+    listing: true,
+    agriDestinations: true,
+  },
   allValidated: true,
   editable: false,
   preparedAt: '2026-07-01T00:00:00Z',
@@ -127,16 +134,16 @@ afterEach(() => {
 });
 
 describe('CityLaunchReadiness', () => {
-  it('renders the VALIDATED summary with all 5 checks shown ticked', () => {
+  it('renders the VALIDATED summary with all 6 checks shown ticked', () => {
     renderWithClient(VALIDATED_STATE);
 
     expect(screen.getByText('VALIDATED')).toBeInTheDocument();
     expect(screen.getByText(/rev 3/)).toBeInTheDocument();
 
-    for (const label of ['Landing', 'Regions', 'Area Groups', 'Areas', 'Listing']) {
+    for (const label of ['Landing', 'Regions', 'Area Groups', 'Areas', 'Listing', 'Agri Destinations']) {
       expect(screen.getByText(new RegExp(`^${label} —`))).toBeInTheDocument();
     }
-    expect(screen.getAllByText('pass')).toHaveLength(5);
+    expect(screen.getAllByText('pass')).toHaveLength(6);
   });
 
   it('renders preparedAt/validatedAt', () => {

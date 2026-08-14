@@ -86,6 +86,7 @@ class AdminCityLaunchPreviewControllerIT {
     @Autowired private SandboxAreaGroupRepository sandboxAreaGroupRepository;
     @Autowired private SandboxAreaGroupMemberRepository sandboxAreaGroupMemberRepository;
     @Autowired private com.example.realestate.discover.navigation.SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
+    @Autowired private SandboxAgriDestinationClassificationRepository sandboxAgriDestinationClassificationRepository;
 
     private static final UUID ADMIN_ID = UUID.fromString("19110101-0000-0000-0000-000000000001");
     private static final UUID BUYER_ID = UUID.fromString("19110102-0000-0000-0000-000000000002");
@@ -183,6 +184,14 @@ class AdminCityLaunchPreviewControllerIT {
                 BigDecimal.valueOf(13.0), BigDecimal.valueOf(74.7), BigDecimal.valueOf(13.0), BigDecimal.valueOf(74.7),
                 BigDecimal.valueOf(13.0), BigDecimal.valueOf(74.7), BigDecimal.ZERO, "preview-policy", Instant.now());
         return sandboxNavigationNodeRepository.save(n);
+    }
+
+    private SandboxAgriDestinationClassification seedAgriRow(
+            long revisionId, String areaKey, double originLat, double originLon,
+            double distanceKm, double bearingDeg, String directionKey, String distanceBandKey) {
+        return sandboxAgriDestinationClassificationRepository.save(new SandboxAgriDestinationClassification(
+                revisionId, areaKey, originLat, originLon, distanceKm, bearingDeg,
+                directionKey, distanceBandKey, "agri-destination-classification-v1", Instant.now()));
     }
 
     // =========================================================================================
@@ -756,5 +765,101 @@ class AdminCityLaunchPreviewControllerIT {
         mockMvc.perform(get(base + "/navigation/resolve?node=a:IN|KA|ACP|NavOrd").header("Authorization", adminAuth()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resolution").value("EXACT"));
+    }
+
+    // =========================================================================================
+    // E9 — GET .../preview/agri (#2151 PR A correction pass finding #4: previously ZERO coverage)
+    // =========================================================================================
+
+    @Test
+    @DisplayName("E9 happy path: admin token -> 200; rowCount/directionDistribution/"
+            + "distanceBandDistribution/origin all match the seeded sandbox rows; no-store")
+    void e9_happyPath_matchesSeededRows() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        seedAgriRow(revisionId, "IN|KA|ACP|Agri-N", 13.0, 74.7, 5.6, 0.0, "N", "0_10");
+        seedAgriRow(revisionId, "IN|KA|ACP|Agri-E", 13.0, 74.7, 14.6, 90.0, "E", "10_25");
+        seedAgriRow(revisionId, "IN|KA|ACP|Agri-E2", 13.0, 74.7, 16.0, 91.0, "E", "10_25");
+
+        String url = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview/agri";
+
+        mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.rowCount").value(3))
+                .andExpect(jsonPath("$.directionDistribution.N").value(1))
+                .andExpect(jsonPath("$.directionDistribution.E").value(2))
+                .andExpect(jsonPath("$.distanceBandDistribution.['0_10']").value(1))
+                .andExpect(jsonPath("$.distanceBandDistribution.['10_25']").value(2))
+                .andExpect(jsonPath("$.areasWithMissingCoordinates").value(0))
+                .andExpect(jsonPath("$.originLat").value(13.0))
+                .andExpect(jsonPath("$.originLon").value(74.7));
+    }
+
+    @Test
+    @DisplayName("E9: areasWithMissingCoordinates counts this revision's ACTIVE sandbox_areas rows "
+            + "with a NULL geo_center_lat/lon, independent of the Agri row set")
+    void e9_areasWithMissingCoordinates_countsSandboxAreasWithNullCoordinates() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        seedArea(revisionId, "IN|KA|ACP|Agri-HasCoords", "HasCoords", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+        seedArea(revisionId, "IN|KA|ACP|Agri-NoCoords", "NoCoords", "ACTIVE",
+                null, null, null, null, null, null);
+        seedAgriRow(revisionId, "IN|KA|ACP|Agri-HasCoords", 13.0, 74.7, 1.1, 0.0, "N", "0_10");
+
+        String url = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview/agri";
+
+        mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rowCount").value(1))
+                .andExpect(jsonPath("$.areasWithMissingCoordinates").value(1));
+    }
+
+    @Test
+    @DisplayName("E9 auth: non-admin -> 403, no token -> 401")
+    void e9_auth_nonAdminForbidden_noTokenUnauthorized() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        String url = "/api/admin/city-launch/cities/" + testCityId
+                + "/revisions/" + revision.getId() + "/preview/agri";
+
+        mockMvc.perform(get(url).header("Authorization", "Bearer " + BUYER_ID))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get(url)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("E9 IDOR guard: a revision belonging to a DIFFERENT city -> 404")
+    void e9_wrongCity_404() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        String url = "/api/admin/city-launch/cities/" + otherCityId
+                + "/revisions/" + revision.getId() + "/preview/agri";
+        mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("E9: prep_state != DONE -> 409")
+    void e9_prepStateNotDone_409() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.RUNNING, LifecycleStatus.PREPARING);
+        String url = "/api/admin/city-launch/cities/" + testCityId
+                + "/revisions/" + revision.getId() + "/preview/agri";
+        mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("E9: lifecycle PREPARING/SUPERSEDED/FAILED -> 409")
+    void e9_nonPreviewableLifecycle_409() throws Exception {
+        for (LifecycleStatus status : new LifecycleStatus[] {
+                LifecycleStatus.PREPARING, LifecycleStatus.SUPERSEDED, LifecycleStatus.FAILED}) {
+            CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, status);
+            String url = "/api/admin/city-launch/cities/" + testCityId
+                    + "/revisions/" + revision.getId() + "/preview/agri";
+            mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                    .andExpect(status().isConflict());
+        }
     }
 }

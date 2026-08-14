@@ -97,6 +97,7 @@ class CityLaunchPromotionServiceIT {
     @Autowired private SandboxCityRegionRepository sandboxCityRegionRepository;
     @Autowired private SandboxAreaGroupRepository sandboxAreaGroupRepository;
     @Autowired private SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
+    @Autowired private SandboxAgriDestinationClassificationRepository sandboxAgriDestinationClassificationRepository;
     @Autowired private NavigationNodeRepository navigationNodeRepository;
     @Autowired private JdbcTemplate jdbc;
 
@@ -118,6 +119,9 @@ class CityLaunchPromotionServiceIT {
             }
             jdbc.update("DELETE FROM public.city_launch_revision WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.navigation_nodes WHERE city_id = ?", cityId);
+            // #2151 PR A: agri_destination_classification.area_key FKs public.areas — must be
+            // cleared before the areas DELETE below, mirroring the navigation_nodes precedent above.
+            jdbc.update("DELETE FROM public.agri_destination_classification WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.area_group_members WHERE area_group_id IN "
                     + "(SELECT id FROM public.area_groups WHERE city_id = ?)", cityId);
             jdbc.update("DELETE FROM public.area_groups WHERE city_id = ?", cityId);
@@ -246,6 +250,12 @@ class CityLaunchPromotionServiceIT {
      * itself (see {@code CityLaunchPrepareNavigationWiringIT} for the generation-wiring proof).
      */
     private void recomputeAndPersistChecksumWithNavigationNodes(long revisionId) {
+        // #2151 PR A: prepareAndValidate's REAL prepare run already generated (and persisted)
+        // sandbox_agri_destination_classification rows for this revision — unlike navigation-tree
+        // generation, Agri generation has NO city_region_policy precondition gate, so it always
+        // runs. This helper must fold those CURRENT rows into the recompute (via the nine-arg
+        // overload) or the checksum it writes silently stops matching what
+        // CityLaunchPromotionService recomputes at launch time.
         String checksum = RevisionChecksum.compute(
                 sandboxAreaRepository.findByRevisionId(revisionId),
                 sandboxAliasRepository.findByRevisionId(revisionId),
@@ -253,7 +263,9 @@ class CityLaunchPromotionServiceIT {
                 sandboxMembershipRepository.findByRevisionId(revisionId),
                 sandboxAreaGroupRepository.findByRevisionId(revisionId),
                 sandboxGroupMemberRepository.findByRevisionId(revisionId),
-                sandboxNavigationNodeRepository.findByRevisionId(revisionId));
+                sandboxNavigationNodeRepository.findByRevisionId(revisionId),
+                List.of(),
+                sandboxAgriDestinationClassificationRepository.findByRevisionId(revisionId));
         jdbc.update("UPDATE public.city_launch_revision SET persisted_revision_checksum = ? WHERE id = ?",
                 checksum, revisionId);
     }
@@ -343,7 +355,9 @@ class CityLaunchPromotionServiceIT {
                 .isEqualTo(LifecycleStatus.PREPARED));
 
         long revisionId = prep.revisionId();
-        for (String key : new String[] {"landing", "regions", "areaGroups", "areas", "listing"}) {
+        // #2151 PR A adds a 6th validation checklist column (agriDestinations); markValidated's
+        // WHERE clause now requires all six, so this shared helper must tick all six too.
+        for (String key : new String[] {"landing", "regions", "areaGroups", "areas", "listing", "agriDestinations"}) {
             validationService.toggleCheck(cityId, revisionId, key, true);
         }
         validationService.markValidated(cityId, revisionId);

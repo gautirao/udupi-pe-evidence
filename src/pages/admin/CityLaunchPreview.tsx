@@ -224,7 +224,7 @@ export default function CityLaunchPreview() {
                     </Button>
                     {!validation.allValidated && (
                       <p className="text-center text-[10px] text-muted-foreground">
-                        Enabled once all five are checked
+                        Enabled once all six are checked
                       </p>
                     )}
                   </>

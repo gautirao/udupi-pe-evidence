@@ -82,6 +82,7 @@ public class CityLaunchPreviewService {
     private final SandboxAreaGroupMemberRepository areaGroupMemberRepository;
     private final SandboxAreaRepository areaRepository;
     private final SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
+    private final SandboxAgriDestinationClassificationRepository sandboxAgriDestinationClassificationRepository;
     private final JdbcOperations jdbcOperations;
 
     public CityLaunchPreviewService(
@@ -92,6 +93,7 @@ public class CityLaunchPreviewService {
             SandboxAreaGroupMemberRepository areaGroupMemberRepository,
             SandboxAreaRepository areaRepository,
             SandboxNavigationNodeRepository sandboxNavigationNodeRepository,
+            SandboxAgriDestinationClassificationRepository sandboxAgriDestinationClassificationRepository,
             JdbcOperations jdbcOperations) {
         this.revisionRepository = revisionRepository;
         this.regionRepository = regionRepository;
@@ -100,6 +102,7 @@ public class CityLaunchPreviewService {
         this.areaGroupMemberRepository = areaGroupMemberRepository;
         this.areaRepository = areaRepository;
         this.sandboxNavigationNodeRepository = sandboxNavigationNodeRepository;
+        this.sandboxAgriDestinationClassificationRepository = sandboxAgriDestinationClassificationRepository;
         this.jdbcOperations = jdbcOperations;
     }
 
@@ -347,6 +350,50 @@ public class CityLaunchPreviewService {
         public Long getId() {
             return mockId;
         }
+    }
+
+    // ── E9: Agri destination classification preview (#2151 PR A) ───────────────────────────────
+
+    /**
+     * Row count, direction/distance-band distributions, missing-coordinate count, and the origin
+     * used — everything an admin needs to judge Agri generation quality for this revision before
+     * ticking the {@code agriDestinations} validation check. API-only; never read by any
+     * shopper-facing surface.
+     */
+    @Transactional(readOnly = true)
+    public AgriPreviewResponse getAgriPreview(int cityId, long revisionId) {
+        loadPreviewableRevision(cityId, revisionId);
+
+        List<SandboxAgriDestinationClassification> rows =
+                sandboxAgriDestinationClassificationRepository.findByRevisionId(revisionId);
+
+        Map<String, Long> directionDistribution = new LinkedHashMap<>();
+        Map<String, Long> distanceBandDistribution = new LinkedHashMap<>();
+        Double originLat = null;
+        Double originLon = null;
+        for (SandboxAgriDestinationClassification row : rows) {
+            directionDistribution.merge(row.getDirectionKey(), 1L, Long::sum);
+            distanceBandDistribution.merge(row.getDistanceBandKey(), 1L, Long::sum);
+            if (originLat == null) {
+                originLat = row.getOriginLat();
+                originLon = row.getOriginLon();
+            }
+        }
+
+        // "Areas with missing coordinates" — this revision's ACTIVE sandbox_areas rows with a NULL
+        // geo_center_lat/lon. Correctness fix (#2151 PR A): AgriDestinationClassificationGenerator
+        // no longer re-queries production public.areas — it consumes the SAME captured sandbox_areas
+        // rows this revision was written from (see that class's "Snapshot consistency" javadoc), so
+        // this is now exactly the generator's actual input set, not merely a diagnostic proxy for a
+        // separate production read.
+        long missingCoordinates = areaRepository.findByRevisionId(revisionId).stream()
+                .filter(a -> ACTIVE_STATUS.equals(a.getLifecycleStatus()))
+                .filter(a -> a.getGeoCenterLat() == null || a.getGeoCenterLon() == null)
+                .count();
+
+        return new AgriPreviewResponse(
+                rows.size(), directionDistribution, distanceBandDistribution,
+                Math.toIntExact(missingCoordinates), originLat, originLon);
     }
 
     // ── Viewability guard ────────────────────────────────────────────────────────────────────

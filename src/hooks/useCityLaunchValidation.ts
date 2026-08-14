@@ -16,6 +16,7 @@ export interface CityLaunchValidationChecks {
   areaGroups: boolean;
   areas: boolean;
   listing: boolean;
+  agriDestinations: boolean;
 }
 
 export type CityLaunchValidationCheckKey = keyof CityLaunchValidationChecks;
@@ -39,7 +40,7 @@ interface RerunPreviewResponse {
 }
 
 /**
- * The 5 reversible checklist items — labels/copy match
+ * The 6 reversible checklist items — labels/copy match
  * ui_kits/admin/admin-data.js's window.RTA_VALIDATION exactly. Shared by
  * CityLaunchPreview's rail and CityLaunchReadiness's summary so both render
  * identical labels/notes from one source.
@@ -54,6 +55,7 @@ export const VALIDATION_CHECK_ITEMS: ReadonlyArray<{
   { key: 'areaGroups', label: 'Area Groups', note: 'Area groups resolve inside a region.' },
   { key: 'areas', label: 'Areas', note: 'Individual areas are visible and legible.' },
   { key: 'listing', label: 'Listing', note: 'The simulated listing shows a pin and card.' },
+  { key: 'agriDestinations', label: 'Agri Destinations', note: 'Agri classification rows, direction and distance-band spread look right for the city origin.' },
 ];
 
 function validationQueryKey(cityId: number, revisionId: number) {
@@ -77,8 +79,9 @@ export function useValidationState(cityId: number, revisionId: number) {
 
 /**
  * PUT .../validation/checks/{checkKey} {value} — toggles a single reversible
- * check. On 409 (revision no longer editable — superseded/stale) surface a
- * toast and invalidate so the rail re-reads the server's read-only state.
+ * check. On 422 (agri classification empty) or 409 (no longer editable —
+ * superseded/stale) surface a toast and invalidate so the rail re-reads the
+ * server's read-only state.
  */
 export function useToggleCheck(cityId: number, revisionId: number) {
   const queryClient = useQueryClient();
@@ -99,6 +102,15 @@ export function useToggleCheck(cityId: number, revisionId: number) {
       queryClient.invalidateQueries({ queryKey: validationQueryKey(cityId, revisionId) });
     },
     onError: (err) => {
+      if (err instanceof ApiError && err.status === 422) {
+        toast({
+          title: 'This check cannot be ticked yet',
+          description: 'Agri destination classification produced no rows for this revision. Re-run preparation before validating this section.',
+          variant: 'destructive',
+        });
+        queryClient.invalidateQueries({ queryKey: validationQueryKey(cityId, revisionId) });
+        return;
+      }
       if (err instanceof ApiError && err.status === 409) {
         toast({
           title: 'This revision is no longer current',
@@ -118,7 +130,7 @@ export function useToggleCheck(cityId: number, revisionId: number) {
 
 /**
  * POST .../validation/mark-validated — marks the revision VALIDATED. On 422
- * (not all 5 checks ticked) or 409 (no longer current) surfaces a toast and
+ * (not all 6 checks ticked) or 409 (no longer current) surfaces a toast and
  * invalidates so the rail reflects the server's actual state.
  */
 export function useMarkValidated(cityId: number, revisionId: number) {
@@ -136,7 +148,7 @@ export function useMarkValidated(cityId: number, revisionId: number) {
       if (err instanceof ApiError && err.status === 422) {
         toast({
           title: 'Not all checks complete',
-          description: 'Tick all five checks before marking this preview validated.',
+          description: 'Tick all six checks before marking this preview validated.',
           variant: 'destructive',
         });
         queryClient.invalidateQueries({ queryKey: validationQueryKey(cityId, revisionId) });
@@ -160,7 +172,7 @@ export function useMarkValidated(cityId: number, revisionId: number) {
 }
 
 /**
- * POST .../validation/reset — resets all 5 checks to false (VALIDATED
+ * POST .../validation/reset — resets all 6 checks to false (VALIDATED
  * reverts to PREPARED server-side).
  */
 export function useResetValidation(cityId: number, revisionId: number) {

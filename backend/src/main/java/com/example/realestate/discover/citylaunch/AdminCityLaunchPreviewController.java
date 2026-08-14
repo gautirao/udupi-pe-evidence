@@ -143,6 +143,20 @@ public class AdminCityLaunchPreviewController {
         return noStore(previewService.resolveNavigation(cityId, revisionId, node));
     }
 
+    /**
+     * GET .../preview/agri -&gt; {@link AgriPreviewResponse} (#2151 PR A). Row count, direction/
+     * distance-band distributions, areas excluded for missing coordinates, and the origin used —
+     * everything an admin needs to judge Agri generation quality before ticking the
+     * {@code agriDestinations} validation checklist item.
+     */
+    @IsAdmin
+    @GetMapping("/agri")
+    public ResponseEntity<AgriPreviewResponse> getAgriPreview(
+            @PathVariable int cityId, @PathVariable long revisionId, CallerInfo caller) {
+        log.debug("GET preview/agri cityId={} revisionId={} adminId={}", cityId, revisionId, caller.userId());
+        return noStore(previewService.getAgriPreview(cityId, revisionId));
+    }
+
     @IsAdmin
     @GetMapping("/navigation/{nodeKey}/counts")
     public ResponseEntity<NavigationCountsResponse> getNavigationCounts(

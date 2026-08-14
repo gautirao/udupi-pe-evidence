@@ -84,7 +84,14 @@ const { PREVIEW_AREA_GROUPS_DTO, LIVE_ONLY_AREA_GROUPS_DTO, DEFAULT_VALIDATION_S
     cityId: 7,
     revisionNumber: 1,
     lifecycleStatus: 'PREPARED',
-    checks: { landing: false, regions: false, areaGroups: false, areas: false, listing: false },
+    checks: {
+      landing: false,
+      regions: false,
+      areaGroups: false,
+      areas: false,
+      listing: false,
+      agriDestinations: false,
+    },
     allValidated: false,
     editable: true,
     preparedAt: '2026-07-01T00:00:00Z',
@@ -296,7 +303,14 @@ describe('CityLaunchPreview — validation rail (Issue #1911 PR4)', () => {
       cityId: CITY_ID,
       revisionNumber: 1,
       lifecycleStatus: 'PREPARED',
-      checks: { landing: false, regions: false, areaGroups: false, areas: false, listing: false },
+      checks: {
+        landing: false,
+        regions: false,
+        areaGroups: false,
+        areas: false,
+        listing: false,
+        agriDestinations: false,
+      },
       allValidated: false,
       editable: true,
       preparedAt: '2026-07-01T00:00:00Z',
@@ -314,7 +328,7 @@ describe('CityLaunchPreview — validation rail (Issue #1911 PR4)', () => {
     vi.mocked(api.post).mockReset();
   });
 
-  it('renders the 5 validation checkboxes driven by GET /validation', async () => {
+  it('renders the 6 validation checkboxes driven by GET /validation', async () => {
     vi.mocked(api.get).mockImplementation(async (path: string) =>
       path.endsWith('/validation') ? validationState() : DEFAULT_VALIDATION_STATE_DTO,
     );
@@ -322,13 +336,14 @@ describe('CityLaunchPreview — validation rail (Issue #1911 PR4)', () => {
     renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
 
     await waitFor(() => {
-      expect(screen.getAllByRole('checkbox')).toHaveLength(5);
+      expect(screen.getAllByRole('checkbox')).toHaveLength(6);
     });
     expect(screen.getByRole('checkbox', { name: 'Landing' })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Regions' })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Area Groups' })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Areas' })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Listing' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Agri Destinations' })).not.toBeChecked();
   });
 
   it('ticking a checkbox calls PUT /validation/checks/{checkKey}', async () => {
@@ -336,7 +351,16 @@ describe('CityLaunchPreview — validation rail (Issue #1911 PR4)', () => {
       path.endsWith('/validation') ? validationState() : DEFAULT_VALIDATION_STATE_DTO,
     );
     vi.mocked(api.put).mockResolvedValue(
-      validationState({ checks: { landing: true, regions: false, areaGroups: false, areas: false, listing: false } }),
+      validationState({
+        checks: {
+          landing: true,
+          regions: false,
+          areaGroups: false,
+          areas: false,
+          listing: false,
+          agriDestinations: false,
+        },
+      }),
     );
 
     renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
@@ -349,7 +373,36 @@ describe('CityLaunchPreview — validation rail (Issue #1911 PR4)', () => {
     });
   });
 
-  it('"Mark preview validated" is disabled until all five checks are ticked', async () => {
+  it('ticking the Agri Destinations checkbox calls PUT /validation/checks/agriDestinations', async () => {
+    vi.mocked(api.get).mockImplementation(async (path: string) =>
+      path.endsWith('/validation') ? validationState() : DEFAULT_VALIDATION_STATE_DTO,
+    );
+    vi.mocked(api.put).mockResolvedValue(
+      validationState({
+        checks: {
+          landing: false,
+          regions: false,
+          areaGroups: false,
+          areas: false,
+          listing: false,
+          agriDestinations: true,
+        },
+      }),
+    );
+
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'Agri Destinations' })).toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Agri Destinations' }));
+
+    await waitFor(() => {
+      expect(api.put).toHaveBeenCalledWith(`${validationPath}/checks/agriDestinations`, { value: true });
+    });
+  });
+
+  it('"Mark preview validated" is disabled until all six checks are ticked', async () => {
     vi.mocked(api.get).mockImplementation(async (path: string) =>
       path.endsWith('/validation') ? validationState() : DEFAULT_VALIDATION_STATE_DTO,
     );
@@ -361,11 +414,43 @@ describe('CityLaunchPreview — validation rail (Issue #1911 PR4)', () => {
     });
   });
 
-  it('"Mark preview validated" is enabled once allValidated is true', async () => {
+  it('"Mark preview validated" stays disabled when only five of six checks are ticked', async () => {
     vi.mocked(api.get).mockImplementation(async (path: string) =>
       path.endsWith('/validation')
         ? validationState({
-            checks: { landing: true, regions: true, areaGroups: true, areas: true, listing: true },
+            checks: {
+              landing: true,
+              regions: true,
+              areaGroups: true,
+              areas: true,
+              listing: true,
+              agriDestinations: false,
+            },
+            allValidated: false,
+          })
+        : DEFAULT_VALIDATION_STATE_DTO,
+    );
+
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: 'Landing' })).toBeChecked();
+    });
+    expect(screen.getByRole('button', { name: /mark preview validated/i })).toBeDisabled();
+  });
+
+  it('"Mark preview validated" is enabled once allValidated is true (all six checks ticked)', async () => {
+    vi.mocked(api.get).mockImplementation(async (path: string) =>
+      path.endsWith('/validation')
+        ? validationState({
+            checks: {
+              landing: true,
+              regions: true,
+              areaGroups: true,
+              areas: true,
+              listing: true,
+              agriDestinations: true,
+            },
             allValidated: true,
           })
         : DEFAULT_VALIDATION_STATE_DTO,
@@ -424,7 +509,14 @@ describe('CityLaunchPreview — validation rail (Issue #1911 PR4)', () => {
           lifecycleStatus: 'VALIDATED',
           allValidated: true,
           editable: true,
-          checks: { landing: true, regions: true, areaGroups: true, areas: true, listing: true },
+          checks: {
+            landing: true,
+            regions: true,
+            areaGroups: true,
+            areas: true,
+            listing: true,
+            agriDestinations: true,
+          },
           supersededBy: null,
         });
       }
@@ -489,6 +581,7 @@ describe('CityLaunchPreview — validation rail wire contract (Issue #1911 PR4, 
           areaGroups: true,
           areas: false,
           listing: false,
+          agriDestinations: false,
         },
         allValidated: false,
         editable: true,
@@ -501,13 +594,14 @@ describe('CityLaunchPreview — validation rail wire contract (Issue #1911 PR4, 
     renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
 
     await waitFor(() => {
-      expect(screen.getAllByRole('checkbox')).toHaveLength(5);
+      expect(screen.getAllByRole('checkbox')).toHaveLength(6);
     });
     expect(screen.getByRole('checkbox', { name: 'Landing' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Regions' })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Area Groups' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Areas' })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Listing' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Agri Destinations' })).not.toBeChecked();
     expect(api.get).toHaveBeenCalledWith(validationPath);
   });
 
@@ -519,7 +613,14 @@ describe('CityLaunchPreview — validation rail wire contract (Issue #1911 PR4, 
         cityId: 7,
         revisionNumber: 3,
         lifecycleStatus: 'SUPERSEDED',
-        checks: { landing: true, regions: true, areaGroups: true, areas: true, listing: true },
+        checks: {
+          landing: true,
+          regions: true,
+          areaGroups: true,
+          areas: true,
+          listing: true,
+          agriDestinations: true,
+        },
         allValidated: true,
         editable: false,
         preparedAt: '2026-07-15T10:00:00Z',

@@ -11,15 +11,15 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Admin validation checklist for a {@link CityLaunchRevision} (#1911 PR4): five independent
- * per-section confirmation flags (landing/regions/areaGroups/areas/listing) plus an atomic
- * PREPARED -&gt; VALIDATED transition once all five are set.
+ * Admin validation checklist for a {@link CityLaunchRevision} (#1911 PR4, extended #2151 PR A): six
+ * independent per-section confirmation flags (landing/regions/areaGroups/areas/listing/
+ * agriDestinations) plus an atomic PREPARED -&gt; VALIDATED transition once all six are set.
  *
  * <p><b>Authority split</b>: every write here first fires a guarded
  * {@code @Modifying} query on {@link CityLaunchRevisionRepository} whose SQL {@code WHERE} clause
  * is the single source of truth for "may this row be mutated right now" (id + city_id scoped,
  * {@code superseded_by IS NULL}, {@code lifecycle_status IN (PREPARED, VALIDATED)}, and — for
- * {@code markValidated} — all five columns already true). The Java-level
+ * {@code markValidated} — all six columns already true). The Java-level
  * {@link #loadEditableRevision} check below exists ONLY to turn a 0-rows-affected outcome into the
  * right HTTP status (404 missing/wrong-city vs 409 not-editable vs 422 not-all-checked); it is
  * never itself the authority that permits a write to proceed.
@@ -31,9 +31,12 @@ public class CityLaunchValidationService {
             EnumSet.of(LifecycleStatus.PREPARED, LifecycleStatus.VALIDATED);
 
     private final CityLaunchRevisionRepository revisionRepository;
+    private final SandboxAgriDestinationClassificationRepository agriClassificationRepository;
 
-    public CityLaunchValidationService(CityLaunchRevisionRepository revisionRepository) {
+    public CityLaunchValidationService(CityLaunchRevisionRepository revisionRepository,
+            SandboxAgriDestinationClassificationRepository agriClassificationRepository) {
         this.revisionRepository = revisionRepository;
+        this.agriClassificationRepository = agriClassificationRepository;
     }
 
     @Transactional(readOnly = true)
@@ -60,6 +63,9 @@ public class CityLaunchValidationService {
             case "listing" -> value
                     ? revisionRepository.setListingValidatedTrue(revisionId, cityId)
                     : revisionRepository.setListingValidatedFalse(revisionId, cityId);
+            case "agriDestinations" -> value
+                    ? revisionRepository.setAgriValidatedTrue(revisionId, cityId)
+                    : revisionRepository.setAgriValidatedFalse(revisionId, cityId);
             default -> throw new IllegalArgumentException("Unknown validation check key: " + checkKey);
         };
 
@@ -68,6 +74,16 @@ public class CityLaunchValidationService {
             // (a benign race where the row became editable/ineditable between the UPDATE and this
             // read) fall through to a generic conflict rather than silently reporting success.
             loadEditableRevision(cityId, revisionId);
+            if ("agriDestinations".equals(checkKey) && value
+                    && !agriClassificationRepository.existsByRevisionId(revisionId)) {
+                // The revision IS editable, so the EXISTS guard in setAgriValidatedTrue's WHERE
+                // clause is what rejected the write (correction pass, #2151 AC2) — not a lifecycle
+                // race. Surface the actual business rule rather than the generic 409 below.
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "Agri destination classification has zero rows for this revision; "
+                                + "agriDestinations cannot be marked validated until Agri generation "
+                                + "produces at least one row");
+            }
             throw notEditable();
         }
         return getValidationState(cityId, revisionId);
@@ -87,12 +103,12 @@ public class CityLaunchValidationService {
     public ValidationStateDto markValidated(int cityId, long revisionId) {
         int rows = revisionRepository.markValidated(revisionId, cityId, Instant.now());
         if (rows == 0) {
-            // Editable but rows==0 means the all-five-checked WHERE clause didn't match — 422, a
+            // Editable but rows==0 means the all-six-checked WHERE clause didn't match — 422, a
             // business-rule failure, not a state-machine conflict. loadEditableRevision throws
             // 404/409 first if either of those applies.
             loadEditableRevision(cityId, revisionId);
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    "All five validation checks must be complete before marking this revision validated");
+                    "All six validation checks must be complete before marking this revision validated");
         }
         return getValidationState(cityId, revisionId);
     }

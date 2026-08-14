@@ -151,8 +151,9 @@ class AdminCityLaunchLaunchControllerIT {
         long revisionId = jdbc.queryForObject(
                 "INSERT INTO public.city_launch_revision (city_id, revision_number, lifecycle_status, "
                         + "prep_state, prep_stage, landing_validated, regions_validated, area_groups_validated, "
-                        + "areas_validated, listing_validated, persisted_revision_checksum, created_by) "
-                        + "VALUES (?, 1, 'PREPARED', 'DONE', 6, true, true, true, true, true, "
+                        + "areas_validated, listing_validated, agri_validated, persisted_revision_checksum, "
+                        + "created_by) "
+                        + "VALUES (?, 1, 'PREPARED', 'DONE', 6, true, true, true, true, true, true, "
                         + "'seeded-checksum-placeholder', ?) RETURNING id",
                 Long.class, cityId, ADMIN_ID);
 

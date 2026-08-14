@@ -111,6 +111,11 @@ public class CityLaunchRevision {
     @Column(name = "listing_validated", nullable = false)
     private boolean listingValidated;
 
+    // ── Validation checklist, 6th column (V125, #2151 PR A) — same no-public-setter discipline. ──
+
+    @Column(name = "agri_validated", nullable = false)
+    private boolean agriValidated;
+
     @Column(name = "validated_at")
     private Instant validatedAt;
 
@@ -152,6 +157,7 @@ public class CityLaunchRevision {
     public boolean isAreaGroupsValidated() { return areaGroupsValidated; }
     public boolean isAreasValidated() { return areasValidated; }
     public boolean isListingValidated() { return listingValidated; }
+    public boolean isAgriValidated() { return agriValidated; }
     public Instant getValidatedAt() { return validatedAt; }
 
     // ── Setters (in-memory only; PR1 has no persisted UPDATE path via save()) ──────────────────

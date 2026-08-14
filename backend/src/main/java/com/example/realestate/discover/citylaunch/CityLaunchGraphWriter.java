@@ -1,5 +1,6 @@
 package com.example.realestate.discover.citylaunch;
 
+import com.example.realestate.discover.AgriDestinationClassificationGenerator;
 import com.example.realestate.discover.navigation.NavigationPolicyReader;
 import com.example.realestate.discover.navigation.NavigationTreeGenerationService;
 import com.example.realestate.discover.navigation.NavigationTreeValidationException;
@@ -10,6 +11,7 @@ import com.example.realestate.discover.navigation.SandboxNavigationOverrideRepos
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -64,6 +66,8 @@ public class CityLaunchGraphWriter {
     private final NavigationTreeGenerationService navigationTreeGenerationService;
     private final SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
     private final SandboxNavigationOverrideRepository sandboxNavigationOverrideRepository;
+    private final AgriDestinationClassificationGenerator agriDestinationClassificationGenerator;
+    private final JdbcOperations jdbcOperations;
     private final CityLaunchSseService sseService;
 
     /**
@@ -91,6 +95,8 @@ public class CityLaunchGraphWriter {
             NavigationTreeGenerationService navigationTreeGenerationService,
             SandboxNavigationNodeRepository sandboxNavigationNodeRepository,
             SandboxNavigationOverrideRepository sandboxNavigationOverrideRepository,
+            AgriDestinationClassificationGenerator agriDestinationClassificationGenerator,
+            JdbcOperations jdbcOperations,
             CityLaunchSseService sseService,
             @Lazy CityLaunchGraphWriter self) {
         this.revisionRepository = revisionRepository;
@@ -105,6 +111,8 @@ public class CityLaunchGraphWriter {
         this.navigationTreeGenerationService = navigationTreeGenerationService;
         this.sandboxNavigationNodeRepository = sandboxNavigationNodeRepository;
         this.sandboxNavigationOverrideRepository = sandboxNavigationOverrideRepository;
+        this.agriDestinationClassificationGenerator = agriDestinationClassificationGenerator;
+        this.jdbcOperations = jdbcOperations;
         this.sseService = sseService;
         this.self = self;
     }
@@ -140,7 +148,8 @@ public class CityLaunchGraphWriter {
                 .orElseThrow(() -> new IllegalStateException("Revision not found: " + revisionId));
 
         CanonicalGeographyReader.CanonicalGeography geography = geographyReader.loadGeography(cityId);
-        validate(geography);
+        CityOrigin origin = loadCityOrigin(cityId);
+        validate(geography, origin);
 
         Map<String, Long> sandboxAreaIdByKey = new HashMap<>();
         List<SandboxArea> savedAreas = new ArrayList<>();
@@ -251,24 +260,75 @@ public class CityLaunchGraphWriter {
             savedNavigationNodes = List.of();
         }
 
-        // #1911 PR5 / #1955 Areas PR A SLICE 2e/2f+2g: compute + persist the "before" checksum
-        // anchor over the row set just written (now eight tables), via the SAME RevisionChecksum
-        // routine CityLaunchPromotionService recomputes at launch time — a match is guaranteed by
-        // construction in the happy path; a mismatch at launch means genuine out-of-band sandbox
-        // mutation between prep completion and promotion. No override row can exist yet at this
-        // point (this revision was just created earlier in this same request), so this list is
-        // always empty here — read via the repository anyway so there is exactly ONE checksum call
-        // shape used everywhere (here, the override endpoints, and CityLaunchPromotionService).
+        // #2151 PR A (decision.d2): Agri destination classification generation, as the pipeline's
+        // 8th step — the AC3 hard precondition (origin non-null/non-zero) was already enforced in
+        // validate() above, BEFORE any sandbox row (of any of the now-nine tables) was written, so
+        // origin.lat()/origin.lon() are guaranteed safe to pass through here. Unlike the
+        // navigation-tree generation above, this step is unconditional (no city_region_policy
+        // precondition) — every city with valid geography gets an Agri classification.
+        //
+        // Correctness fix: passes `savedAreas` — the SAME sandbox_areas rows just persisted above
+        // from `geography.areas()` — rather than letting the generator issue its own fresh
+        // `SELECT ... FROM public.areas`. Two separate statements against a mutable production
+        // table inside one @Transactional method are NOT guaranteed the same PostgreSQL READ
+        // COMMITTED snapshot; a concurrent area status/coordinate change landing between the two
+        // reads could previously make sandbox_areas and sandbox_agri_destination_classification
+        // disagree about the same area for the SAME revision, silently poisoning the checksum. See
+        // AgriDestinationClassificationGenerator's class javadoc "Snapshot consistency".
+        List<SandboxAgriDestinationClassification> savedAgriDestinations =
+                agriDestinationClassificationGenerator.generateAndStoreForRevision(
+                        revisionId, savedAreas, origin.lat(), origin.lon(), Instant.now());
+
+        // #1911 PR5 / #1955 Areas PR A SLICE 2e/2f+2g / #2151 PR A: compute + persist the "before"
+        // checksum anchor over the row set just written (now nine tables), via the SAME
+        // RevisionChecksum routine CityLaunchPromotionService recomputes at launch time — a match
+        // is guaranteed by construction in the happy path; a mismatch at launch means genuine
+        // out-of-band sandbox mutation between prep completion and promotion. No override row can
+        // exist yet at this point (this revision was just created earlier in this same request), so
+        // this list is always empty here — read via the repository anyway so there is exactly ONE
+        // checksum call shape used everywhere (here, the override endpoints, and
+        // CityLaunchPromotionService).
         List<SandboxNavigationOverride> savedOverrides =
                 sandboxNavigationOverrideRepository.findByRevisionIdOrderByApplyOrderAsc(revisionId);
         revision.setPersistedRevisionChecksum(RevisionChecksum.compute(
                 savedAreas, savedAliases, savedRegions, savedMemberships, savedGroups, savedGroupMembers,
-                savedNavigationNodes, savedOverrides));
+                savedNavigationNodes, savedOverrides, savedAgriDestinations));
 
         revision.setLifecycleStatus(LifecycleStatus.PREPARED);
         revision.setPrepState(PrepState.DONE);
         revision.setPreparedAt(Instant.now());
         emitTerminalProgressAfterCommit(revision);
+    }
+
+    /** City geo-center origin, as read directly from {@code public.cities} — see {@link
+     *  #loadCityOrigin}. {@code lat}/{@code lon} are {@code null} when the column itself is NULL,
+     *  distinct from a legitimate 0.0 coordinate, so {@link #validate} can reject both cases (AC3). */
+    private record CityOrigin(Double lat, Double lon) {}
+
+    /**
+     * Reads {@code cities.geo_center_lat}/{@code geo_center_lon} directly (not via {@link
+     * CanonicalGeographyReader}, which does not currently expose the city's own origin — only its
+     * areas/regions/groups) so {@link #validate} can enforce the AC3 hard precondition BEFORE any
+     * sandbox row is written. Uses {@code rs.getObject(...)} (never {@code rs.getDouble(...)}) so a
+     * NULL column is preserved as Java {@code null} rather than silently coerced to {@code 0.0} —
+     * the exact hazard #2151 finding F1 documents in {@code RegionalClassificationBackfillService}.
+     * Widens via {@link CanonicalGeographyReader}'s {@code nullableDouble} pattern ({@code (Number)}
+     * then {@code .doubleValue()}, never a hard {@code (Double)} cast) so a future {@code NUMERIC}
+     * migration on this column family — which the driver would surface as {@code BigDecimal} —
+     * cannot throw a {@code ClassCastException} here (correction pass finding #7).
+     */
+    private CityOrigin loadCityOrigin(Integer cityId) {
+        return jdbcOperations.query(
+                "SELECT geo_center_lat, geo_center_lon FROM public.cities WHERE id = ?",
+                rs -> rs.next()
+                        ? new CityOrigin(nullableDouble(rs.getObject("geo_center_lat")),
+                                nullableDouble(rs.getObject("geo_center_lon")))
+                        : new CityOrigin(null, null),
+                cityId);
+    }
+
+    private static Double nullableDouble(Object val) {
+        return val == null ? null : ((Number) val).doubleValue();
     }
 
     /**
@@ -279,8 +339,20 @@ public class CityLaunchGraphWriter {
      * "ACTIVE area" AC4 requires is a SOURCE-truth check against that value, not a check against
      * every loaded area row (which would be trivially satisfied even by a city whose areas are all
      * MERGED/INACTIVE, since {@link SandboxArea} no longer defaults to ACTIVE).
+     *
+     * <p>#2151 PR A AC3: also enforces a HARD precondition — never a silent no-op — that the city's
+     * configured origin ({@code geo_center_lat}/{@code geo_center_lon}) is present and non-zero,
+     * BEFORE any sandbox row (of any of the nine tables, including {@code sandbox_areas} itself) is
+     * written. This closes finding F1: {@code rs.getDouble()} silently turning a NULL origin into
+     * {@code 0.0} (a plausible-but-wrong Gulf-of-Guinea origin) would otherwise let Agri destination
+     * generation run to completion on a meaningless origin and REACH a PREPARED revision.
      */
-    private void validate(CanonicalGeographyReader.CanonicalGeography geography) {
+    private void validate(CanonicalGeographyReader.CanonicalGeography geography, CityOrigin origin) {
+        if (origin.lat() == null || origin.lon() == null || origin.lat() == 0.0 || origin.lon() == 0.0) {
+            throw new GeographyValidationException(
+                    "City is missing a configured geo_center_lat/geo_center_lon origin — cannot generate "
+                            + "Agri destination classification (#2151 AC3)");
+        }
         if (geography.areas().isEmpty()) {
             throw new GeographyValidationException("City has zero ACTIVE areas");
         }

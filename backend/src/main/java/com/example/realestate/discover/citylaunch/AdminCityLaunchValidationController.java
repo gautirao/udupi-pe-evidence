@@ -59,7 +59,7 @@ public class AdminCityLaunchValidationController {
         return validationService.toggleCheck(cityId, revisionId, checkKey, request.value());
     }
 
-    /** POST .../validation/reset — clears all five checklist items. */
+    /** POST .../validation/reset — clears all six checklist items. */
     @IsAdmin
     @PostMapping("/reset")
     public ValidationStateDto reset(

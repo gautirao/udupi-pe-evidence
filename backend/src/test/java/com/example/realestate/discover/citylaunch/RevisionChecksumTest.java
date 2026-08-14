@@ -276,4 +276,103 @@ class RevisionChecksumTest {
         assertThat(first).isNotNull();
         assertThat(second).isEqualTo(first);
     }
+
+    // =========================================================================================
+    // #2151 PR A, AC16 (RELEASE-BLOCKING): ninth-table (sandbox_agri_destination_classification)
+    // extension. A regression here makes every historical persisted_revision_checksum fail
+    // verification with a 422 at CityLaunchPromotionService's next promotion — a pipeline-wide
+    // outage, not a degraded feature — so this contract is asserted directly against the
+    // independently-reproduced PRE-#2151 eight-argument raw-string encoding, not merely against
+    // "the 8-arg overload returns the same thing as the 9-arg overload" (which would be true even
+    // if BOTH were broken in the same way).
+    // =========================================================================================
+
+    private static SandboxAgriDestinationClassification agriRow(String areaKey) {
+        return new SandboxAgriDestinationClassification(
+                1L, areaKey, 13.0, 74.7, 12.3, 45.0, "NE", "10_25",
+                "agri-destination-classification-v1", Instant.parse("2026-01-01T00:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("AC16(i): a revision with an EMPTY Agri list produces a checksum BYTE-IDENTICAL to "
+            + "the pre-#2151 eight-argument computation — every historical persisted_revision_checksum "
+            + "still verifies")
+    void nineArgOverload_emptyAgriList_matchesPreChangeEightArgDigest() {
+        SandboxArea a = area("city|area-1");
+
+        // Independent oracle: the EIGHT-argument overload, called directly — this is the exact
+        // pre-#2151 call shape CityLaunchGraphWriter/CityLaunchPromotionService used before this PR.
+        String eightArg = RevisionChecksum.compute(
+                List.of(a), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+        // Nine-argument overload with an EXPLICIT empty Agri list.
+        String nineArgEmpty = RevisionChecksum.compute(
+                List.of(a), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+
+        assertThat(nineArgEmpty).isEqualTo(eightArg);
+        // Also anchor against the independently-reproduced PRE-#1955 six-section digest, so this
+        // test does not merely prove internal self-consistency between two RevisionChecksum
+        // overloads that could both be wrong the same way.
+        assertThat(nineArgEmpty).isEqualTo(expectedPreChangeDigestForSingleArea(a));
+    }
+
+    @Test
+    @DisplayName("AC16(iii): the 8-arg overload is exercised directly and still delegates with "
+            + "List.of() for the Agri section — proven by equality with the 9-arg(empty) call")
+    void eightArgOverload_stillDelegatesWithEmptyAgriList() {
+        UUID admin = UUID.randomUUID();
+        SandboxNavigationOverride override = excludeOverride("city|area-1", admin);
+
+        String eightArg = RevisionChecksum.compute(
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(override));
+        String nineArgEmpty = RevisionChecksum.compute(
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(override),
+                List.of());
+
+        assertThat(eightArg).isEqualTo(nineArgEmpty);
+    }
+
+    @Test
+    @DisplayName("AC16(ii): a single tampered Agri row changes the checksum")
+    void nonEmptyAgriList_changesDigest() {
+        String withoutAgri = RevisionChecksum.compute(
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+        String withAgri = RevisionChecksum.compute(
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(agriRow("city|area-1")));
+
+        assertThat(withAgri).isNotEqualTo(withoutAgri);
+    }
+
+    @Test
+    @DisplayName("AC16(ii): tampering with an Agri row's OWN field (distanceKm) changes the digest")
+    void tamperedAgriRow_changesDigest() {
+        SandboxAgriDestinationClassification original = agriRow("city|area-1");
+        SandboxAgriDestinationClassification tampered = new SandboxAgriDestinationClassification(
+                1L, "city|area-1", 13.0, 74.7, 99.9, 45.0, "NE", "10_25",
+                "agri-destination-classification-v1", Instant.parse("2026-01-01T00:00:00Z"));
+
+        String originalDigest = RevisionChecksum.compute(
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(original));
+        String tamperedDigest = RevisionChecksum.compute(
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(tampered));
+
+        assertThat(tamperedDigest).isNotEqualTo(originalDigest);
+    }
+
+    @Test
+    @DisplayName("determinism: two computations over the same Agri list produce the same digest")
+    void nonEmptyAgriList_isDeterministic() {
+        SandboxAgriDestinationClassification row = agriRow("city|area-1");
+
+        String first = RevisionChecksum.compute(
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(row));
+        String second = RevisionChecksum.compute(
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(row));
+
+        assertThat(second).isEqualTo(first);
+    }
 }

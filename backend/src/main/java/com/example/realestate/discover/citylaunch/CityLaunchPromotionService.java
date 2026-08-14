@@ -92,6 +92,8 @@ public class CityLaunchPromotionService {
     private final SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
     private final SandboxNavigationOverrideRepository sandboxNavigationOverrideRepository;
     private final NavigationNodeRepository navigationNodeRepository;
+    private final SandboxAgriDestinationClassificationRepository sandboxAgriDestinationClassificationRepository;
+    private final AgriDestinationClassificationRepository agriDestinationClassificationRepository;
     private final JdbcOperations jdbcOperations;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -106,6 +108,8 @@ public class CityLaunchPromotionService {
             SandboxNavigationNodeRepository sandboxNavigationNodeRepository,
             SandboxNavigationOverrideRepository sandboxNavigationOverrideRepository,
             NavigationNodeRepository navigationNodeRepository,
+            SandboxAgriDestinationClassificationRepository sandboxAgriDestinationClassificationRepository,
+            AgriDestinationClassificationRepository agriDestinationClassificationRepository,
             JdbcOperations jdbcOperations,
             ApplicationEventPublisher eventPublisher) {
         this.revisionRepository = revisionRepository;
@@ -118,6 +122,8 @@ public class CityLaunchPromotionService {
         this.sandboxNavigationNodeRepository = sandboxNavigationNodeRepository;
         this.sandboxNavigationOverrideRepository = sandboxNavigationOverrideRepository;
         this.navigationNodeRepository = navigationNodeRepository;
+        this.sandboxAgriDestinationClassificationRepository = sandboxAgriDestinationClassificationRepository;
+        this.agriDestinationClassificationRepository = agriDestinationClassificationRepository;
         this.jdbcOperations = jdbcOperations;
         this.eventPublisher = eventPublisher;
     }
@@ -141,6 +147,8 @@ public class CityLaunchPromotionService {
                 sandboxNavigationNodeRepository.findByRevisionId(revisionId);
         List<SandboxNavigationOverride> sandboxNavigationOverrides =
                 sandboxNavigationOverrideRepository.findByRevisionIdOrderByApplyOrderAsc(revisionId);
+        List<SandboxAgriDestinationClassification> sandboxAgriDestinations =
+                sandboxAgriDestinationClassificationRepository.findByRevisionId(revisionId);
 
         CityLaunchRevision revision = revisionRepository.findByIdForUpdate(revisionId)
                 .orElseThrow(() -> new IllegalStateException(
@@ -160,7 +168,7 @@ public class CityLaunchPromotionService {
 
         String recomputedChecksum = RevisionChecksum.compute(
                 sandboxAreas, sandboxAliases, sandboxRegions, sandboxMemberships, sandboxGroups, sandboxGroupMembers,
-                sandboxNavigationNodes, sandboxNavigationOverrides);
+                sandboxNavigationNodes, sandboxNavigationOverrides, sandboxAgriDestinations);
         if (!recomputedChecksum.equals(persistedChecksum)) {
             log.warn("City launch checksum mismatch cityId={} revisionId={} recomputed={} persisted={} — "
                     + "rejecting, zero writes", cityId, revisionId, recomputedChecksum, persistedChecksum);
@@ -195,6 +203,16 @@ public class CityLaunchPromotionService {
         // idempotency as the six geography tables above.
         int navigationNodesPromoted = promoteNavigationNodes(cityId, sandboxNavigationNodes);
 
+        // ── Ninth table, LAST of all (#2151 PR A): agri_destination_classification.area_key FKs
+        // public.areas, which promoteAreas() above has already ensured exist in production for this
+        // city. Uses REPLACE-discipline — same rationale as promoteNavigationNodes (see that
+        // method's javadoc): a re-launch of the SAME city may legitimately reclassify (origin moved,
+        // an area was renamed/merged/made INACTIVE since the prior promotion), so there is no
+        // stable natural key to compare-before-write against, and clearing every prior production
+        // row for this city before inserting the new revision's set is required to close the F2
+        // stale-row defect this PR must not reproduce.
+        int agriDestinationsPromoted = promoteAgriDestinationClassification(cityId, sandboxAgriDestinations);
+
         Instant now = Instant.now();
 
         CityLaunchRevision oldPromoted = revisionRepository.findPromotedByCityIdForUpdate(cityId).orElse(null);
@@ -223,9 +241,11 @@ public class CityLaunchPromotionService {
         boolean cityActivated = cityActivatedRows == 1;
 
         log.info("City launch PROMOTED cityId={} revisionId={} adminId={} areas={} aliases={} regions={} "
-                        + "memberships={} groups={} groupMembers={} navigationNodes={} cityActivated={} checksum={}",
+                        + "memberships={} groups={} groupMembers={} navigationNodes={} agriDestinations={} "
+                        + "cityActivated={} checksum={}",
                 cityId, revisionId, adminId, areasPromoted, aliasesPromoted, regionsPromoted, membershipsPromoted,
-                groupsPromoted, groupMembersPromoted, navigationNodesPromoted, cityActivated, recomputedChecksum);
+                groupsPromoted, groupMembersPromoted, navigationNodesPromoted, agriDestinationsPromoted,
+                cityActivated, recomputedChecksum);
 
         // #1955 Areas PR A, SLICE 2d: refresh signal for the navigation-hierarchy cache — published
         // here (inside the transaction) but only DELIVERED to NavigationGraphRefreshListener
@@ -235,8 +255,8 @@ public class CityLaunchPromotionService {
         eventPublisher.publishEvent(new CityNavigationRevisionPromoted(cityId, revisionId));
 
         return new PromotionReport(revisionId, "PROMOTED", now, areasPromoted, aliasesPromoted, regionsPromoted,
-                membershipsPromoted, groupsPromoted, groupMembersPromoted, navigationNodesPromoted, cityActivated,
-                false);
+                membershipsPromoted, groupsPromoted, groupMembersPromoted, navigationNodesPromoted,
+                agriDestinationsPromoted, cityActivated, false);
     }
 
     // ── CAS-failure disposition (AC3/AC4) ───────────────────────────────────────────────────────
@@ -251,7 +271,7 @@ public class CityLaunchPromotionService {
             log.info("City launch idempotent no-op cityId={} revisionId={} promotedAt={}",
                     cityId, revisionId, revision.getPromotedAt());
             return new PromotionReport(revisionId, "PROMOTED", revision.getPromotedAt(),
-                    0, 0, 0, 0, 0, 0, 0, false, true);
+                    0, 0, 0, 0, 0, 0, 0, 0, false, true);
         }
 
         throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -556,6 +576,43 @@ public class CityLaunchPromotionService {
                     n.getMinLat(), n.getMinLon(), n.getMaxLat(), n.getMaxLon(), n.getBearingDegrees(),
                     n.getPolicyFingerprint(), n.getGeneratedAt()));
             productionIdBySandboxId.put(n.getId(), saved.getId());
+            count++;
+        }
+        return count;
+    }
+
+    /**
+     * REPLACE-discipline promotion of the Agri destination classification (#2151 PR A) — see the
+     * call-site comment in {@link #launch} for why compare-before-write is wrong for this table
+     * (same rationale as {@link #promoteNavigationNodes}). {@code area_key} FKs {@code
+     * public.areas}, which {@link #promoteAreas} above has already ensured exist in production for
+     * this city, so every row here can INSERT cleanly.
+     *
+     * <p>Correction pass finding #3: an empty {@code sandboxAgriDestinations} list (e.g. a revision
+     * VALIDATED before this PR's checksum gate existed) legitimately passes the checksum gate and
+     * then wipes every production row for this city, installing nothing. Whether an empty sandbox
+     * set should ABORT promotion instead is a PR B decision, not this PR's — this method only makes
+     * that outcome visible via a WARN log rather than changing promotion semantics.
+     */
+    private int promoteAgriDestinationClassification(
+            int cityId, List<SandboxAgriDestinationClassification> sandboxAgriDestinations) {
+        int deletedRows = agriDestinationClassificationRepository.deleteByCityId(cityId);
+        if (sandboxAgriDestinations.isEmpty() && deletedRows > 0) {
+            log.warn("City launch Agri destination classification promotion WIPED {} production row(s) for "
+                    + "cityId={} with an EMPTY sandbox set — no replacement rows will be installed; this is "
+                    + "expected only for a revision prepared/validated before the Agri classification "
+                    + "feature existed", deletedRows, cityId);
+        }
+
+        int count = 0;
+        for (SandboxAgriDestinationClassification a : sandboxAgriDestinations.stream()
+                .sorted(Comparator.comparing(SandboxAgriDestinationClassification::getAreaKey,
+                        Comparator.nullsFirst(Comparator.naturalOrder())))
+                .toList()) {
+            agriDestinationClassificationRepository.save(new AgriDestinationClassification(
+                    cityId, a.getAreaKey(), a.getOriginLat(), a.getOriginLon(),
+                    a.getDistanceKm(), a.getBearingDeg(), a.getDirectionKey(), a.getDistanceBandKey(),
+                    a.getGeneratorVersion(), a.getGeneratedAt()));
             count++;
         }
         return count;

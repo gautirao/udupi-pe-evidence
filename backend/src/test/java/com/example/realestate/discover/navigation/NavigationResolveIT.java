@@ -121,6 +121,11 @@ class NavigationResolveIT {
             jdbc.update("DELETE FROM public.property_listings WHERE area_key LIKE ?", "IN|KA|" + slug + "|%");
             jdbc.update("DELETE FROM public.city_launch_revision WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.navigation_nodes WHERE city_id = ?", cityId);
+            // #2151 PR A: agri_destination_classification.area_key FKs public.areas -- this
+            // fixture's real prepare->promote pipeline now also generates/promotes Agri rows
+            // unconditionally, so they must be cleared before the areas DELETE below (mirrors
+            // CityLaunchPromotionServiceIT's cleanup precedent).
+            jdbc.update("DELETE FROM public.agri_destination_classification WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_region_policy WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_region_memberships WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_regions WHERE city_id = ?", cityId);
@@ -198,7 +203,13 @@ class NavigationResolveIT {
         pollUntil(() -> assertThat(revisionRepository.findById(revisionId).orElseThrow().getLifecycleStatus())
                 .isEqualTo(LifecycleStatus.PREPARED));
 
-        for (String key : new String[] {"landing", "regions", "areaGroups", "areas", "listing"}) {
+        // #2151 PR A adds a 6th checklist column (agriDestinations); markValidated's WHERE clause
+        // now requires all six. No manual seeding needed here — this fixture drives the REAL
+        // prepare pipeline with a valid, non-null/non-zero city origin (13.0, 74.7), so
+        // CityLaunchGraphWriter's unconditional Agri-generation step already produced at least one
+        // sandbox_agri_destination_classification row for this revision before this point, which
+        // satisfies setAgriValidatedTrue's EXISTS guard.
+        for (String key : new String[] {"landing", "regions", "areaGroups", "areas", "listing", "agriDestinations"}) {
             validationService.toggleCheck(fixture.cityId(), revisionId, key, true);
         }
         validationService.markValidated(fixture.cityId(), revisionId);

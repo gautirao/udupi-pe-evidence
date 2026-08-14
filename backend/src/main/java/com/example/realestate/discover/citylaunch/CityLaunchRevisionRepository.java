@@ -116,6 +116,25 @@ public interface CityLaunchRevisionRepository extends JpaRepository<CityLaunchRe
     int setListingValidatedTrue(@Param("id") Long id, @Param("cityId") Integer cityId);
 
     /**
+     * #2151 PR A, 6th validation checklist column — same guard discipline as the five above, PLUS
+     * (correction pass, AC2) an EXISTS subquery against {@code sandbox_agri_destination_classification}
+     * scoped to this revision: an admin CANNOT tick this box for a revision whose Agri generation
+     * produced zero rows. This is the sole enforcement point — not a Java pre-check — so there is no
+     * check-then-act race between "does a row exist" and "set the flag". A revision that fails this
+     * EXISTS check gets 0 rows affected exactly like a non-editable revision; the SERVICE
+     * distinguishes the two by separately probing {@code SandboxAgriDestinationClassificationRepository}
+     * to shape a 422 (zero-rows business rule) vs 404/409 (not found / not editable) response.
+     */
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query(value = "UPDATE public.city_launch_revision SET agri_validated = true "
+            + "WHERE id = :id AND city_id = :cityId AND superseded_by IS NULL "
+            + "AND lifecycle_status IN ('PREPARED', 'VALIDATED') "
+            + "AND EXISTS (SELECT 1 FROM public.sandbox_agri_destination_classification a "
+            + "WHERE a.revision_id = :id)", nativeQuery = true)
+    int setAgriValidatedTrue(@Param("id") Long id, @Param("cityId") Integer cityId);
+
+    /**
      * Unticking a check while VALIDATED atomically demotes lifecycle_status back to PREPARED and
      * clears validated_at IN THE SAME UPDATE (never a separate write), so the "VALIDATED implies
      * all-5" invariant can never be observed broken between two statements.
@@ -170,15 +189,28 @@ public interface CityLaunchRevisionRepository extends JpaRepository<CityLaunchRe
             + "AND lifecycle_status IN ('PREPARED', 'VALIDATED')", nativeQuery = true)
     int setListingValidatedFalse(@Param("id") Long id, @Param("cityId") Integer cityId);
 
+    /** #2151 PR A, 6th validation checklist column — replicates the SAME lifecycle demotion CASE
+     *  (VALIDATED -&gt; PREPARED, validated_at cleared, in the SAME UPDATE) as the five methods above,
+     *  per the class javadoc's "guard lives in the SQL WHERE clause itself" contract. */
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query(value = "UPDATE public.city_launch_revision SET "
+            + "agri_validated = false, "
+            + "lifecycle_status = CASE WHEN lifecycle_status = 'VALIDATED' THEN 'PREPARED' ELSE lifecycle_status END, "
+            + "validated_at = CASE WHEN lifecycle_status = 'VALIDATED' THEN NULL ELSE validated_at END "
+            + "WHERE id = :id AND city_id = :cityId AND superseded_by IS NULL "
+            + "AND lifecycle_status IN ('PREPARED', 'VALIDATED')", nativeQuery = true)
+    int setAgriValidatedFalse(@Param("id") Long id, @Param("cityId") Integer cityId);
+
     /**
-     * Resets all five checklist columns to false, atomically demoting VALIDATED -> PREPARED and
+     * Resets all six checklist columns to false, atomically demoting VALIDATED -> PREPARED and
      * clearing validated_at in the same UPDATE as the per-column set-false methods above.
      */
     @Modifying(clearAutomatically = true)
     @Transactional
     @Query(value = "UPDATE public.city_launch_revision SET "
             + "landing_validated = false, regions_validated = false, area_groups_validated = false, "
-            + "areas_validated = false, listing_validated = false, "
+            + "areas_validated = false, listing_validated = false, agri_validated = false, "
             + "lifecycle_status = CASE WHEN lifecycle_status = 'VALIDATED' THEN 'PREPARED' ELSE lifecycle_status END, "
             + "validated_at = CASE WHEN lifecycle_status = 'VALIDATED' THEN NULL ELSE validated_at END "
             + "WHERE id = :id AND city_id = :cityId AND superseded_by IS NULL "
@@ -186,10 +218,12 @@ public interface CityLaunchRevisionRepository extends JpaRepository<CityLaunchRe
     int resetValidation(@Param("id") Long id, @Param("cityId") Integer cityId);
 
     /**
-     * Transitions PREPARED -&gt; VALIDATED. The all-five-checked invariant is enforced IN THE SQL
-     * WHERE clause itself (never a disabled button / service-only check) — a caller with 4/5
-     * checked gets 0 rows affected exactly like a caller on a non-editable revision; the SERVICE
-     * distinguishes the two by pre-loading the revision when rows == 0.
+     * Transitions PREPARED -&gt; VALIDATED. The all-six-checked invariant (five V120 columns plus
+     * #2151 PR A's agri_validated) is enforced IN THE SQL WHERE clause itself (never a disabled
+     * button / service-only check) — a caller with 5/6 checked gets 0 rows affected exactly like a
+     * caller on a non-editable revision; the SERVICE distinguishes the two by pre-loading the
+     * revision when rows == 0. This WHERE clause is the SOLE promotability authority (#2151 risk
+     * item 3) — a concurrent caller cannot bypass it by any other write path.
      */
     @Modifying(clearAutomatically = true)
     @Transactional
@@ -198,7 +232,7 @@ public interface CityLaunchRevisionRepository extends JpaRepository<CityLaunchRe
             + "WHERE id = :id AND city_id = :cityId AND superseded_by IS NULL "
             + "AND lifecycle_status IN ('PREPARED', 'VALIDATED') "
             + "AND landing_validated AND regions_validated AND area_groups_validated "
-            + "AND areas_validated AND listing_validated", nativeQuery = true)
+            + "AND areas_validated AND listing_validated AND agri_validated", nativeQuery = true)
     int markValidated(@Param("id") Long id, @Param("cityId") Integer cityId, @Param("now") Instant now);
 
     /**

@@ -57,6 +57,19 @@ import java.util.Map;
  * DIRECTLY here (not merely indirectly via their effect on {@code sandbox_navigation_nodes})
  * so the checksum gate can detect a tampered/added/removed override row even in the rare case
  * its structural effect on the generated tree happens to be a no-op.
+ *
+ * <h2>#2151 PR A — ninth-table extension (APPEND-ONLY, RELEASE-BLOCKING contract, AC16)</h2>
+ * {@link #compute(List, List, List, List, List, List, List, List, List)} appends a NINTH, TRAILING
+ * section for {@code sandbox_agri_destination_classification} after the eight above, on the SAME
+ * "empty list contributes nothing" append-only discipline as every prior extension — so every
+ * revision prepared before this change (and any revision generation legitimately produced zero Agri
+ * rows for) leaves the raw string byte-identical to the eight-section encoding, and its
+ * ALREADY-persisted {@code persisted_revision_checksum} keeps verifying without a re-prepare. The
+ * eight-arg {@link #compute(List, List, List, List, List, List, List, List)} overload is UNCHANGED
+ * — it delegates with an empty Agri list. Getting this wrong makes every historical {@code
+ * persisted_revision_checksum} fail verification with a 422 at the next promotion — a
+ * pipeline-wide outage, not a degraded feature — which is why this contract is covered by a
+ * dedicated release-blocking unit test ({@code RevisionChecksumTest}, AC16).
  */
 final class RevisionChecksum {
 
@@ -88,11 +101,9 @@ final class RevisionChecksum {
     }
 
     /**
-     * #1955 Areas PR A, SLICE 2f+2g eighth-table signature — see class javadoc for the
-     * append-only contract. {@code overrides} is appended as an EIGHTH, TRAILING section after
-     * {@code navigationNodes}, only when non-empty, so an empty override list (every revision
-     * that has never had a controlled override applied) leaves the raw string byte-identical to
-     * the seven-section encoding.
+     * #1955 Areas PR A, SLICE 2f+2g eighth-table signature, preserved for existing call sites.
+     * Delegates with an empty Agri-destination list, which is a no-op on the raw string (see class
+     * javadoc, #2151 PR A AC16).
      */
     static String compute(
             List<SandboxArea> areas,
@@ -103,6 +114,26 @@ final class RevisionChecksum {
             List<SandboxAreaGroupMember> groupMembers,
             List<SandboxNavigationNode> navigationNodes,
             List<SandboxNavigationOverride> overrides) {
+        return compute(areas, aliases, regions, memberships, groups, groupMembers, navigationNodes,
+                overrides, List.of());
+    }
+
+    /**
+     * #2151 PR A ninth-table signature — see class javadoc for the append-only contract (AC16).
+     * {@code agriDestinations} is appended as a NINTH, TRAILING section after {@code overrides},
+     * only when non-empty, so an empty Agri-destination list (every revision prepared before this
+     * change) leaves the raw string byte-identical to the eight-section encoding.
+     */
+    static String compute(
+            List<SandboxArea> areas,
+            List<SandboxAreaAlias> aliases,
+            List<SandboxCityRegion> regions,
+            List<SandboxCityRegionMembership> memberships,
+            List<SandboxAreaGroup> groups,
+            List<SandboxAreaGroupMember> groupMembers,
+            List<SandboxNavigationNode> navigationNodes,
+            List<SandboxNavigationOverride> overrides,
+            List<SandboxAgriDestinationClassification> agriDestinations) {
         StringBuilder raw = new StringBuilder();
 
         // Owning-row-identity lookups: membership/groupMember digests must hash the NATURAL key of
@@ -283,6 +314,32 @@ final class RevisionChecksum {
                         appendField(raw, o.getApplyOrder());
                         appendField(raw, o.getReason());
                         appendField(raw, o.getCreatedBy() == null ? null : o.getCreatedBy().toString());
+                        raw.append('}');
+                    });
+            raw.append(']');
+        }
+
+        // #2151 PR A: ninth, TRAILING section — appended ONLY when non-empty, same append-only
+        // discipline as the seventh (navigationNodes) and eighth (overrides) sections above.
+        // generatedAt is deliberately NOT hashed (see AgriDestinationClassificationGenerator class
+        // javadoc "Determinism & idempotency") — it is the one column that legitimately varies
+        // between two runs over otherwise-unchanged input, and hashing it would make the checksum
+        // gate fail on every re-prepare even when nothing about the classification actually changed.
+        if (!agriDestinations.isEmpty()) {
+            raw.append(";agriDestinations=[");
+            agriDestinations.stream()
+                    .sorted(Comparator.comparing(SandboxAgriDestinationClassification::getAreaKey,
+                            Comparator.nullsFirst(Comparator.naturalOrder())))
+                    .forEach(a -> {
+                        raw.append('{');
+                        appendField(raw, a.getAreaKey());
+                        appendField(raw, a.getOriginLat());
+                        appendField(raw, a.getOriginLon());
+                        appendField(raw, a.getDistanceKm());
+                        appendField(raw, a.getBearingDeg());
+                        appendField(raw, a.getDirectionKey());
+                        appendField(raw, a.getDistanceBandKey());
+                        appendField(raw, a.getGeneratorVersion());
                         raw.append('}');
                     });
             raw.append(']');

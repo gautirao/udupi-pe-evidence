@@ -69,7 +69,14 @@ function makeState(overrides: Partial<ValidationStateDto> = {}): ValidationState
     cityId: CITY_ID,
     revisionNumber: 1,
     lifecycleStatus: 'PREPARED',
-    checks: { landing: false, regions: false, areaGroups: false, areas: false, listing: false },
+    checks: {
+      landing: false,
+      regions: false,
+      areaGroups: false,
+      areas: false,
+      listing: false,
+      agriDestinations: false,
+    },
     allValidated: false,
     editable: true,
     preparedAt: '2026-07-01T00:00:00Z',
@@ -115,7 +122,18 @@ describe('useValidationState', () => {
 
 describe('useToggleCheck', () => {
   it('PUTs {value} to the checks/{checkKey} path and invalidates the validation query', async () => {
-    vi.mocked(api.put).mockResolvedValue(makeState({ checks: { landing: true, regions: false, areaGroups: false, areas: false, listing: false } }));
+    vi.mocked(api.put).mockResolvedValue(
+      makeState({
+        checks: {
+          landing: true,
+          regions: false,
+          areaGroups: false,
+          areas: false,
+          listing: false,
+          agriDestinations: false,
+        },
+      }),
+    );
     const client = freshClient();
     const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
 
@@ -153,12 +171,78 @@ describe('useToggleCheck', () => {
       queryKey: ['city-launch-validation', CITY_ID, REVISION_ID],
     });
   });
+
+  it('on 422 (Issue #2151: agri destinations has zero rows), surfaces the actionable toast copy and invalidates', async () => {
+    // Fixture message deliberately mirrors what api.ts actually produces
+    // (it always overwrites the server's message with this generic string) —
+    // not the server's original sentence, which never reaches the client.
+    vi.mocked(api.put).mockRejectedValue(
+      new ApiError('API request failed: 422 Unprocessable Entity', 422, null),
+    );
+    const client = freshClient();
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
+
+    const { result } = renderHook(() => useToggleCheck(CITY_ID, REVISION_ID), {
+      wrapper: makeWrapper(client),
+    });
+
+    result.current.mutate({ checkKey: 'agriDestinations', value: true });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'This check cannot be ticked yet',
+        description: expect.stringMatching(/re-run preparation/i),
+        variant: 'destructive',
+      }),
+    );
+    expect(mockToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Failed to update check' }),
+    );
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['city-launch-validation', CITY_ID, REVISION_ID],
+    });
+  });
+
+  it('PUTs {value} to the checks/agriDestinations path (Issue #2151 PR A sixth check)', async () => {
+    vi.mocked(api.put).mockResolvedValue(
+      makeState({
+        checks: {
+          landing: false,
+          regions: false,
+          areaGroups: false,
+          areas: false,
+          listing: false,
+          agriDestinations: true,
+        },
+      }),
+    );
+    const client = freshClient();
+
+    const { result } = renderHook(() => useToggleCheck(CITY_ID, REVISION_ID), {
+      wrapper: makeWrapper(client),
+    });
+
+    result.current.mutate({ checkKey: 'agriDestinations', value: true });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(api.put).toHaveBeenCalledWith(`${VALIDATION_PATH}/checks/agriDestinations`, { value: true });
+  });
 });
 
 describe('useMarkValidated', () => {
   it('POSTs mark-validated and updates the query cache on 200', async () => {
     const validated = makeState({
-      checks: { landing: true, regions: true, areaGroups: true, areas: true, listing: true },
+      checks: {
+        landing: true,
+        regions: true,
+        areaGroups: true,
+        areas: true,
+        listing: true,
+        agriDestinations: true,
+      },
       allValidated: true,
       lifecycleStatus: 'VALIDATED',
     });
