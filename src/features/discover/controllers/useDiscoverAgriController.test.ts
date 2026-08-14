@@ -2,10 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 
 const mockUseRegionalAreaGroups = vi.hoisted(() => vi.fn());
+const mockUseAgriDestinations = vi.hoisted(() => vi.fn());
 const mockUseAgriMapListings = vi.hoisted(() => vi.fn());
 const mockUseFilteredAgriListings = vi.hoisted(() => vi.fn());
 
-vi.mock('@/hooks/useRegionalAreaGroups', () => ({ useRegionalAreaGroups: mockUseRegionalAreaGroups }));
+vi.mock('@/hooks/useRegionalAreaGroups', () => ({
+  useRegionalAreaGroups: mockUseRegionalAreaGroups,
+  useAgriDestinations: mockUseAgriDestinations,
+}));
 vi.mock('@/hooks/useAgriMapListings', () => ({ useAgriMapListings: mockUseAgriMapListings }));
 vi.mock('@/features/discover/presentation/useFilteredAgriListings', () => ({
   useFilteredAgriListings: mockUseFilteredAgriListings,
@@ -48,10 +52,19 @@ const AGRI_LISTINGS_RESULT = {
   isError: false,
   refetch: vi.fn(),
 };
+const AGRI_DESTINATIONS_RESULT = {
+  destinations: [{ areaKey: 'IN|KA|Udupi|Manipal', displayName: 'Manipal', distanceKm: 12, bearingDeg: 90, direction: 'E', parcelCount: 3 }],
+  isLoading: false,
+  isError: false,
+  isNotYetPromoted: false,
+  error: null,
+  refetch: vi.fn(),
+};
 
 describe('useDiscoverAgriController (#2142 Commit 3 — moved verbatim from MapDiscovery.tsx, composition test)', () => {
   beforeEach(() => {
     mockUseRegionalAreaGroups.mockReset().mockReturnValue(REGIONAL_RESULT);
+    mockUseAgriDestinations.mockReset().mockReturnValue(AGRI_DESTINATIONS_RESULT);
     mockUseAgriMapListings.mockReset().mockReturnValue(AGRI_LISTINGS_RESULT);
     mockUseFilteredAgriListings.mockReset().mockReturnValue(null);
   });
@@ -102,15 +115,46 @@ describe('useDiscoverAgriController (#2142 Commit 3 — moved verbatim from MapD
     expect(corridorOnly.current.agriGroupLabel).toBe('East Corridor');
   });
 
-  it('useAgriMapListings is called with the resolved areaKeys and isAuthenticated', () => {
+  it('useAgriMapListings is called with the single canonical selectedLocality areaKey and isAuthenticated (#2151 PR C, C-F2 — no more repeated areaKeys[])', () => {
     renderHook(() =>
       useDiscoverAgriController({
-        nav: makeNav({ selectedRegion: 'E', selectedMaxKm: 25, city: 'bangalore' }),
+        nav: makeNav({
+          selectedRegion: 'E',
+          selectedMaxKm: 25,
+          city: 'bangalore',
+          selectedLocality: 'IN|KA|Udupi|A',
+        }),
         intentListingPurpose: 'rent',
         isAuthenticated: false,
       }),
     );
-    expect(mockUseAgriMapListings).toHaveBeenCalledWith('bangalore', ['IN|KA|Udupi|A'], 'rent', false);
+    expect(mockUseAgriMapListings).toHaveBeenCalledWith('bangalore', 'IN|KA|Udupi|A', 'rent', false);
+  });
+
+  it('useAgriMapListings is called with an empty areaKey when nav.selectedLocality is unset', () => {
+    renderHook(() =>
+      useDiscoverAgriController({
+        nav: makeNav({ city: 'bangalore' }),
+        intentListingPurpose: 'sale',
+        isAuthenticated: true,
+      }),
+    );
+    expect(mockUseAgriMapListings).toHaveBeenCalledWith('bangalore', '', 'sale', true);
+  });
+
+  it('useAgriDestinations is called with city/selectedRegion/selectedMaxKm/intentListingPurpose and its result is exposed as agriDestinations (#2151 PR C, C-F4/C-F7)', () => {
+    const { result } = renderHook(() =>
+      useDiscoverAgriController({
+        nav: makeNav({ selectedRegion: 'E', selectedMaxKm: 25, city: 'bangalore' }),
+        intentListingPurpose: 'sale',
+        isAuthenticated: true,
+      }),
+    );
+    expect(mockUseAgriDestinations).toHaveBeenCalledWith('bangalore', 'E', 25, 'sale');
+    expect(result.current.agriDestinations).toEqual(AGRI_DESTINATIONS_RESULT.destinations);
+    expect(result.current.isLoadingAgriDestinations).toBe(false);
+    expect(result.current.isAgriDestinationsError).toBe(false);
+    expect(result.current.isAgriDestinationsNotYetPromoted).toBe(false);
   });
 
   it('selectedGroupListingItem finds the matching listing by nav.selectedListing id, null when absent/not found', () => {

@@ -663,13 +663,19 @@ export function useDiscoverCameraOrchestration({
 
     // Issue #1480 — when a locality/town is selected, frame only that town's listings.
     // Locality branch takes priority over corridor framing; early-return prevents overwrite.
+    // Issue #2151 PR C (C-F5) — `selectedLocality` is now the canonical areas.area_key (see
+    // src/features/discover/state/url/agricultural.ts, C-F1), so identity is a direct areaKey
+    // match. This collapses what used to be a SECOND independent `item.locality ?? item.areaKey`
+    // derivation (duplicating AgriGroupSelectedPanel's own, now-deleted, client-side grouping) —
+    // there is now exactly one destination-identity concept (areaKey), sourced from the URL/server,
+    // not re-derived from listing rows here.
     const selectedLocality = urlState.selectedLocality ?? null;
     if (selectedLocality) {
       const localityListings = (agriMapListingsData?.listings ?? []).filter(
         (l) =>
           l.latitude != null &&
           l.longitude != null &&
-          (l.locality ?? l.areaKey) === selectedLocality,
+          l.areaKey === selectedLocality,
       );
       if (localityListings.length > 0) {
         const lats = localityListings.map((l) => l.latitude as number);

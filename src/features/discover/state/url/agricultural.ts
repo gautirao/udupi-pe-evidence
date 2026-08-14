@@ -23,6 +23,25 @@ import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type { DiscoverUrlActions, DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 
 const PARAM_LOCALITY = 'locality';
+/**
+ * Issue #2151 PR C (C-F1) — canonical destination-key URL param. Stores areas.area_key (a stable
+ * identity), never display text. Legacy `locality=`/`town=` links (which stored free-text town
+ * names, or occasionally an areaKey when the old client-side grouping fell back to it) are
+ * migrated to this param exactly once on cold load — see the migration effect below.
+ */
+const PARAM_DEST_KEY = 'destKey';
+/**
+ * Issue #2151 PR C — format guard for the legacy locality/town → destKey migration below.
+ * Real area_key values follow `IN|KA|<District>|<Name>` (see src/lib/areaKey.ts's
+ * buildAreaKey / AreaOverviewController contract) — at least 3 non-empty pipe-delimited
+ * segments. No codebase-wide area_key validator exists to reuse (checked
+ * discoverUrlNormalize.ts and areaKey.ts — neither exports one), so this is scoped locally.
+ * Deliberately loose (segment count, not a hard-coded `IN|KA|` prefix) so it doesn't need to
+ * change if the key format ever grows beyond India/Karnataka. A legacy value that does NOT
+ * match this shape is free-text display text (e.g. "Manipal") and must never be promoted to
+ * the canonical destKey param — see the migration effect below.
+ */
+const AREA_KEY_FORMAT = /^[^|]+(?:\|[^|]+){2,}$/;
 const VALID_MAX_KM = new Set([10, 25, 50, 100]);
 /**
  * Byte-identical re-export target — useDiscoverUrlState.ts does
@@ -75,10 +94,35 @@ export function useAgriculturalUrlDomain(
   const rawListing = urlParams.get('listing');
   const selectedListing: string | null = rawListing && rawListing.length > 0 ? rawListing : null;
 
-  // Issue #1464 — agri-group-locality drill-down. Plain string from `locality` or `town` URL param.
+  // Issue #1464 — agri-group-locality drill-down. Issue #2151 PR C (C-F1) — the canonical source
+  // is now `destKey` (a stable areas.area_key), not free-text `locality`/`town`. Legacy
+  // `locality`/`town` values are read here ONLY as a render-scope fallback for the very first
+  // tick before the migration effect below has had a chance to run (it fires on mount and
+  // REPLACEs `destKey` in, so this fallback is never hit again after that first render).
   // useSearchParams.get() returns the already-decoded value (no manual decodeURIComponent needed).
-  const rawLocality = urlParams.get(PARAM_LOCALITY) || urlParams.get('town');
-  const selectedLocality: string | null = rawLocality && rawLocality.length > 0 ? rawLocality : null;
+  //
+  // GitHub-reviewer-24-confirmed bug fix (#2151 PR C follow-up) — this is the READ side of the
+  // same bug the migration effect below already fixed on the WRITE side: a legacy value can be
+  // either a real areas.area_key OR free-text display text (e.g. "Manipal"). The migration effect
+  // only ever persists an area_key-shaped legacy value into destKey, but this render-scope
+  // fallback used to expose ANY non-empty legacy value as `selectedLocality` unconditionally —
+  // including free text — on the very first render, before the migration effect has run. Any
+  // downstream consumer treating a non-null selectedLocality as "ready to fetch" could scope a
+  // request by an invalid areaKey (e.g. "Manipal") on that first render. Apply the same
+  // AREA_KEY_FORMAT guard here: a legacy value that isn't area_key-shaped is treated as absent,
+  // exactly like the migration effect already treats it on the write side.
+  const rawDestKey = urlParams.get(PARAM_DEST_KEY);
+  const rawLocalityLegacyCandidate = urlParams.get(PARAM_LOCALITY) || urlParams.get('town');
+  const rawLocalityLegacy =
+    rawLocalityLegacyCandidate && AREA_KEY_FORMAT.test(rawLocalityLegacyCandidate)
+      ? rawLocalityLegacyCandidate
+      : null;
+  const selectedLocality: string | null =
+    rawDestKey && rawDestKey.length > 0
+      ? rawDestKey
+      : rawLocalityLegacy && rawLocalityLegacy.length > 0
+        ? rawLocalityLegacy
+        : null;
 
   // ─── OD-1 Option A: Legacy group=DIR:BAND cold-load migration ────────────────
   // On initial URL parse: if the `group` param is present, replace history with
@@ -168,6 +212,59 @@ export function useAgriculturalUrlDomain(
     }
   }, [selectedRegion, selectedMaxKm, hasLegacyGroupParam, setUrlParams]);
   // No eslint-disable needed — all consumed values are in the deps array.
+
+  // ─── Issue #2151 PR C (C-F1): legacy locality/town → canonical destKey, EXACTLY ONCE ─────────
+  // Mirrors the OD-1 group=DIR:BAND migration above: a ref-guarded mount effect that fires once,
+  // deletes the legacy params, and REPLACEs so no phantom history entry is created. This is a
+  // param-identity migration (rename), not a display-text→area_key content lookup — no such
+  // lookup is available client-side. Callers going forward (AgriGroupSelectedPanel's
+  // `onSelectLocality`) write the destination's real areas.area_key via `setLocality`; only
+  // pre-existing shared links that still carry old `locality=`/`town=` values go through this
+  // one-time migration.
+  //
+  // GitHub-reviewer-confirmed bug fix: pre-#2151 shared links could carry EITHER a real
+  // areas.area_key OR free-text display text (e.g. "Manipal") in the legacy param — the old
+  // client-side grouping sometimes fell back to the areaKey, sometimes used display text.
+  // Blindly promoting whichever value is present would let free text pose as a stable identity
+  // (the exact bug #2151 exists to eliminate) and could scope a downstream destination request
+  // by an invalid key. So the legacy value is only promoted to destKey when it already matches
+  // the area_key shape (AREA_KEY_FORMAT); otherwise it is dropped — the legacy params are still
+  // removed, but destKey is left unset, and the app falls through to its normal "no destination
+  // selected" state (group/corridor list). This is the safe, honest fallback: never fabricate an
+  // identity from display text.
+  //
+  // Guarded independently of coldLoadDoneRef/groupMigrationDoneRef above — this domain (locality
+  // drill-down identity) has no ordering dependency on the region/maxKm cold-load state machine,
+  // so it does not need to participate in that ref chain.
+  const localityMigrationDoneRef = useRef(false);
+  useEffect(() => {
+    if (localityMigrationDoneRef.current) return;
+    localityMigrationDoneRef.current = true;
+
+    const hasCanonical = urlParams.get(PARAM_DEST_KEY) !== null;
+    if (hasCanonical) return; // already canonical — nothing to migrate
+
+    const legacyValue = urlParams.get(PARAM_LOCALITY) || urlParams.get('town');
+    if (!legacyValue) return; // no legacy param present — nothing to migrate
+
+    const isAreaKeyShaped = AREA_KEY_FORMAT.test(legacyValue);
+
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete(PARAM_LOCALITY);
+        next.delete('town');
+        if (isAreaKeyShaped) {
+          next.set(PARAM_DEST_KEY, legacyValue);
+        }
+        // else: free-text display value — drop it rather than fabricate an identity.
+        return next;
+      },
+      { replace: true }, // REPLACE — migration must not create a phantom history entry
+    );
+    // No eslint-disable needed — mirrors the OD-1 effect above: real deps satisfy
+    // react-hooks/exhaustive-deps, and the ref guard ensures the body still only runs once.
+  }, [urlParams, setUrlParams]);
 
   // ─── Actions ─────────────────────────────────────────────────────────────
 
@@ -272,18 +369,24 @@ export function useAgriculturalUrlDomain(
     );
   }, [setUrlParams]);
 
+  // Issue #2151 PR C (C-F1) — `name` is now expected to be the destination's stable areas.area_key
+  // (e.g. from AgriGroupSelectedPanel's server-supplied destination buckets), not free-text.
+  // Written to the canonical PARAM_DEST_KEY; legacy PARAM_LOCALITY/`town` are always cleared so no
+  // dual-canonical state can persist across a setLocality call.
   const setLocality = useCallback(
-    (name: string) => {
+    (key: string) => {
       setUrlParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (name) {
+          if (key) {
             // setUrlParams (URLSearchParams.set) auto-encodes the value.
             // We pass the plain decoded string; it is percent-encoded on write
             // and decoded back by .get() on the next render.
-            next.set(PARAM_LOCALITY, name);
+            next.set(PARAM_DEST_KEY, key);
+            next.delete(PARAM_LOCALITY);
             next.delete('town');
           } else {
+            next.delete(PARAM_DEST_KEY);
             next.delete(PARAM_LOCALITY);
             next.delete('town');
           }
@@ -299,6 +402,7 @@ export function useAgriculturalUrlDomain(
     setUrlParams(
       (prev) => {
         const next = new URLSearchParams(prev);
+        next.delete(PARAM_DEST_KEY);
         next.delete(PARAM_LOCALITY);
         next.delete('town');
         return next;

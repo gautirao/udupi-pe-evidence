@@ -167,6 +167,28 @@ const AGRI_LISTING_DETAIL_FIXTURE = {
   status: 'LIVE',
 };
 
+/**
+ * Issue #2151 PR C (C-F4) — server-computed destination buckets for the Level-2 panel.
+ * AgriGroupSelectedPanel no longer derives town rows by client-grouping the whole-corridor
+ * `agri-map-listings` fetch — it now renders `agri-group-locality-btn` rows straight from
+ * GET /api/discover/agri-destinations. `areaKey` MUST be the real stable areas.area_key
+ * (never display text) — it becomes the `destKey` URL param when a row is clicked.
+ */
+const AGRI_DESTINATIONS_FIXTURE = {
+  city: CITY,
+  destinations: [
+    {
+      areaKey: AREA_KEY,
+      displayName: 'Manipal',
+      distanceKm: 8.2,
+      bearingDeg: 12,
+      direction: REGION,
+      parcelCount: 1,
+      parcelAcreage: 3.0,
+    },
+  ],
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -186,9 +208,26 @@ async function stubCommonRoutes(page: Page, anonPrice = false) {
   await page.route('**/api/discover/listings**', (r) => fulfillJson(r, 200, { content: [], totalElements: 0 }));
   await page.route('**/api/public/schools/**', (r) => fulfillJson(r, 200, []));
   await page.route('**/api/discover/regional-area-groups**', (r) => fulfillJson(r, 200, REGIONAL_AREA_GROUPS_FIXTURE));
+  // Issue #2151 PR C — Level-2 town rows come from agri-destinations, not agri-map-listings.
+  await page.route('**/api/discover/agri-destinations**', (r) => fulfillJson(r, 200, AGRI_DESTINATIONS_FIXTURE));
   await page.route('**/api/discover/agri-map-listings**', (r) =>
     fulfillJson(r, 200, anonPrice ? AGRI_MAP_LISTINGS_ANON_FIXTURE : AGRI_MAP_LISTINGS_FIXTURE));
   await page.route('**/api/public/listings/*', (r) => fulfillJson(r, 200, AGRI_LISTING_DETAIL_FIXTURE));
+}
+
+/**
+ * Issue #2151 PR C — drills from the Level-2 destination row (agri-group-locality-btn) into
+ * Level-3 (AgriGroupLocalityPanel), which is where listing rows / the peek now live. Replaces
+ * the pre-PR-C direct click on 'agri-group-listing-row' at Level 2.
+ */
+async function drillIntoLocality(page: Page) {
+  const localityBtn = page.locator('[data-testid="agri-group-locality-btn"]').first();
+  await expect(localityBtn).toBeVisible({ timeout: 12_000 });
+  await localityBtn.click();
+  await page.waitForURL(/destKey=/, { timeout: 8_000 });
+  await expect(page.locator('[data-testid="agri-group-locality-panel"]')).toBeVisible({
+    timeout: 10_000,
+  });
 }
 
 /**
@@ -264,7 +303,7 @@ test.describe('@integration-ui 1448 — direction-first v2.1 — stubbed', () =>
   // ── AC2: 25 km chip selected by default; listings visible; sector overlay > 0 ─
 
   test(
-    'AC2: 25 km chip selected by default; agri-group-listing-row visible; sector overlay paths > 0',
+    'AC2: 25 km chip selected by default; agri-group-locality-btn visible (destination buckets, Issue #2151 PR C); sector overlay paths > 0',
     async ({ page }) => {
       await stubCommonRoutes(page);
       await navigateAgriFirst(page, { region: REGION, maxKm: '25' });
@@ -282,13 +321,17 @@ test.describe('@integration-ui 1448 — direction-first v2.1 — stubbed', () =>
       const chip50 = page.locator('[data-testid="distance-chip-50"]');
       await expect(chip50).toHaveAttribute('aria-pressed', 'false');
 
-      // At least one listing row must be visible from the fixture
-      const listingRows = page.locator('[data-testid="agri-group-listing-row"]');
-      const rowCount = await listingRows.count();
+      // Issue #2151 PR C (C-F4) — Level-2 shows server-computed destination (town) rows, not
+      // flat listing rows. 'agri-group-listing-row' no longer renders at this level.
+      const localityRows = page.locator('[data-testid="agri-group-locality-btn"]');
+      const rowCount = await localityRows.count();
       if (rowCount === 0) {
-        throw new Error('FIXTURE PRECONDITION FAILED: no listing rows rendered — check AGRI_MAP_LISTINGS_FIXTURE');
+        throw new Error('FIXTURE PRECONDITION FAILED: no destination rows rendered — check AGRI_DESTINATIONS_FIXTURE');
       }
-      await expect(listingRows.first()).toBeVisible({ timeout: 8_000 });
+      await expect(localityRows.first()).toBeVisible({ timeout: 8_000 });
+      // Displayed text must be the human displayName, never the raw pipe-delimited area_key.
+      await expect(localityRows.first()).toContainText('Manipal');
+      await expect(localityRows.first()).not.toContainText('|');
 
       // Sector overlay must render at least one path (POSITIVE spy).
       // Use waitForFunction to avoid a fixed sleep as the sole gate.
@@ -335,8 +378,8 @@ test.describe('@integration-ui 1448 — direction-first v2.1 — stubbed', () =>
       await expect(page.locator('[data-testid="distance-chip-50"]')).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('[data-testid="distance-chip-25"]')).toHaveAttribute('aria-pressed', 'false');
 
-      // Listings still present
-      await expect(page.locator('[data-testid="agri-group-listing-row"]').first()).toBeVisible({
+      // Issue #2151 PR C — destination rows (not flat listing rows) still present
+      await expect(page.locator('[data-testid="agri-group-locality-btn"]').first()).toBeVisible({
         timeout: 8_000,
       });
 
@@ -361,8 +404,8 @@ test.describe('@integration-ui 1448 — direction-first v2.1 — stubbed', () =>
       await expect(page.locator('[data-testid="distance-chip-25"]')).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('[data-testid="distance-chip-50"]')).toHaveAttribute('aria-pressed', 'false');
 
-      // Listing row still visible
-      await expect(page.locator('[data-testid="agri-group-listing-row"]').first()).toBeVisible({
+      // Issue #2151 PR C — destination row still visible
+      await expect(page.locator('[data-testid="agri-group-locality-btn"]').first()).toBeVisible({
         timeout: 8_000,
       });
 
@@ -381,7 +424,7 @@ test.describe('@integration-ui 1448 — direction-first v2.1 — stubbed', () =>
   // ── AC4: Peek open/close — close preserves region+maxKm, removes listing= ──
 
   test(
-    'AC4: listing peek open/close — close preserves region+maxKm, removes listing=',
+    'AC4: listing peek open/close — close preserves region+maxKm+destKey, removes listing= (Issue #2151 PR C: peek now lives at Level 3)',
     async ({ page }) => {
       await stubCommonRoutes(page);
       await navigateAgriFirst(page, { region: REGION, maxKm: '25' });
@@ -390,8 +433,11 @@ test.describe('@integration-ui 1448 — direction-first v2.1 — stubbed', () =>
         timeout: 10_000,
       });
 
+      // Issue #2151 PR C — drill into the destination (Level 3) before the peek is reachable.
+      await drillIntoLocality(page);
+
       // Wait for listing rows to appear
-      await expect(page.locator('[data-testid="agri-group-listing-row"]').first()).toBeVisible({
+      await expect(page.locator('[data-testid="agri-locality-listing-row"]').first()).toBeVisible({
         timeout: 12_000,
       });
 
@@ -401,7 +447,7 @@ test.describe('@integration-ui 1448 — direction-first v2.1 — stubbed', () =>
       });
 
       // Click first listing row → PUSH listing= into URL
-      await page.locator('[data-testid="agri-group-listing-row"]').first().click();
+      await page.locator('[data-testid="agri-locality-listing-row"]').first().click();
 
       // URL must contain listing= param
       await page.waitForURL(/listing=/, { timeout: 8_000 });
@@ -426,7 +472,7 @@ test.describe('@integration-ui 1448 — direction-first v2.1 — stubbed', () =>
       // Await the detail response to ensure lazy fields have loaded before close
       await detailResponsePromise;
 
-      // Click close — REPLACE removes listing= only, preserving region+maxKm
+      // Click close — REPLACE removes listing= only, preserving region+maxKm+destKey
       await page.locator('[data-testid="agri-listing-peek-close"]').click();
 
       // listing= must be absent after close
@@ -437,9 +483,12 @@ test.describe('@integration-ui 1448 — direction-first v2.1 — stubbed', () =>
       // region and maxKm must be preserved
       expect(urlAfterClose).toContain(`region=${REGION}`);
       expect(urlAfterClose).toContain('maxKm=25');
+      // Issue #2151 PR C — destKey (Level-3 destination identity) must also survive a peek close.
+      expect(urlAfterClose).toContain('destKey=');
 
-      // Panel returns to agri-group-selected (peek gone)
-      await expect(page.locator('[data-testid="agri-group-selected-panel"]')).toBeVisible({
+      // Panel returns to agri-group-locality (Level 3, peek gone) — NOT agri-group-selected,
+      // since the peek was opened from inside the locality drill-down.
+      await expect(page.locator('[data-testid="agri-group-locality-panel"]')).toBeVisible({
         timeout: 5_000,
       });
       await expect(page.locator('[data-testid="agri-listing-peek"]')).toHaveCount(0);
@@ -513,11 +562,11 @@ test.describe('@integration-ui 1448 — direction-first v2.1 — stubbed', () =>
       // 25 km chip must be pre-selected
       await expect(page.locator('[data-testid="distance-chip-25"]')).toHaveAttribute('aria-pressed', 'true');
 
-      // Listing rows must be populated from fixture
-      const listingRows = page.locator('[data-testid="agri-group-listing-row"]');
-      const rowCount = await listingRows.count();
+      // Issue #2151 PR C — destination rows must be populated from the agri-destinations fixture.
+      const localityRows = page.locator('[data-testid="agri-group-locality-btn"]');
+      const rowCount = await localityRows.count();
       if (rowCount === 0) {
-        throw new Error('FIXTURE PRECONDITION FAILED: no listing rows on deep-link cold load');
+        throw new Error('FIXTURE PRECONDITION FAILED: no destination rows on deep-link cold load');
       }
 
       // Sector overlay must render (waitForFunction instead of blind timeout)
@@ -654,7 +703,7 @@ test.describe('@integration-ui 1448 — direction-first v2.1 — stubbed', () =>
   // ── AC12: Anon — peek shows price-signin affordance; numeric price absent ──────
 
   test(
-    'AC12: anon default (pricePaise: null) — peek shows agri-listing-peek-price-signin; numeric price absent',
+    'AC12: anon default (pricePaise: null) — peek shows agri-listing-peek-price-signin; numeric price absent (Issue #2151 PR C: peek reached via Level-3 destination drill-down)',
     async ({ page }) => {
       // Stubs must be set up BEFORE navigation — use anonPrice=true for null pricePaise
       await stubCommonRoutes(page, true);
@@ -664,13 +713,16 @@ test.describe('@integration-ui 1448 — direction-first v2.1 — stubbed', () =>
         timeout: 10_000,
       });
 
+      // Issue #2151 PR C — drill into the destination before the peek is reachable.
+      await drillIntoLocality(page);
+
       // Wait for listing rows from the anon fixture
-      await expect(page.locator('[data-testid="agri-group-listing-row"]').first()).toBeVisible({
+      await expect(page.locator('[data-testid="agri-locality-listing-row"]').first()).toBeVisible({
         timeout: 12_000,
       });
 
       // Click first listing row to open peek
-      await page.locator('[data-testid="agri-group-listing-row"]').first().click();
+      await page.locator('[data-testid="agri-locality-listing-row"]').first().click();
 
       // URL must contain listing= param
       await page.waitForURL(/listing=/, { timeout: 8_000 });
@@ -748,15 +800,16 @@ test.describe('@integration-ui 1448 — Real-seed [REAL_SEED only]', () => {
       // 25 km chip must be pre-selected by default
       await expect(page.locator('[data-testid="distance-chip-25"]')).toHaveAttribute('aria-pressed', 'true');
 
-      // Allow agri-map-listings to load listing rows from live backend
+      // Allow agri-destinations to load destination rows from live backend.
+      // Issue #2151 PR C — Level 2 shows destination (town) rows, not flat listing rows.
       await page.waitForTimeout(2000);
 
-      const listingRows = page.locator('[data-testid="agri-group-listing-row"]');
-      const rowCount = await listingRows.count();
+      const localityRows = page.locator('[data-testid="agri-group-locality-btn"]');
+      const rowCount = await localityRows.count();
       if (rowCount === 0) {
         throw new Error(
-          'FIXTURE PRECONDITION FAILED: no agri listings found for selected corridor — ' +
-          'seed may be incomplete or backend not pointed at local fixture',
+          'FIXTURE PRECONDITION FAILED: no agri destinations found for selected corridor — ' +
+          'seed may be incomplete, or the city has not been promoted through Agri City Launch',
         );
       }
 
@@ -785,10 +838,18 @@ test.describe('@integration-ui 1448 — Real-seed [REAL_SEED only]', () => {
         'REGRESSION (real-seed): sector overlay absent after chip switch to maxKm=50',
       ).toBeGreaterThan(0);
 
-      // ── Open listing peek ────────────────────────────────────────────────────
-      const firstRow = listingRows.first();
-      await expect(firstRow).toBeVisible({ timeout: 5_000 });
-      await firstRow.click();
+      // ── Drill into a destination, then open a listing peek (Issue #2151 PR C) ──
+      const firstLocality = localityRows.first();
+      await expect(firstLocality).toBeVisible({ timeout: 5_000 });
+      await firstLocality.click();
+      await page.waitForURL(/destKey=/, { timeout: 8_000 });
+      await expect(page.locator('[data-testid="agri-group-locality-panel"]')).toBeVisible({
+        timeout: 10_000,
+      });
+
+      const listingRows = page.locator('[data-testid="agri-locality-listing-row"]');
+      await expect(listingRows.first()).toBeVisible({ timeout: 10_000 });
+      await listingRows.first().click();
 
       await expect(page.locator('[data-testid="agri-listing-peek"]')).toBeVisible({
         timeout: 10_000,

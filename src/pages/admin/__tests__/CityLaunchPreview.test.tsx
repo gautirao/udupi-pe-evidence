@@ -152,6 +152,14 @@ vi.mock('@/hooks/useDiscoverCityListings', () => ({
 
 vi.mock('@/hooks/useRegionalAreaGroups', () => ({
   useRegionalAreaGroups: () => ({ groups: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useAgriDestinations: () => ({
+    destinations: [],
+    isLoading: false,
+    isError: false,
+    isNotYetPromoted: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
 }));
 
 vi.mock('@/hooks/useAgriMapListings', () => ({

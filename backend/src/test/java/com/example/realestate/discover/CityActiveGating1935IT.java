@@ -382,11 +382,11 @@ class CityActiveGating1935IT {
     @DisplayName("agri-map-listings: inactive city == unknown city (empty listings); active city returns the agri listing")
     void agriMapListings_inactiveEqualsUnknown_activeReturnsData() {
         AgriMapListingsResponse active = discoverAgriMapListingsService.findAgriMapListings(
-                ACTIVE_CITY, null, List.of(ACTIVE_AREA), Optional.empty(), true, null);
+                ACTIVE_CITY, ACTIVE_AREA, Optional.empty(), true, null);
         AgriMapListingsResponse inactive = discoverAgriMapListingsService.findAgriMapListings(
-                INACTIVE_CITY, null, List.of(INACTIVE_AREA), Optional.empty(), true, null);
+                INACTIVE_CITY, INACTIVE_AREA, Optional.empty(), true, null);
         AgriMapListingsResponse unknown = discoverAgriMapListingsService.findAgriMapListings(
-                UNKNOWN_CITY, null, List.of(UNKNOWN_AREA), Optional.empty(), true, null);
+                UNKNOWN_CITY, UNKNOWN_AREA, Optional.empty(), true, null);
 
         assertThat(active.listings()).hasSize(1);
         assertThat(inactive.listings()).isEmpty();

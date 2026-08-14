@@ -22,6 +22,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
+import { useAgriDestinations } from '@/hooks/useRegionalAreaGroups';
 import type { CumulativeDistanceTier } from '@/hooks/useRegionalAreaGroups';
 import { AgriFiltersPanel } from './AgriFiltersPanel';
 import type { AgriFilterValues } from './AgriFiltersPanel';
@@ -47,8 +48,16 @@ const FRAUNCES = "font-['Fraunces',_ui-serif,_Georgia,_serif]";
 
 interface AgriGroupSelectedPanelProps {
   groupLabel: string;
+  /**
+   * Issue #2151 PR C (C-F4) — retained for caller compatibility (DiscoverRightPanel still passes
+   * it through) but no longer drives the Level-2 towns list or hero stats, which now come from
+   * server-supplied destination buckets (see useAgriDestinations). Still meaningful once a
+   * specific locality is selected — see AgriGroupLocalityPanel.
+   */
   listings: AgriMapListingItem[] | null;
+  /** Issue #2151 PR C (C-F4) — vestigial; see `listings` doc above. */
   listingCount: number;
+  /** Issue #2151 PR C (C-F4) — folded into the combined loading/error state alongside the new destinations fetch; no longer the sole source of truth for this panel's body state. */
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
@@ -65,8 +74,13 @@ interface AgriGroupSelectedPanelProps {
   availableMaxDistances: CumulativeDistanceTier[] | undefined;
   /** Issue #1445 — called when user selects a distance tier chip. */
   onSetMaxKm: (km: 10 | 25 | 50 | 100) => void;
-  /** Issue #1464 — called when user clicks a locality group to drill in. */
-  onSelectLocality?: (localityKey: string) => void;
+  /**
+   * Issue #1464 — called when user clicks a locality group to drill in.
+   * Issue #2151 PR C (C-F1/C-F4) — called with the destination's stable areas.area_key (from the
+   * server-supplied destination bucket), NOT display text. Consumers write this value straight
+   * into the URL via the agricultural URL domain's `setLocality`, which now treats it as canonical.
+   */
+  onSelectLocality?: (areaKey: string) => void;
   /** Issue #1457 — whether the current user is authenticated (unlocks price filter). Default false. */
   isAuthenticated?: boolean;
   /** Issue #1457 — currently active acreage min filter (from URL). */
@@ -97,6 +111,14 @@ interface AgriGroupSelectedPanelProps {
   limit?: number;
   /** Issue #1771 — human-readable city label for the hero breadcrumb (e.g. "Udupi"). */
   cityLabel?: string;
+  /**
+   * Issue #2151 PR C (code-reviewer finding) — canonical city slug (e.g. "udupi") used to fetch
+   * server-supplied destination buckets via useAgriDestinations. Distinct from `cityLabel`, which
+   * is a display-only label and must never be used to derive the fetch key (a multi-word label
+   * like "Sri Ganganagar" would lowercase to "sri ganganagar", which never matches the backend's
+   * slug lookup and silently yields an empty destinations: [] instead of a real result).
+   */
+  citySlug?: string;
   /** Issue #1771 — corridor group name for the hero title (e.g. "N towards Brahmavar"). */
   corridorName?: string | null;
   /** Issue #1771 — corridor direction code (e.g. "N") for the breadcrumb + summary band. */
@@ -151,6 +173,7 @@ export function AgriGroupSelectedPanel({
   truncated,
   limit,
   cityLabel,
+  citySlug,
   corridorName = null,
   directionCode = null,
 }: AgriGroupSelectedPanelProps) {
@@ -159,36 +182,52 @@ export function AgriGroupSelectedPanel({
     ? [...availableMaxDistances].sort((a, b) => a.maxKm - b.maxKm)
     : [];
 
-  // Issue #1464 — group listings by locality (fallback to areaKey when locality is null).
-  // Issue #1486 — SORT 1: count descending; SORT 2: alpha tie-break (locale-aware, case-insensitive).
-  const sortedGroups: [string, AgriMapListingItem[]][] = React.useMemo(() => {
-    if (!listings || listings.length === 0) return [];
-    const groupMap = new Map<string, AgriMapListingItem[]>();
-    for (const item of listings) {
-      const key = item.locality ?? item.areaKey;
-      const existing = groupMap.get(key);
-      if (existing) {
-        existing.push(item);
-      } else {
-        groupMap.set(key, [item]);
-      }
-    }
-    return [...groupMap.entries()].sort(([aKey, aListings], [bKey, bListings]) => {
-      const countDiff = bListings.length - aListings.length;
-      if (countDiff !== 0) return countDiff;
-      return aKey.localeCompare(bKey, 'en', { sensitivity: 'base' });
-    });
-  }, [listings]);
+  // ── Issue #2151 PR C (C-F4) — server-supplied destination buckets ──────────────────────────
+  // Replaces the old client-side `item.locality ?? item.areaKey` grouping over fetched parcels
+  // (deleted here — see #1464/#1486 history in git blame for the removed logic). Towns/localities,
+  // their parcel counts, and their acreage totals are now precomputed server-side aggregates from
+  // GET /api/discover/agri-destinations, not derived from the `listings` prop.
+  //
+  // City input: `citySlug` is the canonical slug threaded down from DiscoverRightPanel (which owns
+  // it via the `city` prop). Deliberately NOT using useDiscoverNav() here even though it's the
+  // repo's normal city-access pattern for panels (SchoolsInAreaPanel/SchoolBrowsePanel/
+  // GuidedEntryPanel) — it throws outside a DiscoverProvider, which would crash existing
+  // out-of-scope tests that render this panel standalone.
+  const citySlugForDestinations = (citySlug ?? '').trim().toLowerCase();
+  const listingPurposeForDestinations = intent === 'rent' ? 'rent' : 'sale';
+  const {
+    destinations,
+    isLoading: isLoadingDestinations,
+    isError: isDestinationsError,
+    isNotYetPromoted,
+    refetch: refetchDestinations,
+  } = useAgriDestinations(citySlugForDestinations, directionCode, selectedMaxKm, listingPurposeForDestinations);
 
-  // Total acreage across all loaded listings (2dp, trailing zeros dropped for whole numbers).
+  // C-F6: five distinct body states. `isNotYetPromoted` (503 AGRI_DESTINATIONS_NOT_YET_PROMOTED)
+  // is carved out first — it must never collapse into the generic retryable-error state, and it
+  // takes priority over a stale `isLoading`/`isError` prop from the (now Level-3-only) listings
+  // fetch. `isLoading`/`isError` props are folded in so this panel still reacts to the listings
+  // fetch's own transient states (e.g. a race on first mount) without introducing a second,
+  // independent source of truth for what "loading"/"error" means.
+  const showLoading = isLoading || isLoadingDestinations;
+  const showNotYetPromoted = !showLoading && isNotYetPromoted;
+  const showGenericError = !showLoading && !showNotYetPromoted && (isError || isDestinationsError);
+
+  // Total acreage across all destination buckets (2dp, trailing zeros dropped for whole numbers).
   const totalAcres = React.useMemo(() => {
-    if (!listings || listings.length === 0) return null;
-    const values = listings
-      .map((l) => l.computedAreaAcres)
+    const values = destinations
+      .map((d) => d.parcelAcreage)
       .filter((v): v is number => v != null);
     if (values.length === 0) return null;
     return Math.round(values.reduce((sum, v) => sum + v, 0) * 100) / 100;
-  }, [listings]);
+  }, [destinations]);
+
+  // Total parcel count across all destination buckets — replaces the `listingCount` prop (which
+  // reflected the old whole-tier listings fetch) as the hero/summary-band figure.
+  const totalParcels = React.useMemo(
+    () => destinations.reduce((sum, d) => sum + d.parcelCount, 0),
+    [destinations],
+  );
 
   const formatAcres = (acres: number): string =>
     acres % 1 === 0 ? `${acres}` : acres.toFixed(2);
@@ -303,8 +342,8 @@ export function AgriGroupSelectedPanel({
   const bearing = directionCode ? (BEARING_LABELS[directionCode] ?? directionCode) : null;
   const heroTitle = corridorName ?? groupLabel;
   const maxTierKm = sortedTiers.length > 0 ? sortedTiers[sortedTiers.length - 1].maxKm : null;
-  const townCount = sortedGroups.length;
-  const saleWord = intent === 'rent' ? 'rent' : 'sale';
+  const townCount = destinations.length;
+  const saleWord = listingPurposeForDestinations;
 
   return (
     <div
@@ -364,14 +403,14 @@ export function AgriGroupSelectedPanel({
             </div>
           </div>
 
-          {!isLoading && !isError && (
+          {!showLoading && !showGenericError && !showNotYetPromoted && (
             <div className="mt-5 grid grid-cols-3 border-t border-slate-800 pt-4">
               <div className="flex min-w-0 flex-col" data-testid="agri-group-listing-count">
                 <span className="font-mono text-xl font-bold leading-none tracking-tight tabular-nums text-white">
-                  {listingCount}
+                  {totalParcels}
                 </span>
                 <span className="mt-1.5 text-xs text-slate-400">
-                  {listingCount === 1 ? 'parcel' : 'parcels'}
+                  {totalParcels === 1 ? 'parcel' : 'parcels'}
                 </span>
               </div>
               <div className="flex min-w-0 flex-col border-l border-slate-800 pl-4">
@@ -522,14 +561,41 @@ export function AgriGroupSelectedPanel({
           )}
         </div>
 
-        {/* ── Body ─────────────────────────────────────────────────────────────── */}
-        {isLoading ? (
+        {/* ── Body — C-F6: five distinct states ───────────────────────────────── */}
+        {showLoading ? (
+          // State 1: loading
           <div className="flex flex-col gap-2" aria-busy="true">
             <ListingSkeleton />
             <ListingSkeleton />
             <ListingSkeleton />
           </div>
-        ) : isError ? (
+        ) : showNotYetPromoted ? (
+          // State 5: reference model unavailable (503 AGRI_DESTINATIONS_NOT_YET_PROMOTED).
+          // Deliberately distinct from the generic error state below: this is NOT
+          // shopper-retryable (a Retry button would be misleading — retrying hits the same
+          // 503 until an operator re-promotes the city), and it must NOT read as an empty
+          // result (there's a real reason no data can be shown, not "zero matches").
+          <div
+            data-testid="agri-group-not-promoted-state"
+            className="flex flex-col items-center justify-center p-6 gap-3 text-center"
+          >
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+              <AlertCircle className="h-7 w-7 text-muted-foreground" aria-hidden="true" />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Agricultural listings for this area aren&apos;t set up yet. Please check back soon.
+            </p>
+            <button
+              type="button"
+              data-testid="agri-group-back-btn"
+              className="text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors"
+              onClick={onClear}
+            >
+              ← Back to group list
+            </button>
+          </div>
+        ) : showGenericError ? (
+          // State 4: retryable error (generic/network).
           <div
             data-testid="agri-group-error-state"
             className="flex flex-col items-center justify-center p-6 gap-3 text-center"
@@ -544,7 +610,10 @@ export function AgriGroupSelectedPanel({
               variant="outline"
               size="sm"
               data-testid="agri-group-retry-btn"
-              onClick={onRetry}
+              onClick={() => {
+                onRetry();
+                refetchDestinations();
+              }}
             >
               Retry
             </Button>
@@ -557,7 +626,8 @@ export function AgriGroupSelectedPanel({
               ← Back to group list
             </button>
           </div>
-        ) : !listings || listings.length === 0 ? (
+        ) : destinations.length === 0 ? (
+          // States 2/3: no destinations in scope vs. destination empty under active filters.
           <div
             data-testid={hasActiveFilters ? 'agri-filtered-empty-state' : 'agri-group-empty-state'}
             className="flex flex-col items-center justify-center p-6 gap-3 text-center"
@@ -583,6 +653,7 @@ export function AgriGroupSelectedPanel({
             </button>
           </div>
         ) : (
+          // Success: destination buckets available.
           <>
             {/* ── Pale green summary band (mock parity, Issue #1771) ──────────── */}
             <div
@@ -590,11 +661,11 @@ export function AgriGroupSelectedPanel({
               className="flex items-start gap-3 rounded-xl border border-evergreen/20 bg-evergreen-tint px-4 py-3.5"
             >
               <span className="font-mono text-2xl font-bold leading-none tracking-tight tabular-nums text-evergreen mt-0.5">
-                {listingCount}
+                {totalParcels}
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-foreground">
-                  Agri {listingCount === 1 ? 'parcel' : 'parcels'} for {saleWord} · grouped into{' '}
+                  Agri {totalParcels === 1 ? 'parcel' : 'parcels'} for {saleWord} · grouped into{' '}
                   {townCount} {townCount === 1 ? 'town' : 'towns'}
                 </p>
                 <p className="mt-0.5 font-mono text-xs text-muted-foreground tabular-nums">
@@ -620,26 +691,22 @@ export function AgriGroupSelectedPanel({
                 data-testid="agri-group-listings-list"
                 className="flex flex-col gap-3"
               >
-                {sortedGroups.map(([localityKey, groupListings]) => {
-                  // Issue #1486 — sum computedAreaAcres; omit line when no listing has a non-null value.
-                  const acreageValues = groupListings
-                    .map((l) => l.computedAreaAcres)
-                    .filter((v): v is number => v != null);
-                  const totalAcreage =
-                    acreageValues.length > 0
-                      ? acreageValues.reduce((sum, v) => sum + v, 0)
-                      : null;
+                {/* Display order: server-returned order is preserved as-is (no client resort).
+                    AgriDestinationPort already returns buckets ordered by distance/bearing from
+                    the city origin, which is the correct navigational order for this list — no
+                    client-side re-sort is needed or attempted. */}
+                {destinations.map((bucket) => {
                   const roundedAcreage =
-                    totalAcreage !== null ? Math.round(totalAcreage * 100) / 100 : null;
+                    bucket.parcelAcreage != null ? Math.round(bucket.parcelAcreage * 100) / 100 : null;
 
                   return (
-                    <div key={localityKey} data-testid="agri-group-locality-group">
+                    <div key={bucket.areaKey} data-testid="agri-group-locality-group">
                       {/* Town card — clicking drills into that town's parcels (mock parity) */}
                       <button
                         type="button"
                         data-testid="agri-group-locality-btn"
-                        aria-label={`View ${localityKey} parcels`}
-                        onClick={() => onSelectLocality?.(localityKey)}
+                        aria-label={`View ${bucket.displayName} parcels`}
+                        onClick={() => onSelectLocality?.(bucket.areaKey)}
                         className="group w-full flex items-center gap-3.5 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-evergreen/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {/* Location icon block */}
@@ -651,12 +718,12 @@ export function AgriGroupSelectedPanel({
                         </span>
                         <div className="flex-1 min-w-0">
                           <span className="block truncate text-[15px] font-semibold text-foreground">
-                            {localityKey}
+                            {bucket.displayName}
                           </span>
                           <span className="mt-1 block text-xs text-muted-foreground">
                             <span className="font-semibold text-foreground">
-                              {groupListings.length}{' '}
-                              {groupListings.length === 1 ? 'parcel' : 'parcels'}
+                              {bucket.parcelCount}{' '}
+                              {bucket.parcelCount === 1 ? 'parcel' : 'parcels'}
                             </span>
                             {roundedAcreage !== null && (
                               <span data-testid="agri-group-locality-acreage">

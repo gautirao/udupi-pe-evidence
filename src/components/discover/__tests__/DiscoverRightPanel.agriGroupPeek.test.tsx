@@ -27,6 +27,16 @@ vi.mock('@/hooks/useAgriListingDetail', () => ({
   useAgriListingDetail: mockUseAgriListingDetail,
 }));
 
+// Issue #2151 PR C (C-F4) — AgriGroupSelectedPanel now fetches server-supplied destination
+// buckets via useAgriDestinations directly. Mocked here (rather than left to hit the real
+// endpoint) both to keep this a hermetic routing test and to avoid the real
+// useRegionalAreaGroups.ts module's transitive '@/lib/api' → Supabase client import, which
+// requires env vars this test environment doesn't configure.
+const mockUseAgriDestinations = vi.hoisted(() => vi.fn());
+vi.mock('@/hooks/useRegionalAreaGroups', () => ({
+  useAgriDestinations: mockUseAgriDestinations,
+}));
+
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: vi.fn(() => ({ user: null, isLoading: false, isAdmin: false, isDealer: false })),
 }));
@@ -123,6 +133,25 @@ describe('DiscoverRightPanel — agri-group-peek routing (Issue #1430)', () => {
       data: undefined,
       isLoading: true,
       isError: false,
+    });
+    // Default: one server-supplied destination bucket so the Level-2 towns list has something
+    // to render (mirrors the shape GET /api/discover/agri-destinations returns).
+    mockUseAgriDestinations.mockReturnValue({
+      destinations: [
+        {
+          areaKey: 'IN|KA|Udupi|Manipal',
+          displayName: 'Manipal Village',
+          distanceKm: 10,
+          bearingDeg: 0,
+          direction: 'N',
+          parcelCount: 2,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      isNotYetPromoted: false,
+      error: null,
+      refetch: vi.fn(),
     });
   });
 
@@ -224,5 +253,93 @@ describe('DiscoverRightPanel — agri-group-peek routing (Issue #1430)', () => {
     expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
     // navigate must NOT have been called (user hasn't clicked anything)
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  // Issue #2151 PR C (gap closure) — regression coverage for the shopper-visible defect where the
+  // Agri locality panel rendered the raw canonical areaKey (e.g. 'IN|KA|Udupi|Manipal') instead of
+  // a human-readable name. `selectedLocality` is now areas.area_key (C-F1); the panel must resolve
+  // it against the server-supplied destination buckets (mocked above via mockUseAgriDestinations).
+  it('panelContent=agri-group-locality resolves selectedLocality areaKey to its bucket displayName, never the raw pipe-delimited key', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-group-locality"
+        selectedLocality="IN|KA|Udupi|Manipal"
+        agriGroupListings={[makeAgriItem('listing-1')]}
+        isLoadingAgriGroupListings={false}
+        isAgriGroupListingsError={false}
+        onRetryAgriGroupListings={vi.fn()}
+        onClearLocality={vi.fn()}
+      />,
+    );
+
+    const name = screen.getByTestId('agri-locality-name');
+    expect(name).toHaveTextContent('Manipal Village');
+    expect(name).not.toHaveTextContent('IN|KA|Udupi|Manipal');
+    expect(screen.queryByText('IN|KA|Udupi|Manipal')).not.toBeInTheDocument();
+  });
+
+  it('panelContent=agri-group-locality falls back to a generic placeholder (never the raw areaKey) when no matching destination bucket is loaded', () => {
+    mockUseAgriDestinations.mockReturnValue({
+      destinations: [],
+      isLoading: true,
+      isError: false,
+      isNotYetPromoted: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-group-locality"
+        selectedLocality="IN|KA|Udupi|Manipal"
+        agriGroupListings={[]}
+        isLoadingAgriGroupListings
+        isAgriGroupListingsError={false}
+        onRetryAgriGroupListings={vi.fn()}
+        onClearLocality={vi.fn()}
+      />,
+    );
+
+    const name = screen.getByTestId('agri-locality-name');
+    expect(name).not.toHaveTextContent('IN|KA|Udupi|Manipal');
+    expect(screen.queryByText('IN|KA|Udupi|Manipal')).not.toBeInTheDocument();
+  });
+
+  // Issue #2151 PR C (code-reviewer finding, MEDIUM) — useAgriDestinations is called
+  // unconditionally at the top of DiscoverRightPanel (correct per Rules of Hooks) but must be
+  // gated so it doesn't fire a real GET /api/discover/agri-destinations on every Discover render.
+  // The hook has no exposed `enabled` option, so the gate is the `city` argument itself: it must
+  // collapse to '' (tripping the hook's own `enabled: city.length > 0` internal check) whenever
+  // panelContent isn't 'agri-group-locality'.
+  it('gates the destinations fetch: passes an empty city (no fetch) when panelContent is not agri-group-locality', () => {
+    mockUseAgriDestinations.mockClear();
+    renderPanel(<DiscoverRightPanel {...baseProps} city="udupi" panelContent="area-selection" />);
+
+    expect(mockUseAgriDestinations).toHaveBeenCalledTimes(1);
+    const [cityArg] = mockUseAgriDestinations.mock.calls[0];
+    expect(cityArg).toBe('');
+  });
+
+  it('gates the destinations fetch: passes the real city when panelContent is agri-group-locality', () => {
+    mockUseAgriDestinations.mockClear();
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        city="udupi"
+        panelContent="agri-group-locality"
+        selectedLocality="IN|KA|Udupi|Manipal"
+        agriGroupListings={[]}
+        isLoadingAgriGroupListings={false}
+        isAgriGroupListingsError={false}
+        onRetryAgriGroupListings={vi.fn()}
+        onClearLocality={vi.fn()}
+      />,
+    );
+
+    expect(mockUseAgriDestinations).toHaveBeenCalledTimes(1);
+    const [cityArg] = mockUseAgriDestinations.mock.calls[0];
+    expect(cityArg).toBe('udupi');
   });
 });

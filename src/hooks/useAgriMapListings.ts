@@ -2,12 +2,21 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
 /**
- * Issue #1410 (B3) — fetch agri map listings for a set of area keys from the
+ * Issue #1410 (B3) — fetch agri map listings for a single area key from the
  * public endpoint. Used by MapDiscovery to populate AgriMarkerClusterLayer and
- * AgriPolygonLayer when a regional group is selected on the agri-first landing.
+ * AgriPolygonLayer when a destination (town/locality) is selected on the
+ * agri-first landing.
  *
- * Query is disabled when city or areaKeys are empty so the hook is a no-op
- * when no group is selected.
+ * Issue #2151 PR C (C-F2) — cut over from the legacy repeated `areaKeys` param
+ * to the canonical single `areaKey` param. The backend no longer accepts
+ * `areaKeys` at all (400 `area_key_required_legacy_area_keys_param_removed`);
+ * the corridor-wide "all towns" fetch this hook used to power is replaced by
+ * server-computed destination buckets (see useAgriDestinations in
+ * useRegionalAreaGroups.ts) — this hook now only ever scopes to ONE selected
+ * destination's areaKey (the Level-3 locality drill-down).
+ *
+ * Query is disabled when city or areaKey is empty so the hook is a no-op
+ * when no destination is selected.
  */
 
 export interface AgriMapListingItem {
@@ -71,19 +80,17 @@ export const AGRI_MAP_LISTINGS_QUERY_KEY_BASE = ['agri-map-listings'] as const;
  */
 export function useAgriMapListings(
   city: string,
-  areaKeys: string[],
+  areaKey: string,
   listingPurpose?: string,
   isAuthenticated = false,
 ) {
-  const sortedKeys = [...areaKeys].sort();
   // Auth-scope literal — must be FIRST dimension after base key so anon and authed
   // responses never collide in the TanStack Query cache.
   const authScope = isAuthenticated ? 'authed' : 'anon';
   return useQuery<AgriMapListingsResponse>({
-    queryKey: [...AGRI_MAP_LISTINGS_QUERY_KEY_BASE, authScope, city, listingPurpose ?? null, ...sortedKeys],
+    queryKey: [...AGRI_MAP_LISTINGS_QUERY_KEY_BASE, authScope, city, listingPurpose ?? null, areaKey],
     queryFn: async () => {
-      const params = new URLSearchParams({ city });
-      sortedKeys.forEach(k => params.append('areaKeys', k));
+      const params = new URLSearchParams({ city, areaKey });
       if (listingPurpose) params.set('listingPurpose', listingPurpose);
       const data = await api.get<AgriMapListingsResponse>(
         `/api/discover/agri-map-listings?${params.toString()}`,
@@ -93,7 +100,7 @@ export function useAgriMapListings(
       );
       return data;
     },
-    enabled: city.length > 0 && areaKeys.length > 0,
+    enabled: city.length > 0 && areaKey.length > 0,
     staleTime: 120_000,
   });
 }

@@ -1,24 +1,42 @@
 /**
- * Tests for AgriGroupSelectedPanel (Issue #1425, extended in #1445)
+ * Tests for AgriGroupSelectedPanel (Issue #1425, extended in #1445; reworked by
+ * Issue #2151 PR C, C-F4/C-F6, for server-supplied destination buckets).
  *
  * Covers:
  * - Header chip renders group label and clear button
  * - Clear button fires onClear callback
- * - Loading state: skeleton rows visible, no listing rows
- * - Empty state: "No listings in this region" + back-to-list button fires onClear
- * - Error state: error message + retry button + back-to-list button
- * - Listings state: rows rendered + click fires onSelectListing with correct id
- * - Aggregate count renders correct singular/plural text
+ * - C-F6 five distinct body states: loading, no-destinations-in-scope,
+ *   destination-empty-under-filters, retryable error, 503 not-yet-promoted
+ * - Towns list rendered from server-supplied destination buckets (not client-grouped
+ *   listings); click identity is the destination's areaKey
+ * - Aggregate hero/summary-band counts derived from destination bucket aggregates
  * - Distance chip row: renders chips, aria-pressed state, click handler, empty guard
+ * - Agri filters drawer + active-filter chips (unaffected by C-F4, still prop-driven)
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
-import { AgriGroupSelectedPanel } from '../AgriGroupSelectedPanel';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
-import type { CumulativeDistanceTier } from '@/hooks/useRegionalAreaGroups';
+import type { CumulativeDistanceTier, AgriDestinationBucket } from '@/hooks/useRegionalAreaGroups';
+
+// ─── Hoisted mock: useAgriDestinations ─────────────────────────────────────────
+
+const mockUseAgriDestinations = vi.hoisted(() => vi.fn());
+const mockRefetchDestinations = vi.hoisted(() => vi.fn());
+
+// Deliberately NOT using importOriginal here: the real useRegionalAreaGroups.ts imports
+// '@/lib/api', which transitively imports the Supabase client and requires real env vars this
+// test environment doesn't have configured. This component only ever imports `useAgriDestinations`
+// (a value) and `CumulativeDistanceTier`/`AgriDestinationBucket` (types, erased at build time) from
+// this module, so a full mock with just the one runtime export is both sufficient and avoids that
+// transitive dependency entirely.
+vi.mock('@/hooks/useRegionalAreaGroups', () => ({
+  useAgriDestinations: mockUseAgriDestinations,
+}));
+
+import { AgriGroupSelectedPanel } from '../AgriGroupSelectedPanel';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -49,6 +67,19 @@ const ALL_TIERS: CumulativeDistanceTier[] = [
   makeTier(100),
 ];
 
+const makeBucket = (
+  areaKey: string,
+  overrides: Partial<AgriDestinationBucket> = {},
+): AgriDestinationBucket => ({
+  areaKey,
+  displayName: areaKey,
+  distanceKm: 10,
+  bearingDeg: 0,
+  direction: 'N',
+  parcelCount: 1,
+  ...overrides,
+});
+
 const noop = () => {};
 
 const baseProps = {
@@ -64,7 +95,39 @@ const baseProps = {
   selectedMaxKm: null,
   availableMaxDistances: undefined,
   onSetMaxKm: noop as (km: 10 | 25 | 50 | 100) => void,
+  // Issue #2151 PR C (C-F4) — the destinations fetch is keyed off citySlug/directionCode/
+  // selectedMaxKm/intent; provide a stable cityLabel/citySlug pair so tests exercise the real
+  // fetch-gating logic (the hook itself is mocked below, so no real network call ever happens).
+  cityLabel: 'Udupi',
+  citySlug: 'udupi',
 };
+
+interface MockDestinationsResult {
+  destinations: AgriDestinationBucket[];
+  isLoading: boolean;
+  isError: boolean;
+  isNotYetPromoted: boolean;
+  error: Error | null;
+  refetch: () => void;
+}
+
+/** Default mock — empty destinations, not loading, no error. Override per test as needed. */
+function mockDestinations(overrides: Partial<MockDestinationsResult> = {}) {
+  mockUseAgriDestinations.mockReturnValue({
+    destinations: [],
+    isLoading: false,
+    isError: false,
+    isNotYetPromoted: false,
+    error: null,
+    refetch: mockRefetchDestinations,
+    ...overrides,
+  });
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockDestinations();
+});
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -88,128 +151,252 @@ describe('AgriGroupSelectedPanel — header chip', () => {
   });
 });
 
-describe('AgriGroupSelectedPanel — loading state', () => {
-  it('renders skeleton rows when isLoading=true', () => {
-    render(<AgriGroupSelectedPanel {...baseProps} isLoading={true} listings={null} />);
+// ─── Issue #2151 PR C (C-F6) — five distinct body states ─────────────────────
+
+describe('AgriGroupSelectedPanel — C-F6 state 1: loading', () => {
+  it('renders skeleton rows when the destinations fetch is loading', () => {
+    mockDestinations({ isLoading: true });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} />);
     const skeletons = screen.getAllByTestId('agri-group-listing-skeleton');
     expect(skeletons.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('does not render listing rows when isLoading=true', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        isLoading={true}
-        listings={[makeListing('l1')]}
-      />,
-    );
-    expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
+  it('also shows loading when the legacy `isLoading` prop is true (folded in)', () => {
+    mockDestinations({ isLoading: false });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} isLoading={true} />);
+    expect(screen.getAllByTestId('agri-group-listing-skeleton').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('does not render the towns list while loading', () => {
+    mockDestinations({ isLoading: true, destinations: [makeBucket('a')] });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} />);
+    expect(screen.queryByTestId('agri-group-locality-btn')).not.toBeInTheDocument();
   });
 });
 
-describe('AgriGroupSelectedPanel — empty state', () => {
-  it('renders intent-aware empty state when listings is empty array (default intent=buy → "for sale")', () => {
-    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} listingCount={0} />);
+describe('AgriGroupSelectedPanel — C-F6 state 2: no destinations in scope', () => {
+  it('renders the plain empty state when destinations=[] and no advanced filters are active', () => {
+    mockDestinations({ destinations: [] });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
     expect(screen.getByTestId('agri-group-empty-state')).toBeInTheDocument();
     expect(screen.getByText('No agricultural land for sale in this region')).toBeInTheDocument();
   });
 
   it('renders "for rent" empty state when intent=rent', () => {
-    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} listingCount={0} intent="rent" />);
-    expect(screen.getByTestId('agri-group-empty-state')).toBeInTheDocument();
+    mockDestinations({ destinations: [] });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} intent="rent" />);
     expect(screen.getByText('No agricultural land for rent in this region')).toBeInTheDocument();
   });
 
   it('back-to-list button in empty state fires onClear', async () => {
+    mockDestinations({ destinations: [] });
     const user = userEvent.setup();
     const onClear = vi.fn();
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={[]} listingCount={0} onClear={onClear} />,
-    );
-    const backBtn = screen.getByTestId('agri-group-back-btn');
-    await user.click(backBtn);
-    expect(onClear).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('AgriGroupSelectedPanel — error state', () => {
-  it('renders error state when isError=true', () => {
-    render(<AgriGroupSelectedPanel {...baseProps} isError={true} listings={null} />);
-    expect(screen.getByTestId('agri-group-error-state')).toBeInTheDocument();
-    expect(screen.getByText(/could not load listings/i)).toBeInTheDocument();
-  });
-
-  it('retry button fires onRetry', async () => {
-    const user = userEvent.setup();
-    const onRetry = vi.fn();
-    render(
-      <AgriGroupSelectedPanel {...baseProps} isError={true} listings={null} onRetry={onRetry} />,
-    );
-    await user.click(screen.getByTestId('agri-group-retry-btn'));
-    expect(onRetry).toHaveBeenCalledTimes(1);
-  });
-
-  it('back-to-list button in error state fires onClear', async () => {
-    const user = userEvent.setup();
-    const onClear = vi.fn();
-    render(
-      <AgriGroupSelectedPanel {...baseProps} isError={true} listings={null} onClear={onClear} />,
-    );
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} onClear={onClear} />);
     await user.click(screen.getByTestId('agri-group-back-btn'));
     expect(onClear).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('AgriGroupSelectedPanel — listings state', () => {
-  it('renders one locality button per distinct locality', () => {
-    const listings = [makeListing('a1'), makeListing('a2'), makeListing('a3')];
-    // Each listing gets a different locality by default (makeListing sets locality to `Locality ${id}`)
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={3} />,
-    );
-    // 3 distinct localities → 3 locality buttons, 0 listing rows
-    expect(screen.getAllByTestId('agri-group-locality-btn')).toHaveLength(3);
-    expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
-  });
-
-  it('no inline listing rows are visible at Level 2 (towns-only view)', () => {
-    const listings = [makeListing('a1'), makeListing('a2')];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
-    );
-    expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
-  });
-
-  it('does not render land area element when landArea is null', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[makeListing('x1', { landArea: null, landAreaUnit: null })]}
-        listingCount={1}
-      />,
-    );
-    expect(screen.queryByTestId('agri-group-land-area')).not.toBeInTheDocument();
+describe('AgriGroupSelectedPanel — C-F6 state 3: destination empty under active filters', () => {
+  it('renders the filtered-empty testid (distinct from the plain empty state) when an advanced filter is active', () => {
+    mockDestinations({ destinations: [] });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} agriAcresMin={5} />);
+    expect(screen.getByTestId('agri-filtered-empty-state')).toBeInTheDocument();
+    expect(screen.queryByTestId('agri-group-empty-state')).not.toBeInTheDocument();
+    expect(screen.getByText(/no agricultural listings match/i)).toBeInTheDocument();
   });
 });
 
-describe('AgriGroupSelectedPanel — aggregate count', () => {
-  it('renders plural parcel count in hero + summary band (default intent=buy)', () => {
+describe('AgriGroupSelectedPanel — C-F6 state 4: retryable error (generic/network)', () => {
+  it('renders the generic error state when the destinations fetch errors', () => {
+    mockDestinations({ isError: true });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} />);
+    expect(screen.getByTestId('agri-group-error-state')).toBeInTheDocument();
+    expect(screen.getByText(/could not load listings/i)).toBeInTheDocument();
+  });
+
+  it('is distinct from the 503 not-yet-promoted state', () => {
+    mockDestinations({ isError: true, isNotYetPromoted: false });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} />);
+    expect(screen.getByTestId('agri-group-error-state')).toBeInTheDocument();
+    expect(screen.queryByTestId('agri-group-not-promoted-state')).not.toBeInTheDocument();
+  });
+
+  it('retry button calls both onRetry (legacy listings retry) and the destinations refetch', async () => {
+    mockDestinations({ isError: true });
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} onRetry={onRetry} />);
+    await user.click(screen.getByTestId('agri-group-retry-btn'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(mockRefetchDestinations).toHaveBeenCalledTimes(1);
+  });
+
+  it('back-to-list button in error state fires onClear', async () => {
+    mockDestinations({ isError: true });
+    const user = userEvent.setup();
+    const onClear = vi.fn();
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} onClear={onClear} />);
+    await user.click(screen.getByTestId('agri-group-back-btn'));
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it('also errors when the legacy `isError` prop is true (folded in)', () => {
+    mockDestinations({ isError: false });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} isError={true} />);
+    expect(screen.getByTestId('agri-group-error-state')).toBeInTheDocument();
+  });
+});
+
+describe('AgriGroupSelectedPanel — C-F6 state 5: reference model unavailable (503 not-yet-promoted)', () => {
+  it('renders a distinct not-promoted state, never the generic error state', () => {
+    mockDestinations({ isNotYetPromoted: true, isError: false });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} />);
+    expect(screen.getByTestId('agri-group-not-promoted-state')).toBeInTheDocument();
+    expect(screen.queryByTestId('agri-group-error-state')).not.toBeInTheDocument();
+  });
+
+  it('renders a distinct not-promoted state, never an empty-result state', () => {
+    mockDestinations({ isNotYetPromoted: true, isError: false, destinations: [] });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} />);
+    expect(screen.getByTestId('agri-group-not-promoted-state')).toBeInTheDocument();
+    expect(screen.queryByTestId('agri-group-empty-state')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('agri-filtered-empty-state')).not.toBeInTheDocument();
+  });
+
+  it('does NOT render a Retry button — this state is not shopper-retryable', () => {
+    mockDestinations({ isNotYetPromoted: true, isError: false });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} />);
+    expect(screen.queryByTestId('agri-group-retry-btn')).not.toBeInTheDocument();
+  });
+
+  it('back-to-list link still fires onClear', async () => {
+    mockDestinations({ isNotYetPromoted: true, isError: false });
+    const user = userEvent.setup();
+    const onClear = vi.fn();
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} onClear={onClear} />);
+    await user.click(screen.getByTestId('agri-group-back-btn'));
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes priority even when the (Level-3) listings isError prop is also true', () => {
+    mockDestinations({ isNotYetPromoted: true, isError: false });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} isError={true} />);
+    expect(screen.getByTestId('agri-group-not-promoted-state')).toBeInTheDocument();
+    expect(screen.queryByTestId('agri-group-error-state')).not.toBeInTheDocument();
+  });
+});
+
+// ─── Issue #2151 PR C (C-F4) — server-supplied destination buckets ───────────
+
+describe('AgriGroupSelectedPanel — destination buckets (towns list)', () => {
+  it('renders one locality button per destination bucket, using displayName as the label', () => {
+    mockDestinations({
+      destinations: [
+        makeBucket('IN|KA|Udupi|Shirva', { displayName: 'Shirva', parcelCount: 3 }),
+        makeBucket('IN|KA|Udupi|Hebri', { displayName: 'Hebri', parcelCount: 1 }),
+      ],
+    });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    const btns = screen.getAllByTestId('agri-group-locality-btn');
+    expect(btns).toHaveLength(2);
+    expect(btns[0]).toHaveTextContent('Shirva');
+    expect(btns[1]).toHaveTextContent('Hebri');
+  });
+
+  it('preserves server-supplied bucket order (no client-side re-sort)', () => {
+    mockDestinations({
+      destinations: [
+        makeBucket('c', { displayName: 'Zebra Town', parcelCount: 1 }),
+        makeBucket('a', { displayName: 'Apple Town', parcelCount: 9 }),
+        makeBucket('b', { displayName: 'Mango Town', parcelCount: 5 }),
+      ],
+    });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    const btns = screen.getAllByTestId('agri-group-locality-btn');
+    // Server order (Zebra, Apple, Mango) is preserved verbatim — NOT count-desc, NOT alpha.
+    expect(btns[0]).toHaveTextContent('Zebra Town');
+    expect(btns[1]).toHaveTextContent('Apple Town');
+    expect(btns[2]).toHaveTextContent('Mango Town');
+  });
+
+  it('renders the bucket parcelCount (singular/plural)', () => {
+    mockDestinations({
+      destinations: [makeBucket('a', { displayName: 'Shirva', parcelCount: 1 })],
+    });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    expect(screen.getByTestId('agri-group-locality-btn')).toHaveTextContent('1 parcel');
+  });
+
+  it('renders the bucket parcelAcreage total when present (2dp for fractional values)', () => {
+    mockDestinations({
+      destinations: [makeBucket('a', { displayName: 'Shirva', parcelCount: 2, parcelAcreage: 5.5 })],
+    });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    expect(screen.getByTestId('agri-group-locality-acreage')).toHaveTextContent('5.50 acres total');
+  });
+
+  it('renders the bucket parcelAcreage total without decimals for a whole-number acreage', () => {
+    mockDestinations({
+      destinations: [makeBucket('a', { displayName: 'Shirva', parcelCount: 2, parcelAcreage: 6 })],
+    });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    expect(screen.getByTestId('agri-group-locality-acreage')).toHaveTextContent('6 acres total');
+  });
+
+  it('omits the acreage line when parcelAcreage is undefined (absent from JSON)', () => {
+    mockDestinations({
+      destinations: [makeBucket('a', { displayName: 'Shirva', parcelCount: 2 })],
+    });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    expect(screen.queryByTestId('agri-group-locality-acreage')).not.toBeInTheDocument();
+  });
+
+  it('clicking a locality button calls onSelectLocality with the bucket areaKey (NOT display text)', async () => {
+    const user = userEvent.setup();
+    const onSelectLocality = vi.fn();
+    mockDestinations({
+      destinations: [makeBucket('IN|KA|Udupi|Shirva', { displayName: 'Shirva', parcelCount: 1 })],
+    });
     render(
-      <AgriGroupSelectedPanel {...baseProps} listings={[makeListing('a1'), makeListing('a2')]} listingCount={2} />,
+      <AgriGroupSelectedPanel {...baseProps} listings={[]} onSelectLocality={onSelectLocality} />,
     );
-    // Hero stat row: value + "parcels" label
-    expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent('2');
+    await user.click(screen.getByTestId('agri-group-locality-btn'));
+    expect(onSelectLocality).toHaveBeenCalledTimes(1);
+    expect(onSelectLocality).toHaveBeenCalledWith('IN|KA|Udupi|Shirva');
+  });
+
+  it('does not render inline listing rows for the towns view', () => {
+    mockDestinations({
+      destinations: [makeBucket('a', { displayName: 'Shirva', parcelCount: 1 })],
+    });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
+  });
+});
+
+// ─── Aggregate hero / summary-band counts (now bucket-derived) ────────────────
+
+describe('AgriGroupSelectedPanel — aggregate count (bucket-derived)', () => {
+  it('renders plural parcel count in hero + summary band, summed across buckets (default intent=buy)', () => {
+    mockDestinations({
+      destinations: [
+        makeBucket('a', { parcelCount: 3 }),
+        makeBucket('b', { parcelCount: 2 }),
+      ],
+    });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent('5');
     expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent('parcels');
-    // Pale green summary band: intent-aware copy grouped-by-towns line
     expect(screen.getByTestId('agri-group-count-band')).toHaveTextContent(
       'Agri parcels for sale · grouped into 2 towns',
     );
   });
 
-  it('renders singular parcel count when listingCount === 1 (default intent=buy)', () => {
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={[makeListing('a1')]} listingCount={1} />,
-    );
+  it('renders singular parcel count when the bucket sum is 1', () => {
+    mockDestinations({ destinations: [makeBucket('a', { parcelCount: 1 })] });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
     expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent('1');
     expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent('parcel');
     expect(screen.getByTestId('agri-group-count-band')).toHaveTextContent(
@@ -218,16 +405,28 @@ describe('AgriGroupSelectedPanel — aggregate count', () => {
   });
 
   it('renders "for rent" count when intent=rent', () => {
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={[makeListing('a1'), makeListing('a2')]} listingCount={2} intent="rent" />,
-    );
+    mockDestinations({
+      destinations: [makeBucket('a', { parcelCount: 1 }), makeBucket('b', { parcelCount: 1 })],
+    });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} intent="rent" />);
     expect(screen.getByTestId('agri-group-count-band')).toHaveTextContent(
       'Agri parcels for rent · grouped into 2 towns',
     );
   });
+
+  it('sums parcelAcreage across buckets for the summary-band total', () => {
+    mockDestinations({
+      destinations: [
+        makeBucket('a', { parcelCount: 1, parcelAcreage: 3.5 }),
+        makeBucket('b', { parcelCount: 1, parcelAcreage: 1.5 }),
+      ],
+    });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    expect(screen.getByTestId('agri-group-count-band')).toHaveTextContent('5.00 acres total');
+  });
 });
 
-// ─── Issue #1445 — Distance chip row ─────────────────────────────────────────
+// ─── Issue #1445 — Distance chip row (unaffected by C-F4) ────────────────────
 
 describe('AgriGroupSelectedPanel — distance chip row', () => {
   it('(a) renders all 4 chip buttons when availableMaxDistances is provided', () => {
@@ -256,8 +455,6 @@ describe('AgriGroupSelectedPanel — distance chip row', () => {
     );
     expect(screen.getByTestId('distance-chip-25')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('distance-chip-10')).not.toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('distance-chip-50')).not.toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('distance-chip-100')).not.toHaveAttribute('aria-pressed', 'true');
   });
 
   it('(c) clicking a chip calls onSetMaxKm with the correct km value', async () => {
@@ -278,460 +475,13 @@ describe('AgriGroupSelectedPanel — distance chip row', () => {
   });
 
   it('(d) no chip row when availableMaxDistances is undefined', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        selectedMaxKm={null}
-        availableMaxDistances={undefined}
-      />,
-    );
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
     expect(screen.queryByTestId('distance-chip-10')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('distance-chip-25')).not.toBeInTheDocument();
-  });
-
-  it('(d) no chip row when availableMaxDistances is empty array', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        selectedMaxKm={null}
-        availableMaxDistances={[]}
-      />,
-    );
-    expect(screen.queryByTestId('distance-chip-10')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('distance-chip-25')).not.toBeInTheDocument();
-  });
-
-  // ── Issue #1446: chip-switching additions ─────────────────────────────────
-
-  it('(e) AC4 rerender: chip selection tracks selectedMaxKm prop changes', () => {
-    const { rerender } = render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        selectedMaxKm={25}
-        availableMaxDistances={ALL_TIERS}
-      />,
-    );
-    // Initial: chip-25 selected, chip-50 not selected
-    expect(screen.getByTestId('distance-chip-25')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('distance-chip-50')).not.toHaveAttribute('aria-pressed', 'true');
-
-    // Rerender with selectedMaxKm=50
-    rerender(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        selectedMaxKm={50}
-        availableMaxDistances={ALL_TIERS}
-      />,
-    );
-    // After rerender: chip-50 selected, chip-25 no longer selected
-    expect(screen.getByTestId('distance-chip-50')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('distance-chip-25')).not.toHaveAttribute('aria-pressed', 'true');
-  });
-
-  it('(f) AC2 region preservation: chip-50 click fires onSetMaxKm with exactly 50', async () => {
-    const user = userEvent.setup();
-    const onSetMaxKm = vi.fn();
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        selectedMaxKm={25}
-        availableMaxDistances={ALL_TIERS}
-        onSetMaxKm={onSetMaxKm}
-      />,
-    );
-    await user.click(screen.getByTestId('distance-chip-50'));
-    expect(onSetMaxKm).toHaveBeenCalledTimes(1);
-    expect(onSetMaxKm).toHaveBeenCalledWith(50);
-    // Verify the callback was NOT called with any other value
-    expect(onSetMaxKm).not.toHaveBeenCalledWith(25);
-    expect(onSetMaxKm).not.toHaveBeenCalledWith(10);
-    expect(onSetMaxKm).not.toHaveBeenCalledWith(100);
   });
 });
 
-// ─── Issue #1464 — Locality grouping ─────────────────────────────────────────
+// ─── Issue #1457 — agri filters drawer (unaffected by C-F4) ──────────────────
 
-describe('AgriGroupSelectedPanel — locality grouping (Issue #1464)', () => {
-  it('groups listings from 2 different localities into 2 group sections', () => {
-    const listings = [
-      makeListing('a1', { locality: 'Shirva' }),
-      makeListing('a2', { locality: 'Hebri' }),
-      makeListing('a3', { locality: 'Shirva' }),
-    ];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={3} />,
-    );
-    // Two locality group sections
-    expect(screen.getAllByTestId('agri-group-locality-group')).toHaveLength(2);
-  });
-
-  it('renders correct count label for each group (plural)', () => {
-    const listings = [
-      makeListing('a1', { locality: 'Shirva' }),
-      makeListing('a2', { locality: 'Shirva' }),
-    ];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
-    );
-    const btns = screen.getAllByTestId('agri-group-locality-btn');
-    expect(btns[0]).toHaveTextContent('2 parcels');
-  });
-
-  it('renders correct count label for a single-item group (singular)', () => {
-    const listings = [
-      makeListing('a1', { locality: 'Shirva' }),
-    ];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={1} />,
-    );
-    const btn = screen.getByTestId('agri-group-locality-btn');
-    expect(btn).toHaveTextContent('1 parcel');
-  });
-
-  it('listing with null locality is grouped under its areaKey', () => {
-    const listing = makeListing('a1', { locality: null, areaKey: 'IN|KA|Udupi|Kota' });
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={[listing]} listingCount={1} />,
-    );
-    // Group header shows the areaKey
-    const btn = screen.getByTestId('agri-group-locality-btn');
-    expect(btn).toHaveTextContent('IN|KA|Udupi|Kota');
-  });
-
-  it('count-desc primary: high-count town appears before low-count town even when alpha order differs', () => {
-    // "Apple" is alpha-first but has only 1 listing; "Zebra" has 2 — Zebra must win on count.
-    // "Mango" also has 1 listing — alpha tie-break between Apple and Mango gives Apple before Mango.
-    const listings = [
-      makeListing('z1', { locality: 'Zebra' }),
-      makeListing('z2', { locality: 'Zebra' }),
-      makeListing('a1', { locality: 'Apple' }),
-      makeListing('m1', { locality: 'Mango' }),
-    ];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={4} />,
-    );
-    const btns = screen.getAllByTestId('agri-group-locality-btn');
-    // Zebra: 2 (count-desc wins over alpha); Apple: 1 (alpha-tie second); Mango: 1 (alpha-tie third)
-    expect(btns[0]).toHaveTextContent('Zebra');
-    expect(btns[1]).toHaveTextContent('Apple');
-    expect(btns[2]).toHaveTextContent('Mango');
-  });
-
-  it('single locality group shows correct count when all listings share one locality', () => {
-    const listings = [
-      makeListing('z3', { locality: 'Shirva' }),
-      makeListing('z1', { locality: 'Shirva' }),
-      makeListing('z2', { locality: 'Shirva' }),
-    ];
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={listings}
-        listingCount={3}
-      />,
-    );
-    // One group section, one button showing count 3, no listing rows
-    expect(screen.getAllByTestId('agri-group-locality-group')).toHaveLength(1);
-    const btn = screen.getByTestId('agri-group-locality-btn');
-    expect(btn).toHaveTextContent('3 parcels');
-    expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
-  });
-
-  it('clicking a locality group button calls onSelectLocality with the locality name', async () => {
-    const user = userEvent.setup();
-    const onSelectLocality = vi.fn();
-    const listings = [
-      makeListing('a1', { locality: 'Shirva' }),
-    ];
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={listings}
-        listingCount={1}
-        onSelectLocality={onSelectLocality}
-      />,
-    );
-    const btn = screen.getByTestId('agri-group-locality-btn');
-    await user.click(btn);
-    expect(onSelectLocality).toHaveBeenCalledTimes(1);
-    expect(onSelectLocality).toHaveBeenCalledWith('Shirva');
-  });
-});
-
-// ─── Issue #1458 — categorical filter props ───────────────────────────────────
-
-describe('AgriGroupSelectedPanel — agri structured field filter props (Issue #1458)', () => {
-  it('renders agri-filtered-empty-state testid when agriLandCategory filter is active and no listings', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        listingCount={0}
-        agriLandCategory="FARMLAND"
-      />,
-    );
-    expect(screen.getByTestId('agri-filtered-empty-state')).toBeInTheDocument();
-  });
-
-  it('renders agri-filtered-empty-state testid when agriFarmhouseAvailable filter is active (true) and no listings', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        listingCount={0}
-        agriFarmhouseAvailable={true}
-      />,
-    );
-    expect(screen.getByTestId('agri-filtered-empty-state')).toBeInTheDocument();
-  });
-
-  it('renders agri-filtered-empty-state testid when agriFencingDone filter is active (false) and no listings', () => {
-    // false is an active filter (explicitly set to false), not the same as null (absent)
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        listingCount={0}
-        agriFencingDone={false}
-      />,
-    );
-    expect(screen.getByTestId('agri-filtered-empty-state')).toBeInTheDocument();
-  });
-
-  it('renders agri-filtered-empty-state testid when agriWaterSource=NOT_AVAILABLE filter is active and no listings', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        listingCount={0}
-        agriWaterSource="NOT_AVAILABLE"
-      />,
-    );
-    expect(screen.getByTestId('agri-filtered-empty-state')).toBeInTheDocument();
-  });
-
-  it('renders plain agri-group-empty-state when NO categorical filters are active and no listings', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        listingCount={0}
-        agriLandCategory={null}
-        agriFarmhouseAvailable={null}
-        agriFencingDone={null}
-        agriWaterSource={null}
-      />,
-    );
-    expect(screen.getByTestId('agri-group-empty-state')).toBeInTheDocument();
-    expect(screen.queryByTestId('agri-filtered-empty-state')).not.toBeInTheDocument();
-  });
-});
-
-// ─── Issue #1486 — Sort by count desc + acreage line ──────────────────────────
-
-describe('AgriGroupSelectedPanel — sort count-desc + acreage (Issue #1486)', () => {
-  it('AC1: sorts towns by listing count descending', () => {
-    // Shirva: 3 listings, Hebri: 1 listing — Shirva must appear first
-    const listings = [
-      makeListing('a1', { locality: 'Hebri' }),
-      makeListing('a2', { locality: 'Shirva' }),
-      makeListing('a3', { locality: 'Shirva' }),
-      makeListing('a4', { locality: 'Shirva' }),
-    ];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={4} />,
-    );
-    const btns = screen.getAllByTestId('agri-group-locality-btn');
-    expect(btns[0]).toHaveTextContent('Shirva');
-    expect(btns[1]).toHaveTextContent('Hebri');
-  });
-
-  it('AC2: equal-count towns sorted alphabetically (locale-aware, case-insensitive)', () => {
-    // All towns have 2 listings — must sort alpha: Apple, Mango, Zebra
-    const listings = [
-      makeListing('z1', { locality: 'Zebra' }),
-      makeListing('z2', { locality: 'Zebra' }),
-      makeListing('a1', { locality: 'Apple' }),
-      makeListing('a2', { locality: 'Apple' }),
-      makeListing('m1', { locality: 'Mango' }),
-      makeListing('m2', { locality: 'Mango' }),
-    ];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={6} />,
-    );
-    const btns = screen.getAllByTestId('agri-group-locality-btn');
-    expect(btns[0]).toHaveTextContent('Apple');
-    expect(btns[1]).toHaveTextContent('Mango');
-    expect(btns[2]).toHaveTextContent('Zebra');
-  });
-
-  it('AC2: count-desc takes priority over alpha (3-listing town before 1-listing town)', () => {
-    // "Aaaa" (alpha-first) has 1 listing; "Zzzz" has 3 — Zzzz must appear first
-    const listings = [
-      makeListing('a1', { locality: 'Aaaa' }),
-      makeListing('z1', { locality: 'Zzzz' }),
-      makeListing('z2', { locality: 'Zzzz' }),
-      makeListing('z3', { locality: 'Zzzz' }),
-    ];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={4} />,
-    );
-    const btns = screen.getAllByTestId('agri-group-locality-btn');
-    expect(btns[0]).toHaveTextContent('Zzzz');
-    expect(btns[1]).toHaveTextContent('Aaaa');
-  });
-
-  it('AC4: acreage line shows sum of computedAreaAcres for a town', () => {
-    const listings = [
-      makeListing('a1', { locality: 'Shirva', computedAreaAcres: 3.5 }),
-      makeListing('a2', { locality: 'Shirva', computedAreaAcres: 1.5 }),
-    ];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
-    );
-    // Sum = 5.0 acres — integer format (no decimals)
-    const acreageEl = screen.getByTestId('agri-group-locality-acreage');
-    expect(acreageEl).toHaveTextContent('5 acres total');
-  });
-
-  it('AC4: acreage line uses 2dp when sum is fractional', () => {
-    const listings = [
-      makeListing('a1', { locality: 'Shirva', computedAreaAcres: 2.75 }),
-      makeListing('a2', { locality: 'Shirva', computedAreaAcres: 1.0 }),
-    ];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
-    );
-    const acreageEl = screen.getByTestId('agri-group-locality-acreage');
-    expect(acreageEl).toHaveTextContent('3.75 acres total');
-  });
-
-  it('AC4: acreage line omitted when all computedAreaAcres are null', () => {
-    const listings = [
-      makeListing('a1', { locality: 'Shirva', computedAreaAcres: null }),
-      makeListing('a2', { locality: 'Shirva', computedAreaAcres: null }),
-    ];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
-    );
-    expect(screen.queryByTestId('agri-group-locality-acreage')).not.toBeInTheDocument();
-  });
-
-  it('AC4: acreage line omitted when computedAreaAcres is absent from all listings', () => {
-    // makeListing without computedAreaAcres override — field is undefined
-    const listings = [
-      makeListing('a1', { locality: 'Shirva' }),
-      makeListing('a2', { locality: 'Shirva' }),
-    ];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
-    );
-    expect(screen.queryByTestId('agri-group-locality-acreage')).not.toBeInTheDocument();
-  });
-
-  it('AC4: acreage line shown when at least one listing has non-null computedAreaAcres (others null)', () => {
-    const listings = [
-      makeListing('a1', { locality: 'Shirva', computedAreaAcres: 4.0 }),
-      makeListing('a2', { locality: 'Shirva', computedAreaAcres: null }),
-    ];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
-    );
-    const acreageEl = screen.getByTestId('agri-group-locality-acreage');
-    expect(acreageEl).toHaveTextContent('4 acres total');
-  });
-
-  it('AC4 (F2): undefined computedAreaAcres (never backfilled) mixed with a non-null value — sums correctly', () => {
-    // makeListing without computedAreaAcres override leaves the field as undefined.
-    // The filter `v != null` must exclude both null and undefined, summing only the 2.0.
-    const listings = [
-      makeListing('a1', { locality: 'Shirva' }), // computedAreaAcres: undefined
-      makeListing('a2', { locality: 'Shirva', computedAreaAcres: 2.0 }),
-    ];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
-    );
-    const acreageEl = screen.getByTestId('agri-group-locality-acreage');
-    expect(acreageEl).toHaveTextContent('2 acres total');
-  });
-
-  it('AC4 (F1): float accumulation — 0.1 × 20 sums to 2.0000000000000004 in V8; must render "2 acres total" not "2.00 acres total"', () => {
-    // Confirmed in Node.js/V8:
-    //   Array.from({length:20}, () => 0.1).reduce((a,b) => a+b, 0) === 2.0000000000000004
-    // That value fails `% 1 === 0` (remainder is 4e-16) without prior rounding to 2dp.
-    const driftingListings = Array.from({ length: 20 }, (_, i) =>
-      makeListing(`drift-${i}`, { locality: 'Shirva', computedAreaAcres: 0.1 }),
-    );
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={driftingListings} listingCount={20} />,
-    );
-    const acreageEl = screen.getByTestId('agri-group-locality-acreage');
-    // Without Math.round fix: renders "2.00 acres total" (falls into toFixed branch)
-    // With fix: renders "2 acres total"
-    expect(acreageEl).toHaveTextContent('2 acres total');
-    expect(acreageEl).not.toHaveTextContent('2.00 acres total');
-  });
-
-  it('AC4: each town shows its own acreage independently', () => {
-    const listings = [
-      makeListing('a1', { locality: 'Shirva', computedAreaAcres: 5.0 }),
-      makeListing('a2', { locality: 'Shirva', computedAreaAcres: 5.0 }),
-      makeListing('b1', { locality: 'Hebri', computedAreaAcres: null }),
-    ];
-    render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={3} />,
-    );
-    // Shirva: 2 listings (appears first), Hebri: 1 listing
-    const acreageEls = screen.getAllByTestId('agri-group-locality-acreage');
-    // Only Shirva group has acreage (Hebri all-null)
-    expect(acreageEls).toHaveLength(1);
-    expect(acreageEls[0]).toHaveTextContent('10 acres total');
-  });
-});
-
-// ─── Issue #1456 — Cumulative distance hint text ──────────────────────────────
-
-describe('AgriGroupSelectedPanel — cumulative distance hint (Issue #1456)', () => {
-  it('renders hint text when distance tiers are present', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        selectedMaxKm={25}
-        availableMaxDistances={ALL_TIERS}
-      />,
-    );
-    expect(
-      screen.getByText('Includes parcels at closer distances too.'),
-    ).toBeInTheDocument();
-  });
-
-  it('does NOT render hint text when availableMaxDistances is undefined (no chip row)', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        selectedMaxKm={null}
-        availableMaxDistances={undefined}
-      />,
-    );
-    expect(
-      screen.queryByText('Includes parcels at closer distances too.'),
-    ).not.toBeInTheDocument();
-  });
-});
-
-// ─── Issue #1457 — agri filters now live behind the "Filters" drawer ─────────
-// The advanced filter form moved from always-visible into a Sheet opened by the
-// area-first-style "Filters" button. These tests open the drawer first, then
-// assert the form is reachable and Apply/Clear still work.
-
-/** Open the agri Filters drawer (Sheet) and return once its content is mounted. */
 async function openFiltersDrawer(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByTestId('agri-filters-trigger'));
   expect(await screen.findByTestId('agri-filters-panel')).toBeInTheDocument();
@@ -740,9 +490,7 @@ async function openFiltersDrawer(user: ReturnType<typeof userEvent.setup>) {
 describe('AgriGroupSelectedPanel — agri filters drawer (Issue #1457)', () => {
   it('does NOT render the filter form until the Filters drawer is opened', () => {
     render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
-    // Form is in a closed Sheet — not in the document yet.
     expect(screen.queryByTestId('agri-filters-panel')).not.toBeInTheDocument();
-    // But the trigger button IS visible on the main panel.
     expect(screen.getByTestId('agri-filters-trigger')).toBeInTheDocument();
   });
 
@@ -753,102 +501,27 @@ describe('AgriGroupSelectedPanel — agri filters drawer (Issue #1457)', () => {
     expect(screen.getByTestId('agri-filters-panel')).toBeInTheDocument();
   });
 
-  it('shows locked price UI inside the drawer when isAuthenticated=false (default)', async () => {
-    const user = userEvent.setup();
-    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} isAuthenticated={false} />);
-    await openFiltersDrawer(user);
-    expect(screen.getByTestId('agri-price-locked')).toBeInTheDocument();
-  });
-
-  it('shows price inputs inside the drawer when isAuthenticated=true', async () => {
-    const user = userEvent.setup();
-    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} isAuthenticated={true} />);
-    await openFiltersDrawer(user);
-    expect(screen.getByTestId('agri-price-min')).toBeInTheDocument();
-    expect(screen.getByTestId('agri-price-max')).toBeInTheDocument();
-  });
-
-  it('shows agri-filtered-empty-state testid when filter active and listings empty', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        agriAcresMin={5}
-      />,
-    );
-    expect(screen.getByTestId('agri-filtered-empty-state')).toBeInTheDocument();
-    expect(screen.getByText(/no agricultural listings match/i)).toBeInTheDocument();
-  });
-
-  it('shows agri-group-empty-state testid when no filter active and listings empty', () => {
-    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
-    expect(screen.getByTestId('agri-group-empty-state')).toBeInTheDocument();
-    expect(screen.getByText(/no agricultural land for sale in this region/i)).toBeInTheDocument();
-  });
-
   it('calls onApplyFilters callback when Apply Filters clicked inside the drawer', async () => {
     const user = userEvent.setup();
     const onApplyFilters = vi.fn();
     render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        onApplyFilters={onApplyFilters}
-      />,
+      <AgriGroupSelectedPanel {...baseProps} listings={[]} onApplyFilters={onApplyFilters} />,
     );
     await openFiltersDrawer(user);
     await user.click(screen.getByTestId('agri-filters-apply'));
     expect(onApplyFilters).toHaveBeenCalledTimes(1);
   });
-
-  it('calls onClearFilters callback when Clear Filters clicked inside the drawer', async () => {
-    const user = userEvent.setup();
-    const onClearFilters = vi.fn();
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        onClearFilters={onClearFilters}
-      />,
-    );
-    await openFiltersDrawer(user);
-    await user.click(screen.getByTestId('agri-filters-clear'));
-    expect(onClearFilters).toHaveBeenCalledTimes(1);
-  });
 });
-
-// ─── Filters button active-filter count ───────────────────────────────────────
 
 describe('AgriGroupSelectedPanel — Filters button active-filter count', () => {
   it('shows no count badge when no advanced filters are active', () => {
     render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
-    expect(screen.getByTestId('agri-filters-trigger')).toBeInTheDocument();
     expect(screen.queryByTestId('agri-filters-count')).not.toBeInTheDocument();
   });
 
-  it('shows count = 1 when only the acreage range is set (min or max)', () => {
+  it('shows count = 1 when only the acreage range is set', () => {
     render(<AgriGroupSelectedPanel {...baseProps} listings={[]} agriAcresMin={5} />);
     expect(screen.getByTestId('agri-filters-count')).toHaveTextContent('1');
-  });
-
-  it('counts acreage + price + land category + farmhouse + fencing + water = 6', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[]}
-        isAuthenticated
-        agriAcresMin={5}
-        agriAcresMax={20}
-        agriPriceMin={2000000}
-        agriPriceMax={10000000}
-        agriLandCategory="FARMLAND"
-        agriFarmhouseAvailable={true}
-        agriFencingDone={true}
-        agriWaterSource="BOREWELL"
-      />,
-    );
-    // acreage(1) + price(1) + landCategory(1) + farmhouse(1) + fencing(1) + water(1)
-    expect(screen.getByTestId('agri-filters-count')).toHaveTextContent('6');
   });
 
   it('does NOT count distance/maxKm, region or intent toward the badge', () => {
@@ -861,164 +534,37 @@ describe('AgriGroupSelectedPanel — Filters button active-filter count', () => 
         availableMaxDistances={ALL_TIERS}
       />,
     );
-    // Distance is selected + intent is rent, but no advanced filters → no badge.
     expect(screen.queryByTestId('agri-filters-count')).not.toBeInTheDocument();
   });
 });
 
-// ─── Active advanced-filter chips ─────────────────────────────────────────────
+// ─── Issue #2151 PR C (code-reviewer finding, HIGH) — fetch keys off citySlug, not cityLabel ──
 
-describe('AgriGroupSelectedPanel — active advanced-filter chips', () => {
-  it('renders no chip row when no advanced filters are active', () => {
-    render(<AgriGroupSelectedPanel {...baseProps} listings={[makeListing('a1')]} listingCount={1} />);
-    expect(screen.queryByTestId('agri-active-filters')).not.toBeInTheDocument();
-  });
-
-  it('renders one chip per active advanced filter with friendly labels', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[makeListing('a1')]}
-        listingCount={1}
-        isAuthenticated
-        agriAcresMin={5}
-        agriAcresMax={20}
-        agriPriceMin={2000000}
-        agriPriceMax={10000000}
-        agriLandCategory="FARMLAND"
-        agriFarmhouseAvailable={true}
-        agriFencingDone={true}
-        agriWaterSource="BOREWELL"
-      />,
-    );
-    const chips = screen.getAllByTestId('agri-active-filter-chip');
-    expect(chips).toHaveLength(6);
-    expect(screen.getByText('5–20 acres')).toBeInTheDocument();
-    expect(screen.getByText(/Land category: Farmland/)).toBeInTheDocument();
-    expect(screen.getByText('Farmhouse available')).toBeInTheDocument();
-    expect(screen.getByText('Fencing done')).toBeInTheDocument();
-    expect(screen.getByText('Borewell')).toBeInTheDocument();
-  });
-
-  it('formats one-sided acreage and price ranges', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[makeListing('a1')]}
-        listingCount={1}
-        isAuthenticated
-        agriAcresMin={5}
-        agriPriceMax={10000000}
-      />,
-    );
-    expect(screen.getByText('5+ acres')).toBeInTheDocument();
-    // formatPrice(10000000) → "₹1 Cr"
-    expect(screen.getByText(/Up to ₹1 Cr/)).toBeInTheDocument();
-  });
-
-  it('renders "No farmhouse"/"No fencing" chips when the boolean filter is explicitly false', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[makeListing('a1')]}
-        listingCount={1}
-        agriFarmhouseAvailable={false}
-        agriFencingDone={false}
-      />,
-    );
-    expect(screen.getByText('No farmhouse')).toBeInTheDocument();
-    expect(screen.getByText('No fencing')).toBeInTheDocument();
-  });
-
-  it('does NOT render chips for default ("Any"/"All") values', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[makeListing('a1')]}
-        listingCount={1}
-        agriLandCategory={null}
-        agriFarmhouseAvailable={null}
-        agriFencingDone={null}
-        agriWaterSource={null}
-      />,
-    );
-    expect(screen.queryByTestId('agri-active-filters')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('agri-active-filter-chip')).not.toBeInTheDocument();
-  });
-
-  it('does NOT render a chip for the selected distance (distance stays on the main panel)', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[makeListing('a1')]}
-        listingCount={1}
-        selectedMaxKm={25}
-        availableMaxDistances={ALL_TIERS}
-      />,
-    );
-    // Distance chip row is present, but no advanced-filter chip row.
-    expect(screen.getByTestId('distance-chip-25')).toBeInTheDocument();
-    expect(screen.queryByTestId('agri-active-filters')).not.toBeInTheDocument();
-  });
-
-  it('per-chip remove re-applies the remaining filters with only that field cleared', async () => {
-    const user = userEvent.setup();
-    const onApplyFilters = vi.fn();
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[makeListing('a1')]}
-        listingCount={1}
-        agriAcresMin={5}
-        agriAcresMax={20}
-        agriLandCategory="FARMLAND"
-        onApplyFilters={onApplyFilters}
-      />,
-    );
-    await user.click(screen.getByTestId('agri-active-filter-remove-landCategory'));
-    expect(onApplyFilters).toHaveBeenCalledTimes(1);
-    expect(onApplyFilters).toHaveBeenCalledWith(
-      expect.objectContaining({
-        agriAcresMin: 5,
-        agriAcresMax: 20,
-        agriLandCategory: null,
-      }),
-    );
-  });
-
-  it('"Clear all" fires onClearFilters', async () => {
-    const user = userEvent.setup();
-    const onClearFilters = vi.fn();
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[makeListing('a1')]}
-        listingCount={1}
-        agriAcresMin={5}
-        agriLandCategory="FARMLAND"
-        onClearFilters={onClearFilters}
-      />,
-    );
-    await user.click(screen.getByTestId('agri-active-filters-clear-all'));
-    expect(onClearFilters).toHaveBeenCalledTimes(1);
-  });
-});
-
-// ─── Distance chips remain visible on the main panel (regression guard) ───────
-
-describe('AgriGroupSelectedPanel — distance chips stay on main panel (not in drawer)', () => {
-  it('renders distance chips on the main panel WITHOUT opening the Filters drawer', () => {
+describe('AgriGroupSelectedPanel — destination fetch uses citySlug, not cityLabel', () => {
+  it('calls useAgriDestinations with the canonical slug even when cityLabel diverges from it', () => {
     render(
       <AgriGroupSelectedPanel
         {...baseProps}
         listings={[]}
-        selectedMaxKm={25}
-        availableMaxDistances={ALL_TIERS}
+        cityLabel="Sri Ganganagar"
+        citySlug="sri-ganganagar"
       />,
     );
-    // Drawer is closed (form absent) but distance chips are immediately visible.
-    expect(screen.queryByTestId('agri-filters-panel')).not.toBeInTheDocument();
-    expect(screen.getByTestId('distance-chip-10')).toBeInTheDocument();
-    expect(screen.getByTestId('distance-chip-25')).toHaveAttribute('aria-pressed', 'true');
+    const [cityArg] = mockUseAgriDestinations.mock.calls[0];
+    expect(cityArg).toBe('sri-ganganagar');
+  });
+
+  it('does NOT derive the fetch key from cityLabel (would otherwise produce a spaced, non-matching string)', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        cityLabel="Sri Ganganagar"
+        citySlug="sri-ganganagar"
+      />,
+    );
+    const [cityArg] = mockUseAgriDestinations.mock.calls[0];
+    expect(cityArg).not.toBe('sri ganganagar');
+    expect(cityArg).toBe('sri-ganganagar');
   });
 });

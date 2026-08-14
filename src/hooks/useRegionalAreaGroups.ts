@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 
 // ─── Frontend Types (cumulative corridor model, Issue #1429) ──────────────────
 
@@ -137,12 +137,19 @@ export function normalizeRegionalAreaGroupsResponse(
  * Returns cumulative corridor data — each corridor has availableMaxDistances[]
  * ordered by maxKm ascending. Returns { groups: [], isLoading, error } structure.
  */
-export function useRegionalAreaGroups(city: string): RegionalAreaGroupsData {
+/**
+ * Issue #2151 PR C (C-F3) — `listingPurpose` is OPTIONAL and additive (shipped server-side by
+ * PR B). Forwarded only when present so omitting it preserves today's behaviour exactly (no
+ * query-string change, no query-key change for existing callers that don't pass it).
+ */
+export function useRegionalAreaGroups(city: string, listingPurpose?: string): RegionalAreaGroupsData {
   const { data, isLoading, isError, error, refetch } = useQuery<Pick<RegionalAreaGroupsData, 'groups'>>({
-    queryKey: [...REGIONAL_AREA_GROUPS_QUERY_KEY_BASE, city, 'agricultural_land'],
+    queryKey: [...REGIONAL_AREA_GROUPS_QUERY_KEY_BASE, city, 'agricultural_land', listingPurpose ?? null],
     queryFn: async () => {
+      const params = new URLSearchParams({ city, propertyType: 'agricultural_land' });
+      if (listingPurpose) params.set('listingPurpose', listingPurpose);
       const rawResponse = await api.get<CorridorGroupsDTOResponse>(
-        `/api/discover/regional-area-groups?city=${encodeURIComponent(city)}&propertyType=agricultural_land`,
+        `/api/discover/regional-area-groups?${params.toString()}`,
         { skipAuth: true },
       );
       return normalizeRegionalAreaGroupsResponse(rawResponse, city);
@@ -156,6 +163,151 @@ export function useRegionalAreaGroups(city: string): RegionalAreaGroupsData {
     groups: data?.groups ?? [],
     isLoading,
     isError,
+    error: error as Error | null,
+    refetch,
+  };
+}
+
+// ─── Agri destinations (Issue #2151 PR C, C-F4) ────────────────────────────────
+//
+// GET /api/discover/agri-destinations?city=&direction=&maxKm=&listingPurpose= — server-computed
+// destination (town/locality) buckets for the agri-first corridor drill-down. Replaces the
+// client-side `item.locality ?? item.areaKey` grouping that used to be computed in
+// AgriGroupSelectedPanel.tsx from raw parcel listings (deleted — see that file). `areaKey` is the
+// STABLE canonical identity for a destination (areas.area_key) — see
+// src/features/discover/state/url/agricultural.ts (C-F1) for how it becomes the URL identity.
+
+export interface AgriDestinationBucket {
+  /** Stable canonical identity — areas.area_key. Never display text. */
+  areaKey: string;
+  /** Human-readable label, e.g. "N towards Brahmavar" or a town name. */
+  displayName: string;
+  distanceKm: number;
+  bearingDeg: number;
+  direction: string;
+  parcelCount: number;
+  /** Undefined when absent from JSON (backend @JsonInclude NON_NULL). NOT null. */
+  parcelAcreage?: number;
+}
+
+export const AGRI_DESTINATIONS_QUERY_KEY_BASE = ['agri-destinations'] as const;
+
+/**
+ * Backend fail-closed code (503) for a city that is ACTIVE but has never been promoted through
+ * Agri City Launch. NOT a transient/network error and NOT shopper-retryable — remediation is an
+ * operator re-promotion. Must be rendered as its own distinct state, never folded into the
+ * generic retryable-error state and never presented as an empty result (C-F6 state 5).
+ */
+export const AGRI_DESTINATIONS_NOT_YET_PROMOTED_CODE = 'AGRI_DESTINATIONS_NOT_YET_PROMOTED';
+
+interface AgriDestinationBucketDTO {
+  areaKey?: string;
+  displayName?: string;
+  distanceKm?: number;
+  bearingDeg?: number;
+  direction?: string;
+  parcelCount?: number;
+  parcelAcreage?: number | null;
+}
+
+interface AgriDestinationsDTOResponse {
+  city?: string;
+  destinations?: AgriDestinationBucketDTO[] | null;
+}
+
+/** Type guard for the shape GlobalExceptionHandler puts on a ResponseStatusException body. */
+function isErrorCodeBody(body: unknown): body is { error: string } {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    'error' in body &&
+    typeof (body as { error: unknown }).error === 'string'
+  );
+}
+
+export function normalizeAgriDestinationsResponse(dto: AgriDestinationsDTOResponse): AgriDestinationBucket[] {
+  if (!dto?.destinations || !Array.isArray(dto.destinations)) return [];
+  return dto.destinations
+    .map((d): AgriDestinationBucket | null => {
+      const areaKey = typeof d.areaKey === 'string' ? d.areaKey : '';
+      // Skip buckets with no usable identity.
+      if (!areaKey) return null;
+      return {
+        areaKey,
+        displayName: typeof d.displayName === 'string' && d.displayName.length > 0 ? d.displayName : areaKey,
+        distanceKm: typeof d.distanceKm === 'number' ? d.distanceKm : 0,
+        bearingDeg: typeof d.bearingDeg === 'number' ? d.bearingDeg : 0,
+        direction: typeof d.direction === 'string' ? d.direction : '',
+        parcelCount: typeof d.parcelCount === 'number' ? d.parcelCount : 0,
+        // parcelAcreage: undefined if absent or null (NOT null — mirrors agriAcreage convention above).
+        parcelAcreage: typeof d.parcelAcreage === 'number' ? d.parcelAcreage : undefined,
+      };
+    })
+    .filter((d): d is AgriDestinationBucket => d !== null);
+}
+
+export interface AgriDestinationsData {
+  destinations: AgriDestinationBucket[];
+  isLoading: boolean;
+  /**
+   * True for any error EXCEPT the 503 not-yet-promoted case, which is surfaced separately via
+   * `isNotYetPromoted` (C-F6: the two must render as distinct states).
+   */
+  isError: boolean;
+  isNotYetPromoted: boolean;
+  error: Error | null;
+  refetch: () => void;
+}
+
+/**
+ * Fetch server-computed destination buckets for a corridor (direction + maxKm) — Issue #2151 PR C.
+ * `direction`/`maxKm`/`listingPurpose` are all optional and forwarded only when present, matching
+ * the backend contract (GET .../agri-destinations?city=...[&direction=][&maxKm=][&listingPurpose=]).
+ */
+export function useAgriDestinations(
+  city: string,
+  direction?: string | null,
+  maxKm?: number | null,
+  listingPurpose?: string,
+): AgriDestinationsData {
+  const { data, isLoading, isError, error, refetch } = useQuery<AgriDestinationBucket[]>({
+    queryKey: [
+      ...AGRI_DESTINATIONS_QUERY_KEY_BASE,
+      city,
+      direction ?? null,
+      maxKm ?? null,
+      listingPurpose ?? null,
+    ],
+    queryFn: async () => {
+      const params = new URLSearchParams({ city });
+      if (direction) params.set('direction', direction);
+      if (maxKm != null) params.set('maxKm', String(maxKm));
+      if (listingPurpose) params.set('listingPurpose', listingPurpose);
+      const dto = await api.get<AgriDestinationsDTOResponse>(
+        `/api/discover/agri-destinations?${params.toString()}`,
+        { skipAuth: true },
+      );
+      return normalizeAgriDestinationsResponse(dto);
+    },
+    enabled: city.length > 0,
+    staleTime: 120_000,
+    retry: false,
+  });
+
+  const isNotYetPromoted =
+    isError &&
+    error instanceof ApiError &&
+    error.status === 503 &&
+    isErrorCodeBody(error.body) &&
+    error.body.error === AGRI_DESTINATIONS_NOT_YET_PROMOTED_CODE;
+
+  return {
+    destinations: data ?? [],
+    isLoading,
+    // The 503 not-yet-promoted case is carved out of the generic error flag — C-F6 requires it
+    // never be presented as a generic retryable error.
+    isError: isError && !isNotYetPromoted,
+    isNotYetPromoted,
     error: error as Error | null,
     refetch,
   };

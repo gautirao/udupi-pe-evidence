@@ -427,11 +427,18 @@ test.describe('Issue #1771 — Agri-First Discover polish evidence capture', () 
     await saveEvidence(page, '2_udupi_agri_direction_selected.png');
   });
 
-  test('3. Udupi locality selected (locality=Brahmavar)', async ({ page }) => {
+  test('3. Udupi locality selected (destKey=<Brahmavar areaKey>)', async ({ page }) => {
     // Taller viewport: the right panel is an inner scroll container, so fullPage
     // cannot expand it — the extra height keeps hero + filters + parcel cards in frame.
     await page.setViewportSize({ width: 1440, height: 1750 });
-    await page.goto('/discover?city=udupi&lat=13.45340&lon=74.74033&zoom=12&journey=agri-first&region=N&maxKm=25&locality=Brahmavar');
+    // Issue #2151 PR C (C-F1) — the destination identity URL param is the canonical
+    // areas.area_key, not free display text. This spec hits the REAL hosted backend (no
+    // stubs), so the value here MUST be the actual live area_key for "Brahmavar" — a plain
+    // 'Brahmavar' string will NOT resolve (no display-text lookup exists client-side; see
+    // agricultural.ts's migration-effect doc). Naming convention matches this repo's other
+    // Udupi fixtures (e.g. 'IN|KA|Udupi|Manipal'); confirm against the live agri-destinations
+    // response for the N/25km corridor before trusting this value.
+    await page.goto('/discover?city=udupi&lat=13.45340&lon=74.74033&zoom=12&journey=agri-first&region=N&maxKm=25&destKey=' + encodeURIComponent('IN|KA|Udupi|Brahmavar'));
     await waitForRealLoadedState(page);
 
     await expect(page.getByTestId('agri-group-locality-panel')).toBeVisible({ timeout: 10_000 });
@@ -466,9 +473,11 @@ test.describe('Issue #1771 — Agri-First Discover polish evidence capture', () 
     await saveEvidence(page, '5_bangalore_agri_direction_selected.png');
   });
 
-  test('6. Bangalore locality selected (locality=Yelahanka Rural)', async ({ page }) => {
+  test('6. Bangalore locality selected (destKey=<Yelahanka Rural areaKey>)', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1750 });
-    await page.goto('/discover?city=bangalore&journey=agri-first&region=N&maxKm=100&locality=Yelahanka%20Rural');
+    // Issue #2151 PR C (C-F1) — see test 3's comment: destKey must be the real live area_key,
+    // not the display name. Verify against the live agri-destinations response before trusting.
+    await page.goto('/discover?city=bangalore&journey=agri-first&region=N&maxKm=100&destKey=' + encodeURIComponent('IN|KA|Bangalore|Yelahanka Rural'));
     await waitForRealLoadedState(page);
 
     await expect(page.getByTestId('agri-group-locality-panel')).toBeVisible({ timeout: 10_000 });

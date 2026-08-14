@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useRegionalAreaGroups } from '@/hooks/useRegionalAreaGroups';
+import { useRegionalAreaGroups, useAgriDestinations } from '@/hooks/useRegionalAreaGroups';
 import { useAgriMapListings } from '@/hooks/useAgriMapListings';
 import { useFilteredAgriListings } from '@/features/discover/presentation/useFilteredAgriListings';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
@@ -57,12 +57,39 @@ export function useDiscoverAgriController({
     : null;
   const selectedGroupAreaKeys = selectedTierData?.areaKeys ?? [];
 
+  // Issue #2151 PR C (C-F2) — the backend agri-map-listings endpoint no longer accepts the legacy
+  // repeated `areaKeys` param; it now scopes to exactly ONE canonical `areaKey` (the corridor-wide
+  // "all towns" fetch this used to power is replaced below by useAgriDestinations' server-computed
+  // buckets). This hook is now only ever used for the Level-3 locality drill-down — the single
+  // destination the user has selected via `nav.selectedLocality`, which C-F1
+  // (state/url/agricultural.ts) makes the canonical areas.area_key, not free text.
+  const selectedDestinationAreaKey = nav.selectedLocality ?? '';
+
   const {
     data: agriMapListingsData,
     isLoading: isLoadingAgriGroupListings,
     isError: isAgriGroupListingsError,
     refetch: refetchAgriGroupListings,
-  } = useAgriMapListings(nav.city, selectedGroupAreaKeys, intentListingPurpose, isAuthenticated);
+  } = useAgriMapListings(nav.city, selectedDestinationAreaKey, intentListingPurpose, isAuthenticated);
+
+  // Issue #2151 PR C (C-F4/C-F7) — server-computed destination (town/locality) buckets for the
+  // agri-group-selected (Level-2) panel. Replaces the client-side `item.locality ?? item.areaKey`
+  // grouping that used to be computed from raw parcel listings in AgriGroupSelectedPanel.tsx.
+  // useDiscoverAgriController stays the single Agri owner of this fetch (C-F7); however, the
+  // panel-composition layer that wires controller output into DiscoverRightPanel props
+  // (assembleDiscoverSurfaceProps.ts / buildPanelSurfaceModel.ts) is outside this PR's allowed
+  // edit globs, so AgriGroupSelectedPanel additionally calls useAgriDestinations directly with the
+  // same (city, direction, maxKm, listingPurpose) inputs — see that file's own comment. Both call
+  // sites resolve to the identical TanStack Query cache key, so there is no divergence risk; this
+  // controller-level wiring documents the intended ownership and gives it test coverage even
+  // though today's composition layer doesn't yet forward it as a DiscoverRightPanel prop.
+  const {
+    destinations: agriDestinations,
+    isLoading: isLoadingAgriDestinations,
+    isError: isAgriDestinationsError,
+    isNotYetPromoted: isAgriDestinationsNotYetPromoted,
+    refetch: refetchAgriDestinations,
+  } = useAgriDestinations(nav.city || DEFAULT_CITY, selectedRegion, selectedMaxKm, intentListingPurpose);
 
   // Issue #1429 — corridor + distance tier label for the agri-group-selected panel header chip.
   const agriGroupLabel = selectedCorridorData
@@ -101,6 +128,11 @@ export function useDiscoverAgriController({
     isLoadingAgriGroupListings,
     isAgriGroupListingsError,
     refetchAgriGroupListings,
+    agriDestinations,
+    isLoadingAgriDestinations,
+    isAgriDestinationsError,
+    isAgriDestinationsNotYetPromoted,
+    refetchAgriDestinations,
     agriGroupLabel,
     selectedGroupListingItem,
     filteredAgriListings,

@@ -107,7 +107,7 @@ describe('useAgriMapListings — staleTime', () => {
       <QueryClientProvider client={qc}>{children}</QueryClientProvider>
     );
 
-    renderHook(() => useAgriMapListings('udupi', ['area-north']), { wrapper });
+    renderHook(() => useAgriMapListings('udupi', 'area-north'), { wrapper });
 
     // Wait for query to be registered in the cache.
     await new Promise((r) => setTimeout(r, 0));

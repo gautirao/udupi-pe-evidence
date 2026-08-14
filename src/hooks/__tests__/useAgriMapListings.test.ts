@@ -1,15 +1,25 @@
 /**
- * useAgriMapListings — Issue #1410 (B3)
+ * useAgriMapListings — Issue #1410 (B3), cut over to single canonical `areaKey` by
+ * Issue #2151 PR C (C-F2).
  *
  * Tests:
- * AC1  Query key includes city + sorted areaKeys; different orderings → same key
+ * AC1  Query key includes city + areaKey + listingPurpose + authScope
  * AC2  Successful response returned with all fields, nullable handling
  * AC3  Network error → query rejects (TanStack Query surfaces as error state)
  * AC4  enabled guard: city='' → query not called
- * AC5  enabled guard: areaKeys=[] → query not called
+ * AC5  enabled guard: areaKey='' → query not called
  * AC6  skipAuth: true → api.get called with skipAuth option
  * AC7  boundaryGeoJson null handling — listing with null boundary included
  * AC8  (AC11 guard) /api/discover/agri-map-listings called; /api/discover/markers NOT called
+ * AC9  (C-F2) sends canonical single `areaKey` param; legacy `areaKeys` is NEVER sent
+ * AC10 (Issue #1551 — SECURITY-CRITICAL) authed call (isAuthenticated=true) passes NO
+ *      skipAuth option to api.get — complements AC6, which only proves the anon path.
+ * AC11 (Issue #1551 — SECURITY-CRITICAL) query key carries the auth-scope literal
+ *      ('authed'/'anon') at a stable position, and authed vs anon keys are structurally
+ *      distinct so they cannot collide in the TanStack Query cache.
+ * AC12 (Issue #1551 — SECURITY-CRITICAL) QueryClient cache isolation: an anon-seeded
+ *      cache entry is NOT visible under the authed key (proves the cache-key segregation
+ *      actually prevents an anon caller from being served an authed-scoped response).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
@@ -84,44 +94,20 @@ describe('useAgriMapListings', () => {
     vi.clearAllMocks();
   });
 
-  it('AC1: returns data for city + areaKeys', async () => {
+  it('AC1: returns data for city + areaKey', async () => {
     mockGet.mockResolvedValueOnce(SAMPLE_RESPONSE);
     const { result } = renderHook(
-      () => useAgriMapListings('udupi', ['IN|KA|Udupi|Manipal']),
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal'),
       { wrapper: makeWrapper() },
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(SAMPLE_RESPONSE);
   });
 
-  it('AC1: different key orderings produce the same sorted query key', async () => {
-    const keysAB = ['key-B', 'key-A'];
-    const keysBA = ['key-A', 'key-B'];
-
-    mockGet.mockResolvedValue({ city: 'udupi', listings: [] });
-
-    const { result: rAB } = renderHook(
-      () => useAgriMapListings('udupi', keysAB),
-      { wrapper: makeWrapper() },
-    );
-    const { result: rBA } = renderHook(
-      () => useAgriMapListings('udupi', keysBA),
-      { wrapper: makeWrapper() },
-    );
-
-    await waitFor(() => expect(rAB.current.isSuccess).toBe(true));
-    await waitFor(() => expect(rBA.current.isSuccess).toBe(true));
-
-    // Both calls should have been made with the same sorted URL params
-    const urlAB = mockGet.mock.calls.find(c => (c[0] as string).includes('key-A') && (c[0] as string).includes('key-B'))?.[0];
-    const urlBA = mockGet.mock.calls.slice().reverse().find(c => (c[0] as string).includes('key-A') && (c[0] as string).includes('key-B'))?.[0];
-    expect(urlAB).toBe(urlBA);
-  });
-
   it('AC2: all fields preserved in response including nullable ones', async () => {
     mockGet.mockResolvedValueOnce(SAMPLE_RESPONSE);
     const { result } = renderHook(
-      () => useAgriMapListings('udupi', ['IN|KA|Udupi|Manipal']),
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal'),
       { wrapper: makeWrapper() },
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -138,7 +124,7 @@ describe('useAgriMapListings', () => {
   it('AC3: network error → query surfaces as error state', async () => {
     mockGet.mockRejectedValueOnce(new Error('Network error'));
     const { result } = renderHook(
-      () => useAgriMapListings('udupi', ['IN|KA|Udupi|Manipal']),
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal'),
       { wrapper: makeWrapper() },
     );
     await waitFor(() => expect(result.current.isError).toBe(true));
@@ -147,16 +133,16 @@ describe('useAgriMapListings', () => {
 
   it('AC4: city="" → query disabled, api.get not called', () => {
     const { result } = renderHook(
-      () => useAgriMapListings('', ['IN|KA|Udupi|Manipal']),
+      () => useAgriMapListings('', 'IN|KA|Udupi|Manipal'),
       { wrapper: makeWrapper() },
     );
     expect(result.current.fetchStatus).toBe('idle');
     expect(mockGet).not.toHaveBeenCalled();
   });
 
-  it('AC5: areaKeys=[] → query disabled, api.get not called', () => {
+  it('AC5: areaKey="" → query disabled, api.get not called', () => {
     const { result } = renderHook(
-      () => useAgriMapListings('udupi', []),
+      () => useAgriMapListings('udupi', ''),
       { wrapper: makeWrapper() },
     );
     expect(result.current.fetchStatus).toBe('idle');
@@ -166,7 +152,7 @@ describe('useAgriMapListings', () => {
   it('AC6: skipAuth:true passed to api.get', async () => {
     mockGet.mockResolvedValueOnce({ city: 'udupi', listings: [] });
     const { result } = renderHook(
-      () => useAgriMapListings('udupi', ['IN|KA|Udupi|Manipal']),
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal'),
       { wrapper: makeWrapper() },
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -179,7 +165,7 @@ describe('useAgriMapListings', () => {
   it('AC7: listing with boundaryGeoJson=null is included in results', async () => {
     mockGet.mockResolvedValueOnce(SAMPLE_RESPONSE);
     const { result } = renderHook(
-      () => useAgriMapListings('udupi', ['IN|KA|Udupi|Manipal']),
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal'),
       { wrapper: makeWrapper() },
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -191,7 +177,7 @@ describe('useAgriMapListings', () => {
   it('AC8 (AC11 guard): /api/discover/agri-map-listings called; /api/discover/markers NOT called', async () => {
     mockGet.mockResolvedValueOnce({ city: 'udupi', listings: [] });
     const { result } = renderHook(
-      () => useAgriMapListings('udupi', ['IN|KA|Udupi|Manipal']),
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal'),
       { wrapper: makeWrapper() },
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -204,24 +190,115 @@ describe('useAgriMapListings', () => {
     expect(markersCalled).toBe(false);
   });
 
-  it('query key includes city and sorted areaKeys', async () => {
+  it('AC9 (C-F2): sends canonical single areaKey param', async () => {
     mockGet.mockResolvedValueOnce({ city: 'udupi', listings: [] });
     const { result } = renderHook(
-      () => useAgriMapListings('udupi', ['key-Z', 'key-A']),
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal'),
       { wrapper: makeWrapper() },
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    // Verify that the URL params are sorted
     const calledUrl = mockGet.mock.calls[0][0] as string;
     expect(calledUrl).toContain('city=udupi');
-    const firstKey = calledUrl.indexOf('key-A');
-    const secondKey = calledUrl.indexOf('key-Z');
-    // key-A (sorted first) should appear before key-Z
-    expect(firstKey).toBeLessThan(secondKey);
+    expect(calledUrl).toContain('areaKey=IN');
+  });
+
+  it('AC9 (C-F2): NEVER sends the legacy repeated `areaKeys` param', async () => {
+    mockGet.mockResolvedValueOnce({ city: 'udupi', listings: [] });
+    const { result } = renderHook(
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal'),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const calledUrl = mockGet.mock.calls[0][0] as string;
+    // `areaKeys` (plural, legacy) must never appear — only the canonical singular `areaKey`.
+    expect(calledUrl).not.toContain('areaKeys=');
+  });
+
+  it('query key includes city and areaKey', async () => {
+    mockGet.mockResolvedValueOnce({ city: 'udupi', listings: [] });
+    const { result } = renderHook(
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal'),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const calledUrl = mockGet.mock.calls[0][0] as string;
+    expect(calledUrl).toContain('city=udupi');
+    expect(calledUrl).toContain('IN');
   });
 
   it('QUERY_KEY_BASE is the expected constant', () => {
     expect(AGRI_MAP_LISTINGS_QUERY_KEY_BASE).toEqual(['agri-map-listings']);
+  });
+
+  it('AC10: authed call (isAuthenticated=true) passes NO skipAuth option to api.get', async () => {
+    mockGet.mockResolvedValueOnce({ city: 'udupi', listings: [] });
+    const { result } = renderHook(
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal', undefined, /* isAuthenticated= */ true),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // Authed: no options arg → api.ts injects the Authorization header.
+    // FAILS if the hook passes skipAuth:true for authed users (would suppress the auth header).
+    expect(mockGet).toHaveBeenCalledWith(
+      expect.stringContaining('/api/discover/agri-map-listings'),
+      undefined,
+    );
+  });
+
+  it('AC11: query key carries auth-scope at a stable position; authed and anon keys are structurally distinct', async () => {
+    mockGet.mockResolvedValue({ city: 'udupi', listings: [] });
+
+    const anonClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result: anonResult } = renderHook(
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal', undefined, false),
+      {
+        wrapper: ({ children }) =>
+          React.createElement(QueryClientProvider, { client: anonClient }, children),
+      },
+    );
+    await waitFor(() => expect(anonResult.current.isSuccess).toBe(true));
+    const anonKey = anonClient.getQueryCache().getAll()[0].queryKey;
+
+    const authedClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result: authedResult } = renderHook(
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal', undefined, true),
+      {
+        wrapper: ({ children }) =>
+          React.createElement(QueryClientProvider, { client: authedClient }, children),
+      },
+    );
+    await waitFor(() => expect(authedResult.current.isSuccess).toBe(true));
+    const authedKey = authedClient.getQueryCache().getAll()[0].queryKey;
+
+    // Auth-scope literal sits right after the base segment — FAILS if the hook drops
+    // or reorders it.
+    expect(anonKey[1]).toBe('anon');
+    expect(authedKey[1]).toBe('authed');
+    // Structurally distinct as a whole → cannot collide as cache keys.
+    expect(anonKey).not.toEqual(authedKey);
+    // All other dimensions (city, listingPurpose, areaKey) match — only auth-scope differs.
+    expect([anonKey[0], ...anonKey.slice(2)]).toEqual([authedKey[0], ...authedKey.slice(2)]);
+  });
+
+  it('AC12: QueryClient does not surface an anon-seeded cache entry under the authed key (cache isolation)', () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const anonKey = [...AGRI_MAP_LISTINGS_QUERY_KEY_BASE, 'anon', 'udupi', null, 'IN|KA|Udupi|Manipal'];
+    const authedKey = [...AGRI_MAP_LISTINGS_QUERY_KEY_BASE, 'authed', 'udupi', null, 'IN|KA|Udupi|Manipal'];
+
+    // Seed an anon (coarsened / price-null) response under the anon key.
+    client.setQueryData(anonKey, {
+      city: 'udupi',
+      listings: [{ id: 'listing-1', pricePaise: null }],
+    });
+
+    // An authed reader must NOT be served the anon cache entry — the exact-price/coords
+    // authed response must come from a real fetch, never a stale anon cache hit.
+    const authedCachedData = client.getQueryData(authedKey);
+    expect(authedCachedData).toBeUndefined();
+
+    client.clear();
   });
 });
