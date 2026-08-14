@@ -38,12 +38,16 @@ export function useDiscoverAgriController({
   // Issue #1429 (B2) — precomputed corridor groups for the agri-first landing panel.
   // Issue #1745 Batch B — same DEFAULT_CITY fallback as useAreaGroups, for
   // agri-first city-landing consistency.
+  // Issue #2151 PR C carry-over (C-F3) — forward intentListingPurpose so the Level-1
+  // corridor-tier counts reflect the shopper's active Buy/Rent filter, same as the
+  // Level-2 useAgriDestinations call below. Optional/additive param: omitting it (the
+  // pre-#2151 behaviour) is unchanged, so this is not a query-key/response-shape change.
   const {
     groups: corridorGroups,
     isLoading: isLoadingRegionalAreaGroups,
     isError: isRegionalAreaGroupsError,
     refetch: refetchRegionalAreaGroups,
-  } = useRegionalAreaGroups(nav.city || DEFAULT_CITY);
+  } = useRegionalAreaGroups(nav.city || DEFAULT_CITY, intentListingPurpose);
 
   // Issue #1429 — derive areaKeys from the selected corridor + distance tier to fetch
   // agri map listings. Hook is disabled when selectedRegion + selectedMaxKm are not both set.
