@@ -564,7 +564,10 @@ class CityLaunchPreparationServiceIT {
             + "city_regions itself; now it tries, and correctly reports WHY generation is blocked.")
     void ac4_invalidGeography_zeroRegions_failsValidation_zeroSandboxRows() {
         int cityId = seedCity("ac4");
-        seedArea(cityId, "ac4|area-1", 13.01, 74.71);
+        // #2163 review fix: 4-segment area_key so the ACTIVE-area guard (which mirrors the
+        // downstream array_length(area_key,'|') = 4 classification-eligibility filter) is
+        // satisfied and this test reaches the MISSING_POLICY failure it is actually about.
+        seedArea(cityId, "ac4|d|g|area-1", 13.01, 74.71);
         // No city_region_policy row seeded -> CityRegionOnboardingService.apply() throws
         // MISSING_POLICY, surfaced as CityPrerequisiteGenerationException.
 

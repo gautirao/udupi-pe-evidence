@@ -184,7 +184,7 @@ class CityLaunchPrepareNavigationWiringIT {
             jdbc.update(
                     "INSERT INTO public.areas (area_key, city_id, name, district, geo_center_lat, geo_center_lon, "
                             + " min_lat, min_lon, max_lat, max_lon) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    slug + "|area-" + i, cityId, "Area " + i, slug + "-district", lat, lon,
+                    slug + "|d|g|area-" + i, cityId, "Area " + i, slug + "-district", lat, lon,
                     lat - 0.001, lon - 0.001, lat + 0.001, lon + 0.001);
         }
 
@@ -194,7 +194,7 @@ class CityLaunchPrepareNavigationWiringIT {
             // #2163: 'OVERRIDE' (not 'AUTO') is load-bearing — see seedDecoyClassifiedArea's javadoc.
             jdbc.update("INSERT INTO public.city_region_memberships "
                             + "(city_id, area_key, region_key, assignment_source) VALUES (?, ?, ?, 'OVERRIDE')",
-                    cityId, slug + "|area-" + i, slug + "-north");
+                    cityId, slug + "|d|g|area-" + i, slug + "-north");
         }
 
         return cityId;
