@@ -13,8 +13,12 @@
  * and useDiscoverAgriController consume.
  *
  * Covers:
- * - Legacy `locality=` cold-load migrates to canonical `destKey=` exactly once.
- * - Legacy `town=` cold-load migrates to canonical `destKey=` exactly once.
+ * - Legacy `locality=` cold-load migrates to canonical `destKey=` exactly once, but ONLY when
+ *   the legacy value already looks like a real area_key (e.g. `IN|KA|Udupi|Manipal`).
+ * - Legacy `town=` cold-load migrates to canonical `destKey=` exactly once, same area_key gate.
+ * - A legacy `locality=`/`town=` value that is free-text display text (not area_key-shaped) is
+ *   DROPPED — the legacy params are removed but `destKey` is left unset, never fabricated from
+ *   display text (GitHub-reviewer-confirmed bug fix, Issue #2151).
  * - Migration does not oscillate/re-fire across subsequent unrelated re-renders.
  * - An already-canonical `destKey=` wins over a simultaneously-present legacy value
  *   (no permanent dual-canonical state).
@@ -49,38 +53,61 @@ function renderWithLocation(initialUrl: string) {
 }
 
 describe('agricultural URL domain — destination-key migration (C-F1)', () => {
-  it('migrates legacy locality= to canonical destKey= exactly once on cold load', () => {
+  it('migrates a legacy locality= that IS area_key-shaped to canonical destKey= exactly once on cold load', () => {
+    const { result } = renderWithLocation(
+      '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&locality=IN%7CKA%7CUdupi%7CManipal',
+    );
+
+    // Canonical field is populated from the legacy value, unchanged.
+    expect(result.current.urlState[0].selectedLocality).toBe('IN|KA|Udupi|Manipal');
+    // The raw URL no longer carries the legacy param — only the canonical one.
+    const search = result.current.location.search;
+    expect(search).toContain('destKey=IN');
+    expect(search).not.toContain('locality=');
+  });
+
+  it('migrates a legacy town= that IS area_key-shaped to canonical destKey= exactly once on cold load', () => {
+    const { result } = renderWithLocation(
+      '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&town=IN%7CKA%7CUdupi%7CKota',
+    );
+
+    expect(result.current.urlState[0].selectedLocality).toBe('IN|KA|Udupi|Kota');
+    const search = result.current.location.search;
+    expect(search).toContain('destKey=IN');
+    expect(search).not.toContain('town=');
+  });
+
+  it('drops a legacy locality= that is free-text (NOT area_key-shaped) instead of fabricating a destKey — GitHub-reviewer-confirmed bug fix (#2151)', () => {
     const { result } = renderWithLocation(
       '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&locality=Manipal',
     );
 
-    // Canonical field is populated from the legacy value.
-    expect(result.current.urlState[0].selectedLocality).toBe('Manipal');
-    // The raw URL no longer carries the legacy param — only the canonical one.
+    // Free text must never be promoted to the canonical identity param.
+    expect(result.current.urlState[0].selectedLocality).toBeNull();
     const search = result.current.location.search;
-    expect(search).toContain('destKey=Manipal');
+    expect(search).not.toContain('destKey=');
     expect(search).not.toContain('locality=');
   });
 
-  it('migrates legacy town= to canonical destKey= exactly once on cold load', () => {
+  it('drops a legacy town= that is free-text (NOT area_key-shaped) instead of fabricating a destKey', () => {
     const { result } = renderWithLocation(
       '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&town=Kota',
     );
 
-    expect(result.current.urlState[0].selectedLocality).toBe('Kota');
+    expect(result.current.urlState[0].selectedLocality).toBeNull();
     const search = result.current.location.search;
-    expect(search).toContain('destKey=Kota');
+    expect(search).not.toContain('destKey=');
     expect(search).not.toContain('town=');
   });
 
   it('does NOT re-translate on a subsequent unrelated re-render (exactly-once, no oscillation)', () => {
     const { result } = renderWithLocation(
-      '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&locality=Manipal',
+      '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&locality=IN%7CKA%7CUdupi%7CManipal',
     );
 
-    expect(result.current.urlState[0].selectedLocality).toBe('Manipal');
+    expect(result.current.urlState[0].selectedLocality).toBe('IN|KA|Udupi|Manipal');
     const searchAfterMigration = result.current.location.search;
-    expect(searchAfterMigration).toContain('destKey=Manipal');
+    expect(searchAfterMigration).toContain('destKey=IN');
 
     // Trigger an unrelated URL state change — this causes the whole facade (and every
     // domain hook sharing its urlParams/setUrlParams, including the agricultural
@@ -94,10 +121,10 @@ describe('agricultural URL domain — destination-key migration (C-F1)', () => {
     // be a no-op given the ref guard, but if it were NOT a no-op (the bug this guards
     // against), selectedLocality could reset to null or the legacy params could
     // reappear — neither happens.
-    expect(result.current.urlState[0].selectedLocality).toBe('Manipal');
+    expect(result.current.urlState[0].selectedLocality).toBe('IN|KA|Udupi|Manipal');
     expect(result.current.urlState[0].selectedMaxKm).toBe(50);
     const searchAfterRerender = result.current.location.search;
-    expect(searchAfterRerender).toContain('destKey=Manipal');
+    expect(searchAfterRerender).toContain('destKey=IN');
     expect(searchAfterRerender).not.toContain('locality=');
     expect(searchAfterRerender).not.toContain('town=');
   });
@@ -113,11 +140,11 @@ describe('agricultural URL domain — destination-key migration (C-F1)', () => {
 
   it('setLocality writes the canonical destKey param and clears legacy locality/town params', () => {
     const { result } = renderWithLocation(
-      '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&locality=OldTown',
+      '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&locality=IN%7CKA%7CUdupi%7COldTown',
     );
 
-    // Let the cold-load migration settle first.
-    expect(result.current.urlState[0].selectedLocality).toBe('OldTown');
+    // Let the cold-load migration settle first (area_key-shaped legacy value migrates unchanged).
+    expect(result.current.urlState[0].selectedLocality).toBe('IN|KA|Udupi|OldTown');
 
     act(() => {
       result.current.urlState[1].setLocality('IN|KA|Udupi|Manipal');

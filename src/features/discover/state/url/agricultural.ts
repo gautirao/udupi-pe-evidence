@@ -30,6 +30,18 @@ const PARAM_LOCALITY = 'locality';
  * migrated to this param exactly once on cold load — see the migration effect below.
  */
 const PARAM_DEST_KEY = 'destKey';
+/**
+ * Issue #2151 PR C — format guard for the legacy locality/town → destKey migration below.
+ * Real area_key values follow `IN|KA|<District>|<Name>` (see src/lib/areaKey.ts's
+ * buildAreaKey / AreaOverviewController contract) — at least 3 non-empty pipe-delimited
+ * segments. No codebase-wide area_key validator exists to reuse (checked
+ * discoverUrlNormalize.ts and areaKey.ts — neither exports one), so this is scoped locally.
+ * Deliberately loose (segment count, not a hard-coded `IN|KA|` prefix) so it doesn't need to
+ * change if the key format ever grows beyond India/Karnataka. A legacy value that does NOT
+ * match this shape is free-text display text (e.g. "Manipal") and must never be promoted to
+ * the canonical destKey param — see the migration effect below.
+ */
+const AREA_KEY_FORMAT = /^[^|]+(?:\|[^|]+){2,}$/;
 const VALID_MAX_KM = new Set([10, 25, 50, 100]);
 /**
  * Byte-identical re-export target — useDiscoverUrlState.ts does
@@ -188,12 +200,23 @@ export function useAgriculturalUrlDomain(
 
   // ─── Issue #2151 PR C (C-F1): legacy locality/town → canonical destKey, EXACTLY ONCE ─────────
   // Mirrors the OD-1 group=DIR:BAND migration above: a ref-guarded mount effect that fires once,
-  // moves the legacy param's value verbatim under the canonical param name, deletes the legacy
-  // params, and REPLACEs so no phantom history entry is created. This is a param-identity
-  // migration (rename), not a display-text→area_key content lookup — no such lookup is available
-  // client-side. Callers going forward (AgriGroupSelectedPanel's `onSelectLocality`) write the
-  // destination's real areas.area_key via `setLocality`; only pre-existing shared links that still
-  // carry old free-text `locality=`/`town=` values go through this one-time param rename.
+  // deletes the legacy params, and REPLACEs so no phantom history entry is created. This is a
+  // param-identity migration (rename), not a display-text→area_key content lookup — no such
+  // lookup is available client-side. Callers going forward (AgriGroupSelectedPanel's
+  // `onSelectLocality`) write the destination's real areas.area_key via `setLocality`; only
+  // pre-existing shared links that still carry old `locality=`/`town=` values go through this
+  // one-time migration.
+  //
+  // GitHub-reviewer-confirmed bug fix: pre-#2151 shared links could carry EITHER a real
+  // areas.area_key OR free-text display text (e.g. "Manipal") in the legacy param — the old
+  // client-side grouping sometimes fell back to the areaKey, sometimes used display text.
+  // Blindly promoting whichever value is present would let free text pose as a stable identity
+  // (the exact bug #2151 exists to eliminate) and could scope a downstream destination request
+  // by an invalid key. So the legacy value is only promoted to destKey when it already matches
+  // the area_key shape (AREA_KEY_FORMAT); otherwise it is dropped — the legacy params are still
+  // removed, but destKey is left unset, and the app falls through to its normal "no destination
+  // selected" state (group/corridor list). This is the safe, honest fallback: never fabricate an
+  // identity from display text.
   //
   // Guarded independently of coldLoadDoneRef/groupMigrationDoneRef above — this domain (locality
   // drill-down identity) has no ordering dependency on the region/maxKm cold-load state machine,
@@ -209,12 +232,17 @@ export function useAgriculturalUrlDomain(
     const legacyValue = urlParams.get(PARAM_LOCALITY) || urlParams.get('town');
     if (!legacyValue) return; // no legacy param present — nothing to migrate
 
+    const isAreaKeyShaped = AREA_KEY_FORMAT.test(legacyValue);
+
     setUrlParams(
       (prev) => {
         const next = new URLSearchParams(prev);
         next.delete(PARAM_LOCALITY);
         next.delete('town');
-        next.set(PARAM_DEST_KEY, legacyValue);
+        if (isAreaKeyShaped) {
+          next.set(PARAM_DEST_KEY, legacyValue);
+        }
+        // else: free-text display value — drop it rather than fabricate an identity.
         return next;
       },
       { replace: true }, // REPLACE — migration must not create a phantom history entry
