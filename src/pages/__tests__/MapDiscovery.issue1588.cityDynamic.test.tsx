@@ -161,6 +161,14 @@ vi.mock('@/hooks/useAreaGroups', () => ({
 
 vi.mock('@/hooks/useRegionalAreaGroups', () => ({
   useRegionalAreaGroups: vi.fn(() => ({ groups: [], isLoading: false, error: null })),
+  useAgriDestinations: vi.fn(() => ({
+    destinations: [],
+    isLoading: false,
+    isError: false,
+    isNotYetPromoted: false,
+    error: null,
+    refetch: vi.fn(),
+  })),
 }));
 
 vi.mock('react-leaflet', () => ({

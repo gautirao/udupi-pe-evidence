@@ -31,6 +31,25 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
+// Issue #2151 PR C (C-F4) — DiscoverRightPanel now calls useAgriDestinations unconditionally
+// at the top of the component (Rules of Hooks — see its inline comment), even on non-agri
+// panelContent values like the school journeys this suite renders. Mocked here (rather than
+// left to hit the real endpoint) both to keep this a hermetic test and because this suite's
+// `render()` calls don't wrap in a QueryClientProvider (the real hook's useQuery would throw
+// "No QueryClient set" otherwise).
+const mockUseAgriDestinations = vi.hoisted(() => vi.fn());
+vi.mock('@/hooks/useRegionalAreaGroups', () => ({
+  useAgriDestinations: mockUseAgriDestinations,
+}));
+mockUseAgriDestinations.mockReturnValue({
+  destinations: [],
+  isLoading: false,
+  isError: false,
+  isNotYetPromoted: false,
+  error: null,
+  refetch: vi.fn(),
+});
+
 // The composed tree transitively imports the Supabase client (auth-gated PropertyCard →
 // useAuth). Stub it so the auth auto-refresh timer doesn't fire an unhandled rejection
 // in jsdom (mirrors SchoolsInAreaPanel.issue1067.test.tsx prior art).

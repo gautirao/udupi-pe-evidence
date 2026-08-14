@@ -47,6 +47,43 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
+// Issue #2151 PR C (C-F4) — AgriGroupSelectedPanel now fetches server-supplied destination
+// buckets via useAgriDestinations directly. Mocked here (rather than left to hit the real
+// endpoint) both to keep this a hermetic routing test and to avoid the real
+// useRegionalAreaGroups.ts module's transitive '@/lib/api' → Supabase client import, which
+// requires env vars this test environment doesn't configure.
+const mockUseAgriDestinations = vi.hoisted(() => vi.fn());
+vi.mock('@/hooks/useRegionalAreaGroups', () => ({
+  useAgriDestinations: mockUseAgriDestinations,
+}));
+// Default: two server-supplied destination buckets, matching the two distinct localities
+// ('Locality g1' / 'Locality g2') the agri-group-selected tests below construct.
+mockUseAgriDestinations.mockReturnValue({
+  destinations: [
+    {
+      areaKey: 'IN|KA|Udupi|Manipal-g1',
+      displayName: 'Locality g1',
+      distanceKm: 10,
+      bearingDeg: 0,
+      direction: 'N',
+      parcelCount: 1,
+    },
+    {
+      areaKey: 'IN|KA|Udupi|Manipal-g2',
+      displayName: 'Locality g2',
+      distanceKm: 12,
+      bearingDeg: 0,
+      direction: 'N',
+      parcelCount: 1,
+    },
+  ],
+  isLoading: false,
+  isError: false,
+  isNotYetPromoted: false,
+  error: null,
+  refetch: vi.fn(),
+});
+
 vi.mock('@/hooks/useDiscoverAreas', () => ({
   useDiscoverAreas: vi.fn((city) => {
     // Return mock matching DiscoverAreasResponse shape: { city, areas[] }

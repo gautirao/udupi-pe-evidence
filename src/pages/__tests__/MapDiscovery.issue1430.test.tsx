@@ -174,8 +174,34 @@ vi.mock('@/hooks/useAreaGroups', () => ({
   useAreaGroups: vi.fn(() => ({ data: { groups: [] }, isLoading: false })),
 }));
 
+// Issue #2151 PR C — useAgriDestinations replaced the client-side locality grouping that
+// AgriGroupSelectedPanel (Level-2) and AgriGroupLocalityPanel's parent (Level-3 display-name
+// lookup) used to derive from raw agriGroupListings. AC4a/AC4b (issue #1480) need at least one
+// destination bucket so the Level-2 town button renders. areaKey below matches makeAgriItem()'s
+// areaKey ('IN|KA|Udupi|Manipal') and displayName matches its locality ('Manipal Village') so
+// the Level-3 display-name lookup in DiscoverRightPanel (line ~1365) also resolves correctly.
+const mockAgriDestinationsData = vi.hoisted(() => ({
+  current: [] as Array<{
+    areaKey: string;
+    displayName: string;
+    distanceKm: number;
+    bearingDeg: number;
+    direction: string;
+    parcelCount: number;
+    parcelAcreage?: number;
+  }>,
+}));
+
 vi.mock('@/hooks/useRegionalAreaGroups', () => ({
   useRegionalAreaGroups: vi.fn(() => ({ groups: [], isLoading: false, error: null })),
+  useAgriDestinations: vi.fn(() => ({
+    destinations: mockAgriDestinationsData.current,
+    isLoading: false,
+    isError: false,
+    isNotYetPromoted: false,
+    error: null,
+    refetch: vi.fn(),
+  })),
 }));
 
 vi.mock('react-leaflet', () => ({
@@ -229,6 +255,7 @@ describe('Issue #1430 — MapDiscovery selectedGroupListingItem derivation', () 
     mockSetSelectedListing.mockReset();
     mockClearRegionAndMaxKm.mockReset();
     mockAgriListingsData.current = null;
+    mockAgriDestinationsData.current = [];
     // Default state: agri-first, region+maxKm set, no selectedListing
     mockUseDiscoverUrlState.mockReturnValue([
       makeUrlState(),
@@ -280,6 +307,17 @@ describe('Issue #1430 — MapDiscovery selectedGroupListingItem derivation', () 
     // The setSelectedListing call now originates from AgriGroupLocalityPanel (Level-3),
     // not from AgriGroupSelectedPanel (Level-2).
     mockAgriListingsData.current = { listings: [makeAgriItem('card-click-target')] };
+    mockAgriDestinationsData.current = [
+      {
+        areaKey: 'IN|KA|Udupi|Manipal',
+        displayName: 'Manipal Village',
+        distanceKm: 8,
+        bearingDeg: 0,
+        direction: 'N',
+        parcelCount: 1,
+        parcelAcreage: 2.5,
+      },
+    ];
 
     // selectedListing + selectedLocality both null → agri-group-selected panel shows (Level 2)
     renderAt('/discover?city=udupi&journey=agri-first&region=N&maxKm=25');
@@ -298,15 +336,29 @@ describe('Issue #1430 — MapDiscovery selectedGroupListingItem derivation', () 
     // This test verifies: clicking a listing row in Level-3 calls setSelectedListing(id), not navigate.
     const user = userEvent.setup();
     mockAgriListingsData.current = { listings: [makeAgriItem('card-click-target')] };
+    mockAgriDestinationsData.current = [
+      {
+        areaKey: 'IN|KA|Udupi|Manipal',
+        displayName: 'Manipal Village',
+        distanceKm: 8,
+        bearingDeg: 0,
+        direction: 'N',
+        parcelCount: 1,
+        parcelAcreage: 2.5,
+      },
+    ];
 
     // Start at Level 3: selectedLocality set → agri-group-locality panel (AgriGroupLocalityPanel)
-    // makeAgriItem has locality: 'Manipal Village', so it matches the filter in DiscoverRightPanel
+    // Issue #2151 PR C AC5: selectedLocality is canonically an areas.area_key, not a display
+    // name — DiscoverRightPanel's 'agri-group-locality' case filters via l.areaKey ===
+    // selectedLocality with no l.locality fallback. Use the areaKey makeAgriItem() assigns
+    // ('IN|KA|Udupi|Manipal') so the filter matches under the new identity contract.
     mockUseDiscoverUrlState.mockReturnValue([
-      makeUrlState({ selectedLocality: 'Manipal Village' }),
+      makeUrlState({ selectedLocality: 'IN|KA|Udupi|Manipal' }),
       makeDefaultActions(),
     ]);
 
-    renderAt('/discover?city=udupi&journey=agri-first&region=N&maxKm=25&locality=Manipal%20Village');
+    renderAt('/discover?city=udupi&journey=agri-first&region=N&maxKm=25&locality=IN%7CKA%7CUdupi%7CManipal');
 
     // Level 3: AgriGroupLocalityPanel renders listing rows with testId agri-locality-listing-row
     await waitFor(() => {

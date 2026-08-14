@@ -25,9 +25,9 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
  * Unit tests for {@link DiscoverAgriMapListingsService}.
  *
  * <p>#2151 PR B: this service is now a COMPOSER over {@link AgriDestinationPort} — no more direct
- * JDBC. Tests mock the port instead of {@code JdbcOperations}: validation, canonical
- * {@code areaKey} vs legacy {@code areaKeys[]} resolution, anon projection (#1454/#1551), and
- * {@code truncated} derivation from the port's {@code hasMore}.
+ * JDBC. Tests mock the port instead of {@code JdbcOperations}: validation, the single canonical
+ * {@code areaKey} (legacy {@code areaKeys[]} REMOVED in PR C — see the oq_c3 tests below), anon
+ * projection (#1454/#1551), and {@code truncated} derivation from the port's {@code hasMore}.
  */
 @ExtendWith(MockitoExtension.class)
 class DiscoverAgriMapListingsServiceTest {
@@ -51,7 +51,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubParcels(List.of(parcel), false);
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", null, List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
+                "udupi", "IN|KA|Udupi|Area1", Optional.empty(), true, null);
 
         assertThat(resp.city()).isEqualTo("udupi");
         assertThat(resp.listings()).hasSize(1);
@@ -69,7 +69,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubParcels(List.of(), false);
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "UDUPI", null, List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
+                "UDUPI", "IN|KA|Udupi|Area1", Optional.empty(), true, null);
 
         assertThat(resp.city()).isEqualTo("udupi");
     }
@@ -79,7 +79,7 @@ class DiscoverAgriMapListingsServiceTest {
     @Test
     void findAgriMapListings_blankCity_throws400() {
         assertThatThrownBy(() -> service.findAgriMapListings(
-                "  ", null, List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null))
+                "  ", "IN|KA|Udupi|Area1", Optional.empty(), true, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(BAD_REQUEST));
@@ -88,76 +88,61 @@ class DiscoverAgriMapListingsServiceTest {
     @Test
     void findAgriMapListings_nullCity_throws400() {
         assertThatThrownBy(() -> service.findAgriMapListings(
-                null, null, List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null))
+                null, "IN|KA|Udupi|Area1", Optional.empty(), true, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(BAD_REQUEST));
     }
 
-    // ── 400: neither areaKey nor areaKeys present ──────────────────────────────────────────────
+    // ── #2151 PR C, oq_c3: areaKeys[] is REMOVED — a null/blank areaKey is REJECTED with a clear
+    //    400, not silently treated as "no scope"/ignored. See findAgriMapListings javadoc for the
+    //    ruled reasoning. This is the case a legacy caller (still sending only areaKeys[], not yet
+    //    cut over to areaKey) now hits — the controller never binds areaKeys to anything, so it
+    //    arrives here as a plain null.
 
     @Test
-    void findAgriMapListings_emptyAreaKeys_throws400() {
+    void findAgriMapListings_nullAreaKey_legacyAreaKeysCallerRejectedWith400() {
         assertThatThrownBy(() -> service.findAgriMapListings(
-                "udupi", null, List.of(), Optional.empty(), true, null))
+                "udupi", null, Optional.empty(), true, null))
+                .as("oq_c3: a legacy areaKeys-only caller (areaKey arrives null) must be rejected, "
+                        + "not silently ignored")
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(BAD_REQUEST));
     }
 
     @Test
-    void findAgriMapListings_nullAreaKeys_throws400() {
+    void findAgriMapListings_blankAreaKey_throws400() {
         assertThatThrownBy(() -> service.findAgriMapListings(
-                "udupi", null, null, Optional.empty(), true, null))
+                "udupi", "   ", Optional.empty(), true, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(BAD_REQUEST));
     }
 
-    // ── 400: areaKeys exceeds maximum (> 50) ───────────────────────────────────────────────────
-
     @Test
-    void findAgriMapListings_tooManyAreaKeys_throws400() {
-        List<String> bigList = java.util.Collections.nCopies(DiscoverAgriMapListingsService.MAX_AREA_KEYS + 1, "key");
+    void findAgriMapListings_nullAreaKey_400MessageIsClearNotGeneric() {
         assertThatThrownBy(() -> service.findAgriMapListings(
-                "udupi", null, bigList, Optional.empty(), true, null))
+                "udupi", null, Optional.empty(), true, null))
                 .isInstanceOf(ResponseStatusException.class)
-                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
-                        .isEqualTo(BAD_REQUEST));
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getReason())
+                        .as("oq_c3: the 400 message must name the removed legacy param, not just "
+                                + "'invalid request', so a caller debugging a sudden 400 can find the cause")
+                        .isEqualTo("area_key_required_legacy_area_keys_param_removed"));
     }
 
-    // ── canonical areaKey vs legacy areaKeys[] resolution (#2151) ─────────────────────────────
+    // ── canonical areaKey resolution (#2151 PR C) ──────────────────────────────────────────────
 
     @Test
-    void findAgriMapListings_canonicalAreaKeyOnly_resolvesToSingletonList() {
+    void findAgriMapListings_canonicalAreaKey_resolvesToSingletonList() {
         stubParcels(List.of(), false);
 
-        service.findAgriMapListings("udupi", "IN|KA|Udupi|Area1", null, Optional.empty(), true, null);
+        service.findAgriMapListings("udupi", "IN|KA|Udupi|Area1", Optional.empty(), true, null);
 
         ArgumentCaptor<AgriDestinationPort.ParcelQuery> captor =
                 ArgumentCaptor.forClass(AgriDestinationPort.ParcelQuery.class);
         verify(agriDestinationPort).findParcels(captor.capture());
         assertThat(captor.getValue().areaKeys()).containsExactly("IN|KA|Udupi|Area1");
-    }
-
-    @Test
-    void findAgriMapListings_bothPresentAndAgree_accepted() {
-        stubParcels(List.of(), false);
-
-        service.findAgriMapListings("udupi", "IN|KA|Udupi|Area1",
-                List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
-
-        verify(agriDestinationPort).findParcels(any());
-    }
-
-    @Test
-    void findAgriMapListings_bothPresentAndDisagree_throws400() {
-        assertThatThrownBy(() -> service.findAgriMapListings(
-                "udupi", "IN|KA|Udupi|Area1", List.of("IN|KA|Udupi|Area2"),
-                Optional.empty(), true, null))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
-                        .isEqualTo(BAD_REQUEST));
     }
 
     // ── truncated derived from port hasMore ───────────────────────────────────────────────────
@@ -169,7 +154,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubParcels(List.of(parcel), true);
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", null, List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
+                "udupi", "IN|KA|Udupi|Area1", Optional.empty(), true, null);
 
         assertThat(resp.truncated()).isTrue();
         assertThat(resp.limit()).isEqualTo(DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST);
@@ -180,7 +165,7 @@ class DiscoverAgriMapListingsServiceTest {
     @Test
     void findAgriMapListings_malformedBbox_throws400() {
         assertThatThrownBy(() -> service.findAgriMapListings(
-                "udupi", null, List.of("IN|KA|Udupi|Area1"), Optional.of("not,a,valid"), true, null))
+                "udupi", "IN|KA|Udupi|Area1", Optional.of("not,a,valid"), true, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(BAD_REQUEST));
@@ -192,7 +177,7 @@ class DiscoverAgriMapListingsServiceTest {
     void findAgriMapListings_validBbox_translatedToPortViewport() {
         stubParcels(List.of(), false);
 
-        service.findAgriMapListings("udupi", null, List.of("IN|KA|Udupi|Area1"),
+        service.findAgriMapListings("udupi", "IN|KA|Udupi|Area1",
                 Optional.of("13.0,74.0,14.0,75.0"), true, null); // south,west,north,east
 
         ArgumentCaptor<AgriDestinationPort.ParcelQuery> captor =
@@ -213,7 +198,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubParcels(List.of(), false);
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", null, List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
+                "udupi", "IN|KA|Udupi|Area1", Optional.empty(), true, null);
 
         assertThat(resp.listings()).isEmpty();
         assertThat(resp.city()).isEqualTo("udupi");
@@ -225,7 +210,7 @@ class DiscoverAgriMapListingsServiceTest {
     void findAgriMapListings_listingPurposeRent_passedToPortFilters() {
         stubParcels(List.of(), false);
 
-        service.findAgriMapListings("udupi", null, List.of("IN|KA|Udupi|Area1"),
+        service.findAgriMapListings("udupi", "IN|KA|Udupi|Area1",
                 Optional.empty(), true, "rent");
 
         ArgumentCaptor<AgriDestinationPort.ParcelQuery> captor =
@@ -238,7 +223,7 @@ class DiscoverAgriMapListingsServiceTest {
     void findAgriMapListings_listingPurposeNull_noFilterPassed() {
         stubParcels(List.of(), false);
 
-        service.findAgriMapListings("udupi", null, List.of("IN|KA|Udupi|Area1"),
+        service.findAgriMapListings("udupi", "IN|KA|Udupi|Area1",
                 Optional.empty(), true, null);
 
         ArgumentCaptor<AgriDestinationPort.ParcelQuery> captor =
@@ -271,17 +256,17 @@ class DiscoverAgriMapListingsServiceTest {
                 "archivedat", "isduplicate", "status");
     }
 
-    // ── multiple areaKeys (legacy): results for all matching keys ────────────────────────────
+    // ── #2151 PR C: single areaKey scope returns exactly the listings the port returns for it
+    //    (legacy multi-key areaKeys[] request path no longer exists — see oq_c3 tests above) ─────
 
     @Test
-    void findAgriMapListings_multipleAreaKeys_returnsAllMatchingListings() {
+    void findAgriMapListings_singleAreaKey_returnsPortSuppliedListings() {
         AgriDestinationPort.AgriParcel p1 = parcel("id-1", "Farm1", "IN|KA|Udupi|Area1", 13.3, 74.7, "Area1", null);
-        AgriDestinationPort.AgriParcel p2 = parcel("id-2", "Farm2", "IN|KA|Udupi|Area2", 13.4, 74.8, "Area2", null);
+        AgriDestinationPort.AgriParcel p2 = parcel("id-2", "Farm2", "IN|KA|Udupi|Area1", 13.4, 74.8, "Area1", null);
         stubParcels(List.of(p1, p2), false);
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", null, List.of("IN|KA|Udupi|Area1", "IN|KA|Udupi|Area2"),
-                Optional.empty(), true, null);
+                "udupi", "IN|KA|Udupi|Area1", Optional.empty(), true, null);
 
         assertThat(resp.listings()).hasSize(2);
         assertThat(resp.listings().stream().map(AgriMapListingItem::id))
@@ -300,7 +285,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubParcels(List.of(source), false);
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", null, List.of("IN|KA|Udupi|Area1"), Optional.empty(), false, null);
+                "udupi", "IN|KA|Udupi|Area1", Optional.empty(), false, null);
 
         AgriMapListingItem returned = resp.listings().get(0);
         assertThat(returned.pricePaise()).isNull();
@@ -319,7 +304,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubParcels(List.of(source), false);
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", null, List.of("IN|KA|Udupi|Area1"), Optional.empty(), false, null);
+                "udupi", "IN|KA|Udupi|Area1", Optional.empty(), false, null);
 
         AgriMapListingItem returned = resp.listings().get(0);
         assertThat(returned.latitude()).as("null coord must NOT become 0.0").isNull();
@@ -339,7 +324,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubParcels(List.of(source), false);
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", null, List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
+                "udupi", "IN|KA|Udupi|Area1", Optional.empty(), true, null);
 
         AgriMapListingItem returned = resp.listings().get(0);
         assertThat(returned.latitude()).isEqualTo(13.34091);
@@ -361,7 +346,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubParcels(List.of(source), false);
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", null, List.of("IN|KA|Udupi|Area1"), Optional.empty(), false, null);
+                "udupi", "IN|KA|Udupi|Area1", Optional.empty(), false, null);
 
         AgriMapListingItem returned = resp.listings().get(0);
         assertThat(returned.roadAccess()).isEqualTo("PAVED");

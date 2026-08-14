@@ -6,30 +6,50 @@
  *
  * ACs verified:
  *   AC1a — No overlay paths on agri-first landing (no region selected)
- *   AC1b — Overlay paths > 0 after corridor + distance-chip selection (POSITIVE spy)
+ *   AC1b — Overlay paths > 0 after corridor-card click (POSITIVE spy). The click is the #1445
+ *           atomic one-click model — it PUSHes region+maxKm together in one navigation, so there
+ *           is no separate distance-chip click step (see AC1b's inline comment for evidence).
  *   AC1c — Overlay paths == 0 after clearing region (corridor-back-btn)
  *   AC2  — Listing peek fields: locality/acreage/price (synchronous) +
  *           media or no-media + description (lazy); NO video indicator assertions (#1443)
  *   AC3  — View full details CTA navigates to /listing/:id
- *   AC4  — Full Back/Forward ladder: peek → group-selected → distance-chips → no-region;
- *           Forward ladder restores each step
+ *   AC4  — Full Back/Forward ladder: peek → locality → group-selected → no-region;
+ *           Forward ladder restores each step. There is no separate "region only, no maxKm"
+ *           rung — the #1445 atomic one-click + cold-load canonicalisation effect make that
+ *           state unreachable via any user action or direct URL entry (see AC4's inline comment).
  *   AC5  — area-first journey: no overlay, no peek
  *   AC5b — school-first journey: no overlay, no peek
  *   AC6  — [REAL_SEED only] live-stack: corridor list >= 1; overlay renders;
  *           listing peek opens; CTA → /listing/:id
  *
+ * Updated for Issue #2151 PR C (C-F1/C-F4) — the listing peek now sits one rung deeper, behind a
+ * destKey (canonical areas.area_key) destination drill-down, since AgriGroupSelectedPanel no
+ * longer client-groups the whole-corridor listings fetch into directly-clickable rows. AC2/AC3/
+ * AC4/AC6 updated accordingly.
+ *
+ * AC1b/AC4 additionally corrected during PR C E2E hardening (pre-existing #1445 defect, NOT a PR C
+ * regression — confirmed via `git stash` A/B comparison against clean main, which reproduces the
+ * identical corridor-distance-chips-never-appears / maxKm-always-backfilled failures): these two
+ * tests previously assumed a two-step corridor-card-click-then-distance-chip-click flow with a
+ * reachable "region only" URL state. That flow was already dead by the time of this PR — the
+ * corridor card's onClick uses the atomic onSetRegionWithMaxKm (#1445), and 1448's own AC1 asserts
+ * corridor-distance-chips must NOT appear after a corridor click. AC1b/AC4 now assert the actual
+ * one-click contract instead.
+ *
  * URL contract (verified from src/hooks/useDiscoverUrlState.ts):
  *   region=<DIR>         → PUSH (setRegion)
  *   maxKm=<N>            → PUSH (setMaxKm)
+ *   destKey=<areaKey>    → PUSH (setLocality — Issue #2151 PR C canonical destination identity)
  *   listing=<uuid>       → PUSH (setSelectedListing)
- *   clearRegionAndMaxKm  → PUSH (removes region + maxKm + listing atomically)
+ *   clearRegionAndMaxKm  → PUSH (removes region + maxKm + destKey + listing atomically)
  *   clearSelectedListing → REPLACE (close button does NOT push — use goBack/goForward)
  *
- * Panel state machine (verified from src/utils/discoverPanelState.ts):
- *   region + maxKm + listing → agri-group-peek
- *   region + maxKm            → agri-group-selected
- *   region only               → agri-landing (corridor distance-chip view)
- *   no region                 → agri-landing (corridor list)
+ * Panel state machine (verified from src/utils/discoverPanelState.ts; destKey rung added by #2151 PR C):
+ *   region + maxKm + destKey + listing → agri-group-peek
+ *   region + maxKm + destKey          → agri-group-locality (Level 3)
+ *   region + maxKm                    → agri-group-selected (Level 2 — destination rows)
+ *   region only                       → agri-landing (corridor distance-chip view)
+ *   no region                         → agri-landing (corridor list)
  *
  * Fixture shape: NEW corridor-first CorridorGroupDTO (#1435) — NOT deprecated group=DIR:BAND shape.
  *
@@ -165,6 +185,27 @@ const AGRI_MAP_LISTINGS_FIXTURE = {
 };
 
 /**
+ * Issue #2151 PR C (C-F4) — server-computed destination buckets for the Level-2 panel.
+ * The listing peek now lives one level deeper (Level 3, behind a destKey drill-down) than it
+ * did pre-PR-C, since AgriGroupSelectedPanel no longer client-groups the whole-corridor
+ * agri-map-listings fetch into rows you could click straight into a peek.
+ */
+const AGRI_DESTINATIONS_FIXTURE = {
+  city: CITY,
+  destinations: [
+    {
+      areaKey: AREA_KEY,
+      displayName: 'Manipal',
+      distanceKm: 8.2,
+      bearingDeg: 12,
+      direction: REGION,
+      parcelCount: 1,
+      parcelAcreage: 3.0,
+    },
+  ],
+};
+
+/**
  * Full listing detail — includes images and description for lazy peek fields.
  * Shape verified against PR #1407 public DTO.
  */
@@ -207,6 +248,10 @@ async function stubCommonRoutes(page: Page) {
   await page.route('**/api/public/schools/**', (r) => fulfillJson(r, 200, []));
   await page.route('**/api/discover/regional-area-groups**', (r) =>
     fulfillJson(r, 200, REGIONAL_AREA_GROUPS_FIXTURE),
+  );
+  // Issue #2151 PR C — Level-2 town rows come from agri-destinations, not agri-map-listings.
+  await page.route('**/api/discover/agri-destinations**', (r) =>
+    fulfillJson(r, 200, AGRI_DESTINATIONS_FIXTURE),
   );
   await page.route('**/api/discover/agri-map-listings**', (r) =>
     fulfillJson(r, 200, AGRI_MAP_LISTINGS_FIXTURE),
@@ -260,29 +305,27 @@ test.describe('@integration-ui 1431 — Agri sector overlay + listing peek — s
   // ── AC1b: Overlay appears after corridor + chip selection ─────────────────
 
   test(
-    'AC1b: overlay paths > 0 after selecting corridor and distance chip (POSITIVE spy)',
+    'AC1b: overlay paths > 0 after selecting corridor (POSITIVE spy; #1445 one-click atomic model — corridor card click PUSHes region+maxKm together, no intermediate distance-chip step)',
     async ({ page }) => {
       await stubCommonRoutes(page);
       await navigateAgriFirst(page);
 
-      // Click the first corridor card to enter the distance-chip view
+      // Click the first corridor card. Issue #1445's atomic one-click model (see
+      // DiscoverRightPanel.tsx's corridor-card onClick={() => onSetRegionWithMaxKm(...)}, and
+      // 1448's AC1 hard regression guard) means this PUSHes region=<DIR>&maxKm=25 together in a
+      // single navigation — there is no intermediate `corridor-distance-chips` landing state to
+      // wait for or a distance chip to click. (Evidence: this test previously waited for
+      // `[data-testid="corridor-distance-chips"]` after the click and timed out identically on
+      // clean main pre-PR-C — confirmed via `git stash` A/B comparison during #2151 PR C E2E
+      // hardening. `corridor-distance-chips` is a pre-existing dead landing-view testid, not a
+      // PR C regression.)
       const corridorCard = page.locator('[data-testid="corridor-card"]').first();
       await expect(corridorCard).toBeVisible({ timeout: 10_000 });
       await corridorCard.click();
 
-      // Wait for distance chips to appear
-      await expect(page.locator('[data-testid="corridor-distance-chips"]')).toBeVisible({
-        timeout: 8_000,
-      });
-
-      // Click the chip for maxKm=25
-      const chip25 = page.locator(`[data-testid="distance-chip-${MAX_KM}"]`);
-      await expect(chip25).toBeVisible({ timeout: 5_000 });
-      await chip25.click();
-
-      // Assert URL has both region and maxKm
+      // Assert URL has both region and maxKm — atomic one-click contract.
       await page.waitForURL(new RegExp(`region=${REGION}.*maxKm=${MAX_KM}|maxKm=${MAX_KM}.*region=${REGION}`), {
-        timeout: 5_000,
+        timeout: 8_000,
       });
       const url = page.url();
       expect(url).toContain(`region=${REGION}`);
@@ -345,10 +388,10 @@ test.describe('@integration-ui 1431 — Agri sector overlay + listing peek — s
   // ── AC2: Listing peek fields ───────────────────────────────────────────────
 
   test(
-    'AC2: listing peek shows locality/acreage/price (synchronous) + lazy media and description',
+    'AC2: listing peek shows locality/acreage/price (synchronous) + lazy media and description (Issue #2151 PR C: peek now behind destKey drill-down)',
     async ({ page }) => {
       await stubCommonRoutes(page);
-      // Start at group-selected state (region + maxKm set, no listing)
+      // Start at group-selected state (region + maxKm set, no destination/listing)
       await navigateAgriFirst(page, { region: REGION, maxKm: String(MAX_KM) });
 
       // AgriGroupSelectedPanel must be visible
@@ -356,8 +399,17 @@ test.describe('@integration-ui 1431 — Agri sector overlay + listing peek — s
         timeout: 10_000,
       });
 
+      // Issue #2151 PR C — drill into the destination (Level 3) before the peek is reachable.
+      const localityBtn = page.locator('[data-testid="agri-group-locality-btn"]').first();
+      await expect(localityBtn).toBeVisible({ timeout: 12_000 });
+      await localityBtn.click();
+      await page.waitForURL(/destKey=/, { timeout: 8_000 });
+      await expect(page.locator('[data-testid="agri-group-locality-panel"]')).toBeVisible({
+        timeout: 10_000,
+      });
+
       // Wait for listing rows to populate
-      await expect(page.locator('[data-testid="agri-group-listing-row"]').first()).toBeVisible({
+      await expect(page.locator('[data-testid="agri-locality-listing-row"]').first()).toBeVisible({
         timeout: 12_000,
       });
 
@@ -366,7 +418,7 @@ test.describe('@integration-ui 1431 — Agri sector overlay + listing peek — s
       const detailResponsePromise = page.waitForResponse('**/api/public/listings/*', {
         timeout: 10_000,
       });
-      await page.locator('[data-testid="agri-group-listing-row"]').first().click();
+      await page.locator('[data-testid="agri-locality-listing-row"]').first().click();
 
       // URL must contain listing param
       await page.waitForURL(new RegExp(`listing=${LISTING_ID}`), { timeout: 8_000 });
@@ -416,10 +468,12 @@ test.describe('@integration-ui 1431 — Agri sector overlay + listing peek — s
 
   test('AC3: View full details CTA navigates to /listing/:id', async ({ page }) => {
     await stubCommonRoutes(page);
-    // Start directly in peek state
+    // Start directly in peek state — Issue #2151 PR C: the peek's URL scope now includes
+    // destKey=<areaKey> (the Level-3 destination), not just region+maxKm+listing.
     await navigateAgriFirst(page, {
       region: REGION,
       maxKm: String(MAX_KM),
+      destKey: AREA_KEY,
       listing: LISTING_ID,
     });
 
@@ -438,7 +492,7 @@ test.describe('@integration-ui 1431 — Agri sector overlay + listing peek — s
   // ── AC4: Full Back/Forward ladder ─────────────────────────────────────────
 
   test(
-    'AC4: Back/Forward ladder — peek → group-selected → distance-chips → no-region → forward to each state',
+    'AC4: Back/Forward ladder — peek → locality → group-selected → no-region → forward to each state (Issue #2151 PR C adds the destKey/locality rung; #1445 atomic one-click removes the separate region-only/distance-chips rung — see comment below)',
     async ({ page }) => {
       await stubCommonRoutes(page);
 
@@ -449,15 +503,16 @@ test.describe('@integration-ui 1431 — Agri sector overlay + listing peek — s
       });
       expect(page.url()).not.toContain('region=');
 
-      // Step 1: Navigate to region=N (PUSH — simulates corridor-card click)
-      await page.goto(`/discover?city=${CITY}&journey=agri-first&region=${REGION}`);
-      await page.waitForLoadState('domcontentloaded');
-      await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 10_000 });
-      await page.waitForTimeout(500);
-      expect(page.url()).toContain(`region=${REGION}`);
-      expect(page.url()).not.toContain('maxKm=');
-
-      // Step 2: Navigate to region=N&maxKm=25 (PUSH — simulates distance-chip click)
+      // Step 1: Navigate to region=N&maxKm=25 (PUSH — simulates the #1445 atomic corridor-card
+      // click, which PUSHes region+maxKm together in one navigation; see
+      // DiscoverRightPanel.tsx's corridor-card onClick={() => onSetRegionWithMaxKm(...)} and
+      // 1448's AC1 hard regression guard). A bare `region=N` (no maxKm) intermediate rung is NOT
+      // reachable here: the #1445 cold-load canonicalisation effect
+      // (src/features/discover/state/url/agricultural.ts) backfills maxKm=25 via REPLACE for
+      // ANY cold-load URL that has region set without maxKm — confirmed by `git stash` A/B
+      // comparison against clean main during #2151 PR C E2E hardening (pre-existing, not a PR C
+      // regression). The former Back-3/Forward-1 "region only → corridor-distance-chips" rungs
+      // are removed below for the same reason.
       await page.goto(`/discover?city=${CITY}&journey=agri-first&region=${REGION}&maxKm=${MAX_KM}`);
       await page.waitForLoadState('domcontentloaded');
       await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 10_000 });
@@ -465,9 +520,21 @@ test.describe('@integration-ui 1431 — Agri sector overlay + listing peek — s
       expect(page.url()).toContain(`region=${REGION}`);
       expect(page.url()).toContain(`maxKm=${MAX_KM}`);
 
-      // Step 3: Navigate to region+maxKm+listing (PUSH — simulates listing-row click)
+      // Step 2: Navigate to region+maxKm+destKey (PUSH — simulates a destination-row click,
+      // Issue #2151 PR C's new Level-3 rung).
       await page.goto(
-        `/discover?city=${CITY}&journey=agri-first&region=${REGION}&maxKm=${MAX_KM}&listing=${LISTING_ID}`,
+        `/discover?city=${CITY}&journey=agri-first&region=${REGION}&maxKm=${MAX_KM}&destKey=${encodeURIComponent(AREA_KEY)}`,
+      );
+      await page.waitForLoadState('domcontentloaded');
+      await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator('[data-testid="agri-group-locality-panel"]')).toBeVisible({
+        timeout: 10_000,
+      });
+      expect(page.url()).toContain('destKey=');
+
+      // Step 3: Navigate to region+maxKm+destKey+listing (PUSH — simulates listing-row click)
+      await page.goto(
+        `/discover?city=${CITY}&journey=agri-first&region=${REGION}&maxKm=${MAX_KM}&destKey=${encodeURIComponent(AREA_KEY)}&listing=${LISTING_ID}`,
       );
       await page.waitForLoadState('domcontentloaded');
       await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 10_000 });
@@ -475,43 +542,38 @@ test.describe('@integration-ui 1431 — Agri sector overlay + listing peek — s
       await expect(page.locator('[data-testid="agri-listing-peek"]')).toBeVisible({ timeout: 12_000 });
       expect(page.url()).toContain(`listing=${LISTING_ID}`);
 
-      // ── Back 1: listing → group-selected (region+maxKm, no listing) ──────
+      // ── Back 1: listing → locality (region+maxKm+destKey, no listing) ────
       await page.goBack();
       await page.waitForURL(/\/discover/, { timeout: 8_000 });
       await page.waitForTimeout(1000);
       const urlAfterBack1 = page.url();
       expect(urlAfterBack1).toContain(`region=${REGION}`);
       expect(urlAfterBack1).toContain(`maxKm=${MAX_KM}`);
+      expect(urlAfterBack1).toContain('destKey=');
       expect(urlAfterBack1).not.toContain('listing=');
-      await expect(page.locator('[data-testid="agri-group-selected-panel"]')).toBeVisible({
+      await expect(page.locator('[data-testid="agri-group-locality-panel"]')).toBeVisible({
         timeout: 8_000,
       });
-      // Overlay must still be rendered
-      await page.waitForTimeout(1000);
-      const overlayAfterBack1 = await page.locator('.leaflet-overlay-pane path').count();
-      expect(overlayAfterBack1).toBeGreaterThan(0);
 
-      // ── Back 2: group-selected → region only (distance-chips, no maxKm) ──
+      // ── Back 2: locality → group-selected (region+maxKm, no destKey) ─────
       await page.goBack();
       await page.waitForURL(/\/discover/, { timeout: 8_000 });
       await page.waitForTimeout(1000);
       const urlAfterBack2 = page.url();
       expect(urlAfterBack2).toContain(`region=${REGION}`);
-      expect(urlAfterBack2).not.toContain('maxKm=');
+      expect(urlAfterBack2).toContain(`maxKm=${MAX_KM}`);
+      expect(urlAfterBack2).not.toContain('destKey=');
       expect(urlAfterBack2).not.toContain('listing=');
-      // With region=N and no maxKm → agri-landing panel shows corridor distance-chip view.
-      // Hard assertion: corridor-distance-chips must be visible.
-      // Do NOT use an OR with corridor-landing-list — that would mask a regression
-      // where Back-2 overshot to the no-region state (list, not chips).
-      await expect(page.locator('[data-testid="corridor-distance-chips"]')).toBeVisible({
+      await expect(page.locator('[data-testid="agri-group-selected-panel"]')).toBeVisible({
         timeout: 8_000,
       });
-      // No overlay without maxKm
+      // Overlay must still be rendered
       await page.waitForTimeout(1000);
       const overlayAfterBack2 = await page.locator('.leaflet-overlay-pane path').count();
-      expect(overlayAfterBack2).toBe(0);
+      expect(overlayAfterBack2).toBeGreaterThan(0);
 
-      // ── Back 3: region only → no region (step 0) ─────────────────────────
+      // ── Back 3: group-selected → no region (step 0) — the atomic one-click model means this
+      // is the very next rung back; there is no reachable "region only, no maxKm" state. ──
       await page.goBack();
       await page.waitForURL(/\/discover/, { timeout: 8_000 });
       await page.waitForTimeout(1000);
@@ -522,13 +584,7 @@ test.describe('@integration-ui 1431 — Agri sector overlay + listing peek — s
       const overlayAfterBack3 = await page.locator('.leaflet-overlay-pane path').count();
       expect(overlayAfterBack3).toBe(0);
 
-      // ── Forward 1: no region → region=N ──────────────────────────────────
-      await page.goForward();
-      await page.waitForURL(/\/discover/, { timeout: 8_000 });
-      await page.waitForTimeout(500);
-      expect(page.url()).toContain(`region=${REGION}`);
-
-      // ── Forward 2: region=N → region+maxKm (group-selected + overlay) ────
+      // ── Forward 1: no region → region+maxKm (group-selected + overlay, atomic) ───────────
       await page.goForward();
       await page.waitForURL(/\/discover/, { timeout: 8_000 });
       await page.waitForTimeout(1500);
@@ -537,10 +593,19 @@ test.describe('@integration-ui 1431 — Agri sector overlay + listing peek — s
       await expect(page.locator('[data-testid="agri-group-selected-panel"]')).toBeVisible({
         timeout: 8_000,
       });
-      const overlayFwd2 = await page.locator('.leaflet-overlay-pane path').count();
-      expect(overlayFwd2).toBeGreaterThan(0);
+      const overlayFwd1 = await page.locator('.leaflet-overlay-pane path').count();
+      expect(overlayFwd1).toBeGreaterThan(0);
 
-      // ── Forward 3: group-selected → peek ─────────────────────────────────
+      // ── Forward 2: group-selected → locality (destKey restored) ─────────
+      await page.goForward();
+      await page.waitForURL(/\/discover/, { timeout: 8_000 });
+      await page.waitForTimeout(1000);
+      expect(page.url()).toContain('destKey=');
+      await expect(page.locator('[data-testid="agri-group-locality-panel"]')).toBeVisible({
+        timeout: 10_000,
+      });
+
+      // ── Forward 3: locality → peek ────────────────────────────────────────
       await page.goForward();
       await page.waitForURL(/\/discover/, { timeout: 8_000 });
       await page.waitForTimeout(1000);
@@ -655,11 +720,24 @@ test.describe('@integration-ui 1431 — Real-seed [REAL_SEED only]', () => {
       });
       await page.waitForTimeout(2000);
 
-      const listingRows = page.locator('[data-testid="agri-group-listing-row"]');
+      // Issue #2151 PR C — Level 2 shows destination rows; drill in before listing rows exist.
+      const localityRows = page.locator('[data-testid="agri-group-locality-btn"]');
+      const localityCount = await localityRows.count();
+      if (localityCount === 0) {
+        console.log('[1431 AC6] No destination rows in selected region — skipping peek assertions');
+        return;
+      }
+      await localityRows.first().click();
+      await page.waitForURL(/destKey=/, { timeout: 10_000 });
+      await expect(page.locator('[data-testid="agri-group-locality-panel"]')).toBeVisible({
+        timeout: 10_000,
+      });
+
+      const listingRows = page.locator('[data-testid="agri-locality-listing-row"]');
       const rowCount = await listingRows.count();
       if (rowCount === 0) {
-        // No listings in this region — test is inconclusive, not a failure
-        console.log('[1431 AC6] No listing rows in selected region — skipping peek assertions');
+        // No listings in this destination — test is inconclusive, not a failure
+        console.log('[1431 AC6] No listing rows in selected destination — skipping peek assertions');
         return;
       }
 

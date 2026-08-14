@@ -28,7 +28,6 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.reset;
@@ -86,13 +85,13 @@ class DiscoverAgriMapListingsControllerTest {
 
     @Test
     void getAgriMapListings_anonymousRequest_returns200() throws Exception {
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), anyList(), any(), anyBoolean(), any()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(), false, 250));
 
         // No Authorization header — must succeed (public endpoint)
         mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi")
-                        .param("areaKeys", "IN|KA|Udupi|Area1"))
+                        .param("areaKey", "IN|KA|Udupi|Area1"))
                 .andExpect(status().isOk());
     }
 
@@ -111,12 +110,12 @@ class DiscoverAgriMapListingsControllerTest {
                 null, null, null, null,
                 null, null, null, null, null
         );
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), anyList(), any(), anyBoolean(), any()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item), false, 250));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi")
-                        .param("areaKeys", "IN|KA|Udupi|Area1"))
+                        .param("areaKey", "IN|KA|Udupi|Area1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.city", is("udupi")))
                 .andExpect(jsonPath("$.truncated", is(false)))
@@ -145,12 +144,12 @@ class DiscoverAgriMapListingsControllerTest {
                 null, null, null, null,
                 null, null, null, null, null
         );
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), anyList(), any(), anyBoolean(), any()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item), false, 250));
 
         String responseBody = mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi")
-                        .param("areaKeys", "IN|KA|Udupi|Area1"))
+                        .param("areaKey", "IN|KA|Udupi|Area1"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 
@@ -175,12 +174,12 @@ class DiscoverAgriMapListingsControllerTest {
 
     @Test
     void getAgriMapListings_responseHasCacheControlPublicMaxAge120() throws Exception {
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), anyList(), any(), anyBoolean(), any()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(), false, 250));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi")
-                        .param("areaKeys", "IN|KA|Udupi|Area1"))
+                        .param("areaKey", "IN|KA|Udupi|Area1"))
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", containsString("max-age=120")))
@@ -192,12 +191,12 @@ class DiscoverAgriMapListingsControllerTest {
 
     @Test
     void getAgriMapListings_responseIsJson() throws Exception {
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), anyList(), any(), anyBoolean(), any()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(), false, 250));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi")
-                        .param("areaKeys", "IN|KA|Udupi|Area1"))
+                        .param("areaKey", "IN|KA|Udupi|Area1"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith("application/json"));
     }
@@ -207,69 +206,60 @@ class DiscoverAgriMapListingsControllerTest {
     @Test
     void getAgriMapListings_missingCity_returns400() throws Exception {
         mockMvc.perform(get("/api/discover/agri-map-listings")
-                        .param("areaKeys", "IN|KA|Udupi|Area1"))
+                        .param("areaKey", "IN|KA|Udupi|Area1"))
                 .andExpect(status().isBadRequest());
     }
 
-    // ── AC6: 400 when neither areaKey nor areaKeys is present ─────────────────
+    // ── AC6: 400 when areaKey is absent ────────────────────────────────────────
     //
-    // #2151 PR B: areaKeys is no longer a Spring-required param (areaKey is the new canonical
-    // alternative), so this validation now happens in the (mocked, in this WebMvcTest slice)
-    // service rather than via Spring's automatic missing-required-param 400 — mirrors the
-    // AC7 "service throws 400" pattern below. Real validation is covered by
-    // DiscoverAgriMapListingsServiceTest#findAgriMapListings_emptyAreaKeys_throws400.
+    // #2151 PR C: areaKeys[] is REMOVED entirely (no longer a controller param at all — Spring
+    // silently drops an unrecognised query param rather than erroring). areaKey is now the only
+    // scope param and is optional at the Spring binding level (required=false) so that a missing
+    // value produces the service's clear, documented 400 (oq_c3) rather than Spring's generic
+    // "missing required parameter" message. Real validation is covered by
+    // DiscoverAgriMapListingsServiceTest#findAgriMapListings_nullAreaKey_legacyAreaKeysCallerRejectedWith400.
 
     @Test
-    void getAgriMapListings_missingAreaKeys_returns400() throws Exception {
-        when(agriMapListingsService.findAgriMapListings(anyString(), any(), any(), any(), anyBoolean(), any()))
-                .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "area_keys_must_not_be_empty"));
+    void getAgriMapListings_missingAreaKey_returns400() throws Exception {
+        when(agriMapListingsService.findAgriMapListings(anyString(), any(), any(), anyBoolean(), any()))
+                .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "area_key_required_legacy_area_keys_param_removed"));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi"))
                 .andExpect(status().isBadRequest());
     }
 
-    // ── AC7: 400 when service throws 400 (e.g. empty areaKeys passed as empty list) ─
+    // ── oq_c3: a caller sending ONLY the removed legacy areaKeys[] param (no areaKey) gets the
+    //    SAME clear 400 as a caller sending neither — Spring drops the unrecognised areaKeys param
+    //    silently, so this is indistinguishable, at the controller, from the missing-areaKey case
+    //    above. The point of this test is to prove that indistinguishability is intentional and the
+    //    behaviour is NOT a silent-ignore/200-empty regression. ─────────────────────────────────
 
     @Test
-    void getAgriMapListings_serviceThrows400_returns400() throws Exception {
-        when(agriMapListingsService.findAgriMapListings(anyString(), any(), anyList(), any(), anyBoolean(), any()))
-                .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "area_keys_must_not_be_empty"));
+    void getAgriMapListings_onlyLegacyAreaKeysParamSent_returns400NotSilentlyIgnored() throws Exception {
+        when(agriMapListingsService.findAgriMapListings(anyString(), any(), any(), anyBoolean(), any()))
+                .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "area_key_required_legacy_area_keys_param_removed"));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi")
-                        .param("areaKeys", "somekey"))
+                        .param("areaKeys", "IN|KA|Udupi|Area1")) // legacy-only, no areaKey
                 .andExpect(status().isBadRequest());
     }
 
-    // ── AC8: multiple areaKeys in request returns listings for all ────────────
+    // ── AC7: 400 when service throws 400 (e.g. blank areaKey) ─────────────────
 
     @Test
-    void getAgriMapListings_multipleAreaKeys_returnsCorrectSet() throws Exception {
-        AgriMapListingItem item1 = new AgriMapListingItem(
-                "id-1", null, "IN|KA|Udupi|Area1", 13.3, 74.7,
-                "agricultural_land", "Area1", null,
-                null, null, null, null, null,
-                null, null, null, null,
-                null, null, null, null, null);
-        AgriMapListingItem item2 = new AgriMapListingItem(
-                "id-2", null, "IN|KA|Udupi|Area2", 13.4, 74.8,
-                "agricultural_land", "Area2", null,
-                null, null, null, null, null,
-                null, null, null, null,
-                null, null, null, null, null);
-
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), anyList(), any(), anyBoolean(), any()))
-                .thenReturn(new AgriMapListingsResponse("udupi", List.of(item1, item2), false, 250));
+    void getAgriMapListings_serviceThrows400_returns400() throws Exception {
+        when(agriMapListingsService.findAgriMapListings(anyString(), any(), any(), anyBoolean(), any()))
+                .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "area_key_required_legacy_area_keys_param_removed"));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi")
-                        .param("areaKeys", "IN|KA|Udupi|Area1")
-                        .param("areaKeys", "IN|KA|Udupi|Area2"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.listings", hasSize(2)))
-                .andExpect(jsonPath("$.listings[0].id", is("id-1")))
-                .andExpect(jsonPath("$.listings[1].id", is("id-2")));
+                        .param("areaKey", ""))
+                .andExpect(status().isBadRequest());
     }
 
     // ── null fields omitted by @JsonInclude(NON_NULL) ─────────────────────────
@@ -285,12 +275,12 @@ class DiscoverAgriMapListingsControllerTest {
                 null, null, null, null,
                 null, null, null, null, null
         );
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), anyList(), any(), anyBoolean(), any()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), any(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item), false, 250));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi")
-                        .param("areaKeys", "IN|KA|Udupi|Area1"))
+                        .param("areaKey", "IN|KA|Udupi|Area1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.listings[0].boundaryGeoJson").doesNotExist());
     }

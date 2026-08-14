@@ -32,6 +32,7 @@ import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { RegionScopedAreaGroup } from '@/hooks/useRegionScopedAreaGroups';
 import type { ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
 import type { CorridorGroupData, CumulativeDistanceTier } from '@/hooks/useRegionalAreaGroups';
+import { useAgriDestinations } from '@/hooks/useRegionalAreaGroups';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PanelHeader } from './PanelHeader';
 import { GuidedEntryPanel } from './panels/GuidedEntryPanel';
@@ -1064,6 +1065,29 @@ export function DiscoverRightPanel({
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
 
+  // Issue #2151 PR C (gap closure) — resolves the human-readable display name for the selected
+  // Agri locality's canonical areaKey. `selectedLocality` is now areas.area_key (e.g.
+  // 'IN|KA|Udupi|Manipal'), not display text (C-F1), so the 'agri-group-locality' case below
+  // must not render it directly. Mirrors AgriGroupSelectedPanel's own direct useAgriDestinations
+  // call: the panel-composition layer that would otherwise thread `agriDestinations` down from
+  // useDiscoverAgriController as a dedicated prop is outside this PR's allowed edit globs (see
+  // that controller's comment for the full rationale) — same TanStack Query cache key, so no
+  // divergence risk. Called unconditionally here, at the top of the component (Rules of Hooks),
+  // even though its result is only consumed by the 'agri-group-locality' branch of renderPanel.
+  //
+  // Issue #2151 PR C (code-reviewer finding, MEDIUM) — the hook itself has no `enabled` option
+  // exposed at the call site (it only gates internally on `city.length > 0`), and the hook file is
+  // outside this PR's allowed edit globs. Gate at the call site instead: pass an empty city string
+  // whenever this panel isn't showing 'agri-group-locality', which trips the hook's own
+  // `enabled: city.length > 0` check and prevents a GET /api/discover/agri-destinations fetch on
+  // every Discover render (school-first, area-first, guided-entry, etc.).
+  const { destinations: agriDestinationsForLocality } = useAgriDestinations(
+    panelContent === 'agri-group-locality' ? (city ?? '').trim().toLowerCase() : '',
+    selectedRegion,
+    selectedMaxKm,
+    intent === 'rent' ? 'rent' : 'sale',
+  );
+
   // Issue #1588 — shared props for the public landing (guided-entry) panel + its
   // two no-areaKey fallbacks. City + intent are the existing URL-state controls.
   const guidedEntryProps = {
@@ -1327,9 +1351,19 @@ export function DiscoverRightPanel({
       case 'agri-group-locality': {
         // Issue #1464 — drill-down showing listings for a single locality within
         // the selected agri regional group. Activated when locality= is set in URL.
+        // Issue #2151 PR C (AC5) — `selectedLocality` is the canonical areas.area_key single
+        // source of truth (C-F1); no independent `l.locality` fallback re-derivation here.
         const localityListings = (agriGroupListings ?? []).filter(
-          (l) => (l.locality ?? l.areaKey) === selectedLocality,
+          (l) => l.areaKey === selectedLocality,
         );
+        // Issue #2151 PR C (gap closure) — human-readable name for the selected areaKey, resolved
+        // from the server-supplied destination buckets (see hook call above). Fallback: while the
+        // buckets are still loading (or, for any other reason, don't (yet) contain a bucket for
+        // this areaKey), show a generic placeholder rather than the raw pipe-delimited areaKey —
+        // shoppers should never see 'IN|KA|Udupi|Manipal' as a page title/breadcrumb.
+        const selectedLocalityDisplayName =
+          agriDestinationsForLocality.find((d) => d.areaKey === selectedLocality)?.displayName
+          ?? 'Selected locality';
         return (
           <>
             <PanelHeader
@@ -1338,7 +1372,7 @@ export function DiscoverRightPanel({
               onStartOver={onStartOver}
             />
             <AgriGroupLocalityPanel
-              localityName={selectedLocality ?? ''}
+              localityName={selectedLocalityDisplayName}
               listings={localityListings}
               isLoading={isLoadingAgriGroupListings ?? false}
               isError={isAgriGroupListingsError ?? false}
@@ -1406,6 +1440,9 @@ export function DiscoverRightPanel({
               limit={agriGroupListingsLimit}
               // Issue #1771: navy hero breadcrumb + title (mock parity)
               cityLabel={cityLabel ?? city}
+              // Issue #2151 PR C (code-reviewer finding) — canonical slug for the destination
+              // fetch, kept distinct from `cityLabel` above (display-only; must never drive fetch keys).
+              citySlug={city}
               corridorName={corridorGroups?.find((c) => c.directionCode === selectedRegion)?.groupName ?? null}
               directionCode={selectedRegion}
             />

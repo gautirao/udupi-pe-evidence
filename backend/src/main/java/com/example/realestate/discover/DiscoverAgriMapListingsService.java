@@ -14,11 +14,11 @@ import java.util.Optional;
 /**
  * Service for GET /api/discover/agri-map-listings.
  *
- * <p><b>#2151 PR B cutover.</b> This class is now a COMPOSER over {@link AgriDestinationPort} — it
- * no longer owns any SQL. It is responsible for:
+ * <p><b>#2151 PR B cutover, PR C legacy-param removal.</b> This class is now a COMPOSER over
+ * {@link AgriDestinationPort} — it no longer owns any SQL. It is responsible for:
  * <ul>
- *   <li>resolving the canonical scope param (single {@code areaKey}) vs the legacy
- *       {@code areaKeys[]} array,</li>
+ *   <li>validating the canonical scope param (single {@code areaKey} — the legacy {@code areaKeys[]}
+ *       array was removed in PR C; see {@link #findAgriMapListings} javadoc, oq_c3),</li>
  *   <li>mapping {@link AgriDestinationPort.AgriParcel} (exact coordinates/price ALWAYS populated
  *       by the port) to the public {@link AgriMapListingItem} shape, and</li>
  *   <li>the #1454/#1551 anonymous projection (coarsened lat/lng, withheld price) — applied HERE,
@@ -29,11 +29,6 @@ import java.util.Optional;
 public class DiscoverAgriMapListingsService {
 
     private static final Logger log = LoggerFactory.getLogger(DiscoverAgriMapListingsService.class);
-
-    /** Maximum number of areaKeys allowed in one request — single owner is now
-     *  {@link AgriDestinationPort#MAX_DESTINATION_AREA_KEYS} (#2151 PR B); mirrored here so
-     *  existing tests/call sites that reference this constant keep compiling. */
-    static final int MAX_AREA_KEYS = AgriDestinationPort.MAX_DESTINATION_AREA_KEYS;
 
     /**
      * Maximum number of listings returned in a single response — single owner is now
@@ -57,11 +52,22 @@ public class DiscoverAgriMapListingsService {
     /**
      * Finds LIVE agricultural_land listings for the given city and scope.
      *
-     * <p>#2151 PR B: the drill-down scope is now the stable {@code areaKey} (canonical) with the
-     * client-supplied {@code areaKeys} array retained as LEGACY/DEPRECATED (removed in PR C).
-     * Exactly one of {@code areaKey}/{@code areaKeys} must be present; if both are present they
-     * must agree (a single-element {@code areaKeys} equal to {@code areaKey}) or the request is
-     * rejected with 400.
+     * <p>#2151 PR C: the legacy {@code areaKeys[]} array param is REMOVED. {@code areaKey} (single,
+     * canonical) is now the ONLY drill-down scope param this method accepts.
+     *
+     * <p><b>oq_c3 decision (#2151 PR C, explicitly ruled — not left emergent):</b> a caller that
+     * sends ONLY the legacy {@code areaKeys} (so {@code areaKey} arrives {@code null}/blank here —
+     * the removed controller param is never bound to anything) is REJECTED with 400
+     * ({@code area_key_required_legacy_area_keys_param_removed}), NOT silently treated as "no
+     * scope"/ignored. Reasoning: this is a public, unauthenticated endpoint; silently ignoring a
+     * stale client's only scope param would return a response that LOOKS like a valid answer (an
+     * empty-scope 400 would instead be indistinguishable from "this drill-down genuinely has no
+     * listings" if it were downgraded to an empty 200) while actually serving nothing useful to a
+     * caller who has not yet cut over — the same fail-loud-not-fail-silent discipline this PR
+     * applies elsewhere (see {@code AgriDestinationPortPostgresAdapter#findDestinations}'s 503 vs
+     * silent-empty correction, #2151 PR B B2). The frontend cutover away from {@code areaKeys}
+     * lands in this SAME PR (#2151 PR C), so this is not expected to be reachable in production
+     * once both halves ship together.
      *
      * <p>#1454 auth-aware gating unchanged: anonymous callers receive NO {@code pricePaise} and
      * COARSENED lat/lng; authenticated callers receive exact lat/lng and pricePaise.
@@ -71,7 +77,6 @@ public class DiscoverAgriMapListingsService {
     @Transactional(readOnly = true)
     public AgriMapListingsResponse findAgriMapListings(String citySlug,
                                                        String areaKey,
-                                                       List<String> areaKeys,
                                                        Optional<String> bbox,
                                                        boolean isAuthenticated,
                                                        String listingPurpose) {
@@ -79,11 +84,11 @@ public class DiscoverAgriMapListingsService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "city_must_not_be_blank");
         }
 
-        List<String> resolvedAreaKeys = resolveAreaKeys(areaKey, areaKeys);
-        if (resolvedAreaKeys.size() > MAX_AREA_KEYS) {
+        if (areaKey == null || areaKey.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "area_keys_exceeds_maximum_of_" + MAX_AREA_KEYS);
+                    "area_key_required_legacy_area_keys_param_removed");
         }
+        List<String> resolvedAreaKeys = List.of(areaKey);
 
         DiscoverListingPredicateBuilder.Bbox parsedBbox = bbox.isPresent()
                 ? BboxParser.parse(bbox.get())
@@ -123,28 +128,6 @@ public class DiscoverAgriMapListingsService {
         log.debug("findAgriMapListings city={} returned={} authenticated={} truncated={}",
                 citySlug, listings.size(), isAuthenticated, page.hasMore());
         return new AgriMapListingsResponse(citySlug.toLowerCase(), listings, page.hasMore(), MAX_LISTINGS_PER_REQUEST);
-    }
-
-    /**
-     * Resolves the canonical {@code areaKey} vs the legacy {@code areaKeys[]} array into a single
-     * list for the port. Exactly one must be present; both present and disagreeing is rejected.
-     */
-    private static List<String> resolveAreaKeys(String areaKey, List<String> areaKeys) {
-        boolean hasSingle = areaKey != null && !areaKey.isBlank();
-        boolean hasLegacy = areaKeys != null && !areaKeys.isEmpty();
-
-        if (!hasSingle && !hasLegacy) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "area_keys_must_not_be_empty");
-        }
-        if (hasSingle && hasLegacy) {
-            boolean agree = areaKeys.size() == 1 && areaKeys.get(0).equals(areaKey);
-            if (!agree) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "area_key_and_area_keys_must_not_both_be_present");
-            }
-            return List.of(areaKey);
-        }
-        return hasSingle ? List.of(areaKey) : areaKeys;
     }
 
     private static AgriMapListingItem toItem(AgriDestinationPort.AgriParcel p) {

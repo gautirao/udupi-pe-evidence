@@ -23,6 +23,13 @@ import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type { DiscoverUrlActions, DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 
 const PARAM_LOCALITY = 'locality';
+/**
+ * Issue #2151 PR C (C-F1) — canonical destination-key URL param. Stores areas.area_key (a stable
+ * identity), never display text. Legacy `locality=`/`town=` links (which stored free-text town
+ * names, or occasionally an areaKey when the old client-side grouping fell back to it) are
+ * migrated to this param exactly once on cold load — see the migration effect below.
+ */
+const PARAM_DEST_KEY = 'destKey';
 const VALID_MAX_KM = new Set([10, 25, 50, 100]);
 /**
  * Byte-identical re-export target — useDiscoverUrlState.ts does
@@ -75,10 +82,20 @@ export function useAgriculturalUrlDomain(
   const rawListing = urlParams.get('listing');
   const selectedListing: string | null = rawListing && rawListing.length > 0 ? rawListing : null;
 
-  // Issue #1464 — agri-group-locality drill-down. Plain string from `locality` or `town` URL param.
+  // Issue #1464 — agri-group-locality drill-down. Issue #2151 PR C (C-F1) — the canonical source
+  // is now `destKey` (a stable areas.area_key), not free-text `locality`/`town`. Legacy
+  // `locality`/`town` values are read here ONLY as a render-scope fallback for the very first
+  // tick before the migration effect below has had a chance to run (it fires on mount and
+  // REPLACEs `destKey` in, so this fallback is never hit again after that first render).
   // useSearchParams.get() returns the already-decoded value (no manual decodeURIComponent needed).
-  const rawLocality = urlParams.get(PARAM_LOCALITY) || urlParams.get('town');
-  const selectedLocality: string | null = rawLocality && rawLocality.length > 0 ? rawLocality : null;
+  const rawDestKey = urlParams.get(PARAM_DEST_KEY);
+  const rawLocalityLegacy = urlParams.get(PARAM_LOCALITY) || urlParams.get('town');
+  const selectedLocality: string | null =
+    rawDestKey && rawDestKey.length > 0
+      ? rawDestKey
+      : rawLocalityLegacy && rawLocalityLegacy.length > 0
+        ? rawLocalityLegacy
+        : null;
 
   // ─── OD-1 Option A: Legacy group=DIR:BAND cold-load migration ────────────────
   // On initial URL parse: if the `group` param is present, replace history with
@@ -168,6 +185,43 @@ export function useAgriculturalUrlDomain(
     }
   }, [selectedRegion, selectedMaxKm, hasLegacyGroupParam, setUrlParams]);
   // No eslint-disable needed — all consumed values are in the deps array.
+
+  // ─── Issue #2151 PR C (C-F1): legacy locality/town → canonical destKey, EXACTLY ONCE ─────────
+  // Mirrors the OD-1 group=DIR:BAND migration above: a ref-guarded mount effect that fires once,
+  // moves the legacy param's value verbatim under the canonical param name, deletes the legacy
+  // params, and REPLACEs so no phantom history entry is created. This is a param-identity
+  // migration (rename), not a display-text→area_key content lookup — no such lookup is available
+  // client-side. Callers going forward (AgriGroupSelectedPanel's `onSelectLocality`) write the
+  // destination's real areas.area_key via `setLocality`; only pre-existing shared links that still
+  // carry old free-text `locality=`/`town=` values go through this one-time param rename.
+  //
+  // Guarded independently of coldLoadDoneRef/groupMigrationDoneRef above — this domain (locality
+  // drill-down identity) has no ordering dependency on the region/maxKm cold-load state machine,
+  // so it does not need to participate in that ref chain.
+  const localityMigrationDoneRef = useRef(false);
+  useEffect(() => {
+    if (localityMigrationDoneRef.current) return;
+    localityMigrationDoneRef.current = true;
+
+    const hasCanonical = urlParams.get(PARAM_DEST_KEY) !== null;
+    if (hasCanonical) return; // already canonical — nothing to migrate
+
+    const legacyValue = urlParams.get(PARAM_LOCALITY) || urlParams.get('town');
+    if (!legacyValue) return; // no legacy param present — nothing to migrate
+
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete(PARAM_LOCALITY);
+        next.delete('town');
+        next.set(PARAM_DEST_KEY, legacyValue);
+        return next;
+      },
+      { replace: true }, // REPLACE — migration must not create a phantom history entry
+    );
+    // No eslint-disable needed — mirrors the OD-1 effect above: real deps satisfy
+    // react-hooks/exhaustive-deps, and the ref guard ensures the body still only runs once.
+  }, [urlParams, setUrlParams]);
 
   // ─── Actions ─────────────────────────────────────────────────────────────
 
@@ -272,18 +326,24 @@ export function useAgriculturalUrlDomain(
     );
   }, [setUrlParams]);
 
+  // Issue #2151 PR C (C-F1) — `name` is now expected to be the destination's stable areas.area_key
+  // (e.g. from AgriGroupSelectedPanel's server-supplied destination buckets), not free-text.
+  // Written to the canonical PARAM_DEST_KEY; legacy PARAM_LOCALITY/`town` are always cleared so no
+  // dual-canonical state can persist across a setLocality call.
   const setLocality = useCallback(
-    (name: string) => {
+    (key: string) => {
       setUrlParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (name) {
+          if (key) {
             // setUrlParams (URLSearchParams.set) auto-encodes the value.
             // We pass the plain decoded string; it is percent-encoded on write
             // and decoded back by .get() on the next render.
-            next.set(PARAM_LOCALITY, name);
+            next.set(PARAM_DEST_KEY, key);
+            next.delete(PARAM_LOCALITY);
             next.delete('town');
           } else {
+            next.delete(PARAM_DEST_KEY);
             next.delete(PARAM_LOCALITY);
             next.delete('town');
           }
@@ -299,6 +359,7 @@ export function useAgriculturalUrlDomain(
     setUrlParams(
       (prev) => {
         const next = new URLSearchParams(prev);
+        next.delete(PARAM_DEST_KEY);
         next.delete(PARAM_LOCALITY);
         next.delete('town');
         return next;

@@ -12,14 +12,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Public (unauthenticated) endpoint: agri map listings.
  *
- * <p>GET /api/discover/agri-map-listings?city={citySlug}&areaKeys={k1}&areaKeys={k2}[&bbox=...]
+ * <p>GET /api/discover/agri-map-listings?city={citySlug}&areaKey={k1}[&bbox=...]
  *
  * <p>Returns LIVE agricultural_land listings for map rendering, including boundary GeoJSON
  * where available. No authentication required — public anonymous data.
@@ -39,21 +38,22 @@ public class DiscoverAgriMapListingsController {
     /**
      * Returns LIVE agricultural_land listings for the given city and scope.
      *
-     * <p>#2151 PR B: {@code areaKey} is the CANONICAL stable drill-down scope. {@code areaKeys[]}
-     * is retained as LEGACY/DEPRECATED (removed in PR C). Exactly one must be present; both
-     * present and disagreeing is rejected with 400 (validated in
-     * {@link DiscoverAgriMapListingsService#findAgriMapListings}).
+     * <p>#2151 PR C: the legacy {@code areaKeys[]} array param has been REMOVED (it was retained as
+     * deprecated-but-accepted through PR B; PR C is its documented removal point). {@code areaKey}
+     * is now the ONLY drill-down scope param. A request that sends only the legacy {@code areaKeys}
+     * (no {@code areaKey}) is REJECTED with 400, not silently ignored — see
+     * {@link DiscoverAgriMapListingsService#findAgriMapListings} javadoc (oq_c3) for the reasoning.
+     * Spring simply drops an unrecognised {@code areaKeys} query param; it is never bound to
+     * anything on this controller method.
      *
      * @param city     city slug (e.g. "udupi")
-     * @param areaKey  CANONICAL single stable destination area key
-     * @param areaKeys LEGACY area keys (IN-clause filter, max 50) — deprecated, removed in PR C
+     * @param areaKey  CANONICAL, and now ONLY, stable destination area key
      * @param bbox     optional bounding box "minLat,minLon,maxLat,maxLon"
      */
     @GetMapping("/agri-map-listings")
     public ResponseEntity<AgriMapListingsResponse> getAgriMapListings(
             @RequestParam String city,
             @RequestParam(required = false) String areaKey,
-            @RequestParam(required = false) List<String> areaKeys,
             @RequestParam(required = false) String bbox,
             @RequestParam(required = false) String listingPurpose) {
 
@@ -65,11 +65,11 @@ public class DiscoverAgriMapListingsController {
                 && auth.isAuthenticated()
                 && !(auth instanceof AnonymousAuthenticationToken);
 
-        log.debug("GET /api/discover/agri-map-listings city={} areaKey={} areaKeys={} bboxPresent={} authenticated={}",
-                city, areaKey != null, areaKeys != null ? areaKeys.size() : 0, bbox != null, isAuthenticated);
+        log.debug("GET /api/discover/agri-map-listings city={} areaKeyPresent={} bboxPresent={} authenticated={}",
+                city, areaKey != null, bbox != null, isAuthenticated);
 
         AgriMapListingsResponse result = service.findAgriMapListings(
-                city, areaKey, areaKeys, Optional.ofNullable(bbox), isAuthenticated, listingPurpose);
+                city, areaKey, Optional.ofNullable(bbox), isAuthenticated, listingPurpose);
 
         // #1454 cache semantics: the authenticated response carries full-precision lat/lng and
         // pricePaise — it MUST NOT be stored by a shared/CDN cache (a cached authed body could be

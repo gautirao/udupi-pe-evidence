@@ -26,7 +26,6 @@ import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.reset;
@@ -138,12 +137,12 @@ class DiscoverAgriMapListingsControllerIT {
     @DisplayName("anon: pricePaise null, coords coarsened to 2dp, new non-PII fields pass through")
     void anonCaller_anonProjection_priceNullCoordsCoarsenedNewFieldsPresent() throws Exception {
         when(agriMapListingsService.findAgriMapListings(
-                eq("udupi"), any(), anyList(), any(Optional.class), eq(false), any()))
+                eq("udupi"), any(), any(Optional.class), eq(false), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(ANON_ITEM), false, 250));
 
         mockMvc.perform(get(URL)
                         .param("city", "udupi")
-                        .param("areaKeys", AREA_KEY))
+                        .param("areaKey", AREA_KEY))
                 .andExpect(status().isOk())
                 // AC3: pricePaise absent (null → omitted by @JsonInclude NON_NULL)
                 .andExpect(jsonPath("$.listings[0].pricePaise").doesNotExist())
@@ -174,12 +173,12 @@ class DiscoverAgriMapListingsControllerIT {
     @DisplayName("authed: pricePaise present, exact coords, new fields present, Cache-Control no-store")
     void authedCaller_authedProjection_pricePresentExactCoordsNewFieldsPresent() throws Exception {
         when(agriMapListingsService.findAgriMapListings(
-                eq("udupi"), any(), anyList(), any(Optional.class), eq(true), any()))
+                eq("udupi"), any(), any(Optional.class), eq(true), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(AUTHED_ITEM), false, 250));
 
         mockMvc.perform(get(URL)
                         .param("city", "udupi")
-                        .param("areaKeys", AREA_KEY))
+                        .param("areaKey", AREA_KEY))
                 .andExpect(status().isOk())
                 // AC2: pricePaise present for authed
                 .andExpect(jsonPath("$.listings[0].pricePaise", is(12500000)))
@@ -212,12 +211,12 @@ class DiscoverAgriMapListingsControllerIT {
                 null, null, null, null, null  // all new fields null
         );
         when(agriMapListingsService.findAgriMapListings(
-                eq("udupi"), any(), anyList(), any(Optional.class), eq(false), any()))
+                eq("udupi"), any(), any(Optional.class), eq(false), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(noNewFields), false, 250));
 
         mockMvc.perform(get(URL)
                         .param("city", "udupi")
-                        .param("areaKeys", AREA_KEY))
+                        .param("areaKey", AREA_KEY))
                 .andExpect(status().isOk())
                 // All null new fields must be absent (not serialised as JSON null)
                 .andExpect(jsonPath("$.listings[0].roadAccess").doesNotExist())
@@ -235,12 +234,12 @@ class DiscoverAgriMapListingsControllerIT {
     @DisplayName("real security chain: this endpoint is permitAll — anonymous GET returns 200")
     void anonymousGet_publicEndpoint_returns200() throws Exception {
         when(agriMapListingsService.findAgriMapListings(
-                anyString(), any(), anyList(), any(Optional.class), eq(false), any()))
+                anyString(), any(), any(Optional.class), eq(false), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(), false, 250));
 
         mockMvc.perform(get(URL)
                         .param("city", "udupi")
-                        .param("areaKeys", AREA_KEY))
+                        .param("areaKey", AREA_KEY))
                 .andExpect(status().isOk());
     }
 }
