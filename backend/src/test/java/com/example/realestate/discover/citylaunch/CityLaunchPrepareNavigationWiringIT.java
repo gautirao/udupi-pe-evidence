@@ -106,6 +106,7 @@ class CityLaunchPrepareNavigationWiringIT {
             jdbc.update("DELETE FROM public.city_region_policy WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_region_memberships WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_regions WHERE city_id = ?", cityId);
+            jdbc.update("DELETE FROM public.regional_area_classifications WHERE city_key = ?", slug);
             jdbc.update("DELETE FROM public.areas WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.cities WHERE id = ?", cityId);
         }
@@ -131,6 +132,30 @@ class CityLaunchPrepareNavigationWiringIT {
         throw lastError;
     }
 
+    /**
+     * #2163: {@code prepare()} now self-materializes canonical geography prerequisites via {@code
+     * CityRegionOnboardingService.apply()}, which requires >=1 real {@code
+     * regional_area_classifications} row (else {@code MISSING_CLASSIFICATIONS}) — this file hand-
+     * seeds {@code city_regions}/{@code city_region_memberships} directly with a SPECIFIC
+     * region_key covering all 3 fixture areas (so the AREA-leaf-count assertion below stays exact),
+     * so rather than reclassify those real areas (scattering them across apply()'s own canonical
+     * CENTRAL_CARDINAL_8 regions), seed one separate INACTIVE "decoy" area purely to satisfy
+     * {@code classificationsPresent()}. Being INACTIVE, it is excluded from navigation-tree
+     * generation's area capture, so it never appears in the AREA-node-count assertion.
+     */
+    private void seedDecoyClassifiedArea(int cityId, String citySlug) {
+        String decoyAreaKey = citySlug + "|d|g|decoy-2163";
+        jdbc.update(
+                "INSERT INTO public.areas (area_key, city_id, name, district, geo_center_lat, geo_center_lon, "
+                        + "lifecycle_status) VALUES (?, ?, ?, ?, ?, ?, 'INACTIVE')",
+                decoyAreaKey, cityId, decoyAreaKey, citySlug + "-district", 13.0, 74.7);
+        jdbc.update(
+                "INSERT INTO public.regional_area_classifications "
+                        + "(city_key, area_key, direction_key, distance_band_key, bearing_deg, distance_km, computed_at) "
+                        + "VALUES (?, ?, 'N', '0_10', 0.0, 5.0, now())",
+                citySlug, decoyAreaKey);
+    }
+
     /** 3 areas, 1 region, and a {@code city_region_policy} row with a permissive
      *  {@code min_areas_per_cluster=1} so this minimal fixture never trips a "too few areas to
      *  form a cluster" rejection unrelated to the wiring under test. */
@@ -148,6 +173,7 @@ class CityLaunchPrepareNavigationWiringIT {
                         + "VALUES (?, 'CENTRAL_CARDINAL_8', 3.0, 8, 1, 6, true, 0.35, 0.5, "
                         + " 'GEOMETRIC_BISECTION', 'CENTROID_NEAREST', 'ATTACH_NEAREST_CLUSTER', 'AREA_CENTROID_MEAN')",
                 cityId);
+        seedDecoyClassifiedArea(cityId, slug);
 
         for (int i = 1; i <= 3; i++) {
             double lat = 13.0 + i * 0.01;
@@ -165,8 +191,9 @@ class CityLaunchPrepareNavigationWiringIT {
         jdbc.update("INSERT INTO public.city_regions (city_id, region_key, display_label, display_order) "
                 + "VALUES (?, ?, ?, 1)", cityId, slug + "-north", slug + "-north");
         for (int i = 1; i <= 3; i++) {
+            // #2163: 'OVERRIDE' (not 'AUTO') is load-bearing — see seedDecoyClassifiedArea's javadoc.
             jdbc.update("INSERT INTO public.city_region_memberships "
-                            + "(city_id, area_key, region_key, assignment_source) VALUES (?, ?, ?, 'AUTO')",
+                            + "(city_id, area_key, region_key, assignment_source) VALUES (?, ?, ?, 'OVERRIDE')",
                     cityId, slug + "|area-" + i, slug + "-north");
         }
 

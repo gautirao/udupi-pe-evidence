@@ -2,6 +2,7 @@ package com.example.realestate.exception;
 
 import com.example.realestate.area.AreaNotFoundException;
 import com.example.realestate.discover.citylaunch.CityPreparationConflictException;
+import com.example.realestate.discover.citylaunch.CityPrerequisiteGenerationException;
 import com.example.realestate.discover.citylaunch.GeographyValidationException;
 import com.example.realestate.discover.navigation.NavigationTreeValidationException;
 import com.example.realestate.listing.exception.ListingLifecycleException;
@@ -112,6 +113,19 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.warn("Geography validation failed: {}", ex.getMessage());
         return ResponseEntity.unprocessableEntity()
                 .body(Map.of("error", "GEOGRAPHY_VALIDATION_FAILED"));
+    }
+
+    // ===== CityPrerequisiteGenerationException → 422, distinct contract from GeographyValidationException =====
+
+    @ExceptionHandler(CityPrerequisiteGenerationException.class)
+    public ResponseEntity<Map<String, String>> handleCityPrerequisiteGeneration(CityPrerequisiteGenerationException ex) {
+        log.warn("City prerequisite generation failed [{}]: {}", ex.reason(), ex.getMessage());
+        return ResponseEntity.unprocessableEntity()
+                .body(Map.of(
+                        "error", "CITY_PREREQUISITES_NOT_GENERATED",
+                        "reason", ex.reason(),
+                        "message", ex.getMessage(),
+                        "remediation", ex.remediation()));
     }
 
     // ===== NavigationTreeValidationException → 422, body carries the structured ValidationReport =====

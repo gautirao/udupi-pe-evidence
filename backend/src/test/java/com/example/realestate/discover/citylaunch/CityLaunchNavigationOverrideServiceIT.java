@@ -105,6 +105,7 @@ class CityLaunchNavigationOverrideServiceIT {
             jdbc.update("DELETE FROM public.city_region_policy WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_region_memberships WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_regions WHERE city_id = ?", cityId);
+            jdbc.update("DELETE FROM public.regional_area_classifications WHERE city_key = ?", slug);
             jdbc.update("DELETE FROM public.areas WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.cities WHERE id = ?", cityId);
         }
@@ -149,6 +150,7 @@ class CityLaunchNavigationOverrideServiceIT {
                         + "VALUES (?, 'CENTRAL_CARDINAL_8', 3.0, 2, 1, 6, false, 0.35, 0.5, "
                         + " 'GEOMETRIC_BISECTION', 'CENTROID_NEAREST', 'ATTACH_NEAREST_CLUSTER', 'AREA_CENTROID_MEAN')",
                 cityId);
+        seedDecoyClassifiedArea(cityId, slug);
 
         for (int i = 1; i <= 4; i++) {
             double lat = 13.0 + i * 0.1;
@@ -163,8 +165,13 @@ class CityLaunchNavigationOverrideServiceIT {
         jdbc.update("INSERT INTO public.city_regions (city_id, region_key, display_label, display_order) "
                 + "VALUES (?, ?, ?, 1)", cityId, slug + "-north", slug + "-north");
         for (int i = 1; i <= 4; i++) {
+            // #2163: 'OVERRIDE' (not 'AUTO') is load-bearing — CityRegionOnboardingService.apply(),
+            // now invoked by every prepare() call, deletes stale 'AUTO' memberships for any
+            // area_key outside its own computed effective set; these fixture areas are deliberately
+            // NOT real-classified (see seedDecoyClassifiedArea), so an 'AUTO' row here would be
+            // wiped out by that exact cleanup on the very same prepare() call that seeded it.
             jdbc.update("INSERT INTO public.city_region_memberships "
-                            + "(city_id, area_key, region_key, assignment_source) VALUES (?, ?, ?, 'AUTO')",
+                            + "(city_id, area_key, region_key, assignment_source) VALUES (?, ?, ?, 'OVERRIDE')",
                     cityId, slug + "|area-" + i, slug + "-north");
         }
 
@@ -188,6 +195,7 @@ class CityLaunchNavigationOverrideServiceIT {
                         + "VALUES (?, 'CENTRAL_CARDINAL_8', 3.0, 3, 1, 6, false, 0.35, 0.5, "
                         + " 'GEOMETRIC_BISECTION', 'CENTROID_NEAREST', 'ATTACH_NEAREST_CLUSTER', 'AREA_CENTROID_MEAN')",
                 cityId);
+        seedDecoyClassifiedArea(cityId, slug);
 
         for (int i = 1; i <= 6; i++) {
             double lat = 13.0 + i * 0.1;
@@ -202,12 +210,42 @@ class CityLaunchNavigationOverrideServiceIT {
         jdbc.update("INSERT INTO public.city_regions (city_id, region_key, display_label, display_order) "
                 + "VALUES (?, ?, ?, 1)", cityId, slug + "-north", slug + "-north");
         for (int i = 1; i <= 6; i++) {
+            // #2163: 'OVERRIDE' (not 'AUTO') is load-bearing — CityRegionOnboardingService.apply(),
+            // now invoked by every prepare() call, deletes stale 'AUTO' memberships for any
+            // area_key outside its own computed effective set; these fixture areas are deliberately
+            // NOT real-classified (see seedDecoyClassifiedArea), so an 'AUTO' row here would be
+            // wiped out by that exact cleanup on the very same prepare() call that seeded it.
             jdbc.update("INSERT INTO public.city_region_memberships "
-                            + "(city_id, area_key, region_key, assignment_source) VALUES (?, ?, ?, 'AUTO')",
+                            + "(city_id, area_key, region_key, assignment_source) VALUES (?, ?, ?, 'OVERRIDE')",
                     cityId, slug + "|area-" + i, slug + "-north");
         }
 
         return cityId;
+    }
+
+    /**
+     * #2163: {@code prepare()} now self-materializes canonical geography prerequisites via {@code
+     * CityRegionOnboardingService.apply()}, which requires >=1 real {@code
+     * regional_area_classifications} row (else {@code MISSING_CLASSIFICATIONS}) — this file's
+     * fixtures hand-seed {@code city_regions}/{@code city_region_memberships} directly with a
+     * SPECIFIC region_key covering ALL of a fixture's areas (required for the clustering tests
+     * below to bisect a single region's member set), so rather than reclassify the real fixture
+     * areas (which would scatter them across apply()'s own canonical CENTRAL_CARDINAL_8 regions
+     * instead), seed one separate INACTIVE "decoy" area purely to satisfy {@code
+     * classificationsPresent()}. Being INACTIVE, it is excluded from navigation-tree generation's
+     * area capture, so it never appears in any cluster/tree assertion in this file.
+     */
+    private void seedDecoyClassifiedArea(int cityId, String citySlug) {
+        String decoyAreaKey = citySlug + "|d|g|decoy-2163";
+        jdbc.update(
+                "INSERT INTO public.areas (area_key, city_id, name, district, geo_center_lat, geo_center_lon, "
+                        + "lifecycle_status) VALUES (?, ?, ?, ?, ?, ?, 'INACTIVE')",
+                decoyAreaKey, cityId, decoyAreaKey, citySlug + "-district", 13.0, 74.7);
+        jdbc.update(
+                "INSERT INTO public.regional_area_classifications "
+                        + "(city_key, area_key, direction_key, distance_band_key, bearing_deg, distance_km, computed_at) "
+                        + "VALUES (?, ?, 'N', '0_10', 0.0, 5.0, now())",
+                citySlug, decoyAreaKey);
     }
 
     private long prepareAndAwaitPrepared(int cityId) {

@@ -127,6 +127,11 @@ class CityLaunchPromotionServiceIT {
             jdbc.update("DELETE FROM public.area_groups WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_region_memberships WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_regions WHERE city_id = ?", cityId);
+            // #2163: seedRegionPolicy()/seedClassification() insert rows that FK-reference (policy)
+            // or otherwise scope to (classifications) this city/slug and must be cleared first.
+            jdbc.update("DELETE FROM public.city_region_policy WHERE city_id = ?", cityId);
+            jdbc.update("DELETE FROM public.regional_area_classifications WHERE city_key = ?", slug);
+            jdbc.update("DELETE FROM public.regional_area_overrides WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.area_alias WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.areas WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.cities WHERE id = ?", cityId);
@@ -178,11 +183,70 @@ class CityLaunchPromotionServiceIT {
                 cityId, regionKey, regionKey);
     }
 
+    /**
+     * #2163: this file's fixtures hand-seed {@code city_regions}/{@code city_region_memberships}
+     * directly (rather than deriving them from real classification data) to control EXACTLY which
+     * areas share a region for its assignment-tamper tests. {@code assignment_source='OVERRIDE'}
+     * (not {@code 'AUTO'}) is load-bearing here: {@code CityRegionOnboardingService.apply()} — now
+     * invoked by every {@code prepare()} call (#2163) — deletes stale {@code 'AUTO'} memberships
+     * for any area_key outside its own computed effective set (see {@code
+     * deleteStaleAutoMemberships}); these fixtures' areas are deliberately NOT real-classified (see
+     * {@link #seedDecoyClassifiedArea}), so an {@code 'AUTO'} row here would be wiped out by that
+     * exact cleanup on the very same {@code prepare()} call that seeded it.
+     */
     private void seedMembership(int cityId, String areaKey, String regionKey) {
         jdbc.update(
                 "INSERT INTO public.city_region_memberships (city_id, area_key, region_key, assignment_source) "
-                        + "VALUES (?, ?, ?, 'AUTO')",
+                        + "VALUES (?, ?, ?, 'OVERRIDE')",
                 cityId, areaKey, regionKey);
+    }
+
+    /**
+     * #2163: {@code prepare()} now self-materializes canonical geography prerequisites via
+     * {@code CityRegionOnboardingService.apply()}, which requires a {@code city_region_policy}
+     * row (else {@code MISSING_POLICY}) and >=1 real classified area (else {@code
+     * MISSING_CLASSIFICATIONS}). Seed a policy row plus one separate INACTIVE "decoy" area with a
+     * 4-segment area_key (real fixture areas here use the file's existing 2-segment convention,
+     * which {@code CityRegionOnboardingService}'s own classification-eligibility filter — mirroring
+     * {@code RegionalClassificationBackfillService}'s — structurally excludes) purely so {@code
+     * classificationsPresent()=true} and {@code apply()} has >=1 real region to materialize. Being
+     * INACTIVE, the decoy is excluded from {@code CityLaunchGraphWriter}'s area capture, so it
+     * never appears in any sandbox_areas/row-count assertion in this file.
+     */
+    private void seedRegionPolicy(int cityId, String regionModel, double centralRadiusKm) {
+        jdbc.update(
+                "INSERT INTO public.city_region_policy (city_id, region_model, central_radius_km) "
+                        + "VALUES (?, ?, ?)",
+                cityId, regionModel, centralRadiusKm);
+    }
+
+    /**
+     * #2163: a fixture that has an {@code area_groups} member area which is NOT itself
+     * real-classified (see {@link #seedDecoyClassifiedArea}) trips {@code
+     * CityRegionOnboardingService.apply()}'s DEGENERATE_GROUP guard — a group is degenerate when
+     * NONE of its members has a classification-projected region. A {@code regional_area_overrides}
+     * row resolves this exactly the way a real operator would (see {@code
+     * CityRegionOnboardingNamespaceCollisionIT}'s {@code resolveNonUnifiedGroups} for the same
+     * pattern), independent of this file's OWN manually-seeded {@code city_region_memberships}.
+     */
+    private void seedRegionOverride(int cityId, String areaKey, String regionKey) {
+        jdbc.update(
+                "INSERT INTO public.regional_area_overrides (city_id, area_key, forced_region_key, reason, author) "
+                        + "VALUES (?, ?, ?, 'test-fixture-2163', 'test')",
+                cityId, areaKey, regionKey);
+    }
+
+    private void seedDecoyClassifiedArea(int cityId, String citySlug) {
+        String decoyAreaKey = citySlug + "|d|g|decoy-2163";
+        jdbc.update(
+                "INSERT INTO public.areas (area_key, city_id, name, district, geo_center_lat, geo_center_lon, "
+                        + "lifecycle_status) VALUES (?, ?, ?, ?, ?, ?, 'INACTIVE')",
+                decoyAreaKey, cityId, decoyAreaKey, citySlug + "-district", 13.0, 74.7);
+        jdbc.update(
+                "INSERT INTO public.regional_area_classifications "
+                        + "(city_key, area_key, direction_key, distance_band_key, bearing_deg, distance_km, computed_at) "
+                        + "VALUES (?, ?, 'N', '0_10', 0.0, 5.0, now())",
+                citySlug, decoyAreaKey);
     }
 
     private int seedGroup(int cityId, String slug, String subtitle) {
@@ -283,6 +347,8 @@ class CityLaunchPromotionServiceIT {
         seedArea(cityId, citySlug + "|area-1", 13.01, 74.71, citySlug + "-district");
         seedArea(cityId, citySlug + "|area-2", 13.02, 74.72, null);
         seedArea(cityId, citySlug + "|area-3", 13.03, 74.73, null);
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        seedDecoyClassifiedArea(cityId, citySlug);
         seedRegion(cityId, citySlug + "-north");
         seedMembership(cityId, citySlug + "|area-1", citySlug + "-north");
         seedMembership(cityId, citySlug + "|area-2", citySlug + "-north");
@@ -303,10 +369,14 @@ class CityLaunchPromotionServiceIT {
         seedArea(cityId, citySlug + "|area-1", 13.01, 74.71, citySlug + "-district");
         seedArea(cityId, citySlug + "|area-2", 13.02, 74.72, null);
         seedArea(cityId, citySlug + "|area-3", 13.03, 74.73, null);
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        seedDecoyClassifiedArea(cityId, citySlug);
         seedRegion(cityId, citySlug + "-north");
         seedMembership(cityId, citySlug + "|area-1", citySlug + "-north");
         seedMembership(cityId, citySlug + "|area-2", citySlug + "-north");
         seedMembership(cityId, citySlug + "|area-3", citySlug + "-north");
+        seedRegionOverride(cityId, citySlug + "|area-1", "N");
+        seedRegionOverride(cityId, citySlug + "|area-2", "N");
         int groupId = seedGroup(cityId, citySlug + "-belt", null);
         seedGroupMember(groupId, citySlug + "|area-1");
         seedGroupMember(groupId, citySlug + "|area-2");
@@ -326,6 +396,8 @@ class CityLaunchPromotionServiceIT {
         seedArea(cityId, citySlug + "|area-1", 13.01, 74.71, citySlug + "-district");
         seedArea(cityId, citySlug + "|area-2", 13.02, 74.72, null);
         seedArea(cityId, citySlug + "|area-3", 13.03, 74.73, null);
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        seedDecoyClassifiedArea(cityId, citySlug);
         seedRegion(cityId, citySlug + "-north");
         seedMembership(cityId, citySlug + "|area-1", citySlug + "-north");
         seedMembership(cityId, citySlug + "|area-2", citySlug + "-north");
@@ -339,9 +411,13 @@ class CityLaunchPromotionServiceIT {
         seedArea(cityId, citySlug + "|area-1", 13.01, 74.71, citySlug + "-district");
         seedArea(cityId, citySlug + "|area-2", 13.02, 74.72, null);
         seedAlias(cityId, citySlug + "|area-1", "Area One", "area one");
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        seedDecoyClassifiedArea(cityId, citySlug);
         seedRegion(cityId, citySlug + "-north");
         seedMembership(cityId, citySlug + "|area-1", citySlug + "-north");
         seedMembership(cityId, citySlug + "|area-2", citySlug + "-north");
+        seedRegionOverride(cityId, citySlug + "|area-1", "N");
+        seedRegionOverride(cityId, citySlug + "|area-2", "N");
         int groupId = seedGroup(cityId, citySlug + "-belt", null);
         seedGroupMember(groupId, citySlug + "|area-1");
         seedGroupMember(groupId, citySlug + "|area-2");
@@ -385,10 +461,16 @@ class CityLaunchPromotionServiceIT {
         assertThat(report.lifecycleStatus()).isEqualTo("PROMOTED");
         assertThat(report.idempotentNoop()).isFalse();
         assertThat(report.promotedAt()).isNotNull();
-        assertThat(report.areasPromoted()).isEqualTo(2);
+        // #2163: seedFullValidGeography() now also seeds one INACTIVE "decoy" area (see
+        // seedDecoyClassifiedArea) purely so prepare()'s self-materialized
+        // CityRegionOnboardingService.apply() call has a real classified area to work with —
+        // areasPromoted/regionsPromoted/membershipsPromoted counts include it (all captured areas
+        // are promoted regardless of lifecycle_status; apply() also always materializes ALL 5
+        // canonical CENTRAL_CARDINAL_4 regions, not just the hand-seeded "-north" one).
+        assertThat(report.areasPromoted()).isEqualTo(3);
         assertThat(report.aliasesPromoted()).isEqualTo(1);
-        assertThat(report.regionsPromoted()).isEqualTo(1);
-        assertThat(report.membershipsPromoted()).isEqualTo(2);
+        assertThat(report.regionsPromoted()).isEqualTo(6);
+        assertThat(report.membershipsPromoted()).isEqualTo(3);
         assertThat(report.groupsPromoted()).isEqualTo(1);
         assertThat(report.groupMembersPromoted()).isEqualTo(2);
         // AC10 characterization (#1955 Areas PR A, SLICE 2c): `seedCity()` in this test never seeds a
@@ -519,7 +601,8 @@ class CityLaunchPromotionServiceIT {
 
         Integer areaCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM public.areas WHERE city_id = ?", Integer.class, cityId);
-        assertThat(areaCount).isEqualTo(2);
+        // #2163: 3, not 2 — includes seedFullValidGeography()'s decoy area (see seedDecoyClassifiedArea).
+        assertThat(areaCount).isEqualTo(3);
         CityLaunchRevision revision = revisionRepository.findById(revisionId).orElseThrow();
         assertThat(revision.getLifecycleStatus()).isEqualTo(LifecycleStatus.PROMOTED);
     }
@@ -835,6 +918,8 @@ class CityLaunchPromotionServiceIT {
     void canonicalDrift() {
         int cityId = seedCity("cd5", false);
         seedArea(cityId, "cd5|area-1", 13.01, 74.71, "seed-district");
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        seedDecoyClassifiedArea(cityId, "cd5");
         seedRegion(cityId, "cd5-north");
         seedMembership(cityId, "cd5|area-1", "cd5-north");
         long revisionId = prepareAndValidate(cityId);
@@ -899,7 +984,8 @@ class CityLaunchPromotionServiceIT {
 
         PromotionReport report = promotionService.launch(cityId, revisionId, ADMIN_ID.toString());
         assertThat(report.idempotentNoop()).isFalse();
-        assertThat(report.areasPromoted()).isEqualTo(2);
+        // #2163: 3, not 2 — includes seedFullValidGeography()'s decoy area (see seedDecoyClassifiedArea).
+        assertThat(report.areasPromoted()).isEqualTo(3);
 
         String district = jdbc.queryForObject(
                 "SELECT district FROM public.areas WHERE area_key = ?", String.class, "nn5|area-2");

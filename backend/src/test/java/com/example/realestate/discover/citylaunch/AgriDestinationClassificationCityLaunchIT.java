@@ -111,6 +111,10 @@ class AgriDestinationClassificationCityLaunchIT {
             jdbc.update("DELETE FROM public.agri_destination_classification WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_region_memberships WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_regions WHERE city_id = ?", cityId);
+            // #2163: seedRegionPolicy()/seedClassification() insert rows that FK-reference (policy)
+            // or otherwise scope to (classifications) this city/slug and must be cleared first.
+            jdbc.update("DELETE FROM public.city_region_policy WHERE city_id = ?", cityId);
+            jdbc.update("DELETE FROM public.regional_area_classifications WHERE city_key = ?", slug);
             jdbc.update("DELETE FROM public.areas WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.cities WHERE id = ?", cityId);
         }
@@ -188,14 +192,68 @@ class AgriDestinationClassificationCityLaunchIT {
                 cityId, areaKey, regionKey);
     }
 
+    /**
+     * #2163: {@code prepare()} now self-materializes canonical geography prerequisites via
+     * {@code CityRegionOnboardingService.apply()}, which requires a {@code city_region_policy}
+     * row (else it throws {@code MISSING_POLICY}). Mirrors Udupi's real production policy
+     * (CENTRAL_CARDINAL_4).
+     */
+    private void seedRegionPolicy(int cityId, String regionModel, double centralRadiusKm) {
+        jdbc.update(
+                "INSERT INTO public.city_region_policy (city_id, region_model, central_radius_km) "
+                        + "VALUES (?, ?, ?)",
+                cityId, regionModel, centralRadiusKm);
+    }
+
+    /**
+     * #2163: directly seeds a {@code regional_area_classifications} row (bypassing
+     * {@code RegionalClassificationBackfillService}, whose {@code array_length(area_key,'|')=4}
+     * filter would reject this file's deliberately 2-segment {@code citySlug|suffix} area_key
+     * convention) so {@code prepare()}'s self-generated {@code CityRegionOnboardingService.apply()}
+     * call finds {@code classificationsPresent()=true} and skips the (here, inapplicable) backfill
+     * gate. The exact direction/distance values are irrelevant to every test in this file — none
+     * asserts on which region_key an area lands in, only that city_regions/memberships end up
+     * non-empty so prepare() can proceed to admission.
+     */
+    private void seedClassification(String citySlug, String areaKey) {
+        jdbc.update(
+                "INSERT INTO public.regional_area_classifications "
+                        + "(city_key, area_key, direction_key, distance_band_key, bearing_deg, distance_km, computed_at) "
+                        + "VALUES (?, ?, 'N', '0_10', 0.0, 5.0, now())",
+                citySlug, areaKey);
+    }
+
+    /**
+     * #2163: {@code CityRegionOnboardingService}'s own {@code CLASSIFICATIONS_SQL} ALSO applies
+     * the {@code array_length(area_key,'|')=4} filter (mirroring the backfill service's), so a
+     * classification row seeded against one of this file's deliberately 2-segment test area_keys
+     * (see {@link #seedClassification}) is silently excluded and never satisfies {@code
+     * classificationsPresent()}. Rather than reformatting every area_key + the dozens of
+     * assertions keyed on the exact 2-segment strings throughout this file, seed one INACTIVE,
+     * 4-segment "decoy" area purely so {@code classificationsPresent()=true} and {@code apply()}
+     * has >=1 real region to materialize (satisfying {@code validateCanonicalGeographyReady}'s
+     * "regions non-empty" post-condition). Being INACTIVE, it is excluded from {@code
+     * CityLaunchGraphWriter}'s area capture, so it never appears in any sandbox_areas/Agri
+     * row-count assertion in this file.
+     */
+    private void seedDecoyClassifiedArea(int cityId, String citySlug) {
+        String decoyAreaKey = citySlug + "|d|g|decoy-2163";
+        jdbc.update(
+                "INSERT INTO public.areas (area_key, city_id, name, district, geo_center_lat, geo_center_lon, "
+                        + "lifecycle_status) VALUES (?, ?, ?, ?, ?, ?, 'INACTIVE')",
+                decoyAreaKey, cityId, decoyAreaKey, cityId + "-district", ORIGIN_LAT, ORIGIN_LON);
+        seedClassification(citySlug, decoyAreaKey);
+    }
+
     /** Valid canonical geography: {@code areaOffsets} keyed by area_key suffix -> [lat, lon]. */
     private int seedValidGeography(String citySlug, Map<String, double[]> areaOffsets) {
         int cityId = seedCity(citySlug);
-        seedRegion(cityId, citySlug + "-north");
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        seedDecoyClassifiedArea(cityId, citySlug);
         for (Map.Entry<String, double[]> e : areaOffsets.entrySet()) {
             String areaKey = citySlug + "|" + e.getKey();
             seedArea(cityId, areaKey, e.getValue()[0], e.getValue()[1]);
-            seedMembership(cityId, areaKey, citySlug + "-north");
+            seedClassification(citySlug, areaKey);
         }
         return cityId;
     }
@@ -442,9 +500,10 @@ class AgriDestinationClassificationCityLaunchIT {
             + "PREPARED")
     void ac3_zeroOrigin_prepareFails_noRevisionReachesPrepared() {
         int cityId = seedCityWithZeroOrigin("ac3-zero");
-        seedRegion(cityId, "ac3-zero-north");
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        seedDecoyClassifiedArea(cityId, "ac3-zero");
         seedArea(cityId, "ac3-zero|area-1", ORIGIN_LAT, ORIGIN_LON);
-        seedMembership(cityId, "ac3-zero|area-1", "ac3-zero-north");
+        seedClassification("ac3-zero", "ac3-zero|area-1");
 
         PrepareResponse prep = preparationService.prepare(cityId, ADMIN_ID);
         long revisionId = prep.revisionId();
@@ -510,7 +569,13 @@ class AgriDestinationClassificationCityLaunchIT {
 
         // The exact input CityLaunchGraphWriter captured into sandbox_areas for this revision,
         // BEFORE any production mutation below — this is what the generator must be driven by.
-        List<SandboxArea> capturedAreas = sandboxAreaRepository.findByRevisionId(revisionId);
+        // #2163: exclude the fixture's decoy classified area (see seedDecoyClassifiedArea) — it
+        // exists only to satisfy prepare()'s self-materialized classificationsPresent()/apply()
+        // prerequisites, is captured into sandbox_areas like every other area regardless of
+        // lifecycle_status, but is not part of what THIS test is verifying.
+        List<SandboxArea> capturedAreas = sandboxAreaRepository.findByRevisionId(revisionId).stream()
+                .filter(a -> !a.getAreaKey().contains("decoy-2163"))
+                .toList();
         assertThat(capturedAreas).hasSize(2);
         Set<String> capturedAreaKeys = capturedAreas.stream()
                 .map(SandboxArea::getAreaKey)
