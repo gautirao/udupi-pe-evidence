@@ -87,4 +87,48 @@ describe('DiscoverMapCountBadge', () => {
     );
     expect(screen.getByTestId('discover-badge-stale')).toHaveTextContent('Filtered results');
   });
+
+  // Issue #2169 Bug 2 — the footer badge must never show the residential
+  // cityTotal while browsing the Agri journey. Agricultural land is a
+  // separate model (parcels/corridors, not residential area counts) — see
+  // DiscoverRightPanel's Agri intro copy. Mirrors the school-first pattern
+  // of a distinct journey-aware branch, but agri suppresses the pill
+  // entirely rather than showing a count (see useDiscoverMapCountBadge
+  // wiring comment for the suppress-vs-total rationale).
+  it('#2169: agri-first journey never renders the residential-cityTotal fallback badge', () => {
+    render(
+      <DiscoverMapCountBadge
+        {...baseProps()}
+        resolvedPanelContent="agri-landing"
+        journey="agri-first"
+        isAreaFirstSelectedAreaState={false}
+        isSelectedGroupState={false}
+        selectedArea={null}
+        focusedGroup={null}
+        areaResultSummaryText={null}
+        cityTotal={100}
+        fallbackBadgeCopy="100 properties in bangalore"
+      />,
+    );
+    expect(screen.queryByTestId('discover-badge')).not.toBeInTheDocument();
+    expect(screen.queryByText(/properties in bangalore/i)).not.toBeInTheDocument();
+  });
+
+  // Issue #2169 Bug 2 — the public-landing summary pill (bottom-center) is a
+  // second, independent leak vector for the same residential cityTotal; the
+  // guard must suppress this pill too, even if isAreaFirstCityLanding were
+  // ever (incorrectly) true for an agri state.
+  it('#2169: agri-first journey never renders the public-landing cityTotal pill even if isAreaFirstCityLanding is true', () => {
+    render(
+      <DiscoverMapCountBadge
+        {...baseProps()}
+        resolvedPanelContent="guided-entry"
+        isAreaFirstCityLanding={true}
+        journey="agri-first"
+        discoverBadge={{ ...DISCOVER_BADGE, visible: false }}
+        cityTotal={100}
+      />,
+    );
+    expect(screen.queryByTestId('discover-badge')).not.toBeInTheDocument();
+  });
 });
