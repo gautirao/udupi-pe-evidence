@@ -8,6 +8,7 @@ import com.example.realestate.discover.navigation.SandboxNavigationNode;
 import com.example.realestate.discover.navigation.SandboxNavigationNodeRepository;
 import com.example.realestate.discover.navigation.SandboxNavigationOverride;
 import com.example.realestate.discover.navigation.SandboxNavigationOverrideRepository;
+import jakarta.persistence.EntityManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -67,8 +68,10 @@ public class CityLaunchGraphWriter {
     private final SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
     private final SandboxNavigationOverrideRepository sandboxNavigationOverrideRepository;
     private final AgriDestinationClassificationGenerator agriDestinationClassificationGenerator;
+    private final SandboxAgriDestinationClassificationRepository sandboxAgriDestinationClassificationRepository;
     private final JdbcOperations jdbcOperations;
     private final CityLaunchSseService sseService;
+    private final EntityManager entityManager;
 
     /**
      * Self-reference to the Spring-proxied instance of this very bean, injected lazily.
@@ -96,8 +99,10 @@ public class CityLaunchGraphWriter {
             SandboxNavigationNodeRepository sandboxNavigationNodeRepository,
             SandboxNavigationOverrideRepository sandboxNavigationOverrideRepository,
             AgriDestinationClassificationGenerator agriDestinationClassificationGenerator,
+            SandboxAgriDestinationClassificationRepository sandboxAgriDestinationClassificationRepository,
             JdbcOperations jdbcOperations,
             CityLaunchSseService sseService,
+            EntityManager entityManager,
             @Lazy CityLaunchGraphWriter self) {
         this.revisionRepository = revisionRepository;
         this.geographyReader = geographyReader;
@@ -112,8 +117,10 @@ public class CityLaunchGraphWriter {
         this.sandboxNavigationNodeRepository = sandboxNavigationNodeRepository;
         this.sandboxNavigationOverrideRepository = sandboxNavigationOverrideRepository;
         this.agriDestinationClassificationGenerator = agriDestinationClassificationGenerator;
+        this.sandboxAgriDestinationClassificationRepository = sandboxAgriDestinationClassificationRepository;
         this.jdbcOperations = jdbcOperations;
         this.sseService = sseService;
+        this.entityManager = entityManager;
         this.self = self;
     }
 
@@ -251,6 +258,12 @@ public class CityLaunchGraphWriter {
         List<SandboxNavigationNode> savedNavigationNodes;
         if (navigationPolicyReader.findPolicy(cityId).isPresent()) {
             navigationTreeGenerationService.generateAndStoreForRevision(revisionId, cityId, Instant.now());
+            // #2177: this find resolves through Hibernate's identity map back to the entities
+            // NavigationTreeGenerationService just `.save()`'d in this SAME transaction — detaching
+            // them and re-querying forces a genuinely fresh, DB-round-tripped read (see the detachAll
+            // javadoc / #2177 comment below for the full identity-map explanation).
+            savedNavigationNodes = sandboxNavigationNodeRepository.findByRevisionId(revisionId);
+            detachAll(savedNavigationNodes);
             savedNavigationNodes = sandboxNavigationNodeRepository.findByRevisionId(revisionId);
         } else {
             log.info("CityLaunchGraphWriter: no city_region_policy row for cityId={} — skipping "
@@ -288,16 +301,73 @@ public class CityLaunchGraphWriter {
         // this list is always empty here — read via the repository anyway so there is exactly ONE
         // checksum call shape used everywhere (here, the override endpoints, and
         // CityLaunchPromotionService).
+        // #2177: same identity-map hazard as savedNavigationNodes above — detach-then-re-query so a
+        // genuinely fresh, DB-round-tripped read is what feeds the checksum below. This list is
+        // always empty in practice (see comment above), so this is a defensive no-op today, but it
+        // closes the gap symmetrically for every one of the nine tables rather than leaving two with
+        // an unexercised version of the same defect.
         List<SandboxNavigationOverride> savedOverrides =
                 sandboxNavigationOverrideRepository.findByRevisionIdOrderByApplyOrderAsc(revisionId);
+        detachAll(savedOverrides);
+        savedOverrides = sandboxNavigationOverrideRepository.findByRevisionIdOrderByApplyOrderAsc(revisionId);
+
+        // #2177: hash DB-round-tripped rows, not the in-memory `.save()`-returned entities. On the
+        // hosted connection (extra_float_digits = 0) Postgres formats a re-SELECTed DOUBLE PRECISION
+        // to 15 significant digits, which is lossy versus full Java `double` precision (up to 17
+        // significant digits) — so a checksum computed here over the in-memory objects could differ
+        // from CityLaunchPromotionService.launch's checksum, which always re-queries all nine tables
+        // fresh, over the SAME underlying rows. savedAreas/savedAliases/savedRegions/savedMemberships/
+        // savedGroups/savedGroupMembers/savedAgriDestinations (the in-memory lists) are intentionally
+        // left untouched above — sandboxGroupIdBySlug/sandboxAreaIdByKey lookups and savedAreas' use
+        // as agriDestinationClassificationGenerator's snapshot input (see comment above) both need the
+        // in-memory objects, and neither happens after this point in the method.
+        //
+        // A plain repository re-query is NOT sufficient on its own: every entity below is already
+        // MANAGED in this transaction's Hibernate persistence context from its own `.save()` call
+        // above, so a same-session `findByRevisionId` resolves each row through Hibernate's identity
+        // map and returns the SAME in-memory (full-precision) instance rather than building a fresh
+        // one from the ResultSet — silently defeating the whole point of re-querying. Explicitly
+        // detaching each entity first forces the subsequent finder to construct genuinely fresh
+        // entities from the DB response, matching what CityLaunchPromotionService.launch naturally
+        // gets (a brand-new transaction/session with an empty persistence context).
+        detachAll(savedAreas);
+        detachAll(savedAliases);
+        detachAll(savedRegions);
+        detachAll(savedMemberships);
+        detachAll(savedGroups);
+        detachAll(savedGroupMembers);
+        detachAll(savedAgriDestinations);
+
+        List<SandboxArea> checksumAreas = sandboxAreaRepository.findByRevisionId(revisionId);
+        List<SandboxAreaAlias> checksumAliases = sandboxAreaAliasRepository.findByRevisionId(revisionId);
+        List<SandboxCityRegion> checksumRegions = sandboxCityRegionRepository.findByRevisionId(revisionId);
+        List<SandboxCityRegionMembership> checksumMemberships =
+                sandboxCityRegionMembershipRepository.findByRevisionId(revisionId);
+        List<SandboxAreaGroup> checksumGroups = sandboxAreaGroupRepository.findByRevisionId(revisionId);
+        List<SandboxAreaGroupMember> checksumGroupMembers =
+                sandboxAreaGroupMemberRepository.findByRevisionId(revisionId);
+        List<SandboxAgriDestinationClassification> checksumAgriDestinations =
+                sandboxAgriDestinationClassificationRepository.findByRevisionId(revisionId);
+
         revision.setPersistedRevisionChecksum(RevisionChecksum.compute(
-                savedAreas, savedAliases, savedRegions, savedMemberships, savedGroups, savedGroupMembers,
-                savedNavigationNodes, savedOverrides, savedAgriDestinations));
+                checksumAreas, checksumAliases, checksumRegions, checksumMemberships, checksumGroups,
+                checksumGroupMembers, savedNavigationNodes, savedOverrides, checksumAgriDestinations));
 
         revision.setLifecycleStatus(LifecycleStatus.PREPARED);
         revision.setPrepState(PrepState.DONE);
         revision.setPreparedAt(Instant.now());
         emitTerminalProgressAfterCommit(revision);
+    }
+
+    /**
+     * Removes each entity from this transaction's Hibernate persistence context (identity map) so a
+     * subsequent same-session query for the same rows builds fresh entities from the DB response
+     * instead of resolving back to these already-managed in-memory instances (#2177). {@code
+     * revision} itself is never passed here — it is mutated after this point and must stay managed
+     * so those mutations are flushed at commit.
+     */
+    private void detachAll(List<?> entities) {
+        entities.forEach(entityManager::detach);
     }
 
     /** City geo-center origin, as read directly from {@code public.cities} — see {@link

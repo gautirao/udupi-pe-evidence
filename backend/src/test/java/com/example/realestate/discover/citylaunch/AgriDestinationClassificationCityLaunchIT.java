@@ -55,6 +55,19 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         "spring.datasource.hikari.data-source-properties.ssl=false",
         "spring.datasource.hikari.data-source-properties.sslmode=disable",
         "spring.datasource.hikari.data-source-properties.stringtype=unspecified",
+        // #2177: pgjdbc ALWAYS issues its own "SET extra_float_digits" during connection startup
+        // (independent of the server/session default) to guarantee lossless TEXT round-tripping for
+        // its own correctness — so setting extra_float_digits on the Postgres server alone (or via
+        // Hikari data-source-properties, applied before pgjdbc's own startup handshake completes)
+        // does NOT reproduce the hosted bug. connection-init-sql runs AFTER pgjdbc's connection setup
+        // finishes, on every pooled physical connection, so this explicit SET is the one that sticks
+        // — faithfully modelling the truncation a connection routed through Supabase's PgBouncer
+        // transaction-pooler experiences. binaryTransfer=false forces pgjdbc's TEXT wire format for
+        // every query result (not just the first few, before its server-side-prepare threshold);
+        // BINARY transfer carries full IEEE-754 precision regardless of extra_float_digits and would
+        // otherwise mask the truncation entirely once Hibernate re-executes the same query 5+ times.
+        "spring.datasource.hikari.data-source-properties.binaryTransfer=false",
+        "spring.datasource.hikari.connection-init-sql=SET extra_float_digits = 0",
         "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://test.example.com/auth/v1",
         "AI_API_KEY=test-dummy-not-used-in-agri-city-launch-it",
         "spring.task.scheduling.enabled=false"
@@ -674,5 +687,63 @@ class AgriDestinationClassificationCityLaunchIT {
         CityLaunchRevision revision = revisionRepository.findById(revisionId).orElseThrow();
         assertThat(revision.getLifecycleStatus()).isEqualTo(LifecycleStatus.VALIDATED);
         assertThat(revision.getAppliedRevisionChecksum()).isNull();
+    }
+
+    // =========================================================================================
+    // 6 — #2177 CHECKSUM PRECISION DRIFT REGRESSION: CityLaunchGraphWriter must stamp
+    // persisted_revision_checksum from the SAME DB-round-tripped representation of every double
+    // that CityLaunchPromotionService.launch recomputes from — not from the in-memory `.save()`-
+    // returned entities, which carry full Java `double` precision never round-tripped through a
+    // SELECT. On a connection with extra_float_digits=0 (this container; matches hosted Supabase —
+    // see the @Container javadoc above), Postgres formats a re-SELECTed DOUBLE PRECISION to 15
+    // significant digits, which is lossy versus the up-to-17 significant digits a haversine-
+    // computed double may need to round-trip exactly. Before the #2177 fix, prepare-time hashed the
+    // full-precision in-memory value while promote-time always hashed the truncated re-queried
+    // value, so a genuine (non-tampered) revision could fail promotion with a false-positive 422
+    // checksum mismatch purely from this representation gap.
+    // =========================================================================================
+
+    @Test
+    @DisplayName("#2177 regression: promotion succeeds for a genuine (untampered) revision whose Agri "
+            + "distance/bearing doubles have enough decimal entropy to previously trigger a false "
+            + "checksum-mismatch 422 from prepare-time vs. promote-time float representation drift")
+    void checksumPrecisionDrift_promotionSucceedsDespiteHighEntropyDoubles() {
+        // Offsets chosen so haversine distance/bearing land far from any round number or band/sector
+        // boundary — maximising the odds the resulting double needs the full 17 significant digits
+        // to round-trip exactly (matching the diagnosed live case: a haversine distance of
+        // 1.1561671177279886 round-tripping through Postgres as 1.15616711772799 under
+        // extra_float_digits=0).
+        Map<String, double[]> areas = Map.of(
+                "area-1", new double[] {ORIGIN_LAT + 0.083756219, ORIGIN_LON + 0.041928374},
+                "area-2", new double[] {ORIGIN_LAT - 0.019283746, ORIGIN_LON + 0.067182934},
+                "area-3", new double[] {ORIGIN_LAT + 0.052918374, ORIGIN_LON - 0.038475610});
+        int cityId = seedValidGeography("prec1", areas);
+
+        long revisionId = prepareAndValidate(cityId);
+
+        // Sanity: at least one generated distance/bearing genuinely carries high decimal entropy —
+        // otherwise this test would vacuously pass even against the pre-fix code.
+        List<SandboxAgriDestinationClassification> rows =
+                sandboxAgriDestinationClassificationRepository.findByRevisionId(revisionId);
+        assertThat(rows).hasSize(3);
+        boolean anyHighEntropy = rows.stream().anyMatch(r ->
+                Double.toString(r.getDistanceKm()).replace("-", "").replace(".", "").length() >= 15
+                        || Double.toString(r.getBearingDeg()).replace("-", "").replace(".", "").length() >= 15);
+        assertThat(anyHighEntropy)
+                .as("fixture must produce at least one distanceKm/bearingDeg with >=15 significant "
+                        + "digits, else this test cannot exercise the #2177 precision-drift gap")
+                .isTrue();
+
+        PromotionReport report = promotionService.launch(cityId, revisionId, ADMIN_ID.toString());
+
+        assertThat(report.lifecycleStatus())
+                .as("a genuine, untampered revision must promote successfully — a checksum mismatch "
+                        + "here means prepare-time and promote-time hashed different representations "
+                        + "of the same underlying double values (#2177)")
+                .isEqualTo("PROMOTED");
+        assertThat(report.agriDestinationsPromoted()).isEqualTo(3);
+
+        List<AgriDestinationClassification> prodRows = agriDestinationClassificationRepository.findByCityId(cityId);
+        assertThat(prodRows).hasSize(3);
     }
 }

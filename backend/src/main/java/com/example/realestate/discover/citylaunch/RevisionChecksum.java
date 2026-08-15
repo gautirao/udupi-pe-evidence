@@ -3,6 +3,9 @@ package com.example.realestate.discover.citylaunch;
 import com.example.realestate.discover.navigation.SandboxNavigationNode;
 import com.example.realestate.discover.navigation.SandboxNavigationOverride;
 
+import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -435,6 +438,53 @@ final class RevisionChecksum {
 
     private static void appendField(StringBuilder sb, Object value) {
         appendField(sb, value == null ? null : value.toString());
+    }
+
+    /**
+     * #2178 (follow-up to #2177): every {@code Double} column hashed by {@link #compute} — lat/lon/
+     * centre/bounds/distance/bearing across all nine tables — routes through THIS overload (Java
+     * overload resolution picks it over {@link #appendField(StringBuilder, Object)} for every
+     * {@code Double}-typed getter call site above, with no call-site changes needed) rather than
+     * hashing {@code Double.toString(value)} directly.
+     *
+     * <p>#2177's detach-then-re-query fix guarantees prepare-time and promote-time both issue a
+     * genuinely fresh read of the same underlying row — but does NOT guarantee they get the SAME
+     * wire representation of that read. pgjdbc negotiates BINARY transfer (full IEEE-754 precision)
+     * after roughly 5 executions of the same prepared statement, but stays on TEXT transfer (subject
+     * to the server's {@code extra_float_digits} setting, 0 on the hosted connection — 15
+     * significant digits) before that threshold. Depending on connection/statement-cache state at
+     * prepare time vs. promote time, one side could hash a full-precision BINARY read and the other a
+     * 15-significant-digit TEXT read of the IDENTICAL stored value, still producing different digests
+     * — a genuine gap distinct from (and found after) the identity-map staleness #2177 already fixed.
+     *
+     * <p>Canonicalizing every double to 15 significant digits before hashing closes this regardless of
+     * which wire format either side happened to get: a double already carrying <=15 significant
+     * digits (a TEXT-transfer read) is unaffected, and a full-precision BINARY-transfer read of the
+     * SAME underlying value rounds down to the identical 15-digit decimal. 15 is the largest precision
+     * that is safe for this purpose — {@code DBL_DIG}, the IEEE-754 double guarantee that any decimal
+     * with <=15 significant digits survives a parse-to-double-and-back-to-decimal round trip exactly
+     * — so this canonicalization is idempotent: re-rounding an already-15-digit value can never change
+     * it, and both a TEXT-truncated read and a BINARY-exact read of one true value always converge on
+     * the SAME canonical string. Going any higher than 15 would let true precision differences distinguish TEXT
+     * from BINARY reads of the identical value again, reopening this exact gap; going lower would
+     * throw away real precision this checksum needs for tamper detection (e.g. distinguishing two
+     * areas whose coordinates differ only in the 13th/14th significant digit).
+     */
+    private static void appendField(StringBuilder sb, Double value) {
+        appendField(sb, value == null ? null : canonicalizeDouble(value));
+    }
+
+    /** See {@link #appendField(StringBuilder, Double)} javadoc for the full #2177/#2178 rationale. */
+    private static String canonicalizeDouble(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            // Unreachable for every current Double column (lat/lon/distance/bearing are always finite
+            // real numbers) — handled defensively so this helper never throws on an unexpected input.
+            return Double.toString(value);
+        }
+        return new BigDecimal(value)
+                .round(new MathContext(15, RoundingMode.HALF_UP))
+                .stripTrailingZeros()
+                .toPlainString();
     }
 
     /**

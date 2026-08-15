@@ -71,6 +71,22 @@ class RevisionChecksumTest {
         appendField(sb, value == null ? null : value.toString());
     }
 
+    /**
+     * #2178: duplicated from {@link RevisionChecksum}'s own (private) {@code
+     * appendField(StringBuilder, Double)}/{@code canonicalizeDouble} — this oracle must mirror
+     * production's CURRENT encoding (now including the 15-significant-digit canonicalization), the
+     * same duplication convention this class's javadoc already documents for the String/Object
+     * overloads and {@code sha256Hex}. Overloaded (not the generic {@code Object} version above) so
+     * Java's static-type overload resolution routes every {@code Double}-typed getter call in {@link
+     * #expectedPreChangeDigestForSingleArea} here automatically.
+     */
+    private static void appendField(StringBuilder sb, Double value) {
+        appendField(sb, value == null ? null : new BigDecimal(value)
+                .round(new java.math.MathContext(15, java.math.RoundingMode.HALF_UP))
+                .stripTrailingZeros()
+                .toPlainString());
+    }
+
     private static String sha256Hex(String value) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -374,5 +390,101 @@ class RevisionChecksumTest {
                 List.of(row));
 
         assertThat(second).isEqualTo(first);
+    }
+
+    // =========================================================================================
+    // #2178 (follow-up to #2177): TEXT-transfer vs. BINARY-transfer wire-representation drift.
+    //
+    // #2177's detach-then-re-query fix in CityLaunchGraphWriter guarantees prepare-time and
+    // promote-time both issue a genuinely fresh DB read — but a PR reviewer-bot on #2178 correctly
+    // found that this alone does NOT guarantee they get the SAME wire representation of that read:
+    // pgjdbc negotiates lossless BINARY transfer after ~5 executions of the same prepared statement,
+    // but stays on TEXT transfer (subject to the hosted connection's extra_float_digits=0 — 15
+    // significant digits) before that threshold. Depending on connection/statement-cache state, one
+    // side could hash a full-precision BINARY read and the other a 15-significant-digit TEXT read of
+    // the IDENTICAL stored value, still producing different digests.
+    //
+    // These tests simulate both wire representations of the SAME underlying value directly (no DB
+    // involved — RevisionChecksum operates purely on Java objects) and assert the canonicalization
+    // added to RevisionChecksum#appendField(StringBuilder, Double) makes them hash identically.
+    // =========================================================================================
+
+    /** Simulates a TEXT-transfer JDBC read under extra_float_digits=0: Postgres formats the value to
+     *  15 significant digits, and pgjdbc parses that text back into a (slightly less precise) double
+     *  — mirrors the diagnosed live case (#2177): a BINARY-precision 1.1561671177279886 round-tripped
+     *  through Postgres TEXT format as 1.15616711772799. */
+    private static double simulateTextTransferRead(double fullPrecisionValue) {
+        return Double.parseDouble(new BigDecimal(fullPrecisionValue)
+                .round(new java.math.MathContext(15, java.math.RoundingMode.HALF_UP))
+                .toPlainString());
+    }
+
+    @Test
+    @DisplayName("#2178: a full-precision (simulated BINARY-transfer) double and its 15-significant-"
+            + "digit (simulated TEXT-transfer, extra_float_digits=0) counterpart of the SAME underlying "
+            + "value are genuinely different Java doubles — sanity check that this test isn't vacuous")
+    void simulatedTextAndBinaryReads_areGenuinelyDifferentDoublesBeforeCanonicalization() {
+        double binaryPrecision = 1.1561671177279886;
+        double textPrecision = simulateTextTransferRead(binaryPrecision);
+
+        assertThat(textPrecision)
+                .as("the simulated TEXT-transfer read must actually differ bit-for-bit from the "
+                        + "BINARY-transfer value, matching the live-diagnosed 1.1561671177279886 -> "
+                        + "1.15616711772799 drift, or this regression test proves nothing")
+                .isNotEqualTo(binaryPrecision);
+    }
+
+    @Test
+    @DisplayName("#2178: an Agri row hashed from a full-precision (BINARY-transfer) double produces the "
+            + "IDENTICAL checksum contribution as the SAME row hashed from its 15-significant-digit "
+            + "(TEXT-transfer) counterpart")
+    void agriRow_binaryAndTextTransferReadsOfSameValue_produceIdenticalChecksum() {
+        double binaryDistanceKm = 1.1561671177279886;
+        double textDistanceKm = simulateTextTransferRead(binaryDistanceKm);
+        double binaryBearingDeg = 286.78852641197636;
+        double textBearingDeg = simulateTextTransferRead(binaryBearingDeg);
+
+        SandboxAgriDestinationClassification binaryRow = new SandboxAgriDestinationClassification(
+                1L, "city|area-1", 13.0, 74.7, binaryDistanceKm, binaryBearingDeg, "NW", "0_10",
+                "agri-destination-classification-v1", Instant.parse("2026-01-01T00:00:00Z"));
+        SandboxAgriDestinationClassification textRow = new SandboxAgriDestinationClassification(
+                1L, "city|area-1", 13.0, 74.7, textDistanceKm, textBearingDeg, "NW", "0_10",
+                "agri-destination-classification-v1", Instant.parse("2026-01-01T00:00:00Z"));
+
+        String binaryChecksum = RevisionChecksum.compute(
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(binaryRow));
+        String textChecksum = RevisionChecksum.compute(
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(textRow));
+
+        assertThat(textChecksum)
+                .as("#2178: prepare-time (possibly BINARY-transfer) and promote-time (possibly "
+                        + "TEXT-transfer) reads of the SAME underlying stored value must canonicalize to "
+                        + "the identical checksum, regardless of which wire format either side happened "
+                        + "to get from pgjdbc")
+                .isEqualTo(binaryChecksum);
+    }
+
+    @Test
+    @DisplayName("#2178: canonicalization does not destroy real tamper detection — a genuinely "
+            + "different value (differing well beyond the 15th significant digit) still changes the "
+            + "digest")
+    void canonicalization_stillDetectsGenuineTampering() {
+        SandboxAgriDestinationClassification original = agriRow("city|area-1");
+        // Differs from agriRow's distanceKm (12.3) at the SECOND significant digit — nowhere near the
+        // 15-significant-digit canonicalization boundary — so this must still be detected.
+        SandboxAgriDestinationClassification tampered = new SandboxAgriDestinationClassification(
+                1L, "city|area-1", 13.0, 74.7, 45.6, 45.0, "NE", "10_25",
+                "agri-destination-classification-v1", Instant.parse("2026-01-01T00:00:00Z"));
+
+        String originalDigest = RevisionChecksum.compute(
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(original));
+        String tamperedDigest = RevisionChecksum.compute(
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(tampered));
+
+        assertThat(tamperedDigest).isNotEqualTo(originalDigest);
     }
 }
