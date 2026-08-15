@@ -329,6 +329,22 @@ export interface NavigationCountsResponse {
   /** Each direct child's own rolled-up listing + school totals, in display order. */
   children: NavigationNodeCount[];
   revisionId: number;
+  /**
+   * #2170: `true` ONLY on the Admin City Launch PREVIEW route
+   * (`CityLaunchPreviewService#getNavigationCounts`), which has no per-revision
+   * schools simulation at all yet (unlike Agri's
+   * `sandbox_agri_destination_classification` pipeline, #2167) and so hardcodes
+   * `schoolCount`/`areaSchoolCounts` to zero/empty for EVERY revision. Without
+   * this flag, a genuinely schools-less city and an un-simulated preview are
+   * indistinguishable on the wire — both render as a flat zero.
+   *
+   * `undefined`/absent on every PRODUCTION response
+   * (`NavigationController#getCounts`), whose `schoolCount`/`areaSchoolCounts`
+   * are always real, precise counts — never `false`, so a consumer's presence
+   * check (`schoolsNotSimulatedForRevision === true`) cannot be spoofed by a
+   * stray literal, and production's wire shape is unaffected by this field.
+   */
+  schoolsNotSimulatedForRevision?: boolean;
 }
 
 /**

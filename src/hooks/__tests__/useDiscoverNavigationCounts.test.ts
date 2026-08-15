@@ -744,3 +744,42 @@ describe('error handling', () => {
     expect(result.current.isStaleResponseIgnored).toBe(false);
   });
 });
+
+/* ── #2170 — schoolsNotSimulatedForRevision passthrough ──────────────────────
+ * Preview counts flag Schools as not-yet-simulated for the current revision
+ * (`schoolsNotSimulatedForRevision: true`) so a Schools-journey consumer can
+ * render an explicit "not simulated" state instead of a bare zero-count wall.
+ * Production omits the field entirely, and the snapshot must normalise that
+ * absence to `false`, never `undefined`, so a consumer can branch on it
+ * without an extra null check. */
+
+describe('#2170 — schoolsNotSimulatedForRevision', () => {
+  it('surfaces true on the snapshot when the response carries the preview flag', async () => {
+    mockGet.mockResolvedValue(makeResponse({ schoolsNotSimulatedForRevision: true }));
+    const { result } = renderHook(() => useDiscoverNavigationCounts(BASE), {
+      wrapper: makeWrapper(makeClient()),
+    });
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull());
+    expect(result.current.snapshot?.schoolsNotSimulatedForRevision).toBe(true);
+  });
+
+  it('normalises an absent field (production shape) to false, not undefined', async () => {
+    // `makeResponse()` does not set the field — production's real wire shape,
+    // since the backend never sends it there (@JsonInclude(NON_NULL)).
+    mockGet.mockResolvedValue(makeResponse());
+    const { result } = renderHook(() => useDiscoverNavigationCounts(BASE), {
+      wrapper: makeWrapper(makeClient()),
+    });
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull());
+    expect(result.current.snapshot?.schoolsNotSimulatedForRevision).toBe(false);
+  });
+
+  it('a literal false on the response also normalises to false', async () => {
+    mockGet.mockResolvedValue(makeResponse({ schoolsNotSimulatedForRevision: false }));
+    const { result } = renderHook(() => useDiscoverNavigationCounts(BASE), {
+      wrapper: makeWrapper(makeClient()),
+    });
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull());
+    expect(result.current.snapshot?.schoolsNotSimulatedForRevision).toBe(false);
+  });
+});

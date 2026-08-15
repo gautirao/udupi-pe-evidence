@@ -270,6 +270,23 @@ export function SchoolsNavigationJourneyPanel({
             </Button>
           </div>
         )
+      ) : journey.schoolsNotSimulatedForRevision ? (
+        // #2170 — Schools has no per-revision simulation in the Admin City
+        // Launch preview yet, so every zone/area count is hardcoded to zero.
+        // Rendering that through NavigationLevelPanel as usual would show an
+        // indistinguishable "0 schools" wall — the exact failure class #2167
+        // already fixed for Agri (`isNotGeneratedForRevision`). This explicit
+        // state replaces the zero-count zone/area list instead.
+        <div
+          data-testid="schools-not-simulated-for-revision-state"
+          className="flex flex-col items-center justify-center py-12 px-4 gap-3 text-center"
+        >
+          <AlertCircle className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+          <p className="text-sm text-muted-foreground">
+            Schools aren&apos;t simulated in this preview yet — school counts and search
+            results for this revision aren&apos;t available.
+          </p>
+        </div>
       ) : (
         <NavigationLevelPanel
           journey={{

@@ -61,6 +61,20 @@ import java.util.Map;
  * @param children          each direct child's own rolled-up listing + school totals plus its
  *                          {@link ChildCount#matchingAreaCount}, in display order
  * @param revisionId        the production revision the counts' structural fold was computed against
+ * @param schoolsNotSimulatedForRevision  #2170: {@code true} only on the Admin City Launch
+ *                          PREVIEW route ({@code CityLaunchPreviewService#getNavigationCounts}),
+ *                          which has no per-revision schools simulation at all yet (unlike Agri's
+ *                          {@code sandbox_agri_destination_classification} pipeline, #2167) and so
+ *                          hardcodes {@code schoolCount}/{@code areaSchoolCounts} to zero/empty for
+ *                          EVERY revision. Without this flag a genuinely schools-less city and an
+ *                          un-simulated preview are indistinguishable on the wire — both render as
+ *                          a flat zero. {@code null} (omitted, {@code @JsonInclude(NON_NULL)}) on
+ *                          every PRODUCTION response ({@code NavigationController#getCounts}),
+ *                          whose {@code schoolCount}/{@code areaSchoolCounts} are always real,
+ *                          precise counts — never {@code false}, so a client's presence check
+ *                          (`schoolsNotSimulatedForRevision === true`) can't be spoofed by a stray
+ *                          literal and production's wire shape is byte-identical to before this
+ *                          field existed.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record NavigationCountsResponse(
@@ -70,7 +84,8 @@ public record NavigationCountsResponse(
         Map<String, Long> areaCounts,
         Map<String, Long> areaSchoolCounts,
         List<ChildCount> children,
-        long revisionId
+        long revisionId,
+        Boolean schoolsNotSimulatedForRevision
 ) {
 
     /**
