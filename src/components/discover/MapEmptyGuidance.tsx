@@ -79,7 +79,12 @@ export function MapEmptyGuidance({
   // cityTotal === 0 messages above (gated cityTotal > 0). Explicit `=== false`
   // comparisons keep this dormant when callers omit the props (undefined).
   // The null-guards on the zoom values prevent undefined ever tripping `>`.
+  // Issue #2169 (reviewer follow-up) — this branch's trigger condition reads
+  // the residential cityTotal (`cityTotal > 0`), so it must stay suppressed
+  // during the Agri journey too, same as the two messages above, even though
+  // its rendered copy carries no explicit count/claim.
   const showAnonZoomPrompt =
+    !isAgriJourney &&
     isAuthenticated === false &&
     hasAreaSelected === false &&
     mapZoom != null &&

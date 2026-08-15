@@ -268,4 +268,42 @@ describe('MapEmptyGuidance', () => {
     );
     expect(screen.getByText(/No properties listed in/i)).toBeInTheDocument();
   });
+
+  // --- Issue #2173 (PR reviewer follow-up): anon zoom-past-area prompt must
+  // also stay suppressed during the Agri journey, mirroring the two messages
+  // above, even though the prompt's own copy carries no residential count. ---
+
+  it('#2173: Agri journey + anon zoom-past-area trigger conditions met → prompt NOT shown', () => {
+    const { container } = renderWithRouter(
+      <MapEmptyGuidance
+        cityTotal={5}
+        filters={emptyFilters}
+        city="udupi"
+        isLoading={false}
+        isAuthenticated={false}
+        hasAreaSelected={false}
+        mapZoom={AREA_LAYER_MAX_ZOOM + 2}
+        areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
+        isAgriJourney
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/Select an area to see properties/i)).not.toBeInTheDocument();
+  });
+
+  it('#2173: non-Agri journey (isAgriJourney omitted) + same anon zoom-past-area trigger → prompt still renders (regression)', () => {
+    renderWithRouter(
+      <MapEmptyGuidance
+        cityTotal={5}
+        filters={emptyFilters}
+        city="udupi"
+        isLoading={false}
+        isAuthenticated={false}
+        hasAreaSelected={false}
+        mapZoom={AREA_LAYER_MAX_ZOOM + 2}
+        areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
+      />,
+    );
+    expect(screen.getByText(/Select an area to see properties/i)).toBeInTheDocument();
+  });
 });
