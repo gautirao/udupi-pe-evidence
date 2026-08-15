@@ -195,6 +195,17 @@ class CityLaunchPreparationServiceIT {
                 areaKey, cityId, areaKey, lat, lon, lifecycleStatus);
     }
 
+    /** Same as {@link #seedArea(int, String, double, double, String)} but with a NULL geo-centre —
+     * relies on the Testcontainers-only V116.9 relaxation of areas.geo_center_lat/lon to nullable
+     * (production V71 keeps them NOT NULL) to prove the {@code geoCenterLat/Lon != null} arm of
+     * {@code ensureCanonicalGeography}'s NO_ACTIVE_AREAS guard. */
+    private void seedAreaWithNullGeo(int cityId, String areaKey, String lifecycleStatus) {
+        jdbc.update(
+                "INSERT INTO public.areas (area_key, city_id, name, geo_center_lat, geo_center_lon, lifecycle_status) "
+                        + "VALUES (?, ?, ?, NULL, NULL, ?)",
+                areaKey, cityId, areaKey, lifecycleStatus);
+    }
+
     private void seedRegion(int cityId, String regionKey) {
         jdbc.update(
                 "INSERT INTO public.city_regions (city_id, region_key, display_label, display_order) "
@@ -628,6 +639,23 @@ class CityLaunchPreparationServiceIT {
         seedRegion(cityId, "lc2-north");
         seedMembership(cityId, "lc2|area-merged", "lc2-north");
         seedMembership(cityId, "lc2|area-inactive", "lc2-north");
+
+        assertThatThrownBy(() -> preparationService.prepare(cityId, ADMIN_ID))
+                .isInstanceOf(CityPrerequisiteGenerationException.class)
+                .satisfies(ex -> assertThat(((CityPrerequisiteGenerationException) ex).reason())
+                        .isEqualTo("NO_ACTIVE_AREAS"));
+
+        assertThat(revisionRepository.findByCityId(cityId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("lifecycle-3 (#2163 review fix): a city whose ONLY area is ACTIVE with a 4-segment "
+            + "area_key but a NULL geo-centre fails prerequisite self-generation UP FRONT with "
+            + "CityPrerequisiteGenerationException/NO_ACTIVE_AREAS, exactly like the non-ACTIVE case — "
+            + "proving the geoCenterLat/Lon != null arm of the guard, not just the lifecycleStatus arm.")
+    void lifecycleStatus_activeAreaNullGeoCenter_failsAc4Validation_zeroSandboxRows() {
+        int cityId = seedCity("lc3");
+        seedAreaWithNullGeo(cityId, "lc3|d|g|area-nullgeo", "ACTIVE");
 
         assertThatThrownBy(() -> preparationService.prepare(cityId, ADMIN_ID))
                 .isInstanceOf(CityPrerequisiteGenerationException.class)
