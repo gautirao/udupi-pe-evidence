@@ -28,7 +28,7 @@ describe('useTrendingAreas — preview cache isolation', () => {
     // 2. Render in PREVIEW mode
     const previewWrapper = ({ children }: { children: React.ReactNode }) =>
       React.createElement(QueryClientProvider, { client: queryClient },
-        React.createElement(DiscoverDataSourceProvider, { value: { mode: 'preview', cityId: 1, revisionId: 2 } }, children)
+        React.createElement(DiscoverDataSourceProvider, { value: { mode: 'preview', cityId: 1, revisionId: 2, citySlug: 'udupi' } }, children)
       );
 
     const { result } = renderHook(() => useTrendingAreas(), {

@@ -18,6 +18,7 @@ import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import CityLaunchPreview from '../CityLaunchPreview';
 import { useDiscoverSource, useDiscoverActionsEnabled } from '@/features/discover/state/DiscoverDataSourceContext';
+import { useDiscoverNav } from '@/features/discover/context/useDiscoverContext';
 import { api } from '@/lib/api';
 import type { ValidationStateDto } from '@/hooks/useCityLaunchValidation';
 
@@ -26,11 +27,17 @@ vi.mock('@/pages/MapDiscovery', () => ({
     const source = useDiscoverSource();
     const actionsEnabled = useDiscoverActionsEnabled();
     const navigate = useNavigate();
+    // #2151 Track 1 — surfaces the SAME nav.city every real display/data call site consumes
+    // (the `nav.city || DEFAULT_CITY` idiom), read through the real DiscoverProvider
+    // CityLaunchPreview mounts this stub under. Lets tests prove city-identity resolution
+    // end-to-end without depending on the full unmocked MapDiscovery render.
+    const nav = useDiscoverNav();
     // Mirrors the real PropertyCard preview id shape: preview:{revisionId}:{areaKey}.
     const previewId = 'preview:42:IN|KA|Udupi|Manipal';
     return (
       <div data-testid="map-discovery-stub">
         <p data-testid="source-mode">{source.mode}</p>
+        <p data-testid="nav-city">{nav.city}</p>
         <button
           type="button"
           data-testid="view-details-stub"
@@ -61,7 +68,13 @@ vi.mock('@/pages/MapDiscovery', () => ({
 // vi.hoisted — vi.mock('@/lib/api', ...) below is hoisted above plain const
 // declarations, so these fixtures (referenced inside that factory) must be
 // registered via vi.hoisted to avoid a temporal-dead-zone ReferenceError.
-const { PREVIEW_AREA_GROUPS_DTO, LIVE_ONLY_AREA_GROUPS_DTO, DEFAULT_VALIDATION_STATE_DTO } = vi.hoisted(() => ({
+const {
+  PREVIEW_AREA_GROUPS_DTO,
+  LIVE_ONLY_AREA_GROUPS_DTO,
+  DEFAULT_VALIDATION_STATE_DTO,
+  PREVIEW_IDENTITY_DTO,
+  CITY_IDENTITY_BY_ID,
+} = vi.hoisted(() => ({
   PREVIEW_AREA_GROUPS_DTO: {
     groups: [
       { slug: 'preview-only-group', name: 'Preview Only Group', areaKeys: ['IN|KA|Udupi|Manipal'] },
@@ -97,7 +110,30 @@ const { PREVIEW_AREA_GROUPS_DTO, LIVE_ONLY_AREA_GROUPS_DTO, DEFAULT_VALIDATION_S
     preparedAt: '2026-07-01T00:00:00Z',
     validatedAt: null,
     supersededBy: null,
+    // #2151 Track 1 — several describe blocks below use this fixture as a catch-all fallback
+    // for any api.get path OTHER than the one they're specifically testing, including
+    // .../preview/identity. Carrying a valid citySlug/cityName here keeps those blocks'
+    // pre-existing "one endpoint under test, everything else falls back" pattern working
+    // without touching every individual test.
+    citySlug: 'udupi',
+    cityName: 'Udupi',
   },
+  // #2151 Track 1 — GET .../preview/identity fixture. CityLaunchPreview resolves this BEFORE
+  // mounting the Discover subtree, so every test that renders a real (non-error-state) preview
+  // needs it to resolve successfully.
+  PREVIEW_IDENTITY_DTO: {
+    cityId: 7,
+    citySlug: 'udupi',
+    cityName: 'Udupi',
+  },
+  // #2151 Track 1 — per-cityId identity lookup so the city-identity tests can render at
+  // DISTINCT cityIds (Udupi vs Bangalore) and prove real per-city resolution, not a fixture
+  // that's coincidentally always right for one hardcoded city.
+  CITY_IDENTITY_BY_ID: {
+    1: { cityId: 1, citySlug: 'bangalore', cityName: 'Bangalore' },
+    3: { cityId: 3, citySlug: 'udupi', cityName: 'Udupi' },
+    7: { cityId: 7, citySlug: 'udupi', cityName: 'Udupi' },
+  } as Record<number, { cityId: number; citySlug: string; cityName: string }>,
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -229,6 +265,16 @@ vi.mock('@/lib/api', () => ({
       if (path.startsWith('/api/admin/city-launch') && path.endsWith('/validation')) {
         return DEFAULT_VALIDATION_STATE_DTO;
       }
+      // #2151 Track 1 — CityLaunchPreview resolves identity BEFORE mounting the Discover
+      // subtree; every test in this file that reaches a real render needs this to resolve.
+      // cityId-aware (not a single fixed fixture): the city-identity tests below render at
+      // DISTINCT cityIds (Udupi vs Bangalore) specifically to prove real per-city resolution,
+      // not a value that's coincidentally always right.
+      if (path.startsWith('/api/admin/city-launch') && path.endsWith('/preview/identity')) {
+        const cityIdMatch = path.match(/\/cities\/(\d+)\//);
+        const cityId = cityIdMatch ? Number(cityIdMatch[1]) : PREVIEW_IDENTITY_DTO.cityId;
+        return CITY_IDENTITY_BY_ID[cityId] ?? PREVIEW_IDENTITY_DTO;
+      }
       if (path === '/api/admin/city-launch/cities') {
         return [{ cityId: 7, cityName: 'Test City' }];
       }
@@ -260,25 +306,29 @@ function renderAtPreviewRoute(cityId: string, revisionId: string) {
 }
 
 describe('CityLaunchPreview', () => {
-  it('renders the SIMULATED · PREVIEW ribbon', () => {
+  // #2151 Track 1 — the Discover subtree (ribbon/MapDiscovery/etc) no longer mounts
+  // synchronously: CityLaunchPreview now resolves GET .../preview/identity FIRST (a real,
+  // if instantly-resolving, async mock in this file) and shows a loading skeleton until it
+  // does. Every test below that reaches past that gate now awaits it via findByTestId.
+  it('renders the SIMULATED · PREVIEW ribbon', async () => {
     renderAtPreviewRoute('7', '42');
-    expect(screen.getByTestId('simulated-preview-ribbon')).toBeInTheDocument();
+    expect(await screen.findByTestId('simulated-preview-ribbon')).toBeInTheDocument();
   });
 
-  it('wraps MapDiscovery in a preview DiscoverDataSource sourced from the URL params', () => {
+  it('wraps MapDiscovery in a preview DiscoverDataSource sourced from the URL params', async () => {
     renderAtPreviewRoute('7', '42');
-    expect(screen.getByTestId('map-discovery-stub')).toBeInTheDocument();
+    expect(await screen.findByTestId('map-discovery-stub')).toBeInTheDocument();
     expect(screen.getByTestId('source-mode')).toHaveTextContent('preview');
   });
 
-  it('the mutation guard disables the View-details action in preview mode', () => {
+  it('the mutation guard disables the View-details action in preview mode', async () => {
     renderAtPreviewRoute('7', '42');
-    expect(screen.getByTestId('view-details-stub')).toBeDisabled();
+    expect(await screen.findByTestId('view-details-stub')).toBeDisabled();
   });
 
   it('a preview: id never routes to the real /listing/{uuid} page', async () => {
     renderAtPreviewRoute('7', '42');
-    await userEvent.click(screen.getByTestId('view-details-stub'));
+    await userEvent.click(await screen.findByTestId('view-details-stub'));
     expect(screen.queryByTestId('real-listing-page')).not.toBeInTheDocument();
     // Still on the preview screen.
     expect(screen.getByTestId('map-discovery-stub')).toBeInTheDocument();
@@ -294,6 +344,65 @@ describe('CityLaunchPreview', () => {
     renderAtPreviewRoute('7', '0');
     expect(screen.getByRole('alert')).toHaveTextContent(/invalid preview link/i);
     expect(screen.queryByTestId('map-discovery-stub')).not.toBeInTheDocument();
+  });
+});
+
+// ─── #2151 Track 1 — city identity resolution ───────────────────────────────
+//
+// Root cause: the preview route carries only numeric cityId/revisionId — no
+// `city=` query param, by design — so anything reading nav.city (the
+// `nav.city || DEFAULT_CITY` idiom used throughout Discover) fell back to
+// DEFAULT_CITY ('bangalore'), even when previewing a non-Bangalore city like
+// Udupi. CityLaunchPreview now resolves GET .../preview/identity BEFORE
+// mounting DiscoverDataSourceProvider, and DiscoverContext's central fix
+// substitutes that resolved citySlug for nav.city in preview mode. These
+// tests prove the fix through the SAME nav.city consumers a real display
+// component would use (MockMapDiscovery's `nav-city` testid reads
+// useDiscoverNav().city — the facade every real call site reads).
+describe('CityLaunchPreview — city identity resolution (#2151 Track 1)', () => {
+  it('resolves nav.city to the real owning city for a Udupi preview URL — never falls back to Bangalore/DEFAULT_CITY', async () => {
+    renderAtPreviewRoute('3', '42');
+
+    const navCity = await screen.findByTestId('nav-city');
+    expect(navCity).toHaveTextContent('udupi');
+    expect(navCity).not.toHaveTextContent('bangalore');
+    expect(screen.queryByText(/bangalore/i)).not.toBeInTheDocument();
+  });
+
+  it('resolves nav.city correctly for a Bangalore preview URL too — regression proof that the fix is not coincidentally right only for the non-default city', async () => {
+    renderAtPreviewRoute('1', '42');
+
+    const navCity = await screen.findByTestId('nav-city');
+    expect(navCity).toHaveTextContent('bangalore');
+  });
+
+  it('cold-mount / direct deep-link: identity resolves before the Discover subtree (and any city-dependent request) ever mounts — no flash of the wrong city', async () => {
+    // No prior navigation/render — renderAtPreviewRoute mounts fresh, straight at the preview
+    // URL, mirroring a real cold deep-link (e.g. a bookmarked or shared admin preview link).
+    renderAtPreviewRoute('3', '42');
+
+    // Before identity resolves, the loading skeleton is shown — the Discover subtree
+    // (and therefore nav.city) does not exist yet to read at all, let alone read wrong.
+    expect(screen.queryByTestId('map-discovery-stub')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('nav-city')).not.toBeInTheDocument();
+
+    const navCity = await screen.findByTestId('nav-city');
+    expect(navCity).toHaveTextContent('udupi');
+  });
+
+  it('no DEFAULT_CITY leak: no request URL fired by the mounted subtree contains city=bangalore, and no rendered text is "Bangalore", for a Udupi preview', async () => {
+    renderAtPreviewRoute('3', '42');
+
+    await screen.findByTestId('nav-city');
+    // Give the mocked hooks a tick to settle any further requests.
+    await waitFor(() => expect(screen.getByTestId('nav-city')).toHaveTextContent('udupi'));
+
+    const calledPaths = vi.mocked(api.get).mock.calls.map(([path]) => String(path));
+    expect(calledPaths.some((path) => path.includes('city=bangalore'))).toBe(false);
+    // Text assertion is deliberately paired with the request-URL check above (per #2151
+    // review guidance) — a broken/blank subtree would vacuously pass a text-only assertion.
+    expect(screen.queryByText(/bangalore/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId('map-discovery-stub')).toBeInTheDocument();
   });
 });
 

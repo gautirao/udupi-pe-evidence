@@ -862,4 +862,55 @@ class AdminCityLaunchPreviewControllerIT {
                     .andExpect(status().isConflict());
         }
     }
+
+    @Test
+    @DisplayName("E10: preview/identity returns the revision's real owning-city slug/name (#2151 Track 1)")
+    void e10_identity_returnsCitySlugAndName() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        String url = "/api/admin/city-launch/cities/" + testCityId
+                + "/revisions/" + revision.getId() + "/preview/identity";
+
+        mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.cityId").value(testCityId))
+                .andExpect(jsonPath("$.citySlug").value("acp-it"))
+                .andExpect(jsonPath("$.cityName").value("ACP IT Test City"));
+    }
+
+    @Test
+    @DisplayName("E10 IDOR guard: a revision belonging to a DIFFERENT city -> 404")
+    void e10_wrongCity_404() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        String url = "/api/admin/city-launch/cities/" + otherCityId
+                + "/revisions/" + revision.getId() + "/preview/identity";
+        mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("E10: lifecycle PREPARING/SUPERSEDED/FAILED -> 409, no identity leaked for a "
+            + "non-previewable revision")
+    void e10_nonPreviewableLifecycle_409() throws Exception {
+        for (LifecycleStatus status : new LifecycleStatus[] {
+                LifecycleStatus.PREPARING, LifecycleStatus.SUPERSEDED, LifecycleStatus.FAILED}) {
+            CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, status);
+            String url = "/api/admin/city-launch/cities/" + testCityId
+                    + "/revisions/" + revision.getId() + "/preview/identity";
+            mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                    .andExpect(status().isConflict());
+        }
+    }
+
+    @Test
+    @DisplayName("E10 auth: non-admin -> 403, no token -> 401")
+    void e10_auth_nonAdminForbidden_noTokenUnauthorized() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        String url = "/api/admin/city-launch/cities/" + testCityId
+                + "/revisions/" + revision.getId() + "/preview/identity";
+
+        mockMvc.perform(get(url).header("Authorization", "Bearer " + BUYER_ID))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get(url)).andExpect(status().isUnauthorized());
+    }
 }

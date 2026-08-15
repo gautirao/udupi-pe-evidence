@@ -11,6 +11,7 @@ import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { useDiscoverAreaNavigationPathResolver } from '@/features/discover/navigation/useDiscoverAreaNavigationPath';
 import { useToast } from '@/hooks/use-toast';
+import { useDiscoverSource } from '@/features/discover/state/DiscoverDataSourceContext';
 import { IntentSelector } from './IntentSelector';
 
 /**
@@ -124,9 +125,12 @@ interface CityDropdownProps {
   cities: ControlBarCity[];
   selectedCity: string;
   onSelectCity: (city: ControlBarCity) => void;
+  /** #2151 Track 1 — inert in an admin city-launch preview: the previewed city is fixed by
+   * the route (cityId/revisionId), so switching city here would be meaningless/misleading. */
+  disabled?: boolean;
 }
 
-function CityDropdown({ cities, selectedCity, onSelectCity }: CityDropdownProps) {
+function CityDropdown({ cities, selectedCity, onSelectCity, disabled = false }: CityDropdownProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   // Issue #1953 FIX2 — the listbox below is portaled to document.body, so it
@@ -156,14 +160,22 @@ function CityDropdown({ cities, selectedCity, onSelectCity }: CityDropdownProps)
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="flex h-11 items-center gap-2 rounded-lg border border-border bg-card px-3.5 text-sm font-semibold text-foreground shadow-xs"
+        aria-disabled={disabled}
+        disabled={disabled}
+        onClick={() => {
+          if (disabled) return;
+          setOpen((v) => !v);
+        }}
+        className={cn(
+          'flex h-11 items-center gap-2 rounded-lg border border-border bg-card px-3.5 text-sm font-semibold text-foreground shadow-xs',
+          disabled && 'cursor-not-allowed opacity-60',
+        )}
       >
         <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         {selected?.label ?? selectedCity}
         <ChevronDown className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
       </button>
-      {open &&
+      {!disabled && open &&
         createPortal(
           <ul
             ref={listboxRef}
@@ -463,8 +475,12 @@ export function DiscoverControlBar({ mobileMapTrigger }: DiscoverControlBarProps
   // seam already uses (DiscoverRightPanelContainer.tsx's `handleSelectJourney`)
   // — never a client-constructed node key, never a second resolution path.
   const resolveAreaNavigationPath = useDiscoverAreaNavigationPathResolver();
+  // #2151 Track 1 — the city switcher is inert in an admin city-launch preview: the
+  // previewed city is fixed by the route, not user-selectable.
+  const citySwitcherDisabled = useDiscoverSource().mode === 'preview';
 
   const handleSelectCity = (city: ControlBarCity) => {
+    if (citySwitcherDisabled) return;
     if (!city.active) return;
     if (city.key === nav.city) return;
     actions.changeCity(city.key);
@@ -538,6 +554,7 @@ export function DiscoverControlBar({ mobileMapTrigger }: DiscoverControlBarProps
         cities={CONTROL_BAR_CITIES}
         selectedCity={nav.city}
         onSelectCity={handleSelectCity}
+        disabled={citySwitcherDisabled}
       />
       {/* Issue #1953 build step 6 — distinct testId: DiscoverRightPanel/
           GuidedEntryPanel each render their OWN IntentSelector at

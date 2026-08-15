@@ -8,14 +8,22 @@ import { createContext, useContext, type ReactNode } from 'react';
  * public/authenticated Discover surface or an admin city-launch revision's
  * sandbox preview — WITHOUT forking any component. CityLaunchPreview.tsx
  * wraps the unmodified <MapDiscovery/> in a DiscoverDataSourceProvider with
- * {mode:'preview', cityId, revisionId}; every consumer that doesn't sit
- * under that provider (i.e. all of live Discover today) reads the default
- * context value {mode:'live'} and is byte-identical to pre-PR3 behaviour.
+ * {mode:'preview', cityId, revisionId, citySlug}; every consumer that
+ * doesn't sit under that provider (i.e. all of live Discover today) reads
+ * the default context value {mode:'live'} and is byte-identical to pre-PR3
+ * behaviour.
+ *
+ * `citySlug` (#2151 Track 1) is the revision's real owning-city slug,
+ * resolved server-side via GET .../preview/identity BEFORE this provider is
+ * mounted (see CityLaunchPreview.tsx) — it lets DiscoverContext substitute
+ * the correct city identity for preview mode instead of every display/data
+ * call site falling back to DEFAULT_CITY because a preview URL carries no
+ * `city=` query param by design.
  */
 
 export type DiscoverDataSource =
   | { mode: 'live' }
-  | { mode: 'preview'; cityId: number; revisionId: number };
+  | { mode: 'preview'; cityId: number; revisionId: number; citySlug: string };
 
 const LIVE_SOURCE: DiscoverDataSource = { mode: 'live' };
 

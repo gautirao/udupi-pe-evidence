@@ -75,6 +75,8 @@ public class CityLaunchPreviewService {
 
     private static final String CITY_SLUG_SQL = "SELECT slug FROM public.cities WHERE id = ?";
 
+    private static final String CITY_IDENTITY_SQL = "SELECT slug, name FROM public.cities WHERE id = ?";
+
     private final CityLaunchRevisionRepository revisionRepository;
     private final SandboxCityRegionRepository regionRepository;
     private final SandboxCityRegionMembershipRepository membershipRepository;
@@ -394,6 +396,29 @@ public class CityLaunchPreviewService {
         return new AgriPreviewResponse(
                 rows.size(), directionDistribution, distanceBandDistribution,
                 Math.toIntExact(missingCoordinates), originLat, originLon);
+    }
+
+    // ── E10: preview identity (#2151 Track 1) ───────────────────────────────────────────────
+
+    /**
+     * GET {@code .../preview/identity} — resolves the previewed revision's real owning-city
+     * slug/name. The preview route only carries numeric {@code cityId}/{@code revisionId}, so
+     * without this the frontend has no city identity to thread into the Discover subtree and
+     * falls back to a default city. Guarded by the same {@link #loadPreviewableRevision}
+     * viewability check as every other preview method — a non-previewable revision must yield no
+     * identity, not partial/default data.
+     */
+    @Transactional(readOnly = true)
+    public PreviewIdentityResponse getPreviewIdentity(int cityId, long revisionId) {
+        loadPreviewableRevision(cityId, revisionId);
+
+        List<PreviewIdentityResponse> rows = jdbcOperations.query(CITY_IDENTITY_SQL,
+                (rs, i) -> new PreviewIdentityResponse(cityId, rs.getString("slug"), rs.getString("name")),
+                cityId);
+        if (rows.isEmpty()) {
+            throw notFound();
+        }
+        return rows.get(0);
     }
 
     // ── Viewability guard ────────────────────────────────────────────────────────────────────

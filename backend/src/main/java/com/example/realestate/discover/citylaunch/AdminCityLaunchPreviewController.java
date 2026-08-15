@@ -157,6 +157,19 @@ public class AdminCityLaunchPreviewController {
         return noStore(previewService.getAgriPreview(cityId, revisionId));
     }
 
+    /**
+     * GET .../preview/identity -&gt; {@link PreviewIdentityResponse} (#2151 Track 1). The
+     * previewed revision's real owning-city slug/name, so the admin preview page can resolve
+     * city identity instead of falling back to a default city.
+     */
+    @IsAdmin
+    @GetMapping("/identity")
+    public ResponseEntity<PreviewIdentityResponse> getPreviewIdentity(
+            @PathVariable int cityId, @PathVariable long revisionId, CallerInfo caller) {
+        log.debug("GET preview/identity cityId={} revisionId={} adminId={}", cityId, revisionId, caller.userId());
+        return noStore(previewService.getPreviewIdentity(cityId, revisionId));
+    }
+
     @IsAdmin
     @GetMapping("/navigation/{nodeKey}/counts")
     public ResponseEntity<NavigationCountsResponse> getNavigationCounts(

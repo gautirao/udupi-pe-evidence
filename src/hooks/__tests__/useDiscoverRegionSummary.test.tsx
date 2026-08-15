@@ -52,7 +52,7 @@ function makePreviewWrapper(cityId: number, revisionId: number) {
       { client: queryClient },
       React.createElement(
         DiscoverDataSourceProvider,
-        { value: { mode: 'preview', cityId, revisionId }, children },
+        { value: { mode: 'preview', cityId, revisionId, citySlug: 'bangalore' }, children },
       ),
     );
 }
@@ -297,7 +297,7 @@ describe('useDiscoverRegionSummary — preview mode (Issue #1911 PR3)', () => {
         { client: queryClient },
         React.createElement(
           DiscoverDataSourceProvider,
-          { value: { mode: 'preview' as const, cityId, revisionId }, children },
+          { value: { mode: 'preview' as const, cityId, revisionId, citySlug: 'bangalore' }, children },
         ),
       );
 
