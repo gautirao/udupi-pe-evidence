@@ -1054,6 +1054,44 @@ class AdminCityLaunchPreviewControllerIT {
     }
 
     @Test
+    @DisplayName("E11 IDOR-scope guard (#2167 review finding): a live area with NO sandbox row for "
+            + "THIS revision is rejected, not silently served, even though the revision has an "
+            + "UNRELATED sandbox row for a different area (proves the fix validates areaKey<->"
+            + "revisionId membership, not merely 'revision has >=1 sandbox row')")
+    void e11_agriMapListings_areaKeyNotInThisRevisionSandbox_isRejectedNotServed() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        // In-scope area: sandbox row for THIS revision + a live listing.
+        String inScopeAreaKey = "IN|KA|ACP|Agri-Scope-InScope";
+        insertProductionArea(inScopeAreaKey, testCityId, 13.01, 74.71);
+        seedAgriRow(revisionId, inScopeAreaKey, 13.0, 74.7, 4.0, 10.0, "N", "0_10");
+        insertLiveAgriListing(inScopeAreaKey, "sale", 7_500_000L);
+
+        // Out-of-scope area: a live listing exists, but NO sandbox_agri_destination_classification
+        // row for THIS revision — e.g. it belongs to an unrelated corridor. The revision above is
+        // NOT zero-row (it has inScopeAreaKey's row), so failClosedIfNoSandboxAgriRows alone would
+        // let this through pre-fix.
+        String outOfScopeAreaKey = "IN|KA|ACP|Agri-Scope-OutOfScope";
+        insertProductionArea(outOfScopeAreaKey, testCityId, 13.5, 75.2);
+        insertLiveAgriListing(outOfScopeAreaKey, "sale", 9_000_000L);
+
+        String url = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId
+                + "/preview/agri-map-listings";
+
+        // In-scope areaKey: served normally.
+        mockMvc.perform(get(url).param("areaKey", inScopeAreaKey).header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.listings.length()").value(1))
+                .andExpect(jsonPath("$.listings[0].areaKey").value(inScopeAreaKey));
+
+        // Out-of-scope areaKey: fails closed — NOT a 200 with the live listing, NOT a silent empty 200.
+        mockMvc.perform(get(url).param("areaKey", outOfScopeAreaKey).header("Authorization", adminAuth()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error").value("AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION"));
+    }
+
+    @Test
     @DisplayName("E11: revision with ZERO sandbox agri rows -> 503 "
             + "AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION on all three endpoints")
     void e11_zeroSandboxRows_allThreeReturn503() throws Exception {

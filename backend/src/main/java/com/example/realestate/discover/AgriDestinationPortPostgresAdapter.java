@@ -13,9 +13,12 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * ONE Postgres implementation of {@link AgriDestinationPort} (#2151 PR B, decision.d3).
@@ -320,6 +323,44 @@ public class AgriDestinationPortPostgresAdapter implements AgriDestinationPort {
     }
 
     /**
+     * #2167 review finding (BLOCKING, on top of #2151 PR B Track 2): {@link
+     * #failClosedIfNoSandboxAgriRows} only proves the revision has SOME sandbox rows — it does
+     * nothing to stop a caller from passing an {@code areaKey} that belongs to a completely
+     * unrelated corridor/revision and still getting live {@code property_listings} back for it
+     * (as long as this revision happens to have at least one unrelated sandbox row). Preview
+     * geography MUST be scoped exactly to the selected revision.
+     *
+     * <p>Validates EVERY requested {@code areaKeys} entry is present in {@code
+     * sandbox_agri_destination_classification} for the EXACT {@code revisionId} supplied, via a
+     * single count-match query. Any unmatched key fails closed with the SAME {@link
+     * #AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION} signal used by {@link
+     * #failClosedIfNoSandboxAgriRows} — that code already means "this revision doesn't have
+     * generated Agri destination data for what you're asking about," which is exactly true here
+     * too. Nothing is silently dropped; the whole request fails rather than serving a partial,
+     * cross-revision result.
+     */
+    private void failClosedIfAreaKeysNotInRevisionSandbox(long revisionId, List<String> areaKeys) {
+        Set<String> distinctKeys = new LinkedHashSet<>(areaKeys);
+        String placeholders = String.join(",", Collections.nCopies(distinctKeys.size(), "?"));
+        List<Object> params = new ArrayList<>(distinctKeys.size() + 1);
+        params.add(revisionId);
+        params.addAll(distinctKeys);
+        Integer matchedCount = jdbc.queryForObject(
+                "SELECT COUNT(DISTINCT area_key) FROM sandbox_agri_destination_classification "
+                        + "WHERE revision_id = ? AND area_key IN (" + placeholders + ")",
+                Integer.class, params.toArray());
+        if (matchedCount == null || matchedCount != distinctKeys.size()) {
+            log.warn("findParcels(preview) revisionId={} — one or more requested areaKeys are not "
+                    + "present in sandbox_agri_destination_classification for this revision "
+                    + "(requested={}, matched={}); failing closed rather than serving live listings "
+                    + "for geography this revision never generated",
+                    revisionId, distinctKeys.size(), matchedCount);
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION);
+        }
+    }
+
+    /**
      * PREVIEW equivalent of {@link #findDestinations} for a non-null {@code revisionId}. Reads
      * {@code sandbox_agri_destination_classification} instead of the promoted production table, and
      * deliberately does NOT call {@link CityActivationGuard} — an unpromoted/never-launched city is
@@ -414,6 +455,8 @@ public class AgriDestinationPortPostgresAdapter implements AgriDestinationPort {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "area_keys_exceeds_maximum_of_" + MAX_DESTINATION_AREA_KEYS);
         }
+
+        failClosedIfAreaKeysNotInRevisionSandbox(query.revisionId(), areaKeys);
 
         int size = query.page() != null && query.page().size() > 0
                 ? Math.min(query.page().size(), MAX_PARCELS_PER_PAGE) : MAX_PARCELS_PER_PAGE;
