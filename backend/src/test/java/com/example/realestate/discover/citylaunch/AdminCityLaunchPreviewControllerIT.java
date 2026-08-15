@@ -752,7 +752,8 @@ class AdminCityLaunchPreviewControllerIT {
     // =========================================================================================
 
     @Test
-    @DisplayName("E8: resolve fallback to CITY_ROOT instead of stale ladder; counts returns schoolTotal=0")
+    @DisplayName("E8: resolve fallback to CITY_ROOT instead of stale ladder; counts returns schoolTotal=0 "
+            + "with schoolsNotSimulatedForRevision=true (#2170)")
     void e8_resolveAndCounts() throws Exception {
         CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
         long revisionId = revision.getId();
@@ -780,12 +781,24 @@ class AdminCityLaunchPreviewControllerIT {
                 .andExpect(jsonPath("$.resolution").value("CITY_ROOT"))
                 .andExpect(jsonPath("$.node.nodeType").value("ROOT"));
 
-        // 3. Counts returns 0 for schools, correct count for listings
+        // 3. Counts returns 0 for schools, correct count for listings, and — #2170 — an explicit
+        // schoolsNotSimulatedForRevision=true flag so a caller can tell "not simulated in preview"
+        // apart from a genuine zero-schools city (production omits this field entirely; see
+        // NavigationCountsResponse's javadoc).
         mockMvc.perform(get(base + "/navigation/d:north/counts").header("Authorization", adminAuth()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.count").value(1))
+                .andExpect(jsonPath("$.schoolCount").value(0))
                 .andExpect(jsonPath("$.areaSchoolCounts").isEmpty())
-                .andExpect(jsonPath("$.areaCounts.['IN|KA|ACP|Nav1']").value(1));
+                .andExpect(jsonPath("$.areaCounts.['IN|KA|ACP|Nav1']").value(1))
+                .andExpect(jsonPath("$.schoolsNotSimulatedForRevision").value(true));
+
+        // 4. Same signal on the ROOT node — the flag is a per-response property of the PREVIEW
+        // route, not something that varies by which node was requested.
+        mockMvc.perform(get(base + "/navigation/root/counts").header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.schoolCount").value(0))
+                .andExpect(jsonPath("$.schoolsNotSimulatedForRevision").value(true));
     }
 
     @Test

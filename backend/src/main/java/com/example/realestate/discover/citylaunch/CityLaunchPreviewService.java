@@ -304,7 +304,12 @@ public class CityLaunchPreviewService {
         }
 
         long total = node == null ? areaCounts.size() : sumAreaCountsForNode(navGraph, node, areaCounts);
-        long schoolTotal = 0L; // Schools are not simulated in preview yet
+        // #2170: schools have no per-revision simulation at all (unlike Agri's
+        // sandbox_agri_destination_classification, #2167), so schoolTotal/areaSchoolCounts are
+        // honestly zero/empty for every revision — but the response also carries
+        // schoolsNotSimulatedForRevision=true so a caller can tell "not simulated" apart from a
+        // genuine zero, rather than rendering both as the same flat wall of zeros.
+        long schoolTotal = 0L;
         Map<String, Long> areaSchoolCounts = Map.of();
 
         List<NavigationCountsResponse.ChildCount> children = new ArrayList<>();
@@ -324,7 +329,7 @@ public class CityLaunchPreviewService {
         }
 
         return new NavigationCountsResponse(
-                nodeKey, total, schoolTotal, areaCounts, areaSchoolCounts, children, revisionId);
+                nodeKey, total, schoolTotal, areaCounts, areaSchoolCounts, children, revisionId, Boolean.TRUE);
     }
 
     private long sumAreaCountsForNode(NavigationGraph graph, NavigationNode node, Map<String, Long> areaCounts) {
