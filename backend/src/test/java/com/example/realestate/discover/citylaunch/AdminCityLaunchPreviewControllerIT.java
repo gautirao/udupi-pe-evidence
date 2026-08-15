@@ -1040,6 +1040,217 @@ class AdminCityLaunchPreviewControllerIT {
         assertThat(result.getResponse().getContentAsString()).doesNotContain("Agri-Dest-ProdOnly");
     }
 
+    /** Finds the {@code $.areas[]} entry with the given {@code areaKey} (order is not asserted). */
+    private static com.fasterxml.jackson.databind.JsonNode findAreaByKey(
+            com.fasterxml.jackson.databind.JsonNode areasJson, String areaKey) {
+        for (com.fasterxml.jackson.databind.JsonNode node : areasJson) {
+            if (areaKey.equals(node.get("areaKey").asText())) {
+                return node;
+            }
+        }
+        throw new AssertionError("No area with areaKey=" + areaKey + " in response: " + areasJson);
+    }
+
+    // =========================================================================================
+    // #2171 — /preview/areas?propertyType=agricultural_land honors propertyType, reusing the
+    // SAME AgriDestinationPort-backed count/acreage source as /preview/regional-area-groups.
+    // =========================================================================================
+
+    @Test
+    @DisplayName("#2171: /preview/areas?propertyType=agricultural_land returns the REAL per-area "
+            + "agri parcel count (not the generic unfiltered listingCount=1), matching what "
+            + "/preview/regional-area-groups reports for the same area/revision")
+    void e12_areas_agriPropertyType_realParcelCountMatchesRegionalAreaGroups() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        String agriAreaKey = "IN|KA|ACP|Agri-Areas-Two-Parcels";
+        String nonAgriAreaKey = "IN|KA|ACP|Agri-Areas-Zero-Parcels";
+
+        // Both areas are in-scope sandbox areas (needed for /preview/areas' graph).
+        seedArea(revisionId, agriAreaKey, "Agri Two Parcels", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+        seedArea(revisionId, nonAgriAreaKey, "Agri Zero Parcels", "ACTIVE",
+                13.05, 74.75, 13.04, 74.74, 13.06, 74.76);
+
+        // Only agriAreaKey has a sandbox Agri destination row + LIVE agri parcels; nonAgriAreaKey
+        // has neither, so its real parcel count is 0 — never the fabricated 1 the pre-#2171 code
+        // returned for every area regardless of type.
+        insertProductionArea(agriAreaKey, testCityId, 13.01, 74.71);
+        insertLiveAgriListing(agriAreaKey, "sale", 5_000_000L);
+        insertLiveAgriListing(agriAreaKey, "sale", 6_000_000L);
+        seedAgriRow(revisionId, agriAreaKey, 13.0, 74.7, 5.0, 0.0, "N", "0_10");
+
+        String base = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview";
+
+        MvcResult areasResult = mockMvc.perform(get(base + "/areas")
+                        .param("propertyType", "agricultural_land")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andReturn();
+        com.fasterxml.jackson.databind.JsonNode areasJson =
+                objectMapper.readTree(areasResult.getResponse().getContentAsString()).get("areas");
+        com.fasterxml.jackson.databind.JsonNode agriAreaNode = findAreaByKey(areasJson, agriAreaKey);
+        com.fasterxml.jackson.databind.JsonNode nonAgriAreaNode = findAreaByKey(areasJson, nonAgriAreaKey);
+        assertThat(agriAreaNode.get("listingCount").asLong()).isEqualTo(2L);
+        assertThat(agriAreaNode.get("agriAcreage").asDouble()).isGreaterThan(0.0);
+        assertThat(nonAgriAreaNode.get("listingCount").asLong())
+                .as("real (zero) agri parcel count, never the fabricated generic 1")
+                .isEqualTo(0L);
+        assertThat(nonAgriAreaNode.has("agriAcreage"))
+                .as("no parseable acreage for an area with zero matching parcels — omitted (NON_NULL), never fabricated")
+                .isFalse();
+
+        // Cross-check: the SAME revision's /preview/regional-area-groups (the panel already proven
+        // correct in #2151/#2167) reports the identical parcel count for the identical area — the
+        // map bubble and the right panel can never diverge because both now read the same source.
+        mockMvc.perform(get(base + "/regional-area-groups").header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groups[0].directionCode").value("N"))
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].listingCount").value(2))
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].areaKeys[0]").value(agriAreaKey));
+    }
+
+    @Test
+    @DisplayName("#2174: /preview/areas?propertyType=agricultural_land&purpose=rent|sale returns "
+            + "PURPOSE-SCOPED per-area parcel counts that EXACTLY match what "
+            + "/preview/regional-area-groups?listingPurpose=rent|sale reports for the same area — "
+            + "the actual bubble<->panel parity the Buy/Rent toggle must preserve")
+    void e12_areas_purposeScoped_matchesRegionalAreaGroupsForSamePurpose() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        String agriAreaKey = "IN|KA|ACP|Agri-Areas-MixedPurpose";
+        seedArea(revisionId, agriAreaKey, "Agri Mixed Purpose", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+        insertProductionArea(agriAreaKey, testCityId, 13.01, 74.71);
+
+        // Mixed sale/rent parcels in the SAME area — this is the exact fixture shape the reviewer
+        // named: without purpose scoping, the bubble (sums ALL 3) and a purpose-scoped panel (sums
+        // only the matching purpose) disagree.
+        insertLiveAgriListing(agriAreaKey, "sale", 5_000_000L);
+        insertLiveAgriListing(agriAreaKey, "sale", 6_000_000L);
+        insertLiveAgriListing(agriAreaKey, "rent", 20_000L);
+        seedAgriRow(revisionId, agriAreaKey, 13.0, 74.7, 5.0, 0.0, "N", "0_10");
+
+        String base = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview";
+
+        // purpose=rent -> bubble must show exactly 1 (the single rent parcel), matching the panel.
+        MvcResult rentAreasResult = mockMvc.perform(get(base + "/areas")
+                        .param("propertyType", "agricultural_land")
+                        .param("purpose", "rent")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andReturn();
+        com.fasterxml.jackson.databind.JsonNode rentAreasJson =
+                objectMapper.readTree(rentAreasResult.getResponse().getContentAsString()).get("areas");
+        assertThat(findAreaByKey(rentAreasJson, agriAreaKey).get("listingCount").asLong()).isEqualTo(1L);
+
+        mockMvc.perform(get(base + "/regional-area-groups")
+                        .param("listingPurpose", "rent")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].listingCount").value(1))
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].areaKeys[0]").value(agriAreaKey));
+
+        // purpose=sale -> bubble must show exactly 2 (the two sale parcels), matching the panel —
+        // and it must DIFFER from the rent-scoped result above, proving the filter is real, not a
+        // no-op that happens to return the same number both times.
+        MvcResult saleAreasResult = mockMvc.perform(get(base + "/areas")
+                        .param("propertyType", "agricultural_land")
+                        .param("purpose", "sale")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andReturn();
+        com.fasterxml.jackson.databind.JsonNode saleAreasJson =
+                objectMapper.readTree(saleAreasResult.getResponse().getContentAsString()).get("areas");
+        long saleCount = findAreaByKey(saleAreasJson, agriAreaKey).get("listingCount").asLong();
+        assertThat(saleCount).isEqualTo(2L);
+        assertThat(saleCount).as("sale-scoped count must differ from rent-scoped count").isNotEqualTo(1L);
+
+        mockMvc.perform(get(base + "/regional-area-groups")
+                        .param("listingPurpose", "sale")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].listingCount").value(2))
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].areaKeys[0]").value(agriAreaKey));
+
+        // No purpose (default/blended) -> bubble must show all 3, matching the unscoped panel.
+        MvcResult blendedAreasResult = mockMvc.perform(get(base + "/areas")
+                        .param("propertyType", "agricultural_land")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andReturn();
+        com.fasterxml.jackson.databind.JsonNode blendedAreasJson =
+                objectMapper.readTree(blendedAreasResult.getResponse().getContentAsString()).get("areas");
+        assertThat(findAreaByKey(blendedAreasJson, agriAreaKey).get("listingCount").asLong()).isEqualTo(3L);
+
+        mockMvc.perform(get(base + "/regional-area-groups")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].listingCount").value(3));
+    }
+
+    @Test
+    @DisplayName("#2171: /preview/areas with NO propertyType is completely unchanged — generic "
+            + "unfiltered listingCount=1 per in-scope area, exactly as before")
+    void e12_areas_noPropertyType_unchangedGenericListingCount() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        String areaKey = "IN|KA|ACP|Agri-Areas-Blended";
+        seedArea(revisionId, areaKey, "Blended Area", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+        // Even with real Agri parcels present, the blended (no propertyType) path must stay
+        // byte-identical to pre-#2171 behaviour: generic listingCount=1, no agriAcreage.
+        insertProductionArea(areaKey, testCityId, 13.01, 74.71);
+        insertLiveAgriListing(areaKey, "sale", 5_000_000L);
+        insertLiveAgriListing(areaKey, "sale", 6_000_000L);
+        seedAgriRow(revisionId, areaKey, 13.0, 74.7, 5.0, 0.0, "N", "0_10");
+
+        String base = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview";
+
+        mockMvc.perform(get(base + "/areas").header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.areas[0].listingCount").value(1))
+                .andExpect(jsonPath("$.areas[0].agriAcreage").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("#2171: propertyType=agricultural_land on a revision with ZERO sandbox agri rows "
+            + "fails closed with 503 AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION — composes onto "
+            + "the SAME fail-closed contract as /preview/regional-area-groups, never silent zeros")
+    void e12_areas_agriPropertyType_zeroSandboxRows_503() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+        seedArea(revisionId, "IN|KA|ACP|Agri-Areas-NoAgriRows", "No Agri Rows", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+        String base = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview";
+
+        mockMvc.perform(get(base + "/areas").param("propertyType", "agricultural_land")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error").value("AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION"));
+    }
+
+    @Test
+    @DisplayName("#2171: propertyType is threaded independently per request — a residential "
+            + "(non-agri) propertyType value behaves like absent, generic listingCount=1")
+    void e12_areas_nonAgriPropertyType_behavesLikeAbsent() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+        seedArea(revisionId, "IN|KA|ACP|Agri-Areas-Residential", "Residential Area", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+        String base = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview";
+
+        mockMvc.perform(get(base + "/areas").param("propertyType", "residential")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.areas[0].listingCount").value(1))
+                .andExpect(jsonPath("$.areas[0].agriAcreage").doesNotExist());
+    }
+
     @Test
     @DisplayName("E11 agri-map-listings: exact coords/price (admin, never anonymised); "
             + "parcels are read from LIVE property_listings scoped by the requested areaKey")

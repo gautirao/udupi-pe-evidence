@@ -220,6 +220,45 @@ describe('useDiscoverMapData — agri-first journey (Issue #1371)', () => {
   });
 });
 
+describe('useDiscoverMapData — Issue #2174 bubble/panel parity: purpose forwarded to agri-scoped areas', () => {
+  it('includes purpose=rent in the agri-scoped areas request URL when journey=agri-first and listingPurpose=rent', async () => {
+    const { result } = renderHook(
+      () =>
+        useDiscoverMapData({
+          ...BASE_PARAMS,
+          journey: 'agri-first',
+          listingPurpose: 'rent',
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => result.current.agriAreasData !== undefined);
+
+    const urls = mockDiscoverAreasGet.mock.calls.map(([url]: [string]) => url);
+    const agriCall = urls.find((u: string) => u.includes('propertyType=agricultural_land'));
+    expect(agriCall).toBeDefined();
+    expect(agriCall).toContain('purpose=rent');
+  });
+
+  it('does NOT include purpose on the agri-scoped areas request when listingPurpose is unset (blended)', async () => {
+    const { result } = renderHook(
+      () =>
+        useDiscoverMapData({
+          ...BASE_PARAMS,
+          journey: 'agri-first',
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => result.current.agriAreasData !== undefined);
+
+    const urls = mockDiscoverAreasGet.mock.calls.map(([url]: [string]) => url);
+    const agriCall = urls.find((u: string) => u.includes('propertyType=agricultural_land'));
+    expect(agriCall).toBeDefined();
+    expect(agriCall).not.toContain('purpose=');
+  });
+});
+
 describe('useDiscoverMapData — non-agri journey (regression guard)', () => {
   it('A4 (regression): does NOT call agri-scoped areas endpoint when journey=area-first', async () => {
     const { result } = renderHook(

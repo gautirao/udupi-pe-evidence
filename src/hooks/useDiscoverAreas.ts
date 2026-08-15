@@ -59,7 +59,13 @@ export function useDiscoverAreas(city: string, propertyType?: string, purpose?: 
       if (propertyType) params.set('propertyType', propertyType);
       if (purpose) params.set('purpose', purpose);
       const livePath = `/api/discover/areas?${params.toString()}`;
-      const path = discoverPath(source, livePath, { kind: 'areas' });
+      // `purpose` (Issue #2174) is forwarded into discoverPath's 'areas'
+      // variant too — the admin city-launch preview endpoint
+      // (AdminCityLaunchPreviewController#getAreas) now accepts a `purpose`
+      // param, threaded through to the same Agri-parcel count the corridor
+      // panel uses, so the map bubble and panel stay in parity when the
+      // Buy/Rent toggle is applied in preview mode, not just in live mode.
+      const path = discoverPath(source, livePath, { kind: 'areas', propertyType, purpose });
       return api.get<DiscoverAreasResponse>(path, { skipAuth: source.mode === 'live' });
     },
     enabled: city.length > 0,

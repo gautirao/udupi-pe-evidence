@@ -562,7 +562,11 @@ export function useDiscoverMapData({
   const {
     data: agriAreasResponseData,
     isLoading: isLoadingAgriAreas,
-  } = useDiscoverAreas(isCityValid ? city : '', isAgriJourney ? AGRICULTURAL_LAND_PROPERTY_TYPE : undefined);
+  } = useDiscoverAreas(
+    isCityValid ? city : '',
+    isAgriJourney ? AGRICULTURAL_LAND_PROPERTY_TYPE : undefined,
+    isAgriJourney ? listingPurpose : undefined,
+  );
   const agriAreasData: DiscoverArea[] | undefined = isAgriJourney
     ? (agriAreasResponseData?.areas ?? [])
     : undefined;

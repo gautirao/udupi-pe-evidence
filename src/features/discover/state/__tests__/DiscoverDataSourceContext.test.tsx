@@ -74,6 +74,38 @@ describe('discoverPath', () => {
     );
   });
 
+  // Issue #2171 — the backend now honors ?propertyType on the preview /areas
+  // endpoint (real per-area Agri parcel counts). discoverPath must forward it
+  // instead of silently discarding the query string in preview mode.
+  it('preview mode appends ?propertyType=agricultural_land to the /areas path when set', () => {
+    expect(
+      discoverPath(PREVIEW_SOURCE, livePath, { kind: 'areas', propertyType: 'agricultural_land' }),
+    ).toBe('/api/admin/city-launch/cities/7/revisions/42/preview/areas?propertyType=agricultural_land');
+  });
+
+  // Issue #2174 — the backend preview /areas endpoint
+  // (AdminCityLaunchPreviewController#getAreas) now honors ?purpose too,
+  // threaded the same way as .../preview/regional-area-groups's
+  // listingPurpose, so the map bubble and the corridor panel stay in parity
+  // when the Buy/Rent toggle is applied. discoverPath must forward both.
+  it('preview mode appends both propertyType and purpose to the /areas path when both are set', () => {
+    expect(
+      discoverPath(PREVIEW_SOURCE, livePath, {
+        kind: 'areas',
+        propertyType: 'agricultural_land',
+        purpose: 'sale',
+      }),
+    ).toBe(
+      '/api/admin/city-launch/cities/7/revisions/42/preview/areas?propertyType=agricultural_land&purpose=sale',
+    );
+  });
+
+  it('preview mode /areas path is unchanged when propertyType/purpose are omitted (existing callers)', () => {
+    expect(discoverPath(PREVIEW_SOURCE, livePath, { kind: 'areas' })).toBe(
+      '/api/admin/city-launch/cities/7/revisions/42/preview/areas',
+    );
+  });
+
   it('preview mode returns the admin preview /markers path', () => {
     expect(discoverPath(PREVIEW_SOURCE, livePath, { kind: 'markers' })).toBe(
       '/api/admin/city-launch/cities/7/revisions/42/preview/markers',

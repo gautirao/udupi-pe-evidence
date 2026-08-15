@@ -78,13 +78,33 @@ public class AdminCityLaunchPreviewController {
         return noStore(previewService.getRegionScopedGroups(cityId, revisionId, regionKey));
     }
 
-    /** GET .../preview/areas -> {@link AreaSummaryResponse}. */
+    /**
+     * GET .../preview/areas[?propertyType=...&amp;purpose=...] -> {@link AreaSummaryResponse}.
+     *
+     * <p>{@code propertyType} (#2171) is OPTIONAL and additive, mirroring production {@code GET
+     * /api/discover/areas}'s contract: absent/not {@code agricultural_land} -&gt; byte-identical
+     * generic per-area {@code listingCount}; {@code agricultural_land} -&gt; each area's {@code
+     * listingCount}/{@code agriAcreage} become the revision's real Agri parcel counts.
+     *
+     * <p>{@code purpose} (#2174) is OPTIONAL, {@code "sale"}/{@code "rent"}, and only meaningful
+     * alongside {@code propertyType=agricultural_land} — same param name and semantics as
+     * production {@code GET /api/discover/areas}'s {@code purpose} and this preview namespace's own
+     * {@code .../preview/regional-area-groups}'s {@code listingPurpose} (both thread into the same
+     * {@link com.example.realestate.discover.AgriDestinationPort}-backed count, so the map bubble
+     * and the Agri corridor panel agree by construction — see {@link
+     * CityLaunchPreviewService#getAreas(int, long, String, String)}), never a second, independently
+     * -maintained counting mechanism.
+     */
     @IsAdmin
     @GetMapping("/areas")
     public ResponseEntity<AreaSummaryResponse> getAreas(
-            @PathVariable int cityId, @PathVariable long revisionId, CallerInfo caller) {
-        log.debug("GET preview/areas cityId={} revisionId={} adminId={}", cityId, revisionId, caller.userId());
-        return noStore(previewService.getAreas(cityId, revisionId));
+            @PathVariable int cityId, @PathVariable long revisionId,
+            @RequestParam(name = "propertyType", required = false) String propertyType,
+            @RequestParam(name = "purpose", required = false) String purpose,
+            CallerInfo caller) {
+        log.debug("GET preview/areas cityId={} revisionId={} propertyType={} purpose={} adminId={}",
+                cityId, revisionId, propertyType, purpose, caller.userId());
+        return noStore(previewService.getAreas(cityId, revisionId, propertyType, purpose));
     }
 
     /** GET .../preview/markers?areaKeys=... -> {@link DiscoverMarkersResponse}. */
