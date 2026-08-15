@@ -317,7 +317,20 @@ export function AreaSelectedPanel({
             eyebrow, area title and result count read as ONE compact block
             instead of a full-bleed hero headline. Count sits outside the <h1>
             (a sibling, not a child) so the heading's accessible name stays
-            exactly "Properties in {areaLabel}" for existing tests/consumers. */}
+            exactly "Properties in {areaLabel}" for existing tests/consumers.
+
+            PR #2180 review fix — `count` is areaListings.length, the length
+            of the bounded per-area fetch slice (caller wires
+            useDiscoverCityListings with limitPerArea: 50), NOT an
+            authoritative total. The evergreen result-summary strip further
+            below gets to say "X verified properties" safely because it has
+            an escape hatch to the caller-precomputed `areaResultSummaryText`
+            (same formatDiscoverBadgeCopy(...) call the map badge uses — see
+            the prop's own JSDoc above). This hero block does not have that
+            wiring, so for any area with >50 matches, labelling this number
+            "for sale"/"for rent" would silently understate the true total.
+            Labelled "shown" instead — true regardless of whether the area
+            has more matches than the fetch limit. */}
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
@@ -333,7 +346,7 @@ export function AreaSelectedPanel({
                 {count}
               </p>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                {intentNoun === 'rent' ? 'for rent' : 'for sale'}
+                {intentNoun === 'rent' ? 'shown for rent' : 'shown for sale'}
               </p>
             </div>
           )}

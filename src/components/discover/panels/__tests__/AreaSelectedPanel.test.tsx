@@ -243,6 +243,39 @@ describe('AreaSelectedPanel', () => {
     });
   });
 
+  // ── PR #2180 review fix — header hero-count truthfulness ─────────────────
+  // areaListings is the bounded per-area fetch slice (caller wires
+  // useDiscoverCityListings with limitPerArea: 50), not an authoritative
+  // total — so the header's hero count must never be labelled in a way that
+  // implies it IS the total (e.g. bare "for sale"/"for rent"), since for any
+  // area with more matches than the fetch limit that would silently
+  // understate the real total.
+  describe('Header hero count (PR #2180 review fix)', () => {
+    it('labels the hero count "shown", never implying it is the area total', () => {
+      // areaListings here stands in for a bounded fetch slice (3 items),
+      // while areaResultSummaryText encodes a true total of 87 — via the
+      // same "M of N" form the map badge uses — that exceeds it.
+      renderPanel({
+        areaListings: [mockListing, { ...mockListing, id: '2' }, { ...mockListing, id: '3' }],
+        areaResultSummaryText: '3 of 87 match your filters in Test Area',
+      });
+      const hero = screen.getByTestId('area-header-count');
+      expect(hero).toHaveTextContent('3');
+      expect(hero).toHaveTextContent('shown for sale');
+      // The true total (87) must never appear in the hero block — this
+      // component has no wiring to it and must not imply one.
+      expect(hero).not.toHaveTextContent('87');
+      // The pre-fix wording ("3" + bare "for sale") reads as "3 properties
+      // for sale, total" — assert the bare (total-implying) form is gone.
+      expect(within(hero).queryByText('for sale', { exact: true })).not.toBeInTheDocument();
+    });
+
+    it('shows "shown for rent" when intent=rent', () => {
+      renderPanel({ areaListings: [mockListing], intent: 'rent' });
+      expect(screen.getByTestId('area-header-count')).toHaveTextContent('shown for rent');
+    });
+  });
+
   // ── Issue #1817 (AC7) — empty-state cause routing (design §7) ─────────────
   // Each cause (filters / search / both / genuinely-empty) must render distinct,
   // honest copy + the correct primary/secondary actions — never a generic
