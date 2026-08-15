@@ -330,6 +330,36 @@ describe('useDiscoverAreas — preview mode (Issue #1911 PR3)', () => {
     expect(options).toEqual({ skipAuth: true });
   });
 
+  // Issue #2171 — preview mode must forward propertyType to the admin
+  // preview /areas endpoint, not just live mode, otherwise the backend's new
+  // real-per-area Agri parcel-count filtering is inert in preview.
+  it('preview request URL includes ?propertyType=agricultural_land when propertyType is passed', async () => {
+    mockGet.mockResolvedValue(AGRI_RESPONSE);
+    const { result } = renderHook(() => useDiscoverAreas('udupi', 'agricultural_land'), {
+      wrapper: makePreviewWrapper(7, 42),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [path] = mockGet.mock.calls[0] as [string, unknown];
+    expect(path).toBe(
+      '/api/admin/city-launch/cities/7/revisions/42/preview/areas?propertyType=agricultural_land',
+    );
+  });
+
+  it('preview request URL includes both propertyType and purpose when both are passed', async () => {
+    mockGet.mockResolvedValue(AGRI_RESPONSE);
+    const { result } = renderHook(
+      () => useDiscoverAreas('udupi', 'agricultural_land', 'sale'),
+      { wrapper: makePreviewWrapper(7, 42) },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [path] = mockGet.mock.calls[0] as [string, unknown];
+    expect(path).toBe(
+      '/api/admin/city-launch/cities/7/revisions/42/preview/areas?propertyType=agricultural_land&purpose=sale',
+    );
+  });
+
   it('preview and live cache entries for the same city are distinct — no cross-serve', () => {
     mockGet.mockResolvedValue(BLENDED_RESPONSE);
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

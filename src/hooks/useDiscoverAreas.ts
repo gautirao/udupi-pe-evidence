@@ -59,7 +59,7 @@ export function useDiscoverAreas(city: string, propertyType?: string, purpose?: 
       if (propertyType) params.set('propertyType', propertyType);
       if (purpose) params.set('purpose', purpose);
       const livePath = `/api/discover/areas?${params.toString()}`;
-      const path = discoverPath(source, livePath, { kind: 'areas' });
+      const path = discoverPath(source, livePath, { kind: 'areas', propertyType, purpose });
       return api.get<DiscoverAreasResponse>(path, { skipAuth: source.mode === 'live' });
     },
     enabled: city.length > 0,

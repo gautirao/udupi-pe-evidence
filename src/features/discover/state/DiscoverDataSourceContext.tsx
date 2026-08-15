@@ -69,7 +69,7 @@ export function useDiscoverSource(): DiscoverDataSource {
 export type DiscoverEndpoint =
   | { kind: 'regions' }
   | { kind: 'regionGroups'; regionKey: string }
-  | { kind: 'areas' }
+  | { kind: 'areas'; propertyType?: string; purpose?: string }
   | { kind: 'markers' }
   | { kind: 'listings' }
   | { kind: 'listingDetail'; areaKey: string }
@@ -94,10 +94,11 @@ export type DiscoverEndpoint =
  *
  * PREVIEW mode: ignores `livePath` and returns the matching
  * `/api/admin/city-launch/cities/{cityId}/revisions/{revisionId}/preview/...`
- * base path. Navigation/region/area/marker/listing endpoints carry no query
- * string in preview mode. The three Agri endpoints (`regionalAreaGroups`,
- * `agriDestinations`, `agriMapListings` — Issue #2151 Track 2) are the
- * exception: they build and append their own query string (e.g.
+ * base path. Navigation/region/marker/listing endpoints carry no query
+ * string in preview mode. The Agri-forwarding endpoints — `areas` (Issue
+ * #2171, `propertyType`/`purpose`), `regionalAreaGroups`, `agriDestinations`,
+ * `agriMapListings` (Issue #2151 Track 2) — are the exception: they build and
+ * append their own query string (e.g. `propertyType`, `purpose`,
  * `listingPurpose`, `direction`, `maxKm`, `areaKey`) in both modes, matching
  * the backend preview contract.
  */
@@ -118,8 +119,13 @@ export function discoverPath(
       return `${base}/regions`;
     case 'regionGroups':
       return `${base}/regions/${encodeURIComponent(endpoint.regionKey)}/groups`;
-    case 'areas':
-      return `${base}/areas`;
+    case 'areas': {
+      const params = new URLSearchParams();
+      if (endpoint.propertyType) params.set('propertyType', endpoint.propertyType);
+      if (endpoint.purpose) params.set('purpose', endpoint.purpose);
+      const qs = params.toString();
+      return `${base}/areas${qs ? `?${qs}` : ''}`;
+    }
     case 'markers':
       return `${base}/markers`;
     case 'listings':
