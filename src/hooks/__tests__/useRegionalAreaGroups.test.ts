@@ -376,6 +376,46 @@ describe('useRegionalAreaGroups', () => {
     // Two distinct fetches (no query-key collision) — both calls happened.
     expect(mockApiGet).toHaveBeenCalledTimes(2);
   });
+
+  // ─── #2151 Track 3 landing-panel gap fix — isNotGeneratedForRevision carve-out ──
+  //
+  // Live-verified gap: a preview revision with zero sandbox Agri rows reproduced the
+  // ORIGINAL "Could not load corridors" bug at the LANDING panel (this hook), even though
+  // the sibling useAgriDestinations hook already carved this 503 out for the drill-down
+  // panel. These tests lock in that useRegionalAreaGroups now mirrors that carve-out.
+
+  it('a generic (non-503) error surfaces isError=true and isNotGeneratedForRevision=false', async () => {
+    mockApiGet.mockRejectedValueOnce(new Error('Network error'));
+
+    const { result } = renderHook(() => useRegionalAreaGroups('udupi'), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isError).toBe(true);
+    expect(result.current.isNotGeneratedForRevision).toBe(false);
+  });
+
+  it('a 503 AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION surfaces isNotGeneratedForRevision=true and isError=false, NOT the generic error state', async () => {
+    const { ApiError } = await import('@/lib/api');
+    mockApiGet.mockRejectedValueOnce(
+      new ApiError('Service Unavailable', 503, {
+        error: AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION_CODE,
+      }),
+    );
+
+    const { result } = renderHook(() => useRegionalAreaGroups('udupi'), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    // The distinguishing assertion: this 503 must never collapse into the generic
+    // retryable-error state, which is what produced the original "Could not load
+    // corridors" bug at the landing panel.
+    expect(result.current.isNotGeneratedForRevision).toBe(true);
+    expect(result.current.isError).toBe(false);
+    expect(result.current.groups).toEqual([]);
+  });
 });
 
 // ─── #2151 Track 3 — preview-mode threading via DiscoverDataSourceContext ─────

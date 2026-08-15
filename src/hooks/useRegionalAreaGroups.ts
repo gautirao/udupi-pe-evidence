@@ -23,7 +23,19 @@ export interface CorridorGroupData {
 export interface RegionalAreaGroupsData {
   groups: CorridorGroupData[];
   isLoading: boolean;
+  /**
+   * True for any error EXCEPT the 503 preview not-generated-for-revision case, which is
+   * surfaced separately via `isNotGeneratedForRevision` (#2151 Track 3 landing-panel gap fix:
+   * must render as its own distinct state, never folded into the generic retryable-error state).
+   */
   isError: boolean;
+  /**
+   * #2151 Track 3 — true when the active source is a PREVIEW revision that has zero sandbox
+   * Agri rows (backend 503 AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION). Mirrors
+   * `useAgriDestinations`'s `isNotGeneratedForRevision` — the remediation is re-running city
+   * preparation for this revision, not a shopper-retryable error.
+   */
+  isNotGeneratedForRevision: boolean;
   error: Error | null;
   refetch: () => void;
 }
@@ -174,10 +186,20 @@ export function useRegionalAreaGroups(city: string, listingPurpose?: string): Re
     retry: false,
   });
 
+  const isNotGeneratedForRevision =
+    isError &&
+    error instanceof ApiError &&
+    error.status === 503 &&
+    isErrorCodeBody(error.body) &&
+    error.body.error === AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION_CODE;
+
   return {
     groups: data?.groups ?? [],
     isLoading,
-    isError,
+    // The 503 not-generated-for-revision case is carved out of the generic error flag — it may
+    // never be presented as a generic retryable error (mirrors useAgriDestinations below).
+    isError: isError && !isNotGeneratedForRevision,
+    isNotGeneratedForRevision,
     error: error as Error | null,
     refetch,
   };

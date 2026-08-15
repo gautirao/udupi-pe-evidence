@@ -46,6 +46,7 @@ export function useDiscoverAgriController({
     groups: corridorGroups,
     isLoading: isLoadingRegionalAreaGroups,
     isError: isRegionalAreaGroupsError,
+    isNotGeneratedForRevision: isRegionalAreaGroupsNotGeneratedForRevision,
     refetch: refetchRegionalAreaGroups,
   } = useRegionalAreaGroups(nav.city || DEFAULT_CITY, intentListingPurpose);
 
@@ -123,6 +124,7 @@ export function useDiscoverAgriController({
     corridorGroups,
     isLoadingRegionalAreaGroups,
     isRegionalAreaGroupsError,
+    isRegionalAreaGroupsNotGeneratedForRevision,
     refetchRegionalAreaGroups,
     selectedRegion,
     selectedMaxKm,
