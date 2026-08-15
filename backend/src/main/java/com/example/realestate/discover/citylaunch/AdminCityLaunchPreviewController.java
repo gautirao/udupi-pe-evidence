@@ -78,13 +78,25 @@ public class AdminCityLaunchPreviewController {
         return noStore(previewService.getRegionScopedGroups(cityId, revisionId, regionKey));
     }
 
-    /** GET .../preview/areas -> {@link AreaSummaryResponse}. */
+    /**
+     * GET .../preview/areas[?propertyType=...] -> {@link AreaSummaryResponse}.
+     *
+     * <p>{@code propertyType} (#2171) is OPTIONAL and additive, mirroring production {@code GET
+     * /api/discover/areas}'s contract: absent/not {@code agricultural_land} -&gt; byte-identical
+     * generic per-area {@code listingCount}; {@code agricultural_land} -&gt; each area's {@code
+     * listingCount}/{@code agriAcreage} become the revision's real Agri parcel counts (see {@link
+     * CityLaunchPreviewService#getAreas(int, long, String)}), so this can never disagree with
+     * {@link #getRegionalAreaGroupsPreview} for the same revision.
+     */
     @IsAdmin
     @GetMapping("/areas")
     public ResponseEntity<AreaSummaryResponse> getAreas(
-            @PathVariable int cityId, @PathVariable long revisionId, CallerInfo caller) {
-        log.debug("GET preview/areas cityId={} revisionId={} adminId={}", cityId, revisionId, caller.userId());
-        return noStore(previewService.getAreas(cityId, revisionId));
+            @PathVariable int cityId, @PathVariable long revisionId,
+            @RequestParam(name = "propertyType", required = false) String propertyType,
+            CallerInfo caller) {
+        log.debug("GET preview/areas cityId={} revisionId={} propertyType={} adminId={}",
+                cityId, revisionId, propertyType, caller.userId());
+        return noStore(previewService.getAreas(cityId, revisionId, propertyType));
     }
 
     /** GET .../preview/markers?areaKeys=... -> {@link DiscoverMarkersResponse}. */
