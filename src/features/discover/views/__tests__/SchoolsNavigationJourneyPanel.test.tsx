@@ -53,6 +53,7 @@ function makeJourney(overrides: Partial<UseAreasNavigationJourneyResult> = {}): 
     children: [],
     resolutionNotice: null,
     nodeCount: null,
+    schoolsNotSimulatedForRevision: false,
     selectNode: vi.fn(),
     refetch: vi.fn(),
     historyAdjacencyLog: [],
@@ -183,5 +184,116 @@ describe('SchoolsNavigationJourneyPanel', () => {
 
     await user.type(input, 'A');
     expect(onSearch).toHaveBeenCalledWith('XYZ' + 'A');
+  });
+
+  // #2170 — the preview counts endpoint flags Schools as not-yet-simulated for
+  // the current revision via `schoolsNotSimulatedForRevision: true`. Every
+  // zone/area count is hardcoded to 0 in that case, so the panel must render an
+  // explicit "not simulated" state instead of the ambiguous "0 schools" wall.
+  describe('#2170 — schoolsNotSimulatedForRevision', () => {
+    const ZONE_NODE = makeNode({
+      children: [
+        { nodeKey: 'd:north', nodeType: 'DIRECTION', displayLabel: 'North', displayOrder: 1, areaKey: null },
+      ],
+    });
+    const ZERO_CHILDREN = [
+      {
+        nodeKey: 'd:north',
+        nodeType: 'DIRECTION' as const,
+        displayLabel: 'North',
+        displayOrder: 1,
+        listingCount: 12,
+        schoolCount: 0,
+        isLeafArea: false,
+        matchingAreaCount: 3,
+        descendantAreaCount: 5,
+        representativeAreaKeys: [],
+        bounds: null,
+        bearingDegrees: null,
+      },
+    ];
+
+    it('renders the explicit unavailable state instead of the bare zero-count zone list', () => {
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <SchoolsNavigationJourneyPanel
+              journey={makeJourney({
+                node: ZONE_NODE,
+                nodeCount: { listingCount: 12, schoolCount: 0, matchingAreaCount: 3 },
+                children: ZERO_CHILDREN,
+                levelKind: 'directions',
+                schoolsNotSimulatedForRevision: true,
+              })}
+              onSelectAreaKey={vi.fn()}
+              buildNodeHref={NOOP_BUILD_HREF}
+              schoolSearchQuery=""
+              onSchoolSearchQueryChange={vi.fn()}
+            />
+          </QueryClientProvider>
+        </MemoryRouter>
+      );
+
+      expect(screen.getByTestId('schools-not-simulated-for-revision-state')).toBeInTheDocument();
+      expect(screen.getByText(/schools aren't simulated in this preview yet/i)).toBeInTheDocument();
+      // The zero-count zone list must never render alongside/instead of this state.
+      expect(screen.queryByTestId('navigation-level-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('navigation-child-card-d:north')).not.toBeInTheDocument();
+    });
+
+    it('production/normal journey (flag false) still renders an honest "0 schools" — completely unchanged', () => {
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <SchoolsNavigationJourneyPanel
+              journey={makeJourney({
+                node: ZONE_NODE,
+                nodeCount: { listingCount: 12, schoolCount: 0, matchingAreaCount: 3 },
+                children: ZERO_CHILDREN,
+                levelKind: 'directions',
+                schoolsNotSimulatedForRevision: false,
+              })}
+              onSelectAreaKey={vi.fn()}
+              buildNodeHref={NOOP_BUILD_HREF}
+              schoolSearchQuery=""
+              onSchoolSearchQueryChange={vi.fn()}
+            />
+          </QueryClientProvider>
+        </MemoryRouter>
+      );
+
+      // A genuine zero-schools node renders the normal zone list with an
+      // honest "0", not the new unavailable state.
+      expect(screen.queryByTestId('schools-not-simulated-for-revision-state')).not.toBeInTheDocument();
+      expect(screen.getByTestId('navigation-level-panel')).toBeInTheDocument();
+      expect(screen.getByTestId('navigation-child-card-d:north')).toBeInTheDocument();
+    });
+
+    it('a journey with the flag absent (production wire shape default) behaves identically to false', () => {
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <SchoolsNavigationJourneyPanel
+              journey={makeJourney({
+                node: ZONE_NODE,
+                nodeCount: { listingCount: 12, schoolCount: 5, matchingAreaCount: 3 },
+                children: ZERO_CHILDREN,
+                levelKind: 'directions',
+                // schoolsNotSimulatedForRevision intentionally omitted — makeJourney
+                // defaults it to false, mirroring how useAreasNavigationJourney
+                // normalises a missing/production response.
+              })}
+              onSelectAreaKey={vi.fn()}
+              buildNodeHref={NOOP_BUILD_HREF}
+              schoolSearchQuery=""
+              onSchoolSearchQueryChange={vi.fn()}
+            />
+          </QueryClientProvider>
+        </MemoryRouter>
+      );
+
+      expect(screen.queryByTestId('schools-not-simulated-for-revision-state')).not.toBeInTheDocument();
+      expect(screen.getByTestId('navigation-level-panel')).toBeInTheDocument();
+    });
   });
 });
