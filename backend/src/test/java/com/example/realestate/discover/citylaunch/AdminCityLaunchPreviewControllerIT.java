@@ -1100,6 +1100,86 @@ class AdminCityLaunchPreviewControllerIT {
     }
 
     @Test
+    @DisplayName("#2174: /preview/areas?propertyType=agricultural_land&purpose=rent|sale returns "
+            + "PURPOSE-SCOPED per-area parcel counts that EXACTLY match what "
+            + "/preview/regional-area-groups?listingPurpose=rent|sale reports for the same area — "
+            + "the actual bubble<->panel parity the Buy/Rent toggle must preserve")
+    void e12_areas_purposeScoped_matchesRegionalAreaGroupsForSamePurpose() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        String agriAreaKey = "IN|KA|ACP|Agri-Areas-MixedPurpose";
+        seedArea(revisionId, agriAreaKey, "Agri Mixed Purpose", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+        insertProductionArea(agriAreaKey, testCityId, 13.01, 74.71);
+
+        // Mixed sale/rent parcels in the SAME area — this is the exact fixture shape the reviewer
+        // named: without purpose scoping, the bubble (sums ALL 3) and a purpose-scoped panel (sums
+        // only the matching purpose) disagree.
+        insertLiveAgriListing(agriAreaKey, "sale", 5_000_000L);
+        insertLiveAgriListing(agriAreaKey, "sale", 6_000_000L);
+        insertLiveAgriListing(agriAreaKey, "rent", 20_000L);
+        seedAgriRow(revisionId, agriAreaKey, 13.0, 74.7, 5.0, 0.0, "N", "0_10");
+
+        String base = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview";
+
+        // purpose=rent -> bubble must show exactly 1 (the single rent parcel), matching the panel.
+        MvcResult rentAreasResult = mockMvc.perform(get(base + "/areas")
+                        .param("propertyType", "agricultural_land")
+                        .param("purpose", "rent")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andReturn();
+        com.fasterxml.jackson.databind.JsonNode rentAreasJson =
+                objectMapper.readTree(rentAreasResult.getResponse().getContentAsString()).get("areas");
+        assertThat(findAreaByKey(rentAreasJson, agriAreaKey).get("listingCount").asLong()).isEqualTo(1L);
+
+        mockMvc.perform(get(base + "/regional-area-groups")
+                        .param("listingPurpose", "rent")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].listingCount").value(1))
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].areaKeys[0]").value(agriAreaKey));
+
+        // purpose=sale -> bubble must show exactly 2 (the two sale parcels), matching the panel —
+        // and it must DIFFER from the rent-scoped result above, proving the filter is real, not a
+        // no-op that happens to return the same number both times.
+        MvcResult saleAreasResult = mockMvc.perform(get(base + "/areas")
+                        .param("propertyType", "agricultural_land")
+                        .param("purpose", "sale")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andReturn();
+        com.fasterxml.jackson.databind.JsonNode saleAreasJson =
+                objectMapper.readTree(saleAreasResult.getResponse().getContentAsString()).get("areas");
+        long saleCount = findAreaByKey(saleAreasJson, agriAreaKey).get("listingCount").asLong();
+        assertThat(saleCount).isEqualTo(2L);
+        assertThat(saleCount).as("sale-scoped count must differ from rent-scoped count").isNotEqualTo(1L);
+
+        mockMvc.perform(get(base + "/regional-area-groups")
+                        .param("listingPurpose", "sale")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].listingCount").value(2))
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].areaKeys[0]").value(agriAreaKey));
+
+        // No purpose (default/blended) -> bubble must show all 3, matching the unscoped panel.
+        MvcResult blendedAreasResult = mockMvc.perform(get(base + "/areas")
+                        .param("propertyType", "agricultural_land")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andReturn();
+        com.fasterxml.jackson.databind.JsonNode blendedAreasJson =
+                objectMapper.readTree(blendedAreasResult.getResponse().getContentAsString()).get("areas");
+        assertThat(findAreaByKey(blendedAreasJson, agriAreaKey).get("listingCount").asLong()).isEqualTo(3L);
+
+        mockMvc.perform(get(base + "/regional-area-groups")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].listingCount").value(3));
+    }
+
+    @Test
     @DisplayName("#2171: /preview/areas with NO propertyType is completely unchanged — generic "
             + "unfiltered listingCount=1 per in-scope area, exactly as before")
     void e12_areas_noPropertyType_unchangedGenericListingCount() throws Exception {

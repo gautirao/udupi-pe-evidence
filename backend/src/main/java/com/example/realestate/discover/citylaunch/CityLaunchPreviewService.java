@@ -168,18 +168,37 @@ public class CityLaunchPreviewService {
 
     @Transactional(readOnly = true)
     public AreaSummaryResponse getAreas(int cityId, long revisionId) {
-        return getAreas(cityId, revisionId, null);
+        return getAreas(cityId, revisionId, null, null);
     }
 
     /**
      * #2171: {@code propertyType}-aware overload backing {@code GET .../preview/areas?propertyType=...}.
-     * When {@code propertyType} normalizes to {@code agricultural_land}, each in-scope area's
-     * {@code listingCount}/{@code agriAcreage} are the REAL revision-scoped Agri parcel counts —
-     * read via {@link AgriDestinationsService#getDestinations(String, String, Double, String, Long)}
-     * (the SAME {@link com.example.realestate.discover.AgriDestinationPort}-backed call already
-     * powering {@link #getRegionalAreaGroupsPreview}/{@link #getAgriDestinationsPreview}), never a
-     * second, independently-maintained counting mechanism — so the map bubble and the Agri corridor
-     * panel can never diverge for the same revision/area.
+     * Delegates to the {@code purpose}-aware 4-arg overload with {@code purpose = null} (no intent
+     * filter — byte-identical to this method's pre-purpose-parity behaviour).
+     */
+    @Transactional(readOnly = true)
+    public AreaSummaryResponse getAreas(int cityId, long revisionId, String propertyType) {
+        return getAreas(cityId, revisionId, propertyType, null);
+    }
+
+    /**
+     * #2171/#2174: {@code propertyType}+{@code purpose}-aware overload backing {@code GET
+     * .../preview/areas?propertyType=...&purpose=...}. When {@code propertyType} normalizes to
+     * {@code agricultural_land}, each in-scope area's {@code listingCount}/{@code agriAcreage} are
+     * the REAL revision-scoped Agri parcel counts, optionally scoped to {@code purpose} ({@code
+     * "sale"}/{@code "rent"}/{@code null} = blended) — read via {@link
+     * AgriDestinationsService#getDestinations(String, String, Double, String, Long)} (the SAME
+     * {@link com.example.realestate.discover.AgriDestinationPort}-backed call, with the SAME
+     * {@code purpose} value, already powering {@link #getRegionalAreaGroupsPreview}/{@link
+     * #getAgriDestinationsPreview}), never a second, independently-maintained counting mechanism —
+     * so the map bubble and the Agri corridor panel can never diverge for the same
+     * revision/area/purpose (#2174: this is what makes the bubble↔panel parity hold even when the
+     * Buy/Rent toggle is applied, not just when propertyType is applied).
+     *
+     * <p>{@code purpose} is ignored (as if {@code null}) when {@code propertyType} does not
+     * normalize to {@code agricultural_land} — mirrors production {@code GET /api/discover/areas}
+     * (see {@link com.example.realestate.discover.AreaSummaryService#getAreasByCity(String, String,
+     * String)}), where {@code purpose} is likewise only meaningful alongside the Agri filter today.
      *
      * <p>A revision with zero {@code sandbox_agri_destination_classification} rows fails closed with
      * the SAME 503 {@code AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION} those endpoints already throw
@@ -192,15 +211,14 @@ public class CityLaunchPreviewService {
      * callers.
      */
     @Transactional(readOnly = true)
-    public AreaSummaryResponse getAreas(int cityId, long revisionId, String propertyType) {
+    public AreaSummaryResponse getAreas(int cityId, long revisionId, String propertyType, String purpose) {
         loadPreviewableRevision(cityId, revisionId);
         String citySlug = resolveCitySlug(cityId);
         PreviewGraph graph = loadGraph(revisionId);
 
+        boolean isAgri = AGRICULTURAL_LAND_PROPERTY_TYPE.equals(normalizePropertyType(propertyType));
         Map<String, AgriDestinationBucketResponse> agriBucketsByAreaKey =
-                AGRICULTURAL_LAND_PROPERTY_TYPE.equals(normalizePropertyType(propertyType))
-                        ? loadAgriBucketsByAreaKey(citySlug, revisionId)
-                        : null;
+                isAgri ? loadAgriBucketsByAreaKey(citySlug, revisionId, purpose) : null;
 
         List<AreaSummary> areas = graph.inScopeAreas().stream()
                 .map(scoped -> toAreaSummary(revisionId, scoped, agriBucketsByAreaKey))
@@ -212,10 +230,11 @@ public class CityLaunchPreviewService {
         return propertyType == null ? null : propertyType.trim().toLowerCase();
     }
 
-    /** One port call for the whole revision, reused across every in-scope area (#2171). */
-    private Map<String, AgriDestinationBucketResponse> loadAgriBucketsByAreaKey(String citySlug, long revisionId) {
+    /** One port call for the whole revision, reused across every in-scope area (#2171/#2174). */
+    private Map<String, AgriDestinationBucketResponse> loadAgriBucketsByAreaKey(
+            String citySlug, long revisionId, String purpose) {
         AgriDestinationsResponse response =
-                agriDestinationsService.getDestinations(citySlug, null, null, null, revisionId);
+                agriDestinationsService.getDestinations(citySlug, null, null, purpose, revisionId);
         Map<String, AgriDestinationBucketResponse> byAreaKey = new HashMap<>();
         for (AgriDestinationBucketResponse bucket : response.destinations()) {
             byAreaKey.put(bucket.areaKey(), bucket);
