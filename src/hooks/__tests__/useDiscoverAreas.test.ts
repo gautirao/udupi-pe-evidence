@@ -346,7 +346,14 @@ describe('useDiscoverAreas — preview mode (Issue #1911 PR3)', () => {
     );
   });
 
-  it('preview request URL includes both propertyType and purpose when both are passed', async () => {
+  // Correction to the #2171 fix — the backend preview /areas endpoint
+  // (AdminCityLaunchPreviewController#getAreas /
+  // CityLaunchPreviewService#getAreas) has no purpose/listingPurpose param,
+  // so `purpose` must NOT be forwarded into the preview request URL even
+  // when both propertyType and purpose are passed to the hook. This locks
+  // in the scope-down so the plumbing can't silently drift back and be
+  // silently ignored by Spring in preview mode.
+  it('preview request URL does NOT include purpose, even when propertyType and purpose are both passed', async () => {
     mockGet.mockResolvedValue(AGRI_RESPONSE);
     const { result } = renderHook(
       () => useDiscoverAreas('udupi', 'agricultural_land', 'sale'),
@@ -356,8 +363,10 @@ describe('useDiscoverAreas — preview mode (Issue #1911 PR3)', () => {
 
     const [path] = mockGet.mock.calls[0] as [string, unknown];
     expect(path).toBe(
-      '/api/admin/city-launch/cities/7/revisions/42/preview/areas?propertyType=agricultural_land&purpose=sale',
+      '/api/admin/city-launch/cities/7/revisions/42/preview/areas?propertyType=agricultural_land',
     );
+    const params = new URLSearchParams(path.split('?')[1]);
+    expect(params.has('purpose')).toBe(false);
   });
 
   it('preview and live cache entries for the same city are distinct — no cross-serve', () => {

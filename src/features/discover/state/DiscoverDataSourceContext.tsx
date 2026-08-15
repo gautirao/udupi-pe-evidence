@@ -69,7 +69,7 @@ export function useDiscoverSource(): DiscoverDataSource {
 export type DiscoverEndpoint =
   | { kind: 'regions' }
   | { kind: 'regionGroups'; regionKey: string }
-  | { kind: 'areas'; propertyType?: string; purpose?: string }
+  | { kind: 'areas'; propertyType?: string }
   | { kind: 'markers' }
   | { kind: 'listings' }
   | { kind: 'listingDetail'; areaKey: string }
@@ -96,11 +96,15 @@ export type DiscoverEndpoint =
  * `/api/admin/city-launch/cities/{cityId}/revisions/{revisionId}/preview/...`
  * base path. Navigation/region/marker/listing endpoints carry no query
  * string in preview mode. The Agri-forwarding endpoints — `areas` (Issue
- * #2171, `propertyType`/`purpose`), `regionalAreaGroups`, `agriDestinations`,
+ * #2171, `propertyType` only — the backend preview endpoint
+ * (AdminCityLaunchPreviewController#getAreas /
+ * CityLaunchPreviewService#getAreas) has no `purpose`/`listingPurpose`
+ * parameter, so `purpose` is intentionally NOT part of this endpoint's
+ * variant or forwarded here), `regionalAreaGroups`, `agriDestinations`,
  * `agriMapListings` (Issue #2151 Track 2) — are the exception: they build and
- * append their own query string (e.g. `propertyType`, `purpose`,
- * `listingPurpose`, `direction`, `maxKm`, `areaKey`) in both modes, matching
- * the backend preview contract.
+ * append their own query string (e.g. `propertyType`, `listingPurpose`,
+ * `direction`, `maxKm`, `areaKey`) in both modes, matching the backend
+ * preview contract.
  */
 export function discoverPath(
   source: DiscoverDataSource,
@@ -122,7 +126,6 @@ export function discoverPath(
     case 'areas': {
       const params = new URLSearchParams();
       if (endpoint.propertyType) params.set('propertyType', endpoint.propertyType);
-      if (endpoint.purpose) params.set('purpose', endpoint.purpose);
       const qs = params.toString();
       return `${base}/areas${qs ? `?${qs}` : ''}`;
     }

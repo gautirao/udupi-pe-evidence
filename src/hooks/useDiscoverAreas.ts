@@ -59,7 +59,11 @@ export function useDiscoverAreas(city: string, propertyType?: string, purpose?: 
       if (propertyType) params.set('propertyType', propertyType);
       if (purpose) params.set('purpose', purpose);
       const livePath = `/api/discover/areas?${params.toString()}`;
-      const path = discoverPath(source, livePath, { kind: 'areas', propertyType, purpose });
+      // NOTE: `purpose` is intentionally NOT forwarded into discoverPath's
+      // 'areas' variant — the admin city-launch preview endpoint
+      // (AdminCityLaunchPreviewController#getAreas) has no purpose param.
+      // It remains in `livePath` above, which live mode returns verbatim.
+      const path = discoverPath(source, livePath, { kind: 'areas', propertyType });
       return api.get<DiscoverAreasResponse>(path, { skipAuth: source.mode === 'live' });
     },
     enabled: city.length > 0,

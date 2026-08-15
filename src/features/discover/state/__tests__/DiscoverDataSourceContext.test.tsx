@@ -83,15 +83,19 @@ describe('discoverPath', () => {
     ).toBe('/api/admin/city-launch/cities/7/revisions/42/preview/areas?propertyType=agricultural_land');
   });
 
-  it('preview mode appends both propertyType and purpose to the /areas path when both are set', () => {
+  // Correction to the #2171 fix — the backend preview /areas endpoint
+  // (AdminCityLaunchPreviewController#getAreas) has no `purpose` param, so
+  // the 'areas' DiscoverEndpoint variant only carries `propertyType`. This
+  // locks that scope-down in so `purpose` plumbing can't silently drift
+  // back in and be silently ignored by Spring.
+  it('the areas endpoint variant does not accept a purpose field (propertyType-only)', () => {
     expect(
       discoverPath(PREVIEW_SOURCE, livePath, {
         kind: 'areas',
         propertyType: 'agricultural_land',
-        purpose: 'sale',
       }),
     ).toBe(
-      '/api/admin/city-launch/cities/7/revisions/42/preview/areas?propertyType=agricultural_land&purpose=sale',
+      '/api/admin/city-launch/cities/7/revisions/42/preview/areas?propertyType=agricultural_land',
     );
   });
 
