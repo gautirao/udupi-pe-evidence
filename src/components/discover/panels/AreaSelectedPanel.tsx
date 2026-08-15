@@ -237,7 +237,7 @@ export function AreaSelectedPanel({
   const count = areaListings?.length ?? 0;
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto">
+    <div className="area-panel-container flex flex-1 flex-col overflow-y-auto">
       {/* Breadcrumb — sticky, area-first hierarchy: Home › City › Group › Area (Issue #1606) */}
       <div className="sticky top-0 z-20 border-b border-border/60 bg-background/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <AreaFirstBreadcrumb
@@ -313,10 +313,31 @@ export function AreaSelectedPanel({
           </div>
         </div>
 
-        {/* R-C — Fraunces serif headline: 2.375rem (38px), design-source exact. */}
-        <h1 className="font-['Fraunces',_ui-serif,_Georgia,_serif] text-[2.375rem] font-semibold leading-[1.1] tracking-[-0.02em] text-foreground">
-          Properties in {areaLabel}
-        </h1>
+        {/* Issue #2159 reskin — mock density rule (VISUAL_RULES §3): the scope
+            eyebrow, area title and result count read as ONE compact block
+            instead of a full-bleed hero headline. Count sits outside the <h1>
+            (a sibling, not a child) so the heading's accessible name stays
+            exactly "Properties in {areaLabel}" for existing tests/consumers. */}
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+              Result scope — Selected area
+            </p>
+            <h1 className="mt-0.5 font-['Fraunces',_ui-serif,_Georgia,_serif] text-[1.625rem] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
+              Properties in {areaLabel}
+            </h1>
+          </div>
+          {!isLoadingListings && (
+            <div className="shrink-0 text-right" data-testid="area-header-count">
+              <p className="font-mono text-2xl font-semibold leading-none tabular-nums text-foreground">
+                {count}
+              </p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {intentNoun === 'rent' ? 'for rent' : 'for sale'}
+              </p>
+            </div>
+          )}
+        </div>
         {/* R-C — sub-copy: 15px, 1.55 line-height, --text-body colour. */}
         <p className="mt-1.5 text-[15px] leading-[1.55] text-[hsl(var(--text-body))]">
           Explore verified listings around {areaLabel}, with map context and area-first filters.
@@ -359,13 +380,13 @@ export function AreaSelectedPanel({
             type="button"
             onClick={handleAddSchool}
             data-testid="add-school-cta"
-            className="flex w-full items-center justify-between gap-2 rounded-xl border border-border bg-card p-3 text-left shadow-sm transition-colors hover:border-primary/60"
+            className="flex w-full items-center gap-3 rounded-xl border border-plum/20 bg-plum-tint p-3 text-left shadow-sm transition-colors hover:border-plum/50"
           >
-            <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <Plus className="h-4 w-4 text-primary" aria-hidden="true" />
-              Add a school in this area
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-plum text-plum-foreground">
+              <Plus className="h-4 w-4" aria-hidden="true" />
             </span>
-            <span className="text-xs text-muted-foreground">Optional</span>
+            <span className="flex-1 text-sm font-semibold text-foreground">Add a school in this area</span>
+            <span className="shrink-0 text-xs text-muted-foreground">Optional</span>
           </button>
         </div>
       )}
@@ -556,7 +577,16 @@ export function AreaSelectedPanel({
                   `${count} verified ${count === 1 ? 'property' : 'properties'} for ${intentNoun} in ${areaLabel}`}
               </p>
             </div>
-            <div className="grid grid-cols-1 gap-3 p-4 2xl:grid-cols-2">
+            {/* Issue #2159 reskin — the desktop 2-column grid target (mock's dense
+                card grid) needs the PANEL's own width, not the viewport's: at the
+                1366×768 desktop target the panel column is well under Tailwind's
+                1536px `2xl` viewport breakpoint, so `2xl:grid-cols-2` never fired
+                and this always rendered single-column on desktop. Tailwind 3.4
+                doesn't ship container-query variants without the (uninstalled)
+                `@tailwindcss/container-queries` plugin, so a plain native CSS
+                container query does the job instead — see `.area-panel-container`
+                / `.area-listings-grid` in src/index.css. */}
+            <div className="area-listings-grid grid grid-cols-1 gap-3 p-4">
               {areaListings.map((listing) => (
                 <div
                   key={listing.id}
