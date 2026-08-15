@@ -39,9 +39,9 @@ package com.example.realestate.discover;
  *       solved by these triggers.)</li>
  * </ul>
  */
-class RegionOnboardingBlockedException extends RuntimeException {
+public class RegionOnboardingBlockedException extends RuntimeException {
 
-    enum Reason {
+    public enum Reason {
         MISSING_POLICY,
         MISSING_CLASSIFICATIONS,
         DEGENERATE_GROUP,
@@ -51,12 +51,12 @@ class RegionOnboardingBlockedException extends RuntimeException {
 
     private final Reason reason;
 
-    RegionOnboardingBlockedException(Reason reason, String message) {
+    public RegionOnboardingBlockedException(Reason reason, String message) {
         super(message);
         this.reason = reason;
     }
 
-    Reason reason() {
+    public Reason reason() {
         return reason;
     }
 }

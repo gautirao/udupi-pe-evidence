@@ -105,6 +105,7 @@ class CityLaunchNavigationOverrideServiceIT {
             jdbc.update("DELETE FROM public.city_region_policy WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_region_memberships WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_regions WHERE city_id = ?", cityId);
+            jdbc.update("DELETE FROM public.regional_area_classifications WHERE city_key = ?", slug);
             jdbc.update("DELETE FROM public.areas WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.cities WHERE id = ?", cityId);
         }
@@ -149,6 +150,7 @@ class CityLaunchNavigationOverrideServiceIT {
                         + "VALUES (?, 'CENTRAL_CARDINAL_8', 3.0, 2, 1, 6, false, 0.35, 0.5, "
                         + " 'GEOMETRIC_BISECTION', 'CENTROID_NEAREST', 'ATTACH_NEAREST_CLUSTER', 'AREA_CENTROID_MEAN')",
                 cityId);
+        seedDecoyClassifiedArea(cityId, slug);
 
         for (int i = 1; i <= 4; i++) {
             double lat = 13.0 + i * 0.1;
@@ -156,16 +158,21 @@ class CityLaunchNavigationOverrideServiceIT {
             jdbc.update(
                     "INSERT INTO public.areas (area_key, city_id, name, district, geo_center_lat, geo_center_lon, "
                             + " min_lat, min_lon, max_lat, max_lon) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    slug + "|area-" + i, cityId, "Area " + i, slug + "-district", lat, lon,
+                    slug + "|d|g|area-" + i, cityId, "Area " + i, slug + "-district", lat, lon,
                     lat - 0.001, lon - 0.001, lat + 0.001, lon + 0.001);
         }
 
         jdbc.update("INSERT INTO public.city_regions (city_id, region_key, display_label, display_order) "
                 + "VALUES (?, ?, ?, 1)", cityId, slug + "-north", slug + "-north");
         for (int i = 1; i <= 4; i++) {
+            // #2163: 'OVERRIDE' (not 'AUTO') is load-bearing — CityRegionOnboardingService.apply(),
+            // now invoked by every prepare() call, deletes stale 'AUTO' memberships for any
+            // area_key outside its own computed effective set; these fixture areas are deliberately
+            // NOT real-classified (see seedDecoyClassifiedArea), so an 'AUTO' row here would be
+            // wiped out by that exact cleanup on the very same prepare() call that seeded it.
             jdbc.update("INSERT INTO public.city_region_memberships "
-                            + "(city_id, area_key, region_key, assignment_source) VALUES (?, ?, ?, 'AUTO')",
-                    cityId, slug + "|area-" + i, slug + "-north");
+                            + "(city_id, area_key, region_key, assignment_source) VALUES (?, ?, ?, 'OVERRIDE')",
+                    cityId, slug + "|d|g|area-" + i, slug + "-north");
         }
 
         return cityId;
@@ -188,6 +195,7 @@ class CityLaunchNavigationOverrideServiceIT {
                         + "VALUES (?, 'CENTRAL_CARDINAL_8', 3.0, 3, 1, 6, false, 0.35, 0.5, "
                         + " 'GEOMETRIC_BISECTION', 'CENTROID_NEAREST', 'ATTACH_NEAREST_CLUSTER', 'AREA_CENTROID_MEAN')",
                 cityId);
+        seedDecoyClassifiedArea(cityId, slug);
 
         for (int i = 1; i <= 6; i++) {
             double lat = 13.0 + i * 0.1;
@@ -195,19 +203,49 @@ class CityLaunchNavigationOverrideServiceIT {
             jdbc.update(
                     "INSERT INTO public.areas (area_key, city_id, name, district, geo_center_lat, geo_center_lon, "
                             + " min_lat, min_lon, max_lat, max_lon) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    slug + "|area-" + i, cityId, "Area " + i, slug + "-district", lat, lon,
+                    slug + "|d|g|area-" + i, cityId, "Area " + i, slug + "-district", lat, lon,
                     lat - 0.001, lon - 0.001, lat + 0.001, lon + 0.001);
         }
 
         jdbc.update("INSERT INTO public.city_regions (city_id, region_key, display_label, display_order) "
                 + "VALUES (?, ?, ?, 1)", cityId, slug + "-north", slug + "-north");
         for (int i = 1; i <= 6; i++) {
+            // #2163: 'OVERRIDE' (not 'AUTO') is load-bearing — CityRegionOnboardingService.apply(),
+            // now invoked by every prepare() call, deletes stale 'AUTO' memberships for any
+            // area_key outside its own computed effective set; these fixture areas are deliberately
+            // NOT real-classified (see seedDecoyClassifiedArea), so an 'AUTO' row here would be
+            // wiped out by that exact cleanup on the very same prepare() call that seeded it.
             jdbc.update("INSERT INTO public.city_region_memberships "
-                            + "(city_id, area_key, region_key, assignment_source) VALUES (?, ?, ?, 'AUTO')",
-                    cityId, slug + "|area-" + i, slug + "-north");
+                            + "(city_id, area_key, region_key, assignment_source) VALUES (?, ?, ?, 'OVERRIDE')",
+                    cityId, slug + "|d|g|area-" + i, slug + "-north");
         }
 
         return cityId;
+    }
+
+    /**
+     * #2163: {@code prepare()} now self-materializes canonical geography prerequisites via {@code
+     * CityRegionOnboardingService.apply()}, which requires >=1 real {@code
+     * regional_area_classifications} row (else {@code MISSING_CLASSIFICATIONS}) — this file's
+     * fixtures hand-seed {@code city_regions}/{@code city_region_memberships} directly with a
+     * SPECIFIC region_key covering ALL of a fixture's areas (required for the clustering tests
+     * below to bisect a single region's member set), so rather than reclassify the real fixture
+     * areas (which would scatter them across apply()'s own canonical CENTRAL_CARDINAL_8 regions
+     * instead), seed one separate INACTIVE "decoy" area purely to satisfy {@code
+     * classificationsPresent()}. Being INACTIVE, it is excluded from navigation-tree generation's
+     * area capture, so it never appears in any cluster/tree assertion in this file.
+     */
+    private void seedDecoyClassifiedArea(int cityId, String citySlug) {
+        String decoyAreaKey = citySlug + "|d|g|decoy-2163";
+        jdbc.update(
+                "INSERT INTO public.areas (area_key, city_id, name, district, geo_center_lat, geo_center_lon, "
+                        + "lifecycle_status) VALUES (?, ?, ?, ?, ?, ?, 'INACTIVE')",
+                decoyAreaKey, cityId, decoyAreaKey, citySlug + "-district", 13.0, 74.7);
+        jdbc.update(
+                "INSERT INTO public.regional_area_classifications "
+                        + "(city_key, area_key, direction_key, distance_band_key, bearing_deg, distance_km, computed_at) "
+                        + "VALUES (?, ?, 'N', '0_10', 0.0, 5.0, now())",
+                citySlug, decoyAreaKey);
     }
 
     private long prepareAndAwaitPrepared(int cityId) {
@@ -261,12 +299,12 @@ class CityLaunchNavigationOverrideServiceIT {
 
         jdbc.update("INSERT INTO public.sandbox_navigation_override "
                 + "(revision_id, override_kind, subject_area_key, apply_order, created_by) "
-                + "VALUES (?, 'EXCLUDE_AREA', 'ovdup1|area-1', 1, ?)", revisionId, ADMIN_ID);
+                + "VALUES (?, 'EXCLUDE_AREA', 'ovdup1|d|g|area-1', 1, ?)", revisionId, ADMIN_ID);
 
         assertThatThrownBy(() -> jdbc.update(
                 "INSERT INTO public.sandbox_navigation_override "
                         + "(revision_id, override_kind, subject_area_key, apply_order, created_by) "
-                        + "VALUES (?, 'EXCLUDE_AREA', 'ovdup1|area-1', 2, ?)", revisionId, ADMIN_ID))
+                        + "VALUES (?, 'EXCLUDE_AREA', 'ovdup1|d|g|area-1', 2, ?)", revisionId, ADMIN_ID))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -277,13 +315,13 @@ class CityLaunchNavigationOverrideServiceIT {
         long revisionId = prepareAndAwaitPrepared(cityId);
 
         AdminNavigationOverrideRequest req = new AdminNavigationOverrideRequest(
-                "EXCLUDE_AREA", "ovrt1|area-1", null, null, null, null, null, "test reason");
+                "EXCLUDE_AREA", "ovrt1|d|g|area-1", null, null, null, null, null, "test reason");
         overrideService.createOverride(cityId, revisionId, req, ADMIN_ID);
 
         List<AdminNavigationOverrideResponse> overrides = overrideService.listOverrides(cityId, revisionId);
         assertThat(overrides).hasSize(1);
         assertThat(overrides.get(0).kind()).isEqualTo("EXCLUDE_AREA");
-        assertThat(overrides.get(0).subjectAreaKey()).isEqualTo("ovrt1|area-1");
+        assertThat(overrides.get(0).subjectAreaKey()).isEqualTo("ovrt1|d|g|area-1");
         assertThat(overrides.get(0).reason()).isEqualTo("test reason");
     }
 
@@ -297,7 +335,7 @@ class CityLaunchNavigationOverrideServiceIT {
         String checksumBefore = revisionRepository.findById(revisionId).orElseThrow().getPersistedRevisionChecksum();
 
         AdminNavigationOverrideRequest req = new AdminNavigationOverrideRequest(
-                "EXCLUDE_AREA", "ovregen1|area-1", null, null, null, null, null, null);
+                "EXCLUDE_AREA", "ovregen1|d|g|area-1", null, null, null, null, null, null);
         NavigationTreeDiffResponse diff = overrideService.createOverride(cityId, revisionId, req, ADMIN_ID);
 
         String checksumAfter = revisionRepository.findById(revisionId).orElseThrow().getPersistedRevisionChecksum();
@@ -306,7 +344,7 @@ class CityLaunchNavigationOverrideServiceIT {
 
         // The excluded area no longer has an AREA leaf in the regenerated tree.
         boolean stillPresent = sandboxNavigationNodeRepository.findByRevisionId(revisionId).stream()
-                .anyMatch(n -> "ovregen1|area-1".equals(n.getAreaKey()));
+                .anyMatch(n -> "ovregen1|d|g|area-1".equals(n.getAreaKey()));
         assertThat(stillPresent).isFalse();
     }
 
@@ -318,7 +356,7 @@ class CityLaunchNavigationOverrideServiceIT {
         jdbc.update("UPDATE public.city_launch_revision SET lifecycle_status = 'VALIDATED' WHERE id = ?", revisionId);
 
         AdminNavigationOverrideRequest req = new AdminNavigationOverrideRequest(
-                "EXCLUDE_AREA", "ovlifecycle1|area-1", null, null, null, null, null, null);
+                "EXCLUDE_AREA", "ovlifecycle1|d|g|area-1", null, null, null, null, null, null);
 
         assertThatThrownBy(() -> overrideService.createOverride(cityId, revisionId, req, ADMIN_ID))
                 .isInstanceOf(ResponseStatusException.class)
@@ -332,7 +370,7 @@ class CityLaunchNavigationOverrideServiceIT {
         long revisionId = prepareAndAwaitPrepared(cityId);
 
         AdminNavigationOverrideRequest req = new AdminNavigationOverrideRequest(
-                "EXCLUDE_AREA", "ovdupsvc1|area-1", null, null, null, null, null, null);
+                "EXCLUDE_AREA", "ovdupsvc1|d|g|area-1", null, null, null, null, null, null);
         overrideService.createOverride(cityId, revisionId, req, ADMIN_ID);
 
         assertThatThrownBy(() -> overrideService.createOverride(cityId, revisionId, req, ADMIN_ID))
@@ -347,7 +385,7 @@ class CityLaunchNavigationOverrideServiceIT {
         long revisionId = prepareAndAwaitPrepared(cityId);
 
         AdminNavigationOverrideRequest req = new AdminNavigationOverrideRequest(
-                "EXCLUDE_AREA", "ovdel1|area-1", null, null, null, null, null, null);
+                "EXCLUDE_AREA", "ovdel1|d|g|area-1", null, null, null, null, null, null);
         overrideService.createOverride(cityId, revisionId, req, ADMIN_ID);
         long overrideId = overrideService.listOverrides(cityId, revisionId).get(0).id();
 
@@ -355,7 +393,7 @@ class CityLaunchNavigationOverrideServiceIT {
 
         assertThat(overrideService.listOverrides(cityId, revisionId)).isEmpty();
         boolean present = sandboxNavigationNodeRepository.findByRevisionId(revisionId).stream()
-                .anyMatch(n -> "ovdel1|area-1".equals(n.getAreaKey()));
+                .anyMatch(n -> "ovdel1|d|g|area-1".equals(n.getAreaKey()));
         assertThat(present).isTrue();
     }
 

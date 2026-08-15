@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -103,6 +104,8 @@ class CityLaunchPreparationServiceIT {
     @Autowired
     @Qualifier("cityLaunchGraphWriterExecutor")
     private java.util.concurrent.Executor graphWriterExecutor;
+    @Autowired private com.example.realestate.discover.CityRegionOnboardingService cityRegionOnboardingService;
+    @Autowired private com.example.realestate.discover.RegionalClassificationBackfillService backfillService;
     
     @SpyBean
     private CityLaunchSseService sseService;
@@ -130,6 +133,10 @@ class CityLaunchPreparationServiceIT {
             jdbc.update("DELETE FROM public.area_groups WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_region_memberships WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_regions WHERE city_id = ?", cityId);
+            // #2163: seedRegionPolicy() inserts city_region_policy rows that FK-reference cities.id
+            // and must be cleared before the city itself can be deleted.
+            jdbc.update("DELETE FROM public.city_region_policy WHERE city_id = ?", cityId);
+            jdbc.update("DELETE FROM public.regional_area_classifications WHERE city_key = ?", slug);
             jdbc.update("DELETE FROM public.area_alias WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.areas WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.cities WHERE id = ?", cityId);
@@ -188,11 +195,36 @@ class CityLaunchPreparationServiceIT {
                 areaKey, cityId, areaKey, lat, lon, lifecycleStatus);
     }
 
+    /** Same as {@link #seedArea(int, String, double, double, String)} but with a NULL geo-centre —
+     * relies on the Testcontainers-only V116.9 relaxation of areas.geo_center_lat/lon to nullable
+     * (production V71 keeps them NOT NULL) to prove the {@code geoCenterLat/Lon != null} arm of
+     * {@code ensureCanonicalGeography}'s NO_ACTIVE_AREAS guard. */
+    private void seedAreaWithNullGeo(int cityId, String areaKey, String lifecycleStatus) {
+        jdbc.update(
+                "INSERT INTO public.areas (area_key, city_id, name, geo_center_lat, geo_center_lon, lifecycle_status) "
+                        + "VALUES (?, ?, ?, NULL, NULL, ?)",
+                areaKey, cityId, areaKey, lifecycleStatus);
+    }
+
     private void seedRegion(int cityId, String regionKey) {
         jdbc.update(
                 "INSERT INTO public.city_regions (city_id, region_key, display_label, display_order) "
                         + "VALUES (?, ?, ?, 1)",
                 cityId, regionKey, regionKey);
+    }
+
+    /**
+     * #2163: {@code prepare()} now self-materializes canonical geography prerequisites via
+     * {@code CityRegionOnboardingService.apply()}, which requires a {@code city_region_policy}
+     * row (else it throws {@code MISSING_POLICY}). Mirrors Udupi's real production policy
+     * (CENTRAL_CARDINAL_4, {@code central_radius_km=4} — see V113) so fixtures using this helper
+     * exercise the same code path prepare() now takes for a never-before-onboarded city.
+     */
+    private void seedRegionPolicy(int cityId, String regionModel, double centralRadiusKm) {
+        jdbc.update(
+                "INSERT INTO public.city_region_policy (city_id, region_model, central_radius_km) "
+                        + "VALUES (?, ?, ?)",
+                cityId, regionModel, centralRadiusKm);
     }
 
     private void seedMembership(int cityId, String areaKey, String regionKey) {
@@ -214,17 +246,22 @@ class CityLaunchPreparationServiceIT {
                 groupId, areaKey);
     }
 
-    /** Full valid canonical geography: 2 areas, 1 region (both areas members), 1 group (both areas members). */
+    /**
+     * Full valid canonical geography: 2 areas (#2163: 4-segment area_key — required by
+     * {@code RegionalClassificationBackfillService}'s {@code array_length(...) = 4} filter, else
+     * {@code prepare()}'s self-backfill upserts zero classification rows for these areas), a
+     * {@code city_region_policy} row (CENTRAL_CARDINAL_4, so {@code prepare()}'s
+     * {@code CityRegionOnboardingService.apply()} call materializes real city_regions/memberships
+     * instead of throwing {@code MISSING_POLICY}), and 1 group (both areas members).
+     */
     private int seedFullValidGeography(String citySlug) {
         int cityId = seedCity(citySlug);
-        seedArea(cityId, citySlug + "|area-1", 13.01, 74.71);
-        seedArea(cityId, citySlug + "|area-2", 13.02, 74.72);
-        seedRegion(cityId, citySlug + "-north");
-        seedMembership(cityId, citySlug + "|area-1", citySlug + "-north");
-        seedMembership(cityId, citySlug + "|area-2", citySlug + "-north");
+        seedArea(cityId, citySlug + "|d|g|area-1", 13.01, 74.71);
+        seedArea(cityId, citySlug + "|d|g|area-2", 13.02, 74.72);
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
         int groupId = seedGroup(cityId, citySlug + "-belt");
-        seedGroupMember(groupId, citySlug + "|area-1");
-        seedGroupMember(groupId, citySlug + "|area-2");
+        seedGroupMember(groupId, citySlug + "|d|g|area-1");
+        seedGroupMember(groupId, citySlug + "|d|g|area-2");
         return cityId;
     }
 
@@ -250,7 +287,11 @@ class CityLaunchPreparationServiceIT {
 
         Long revisionId = response.revisionId();
         assertThat(sandboxAreaRepository.findByRevisionId(revisionId)).hasSize(2);
-        assertThat(sandboxCityRegionRepository.findByRevisionId(revisionId)).hasSize(1);
+        // #2163: prepare() now self-materializes city_regions via CityRegionOnboardingService.apply()
+        // using the CENTRAL_CARDINAL_4 policy seeded by seedFullValidGeography() — apply() always
+        // materializes ALL 5 canonical regions (CENTRAL, N, E, S, W) regardless of occupancy, not
+        // just the ones with members.
+        assertThat(sandboxCityRegionRepository.findByRevisionId(revisionId)).hasSize(5);
         assertThat(sandboxCityRegionMembershipRepository.findByRevisionId(revisionId)).hasSize(2);
         assertThat(sandboxAreaGroupRepository.findByRevisionId(revisionId)).hasSize(1);
         assertThat(sandboxAreaGroupMemberRepository.findByRevisionId(revisionId)).hasSize(2);
@@ -328,6 +369,11 @@ class CityLaunchPreparationServiceIT {
             + "rows AND a separate REQUIRES_NEW transaction still records FAILED + failure_reason")
     void async2_midWriteFailure_rollsBackToZeroRows_andRecordsFailedInSeparateTx() {
         int cityId = seedFullValidGeography("a2");
+        // This test drives CityLaunchGraphWriter directly (bypassing preparationService.prepare(),
+        // and therefore its #2163 self-materialization of city_regions) — seed a canonical region
+        // by hand so the writer has something to copy into sandbox_city_regions and collide on.
+        seedRegion(cityId, "a2-north");
+        seedMembership(cityId, "a2|d|g|area-1", "a2-north");
 
         CityLaunchRevision revision = revisionRepository.saveAndFlush(
                 new CityLaunchRevision(cityId, 1, ADMIN_ID));
@@ -414,6 +460,19 @@ class CityLaunchPreparationServiceIT {
             }
             assertThat(successes.get()).isEqualTo(1);
             assertThat(conflicts.get()).isEqualTo(1);
+
+            // The loser must not have raced its own apply() call into materializing a duplicate
+            // set of city_regions/city_region_memberships rows before losing the conflict check.
+            Integer regionRows = jdbc.queryForObject(
+                    "SELECT count(*) FROM public.city_regions WHERE city_id = ?", Integer.class, cityId);
+            Integer membershipRows = jdbc.queryForObject(
+                    "SELECT count(*) FROM public.city_region_memberships WHERE city_id = ?",
+                    Integer.class, cityId);
+            assertThat(membershipRows).as("both seeded areas must be materialized exactly once each "
+                    + "— a duplicate racing apply() would double this to 4").isEqualTo(2);
+            assertThat(regionRows).as("the CENTRAL_CARDINAL_4 policy materializes exactly 5 region rows "
+                    + "(4 cardinal directions + central) for a single apply() — a duplicate racing "
+                    + "apply() would double this to 10").isEqualTo(5);
         } finally {
             pool.shutdownNow();
         }
@@ -510,15 +569,24 @@ class CityLaunchPreparationServiceIT {
     // =========================================================================================
 
     @Test
-    @DisplayName("AC4: a city with zero city_regions rows fails validation UP FRONT — no revision is created")
+    @DisplayName("AC4 (#2163 update): a city with an ACTIVE area but no city_region_policy row fails "
+            + "prerequisite self-generation UP FRONT with CityPrerequisiteGenerationException/MISSING_POLICY "
+            + "— no revision is created. Previously (pre-#2163) this scenario surfaced as a plain "
+            + "GeographyValidationException because prepare() never attempted to generate the missing "
+            + "city_regions itself; now it tries, and correctly reports WHY generation is blocked.")
     void ac4_invalidGeography_zeroRegions_failsValidation_zeroSandboxRows() {
         int cityId = seedCity("ac4");
-        seedArea(cityId, "ac4|area-1", 13.01, 74.71);
-        // No city_regions seeded at all -> geography.regions() is empty -> GeographyValidationException.
+        // #2163 review fix: 4-segment area_key so the ACTIVE-area guard (which mirrors the
+        // downstream array_length(area_key,'|') = 4 classification-eligibility filter) is
+        // satisfied and this test reaches the MISSING_POLICY failure it is actually about.
+        seedArea(cityId, "ac4|d|g|area-1", 13.01, 74.71);
+        // No city_region_policy row seeded -> CityRegionOnboardingService.apply() throws
+        // MISSING_POLICY, surfaced as CityPrerequisiteGenerationException.
 
         assertThatThrownBy(() -> preparationService.prepare(cityId, ADMIN_ID))
-                .isInstanceOf(GeographyValidationException.class)
-                .hasMessageContaining("City geography is not ready");
+                .isInstanceOf(CityPrerequisiteGenerationException.class)
+                .satisfies(ex -> assertThat(((CityPrerequisiteGenerationException) ex).reason())
+                        .isEqualTo("MISSING_POLICY"));
 
         assertThat(revisionRepository.findByCityId(cityId)).isEmpty();
     }
@@ -534,11 +602,12 @@ class CityLaunchPreparationServiceIT {
             + "to ACTIVE)")
     void lifecycleStatus_activeAndMergedAreas_preservedInSandbox_notDefaultedToActive() {
         int cityId = seedCity("lc1");
-        seedArea(cityId, "lc1|area-active", 13.01, 74.71, "ACTIVE");
-        seedArea(cityId, "lc1|area-merged", 13.02, 74.72, "MERGED");
-        seedRegion(cityId, "lc1-north");
-        seedMembership(cityId, "lc1|area-active", "lc1-north");
-        seedMembership(cityId, "lc1|area-merged", "lc1-north");
+        // #2163: 4-segment area_key (required by RegionalClassificationBackfillService's
+        // array_length(...) = 4 filter) + a city_region_policy row, so prepare()'s self-generated
+        // CityRegionOnboardingService.apply() call succeeds rather than throwing MISSING_POLICY.
+        seedArea(cityId, "lc1|d|g|area-active", 13.01, 74.71, "ACTIVE");
+        seedArea(cityId, "lc1|d|g|area-merged", 13.02, 74.72, "MERGED");
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
 
         PrepareResponse response = preparationService.prepare(cityId, ADMIN_ID);
 
@@ -549,18 +618,20 @@ class CityLaunchPreparationServiceIT {
         List<SandboxArea> areas = sandboxAreaRepository.findByRevisionId(response.revisionId());
         assertThat(areas).hasSize(2);
         assertThat(areas)
-                .filteredOn(a -> a.getAreaKey().equals("lc1|area-active"))
+                .filteredOn(a -> a.getAreaKey().equals("lc1|d|g|area-active"))
                 .singleElement()
                 .satisfies(a -> assertThat(a.getLifecycleStatus()).isEqualTo("ACTIVE"));
         assertThat(areas)
-                .filteredOn(a -> a.getAreaKey().equals("lc1|area-merged"))
+                .filteredOn(a -> a.getAreaKey().equals("lc1|d|g|area-merged"))
                 .singleElement()
                 .satisfies(a -> assertThat(a.getLifecycleStatus()).isEqualTo("MERGED"));
     }
 
     @Test
-    @DisplayName("lifecycle-2: a city whose ONLY areas are non-ACTIVE (all MERGED/INACTIVE) fails AC4 "
-            + "validation -> no revision created")
+    @DisplayName("lifecycle-2 (#2163 update): a city whose ONLY areas are non-ACTIVE (all MERGED/INACTIVE) "
+            + "fails prerequisite self-generation UP FRONT with CityPrerequisiteGenerationException/"
+            + "NO_ACTIVE_AREAS -> no revision created. Previously (pre-#2163) surfaced as a plain "
+            + "GeographyValidationException.")
     void lifecycleStatus_allAreasNonActive_failsAc4Validation_zeroSandboxRows() {
         int cityId = seedCity("lc2");
         seedArea(cityId, "lc2|area-merged", 13.01, 74.71, "MERGED");
@@ -570,8 +641,26 @@ class CityLaunchPreparationServiceIT {
         seedMembership(cityId, "lc2|area-inactive", "lc2-north");
 
         assertThatThrownBy(() -> preparationService.prepare(cityId, ADMIN_ID))
-                .isInstanceOf(GeographyValidationException.class)
-                .hasMessageContaining("City geography is not ready");
+                .isInstanceOf(CityPrerequisiteGenerationException.class)
+                .satisfies(ex -> assertThat(((CityPrerequisiteGenerationException) ex).reason())
+                        .isEqualTo("NO_ACTIVE_AREAS"));
+
+        assertThat(revisionRepository.findByCityId(cityId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("lifecycle-3 (#2163 review fix): a city whose ONLY area is ACTIVE with a 4-segment "
+            + "area_key but a NULL geo-centre fails prerequisite self-generation UP FRONT with "
+            + "CityPrerequisiteGenerationException/NO_ACTIVE_AREAS, exactly like the non-ACTIVE case — "
+            + "proving the geoCenterLat/Lon != null arm of the guard, not just the lifecycleStatus arm.")
+    void lifecycleStatus_activeAreaNullGeoCenter_failsAc4Validation_zeroSandboxRows() {
+        int cityId = seedCity("lc3");
+        seedAreaWithNullGeo(cityId, "lc3|d|g|area-nullgeo", "ACTIVE");
+
+        assertThatThrownBy(() -> preparationService.prepare(cityId, ADMIN_ID))
+                .isInstanceOf(CityPrerequisiteGenerationException.class)
+                .satisfies(ex -> assertThat(((CityPrerequisiteGenerationException) ex).reason())
+                        .isEqualTo("NO_ACTIVE_AREAS"));
 
         assertThat(revisionRepository.findByCityId(cityId)).isEmpty();
     }
@@ -586,7 +675,7 @@ class CityLaunchPreparationServiceIT {
     void ac5_oneRevisionId_sharedAcrossAllSixTables_noOrphans() {
         int cityId = seedFullValidGeography("ac5");
         jdbc.update("INSERT INTO public.area_alias (city_id, area_key, alias, alias_normalised) "
-                + "VALUES (?, ?, ?, ?)", cityId, "ac5|area-1", "Area One Alias", "area one alias");
+                + "VALUES (?, ?, ?, ?)", cityId, "ac5|d|g|area-1", "Area One Alias", "area one alias");
 
         PrepareResponse response = preparationService.prepare(cityId, ADMIN_ID);
         Long revisionId = response.revisionId();
@@ -628,10 +717,10 @@ class CityLaunchPreparationServiceIT {
         insertRevisionRow(cityId, 1, "FAILED", "FAILED", (short) 3);
         CityLaunchRevision failedSnapshot = revisionRepository.findByCityId(cityId).get(0);
 
-        // Fix the geography so the re-run succeeds.
-        seedArea(cityId, "ac7|area-1", 13.01, 74.71);
-        seedRegion(cityId, "ac7-north");
-        seedMembership(cityId, "ac7|area-1", "ac7-north");
+        // Fix the geography so the re-run succeeds. #2163: 4-segment area_key + a city_region_policy
+        // row, so prepare()'s self-generated CityRegionOnboardingService.apply() call succeeds.
+        seedArea(cityId, "ac7|d|g|area-1", 13.01, 74.71);
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
 
         // Rerun with the new valid geography
         PrepareResponse second = preparationService.prepare(cityId, ADMIN_ID);
@@ -755,5 +844,314 @@ class CityLaunchPreparationServiceIT {
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    // =========================================================================================
+    // #2163 — prepare() self-materializes canonical geography prerequisites
+    // =========================================================================================
+
+    @Test
+    @DisplayName("#2163: a never-before-onboarded city (zero regional_area_classifications, zero "
+            + "city_regions — the real Udupi 422 scenario) is self-healed by prepare() itself: "
+            + "city_regions/memberships get materialized from canonical geometry computed in-memory "
+            + "(regional_area_classifications is never written), and a PREPARING revision is "
+            + "admitted — no external startup-flag-gated runner required")
+    void prepare_udupiWithoutRegions_materializesRegionsAndAdmitsRevision() {
+        int cityId = seedFullValidGeography("u2163");
+
+        Integer classificationsBefore = jdbc.queryForObject(
+                "SELECT count(*) FROM public.regional_area_classifications WHERE city_key = ?",
+                Integer.class, "u2163");
+        Integer regionsBefore = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_regions WHERE city_id = ?", Integer.class, cityId);
+        assertThat(classificationsBefore).isZero();
+        assertThat(regionsBefore).isZero();
+
+        PrepareResponse response = preparationService.prepare(cityId, ADMIN_ID);
+        assertThat(response.status()).isEqualTo("preparing");
+
+        Integer classificationsAfter = jdbc.queryForObject(
+                "SELECT count(*) FROM public.regional_area_classifications WHERE city_key = ?",
+                Integer.class, "u2163");
+        Integer regionsAfter = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_regions WHERE city_id = ?", Integer.class, cityId);
+        Integer membershipsAfter = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_region_memberships WHERE city_id = ?", Integer.class, cityId);
+        // #2163 fix: prepare() must never write to the legacy regional_area_classifications table.
+        assertThat(classificationsAfter).isZero();
+        assertThat(regionsAfter).isGreaterThan(0);
+        assertThat(membershipsAfter).isEqualTo(2);
+
+        pollUntil(() ->
+                assertThat(revisionRepository.findById(response.revisionId()).orElseThrow().getLifecycleStatus())
+                        .isEqualTo(LifecycleStatus.PREPARED));
+    }
+
+    @Test
+    @DisplayName("#2163: apply() is applied idempotently — calling it a second time after prepare() "
+            + "already materialized regions leaves city_regions/memberships row counts unchanged "
+            + "(no-op via CityRegionOnboardingService's own fingerprint check)")
+    void prepare_twiceSequentially_noDuplicateRegionsOrMemberships() {
+        int cityId = seedFullValidGeography("u2163b");
+        backfillService.runBackfill("u2163b");
+        cityRegionOnboardingService.apply(cityId);
+
+        Integer regionsAfterFirst = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_regions WHERE city_id = ?", Integer.class, cityId);
+        Integer membershipsAfterFirst = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_region_memberships WHERE city_id = ?", Integer.class, cityId);
+
+        // Second call: same inputs -> CityRegionOnboardingService's fingerprint/no-op check must
+        // leave row counts exactly as they were, not duplicate or churn them.
+        cityRegionOnboardingService.apply(cityId);
+
+        Integer regionsAfterSecond = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_regions WHERE city_id = ?", Integer.class, cityId);
+        Integer membershipsAfterSecond = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_region_memberships WHERE city_id = ?", Integer.class, cityId);
+
+        assertThat(regionsAfterSecond).isEqualTo(regionsAfterFirst);
+        assertThat(membershipsAfterSecond).isEqualTo(membershipsAfterFirst);
+    }
+
+    @Test
+    @DisplayName("#2163: prepare() on a city with an active area_group.slug colliding with a canonical "
+            + "region key fails with CityPrerequisiteGenerationException/NAMESPACE_COLLISION — zero "
+            + "city_regions rows are left behind (whole ensureCanonicalGeography() transaction rolls back)")
+    void prepare_namespaceCollision_returns422WithNAMESPACE_COLLISION() {
+        int cityId = seedCity("nsc");
+        seedArea(cityId, "nsc|d|g|area-1", 13.01, 74.71);
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        // CENTRAL_CARDINAL_4's canonical region keys are CENTRAL/N/E/S/W (short uppercase tokens) —
+        // an active area_group whose slug is literally "N" collides.
+        seedGroup(cityId, "N");
+
+        assertThatThrownBy(() -> preparationService.prepare(cityId, ADMIN_ID))
+                .isInstanceOf(CityPrerequisiteGenerationException.class)
+                .satisfies(ex -> assertThat(((CityPrerequisiteGenerationException) ex).reason())
+                        .isEqualTo("NAMESPACE_COLLISION"));
+
+        Integer regionRows = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_regions WHERE city_id = ?", Integer.class, cityId);
+        assertThat(regionRows).isZero();
+        assertThat(revisionRepository.findByCityId(cityId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("#2163: prepare() on a city with a DEGENERATE area_group (sole member has no "
+            + "projected region — never classified) fails with "
+            + "CityPrerequisiteGenerationException/DEGENERATE_GROUP — zero city_regions rows written")
+    void prepare_degenerateGroup_returns422WithDEGENERATE_GROUP_andWritesNoRegions() {
+        int cityId = seedCity("dgn");
+        seedArea(cityId, "dgn|d|g|area-1", 13.01, 74.71);
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        // Deliberately a 2-segment area_key: RegionalClassificationBackfillService's
+        // array_length(...) = 4 filter skips it, so it never gets a classification row and
+        // therefore never projects to any region -> the group it solely belongs to is DEGENERATE.
+        seedArea(cityId, "dgn|area-unclassified", 13.02, 74.72);
+        int groupId = seedGroup(cityId, "dgn-degenerate-group");
+        seedGroupMember(groupId, "dgn|area-unclassified");
+
+        assertThatThrownBy(() -> preparationService.prepare(cityId, ADMIN_ID))
+                .isInstanceOf(CityPrerequisiteGenerationException.class)
+                .satisfies(ex -> assertThat(((CityPrerequisiteGenerationException) ex).reason())
+                        .isEqualTo("DEGENERATE_GROUP"));
+
+        Integer regionRows = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_regions WHERE city_id = ?", Integer.class, cityId);
+        assertThat(regionRows).isZero();
+        assertThat(revisionRepository.findByCityId(cityId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("#2163/#2151 preservation: starting from a city with NO prior regions, prepare()'s "
+            + "self-materialization still lets the existing async graph-write flow generate "
+            + "agri_destination_classification rows for the new revision")
+    void prepare_afterRegionMaterialization_graphWriteGeneratesAgriDestinations() {
+        int cityId = seedFullValidGeography("agri2163");
+
+        PrepareResponse response = preparationService.prepare(cityId, ADMIN_ID);
+
+        pollUntil(() ->
+                assertThat(revisionRepository.findById(response.revisionId()).orElseThrow().getLifecycleStatus())
+                        .isEqualTo(LifecycleStatus.PREPARED));
+
+        // Agri rows land in the per-revision SANDBOX table pre-promotion, not the production
+        // table (which only gets populated on a subsequent promote() — out of scope here).
+        Integer agriRows = jdbc.queryForObject(
+                "SELECT count(*) FROM public.sandbox_agri_destination_classification WHERE revision_id = ?",
+                Integer.class, response.revisionId());
+        assertThat(agriRows).as("agri destination classification rows must be generated for the new "
+                + "revision even though this city had zero prior city_regions").isGreaterThan(0);
+
+        CityLaunchRevision preparedRevision = revisionRepository.findById(response.revisionId()).orElseThrow();
+        assertThat(preparedRevision.getPersistedRevisionChecksum())
+                .as("the graph-write flow that generated the agri rows must also stamp a persisted "
+                        + "revision checksum — proves the async write actually completed, not just "
+                        + "that the lifecycle flag flipped")
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("#2163/#2151 Bangalore-regression guard: preparing a city that ALREADY has "
+            + "regional_area_classifications rows (from a prior legacy backfill) must leave those "
+            + "rows byte-for-byte unchanged — prepare()'s canonical-geometry path never reads or "
+            + "writes the legacy table at all")
+    void prepare_bangalore_classificationRowsUnchanged() {
+        Integer bangaloreCityId = jdbc.queryForObject(
+                "SELECT id FROM public.cities WHERE slug = 'bangalore'", Integer.class);
+        assertThat(bangaloreCityId).as("fixture precondition: bangalore must be seeded").isNotNull();
+
+        // Populate classifications BEFORE prepare() runs, exactly as production Bangalore already
+        // has them from a prior legacy backfill — proves prepare() doesn't touch the legacy table
+        // either way (unlike the old conditional count==0 backfill gate this fix removed).
+        backfillService.runBackfill("bangalore");
+        List<java.sql.Timestamp> before = jdbc.query(
+                "SELECT computed_at FROM public.regional_area_classifications WHERE city_key = 'bangalore' "
+                        + "ORDER BY area_key",
+                (rs, rowNum) -> rs.getTimestamp("computed_at"));
+        assertThat(before).isNotEmpty();
+
+        Long revisionId = null;
+        try {
+            PrepareResponse response = preparationService.prepare(bangaloreCityId, ADMIN_ID);
+            revisionId = response.revisionId();
+
+            List<java.sql.Timestamp> after = jdbc.query(
+                    "SELECT computed_at FROM public.regional_area_classifications WHERE city_key = 'bangalore' "
+                            + "ORDER BY area_key",
+                    (rs, rowNum) -> rs.getTimestamp("computed_at"));
+            assertThat(after).as("backfill must NOT re-run for an already-classified city — "
+                    + "computed_at timestamps must be identical, not refreshed").isEqualTo(before);
+        } finally {
+            if (revisionId != null) {
+                jdbc.update("DELETE FROM public.city_launch_revision WHERE id = ?", revisionId);
+            }
+        }
+    }
+
+    // =========================================================================================
+    // #2163 review fix — canonical-geometry classification source (regional_area_classifications
+    // must no longer be a production read/write dependency of prepare())
+    // =========================================================================================
+
+    @Test
+    @DisplayName("#2163 review fix: prepare() on a city with ZERO regional_area_classifications rows "
+            + "materializes city_regions/city_region_memberships purely from canonical city + area "
+            + "geometry, and never writes to the legacy table")
+    void prepare_withZeroLegacyClassificationRows_materializesCityRegionsFromCanonicalGeometry() {
+        String slug = "canon2163";
+        int cityId = seedCity(slug);
+        // ~11km north and ~11km south of the city geo_center (13.0, 74.7) — both well outside the
+        // 4km CENTRAL radius, and in clearly distinct compass directions, so they must land in
+        // different regions under CENTRAL_CARDINAL_4 — giving this test a real, direction-specific
+        // assertion rather than "something got created".
+        seedArea(cityId, slug + "|d|g|area-north", 13.10, 74.70);
+        seedArea(cityId, slug + "|d|g|area-south", 12.90, 74.70);
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+
+        Integer legacyBefore = jdbc.queryForObject(
+                "SELECT count(*) FROM public.regional_area_classifications WHERE city_key = ?",
+                Integer.class, slug);
+        assertThat(legacyBefore).isZero();
+
+        PrepareResponse response = preparationService.prepare(cityId, ADMIN_ID);
+
+        pollUntil(() ->
+                assertThat(revisionRepository.findById(response.revisionId()).orElseThrow().getLifecycleStatus())
+                        .isEqualTo(LifecycleStatus.PREPARED));
+
+        Map<String, String> membershipByArea = jdbc.query(
+                        "SELECT area_key, region_key FROM public.city_region_memberships WHERE city_id = ?",
+                        (rs, rowNum) -> Map.entry(rs.getString("area_key"), rs.getString("region_key")),
+                        cityId)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        assertThat(membershipByArea).hasSize(2);
+        assertThat(membershipByArea.get(slug + "|d|g|area-north")).isEqualTo("N");
+        assertThat(membershipByArea.get(slug + "|d|g|area-south")).isEqualTo("S");
+
+        Integer regionRows = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_regions WHERE city_id = ?", Integer.class, cityId);
+        assertThat(regionRows).isGreaterThan(0);
+
+        // Load-bearing: the canonical-geometry path must never have written to the legacy table.
+        Integer legacyAfter = jdbc.queryForObject(
+                "SELECT count(*) FROM public.regional_area_classifications WHERE city_key = ?",
+                Integer.class, slug);
+        assertThat(legacyAfter).isZero();
+
+        // Idempotency: re-applying CANONICAL_GEOMETRY directly (bypassing prepare()'s in-flight
+        // revision uniqueness constraint) must be a no-op — unchanged region/membership counts,
+        // and the legacy table still untouched.
+        cityRegionOnboardingService.apply(cityId, com.example.realestate.discover.CityRegionOnboardingService.ClassificationSource.CANONICAL_GEOMETRY);
+
+        Integer regionRowsAfterReapply = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_regions WHERE city_id = ?", Integer.class, cityId);
+        Integer membershipRowsAfterReapply = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_region_memberships WHERE city_id = ?", Integer.class, cityId);
+        assertThat(regionRowsAfterReapply).isEqualTo(regionRows);
+        assertThat(membershipRowsAfterReapply).isEqualTo(2);
+
+        Integer legacyAfterReapply = jdbc.queryForObject(
+                "SELECT count(*) FROM public.regional_area_classifications WHERE city_key = ?",
+                Integer.class, slug);
+        assertThat(legacyAfterReapply).isZero();
+    }
+
+    @Test
+    @DisplayName("#2163 review fix: apply(CANONICAL_GEOMETRY) and apply(LEGACY_TABLE) produce IDENTICAL "
+            + "city_regions/city_region_memberships when the legacy table is freshly backfilled and all "
+            + "areas are ACTIVE with geo centres — pins the equivalence claim between the two sources")
+    void apply_canonicalGeometryAndLegacyTable_produceIdenticalMaterializedGeography() {
+        String slug = "equiv2163";
+        int cityId = seedCity(slug);
+        seedArea(cityId, slug + "|d|g|area-north", 13.10, 74.70);
+        seedArea(cityId, slug + "|d|g|area-south", 12.90, 74.70);
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+
+        backfillService.runBackfill(slug);
+        cityRegionOnboardingService.apply(cityId,
+                com.example.realestate.discover.CityRegionOnboardingService.ClassificationSource.LEGACY_TABLE);
+
+        Map<String, String> legacyMemberships = jdbc.query(
+                        "SELECT area_key, region_key FROM public.city_region_memberships WHERE city_id = ?",
+                        (rs, rowNum) -> Map.entry(rs.getString("area_key"), rs.getString("region_key")),
+                        cityId)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        Map<String, String> legacyRegions = jdbc.query(
+                        "SELECT region_key, centre_lat, centre_lon, min_lat, max_lat, min_lon, max_lon "
+                                + "FROM public.city_regions WHERE city_id = ?",
+                        (rs, rowNum) -> Map.entry(rs.getString("region_key"), regionGeometryString(rs)),
+                        cityId)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        cityRegionOnboardingService.apply(cityId,
+                com.example.realestate.discover.CityRegionOnboardingService.ClassificationSource.CANONICAL_GEOMETRY);
+
+        Map<String, String> canonicalMemberships = jdbc.query(
+                        "SELECT area_key, region_key FROM public.city_region_memberships WHERE city_id = ?",
+                        (rs, rowNum) -> Map.entry(rs.getString("area_key"), rs.getString("region_key")),
+                        cityId)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        Map<String, String> canonicalRegions = jdbc.query(
+                        "SELECT region_key, centre_lat, centre_lon, min_lat, max_lat, min_lon, max_lon "
+                                + "FROM public.city_regions WHERE city_id = ?",
+                        (rs, rowNum) -> Map.entry(rs.getString("region_key"), regionGeometryString(rs)),
+                        cityId)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        assertThat(canonicalMemberships).isEqualTo(legacyMemberships);
+        assertThat(canonicalRegions).isEqualTo(legacyRegions);
+    }
+
+    private static String regionGeometryString(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return rs.getObject("centre_lat") + "|" + rs.getObject("centre_lon") + "|"
+                + rs.getObject("min_lat") + "|" + rs.getObject("max_lat") + "|"
+                + rs.getObject("min_lon") + "|" + rs.getObject("max_lon");
     }
 }

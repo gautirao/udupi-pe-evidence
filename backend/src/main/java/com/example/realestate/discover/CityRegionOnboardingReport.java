@@ -16,7 +16,9 @@ import java.util.List;
  * @param cityName               resolved city display name, or {@code null} if unknown
  * @param regionModel            the city's region_model, or {@code null} if no policy row exists
  * @param centralRadiusKm        the city's CENTRAL-bucket radius (meaningless if regionModel is null)
- * @param classificationsPresent whether regional_area_classifications has any rows for this city
+ * @param classificationsPresent whether the selected classification source (legacy table or
+ *                               computed canonical geometry, #2163) yielded at least one
+ *                               eligible area for this city
  * @param areaProjections        every eligible (4-segment) classified area, with its projected region_key
  * @param groupCategorizations   every active area_group's UNIFIED/SPLIT/DEGENERATE categorization,
  *                               based on the raw (pre-override) projection

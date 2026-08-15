@@ -111,6 +111,10 @@ class AgriDestinationClassificationCityLaunchIT {
             jdbc.update("DELETE FROM public.agri_destination_classification WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_region_memberships WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_regions WHERE city_id = ?", cityId);
+            // #2163: seedRegionPolicy()/seedClassification() insert rows that FK-reference (policy)
+            // or otherwise scope to (classifications) this city/slug and must be cleared first.
+            jdbc.update("DELETE FROM public.city_region_policy WHERE city_id = ?", cityId);
+            jdbc.update("DELETE FROM public.regional_area_classifications WHERE city_key = ?", slug);
             jdbc.update("DELETE FROM public.areas WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.cities WHERE id = ?", cityId);
         }
@@ -188,14 +192,63 @@ class AgriDestinationClassificationCityLaunchIT {
                 cityId, areaKey, regionKey);
     }
 
+    /**
+     * #2163: {@code prepare()} now self-materializes canonical geography prerequisites via
+     * {@code CityRegionOnboardingService.apply()}, which requires a {@code city_region_policy}
+     * row (else it throws {@code MISSING_POLICY}). Mirrors Udupi's real production policy
+     * (CENTRAL_CARDINAL_4).
+     */
+    private void seedRegionPolicy(int cityId, String regionModel, double centralRadiusKm) {
+        jdbc.update(
+                "INSERT INTO public.city_region_policy (city_id, region_model, central_radius_km) "
+                        + "VALUES (?, ?, ?)",
+                cityId, regionModel, centralRadiusKm);
+    }
+
+    /**
+     * #2163: directly seeds a {@code regional_area_classifications} row (bypassing
+     * {@code RegionalClassificationBackfillService}, whose {@code array_length(area_key,'|')=4}
+     * filter this file's area_keys now satisfy but which would recompute rather than honour the
+     * exact fixture geometry) so {@code prepare()}'s self-generated {@code CityRegionOnboardingService.apply()}
+     * call finds {@code classificationsPresent()=true} and skips the (here, inapplicable) backfill
+     * gate. The exact direction/distance values are irrelevant to every test in this file — none
+     * asserts on which region_key an area lands in, only that city_regions/memberships end up
+     * non-empty so prepare() can proceed to admission.
+     */
+    private void seedClassification(String citySlug, String areaKey) {
+        jdbc.update(
+                "INSERT INTO public.regional_area_classifications "
+                        + "(city_key, area_key, direction_key, distance_band_key, bearing_deg, distance_km, computed_at) "
+                        + "VALUES (?, ?, 'N', '0_10', 0.0, 5.0, now())",
+                citySlug, areaKey);
+    }
+
+    /**
+     * #2163: guarantees {@code classificationsPresent()=true} for fixtures whose own areas are
+     * seeded WITHOUT classification rows (e.g. the zero-origin AC3 fixture), so {@code
+     * CityRegionOnboardingService.apply()} always has >=1 real region to materialize (satisfying
+     * {@code validateCanonicalGeographyReady}'s "regions non-empty" post-condition). Seeded
+     * INACTIVE so {@code AgriDestinationClassificationGenerator}'s ACTIVE-only {@code inScope}
+     * filter skips it — it therefore never appears in any Agri row-count assertion in this file.
+     */
+    private void seedDecoyClassifiedArea(int cityId, String citySlug) {
+        String decoyAreaKey = citySlug + "|d|g|decoy-2163";
+        jdbc.update(
+                "INSERT INTO public.areas (area_key, city_id, name, district, geo_center_lat, geo_center_lon, "
+                        + "lifecycle_status) VALUES (?, ?, ?, ?, ?, ?, 'INACTIVE')",
+                decoyAreaKey, cityId, decoyAreaKey, cityId + "-district", ORIGIN_LAT, ORIGIN_LON);
+        seedClassification(citySlug, decoyAreaKey);
+    }
+
     /** Valid canonical geography: {@code areaOffsets} keyed by area_key suffix -> [lat, lon]. */
     private int seedValidGeography(String citySlug, Map<String, double[]> areaOffsets) {
         int cityId = seedCity(citySlug);
-        seedRegion(cityId, citySlug + "-north");
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        seedDecoyClassifiedArea(cityId, citySlug);
         for (Map.Entry<String, double[]> e : areaOffsets.entrySet()) {
-            String areaKey = citySlug + "|" + e.getKey();
+            String areaKey = citySlug + "|d|g|" + e.getKey();
             seedArea(cityId, areaKey, e.getValue()[0], e.getValue()[1]);
-            seedMembership(cityId, areaKey, citySlug + "-north");
+            seedClassification(citySlug, areaKey);
         }
         return cityId;
     }
@@ -290,7 +343,7 @@ class AgriDestinationClassificationCityLaunchIT {
         rows.forEach(r -> byAreaKey.put(r.getAreaKey(), r));
 
         for (Map.Entry<String, double[]> e : areas.entrySet()) {
-            String areaKey = "gen1|" + e.getKey();
+            String areaKey = "gen1|d|g|" + e.getKey();
             double destLat = e.getValue()[0];
             double destLon = e.getValue()[1];
             double expectedDistanceKm = independentDistanceKm(ORIGIN_LAT, ORIGIN_LON, destLat, destLon);
@@ -315,12 +368,12 @@ class AgriDestinationClassificationCityLaunchIT {
 
         // Sanity: the three chosen offsets genuinely land in three DIFFERENT bands/directions, so
         // this test is not vacuously true for a single degenerate case.
-        assertThat(byAreaKey.get("gen1|area-north").getDistanceBandKey()).isEqualTo("0_10");
-        assertThat(byAreaKey.get("gen1|area-east").getDistanceBandKey()).isEqualTo("10_25");
-        assertThat(byAreaKey.get("gen1|area-south").getDistanceBandKey()).isEqualTo("25_50");
-        assertThat(byAreaKey.get("gen1|area-north").getDirectionKey()).isEqualTo("N");
-        assertThat(byAreaKey.get("gen1|area-east").getDirectionKey()).isEqualTo("E");
-        assertThat(byAreaKey.get("gen1|area-south").getDirectionKey()).isEqualTo("S");
+        assertThat(byAreaKey.get("gen1|d|g|area-north").getDistanceBandKey()).isEqualTo("0_10");
+        assertThat(byAreaKey.get("gen1|d|g|area-east").getDistanceBandKey()).isEqualTo("10_25");
+        assertThat(byAreaKey.get("gen1|d|g|area-south").getDistanceBandKey()).isEqualTo("25_50");
+        assertThat(byAreaKey.get("gen1|d|g|area-north").getDirectionKey()).isEqualTo("N");
+        assertThat(byAreaKey.get("gen1|d|g|area-east").getDirectionKey()).isEqualTo("E");
+        assertThat(byAreaKey.get("gen1|d|g|area-south").getDirectionKey()).isEqualTo("S");
     }
 
     // =========================================================================================
@@ -409,14 +462,14 @@ class AgriDestinationClassificationCityLaunchIT {
         // Deactivate one area — the generator's ACTIVE-only filter must exclude it from the NEXT
         // revision's sandbox set, and promotion's REPLACE discipline must not let its prior
         // production row survive.
-        jdbc.update("UPDATE public.areas SET lifecycle_status = 'INACTIVE' WHERE area_key = ?", "stale1|area-2");
+        jdbc.update("UPDATE public.areas SET lifecycle_status = 'INACTIVE' WHERE area_key = ?", "stale1|d|g|area-2");
 
         long revisionId2 = prepareAndValidate(cityId);
         List<SandboxAgriDestinationClassification> sandboxRows2 =
                 sandboxAgriDestinationClassificationRepository.findByRevisionId(revisionId2);
         assertThat(sandboxRows2).hasSize(2);
         assertThat(sandboxRows2.stream().map(SandboxAgriDestinationClassification::getAreaKey))
-                .doesNotContain("stale1|area-2");
+                .doesNotContain("stale1|d|g|area-2");
 
         PromotionReport report2 = promotionService.launch(cityId, revisionId2, ADMIN_ID.toString());
         assertThat(report2.lifecycleStatus()).isEqualTo("PROMOTED");
@@ -427,8 +480,8 @@ class AgriDestinationClassificationCityLaunchIT {
         assertThat(prodAfterSecond.stream().map(AgriDestinationClassification::getAreaKey))
                 .as("the deactivated area's stale production row must not survive the REPLACE-discipline "
                         + "promotion — this is the exact F2 no-delete-upsert defect this table's design closes")
-                .doesNotContain("stale1|area-2")
-                .containsExactlyInAnyOrder("stale1|area-1", "stale1|area-3");
+                .doesNotContain("stale1|d|g|area-2")
+                .containsExactlyInAnyOrder("stale1|d|g|area-1", "stale1|d|g|area-3");
     }
 
     // =========================================================================================
@@ -442,9 +495,10 @@ class AgriDestinationClassificationCityLaunchIT {
             + "PREPARED")
     void ac3_zeroOrigin_prepareFails_noRevisionReachesPrepared() {
         int cityId = seedCityWithZeroOrigin("ac3-zero");
-        seedRegion(cityId, "ac3-zero-north");
-        seedArea(cityId, "ac3-zero|area-1", ORIGIN_LAT, ORIGIN_LON);
-        seedMembership(cityId, "ac3-zero|area-1", "ac3-zero-north");
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        seedDecoyClassifiedArea(cityId, "ac3-zero");
+        seedArea(cityId, "ac3-zero|d|g|area-1", ORIGIN_LAT, ORIGIN_LON);
+        seedClassification("ac3-zero", "ac3-zero|d|g|area-1");
 
         PrepareResponse prep = preparationService.prepare(cityId, ADMIN_ID);
         long revisionId = prep.revisionId();
@@ -510,7 +564,13 @@ class AgriDestinationClassificationCityLaunchIT {
 
         // The exact input CityLaunchGraphWriter captured into sandbox_areas for this revision,
         // BEFORE any production mutation below — this is what the generator must be driven by.
-        List<SandboxArea> capturedAreas = sandboxAreaRepository.findByRevisionId(revisionId);
+        // #2163: exclude the fixture's decoy classified area (see seedDecoyClassifiedArea) — it
+        // exists only to satisfy prepare()'s self-materialized classificationsPresent()/apply()
+        // prerequisites, is captured into sandbox_areas like every other area regardless of
+        // lifecycle_status, but is not part of what THIS test is verifying.
+        List<SandboxArea> capturedAreas = sandboxAreaRepository.findByRevisionId(revisionId).stream()
+                .filter(a -> !a.getAreaKey().contains("decoy-2163"))
+                .toList();
         assertThat(capturedAreas).hasSize(2);
         Set<String> capturedAreaKeys = capturedAreas.stream()
                 .map(SandboxArea::getAreaKey)
@@ -519,9 +579,9 @@ class AgriDestinationClassificationCityLaunchIT {
         // Mutate PRODUCTION public.areas AFTER capture: deactivate area-2 (the OLD generator's
         // `lifecycle_status = 'ACTIVE'` filter would then exclude it) and move area-1 far away
         // (the OLD generator would compute a completely different distance/bearing for it).
-        jdbc.update("UPDATE public.areas SET lifecycle_status = 'INACTIVE' WHERE area_key = ?", "snap1|area-2");
+        jdbc.update("UPDATE public.areas SET lifecycle_status = 'INACTIVE' WHERE area_key = ?", "snap1|d|g|area-2");
         jdbc.update("UPDATE public.areas SET geo_center_lat = ?, geo_center_lon = ? WHERE area_key = ?",
-                ORIGIN_LAT + 5.0, ORIGIN_LON + 5.0, "snap1|area-1");
+                ORIGIN_LAT + 5.0, ORIGIN_LON + 5.0, "snap1|d|g|area-1");
 
         // Regenerate for the SAME revision, passing the CAPTURED (pre-mutation) input — exactly
         // what CityLaunchGraphWriter now does; production is never consulted again here.
@@ -540,10 +600,10 @@ class AgriDestinationClassificationCityLaunchIT {
         assertThat(regeneratedAreaKeys)
                 .as("area-2 must still be classified despite production having been flipped to "
                         + "INACTIVE after capture")
-                .contains("snap1|area-2");
+                .contains("snap1|d|g|area-2");
 
         SandboxAgriDestinationClassification area1Row = regenerated.stream()
-                .filter(r -> r.getAreaKey().equals("snap1|area-1"))
+                .filter(r -> r.getAreaKey().equals("snap1|d|g|area-1"))
                 .findFirst()
                 .orElseThrow();
         double expectedDistanceKm =
@@ -581,7 +641,7 @@ class AgriDestinationClassificationCityLaunchIT {
         List<AgriDestinationClassification> prodRows = agriDestinationClassificationRepository.findByCityId(cityId);
         assertThat(prodRows).hasSize(2);
         assertThat(prodRows.stream().map(AgriDestinationClassification::getAreaKey))
-                .containsExactlyInAnyOrder("promo1|area-1", "promo1|area-2");
+                .containsExactlyInAnyOrder("promo1|d|g|area-1", "promo1|d|g|area-2");
     }
 
     @Test

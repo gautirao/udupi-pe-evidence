@@ -127,6 +127,11 @@ class CityLaunchPromotionServiceIT {
             jdbc.update("DELETE FROM public.area_groups WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_region_memberships WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.city_regions WHERE city_id = ?", cityId);
+            // #2163: seedRegionPolicy()/seedClassification() insert rows that FK-reference (policy)
+            // or otherwise scope to (classifications) this city/slug and must be cleared first.
+            jdbc.update("DELETE FROM public.city_region_policy WHERE city_id = ?", cityId);
+            jdbc.update("DELETE FROM public.regional_area_classifications WHERE city_key = ?", slug);
+            jdbc.update("DELETE FROM public.regional_area_overrides WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.area_alias WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.areas WHERE city_id = ?", cityId);
             jdbc.update("DELETE FROM public.cities WHERE id = ?", cityId);
@@ -178,11 +183,70 @@ class CityLaunchPromotionServiceIT {
                 cityId, regionKey, regionKey);
     }
 
+    /**
+     * #2163: this file's fixtures hand-seed {@code city_regions}/{@code city_region_memberships}
+     * directly (rather than deriving them from real classification data) to control EXACTLY which
+     * areas share a region for its assignment-tamper tests. {@code assignment_source='OVERRIDE'}
+     * (not {@code 'AUTO'}) is load-bearing here: {@code CityRegionOnboardingService.apply()} — now
+     * invoked by every {@code prepare()} call (#2163) — deletes stale {@code 'AUTO'} memberships
+     * for any area_key outside its own computed effective set (see {@code
+     * deleteStaleAutoMemberships}); these fixtures' areas are deliberately NOT real-classified (see
+     * {@link #seedDecoyClassifiedArea}), so an {@code 'AUTO'} row here would be wiped out by that
+     * exact cleanup on the very same {@code prepare()} call that seeded it.
+     */
     private void seedMembership(int cityId, String areaKey, String regionKey) {
         jdbc.update(
                 "INSERT INTO public.city_region_memberships (city_id, area_key, region_key, assignment_source) "
-                        + "VALUES (?, ?, ?, 'AUTO')",
+                        + "VALUES (?, ?, ?, 'OVERRIDE')",
                 cityId, areaKey, regionKey);
+    }
+
+    /**
+     * #2163: {@code prepare()} now self-materializes canonical geography prerequisites via
+     * {@code CityRegionOnboardingService.apply()}, which requires a {@code city_region_policy}
+     * row (else {@code MISSING_POLICY}) and >=1 real classified area (else {@code
+     * MISSING_CLASSIFICATIONS}). Seed a policy row plus one separate INACTIVE "decoy" area that is
+     * the file's ONLY area carrying a real {@code regional_area_classifications} row — the real
+     * fixture areas are deliberately left unclassified so this file keeps full control over which
+     * areas share a region (see {@link #seedMembership}) — purely so {@code
+     * classificationsPresent()=true} and {@code apply()} has >=1 real region to materialize. Being
+     * INACTIVE, the decoy is excluded from {@code CityLaunchGraphWriter}'s area capture, so it
+     * never appears in any sandbox_areas/row-count assertion in this file.
+     */
+    private void seedRegionPolicy(int cityId, String regionModel, double centralRadiusKm) {
+        jdbc.update(
+                "INSERT INTO public.city_region_policy (city_id, region_model, central_radius_km) "
+                        + "VALUES (?, ?, ?)",
+                cityId, regionModel, centralRadiusKm);
+    }
+
+    /**
+     * #2163: a fixture that has an {@code area_groups} member area which is NOT itself
+     * real-classified (see {@link #seedDecoyClassifiedArea}) trips {@code
+     * CityRegionOnboardingService.apply()}'s DEGENERATE_GROUP guard — a group is degenerate when
+     * NONE of its members has a classification-projected region. A {@code regional_area_overrides}
+     * row resolves this exactly the way a real operator would (see {@code
+     * CityRegionOnboardingNamespaceCollisionIT}'s {@code resolveNonUnifiedGroups} for the same
+     * pattern), independent of this file's OWN manually-seeded {@code city_region_memberships}.
+     */
+    private void seedRegionOverride(int cityId, String areaKey, String regionKey) {
+        jdbc.update(
+                "INSERT INTO public.regional_area_overrides (city_id, area_key, forced_region_key, reason, author) "
+                        + "VALUES (?, ?, ?, 'test-fixture-2163', 'test')",
+                cityId, areaKey, regionKey);
+    }
+
+    private void seedDecoyClassifiedArea(int cityId, String citySlug) {
+        String decoyAreaKey = citySlug + "|d|g|decoy-2163";
+        jdbc.update(
+                "INSERT INTO public.areas (area_key, city_id, name, district, geo_center_lat, geo_center_lon, "
+                        + "lifecycle_status) VALUES (?, ?, ?, ?, ?, ?, 'INACTIVE')",
+                decoyAreaKey, cityId, decoyAreaKey, citySlug + "-district", 13.0, 74.7);
+        jdbc.update(
+                "INSERT INTO public.regional_area_classifications "
+                        + "(city_key, area_key, direction_key, distance_band_key, bearing_deg, distance_km, computed_at) "
+                        + "VALUES (?, ?, 'N', '0_10', 0.0, 5.0, now())",
+                citySlug, decoyAreaKey);
     }
 
     private int seedGroup(int cityId, String slug, String subtitle) {
@@ -277,15 +341,26 @@ class CityLaunchPromotionServiceIT {
      * area-3 leaves the row's OWN value fields (region_key, assignment_source) untouched, so it is
      * invisible to a checksum that hashes only those fields — the exact AC5 gap RevisionChecksum's
      * fix closes.
+     *
+     * <p>#2163 review fix: area-3 is deliberately marked INACTIVE (unlike area-1/area-2) so
+     * {@code CityRegionOnboardingService}'s canonical-geometry classification source — which,
+     * unlike the legacy table, auto-classifies every ACTIVE/4-segment/geo-centered area — does NOT
+     * give it its own AUTO membership row. Being captured into {@code sandbox_areas} is unaffected
+     * by lifecycle_status, so area-3 remains available as the tamper test's repoint target while
+     * staying genuinely UNASSIGNED to any region beforehand.
      */
     private int seedGeographyForMembershipAssignmentTamper(String citySlug) {
         int cityId = seedCity(citySlug, false);
-        seedArea(cityId, citySlug + "|area-1", 13.01, 74.71, citySlug + "-district");
-        seedArea(cityId, citySlug + "|area-2", 13.02, 74.72, null);
-        seedArea(cityId, citySlug + "|area-3", 13.03, 74.73, null);
+        seedArea(cityId, citySlug + "|d|g|area-1", 13.01, 74.71, citySlug + "-district");
+        seedArea(cityId, citySlug + "|d|g|area-2", 13.02, 74.72, null);
+        seedArea(cityId, citySlug + "|d|g|area-3", 13.03, 74.73, null);
+        jdbc.update("UPDATE public.areas SET lifecycle_status = 'INACTIVE' WHERE area_key = ?",
+                citySlug + "|d|g|area-3");
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        seedDecoyClassifiedArea(cityId, citySlug);
         seedRegion(cityId, citySlug + "-north");
-        seedMembership(cityId, citySlug + "|area-1", citySlug + "-north");
-        seedMembership(cityId, citySlug + "|area-2", citySlug + "-north");
+        seedMembership(cityId, citySlug + "|d|g|area-1", citySlug + "-north");
+        seedMembership(cityId, citySlug + "|d|g|area-2", citySlug + "-north");
         return cityId;
     }
 
@@ -300,16 +375,20 @@ class CityLaunchPromotionServiceIT {
      */
     private int seedGeographyForGroupMemberAssignmentTamper(String citySlug) {
         int cityId = seedCity(citySlug, false);
-        seedArea(cityId, citySlug + "|area-1", 13.01, 74.71, citySlug + "-district");
-        seedArea(cityId, citySlug + "|area-2", 13.02, 74.72, null);
-        seedArea(cityId, citySlug + "|area-3", 13.03, 74.73, null);
+        seedArea(cityId, citySlug + "|d|g|area-1", 13.01, 74.71, citySlug + "-district");
+        seedArea(cityId, citySlug + "|d|g|area-2", 13.02, 74.72, null);
+        seedArea(cityId, citySlug + "|d|g|area-3", 13.03, 74.73, null);
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        seedDecoyClassifiedArea(cityId, citySlug);
         seedRegion(cityId, citySlug + "-north");
-        seedMembership(cityId, citySlug + "|area-1", citySlug + "-north");
-        seedMembership(cityId, citySlug + "|area-2", citySlug + "-north");
-        seedMembership(cityId, citySlug + "|area-3", citySlug + "-north");
+        seedMembership(cityId, citySlug + "|d|g|area-1", citySlug + "-north");
+        seedMembership(cityId, citySlug + "|d|g|area-2", citySlug + "-north");
+        seedMembership(cityId, citySlug + "|d|g|area-3", citySlug + "-north");
+        seedRegionOverride(cityId, citySlug + "|d|g|area-1", "N");
+        seedRegionOverride(cityId, citySlug + "|d|g|area-2", "N");
         int groupId = seedGroup(cityId, citySlug + "-belt", null);
-        seedGroupMember(groupId, citySlug + "|area-1");
-        seedGroupMember(groupId, citySlug + "|area-2");
+        seedGroupMember(groupId, citySlug + "|d|g|area-1");
+        seedGroupMember(groupId, citySlug + "|d|g|area-2");
         return cityId;
     }
 
@@ -323,28 +402,34 @@ class CityLaunchPromotionServiceIT {
      */
     private int seedGeographyForAliasAssignmentTamper(String citySlug) {
         int cityId = seedCity(citySlug, false);
-        seedArea(cityId, citySlug + "|area-1", 13.01, 74.71, citySlug + "-district");
-        seedArea(cityId, citySlug + "|area-2", 13.02, 74.72, null);
-        seedArea(cityId, citySlug + "|area-3", 13.03, 74.73, null);
+        seedArea(cityId, citySlug + "|d|g|area-1", 13.01, 74.71, citySlug + "-district");
+        seedArea(cityId, citySlug + "|d|g|area-2", 13.02, 74.72, null);
+        seedArea(cityId, citySlug + "|d|g|area-3", 13.03, 74.73, null);
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        seedDecoyClassifiedArea(cityId, citySlug);
         seedRegion(cityId, citySlug + "-north");
-        seedMembership(cityId, citySlug + "|area-1", citySlug + "-north");
-        seedMembership(cityId, citySlug + "|area-2", citySlug + "-north");
-        seedAlias(cityId, citySlug + "|area-1", "Area One", "area one");
+        seedMembership(cityId, citySlug + "|d|g|area-1", citySlug + "-north");
+        seedMembership(cityId, citySlug + "|d|g|area-2", citySlug + "-north");
+        seedAlias(cityId, citySlug + "|d|g|area-1", "Area One", "area one");
         return cityId;
     }
 
     /** Full valid canonical geography: 2 areas, 1 alias, 1 region (both areas), 1 group (both areas). */
     private int seedFullValidGeography(String citySlug, boolean cityActive) {
         int cityId = seedCity(citySlug, cityActive);
-        seedArea(cityId, citySlug + "|area-1", 13.01, 74.71, citySlug + "-district");
-        seedArea(cityId, citySlug + "|area-2", 13.02, 74.72, null);
-        seedAlias(cityId, citySlug + "|area-1", "Area One", "area one");
+        seedArea(cityId, citySlug + "|d|g|area-1", 13.01, 74.71, citySlug + "-district");
+        seedArea(cityId, citySlug + "|d|g|area-2", 13.02, 74.72, null);
+        seedAlias(cityId, citySlug + "|d|g|area-1", "Area One", "area one");
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        seedDecoyClassifiedArea(cityId, citySlug);
         seedRegion(cityId, citySlug + "-north");
-        seedMembership(cityId, citySlug + "|area-1", citySlug + "-north");
-        seedMembership(cityId, citySlug + "|area-2", citySlug + "-north");
+        seedMembership(cityId, citySlug + "|d|g|area-1", citySlug + "-north");
+        seedMembership(cityId, citySlug + "|d|g|area-2", citySlug + "-north");
+        seedRegionOverride(cityId, citySlug + "|d|g|area-1", "N");
+        seedRegionOverride(cityId, citySlug + "|d|g|area-2", "N");
         int groupId = seedGroup(cityId, citySlug + "-belt", null);
-        seedGroupMember(groupId, citySlug + "|area-1");
-        seedGroupMember(groupId, citySlug + "|area-2");
+        seedGroupMember(groupId, citySlug + "|d|g|area-1");
+        seedGroupMember(groupId, citySlug + "|d|g|area-2");
         return cityId;
     }
 
@@ -385,9 +470,19 @@ class CityLaunchPromotionServiceIT {
         assertThat(report.lifecycleStatus()).isEqualTo("PROMOTED");
         assertThat(report.idempotentNoop()).isFalse();
         assertThat(report.promotedAt()).isNotNull();
-        assertThat(report.areasPromoted()).isEqualTo(2);
+        // #2163: seedFullValidGeography() seeds one INACTIVE "decoy" area (see
+        // seedDecoyClassifiedArea) — areasPromoted/regionsPromoted counts include it (all captured
+        // areas are promoted regardless of lifecycle_status; apply() also always materializes ALL 5
+        // canonical CENTRAL_CARDINAL_4 regions, not just the hand-seeded "-north" one).
+        // #2163 review fix: CityRegionOnboardingService's canonical-geometry classification source
+        // ignores the (INACTIVE) decoy entirely — it only auto-classifies ACTIVE/4-segment/
+        // geo-centered areas, which area-1/area-2 already are. Their regional_area_overrides rows
+        // (both forced to "N") still force their effective region regardless, so
+        // membershipsPromoted is exactly 2 (area-1, area-2) — the decoy no longer contributes a
+        // third AUTO membership the way it did under the legacy classification source.
+        assertThat(report.areasPromoted()).isEqualTo(3);
         assertThat(report.aliasesPromoted()).isEqualTo(1);
-        assertThat(report.regionsPromoted()).isEqualTo(1);
+        assertThat(report.regionsPromoted()).isEqualTo(6);
         assertThat(report.membershipsPromoted()).isEqualTo(2);
         assertThat(report.groupsPromoted()).isEqualTo(1);
         assertThat(report.groupMembersPromoted()).isEqualTo(2);
@@ -519,7 +614,8 @@ class CityLaunchPromotionServiceIT {
 
         Integer areaCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM public.areas WHERE city_id = ?", Integer.class, cityId);
-        assertThat(areaCount).isEqualTo(2);
+        // #2163: 3, not 2 — includes seedFullValidGeography()'s decoy area (see seedDecoyClassifiedArea).
+        assertThat(areaCount).isEqualTo(3);
         CityLaunchRevision revision = revisionRepository.findById(revisionId).orElseThrow();
         assertThat(revision.getLifecycleStatus()).isEqualTo(LifecycleStatus.PROMOTED);
     }
@@ -564,9 +660,9 @@ class CityLaunchPromotionServiceIT {
         int cityId = seedGeographyForMembershipAssignmentTamper("amt5");
         long revisionId = prepareAndValidate(cityId);
 
-        Long area1SandboxId = sandboxAreaRepository.findByRevisionIdAndAreaKey(revisionId, "amt5|area-1")
+        Long area1SandboxId = sandboxAreaRepository.findByRevisionIdAndAreaKey(revisionId, "amt5|d|g|area-1")
                 .orElseThrow().getId();
-        Long area3SandboxId = sandboxAreaRepository.findByRevisionIdAndAreaKey(revisionId, "amt5|area-3")
+        Long area3SandboxId = sandboxAreaRepository.findByRevisionIdAndAreaKey(revisionId, "amt5|d|g|area-3")
                 .orElseThrow().getId();
         SandboxCityRegionMembership tamperedMembership =
                 sandboxMembershipRepository.findByRevisionIdAndSandboxAreaId(revisionId, area1SandboxId).orElseThrow();
@@ -603,9 +699,9 @@ class CityLaunchPromotionServiceIT {
         int cityId = seedGeographyForGroupMemberAssignmentTamper("gmt5");
         long revisionId = prepareAndValidate(cityId);
 
-        Long area2SandboxId = sandboxAreaRepository.findByRevisionIdAndAreaKey(revisionId, "gmt5|area-2")
+        Long area2SandboxId = sandboxAreaRepository.findByRevisionIdAndAreaKey(revisionId, "gmt5|d|g|area-2")
                 .orElseThrow().getId();
-        Long area3SandboxId = sandboxAreaRepository.findByRevisionIdAndAreaKey(revisionId, "gmt5|area-3")
+        Long area3SandboxId = sandboxAreaRepository.findByRevisionIdAndAreaKey(revisionId, "gmt5|d|g|area-3")
                 .orElseThrow().getId();
         SandboxAreaGroupMember tamperedMember = sandboxGroupMemberRepository.findByRevisionId(revisionId).stream()
                 .filter(gm -> gm.getSandboxAreaId().equals(area2SandboxId))
@@ -644,9 +740,9 @@ class CityLaunchPromotionServiceIT {
         int cityId = seedGeographyForAliasAssignmentTamper("aat5");
         long revisionId = prepareAndValidate(cityId);
 
-        Long area1SandboxId = sandboxAreaRepository.findByRevisionIdAndAreaKey(revisionId, "aat5|area-1")
+        Long area1SandboxId = sandboxAreaRepository.findByRevisionIdAndAreaKey(revisionId, "aat5|d|g|area-1")
                 .orElseThrow().getId();
-        Long area3SandboxId = sandboxAreaRepository.findByRevisionIdAndAreaKey(revisionId, "aat5|area-3")
+        Long area3SandboxId = sandboxAreaRepository.findByRevisionIdAndAreaKey(revisionId, "aat5|d|g|area-3")
                 .orElseThrow().getId();
         SandboxAreaAlias tamperedAlias = sandboxAliasRepository.findByRevisionId(revisionId).stream()
                 .filter(al -> al.getSandboxAreaId().equals(area1SandboxId))
@@ -705,7 +801,7 @@ class CityLaunchPromotionServiceIT {
         jdbc.update(
                 "INSERT INTO public.areas (area_key, city_id, name, geo_center_lat, geo_center_lon) "
                         + "VALUES (?, ?, ?, ?, ?)",
-                "rb5|area-2", otherCityId, "CONFLICTING-NAME", 99.0, 99.0);
+                "rb5|d|g|area-2", otherCityId, "CONFLICTING-NAME", 99.0, 99.0);
 
         assertThatThrownBy(() -> promotionService.launch(cityId, revisionId, ADMIN_ID.toString()))
                 .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.type(ResponseStatusException.class))
@@ -718,7 +814,7 @@ class CityLaunchPromotionServiceIT {
 
         // area-1's INSERT was rolled back too -- the WHOLE transaction, not just the failing statement.
         Integer area1Count = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM public.areas WHERE area_key = ?", Integer.class, "rb5|area-1");
+                "SELECT COUNT(*) FROM public.areas WHERE area_key = ?", Integer.class, "rb5|d|g|area-1");
         assertThat(area1Count).isZero();
         Integer regionCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM public.city_regions WHERE city_id = ?", Integer.class, cityId);
@@ -728,7 +824,7 @@ class CityLaunchPromotionServiceIT {
         assertThat(isActiveAfterFailure).isFalse();
 
         // Clear the conflicting row and retry -- a later launch succeeds.
-        jdbc.update("DELETE FROM public.areas WHERE area_key = ?", "rb5|area-2");
+        jdbc.update("DELETE FROM public.areas WHERE area_key = ?", "rb5|d|g|area-2");
         PromotionReport retry = promotionService.launch(cityId, revisionId, ADMIN_ID.toString());
         assertThat(retry.lifecycleStatus()).isEqualTo("PROMOTED");
         assertThat(retry.idempotentNoop()).isFalse();
@@ -753,7 +849,7 @@ class CityLaunchPromotionServiceIT {
         long candidateRevisionId = prepareAndValidate(cityId);
 
         // Force canonical drift failure
-        jdbc.update("UPDATE public.areas SET district = ? WHERE area_key = ?", "DRIFTED-DISTRICT-ROLLBACK", "rbo5|area-2");
+        jdbc.update("UPDATE public.areas SET district = ? WHERE area_key = ?", "DRIFTED-DISTRICT-ROLLBACK", "rbo5|d|g|area-2");
 
         assertThatThrownBy(() -> promotionService.launch(cityId, candidateRevisionId, ADMIN_ID.toString()))
                 .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.type(ResponseStatusException.class))
@@ -834,14 +930,16 @@ class CityLaunchPromotionServiceIT {
             + "-> 422 zero-writes, stays VALIDATED")
     void canonicalDrift() {
         int cityId = seedCity("cd5", false);
-        seedArea(cityId, "cd5|area-1", 13.01, 74.71, "seed-district");
+        seedArea(cityId, "cd5|d|g|area-1", 13.01, 74.71, "seed-district");
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+        seedDecoyClassifiedArea(cityId, "cd5");
         seedRegion(cityId, "cd5-north");
-        seedMembership(cityId, "cd5|area-1", "cd5-north");
+        seedMembership(cityId, "cd5|d|g|area-1", "cd5-north");
         long revisionId = prepareAndValidate(cityId);
 
         // Mutate the canonical (production) row AFTER prep, so promotion's re-read finds a row that
         // disagrees with the frozen sandbox snapshot's content.
-        jdbc.update("UPDATE public.areas SET district = ? WHERE area_key = ?", "DRIFTED-DISTRICT", "cd5|area-1");
+        jdbc.update("UPDATE public.areas SET district = ? WHERE area_key = ?", "DRIFTED-DISTRICT", "cd5|d|g|area-1");
 
         assertThatThrownBy(() -> promotionService.launch(cityId, revisionId, ADMIN_ID.toString()))
                 .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.type(ResponseStatusException.class))
@@ -899,10 +997,11 @@ class CityLaunchPromotionServiceIT {
 
         PromotionReport report = promotionService.launch(cityId, revisionId, ADMIN_ID.toString());
         assertThat(report.idempotentNoop()).isFalse();
-        assertThat(report.areasPromoted()).isEqualTo(2);
+        // #2163: 3, not 2 — includes seedFullValidGeography()'s decoy area (see seedDecoyClassifiedArea).
+        assertThat(report.areasPromoted()).isEqualTo(3);
 
         String district = jdbc.queryForObject(
-                "SELECT district FROM public.areas WHERE area_key = ?", String.class, "nn5|area-2");
+                "SELECT district FROM public.areas WHERE area_key = ?", String.class, "nn5|d|g|area-2");
         assertThat(district).isNull();
 
         String subtitle = jdbc.queryForObject(
@@ -926,15 +1025,15 @@ class CityLaunchPromotionServiceIT {
 
         long rootSandboxId = seedSandboxNavigationNode(
                 revisionId, "nv7-north", "DIRECTION", null, "d:nv7-north", null,
-                List.of("nv7|area-1", "nv7|area-2"), "Nv7 North", 1, 0, List.of(), 2,
+                List.of("nv7|d|g|area-1", "nv7|d|g|area-2"), "Nv7 North", 1, 0, List.of(), 2,
                 13.015, 74.715, 13.01, 74.71, 13.02, 74.72, "fp-nv7-root");
         seedSandboxNavigationNode(
-                revisionId, "nv7-north", "AREA", rootSandboxId, "a:nv7|area-1", "nv7|area-1",
-                List.of("nv7|area-1"), "Area One", 1, 1, List.of("d:nv7-north"), 1,
+                revisionId, "nv7-north", "AREA", rootSandboxId, "a:nv7|d|g|area-1", "nv7|d|g|area-1",
+                List.of("nv7|d|g|area-1"), "Area One", 1, 1, List.of("d:nv7-north"), 1,
                 13.01, 74.71, 13.01, 74.71, 13.01, 74.71, "fp-nv7-leaf");
         seedSandboxNavigationNode(
-                revisionId, "nv7-north", "AREA", rootSandboxId, "a:nv7|area-2", "nv7|area-2",
-                List.of("nv7|area-2"), "Area Two", 2, 1, List.of("d:nv7-north"), 1,
+                revisionId, "nv7-north", "AREA", rootSandboxId, "a:nv7|d|g|area-2", "nv7|d|g|area-2",
+                List.of("nv7|d|g|area-2"), "Area Two", 2, 1, List.of("d:nv7-north"), 1,
                 13.02, 74.72, 13.02, 74.72, 13.02, 74.72, "fp-nv7-leaf");
         recomputeAndPersistChecksumWithNavigationNodes(revisionId);
 
@@ -950,15 +1049,15 @@ class CityLaunchPromotionServiceIT {
         assertThat(root.getParentNodeId()).isNull();
         assertThat(root.getNodeType()).isEqualTo("DIRECTION");
         assertThat(root.getAreaKey()).isNull();
-        assertThat(root.getRepresentativeAreaKeys()).containsExactly("nv7|area-1", "nv7|area-2");
+        assertThat(root.getRepresentativeAreaKeys()).containsExactly("nv7|d|g|area-1", "nv7|d|g|area-2");
         assertThat(root.getDisplayLabel()).isEqualTo("Nv7 North");
         assertThat(root.getDescendantAreaCount()).isEqualTo(2);
         assertThat(root.getPolicyFingerprint()).isEqualTo("fp-nv7-root");
         assertThat(root.getAncestorKeys()).isEmpty();
 
-        NavigationNode leaf1 = navigationNodeRepository.findByCityIdAndNodeKey(cityId, "a:nv7|area-1").orElseThrow();
+        NavigationNode leaf1 = navigationNodeRepository.findByCityIdAndNodeKey(cityId, "a:nv7|d|g|area-1").orElseThrow();
         assertThat(leaf1.getNodeType()).isEqualTo("AREA");
-        assertThat(leaf1.getAreaKey()).isEqualTo("nv7|area-1");
+        assertThat(leaf1.getAreaKey()).isEqualTo("nv7|d|g|area-1");
         // Parent remapped from the sandbox surrogate id to the PRODUCTION surrogate id of the root.
         assertThat(leaf1.getParentNodeId()).isEqualTo(root.getId());
         // ancestor_keys are node_keys, copied VERBATIM — never remapped.
@@ -966,9 +1065,9 @@ class CityLaunchPromotionServiceIT {
         assertThat(leaf1.getDisplayOrder()).isEqualTo(1);
         assertThat(leaf1.getDepth()).isEqualTo(1);
 
-        NavigationNode leaf2 = navigationNodeRepository.findByCityIdAndNodeKey(cityId, "a:nv7|area-2").orElseThrow();
+        NavigationNode leaf2 = navigationNodeRepository.findByCityIdAndNodeKey(cityId, "a:nv7|d|g|area-2").orElseThrow();
         assertThat(leaf2.getParentNodeId()).isEqualTo(root.getId());
-        assertThat(leaf2.getAreaKey()).isEqualTo("nv7|area-2");
+        assertThat(leaf2.getAreaKey()).isEqualTo("nv7|d|g|area-2");
     }
 
     // =========================================================================================
@@ -1000,11 +1099,11 @@ class CityLaunchPromotionServiceIT {
         // another city) -> navigation_nodes.area_key's FK violates on INSERT.
         long rootSandboxId = seedSandboxNavigationNode(
                 revisionId, "rb7-north", "DIRECTION", null, "d:rb7-north", null,
-                List.of("rb7|area-1"), "Rb7 North", 1, 0, List.of(), 1,
+                List.of("rb7|d|g|area-1"), "Rb7 North", 1, 0, List.of(), 1,
                 13.01, 74.71, 13.01, 74.71, 13.01, 74.71, "fp-rb7-root");
         seedSandboxNavigationNode(
-                revisionId, "rb7-north", "AREA", rootSandboxId, "a:rb7|area-does-not-exist",
-                "rb7|area-does-not-exist", List.of("rb7|area-does-not-exist"), "Ghost Area", 1, 1,
+                revisionId, "rb7-north", "AREA", rootSandboxId, "a:rb7|d|g|area-does-not-exist",
+                "rb7|d|g|area-does-not-exist", List.of("rb7|d|g|area-does-not-exist"), "Ghost Area", 1, 1,
                 List.of("d:rb7-north"), 1,
                 13.05, 74.75, 13.05, 74.75, 13.05, 74.75, "fp-rb7-leaf");
         recomputeAndPersistChecksumWithNavigationNodes(revisionId);
@@ -1045,19 +1144,19 @@ class CityLaunchPromotionServiceIT {
         long revision1 = prepareAndValidate(cityId);
         long direction1 = seedSandboxNavigationNode(
                 revision1, "rp7-north", "DIRECTION", null, "d:rp7-north", null,
-                List.of("rp7|area-1", "rp7|area-2"), "Rp7 North v1", 1, 0, List.of(), 2,
+                List.of("rp7|d|g|area-1", "rp7|d|g|area-2"), "Rp7 North v1", 1, 0, List.of(), 2,
                 13.015, 74.715, 13.01, 74.71, 13.02, 74.72, "fp-rp7-v1-direction");
         long root1 = seedSandboxNavigationNode(
-                revision1, "rp7-north", "CLUSTER", direction1, "c:rp7-north:rp7|area-1-rp7|area-2", null,
-                List.of("rp7|area-1", "rp7|area-2"), "Rp7 North v1", 1, 1, List.of("d:rp7-north"), 2,
+                revision1, "rp7-north", "CLUSTER", direction1, "c:rp7-north:rp7|d|g|area-1-rp7|d|g|area-2", null,
+                List.of("rp7|d|g|area-1", "rp7|d|g|area-2"), "Rp7 North v1", 1, 1, List.of("d:rp7-north"), 2,
                 13.015, 74.715, 13.01, 74.71, 13.02, 74.72, "fp-rp7-v1-root");
         seedSandboxNavigationNode(
-                revision1, "rp7-north", "AREA", root1, "a:rp7|area-1", "rp7|area-1",
-                List.of("rp7|area-1"), "Area One", 1, 2, List.of("d:rp7-north", "c:rp7-north:rp7|area-1-rp7|area-2"), 1,
+                revision1, "rp7-north", "AREA", root1, "a:rp7|d|g|area-1", "rp7|d|g|area-1",
+                List.of("rp7|d|g|area-1"), "Area One", 1, 2, List.of("d:rp7-north", "c:rp7-north:rp7|d|g|area-1-rp7|d|g|area-2"), 1,
                 13.01, 74.71, 13.01, 74.71, 13.01, 74.71, "fp-rp7-v1-leaf");
         seedSandboxNavigationNode(
-                revision1, "rp7-north", "AREA", root1, "a:rp7|area-2", "rp7|area-2",
-                List.of("rp7|area-2"), "Area Two", 2, 2, List.of("d:rp7-north", "c:rp7-north:rp7|area-1-rp7|area-2"), 1,
+                revision1, "rp7-north", "AREA", root1, "a:rp7|d|g|area-2", "rp7|d|g|area-2",
+                List.of("rp7|d|g|area-2"), "Area Two", 2, 2, List.of("d:rp7-north", "c:rp7-north:rp7|d|g|area-1-rp7|d|g|area-2"), 1,
                 13.02, 74.72, 13.02, 74.72, 13.02, 74.72, "fp-rp7-v1-leaf");
         recomputeAndPersistChecksumWithNavigationNodes(revision1);
 
@@ -1075,15 +1174,15 @@ class CityLaunchPromotionServiceIT {
         jdbc.update("UPDATE public.city_launch_revision SET superseded_by = ? WHERE id = ?", revision2, revision1);
         long direction2 = seedSandboxNavigationNode(
                 revision2, "rp7-north", "DIRECTION", null, "d:rp7-north", null,
-                List.of("rp7|area-1", "rp7|area-2"), "Rp7 North v2", 1, 0, List.of(), 2,
+                List.of("rp7|d|g|area-1", "rp7|d|g|area-2"), "Rp7 North v2", 1, 0, List.of(), 2,
                 13.015, 74.715, 13.01, 74.71, 13.02, 74.72, "fp-rp7-v2-direction");
         seedSandboxNavigationNode(
-                revision2, "rp7-north", "AREA", direction2, "a:rp7|area-1", "rp7|area-1",
-                List.of("rp7|area-1"), "Area One (flat)", 1, 1, List.of("d:rp7-north"), 1,
+                revision2, "rp7-north", "AREA", direction2, "a:rp7|d|g|area-1", "rp7|d|g|area-1",
+                List.of("rp7|d|g|area-1"), "Area One (flat)", 1, 1, List.of("d:rp7-north"), 1,
                 13.01, 74.71, 13.01, 74.71, 13.01, 74.71, "fp-rp7-v2-leaf");
         seedSandboxNavigationNode(
-                revision2, "rp7-north", "AREA", direction2, "a:rp7|area-2", "rp7|area-2",
-                List.of("rp7|area-2"), "Area Two (flat)", 2, 1, List.of("d:rp7-north"), 1,
+                revision2, "rp7-north", "AREA", direction2, "a:rp7|d|g|area-2", "rp7|d|g|area-2",
+                List.of("rp7|d|g|area-2"), "Area Two (flat)", 2, 1, List.of("d:rp7-north"), 1,
                 13.02, 74.72, 13.02, 74.72, 13.02, 74.72, "fp-rp7-v2-leaf");
         recomputeAndPersistChecksumWithNavigationNodes(revision2);
 
@@ -1100,6 +1199,6 @@ class CityLaunchPromotionServiceIT {
                 .allSatisfy(n -> assertThat(n.getParentNodeId()).isNull());
         // The first revision's CLUSTER root is genuinely gone -- not just superseded/orphaned.
         assertThat(navigationNodeRepository.findByCityIdAndNodeKey(
-                cityId, "c:rp7-north:rp7|area-1-rp7|area-2")).isEmpty();
+                cityId, "c:rp7-north:rp7|d|g|area-1-rp7|d|g|area-2")).isEmpty();
     }
 }

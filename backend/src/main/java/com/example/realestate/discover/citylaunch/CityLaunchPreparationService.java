@@ -1,9 +1,12 @@
 package com.example.realestate.discover.citylaunch;
 
+import com.example.realestate.discover.CityRegionOnboardingService;
+import com.example.realestate.discover.RegionOnboardingBlockedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -34,20 +37,34 @@ public class CityLaunchPreparationService {
 
     private static final Logger log = LoggerFactory.getLogger(CityLaunchPreparationService.class);
 
+    /**
+     * Advisory-lock namespace constant for {@link #ensureCanonicalGeography} (#2163). Arbitrary,
+     * but fixed and unique to this feature — first key of {@code pg_advisory_xact_lock(2163,
+     * cityId)}. No other code in this codebase currently takes a Postgres advisory lock (confirmed
+     * by search before choosing this key), so there is no collision risk.
+     */
+    private static final int PREPARE_ADVISORY_LOCK_NAMESPACE = 2163;
+
     private final CityLaunchRevisionRepository revisionRepository;
     private final CanonicalGeographyReader geographyReader;
     private final CityLaunchGraphWriter graphWriter;
     private final CityLaunchSseService sseService;
+    private final CityRegionOnboardingService cityRegionOnboardingService;
+    private final JdbcOperations jdbcOperations;
 
     public CityLaunchPreparationService(
             CityLaunchRevisionRepository revisionRepository,
             CanonicalGeographyReader geographyReader,
             CityLaunchGraphWriter graphWriter,
-            CityLaunchSseService sseService) {
+            CityLaunchSseService sseService,
+            CityRegionOnboardingService cityRegionOnboardingService,
+            JdbcOperations jdbcOperations) {
         this.revisionRepository = revisionRepository;
         this.geographyReader = geographyReader;
         this.graphWriter = graphWriter;
         this.sseService = sseService;
+        this.cityRegionOnboardingService = cityRegionOnboardingService;
+        this.jdbcOperations = jdbcOperations;
     }
 
     /**
@@ -75,6 +92,7 @@ public class CityLaunchPreparationService {
         geographyReader.findCity(cityId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "City not found"));
 
+        ensureCanonicalGeography(cityId);
         validateCanonicalGeographyReady(cityId);
 
         int nextRevisionNumber = nextRevisionNumber(cityId);
@@ -137,10 +155,85 @@ public class CityLaunchPreparationService {
         CanonicalGeographyReader.CanonicalGeography geography = geographyReader.loadGeography(cityId);
         boolean hasActiveArea = geography.areas().stream()
                 .anyMatch(area -> "ACTIVE".equals(area.lifecycleStatus()));
-        
+
         if (!hasActiveArea || geography.regions().isEmpty()) {
             throw new GeographyValidationException("City geography is not ready: city regions have not been generated");
         }
+    }
+
+    /**
+     * Self-materializes a city's canonical geography prerequisites (#2163) so admin "Prepare
+     * city" no longer 422s for a city that has never been onboarded — it used to require an
+     * external, startup-flag-gated runner to have already populated {@code
+     * regional_area_classifications} and {@code city_regions} out of band.
+     *
+     * <p>Runs BEFORE {@link #validateCanonicalGeographyReady}, which remains as a post-condition
+     * assertion: if this method returns normally, canonical geography must actually be ready.
+     *
+     * <p>Steps, in order:
+     * <ol>
+     * <li>Take a transaction-scoped Postgres advisory lock keyed on {@code cityId} — serializes
+     * concurrent {@code prepare()} calls for the SAME city (a second concurrent caller blocks
+     * here until the first commits/rolls back, rather than racing the onboarding writes below),
+     * and auto-releases at this transaction's commit/rollback.</li>
+     * <li>Assert at least one ACTIVE area exists — without that, there is nothing to classify or
+     * onboard, and we fail fast with a clear, city-scoped message rather than falling through to
+     * a confusing downstream failure.</li>
+     * <li>Call {@link CityRegionOnboardingService#apply(int, CityRegionOnboardingService.ClassificationSource)}
+     * with {@code CANONICAL_GEOMETRY} to materialize {@code city_regions} / {@code
+     * city_region_memberships} from {@code city_region_policy} + classifications computed
+     * in-memory from the city's canonical geo_center and its ACTIVE, geo-centered locality areas.
+     * {@code regional_area_classifications} (legacy/recovery-only after #2151) is neither read
+     * nor written on this path. This call is idempotent/no-op-safe: {@code apply()} itself skips
+     * writing anything when nothing that feeds the materialized output has changed since the last
+     * run (fingerprint + membership + geometry comparison).</li>
+     * </ol>
+     */
+    private void ensureCanonicalGeography(int cityId) {
+        jdbcOperations.query(
+                "SELECT pg_advisory_xact_lock(?, ?)", (rs) -> null, PREPARE_ADVISORY_LOCK_NAMESPACE, cityId);
+
+        CanonicalGeographyReader.CanonicalGeography geography = geographyReader.loadGeography(cityId);
+        boolean hasActiveArea = geography.areas().stream()
+                .anyMatch(area -> "ACTIVE".equals(area.lifecycleStatus()) && isLocalityLevelAreaKey(area.areaKey())
+                        && area.geoCenterLat() != null && area.geoCenterLon() != null);
+        if (!hasActiveArea) {
+            throw new CityPrerequisiteGenerationException(
+                    "NO_ACTIVE_AREAS",
+                    "City id=" + cityId + " has zero ACTIVE areas with geo-centre coordinates — "
+                            + "cannot generate region prerequisites.",
+                    "Onboard and activate Areas with geo-centre coordinates for this city first.");
+        }
+
+        try {
+            cityRegionOnboardingService.apply(cityId, CityRegionOnboardingService.ClassificationSource.CANONICAL_GEOMETRY);
+        } catch (RegionOnboardingBlockedException e) {
+            throw new CityPrerequisiteGenerationException(
+                    e.reason().name(), e.getMessage(), remediationFor(e.reason()));
+        }
+    }
+
+    /**
+     * Mirrors the {@code array_length(string_to_array(area_key, '|'), 1) = 4} locality-level
+     * eligibility filter used by {@link RegionalClassificationBackfillService#runBackfill} and
+     * {@link CityRegionOnboardingService}'s classification query (#2163 review fix): a coarser
+     * (e.g. area-group-level) ACTIVE area must not count toward either the {@code NO_ACTIVE_AREAS}
+     * fast-path guard or the backfill sanity comparison, since neither of those downstream queries
+     * ever consider it.
+     */
+    private static boolean isLocalityLevelAreaKey(String areaKey) {
+        return areaKey != null && areaKey.split("\\|", -1).length == 4;
+    }
+
+    private static String remediationFor(RegionOnboardingBlockedException.Reason reason) {
+        return switch (reason) {
+            case MISSING_POLICY -> "Assign a region_model in city_region_policy for this city.";
+            case MISSING_CLASSIFICATIONS -> "Onboard and activate Areas with geo-centre coordinates for this city first.";
+            case DEGENERATE_GROUP -> "Add regional_area_overrides rows to resolve the degenerate area_group(s), "
+                    + "or fix the underlying curated grouping.";
+            case NAMESPACE_COLLISION -> "Rename the colliding area_group(s), or choose a different region_model.";
+            case ASSIGNMENT_INTEGRITY_BREACH -> "Internal assignment integrity error — contact engineering.";
+        };
     }
 
     /**

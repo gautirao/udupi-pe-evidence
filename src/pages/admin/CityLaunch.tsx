@@ -19,7 +19,9 @@ import {
   useCityLaunchList,
   useCityLaunchProgress,
   usePrepareCity,
+  getPrepareCityErrorDetails,
   type CityLaunchStatusDto,
+  type PrepareErrorBody,
 } from '@/hooks/useCityLaunch';
 import { getCityLaunchStatusConfig } from '@/lib/cityLaunchStatus';
 
@@ -39,6 +41,11 @@ export default function CityLaunch() {
   function handlePrepare(cityId: number) {
     prepareCity.mutate(cityId, {
       onSuccess: () => setExpandedCityId(cityId),
+      onError: (err) => {
+        if (getPrepareCityErrorDetails(err)) {
+          setExpandedCityId(cityId);
+        }
+      },
     });
   }
 
@@ -111,6 +118,11 @@ export default function CityLaunch() {
                     key={city.cityId}
                     city={city}
                     isPreparing={prepareCity.isPending && prepareCity.variables === city.cityId}
+                    prepareError={
+                      prepareCity.variables === city.cityId
+                        ? getPrepareCityErrorDetails(prepareCity.error)
+                        : null
+                    }
                     isExpanded={expandedCityId === city.cityId}
                     onPrepare={() => handlePrepare(city.cityId)}
                     onToggleExpanded={() => toggleExpanded(city.cityId)}
@@ -128,12 +140,13 @@ export default function CityLaunch() {
 interface CityLaunchRowProps {
   city: CityLaunchStatusDto;
   isPreparing: boolean;
+  prepareError: PrepareErrorBody | null;
   isExpanded: boolean;
   onPrepare: () => void;
   onToggleExpanded: () => void;
 }
 
-function CityLaunchRow({ city, isPreparing, isExpanded, onPrepare, onToggleExpanded }: CityLaunchRowProps) {
+function CityLaunchRow({ city, isPreparing, prepareError, isExpanded, onPrepare, onToggleExpanded }: CityLaunchRowProps) {
   const config = getCityLaunchStatusConfig(city.status);
   const progress = useCityLaunchProgress(city.cityId, isExpanded);
   const navigate = useNavigate();
@@ -155,11 +168,8 @@ function CityLaunchRow({ city, isPreparing, isExpanded, onPrepare, onToggleExpan
     }
   }
 
-  const isNotReady = !city.geographyReady && city.status === 'not-started';
-  const actionDisabled = !config.actionEnabled || isPreparing || isNotReady;
-  const tooltipText = isNotReady 
-    ? 'City geography is not ready: city regions have not been generated' 
-    : config.actionTooltip;
+  const actionDisabled = !config.actionEnabled || isPreparing;
+  const tooltipText = config.actionTooltip;
 
   const actionButton = (
     <Button
@@ -171,7 +181,7 @@ function CityLaunchRow({ city, isPreparing, isExpanded, onPrepare, onToggleExpan
       {isPreparing ? (
         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
       ) : null}
-      {config.actionLabel}
+      {prepareError ? 'Retry' : config.actionLabel}
     </Button>
   );
 
@@ -218,7 +228,13 @@ function CityLaunchRow({ city, isPreparing, isExpanded, onPrepare, onToggleExpan
       {isExpanded && (
         <TableRow data-testid={`city-launch-detail-${city.cityId}`}>
           <TableCell colSpan={4} className="bg-muted/30">
-            {city.status === 'failed' && (
+            {prepareError && (
+              <div className="text-sm text-destructive space-y-1" role="alert" aria-live="assertive">
+                <p>{prepareError.message}</p>
+                <p className="text-muted-foreground">{prepareError.remediation}</p>
+              </div>
+            )}
+            {!prepareError && city.status === 'failed' && (
               <p className="text-sm text-destructive">
                 {city.failureReason ?? 'Preparation failed for an unknown reason.'}
               </p>
