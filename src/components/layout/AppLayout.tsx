@@ -98,7 +98,10 @@ const userRoleNavigation = [
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}) {
+export function RoleAwareHeader({
+  selectedCity,
+  suppressPublicDiscoveryNav = false,
+}: { selectedCity?: string; suppressPublicDiscoveryNav?: boolean } = {}) {
   const { user, isAdmin, isBroker, signOut, isLoading } = useAuth();
   const { openAuthModal } = useAuthModal();
   const { toast } = useToast();
@@ -183,7 +186,7 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
       <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
         Explore
       </div>
-      {navVisibility.showPublicDiscovery && publicDiscoveryNavigation.map((item) => (
+      {navVisibility.showPublicDiscovery && !suppressPublicDiscoveryNav && publicDiscoveryNavigation.map((item) => (
         <NavItem key={item.name} item={item} mobile onClick={() => setMobileOpen(false)} />
       ))}
 
@@ -297,11 +300,13 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
           </Link>
 
           {/* Zone 2: Public discovery nav */}
-          <nav aria-label="Public discovery" className="hidden lg:flex items-center gap-1 ml-6">
-            {publicDiscoveryNavigation.map((item) => (
-              <NavItem key={item.name} item={item} />
-            ))}
-          </nav>
+          {!suppressPublicDiscoveryNav && (
+            <nav aria-label="Public discovery" className="hidden lg:flex items-center gap-1 ml-6">
+              {publicDiscoveryNavigation.map((item) => (
+                <NavItem key={item.name} item={item} />
+              ))}
+            </nav>
+          )}
 
           {/* Spacer */}
           <div className="flex-1" />

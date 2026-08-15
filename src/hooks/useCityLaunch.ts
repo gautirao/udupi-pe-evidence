@@ -88,14 +88,22 @@ function cityLaunchProgressQueryKey(cityId: number) {
   return ['admin', 'city-launch', 'cities', cityId, 'prepare'] as const;
 }
 
-/** GET /api/admin/city-launch/cities — the Select City launch queue. */
-export function useCityLaunchList() {
+/**
+ * GET /api/admin/city-launch/cities — the Select City launch queue.
+ *
+ * `enabled` (default true) lets a caller that only needs this list
+ * conditionally — e.g. PublicHeader resolving a previewed city's slug only
+ * while inside an admin city-launch preview — skip the request entirely
+ * rather than fire-and-discard it on every render.
+ */
+export function useCityLaunchList(options?: { enabled?: boolean }) {
   const { isAdmin } = useAuth();
+  const enabled = isAdmin && (options?.enabled ?? true);
 
   return useQuery<CityLaunchStatusDto[]>({
     queryKey: CITY_LAUNCH_LIST_QUERY_KEY,
     queryFn: () => api.get<CityLaunchStatusDto[]>('/api/admin/city-launch/cities'),
-    enabled: isAdmin,
+    enabled,
     staleTime: 15_000,
   });
 }

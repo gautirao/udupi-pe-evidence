@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
 import Onboarding from '../../../pages/Onboarding';
 import { AppLayout } from '../AppLayout';
 import { PublicDiscoverLayout } from '../PublicDiscoverLayout';
+import { makeTestQueryClient } from '@/test/renderWithProviders';
 
 // ─── Polyfills for jsdom ─────────────────────────────────
 
@@ -326,11 +328,13 @@ describe('AppLayout — onboarding redirect for dealers', () => {
 describe('PublicDiscoverLayout — /discover route behaviour', () => {
   function renderDiscover(url = '/discover?city=udupi') {
     return render(
-      <MemoryRouter initialEntries={[url]}>
-        <PublicDiscoverLayout>
-          <div>discover map surface</div>
-        </PublicDiscoverLayout>
-      </MemoryRouter>,
+      <QueryClientProvider client={makeTestQueryClient()}>
+        <MemoryRouter initialEntries={[url]}>
+          <PublicDiscoverLayout>
+            <div>discover map surface</div>
+          </PublicDiscoverLayout>
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
   }
 
