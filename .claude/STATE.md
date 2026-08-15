@@ -3,14 +3,13 @@
 <!-- Claude-managed. Tracks where the session is and how to resume.
      NOT a source of project/product truth — decisions live in docs/ and .claude/ARCHITECTURE.md -->
 
-Last updated: 2026-06-08
+Last updated: 2026-08-15
 
 ## Current Position
-- Active milestone: **discover-filter-simplification** (GitHub milestone #12)
-- Source: Filter Panel Audit (2026-04-30) — Discover filter panel currently mixes page context, area journey, and a school journey with refinement filters; URL persistence is partial
-- Mode: standalone ROUTE_AND_RUN execution per issue (not SPRINT_EXECUTOR)
-- Phase: **implementation in progress**
-- Active issue: **#954** spike — DECISION POSTED (recommend NO URL persistence; use sessionStorage). Awaiting product ack to close.
+- Active thread: City Launch (#2151) preview/promotion bug sweep — investigated + fixed via standalone /quick, not part of the parked milestone #12 below
+- Mode: standalone ROUTE_AND_RUN / /quick execution per issue
+- Phase: PR #2178 (#2177 checksum-drift false positive) open, READY_AWAITING_OWNER_MANUAL_TEST — not merged, awaiting owner manual test on the live Udupi promotion flow
+- Prior milestone #12 (discover-filter-simplification) below remains parked/stale from 2026-06-08 — not touched this session
 
 ## Milestone #12 — Execution Order
 
@@ -43,6 +42,9 @@ Guardrails for the milestone:
 - NONE — paused per user request before Issue 1 implementation.
 
 ## Recent Completions (last 6)
+- #2177 (City Launch checksum-drift false positive blocking promotion) → PR #2178 OPEN, READY_AWAITING_OWNER_MANUAL_TEST (2026-08-15) [/quick]
+- #2175 (City Launch rerun succeeds but leaves admin on dead old-revision screen) → PR #2176 merged 4eb7ecb0 (2026-08-15)
+- #2151 (City Launch preview city-identity + Agri corridor bugs) → PR #2167 merged, plus follow-ups #2169/#2170/#2171 → PRs #2173/#2172/#2174 all merged (2026-08-15)
 - #1403 (dev seed: agricultural land listings for local Discover testing) → PR #1404 OPEN, READY_TO_MERGE awaiting approval (2026-06-08) [/quick]
 - #953 (URL persistence for multi-seller, status booleans, date range) → PR #961 merged (2026-04-30)
 - #952 (relocate text search to listings header + q= URL persistence) → PR #960 merged (2026-04-30)
@@ -59,6 +61,7 @@ Guardrails for the milestone:
 - #862 anonymous AppLayout email → PR #867 merged (2026-04-26)
 
 ## Session Continuity
-- Last session: 2026-04-30 — milestone #12 created, 8 issues filed (#947–#954), paused before implementation.
-- Resume action: User confirms go-ahead → start Issue #947 via ROUTE_AND_RUN (branch `fix/discover-remove-city-from-filter-panel`).
+- Last session: 2026-08-15 — City Launch preview/promotion bug sweep on the real hosted Udupi city: fixed #2151 preview city-identity + Agri corridor bugs (PR #2167 + follow-ups #2169–#2171, all merged), then investigated and fixed the "Preview not ready" rerun leaving the admin stranded (#2175, PR #2176 merged), then diagnosed and fixed a live checksum-drift false positive blocking promotion (#2177, PR #2178 open).
+- Resume action: owner manual-tests PR #2178 on the live Udupi promotion flow (re-run prepare → validate → launch) and approves merge; once merged, #2151's parent DoD sweep (desktop/mobile, Back/Forward/refresh/direct-URL, Areas/Schools regression) is still outstanding and not yet revisited this session.
 - Checkpoint file: this file (STATE.md). No SPRINT_EXECUTOR checkpoint — standalone per-issue execution.
+- Prior 2026-04-30 milestone #12 checkpoint (below, parked) is unrelated and untouched.

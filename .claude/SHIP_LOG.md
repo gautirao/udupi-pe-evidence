@@ -12,6 +12,24 @@ Date: YYYY-MM-DD | Sprint: <name or standalone/quick> | Route: <agent chain>
 ---
 -->
 
+## PR #2178 — fix(#2177): stamp City Launch checksum from DB-round-tripped rows, not in-memory entities
+Date: 2026-08-15 | Sprint: standalone/quick | Route: backend-engineer → code-reviewer (APPROVE) → backend-engineer (fold-in: extend detach fix to remaining 2 tables) → code-reviewer (APPROVE)
+- What: `CityLaunchGraphWriter` now re-queries all 9 sandbox tables from their repositories (with explicit `entityManager.detach()` first, to defeat Hibernate's same-transaction identity map) before stamping `persisted_revision_checksum`, instead of hashing in-memory `.save()`-returned entities for 7 of 9 tables
+- Why: hosted Supabase's `extra_float_digits=0` truncates re-SELECTed DOUBLE PRECISION columns to 15 significant digits, causing prepare-time (in-memory, full precision) and promote-time (always DB-round-tripped) checksums to diverge on genuine, untampered revisions — a false-positive "Preview has drifted" 422 that blocked promotion 4 revisions in a row on live Udupi
+- Deviations: NONE
+- Risks: NONE — regression test proven to fail pre-fix (exact reported 422) and pass post-fix; full CityLaunch/checksum IT suite 71/71 green; pre-push e2e gate passed clean (30/30, no --no-verify needed)
+- Cycles: engineer=2 (fold-in extended detach to the 2 already-"requeried" tables with the same latent gap) review=2 (both APPROVE) | Findings: 1 LOW non-blocking (navigationNodes double-query is the only clean option given current service boundary)
+---
+
+## PR #2176 — fix(#2175): navigate to city list on successful City Launch rerun
+Date: 2026-08-15 | Sprint: standalone/quick | Route: frontend-engineer → code-reviewer (APPROVE w/ comments) → frontend-engineer (fold-in: shared query-key constant)
+- What: `useRerunPreview`'s `onSuccess` now navigates to `/admin/city-launch` (reusing the existing SSE-driven preparing-state UI there) and shows a confirmation toast, instead of only invalidating caches with no navigation
+- Why: a successful "Preview not ready" rerun left the admin stranded on the old revision's now-superseded, all-controls-disabled screen with zero indication a new revision was created — looked exactly like the rerun did nothing
+- Deviations: NONE — backend rerun state machine confirmed already correct, not touched
+- Risks: NONE — 39/39 tests passed including a real MemoryRouter route-change assertion (not a mock-only check); tsc clean
+- Cycles: engineer=1 review=1 fixes=1 | Findings: 1 LOW non-blocking (hardcoded query-key literal vs shared constant) — folded in before PR opened
+---
+
 ## PR #1404 — dev(seed): agricultural land listings for local Discover testing (#1403)
 Date: 2026-06-08 | Sprint: standalone/quick | Route: backend-engineer → code-reviewer (APPROVE w/ comments, 0 blocking)
 - What: opt-in local seed (scripts/db/fixtures/agricultural-listings-seed.sql) of 9 LIVE agricultural_land listings across rural Udupi areas Brahmavar(4)/Shirva(3)/Padubidri(2); 8 valid geography(Polygon,4326) boundaries + 1 NULL-boundary fallback; psql wrapper + docs/db/agricultural-seed.md; tiny compat fix to restore-test-fixture.sh (stale flyway row assertion 84→86 after V84/V85/V86)
