@@ -2,7 +2,6 @@ package com.example.realestate.discover.citylaunch;
 
 import com.example.realestate.discover.CityRegionOnboardingService;
 import com.example.realestate.discover.RegionOnboardingBlockedException;
-import com.example.realestate.discover.RegionalClassificationBackfillService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,9 +18,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -41,7 +38,6 @@ class CityLaunchPreparationServiceTest {
     @Mock private CityLaunchGraphWriter graphWriter;
     @Mock private CityLaunchSseService sseService;
     @Mock private CityRegionOnboardingService cityRegionOnboardingService;
-    @Mock private RegionalClassificationBackfillService regionalClassificationBackfillService;
     @Mock private JdbcOperations jdbcOperations;
 
     private CityLaunchPreparationService service;
@@ -53,7 +49,7 @@ class CityLaunchPreparationServiceTest {
     void setUp() {
         service = new CityLaunchPreparationService(
                 revisionRepository, geographyReader, graphWriter, sseService,
-                cityRegionOnboardingService, regionalClassificationBackfillService, jdbcOperations);
+                cityRegionOnboardingService, jdbcOperations);
     }
 
     private CanonicalGeographyReader.CanonicalCity city() {
@@ -84,15 +80,14 @@ class CityLaunchPreparationServiceTest {
                         "CENTRAL", "Central", 1, null, null, null, null, null, null, null)),
                 List.of(), List.of(), List.of());
         when(geographyReader.loadGeography(CITY_ID)).thenReturn(geography);
-        when(jdbcOperations.queryForObject(anyString(), eq(Integer.class), any())).thenReturn(1);
         when(revisionRepository.findByCityId(CITY_ID)).thenReturn(List.of());
         CityLaunchRevision saved = new CityLaunchRevision(CITY_ID, 1, CALLER_ID);
         when(revisionRepository.saveAndFlush(any())).thenReturn(saved);
 
         service.prepare(CITY_ID, CALLER_ID);
 
-        verify(cityRegionOnboardingService, times(1)).apply(CITY_ID);
-        verify(regionalClassificationBackfillService, never()).runBackfill(anyString());
+        verify(cityRegionOnboardingService, times(1))
+                .apply(CITY_ID, CityRegionOnboardingService.ClassificationSource.CANONICAL_GEOMETRY);
     }
 
     @Test
@@ -104,10 +99,10 @@ class CityLaunchPreparationServiceTest {
         CanonicalGeographyReader.CanonicalGeography geography = new CanonicalGeographyReader.CanonicalGeography(
                 List.of(activeArea("citytest|d|g|a1")), List.of(), List.of(), List.of(), List.of(), List.of());
         when(geographyReader.loadGeography(CITY_ID)).thenReturn(geography);
-        when(jdbcOperations.queryForObject(anyString(), eq(Integer.class), any())).thenReturn(1);
         org.mockito.Mockito.doThrow(new RegionOnboardingBlockedException(
                         RegionOnboardingBlockedException.Reason.NAMESPACE_COLLISION, "collision detail"))
-                .when(cityRegionOnboardingService).apply(CITY_ID);
+                .when(cityRegionOnboardingService)
+                .apply(CITY_ID, CityRegionOnboardingService.ClassificationSource.CANONICAL_GEOMETRY);
 
         assertThatThrownBy(() -> service.prepare(CITY_ID, CALLER_ID))
                 .isInstanceOf(CityPrerequisiteGenerationException.class)
@@ -137,7 +132,7 @@ class CityLaunchPreparationServiceTest {
                 .satisfies(ex -> assertThat(((CityPrerequisiteGenerationException) ex).reason())
                         .isEqualTo("NO_ACTIVE_AREAS"));
 
-        verifyNoInteractions(regionalClassificationBackfillService, cityRegionOnboardingService);
+        verifyNoInteractions(cityRegionOnboardingService);
         verify(revisionRepository, never()).saveAndFlush(any());
     }
 
@@ -160,7 +155,7 @@ class CityLaunchPreparationServiceTest {
                 .satisfies(ex -> assertThat(((CityPrerequisiteGenerationException) ex).reason())
                         .isEqualTo("NO_ACTIVE_AREAS"));
 
-        verifyNoInteractions(regionalClassificationBackfillService, cityRegionOnboardingService);
+        verifyNoInteractions(cityRegionOnboardingService);
         verify(revisionRepository, never()).saveAndFlush(any());
     }
 }

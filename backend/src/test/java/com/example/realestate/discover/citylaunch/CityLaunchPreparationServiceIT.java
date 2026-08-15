@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -824,8 +825,9 @@ class CityLaunchPreparationServiceIT {
     @Test
     @DisplayName("#2163: a never-before-onboarded city (zero regional_area_classifications, zero "
             + "city_regions — the real Udupi 422 scenario) is self-healed by prepare() itself: "
-            + "classifications get backfilled, city_regions/memberships get materialized, and a "
-            + "PREPARING revision is admitted — no external startup-flag-gated runner required")
+            + "city_regions/memberships get materialized from canonical geometry computed in-memory "
+            + "(regional_area_classifications is never written), and a PREPARING revision is "
+            + "admitted — no external startup-flag-gated runner required")
     void prepare_udupiWithoutRegions_materializesRegionsAndAdmitsRevision() {
         int cityId = seedFullValidGeography("u2163");
 
@@ -847,7 +849,8 @@ class CityLaunchPreparationServiceIT {
                 "SELECT count(*) FROM public.city_regions WHERE city_id = ?", Integer.class, cityId);
         Integer membershipsAfter = jdbc.queryForObject(
                 "SELECT count(*) FROM public.city_region_memberships WHERE city_id = ?", Integer.class, cityId);
-        assertThat(classificationsAfter).isEqualTo(2);
+        // #2163 fix: prepare() must never write to the legacy regional_area_classifications table.
+        assertThat(classificationsAfter).isZero();
         assertThat(regionsAfter).isGreaterThan(0);
         assertThat(membershipsAfter).isEqualTo(2);
 
@@ -962,18 +965,18 @@ class CityLaunchPreparationServiceIT {
     }
 
     @Test
-    @DisplayName("#2163 Bangalore-regression guard: preparing a city that ALREADY has "
-            + "regional_area_classifications rows must NOT re-run the backfill — classification rows "
-            + "are left byte-for-byte unchanged (proves the load-bearing count==0 gate in "
-            + "ensureCanonicalGeography's step 3)")
+    @DisplayName("#2163/#2151 Bangalore-regression guard: preparing a city that ALREADY has "
+            + "regional_area_classifications rows (from a prior legacy backfill) must leave those "
+            + "rows byte-for-byte unchanged — prepare()'s canonical-geometry path never reads or "
+            + "writes the legacy table at all")
     void prepare_bangalore_classificationRowsUnchanged() {
         Integer bangaloreCityId = jdbc.queryForObject(
                 "SELECT id FROM public.cities WHERE slug = 'bangalore'", Integer.class);
         assertThat(bangaloreCityId).as("fixture precondition: bangalore must be seeded").isNotNull();
 
         // Populate classifications BEFORE prepare() runs, exactly as production Bangalore already
-        // has them — this is the scenario prepare()'s conditional (count==0) backfill gate exists
-        // to protect.
+        // has them from a prior legacy backfill — proves prepare() doesn't touch the legacy table
+        // either way (unlike the old conditional count==0 backfill gate this fix removed).
         backfillService.runBackfill("bangalore");
         List<java.sql.Timestamp> before = jdbc.query(
                 "SELECT computed_at FROM public.regional_area_classifications WHERE city_key = 'bangalore' "
@@ -997,5 +1000,130 @@ class CityLaunchPreparationServiceIT {
                 jdbc.update("DELETE FROM public.city_launch_revision WHERE id = ?", revisionId);
             }
         }
+    }
+
+    // =========================================================================================
+    // #2163 review fix — canonical-geometry classification source (regional_area_classifications
+    // must no longer be a production read/write dependency of prepare())
+    // =========================================================================================
+
+    @Test
+    @DisplayName("#2163 review fix: prepare() on a city with ZERO regional_area_classifications rows "
+            + "materializes city_regions/city_region_memberships purely from canonical city + area "
+            + "geometry, and never writes to the legacy table")
+    void prepare_withZeroLegacyClassificationRows_materializesCityRegionsFromCanonicalGeometry() {
+        String slug = "canon2163";
+        int cityId = seedCity(slug);
+        // ~11km north and ~11km south of the city geo_center (13.0, 74.7) — both well outside the
+        // 4km CENTRAL radius, and in clearly distinct compass directions, so they must land in
+        // different regions under CENTRAL_CARDINAL_4 — giving this test a real, direction-specific
+        // assertion rather than "something got created".
+        seedArea(cityId, slug + "|d|g|area-north", 13.10, 74.70);
+        seedArea(cityId, slug + "|d|g|area-south", 12.90, 74.70);
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+
+        Integer legacyBefore = jdbc.queryForObject(
+                "SELECT count(*) FROM public.regional_area_classifications WHERE city_key = ?",
+                Integer.class, slug);
+        assertThat(legacyBefore).isZero();
+
+        PrepareResponse response = preparationService.prepare(cityId, ADMIN_ID);
+
+        pollUntil(() ->
+                assertThat(revisionRepository.findById(response.revisionId()).orElseThrow().getLifecycleStatus())
+                        .isEqualTo(LifecycleStatus.PREPARED));
+
+        Map<String, String> membershipByArea = jdbc.query(
+                        "SELECT area_key, region_key FROM public.city_region_memberships WHERE city_id = ?",
+                        (rs, rowNum) -> Map.entry(rs.getString("area_key"), rs.getString("region_key")),
+                        cityId)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        assertThat(membershipByArea).hasSize(2);
+        assertThat(membershipByArea.get(slug + "|d|g|area-north")).isEqualTo("N");
+        assertThat(membershipByArea.get(slug + "|d|g|area-south")).isEqualTo("S");
+
+        Integer regionRows = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_regions WHERE city_id = ?", Integer.class, cityId);
+        assertThat(regionRows).isGreaterThan(0);
+
+        // Load-bearing: the canonical-geometry path must never have written to the legacy table.
+        Integer legacyAfter = jdbc.queryForObject(
+                "SELECT count(*) FROM public.regional_area_classifications WHERE city_key = ?",
+                Integer.class, slug);
+        assertThat(legacyAfter).isZero();
+
+        // Idempotency: re-applying CANONICAL_GEOMETRY directly (bypassing prepare()'s in-flight
+        // revision uniqueness constraint) must be a no-op — unchanged region/membership counts,
+        // and the legacy table still untouched.
+        cityRegionOnboardingService.apply(cityId, com.example.realestate.discover.CityRegionOnboardingService.ClassificationSource.CANONICAL_GEOMETRY);
+
+        Integer regionRowsAfterReapply = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_regions WHERE city_id = ?", Integer.class, cityId);
+        Integer membershipRowsAfterReapply = jdbc.queryForObject(
+                "SELECT count(*) FROM public.city_region_memberships WHERE city_id = ?", Integer.class, cityId);
+        assertThat(regionRowsAfterReapply).isEqualTo(regionRows);
+        assertThat(membershipRowsAfterReapply).isEqualTo(2);
+
+        Integer legacyAfterReapply = jdbc.queryForObject(
+                "SELECT count(*) FROM public.regional_area_classifications WHERE city_key = ?",
+                Integer.class, slug);
+        assertThat(legacyAfterReapply).isZero();
+    }
+
+    @Test
+    @DisplayName("#2163 review fix: apply(CANONICAL_GEOMETRY) and apply(LEGACY_TABLE) produce IDENTICAL "
+            + "city_regions/city_region_memberships when the legacy table is freshly backfilled and all "
+            + "areas are ACTIVE with geo centres — pins the equivalence claim between the two sources")
+    void apply_canonicalGeometryAndLegacyTable_produceIdenticalMaterializedGeography() {
+        String slug = "equiv2163";
+        int cityId = seedCity(slug);
+        seedArea(cityId, slug + "|d|g|area-north", 13.10, 74.70);
+        seedArea(cityId, slug + "|d|g|area-south", 12.90, 74.70);
+        seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
+
+        backfillService.runBackfill(slug);
+        cityRegionOnboardingService.apply(cityId,
+                com.example.realestate.discover.CityRegionOnboardingService.ClassificationSource.LEGACY_TABLE);
+
+        Map<String, String> legacyMemberships = jdbc.query(
+                        "SELECT area_key, region_key FROM public.city_region_memberships WHERE city_id = ?",
+                        (rs, rowNum) -> Map.entry(rs.getString("area_key"), rs.getString("region_key")),
+                        cityId)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        Map<String, String> legacyRegions = jdbc.query(
+                        "SELECT region_key, centre_lat, centre_lon, min_lat, max_lat, min_lon, max_lon "
+                                + "FROM public.city_regions WHERE city_id = ?",
+                        (rs, rowNum) -> Map.entry(rs.getString("region_key"), regionGeometryString(rs)),
+                        cityId)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        cityRegionOnboardingService.apply(cityId,
+                com.example.realestate.discover.CityRegionOnboardingService.ClassificationSource.CANONICAL_GEOMETRY);
+
+        Map<String, String> canonicalMemberships = jdbc.query(
+                        "SELECT area_key, region_key FROM public.city_region_memberships WHERE city_id = ?",
+                        (rs, rowNum) -> Map.entry(rs.getString("area_key"), rs.getString("region_key")),
+                        cityId)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        Map<String, String> canonicalRegions = jdbc.query(
+                        "SELECT region_key, centre_lat, centre_lon, min_lat, max_lat, min_lon, max_lon "
+                                + "FROM public.city_regions WHERE city_id = ?",
+                        (rs, rowNum) -> Map.entry(rs.getString("region_key"), regionGeometryString(rs)),
+                        cityId)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        assertThat(canonicalMemberships).isEqualTo(legacyMemberships);
+        assertThat(canonicalRegions).isEqualTo(legacyRegions);
+    }
+
+    private static String regionGeometryString(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return rs.getObject("centre_lat") + "|" + rs.getObject("centre_lon") + "|"
+                + rs.getObject("min_lat") + "|" + rs.getObject("max_lat") + "|"
+                + rs.getObject("min_lon") + "|" + rs.getObject("max_lon");
     }
 }

@@ -341,12 +341,21 @@ class CityLaunchPromotionServiceIT {
      * area-3 leaves the row's OWN value fields (region_key, assignment_source) untouched, so it is
      * invisible to a checksum that hashes only those fields — the exact AC5 gap RevisionChecksum's
      * fix closes.
+     *
+     * <p>#2163 review fix: area-3 is deliberately marked INACTIVE (unlike area-1/area-2) so
+     * {@code CityRegionOnboardingService}'s canonical-geometry classification source — which,
+     * unlike the legacy table, auto-classifies every ACTIVE/4-segment/geo-centered area — does NOT
+     * give it its own AUTO membership row. Being captured into {@code sandbox_areas} is unaffected
+     * by lifecycle_status, so area-3 remains available as the tamper test's repoint target while
+     * staying genuinely UNASSIGNED to any region beforehand.
      */
     private int seedGeographyForMembershipAssignmentTamper(String citySlug) {
         int cityId = seedCity(citySlug, false);
         seedArea(cityId, citySlug + "|d|g|area-1", 13.01, 74.71, citySlug + "-district");
         seedArea(cityId, citySlug + "|d|g|area-2", 13.02, 74.72, null);
         seedArea(cityId, citySlug + "|d|g|area-3", 13.03, 74.73, null);
+        jdbc.update("UPDATE public.areas SET lifecycle_status = 'INACTIVE' WHERE area_key = ?",
+                citySlug + "|d|g|area-3");
         seedRegionPolicy(cityId, "CENTRAL_CARDINAL_4", 4);
         seedDecoyClassifiedArea(cityId, citySlug);
         seedRegion(cityId, citySlug + "-north");
@@ -461,16 +470,20 @@ class CityLaunchPromotionServiceIT {
         assertThat(report.lifecycleStatus()).isEqualTo("PROMOTED");
         assertThat(report.idempotentNoop()).isFalse();
         assertThat(report.promotedAt()).isNotNull();
-        // #2163: seedFullValidGeography() now also seeds one INACTIVE "decoy" area (see
-        // seedDecoyClassifiedArea) purely so prepare()'s self-materialized
-        // CityRegionOnboardingService.apply() call has a real classified area to work with —
-        // areasPromoted/regionsPromoted/membershipsPromoted counts include it (all captured areas
-        // are promoted regardless of lifecycle_status; apply() also always materializes ALL 5
+        // #2163: seedFullValidGeography() seeds one INACTIVE "decoy" area (see
+        // seedDecoyClassifiedArea) — areasPromoted/regionsPromoted counts include it (all captured
+        // areas are promoted regardless of lifecycle_status; apply() also always materializes ALL 5
         // canonical CENTRAL_CARDINAL_4 regions, not just the hand-seeded "-north" one).
+        // #2163 review fix: CityRegionOnboardingService's canonical-geometry classification source
+        // ignores the (INACTIVE) decoy entirely — it only auto-classifies ACTIVE/4-segment/
+        // geo-centered areas, which area-1/area-2 already are. Their regional_area_overrides rows
+        // (both forced to "N") still force their effective region regardless, so
+        // membershipsPromoted is exactly 2 (area-1, area-2) — the decoy no longer contributes a
+        // third AUTO membership the way it did under the legacy classification source.
         assertThat(report.areasPromoted()).isEqualTo(3);
         assertThat(report.aliasesPromoted()).isEqualTo(1);
         assertThat(report.regionsPromoted()).isEqualTo(6);
-        assertThat(report.membershipsPromoted()).isEqualTo(3);
+        assertThat(report.membershipsPromoted()).isEqualTo(2);
         assertThat(report.groupsPromoted()).isEqualTo(1);
         assertThat(report.groupMembersPromoted()).isEqualTo(2);
         // AC10 characterization (#1955 Areas PR A, SLICE 2c): `seedCity()` in this test never seeds a

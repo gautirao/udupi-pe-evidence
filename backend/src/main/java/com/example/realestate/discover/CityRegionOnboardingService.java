@@ -20,9 +20,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Projects a city's {@code regional_area_classifications} into materialized
+ * Projects a city's per-area (direction, distance) classifications into materialized
  * {@code city_regions} / {@code city_region_memberships} rows, under the city's
- * {@code city_region_policy} (#1882).
+ * {@code city_region_policy} (#1882). Classifications are sourced either from the legacy
+ * {@code regional_area_classifications} table or computed in-memory from canonical city +
+ * area geometry (#2163) — see {@link ClassificationSource}.
  *
  * <p>Mirrors {@link RegionalClassificationBackfillService}'s JdbcOperations +
  * {@code @Transactional} + upsert-idempotency shape. All per-city behaviour is driven
@@ -66,10 +68,35 @@ public class CityRegionOnboardingService {
 
     // ── Public API ────────────────────────────────────────────────────────────
 
+    /** Where an {@link AreaClassification} list is sourced from for one {@link #apply} run. */
+    public enum ClassificationSource { LEGACY_TABLE, CANONICAL_GEOMETRY }
+
+    /**
+     * @param areaKey      the area's canonical key
+     * @param directionKey one of the 8 compass sector keys, relative to the city's geo_center
+     * @param distanceKm   distance from the city's geo_center, in km
+     * @param geoCenterLat area's geo_center_lat (nullable, mirrors the areas table)
+     * @param minLat       area's bbox min_lat (nullable; falls back to geoCenterLat when absent)
+     */
+    public record AreaClassification(
+            String areaKey, String directionKey, double distanceKm,
+            Double geoCenterLat, Double geoCenterLon,
+            Double minLat, Double minLon, Double maxLat, Double maxLon) {}
+
     /** Read-only preview: no writes, ever. */
     @Transactional(readOnly = true)
     public CityRegionOnboardingReport dryRun(int cityId) {
-        return buildReport(cityId);
+        return buildReport(cityId, ClassificationSource.LEGACY_TABLE);
+    }
+
+    /**
+     * Materializes {@code city_regions} + {@code city_region_memberships} for a city, sourcing
+     * classifications from the legacy {@code regional_area_classifications} table. Equivalent to
+     * {@code apply(cityId, ClassificationSource.LEGACY_TABLE)} — retained for existing callers.
+     */
+    @Transactional
+    public void apply(int cityId) {
+        apply(cityId, ClassificationSource.LEGACY_TABLE);
     }
 
     /**
@@ -78,10 +105,15 @@ public class CityRegionOnboardingService {
      * or any area_group is DEGENERATE (no eligible/overridden member) — a SPLIT area_group
      * (members spanning 2+ regions) is expected and proceeds, each member keeping its own
      * independently-resolved region_key (#1910).
+     *
+     * @param source where per-area classifications are sourced from (#2163) — {@code
+     *               LEGACY_TABLE} reads {@code regional_area_classifications}; {@code
+     *               CANONICAL_GEOMETRY} computes them in-memory from canonical city + ACTIVE
+     *               locality-area geometry, never reading or writing the legacy table.
      */
     @Transactional
-    public void apply(int cityId) {
-        CityRegionOnboardingReport report = buildReport(cityId);
+    public void apply(int cityId, ClassificationSource source) {
+        CityRegionOnboardingReport report = buildReport(cityId, source);
 
         if (report.regionModel() == null) {
             throw new RegionOnboardingBlockedException(
@@ -92,8 +124,7 @@ public class CityRegionOnboardingService {
         if (!report.classificationsPresent()) {
             throw new RegionOnboardingBlockedException(
                     RegionOnboardingBlockedException.Reason.MISSING_CLASSIFICATIONS,
-                    "No regional_area_classifications rows for city_id=" + cityId
-                            + " (slug=" + report.citySlug() + ") — run RegionalClassificationBackfillService first.");
+                    missingClassificationsMessage(cityId, report.citySlug(), source));
         }
 
         Set<String> regionKeys = new LinkedHashSet<>(CityRegionProjection.canonicalRegionOrder(report.regionModel()));
@@ -175,7 +206,7 @@ public class CityRegionOnboardingService {
 
     // ── Report construction (shared by dryRun + apply) ───────────────────────
 
-    private CityRegionOnboardingReport buildReport(int cityId) {
+    private CityRegionOnboardingReport buildReport(int cityId, ClassificationSource source) {
         CitySlugRow city = jdbcOperations.query(CITY_SQL, rs -> rs.next()
                 ? new CitySlugRow(rs.getString("slug"), rs.getString("name"))
                 : null, cityId);
@@ -190,25 +221,15 @@ public class CityRegionOnboardingService {
         boolean classificationsPresent = false;
 
         if (citySlug != null && policy != null) {
-            List<ClassificationRow> classifications = jdbcOperations.query(
-                    CLASSIFICATIONS_SQL,
-                    (rs, rowNum) -> new ClassificationRow(
-                            rs.getString("area_key"),
-                            rs.getString("direction_key"),
-                            rs.getDouble("distance_km"),
-                            nullableDouble(rs.getObject("geo_center_lat")),
-                            nullableDouble(rs.getObject("geo_center_lon")),
-                            nullableDouble(rs.getObject("min_lat")),
-                            nullableDouble(rs.getObject("min_lon")),
-                            nullableDouble(rs.getObject("max_lat")),
-                            nullableDouble(rs.getObject("max_lon"))
-                    ),
-                    citySlug);
+            List<AreaClassification> classifications = switch (source) {
+                case LEGACY_TABLE -> loadLegacyClassifications(citySlug);
+                case CANONICAL_GEOMETRY -> computeCanonicalClassifications(cityId);
+            };
 
             classificationsPresent = !classifications.isEmpty();
 
             List<CityRegionOnboardingReport.AreaProjection> projections = new ArrayList<>();
-            for (ClassificationRow c : classifications) {
+            for (AreaClassification c : classifications) {
                 String regionKey = CityRegionProjection.projectRegionKey(
                         c.distanceKm(), c.directionKey(), policy.regionModel(), policy.centralRadiusKm());
                 projections.add(new CityRegionOnboardingReport.AreaProjection(
@@ -265,6 +286,78 @@ public class CityRegionOnboardingService {
                 classificationsPresent,
                 areaProjections,
                 groupCategorizations);
+    }
+
+    /** Legacy source: reads {@code regional_area_classifications} joined to {@code areas}. */
+    private List<AreaClassification> loadLegacyClassifications(String citySlug) {
+        return jdbcOperations.query(
+                CLASSIFICATIONS_SQL,
+                (rs, rowNum) -> new AreaClassification(
+                        rs.getString("area_key"),
+                        rs.getString("direction_key"),
+                        rs.getDouble("distance_km"),
+                        nullableDouble(rs.getObject("geo_center_lat")),
+                        nullableDouble(rs.getObject("geo_center_lon")),
+                        nullableDouble(rs.getObject("min_lat")),
+                        nullableDouble(rs.getObject("min_lon")),
+                        nullableDouble(rs.getObject("max_lat")),
+                        nullableDouble(rs.getObject("max_lon"))
+                ),
+                citySlug);
+    }
+
+    /**
+     * Canonical source (#2163): computes classifications in-memory from the city's geo_center and
+     * its ACTIVE, locality-level (4-segment area_key), geo-centered areas — never reads or writes
+     * {@code regional_area_classifications}.
+     *
+     * <p>The eligibility predicate here (4-segment area_key, {@code lifecycle_status = 'ACTIVE'},
+     * non-null geo_center_lat/lon) must stay identical to
+     * {@link RegionalClassificationBackfillService}'s {@code AREAS_FOR_CITY_SQL} filter, or the two
+     * classification sources will silently diverge.
+     */
+    private List<AreaClassification> computeCanonicalClassifications(int cityId) {
+        CityCentreRow centre = jdbcOperations.query(CANONICAL_CITY_CENTRE_SQL, rs -> rs.next()
+                ? new CityCentreRow(nullableDouble(rs.getObject("geo_center_lat")),
+                        nullableDouble(rs.getObject("geo_center_lon")))
+                : null, cityId);
+        if (centre == null || centre.lat() == null || centre.lon() == null) {
+            return List.of();
+        }
+
+        List<CanonicalAreaRow> areas = jdbcOperations.query(
+                CANONICAL_AREAS_SQL,
+                (rs, rowNum) -> new CanonicalAreaRow(
+                        rs.getString("area_key"),
+                        nullableDouble(rs.getObject("geo_center_lat")),
+                        nullableDouble(rs.getObject("geo_center_lon")),
+                        nullableDouble(rs.getObject("min_lat")),
+                        nullableDouble(rs.getObject("min_lon")),
+                        nullableDouble(rs.getObject("max_lat")),
+                        nullableDouble(rs.getObject("max_lon"))),
+                cityId);
+
+        List<AreaClassification> classifications = new ArrayList<>();
+        for (CanonicalAreaRow area : areas) {
+            double bearing = RegionalGeo.bearingDeg(centre.lat(), centre.lon(), area.lat(), area.lon());
+            double distanceKm = RegionalGeo.haversineKm(centre.lat(), centre.lon(), area.lat(), area.lon());
+            String directionKey = RegionalGeo.directionKey(bearing);
+            classifications.add(new AreaClassification(
+                    area.areaKey(), directionKey, distanceKm,
+                    area.geoCenterLat(), area.geoCenterLon(),
+                    area.minLat(), area.minLon(), area.maxLat(), area.maxLon()));
+        }
+        return classifications;
+    }
+
+    private static String missingClassificationsMessage(int cityId, String citySlug, ClassificationSource source) {
+        return switch (source) {
+            case LEGACY_TABLE -> "No regional_area_classifications rows for city_id=" + cityId
+                    + " (slug=" + citySlug + ") — run RegionalClassificationBackfillService first.";
+            case CANONICAL_GEOMETRY -> "City id=" + cityId + " (slug=" + citySlug + ") has no ACTIVE "
+                    + "locality-level areas with geo centres — onboard and activate Areas with "
+                    + "geo-centre coordinates for this city first.";
+        };
     }
 
     /**
@@ -527,12 +620,18 @@ public class CityRegionOnboardingService {
 
     private record PolicyRow(String regionModel, double centralRadiusKm) {}
 
-    private record ClassificationRow(
-            String areaKey, String directionKey, double distanceKm,
-            Double geoCenterLat, Double geoCenterLon,
-            Double minLat, Double minLon, Double maxLat, Double maxLon) {}
-
     private record GroupMemberRow(String groupSlug, String groupName, String areaKey) {}
+
+    private record CityCentreRow(Double lat, Double lon) {}
+
+    private record CanonicalAreaRow(
+            String areaKey, Double geoCenterLat, Double geoCenterLon,
+            Double minLat, Double minLon, Double maxLat, Double maxLon) {
+
+        double lat() { return geoCenterLat; }
+
+        double lon() { return geoCenterLon; }
+    }
 
     private record EffectiveAssignment(String regionKey, String source) {}
 
@@ -603,6 +702,26 @@ public class CityRegionOnboardingService {
             WHERE rac.city_key = ?
               AND array_length(string_to_array(rac.area_key, '|'), 1) = 4
             ORDER BY rac.area_key
+            """;
+
+    private static final String CANONICAL_CITY_CENTRE_SQL =
+            "SELECT geo_center_lat, geo_center_lon FROM cities WHERE id = ?";
+
+    /**
+     * Mirrors RegionalClassificationBackfillService's {@code AREAS_FOR_CITY_SQL} eligibility
+     * filter exactly (4-segment area_key, ACTIVE, non-null geo centre) — see
+     * {@link #computeCanonicalClassifications}.
+     */
+    private static final String CANONICAL_AREAS_SQL = """
+            SELECT a.area_key, a.geo_center_lat, a.geo_center_lon,
+                   a.min_lat, a.min_lon, a.max_lat, a.max_lon
+            FROM areas a
+            WHERE a.city_id = ?
+              AND array_length(string_to_array(a.area_key, '|'), 1) = 4
+              AND a.lifecycle_status = 'ACTIVE'
+              AND a.geo_center_lat IS NOT NULL
+              AND a.geo_center_lon IS NOT NULL
+            ORDER BY a.area_key
             """;
 
     private static final String AREA_GROUPS_SQL = """

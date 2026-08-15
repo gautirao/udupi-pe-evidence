@@ -2,7 +2,6 @@ package com.example.realestate.discover.citylaunch;
 
 import com.example.realestate.discover.CityRegionOnboardingService;
 import com.example.realestate.discover.RegionOnboardingBlockedException;
-import com.example.realestate.discover.RegionalClassificationBackfillService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -51,7 +50,6 @@ public class CityLaunchPreparationService {
     private final CityLaunchGraphWriter graphWriter;
     private final CityLaunchSseService sseService;
     private final CityRegionOnboardingService cityRegionOnboardingService;
-    private final RegionalClassificationBackfillService regionalClassificationBackfillService;
     private final JdbcOperations jdbcOperations;
 
     public CityLaunchPreparationService(
@@ -60,14 +58,12 @@ public class CityLaunchPreparationService {
             CityLaunchGraphWriter graphWriter,
             CityLaunchSseService sseService,
             CityRegionOnboardingService cityRegionOnboardingService,
-            RegionalClassificationBackfillService regionalClassificationBackfillService,
             JdbcOperations jdbcOperations) {
         this.revisionRepository = revisionRepository;
         this.geographyReader = geographyReader;
         this.graphWriter = graphWriter;
         this.sseService = sseService;
         this.cityRegionOnboardingService = cityRegionOnboardingService;
-        this.regionalClassificationBackfillService = regionalClassificationBackfillService;
         this.jdbcOperations = jdbcOperations;
     }
 
@@ -183,16 +179,14 @@ public class CityLaunchPreparationService {
      * <li>Assert at least one ACTIVE area exists — without that, there is nothing to classify or
      * onboard, and we fail fast with a clear, city-scoped message rather than falling through to
      * a confusing downstream failure.</li>
-     * <li>Conditionally backfill {@code regional_area_classifications}: only when this city
-     * currently has ZERO classification rows. This condition is load-bearing — an unconditional
-     * backfill would silently recompute (and potentially shift) every already-classified city's
-     * region assignments on every single {@code prepare()}/{@code rerunSuperseding()} call,
-     * which would be a behavior change for e.g. Bangalore, not just Udupi.</li>
-     * <li>Call {@link CityRegionOnboardingService#apply(int)} to materialize {@code city_regions}
-     * / {@code city_region_memberships} from {@code city_region_policy} + the (now guaranteed
-     * present) classifications. This call is unconditional but idempotent/no-op-safe: {@code
-     * apply()} itself skips writing anything when nothing that feeds the materialized output has
-     * changed since the last run (fingerprint + membership + geometry comparison).</li>
+     * <li>Call {@link CityRegionOnboardingService#apply(int, CityRegionOnboardingService.ClassificationSource)}
+     * with {@code CANONICAL_GEOMETRY} to materialize {@code city_regions} / {@code
+     * city_region_memberships} from {@code city_region_policy} + classifications computed
+     * in-memory from the city's canonical geo_center and its ACTIVE, geo-centered locality areas.
+     * {@code regional_area_classifications} (legacy/recovery-only after #2151) is neither read
+     * nor written on this path. This call is idempotent/no-op-safe: {@code apply()} itself skips
+     * writing anything when nothing that feeds the materialized output has changed since the last
+     * run (fingerprint + membership + geometry comparison).</li>
      * </ol>
      */
     private void ensureCanonicalGeography(int cityId) {
@@ -201,33 +195,18 @@ public class CityLaunchPreparationService {
 
         CanonicalGeographyReader.CanonicalGeography geography = geographyReader.loadGeography(cityId);
         boolean hasActiveArea = geography.areas().stream()
-                .anyMatch(area -> "ACTIVE".equals(area.lifecycleStatus()) && isLocalityLevelAreaKey(area.areaKey()));
+                .anyMatch(area -> "ACTIVE".equals(area.lifecycleStatus()) && isLocalityLevelAreaKey(area.areaKey())
+                        && area.geoCenterLat() != null && area.geoCenterLon() != null);
         if (!hasActiveArea) {
             throw new CityPrerequisiteGenerationException(
                     "NO_ACTIVE_AREAS",
-                    "City id=" + cityId + " has zero ACTIVE areas — cannot generate region prerequisites.",
-                    "Onboard and activate Areas for this city first.");
-        }
-
-        CanonicalGeographyReader.CanonicalCity city = geographyReader.findCity(cityId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "City not found"));
-        Integer classificationCount = jdbcOperations.queryForObject(
-                "SELECT count(*) FROM public.regional_area_classifications WHERE city_key = ?",
-                Integer.class, city.slug());
-        if (classificationCount == null || classificationCount == 0) {
-            int upserted = regionalClassificationBackfillService.runBackfill(city.slug());
-            long activeAreaCount = geography.areas().stream()
-                    .filter(area -> "ACTIVE".equals(area.lifecycleStatus()) && isLocalityLevelAreaKey(area.areaKey()))
-                    .count();
-            if (upserted != activeAreaCount) {
-                log.warn("City launch prerequisite backfill: cityId={} slug={} upserted={} activeAreas={} "
-                                + "(partial classification coverage is a known pre-existing edge case)",
-                        cityId, city.slug(), upserted, activeAreaCount);
-            }
+                    "City id=" + cityId + " has zero ACTIVE areas with geo-centre coordinates — "
+                            + "cannot generate region prerequisites.",
+                    "Onboard and activate Areas with geo-centre coordinates for this city first.");
         }
 
         try {
-            cityRegionOnboardingService.apply(cityId);
+            cityRegionOnboardingService.apply(cityId, CityRegionOnboardingService.ClassificationSource.CANONICAL_GEOMETRY);
         } catch (RegionOnboardingBlockedException e) {
             throw new CityPrerequisiteGenerationException(
                     e.reason().name(), e.getMessage(), remediationFor(e.reason()));
@@ -249,7 +228,7 @@ public class CityLaunchPreparationService {
     private static String remediationFor(RegionOnboardingBlockedException.Reason reason) {
         return switch (reason) {
             case MISSING_POLICY -> "Assign a region_model in city_region_policy for this city.";
-            case MISSING_CLASSIFICATIONS -> "Run classification backfill for this city.";
+            case MISSING_CLASSIFICATIONS -> "Onboard and activate Areas with geo-centre coordinates for this city first.";
             case DEGENERATE_GROUP -> "Add regional_area_overrides rows to resolve the degenerate area_group(s), "
                     + "or fix the underlying curated grouping.";
             case NAMESPACE_COLLISION -> "Rename the colliding area_group(s), or choose a different region_model.";
