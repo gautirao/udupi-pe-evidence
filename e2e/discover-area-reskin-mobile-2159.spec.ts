@@ -99,5 +99,22 @@ test.describe('#2159 Discover area reskin — mobile (390x844) evidence', () => 
     expect(currentNodeParam(page), 'node= must be unchanged after toggling to Map — the toggle is state-only, never a second URL writer').toBe(
       AREA_NODE,
     );
+
+    // Return leg — Map -> List. PR #2180 re-review (4944951210) asked for the
+    // full round trip, not just the outbound leg: click the same "back to
+    // list" control the previous assertion waited on, and prove the List
+    // surface (cards) is reachable again, with node= still byte-identical.
+    await closeListButton.click();
+
+    await expect(page.locator('[data-testid="listing-card"]').first(), 'List surface must be reachable again after the Map -> List return leg').toBeVisible({
+      timeout: 10_000,
+    });
+    const cardCountAfterReturn = await page.locator('[data-testid="listing-card"]').count();
+    expect(cardCountAfterReturn, 'listing cards must still render after the round trip').toBeGreaterThanOrEqual(1);
+
+    expect(
+      currentNodeParam(page),
+      'node= must still be byte-identical to AREA_NODE after the full List -> Map -> List round trip',
+    ).toBe(AREA_NODE);
   });
 });
