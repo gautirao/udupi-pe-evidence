@@ -79,7 +79,10 @@ export type DiscoverEndpoint =
   | { kind: 'navigationOverrides' }
   | { kind: 'navigationOverrideDelete'; overrideId: number }
   | { kind: 'navigationResolve'; nodeKey: string }
-  | { kind: 'navigationCounts'; nodeKey: string; search: string };
+  | { kind: 'navigationCounts'; nodeKey: string; search: string }
+  | { kind: 'regionalAreaGroups'; listingPurpose: string | null }
+  | { kind: 'agriDestinations'; direction: string | null; maxKm: number | null; listingPurpose: string | null }
+  | { kind: 'agriMapListings'; areaKey: string; listingPurpose: string | null };
 
 /**
  * Resolves the request path for one logical Discover endpoint.
@@ -134,6 +137,25 @@ export function discoverPath(
       return `${base}/navigation/resolve?node=${encodeURIComponent(endpoint.nodeKey)}`;
     case 'navigationCounts':
       return `${base}/navigation/${encodeURIComponent(endpoint.nodeKey)}/counts${endpoint.search ? `?${endpoint.search}` : ''}`;
+    case 'regionalAreaGroups': {
+      const params = new URLSearchParams();
+      if (endpoint.listingPurpose) params.set('listingPurpose', endpoint.listingPurpose);
+      const qs = params.toString();
+      return `${base}/regional-area-groups${qs ? `?${qs}` : ''}`;
+    }
+    case 'agriDestinations': {
+      const params = new URLSearchParams();
+      if (endpoint.direction) params.set('direction', endpoint.direction);
+      if (endpoint.maxKm != null) params.set('maxKm', String(endpoint.maxKm));
+      if (endpoint.listingPurpose) params.set('listingPurpose', endpoint.listingPurpose);
+      const qs = params.toString();
+      return `${base}/agri-destinations${qs ? `?${qs}` : ''}`;
+    }
+    case 'agriMapListings': {
+      const params = new URLSearchParams({ areaKey: endpoint.areaKey });
+      if (endpoint.listingPurpose) params.set('listingPurpose', endpoint.listingPurpose);
+      return `${base}/agri-map-listings?${params.toString()}`;
+    }
     default: {
       // Exhaustiveness guard — a new DiscoverEndpoint variant must be
       // handled above or this fails to typecheck.

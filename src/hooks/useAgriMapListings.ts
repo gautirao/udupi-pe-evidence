@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 
 /**
  * Issue #1410 (B3) — fetch agri map listings for a single area key from the
@@ -84,20 +85,43 @@ export function useAgriMapListings(
   listingPurpose?: string,
   isAuthenticated = false,
 ) {
+  const source = useDiscoverSource();
+
   // Auth-scope literal — must be FIRST dimension after base key so anon and authed
-  // responses never collide in the TanStack Query cache.
+  // responses never collide in the TanStack Query cache. #2151 Track 3: discoverKey's
+  // ['preview', cityId, revisionId] prefix is prepended OUTSIDE/BEFORE this array (not
+  // interleaved with authScope) — preserves the existing anon/authed cache-isolation
+  // ordering (Issue #1551) while adding preview/live cache isolation on top.
   const authScope = isAuthenticated ? 'authed' : 'anon';
   return useQuery<AgriMapListingsResponse>({
-    queryKey: [...AGRI_MAP_LISTINGS_QUERY_KEY_BASE, authScope, city, listingPurpose ?? null, areaKey],
+    queryKey: discoverKey(
+      source,
+      ...AGRI_MAP_LISTINGS_QUERY_KEY_BASE,
+      authScope,
+      city,
+      listingPurpose ?? null,
+      areaKey,
+    ),
     queryFn: async () => {
       const params = new URLSearchParams({ city, areaKey });
       if (listingPurpose) params.set('listingPurpose', listingPurpose);
-      const data = await api.get<AgriMapListingsResponse>(
-        `/api/discover/agri-map-listings?${params.toString()}`,
-        // Authed: send Authorization header so backend returns exact price + coords.
-        // Anon: skipAuth:true → no header → backend returns coarsened coords + null price.
-        isAuthenticated ? undefined : { skipAuth: true },
-      );
+      const livePath = `/api/discover/agri-map-listings?${params.toString()}`;
+      const path = discoverPath(source, livePath, {
+        kind: 'agriMapListings',
+        areaKey,
+        listingPurpose: listingPurpose ?? null,
+      });
+      // Live mode: preserve the existing anon/authed skipAuth behaviour unchanged.
+      // Preview mode: preview endpoints are admin-authed — skipAuth must be false so
+      // the admin JWT is attached, regardless of isAuthenticated (a preview-mode
+      // caller is always the admin).
+      const options =
+        source.mode === 'live'
+          ? isAuthenticated
+            ? undefined
+            : { skipAuth: true as const }
+          : { skipAuth: false as const };
+      const data = await api.get<AgriMapListingsResponse>(path, options);
       return data;
     },
     enabled: city.length > 0 && areaKey.length > 0,

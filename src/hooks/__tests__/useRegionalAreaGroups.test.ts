@@ -24,9 +24,11 @@ import {
   REGIONAL_AREA_GROUPS_QUERY_KEY_BASE,
   AGRI_DESTINATIONS_QUERY_KEY_BASE,
   AGRI_DESTINATIONS_NOT_YET_PROMOTED_CODE,
+  AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION_CODE,
   type CorridorGroupData,
   type CumulativeDistanceTier,
 } from '../useRegionalAreaGroups';
+import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -54,6 +56,22 @@ function makeWrapper() {
   });
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return React.createElement(QueryClientProvider, { client: queryClient }, children);
+  };
+}
+
+function makePreviewWrapper(cityId: number, revisionId: number) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return function PreviewWrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      React.createElement(DiscoverDataSourceProvider, {
+        value: { mode: 'preview', cityId, revisionId, citySlug: 'preview-city' },
+        children,
+      }),
+    );
   };
 }
 
@@ -357,6 +375,119 @@ describe('useRegionalAreaGroups', () => {
 
     // Two distinct fetches (no query-key collision) — both calls happened.
     expect(mockApiGet).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ─── #2151 Track 3 — preview-mode threading via DiscoverDataSourceContext ─────
+
+describe('useRegionalAreaGroups — preview mode (Issue #2151 Track 3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('live mode is byte-identical to pre-Track-3 (regression proof: URL, key, skipAuth)', async () => {
+    mockApiGet.mockResolvedValueOnce({ city: 'udupi', groups: [] });
+    const { result } = renderHook(() => useRegionalAreaGroups('udupi'), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(mockApiGet).toHaveBeenCalledWith(
+      '/api/discover/regional-area-groups?city=udupi&propertyType=agricultural_land',
+      { skipAuth: true },
+    );
+  });
+
+  it('preview mode requests the admin preview regional-area-groups path with skipAuth:false', async () => {
+    mockApiGet.mockResolvedValueOnce({ city: 'udupi', groups: [] });
+    const { result } = renderHook(() => useRegionalAreaGroups('udupi'), {
+      wrapper: makePreviewWrapper(7, 42),
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(mockApiGet).toHaveBeenCalledWith(
+      '/api/admin/city-launch/cities/7/revisions/42/preview/regional-area-groups',
+      { skipAuth: false },
+    );
+  });
+
+  it('preview mode forwards listingPurpose on the preview path and prepends the preview triple to the query key', async () => {
+    mockApiGet.mockResolvedValueOnce({ city: 'udupi', groups: [] });
+    const { result } = renderHook(() => useRegionalAreaGroups('udupi', 'rent'), {
+      wrapper: makePreviewWrapper(7, 42),
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(mockApiGet).toHaveBeenCalledWith(
+      '/api/admin/city-launch/cities/7/revisions/42/preview/regional-area-groups?listingPurpose=rent',
+      { skipAuth: false },
+    );
+  });
+});
+
+describe('useAgriDestinations — preview mode (Issue #2151 Track 3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('live mode is byte-identical to pre-Track-3 (regression proof: URL, key, skipAuth)', async () => {
+    mockApiGet.mockResolvedValueOnce({ city: 'udupi', destinations: [] });
+    const { result } = renderHook(() => useAgriDestinations('udupi', 'N', 25, 'sale'), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(mockApiGet).toHaveBeenCalledWith(
+      '/api/discover/agri-destinations?city=udupi&direction=N&maxKm=25&listingPurpose=sale',
+      { skipAuth: true },
+    );
+  });
+
+  it('preview mode requests the admin preview agri-destinations path with skipAuth:false', async () => {
+    mockApiGet.mockResolvedValueOnce({ city: 'udupi', destinations: [] });
+    const { result } = renderHook(() => useAgriDestinations('udupi', 'N', 25, 'sale'), {
+      wrapper: makePreviewWrapper(7, 42),
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(mockApiGet).toHaveBeenCalledWith(
+      '/api/admin/city-launch/cities/7/revisions/42/preview/agri-destinations?direction=N&maxKm=25&listingPurpose=sale',
+      { skipAuth: false },
+    );
+  });
+
+  it('a live-mode 503 AGRI_DESTINATIONS_NOT_YET_PROMOTED is distinct from the preview not-generated-for-revision carve-out', async () => {
+    const { ApiError } = await import('@/lib/api');
+    mockApiGet.mockRejectedValueOnce(
+      new ApiError('Service Unavailable', 503, { error: AGRI_DESTINATIONS_NOT_YET_PROMOTED_CODE }),
+    );
+    const { result } = renderHook(() => useAgriDestinations('udupi'), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isNotYetPromoted).toBe(true);
+    expect(result.current.isNotGeneratedForRevision).toBe(false);
+    expect(result.current.isError).toBe(false);
+  });
+
+  it('a preview-mode 503 AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION surfaces isNotGeneratedForRevision, NOT isNotYetPromoted or isError', async () => {
+    const { ApiError } = await import('@/lib/api');
+    mockApiGet.mockRejectedValueOnce(
+      new ApiError('Service Unavailable', 503, {
+        error: AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION_CODE,
+      }),
+    );
+    const { result } = renderHook(() => useAgriDestinations('udupi'), {
+      wrapper: makePreviewWrapper(7, 42),
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    // The distinguishing assertion: preview's not-generated-for-revision case must never
+    // collapse into the live not-yet-promoted flag or the generic retryable-error flag.
+    expect(result.current.isNotGeneratedForRevision).toBe(true);
+    expect(result.current.isNotYetPromoted).toBe(false);
+    expect(result.current.isError).toBe(false);
   });
 });
 

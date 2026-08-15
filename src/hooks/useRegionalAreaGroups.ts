@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '@/lib/api';
+import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 
 // ─── Frontend Types (cumulative corridor model, Issue #1429) ──────────────────
 
@@ -143,15 +144,29 @@ export function normalizeRegionalAreaGroupsResponse(
  * query-string change, no query-key change for existing callers that don't pass it).
  */
 export function useRegionalAreaGroups(city: string, listingPurpose?: string): RegionalAreaGroupsData {
+  const source = useDiscoverSource();
+
   const { data, isLoading, isError, error, refetch } = useQuery<Pick<RegionalAreaGroupsData, 'groups'>>({
-    queryKey: [...REGIONAL_AREA_GROUPS_QUERY_KEY_BASE, city, 'agricultural_land', listingPurpose ?? null],
+    queryKey: discoverKey(
+      source,
+      ...REGIONAL_AREA_GROUPS_QUERY_KEY_BASE,
+      city,
+      'agricultural_land',
+      listingPurpose ?? null,
+    ),
     queryFn: async () => {
       const params = new URLSearchParams({ city, propertyType: 'agricultural_land' });
       if (listingPurpose) params.set('listingPurpose', listingPurpose);
-      const rawResponse = await api.get<CorridorGroupsDTOResponse>(
-        `/api/discover/regional-area-groups?${params.toString()}`,
-        { skipAuth: true },
-      );
+      const livePath = `/api/discover/regional-area-groups?${params.toString()}`;
+      const path = discoverPath(source, livePath, {
+        kind: 'regionalAreaGroups',
+        listingPurpose: listingPurpose ?? null,
+      });
+      // Preview endpoints are admin-authed — skipAuth must be false so the
+      // admin JWT is attached. Live mode keeps skipAuth:true (unchanged).
+      const rawResponse = await api.get<CorridorGroupsDTOResponse>(path, {
+        skipAuth: source.mode === 'live',
+      });
       return normalizeRegionalAreaGroupsResponse(rawResponse, city);
     },
     enabled: city.length > 0,
@@ -199,6 +214,16 @@ export const AGRI_DESTINATIONS_QUERY_KEY_BASE = ['agri-destinations'] as const;
  * generic retryable-error state and never presented as an empty result (C-F6 state 5).
  */
 export const AGRI_DESTINATIONS_NOT_YET_PROMOTED_CODE = 'AGRI_DESTINATIONS_NOT_YET_PROMOTED';
+
+/**
+ * Backend fail-closed code (503) for a PREVIEW revision that has zero sandbox Agri rows —
+ * i.e. the revision needs city preparation re-run, not (like the live 503 above) a
+ * never-promoted city. Distinct remediation from AGRI_DESTINATIONS_NOT_YET_PROMOTED_CODE, so
+ * it must render as its own distinct state too (see `isNotGeneratedForRevision` below) — never
+ * folded into the generic retryable-error state, and never conflated with the live-mode
+ * not-yet-promoted carve-out (#2151 Track 3).
+ */
+export const AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION_CODE = 'AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION';
 
 interface AgriDestinationBucketDTO {
   areaKey?: string;
@@ -250,11 +275,20 @@ export interface AgriDestinationsData {
   destinations: AgriDestinationBucket[];
   isLoading: boolean;
   /**
-   * True for any error EXCEPT the 503 not-yet-promoted case, which is surfaced separately via
-   * `isNotYetPromoted` (C-F6: the two must render as distinct states).
+   * True for any error EXCEPT the 503 not-yet-promoted case or the 503 preview
+   * not-generated-for-revision case, both of which are surfaced separately via
+   * `isNotYetPromoted`/`isNotGeneratedForRevision` (C-F6 / #2151 Track 3: these must render as
+   * distinct states, never folded into one ambiguous flag).
    */
   isError: boolean;
   isNotYetPromoted: boolean;
+  /**
+   * #2151 Track 3 — true when the active source is a PREVIEW revision that has zero sandbox
+   * Agri rows (backend 503 AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION). Distinct from
+   * `isNotYetPromoted` (which is a LIVE-mode-only, never-promoted-city carve-out): the
+   * remediation here is re-running city preparation for this revision, not promotion.
+   */
+  isNotGeneratedForRevision: boolean;
   error: Error | null;
   refetch: () => void;
 }
@@ -270,23 +304,34 @@ export function useAgriDestinations(
   maxKm?: number | null,
   listingPurpose?: string,
 ): AgriDestinationsData {
+  const source = useDiscoverSource();
+
   const { data, isLoading, isError, error, refetch } = useQuery<AgriDestinationBucket[]>({
-    queryKey: [
+    queryKey: discoverKey(
+      source,
       ...AGRI_DESTINATIONS_QUERY_KEY_BASE,
       city,
       direction ?? null,
       maxKm ?? null,
       listingPurpose ?? null,
-    ],
+    ),
     queryFn: async () => {
       const params = new URLSearchParams({ city });
       if (direction) params.set('direction', direction);
       if (maxKm != null) params.set('maxKm', String(maxKm));
       if (listingPurpose) params.set('listingPurpose', listingPurpose);
-      const dto = await api.get<AgriDestinationsDTOResponse>(
-        `/api/discover/agri-destinations?${params.toString()}`,
-        { skipAuth: true },
-      );
+      const livePath = `/api/discover/agri-destinations?${params.toString()}`;
+      const path = discoverPath(source, livePath, {
+        kind: 'agriDestinations',
+        direction: direction ?? null,
+        maxKm: maxKm ?? null,
+        listingPurpose: listingPurpose ?? null,
+      });
+      // Preview endpoints are admin-authed — skipAuth must be false so the
+      // admin JWT is attached. Live mode keeps skipAuth:true (unchanged).
+      const dto = await api.get<AgriDestinationsDTOResponse>(path, {
+        skipAuth: source.mode === 'live',
+      });
       return normalizeAgriDestinationsResponse(dto);
     },
     enabled: city.length > 0,
@@ -301,13 +346,21 @@ export function useAgriDestinations(
     isErrorCodeBody(error.body) &&
     error.body.error === AGRI_DESTINATIONS_NOT_YET_PROMOTED_CODE;
 
+  const isNotGeneratedForRevision =
+    isError &&
+    error instanceof ApiError &&
+    error.status === 503 &&
+    isErrorCodeBody(error.body) &&
+    error.body.error === AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION_CODE;
+
   return {
     destinations: data ?? [],
     isLoading,
-    // The 503 not-yet-promoted case is carved out of the generic error flag — C-F6 requires it
-    // never be presented as a generic retryable error.
-    isError: isError && !isNotYetPromoted,
+    // The 503 not-yet-promoted and 503 not-generated-for-revision cases are both carved out of
+    // the generic error flag — neither may be presented as a generic retryable error.
+    isError: isError && !isNotYetPromoted && !isNotGeneratedForRevision,
     isNotYetPromoted,
+    isNotGeneratedForRevision,
     error: error as Error | null,
     refetch,
   };
