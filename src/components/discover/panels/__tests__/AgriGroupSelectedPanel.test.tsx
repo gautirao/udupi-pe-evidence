@@ -107,6 +107,7 @@ interface MockDestinationsResult {
   isLoading: boolean;
   isError: boolean;
   isNotYetPromoted: boolean;
+  isNotGeneratedForRevision: boolean;
   error: Error | null;
   refetch: () => void;
 }
@@ -118,6 +119,7 @@ function mockDestinations(overrides: Partial<MockDestinationsResult> = {}) {
     isLoading: false,
     isError: false,
     isNotYetPromoted: false,
+    isNotGeneratedForRevision: false,
     error: null,
     refetch: mockRefetchDestinations,
     ...overrides,
@@ -285,6 +287,39 @@ describe('AgriGroupSelectedPanel — C-F6 state 5: reference model unavailable (
     render(<AgriGroupSelectedPanel {...baseProps} listings={null} isError={true} />);
     expect(screen.getByTestId('agri-group-not-promoted-state')).toBeInTheDocument();
     expect(screen.queryByTestId('agri-group-error-state')).not.toBeInTheDocument();
+  });
+});
+
+describe('AgriGroupSelectedPanel — #2151 Track 3 state: preview revision not generated', () => {
+  it('renders a distinct not-generated-for-revision state, never the generic error or empty state', () => {
+    mockDestinations({ isNotGeneratedForRevision: true, isError: false });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} />);
+    expect(screen.getByTestId('agri-group-not-generated-for-revision-state')).toBeInTheDocument();
+    expect(screen.queryByTestId('agri-group-error-state')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('agri-group-empty-state')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('agri-filtered-empty-state')).not.toBeInTheDocument();
+  });
+
+  it('does NOT render a Retry button — this state is not retryable', () => {
+    mockDestinations({ isNotGeneratedForRevision: true, isError: false });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} />);
+    expect(screen.queryByTestId('agri-group-retry-btn')).not.toBeInTheDocument();
+  });
+
+  it('back-to-list link still fires onClear', async () => {
+    mockDestinations({ isNotGeneratedForRevision: true, isError: false });
+    const user = userEvent.setup();
+    const onClear = vi.fn();
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} onClear={onClear} />);
+    await user.click(screen.getByTestId('agri-group-back-btn'));
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it('is distinct from — and does not trigger — the not-yet-promoted state', () => {
+    mockDestinations({ isNotGeneratedForRevision: true, isNotYetPromoted: false, isError: false });
+    render(<AgriGroupSelectedPanel {...baseProps} listings={null} />);
+    expect(screen.getByTestId('agri-group-not-generated-for-revision-state')).toBeInTheDocument();
+    expect(screen.queryByTestId('agri-group-not-promoted-state')).not.toBeInTheDocument();
   });
 });
 

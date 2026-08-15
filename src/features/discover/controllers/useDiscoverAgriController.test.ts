@@ -57,6 +57,7 @@ const AGRI_DESTINATIONS_RESULT = {
   isLoading: false,
   isError: false,
   isNotYetPromoted: false,
+  isNotGeneratedForRevision: false,
   error: null,
   refetch: vi.fn(),
 };
@@ -166,6 +167,7 @@ describe('useDiscoverAgriController (#2142 Commit 3 — moved verbatim from MapD
     expect(result.current.isLoadingAgriDestinations).toBe(false);
     expect(result.current.isAgriDestinationsError).toBe(false);
     expect(result.current.isAgriDestinationsNotYetPromoted).toBe(false);
+    expect(result.current.isAgriDestinationsNotGeneratedForRevision).toBe(false);
   });
 
   it('selectedGroupListingItem finds the matching listing by nav.selectedListing id, null when absent/not found', () => {

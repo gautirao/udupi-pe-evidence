@@ -92,6 +92,7 @@ export function useDiscoverAgriController({
     isLoading: isLoadingAgriDestinations,
     isError: isAgriDestinationsError,
     isNotYetPromoted: isAgriDestinationsNotYetPromoted,
+    isNotGeneratedForRevision: isAgriDestinationsNotGeneratedForRevision,
     refetch: refetchAgriDestinations,
   } = useAgriDestinations(nav.city || DEFAULT_CITY, selectedRegion, selectedMaxKm, intentListingPurpose);
 
@@ -136,6 +137,7 @@ export function useDiscoverAgriController({
     isLoadingAgriDestinations,
     isAgriDestinationsError,
     isAgriDestinationsNotYetPromoted,
+    isAgriDestinationsNotGeneratedForRevision,
     refetchAgriDestinations,
     agriGroupLabel,
     selectedGroupListingItem,

@@ -94,9 +94,12 @@ export type DiscoverEndpoint =
  *
  * PREVIEW mode: ignores `livePath` and returns the matching
  * `/api/admin/city-launch/cities/{cityId}/revisions/{revisionId}/preview/...`
- * base path (no query string — the preview endpoints accept none today;
- * callers must not append a live-only query param, e.g. listingPurpose, in
- * preview mode).
+ * base path. Navigation/region/area/marker/listing endpoints carry no query
+ * string in preview mode. The three Agri endpoints (`regionalAreaGroups`,
+ * `agriDestinations`, `agriMapListings` — Issue #2151 Track 2) are the
+ * exception: they build and append their own query string (e.g.
+ * `listingPurpose`, `direction`, `maxKm`, `areaKey`) in both modes, matching
+ * the backend preview contract.
  */
 export function discoverPath(
   source: DiscoverDataSource,
