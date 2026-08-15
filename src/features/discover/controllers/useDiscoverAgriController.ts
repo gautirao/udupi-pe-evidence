@@ -46,6 +46,7 @@ export function useDiscoverAgriController({
     groups: corridorGroups,
     isLoading: isLoadingRegionalAreaGroups,
     isError: isRegionalAreaGroupsError,
+    isNotGeneratedForRevision: isRegionalAreaGroupsNotGeneratedForRevision,
     refetch: refetchRegionalAreaGroups,
   } = useRegionalAreaGroups(nav.city || DEFAULT_CITY, intentListingPurpose);
 
@@ -92,6 +93,7 @@ export function useDiscoverAgriController({
     isLoading: isLoadingAgriDestinations,
     isError: isAgriDestinationsError,
     isNotYetPromoted: isAgriDestinationsNotYetPromoted,
+    isNotGeneratedForRevision: isAgriDestinationsNotGeneratedForRevision,
     refetch: refetchAgriDestinations,
   } = useAgriDestinations(nav.city || DEFAULT_CITY, selectedRegion, selectedMaxKm, intentListingPurpose);
 
@@ -122,6 +124,7 @@ export function useDiscoverAgriController({
     corridorGroups,
     isLoadingRegionalAreaGroups,
     isRegionalAreaGroupsError,
+    isRegionalAreaGroupsNotGeneratedForRevision,
     refetchRegionalAreaGroups,
     selectedRegion,
     selectedMaxKm,
@@ -136,6 +139,7 @@ export function useDiscoverAgriController({
     isLoadingAgriDestinations,
     isAgriDestinationsError,
     isAgriDestinationsNotYetPromoted,
+    isAgriDestinationsNotGeneratedForRevision,
     refetchAgriDestinations,
     agriGroupLabel,
     selectedGroupListingItem,

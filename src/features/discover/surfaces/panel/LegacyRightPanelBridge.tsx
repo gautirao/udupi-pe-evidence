@@ -97,6 +97,7 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
     corridorGroups,
     isLoadingRegionalAreaGroups,
     isRegionalAreaGroupsError,
+    isRegionalAreaGroupsNotGeneratedForRevision,
     selectedRegion,
     selectedMaxKm,
   } = view.agri;
@@ -251,6 +252,11 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
       isLoadingRegionalGroups={isLoadingRegionalAreaGroups}
       // Issue #1453 — surface fetch error so CorridorLandingPanel can show error+retry UI.
       isRegionalGroupsError={isRegionalAreaGroupsError}
+      // #2151 Track 3 landing-panel gap fix — surface the distinct not-generated-for-revision
+      // state so a preview revision with zero sandbox Agri rows doesn't fall into the generic
+      // "Could not load corridors" error at the landing panel (mirrors the drill-down panel's
+      // AgriGroupSelectedPanel isNotGeneratedForRevision carve-out).
+      isRegionalGroupsNotGeneratedForRevision={isRegionalAreaGroupsNotGeneratedForRevision}
       onRetryRegionalGroups={refetchRegionalAreaGroups}
       selectedRegion={selectedRegion}
       selectedMaxKm={selectedMaxKm}

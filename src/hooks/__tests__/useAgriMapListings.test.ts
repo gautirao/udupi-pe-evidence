@@ -44,6 +44,7 @@ vi.mock('@/lib/api', () => ({
 
 // ─── Import hook AFTER mocks ───────────────────────────────────
 import { useAgriMapListings, AGRI_MAP_LISTINGS_QUERY_KEY_BASE } from '../useAgriMapListings';
+import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -53,6 +54,21 @@ function makeWrapper() {
   });
   return ({ children }: { children: React.ReactNode }) =>
     React.createElement(QueryClientProvider, { client: queryClient }, children);
+}
+
+function makePreviewWrapper(cityId: number, revisionId: number) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      React.createElement(DiscoverDataSourceProvider, {
+        value: { mode: 'preview', cityId, revisionId, citySlug: 'preview-city' },
+        children,
+      }),
+    );
 }
 
 const SAMPLE_RESPONSE = {
@@ -300,5 +316,117 @@ describe('useAgriMapListings', () => {
     expect(authedCachedData).toBeUndefined();
 
     client.clear();
+  });
+
+  // ─── #2151 Track 3 — preview-mode threading via DiscoverDataSourceContext ────
+
+  it('live mode is byte-identical to pre-Track-3 (regression proof: URL, key, skipAuth)', async () => {
+    mockGet.mockResolvedValueOnce({ city: 'udupi', listings: [] });
+    const { result } = renderHook(
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal'),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockGet).toHaveBeenCalledWith(
+      '/api/discover/agri-map-listings?city=udupi&areaKey=IN%7CKA%7CUdupi%7CManipal',
+      { skipAuth: true },
+    );
+  });
+
+  it('preview mode requests the admin preview agri-map-listings path and sends skipAuth:false', async () => {
+    mockGet.mockResolvedValueOnce({ city: 'udupi', listings: [] });
+    const { result } = renderHook(
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal'),
+      { wrapper: makePreviewWrapper(7, 42) },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockGet).toHaveBeenCalledWith(
+      '/api/admin/city-launch/cities/7/revisions/42/preview/agri-map-listings?areaKey=IN%7CKA%7CUdupi%7CManipal',
+      { skipAuth: false },
+    );
+  });
+
+  it('preview mode uses skipAuth:false even when isAuthenticated=true (preview caller is always the admin)', async () => {
+    mockGet.mockResolvedValueOnce({ city: 'udupi', listings: [] });
+    const { result } = renderHook(
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal', undefined, /* isAuthenticated= */ true),
+      { wrapper: makePreviewWrapper(7, 42) },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockGet).toHaveBeenCalledWith(
+      expect.stringContaining('/api/admin/city-launch/cities/7/revisions/42/preview/agri-map-listings'),
+      { skipAuth: false },
+    );
+  });
+
+  it('preserves anon/authed cache isolation alongside preview scoping', async () => {
+    mockGet.mockResolvedValue({ city: 'udupi', listings: [] });
+
+    const anonPreviewClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result: anonResult } = renderHook(
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal', undefined, false),
+      {
+        wrapper: ({ children }) =>
+          React.createElement(
+            QueryClientProvider,
+            { client: anonPreviewClient },
+            React.createElement(DiscoverDataSourceProvider, {
+              value: { mode: 'preview', cityId: 7, revisionId: 42, citySlug: 'preview-city' },
+              children,
+            }),
+          ),
+      },
+    );
+    await waitFor(() => expect(anonResult.current.isSuccess).toBe(true));
+    const anonKey = anonPreviewClient.getQueryCache().getAll()[0].queryKey;
+
+    const authedPreviewClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result: authedResult } = renderHook(
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal', undefined, true),
+      {
+        wrapper: ({ children }) =>
+          React.createElement(
+            QueryClientProvider,
+            { client: authedPreviewClient },
+            React.createElement(DiscoverDataSourceProvider, {
+              value: { mode: 'preview', cityId: 7, revisionId: 42, citySlug: 'preview-city' },
+              children,
+            }),
+          ),
+      },
+    );
+    await waitFor(() => expect(authedResult.current.isSuccess).toBe(true));
+    const authedKey = authedPreviewClient.getQueryCache().getAll()[0].queryKey;
+
+    // The ['preview', cityId, revisionId] triple must be prepended OUTSIDE/BEFORE the
+    // existing authScope literal — never interleaved with or replacing it.
+    expect(anonKey.slice(0, 3)).toEqual(['preview', 7, 42]);
+    expect(authedKey.slice(0, 3)).toEqual(['preview', 7, 42]);
+    // authScope keeps its pre-existing relative position: immediately after the
+    // ['preview', cityId, revisionId, ...AGRI_MAP_LISTINGS_QUERY_KEY_BASE] prefix —
+    // exactly where it sat right after AGRI_MAP_LISTINGS_QUERY_KEY_BASE in live mode.
+    const authScopeIndex = 3 + AGRI_MAP_LISTINGS_QUERY_KEY_BASE.length;
+    expect(anonKey[authScopeIndex]).toBe('anon');
+    expect(authedKey[authScopeIndex]).toBe('authed');
+    // Anon and authed preview keys remain structurally distinct — no cache collision.
+    expect(anonKey).not.toEqual(authedKey);
+
+    // Cross-check against the live-mode key ordering for the same call: the segment
+    // AFTER the preview triple must equal the full live-mode key (preview triple is a
+    // pure prefix, not an interleave/replacement).
+    const liveClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result: liveResult } = renderHook(
+      () => useAgriMapListings('udupi', 'IN|KA|Udupi|Manipal', undefined, false),
+      {
+        wrapper: ({ children }) =>
+          React.createElement(QueryClientProvider, { client: liveClient }, children),
+      },
+    );
+    await waitFor(() => expect(liveResult.current.isSuccess).toBe(true));
+    const liveKey = liveClient.getQueryCache().getAll()[0].queryKey;
+    expect(anonKey.slice(3)).toEqual(liveKey);
   });
 });

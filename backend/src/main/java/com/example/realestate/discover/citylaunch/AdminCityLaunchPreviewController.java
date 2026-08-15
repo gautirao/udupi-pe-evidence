@@ -1,5 +1,7 @@
 package com.example.realestate.discover.citylaunch;
 
+import com.example.realestate.discover.AgriDestinationsResponse;
+import com.example.realestate.discover.AgriMapListingsResponse;
 import com.example.realestate.discover.AreaGroupsResponse;
 import com.example.realestate.discover.AreaSummaryResponse;
 import com.example.realestate.discover.CityAreaListingsResponse;
@@ -7,6 +9,7 @@ import com.example.realestate.discover.DiscoverListingResponse;
 import com.example.realestate.discover.DiscoverMarkersResponse;
 import com.example.realestate.discover.RegionScopedAreaGroup;
 import com.example.realestate.discover.RegionSummaryResponse;
+import com.example.realestate.discover.RegionalAreaGroupsResponse;
 import com.example.realestate.security.CallerInfo;
 import com.example.realestate.security.IsAdmin;
 import com.example.realestate.discover.navigation.NavigationCountsResponse;
@@ -155,6 +158,78 @@ public class AdminCityLaunchPreviewController {
             @PathVariable int cityId, @PathVariable long revisionId, CallerInfo caller) {
         log.debug("GET preview/agri cityId={} revisionId={} adminId={}", cityId, revisionId, caller.userId());
         return noStore(previewService.getAgriPreview(cityId, revisionId));
+    }
+
+    /**
+     * GET .../preview/identity -&gt; {@link PreviewIdentityResponse} (#2151 Track 1). The
+     * previewed revision's real owning-city slug/name, so the admin preview page can resolve
+     * city identity instead of falling back to a default city.
+     */
+    @IsAdmin
+    @GetMapping("/identity")
+    public ResponseEntity<PreviewIdentityResponse> getPreviewIdentity(
+            @PathVariable int cityId, @PathVariable long revisionId, CallerInfo caller) {
+        log.debug("GET preview/identity cityId={} revisionId={} adminId={}", cityId, revisionId, caller.userId());
+        return noStore(previewService.getPreviewIdentity(cityId, revisionId));
+    }
+
+    /**
+     * GET .../preview/regional-area-groups?listingPurpose=... -&gt; {@link RegionalAreaGroupsResponse}
+     * (#2151 PR B Track 2). Revision-scoped Agri corridor groups, read from this revision's own
+     * {@code sandbox_agri_destination_classification} rows — never production. Fixes the Admin City
+     * Launch preview's Agricultural land panel "Could not load corridors" bug: the panel's
+     * {@code useRegionalAreaGroups} hook can now call a revision-aware endpoint instead of the
+     * production {@code /api/discover/regional-area-groups}, which never sees sandbox geometry.
+     *
+     * <p>503 {@code AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION} when this revision has zero
+     * sandbox Agri rows (city preparation needs to be re-run) — distinct from production's
+     * {@code AGRI_DESTINATIONS_NOT_YET_PROMOTED}.
+     */
+    @IsAdmin
+    @GetMapping("/regional-area-groups")
+    public ResponseEntity<RegionalAreaGroupsResponse> getRegionalAreaGroupsPreview(
+            @PathVariable int cityId, @PathVariable long revisionId,
+            @RequestParam(name = "listingPurpose", required = false) String listingPurpose,
+            CallerInfo caller) {
+        log.debug("GET preview/regional-area-groups cityId={} revisionId={} adminId={}",
+                cityId, revisionId, caller.userId());
+        return noStore(previewService.getRegionalAreaGroupsPreview(cityId, revisionId, listingPurpose));
+    }
+
+    /**
+     * GET .../preview/agri-destinations?direction=...&amp;maxKm=...&amp;listingPurpose=... -&gt;
+     * {@link AgriDestinationsResponse} (#2151 PR B Track 2). Same revision-scoped sandbox read as
+     * {@link #getRegionalAreaGroupsPreview}, see that method's javadoc for the 503 contract.
+     */
+    @IsAdmin
+    @GetMapping("/agri-destinations")
+    public ResponseEntity<AgriDestinationsResponse> getAgriDestinationsPreview(
+            @PathVariable int cityId, @PathVariable long revisionId,
+            @RequestParam(name = "direction", required = false) String direction,
+            @RequestParam(name = "maxKm", required = false) Double maxKm,
+            @RequestParam(name = "listingPurpose", required = false) String listingPurpose,
+            CallerInfo caller) {
+        log.debug("GET preview/agri-destinations cityId={} revisionId={} direction={} maxKm={} adminId={}",
+                cityId, revisionId, direction, maxKm, caller.userId());
+        return noStore(previewService.getAgriDestinationsPreview(cityId, revisionId, direction, maxKm, listingPurpose));
+    }
+
+    /**
+     * GET .../preview/agri-map-listings?areaKey=...&amp;listingPurpose=... -&gt;
+     * {@link AgriMapListingsResponse} (#2151 PR B Track 2). Parcels are read from the LIVE {@code
+     * property_listings} table (a revision preview scopes GEOGRAPHY, not inventory); always the
+     * exact-coords/real-price shape ({@code @IsAdmin} — never the anonymous-coarsened one).
+     */
+    @IsAdmin
+    @GetMapping("/agri-map-listings")
+    public ResponseEntity<AgriMapListingsResponse> getAgriMapListingsPreview(
+            @PathVariable int cityId, @PathVariable long revisionId,
+            @RequestParam(name = "areaKey") String areaKey,
+            @RequestParam(name = "listingPurpose", required = false) String listingPurpose,
+            CallerInfo caller) {
+        log.debug("GET preview/agri-map-listings cityId={} revisionId={} areaKey={} adminId={}",
+                cityId, revisionId, areaKey, caller.userId());
+        return noStore(previewService.getAgriMapListingsPreview(cityId, revisionId, areaKey, listingPurpose));
     }
 
     @IsAdmin

@@ -1,5 +1,8 @@
 package com.example.realestate.discover.citylaunch;
 
+import com.example.realestate.discover.AgriDestinationsResponse;
+import com.example.realestate.discover.AgriDestinationsService;
+import com.example.realestate.discover.AgriMapListingsResponse;
 import com.example.realestate.discover.AreaGroupResponse;
 import com.example.realestate.discover.AreaGroupsResponse;
 import com.example.realestate.discover.AreaListingCard;
@@ -7,11 +10,14 @@ import com.example.realestate.discover.AreaListingsEntry;
 import com.example.realestate.discover.AreaSummary;
 import com.example.realestate.discover.AreaSummaryResponse;
 import com.example.realestate.discover.CityAreaListingsResponse;
+import com.example.realestate.discover.DiscoverAgriMapListingsService;
 import com.example.realestate.discover.DiscoverListingResponse;
 import com.example.realestate.discover.DiscoverMarker;
 import com.example.realestate.discover.DiscoverMarkersResponse;
 import com.example.realestate.discover.RegionScopedAreaGroup;
 import com.example.realestate.discover.RegionSummaryResponse;
+import com.example.realestate.discover.RegionalAreaGroupsResponse;
+import com.example.realestate.discover.RegionalAreaGroupsService;
 import com.example.realestate.discover.navigation.NavigationCountsResponse;
 import com.example.realestate.discover.navigation.NavigationGraph;
 import com.example.realestate.discover.navigation.NavigationNode;
@@ -38,6 +44,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -75,6 +82,8 @@ public class CityLaunchPreviewService {
 
     private static final String CITY_SLUG_SQL = "SELECT slug FROM public.cities WHERE id = ?";
 
+    private static final String CITY_IDENTITY_SQL = "SELECT slug, name FROM public.cities WHERE id = ?";
+
     private final CityLaunchRevisionRepository revisionRepository;
     private final SandboxCityRegionRepository regionRepository;
     private final SandboxCityRegionMembershipRepository membershipRepository;
@@ -84,6 +93,9 @@ public class CityLaunchPreviewService {
     private final SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
     private final SandboxAgriDestinationClassificationRepository sandboxAgriDestinationClassificationRepository;
     private final JdbcOperations jdbcOperations;
+    private final RegionalAreaGroupsService regionalAreaGroupsService;
+    private final AgriDestinationsService agriDestinationsService;
+    private final DiscoverAgriMapListingsService discoverAgriMapListingsService;
 
     public CityLaunchPreviewService(
             CityLaunchRevisionRepository revisionRepository,
@@ -94,7 +106,10 @@ public class CityLaunchPreviewService {
             SandboxAreaRepository areaRepository,
             SandboxNavigationNodeRepository sandboxNavigationNodeRepository,
             SandboxAgriDestinationClassificationRepository sandboxAgriDestinationClassificationRepository,
-            JdbcOperations jdbcOperations) {
+            JdbcOperations jdbcOperations,
+            RegionalAreaGroupsService regionalAreaGroupsService,
+            AgriDestinationsService agriDestinationsService,
+            DiscoverAgriMapListingsService discoverAgriMapListingsService) {
         this.revisionRepository = revisionRepository;
         this.regionRepository = regionRepository;
         this.membershipRepository = membershipRepository;
@@ -104,6 +119,9 @@ public class CityLaunchPreviewService {
         this.sandboxNavigationNodeRepository = sandboxNavigationNodeRepository;
         this.sandboxAgriDestinationClassificationRepository = sandboxAgriDestinationClassificationRepository;
         this.jdbcOperations = jdbcOperations;
+        this.regionalAreaGroupsService = regionalAreaGroupsService;
+        this.agriDestinationsService = agriDestinationsService;
+        this.discoverAgriMapListingsService = discoverAgriMapListingsService;
     }
 
     // ── Public API (E1-E6) ──────────────────────────────────────────────────────────────────
@@ -286,7 +304,12 @@ public class CityLaunchPreviewService {
         }
 
         long total = node == null ? areaCounts.size() : sumAreaCountsForNode(navGraph, node, areaCounts);
-        long schoolTotal = 0L; // Schools are not simulated in preview yet
+        // #2170: schools have no per-revision simulation at all (unlike Agri's
+        // sandbox_agri_destination_classification, #2167), so schoolTotal/areaSchoolCounts are
+        // honestly zero/empty for every revision — but the response also carries
+        // schoolsNotSimulatedForRevision=true so a caller can tell "not simulated" apart from a
+        // genuine zero, rather than rendering both as the same flat wall of zeros.
+        long schoolTotal = 0L;
         Map<String, Long> areaSchoolCounts = Map.of();
 
         List<NavigationCountsResponse.ChildCount> children = new ArrayList<>();
@@ -306,7 +329,7 @@ public class CityLaunchPreviewService {
         }
 
         return new NavigationCountsResponse(
-                nodeKey, total, schoolTotal, areaCounts, areaSchoolCounts, children, revisionId);
+                nodeKey, total, schoolTotal, areaCounts, areaSchoolCounts, children, revisionId, Boolean.TRUE);
     }
 
     private long sumAreaCountsForNode(NavigationGraph graph, NavigationNode node, Map<String, Long> areaCounts) {
@@ -394,6 +417,74 @@ public class CityLaunchPreviewService {
         return new AgriPreviewResponse(
                 rows.size(), directionDistribution, distanceBandDistribution,
                 Math.toIntExact(missingCoordinates), originLat, originLon);
+    }
+
+    // ── E10: preview identity (#2151 Track 1) ───────────────────────────────────────────────
+
+    /**
+     * GET {@code .../preview/identity} — resolves the previewed revision's real owning-city
+     * slug/name. The preview route only carries numeric {@code cityId}/{@code revisionId}, so
+     * without this the frontend has no city identity to thread into the Discover subtree and
+     * falls back to a default city. Guarded by the same {@link #loadPreviewableRevision}
+     * viewability check as every other preview method — a non-previewable revision must yield no
+     * identity, not partial/default data.
+     */
+    @Transactional(readOnly = true)
+    public PreviewIdentityResponse getPreviewIdentity(int cityId, long revisionId) {
+        loadPreviewableRevision(cityId, revisionId);
+
+        List<PreviewIdentityResponse> rows = jdbcOperations.query(CITY_IDENTITY_SQL,
+                (rs, i) -> new PreviewIdentityResponse(cityId, rs.getString("slug"), rs.getString("name")),
+                cityId);
+        if (rows.isEmpty()) {
+            throw notFound();
+        }
+        return rows.get(0);
+    }
+
+    // ── E11: revision-scoped Agri corridors/destinations/map-listings (#2151 PR B Track 2) ────
+
+    /**
+     * GET {@code .../preview/regional-area-groups} -&gt; {@link RegionalAreaGroupsResponse}. Reads
+     * the revision's own {@code sandbox_agri_destination_classification} rows (never production
+     * {@code agri_destination_classification}) via {@link RegionalAreaGroupsService}'s revision
+     * overload — the fix for the Agri panel's "Could not load corridors" preview bug.
+     */
+    @Transactional(readOnly = true)
+    public RegionalAreaGroupsResponse getRegionalAreaGroupsPreview(
+            int cityId, long revisionId, String listingPurpose) {
+        loadPreviewableRevision(cityId, revisionId);
+        String citySlug = resolveCitySlug(cityId);
+        return regionalAreaGroupsService.getRegionalGroupsForRevision(citySlug, listingPurpose, revisionId);
+    }
+
+    /**
+     * GET {@code .../preview/agri-destinations} -&gt; {@link AgriDestinationsResponse}. Same
+     * revision-scoped sandbox read as {@link #getRegionalAreaGroupsPreview}, via
+     * {@link AgriDestinationsService}'s revision overload.
+     */
+    @Transactional(readOnly = true)
+    public AgriDestinationsResponse getAgriDestinationsPreview(
+            int cityId, long revisionId, String direction, Double maxKm, String listingPurpose) {
+        loadPreviewableRevision(cityId, revisionId);
+        String citySlug = resolveCitySlug(cityId);
+        return agriDestinationsService.getDestinations(citySlug, direction, maxKm, listingPurpose, revisionId);
+    }
+
+    /**
+     * GET {@code .../preview/agri-map-listings} -&gt; {@link AgriMapListingsResponse}. Parcels are
+     * still read from the LIVE {@code property_listings} table (a revision preview scopes GEOGRAPHY,
+     * not inventory — see the port's javadoc). {@code isAuthenticated = true} is passed explicitly
+     * — this endpoint is {@code @IsAdmin}-gated already, so the anonymous-coarsening branch must
+     * never apply here.
+     */
+    @Transactional(readOnly = true)
+    public AgriMapListingsResponse getAgriMapListingsPreview(
+            int cityId, long revisionId, String areaKey, String listingPurpose) {
+        loadPreviewableRevision(cityId, revisionId);
+        String citySlug = resolveCitySlug(cityId);
+        return discoverAgriMapListingsService.findAgriMapListings(
+                citySlug, areaKey, Optional.empty(), true, listingPurpose, revisionId);
     }
 
     // ── Viewability guard ────────────────────────────────────────────────────────────────────

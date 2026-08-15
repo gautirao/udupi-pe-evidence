@@ -86,7 +86,7 @@ const renderCardInPreview = (props: React.ComponentProps<typeof PropertyCard>) =
   render(
     <QueryClientProvider client={testQueryClient}>
       <MemoryRouter>
-        <DiscoverDataSourceProvider value={{ mode: 'preview', cityId: 7, revisionId: 42 }}>
+        <DiscoverDataSourceProvider value={{ mode: 'preview', cityId: 7, revisionId: 42, citySlug: 'preview-city' }}>
           <PropertyCard {...props} />
         </DiscoverDataSourceProvider>
       </MemoryRouter>

@@ -110,6 +110,14 @@ class AdminCityLaunchPreviewControllerIT {
 
     @AfterEach
     void cleanup() {
+        // #2151 PR B Track 2: E11 tests insert directly into production property_listings / areas /
+        // agri_destination_classification — clean those up too (harmless no-op for every other test
+        // in this class, which never touches them).
+        jdbc.update("DELETE FROM public.property_listings WHERE area_key IN "
+                + "(SELECT area_key FROM public.areas WHERE city_id IN (?, ?))", testCityId, otherCityId);
+        jdbc.update("DELETE FROM public.agri_destination_classification WHERE city_id IN (?, ?)",
+                testCityId, otherCityId);
+        jdbc.update("DELETE FROM public.areas WHERE city_id IN (?, ?)", testCityId, otherCityId);
         jdbc.update("DELETE FROM public.city_launch_revision WHERE city_id IN (?, ?)", testCityId, otherCityId);
         jdbc.update("DELETE FROM public.cities WHERE id IN (?, ?)", testCityId, otherCityId);
         jdbc.update("DELETE FROM auth.users WHERE id IN (?, ?)", ADMIN_ID, BUYER_ID);
@@ -192,6 +200,46 @@ class AdminCityLaunchPreviewControllerIT {
         return sandboxAgriDestinationClassificationRepository.save(new SandboxAgriDestinationClassification(
                 revisionId, areaKey, originLat, originLon, distanceKm, bearingDeg,
                 directionKey, distanceBandKey, "agri-destination-classification-v1", Instant.now()));
+    }
+
+    // ── E11 seeding helpers: production tables (#2151 PR B Track 2) ─────────────────────────────
+
+    /** Inserts a PRODUCTION {@code public.areas} row — needed for the LIVE listings city-subselect
+     *  join (DiscoverListingPredicateBuilder) and, for the LEFT JOIN display-name case, for the
+     *  sandbox geometry query to resolve a display name at all. */
+    private void insertProductionArea(String areaKey, int cityId, double lat, double lon) {
+        jdbc.update(
+                "INSERT INTO public.areas (area_key, city_id, name, geo_center_lat, geo_center_lon, lifecycle_status) "
+                        + "VALUES (?, ?, ?, ?, ?, 'ACTIVE')",
+                areaKey, cityId, areaKey, lat, lon);
+    }
+
+    /** Inserts a PRODUCTION {@code agri_destination_classification} row — used to prove the preview
+     *  endpoints never fall back to (or leak) production classification data. */
+    private void insertProductionAgriRow(int cityId, String areaKey, double distanceKm, double bearingDeg,
+                                          String directionKey, String distanceBandKey) {
+        jdbc.update(
+                "INSERT INTO public.agri_destination_classification "
+                        + "(city_id, area_key, origin_lat, origin_lon, distance_km, bearing_deg, "
+                        + " direction_key, distance_band_key, generator_version, generated_at) "
+                        + "VALUES (?, ?, 13.0, 74.7, ?, ?, ?, ?, 'test-generator-v1', now())",
+                cityId, areaKey, distanceKm, bearingDeg, directionKey, distanceBandKey);
+    }
+
+    /** Inserts a LIVE {@code property_listings} row — the join every preview parcel-count/
+     *  map-listings read still goes through (revision preview scopes GEOGRAPHY, not inventory). */
+    private String insertLiveAgriListing(String areaKey, String listingPurpose, long pricePaise) {
+        UUID id = UUID.randomUUID();
+        java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+        jdbc.update(
+                "INSERT INTO public.property_listings "
+                        + "(id, area_key, status, archived_at, is_duplicate, is_valid, "
+                        + " property_type, land_area, land_area_unit, listing_purpose, price_paise, "
+                        + " latitude, longitude, created_at, updated_at) "
+                        + "VALUES (?, ?, 'LIVE', NULL, false, true, 'agricultural_land', 3, 'acre', "
+                        + " ?, ?, ?, ?, ?, ?)",
+                id, areaKey, listingPurpose, pricePaise, 13.01, 74.71, now, now);
+        return id.toString();
     }
 
     // =========================================================================================
@@ -704,7 +752,8 @@ class AdminCityLaunchPreviewControllerIT {
     // =========================================================================================
 
     @Test
-    @DisplayName("E8: resolve fallback to CITY_ROOT instead of stale ladder; counts returns schoolTotal=0")
+    @DisplayName("E8: resolve fallback to CITY_ROOT instead of stale ladder; counts returns schoolTotal=0 "
+            + "with schoolsNotSimulatedForRevision=true (#2170)")
     void e8_resolveAndCounts() throws Exception {
         CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
         long revisionId = revision.getId();
@@ -732,12 +781,24 @@ class AdminCityLaunchPreviewControllerIT {
                 .andExpect(jsonPath("$.resolution").value("CITY_ROOT"))
                 .andExpect(jsonPath("$.node.nodeType").value("ROOT"));
 
-        // 3. Counts returns 0 for schools, correct count for listings
+        // 3. Counts returns 0 for schools, correct count for listings, and — #2170 — an explicit
+        // schoolsNotSimulatedForRevision=true flag so a caller can tell "not simulated in preview"
+        // apart from a genuine zero-schools city (production omits this field entirely; see
+        // NavigationCountsResponse's javadoc).
         mockMvc.perform(get(base + "/navigation/d:north/counts").header("Authorization", adminAuth()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.count").value(1))
+                .andExpect(jsonPath("$.schoolCount").value(0))
                 .andExpect(jsonPath("$.areaSchoolCounts").isEmpty())
-                .andExpect(jsonPath("$.areaCounts.['IN|KA|ACP|Nav1']").value(1));
+                .andExpect(jsonPath("$.areaCounts.['IN|KA|ACP|Nav1']").value(1))
+                .andExpect(jsonPath("$.schoolsNotSimulatedForRevision").value(true));
+
+        // 4. Same signal on the ROOT node — the flag is a per-response property of the PREVIEW
+        // route, not something that varies by which node was requested.
+        mockMvc.perform(get(base + "/navigation/root/counts").header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.schoolCount").value(0))
+                .andExpect(jsonPath("$.schoolsNotSimulatedForRevision").value(true));
     }
 
     @Test
@@ -861,5 +922,295 @@ class AdminCityLaunchPreviewControllerIT {
             mockMvc.perform(get(url).header("Authorization", adminAuth()))
                     .andExpect(status().isConflict());
         }
+    }
+
+    @Test
+    @DisplayName("E10: preview/identity returns the revision's real owning-city slug/name (#2151 Track 1)")
+    void e10_identity_returnsCitySlugAndName() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        String url = "/api/admin/city-launch/cities/" + testCityId
+                + "/revisions/" + revision.getId() + "/preview/identity";
+
+        mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.cityId").value(testCityId))
+                .andExpect(jsonPath("$.citySlug").value("acp-it"))
+                .andExpect(jsonPath("$.cityName").value("ACP IT Test City"));
+    }
+
+    @Test
+    @DisplayName("E10 IDOR guard: a revision belonging to a DIFFERENT city -> 404")
+    void e10_wrongCity_404() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        String url = "/api/admin/city-launch/cities/" + otherCityId
+                + "/revisions/" + revision.getId() + "/preview/identity";
+        mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("E10: lifecycle PREPARING/SUPERSEDED/FAILED -> 409, no identity leaked for a "
+            + "non-previewable revision")
+    void e10_nonPreviewableLifecycle_409() throws Exception {
+        for (LifecycleStatus status : new LifecycleStatus[] {
+                LifecycleStatus.PREPARING, LifecycleStatus.SUPERSEDED, LifecycleStatus.FAILED}) {
+            CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, status);
+            String url = "/api/admin/city-launch/cities/" + testCityId
+                    + "/revisions/" + revision.getId() + "/preview/identity";
+            mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                    .andExpect(status().isConflict());
+        }
+    }
+
+    @Test
+    @DisplayName("E10 auth: non-admin -> 403, no token -> 401")
+    void e10_auth_nonAdminForbidden_noTokenUnauthorized() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        String url = "/api/admin/city-launch/cities/" + testCityId
+                + "/revisions/" + revision.getId() + "/preview/identity";
+
+        mockMvc.perform(get(url).header("Authorization", "Bearer " + BUYER_ID))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get(url)).andExpect(status().isUnauthorized());
+    }
+
+    // =========================================================================================
+    // E11 — GET .../preview/regional-area-groups, .../preview/agri-destinations,
+    //       .../preview/agri-map-listings (#2151 PR B Track 2)
+    // =========================================================================================
+
+    @Test
+    @DisplayName("E11 regional-area-groups: reflects SANDBOX classification, never production "
+            + "(core no-fallback proof)")
+    void e11_regionalAreaGroups_reflectsSandboxNotProduction() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        String sandboxAreaKey = "IN|KA|ACP|Agri-Sandbox";
+        String productionOnlyAreaKey = "IN|KA|ACP|Agri-ProdOnly";
+        insertProductionArea(sandboxAreaKey, testCityId, 13.01, 74.71);
+        insertProductionArea(productionOnlyAreaKey, testCityId, 13.5, 75.2);
+        insertLiveAgriListing(sandboxAreaKey, "sale", 5_000_000L);
+        insertLiveAgriListing(productionOnlyAreaKey, "sale", 6_000_000L);
+
+        // Sandbox: N corridor, 5km. Production (DIFFERENT area/direction/distance): S corridor, 50km.
+        seedAgriRow(revisionId, sandboxAreaKey, 13.0, 74.7, 5.0, 0.0, "N", "0_10");
+        insertProductionAgriRow(testCityId, productionOnlyAreaKey, 50.0, 180.0, "S", "25_50");
+
+        String url = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId
+                + "/preview/regional-area-groups";
+
+        MvcResult result = mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.city").value("acp-it"))
+                .andExpect(jsonPath("$.groups.length()").value(1))
+                .andExpect(jsonPath("$.groups[0].directionCode").value("N"))
+                .andReturn();
+        String body = result.getResponse().getContentAsString();
+        assertThat(body).doesNotContain("Agri-ProdOnly");
+    }
+
+    @Test
+    @DisplayName("E11 agri-destinations: reflects SANDBOX classification, never production")
+    void e11_agriDestinations_reflectsSandboxNotProduction() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        String sandboxAreaKey = "IN|KA|ACP|Agri-Dest-Sandbox";
+        String productionOnlyAreaKey = "IN|KA|ACP|Agri-Dest-ProdOnly";
+        insertProductionArea(sandboxAreaKey, testCityId, 13.02, 74.72);
+        insertProductionArea(productionOnlyAreaKey, testCityId, 13.6, 75.3);
+
+        seedAgriRow(revisionId, sandboxAreaKey, 13.0, 74.7, 6.5, 45.0, "NE", "0_10");
+        insertProductionAgriRow(testCityId, productionOnlyAreaKey, 60.0, 200.0, "SW", "50_up");
+
+        String url = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId
+                + "/preview/agri-destinations";
+
+        MvcResult result = mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.city").value("acp-it"))
+                .andExpect(jsonPath("$.destinations.length()").value(1))
+                .andExpect(jsonPath("$.destinations[0].areaKey").value(sandboxAreaKey))
+                .andExpect(jsonPath("$.destinations[0].direction").value("NE"))
+                .andReturn();
+        assertThat(result.getResponse().getContentAsString()).doesNotContain("Agri-Dest-ProdOnly");
+    }
+
+    @Test
+    @DisplayName("E11 agri-map-listings: exact coords/price (admin, never anonymised); "
+            + "parcels are read from LIVE property_listings scoped by the requested areaKey")
+    void e11_agriMapListings_exactCoordsAndPrice() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        String areaKey = "IN|KA|ACP|Agri-Map-Sandbox";
+        insertProductionArea(areaKey, testCityId, 13.01, 74.71);
+        seedAgriRow(revisionId, areaKey, 13.0, 74.7, 4.0, 10.0, "N", "0_10");
+        insertLiveAgriListing(areaKey, "sale", 7_500_000L);
+
+        String url = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId
+                + "/preview/agri-map-listings";
+
+        mockMvc.perform(get(url).param("areaKey", areaKey).header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.city").value("acp-it"))
+                .andExpect(jsonPath("$.listings.length()").value(1))
+                .andExpect(jsonPath("$.listings[0].areaKey").value(areaKey))
+                .andExpect(jsonPath("$.listings[0].pricePaise").value(7_500_000))
+                .andExpect(jsonPath("$.listings[0].latitude").value(13.01))
+                .andExpect(jsonPath("$.listings[0].longitude").value(74.71));
+    }
+
+    @Test
+    @DisplayName("E11 IDOR-scope guard (#2167 review finding): a live area with NO sandbox row for "
+            + "THIS revision is rejected, not silently served, even though the revision has an "
+            + "UNRELATED sandbox row for a different area (proves the fix validates areaKey<->"
+            + "revisionId membership, not merely 'revision has >=1 sandbox row')")
+    void e11_agriMapListings_areaKeyNotInThisRevisionSandbox_isRejectedNotServed() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        // In-scope area: sandbox row for THIS revision + a live listing.
+        String inScopeAreaKey = "IN|KA|ACP|Agri-Scope-InScope";
+        insertProductionArea(inScopeAreaKey, testCityId, 13.01, 74.71);
+        seedAgriRow(revisionId, inScopeAreaKey, 13.0, 74.7, 4.0, 10.0, "N", "0_10");
+        insertLiveAgriListing(inScopeAreaKey, "sale", 7_500_000L);
+
+        // Out-of-scope area: a live listing exists, but NO sandbox_agri_destination_classification
+        // row for THIS revision — e.g. it belongs to an unrelated corridor. The revision above is
+        // NOT zero-row (it has inScopeAreaKey's row), so failClosedIfNoSandboxAgriRows alone would
+        // let this through pre-fix.
+        String outOfScopeAreaKey = "IN|KA|ACP|Agri-Scope-OutOfScope";
+        insertProductionArea(outOfScopeAreaKey, testCityId, 13.5, 75.2);
+        insertLiveAgriListing(outOfScopeAreaKey, "sale", 9_000_000L);
+
+        String url = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId
+                + "/preview/agri-map-listings";
+
+        // In-scope areaKey: served normally.
+        mockMvc.perform(get(url).param("areaKey", inScopeAreaKey).header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.listings.length()").value(1))
+                .andExpect(jsonPath("$.listings[0].areaKey").value(inScopeAreaKey));
+
+        // Out-of-scope areaKey: fails closed — NOT a 200 with the live listing, NOT a silent empty 200.
+        mockMvc.perform(get(url).param("areaKey", outOfScopeAreaKey).header("Authorization", adminAuth()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error").value("AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION"));
+    }
+
+    @Test
+    @DisplayName("E11: revision with ZERO sandbox agri rows -> 503 "
+            + "AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION on all three endpoints")
+    void e11_zeroSandboxRows_allThreeReturn503() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+        String base = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview";
+
+        mockMvc.perform(get(base + "/regional-area-groups").header("Authorization", adminAuth()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error").value("AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION"));
+
+        mockMvc.perform(get(base + "/agri-destinations").header("Authorization", adminAuth()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error").value("AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION"));
+
+        mockMvc.perform(get(base + "/agri-map-listings")
+                        .param("areaKey", "IN|KA|ACP|WhateverArea")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error").value("AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION"));
+    }
+
+    @Test
+    @DisplayName("E11: non-previewable lifecycle -> 409 BEFORE any agri-specific logic runs, "
+            + "same viewability guard as every other preview endpoint")
+    void e11_nonPreviewableLifecycle_409BeforeAgriLogic() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.RUNNING, LifecycleStatus.PREPARING);
+        String base = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revision.getId() + "/preview";
+
+        mockMvc.perform(get(base + "/regional-area-groups").header("Authorization", adminAuth()))
+                .andExpect(status().isConflict());
+        mockMvc.perform(get(base + "/agri-destinations").header("Authorization", adminAuth()))
+                .andExpect(status().isConflict());
+        mockMvc.perform(get(base + "/agri-map-listings").param("areaKey", "IN|KA|ACP|X")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("E11: wrong-city -> 404 (IDOR guard), same as every other preview endpoint")
+    void e11_wrongCity_404() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        String url = "/api/admin/city-launch/cities/" + otherCityId
+                + "/revisions/" + revision.getId() + "/preview/regional-area-groups";
+        mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("E11 auth: non-admin -> 403, no token -> 401")
+    void e11_auth_nonAdminForbidden_noTokenUnauthorized() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        String url = "/api/admin/city-launch/cities/" + testCityId
+                + "/revisions/" + revision.getId() + "/preview/regional-area-groups";
+
+        mockMvc.perform(get(url).header("Authorization", "Bearer " + BUYER_ID))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get(url)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("E11 direction-label degradation: no city_regional_direction_labels row -> corridors "
+            + "still succeed with the raw direction code, not a 500")
+    void e11_directionLabelDegradation_rawCodeNotCrash() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        // "acp-it" has no city_regional_direction_labels row seeded anywhere in this test class —
+        // exercising exactly the never-launched-city case.
+        String areaKey = "IN|KA|ACP|Agri-NoLabel";
+        insertProductionArea(areaKey, testCityId, 13.01, 74.71);
+        insertLiveAgriListing(areaKey, "sale", 4_000_000L);
+        seedAgriRow(revisionId, areaKey, 13.0, 74.7, 3.0, 270.0, "W", "0_10");
+
+        String url = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId
+                + "/preview/regional-area-groups";
+
+        mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groups[0].directionCode").value("W"))
+                .andExpect(jsonPath("$.groups[0].groupName").value("W corridor"));
+    }
+
+    @Test
+    @DisplayName("E11 LEFT JOIN graceful handling: sandbox area with no matching public.areas row "
+            + "still appears (display name falls back to the area key), not a crash/500")
+    void e11_sandboxAreaWithNoMatchingPublicArea_gracefulNotCrash() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        // Deliberately NO insertProductionArea call — this area_key has never been promoted into
+        // public.areas (the normal state for a never-launched city, per V125's own table comment).
+        String unpromotedAreaKey = "IN|KA|ACP|Agri-NotPromoted";
+        seedAgriRow(revisionId, unpromotedAreaKey, 13.0, 74.7, 7.0, 135.0, "SE", "0_10");
+
+        String url = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId
+                + "/preview/agri-destinations";
+
+        mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.destinations.length()").value(1))
+                .andExpect(jsonPath("$.destinations[0].areaKey").value(unpromotedAreaKey))
+                // display name gracefully falls back to the area key itself (LEFT JOIN, no crash)
+                .andExpect(jsonPath("$.destinations[0].displayName").value(unpromotedAreaKey))
+                // parcel count is 0 (no property_listings row for this unpromoted area) — not null,
+                // not an error
+                .andExpect(jsonPath("$.destinations[0].parcelCount").value(0));
     }
 }

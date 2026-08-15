@@ -45,7 +45,13 @@ const CORRIDOR_GROUPS = [
     availableMaxDistances: [{ maxKm: 25, distanceLabel: '25 km', areaKeys: ['IN|KA|Udupi|A'] }],
   },
 ];
-const REGIONAL_RESULT = { groups: CORRIDOR_GROUPS, isLoading: false, isError: false, refetch: vi.fn() };
+const REGIONAL_RESULT = {
+  groups: CORRIDOR_GROUPS,
+  isLoading: false,
+  isError: false,
+  isNotGeneratedForRevision: false,
+  refetch: vi.fn(),
+};
 const AGRI_LISTINGS_RESULT = {
   data: { listings: [{ id: 'listing-1' }] },
   isLoading: false,
@@ -57,6 +63,7 @@ const AGRI_DESTINATIONS_RESULT = {
   isLoading: false,
   isError: false,
   isNotYetPromoted: false,
+  isNotGeneratedForRevision: false,
   error: null,
   refetch: vi.fn(),
 };
@@ -153,6 +160,24 @@ describe('useDiscoverAgriController (#2142 Commit 3 — moved verbatim from MapD
     expect(mockUseRegionalAreaGroups).toHaveBeenCalledWith('bangalore', 'rent');
   });
 
+  it('exposes useRegionalAreaGroups isNotGeneratedForRevision as isRegionalAreaGroupsNotGeneratedForRevision (#2151 Track 3 landing-panel gap fix)', () => {
+    mockUseRegionalAreaGroups.mockReturnValue({
+      groups: [],
+      isLoading: false,
+      isError: false,
+      isNotGeneratedForRevision: true,
+      refetch: vi.fn(),
+    });
+    const { result } = renderHook(() =>
+      useDiscoverAgriController({
+        nav: makeNav({ city: 'bangalore' }),
+        intentListingPurpose: 'sale',
+        isAuthenticated: true,
+      }),
+    );
+    expect(result.current.isRegionalAreaGroupsNotGeneratedForRevision).toBe(true);
+  });
+
   it('useAgriDestinations is called with city/selectedRegion/selectedMaxKm/intentListingPurpose and its result is exposed as agriDestinations (#2151 PR C, C-F4/C-F7)', () => {
     const { result } = renderHook(() =>
       useDiscoverAgriController({
@@ -166,6 +191,7 @@ describe('useDiscoverAgriController (#2142 Commit 3 — moved verbatim from MapD
     expect(result.current.isLoadingAgriDestinations).toBe(false);
     expect(result.current.isAgriDestinationsError).toBe(false);
     expect(result.current.isAgriDestinationsNotYetPromoted).toBe(false);
+    expect(result.current.isAgriDestinationsNotGeneratedForRevision).toBe(false);
   });
 
   it('selectedGroupListingItem finds the matching listing by nav.selectedListing id, null when absent/not found', () => {

@@ -679,8 +679,10 @@ public class NavigationController {
                     rawChild.nodeKey(), rawChild.count(), rawChild.schoolCount(), matchingAreaCount));
         }
 
+        // schoolsNotSimulatedForRevision: always null here (omitted from JSON) — production counts
+        // are always real, precise per-area school counts. See NavigationCountsResponse's javadoc.
         NavigationCountsResponse body = new NavigationCountsResponse(
-                nodeKey, total, schoolTotal, areaCounts, areaSchoolCounts, children, graph.revisionId());
+                nodeKey, total, schoolTotal, areaCounts, areaSchoolCounts, children, graph.revisionId(), null);
 
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(countsCacheMaxAgeSeconds, TimeUnit.SECONDS).cachePublic())

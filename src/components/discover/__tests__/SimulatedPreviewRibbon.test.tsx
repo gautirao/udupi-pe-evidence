@@ -14,7 +14,7 @@ import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDa
 describe('SimulatedPreviewRibbon', () => {
   it('renders the ribbon in preview mode', () => {
     render(
-      <DiscoverDataSourceProvider value={{ mode: 'preview', cityId: 1, revisionId: 2 }}>
+      <DiscoverDataSourceProvider value={{ mode: 'preview', cityId: 1, revisionId: 2, citySlug: 'preview-city' }}>
         <SimulatedPreviewRibbon />
       </DiscoverDataSourceProvider>,
     );

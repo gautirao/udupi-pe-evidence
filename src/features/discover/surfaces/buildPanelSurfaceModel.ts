@@ -148,6 +148,7 @@ type AgriSlice = Pick<
   | 'corridorGroups'
   | 'isLoadingRegionalAreaGroups'
   | 'isRegionalAreaGroupsError'
+  | 'isRegionalAreaGroupsNotGeneratedForRevision'
   | 'refetchRegionalAreaGroups'
   | 'selectedRegion'
   | 'selectedMaxKm'
@@ -409,6 +410,7 @@ type PanelAgriView = Pick<
   | 'corridorGroups'
   | 'isLoadingRegionalAreaGroups'
   | 'isRegionalAreaGroupsError'
+  | 'isRegionalAreaGroupsNotGeneratedForRevision'
   | 'selectedRegion'
   | 'selectedMaxKm'
 >;
@@ -520,6 +522,7 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       corridorGroups,
       isLoadingRegionalAreaGroups,
       isRegionalAreaGroupsError,
+      isRegionalAreaGroupsNotGeneratedForRevision,
       selectedRegion,
       selectedMaxKm,
       filteredAgriListings,
@@ -599,6 +602,7 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       corridorGroups,
       isLoadingRegionalAreaGroups,
       isRegionalAreaGroupsError,
+      isRegionalAreaGroupsNotGeneratedForRevision,
       selectedRegion,
       selectedMaxKm,
     },

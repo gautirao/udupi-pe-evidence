@@ -88,6 +88,7 @@ interface RenderProps {
   corridorGroups?: CorridorGroupData[];
   isLoadingRegionalGroups?: boolean;
   isRegionalGroupsError?: boolean;
+  isRegionalGroupsNotGeneratedForRevision?: boolean;
   onRetryRegionalGroups?: () => void;
   selectedRegion?: string | null;
   selectedMaxKm?: 10 | 25 | 50 | 100 | null;
@@ -253,5 +254,51 @@ describe('CorridorLandingPanel — fetch error + retry (Issue #1453)', () => {
     expect(screen.getByTestId('corridor-landing-loading')).toBeInTheDocument();
     expect(screen.queryByTestId('corridor-landing-error')).not.toBeInTheDocument();
     expect(screen.queryByTestId('corridor-landing-empty')).not.toBeInTheDocument();
+  });
+});
+
+// ─── #2151 Track 3 landing-panel gap fix — not-generated-for-revision branch ──
+//
+// A preview revision with zero sandbox Agri rows must render its own distinct,
+// non-retryable state at the LANDING panel — not the generic "Could not load
+// corridors" error (the original #2151 bug, previously only fixed for the
+// drill-down AgriGroupSelectedPanel).
+
+describe('CorridorLandingPanel — not-generated-for-revision (#2151 Track 3)', () => {
+  it('renders the distinct not-generated-for-revision state, not the generic error state', () => {
+    renderLanding({
+      isRegionalGroupsNotGeneratedForRevision: true,
+      isRegionalGroupsError: false,
+      corridorGroups: [],
+    });
+
+    expect(screen.getByTestId('corridor-landing-not-generated-for-revision')).toBeInTheDocument();
+    expect(
+      screen.getByText(/hasn't generated Agricultural corridors yet/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('corridor-landing-error')).not.toBeInTheDocument();
+    expect(screen.queryByText(/could not load corridors/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('corridor-landing-empty')).not.toBeInTheDocument();
+  });
+
+  it('takes priority over the generic error state when both flags are somehow true', () => {
+    renderLanding({
+      isRegionalGroupsNotGeneratedForRevision: true,
+      isRegionalGroupsError: true,
+      corridorGroups: [],
+    });
+
+    expect(screen.getByTestId('corridor-landing-not-generated-for-revision')).toBeInTheDocument();
+    expect(screen.queryByTestId('corridor-landing-error')).not.toBeInTheDocument();
+  });
+
+  it('does not render the not-generated-for-revision state when the flag is false', () => {
+    renderLanding({
+      isRegionalGroupsNotGeneratedForRevision: false,
+      corridorGroups: [],
+    });
+
+    expect(screen.queryByTestId('corridor-landing-not-generated-for-revision')).not.toBeInTheDocument();
+    expect(screen.getByTestId('corridor-landing-empty')).toBeInTheDocument();
   });
 });

@@ -90,6 +90,7 @@ function makeParams(overrides: DeepPartial<BuildPanelSurfaceModelParams> = {}): 
       corridorGroups: [],
       isLoadingRegionalAreaGroups: false,
       isRegionalAreaGroupsError: false,
+      isRegionalAreaGroupsNotGeneratedForRevision: false,
       refetchRegionalAreaGroups: vi.fn(),
       selectedRegion: null,
       selectedMaxKm: null,

@@ -211,6 +211,16 @@ export interface NavigationCountsSnapshot {
   readonly areaSchoolCounts: ReadonlyMap<string, number>;
   /** Each direct child's own rolled-up totals, keyed by node key. */
   readonly childCounts: ReadonlyMap<string, NavigationNodeCount>;
+  /**
+   * #2170 — `true` only on the Admin City Launch PREVIEW route, where Schools
+   * has no per-revision simulation yet and `schoolCount`/`areaSchoolCounts` are
+   * hardcoded to zero/empty for every revision. `false` (never `undefined`) on
+   * every other response, including every production response, so a consumer
+   * can branch on this field without an extra null check. See
+   * {@link NavigationCountsResponse.schoolsNotSimulatedForRevision} for the
+   * canonical statement.
+   */
+  readonly schoolsNotSimulatedForRevision: boolean;
   /** Per-area listing count; 0 for an area the response does not mention. */
   listingCountForArea(areaKey: string): number;
   /** Per-area distinct-school count; 0 for an area the response does not mention. */
@@ -244,6 +254,7 @@ function toSnapshot(
     areaListingCounts,
     areaSchoolCounts,
     childCounts,
+    schoolsNotSimulatedForRevision: response.schoolsNotSimulatedForRevision === true,
     listingCountForArea: (areaKey: string) => areaListingCounts.get(areaKey) ?? 0,
     schoolCountForArea: (areaKey: string) => areaSchoolCounts.get(areaKey) ?? 0,
     countsForChild: (childNodeKey: string) => childCounts.get(childNodeKey),

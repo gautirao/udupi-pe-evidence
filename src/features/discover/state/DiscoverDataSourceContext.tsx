@@ -8,14 +8,22 @@ import { createContext, useContext, type ReactNode } from 'react';
  * public/authenticated Discover surface or an admin city-launch revision's
  * sandbox preview — WITHOUT forking any component. CityLaunchPreview.tsx
  * wraps the unmodified <MapDiscovery/> in a DiscoverDataSourceProvider with
- * {mode:'preview', cityId, revisionId}; every consumer that doesn't sit
- * under that provider (i.e. all of live Discover today) reads the default
- * context value {mode:'live'} and is byte-identical to pre-PR3 behaviour.
+ * {mode:'preview', cityId, revisionId, citySlug}; every consumer that
+ * doesn't sit under that provider (i.e. all of live Discover today) reads
+ * the default context value {mode:'live'} and is byte-identical to pre-PR3
+ * behaviour.
+ *
+ * `citySlug` (#2151 Track 1) is the revision's real owning-city slug,
+ * resolved server-side via GET .../preview/identity BEFORE this provider is
+ * mounted (see CityLaunchPreview.tsx) — it lets DiscoverContext substitute
+ * the correct city identity for preview mode instead of every display/data
+ * call site falling back to DEFAULT_CITY because a preview URL carries no
+ * `city=` query param by design.
  */
 
 export type DiscoverDataSource =
   | { mode: 'live' }
-  | { mode: 'preview'; cityId: number; revisionId: number };
+  | { mode: 'preview'; cityId: number; revisionId: number; citySlug: string };
 
 const LIVE_SOURCE: DiscoverDataSource = { mode: 'live' };
 
@@ -71,7 +79,10 @@ export type DiscoverEndpoint =
   | { kind: 'navigationOverrides' }
   | { kind: 'navigationOverrideDelete'; overrideId: number }
   | { kind: 'navigationResolve'; nodeKey: string }
-  | { kind: 'navigationCounts'; nodeKey: string; search: string };
+  | { kind: 'navigationCounts'; nodeKey: string; search: string }
+  | { kind: 'regionalAreaGroups'; listingPurpose: string | null }
+  | { kind: 'agriDestinations'; direction: string | null; maxKm: number | null; listingPurpose: string | null }
+  | { kind: 'agriMapListings'; areaKey: string; listingPurpose: string | null };
 
 /**
  * Resolves the request path for one logical Discover endpoint.
@@ -83,9 +94,12 @@ export type DiscoverEndpoint =
  *
  * PREVIEW mode: ignores `livePath` and returns the matching
  * `/api/admin/city-launch/cities/{cityId}/revisions/{revisionId}/preview/...`
- * base path (no query string — the preview endpoints accept none today;
- * callers must not append a live-only query param, e.g. listingPurpose, in
- * preview mode).
+ * base path. Navigation/region/area/marker/listing endpoints carry no query
+ * string in preview mode. The three Agri endpoints (`regionalAreaGroups`,
+ * `agriDestinations`, `agriMapListings` — Issue #2151 Track 2) are the
+ * exception: they build and append their own query string (e.g.
+ * `listingPurpose`, `direction`, `maxKm`, `areaKey`) in both modes, matching
+ * the backend preview contract.
  */
 export function discoverPath(
   source: DiscoverDataSource,
@@ -126,6 +140,25 @@ export function discoverPath(
       return `${base}/navigation/resolve?node=${encodeURIComponent(endpoint.nodeKey)}`;
     case 'navigationCounts':
       return `${base}/navigation/${encodeURIComponent(endpoint.nodeKey)}/counts${endpoint.search ? `?${endpoint.search}` : ''}`;
+    case 'regionalAreaGroups': {
+      const params = new URLSearchParams();
+      if (endpoint.listingPurpose) params.set('listingPurpose', endpoint.listingPurpose);
+      const qs = params.toString();
+      return `${base}/regional-area-groups${qs ? `?${qs}` : ''}`;
+    }
+    case 'agriDestinations': {
+      const params = new URLSearchParams();
+      if (endpoint.direction) params.set('direction', endpoint.direction);
+      if (endpoint.maxKm != null) params.set('maxKm', String(endpoint.maxKm));
+      if (endpoint.listingPurpose) params.set('listingPurpose', endpoint.listingPurpose);
+      const qs = params.toString();
+      return `${base}/agri-destinations${qs ? `?${qs}` : ''}`;
+    }
+    case 'agriMapListings': {
+      const params = new URLSearchParams({ areaKey: endpoint.areaKey });
+      if (endpoint.listingPurpose) params.set('listingPurpose', endpoint.listingPurpose);
+      return `${base}/agri-map-listings?${params.toString()}`;
+    }
     default: {
       // Exhaustiveness guard — a new DiscoverEndpoint variant must be
       // handled above or this fails to typecheck.

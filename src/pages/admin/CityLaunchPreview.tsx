@@ -22,14 +22,33 @@ import {
   VALIDATION_CHECK_ITEMS,
   type CityLaunchValidationCheckKey,
 } from '@/hooks/useCityLaunchValidation';
+import { usePreviewCityIdentity } from '@/hooks/useCityLaunch';
 import CityLaunchReadiness from '@/pages/admin/CityLaunchReadiness';
+
+/**
+ * Shared full-page "can't show this preview" state (#2151 Track 1) — an invalid
+ * cityId/revisionId route param and a failed/unresolved city-identity lookup are both
+ * unrecoverable-without-a-new-link conditions, so they render identically rather than
+ * inventing a second error surface.
+ */
+function InvalidPreviewState({ message }: { message: string }) {
+  return (
+    <div
+      className="flex min-h-screen flex-col items-center justify-center gap-3 text-destructive"
+      role="alert"
+    >
+      <AlertCircle className="h-8 w-8" />
+      <p className="text-sm font-medium">{message}</p>
+    </div>
+  );
+}
 
 /**
  * Issue #1911 PR3/PR4 — admin city-launch revision preview
  * (/admin/city-launch/:cityId/preview/:revisionId).
  *
  * Wraps the UNMODIFIED production <MapDiscovery/> in a
- * DiscoverDataSourceProvider set to {mode:'preview', cityId, revisionId} so
+ * DiscoverDataSourceProvider set to {mode:'preview', cityId, revisionId, citySlug} so
  * an admin walks a revision's sandbox geography through the SAME Discover
  * UI a real buyer sees — not a forked admin screen. MapDiscovery itself is
  * never edited or copied; it reads the preview source entirely via the 5
@@ -41,6 +60,12 @@ import CityLaunchReadiness from '@/pages/admin/CityLaunchReadiness';
  * through useCityLaunchValidation) and, once the revision is VALIDATED and
  * not superseded, an inline launch-readiness sub-view — reachable only from
  * here, no new top-level route.
+ *
+ * #2151 Track 1: the route only carries numeric cityId/revisionId — no city
+ * slug/name — so before mounting the Discover subtree at all, this page resolves the
+ * revision's REAL owning-city identity via usePreviewCityIdentity and fails closed
+ * (loading skeleton, then the shared invalid-preview state on error) rather than ever
+ * letting DiscoverContext fall back to a default city.
  */
 export default function CityLaunchPreview() {
   const { cityId: cityIdParam, revisionId: revisionIdParam } = useParams<{
@@ -63,18 +88,28 @@ export default function CityLaunchPreview() {
   const markValidated = useMarkValidated(cityId, revisionId);
   const resetValidation = useResetValidation(cityId, revisionId);
   const rerunPreview = useRerunPreview(cityId, revisionId);
+  // #2151 Track 1 — resolved BEFORE the DiscoverDataSourceProvider below is ever
+  // constructed, so preview mode never threads a stale/default city identity.
+  const identity = usePreviewCityIdentity(cityId, revisionId);
 
   if (!isValid) {
+    return <InvalidPreviewState message="Invalid preview link — city or revision id is missing." />;
+  }
+
+  if (identity.isLoading) {
     return (
-      <div
-        className="flex min-h-screen flex-col items-center justify-center gap-3 text-destructive"
-        role="alert"
-      >
-        <AlertCircle className="h-8 w-8" />
-        <p className="text-sm font-medium">Invalid preview link — city or revision id is missing.</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3" aria-live="polite">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-4 w-48" />
       </div>
     );
   }
+
+  if (identity.isError || !identity.data?.citySlug) {
+    return <InvalidPreviewState message="This preview could not be loaded." />;
+  }
+
+  const citySlug = identity.data.citySlug;
 
   const validation = validationState.data;
   const editable = validation?.editable ?? false;
@@ -118,7 +153,7 @@ export default function CityLaunchPreview() {
   }
 
   return (
-    <DiscoverDataSourceProvider value={{ mode: 'preview', cityId, revisionId }}>
+    <DiscoverDataSourceProvider value={{ mode: 'preview', cityId, revisionId, citySlug }}>
       <SimulatedPreviewRibbon />
       <Tabs
         value={subView}

@@ -80,6 +80,32 @@ public class DiscoverAgriMapListingsService {
                                                        Optional<String> bbox,
                                                        boolean isAuthenticated,
                                                        String listingPurpose) {
+        return findAgriMapListings(citySlug, areaKey, bbox, isAuthenticated, listingPurpose, null);
+    }
+
+    /**
+     * Revision-scoped overload (#2151 PR B Track 2) backing {@code
+     * AdminCityLaunchPreviewController}'s {@code .../preview/agri-map-listings} endpoint.
+     * {@code revisionId == null} is byte-identical to the original 5-arg overload above.
+     *
+     * <p><b>Auth note:</b> these preview endpoints are {@code @IsAdmin}-gated already — callers on
+     * the preview path pass {@code isAuthenticated = true} explicitly (the exact-coords/real-price
+     * branch), never derived from the anonymous-coarsening logic this class applies to the public
+     * endpoint.
+     *
+     * @param revisionId {@code null} for production (unchanged); non-null for an Admin City Launch
+     *                   preview revision — the port skips {@link CityActivationGuard} for it (see
+     *                   {@link AgriDestinationPortPostgresAdapter}), but parcels themselves still
+     *                   come from the LIVE {@code property_listings} table, scoped by
+     *                   {@code citySlug} — a revision preview scopes GEOGRAPHY, not inventory.
+     */
+    @Transactional(readOnly = true)
+    public AgriMapListingsResponse findAgriMapListings(String citySlug,
+                                                       String areaKey,
+                                                       Optional<String> bbox,
+                                                       boolean isAuthenticated,
+                                                       String listingPurpose,
+                                                       Long revisionId) {
         if (citySlug == null || citySlug.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "city_must_not_be_blank");
         }
@@ -101,8 +127,8 @@ public class DiscoverAgriMapListingsService {
         String normPurpose = (listingPurpose != null && !listingPurpose.isBlank())
                 ? listingPurpose.trim() : null;
 
-        log.debug("findAgriMapListings city={} areaKeys={} bboxPresent={}",
-                citySlug, resolvedAreaKeys.size(), viewport != null);
+        log.debug("findAgriMapListings city={} areaKeys={} bboxPresent={} revisionId={}",
+                citySlug, resolvedAreaKeys.size(), viewport != null, revisionId);
 
         AgriDestinationPort.ParcelPage page = agriDestinationPort.findParcels(
                 new AgriDestinationPort.ParcelQuery(
@@ -110,7 +136,8 @@ public class DiscoverAgriMapListingsService {
                         resolvedAreaKeys,
                         new AgriDestinationPort.AgriDestinationFilters(normPurpose),
                         new AgriDestinationPort.PageSpec(0, MAX_LISTINGS_PER_REQUEST),
-                        viewport));
+                        viewport,
+                        revisionId));
 
         List<AgriMapListingItem> listings = page.content().stream()
                 .map(DiscoverAgriMapListingsService::toItem)

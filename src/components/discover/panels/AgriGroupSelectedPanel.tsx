@@ -200,18 +200,23 @@ export function AgriGroupSelectedPanel({
     isLoading: isLoadingDestinations,
     isError: isDestinationsError,
     isNotYetPromoted,
+    isNotGeneratedForRevision,
     refetch: refetchDestinations,
   } = useAgriDestinations(citySlugForDestinations, directionCode, selectedMaxKm, listingPurposeForDestinations);
 
   // C-F6: five distinct body states. `isNotYetPromoted` (503 AGRI_DESTINATIONS_NOT_YET_PROMOTED)
-  // is carved out first — it must never collapse into the generic retryable-error state, and it
-  // takes priority over a stale `isLoading`/`isError` prop from the (now Level-3-only) listings
+  // and `isNotGeneratedForRevision` (503 AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION, #2151 Track
+  // 3 — a PREVIEW revision whose Agri classification generator produced zero sandbox rows) are
+  // carved out first — neither may ever collapse into the generic retryable-error state, and both
+  // take priority over a stale `isLoading`/`isError` prop from the (now Level-3-only) listings
   // fetch. `isLoading`/`isError` props are folded in so this panel still reacts to the listings
   // fetch's own transient states (e.g. a race on first mount) without introducing a second,
   // independent source of truth for what "loading"/"error" means.
   const showLoading = isLoading || isLoadingDestinations;
   const showNotYetPromoted = !showLoading && isNotYetPromoted;
-  const showGenericError = !showLoading && !showNotYetPromoted && (isError || isDestinationsError);
+  const showNotGeneratedForRevision = !showLoading && !showNotYetPromoted && isNotGeneratedForRevision;
+  const showGenericError =
+    !showLoading && !showNotYetPromoted && !showNotGeneratedForRevision && (isError || isDestinationsError);
 
   // Total acreage across all destination buckets (2dp, trailing zeros dropped for whole numbers).
   const totalAcres = React.useMemo(() => {
@@ -403,7 +408,7 @@ export function AgriGroupSelectedPanel({
             </div>
           </div>
 
-          {!showLoading && !showGenericError && !showNotYetPromoted && (
+          {!showLoading && !showGenericError && !showNotYetPromoted && !showNotGeneratedForRevision && (
             <div className="mt-5 grid grid-cols-3 border-t border-slate-800 pt-4">
               <div className="flex min-w-0 flex-col" data-testid="agri-group-listing-count">
                 <span className="font-mono text-xl font-bold leading-none tracking-tight tabular-nums text-white">
@@ -584,6 +589,32 @@ export function AgriGroupSelectedPanel({
             </div>
             <p className="text-sm text-muted-foreground">
               Agricultural listings for this area aren&apos;t set up yet. Please check back soon.
+            </p>
+            <button
+              type="button"
+              data-testid="agri-group-back-btn"
+              className="text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors"
+              onClick={onClear}
+            >
+              ← Back to group list
+            </button>
+          </div>
+        ) : showNotGeneratedForRevision ? (
+          // State 5b (#2151 Track 3): PREVIEW revision whose Agri classification generator
+          // produced zero sandbox rows (503 AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION).
+          // Distinct from showNotYetPromoted (a LIVE-mode never-promoted-city carve-out) and
+          // from the generic error state: this is NOT shopper/admin-retryable via the Retry
+          // button — the remediation is re-running city preparation for this revision.
+          <div
+            data-testid="agri-group-not-generated-for-revision-state"
+            className="flex flex-col items-center justify-center p-6 gap-3 text-center"
+          >
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+              <AlertCircle className="h-7 w-7 text-muted-foreground" aria-hidden="true" />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              This preview hasn&apos;t generated Agricultural corridors yet — re-run city
+              preparation for this revision.
             </p>
             <button
               type="button"

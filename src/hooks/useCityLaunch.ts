@@ -108,6 +108,42 @@ export function useCityLaunchList(options?: { enabled?: boolean }) {
   });
 }
 
+export interface PreviewIdentityDto {
+  cityId: number;
+  citySlug: string;
+  cityName: string;
+}
+
+function previewIdentityQueryKey(cityId: number, revisionId: number) {
+  return ['admin', 'city-launch', 'cities', cityId, 'revisions', revisionId, 'preview-identity'] as const;
+}
+
+/**
+ * GET .../preview/identity — resolves a city-launch revision's real owning-city slug/name
+ * (#2151 Track 1). CityLaunchPreview.tsx calls this BEFORE constructing
+ * DiscoverDataSourceProvider so preview mode can thread the correct `citySlug` through
+ * DiscoverContext instead of every display/data call site silently falling back to
+ * DEFAULT_CITY — a preview URL carries no `city=` query param by design, only numeric
+ * cityId/revisionId path segments.
+ */
+export function usePreviewCityIdentity(cityId: number, revisionId: number) {
+  // No isAdmin gate here — matches useValidationState/useCityLaunchProgress's convention for
+  // this already-admin-only page (@IsAdmin is enforced server-side; the route itself is only
+  // reachable from the admin City Launch flow). Gating on isAdmin would make this hook a
+  // silent no-op under any test/mount that doesn't also stub useAuth().isAdmin === true.
+  const enabled = Number.isFinite(cityId) && Number.isFinite(revisionId) && cityId > 0 && revisionId > 0;
+
+  return useQuery<PreviewIdentityDto>({
+    queryKey: previewIdentityQueryKey(cityId, revisionId),
+    queryFn: () =>
+      api.get<PreviewIdentityDto>(
+        `/api/admin/city-launch/cities/${cityId}/revisions/${revisionId}/preview/identity`,
+      ),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 /**
  * POST /api/admin/city-launch/cities/{cityId}/prepare — kicks off (or reruns)
  * geography preparation. Sends NO body: created_by is derived server-side

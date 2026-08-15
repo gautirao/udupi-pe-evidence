@@ -100,6 +100,13 @@ interface CorridorLandingPanelProps {
   isLoading: boolean;
   /** True when the regional-area-groups fetch errored. Renders error+retry UI. */
   isError?: boolean;
+  /**
+   * #2151 Track 3 landing-panel gap fix — true when the active source is a PREVIEW revision
+   * that has zero sandbox Agri rows (backend 503 AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION).
+   * Mirrors AgriGroupSelectedPanel's `isNotGeneratedForRevision` carve-out: must render as its
+   * own distinct state, never folded into the generic retryable-error state below.
+   */
+  isNotGeneratedForRevision?: boolean;
   /** Called when the user clicks Retry in the error state. */
   onRetry?: () => void;
   selectedRegion: string | null;
@@ -173,6 +180,7 @@ function CorridorLandingPanel({
   corridorGroups,
   isLoading,
   isError = false,
+  isNotGeneratedForRevision = false,
   onRetry = () => {},
   selectedRegion,
   selectedMaxKm,
@@ -224,6 +232,25 @@ function CorridorLandingPanel({
             </div>
           </div>
         ))}
+      </div>
+    );
+  }
+
+  // ── Not-generated-for-revision state (#2151 Track 3) ──
+  // Must appear BEFORE the generic error state: a PREVIEW revision with zero sandbox Agri rows
+  // is NOT shopper/admin-retryable via the Retry button below (the remediation is re-running
+  // city preparation for this revision), and it must never render as "Could not load corridors."
+  if (isNotGeneratedForRevision) {
+    return (
+      <div
+        data-testid="corridor-landing-not-generated-for-revision"
+        className="flex flex-col items-center justify-center py-12 px-4 gap-3 text-center"
+      >
+        <AlertCircle className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+        <p className="text-sm text-muted-foreground">
+          This preview hasn&apos;t generated Agricultural corridors yet — re-run city preparation
+          for this revision.
+        </p>
       </div>
     );
   }
@@ -645,6 +672,13 @@ export interface DiscoverRightPanelProps {
   isLoadingRegionalGroups?: boolean;
   /** Issue #1453 — true when the corridor groups fetch errored. */
   isRegionalGroupsError?: boolean;
+  /**
+   * #2151 Track 3 landing-panel gap fix — true when the active source is a PREVIEW revision
+   * that has zero sandbox Agri rows (backend 503 AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION).
+   * Distinct from `isRegionalGroupsError`: renders its own non-retryable state instead of the
+   * generic "Could not load corridors" error.
+   */
+  isRegionalGroupsNotGeneratedForRevision?: boolean;
   /** Issue #1453 — retry callback (the regional-area-groups query's refetch). */
   onRetryRegionalGroups?: () => void;
   /** Selected corridor direction (from URL region= param). Null when none. */
@@ -981,6 +1015,7 @@ export function DiscoverRightPanel({
   corridorGroups = [],
   isLoadingRegionalGroups = false,
   isRegionalGroupsError = false,
+  isRegionalGroupsNotGeneratedForRevision = false,
   onRetryRegionalGroups,
   selectedRegion = null,
   selectedMaxKm = null,
@@ -1169,6 +1204,7 @@ export function DiscoverRightPanel({
               corridorGroups={corridorGroups}
               isLoading={isLoadingRegionalGroups}
               isError={isRegionalGroupsError}
+              isNotGeneratedForRevision={isRegionalGroupsNotGeneratedForRevision}
               onRetry={onRetryRegionalGroups ?? (() => {})}
               selectedRegion={selectedRegion}
               selectedMaxKm={selectedMaxKm}

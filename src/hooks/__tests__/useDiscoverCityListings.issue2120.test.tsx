@@ -63,7 +63,7 @@ function makePreviewWrapper(cityId: number, revisionId: number) {
         { initialEntries: ['/discover'] },
         React.createElement(
           DiscoverDataSourceProvider,
-          { value: { mode: 'preview', cityId, revisionId }, children },
+          { value: { mode: 'preview', cityId, revisionId, citySlug: 'preview-city' }, children },
         )
       )
     );

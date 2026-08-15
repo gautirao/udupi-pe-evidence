@@ -410,6 +410,16 @@ export interface UseAreasNavigationJourneyResult {
    * while counts are loading; server-computed, never summed from `children`.
    */
   nodeCount: { listingCount: number; schoolCount: number; matchingAreaCount: number | null } | null;
+  /**
+   * #2170 — `true` only on the Admin City Launch PREVIEW route, where Schools
+   * has no per-revision simulation yet and every school count is hardcoded to
+   * zero. `false` while counts are loading/absent and on every other response,
+   * including production. A Schools-journey consumer uses this to render an
+   * explicit "not simulated" state instead of a bare zero-count wall — see
+   * `NavigationCountsResponse.schoolsNotSimulatedForRevision`'s doc for the
+   * canonical statement.
+   */
+  schoolsNotSimulatedForRevision: boolean;
   /** The single selection action — same reference every render (AC3.9). */
   selectNode: (nodeKey: string) => void;
   /** Retries BOTH the resolve and (once resolved) the counts fetch. */
@@ -554,6 +564,7 @@ export function useAreasNavigationJourney({
             matchingAreaCount: nodeMatchingAreaCount,
           }
         : null,
+    schoolsNotSimulatedForRevision: countsResult.snapshot?.schoolsNotSimulatedForRevision === true,
     selectNode: onSelectNode,
     // Retries BOTH requests. resolveQuery.refetch() re-runs resolve
     // unconditionally. The resolve query key is UNCHANGED whether counts

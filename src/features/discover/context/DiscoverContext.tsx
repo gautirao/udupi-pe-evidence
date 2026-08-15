@@ -11,6 +11,7 @@ import {
 import { useSearchParams } from 'react-router-dom';
 import { useDiscoverUrlState, type DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useDiscoverSource } from '@/features/discover/state/DiscoverDataSourceContext';
 import type {
   DiscoverActionsContextValue,
   DiscoverNavContextValue,
@@ -142,7 +143,19 @@ export interface DiscoverProviderProps {
 }
 
 export function DiscoverProvider({ children }: DiscoverProviderProps) {
-  const [urlState, urlActions] = useDiscoverUrlState();
+  const [rawUrlState, urlActions] = useDiscoverUrlState();
+  // #2151 Track 1 — the ONE place that corrects city identity for every downstream
+  // `nav.city || DEFAULT_CITY` consumer. A city-launch admin preview route carries no
+  // `city=` query param by design (only numeric cityId/revisionId path segments), so
+  // without this every display/data call site reading nav.city falls back to
+  // DEFAULT_CITY ('bangalore'). The preview route's structural identity (source.citySlug,
+  // resolved server-side from cityId before this provider mounts — see
+  // CityLaunchPreview.tsx) is authoritative and WINS over any incidental/stray `city=`
+  // query param that might be present. In live mode this is a no-op: `urlState` stays
+  // referentially IDENTICAL to `rawUrlState` (not a new object), so no extra re-render is
+  // introduced on the live path.
+  const source = useDiscoverSource();
+  const urlState = source.mode === 'preview' ? { ...rawUrlState, city: source.citySlug } : rawUrlState;
 
   // ─── Stable actions ────────────────────────────────────────────────────
   const actionsRef = useRef<DiscoverUrlActions>(urlActions);

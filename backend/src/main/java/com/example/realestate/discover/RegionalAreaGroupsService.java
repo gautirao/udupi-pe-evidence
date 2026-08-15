@@ -140,8 +140,55 @@ public class RegionalAreaGroupsService {
             return new RegionalAreaGroupsResponse(normalizedCity, List.of());
         }
 
+        return assembleCorridors(normalizedCity, scope);
+    }
+
+    /**
+     * Revision-scoped overload (#2151 PR B Track 2) backing {@code
+     * AdminCityLaunchPreviewController}'s {@code .../preview/regional-area-groups} endpoint.
+     *
+     * <p>Deliberately does NOT call {@link CityActivationGuard} and does NOT accept a
+     * {@code propertyType} param — a revision preview is agri-only by construction (the panel this
+     * backs only ever previews Agricultural land corridors) and previewing a not-yet-active city is
+     * the normal case, not a fail-closed condition (mirrors {@link AgriDestinationPort}'s preview
+     * contract — see {@link AgriDestinationPortPostgresAdapter}).
+     *
+     * <p>Shares {@link #assembleCorridors} with the production path above, so label-loading and
+     * cumulative-tier bucketing are identical code for both — only the port query source differs.
+     */
+    @Transactional(readOnly = true)
+    public RegionalAreaGroupsResponse getRegionalGroupsForRevision(
+            String citySlug, String listingPurpose, long revisionId) {
+        String normalizedCity = citySlug.toLowerCase();
+        String normalizedPurpose = (listingPurpose != null && !listingPurpose.isBlank())
+                ? listingPurpose.trim() : null;
+        log.debug("getRegionalGroupsForRevision city={} revisionId={} listingPurpose={}",
+                normalizedCity, revisionId, normalizedPurpose);
+
+        AgriDestinationPort.DestinationScope scope = agriDestinationPort.findDestinations(
+                new AgriDestinationPort.DestinationScopeQuery(
+                        normalizedCity, null, null,
+                        new AgriDestinationPort.AgriDestinationFilters(normalizedPurpose),
+                        true, revisionId));
+
+        if (scope.destinations().isEmpty()) {
+            log.debug("getRegionalGroupsForRevision city={} revisionId={} — no destinations in scope",
+                    normalizedCity, revisionId);
+            return new RegionalAreaGroupsResponse(normalizedCity, List.of());
+        }
+
+        return assembleCorridors(normalizedCity, scope);
+    }
+
+    // ── Corridor assembly (labels + cumulative tiers), shared by production and preview ─────────
+
+    private RegionalAreaGroupsResponse assembleCorridors(
+            String normalizedCity, AgriDestinationPort.DestinationScope scope) {
         // ── Labels: city_regional_direction_labels is city DISPLAY CONFIG, not
-        //    regional_area_classifications — unaffected by the cutover (AC10).
+        //    regional_area_classifications — unaffected by the cutover (AC10). Also reused as-is by
+        //    the preview path (#2151 PR B Track 2 item 2): a never-launched city legitimately has no
+        //    label row yet, and the null-check below already degrades gracefully to the raw
+        //    direction code — no separate handling needed.
         Map<String, LabelEntry> labelsMap = new LinkedHashMap<>();
         jdbcOperations.query(LABELS_SQL,
                 (RowCallbackHandler) rs -> labelsMap.put(
@@ -181,7 +228,7 @@ public class RegionalAreaGroupsService {
             return Integer.compare(ia, ib);
         });
 
-        log.debug("getRegionalGroups city={} returned {} corridors", normalizedCity, corridors.size());
+        log.debug("assembleCorridors city={} returned {} corridors", normalizedCity, corridors.size());
         return new RegionalAreaGroupsResponse(normalizedCity, List.copyOf(corridors));
     }
 

@@ -167,6 +167,7 @@ const JOURNEY: UseAreasNavigationJourneyResult = {
   children: [],
   resolutionNotice: null,
   nodeCount: null,
+  schoolsNotSimulatedForRevision: false,
   selectNode: vi.fn(),
   refetch: vi.fn(),
   historyAdjacencyLog: [],
