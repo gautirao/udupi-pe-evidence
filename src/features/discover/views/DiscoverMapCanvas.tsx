@@ -888,6 +888,7 @@ export function DiscoverMapCanvas({
         mapZoom={mapZoom}
         hasAreaSelected={!!selectedArea || isBoundedBrowseState}
         areaLayerMaxZoom={areaLayerMaxZoom}
+        isAgriJourney={isAgriJourney}
       />
 
       {/* a3 — Marker popover mini card. Gated to listing-marker clicks via

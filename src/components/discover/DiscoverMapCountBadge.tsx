@@ -71,7 +71,24 @@ export function DiscoverMapCountBadge({
       {/* City / area listing count — bottom-right (Issue #1152). Issue #1588 — on the
           public landing this is replaced by the centered city-wide summary pill below;
           kept bottom-right for contextual (area/school/group) drill-down counts. */}
-      {resolvedPanelContent !== 'guided-entry' && !isAreaFirstCityLanding && discoverBadge.visible && (discoverBadge.count != null || discoverBadge.state === 'stale') && (
+      {resolvedPanelContent !== 'guided-entry' && !isAreaFirstCityLanding &&
+        // Issue #2169 Bug 2 — Agricultural land is a separate model (parcels,
+        // corridors, distances — see DiscoverRightPanel's Agri intro copy),
+        // kept apart from residential area counts. This badge's only count
+        // source below `discoverBadge`/`fallbackBadgeCopy` is `cityTotal`,
+        // the RESIDENTIAL city-wide sum (useDiscoverBadgeController), which
+        // has no agri-first branch to special-case — so without this guard
+        // every agri state fell through to the generic fallback and showed
+        // the unrelated residential total (e.g. "15 properties in Udupi")
+        // while the right panel showed agri corridor/parcel stats. Suppressed
+        // entirely (mirrors the school-first pattern's journey-aware branch,
+        // but the agri journey already surfaces its own corridor/parcel
+        // counts prominently in the right panel, so a second aggregate here
+        // would be redundant at best and a second value to keep in sync at
+        // worst — see #2169 root-cause notes for the corridor-count derived
+        // alternative that was rejected for that reason).
+        journey !== 'agri-first' &&
+        discoverBadge.visible && (discoverBadge.count != null || discoverBadge.state === 'stale') && (
         <div
           className={
             // Issue #1595 — on the selected-group step the pill is centred at the bottom.
@@ -169,7 +186,14 @@ export function DiscoverMapCountBadge({
       {/* Public-landing summary pill — bottom-center, city-wide verified total (Issue #1588).
           Issue #1607 — the area-first city landing reuses the same centred pill so the
           card "properties" stat, the map markers, and this pill all report one figure. */}
-      {(resolvedPanelContent === 'guided-entry' || isAreaFirstCityLanding) && cityTotal > 0 && (
+      {/* Issue #2169 Bug 2 — defence-in-depth: this pill is keyed off
+          isAreaFirstCityLanding (area-first only) and 'guided-entry' (the
+          pre-journey chooser, before journey is set), so it should never be
+          reachable once journey === 'agri-first'; the explicit guard keeps
+          that invariant enforced even if isAreaFirstCityLanding's derivation
+          ever changes. */}
+      {(resolvedPanelContent === 'guided-entry' || isAreaFirstCityLanding) &&
+        journey !== 'agri-first' && cityTotal > 0 && (
         <div className="absolute bottom-5 left-1/2 z-[1000] -translate-x-1/2" data-testid="discover-badge">
           <div className="flex items-center gap-2 whitespace-nowrap rounded-full border border-border bg-card px-4 py-2 text-[13px] font-semibold text-muted-foreground shadow-md">
             <MapPin className="h-[15px] w-[15px] shrink-0 text-[hsl(var(--copper))]" aria-hidden="true" />

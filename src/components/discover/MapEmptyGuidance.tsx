@@ -19,6 +19,15 @@ interface MapEmptyGuidanceProps {
   hasAreaSelected?: boolean;
   /** Area-layer zoom threshold; passed in to keep this component pure. */
   areaLayerMaxZoom?: number;
+  /**
+   * Issue #2169 Bug 2 — `cityTotal` here is the RESIDENTIAL city-wide sum
+   * (same tainted value DiscoverMapCountBadge was fixed to stop showing in
+   * the Agri journey, see #2169). The Agri journey's own empty/sparse state
+   * is owned entirely by the right panel's corridor/parcel copy, so a
+   * residential-count message here would contradict it. Optional so legacy
+   * callers that omit it leave this guard dormant.
+   */
+  isAgriJourney?: boolean;
 }
 
 /**
@@ -35,6 +44,7 @@ export function MapEmptyGuidance({
   mapZoom,
   hasAreaSelected,
   areaLayerMaxZoom,
+  isAgriJourney,
 }: MapEmptyGuidanceProps) {
   if (isLoading) return null;
 
@@ -52,10 +62,16 @@ export function MapEmptyGuidance({
 
   let message: string | null = null;
 
-  if (cityTotal === 0 && hasLocalities) {
+  // Issue #2169 Bug 2 — same rationale as DiscoverMapCountBadge's guard in
+  // this fix: cityTotal is the residential total and has no agri-first
+  // branch, so the messages below would show a residential "no properties"
+  // claim while the right panel displays real agri corridor/parcel stats.
+  // Suppressed entirely rather than given an agri-specific message, since
+  // the right panel already owns the Agri empty/sparse state prominently.
+  if (!isAgriJourney && cityTotal === 0 && hasLocalities) {
     message =
       'No properties found in the selected areas. Try removing a filter or selecting different localities.';
-  } else if (cityTotal === 0) {
+  } else if (!isAgriJourney && cityTotal === 0) {
     message = `No properties listed in ${cityLabel} yet. Try switching to a different city.`;
   }
 
@@ -63,7 +79,12 @@ export function MapEmptyGuidance({
   // cityTotal === 0 messages above (gated cityTotal > 0). Explicit `=== false`
   // comparisons keep this dormant when callers omit the props (undefined).
   // The null-guards on the zoom values prevent undefined ever tripping `>`.
+  // Issue #2169 (reviewer follow-up) — this branch's trigger condition reads
+  // the residential cityTotal (`cityTotal > 0`), so it must stay suppressed
+  // during the Agri journey too, same as the two messages above, even though
+  // its rendered copy carries no explicit count/claim.
   const showAnonZoomPrompt =
+    !isAgriJourney &&
     isAuthenticated === false &&
     hasAreaSelected === false &&
     mapZoom != null &&
