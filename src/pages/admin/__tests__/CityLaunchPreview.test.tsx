@@ -299,6 +299,7 @@ function renderAtPreviewRoute(cityId: string, revisionId: string) {
         <Routes>
           <Route path="/admin/city-launch/:cityId/preview/:revisionId" element={<CityLaunchPreview />} />
           <Route path="/listing/:id" element={<div data-testid="real-listing-page">Real listing page</div>} />
+          <Route path="/admin/city-launch" element={<div data-testid="city-launch-list-page">City launch list</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -596,6 +597,16 @@ describe('CityLaunchPreview — validation rail (Issue #1911 PR4)', () => {
         `/api/admin/city-launch/cities/${CITY_ID}/revisions/${REVISION_ID}/rerun`,
       );
     });
+
+    // #2175 — a successful rerun must navigate the admin away from this now-dead
+    // old-revision screen (it would otherwise refetch as editable:false and show
+    // the superseded-banner with every control disabled, looking like nothing
+    // happened) and back to the city list, where the new PREPARING revision's
+    // progress is actually surfaced.
+    await waitFor(() => {
+      expect(screen.getByTestId('city-launch-list-page')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('superseded-banner')).not.toBeInTheDocument();
   });
 
   it('editable:false (superseded) disables all checkboxes/buttons and shows the not-current banner', async () => {

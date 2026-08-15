@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { CITY_LAUNCH_LIST_QUERY_KEY } from '@/hooks/useCityLaunch';
 
 /**
  * Issue #1911 PR4 — City Launch admin validation-rail hooks over the real
@@ -206,11 +208,18 @@ export function useResetValidation(cityId: number, revisionId: number) {
 /**
  * POST .../rerun — "Preview not ready": discards this revision's readiness
  * and reruns preparation into a new revision. On 202, invalidates the
- * admin city-launch list so the queue reflects the new in-flight revision.
+ * admin city-launch list so the queue reflects the new in-flight revision,
+ * and navigates back to the city list (#2175) — this revision is no longer
+ * editable once superseded, and CityLaunchPreview has no PREPARING-state UI
+ * of its own, so staying on this route would show a misleading
+ * "superseded" banner even though the rerun succeeded. The city list's
+ * existing preparing-state expansion (CityLaunch.tsx) is where the new
+ * revision's progress is actually surfaced.
  */
 export function useRerunPreview(cityId: number, revisionId: number) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   return useMutation<RerunPreviewResponse, ApiError, void>({
     mutationFn: () =>
@@ -218,8 +227,13 @@ export function useRerunPreview(cityId: number, revisionId: number) {
         `/api/admin/city-launch/cities/${cityId}/revisions/${revisionId}/rerun`,
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'city-launch', 'cities'] });
+      queryClient.invalidateQueries({ queryKey: CITY_LAUNCH_LIST_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: validationQueryKey(cityId, revisionId) });
+      toast({
+        title: 'Rerunning preview',
+        description: 'A new revision is being prepared. You will find it back in the city list.',
+      });
+      navigate('/admin/city-launch');
     },
     onError: (err) => {
       if (err instanceof ApiError && err.status === 409) {

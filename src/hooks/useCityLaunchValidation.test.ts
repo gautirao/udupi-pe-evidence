@@ -22,9 +22,23 @@ import {
 } from './useCityLaunchValidation';
 
 const mockToast = vi.fn();
+const mockNavigate = vi.fn();
 
 vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mockToast }),
+}));
+
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => mockNavigate,
+}));
+
+// CITY_LAUNCH_LIST_QUERY_KEY (below) is imported from useCityLaunch.ts, which
+// also imports the real supabase client — mocked here purely so that module
+// load doesn't throw "supabaseUrl is required" in the test environment.
+vi.mock('@/integrations/supabase/client', () => ({
+  supabase: {
+    auth: { getSession: vi.fn(() => Promise.resolve({ data: { session: null }, error: null })) },
+  },
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -322,6 +336,10 @@ describe('useResetValidation', () => {
 });
 
 describe('useRerunPreview', () => {
+  beforeEach(() => {
+    mockNavigate.mockClear();
+  });
+
   it('POSTs /rerun and invalidates the city-launch list + validation query on 202', async () => {
     vi.mocked(api.post).mockResolvedValue({ revisionId: 43, status: 'preparing' });
     const client = freshClient();
@@ -341,6 +359,24 @@ describe('useRerunPreview', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ['admin', 'city-launch', 'cities'],
     });
+  });
+
+  it('on 202, navigates back to the city list and shows a rerunning toast (#2175)', async () => {
+    vi.mocked(api.post).mockResolvedValue({ revisionId: 43, status: 'preparing' });
+    const client = freshClient();
+
+    const { result } = renderHook(() => useRerunPreview(CITY_ID, REVISION_ID), {
+      wrapper: makeWrapper(client),
+    });
+
+    result.current.mutate();
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/admin/city-launch');
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: expect.stringMatching(/rerunning preview/i) }),
+    );
   });
 
   it('on 409, surfaces a "no longer current" toast', async () => {
