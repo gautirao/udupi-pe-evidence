@@ -55,6 +55,23 @@ public class AgriDestinationsService {
     @Transactional(readOnly = true)
     public AgriDestinationsResponse getDestinations(
             String city, String direction, Double maxKm, String listingPurpose) {
+        return getDestinations(city, direction, maxKm, listingPurpose, null);
+    }
+
+    /**
+     * Revision-scoped overload (#2151 PR B Track 2) backing {@code
+     * AdminCityLaunchPreviewController}'s {@code .../preview/agri-destinations} endpoint.
+     * {@code revisionId == null} is byte-identical to the original 4-arg overload above — this is
+     * the SAME method, not a fork; a non-null {@code revisionId} is threaded straight into the port
+     * query, which is the ONLY place preview-vs-production behaviour diverges (see
+     * {@link AgriDestinationPortPostgresAdapter}).
+     *
+     * @param revisionId {@code null} for production (unchanged); non-null for an Admin City Launch
+     *                   preview revision
+     */
+    @Transactional(readOnly = true)
+    public AgriDestinationsResponse getDestinations(
+            String city, String direction, Double maxKm, String listingPurpose, Long revisionId) {
         if (city == null || city.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "city_must_not_be_blank");
         }
@@ -64,15 +81,15 @@ public class AgriDestinationsService {
         String normalizedPurpose = (listingPurpose != null && !listingPurpose.isBlank())
                 ? listingPurpose.trim() : null;
 
-        log.debug("getDestinations city={} direction={} maxKm={} listingPurpose={}",
-                normalizedCity, normalizedDirection, maxKm, normalizedPurpose);
+        log.debug("getDestinations city={} direction={} maxKm={} listingPurpose={} revisionId={}",
+                normalizedCity, normalizedDirection, maxKm, normalizedPurpose, revisionId);
 
         // ── The ONE port call — see class javadoc for why nothing else may be added here.
         AgriDestinationPort.DestinationScope scope = agriDestinationPort.findDestinations(
                 new AgriDestinationPort.DestinationScopeQuery(
                         normalizedCity, normalizedDirection, maxKm,
                         new AgriDestinationPort.AgriDestinationFilters(normalizedPurpose),
-                        true));
+                        true, revisionId));
 
         return new AgriDestinationsResponse(
                 scope.city(),

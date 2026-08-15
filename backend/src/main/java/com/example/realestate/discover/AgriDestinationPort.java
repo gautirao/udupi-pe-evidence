@@ -79,9 +79,26 @@ public interface AgriDestinationPort {
      * @param includeParcelCounts  when {@code false}, {@code parcelCount}/{@code parcelAcreage} on
      *                             each bucket are {@code null} rather than computed — a cheaper
      *                             direction/distance-only lookup
+     * @param revisionId           {@code null} (production, default) reads the promoted {@code
+     *                             agri_destination_classification} table for {@code citySlug} exactly
+     *                             as before #2151 PR B Track 2. Non-null switches to the Admin City
+     *                             Launch PREVIEW path: reads {@code
+     *                             sandbox_agri_destination_classification} for this revision instead,
+     *                             and does NOT apply {@link CityActivationGuard} — an unpromoted city
+     *                             is the normal case being previewed. See
+     *                             {@link AgriDestinationPortPostgresAdapter}'s javadoc.
      */
     record DestinationScopeQuery(String citySlug, String direction, Double maxKm,
-                                  AgriDestinationFilters filters, boolean includeParcelCounts) {}
+                                  AgriDestinationFilters filters, boolean includeParcelCounts,
+                                  Long revisionId) {
+
+        /** Back-compat canonical constructor for every existing (production) call site — equivalent
+         *  to passing {@code revisionId = null}. */
+        public DestinationScopeQuery(String citySlug, String direction, Double maxKm,
+                                      AgriDestinationFilters filters, boolean includeParcelCounts) {
+            this(citySlug, direction, maxKm, filters, includeParcelCounts, null);
+        }
+    }
 
     /**
      * @param citySlug city slug, lower-cased by the adapter
@@ -89,9 +106,23 @@ public interface AgriDestinationPort {
      * @param filters  supported filter set — see {@link AgriDestinationFilters}
      * @param page     page/size — see {@link PageSpec}
      * @param viewport optional viewport rectangle; {@code null} = no viewport filter
+     * @param revisionId {@code null} (production, default) — unchanged behaviour. Non-null: Admin
+     *                   City Launch PREVIEW path — skips {@link CityActivationGuard} (see
+     *                   {@link DestinationScopeQuery#revisionId()}). Parcels themselves are always
+     *                   read from the LIVE {@code property_listings} table scoped by {@code citySlug}
+     *                   — a revision preview scopes GEOGRAPHY, not inventory; sandbox data has no
+     *                   listings table equivalent.
      */
     record ParcelQuery(String citySlug, List<String> areaKeys, AgriDestinationFilters filters,
-                        PageSpec page, GeoBox viewport) {}
+                        PageSpec page, GeoBox viewport, Long revisionId) {
+
+        /** Back-compat canonical constructor for every existing (production) call site — equivalent
+         *  to passing {@code revisionId = null}. */
+        public ParcelQuery(String citySlug, List<String> areaKeys, AgriDestinationFilters filters,
+                            PageSpec page, GeoBox viewport) {
+            this(citySlug, areaKeys, filters, page, viewport, null);
+        }
+    }
 
     /** Zero-based page index and page size (capped at {@value #MAX_PARCELS_PER_PAGE} by the adapter). */
     record PageSpec(int page, int size) {}

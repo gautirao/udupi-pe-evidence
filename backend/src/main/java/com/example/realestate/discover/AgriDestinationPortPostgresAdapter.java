@@ -123,6 +123,35 @@ public class AgriDestinationPortPostgresAdapter implements AgriDestinationPort {
      *  Agri City Launch — see {@link #findDestinations} javadoc (#2151 PR B correction pass, B2). */
     static final String AGRI_DESTINATIONS_NOT_YET_PROMOTED = "AGRI_DESTINATIONS_NOT_YET_PROMOTED";
 
+    /** Error code returned in the 503 body when an Admin City Launch PREVIEW revision (see
+     *  {@link AgriDestinationPort.DestinationScopeQuery#revisionId()}) has ZERO {@code
+     *  sandbox_agri_destination_classification} rows — the preview-domain equivalent of {@link
+     *  #AGRI_DESTINATIONS_NOT_YET_PROMOTED}, deliberately a DISTINCT code: the actionable guidance
+     *  differs (production: wait for promotion; preview: re-run city preparation so the generator
+     *  runs) (#2151 PR B Track 2). */
+    static final String AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION = "AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION";
+
+    /**
+     * Admin City Launch PREVIEW geometry read — mirrors {@link #DESTINATION_GEOMETRY_SQL} but reads
+     * the revision-scoped {@code sandbox_agri_destination_classification} table (V125, #2151 PR A)
+     * instead of the promoted production table, and joins {@code areas} with a LEFT JOIN rather than
+     * an INNER JOIN.
+     *
+     * <p>LEFT JOIN is load-bearing (#2151 PR B Track 2 architect ruling): {@code
+     * sandbox_agri_destination_classification.area_key} is deliberately NOT FK-constrained to {@code
+     * public.areas} (see V125's own table comment) — a sandbox row may describe an area not yet
+     * promoted into {@code public.areas} at all (the normal case for a never-launched city). An
+     * INNER JOIN here would silently drop exactly those rows from the preview; {@code display_name}
+     * is null-checked in the row mapper below and falls back to the area key itself rather than
+     * crashing or vanishing the destination.
+     */
+    private static final String SANDBOX_DESTINATION_GEOMETRY_SQL = """
+            SELECT sadc.area_key, a.name AS display_name, sadc.distance_km, sadc.bearing_deg, sadc.direction_key
+            FROM sandbox_agri_destination_classification sadc
+            LEFT JOIN areas a ON a.area_key = sadc.area_key
+            WHERE sadc.revision_id = ?
+            """;
+
     private final JdbcOperations jdbc;
     private final CityActivationGuard cityActivationGuard;
     private final AgriDestinationPortReadinessCheck readinessCheck;
@@ -138,6 +167,13 @@ public class AgriDestinationPortPostgresAdapter implements AgriDestinationPort {
     @Transactional(readOnly = true)
     public DestinationScope findDestinations(DestinationScopeQuery query) {
         String citySlug = normalizeCity(query.citySlug());
+
+        // #2151 PR B Track 2: Admin City Launch PREVIEW path — branch out BEFORE any production
+        // guard/read below. Everything from here to the end of this method is the UNCHANGED
+        // production (revisionId == null) path.
+        if (query.revisionId() != null) {
+            return findDestinationsForRevision(citySlug, query);
+        }
 
         // #1935 parity: an inactive city must be indistinguishable from an unknown one. This guard
         // MUST run BEFORE any read of agri_destination_classification/areas — cityActivationGuard
@@ -218,6 +254,12 @@ public class AgriDestinationPortPostgresAdapter implements AgriDestinationPort {
     public ParcelPage findParcels(ParcelQuery query) {
         String citySlug = normalizeCity(query.citySlug());
 
+        // #2151 PR B Track 2: Admin City Launch PREVIEW path — see findDestinations' equivalent
+        // branch. Everything below this block is the UNCHANGED production (revisionId == null) path.
+        if (query.revisionId() != null) {
+            return findParcelsForRevision(citySlug, query);
+        }
+
         if (!cityActivationGuard.isActiveCitySlug(citySlug)) {
             log.debug("findParcels city={} — inactive or unknown city", citySlug);
             int size = query.page() != null && query.page().size() > 0
@@ -253,6 +295,144 @@ public class AgriDestinationPortPostgresAdapter implements AgriDestinationPort {
         boolean hasMore = (long) (page + 1) * size < total;
         log.debug("findParcels city={} areaKeys={} page={} size={} total={} hasMore={}",
                 citySlug, areaKeys.size(), page, size, total, hasMore);
+        return new ParcelPage(content, page, size, total, hasMore);
+    }
+
+    // ── Admin City Launch PREVIEW path (#2151 PR B Track 2) ─────────────────────────────────────
+
+    /**
+     * Shared fail-closed guard for BOTH preview methods below: throws 503 {@link
+     * #AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION} when the given revision has ZERO {@code
+     * sandbox_agri_destination_classification} rows — see {@link #findDestinationsForRevision}'s
+     * javadoc for why this must be distinguishable from a genuine zero-match scope.
+     */
+    private void failClosedIfNoSandboxAgriRows(long revisionId, String callerMethodName) {
+        Integer totalRows = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sandbox_agri_destination_classification WHERE revision_id = ?",
+                Integer.class, revisionId);
+        if (totalRows == null || totalRows == 0) {
+            log.warn("{}(preview) revisionId={} — ZERO sandbox_agri_destination_classification rows; "
+                    + "failing closed rather than serving an indistinguishable/misleading result",
+                    callerMethodName, revisionId);
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, AGRI_DESTINATIONS_NOT_GENERATED_FOR_REVISION);
+        }
+    }
+
+    /**
+     * PREVIEW equivalent of {@link #findDestinations} for a non-null {@code revisionId}. Reads
+     * {@code sandbox_agri_destination_classification} instead of the promoted production table, and
+     * deliberately does NOT call {@link CityActivationGuard} — an unpromoted/never-launched city is
+     * the NORMAL case being previewed, not a fail-closed condition.
+     *
+     * <p>Fail-closed equivalent of {@link #AGRI_DESTINATIONS_NOT_YET_PROMOTED}: a revision with ZERO
+     * sandbox rows has never had {@code AgriDestinationClassificationGenerator} run for it (or it ran
+     * and produced nothing) — that is NOT the same thing as a direction/maxKm combination that
+     * legitimately matches none of an otherwise-nonempty row set, so the two cases must stay
+     * distinguishable exactly as they do on the production path.
+     */
+    private DestinationScope findDestinationsForRevision(String citySlug, DestinationScopeQuery query) {
+        long revisionId = query.revisionId();
+        failClosedIfNoSandboxAgriRows(revisionId, "findDestinations");
+
+        StringBuilder sql = new StringBuilder(SANDBOX_DESTINATION_GEOMETRY_SQL);
+        List<Object> params = new ArrayList<>();
+        params.add(revisionId);
+        if (query.direction() != null) {
+            sql.append(" AND sadc.direction_key = ?\n");
+            params.add(query.direction());
+        }
+        if (query.maxKm() != null) {
+            sql.append(" AND sadc.distance_km <= ?\n");
+            params.add(query.maxKm());
+        }
+        sql.append(" ORDER BY sadc.area_key");
+
+        List<DestinationRow> rows = jdbc.query(sql.toString(),
+                (rs, rowNum) -> {
+                    String areaKey = rs.getString("area_key");
+                    String displayName = rs.getString("display_name");
+                    // LEFT JOIN: no public.areas match yet (area not promoted) — degrade to the
+                    // area key itself rather than a null display name or a dropped row.
+                    return new DestinationRow(
+                            areaKey,
+                            displayName != null ? displayName : areaKey,
+                            rs.getDouble("distance_km"),
+                            rs.getDouble("bearing_deg"),
+                            rs.getString("direction_key"));
+                },
+                params.toArray());
+
+        if (rows.isEmpty()) {
+            return new DestinationScope(citySlug, List.of());
+        }
+
+        Map<String, Long> countByArea = Map.of();
+        Map<String, Double> acreageByArea = Map.of();
+        if (query.includeParcelCounts()) {
+            // #2151 PR B Track 2 (documented, item 1): parcel counts/acreage ALWAYS join the LIVE
+            // property_listings table by area_key/citySlug, never a sandbox table — sandbox has no
+            // listings equivalent. A revision preview scopes GEOGRAPHY, not inventory.
+            List<String> areaKeys = rows.stream().map(DestinationRow::areaKey).toList();
+            countByArea = countParcelsByArea(citySlug, query.filters(), areaKeys);
+            acreageByArea = acreageByArea(citySlug, query.filters(), areaKeys);
+        }
+
+        List<DestinationBucket> buckets = new ArrayList<>(rows.size());
+        for (DestinationRow r : rows) {
+            Long count = query.includeParcelCounts() ? countByArea.getOrDefault(r.areaKey(), 0L) : null;
+            Double acreage = query.includeParcelCounts() ? acreageByArea.get(r.areaKey()) : null;
+            buckets.add(new DestinationBucket(
+                    r.areaKey(), r.displayName(), r.distanceKm(), r.bearingDeg(), r.directionKey(),
+                    count, acreage));
+        }
+        log.debug("findDestinations(preview) revisionId={} returned {} destinations", revisionId, buckets.size());
+        return new DestinationScope(citySlug, List.copyOf(buckets));
+    }
+
+    /**
+     * PREVIEW equivalent of {@link #findParcels} for a non-null {@code revisionId}. Parcels are
+     * ALWAYS read from the LIVE {@code property_listings} table (see class javadoc, item 1) — this
+     * method does not touch {@code sandbox_agri_destination_classification} at all; it exists only
+     * to skip {@link CityActivationGuard}, which is structurally inapplicable to a preview of a
+     * possibly-not-yet-active city.
+     *
+     * <p>Still fails closed the SAME way as {@link #findDestinationsForRevision} when the revision
+     * has zero sandbox Agri rows (#2151 PR B Track 2 — all three preview endpoints share one
+     * fail-closed signal): a map-listings drill-down is only ever reachable from a generated
+     * destination bucket in the real UI, so a direct/stale hit against a never-generated revision
+     * must fail the same way, not silently return live listings that no corridor ever pointed to.
+     */
+    private ParcelPage findParcelsForRevision(String citySlug, ParcelQuery query) {
+        failClosedIfNoSandboxAgriRows(query.revisionId(), "findParcels");
+
+        List<String> areaKeys = query.areaKeys();
+        if (areaKeys == null || areaKeys.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "area_keys_must_not_be_empty");
+        }
+        if (areaKeys.size() > MAX_DESTINATION_AREA_KEYS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "area_keys_exceeds_maximum_of_" + MAX_DESTINATION_AREA_KEYS);
+        }
+
+        int size = query.page() != null && query.page().size() > 0
+                ? Math.min(query.page().size(), MAX_PARCELS_PER_PAGE) : MAX_PARCELS_PER_PAGE;
+        int page = query.page() != null ? Math.max(query.page().page(), 0) : 0;
+
+        DiscoverListingPredicateBuilder.Sql sql = buildAgriSql(citySlug, query.filters(), areaKeys, query.viewport());
+
+        long total = countTotal(sql);
+
+        String selectSql = PARCEL_SELECT_SQL + " WHERE " + sql.whereFragment() + " ORDER BY pl.id LIMIT ? OFFSET ?";
+        List<Object> params = new ArrayList<>(sql.params());
+        params.add(size);
+        params.add((long) page * size);
+
+        List<AgriParcel> content = jdbc.query(selectSql, PARCEL_ROW_MAPPER, params.toArray());
+
+        boolean hasMore = (long) (page + 1) * size < total;
+        log.debug("findParcels(preview) revisionId={} city={} areaKeys={} page={} size={} total={} hasMore={}",
+                query.revisionId(), citySlug, areaKeys.size(), page, size, total, hasMore);
         return new ParcelPage(content, page, size, total, hasMore);
     }
 
