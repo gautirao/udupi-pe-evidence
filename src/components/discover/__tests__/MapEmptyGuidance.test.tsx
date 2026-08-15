@@ -231,4 +231,41 @@ describe('MapEmptyGuidance', () => {
     expect(screen.getByText(/No properties listed in/i)).toBeInTheDocument();
     expect(screen.queryByText(/Select an area to see properties/i)).not.toBeInTheDocument();
   });
+
+  // --- Issue #2169 Bug 2: Agri journey must not show the tainted residential cityTotal message ---
+
+  it('#2169: Agri journey + residential cityTotal === 0, no locality filter → renders nothing (no residential message)', () => {
+    const { container } = render(
+      <MapEmptyGuidance
+        cityTotal={0}
+        filters={emptyFilters}
+        city="udupi"
+        isLoading={false}
+        isAgriJourney
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/No properties listed in/i)).not.toBeInTheDocument();
+  });
+
+  it('#2169: Agri journey + residential cityTotal === 0 + locality filter → renders nothing (no residential message)', () => {
+    const { container } = render(
+      <MapEmptyGuidance
+        cityTotal={0}
+        filters={filtersWithLocality}
+        city="udupi"
+        isLoading={false}
+        isAgriJourney
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/No properties found in the selected areas/i)).not.toBeInTheDocument();
+  });
+
+  it('#2169: non-Agri journey + cityTotal === 0 (isAgriJourney omitted) → city-wide message still renders (regression)', () => {
+    render(
+      <MapEmptyGuidance cityTotal={0} filters={emptyFilters} city="udupi" isLoading={false} />,
+    );
+    expect(screen.getByText(/No properties listed in/i)).toBeInTheDocument();
+  });
 });
