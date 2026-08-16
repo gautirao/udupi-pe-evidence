@@ -597,4 +597,24 @@
       display: none;
     }
   }
+
+  /* Issue #2159 — Discover area-results panel reskin: dense 2-column card
+     grid on desktop. Tailwind 3.4 has no built-in container-query variants
+     (that needs the separate @tailwindcss/container-queries plugin, not
+     installed here), so this uses the browser-native CSS Container Queries
+     spec instead. Placed in the `utilities` layer (not `components`) so it
+     wins the cascade-layer tie against Tailwind's own unconditional
+     `.grid-cols-1` utility at equal specificity — `components` always loses
+     to `utilities` regardless of source order. The 560px threshold mirrors
+     the ReTrends mock's own panel-width breakpoint for switching the listing
+     grid to two columns (VISUAL_RULES.md §1). */
+  .area-panel-container {
+    container-type: inline-size;
+  }
+
+  @container (min-width: 560px) {
+    .area-listings-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
 }

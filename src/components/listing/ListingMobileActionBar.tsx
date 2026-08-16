@@ -1,9 +1,20 @@
-import { Calendar, Heart } from 'lucide-react';
+import { Calendar, Heart, Share2, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface ListingMobileActionBarProps {
   saved: boolean;
   onToggleSaved: () => void;
+  /**
+   * Issue #2159 (phase 2, PR #2180) — the desktop gallery overlay already has a
+   * working share button wired to this same handler (ListingDetail.tsx's
+   * `handleShare`, copies the page URL); mobile had no share affordance at
+   * all. Wires the SAME existing handler in — no new share mechanism.
+   * Optional so this component doesn't break for any other caller that
+   * hasn't been updated to pass it.
+   */
+  onShare?: () => void;
+  /** True right after `onShare` succeeds — mirrors the desktop copy-feedback state. */
+  shareCopied?: boolean;
 }
 
 /**
@@ -14,7 +25,7 @@ export interface ListingMobileActionBarProps {
  * scrolls to and focuses the same inline ViewingRequestPanel rendered in the sidebar,
  * so there is exactly one booking state machine on the page.
  */
-export function ListingMobileActionBar({ saved, onToggleSaved }: ListingMobileActionBarProps) {
+export function ListingMobileActionBar({ saved, onToggleSaved, onShare, shareCopied = false }: ListingMobileActionBarProps) {
   function scrollToViewingPanel() {
     const el = document.getElementById('viewing-request-panel');
     if (!el) return;
@@ -40,6 +51,21 @@ export function ListingMobileActionBar({ saved, onToggleSaved }: ListingMobileAc
       >
         <Heart className={cn('h-5 w-5', saved ? 'fill-current text-rose-500' : 'text-foreground')} aria-hidden="true" />
       </button>
+      {onShare && (
+        <button
+          type="button"
+          onClick={onShare}
+          aria-label="Share listing"
+          data-testid="mobile-share-btn"
+          className="flex h-11 w-12 shrink-0 items-center justify-center rounded-lg border border-border bg-card"
+        >
+          {shareCopied ? (
+            <Check className="h-5 w-5 text-foreground" aria-hidden="true" />
+          ) : (
+            <Share2 className="h-5 w-5 text-foreground" aria-hidden="true" />
+          )}
+        </button>
+      )}
       <button
         type="button"
         onClick={scrollToViewingPanel}

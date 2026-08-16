@@ -388,6 +388,7 @@ export default function ListingDetail() {
                   type="button"
                   onClick={handleShare}
                   aria-label="Share listing"
+                  data-testid="gallery-share-btn"
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-colors hover:bg-muted"
                 >
                   {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
@@ -430,7 +431,14 @@ export default function ListingDetail() {
         </div>
       </div>
       </div>
-      {!isPreview && <ListingMobileActionBar saved={saved} onToggleSaved={handleToggleSaved} />}
+      {!isPreview && (
+        <ListingMobileActionBar
+          saved={saved}
+          onToggleSaved={handleToggleSaved}
+          onShare={handleShare}
+          shareCopied={copied}
+        />
+      )}
     </AppLayout>
   );
 }
