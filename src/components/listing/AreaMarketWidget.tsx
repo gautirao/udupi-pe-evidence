@@ -1,11 +1,21 @@
 import { useMemo } from 'react';
 import { LineChart, Line, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle, TrendingUp } from 'lucide-react';
 import { useListingMarketContext } from '@/hooks/useListingMarketContext';
 import { PropertyListing } from '@/hooks/usePropertyListings';
 import { format } from 'date-fns';
+
+// Issue #2159 (phase 2) — reuses the SAME `rounded-2xl border border-border
+// bg-card p-5` card shell as ListingDetailSidebar's other sections (viewing-
+// request panel, area-insights, contact card) and DetailSection in
+// ListingDetailMainContent.tsx, instead of the plain shadcn `Card` this
+// widget used before (which rendered a different radius/border/shadow and
+// stood out against every other sidebar section). Visual only — no change
+// to the data/query below.
+function MarketCard({ children }: { children: React.ReactNode }) {
+  return <div className="rounded-2xl border border-border bg-card p-5">{children}</div>;
+}
 
 interface AreaMarketWidgetProps {
   listing: PropertyListing;
@@ -50,25 +60,25 @@ export function AreaMarketWidget({ listing }: AreaMarketWidgetProps) {
 
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="p-4 space-y-3">
+      <MarketCard>
+        <div className="space-y-3">
           <Skeleton className="h-4 w-32" />
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-3/4" />
-        </CardContent>
-      </Card>
+        </div>
+      </MarketCard>
     );
   }
 
   if (error) {
     return (
-      <Card>
-        <CardContent className="p-4 flex items-center gap-2 text-sm text-muted-foreground">
+      <MarketCard>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />
           Could not load market data.
-        </CardContent>
-      </Card>
+        </div>
+      </MarketCard>
     );
   }
 
@@ -77,19 +87,17 @@ export function AreaMarketWidget({ listing }: AreaMarketWidgetProps) {
 
   if (!hasData) {
     return (
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            <h3 className="font-semibold text-sm">Area Market</h3>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Not enough data for this area yet.
-            <br />
-            Check back as more listings are added.
-          </p>
-        </CardContent>
-      </Card>
+      <MarketCard>
+        <div className="flex items-center gap-2 mb-2">
+          <TrendingUp className="h-4 w-4 text-primary" />
+          <h3 className="text-base font-bold text-foreground">Area Market</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Not enough data for this area yet.
+          <br />
+          Check back as more listings are added.
+        </p>
+      </MarketCard>
     );
   }
 
@@ -118,92 +126,96 @@ export function AreaMarketWidget({ listing }: AreaMarketWidgetProps) {
   const bedroomsLabel = listing.bedrooms ? `${listing.bedrooms}BHK ` : '';
 
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-2 mb-1">
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          <h3 className="font-semibold text-sm">Area Market</h3>
-        </div>
-        <p className="text-xs text-muted-foreground mb-3">
-          {bedroomsLabel}
-          {typeLabel}s · {listing.locality} · 6 months
-        </p>
+    <MarketCard>
+      <div className="flex items-center gap-2 mb-1">
+        <TrendingUp className="h-4 w-4 text-primary" />
+        <h3 className="text-base font-bold text-foreground">Area Market</h3>
+      </div>
+      <p className="text-xs text-muted-foreground mb-3">
+        {bedroomsLabel}
+        {typeLabel}s · {listing.locality} · 6 months
+      </p>
 
-        <ResponsiveContainer width="100%" height={80}>
-          <LineChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-            <XAxis
-              dataKey="month"
-              tick={{ fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <Tooltip
-              formatter={(value: number) => [
-                `₹${value.toLocaleString('en-IN')} ${unit}`,
-                '',
-              ]}
-              contentStyle={{ fontSize: 11 }}
-              labelStyle={{ fontSize: 11 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="p75"
-              stroke="#a7f3d0"
-              strokeWidth={1}
-              dot={false}
-              strokeDasharray="3 3"
-            />
-            <Line
-              type="monotone"
-              dataKey="p25"
-              stroke="#a7f3d0"
-              strokeWidth={1}
-              dot={false}
-              strokeDasharray="3 3"
-            />
-            <Line
-              type="monotone"
-              dataKey="median"
-              stroke="#10b981"
-              strokeWidth={2}
-              dot={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={80}>
+        <LineChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+          <XAxis
+            dataKey="month"
+            tick={{ fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <Tooltip
+            formatter={(value: number) => [
+              `₹${value.toLocaleString('en-IN')} ${unit}`,
+              '',
+            ]}
+            contentStyle={{ fontSize: 11 }}
+            labelStyle={{ fontSize: 11 }}
+          />
+          <Line
+            type="monotone"
+            dataKey="p75"
+            stroke="#a7f3d0"
+            strokeWidth={1}
+            dot={false}
+            strokeDasharray="3 3"
+          />
+          <Line
+            type="monotone"
+            dataKey="p25"
+            stroke="#a7f3d0"
+            strokeWidth={1}
+            dot={false}
+            strokeDasharray="3 3"
+          />
+          <Line
+            type="monotone"
+            dataKey="median"
+            stroke="#10b981"
+            strokeWidth={2}
+            dot={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
 
-        <div className="mt-3 space-y-1.5 text-sm border-t pt-3">
-          {latestMedian && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Area median</span>
-              <span className="font-medium">
-                ₹{Math.round(Number(latestMedian)).toLocaleString('en-IN')} {unit}
+      <div className="mt-3 space-y-1.5 border-t border-border pt-3 text-sm">
+        {latestMedian && (
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Area median</span>
+            {/* Issue #2159 (phase 2) — font-mono for the metric value, matching
+                every other price/count in this app (PropertyCard, ListingSpecsGrid,
+                the mock's own MarketStat). */}
+            <span className="font-mono font-medium text-foreground">
+              ₹{Math.round(Number(latestMedian)).toLocaleString('en-IN')} {unit}
+            </span>
+          </div>
+        )}
+        {listingRate && (
+          <div className="flex justify-between items-center gap-2">
+            <span className="text-muted-foreground shrink-0">This listing</span>
+            <div className="flex items-center gap-1.5 flex-wrap justify-end">
+              <span className="font-mono font-medium text-foreground">
+                ₹{listingRate.toLocaleString('en-IN')} {unit}
               </span>
-            </div>
-          )}
-          {listingRate && (
-            <div className="flex justify-between items-center gap-2">
-              <span className="text-muted-foreground shrink-0">This listing</span>
-              <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                <span className="font-medium">
-                  ₹{listingRate.toLocaleString('en-IN')} {unit}
+              {badge && pctBelow !== null && pctBelow > 0 && (
+                // Issue #2159 (phase 2) — evergreen token, not a hardcoded
+                // Tailwind green, matching the RERA/trust badges elsewhere on
+                // this same page (ListingDetailMainContent.tsx).
+                <span
+                  className={`rounded bg-evergreen-tint px-1.5 py-0.5 text-xs text-evergreen ${
+                    badge.bold ? 'font-semibold' : ''
+                  }`}
+                >
+                  {badge.label} · {pctBelow}% below
                 </span>
-                {badge && pctBelow !== null && pctBelow > 0 && (
-                  <span
-                    className={`text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-800 ${
-                      badge.bold ? 'font-semibold' : ''
-                    }`}
-                  >
-                    {badge.label} · {pctBelow}% below
-                  </span>
-                )}
-              </div>
+              )}
             </div>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Based on {totalSimilarCount} listing{totalSimilarCount !== 1 ? 's' : ''}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Based on {totalSimilarCount} listing{totalSimilarCount !== 1 ? 's' : ''}
+        </p>
+      </div>
+    </MarketCard>
   );
 }

@@ -55,7 +55,9 @@ function PrimarySpecCell({ icon, value, label, testId }: PrimarySpecCellProps) {
     >
       <span className="text-foreground/60">{icon}</span>
       <div>
-        <p className="text-2xl font-bold text-foreground leading-tight">{value}</p>
+        {/* Issue #2159 (phase 2) — matches the mock's Tile (`font-family: var(--font-mono)`)
+            and this app's mono-for-metrics convention (PropertyCard price, spec rows below). */}
+        <p className="font-mono text-2xl font-bold text-foreground leading-tight">{value}</p>
         <p className="mt-1 text-sm text-muted-foreground">{label}</p>
       </div>
     </div>
@@ -398,7 +400,9 @@ export function ListingSpecsGrid({ listing }: ListingSpecsGridProps) {
       className="rounded-2xl border border-border bg-card p-5 md:p-6"
       data-testid="listing-specs-grid"
     >
-      <h2 className="font-serif text-xl font-semibold text-foreground">Property details</h2>
+      {/* Issue #2159 (phase 2) — sans, not serif, matching DetailSection's section
+          titles (ListingDetailMainContent.tsx) and the mock's Section component. */}
+      <h2 className="text-lg font-bold text-foreground">Property details</h2>
       <p className="mt-1 mb-5 text-sm text-muted-foreground">
         Shown for {typeNoun} listings — fields that don't apply to this property type are hidden.
       </p>

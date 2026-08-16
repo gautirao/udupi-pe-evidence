@@ -45,9 +45,14 @@ function DetailSection({
   return (
     <section className={`rounded-2xl border border-border bg-card p-5 md:p-6 ${className}`}>
       {title && (
+        // Issue #2159 (phase 2) — mock's Section title (ui_kits/discover/listing.html
+        // ListingDetail.jsx) is sans-serif 18px/700, not serif. Reserving the
+        // Fraunces serif for the ONE listing-title headline below (and price)
+        // mirrors the same restraint already established for the Discover area
+        // reskin (VISUAL_RULES.md: "--font-serif: panel headings only").
         <div className="mb-4 flex items-center gap-2">
           {icon}
-          <h2 className="font-serif text-xl font-semibold text-foreground">{title}</h2>
+          <h2 className="text-lg font-bold text-foreground">{title}</h2>
         </div>
       )}
       {children}
@@ -128,20 +133,27 @@ export function ListingDetailMainContent({
             )}
           </div>
 
+          {/* Issue #2159 (phase 2) — price is font-mono, not serif: matches the mock
+              (ListingDetail.jsx Summary: `fontFamily: var(--font-mono)` for the
+              price) AND this app's own already-established convention that prices/
+              counts/metrics render in mono (PropertyCard.tsx's price, the Discover
+              area-panel's hero result count). Serif stays reserved for the listing
+              title only ("Price on request" — no numeric value — is the one
+              exception the mock itself keeps serif for, left unchanged below). */}
           <div className="shrink-0 text-right">
             {isRent ? (
               listing.monthlyRent != null && (
-                <p className="font-serif text-2xl md:text-3xl font-bold text-foreground">
+                <p className="font-mono text-2xl md:text-3xl font-bold text-foreground">
                   ₹{listing.monthlyRent.toLocaleString('en-IN')}
-                  <span className="text-base font-normal text-muted-foreground"> / month</span>
+                  <span className="font-sans text-base font-normal text-muted-foreground"> / month</span>
                 </p>
               )
             ) : listing.price ? (
-              <p className="font-serif text-2xl md:text-3xl font-bold text-foreground">
+              <p className="font-mono text-2xl md:text-3xl font-bold text-foreground">
                 {formatPrice(listing.price, listing.price_unit ?? null)}
               </p>
             ) : listing.priceBand ? (
-              <p className="font-serif text-2xl md:text-3xl font-bold text-foreground">
+              <p className="font-mono text-2xl md:text-3xl font-bold text-foreground">
                 {listing.priceBand}
               </p>
             ) : null}

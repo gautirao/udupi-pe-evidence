@@ -706,9 +706,38 @@ describe('ListingDetail — residential redesign smoke', () => {
       primaryImageUrl: 'https://example.com/p.jpg',
       imageCount: 1,
     }));
-    expect(screen.getByRole('button', { name: /share listing/i })).toBeInTheDocument();
-    // Use testid to target the gallery overlay save button specifically (sidebar also has a save button).
+    // Issue #2159 (phase 2) — mobile now has its OWN share button (same handleShare
+    // handler, ListingMobileActionBar.tsx), so "share listing" is no longer a unique
+    // accessible name; use testid to target the gallery overlay one specifically —
+    // same disambiguation pattern already used for the save button below (sidebar
+    // also has a save button).
+    expect(screen.getByTestId('gallery-share-btn')).toBeInTheDocument();
     expect(screen.getByTestId('gallery-save-btn')).toBeInTheDocument();
+  });
+
+  // Issue #2159 (phase 2, PR #2180) — mobile previously had no share affordance at
+  // all (ListingMobileActionBar only showed save/contact/viewing-request); this
+  // wires the SAME existing handleShare handler (copies the page URL) into the
+  // mobile action bar.
+  it('renders a share button in the mobile action bar, wired to the same handleShare handler', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+
+    renderWithListing(makeListing({
+      images: [],
+      primaryImageUrl: 'https://example.com/p.jpg',
+      imageCount: 1,
+    }));
+
+    const mobileShareBtn = screen.getByTestId('mobile-share-btn');
+    expect(mobileShareBtn).toBeInTheDocument();
+
+    await user.click(mobileShareBtn);
+    expect(writeText).toHaveBeenCalledWith(window.location.href);
   });
 
   it('does not crash and still renders the title when price, coords and description are absent', () => {
