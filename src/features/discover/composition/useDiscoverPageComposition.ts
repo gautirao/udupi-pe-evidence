@@ -398,11 +398,14 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     areaListings,
     schoolRadiusListings,
     filteredListings,
-    // Issue #2083 cycle 4 — genuinely legacy-only: every consumer in
-    // schoolFirstCounts.ts early-returns unless journey === 'school-first',
-    // a journey the canonical node hierarchy never sets areaKey/nodeAreaPoint
-    // through, so the legacy value is correct here (verified by code review).
-    selectedArea: legacySelectedArea,
+    // Issue #2183 fix cycle 2 (code review) — this single param feeds BOTH
+    // useSchoolFirstCounts (journey-gated, legacy-only in practice — see that
+    // hook's own comment) AND useSchoolListings' anon schoolListings branch
+    // (NOT journey-gated, reachable from the canonical node= area-first +
+    // school-combined state — see useDiscoverSchoolController.ts:237-239).
+    // Must be effectiveSelectedArea (the node+legacy bridge), not the bare
+    // legacy value, or anon area-bbox scoping is a no-op under node=.
+    selectedArea: effectiveSelectedArea,
     focusedGroup,
   });
   const {

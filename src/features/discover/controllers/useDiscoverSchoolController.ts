@@ -234,9 +234,15 @@ export function useDiscoverSchoolController({
     filteredListings,
     journey: urlState.journey,
     schoolId: urlState.schoolId,
-    // Issue #2183 — same legacy/school-first area bridge this controller already
-    // threads to useSchoolFirstCounts below (see that call's own comment for why
-    // legacySelectedArea, not effectiveSelectedArea, is correct here).
+    // Issue #2183 fix cycle 2 (code review) — unlike useSchoolFirstCounts below,
+    // useSchoolListings' anon schoolListings branch is gated ONLY on
+    // `!isAuthenticated && filters.schoolLat/Lon/RadiusKm` — no journey check —
+    // so it IS reachable from the canonical node= area-first + school-combined
+    // state, where the legacy areaKey-driven value is always null. The caller
+    // (useDiscoverPageComposition.ts) must pass effectiveSelectedArea (the
+    // node+legacy bridge) into this param, not the bare legacy value, or the
+    // area-bbox scoping in filterSchoolRadiusListingsByAreaBbox becomes a no-op
+    // and the anon panel count disagrees with the map (reproducing #2183).
     selectedArea,
   });
 

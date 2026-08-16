@@ -271,6 +271,37 @@ describe('useSchoolListings', () => {
       expect(result.current.schoolRadiusFallbackMarkers).toHaveLength(1);
     });
 
+    // Fix cycle 2 (code review) — the anon schoolListings branch above is gated
+    // ONLY on `!isAuthenticated && filters.schoolLat/Lon/RadiusKm`, with NO
+    // journey check (unlike schoolRadiusFallbackMarkers, which requires
+    // journey === 'school-first'). It is therefore reachable from the
+    // canonical `node=` area-first + school-combined state, where journey
+    // stays 'area-first' (per e2e/discover-area-selected-filters.spec.ts) and
+    // the caller must pass effectiveSelectedArea (not the always-null legacy
+    // value) for this scoping to take effect. This case proves the hook itself
+    // applies the bbox scoping regardless of journey — i.e. it does NOT
+    // silently no-op just because journey isn't 'school-first'.
+    it('anon, active school-radius, journey=area-first (canonical node= area+school-combined state), selected area bbox EXCLUDES the listing: schoolListings drops it', () => {
+      const areaFarFromListing: AreaPoint = {
+        areaKey: 'area:far',
+        areaLabel: 'Far Area',
+        geo_center_lat: 12.9,
+        geo_center_lon: 77.5,
+        bbox: [[12.9, 77.5], [12.95, 77.6]],
+      };
+      const { result } = renderHook(() =>
+        useSchoolListings(
+          makeParams({
+            filters: { ...EMPTY_FILTERS, schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 },
+            journey: 'area-first',
+            schoolId: 'school-1',
+            selectedArea: areaFarFromListing,
+          }),
+        ),
+      );
+      expect(result.current.schoolListings).toEqual([]);
+    });
+
     it('selected area with a null bbox: treated as no area constraint (identity pass-through), matching filterSchoolRadiusListingsByAreaBbox\'s null-bbox no-op contract', () => {
       const { result } = renderHook(() =>
         useSchoolListings(
