@@ -1,7 +1,11 @@
 package com.example.realestate.discover.navigation;
 
+import com.example.realestate.discover.citylaunch.CanonicalGeographyReader;
 import com.example.realestate.discover.citylaunch.CityLaunchRevision;
 import com.example.realestate.discover.citylaunch.CityLaunchRevisionRepository;
+import com.example.realestate.discover.citylaunch.SandboxAreaRepository;
+import com.example.realestate.discover.citylaunch.SandboxCityRegionMembershipRepository;
+import com.example.realestate.discover.citylaunch.SandboxCityRegionRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -129,6 +133,19 @@ class NavigationTreeBangaloreCandidateIT {
     @Autowired private SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
     @Autowired private CityLaunchRevisionRepository revisionRepository;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private CanonicalGeographyReader geographyReader;
+    @Autowired private SandboxAreaRepository sandboxAreaRepository;
+    @Autowired private SandboxCityRegionRepository sandboxCityRegionRepository;
+    @Autowired private SandboxCityRegionMembershipRepository sandboxCityRegionMembershipRepository;
+
+    /** #2157: capture cityId's canonical geography into the sandbox tables for revisionId (mirroring
+     *  CityLaunchGraphWriter's own capture step) and return the lists NavigationTreeGenerationService
+     *  now requires as direct input. */
+    private SandboxGeographyTestSupport.Captured captureSandboxGeography(int cityId, long revisionId) {
+        return SandboxGeographyTestSupport.captureSandboxGeography(
+                geographyReader, sandboxAreaRepository, sandboxCityRegionRepository,
+                sandboxCityRegionMembershipRepository, cityId, revisionId);
+    }
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
     private final List<String> testCitySlugs = new ArrayList<>();
@@ -326,9 +343,11 @@ class NavigationTreeBangaloreCandidateIT {
         CityLaunchRevision revision = revisionRepository.saveAndFlush(
                 new CityLaunchRevision(fixture.cityId(), 1, ADMIN_ID));
         Long revisionId = revision.getId();
+        SandboxGeographyTestSupport.Captured captured = captureSandboxGeography(fixture.cityId(), revisionId);
 
         assertThatCode(() ->
-                generationService.generateAndStoreForRevision(revisionId, fixture.cityId(), Instant.now()))
+                generationService.generateAndStoreForRevision(revisionId, fixture.cityId(), fixture.slug(),
+                        captured.areas(), captured.regions(), captured.memberships(), Instant.now()))
                 .as("Bangalore-shaped cohort generation must complete without "
                         + "NavigationTreeValidationException")
                 .doesNotThrowAnyException();
@@ -438,13 +457,16 @@ class NavigationTreeBangaloreCandidateIT {
         CityLaunchRevision revision = revisionRepository.saveAndFlush(
                 new CityLaunchRevision(fixture.cityId(), 1, ADMIN_ID));
         Long revisionId = revision.getId();
+        SandboxGeographyTestSupport.Captured captured = captureSandboxGeography(fixture.cityId(), revisionId);
 
-        generationService.generateAndStoreForRevision(revisionId, fixture.cityId(), Instant.now());
+        generationService.generateAndStoreForRevision(revisionId, fixture.cityId(), fixture.slug(),
+                captured.areas(), captured.regions(), captured.memberships(), Instant.now());
         List<SandboxNavigationNode> firstRun = sandboxNavigationNodeRepository.findByRevisionId(revisionId);
         assertThat(firstRun).isNotEmpty();
 
         assertThatCode(() ->
-                generationService.generateAndStoreForRevision(revisionId, fixture.cityId(), Instant.now()))
+                generationService.generateAndStoreForRevision(revisionId, fixture.cityId(), fixture.slug(),
+                        captured.areas(), captured.regions(), captured.memberships(), Instant.now()))
                 .doesNotThrowAnyException();
         List<SandboxNavigationNode> secondRun = sandboxNavigationNodeRepository.findByRevisionId(revisionId);
         assertThat(secondRun).hasSameSizeAs(firstRun);
@@ -469,7 +491,11 @@ class NavigationTreeBangaloreCandidateIT {
         CityFixture baselineFixture = seedBangaloreCandidateCity("bangalore-cohort-base", null);
         CityLaunchRevision baselineRevision = revisionRepository.saveAndFlush(
                 new CityLaunchRevision(baselineFixture.cityId(), 1, ADMIN_ID));
-        generationService.generateAndStoreForRevision(baselineRevision.getId(), baselineFixture.cityId(), Instant.now());
+        SandboxGeographyTestSupport.Captured baselineCaptured =
+                captureSandboxGeography(baselineFixture.cityId(), baselineRevision.getId());
+        generationService.generateAndStoreForRevision(baselineRevision.getId(), baselineFixture.cityId(),
+                baselineFixture.slug(), baselineCaptured.areas(), baselineCaptured.regions(),
+                baselineCaptured.memberships(), Instant.now());
         List<SandboxNavigationNode> baselineNodes =
                 sandboxNavigationNodeRepository.findByRevisionId(baselineRevision.getId());
 
@@ -486,7 +512,11 @@ class NavigationTreeBangaloreCandidateIT {
         CityFixture shuffledFixture = seedBangaloreCandidateCity("bangalore-cohort-shuf", 42L);
         CityLaunchRevision shuffledRevision = revisionRepository.saveAndFlush(
                 new CityLaunchRevision(shuffledFixture.cityId(), 1, ADMIN_ID));
-        generationService.generateAndStoreForRevision(shuffledRevision.getId(), shuffledFixture.cityId(), Instant.now());
+        SandboxGeographyTestSupport.Captured shuffledCaptured =
+                captureSandboxGeography(shuffledFixture.cityId(), shuffledRevision.getId());
+        generationService.generateAndStoreForRevision(shuffledRevision.getId(), shuffledFixture.cityId(),
+                shuffledFixture.slug(), shuffledCaptured.areas(), shuffledCaptured.regions(),
+                shuffledCaptured.memberships(), Instant.now());
         List<SandboxNavigationNode> shuffledNodes =
                 sandboxNavigationNodeRepository.findByRevisionId(shuffledRevision.getId());
 

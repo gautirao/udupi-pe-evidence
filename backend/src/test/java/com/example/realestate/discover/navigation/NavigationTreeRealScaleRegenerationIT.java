@@ -1,7 +1,11 @@
 package com.example.realestate.discover.navigation;
 
+import com.example.realestate.discover.citylaunch.CanonicalGeographyReader;
 import com.example.realestate.discover.citylaunch.CityLaunchRevision;
 import com.example.realestate.discover.citylaunch.CityLaunchRevisionRepository;
+import com.example.realestate.discover.citylaunch.SandboxAreaRepository;
+import com.example.realestate.discover.citylaunch.SandboxCityRegionMembershipRepository;
+import com.example.realestate.discover.citylaunch.SandboxCityRegionRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -96,6 +100,19 @@ class NavigationTreeRealScaleRegenerationIT {
     @Autowired private SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
     @Autowired private CityLaunchRevisionRepository revisionRepository;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private CanonicalGeographyReader geographyReader;
+    @Autowired private SandboxAreaRepository sandboxAreaRepository;
+    @Autowired private SandboxCityRegionRepository sandboxCityRegionRepository;
+    @Autowired private SandboxCityRegionMembershipRepository sandboxCityRegionMembershipRepository;
+
+    /** #2157: capture cityId's canonical geography into the sandbox tables for revisionId (mirroring
+     *  CityLaunchGraphWriter's own capture step) and return the lists NavigationTreeGenerationService
+     *  now requires as direct input. */
+    private SandboxGeographyTestSupport.Captured captureSandboxGeography(int cityId, long revisionId) {
+        return SandboxGeographyTestSupport.captureSandboxGeography(
+                geographyReader, sandboxAreaRepository, sandboxCityRegionRepository,
+                sandboxCityRegionMembershipRepository, cityId, revisionId);
+    }
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
     private final List<String> testCitySlugs = new ArrayList<>();
@@ -205,10 +222,12 @@ class NavigationTreeRealScaleRegenerationIT {
         CityLaunchRevision revision = revisionRepository.saveAndFlush(
                 new CityLaunchRevision(fixture.cityId(), 1, ADMIN_ID));
         Long revisionId = revision.getId();
+        SandboxGeographyTestSupport.Captured captured = captureSandboxGeography(fixture.cityId(), revisionId);
 
         // ── P4.2: the original failing scenario, re-driven — must NOT throw ─────────────────────
         assertThatCode(() ->
-                generationService.generateAndStoreForRevision(revisionId, fixture.cityId(), Instant.now()))
+                generationService.generateAndStoreForRevision(revisionId, fixture.cityId(), fixture.slug(),
+                        captured.areas(), captured.regions(), captured.memberships(), Instant.now()))
                 .as("real-scale regeneration must complete without NavigationTreeValidationException "
                         + "(pre-fix: hundreds of INVALID_HIERARCHY_SHAPE errors)")
                 .doesNotThrowAnyException();
@@ -232,7 +251,8 @@ class NavigationTreeRealScaleRegenerationIT {
 
         // ── P4.5: re-run the SAME revision — persisted result must be IDENTICAL ─────────────────
         assertThatCode(() ->
-                generationService.generateAndStoreForRevision(revisionId, fixture.cityId(), Instant.now()))
+                generationService.generateAndStoreForRevision(revisionId, fixture.cityId(), fixture.slug(),
+                        captured.areas(), captured.regions(), captured.memberships(), Instant.now()))
                 .as("re-regeneration of the same revision must also complete without throwing")
                 .doesNotThrowAnyException();
 

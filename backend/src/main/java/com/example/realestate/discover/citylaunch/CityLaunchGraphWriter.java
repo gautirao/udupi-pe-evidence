@@ -257,7 +257,41 @@ public class CityLaunchGraphWriter {
         // pre-INSERT validation failure in this method.
         List<SandboxNavigationNode> savedNavigationNodes;
         if (navigationPolicyReader.findPolicy(cityId).isPresent()) {
-            navigationTreeGenerationService.generateAndStoreForRevision(revisionId, cityId, Instant.now());
+            // #2157: pass the ALREADY-CAPTURED savedAreas/savedRegions/savedMemberships in-memory
+            // lists (not a fresh findByRevisionId DB round-trip) — this is the SAME revision-scoped
+            // capture NavigationTreeGenerationService now generates from exclusively, so the tree it
+            // produces can never disagree with this transaction's own sandbox_areas/
+            // sandbox_city_regions/sandbox_city_region_memberships writes above (see that service's
+            // "Snapshot consistency" class javadoc).
+            //
+            // Precision asymmetry (accepted trade-off, #2157 decision D2 — not an oversight): this
+            // first generation is fed these in-memory `repository.save()` return values at full Java
+            // `double` precision, never round-tripped through Postgres. Every LATER regeneration goes
+            // through CityLaunchNavigationOverrideService#regenerateAndRestamp, which reads
+            // DB-round-tripped rows — lossy to ~15 significant digits on a connection with
+            // extra_float_digits = 0 (see the #2177 comment further below in this method). So
+            // prepare-time and override-time node geometry are NOT guaranteed bit-identical for the
+            // same underlying area; the divergence sits in the 15th-17th significant digit of a
+            // lat/lon and is not expected to flip a bisection decision. The checksum itself is still
+            // stamped from DB-round-tripped rows via the detachAll sequence below, which is untouched
+            // by this asymmetry. citySlug is resolved via geographyReader (the SAME
+            // CanonicalGeographyReader#findCity call NavigationTreeGenerationService used to make
+            // itself) — this is a slug lookup only, not a re-read of mutable area/region geometry, so
+            // it carries none of the snapshot-divergence risk this fix closes.
+            //
+            // citySlug immutability assumption: cities.slug is treated as effectively immutable for
+            // the lifetime of a revision review cycle. That assumption is load-bearing — citySlug
+            // feeds policyReader.findSortedDirectionLabelPairs and thence
+            // NavigationPolicyFingerprint.compute, which is stored per node, so a slug edited
+            // mid-review-cycle would cause policy-fingerprint drift across regenerations of the same
+            // revision. This is why a separate-statement read of public.cities is acceptable here and
+            // is NOT the defect #2157 fixes: it reads city identity, not the mutable
+            // areas/city_regions/city_region_memberships geometry the snapshot hazard was about.
+            String citySlug = geographyReader.findCity(cityId)
+                    .orElseThrow(() -> new IllegalArgumentException("No city for city_id=" + cityId))
+                    .slug();
+            navigationTreeGenerationService.generateAndStoreForRevision(
+                    revisionId, cityId, citySlug, savedAreas, savedRegions, savedMemberships, Instant.now());
             // #2177: this find resolves through Hibernate's identity map back to the entities
             // NavigationTreeGenerationService just `.save()`'d in this SAME transaction — detaching
             // them and re-querying forces a genuinely fresh, DB-round-tripped read (see the detachAll

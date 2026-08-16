@@ -1,6 +1,8 @@
 package com.example.realestate.discover.navigation;
 
-import com.example.realestate.discover.citylaunch.CanonicalGeographyReader;
+import com.example.realestate.discover.citylaunch.SandboxArea;
+import com.example.realestate.discover.citylaunch.SandboxCityRegion;
+import com.example.realestate.discover.citylaunch.SandboxCityRegionMembership;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -17,12 +19,27 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Orchestrates one revision's navigation-tree generation: loads canonical geography (SLICE 2a's
- * {@link CanonicalGeographyReader}) + {@code city_region_policy} knobs ({@link
+ * Orchestrates one revision's navigation-tree generation: consumes the CAPTURED revision geography
+ * ({@link SandboxArea}/{@link SandboxCityRegion}/{@link SandboxCityRegionMembership} lists the
+ * caller already read/persisted for this revision) + {@code city_region_policy} knobs ({@link
  * NavigationPolicyReader}), runs {@link NavigationTreeGenerator} (D4), validates the result with
  * {@link NavigationTreeValidationService} (AC7 — a superset of the V121 DB constraints, checked
  * BEFORE any write), and only then persists via {@link NavigationTreeSandboxWriter}. A failing
  * validation throws {@link NavigationTreeValidationException} and writes NOTHING.
+ *
+ * <h2>Snapshot consistency (correctness fix, #2157)</h2>
+ * This service deliberately does NOT read canonical geography itself. It used to — via a
+ * city-lookup + geography-load pair of reads against production {@code public.cities}/{@code
+ * areas}/{@code city_regions}/{@code city_region_memberships} — but under PostgreSQL READ COMMITTED,
+ * being inside the same {@code @Transactional} method as the caller's own geography read does NOT
+ * guarantee the same snapshot: each statement takes its own snapshot, so a second, independent read
+ * here could observe a DIFFERENT snapshot of {@code public.areas}/{@code city_regions}/{@code
+ * city_region_memberships} than the one already written into {@code sandbox_areas}/{@code
+ * sandbox_city_regions}/{@code sandbox_city_region_memberships} for this revision. That would let
+ * {@code sandbox_navigation_nodes} disagree with its own revision's sandbox geography, and the
+ * checksum computed over both would bind that inconsistent pair undetected. Consuming the
+ * ALREADY-CAPTURED sandbox lists the caller passes in closes that gap — there is only ever ONE read
+ * of geometry per revision, mirroring {@code AgriDestinationClassificationGenerator} (#2151 PR A).
  *
  * <p>Reads geometry ONLY — never {@code property_listings} — and never touches production {@code
  * navigation_nodes} or any promotion path; those are later, separately-scoped #1955 slices. Not
@@ -34,7 +51,6 @@ public class NavigationTreeGenerationService {
 
     private static final Logger log = LoggerFactory.getLogger(NavigationTreeGenerationService.class);
 
-    private final CanonicalGeographyReader geographyReader;
     private final NavigationPolicyReader policyReader;
     private final NavigationTreeGenerator generator;
     private final NavigationTreeValidationService validationService;
@@ -43,11 +59,10 @@ public class NavigationTreeGenerationService {
     private final SandboxNavigationOverrideRepository overrideRepository;
 
     public NavigationTreeGenerationService(
-            CanonicalGeographyReader geographyReader, NavigationPolicyReader policyReader,
+            NavigationPolicyReader policyReader,
             NavigationTreeGenerator generator, NavigationTreeValidationService validationService,
             NavigationTreeSandboxWriter sandboxWriter, NavigationTreeOverrideApplier overrideApplier,
             SandboxNavigationOverrideRepository overrideRepository) {
-        this.geographyReader = geographyReader;
         this.policyReader = policyReader;
         this.generator = generator;
         this.validationService = validationService;
@@ -74,42 +89,58 @@ public class NavigationTreeGenerationService {
      * needs no separate override-unaware variant.
      */
     @Transactional
-    public List<Long> generateAndStoreForRevision(Long revisionId, Integer cityId, Instant generatedAt) {
-        CanonicalGeographyReader.CanonicalCity city = geographyReader.findCity(cityId)
-                .orElseThrow(() -> new IllegalArgumentException("No city for city_id=" + cityId));
+    public List<Long> generateAndStoreForRevision(
+            Long revisionId, Integer cityId, String citySlug,
+            List<SandboxArea> areas, List<SandboxCityRegion> regions,
+            List<SandboxCityRegionMembership> memberships, Instant generatedAt) {
         NavigationPolicyReader.CityRegionPolicyRow policyRow = policyReader.findPolicy(cityId)
                 .orElseThrow(() -> new IllegalStateException(
                         "No city_region_policy row for city_id=" + cityId + " — cannot generate a navigation tree"));
-
-        CanonicalGeographyReader.CanonicalGeography geography = geographyReader.loadGeography(cityId);
 
         // #2086 code-review fix: areaByKey is LOOKUP-ONLY (areaByKey.get(...) below) — its iteration
         // order is never observed, so it carries no determinism obligation of its own. Determinism
         // rests entirely on NavigationTreeGenerator's own sorts (generateRegion:183-185,
         // generateCity:126-129); do NOT add a `.values()`/entrySet() iteration over this map without
         // re-establishing an explicit sort first.
-        Map<String, CanonicalGeographyReader.CanonicalArea> areaByKey = geography.areas().stream()
-                .collect(Collectors.toMap(CanonicalGeographyReader.CanonicalArea::areaKey, a -> a, (a, b) -> a));
+        Map<String, SandboxArea> areaByKey = areas.stream()
+                .collect(Collectors.toMap(SandboxArea::getAreaKey, a -> a, (a, b) -> a));
 
-        Map<String, List<String>> areaKeysByRegion = geography.memberships().stream()
-                .collect(Collectors.groupingBy(
-                        CanonicalGeographyReader.CanonicalCityRegionMembership::regionKey,
-                        LinkedHashMap::new,
-                        Collectors.mapping(CanonicalGeographyReader.CanonicalCityRegionMembership::areaKey,
-                                Collectors.toList())));
+        // #2157: SandboxCityRegionMembership stores sandbox_area_id (an FK to SandboxArea.getId()),
+        // NOT area_key — unlike CanonicalCityRegionMembership, which carries area_key directly. Build
+        // the sandbox_area_id -> area_key join ONCE, up front (mirroring the sandboxAreaIdByKey map
+        // CityLaunchGraphWriter builds while WRITING these same rows), rather than a nested-loop
+        // lookup inside the grouping below.
+        Map<Long, String> areaKeyBySandboxAreaId = areas.stream()
+                .collect(Collectors.toMap(SandboxArea::getId, SandboxArea::getAreaKey, (a, b) -> a));
 
-        // #1956 D4: canonical region displayOrder/displayLabel (city_regions, already loaded by
-        // CanonicalGeographyReader) — threaded through GeneratorRegionInput so the generator can
-        // number each region's DIRECTION root in CANONICAL region order (CENTRAL, N, E, S, W), not
-        // the region_key alphabetical sort generateCity uses for processing determinism.
-        Map<String, CanonicalGeographyReader.CanonicalCityRegion> regionByKey = geography.regions().stream()
-                .collect(Collectors.toMap(CanonicalGeographyReader.CanonicalCityRegion::regionKey, r -> r, (a, b) -> a));
+        Map<String, List<String>> areaKeysByRegion = new LinkedHashMap<>();
+        for (SandboxCityRegionMembership membership : memberships) {
+            String areaKey = areaKeyBySandboxAreaId.get(membership.getSandboxAreaId());
+            if (areaKey == null) {
+                // A membership whose sandbox_area_id has no matching SandboxArea in this revision's
+                // captured input is a data-quality gap, not a generator concern — surfaced via log
+                // (mirroring the null-geometry skip below) rather than silently dropped with no trace.
+                log.warn("NavigationTreeGenerationService: revision_id={} city_id={} sandbox_area_id={} "
+                                + "region_key={} has no matching SandboxArea in the captured revision input "
+                                + "— membership excluded from this generation run",
+                        revisionId, cityId, membership.getSandboxAreaId(), membership.getRegionKey());
+                continue;
+            }
+            areaKeysByRegion.computeIfAbsent(membership.getRegionKey(), k -> new ArrayList<>()).add(areaKey);
+        }
+
+        // #1956 D4: canonical region displayOrder/displayLabel (city_regions, already captured into
+        // sandbox_city_regions) — threaded through GeneratorRegionInput so the generator can number
+        // each region's DIRECTION root in CANONICAL region order (CENTRAL, N, E, S, W), not the
+        // region_key alphabetical sort generateCity uses for processing determinism.
+        Map<String, SandboxCityRegion> regionByKey = regions.stream()
+                .collect(Collectors.toMap(SandboxCityRegion::getRegionKey, r -> r, (a, b) -> a));
 
         List<GeneratorRegionInput> regionInputs = new ArrayList<>();
         for (Map.Entry<String, List<String>> e : areaKeysByRegion.entrySet()) {
             List<GeneratorArea> members = new ArrayList<>();
             for (String areaKey : e.getValue()) {
-                CanonicalGeographyReader.CanonicalArea area = areaByKey.get(areaKey);
+                SandboxArea area = areaByKey.get(areaKey);
                 if (area == null) {
                     continue;
                 }
@@ -124,9 +155,9 @@ public class NavigationTreeGenerationService {
                 }
                 members.add(generatorArea);
             }
-            CanonicalGeographyReader.CanonicalCityRegion regionMeta = regionByKey.get(e.getKey());
-            int regionDisplayOrder = regionMeta != null && regionMeta.displayOrder() != null
-                    ? regionMeta.displayOrder() : 0;
+            SandboxCityRegion regionMeta = regionByKey.get(e.getKey());
+            int regionDisplayOrder = regionMeta != null && regionMeta.getDisplayOrder() != null
+                    ? regionMeta.getDisplayOrder() : 0;
             // #2086 code-review fix (N4): a region's raw display_label is no longer threaded to the
             // generator at all — design.R1 derives a DIRECTION's label from member geography via
             // NavigationTreeGenerator#deriveLabel, and generateRegion's parameter list no longer
@@ -154,7 +185,7 @@ public class NavigationTreeGenerationService {
 
         regionInputs = overrideApplier.applyPreBisection(regionInputs, overrides);
 
-        List<String> directionLabelPairs = policyReader.findSortedDirectionLabelPairs(city.slug());
+        List<String> directionLabelPairs = policyReader.findSortedDirectionLabelPairs(citySlug);
         String fingerprint = NavigationPolicyFingerprint.compute(
                 policyRow.regionModel(), policyRow.centralRadiusKm(), directionLabelPairs, policyRow.knobs());
 
@@ -195,18 +226,18 @@ public class NavigationTreeGenerationService {
         return ids;
     }
 
-    private GeneratorArea toGeneratorArea(CanonicalGeographyReader.CanonicalArea a) {
-        BigDecimal centreLat = bd(a.geoCenterLat());
-        BigDecimal centreLon = bd(a.geoCenterLon());
-        BigDecimal minLat = bd(a.minLat());
-        BigDecimal minLon = bd(a.minLon());
-        BigDecimal maxLat = bd(a.maxLat());
-        BigDecimal maxLon = bd(a.maxLon());
+    private GeneratorArea toGeneratorArea(SandboxArea a) {
+        BigDecimal centreLat = bd(a.getGeoCenterLat());
+        BigDecimal centreLon = bd(a.getGeoCenterLon());
+        BigDecimal minLat = bd(a.getMinLat());
+        BigDecimal minLon = bd(a.getMinLon());
+        BigDecimal maxLat = bd(a.getMaxLat());
+        BigDecimal maxLon = bd(a.getMaxLon());
         if (Objects.isNull(centreLat) || Objects.isNull(centreLon) || Objects.isNull(minLat)
                 || Objects.isNull(minLon) || Objects.isNull(maxLat) || Objects.isNull(maxLon)) {
             return null;
         }
-        return new GeneratorArea(a.areaKey(), a.name(), centreLat, centreLon, minLat, minLon, maxLat, maxLon);
+        return new GeneratorArea(a.getAreaKey(), a.getName(), centreLat, centreLon, minLat, minLon, maxLat, maxLon);
     }
 
     private static BigDecimal bd(Double v) {

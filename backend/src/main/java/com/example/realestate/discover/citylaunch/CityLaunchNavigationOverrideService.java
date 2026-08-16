@@ -64,6 +64,7 @@ public class CityLaunchNavigationOverrideService {
     private final SandboxCityRegionMembershipRepository sandboxCityRegionMembershipRepository;
     private final SandboxAreaGroupRepository sandboxAreaGroupRepository;
     private final SandboxAreaGroupMemberRepository sandboxAreaGroupMemberRepository;
+    private final CanonicalGeographyReader geographyReader;
 
     public CityLaunchNavigationOverrideService(
             CityLaunchRevisionRepository revisionRepository,
@@ -77,7 +78,8 @@ public class CityLaunchNavigationOverrideService {
             SandboxCityRegionRepository sandboxCityRegionRepository,
             SandboxCityRegionMembershipRepository sandboxCityRegionMembershipRepository,
             SandboxAreaGroupRepository sandboxAreaGroupRepository,
-            SandboxAreaGroupMemberRepository sandboxAreaGroupMemberRepository) {
+            SandboxAreaGroupMemberRepository sandboxAreaGroupMemberRepository,
+            CanonicalGeographyReader geographyReader) {
         this.revisionRepository = revisionRepository;
         this.overrideRepository = overrideRepository;
         this.sandboxNavigationNodeRepository = sandboxNavigationNodeRepository;
@@ -90,6 +92,7 @@ public class CityLaunchNavigationOverrideService {
         this.sandboxCityRegionMembershipRepository = sandboxCityRegionMembershipRepository;
         this.sandboxAreaGroupRepository = sandboxAreaGroupRepository;
         this.sandboxAreaGroupMemberRepository = sandboxAreaGroupMemberRepository;
+        this.geographyReader = geographyReader;
     }
 
     // ── Reads ────────────────────────────────────────────────────────────────────────────────
@@ -200,8 +203,15 @@ public class CityLaunchNavigationOverrideService {
 
     private NavigationTreeDiffResponse regenerateAndRestamp(int cityId, CityLaunchRevision revision) {
         long revisionId = revision.getId();
-        generationService.generateAndStoreForRevision(revisionId, cityId, Instant.now());
 
+        // #2157: hoisted ABOVE the generation call (previously issued after) so the SAME lists feed
+        // both NavigationTreeGenerationService and the RevisionChecksum recompute below — this
+        // revision's own sandbox_areas/sandbox_city_regions/sandbox_city_region_memberships, never a
+        // fresh read of LIVE production geography. Before this fix, this path regenerated the tree
+        // from CURRENT public.areas/city_regions/city_region_memberships while checksumming THIS
+        // revision's (possibly older) sandbox rows — two different geography snapshots for the same
+        // revision. That is the defect this fix closes, not a behaviour this hoist is meant to
+        // preserve.
         List<SandboxArea> areas = sandboxAreaRepository.findByRevisionId(revisionId);
         List<SandboxAreaAlias> aliases = sandboxAreaAliasRepository.findByRevisionId(revisionId);
         List<SandboxCityRegion> regions = sandboxCityRegionRepository.findByRevisionId(revisionId);
@@ -209,6 +219,25 @@ public class CityLaunchNavigationOverrideService {
                 sandboxCityRegionMembershipRepository.findByRevisionId(revisionId);
         List<SandboxAreaGroup> groups = sandboxAreaGroupRepository.findByRevisionId(revisionId);
         List<SandboxAreaGroupMember> groupMembers = sandboxAreaGroupMemberRepository.findByRevisionId(revisionId);
+
+        // citySlug: a lookup-only read of public.cities, not a re-read of mutable area/region
+        // geometry — carries none of the snapshot-divergence risk this fix closes (see
+        // CityLaunchGraphWriter's equivalent call for the same rationale).
+        //
+        // citySlug immutability assumption: cities.slug is treated as effectively immutable for the
+        // lifetime of a revision review cycle. That assumption is load-bearing — citySlug feeds
+        // policyReader.findSortedDirectionLabelPairs and thence NavigationPolicyFingerprint.compute,
+        // which is stored per node, so a slug edited mid-review-cycle would cause policy-fingerprint
+        // drift across regenerations of the same revision. This is why a separate-statement read of
+        // public.cities is acceptable here and is NOT the defect #2157 fixes: it reads city identity,
+        // not the mutable areas/city_regions/city_region_memberships geometry the snapshot hazard
+        // was about.
+        String citySlug = geographyReader.findCity(cityId)
+                .orElseThrow(() -> new IllegalArgumentException("No city for city_id=" + cityId))
+                .slug();
+        generationService.generateAndStoreForRevision(
+                revisionId, cityId, citySlug, areas, regions, memberships, Instant.now());
+
         List<SandboxNavigationNode> navNodes = sandboxNavigationNodeRepository.findByRevisionId(revisionId);
         List<SandboxNavigationOverride> overrides = overrideRepository.findByRevisionIdOrderByApplyOrderAsc(revisionId);
 

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -20,6 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.web.server.ResponseStatusException;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -30,6 +32,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -84,6 +87,16 @@ class CityLaunchNavigationOverrideServiceIT {
     @Autowired private SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
     @Autowired private SandboxNavigationOverrideRepository sandboxNavigationOverrideRepository;
     @Autowired private JdbcTemplate jdbc;
+
+    /**
+     * #2157 AC4: spy on the REAL {@link CanonicalGeographyReader} bean — every call still delegates
+     * to the real DB, but interactions are recorded for verification. Used to prove override
+     * regeneration ({@link CityLaunchNavigationOverrideService#regenerateAndRestamp}) never calls
+     * {@link CanonicalGeographyReader#loadGeography(int)} (a re-read of LIVE production geography);
+     * {@link CanonicalGeographyReader#findCity(int)} (slug-only lookup) IS expected and allowed.
+     */
+    @MockitoSpyBean
+    private CanonicalGeographyReader geographyReader;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
     private final List<String> testCitySlugs = new ArrayList<>();
@@ -530,5 +543,146 @@ class CityLaunchNavigationOverrideServiceIT {
 
         assertThat(checksumSecond).isEqualTo(checksumFirst);
         assertThat(labelsSecond).isEqualTo(labelsFirst);
+    }
+
+    // ── #2157 AC4: override regeneration never re-reads canonical (production) geography ───────
+
+    @Test
+    @DisplayName("[#2157 AC4] createOverride's regenerate+re-stamp never calls "
+            + "CanonicalGeographyReader.loadGeography — it reads this revision's OWN sandbox_areas/"
+            + "sandbox_city_regions/sandbox_city_region_memberships instead. findCity (slug-only) IS "
+            + "still called and is NOT the risk this AC guards against.")
+    void createOverride_neverReadsCanonicalGeography() {
+        int cityId = seedCityWithThreeAreaClusters("ovac4a");
+        long revisionId = prepareAndAwaitPrepared(cityId);
+
+        // prepare() itself legitimately reads canonical geography (#2163's ensureCanonicalGeography +
+        // validateCanonicalGeographyReady, both pre-existing and out of #2157's scope) — clear that
+        // history so the verification below is scoped exactly to createOverride's own regeneration.
+        Mockito.clearInvocations(geographyReader);
+
+        AdminNavigationOverrideRequest req = new AdminNavigationOverrideRequest(
+                "EXCLUDE_AREA", "ovac4a|d|g|area-1", null, null, null, null, null, null);
+        overrideService.createOverride(cityId, revisionId, req, ADMIN_ID);
+
+        Mockito.verify(geographyReader, Mockito.never()).loadGeography(Mockito.anyInt());
+        Mockito.verify(geographyReader, Mockito.atLeastOnce()).findCity(cityId);
+    }
+
+    @Test
+    @DisplayName("[#2157 AC4] deleteOverride's regenerate+re-stamp ALSO never calls "
+            + "CanonicalGeographyReader.loadGeography")
+    void deleteOverride_neverReadsCanonicalGeography() {
+        int cityId = seedCityWithThreeAreaClusters("ovac4b");
+        long revisionId = prepareAndAwaitPrepared(cityId);
+
+        AdminNavigationOverrideRequest req = new AdminNavigationOverrideRequest(
+                "EXCLUDE_AREA", "ovac4b|d|g|area-1", null, null, null, null, null, null);
+        overrideService.createOverride(cityId, revisionId, req, ADMIN_ID);
+        long overrideId = overrideService.listOverrides(cityId, revisionId).get(0).id();
+
+        Mockito.clearInvocations(geographyReader);
+
+        overrideService.deleteOverride(cityId, revisionId, overrideId);
+
+        Mockito.verify(geographyReader, Mockito.never()).loadGeography(Mockito.anyInt());
+        Mockito.verify(geographyReader, Mockito.atLeastOnce()).findCity(cityId);
+    }
+
+    // ── #2157 AC5 (centrepiece): concurrent production geography mutation cannot contaminate an
+    //    already-captured revision ────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("[#2157 AC5, CENTREPIECE] a concurrent production geography mutation (a new area + "
+            + "region membership inserted directly into public.areas/city_region_memberships AFTER "
+            + "this revision's sandbox geography was captured) does NOT contaminate override "
+            + "regeneration: the regenerated tree still corresponds EXACTLY to this revision's OWN "
+            + "captured sandbox_areas — the injected production area never appears, and no originally-"
+            + "captured area vanishes. Additionally, regenerating with the SAME override state as "
+            + "before the mutation reproduces the IDENTICAL pre-mutation checksum, proving the "
+            + "mutation left zero trace in this revision's own persisted state.")
+    void overrideRegeneration_isImmuneToConcurrentProductionGeographyMutation() {
+        int cityId = seedCityWithThreeAreaClusters("ovac5");
+        long revisionId = prepareAndAwaitPrepared(cityId);
+
+        // ── Establish an apples-to-apples BASELINE checksum via the SAME code path (regenerateAndRestamp,
+        //    RevisionChecksum's 8-arg overload) the post-mutation checksum below will also go through —
+        //    NOT the freshly-prepared persisted_revision_checksum (that one is stamped by
+        //    CityLaunchGraphWriter via a DIFFERENT 9-arg overload that also folds in agri-destination
+        //    rows, so it is never checksum-comparable to a regenerateAndRestamp output even with zero
+        //    contamination). A harmless RELABEL-then-delete round trip returns the tree to its
+        //    un-overridden shape while forcing exactly one 8-arg checksum stamp to compare against.
+        String clusterNodeKeyForBaseline = clusters(revisionId).get(0).getNodeKey();
+        AdminNavigationOverrideRequest primingRelabel = new AdminNavigationOverrideRequest(
+                "RELABEL", null, clusterNodeKeyForBaseline, null, null, "Baseline-Priming Label", null, null);
+        overrideService.createOverride(cityId, revisionId, primingRelabel, ADMIN_ID);
+        overrideService.deleteOverride(cityId, revisionId,
+                overrideService.listOverrides(cityId, revisionId).get(0).id());
+
+        String checksumBeforeAnyOverride =
+                revisionRepository.findById(revisionId).orElseThrow().getPersistedRevisionChecksum();
+        Set<String> areaKeysBeforeMutation = sandboxNavigationNodeRepository.findByRevisionId(revisionId).stream()
+                .filter(n -> "AREA".equals(n.getNodeType()))
+                .map(SandboxNavigationNode::getAreaKey)
+                .collect(java.util.stream.Collectors.toSet());
+        assertThat(areaKeysBeforeMutation).hasSize(6); // seedCityWithThreeAreaClusters seeds 6 areas
+
+        // ── Simulate a CONCURRENT writer: insert a brand-new ACTIVE area into PRODUCTION public.areas
+        //    plus a city_region_memberships row assigning it to the SAME region this revision already
+        //    captured — mirroring a second admin onboarding a new area for this city while THIS
+        //    revision is being reviewed/overridden. This happens entirely OUTSIDE this revision's own
+        //    sandbox_* tables.
+        String injectedAreaKey = "ovac5|d|g|injected-concurrent";
+        jdbc.update(
+                "INSERT INTO public.areas (area_key, city_id, name, district, geo_center_lat, geo_center_lon, "
+                        + " min_lat, min_lon, max_lat, max_lon) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                injectedAreaKey, cityId, "Injected Concurrent Area", "ovac5-district", 13.35, 74.7,
+                13.349, 74.699, 13.351, 74.701);
+        jdbc.update("INSERT INTO public.city_region_memberships "
+                        + "(city_id, area_key, region_key, assignment_source) VALUES (?, ?, ?, 'OVERRIDE')",
+                cityId, injectedAreaKey, "ovac5-north");
+
+        // ── Trigger regeneration via a RELABEL override (harmless — changes only a display_label,
+        //    never area membership), then IMMEDIATELY delete it — round-tripping the tree back to its
+        //    original (pre-override) shape. If regeneration read LIVE production geography (the
+        //    pre-#2157 defect), the injected area would enter this revision's sandbox_navigation_nodes
+        //    on the FIRST regeneration below and never leave.
+        String clusterNodeKey = clusters(revisionId).get(0).getNodeKey();
+        AdminNavigationOverrideRequest relabel = new AdminNavigationOverrideRequest(
+                "RELABEL", null, clusterNodeKey, null, null, "Concurrent-Mutation-Probe Label", null, null);
+        overrideService.createOverride(cityId, revisionId, relabel, ADMIN_ID);
+
+        Set<String> areaKeysAfterRelabel = sandboxNavigationNodeRepository.findByRevisionId(revisionId).stream()
+                .filter(n -> "AREA".equals(n.getNodeType()))
+                .map(SandboxNavigationNode::getAreaKey)
+                .collect(java.util.stream.Collectors.toSet());
+        assertThat(areaKeysAfterRelabel)
+                .as("the injected production area must NOT appear in the regenerated tree, and every "
+                        + "originally-captured area must still be present — RELABEL touches only a "
+                        + "display_label, so membership must be byte-identical to before the mutation")
+                .isEqualTo(areaKeysBeforeMutation)
+                .doesNotContain(injectedAreaKey);
+
+        // ── Delete the RELABEL override -> regenerates AGAIN, back toward the un-overridden tree.
+        long overrideId = overrideService.listOverrides(cityId, revisionId).get(0).id();
+        overrideService.deleteOverride(cityId, revisionId, overrideId);
+
+        Set<String> areaKeysAfterDelete = sandboxNavigationNodeRepository.findByRevisionId(revisionId).stream()
+                .filter(n -> "AREA".equals(n.getNodeType()))
+                .map(SandboxNavigationNode::getAreaKey)
+                .collect(java.util.stream.Collectors.toSet());
+        assertThat(areaKeysAfterDelete)
+                .as("still no contamination after a SECOND regeneration")
+                .isEqualTo(areaKeysBeforeMutation)
+                .doesNotContain(injectedAreaKey);
+
+        String checksumAfterDelete =
+                revisionRepository.findById(revisionId).orElseThrow().getPersistedRevisionChecksum();
+        assertThat(checksumAfterDelete)
+                .as("recomputed checksum after the RELABEL-then-delete round trip must EXACTLY match the "
+                        + "pre-mutation checksum — despite the production geography mutation happening in "
+                        + "between, this revision's own persisted state (and thus its checksum) reflects "
+                        + "ONLY its own captured sandbox geography, never the concurrent production write")
+                .isEqualTo(checksumBeforeAnyOverride);
     }
 }

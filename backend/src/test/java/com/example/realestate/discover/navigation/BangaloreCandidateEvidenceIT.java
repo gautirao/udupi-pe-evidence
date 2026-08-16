@@ -2,10 +2,14 @@ package com.example.realestate.discover.navigation;
 
 import com.example.realestate.discover.CityRegionOnboardingService;
 import com.example.realestate.discover.RegionalClassificationBackfillService;
+import com.example.realestate.discover.citylaunch.CanonicalGeographyReader;
 import com.example.realestate.discover.citylaunch.CityLaunchNavigationOverrideService;
 import com.example.realestate.discover.citylaunch.CityLaunchRevision;
 import com.example.realestate.discover.citylaunch.CityLaunchRevisionRepository;
 import com.example.realestate.discover.citylaunch.NavigationPreviewTreeResponse;
+import com.example.realestate.discover.citylaunch.SandboxAreaRepository;
+import com.example.realestate.discover.citylaunch.SandboxCityRegionMembershipRepository;
+import com.example.realestate.discover.citylaunch.SandboxCityRegionRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -136,6 +140,10 @@ class BangaloreCandidateEvidenceIT {
     @Autowired private SandboxNavigationNodeRepository sandboxNavigationNodeRepository;
     @Autowired private CityLaunchRevisionRepository revisionRepository;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private CanonicalGeographyReader geographyReader;
+    @Autowired private SandboxAreaRepository sandboxAreaRepository;
+    @Autowired private SandboxCityRegionRepository sandboxCityRegionRepository;
+    @Autowired private SandboxCityRegionMembershipRepository sandboxCityRegionMembershipRepository;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
     private static final String BANGALORE_SLUG = "bangalore";
@@ -225,8 +233,17 @@ class BangaloreCandidateEvidenceIT {
                 new CityLaunchRevision(cityId, nextRevisionNumber(cityId), ADMIN_ID));
         Long revisionId = revision.getId();
 
+        // #2157: NavigationTreeGenerationService no longer reads canonical geography itself — capture
+        // it into sandbox_areas/sandbox_city_regions/sandbox_city_region_memberships ONCE (mirroring
+        // CityLaunchGraphWriter's own capture step), then drive generation off the SAME captured lists
+        // for both the first run and the determinism re-run below.
+        SandboxGeographyTestSupport.Captured captured = SandboxGeographyTestSupport.captureSandboxGeography(
+                geographyReader, sandboxAreaRepository, sandboxCityRegionRepository,
+                sandboxCityRegionMembershipRepository, cityId, revisionId);
+
         assertThatCode(() ->
-                generationService.generateAndStoreForRevision(revisionId, cityId, Instant.now()))
+                generationService.generateAndStoreForRevision(revisionId, cityId, BANGALORE_SLUG,
+                        captured.areas(), captured.regions(), captured.memberships(), Instant.now()))
                 .as("generation must complete without NavigationTreeValidationException against real "
                         + "Bangalore geography")
                 .doesNotThrowAnyException();
@@ -296,7 +313,8 @@ class BangaloreCandidateEvidenceIT {
 
         // ── Determinism (AC10 / P4.5 pattern reused) ─────────────────────────────────────────────
         assertThatCode(() ->
-                generationService.generateAndStoreForRevision(revisionId, cityId, Instant.now()))
+                generationService.generateAndStoreForRevision(revisionId, cityId, BANGALORE_SLUG,
+                        captured.areas(), captured.regions(), captured.memberships(), Instant.now()))
                 .as("re-regeneration of the same revision must also complete without throwing")
                 .doesNotThrowAnyException();
         List<SandboxNavigationNode> secondRun = sandboxNavigationNodeRepository.findByRevisionId(revisionId);
