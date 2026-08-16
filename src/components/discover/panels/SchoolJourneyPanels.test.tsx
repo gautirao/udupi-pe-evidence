@@ -13,17 +13,23 @@ import { describe, it, expect, vi } from 'vitest';
 import { screen, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
-import { SchoolSelectedPanel } from './SchoolJourneyPanels';
+import { SchoolSelectedPanel, AreaSchoolCombinedPanel } from './SchoolJourneyPanels';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
+import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 
-// Minimal listing factory
-function makeListing(id: string): DiscoverCityListingItem {
+// Minimal listing factory. lat/lon default to the mock school's own coordinates
+// (0 km) so callers that don't care about distance keep the old behaviour;
+// Issue #1974 tests override lat/lon (or pass null) to exercise sort order.
+function makeListing(
+  id: string,
+  coords: { lat: number | null; lon: number | null } = { lat: 13.35, lon: 74.79 },
+): DiscoverCityListingItem {
   return {
     id,
     propertyType: 'apartment',
-    lat: 13.35,
-    lon: 74.79,
+    lat: coords.lat,
+    lon: coords.lon,
     title: `Property ${id}`,
     locality: 'Manipal',
     areaKey: 'area-manipal',
@@ -173,5 +179,138 @@ describe('SchoolSelectedPanel — loading and empty states', () => {
     // radiusKm=2 → effectiveRadius=2; RADIUS_OPTIONS=[3,5,10] all > 2 → try-radius-5-btn present
     renderPanel({ listings: [], isLoadingListings: false, radiusKm: 2 });
     expect(screen.getByTestId('try-radius-5-btn')).toBeDefined();
+  });
+});
+
+// Issue #1974 — SchoolSelectedPanel/AreaSchoolCombinedPanel now render listings
+// sorted nearest-to-school-first instead of raw server (created_at DESC) order.
+// mockSchool sits at (13.35, 74.79); the offsets below give distinct, ascending
+// real haversine distances (~1.11 km per 0.01° latitude at this longitude).
+describe('SchoolSelectedPanel — nearest-first sort order (Issue #1974)', () => {
+  it('renders cards in ascending distance order regardless of input (server) order', () => {
+    // Deliberately NOT in distance order: far, near, mid.
+    const far = makeListing('l-far', { lat: 13.39, lon: 74.79 }); // ~4.45 km
+    const near = makeListing('l-near', { lat: 13.36, lon: 74.79 }); // ~1.11 km
+    const mid = makeListing('l-mid', { lat: 13.37, lon: 74.79 }); // ~2.22 km
+    const { container } = renderPanel({ listings: [far, near, mid] });
+
+    const titles = Array.from(container.querySelectorAll('[data-testid="listing-card"] h3')).map(
+      (h) => h.textContent,
+    );
+    expect(titles).toEqual(['Property l-near', 'Property l-mid', 'Property l-far']);
+  });
+
+  it('renders a listing with missing coordinates last, not first or in server position', () => {
+    const noCoords = makeListing('l-none', { lat: null, lon: null }); // first in input
+    const near = makeListing('l-near', { lat: 13.36, lon: 74.79 });
+    const far = makeListing('l-far', { lat: 13.39, lon: 74.79 });
+    const { container } = renderPanel({ listings: [noCoords, near, far] });
+
+    const titles = Array.from(container.querySelectorAll('[data-testid="listing-card"] h3')).map(
+      (h) => h.textContent,
+    );
+    expect(titles).toEqual(['Property l-near', 'Property l-far', 'Property l-none']);
+  });
+
+  it('preserves the correct per-card distanceKm value (order changes, values do not)', () => {
+    const far = makeListing('l-far', { lat: 13.39, lon: 74.79 });
+    const near = makeListing('l-near', { lat: 13.36, lon: 74.79 });
+    renderPanel({ listings: [far, near] });
+
+    const badges = screen.getAllByTestId('distance-badge');
+    // Rendered in sorted (near, far) order — so the first badge belongs to l-near.
+    expect(badges[0].textContent).toContain('1.1 km from school');
+    expect(badges[1].textContent).toContain('4.4 km from school');
+  });
+
+  it('renders no distance badge for the missing-coordinates card (never fabricated)', () => {
+    const noCoords = makeListing('l-none', { lat: null, lon: null });
+    const { container } = renderPanel({ listings: [noCoords] });
+
+    expect(screen.queryByTestId('distance-badge')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="listing-card"] h3')?.textContent,
+    ).toBe('Property l-none');
+  });
+
+  it('radius chip selection/regression check: the chip matching radiusKm is the only one marked active', () => {
+    renderPanel({ radiusKm: 5, listings: [makeListing('l-1'), makeListing('l-2')] });
+
+    expect(screen.getByTestId('radius-btn-5').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('radius-btn-3').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('radius-btn-10').getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
+describe('AreaSchoolCombinedPanel — nearest-first sort order (Issue #1974)', () => {
+  const mockAreaPoint: AreaPoint = {
+    areaKey: 'area-manipal',
+    areaLabel: 'Manipal',
+    geo_center_lat: 13.35,
+    geo_center_lon: 74.79,
+    bbox: null,
+  };
+
+  function renderCombinedPanel(
+    props: Partial<React.ComponentProps<typeof AreaSchoolCombinedPanel>> = {},
+  ) {
+    return renderWithProviders(
+      <DiscoverProvider>
+        <AreaSchoolCombinedPanel
+          selectedArea={mockAreaPoint}
+          selectedSchool={mockSchool}
+          listings={[makeListing('l-1'), makeListing('l-2')]}
+          isLoadingListings={false}
+          radiusKm={2}
+          onRadiusChange={vi.fn()}
+          onClearSchool={vi.fn()}
+          onClearArea={vi.fn()}
+          isAuthenticated={true}
+          intent="buy"
+          {...props}
+        />
+      </DiscoverProvider>,
+    );
+  }
+
+  it('renders cards in ascending distance order regardless of input (server) order', () => {
+    const far = makeListing('l-far', { lat: 13.39, lon: 74.79 });
+    const near = makeListing('l-near', { lat: 13.36, lon: 74.79 });
+    const mid = makeListing('l-mid', { lat: 13.37, lon: 74.79 });
+    const { container } = renderCombinedPanel({ listings: [far, near, mid] });
+
+    const titles = Array.from(container.querySelectorAll('[data-testid="listing-card"] h3')).map(
+      (h) => h.textContent,
+    );
+    expect(titles).toEqual(['Property l-near', 'Property l-mid', 'Property l-far']);
+  });
+
+  it('renders a listing with missing coordinates last, not first or in server position', () => {
+    const noCoords = makeListing('l-none', { lat: null, lon: null });
+    const near = makeListing('l-near', { lat: 13.36, lon: 74.79 });
+    const { container } = renderCombinedPanel({ listings: [noCoords, near] });
+
+    const titles = Array.from(container.querySelectorAll('[data-testid="listing-card"] h3')).map(
+      (h) => h.textContent,
+    );
+    expect(titles).toEqual(['Property l-near', 'Property l-none']);
+  });
+
+  it('preserves the correct per-card distanceKm value (order changes, values do not)', () => {
+    const far = makeListing('l-far', { lat: 13.39, lon: 74.79 });
+    const near = makeListing('l-near', { lat: 13.36, lon: 74.79 });
+    renderCombinedPanel({ listings: [far, near] });
+
+    const badges = screen.getAllByTestId('distance-badge');
+    expect(badges[0].textContent).toContain('1.1 km from school');
+    expect(badges[1].textContent).toContain('4.4 km from school');
+  });
+
+  it('radius chip selection/regression check: the chip matching radiusKm is the only one marked active (combined panel prefix)', () => {
+    renderCombinedPanel({ radiusKm: 5 });
+
+    expect(screen.getByTestId('combined-radius-btn-5').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('combined-radius-btn-3').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('combined-radius-btn-10').getAttribute('aria-pressed')).toBe('false');
   });
 });

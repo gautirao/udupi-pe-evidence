@@ -12,6 +12,29 @@ export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: numb
 }
 
 /**
+ * Sorts items ascending by a precomputed distanceKm, so callers compute distance
+ * once (e.g. via haversineKm) and this only orders it — never recomputes it.
+ * Items with a non-finite distance (null/undefined/NaN — no usable coordinates)
+ * sort after all finite-distance items. Array.prototype.sort is stable in all
+ * supported engines, so equal-distance items and items that are all non-finite
+ * keep their original relative order (deterministic tie behaviour).
+ */
+export function sortByDistanceKmAscending<T>(
+  items: readonly T[],
+  distanceOf: (item: T) => number | null | undefined,
+): T[] {
+  return [...items].sort((a, b) => {
+    const da = distanceOf(a);
+    const db = distanceOf(b);
+    const aFinite = typeof da === 'number' && Number.isFinite(da);
+    const bFinite = typeof db === 'number' && Number.isFinite(db);
+    if (aFinite && bFinite) return (da as number) - (db as number);
+    if (aFinite !== bFinite) return aFinite ? -1 : 1;
+    return 0;
+  });
+}
+
+/**
  * Geodesic destination point using haversine/spherical earth model.
  * Returns [lat, lon] of the point at distance distanceKm from (lat, lon)
  * along initial bearing bearingDeg (degrees, 0=N, 90=E, 180=S, 270=W).
