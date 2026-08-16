@@ -1,9 +1,14 @@
 import { useMemo } from 'react';
+import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
 import type { DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { clampSchoolRadiusKm, PropertyListing, PropertyImage, PropertyFilters } from '@/hooks/usePropertyListings';
-import { applyAnonPropertyFilters, deriveAnonSchoolRadiusMarkers } from '@/features/discover/presentation/anonPropertyFilters';
+import {
+  applyAnonPropertyFilters,
+  deriveAnonSchoolRadiusMarkers,
+  filterSchoolRadiusListingsByAreaBbox,
+} from '@/features/discover/presentation/anonPropertyFilters';
 
 export interface UseSchoolListingsParams {
   isAuthenticated: boolean;
@@ -13,6 +18,16 @@ export interface UseSchoolListingsParams {
   filteredListings: (PropertyListing & { images?: PropertyImage[] })[];
   journey: DiscoverUrlState['journey'];
   schoolId: DiscoverUrlState['schoolId'];
+  /**
+   * Issue #2183 — the area the school was picked within (null for pure
+   * school-first with no area context). When set, its bbox is used to keep
+   * the anon/pre-CTA school-radius fallback sources (schoolListings' anon
+   * branch and schoolRadiusFallbackMarkers) consistent with the
+   * authenticated path's area+school-radius combined scoping. See
+   * filterSchoolRadiusListingsByAreaBbox's doc comment for the full
+   * rationale.
+   */
+  selectedArea: AreaPoint | null;
 }
 
 export interface UseSchoolListingsResult {
@@ -37,7 +52,17 @@ export function useSchoolListings({
   filteredListings,
   journey,
   schoolId,
+  selectedArea,
 }: UseSchoolListingsParams): UseSchoolListingsResult {
+  // Issue #2183 — area-bbox-scoped view of schoolRadiusListings, shared by both
+  // consumers below (anon schoolListings + schoolRadiusFallbackMarkers) so they
+  // stay in lockstep with the authenticated path's area+school-radius combined
+  // scoping. No-op (identity) when selectedArea/bbox is null. See
+  // filterSchoolRadiusListingsByAreaBbox's doc comment for the full rationale.
+  const areaScopedSchoolRadiusListings = useMemo(
+    () => filterSchoolRadiusListingsByAreaBbox(schoolRadiusListings, selectedArea?.bbox),
+    [schoolRadiusListings, selectedArea],
+  );
   // Convert filteredListings (PropertyListing[]) to DiscoverCityListingItem[] for
   // SchoolSelectedPanel card list. filteredListings is the school-proximity-filtered
   // set when schoolLat/Lon/RadiusKm filters are active.
@@ -70,7 +95,7 @@ export function useSchoolListings({
           // 20-field anon contract are honoured. reraRegistered and sellerTypes rely on
           // server-EXCLUDED fields (reraNumber/sellerType) and are intentionally NOT
           // applied — anon never sees those fields (AC6).
-          return applyAnonPropertyFilters(schoolRadiusListings, filters);
+          return applyAnonPropertyFilters(areaScopedSchoolRadiusListings, filters);
         }
         // No active school radius — fall back to area-scoped public browse.
         return areaListings;
@@ -106,7 +131,7 @@ export function useSchoolListings({
         lon: l.longitude,
       }));
     },
-    [isAuthenticated, areaListings, schoolRadiusListings, filteredListings, filters],
+    [isAuthenticated, areaListings, areaScopedSchoolRadiusListings, filteredListings, filters],
   );
 
   // Issue #1261 rev2 (AC11) — radius-filtered marker pins from the PUBLIC school-radius
@@ -119,12 +144,16 @@ export function useSchoolListings({
   // Derives from schoolRadiusListings (public endpoint, server-side ST_DWithin — genuinely
   // radius-filtered) rather than schoolListings (which for auth users = city-wide
   // filteredListings — NOT radius-filtered, wrong source for marker pins).
+  // Issue #2183 — uses the area-bbox-scoped view (areaScopedSchoolRadiusListings), not
+  // the raw schoolRadiusListings, so these fallback pins never show homes outside the
+  // area the authenticated badge/panel has already excluded via effectiveFilters'
+  // polygon injection. See filterSchoolRadiusListingsByAreaBbox's doc comment.
   const schoolRadiusFallbackMarkers = useMemo(
     () =>
       journey === 'school-first' && schoolId
-        ? deriveAnonSchoolRadiusMarkers(schoolRadiusListings)
+        ? deriveAnonSchoolRadiusMarkers(areaScopedSchoolRadiusListings)
         : [],
-    [journey, schoolId, schoolRadiusListings],
+    [journey, schoolId, areaScopedSchoolRadiusListings],
   );
 
   return { schoolListings, schoolRadiusFallbackMarkers };

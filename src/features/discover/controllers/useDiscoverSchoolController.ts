@@ -234,6 +234,10 @@ export function useDiscoverSchoolController({
     filteredListings,
     journey: urlState.journey,
     schoolId: urlState.schoolId,
+    // Issue #2183 — same legacy/school-first area bridge this controller already
+    // threads to useSchoolFirstCounts below (see that call's own comment for why
+    // legacySelectedArea, not effectiveSelectedArea, is correct here).
+    selectedArea,
   });
 
   const {
