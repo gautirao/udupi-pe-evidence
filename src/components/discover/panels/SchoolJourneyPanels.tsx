@@ -4,7 +4,7 @@
  * SchoolSelectedPanel is the full implementation (S3); other panels remain as
  * stubs until their milestones ship.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, ChevronLeft, ChevronRight, GraduationCap, Home, Layers, LayoutGrid, MapPin, Search, SlidersHorizontal, X } from 'lucide-react';
@@ -33,7 +33,7 @@ import { AGRICULTURAL_LAND_PROPERTY_TYPE } from '@/lib/listing-constants';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import { clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
 import { SchoolsInAreaPanel as RealSchoolsInAreaPanel } from './SchoolsInAreaPanel';
-import { haversineKm } from '@/lib/geo';
+import { haversineKm, sortByDistanceKmAscending } from '@/lib/geo';
 import { formatMemberAreaSummary, buildAreaNameIndex } from '@/utils/areaNameSummary';
 
 // ReTrends redesign: 3/5/10 km replaces 1/2/3/5 km
@@ -1427,6 +1427,25 @@ export function SchoolSelectedPanel({
     school != null &&
     ((school.latitude as unknown) == null || (school.longitude as unknown) == null);
 
+  // Issue #1974 — compute distance once per listing, then sort ascending so the
+  // visible card order matches "nearest to school first" instead of server order
+  // (created_at DESC). Listings without usable coordinates sort last.
+  const sortedListingsWithDistance = useMemo(() => {
+    const withDistance = listings.map((listing) => {
+      // Compute real haversine distance — only when both school and listing have coords.
+      const distanceKm =
+        school != null &&
+        (school.latitude as unknown) != null &&
+        (school.longitude as unknown) != null &&
+        listing.lat != null &&
+        listing.lon != null
+          ? haversineKm(school.latitude, school.longitude, listing.lat, listing.lon)
+          : null;
+      return { listing, distanceKm };
+    });
+    return sortByDistanceKmAscending(withDistance, (pair) => pair.distanceKm);
+  }, [listings, school]);
+
   return (
     <>
       {/* onBack is forwarded to PanelHeader which renders the single canonical Back
@@ -1589,37 +1608,25 @@ export function SchoolSelectedPanel({
           />
         ) : (
           <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3 p-3">
-            {listings.map((listing) => {
-              // Compute real haversine distance — only when both school and listing have coords.
-              const distanceKm =
-                school != null &&
-                (school.latitude as unknown) != null &&
-                (school.longitude as unknown) != null &&
-                listing.lat != null &&
-                listing.lon != null
-                  ? haversineKm(school.latitude, school.longitude, listing.lat, listing.lon)
-                  : null;
-
-              return (
-                <div
-                  key={listing.id}
-                  ref={(node) => {
-                    if (node) cardRefs.current.set(listing.id, node);
-                    else cardRefs.current.delete(listing.id);
-                  }}
-                >
-                  <PropertyCard
-                    listing={listing}
-                    isAuthenticated={isAuthenticated}
-                    onNavigate={() => navigate(`/listing/${listing.id}`)}
-                    isSelected={selectedListingId === listing.id}
-                    onSelect={onSelectListing}
-                    onHover={onHoverListing}
-                    distanceKm={distanceKm}
-                  />
-                </div>
-              );
-            })}
+            {sortedListingsWithDistance.map(({ listing, distanceKm }) => (
+              <div
+                key={listing.id}
+                ref={(node) => {
+                  if (node) cardRefs.current.set(listing.id, node);
+                  else cardRefs.current.delete(listing.id);
+                }}
+              >
+                <PropertyCard
+                  listing={listing}
+                  isAuthenticated={isAuthenticated}
+                  onNavigate={() => navigate(`/listing/${listing.id}`)}
+                  isSelected={selectedListingId === listing.id}
+                  onSelect={onSelectListing}
+                  onHover={onHoverListing}
+                  distanceKm={distanceKm}
+                />
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -1743,6 +1750,31 @@ export function AreaSchoolCombinedPanel({
   const hasMissingCoords =
     selectedSchool != null &&
     ((selectedSchool.latitude as unknown) == null || (selectedSchool.longitude as unknown) == null);
+
+  // Issue #1974 — compute distance once per listing, then sort ascending so the
+  // visible card order matches "nearest to school first" instead of server order
+  // (created_at DESC). Listings without usable coordinates sort last. Declared
+  // before the early loading-skeleton return to preserve hook-call order.
+  const sortedListingsWithDistance = useMemo(() => {
+    const withDistance = listings.map((listing) => {
+      // Compute real haversine distance — only when both school and listing have coords.
+      const distanceKm =
+        selectedSchool != null &&
+        (selectedSchool.latitude as unknown) != null &&
+        (selectedSchool.longitude as unknown) != null &&
+        listing.lat != null &&
+        listing.lon != null
+          ? haversineKm(
+              selectedSchool.latitude,
+              selectedSchool.longitude,
+              listing.lat,
+              listing.lon,
+            )
+          : null;
+      return { listing, distanceKm };
+    });
+    return sortByDistanceKmAscending(withDistance, (pair) => pair.distanceKm);
+  }, [listings, selectedSchool]);
 
   // Loading skeleton — shown when either dimension is still resolving on cold load.
   if (!selectedArea || !selectedSchool) {
@@ -1878,41 +1910,25 @@ export function AreaSchoolCombinedPanel({
           />
         ) : (
           <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3 p-3">
-            {listings.map((listing) => {
-              // Compute real haversine distance — only when both school and listing have coords.
-              const distanceKm =
-                (selectedSchool.latitude as unknown) != null &&
-                (selectedSchool.longitude as unknown) != null &&
-                listing.lat != null &&
-                listing.lon != null
-                  ? haversineKm(
-                      selectedSchool.latitude,
-                      selectedSchool.longitude,
-                      listing.lat,
-                      listing.lon,
-                    )
-                  : null;
-
-              return (
-                <div
-                  key={listing.id}
-                  ref={(node) => {
-                    if (node) cardRefs.current.set(listing.id, node);
-                    else cardRefs.current.delete(listing.id);
-                  }}
-                >
-                  <PropertyCard
-                    listing={listing}
-                    isAuthenticated={isAuthenticated}
-                    onNavigate={() => navigate(`/listing/${listing.id}`)}
-                    isSelected={selectedListingId === listing.id}
-                    onSelect={onSelectListing}
-                    onHover={onHoverListing}
-                    distanceKm={distanceKm}
-                  />
-                </div>
-              );
-            })}
+            {sortedListingsWithDistance.map(({ listing, distanceKm }) => (
+              <div
+                key={listing.id}
+                ref={(node) => {
+                  if (node) cardRefs.current.set(listing.id, node);
+                  else cardRefs.current.delete(listing.id);
+                }}
+              >
+                <PropertyCard
+                  listing={listing}
+                  isAuthenticated={isAuthenticated}
+                  onNavigate={() => navigate(`/listing/${listing.id}`)}
+                  isSelected={selectedListingId === listing.id}
+                  onSelect={onSelectListing}
+                  onHover={onHoverListing}
+                  distanceKm={distanceKm}
+                />
+              </div>
+            ))}
           </div>
         )}
       </div>
