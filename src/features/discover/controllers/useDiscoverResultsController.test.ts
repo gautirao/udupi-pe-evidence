@@ -121,7 +121,7 @@ describe('useDiscoverResultsController (#2142 Commit 3 — moved verbatim from M
       undefined,
       'rent',
       undefined,
-      ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Tiger Circle'],
+      { kind: 'areas', areaKeys: ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Tiger Circle'] },
     );
   });
 

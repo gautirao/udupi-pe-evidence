@@ -4,6 +4,7 @@ import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { snapBbox } from '@/lib/bboxUtils';
 import { buildDiscoverSearchParams } from '@/lib/discoverSearchParams';
 import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
+import type { DiscoverMarkerScope } from '@/features/discover/selectors/markerScope';
 
 export interface DiscoverFilteredMarker {
   id: string;
@@ -60,15 +61,20 @@ export function useDiscoverFilteredMarkers(
   /** Issue #1463 — Exclude markers of this property type (e.g. 'agricultural_land' in non-agri journeys). Absent = no exclusion. */
   excludePropertyType?: string,
   /**
-   * Issue #1597 — optional area key filter for group-results markers.
-   * When non-empty, /api/discover/markers returns ONLY markers whose area_key is in this set.
-   * Sorted before use for stable cache keys. An empty array disables the fetch
-   * (empty-areaKeys guard) to prevent a whole-city leak or backend 400.
-   * When undefined, no area filter is applied (preserves existing call-site behaviour).
+   * Issue #2185 S2 — the single geography-scope decision for this fetch
+   * (see `resolveDiscoverMarkerScope`/`DiscoverMarkerScope` for the
+   * precedence and rationale). Defaults to `{kind:'city'}` — the pre-#2185
+   * unscoped-city-wide baseline — so existing callers that predate this
+   * param keep compiling and behaving identically.
+   *   'city'       -> no area filter is applied (unscoped, unchanged).
+   *   'node'       -> scoped to a single canonical discovery node (`nodeKey=`).
+   *   'areas'      -> LEGACY #1597 group-scope; sorted `areaKeys=` (repeated).
+   *                   An empty `areaKeys` array disables the fetch (below) to
+   *                   prevent a whole-city leak or backend 400.
+   *   'unresolved' -> disables the fetch entirely (below) — never fires with
+   *                   a mid-resolution/undefined scope.
    */
-  areaKeys?: string[],
-  /** Optional node key to scope the markers to a canonical discovery node. */
-  nodeKey?: string,
+  scope: DiscoverMarkerScope = { kind: 'city' },
 ) {
   // Issue #1911 PR3 — see useDiscoverRegionSummary.ts for the default-context
   // ({mode:'live'}) byte-identical-live-behaviour rationale.
@@ -80,15 +86,26 @@ export function useDiscoverFilteredMarkers(
 
   const trimmedQ = q?.trim() || undefined;
 
-  // Issue #1597 — sort for stable cache keys; null when no area filter.
-  const sortedAreaKeys = areaKeys != null ? [...areaKeys].sort() : null;
+  // Issue #2185 S2 — derive the wire-level scope fields from `scope` ONCE,
+  // here, so the queryFn and the queryKey below can never disagree on what
+  // was actually requested (a stale-closure/key-mismatch bug class).
+  // Issue #1597 — sort for stable cache keys; null when scope is not 'areas'.
+  const sortedAreaKeys = scope.kind === 'areas' ? [...scope.areaKeys].sort() : null;
+  const scopeNodeKey = scope.kind === 'node' ? scope.nodeKey : undefined;
   // Empty-areaKeys guard: do NOT fire when the group has no member areas (backend returns 400 on []).
-  const areaKeysEmpty = sortedAreaKeys !== null && sortedAreaKeys.length === 0;
+  const areasEmpty = scope.kind === 'areas' && scope.areaKeys.length === 0;
 
   return useQuery<DiscoverFilteredMarkersResponse>({
+    // Flattened into discrete fields (kind + nodeKey + sorted areaKeys)
+    // rather than the `scope` object itself — TanStack Query keys rely on
+    // structural equality via JSON serialization, and flattening guarantees
+    // `{kind:'city'}` and a `{kind:'node', nodeKey}` scope can never collapse
+    // to the same key (an object with an absent vs. present property could,
+    // depending on serialization order, if compared loosely).
     queryKey: discoverKey(
       source,
-      'discover-filtered-markers', city, filters, snapped, trimmedQ, listingPurpose ?? null, excludePropertyType ?? null, sortedAreaKeys, nodeKey ?? null,
+      'discover-filtered-markers', city, filters, snapped, trimmedQ, listingPurpose ?? null, excludePropertyType ?? null,
+      scope.kind, scopeNodeKey ?? null, sortedAreaKeys,
     ),
     queryFn: ({ signal }) => {
       const params = buildDiscoverSearchParams({
@@ -99,7 +116,7 @@ export function useDiscoverFilteredMarkers(
         trimmedQ,
         listingPurpose,
         excludePropertyType,
-        nodeKey,
+        nodeKey: scopeNodeKey,
       });
 
       const livePath = `/api/discover/markers?${params.toString()}`;
@@ -118,7 +135,12 @@ export function useDiscoverFilteredMarkers(
       // requires the admin JWT, which the default (no skipAuth) already sends.
       return api.get<DiscoverFilteredMarkersResponse>(path, { signal });
     },
-    enabled: enabled && city.length > 0 && !areaKeysEmpty,
+    // Issue #2185 S2 — `scope.kind !== 'unresolved'` is the general form of
+    // the #1597 empty-areaKeys guard: NEVER fire while the scope's own
+    // producer hasn't settled yet (a `node=` mid-resolution, or a legacy
+    // group cold-load), because "no scope yet" must never silently degrade
+    // to "unscoped city-wide" (the exact bug this issue fixes).
+    enabled: enabled && city.length > 0 && scope.kind !== 'unresolved' && !areasEmpty,
     staleTime: 60_000,
     // Keep previous markers visible while a new school-proximity refetch is in-flight.
     // Without this, TanStack Query v5 resets data to undefined on queryKey change,

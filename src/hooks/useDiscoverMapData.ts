@@ -28,6 +28,7 @@ import {
   discoverListingToPropertyListing,
   cityListingToPropertyListing,
 } from '@/lib/discoverMappers';
+import type { DiscoverMarkerScope } from '@/features/discover/selectors/markerScope';
 
 /**
  * Issue #1801 — optimistic camera-navigation intent for area-marker clicks.
@@ -294,26 +295,15 @@ export interface UseDiscoverMapDataParams {
    */
   listingPurpose?: string;
   /**
-   * Issue #1806 (FIX-1) — the active group's member area keys, forwarded to
-   * useDiscoverFilteredMarkers so the map's marker fetch is scoped to the SAME
-   * areas the right panel shows for a selected group, instead of leaking a
-   * city-wide fetch. Three states, all deliberate (see caller):
-   *   undefined  → no group is focused; unscoped city-wide query (unchanged).
-   *   []         → a group IS focused but its area keys have not resolved yet
-   *                 (cold-load race) — the empty-areaKeys guard in
-   *                 useDiscoverFilteredMarkers DISABLES the fetch rather than
-   *                 firing unscoped (fail-safe: empty map, never a wrong map).
-   *   [k1, k2..] → a group is focused and resolved; the fetch is scoped to
-   *                exactly these areas.
-   * The caller (MapDiscovery.tsx) MUST NOT pass this for the school-first
-   * radius surface (schoolId set) — that surface is radius-scoped by design
-   * (#1261), not group-scoped.
+   * Issue #2185 S2 — the single geography-scope decision for the map's
+   * marker fetch, computed once by the caller (via
+   * `resolveDiscoverMarkerScope`) and forwarded verbatim to
+   * useDiscoverFilteredMarkers. Defaults to `{kind:'city'}` (unscoped
+   * city-wide, the pre-#2185 baseline) when omitted. See
+   * `@/features/discover/selectors/markerScope` for the full precedence and
+   * the #1806/#1597/#2087 producers this replaces.
    */
-  groupAreaKeys?: string[];
-  /**
-   * Bounded listings nodeKey. When provided, the map's marker fetch is scoped to this canonical node.
-   */
-  nodeKey?: string;
+  scope?: DiscoverMarkerScope;
 }
 
 export interface UseDiscoverMapDataResult {
@@ -479,8 +469,7 @@ export function useDiscoverMapData({
   bbox,
   journey,
   listingPurpose,
-  groupAreaKeys,
-  nodeKey,
+  scope = { kind: 'city' },
 }: UseDiscoverMapDataParams): UseDiscoverMapDataResult {
   const isCityValid = city in CITY_CONFIG;
 
@@ -532,13 +521,9 @@ export function useDiscoverMapData({
     debouncedSearch?.trim() || undefined,
     listingPurpose,
     excludePropertyType,
-    // Issue #1806 (FIX-1) — group-scope the map's marker fetch. undefined = no
-    // group focused (unchanged, unscoped). [] = a group is focused but not yet
-    // resolved (disables the fetch via the hook's empty-areaKeys guard, never
-    // an unscoped flash). [k1, k2..] = scoped to the group's member areas.
-    groupAreaKeys,
-    // Issue #2087 — bounded listings canonical node scope.
-    nodeKey,
+    // Issue #2185 S2 — the caller-resolved scope (city/node/legacy areas/
+    // unresolved). Replaces the separate groupAreaKeys/nodeKey params.
+    scope,
   );
 
   // ── Static data ───────────────────────────────────────────────────────────
@@ -889,13 +874,19 @@ export function useDiscoverMapData({
   // map and the panel side. Nothing reads it yet — no render output changes.
   // See visibleMemberSet.ts for why one shared set (not two derivations) is
   // what AC1.12 actually requires.
+  // Issue #2185 S2 — scopedAreaKeys preserves the exact pre-#2185 semantics
+  // (the legacy #1597 group producer only); a 'node' scope is a DIFFERENT
+  // geography shape (no client-visible member-area list — see the
+  // no-client-side-node->areaKeys-synthesis constraint on this issue) and is
+  // intentionally NOT folded in here.
+  const scopedAreaKeys = scope.kind === 'areas' ? scope.areaKeys : undefined;
   const visibleMemberSet = useMemo(
     () =>
       deriveVisibleMemberSet({
         candidateAreaKeys: discoverAreas.map((a) => a.areaKey),
-        scopedAreaKeys: groupAreaKeys,
+        scopedAreaKeys,
       }),
-    [discoverAreas, groupAreaKeys],
+    [discoverAreas, scopedAreaKeys],
   );
 
   // ── Marker truncation metadata ────────────────────────────────────────────

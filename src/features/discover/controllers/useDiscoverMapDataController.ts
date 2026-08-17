@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from 'react';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { AREA_LAYER_MAX_ZOOM, shouldShowMarkers } from '@/lib/map/zoomPolicy';
+import { useDiscoverSource } from '@/features/discover/state/DiscoverDataSourceContext';
+import { resolveDiscoverMarkerScope } from '@/features/discover/selectors/markerScope';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
@@ -131,16 +133,33 @@ export function useDiscoverMapDataController({
     return false;
   })();
 
+  // Issue #2185 S2 — the source of truth for what geography the map's
+  // marker fetch is scoped to. See `resolveDiscoverMarkerScope`'s own doc
+  // for the full precedence and why it must be computed in THIS ONE place
+  // (this controller is the sole caller of the selector).
+  const source = useDiscoverSource();
+  const markerScope = resolveDiscoverMarkerScope({
+    sourceMode: source.mode,
+    journey: nav.journey,
+    schoolId: nav.schoolId,
+    rawNodeParam: nav.rawNodeParam,
+    resolvedNodeKey: areasNavigationJourney.node?.nodeKey ?? null,
+    groupAreaKeys: groupAreaKeysForMapData,
+  });
+
   const mapData = useDiscoverMapData({
     // Issue #1956 PR-4 (gate 3) — feeds the bridged AreaPoint so the
     // areaKeys derivation (useDiscoverMapData.ts:511) resolves to
     // [effectiveSelectedArea.areaKey] instead of [] at a canonical AREA leaf.
     city, selectedArea: effectiveSelectedArea, filters: effectiveFilters, debouncedSearch,
     urlSchoolId: nav.schoolId, isAuthenticated, fitTick,
-    // Issue #1806 (FIX-1) — see useDiscoverAreaGroupsController's
-    // groupAreaKeysForMapData for the full journey/state → value mapping.
-    groupAreaKeys: groupAreaKeysForMapData,
-    nodeKey: nav.nodeListings && areasNavigationJourney.node ? areasNavigationJourney.node.nodeKey : undefined,
+    // Issue #2185 S2 — replaces the separate groupAreaKeys/nodeKey params
+    // (#1806/#2087). The canonical node journey never sets nav.groupId, so
+    // groupAreaKeysForMapData was always undefined there and the marker
+    // fetch reached this hook with NO scope at all (unscoped city-wide) —
+    // the map/panel divergence this issue fixes. markerScope now resolves
+    // deterministically for every journey/state combination.
+    scope: markerScope,
     // Issue #1118: do NOT include !!nav.schoolId here. The /api/discover/markers
     // endpoint is auth-gated (returns 401 for anonymous users). Enabling the query for
     // unauthenticated school-first users caused a delayed marker disappearance: placeholderData

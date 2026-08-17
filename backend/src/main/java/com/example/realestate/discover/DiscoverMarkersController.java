@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.example.realestate.discover.navigation.NavigationGraphCache;
-import com.example.realestate.discover.navigation.NavigationGraph;
 
 import java.util.List;
 
@@ -86,19 +85,10 @@ public class DiscoverMarkersController {
         // areaKeys: absent (null) = no area filter; present-but-empty = client bug → reject.
         List<String> effectiveAreaKeys = areaKeys;
         if (nodeKey != null) {
-            NavigationGraph graph = navigationGraphCache.getActiveGraph(city)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "city_graph_not_found"));
-            if (!graph.containsNodeKey(nodeKey)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_node_key");
-            }
-            if ("root".equals(nodeKey)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "node_listings_not_eligible: root node is excluded");
-            }
-            List<String> descendantAreas = graph.descendantAreaKeysOf(nodeKey);
-            if (descendantAreas.size() > 15) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "node_listings_not_eligible: descendant area count exceeds 15");
-            }
-            effectiveAreaKeys = descendantAreas;
+            // Markers is a payload-scoping endpoint, not a bounded-browse endpoint: the real
+            // payload bound is the service-level FETCH_LIMIT, so the >15-descendant eligibility
+            // cap (owned by the listings/bounded-browse endpoint) does not apply here.
+            effectiveAreaKeys = NodeKeyResolver.resolveDescendantAreaKeys(navigationGraphCache, city, nodeKey, -1);
         } else if (areaKeys != null && areaKeys.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "area_keys_must_not_be_empty");
         }
