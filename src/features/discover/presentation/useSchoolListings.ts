@@ -156,11 +156,15 @@ export function useSchoolListings({
   // SAME backend query (`effectiveFilters`, which already applies the area-bbox
   // `polygon` AND `schoolLat`/`schoolLon`/`schoolRadiusKm` server-side — see
   // useDiscoverMapDataController.ts) that `schoolListings`' authenticated branch
-  // above already maps into panel cards, is fetched unconditionally
-  // (`listingsEnabled` does not depend on the bounded-search CTA), and is
-  // genuinely complete. Using it here guarantees the map's pre-CTA fallback
-  // marker count agrees with the panel's listing count by construction, for both
-  // the combined (area+school) and pure school-first states.
+  // above already maps into panel cards, and is fetched unconditionally
+  // (`listingsEnabled` does not depend on the bounded-search CTA). It still
+  // shares the same page=0&size=50 cap as the panel — unlike the public
+  // endpoint, that cap is applied AFTER the server-side area+radius filter, not
+  // before, so panel and map agree by construction even at the cap. A
+  // selected area+radius with genuinely >50 matches is a separate, pre-existing
+  // pagination question, out of scope for this fix. Using it here guarantees
+  // the map's pre-CTA fallback marker count agrees with the panel's listing
+  // count, for both the combined (area+school) and pure school-first states.
   //
   // Anon users keep the pre-existing area-bbox-scoped public-endpoint derivation
   // (deriveAnonSchoolRadiusMarkers over areaScopedSchoolRadiusListings) — there is
