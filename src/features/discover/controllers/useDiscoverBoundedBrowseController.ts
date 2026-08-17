@@ -5,6 +5,7 @@ import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
 import { buildCityListingsQueryParams } from '@/features/discover/adapters/cityListingsQueryParams';
 import { resolveNodeListingsAnonMarkers } from '@/features/discover/adapters/anonMarkerAdapter';
 import { filteredMarkerToPropertyListing } from '@/lib/discoverMappers';
+import type { DiscoverMarkerScope } from '@/features/discover/selectors/markerScope';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 
@@ -77,6 +78,15 @@ export function useDiscoverBoundedBrowseController({
   // resolution. `enabled` additionally requires the node to have resolved
   // (mirrors the previous empty-areaKeys guard's loading-race handling) so an
   // unresolved node never fires an unscoped, city-wide-leaking request.
+  // Issue #2185 S2 — this surface's own canonical-node scope, built directly
+  // (NOT via resolveDiscoverMarkerScope — that selector's precedence is
+  // owned by useDiscoverMapDataController for the primary map/panel marker
+  // fetch; this is a SEPARATE bounded-Browse surface with its own enabled
+  // gate below, already requiring a resolved node).
+  const boundedBrowseScope: DiscoverMarkerScope = areasNavigationJourney.node?.nodeKey
+    ? { kind: 'node', nodeKey: areasNavigationJourney.node.nodeKey }
+    : { kind: 'unresolved', reason: 'node-resolving' };
+
   const { data: nodeListingsMarkersData } = useDiscoverFilteredMarkers(
     city,
     urlDiscoverFilters,
@@ -88,8 +98,7 @@ export function useDiscoverBoundedBrowseController({
     debouncedSearch?.trim() || undefined,
     intentListingPurpose,
     undefined,   // excludePropertyType — not applicable
-    undefined,   // areaKeys — intentionally omitted; nodeKey below is the canonical scope
-    areasNavigationJourney.node?.nodeKey,
+    boundedBrowseScope,
   );
 
   // Anonymous path: /api/discover/cities/{city}/listings (public, multi-areaKeys

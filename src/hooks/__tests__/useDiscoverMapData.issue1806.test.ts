@@ -105,12 +105,12 @@ beforeEach(() => {
 });
 
 describe('useDiscoverMapData — groupAreaKeys forwarding (Issue #1806 FIX-1, T1/T2)', () => {
-  it('T1: forwards groupAreaKeys as the 8th positional arg to /api/discover/markers as areaKeys, sorted, scoped to the group', async () => {
+  it('T1: forwards scope.kind="areas" areaKeys to /api/discover/markers as areaKeys, sorted, scoped to the group', async () => {
     renderHook(
       () =>
         useDiscoverMapData({
           ...BASE_PARAMS,
-          groupAreaKeys: ['IN|KA|Bengaluru|Yelahanka', 'IN|KA|Bengaluru|Hebbal'],
+          scope: { kind: 'areas', areaKeys: ['IN|KA|Bengaluru|Yelahanka', 'IN|KA|Bengaluru|Hebbal'] },
         }),
       { wrapper: makeWrapper() },
     );
@@ -134,12 +134,12 @@ describe('useDiscoverMapData — groupAreaKeys forwarding (Issue #1806 FIX-1, T1
     expect(areaKeys.sort()).toEqual(['IN|KA|Bengaluru|Hebbal', 'IN|KA|Bengaluru|Yelahanka'].sort());
   });
 
-  it('T2a: groupAreaKeys=[] DISABLES the marker fetch (empty-areaKeys guard) — no unscoped city-wide request fires', async () => {
+  it('T2a: scope.kind="areas" areaKeys=[] DISABLES the marker fetch (empty-areaKeys guard) — no unscoped city-wide request fires', async () => {
     renderHook(
       () =>
         useDiscoverMapData({
           ...BASE_PARAMS,
-          groupAreaKeys: [],
+          scope: { kind: 'areas', areaKeys: [] },
         }),
       { wrapper: makeWrapper() },
     );
@@ -153,12 +153,11 @@ describe('useDiscoverMapData — groupAreaKeys forwarding (Issue #1806 FIX-1, T1
     expect(markersCall).toBeUndefined();
   });
 
-  it('T2b: groupAreaKeys=undefined (no group focused) fires the unscoped city-wide request (unchanged behaviour)', async () => {
+  it('T2b: scope omitted (default {kind:"city"}, no group focused) fires the unscoped city-wide request (unchanged behaviour)', async () => {
     renderHook(
       () =>
         useDiscoverMapData({
           ...BASE_PARAMS,
-          groupAreaKeys: undefined,
         }),
       { wrapper: makeWrapper() },
     );
@@ -248,19 +247,19 @@ describe('useDiscoverMapData — isErrorAreaListings (Issue #1806 DIRECTIVE 1)',
 });
 
 describe('useDiscoverMapData — school-first journey guard (Issue #1806 DIRECTIVE 5 / T9, hook boundary)', () => {
-  it('T9: groupAreaKeys forwarded even when journey=school-first — the caller (MapDiscovery) owns the guard, not this hook', async () => {
+  it('T9: scope forwarded even when journey=school-first — the caller (useDiscoverMapDataController, via resolveDiscoverMarkerScope) owns the guard, not this hook', async () => {
     // This hook trusts its caller exactly like the existing markersEnabled gate
     // (see useDiscoverMapData.markersEnabled.test.ts R3). The actual "do not
-    // group-clip school-first with schoolId" guard lives in MapDiscovery's
-    // groupAreaKeysForMapData derivation, covered by
-    // src/pages/__tests__/MapDiscovery.groupAreaKeys.test.tsx. Documented here
-    // so the hook boundary contract is explicit and doesn't silently drift.
+    // area/node-clip school-first with schoolId" guard lives in
+    // resolveDiscoverMarkerScope (Issue #2185 S2, rule 2), covered by
+    // markerScope.test.ts. Documented here so the hook boundary contract is
+    // explicit and doesn't silently drift.
     renderHook(
       () =>
         useDiscoverMapData({
           ...BASE_PARAMS,
           journey: 'school-first',
-          groupAreaKeys: ['IN|KA|Bengaluru|Hebbal'],
+          scope: { kind: 'areas', areaKeys: ['IN|KA|Bengaluru|Hebbal'] },
         }),
       { wrapper: makeWrapper() },
     );

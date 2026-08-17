@@ -357,8 +357,14 @@ class DiscoverMarkersControllerTest {
                 .andExpect(jsonPath("$.error").value("node_listings_not_eligible: root node is excluded"));
     }
 
+    // Markers is a payload-scoping endpoint, not a bounded-browse endpoint: the >15-descendant
+    // eligibility cap is owned by the listings endpoint only. A broad node must still resolve
+    // and scope the query to its descendant Areas (never fall back to whole-city data).
     @Test
-    void nodeKey_rejectsBroadNode() throws Exception {
+    void nodeKey_acceptsBroadNode_16Descendants() throws Exception {
+        DiscoverMarkersResponse mockResp = new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0, 5000, false);
+        when(service.getMarkers(any())).thenReturn(mockResp);
+
         NavigationGraph mockGraph = mock(NavigationGraph.class);
         when(mockGraph.containsNodeKey("d:n")).thenReturn(true);
         // Return 16 dummy areas
@@ -371,7 +377,58 @@ class DiscoverMarkersControllerTest {
                 .param("city", "udupi")
                 .param("nodeKey", "d:n")
                 .with(jwt()))
+                .andExpect(status().isOk());
+
+        // Status alone is not sufficient: a 200 returning whole-city (unscoped) data would be
+        // the dangerous false pass. Assert the service was actually called with the resolved,
+        // 16-element descendant-area scope.
+        verify(service).getMarkers(argThat(f ->
+                f.areaKeys() != null
+                && f.areaKeys().size() == 16
+                && f.areaKeys().containsAll(largeList)
+        ));
+    }
+
+    // Boundary test: exactly 15 descendants must still pass on markers (pins the comparison
+    // operator alongside the 16-descendant acceptance case above).
+    @Test
+    void nodeKey_acceptsExactly15Descendants() throws Exception {
+        DiscoverMarkersResponse mockResp = new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0, 5000, false);
+        when(service.getMarkers(any())).thenReturn(mockResp);
+
+        NavigationGraph mockGraph = mock(NavigationGraph.class);
+        when(mockGraph.containsNodeKey("d:n")).thenReturn(true);
+        List<String> exactList = java.util.stream.IntStream.range(0, 15)
+                .mapToObj(i -> "Area" + i).toList();
+        when(mockGraph.descendantAreaKeysOf("d:n")).thenReturn(exactList);
+        when(navigationGraphCache.getActiveGraph("udupi")).thenReturn(java.util.Optional.of(mockGraph));
+
+        mockMvc.perform(get("/api/discover/markers")
+                .param("city", "udupi")
+                .param("nodeKey", "d:n")
+                .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getMarkers(argThat(f ->
+                f.areaKeys() != null
+                && f.areaKeys().size() == 15
+                && f.areaKeys().containsAll(exactList)
+        ));
+    }
+
+    @Test
+    void nodeKey_invalidNodeKey_returns400() throws Exception {
+        NavigationGraph mockGraph = mock(NavigationGraph.class);
+        when(mockGraph.containsNodeKey("bogus")).thenReturn(false);
+        when(navigationGraphCache.getActiveGraph("udupi")).thenReturn(java.util.Optional.of(mockGraph));
+
+        mockMvc.perform(get("/api/discover/markers")
+                .param("city", "udupi")
+                .param("nodeKey", "bogus")
+                .with(jwt()))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("node_listings_not_eligible: descendant area count exceeds 15"));
+                .andExpect(jsonPath("$.error").value("invalid_node_key"));
+
+        verifyNoInteractions(service);
     }
 }

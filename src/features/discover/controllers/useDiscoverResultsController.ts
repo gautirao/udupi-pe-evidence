@@ -7,6 +7,7 @@ import { buildCityListingsQueryParams } from '@/features/discover/adapters/cityL
 import type { useAreaGroups } from '@/hooks/useAreaGroups';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { DiscoverPanelContent } from '@/features/discover/selectors/panelContent';
+import type { DiscoverMarkerScope } from '@/features/discover/selectors/markerScope';
 
 export interface UseDiscoverResultsControllerParams {
   panelContent: DiscoverPanelContent;
@@ -78,6 +79,15 @@ export function useDiscoverResultsController({
   // useDiscoverMarkers (-> /api/listings/markers) because the public endpoint silently
   // ignores areaKeys and property filters. bbox=null: group-results show all matching
   // markers regardless of viewport.
+  // Issue #2185 S2 — this surface's own legacy #1597 group scope, built
+  // directly (NOT via resolveDiscoverMarkerScope — that selector's
+  // precedence is owned by useDiscoverMapDataController for the primary
+  // map/panel marker fetch; group-results is a SEPARATE surface, already
+  // gated on isGroupResultsState above).
+  const groupResultsScope: DiscoverMarkerScope = isGroupResultsState
+    ? { kind: 'areas', areaKeys: resolvedGroupAreaKeys }
+    : { kind: 'city' };
+
   const { data: groupResultsMarkersData } = useDiscoverFilteredMarkers(
     city,
     urlDiscoverFilters,
@@ -86,7 +96,7 @@ export function useDiscoverResultsController({
     undefined,
     intentListingPurpose,
     undefined,
-    isGroupResultsState ? resolvedGroupAreaKeys : undefined,
+    groupResultsScope,
   );
 
   // ── Anonymous path: /api/discover/cities/{city}/listings (public, multi-areaKeys) ──

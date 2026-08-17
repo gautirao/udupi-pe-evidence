@@ -695,7 +695,7 @@ describe('useDiscoverFilteredMarkers', () => {
   // ─── Issue #1597 — areaKeys filter for group-results markers ─────────────────
 
   it('areaKeys_appended_as_repeated_params_in_sorted_order', async () => {
-    // When areaKeys is provided, they must be appended sorted and sent to /api/discover/markers.
+    // When a scope.kind='areas' is provided, they must be appended sorted and sent to /api/discover/markers.
     mockGet.mockResolvedValue(BASE_MARKERS);
 
     const { result } = renderHook(
@@ -708,7 +708,7 @@ describe('useDiscoverFilteredMarkers', () => {
           undefined,
           undefined,
           undefined,
-          ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala'],
+          { kind: 'areas', areaKeys: ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala'] },
         ),
       { wrapper: makeWrapper() },
     );
@@ -736,7 +736,7 @@ describe('useDiscoverFilteredMarkers', () => {
           undefined,
           undefined,
           undefined,
-          [],
+          { kind: 'areas', areaKeys: [] },
         ),
       { wrapper: makeWrapper() },
     );
@@ -777,7 +777,7 @@ describe('useDiscoverFilteredMarkers', () => {
           undefined,
           'sale',
           undefined,
-          ['IN|KA|Udupi|Malpe', 'IN|KA|Udupi|Ullal'],
+          { kind: 'areas', areaKeys: ['IN|KA|Udupi|Malpe', 'IN|KA|Udupi|Ullal'] },
         ),
       { wrapper: makeWrapper() },
     );
@@ -796,6 +796,87 @@ describe('useDiscoverFilteredMarkers', () => {
   });
 
   // ─── End Issue #1597 ─────────────────────────────────────────────────────────
+
+  // ─── Issue #2185 S2 — node/unresolved scope hook-level coverage ──────────────
+
+  it('node_scope_puts_nodeKey_on_the_wire', async () => {
+    // Tie-breaker: assert the OUTGOING request carries nodeKey=, not just that a
+    // (canned) response came back — a mocked response would look identical even
+    // if the request had silently gone city-wide/unscoped.
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverFilteredMarkers(
+          'udupi',
+          {},
+          true,
+          null,
+          undefined,
+          undefined,
+          undefined,
+          { kind: 'node', nodeKey: 'n:area-1' },
+        ),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('nodeKey')).toBe('n:area-1');
+  });
+
+  it('unresolved_scope_disables_fetch_guard', () => {
+    // Tie-breaker: a legitimately-idle query and a silently-disabled one look
+    // identical from the outside unless we assert fetchStatus stays idle AND
+    // the mocked GET is never invoked.
+    const { result } = renderHook(
+      () =>
+        useDiscoverFilteredMarkers(
+          'udupi',
+          {},
+          true,
+          null,
+          undefined,
+          undefined,
+          undefined,
+          { kind: 'unresolved', reason: 'node-resolving' },
+        ),
+      { wrapper: makeWrapper() },
+    );
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  it('city_scope_sends_neither_nodeKey_nor_areaKeys', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverFilteredMarkers(
+          'udupi',
+          {},
+          true,
+          null,
+          undefined,
+          undefined,
+          undefined,
+          { kind: 'city' },
+        ),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('nodeKey')).toBe(false);
+    expect(params.has('areaKeys')).toBe(false);
+  });
+
+  // ─── End Issue #2185 S2 ────────────────────────────────────────────────────
 });
 
 // ─── Issue #1911 PR3 — preview-mode threading (AC10 cache-key isolation) ──
@@ -824,7 +905,7 @@ describe('useDiscoverFilteredMarkers — preview mode (Issue #1911 PR3)', () => 
       () =>
         useDiscoverFilteredMarkers(
           'udupi', {}, true, null, undefined, undefined, undefined,
-          ['IN|KA|Udupi|Malpe', 'IN|KA|Udupi|Ullal'],
+          { kind: 'areas', areaKeys: ['IN|KA|Udupi|Malpe', 'IN|KA|Udupi|Ullal'] },
         ),
       { wrapper: makePreviewWrapper(7, 42) },
     );
