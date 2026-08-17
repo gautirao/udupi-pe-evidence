@@ -92,6 +92,44 @@ export function applyAnonPropertyFilters(
 }
 
 /**
+ * Issue #2183 — the 'area-school-combined' panel state (derivePanelContent:
+ * areaKey + schoolId both present, which is the DEFAULT shape of a school-first
+ * selection since handleSchoolSelect always writes the picked school's own
+ * areaKey to the URL as breadcrumb context) scopes the AUTHENTICATED path's
+ * badge/panel count to the intersection of the selected area's bounding box AND
+ * the school radius — see useDiscoverMapDataController.ts's `effectiveFilters`
+ * AC4 comment, which injects that same bbox as a `polygon` param on the
+ * authenticated /api/discover/listings request.
+ *
+ * schoolRadiusListings (this file's other helpers) comes from the PUBLIC
+ * /school-radius-listings endpoint, which has no polygon/area param, so before
+ * this fix the anon panel count and the map's pre-CTA fallback markers
+ * (schoolRadiusFallbackMarkers, active for anon AND for authenticated users
+ * before the bounded-search CTA) ignored the area bound entirely — showing
+ * homes outside the area the authenticated badge/panel had already excluded,
+ * and disagreeing with the panel's own "N homes" count (#2183).
+ *
+ * Applying the SAME rectangle bound client-side keeps every surface
+ * consistent: the polygon injected server-side for the authenticated path IS
+ * literally the area's bbox rectangle (not a precise area shape), so a
+ * rectangle bounds check here is an exact equivalent, not an approximation.
+ * No-op (returns `listings` unchanged) when `bbox` is null — i.e. pure
+ * school-first with no area context, unchanged from prior behaviour.
+ */
+export function filterSchoolRadiusListingsByAreaBbox<
+  T extends { lat?: number | null; lon?: number | null },
+>(
+  listings: T[],
+  bbox: [[number, number], [number, number]] | null | undefined,
+): T[] {
+  if (!bbox) return listings;
+  const [[south, west], [north, east]] = bbox;
+  return listings.filter(
+    (l) => l.lat != null && l.lon != null && l.lat >= south && l.lat <= north && l.lon >= west && l.lon <= east,
+  );
+}
+
+/**
  * Issue #1261 rev2 (AC11) — derive Leaflet-pin shape from the anon school-radius
  * listings already fetched + filtered for the right panel. Mirrors the
  * `areaMarkerListings` recipe in useDiscoverMapData.ts: filter null coordinates,

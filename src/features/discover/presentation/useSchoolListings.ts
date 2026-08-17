@@ -1,9 +1,14 @@
 import { useMemo } from 'react';
+import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
 import type { DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { clampSchoolRadiusKm, PropertyListing, PropertyImage, PropertyFilters } from '@/hooks/usePropertyListings';
-import { applyAnonPropertyFilters, deriveAnonSchoolRadiusMarkers } from '@/features/discover/presentation/anonPropertyFilters';
+import {
+  applyAnonPropertyFilters,
+  deriveAnonSchoolRadiusMarkers,
+  filterSchoolRadiusListingsByAreaBbox,
+} from '@/features/discover/presentation/anonPropertyFilters';
 
 export interface UseSchoolListingsParams {
   isAuthenticated: boolean;
@@ -13,6 +18,16 @@ export interface UseSchoolListingsParams {
   filteredListings: (PropertyListing & { images?: PropertyImage[] })[];
   journey: DiscoverUrlState['journey'];
   schoolId: DiscoverUrlState['schoolId'];
+  /**
+   * Issue #2183 — the area the school was picked within (null for pure
+   * school-first with no area context). When set, its bbox is used to keep
+   * the anon/pre-CTA school-radius fallback sources (schoolListings' anon
+   * branch and schoolRadiusFallbackMarkers) consistent with the
+   * authenticated path's area+school-radius combined scoping. See
+   * filterSchoolRadiusListingsByAreaBbox's doc comment for the full
+   * rationale.
+   */
+  selectedArea: AreaPoint | null;
 }
 
 export interface UseSchoolListingsResult {
@@ -37,7 +52,17 @@ export function useSchoolListings({
   filteredListings,
   journey,
   schoolId,
+  selectedArea,
 }: UseSchoolListingsParams): UseSchoolListingsResult {
+  // Issue #2183 — area-bbox-scoped view of schoolRadiusListings, shared by both
+  // consumers below (anon schoolListings + schoolRadiusFallbackMarkers) so they
+  // stay in lockstep with the authenticated path's area+school-radius combined
+  // scoping. No-op (identity) when selectedArea/bbox is null. See
+  // filterSchoolRadiusListingsByAreaBbox's doc comment for the full rationale.
+  const areaScopedSchoolRadiusListings = useMemo(
+    () => filterSchoolRadiusListingsByAreaBbox(schoolRadiusListings, selectedArea?.bbox),
+    [schoolRadiusListings, selectedArea],
+  );
   // Convert filteredListings (PropertyListing[]) to DiscoverCityListingItem[] for
   // SchoolSelectedPanel card list. filteredListings is the school-proximity-filtered
   // set when schoolLat/Lon/RadiusKm filters are active.
@@ -70,7 +95,7 @@ export function useSchoolListings({
           // 20-field anon contract are honoured. reraRegistered and sellerTypes rely on
           // server-EXCLUDED fields (reraNumber/sellerType) and are intentionally NOT
           // applied — anon never sees those fields (AC6).
-          return applyAnonPropertyFilters(schoolRadiusListings, filters);
+          return applyAnonPropertyFilters(areaScopedSchoolRadiusListings, filters);
         }
         // No active school radius — fall back to area-scoped public browse.
         return areaListings;
@@ -106,25 +131,54 @@ export function useSchoolListings({
         lon: l.longitude,
       }));
     },
-    [isAuthenticated, areaListings, schoolRadiusListings, filteredListings, filters],
+    [isAuthenticated, areaListings, areaScopedSchoolRadiusListings, filteredListings, filters],
   );
 
-  // Issue #1261 rev2 (AC11) — radius-filtered marker pins from the PUBLIC school-radius
-  // endpoint for both auth and anon users. For anon: always the primary marker source
-  // (auth marker endpoint is disabled). For auth: serves as marker fallback BEFORE the
-  // #1115 bounded-search CTA is triggered (markersEnabled=false → schoolRadiusEnabled=true
-  // in the hook, so schoolRadiusListings is populated). Once CTA fires, markersEnabled
-  // becomes true, schoolRadiusEnabled becomes false, schoolRadiusListings drains, and the
-  // IIFE below switches to the richer auth markerListings instead.
-  // Derives from schoolRadiusListings (public endpoint, server-side ST_DWithin — genuinely
-  // radius-filtered) rather than schoolListings (which for auth users = city-wide
-  // filteredListings — NOT radius-filtered, wrong source for marker pins).
+  // Issue #1261 rev2 (AC11) — radius-filtered marker pins, active for both auth and
+  // anon users. For anon: always the primary marker source (auth marker endpoint is
+  // disabled). For auth: serves as marker fallback BEFORE the #1115 bounded-search
+  // CTA is triggered (markersEnabled=false pre-CTA, so Tier 1's markerListings from
+  // /api/discover/markers is empty — see resolveMarkerListings.ts). Once the CTA
+  // fires, markersEnabled becomes true and markerListings populates, so
+  // resolveMarkerListings' Tier 1 takes over from this fallback.
+  //
+  // Issue #2184 (fix-cycle, #2183 10km-radius investigation) — for AUTHENTICATED
+  // users this now derives from `filteredListings`, not the anon
+  // `areaScopedSchoolRadiusListings` (bbox-filtered view of the PUBLIC
+  // /school-radius-listings endpoint). Root cause: that public endpoint is a
+  // capped, city-wide `page=0&size=50` window (DECISION-2) with no ordering
+  // guarantee that a given area's matches land within the first page —
+  // `hasMore: true` is common. Once the #2183 fix additionally bbox-filters that
+  // incomplete window, the intersection can spuriously come up empty even though
+  // real, in-radius, in-area listings exist (confirmed live: 50-row public page
+  // contained zero Jayanagar rows while the authenticated combined polygon+radius
+  // query correctly returned 6). `filteredListings` has no such gap: it is the
+  // SAME backend query (`effectiveFilters`, which already applies the area-bbox
+  // `polygon` AND `schoolLat`/`schoolLon`/`schoolRadiusKm` server-side — see
+  // useDiscoverMapDataController.ts) that `schoolListings`' authenticated branch
+  // above already maps into panel cards, and is fetched unconditionally
+  // (`listingsEnabled` does not depend on the bounded-search CTA). It still
+  // shares the same page=0&size=50 cap as the panel — unlike the public
+  // endpoint, that cap is applied AFTER the server-side area+radius filter, not
+  // before, so panel and map agree by construction even at the cap. A
+  // selected area+radius with genuinely >50 matches is a separate, pre-existing
+  // pagination question, out of scope for this fix. Using it here guarantees
+  // the map's pre-CTA fallback marker count agrees with the panel's listing
+  // count, for both the combined (area+school) and pure school-first states.
+  //
+  // Anon users keep the pre-existing area-bbox-scoped public-endpoint derivation
+  // (deriveAnonSchoolRadiusMarkers over areaScopedSchoolRadiusListings) — there is
+  // no authenticated-only combined backend query available to anon callers, so
+  // the public endpoint remains the best available source for them.
   const schoolRadiusFallbackMarkers = useMemo(
-    () =>
-      journey === 'school-first' && schoolId
-        ? deriveAnonSchoolRadiusMarkers(schoolRadiusListings)
-        : [],
-    [journey, schoolId, schoolRadiusListings],
+    () => {
+      if (journey !== 'school-first' || !schoolId) return [];
+      if (isAuthenticated) {
+        return filteredListings.filter((l) => l.latitude != null && l.longitude != null);
+      }
+      return deriveAnonSchoolRadiusMarkers(areaScopedSchoolRadiusListings);
+    },
+    [journey, schoolId, isAuthenticated, filteredListings, areaScopedSchoolRadiusListings],
   );
 
   return { schoolListings, schoolRadiusFallbackMarkers };
