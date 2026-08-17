@@ -134,26 +134,47 @@ export function useSchoolListings({
     [isAuthenticated, areaListings, areaScopedSchoolRadiusListings, filteredListings, filters],
   );
 
-  // Issue #1261 rev2 (AC11) — radius-filtered marker pins from the PUBLIC school-radius
-  // endpoint for both auth and anon users. For anon: always the primary marker source
-  // (auth marker endpoint is disabled). For auth: serves as marker fallback BEFORE the
-  // #1115 bounded-search CTA is triggered (markersEnabled=false → schoolRadiusEnabled=true
-  // in the hook, so schoolRadiusListings is populated). Once CTA fires, markersEnabled
-  // becomes true, schoolRadiusEnabled becomes false, schoolRadiusListings drains, and the
-  // IIFE below switches to the richer auth markerListings instead.
-  // Derives from schoolRadiusListings (public endpoint, server-side ST_DWithin — genuinely
-  // radius-filtered) rather than schoolListings (which for auth users = city-wide
-  // filteredListings — NOT radius-filtered, wrong source for marker pins).
-  // Issue #2183 — uses the area-bbox-scoped view (areaScopedSchoolRadiusListings), not
-  // the raw schoolRadiusListings, so these fallback pins never show homes outside the
-  // area the authenticated badge/panel has already excluded via effectiveFilters'
-  // polygon injection. See filterSchoolRadiusListingsByAreaBbox's doc comment.
+  // Issue #1261 rev2 (AC11) — radius-filtered marker pins, active for both auth and
+  // anon users. For anon: always the primary marker source (auth marker endpoint is
+  // disabled). For auth: serves as marker fallback BEFORE the #1115 bounded-search
+  // CTA is triggered (markersEnabled=false pre-CTA, so Tier 1's markerListings from
+  // /api/discover/markers is empty — see resolveMarkerListings.ts). Once the CTA
+  // fires, markersEnabled becomes true and markerListings populates, so
+  // resolveMarkerListings' Tier 1 takes over from this fallback.
+  //
+  // Issue #2184 (fix-cycle, #2183 10km-radius investigation) — for AUTHENTICATED
+  // users this now derives from `filteredListings`, not the anon
+  // `areaScopedSchoolRadiusListings` (bbox-filtered view of the PUBLIC
+  // /school-radius-listings endpoint). Root cause: that public endpoint is a
+  // capped, city-wide `page=0&size=50` window (DECISION-2) with no ordering
+  // guarantee that a given area's matches land within the first page —
+  // `hasMore: true` is common. Once the #2183 fix additionally bbox-filters that
+  // incomplete window, the intersection can spuriously come up empty even though
+  // real, in-radius, in-area listings exist (confirmed live: 50-row public page
+  // contained zero Jayanagar rows while the authenticated combined polygon+radius
+  // query correctly returned 6). `filteredListings` has no such gap: it is the
+  // SAME backend query (`effectiveFilters`, which already applies the area-bbox
+  // `polygon` AND `schoolLat`/`schoolLon`/`schoolRadiusKm` server-side — see
+  // useDiscoverMapDataController.ts) that `schoolListings`' authenticated branch
+  // above already maps into panel cards, is fetched unconditionally
+  // (`listingsEnabled` does not depend on the bounded-search CTA), and is
+  // genuinely complete. Using it here guarantees the map's pre-CTA fallback
+  // marker count agrees with the panel's listing count by construction, for both
+  // the combined (area+school) and pure school-first states.
+  //
+  // Anon users keep the pre-existing area-bbox-scoped public-endpoint derivation
+  // (deriveAnonSchoolRadiusMarkers over areaScopedSchoolRadiusListings) — there is
+  // no authenticated-only combined backend query available to anon callers, so
+  // the public endpoint remains the best available source for them.
   const schoolRadiusFallbackMarkers = useMemo(
-    () =>
-      journey === 'school-first' && schoolId
-        ? deriveAnonSchoolRadiusMarkers(areaScopedSchoolRadiusListings)
-        : [],
-    [journey, schoolId, areaScopedSchoolRadiusListings],
+    () => {
+      if (journey !== 'school-first' || !schoolId) return [];
+      if (isAuthenticated) {
+        return filteredListings.filter((l) => l.latitude != null && l.longitude != null);
+      }
+      return deriveAnonSchoolRadiusMarkers(areaScopedSchoolRadiusListings);
+    },
+    [journey, schoolId, isAuthenticated, filteredListings, areaScopedSchoolRadiusListings],
   );
 
   return { schoolListings, schoolRadiusFallbackMarkers };
