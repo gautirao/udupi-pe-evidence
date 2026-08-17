@@ -88,7 +88,7 @@ type MapLayersView = Pick<
   | 'isBoundedBrowseState'
   | 'areaRestoreArea'
 > &
-  Pick<DiscoverMapCanvasProps, 'selectedRegion' | 'selectedMaxKm' | 'filteredAgriListings'> &
+  Pick<DiscoverMapCanvasProps, 'selectedRegion' | 'selectedMaxKm' | 'filteredAgriListings' | 'agriDestinationMarkers'> &
   Pick<DiscoverMapCanvasProps, 'overviewAreas' | 'areaSearchMatchKeys' | 'hoveredAreaKeyForMap'> &
   Pick<DiscoverMapCanvasProps, 'schoolZoneLabels'> &
   Pick<DiscoverMapCanvasProps, 'isRegionOverview' | 'regionOverviewShortLabel'>;
@@ -253,6 +253,7 @@ export type BuildMapSurfaceViewParams = Omit<
   | 'selectedRegion'
   | 'selectedMaxKm'
   | 'filteredAgriListings'
+  | 'agriDestinationMarkers'
   | 'schoolZoneLabels'
   | 'schools'
   | 'schoolsQuery'
@@ -378,7 +379,7 @@ export type BuildMapSurfaceViewParams = Omit<
   >;
   agriController: Pick<
     ReturnType<typeof useDiscoverAgriController>,
-    'selectedRegion' | 'selectedMaxKm' | 'filteredAgriListings'
+    'selectedRegion' | 'selectedMaxKm' | 'filteredAgriListings' | 'agriDestinationMarkers'
   >;
   schoolController: Pick<
     ReturnType<typeof useDiscoverSchoolController>,
@@ -519,7 +520,7 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
     journeyChromeController: { isLandingState, showSchoolMarkers, showSchoolBreadcrumb, schoolRadiusOverlay, isSelectedGroupState, isAreaFirstSelectedAreaState },
     markerPopoverController: { currentMapMarkerListings, markerPopoverStepper },
     navigationController: { hoveredNavigationNodeKey, focusedClusterMemberAreaKeys },
-    agriController: { selectedRegion, selectedMaxKm, filteredAgriListings },
+    agriController: { selectedRegion, selectedMaxKm, filteredAgriListings, agriDestinationMarkers },
     schoolController: {
       schoolZoneLabels,
       schools,
@@ -583,6 +584,7 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       selectedRegion,
       selectedMaxKm,
       filteredAgriListings,
+      agriDestinationMarkers,
       filters,
       isLandingState,
       overviewAreas,

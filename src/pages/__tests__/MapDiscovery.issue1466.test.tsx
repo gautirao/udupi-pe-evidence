@@ -1,13 +1,23 @@
 /**
  * Issue #1466 — MapDiscovery: agri marker click regression
+ * Issue #2186 — updated for the Level-2 (destination-bucket) vs Level-3 (real parcel)
+ * marker click split: a click only opens the individual-listing peek
+ * (urlActions.setSelectedListing) once a locality has been drilled into
+ * (selectedLocality set). Before that, region+maxKm is set but selectedLocality is
+ * still null, and only synthetic destination markers are ever on-screen — a click
+ * on one of those must drill in (urlActions.setLocality), not open a peek.
  *
  * handleSelectMarkerListing must call urlActions.setSelectedListing(id) when:
  *   - listing is non-null
  *   - journey === 'agri-first'
  *   - selectedRegion is non-null
  *   - selectedMaxKm is non-null
+ *   - selectedLocality is non-null (Level-3 — real parcel listing on-screen)
  *
- * TC1 (must fail without fix): agri context fully set → setSelectedListing called
+ * TC1 (must fail without fix): agri context fully set incl. selectedLocality →
+ *   setSelectedListing called
+ * TC1b (Issue #2186): agri context set, selectedLocality NULL (Level-2 destination
+ *   marker) → setLocality(listing.areaKey) called instead, setSelectedListing NOT called
  * TC2: residential journey → setSelectedListing NOT called
  * TC3: agri-first but selectedRegion=null → NOT called
  * TC4: agri-first but selectedMaxKm=null → NOT called
@@ -31,6 +41,7 @@ const mockUseAuth = vi.hoisted(() =>
 );
 
 const mockSetSelectedListing = vi.hoisted(() => vi.fn());
+const mockSetLocality = vi.hoisted(() => vi.fn());
 const mockUseDiscoverUrlState = vi.hoisted(() => vi.fn());
 
 // Capture the onSelectListing callback passed to PropertyMap so tests can invoke it directly.
@@ -182,6 +193,8 @@ function makeDefaultActions() {
     clearRegionAndMaxKm: vi.fn(),
     setSelectedListing: mockSetSelectedListing,
     clearSelectedListing: vi.fn(),
+    setLocality: mockSetLocality,
+    clearLocality: vi.fn(),
     enterSchoolPicking: vi.fn(),
     clearSchoolPicking: vi.fn(),
     backToSchoolPicking: vi.fn(),
@@ -206,17 +219,19 @@ function makeUrlState(overrides: Record<string, unknown> = {}) {
     selectedRegion: 'S' as const,
     selectedMaxKm: 25 as const,
     selectedListing: null as string | null,
+    selectedLocality: null as string | null,
     ...overrides,
   };
 }
 
-const makeListing = (id = 'uuid-1'): PropertyListingWithImages =>
+const makeListing = (id = 'uuid-1', areaKey?: string): PropertyListingWithImages =>
   ({
     id,
     title: 'Test Agri Listing',
     price: 0,
     location: 'Manipal',
     propertyType: 'agricultural_land',
+    areaKey: areaKey ?? null,
     images: [],
   } as unknown as PropertyListingWithImages);
 
@@ -239,12 +254,18 @@ describe('Issue #1466 — handleSelectMarkerListing agri URL wiring', () => {
     capturedOnSelectListing = undefined;
     mockUseAuth.mockReturnValue({ user: null, isLoading: false, isAdmin: false, isDealer: false });
     mockSetSelectedListing.mockReset();
+    mockSetLocality.mockReset();
     // Default: agri-first, selectedRegion='S', selectedMaxKm=25
     mockUseDiscoverUrlState.mockReturnValue([makeUrlState(), makeDefaultActions()]);
   });
 
-  it('TC1: agri-first + region=S + maxKm=25 + non-null listing → setSelectedListing(id) called', async () => {
-    renderAt('/discover?city=udupi&journey=agri-first&region=S&maxKm=25');
+  it('TC1: agri-first + region=S + maxKm=25 + selectedLocality set + non-null listing → setSelectedListing(id) called', async () => {
+    mockUseDiscoverUrlState.mockReturnValue([
+      makeUrlState({ selectedLocality: 'IN|KA|Udupi|Brahmavar' }),
+      makeDefaultActions(),
+    ]);
+
+    renderAt('/discover?city=udupi&journey=agri-first&region=S&maxKm=25&destKey=IN%7CKA%7CUdupi%7CBrahmavar');
 
     await waitFor(() => {
       expect(capturedOnSelectListing).toBeDefined();
@@ -255,6 +276,22 @@ describe('Issue #1466 — handleSelectMarkerListing agri URL wiring', () => {
     });
 
     expect(mockSetSelectedListing).toHaveBeenCalledWith('uuid-1');
+    expect(mockSetLocality).not.toHaveBeenCalled();
+  });
+
+  it('TC1b (Issue #2186): agri context set, selectedLocality NULL (Level-2 destination marker) → setLocality(areaKey) called, setSelectedListing NOT called', async () => {
+    renderAt('/discover?city=udupi&journey=agri-first&region=S&maxKm=25');
+
+    await waitFor(() => {
+      expect(capturedOnSelectListing).toBeDefined();
+    });
+
+    act(() => {
+      capturedOnSelectListing!(makeListing('IN|KA|Udupi|Brahmavar', 'IN|KA|Udupi|Brahmavar'));
+    });
+
+    expect(mockSetLocality).toHaveBeenCalledWith('IN|KA|Udupi|Brahmavar');
+    expect(mockSetSelectedListing).not.toHaveBeenCalled();
   });
 
   it('TC2: residential journey (not agri-first) → setSelectedListing NOT called', async () => {

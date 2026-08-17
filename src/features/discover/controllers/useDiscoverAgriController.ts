@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import { useRegionalAreaGroups, useAgriDestinations } from '@/hooks/useRegionalAreaGroups';
 import { useAgriMapListings } from '@/hooks/useAgriMapListings';
 import { useFilteredAgriListings } from '@/features/discover/presentation/useFilteredAgriListings';
-import { DEFAULT_CITY } from '@/lib/localityUtils';
+import { useAgriDestinationMarkers } from '@/features/discover/presentation/useAgriDestinationMarkers';
+import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import type { DiscoverNavContextValue } from '@/features/discover/context/types';
 
 export interface UseDiscoverAgriControllerParams {
@@ -97,6 +98,18 @@ export function useDiscoverAgriController({
     refetch: refetchAgriDestinations,
   } = useAgriDestinations(nav.city || DEFAULT_CITY, selectedRegion, selectedMaxKm, intentListingPurpose);
 
+  // Issue #2186 — Level-2 destination-bucket markers (agri panel results with no parcel
+  // markers on the map). Backend deliberately omits exact coordinates on
+  // agri-destinations buckets, so positions are derived client-side from bearing/distance
+  // off the SAME fixed city origin the corridor sector overlay (SectorOverlay.tsx) uses —
+  // CITY_CONFIG[city].center, never a second, independently-resolved origin.
+  const cityCenterForAgri = CITY_CONFIG[nav.city || DEFAULT_CITY]?.center;
+  const agriDestinationMarkers = useAgriDestinationMarkers({
+    agriDestinations,
+    cityLat: cityCenterForAgri?.[0],
+    cityLon: cityCenterForAgri?.[1],
+  });
+
   // Issue #1429 — corridor + distance tier label for the agri-group-selected panel header chip.
   const agriGroupLabel = selectedCorridorData
     ? selectedTierData
@@ -144,5 +157,6 @@ export function useDiscoverAgriController({
     agriGroupLabel,
     selectedGroupListingItem,
     filteredAgriListings,
+    agriDestinationMarkers,
   };
 }

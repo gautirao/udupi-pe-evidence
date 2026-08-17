@@ -218,6 +218,27 @@ export function useMarkerSelection({
 
   const handleSelectMarkerListing = useCallback(
     (listing: PropertyListingWithImages | null) => {
+      // Issue #2186 — a Level-2 agri destination-bucket marker (region + maxKm chosen,
+      // no locality drilled in yet) must drill into that locality, NOT open the
+      // individual-listing peek. It is distinguished from a real Level-3 parcel marker
+      // by `state.selectedLocality` being unset: destination-bucket markers only ever
+      // render on the map while no locality is selected (see
+      // useDiscoverAgriController's agriDestinationMarkers / DiscoverMapCanvas's
+      // agriGroupListings resolution) — a real parcel marker is never on-screen at the
+      // same time. Checked BEFORE the local-state write below so this synthetic
+      // "listing" never becomes selectedMarkerListing.
+      if (listing != null) {
+        const { urlActions: actions, urlState: state } = ctxRef.current;
+        if (
+          state.journey === 'agri-first' &&
+          state.selectedRegion != null &&
+          state.selectedMaxKm != null &&
+          state.selectedLocality == null
+        ) {
+          actions.setLocality(listing.areaKey ?? listing.id);
+          return;
+        }
+      }
       setSelectedMarkerListing(listing);
       if (listing == null) {
         popoverSourceRef.current = null;
@@ -226,8 +247,8 @@ export function useMarkerSelection({
       // Default to click-set — overridden to 'url' below at the exact point
       // (if any) a URL write actually happens for this click.
       popoverSourceRef.current = 'click';
-      // Issue #1466: In agri-group-selected context (corridor + distance tier chosen,
-      // no specific area), a marker click must write listing=<uuid> to the URL so
+      // Issue #1466: In agri-group-locality context (corridor + distance tier + locality
+      // chosen), a marker click must write listing=<uuid> to the URL so
       // derivePanelContent routes to 'agri-group-peek'. The agri-detail override
       // (resolvedPanelContent in the page) uses local selectedMarkerListing state and only
       // fires when panelContent==='agri-selected' (areaKey present) — no conflict here.

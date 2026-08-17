@@ -12,6 +12,7 @@ function makeUrlActions(overrides: Partial<DiscoverUrlActions> = {}): DiscoverUr
   return {
     setSelectedListing: vi.fn(),
     clearSelectedListing: vi.fn(),
+    setLocality: vi.fn(),
     ...overrides,
   } as unknown as DiscoverUrlActions;
 }
@@ -50,10 +51,15 @@ describe('useMarkerSelection', () => {
     expect(result.current.markerPixelPos).toBeNull();
   });
 
-  it('(ii) handleSelectMarkerListing: agri-first + selectedRegion + selectedMaxKm sets state and writes the URL', () => {
+  it('(ii) handleSelectMarkerListing: agri-first + selectedRegion + selectedMaxKm + selectedLocality (Level-3, real parcel) sets state and writes the URL', () => {
     const setSelectedListing = vi.fn();
     const urlActions = makeUrlActions({ setSelectedListing });
-    const urlState = makeUrlState({ journey: 'agri-first', selectedRegion: 'NE', selectedMaxKm: 25 });
+    const urlState = makeUrlState({
+      journey: 'agri-first',
+      selectedRegion: 'NE',
+      selectedMaxKm: 25,
+      selectedLocality: 'IN|KA|Udupi|Brahmavar',
+    });
     const { result } = renderHook(() => useMarkerSelection({ urlActions, urlState }));
 
     const listing = makeListing('agri-1');
@@ -64,6 +70,28 @@ describe('useMarkerSelection', () => {
     expect(result.current.selectedMarkerListing).toBe(listing);
     expect(setSelectedListing).toHaveBeenCalledWith('agri-1');
     expect(setSelectedListing).toHaveBeenCalledTimes(1);
+  });
+
+  it('(ii-b) Issue #2186: agri-first + selectedRegion + selectedMaxKm, NO selectedLocality (Level-2 destination marker) drills into the locality instead of opening a peek', () => {
+    const setSelectedListing = vi.fn();
+    const setLocality = vi.fn();
+    const urlActions = makeUrlActions({ setSelectedListing, setLocality });
+    const urlState = makeUrlState({ journey: 'agri-first', selectedRegion: 'NE', selectedMaxKm: 25 });
+    const { result } = renderHook(() => useMarkerSelection({ urlActions, urlState }));
+
+    const destinationMarker = {
+      id: 'IN|KA|Udupi|Brahmavar',
+      areaKey: 'IN|KA|Udupi|Brahmavar',
+    } as unknown as PropertyListingWithImages;
+    act(() => {
+      result.current.handleSelectMarkerListing(destinationMarker);
+    });
+
+    expect(setLocality).toHaveBeenCalledWith('IN|KA|Udupi|Brahmavar');
+    expect(setSelectedListing).not.toHaveBeenCalled();
+    // The synthetic destination "listing" must never become selectedMarkerListing —
+    // it isn't a real listing, so the agri-detail/peek panel must not render it.
+    expect(result.current.selectedMarkerListing).toBeNull();
   });
 
   it('(iii) handleSelectMarkerListing: area-first + areaKey + no school writes the URL', () => {

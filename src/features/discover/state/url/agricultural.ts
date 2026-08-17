@@ -13,12 +13,17 @@
  * doc for the full param contract.
  */
 import { useCallback, useEffect, useRef } from 'react';
-import { VALID_DIRECTIONS, extractLegacyGroupDirection } from '@/hooks/discoverUrlNormalize';
+import {
+  VALID_DIRECTIONS,
+  extractLegacyGroupDirection,
+  normalizeDiscoverSearchParams,
+} from '@/hooks/discoverUrlNormalize';
 import {
   applyLayerSelectionToParams,
   clearRegionScopeForAgri,
   paramsToLayerInput,
 } from '@/utils/discoverLayerRegistry';
+import { CLUSTER_FOCUS_PARAM, clearClusterFocusParam } from './clusterFocus';
 import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type { DiscoverUrlActions, DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 
@@ -264,6 +269,41 @@ export function useAgriculturalUrlDomain(
     );
     // No eslint-disable needed — mirrors the OD-1 effect above: real deps satisfy
     // react-hooks/exhaustive-deps, and the ref guard ensures the body still only runs once.
+  }, [urlParams, setUrlParams]);
+
+  // ─── Issue #2186 (AC6): cold-load stale-param strip ──────────────────────────
+  // A shared/bookmarked agri-first URL may still carry a school-first schoolId/radiusKm
+  // selection, or a stale clusterFocus left over from a prior area-hierarchy visit.
+  // Neither concept applies to agri-first (no school, no area-cluster hierarchy there),
+  // so strip all three once on mount via REPLACE — mirrors the OD-1/destKey migration
+  // effects above (ref-guarded, fires exactly once, never a phantom history entry).
+  // Guarded independently of coldLoadDoneRef/groupMigrationDoneRef/localityMigrationDoneRef
+  // above: this check has no ordering dependency on the region/maxKm/destKey state
+  // machines, so it does not need to participate in that ref chain.
+  const staleParamStripDoneRef = useRef(false);
+  useEffect(() => {
+    if (staleParamStripDoneRef.current) return;
+    staleParamStripDoneRef.current = true;
+
+    const journey = normalizeDiscoverSearchParams(urlParams).get('journey');
+    if (journey !== 'agri-first') return;
+
+    const hasStaleParams =
+      urlParams.get('schoolId') != null ||
+      urlParams.get('radiusKm') != null ||
+      urlParams.get(CLUSTER_FOCUS_PARAM) != null;
+    if (!hasStaleParams) return;
+
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('schoolId');
+        next.delete('radiusKm');
+        clearClusterFocusParam(next);
+        return next;
+      },
+      { replace: true }, // REPLACE — normalization must not create a phantom history entry
+    );
   }, [urlParams, setUrlParams]);
 
   // ─── Actions ─────────────────────────────────────────────────────────────

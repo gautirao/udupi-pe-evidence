@@ -5,7 +5,7 @@
  * badge-fork import-guard (this module must never import formatDiscoverBadgeCopy /
  * deriveSchoolRadiusPillNoun / hasActiveAnonPropertyFilter — those stay page-owned).
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +33,10 @@ vi.mock('@/components/map/PropertyMap', () => ({
   PropertyMap: (props: {
     hoveredNavigationNodeKey?: string | null;
     onAreaVisualClusterCameraIntent?: (bounds: unknown, center: unknown) => void;
+    // Issue #2186 — captured so a test can prove which source (filteredAgriListings vs
+    // agriDestinationMarkers vs null) DiscoverMapCanvas actually resolved into the
+    // agriGroupListings prop, without needing PropertyMap's real Leaflet internals.
+    agriGroupListings?: Array<{ id: string }> | null;
   }) => (
     <div
       data-testid="property-map-mock"
@@ -40,6 +44,11 @@ vi.mock('@/components/map/PropertyMap', () => ({
       data-has-area-visual-cluster-camera-intent={String(
         typeof props.onAreaVisualClusterCameraIntent === 'function',
       )}
+      data-agri-group-listings-ids={
+        props.agriGroupListings == null
+          ? 'null'
+          : props.agriGroupListings.map((l) => l.id).join(',')
+      }
     />
   ),
 }));
@@ -188,6 +197,7 @@ function baseProps(overrides: Partial<DiscoverMapCanvasProps> = {}): DiscoverMap
     selectedRegion: null,
     selectedMaxKm: null,
     filteredAgriListings: null,
+    agriDestinationMarkers: [],
     filters: {},
     isLandingState: true,
     handlePolygonDrawn: vi.fn(),
@@ -305,6 +315,75 @@ describe('DiscoverMapCanvas', () => {
       'data-has-area-visual-cluster-camera-intent',
       'true',
     );
+  });
+
+  describe('Issue #2186 — agriGroupListings prop resolution', () => {
+    afterEach(() => {
+      // Restore BASE_NAV.selectedLocality after any test that mutates it below —
+      // BASE_NAV is a shared hoisted fixture read by every test in this file.
+      BASE_NAV.selectedLocality = undefined;
+    });
+
+    it('AC4: Level-2 (region + maxKm set, no selectedLocality) resolves to agriDestinationMarkers, fixing the "results but no markers" gap', () => {
+      const agriDestinationMarkers = [
+        { id: 'IN|KA|Udupi|Brahmavar', areaKey: 'IN|KA|Udupi|Brahmavar', latitude: 13.4, longitude: 74.8, propertyType: 'agricultural_land' },
+      ];
+      render(
+        <DiscoverMapCanvas
+          {...baseProps({
+            selectedRegion: 'N',
+            selectedMaxKm: 25,
+            filteredAgriListings: null,
+            agriDestinationMarkers,
+          })}
+        />,
+      );
+      expect(screen.getByTestId('property-map-mock')).toHaveAttribute(
+        'data-agri-group-listings-ids',
+        'IN|KA|Udupi|Brahmavar',
+      );
+    });
+
+    it('Level-3 (selectedLocality also set) resolves to filteredAgriListings, unchanged pre-#2186 behaviour', () => {
+      BASE_NAV.selectedLocality = 'IN|KA|Udupi|Brahmavar';
+      const filteredAgriListings = [
+        { id: 'parcel-1', areaKey: 'IN|KA|Udupi|Brahmavar', latitude: 13.41, longitude: 74.81, propertyType: 'agricultural_land' },
+      ];
+      const agriDestinationMarkers = [
+        { id: 'IN|KA|Udupi|Brahmavar', areaKey: 'IN|KA|Udupi|Brahmavar', latitude: 13.4, longitude: 74.8, propertyType: 'agricultural_land' },
+      ];
+      render(
+        <DiscoverMapCanvas
+          {...baseProps({
+            selectedRegion: 'N',
+            selectedMaxKm: 25,
+            filteredAgriListings,
+            agriDestinationMarkers,
+          })}
+        />,
+      );
+      expect(screen.getByTestId('property-map-mock')).toHaveAttribute(
+        'data-agri-group-listings-ids',
+        'parcel-1',
+      );
+    });
+
+    it('no region/maxKm selected (Level-1 landing) resolves to null — no markers, no regression', () => {
+      render(
+        <DiscoverMapCanvas
+          {...baseProps({
+            selectedRegion: null,
+            selectedMaxKm: null,
+            filteredAgriListings: null,
+            agriDestinationMarkers: [],
+          })}
+        />,
+      );
+      expect(screen.getByTestId('property-map-mock')).toHaveAttribute(
+        'data-agri-group-listings-ids',
+        'null',
+      );
+    });
   });
 
   it('shows the error card instead of PropertyMap when error is set', () => {

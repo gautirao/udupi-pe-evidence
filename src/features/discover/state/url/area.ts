@@ -16,6 +16,7 @@ import {
   type NavigationResolveResponseWire,
 } from '@/features/discover/navigation/types';
 import { AREAS_NAVIGATION_RESOLVE_QUERY_KEY_BASE } from '@/features/discover/navigation/useAreasNavigationJourney';
+import { clearClusterFocusParam } from './clusterFocus';
 import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type {
   DiscoverJourney,
@@ -331,6 +332,15 @@ export function useAreaUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<AreaState, 
             next.set('journey', newJourney);
           } else {
             next.delete('journey');
+          }
+          // Issue #2186 (AC5) — school-first context (schoolId/radiusKm) and any stale
+          // area-cluster focus never apply to agri-first (no school or hierarchy-cluster
+          // concept there). Strip all three on any switch INTO agri-first so a prior
+          // school-first/area-first selection can't leak into the agri panel/map.
+          if (newJourney === 'agri-first') {
+            next.delete('schoolId');
+            next.delete('radiusKm');
+            clearClusterFocusParam(next);
           }
           return next;
         },

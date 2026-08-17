@@ -73,6 +73,14 @@ export interface DiscoverMapCanvasProps {
   selectedRegion: 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW' | null;
   selectedMaxKm: 10 | 25 | 50 | 100 | null;
   filteredAgriListings: AgriMapListingItem[] | null;
+  /**
+   * Issue #2186 — synthetic per-destination-bucket markers for the Level-2 agri panel
+   * (region + maxKm selected, no locality drilled in yet). Positions are derived
+   * client-side (see useAgriDestinationMarkers) since the backend's agri-destinations
+   * buckets deliberately omit exact coordinates. Always [] (never null) when there is
+   * no data — `agriDestinations` fetch failure/loading is not this prop's concern.
+   */
+  agriDestinationMarkers: AgriMapListingItem[];
   filters: PropertyFilters;
   isLandingState: boolean;
   handlePolygonDrawn: (polygon: [number, number][]) => void;
@@ -315,6 +323,7 @@ export function DiscoverMapCanvas({
   selectedRegion,
   selectedMaxKm,
   filteredAgriListings,
+  agriDestinationMarkers,
   filters,
   isLandingState,
   handlePolygonDrawn,
@@ -570,7 +579,17 @@ export function DiscoverMapCanvas({
         <PropertyMap
           listings={currentMapMarkerListings}
           focusBounds={agriGroupFocusBounds ?? activeFocusBounds}
-          agriGroupListings={(selectedRegion && selectedMaxKm != null) ? filteredAgriListings : null}
+          // Issue #2186 — Level-3 (locality drilled into) uses the real fetched parcel
+          // listings, unchanged. Level-2 (region + maxKm chosen, no locality yet) now
+          // renders the synthetic per-destination-bucket markers instead of nothing,
+          // fixing the "agri panel has results but the map shows zero markers" gap.
+          agriGroupListings={
+            nav.selectedLocality
+              ? filteredAgriListings
+              : (selectedRegion && selectedMaxKm != null)
+                ? agriDestinationMarkers
+                : null
+          }
           polygon={filters.polygon}
           // Issue #1588 — hide the polygon draw tool on the public landing
           // (guided-entry). PropertyMap only mounts DrawControl when BOTH handlers
