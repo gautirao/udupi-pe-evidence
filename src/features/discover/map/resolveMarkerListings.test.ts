@@ -462,4 +462,93 @@ describe('resolveMarkerListings', () => {
       expect(result).toEqual([]);
     });
   });
+
+  // Issue #2193 AC3 (marker half) — real PropertyMap rendering proved genuinely
+  // infeasible in this suite (every existing PropertyMap.*.test.tsx mocks the
+  // `leaflet` module itself — `marker`/`divIcon` are `vi.fn()` stubs — so no
+  // existing convention in this repo produces a real DOM
+  // `data-testid="property-marker"` element under JSDOM; see specialist report
+  // for the full R2 discussion). This proves the MARKER-SELECTION layer instead:
+  // resolveMarkerListings is the pure selector that decides which listing array
+  // actually reaches <PropertyMap listings={...}> for a resolved AREA leaf. The
+  // Leaflet DOM render itself remains UNPROVEN by this test — stated explicitly,
+  // not silently substituted.
+  describe('Issue #2193 AC3 — dual-surface contract (marker-selection half), by listing id', () => {
+    const TARGET_AREA_KEY = 'QA|QA|qa2193audit|TargetArea';
+    const OUTSIDE_AREA_KEY = 'QA|QA|qa2193audit|OutsideArea';
+    const TARGET_LISTING_ID = '11111111-1111-1111-1111-111111111111';
+    const OUTSIDE_LISTING_ID = '22222222-2222-2222-2222-222222222222';
+
+    const TARGET_AREA: AreaPoint = {
+      areaKey: TARGET_AREA_KEY,
+      areaLabel: 'TargetArea',
+      geo_center_lat: 13.0,
+      geo_center_lon: 74.0,
+      bbox: [[12.9, 73.9], [13.1, 74.1]],
+      listingCount: 1,
+    };
+
+    function makeIdentifiedMarker(id: string, lat: number, lon: number): PropertyListingWithImages {
+      return { ...makeMarker(), id, latitude: lat, longitude: lon };
+    }
+
+    // ONE shared fixture payload (N5) — the SAME two listing objects are reused
+    // as the source of truth for both this selector-level assertion and (via
+    // the identical TARGET_LISTING_ID / TARGET_AREA_KEY constants) the AC3
+    // panel-render spec in
+    // src/components/discover/__tests__/DiscoverDualSurfaceInvariant2193.test.tsx.
+    // A desync (panel/marker fixtures built independently) is exactly what N5
+    // exists to defeat, so the identifiers here are NOT re-invented per file.
+    const targetListing = makeIdentifiedMarker(TARGET_LISTING_ID, 13.0, 74.0);
+    const outsideListing = makeIdentifiedMarker(OUTSIDE_LISTING_ID, 20.0, 80.0);
+
+    it('a resolved AREA leaf surfaces ONLY the in-area TARGET listing by id — the OUTSIDE listing (negative control) never leaks in', () => {
+      // R5: zoom explicitly set/asserted ABOVE the marker-visibility threshold
+      // so an absent marker cannot be misread as "correctly suppressed".
+      const mapZoom = 14;
+      const areaLayerMaxZoom = 12;
+      expect(mapZoom).toBeGreaterThan(areaLayerMaxZoom);
+
+      const result = resolveMarkerListings(
+        baseInput({
+          selectedArea: TARGET_AREA,
+          mapZoom,
+          areaLayerMaxZoom,
+          isLoadingAreaListings: false,
+          isErrorAreaListings: false,
+          // areaMarkerListings is what the real controller derives from the
+          // SAME node-scoped payload the panel consumes (areaListings ->
+          // withCoords, useDiscoverMapData.ts) — deliberately containing
+          // ONLY the target listing, proving scope containment at the
+          // selector boundary regardless of what a wider unscoped fetch
+          // might have returned.
+          areaMarkerListings: [targetListing],
+          // markerListings simulates an UNSCOPED/city-wide fetch that (bug
+          // scenario) leaked the OUTSIDE listing too — proving the selector
+          // prefers the area-scoped array and never falls through to it here.
+          markerListings: [targetListing, outsideListing],
+        }),
+      );
+
+      const ids = result.map((l) => l.id);
+      expect(ids).toContain(TARGET_LISTING_ID);
+      expect(ids).not.toContain(OUTSIDE_LISTING_ID);
+      expect(result).toEqual([targetListing]);
+    });
+
+    it('discriminating negative control — swapping selectedArea to OUTSIDE_AREA_KEY with only outsideListing scoped proves the TARGET is excluded when out of scope', () => {
+      const result = resolveMarkerListings(
+        baseInput({
+          selectedArea: { ...TARGET_AREA, areaKey: OUTSIDE_AREA_KEY, areaLabel: 'OutsideArea' },
+          mapZoom: 14,
+          areaLayerMaxZoom: 12,
+          areaMarkerListings: [outsideListing],
+          markerListings: [targetListing, outsideListing],
+        }),
+      );
+      const ids = result.map((l) => l.id);
+      expect(ids).toContain(OUTSIDE_LISTING_ID);
+      expect(ids).not.toContain(TARGET_LISTING_ID);
+    });
+  });
 });

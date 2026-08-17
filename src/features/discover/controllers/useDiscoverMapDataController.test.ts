@@ -167,6 +167,18 @@ function findMarkersCall() {
   return mockApiGet.mock.calls.find(([url]: [string]) => url.includes('/api/discover/markers'));
 }
 
+// Issue #2193 AC2 — the PANEL twin of findMarkersCall. The right panel's data
+// comes from a SEPARATE hook/endpoint (useDiscoverCityListings ->
+// GET /api/discover/cities/<city>/listings?areaKeys=...), reached for real
+// through the same mocked api.get in this test (it is NOT among the sub-hooks
+// mocked at the top of this file). Excludes the markers URL explicitly so a
+// same-substring collision can never make both helpers resolve to one call.
+function findPanelCall() {
+  return mockApiGet.mock.calls.find(
+    ([url]: [string]) => url.includes('/discover/cities/') && url.includes('/listings') && !url.includes('/markers'),
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   setupDefaultMocks();
@@ -253,5 +265,73 @@ describe('useDiscoverMapDataController — canonical AREA-leaf marker scope (Iss
     const params = new URLSearchParams(url.split('?')[1]);
     expect(params.has('nodeKey')).toBe(false);
     expect(params.getAll('areaKeys')).toEqual([]);
+  });
+});
+
+describe('useDiscoverMapDataController — Issue #2193 AC2: same-geography contract (map/panel scope agreement)', () => {
+  // WHAT THIS TEST ACTUALLY PROVES, scope-narrowed to the resolved-AREA-leaf
+  // state it exercises: the /api/discover/markers REQUEST is correctly
+  // node-scoped and NAMES THE SAME AREA as the panel's own request —
+  //   markers request: GET /api/discover/markers?nodeKey=<leaf>            (useDiscoverFilteredMarkers)
+  //   panel request:   GET /api/discover/cities/<city>/listings?areaKeys=<area> (useDiscoverCityListings)
+  // Nothing at the type level forces those two REQUESTS to name the SAME
+  // geography — they are two independently-computed params threaded through
+  // two independent hooks — so this is a genuine, valuable regression guard
+  // on request scoping.
+  //
+  // WHAT THIS TEST DOES NOT PROVE, for this specific state: that the markers
+  // RESPONSE is what determines the rendered marker set. For a resolved
+  // canonical AREA leaf, `resolveMarkerListings.ts` (:146-168) takes the
+  // `selectedArea` branch, which returns `areaMarkerListings` whenever it is
+  // non-empty and only falls back to the `/api/discover/markers` response
+  // (`markerListings`) `if (isErrorAreaListings)`. `areaMarkerListings` is
+  // itself derived (`useDiscoverMapData.ts` :689-703) from `areaListings`,
+  // sourced from `cityListingsData` (`useDiscoverCityListings`, :582-595 and
+  // :667-670) — the SAME public teaser response that feeds the panel. So in
+  // THIS state, panel and rendered markers already share one response by
+  // construction; the markers request asserted below is still fired (and
+  // still JWT-gated) but is an error-fallback source here, not the primary
+  // source of truth for what's on screen. (It genuinely IS the primary,
+  // markers-first source for the group-results and `nodeListings=1` states —
+  // this narrowing applies only to the plain resolved `node=` AREA-leaf state
+  // this describe block covers.)
+  it('marker nodeKey and panel areaKeys resolve to the SAME area — not merely both present (N3 hardening)', async () => {
+    renderHook(
+      () =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          nav: makeNav({ journey: 'area-first', rawNodeParam: 'n:area-1', node: 'n:area-1' }),
+          effectiveSelectedArea: EFFECTIVE_SELECTED_AREA,
+          areasNavigationJourney: makeAreasNavigationJourney({ node: AREA_LEAF }),
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(findMarkersCall()).toBeDefined();
+      expect(findPanelCall()).toBeDefined();
+    });
+
+    const [markersUrl] = findMarkersCall() as [string, unknown];
+    const markerParams = new URLSearchParams(markersUrl.split('?')[1]);
+
+    const [panelUrl] = findPanelCall() as [string, unknown];
+    const panelParams = new URLSearchParams(panelUrl.split('?')[1]);
+
+    // The marker request is scoped to the resolved node leaf...
+    expect(markerParams.get('nodeKey')).toBe(AREA_LEAF.nodeKey);
+    // ...and the panel request is scoped to areaKeys=[...]. Presence alone is
+    // NOT the assertion (that would pass even if the panel's areaKeys named a
+    // totally different area than the marker's nodeKey resolved to). Instead
+    // compare against `AREA_LEAF.areaKey` — the SAME node object's own
+    // canonical area-bridge field that fed `effectiveSelectedArea` — so a
+    // scope desync (panel pointed at area A while markers resolve node B)
+    // makes this assertion fail, not merely a "was something sent" check.
+    expect(panelParams.getAll('areaKeys')).toEqual([AREA_LEAF.areaKey]);
+
+    // Belt-and-braces identity check: the panel's sole areaKeys value and the
+    // area backing the marker's resolved node are literally the same string.
+    expect(panelParams.getAll('areaKeys')).toEqual([EFFECTIVE_SELECTED_AREA.areaKey]);
+    expect(EFFECTIVE_SELECTED_AREA.areaKey).toBe(AREA_LEAF.areaKey);
   });
 });
