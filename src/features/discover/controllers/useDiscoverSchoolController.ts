@@ -70,7 +70,7 @@ export interface UseDiscoverSchoolControllerParams
  * outputs from useDiscoverPageState, useDiscoverMapData (schoolById/
  * schoolByIdError/discoverAreas/areasLoading/areaListings/
  * schoolRadiusListings/filteredListings), and `focusedGroup` (page-level
- * derivation via `resolveDiscoverGroupForAreaKey`, shared with the
+ * derivation via `resolveActiveDiscoverGroup`, shared with the
  * page's own `groupListingsCount` badge derivation — not school-specific,
  * so not owned here).
  */

@@ -62,23 +62,6 @@ export function resolveActiveDiscoverGroup(
   );
 }
 
-/**
- * Resolves an active group given an areaKey, falling back to matching groups that contain that areaKey.
- * Guarantees state/breadcrumb/map consistency when areaKey is active even if groupId is omitted from deep-link.
- */
-export function resolveDiscoverGroupForAreaKey(
-  groups: AreaGroup[] | undefined | null,
-  groupId: string | null | undefined,
-  areaKey: string | null | undefined,
-): AreaGroup | null {
-  if (!groups) return null;
-  const direct = resolveActiveDiscoverGroup(groups, groupId);
-  if (direct) return direct;
-  if (!areaKey?.trim()) return null;
-  const targetKey = areaKey.trim();
-  return groups.find((g) => g.area_keys.includes(targetKey)) ?? null;
-}
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**

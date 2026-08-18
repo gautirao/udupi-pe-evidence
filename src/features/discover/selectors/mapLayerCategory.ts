@@ -24,6 +24,5 @@ export {
   toLayerInput,
   selectDiscoverMapLayer,
   resolveActiveDiscoverGroup,
-  resolveDiscoverGroupForAreaKey,
   type DiscoverMapLayerKind,
 } from '@/features/discover/utils/discoverLayerRegistry';

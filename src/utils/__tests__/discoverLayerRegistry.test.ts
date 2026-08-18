@@ -11,7 +11,6 @@ import {
   paramsToLayerInput,
   applyLayerSelectionToParams,
   resolveActiveDiscoverGroup,
-  resolveDiscoverGroupForAreaKey,
   LAYER_PARAM,
   PANEL_DERIVATION_FIELDS,
   type DiscoverLayerInput,
@@ -654,12 +653,17 @@ describe('PR-B1 Group Resolution Helpers (#1798)', () => {
     expect(resolveActiveDiscoverGroup(undefined, 'any')).toBeNull();
   });
 
-  it('resolveDiscoverGroupForAreaKey resolves from groupId or falls back to member area matching', () => {
-    // Direct groupId match takes precedence
-    expect(resolveDiscoverGroupForAreaKey(mockGroups, 'university-belt', 'IN|KA|Bangalore|Kodalagurki')?.name).toBe('University Belt');
-    // Mismatched or slug-only groupId falls back to finding the group containing areaKey
-    expect(resolveDiscoverGroupForAreaKey(mockGroups, 'north-growth', 'IN|KA|Bangalore|Kodalagurki')?.name).toBe('North Bangalore Emerging');
-    // No groupId, finds by areaKey alone
-    expect(resolveDiscoverGroupForAreaKey(mockGroups, null, 'IN|KA|Bangalore|Kodalagurki')?.name).toBe('North Bangalore Emerging');
+  // Issue #2201 — `groupId` is the SOLE server-owned product-identity signal
+  // for a group; `areaKey` must never act as a surrogate. A group is only
+  // ever resolved via an explicit, resolvable `groupId` — never inferred by
+  // scanning which group's `area_keys` happens to contain a given areaKey.
+  it('resolveActiveDiscoverGroup never infers a group from areaKey alone', () => {
+    // No groupId at all — must return null, even though
+    // 'IN|KA|Bangalore|Kodalagurki' is a member area of 'North Bangalore Emerging'.
+    expect(resolveActiveDiscoverGroup(mockGroups, null)).toBeNull();
+    expect(resolveActiveDiscoverGroup(mockGroups, undefined)).toBeNull();
+    // An unresolvable groupId must also return null — not fall back to any
+    // area-key-based inference.
+    expect(resolveActiveDiscoverGroup(mockGroups, 'not-a-real-group-id')).toBeNull();
   });
 });

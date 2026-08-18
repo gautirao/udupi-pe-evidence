@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useAreaGroups, type AreaGroup } from '@/hooks/useAreaGroups';
-import { resolveDiscoverGroupForAreaKey } from '@/features/discover/selectors/mapLayerCategory';
+import { resolveActiveDiscoverGroup } from '@/features/discover/selectors/mapLayerCategory';
 import { prettifyZoneSlug } from '@/components/discover/SchoolRadiusMapOverlay';
 
 export interface UseDiscoverAreaGroupsControllerParams {
@@ -19,18 +19,22 @@ export interface UseDiscoverAreaGroupsControllerParams {
  * focusedGroup after the badge block, focusedGroupAreas after that, and
  * selectedGroupName 600 lines later still).
  *
- * SOLE OWNER of "given the URL's groupId/areaKey, which AreaGroup is in
- * focus and what does that imply". Every one of the four derivations calls
- * the SAME resolver (`resolveDiscoverGroupForAreaKey`) over the SAME inputs;
- * co-locating them is what makes the historical "deliberately duplicates that
+ * SOLE OWNER of "given the URL's groupId, which AreaGroup is in focus and
+ * what does that imply". Every one of the four derivations calls the SAME
+ * resolver (`resolveActiveDiscoverGroup`) over the SAME `groupId`; co-locating
+ * them is what makes the historical "deliberately duplicates that
  * derivation ... rather than reordering ~1600 lines of existing hooks"
  * comment (MapDiscovery.tsx, issue #1806 FIX-1) obsolete rather than
  * permanent.
+ *
+ * Issue #2201 — `groupId` is the SOLE server-owned product-identity signal
+ * for a group. `areaKey` is never used to infer group identity (it used to,
+ * via a since-removed fallback in the shared resolver): a group is only ever
+ * "focused" when `groupId` explicitly resolves to a real `AreaGroup`.
  */
 export function useDiscoverAreaGroupsController({
   navCity,
   groupId,
-  areaKey,
   journey,
   schoolId,
 }: UseDiscoverAreaGroupsControllerParams) {
@@ -51,12 +55,12 @@ export function useDiscoverAreaGroupsController({
     isLoading: isLoadingAreaGroups,
   } = useAreaGroups(navCity);
 
-  // Issue #1175 v3 / Issue #1798 PR-B1 — focusedGroup is resolved from both groupId (by ID
-  // or exact slug match) and automatically derived from nav.areaKey if needed.
-  // Guarantees right panel, map layer, map markers, and map breadcrumb derive from unified context.
+  // Issue #1175 v3 / Issue #1798 PR-B1 (Issue #2201 correction) — focusedGroup is resolved
+  // from groupId ONLY (by ID or exact slug match). Guarantees right panel, map layer, map
+  // markers, and map breadcrumb derive from unified context.
   const focusedGroup = useMemo(() => {
-    return resolveDiscoverGroupForAreaKey(areaGroupsData?.groups, groupId, areaKey);
-  }, [areaGroupsData?.groups, groupId, areaKey]);
+    return resolveActiveDiscoverGroup(areaGroupsData?.groups, groupId);
+  }, [areaGroupsData?.groups, groupId]);
 
   const focusedGroupAreas = useMemo(
     () => focusedGroup?.area_keys,
@@ -87,9 +91,9 @@ export function useDiscoverAreaGroupsController({
   const groupAreaKeysForMapData = useMemo((): string[] | undefined => {
     if (!groupId) return undefined;
     if (journey === 'school-first' && schoolId) return undefined;
-    const group = resolveDiscoverGroupForAreaKey(areaGroupsData?.groups, groupId, areaKey);
+    const group = resolveActiveDiscoverGroup(areaGroupsData?.groups, groupId);
     return group?.area_keys ?? [];
-  }, [groupId, journey, schoolId, areaKey, areaGroupsData?.groups]);
+  }, [groupId, journey, schoolId, areaGroupsData?.groups]);
 
   // Issue #1606 — resolved group display name for the area-first breadcrumb. Prefers the
   // backend group name, falls back to a prettified slug so a deep-linked groupId that has

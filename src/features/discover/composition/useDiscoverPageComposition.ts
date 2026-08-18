@@ -140,8 +140,10 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
 
   // The four derivations (useAreaGroups + focusedGroup + focusedGroupAreas +
   // groupAreaKeysForMapData + selectedGroupName) all call the SAME
-  // resolveDiscoverGroupForAreaKey over the SAME inputs and are pure
-  // useMemos/consts with no consumer between this call and their use sites.
+  // resolveActiveDiscoverGroup over the SAME groupId (Issue #2201 — groupId
+  // is the sole group-identity signal, areaKey is never used to infer group
+  // membership) and are pure useMemos/consts with no consumer between this
+  // call and their use sites.
   const areaGroupsController = useDiscoverAreaGroupsController({
     navCity: nav.city || DEFAULT_CITY,
     groupId: nav.groupId,
