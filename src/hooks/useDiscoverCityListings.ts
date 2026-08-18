@@ -196,7 +196,11 @@ export function useDiscoverCityListings({
         `/api/discover/cities/${encodeURIComponent(city)}/listings?${params.toString()}`,
       );
     },
-    enabled: areaKeys.length > 0,
+    // Issue #2189 — areaKeys resolving before `city` does previously let this fire
+    // with an empty city segment (`/api/discover/cities//listings`, 401). Boolean(city)
+    // mirrors the existing city-readiness idiom used by useAreasNavigationJourney.ts
+    // and area.ts rather than introducing a second city-validity owner.
+    enabled: areaKeys.length > 0 && Boolean(city),
     staleTime: DISCOVER_CITY_LISTINGS_STALE_TIME_MS,
     placeholderData: keepPreviousData,
   });

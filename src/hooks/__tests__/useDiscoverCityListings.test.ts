@@ -54,6 +54,40 @@ describe('useDiscoverCityListings', () => {
     expect(mockGet).not.toHaveBeenCalled();
   });
 
+  // ─── Issue #2189 — city-resolved guard ─────────────────────────
+
+  it('does not fetch when city is empty even if areaKeys is populated (Issue #2189)', () => {
+    const { result } = renderHook(
+      () => useDiscoverCityListings({ city: '', areaKeys: ['udupi|manipal'] }),
+      { wrapper: makeWrapper() },
+    );
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  it('never issues a request with an empty city path segment, even transiently (Issue #2189)', async () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+
+    const { result, rerender } = renderHook(
+      ({ city, areaKeys }: { city: string; areaKeys: string[] }) =>
+        useDiscoverCityListings({ city, areaKeys }),
+      { wrapper: makeWrapper(), initialProps: { city: '', areaKeys: ['udupi|manipal'] } },
+    );
+
+    // areaKeys resolved first, city still empty — must stay disabled.
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockGet).not.toHaveBeenCalled();
+
+    // city subsequently resolves — exactly one, correctly-formed request fires.
+    rerender({ city: 'udupi', areaKeys: ['udupi|manipal'] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    expect(url.startsWith('/api/discover/cities/udupi/listings?')).toBe(true);
+    expect(url).not.toContain('/api/discover/cities//listings');
+  });
+
   it('fetches with basic params when no filters provided', async () => {
     mockGet.mockResolvedValue(BASE_RESPONSE);
 
