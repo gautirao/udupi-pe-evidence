@@ -13,11 +13,23 @@ import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
  * map/panel mismatch the issue reports.
  *
  * `'areas'` is the LEGACY #1597 group-scope producer. It is dead on the
- * canonical node path (rule 5 always wins there), but it is NOT dead overall
- * — it still has live producers: preview mode (rule 1 below), and the
- * journeyless landing / school-first / agri-first surfaces documented in
- * #2188. It is deferred to #2188 for eventual removal once all of those
- * producers are migrated off it.
+ * canonical node path (rule 5 always wins there), but it is NOT dead
+ * overall. It is reachable via two disjoint routes:
+ *   1. Preview mode, unconditionally (rule 1) — preview's `/markers`
+ *      endpoint only understands `?areaKeys=`; a node scope has no wire
+ *      representation there (D2, deferred as #2202).
+ *   2. Live mode when `journey === 'school-first' && schoolId == null &&
+ *      groupId != null` (reaches rule 6). Both school-first guards — rule 2
+ *      here and useDiscoverAreaGroupsController.ts:89 — are keyed on
+ *      `schoolId`, not on the journey, so the shipped school-browse /
+ *      school-group-areas states (schoolId null; see
+ *      discoverPanelState.ts:118-120) fire neither guard and fall through
+ *      to rule 6.
+ * agri-first can never reach rule 6 — rule 3 returns `{ kind: 'city' }`
+ * unconditionally. The arm dies only when BOTH preview node-scoping (#2202)
+ * and the school-first group taxonomy migration (#2201) have landed — never
+ * on one alone; deleting it before then reintroduces the #1806 map/panel
+ * scope mismatch. Legacy removal is tracked as #2205.
  */
 export type DiscoverMarkerScope =
   | { kind: 'city' }
