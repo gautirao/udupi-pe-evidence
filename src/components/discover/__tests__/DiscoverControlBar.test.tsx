@@ -72,7 +72,14 @@ const { BASE_NAV, ACTIONS } = vi.hoisted(() => {
     goToAncestorNode: vi.fn(),
     clearNode: vi.fn(),
     enterAreasJourney: vi.fn(),
+    enterSchoolsJourney: vi.fn(),
+    enterSchoolsJourneyAtArea: vi.fn(),
     buildNodeHref: vi.fn(),
+    enterNodeListings: vi.fn(),
+    clearNodeListings: vi.fn(),
+    // Issue #2203 — journey-preserving node selection for School-first/Agri-first.
+    goToNodeAndClearSchoolSelection: vi.fn(),
+    goToNodeAndClearAgriculturalLocality: vi.fn(),
   };
 
   return { BASE_NAV: nav, ACTIONS: actions };
@@ -340,42 +347,123 @@ describe('DiscoverControlBar', () => {
       expect(mockResolveMutate).not.toHaveBeenCalled();
     });
 
-    // Issue #1956 PR 6 rework (rework-request-pr-review-3.toml) — the
-    // canonical resolve->enterAreasJourney seam above is a SHARED control
-    // across all three journeys plus the journey-less landing. Selecting
-    // an area outside journey=area-first must NEVER call
-    // enterAreasJourney (which atomically writes journey=area-first) —
-    // that was the cross-journey-ejection regression this rework fixes.
-    // Each case gets its own test per the rework's explicit instruction
-    // ("a test per journey is the point, not an afterthought").
-    describe('shared control seam by journey — school-first/agri-first/journey-less must not convert', () => {
-      it('school-first: selecting an area calls the legacy selectArea and keeps journey=school-first (no resolver call, no enterAreasJourney)', async () => {
+    // Issue #2203 (Option A') — the canonical resolve seam above is now
+    // SHARED across all three explicit journeys (area-first, school-first,
+    // agri-first). School-first/agri-first must resolve through the SAME
+    // resolver as area-first but write via a JOURNEY-PRESERVING node action
+    // — never enterAreasJourney (which would eject the user into
+    // area-first, the cross-journey-ejection regression the #1956 PR 6
+    // rework originally guarded against). Only the journey-less landing
+    // keeps the untouched legacy `selectArea` behaviour. Each case gets its
+    // own test per the established "a test per journey" convention.
+    describe('shared control seam by journey — school-first/agri-first resolve+preserve, journey-less stays legacy', () => {
+      it('school-first: resolves through the SAME resolver as area-first (never the legacy selectArea)', async () => {
         currentNav = { ...BASE_NAV, journey: 'school-first' };
         const user = userEvent.setup();
         render(<DiscoverControlBar />);
         await user.type(screen.getByTestId('control-bar-area-input'), 'koramangala');
         await user.click(screen.getByTestId('control-bar-area-option-area:koramangala'));
 
-        expect(ACTIONS.selectArea).toHaveBeenCalledTimes(1);
-        expect(ACTIONS.selectArea).toHaveBeenCalledWith('area:koramangala');
-        expect(mockResolveMutate).not.toHaveBeenCalled();
-        expect(ACTIONS.enterAreasJourney).not.toHaveBeenCalled();
+        expect(mockResolveMutate).toHaveBeenCalledTimes(1);
+        const [params] = mockResolveMutate.mock.calls[0];
+        expect(params).toEqual({ city: 'bangalore', areaKey: 'area:koramangala' });
+        expect(ACTIONS.selectArea).not.toHaveBeenCalled();
       });
 
-      it('agri-first: selecting an area calls the legacy selectArea and keeps journey=agri-first (no resolver call, no enterAreasJourney)', async () => {
+      it('school-first: on resolution SUCCESS, writes the resolved node via goToNodeAndClearSchoolSelection — never enterAreasJourney (journey preserved)', async () => {
+        currentNav = { ...BASE_NAV, journey: 'school-first' };
+        const user = userEvent.setup();
+        mockResolveMutate.mockImplementation((_params, { onSuccess }) => {
+          onSuccess({
+            areaKey: 'area:koramangala',
+            nodeKey: 'a:area:koramangala',
+            displayLabel: 'Koramangala',
+            ancestry: [],
+            revisionId: 1,
+          });
+        });
+        render(<DiscoverControlBar />);
+        await user.type(screen.getByTestId('control-bar-area-input'), 'koramangala');
+        await user.click(screen.getByTestId('control-bar-area-option-area:koramangala'));
+
+        expect(ACTIONS.goToNodeAndClearSchoolSelection).toHaveBeenCalledTimes(1);
+        expect(ACTIONS.goToNodeAndClearSchoolSelection).toHaveBeenCalledWith('a:area:koramangala');
+        expect(ACTIONS.enterAreasJourney).not.toHaveBeenCalled();
+        expect(ACTIONS.selectArea).not.toHaveBeenCalled();
+        expect(mockToast).not.toHaveBeenCalled();
+      });
+
+      it('school-first: on resolution FAILURE, writes nothing and shows the existing stale-link toast', async () => {
+        currentNav = { ...BASE_NAV, journey: 'school-first' };
+        const user = userEvent.setup();
+        mockResolveMutate.mockImplementation((_params, { onError }) => {
+          onError(new Error('404'));
+        });
+        render(<DiscoverControlBar />);
+        await user.type(screen.getByTestId('control-bar-area-input'), 'koramangala');
+        await user.click(screen.getByTestId('control-bar-area-option-area:koramangala'));
+
+        expect(ACTIONS.goToNodeAndClearSchoolSelection).not.toHaveBeenCalled();
+        expect(ACTIONS.enterAreasJourney).not.toHaveBeenCalled();
+        expect(ACTIONS.selectArea).not.toHaveBeenCalled();
+        expect(mockToast).toHaveBeenCalledTimes(1);
+        expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' }));
+      });
+
+      it('agri-first: resolves through the SAME resolver as area-first (never the legacy selectArea)', async () => {
         currentNav = { ...BASE_NAV, journey: 'agri-first' };
         const user = userEvent.setup();
         render(<DiscoverControlBar />);
         await user.type(screen.getByTestId('control-bar-area-input'), 'koramangala');
         await user.click(screen.getByTestId('control-bar-area-option-area:koramangala'));
 
-        expect(ACTIONS.selectArea).toHaveBeenCalledTimes(1);
-        expect(ACTIONS.selectArea).toHaveBeenCalledWith('area:koramangala');
-        expect(mockResolveMutate).not.toHaveBeenCalled();
-        expect(ACTIONS.enterAreasJourney).not.toHaveBeenCalled();
+        expect(mockResolveMutate).toHaveBeenCalledTimes(1);
+        const [params] = mockResolveMutate.mock.calls[0];
+        expect(params).toEqual({ city: 'bangalore', areaKey: 'area:koramangala' });
+        expect(ACTIONS.selectArea).not.toHaveBeenCalled();
       });
 
-      it('journey-less (landing, journey=null): selecting an area calls the legacy selectArea, never enterAreasJourney — the copy fallback to area-first text is display-only and must not extend to behaviour', async () => {
+      it('agri-first: on resolution SUCCESS, writes the resolved node via goToNodeAndClearAgriculturalLocality — never enterAreasJourney (journey preserved)', async () => {
+        currentNav = { ...BASE_NAV, journey: 'agri-first' };
+        const user = userEvent.setup();
+        mockResolveMutate.mockImplementation((_params, { onSuccess }) => {
+          onSuccess({
+            areaKey: 'area:koramangala',
+            nodeKey: 'a:area:koramangala',
+            displayLabel: 'Koramangala',
+            ancestry: [],
+            revisionId: 1,
+          });
+        });
+        render(<DiscoverControlBar />);
+        await user.type(screen.getByTestId('control-bar-area-input'), 'koramangala');
+        await user.click(screen.getByTestId('control-bar-area-option-area:koramangala'));
+
+        expect(ACTIONS.goToNodeAndClearAgriculturalLocality).toHaveBeenCalledTimes(1);
+        expect(ACTIONS.goToNodeAndClearAgriculturalLocality).toHaveBeenCalledWith('a:area:koramangala');
+        expect(ACTIONS.enterAreasJourney).not.toHaveBeenCalled();
+        expect(ACTIONS.selectArea).not.toHaveBeenCalled();
+        expect(mockToast).not.toHaveBeenCalled();
+      });
+
+      it('agri-first: on resolution FAILURE, writes nothing and shows the existing stale-link toast', async () => {
+        currentNav = { ...BASE_NAV, journey: 'agri-first' };
+        const user = userEvent.setup();
+        mockResolveMutate.mockImplementation((_params, { onError }) => {
+          onError(new Error('404'));
+        });
+        render(<DiscoverControlBar />);
+        await user.type(screen.getByTestId('control-bar-area-input'), 'koramangala');
+        await user.click(screen.getByTestId('control-bar-area-option-area:koramangala'));
+
+        expect(ACTIONS.goToNodeAndClearAgriculturalLocality).not.toHaveBeenCalled();
+        expect(ACTIONS.enterAreasJourney).not.toHaveBeenCalled();
+        expect(ACTIONS.selectArea).not.toHaveBeenCalled();
+        expect(mockToast).toHaveBeenCalledTimes(1);
+        expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' }));
+      });
+
+      it('journey-less (landing, journey=null): selecting an area calls the legacy selectArea, never enterAreasJourney or the resolver — the copy fallback to area-first text is display-only and must not extend to behaviour', async () => {
         currentNav = { ...BASE_NAV, journey: null };
         const user = userEvent.setup();
         render(<DiscoverControlBar />);
@@ -386,16 +474,29 @@ describe('DiscoverControlBar', () => {
         expect(ACTIONS.selectArea).toHaveBeenCalledWith('area:koramangala');
         expect(mockResolveMutate).not.toHaveBeenCalled();
         expect(ACTIONS.enterAreasJourney).not.toHaveBeenCalled();
+        expect(ACTIONS.goToNodeAndClearSchoolSelection).not.toHaveBeenCalled();
+        expect(ACTIONS.goToNodeAndClearAgriculturalLocality).not.toHaveBeenCalled();
       });
 
-      it('school-first/agri-first/journey-less never toast even when a resolver failure callback would otherwise fire (the resolver is never invoked at all)', async () => {
-        currentNav = { ...BASE_NAV, journey: 'school-first' };
+      it('journey-less landing never toasts (selectArea is synchronous, no resolver involved)', async () => {
+        currentNav = { ...BASE_NAV, journey: null };
         const user = userEvent.setup();
         render(<DiscoverControlBar />);
         await user.type(screen.getByTestId('control-bar-area-input'), 'koramangala');
         await user.click(screen.getByTestId('control-bar-area-option-area:koramangala'));
 
         expect(mockToast).not.toHaveBeenCalled();
+      });
+
+      it('school-first: ignores a second selection while a resolution is already in flight', async () => {
+        currentNav = { ...BASE_NAV, journey: 'school-first' };
+        const user = userEvent.setup();
+        mockResolveIsPending = true;
+        render(<DiscoverControlBar />);
+        await user.type(screen.getByTestId('control-bar-area-input'), 'koramangala');
+        await user.click(screen.getByTestId('control-bar-area-option-area:koramangala'));
+
+        expect(mockResolveMutate).not.toHaveBeenCalled();
       });
     });
 

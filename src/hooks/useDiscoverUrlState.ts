@@ -559,6 +559,24 @@ export interface DiscoverUrlActions {
    * Single REPLACE.
    */
   clearNodeListings: () => void;
+  /**
+   * Issue #2203 (Option A') — School-first "pick a new Area" from the shared
+   * control-bar search. Writes `node=<resolvedKey>` (identical delta to
+   * `goToNode`) AND clears `schoolId` in ONE PUSH. `journey` is never
+   * touched — the caller stays in school-first. Use this instead of
+   * `goToNode` whenever a new Area selection must also invalidate a
+   * previously-selected school (the geography-dependent leaf).
+   */
+  goToNodeAndClearSchoolSelection: (nodeKey: string) => void;
+  /**
+   * Issue #2203 (Option A') — Agri-first "pick a new Area" from the shared
+   * control-bar search. Writes `node=<resolvedKey>` (identical delta to
+   * `goToNode`) AND clears the destKey-based `selectedLocality` leaf
+   * (`destKey`/`locality`/`town`) in ONE PUSH. `journey` is never touched.
+   * `selectedRegion`/`selectedMaxKm` (corridor + radius) are deliberately
+   * preserved — they remain meaningful across an Area change.
+   */
+  goToNodeAndClearAgriculturalLocality: (nodeKey: string) => void;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────

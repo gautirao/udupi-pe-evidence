@@ -103,9 +103,17 @@ const ACTION_KEYS = [
   'clearNode',
   'enterAreasJourney',
   'enterSchoolsJourney',
+  // #2203 pre-existing gap fix — this key was missing from the exhaustive
+  // list (build-breaking: the `ActionKeysExhaustive` assert below resolved
+  // to `never`), touched here anyway since this array is already being
+  // extended for #2203's two new actions.
+  'enterSchoolsJourneyAtArea',
   'buildNodeHref',
   'enterNodeListings',
   'clearNodeListings',
+  // #2203 — Option A' journey-preserving node selection (School-first/Agri-first).
+  'goToNodeAndClearSchoolSelection',
+  'goToNodeAndClearAgriculturalLocality',
 ] as const satisfies readonly (keyof DiscoverUrlActions)[];
 
 // A deliberately-omitted (or renamed/added) DiscoverUrlActions key makes this

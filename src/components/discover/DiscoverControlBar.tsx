@@ -487,42 +487,64 @@ export function DiscoverControlBar({ mobileMapTrigger }: DiscoverControlBarProps
   };
 
   const handleSelectArea = (areaKey: string) => {
-    // PR review rework (rework-request-pr-review-3.toml) — this control bar
-    // is SHARED across area-first, school-first, agri-first, AND the
-    // journey-less landing (nav.journey === null before any journey is
-    // picked). The canonical resolve-through-navigation-path ->
-    // enterAreasJourney seam below is authorised ONLY for the explicit
-    // area-first journey ([rulings.option_a_search_convergence_2026_08_03]
-    // scopes this to the area-search convergence fix, and the standing
+    // Issue #2203 (Option A') — this control bar is SHARED across
+    // area-first, school-first, agri-first, AND the journey-less landing
+    // (nav.journey === null before any journey is picked). The original
+    // three-way split here (PR review rework, rework-request-pr-review-3.toml)
+    // routed school-first/agri-first/journey-less all through the SAME
+    // `actions.selectArea` branch alongside journey-less — that was correct
+    // for journey-less (out of scope, deferred to #2059's journey-less
+    // convergence) but left school-first/agri-first area-search unable to
+    // preserve a resolved canonical node like area-first can.
+    //
+    // Journey-less landing keeps its EXACT pre-existing behaviour — the
     // [rulings.oq_a] A1 MINIMAL ruling explicitly keeps journey-less
-    // convergence OUT of this PR, deferred to #2059). school-first and
-    // agri-first must keep selecting the area WITHOUT changing the active
-    // journey — restoring the pre-existing `actions.selectArea` behaviour
-    // this fix's predecessor commit (77a8af93) incorrectly replaced
-    // unconditionally. The journey-less landing case is folded into the
-    // same restored branch rather than into the canonical one: extending
-    // canonical convergence to a journey-less URL would itself be the
-    // out-of-scope journey-less defaulting A1 forbids, even though the
-    // adjacent copy fallback (resolveAreaSearchCopy) treats null as
-    // area-first for LABEL text only.
-    if (nav.journey !== 'area-first') {
+    // convergence out of scope (deferred to #2059), and the adjacent copy
+    // fallback (resolveAreaSearchCopy) treating null as area-first is
+    // display-only text, never behaviour.
+    if (nav.journey === null) {
       actions.selectArea(areaKey);
       return;
     }
 
-    // A resolution is already in flight for a prior selection — never fire a
-    // second concurrent request/history write (mirrors handleSelectJourney's
-    // same guard for the JourneySwitcher conversion seam).
+    // Every journeyed case (area-first, school-first, agri-first) now
+    // resolves the picked areaKey through the SAME sanctioned server path
+    // (`.../navigation-path`) area-first already used — never a
+    // client-constructed node key, never a second resolution path. A
+    // resolution already in flight for a prior selection is never
+    // superseded by a second concurrent request/history write (mirrors
+    // handleSelectJourney's same guard for the JourneySwitcher conversion
+    // seam).
     if (resolveAreaNavigationPath.isPending) return;
     resolveAreaNavigationPath.mutate(
       { city: nav.city, areaKey },
       {
         onSuccess: (path) => {
-          // Success: camera and panel move together, in ONE atomic write —
-          // the same writer guided hierarchy selection uses. The legacy
-          // `areaKey=`/`groupId=` params are never written in the first
-          // place, so there is nothing obsolete left to clear.
-          actions.enterAreasJourney(path.nodeKey);
+          // area-first: camera and panel move together via enterAreasJourney
+          // — the same atomic writer guided hierarchy selection uses. The
+          // legacy `areaKey=`/`groupId=` params are never written in the
+          // first place, so there is nothing obsolete left to clear.
+          //
+          // school-first/agri-first: `journey` is NEVER converted to
+          // area-first — that would eject the user out of the journey they
+          // are in, which is exactly the cross-journey-ejection regression
+          // the school-first/agri-first branch below `enterAreasJourney`
+          // used to guard against. Instead the resolved node is written via
+          // a journey-preserving action that ALSO clears the
+          // geography-dependent leaf selection the just-left Area owned
+          // (school-first: `schoolId`; agri-first: the destKey-based
+          // `selectedLocality`) in the SAME atomic write — a new Area no
+          // longer implies the previously-selected school/locality is still
+          // valid. `selectedRegion`/`selectedMaxKm` (agri-first's corridor +
+          // radius) are untouched — those remain meaningful across an Area
+          // change within the same corridor.
+          if (nav.journey === 'area-first') {
+            actions.enterAreasJourney(path.nodeKey);
+          } else if (nav.journey === 'school-first') {
+            actions.goToNodeAndClearSchoolSelection(path.nodeKey);
+          } else {
+            actions.goToNodeAndClearAgriculturalLocality(path.nodeKey);
+          }
         },
         onError: () => {
           // Failure: preserve the current canonical state untouched (no

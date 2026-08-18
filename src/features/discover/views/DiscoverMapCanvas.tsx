@@ -449,7 +449,15 @@ export function DiscoverMapCanvas({
   // journey is active, so each site recomputes the SAME condition rather
   // than trusting a threaded boolean.
   const isSchoolsNavNodeLevel = nav.journey === 'school-first' && !nav.areaKey && !nav.schoolId;
-  const showAreasNavigationDestinations = (nav.journey === 'area-first' || isSchoolsNavNodeLevel) && !nav.nodeListings;
+  // Issue #2203 follow-up (review Finding 1) — symmetric agri-first
+  // counterpart to `isSchoolsNavNodeLevel` above, completing this file's
+  // copy of the triplicated gate to match the widened
+  // `showAreasNavigationJourney` in useDiscoverNavigationController.ts.
+  // Same condition as that controller's `isAgriNavNodeLevel`: agri-first's
+  // geography-dependent leaf is `selectedLocality`, not `areaKey`/`schoolId`.
+  const isAgriNavNodeLevel = nav.journey === 'agri-first' && !nav.selectedLocality;
+  const showAreasNavigationDestinations =
+    (nav.journey === 'area-first' || isSchoolsNavNodeLevel || isAgriNavNodeLevel) && !nav.nodeListings;
 
   // Issue #2089 — Leaflet's own click-after-drag suppression only covers
   // Leaflet's INTERNAL 'click' event system; it does not stop the browser's

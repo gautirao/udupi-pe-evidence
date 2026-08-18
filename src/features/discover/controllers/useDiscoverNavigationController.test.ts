@@ -80,7 +80,32 @@ describe('useDiscoverNavigationController (#2142 Commit 3 — moved verbatim fro
   it('showAreasNavigationJourney is false for any other journey', () => {
     const { result } = renderHook(() =>
       useDiscoverNavigationController({
-        nav: makeNav({ journey: 'agri-first' }),
+        nav: makeNav({ journey: null }),
+        goToNode: vi.fn(),
+        intentListingPurpose: 'sale',
+      }),
+    );
+    expect(result.current.showAreasNavigationJourney).toBe(false);
+  });
+
+  // Issue #2203 follow-up — symmetric agri-first counterpart to the
+  // school-first NODE-level cases above. Agri-first's geography-dependent
+  // leaf is `selectedLocality`, not `areaKey`/`schoolId`.
+  it('showAreasNavigationJourney is true for the agri-first NODE level (no selectedLocality)', () => {
+    const { result } = renderHook(() =>
+      useDiscoverNavigationController({
+        nav: makeNav({ journey: 'agri-first', selectedLocality: null }),
+        goToNode: vi.fn(),
+        intentListingPurpose: 'sale',
+      }),
+    );
+    expect(result.current.showAreasNavigationJourney).toBe(true);
+  });
+
+  it('showAreasNavigationJourney is false for agri-first once a selectedLocality is resolved', () => {
+    const { result } = renderHook(() =>
+      useDiscoverNavigationController({
+        nav: makeNav({ journey: 'agri-first', selectedLocality: 'Manipal' }),
         goToNode: vi.fn(),
         intentListingPurpose: 'sale',
       }),
@@ -121,6 +146,69 @@ describe('useDiscoverNavigationController (#2142 Commit 3 — moved verbatim fro
         filters: expect.objectContaining({ propertyTypes: ['house'], bedrooms: [3], purpose: 'sale' }),
       }),
     );
+  });
+
+  // Issue #2203 follow-up — proves `nodeAreaPoint` actually populates once
+  // an AREA leaf resolves, for BOTH school-first and agri-first, via the
+  // real `deriveAreaPointFromNode` bridge (not mocked) fed by the mocked
+  // `useAreasNavigationJourney.node`. `isNodeAreaLeafActive` must stay false
+  // for both — it is hardcoded to `journey === 'area-first'` only (owner
+  // ruling on #2203) and must NOT widen.
+  const RESOLVED_AREA_NODE = {
+    nodeKey: 'a:IN|KA|Udupi|Manipal',
+    nodeType: 'AREA' as const,
+    areaKey: 'IN|KA|Udupi|Manipal',
+    displayLabel: 'Manipal',
+    bounds: {
+      centreLat: 13.35,
+      centreLon: 74.79,
+      minLat: 13.3,
+      minLon: 74.75,
+      maxLat: 13.4,
+      maxLon: 74.83,
+    },
+  };
+
+  it('nodeAreaPoint populates for the school-first NODE level once the node resolves to an AREA leaf, but isNodeAreaLeafActive stays false', () => {
+    mockUseAreasNavigationJourney.mockReturnValue({ ...NODE_JOURNEY_RESULT, node: RESOLVED_AREA_NODE });
+    const { result } = renderHook(() =>
+      useDiscoverNavigationController({
+        nav: makeNav({ journey: 'school-first', areaKey: null, schoolId: null }),
+        goToNode: vi.fn(),
+        intentListingPurpose: 'sale',
+      }),
+    );
+    expect(result.current.nodeAreaPoint).toEqual(
+      expect.objectContaining({ areaKey: 'IN|KA|Udupi|Manipal', geo_center_lat: 13.35, geo_center_lon: 74.79 }),
+    );
+    expect(result.current.isNodeAreaLeafActive).toBe(false);
+  });
+
+  it('nodeAreaPoint populates for the agri-first NODE level once the node resolves to an AREA leaf, but isNodeAreaLeafActive stays false', () => {
+    mockUseAreasNavigationJourney.mockReturnValue({ ...NODE_JOURNEY_RESULT, node: RESOLVED_AREA_NODE });
+    const { result } = renderHook(() =>
+      useDiscoverNavigationController({
+        nav: makeNav({ journey: 'agri-first', selectedLocality: null }),
+        goToNode: vi.fn(),
+        intentListingPurpose: 'sale',
+      }),
+    );
+    expect(result.current.nodeAreaPoint).toEqual(
+      expect.objectContaining({ areaKey: 'IN|KA|Udupi|Manipal', geo_center_lat: 13.35, geo_center_lon: 74.79 }),
+    );
+    expect(result.current.isNodeAreaLeafActive).toBe(false);
+  });
+
+  it('nodeAreaPoint stays null for agri-first once selectedLocality is resolved (legacy leaf interlock, mirrors school-first)', () => {
+    mockUseAreasNavigationJourney.mockReturnValue({ ...NODE_JOURNEY_RESULT, node: RESOLVED_AREA_NODE });
+    const { result } = renderHook(() =>
+      useDiscoverNavigationController({
+        nav: makeNav({ journey: 'agri-first', selectedLocality: 'Manipal' }),
+        goToNode: vi.fn(),
+        intentListingPurpose: 'sale',
+      }),
+    );
+    expect(result.current.nodeAreaPoint).toBeNull();
   });
 
   it('returns areasNavigationJourney, hoveredNavigationNodeKey/setter, and focusedClusterMemberAreaKeys/setter', () => {

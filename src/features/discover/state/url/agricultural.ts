@@ -27,14 +27,21 @@ import { CLUSTER_FOCUS_PARAM, clearClusterFocusParam } from './clusterFocus';
 import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type { DiscoverUrlActions, DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 
-const PARAM_LOCALITY = 'locality';
+/**
+ * Exported (Issue #2203) so `state/url/navigation.ts`'s
+ * `goToNodeAndClearAgriculturalLocality` can clear the SAME three params this
+ * domain owns for `selectedLocality` (canonical `destKey` + the two legacy
+ * aliases) in the SAME atomic node-navigation write, instead of hardcoding a
+ * second copy of these literals in a different domain module.
+ */
+export const PARAM_LOCALITY = 'locality';
 /**
  * Issue #2151 PR C (C-F1) — canonical destination-key URL param. Stores areas.area_key (a stable
  * identity), never display text. Legacy `locality=`/`town=` links (which stored free-text town
  * names, or occasionally an areaKey when the old client-side grouping fell back to it) are
  * migrated to this param exactly once on cold load — see the migration effect below.
  */
-const PARAM_DEST_KEY = 'destKey';
+export const PARAM_DEST_KEY = 'destKey';
 /**
  * Issue #2151 PR C — format guard for the legacy locality/town → destKey migration below.
  * Real area_key values follow `IN|KA|<District>|<Name>` (see src/lib/areaKey.ts's

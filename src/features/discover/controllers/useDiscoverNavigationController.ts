@@ -73,12 +73,31 @@ export function useDiscoverNavigationController({
   // see DiscoverMapCanvas.tsx's own copy of this comment for why the
   // triplication is deliberate.
   const isSchoolsNavNodeLevel = nav.journey === 'school-first' && !nav.areaKey && !nav.schoolId;
+  // Issue #2203 follow-up — symmetric agri-first counterpart to
+  // `isSchoolsNavNodeLevel` above. Agri-first's geography-dependent leaf is
+  // `selectedLocality` (the destKey-based locality selection, not
+  // `areaKey`/`schoolId`) — see agricultural.ts's `PARAM_DEST_KEY`. Same
+  // rationale: once a canonical AREA is picked via `goToNode` (now
+  // `goToNodeAndClearAgriculturalLocality`, which never touches `journey`),
+  // this stays true so the canonical hierarchy fetch (and `nodeAreaPoint`
+  // derivation below) keeps running for agri-first too — it must NOT widen
+  // `isNodeAreaLeafActive`, which stays hardcoded to `journey ===
+  // 'area-first'` per the owner ruling on #2203.
+  //
+  // Review follow-up (PR #2211) — this flag also feeds `showAreasNavigationJourney`
+  // below, which in turn is the `showAreasNavigationJourney` param
+  // `useDiscoverCameraController` uses to gate `isSelectedNodeOutOfView`/the
+  // "Recenter on <label>" affordance (same as `isSchoolsNavNodeLevel` already
+  // did for school-first before this PR). So agri-first at the node level can
+  // now trigger Recenter too — this is intentional, symmetric completion, not
+  // a side effect limited to `nodeAreaPoint`/the hierarchy fetch.
+  const isAgriNavNodeLevel = nav.journey === 'agri-first' && !nav.selectedLocality;
   // Issue #2142 SOLID follow-up (commit 2) — moved verbatim from
   // DiscoverPanelSurface.tsx, which derived the identical expression off its
   // own `useDiscoverNav()` read. Same input, same value; the surface now
   // consumes it through the panel model instead of re-deriving it.
   const isAreaFirstJourneyActive = nav.journey === 'area-first';
-  const showAreasNavigationJourney = isAreaFirstJourneyActive || isSchoolsNavNodeLevel;
+  const showAreasNavigationJourney = isAreaFirstJourneyActive || isSchoolsNavNodeLevel || isAgriNavNodeLevel;
 
   // Issue #1956 PR 2 (Slice 3, pass 4, AC3.9) — the ONE ephemeral hover/focus
   // node_key, threaded unchanged to BOTH the map's AreaDestinationMarkerLayer

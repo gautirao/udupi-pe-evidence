@@ -96,6 +96,44 @@ describe('useDiscoverCameraController (#1823/#2143 sole owner)', () => {
     expect(mockCheckIsSelectedNodeOutOfView).toHaveBeenCalledWith(node, [1, 2, 3, 4]);
   });
 
+  // Issue #2203 follow-up (review Finding 2, PR #2211) — this controller is
+  // deliberately journey-agnostic: it only ever sees the flattened
+  // `showAreasNavigationJourney` boolean, not `nav.journey` itself. The
+  // journey-specific gating (school-first/agri-first at the NODE level, both
+  // proven true in useDiscoverNavigationController.test.ts) all funnels
+  // through that SAME boolean before reaching this controller, so the
+  // delegation test above already exercises the code path both journeys hit.
+  // This test pins that reachability explicitly for agri-first (mirroring
+  // school-first, which reaches the identical `showAreasNavigationJourney:
+  // true` state via `isSchoolsNavNodeLevel`) so Recenter's agri-first
+  // coverage can't silently regress without a dedicated failure.
+  it('isSelectedNodeOutOfView / Recenter is reachable for agri-first at the NODE level (mirrors school-first via the same showAreasNavigationJourney flattening)', () => {
+    mockCheckIsSelectedNodeOutOfView.mockReturnValue(true);
+    mockGetCameraIntentForRecenter.mockReturnValue({
+      cameraBounds: [[1, 2], [3, 4]],
+      centre: [5, 6],
+      kind: 'leaf',
+    });
+    // showAreasNavigationJourney: true is exactly what
+    // useDiscoverNavigationController computes for
+    // `journey === 'agri-first' && !selectedLocality` (isAgriNavNodeLevel).
+    const node = { nodeKey: 'agri:n:1' } as never;
+    const publishRecenterCameraIntent = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverCameraController(
+        baseParams({
+          showAreasNavigationJourney: true,
+          areasNavigationJourney: { node, children: [], isLoading: false, error: null, selectNode: vi.fn() } as never,
+          mapBbox: [1, 2, 3, 4],
+          publishRecenterCameraIntent,
+        }),
+      ),
+    );
+    expect(result.current.isSelectedNodeOutOfView).toBe(true);
+    act(() => result.current.handleRecenterOnSelectedNode());
+    expect(publishRecenterCameraIntent).toHaveBeenCalledWith([[1, 2], [3, 4]], [5, 6], 'leaf');
+  });
+
   it('handleRecenterOnSelectedNode is a no-op when getCameraIntentForRecenter returns null', () => {
     const publishRecenterCameraIntent = vi.fn();
     const { result } = renderHook(() =>

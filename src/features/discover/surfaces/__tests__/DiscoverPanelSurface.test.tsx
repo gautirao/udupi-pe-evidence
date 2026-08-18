@@ -142,6 +142,9 @@ const { BASE_URL_STATE, URL_ACTIONS } = vi.hoisted(() => {
     buildNodeHref: vi.fn(),
     enterNodeListings: vi.fn(),
     clearNodeListings: vi.fn(),
+    // Issue #2203 — journey-preserving node selection.
+    goToNodeAndClearSchoolSelection: vi.fn(),
+    goToNodeAndClearAgriculturalLocality: vi.fn(),
     setSelectedListing: vi.fn(),
     clearSelectedListing: vi.fn(),
     setLocality: vi.fn(),

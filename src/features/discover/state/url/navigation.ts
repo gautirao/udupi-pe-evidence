@@ -49,11 +49,22 @@ import { useCallback } from 'react';
 import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type { DiscoverUrlActions, DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { clearClusterFocusParam } from './clusterFocus';
+import { PARAM_DEST_KEY, PARAM_LOCALITY } from './agricultural';
 
 type NavigationState = Pick<DiscoverUrlState, 'node' | 'rawNodeParam' | 'nodeListings'>;
 type NavigationActions = Pick<
   DiscoverUrlActions,
-  'goToNode' | 'goToAncestorNode' | 'clearNode' | 'enterAreasJourney' | 'enterSchoolsJourney' | 'enterSchoolsJourneyAtArea' | 'buildNodeHref' | 'enterNodeListings' | 'clearNodeListings'
+  | 'goToNode'
+  | 'goToAncestorNode'
+  | 'clearNode'
+  | 'enterAreasJourney'
+  | 'enterSchoolsJourney'
+  | 'enterSchoolsJourneyAtArea'
+  | 'buildNodeHref'
+  | 'enterNodeListings'
+  | 'clearNodeListings'
+  | 'goToNodeAndClearSchoolSelection'
+  | 'goToNodeAndClearAgriculturalLocality'
 >;
 
 /**
@@ -367,6 +378,95 @@ export function useNavigationUrlDomain(
   const clearNode = useCallback(() => writeNode(null), [writeNode]);
 
   /**
+   * Issue #2203 (Option A') — School-first "pick a new Area from the shared
+   * control-bar search" seam. Drills into the resolved child node (the
+   * IDENTICAL `node=` URL delta `goToNode` writes — same `applyNodeDelta`)
+   * AND clears the geography-dependent `schoolId` leaf selection, in the
+   * SAME `setUrlParams` call — never a second, separate write/history entry.
+   *
+   * `journey` is NEVER touched here — unlike `enterAreasJourney`, this never
+   * converts the active journey to `area-first`; the caller stays in
+   * school-first the whole time. Mirrors `enterSchoolsJourney`'s existing
+   * `next.delete('schoolId')` (that atomic journey-entry writer already
+   * drops schoolId when (re-)entering school-first) — this is the same
+   * clear, applied to an in-journey Area re-pick instead of journey entry.
+   *
+   * Only `schoolId` is deleted, not `radiusKm` — matching `enterSchoolsJourney`'s
+   * own precedent (it clears schoolId only, not radiusKm) rather than
+   * inventing a second clear-shape for the same leaf concept.
+   *
+   * Same no-op guard as `writeNode`: re-selecting the Area the node cursor is
+   * already on burns zero history entries.
+   *
+   * Review follow-up (PR #2211, reviewer-bot @ 07c92a3b) — ALSO clears the
+   * legacy `areaKey` param in this SAME write, mirroring `enterAreasJourney`'s
+   * `next.delete('areaKey')`: a stale `areaKey` left over from a prior
+   * area-first visit must disappear in the IDENTICAL transition that writes
+   * the new canonical `node=`, never a second, separate clear. `groupId` is
+   * deliberately NOT touched here — that's #2201's separate canonical
+   * identity, out of scope for this leaf-selection seam.
+   */
+  const goToNodeAndClearSchoolSelection = useCallback(
+    (nodeKey: string) => {
+      cancelPendingViewportCommit(timers);
+      if (nodeKey === node) {
+        return;
+      }
+      setUrlParams(
+        (prev) => {
+          const next = applyNodeDelta(prev, nodeKey);
+          next.delete('schoolId');
+          next.delete('areaKey');
+          return next;
+        },
+        { replace: false }, // PUSH — a genuine Area re-pick is a deliberate destination
+      );
+    },
+    [setUrlParams, timers, node],
+  );
+
+  /**
+   * Issue #2203 (Option A') — Agri-first "pick a new Area from the shared
+   * control-bar search" seam. Same shape as
+   * `goToNodeAndClearSchoolSelection` above, for the agri-first
+   * geography-dependent leaf: the destKey-based `selectedLocality`
+   * (agricultural.ts's `PARAM_DEST_KEY` plus its two legacy aliases,
+   * `PARAM_LOCALITY` and `town` — mirrors `clearLocality`'s own delete set so
+   * this can never leave a stale legacy alias behind). `journey` is never
+   * touched. `selectedRegion`/`selectedMaxKm` (the corridor + radius
+   * filters) are deliberately NOT cleared — they remain meaningful across
+   * an Area change within the same corridor, unlike the destKey leaf.
+   *
+   * Review follow-up (PR #2211, reviewer-bot @ 07c92a3b) — ALSO clears the
+   * legacy `areaKey` param in this SAME write, mirroring `enterAreasJourney`'s
+   * `next.delete('areaKey')`: a stale `areaKey` left over from a prior
+   * area-first visit must disappear in the IDENTICAL transition that writes
+   * the new canonical `node=`, never a second, separate clear. `groupId` is
+   * deliberately NOT touched here — that's #2201's separate canonical
+   * identity, out of scope for this leaf-selection seam.
+   */
+  const goToNodeAndClearAgriculturalLocality = useCallback(
+    (nodeKey: string) => {
+      cancelPendingViewportCommit(timers);
+      if (nodeKey === node) {
+        return;
+      }
+      setUrlParams(
+        (prev) => {
+          const next = applyNodeDelta(prev, nodeKey);
+          next.delete(PARAM_DEST_KEY);
+          next.delete(PARAM_LOCALITY);
+          next.delete('town');
+          next.delete('areaKey');
+          return next;
+        },
+        { replace: false }, // PUSH — a genuine Area re-pick is a deliberate destination
+      );
+    },
+    [setUrlParams, timers, node],
+  );
+
+  /**
    * ATOMIC journey entry — sets `journey=area-first` AND `node=` in ONE
    * `setUrlParams` call, therefore ONE history entry.
    *
@@ -476,6 +576,18 @@ export function useNavigationUrlDomain(
 
   return {
     state: { node, rawNodeParam, nodeListings },
-    actions: { goToNode, goToAncestorNode, clearNode, enterAreasJourney, enterSchoolsJourney, enterSchoolsJourneyAtArea, buildNodeHref, enterNodeListings, clearNodeListings },
+    actions: {
+      goToNode,
+      goToAncestorNode,
+      clearNode,
+      enterAreasJourney,
+      enterSchoolsJourney,
+      enterSchoolsJourneyAtArea,
+      buildNodeHref,
+      enterNodeListings,
+      clearNodeListings,
+      goToNodeAndClearSchoolSelection,
+      goToNodeAndClearAgriculturalLocality,
+    },
   };
 }

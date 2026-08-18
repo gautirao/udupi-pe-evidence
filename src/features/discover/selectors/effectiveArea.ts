@@ -12,20 +12,21 @@ import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
  * `selectedArea` always wins when both are non-null. `nodeAreaPoint` is
  * non-null only while `showAreasNavigationJourney` is true AND the node
  * journey resolved to an AREA leaf (useDiscoverNavigationController.ts:115-118).
- * `showAreasNavigationJourney` is true for area-first, and ALSO for
- * school-first at the nav-node root (`journey === 'school-first' &&
- * !areaKey && !schoolId`, :75, :81) — so `nodeAreaPoint` CAN be non-null in
- * school-first, not just area-first.
+ * `showAreasNavigationJourney` is true for area-first, for school-first at
+ * the nav-node root (`journey === 'school-first' && !areaKey && !schoolId`),
+ * and — since issue #2203's follow-up fix — for agri-first at the
+ * equivalent nav-node root (`journey === 'agri-first' &&
+ * !selectedLocality`) — so `nodeAreaPoint` CAN be non-null in school-first
+ * AND agri-first, not just area-first.
  *
- * In agri-first, `nodeAreaPoint` is genuinely always null (agri-first
- * satisfies neither disjunct of `showAreasNavigationJourney`, :80-81), so
- * `selectedArea` is the sole live source of area identity there.
- *
- * In school-first, the two sources still don't collide, but not because
- * `nodeAreaPoint` is always null: `isSchoolsNavNodeLevel` requires
- * `!nav.areaKey` (:75), so the moment a legacy `areaKey` sets `selectedArea`
- * non-null, `isSchoolsNavNodeLevel` (and with it `nodeAreaPoint`) goes false
- * first. The interlock is what prevents the collision, not journey identity.
+ * In both school-first and agri-first, the two sources still don't
+ * collide, but not because `nodeAreaPoint` is always null: `isSchoolsNavNodeLevel`
+ * requires `!nav.areaKey`, and its agri-first counterpart requires
+ * `!nav.selectedLocality`, so the moment a legacy `areaKey`
+ * (school-first) or `selectedLocality` (agri-first) sets `selectedArea`
+ * non-null, the corresponding node-level flag (and with it `nodeAreaPoint`)
+ * goes false first. The interlock is what prevents the collision, not
+ * journey identity.
  *
  * In area-first, `showAreasNavigationJourney` is true regardless of
  * `areaKey`, so a URL carrying BOTH `node=` and a legacy `areaKey=` CAN make
