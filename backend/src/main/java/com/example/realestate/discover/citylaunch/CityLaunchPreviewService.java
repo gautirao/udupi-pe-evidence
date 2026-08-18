@@ -244,13 +244,42 @@ public class CityLaunchPreviewService {
 
     @Transactional(readOnly = true)
     public DiscoverMarkersResponse getMarkers(int cityId, long revisionId, List<String> areaKeys) {
+        return getMarkers(cityId, revisionId, areaKeys, null);
+    }
+
+    /**
+     * #2202: {@code node}-aware overload backing {@code GET .../preview/markers?node=...}. Mirrors
+     * {@link #getNavigationCounts}'s node resolution exactly: {@code node} absent/blank/{@code
+     * "root"} means no node-based filter (byte-identical to the {@code areaKeys}-only path above);
+     * otherwise the node is resolved against THIS revision's own {@link NavigationGraph} (built by
+     * {@link #buildPreviewNavigationGraph}, never a production/other-revision graph — this is what
+     * makes a node key unknown to this revision's sandbox 404 rather than silently resolving), a
+     * miss throws the same 404 {@code getNavigationCounts} throws, and a hit's {@code
+     * navGraph.descendantAreaKeysOf(node)} REPLACES {@code areaKeys} as the effective filter set —
+     * node wins over areaKeys when both are supplied, matching live-mode {@code
+     * DiscoverMarkersController}'s precedent. No descendant-count cap is applied (unbounded), since
+     * this is a payload-scoping endpoint for a low-volume admin-only surface, not a bounded-browse
+     * one.
+     */
+    @Transactional(readOnly = true)
+    public DiscoverMarkersResponse getMarkers(int cityId, long revisionId, List<String> areaKeys, String node) {
         loadPreviewableRevision(cityId, revisionId);
         String citySlug = resolveCitySlug(cityId);
         PreviewGraph graph = loadGraph(revisionId);
 
         Set<String> requested = areaKeys == null ? null : Set.copyOf(areaKeys);
+        if (node != null && !node.isBlank() && !"root".equals(node)) {
+            NavigationGraph navGraph = buildPreviewNavigationGraph(citySlug, revisionId);
+            NavigationNode resolved = navGraph.nodeByKey(node);
+            if (resolved == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown navigation node");
+            }
+            requested = Set.copyOf(navGraph.descendantAreaKeysOf(node));
+        }
+
+        Set<String> effectiveRequested = requested;
         List<DiscoverMarker> markers = graph.inScopeAreas().stream()
-                .filter(scoped -> requested == null || requested.contains(scoped.area().getAreaKey()))
+                .filter(scoped -> effectiveRequested == null || effectiveRequested.contains(scoped.area().getAreaKey()))
                 .map(scoped -> SimulatedListingFactory.of(revisionId, scoped.area()))
                 .filter(Objects::nonNull)
                 .map(SimulatedListingFactory::toMarker)

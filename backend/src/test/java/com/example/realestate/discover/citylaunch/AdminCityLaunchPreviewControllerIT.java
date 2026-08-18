@@ -1424,4 +1424,145 @@ class AdminCityLaunchPreviewControllerIT {
                 // not an error
                 .andExpect(jsonPath("$.destinations[0].parcelCount").value(0));
     }
+
+    // =========================================================================================
+    // E12 — #2202: canonical node-scoping on GET .../preview/markers?node=..., mirroring
+    // getNavigationCounts' own node resolution against this revision's own navigation graph.
+    // =========================================================================================
+
+    @Test
+    @DisplayName("E12: node resolves to its descendant areas' markers, scoped to THIS revision's own graph")
+    void e12_node_resolvesToDescendantAreaMarkers() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        SandboxArea inScope = seedArea(revisionId, "IN|KA|ACP|Node-InScope", "Node InScope", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+        SandboxArea outOfScope = seedArea(revisionId, "IN|KA|ACP|Node-OutOfScope", "Node OutOfScope", "ACTIVE",
+                13.05, 74.75, 13.04, 74.74, 13.06, 74.76);
+        seedRegion(revisionId, "north", "North", 1);
+        seedMembership(revisionId, inScope.getId(), "north");
+        seedMembership(revisionId, outOfScope.getId(), "north");
+
+        var dir = seedNavigationNode(revisionId, "d:north", "DIRECTION", null, "north", null, 1, 1,
+                java.util.List.of(), java.util.List.of(inScope.getAreaKey()));
+        seedNavigationNode(revisionId, "a:" + inScope.getAreaKey(), "AREA", dir.getId(), "north",
+                inScope.getAreaKey(), 1, 2, java.util.List.of("d:north"), java.util.List.of(inScope.getAreaKey()));
+
+        String base = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview";
+
+        mockMvc.perform(get(base + "/markers").param("node", "d:north").header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.markers.length()").value(1))
+                .andExpect(jsonPath("$.markers[0].id").value("preview:" + revisionId + ":" + inScope.getAreaKey()));
+    }
+
+    @Test
+    @DisplayName("E12: node key unknown to THIS revision's sandbox navigation graph -> 404 "
+            + "(revision-isolation guarantee — a node seeded on a different revision must never resolve here)")
+    void e12_node_unknownToThisRevisionGraph_404() throws Exception {
+        CityLaunchRevision revisionA = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        CityLaunchRevision revisionB = seedRevision(otherCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+
+        // A navigation node seeded ONLY on revision B's sandbox graph.
+        SandboxArea areaB = seedArea(revisionB.getId(), "IN|KA|ACP|Node-RevB", "Node RevB", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+        seedNavigationNode(revisionB.getId(), "d:revb-only", "DIRECTION", null, "north", null, 1, 1,
+                java.util.List.of(), java.util.List.of(areaB.getAreaKey()));
+
+        // Revision A has areas but no navigation nodes at all -> "d:revb-only" cannot resolve here.
+        seedArea(revisionA.getId(), "IN|KA|ACP|Node-RevA", "Node RevA", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+
+        String url = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionA.getId()
+                + "/preview/markers?node=d:revb-only";
+
+        mockMvc.perform(get(url).header("Authorization", adminAuth()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("E12: node=root behaves as no-filter, same as omitting node entirely")
+    void e12_node_root_isNoFilter() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        SandboxArea areaOne = seedArea(revisionId, "IN|KA|ACP|Node-Root1", "Node Root1", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+        SandboxArea areaTwo = seedArea(revisionId, "IN|KA|ACP|Node-Root2", "Node Root2", "ACTIVE",
+                13.05, 74.75, 13.04, 74.74, 13.06, 74.76);
+
+        String base = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview";
+
+        String withRoot = mockMvc.perform(get(base + "/markers").param("node", "root")
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.markers.length()").value(2))
+                .andReturn().getResponse().getContentAsString();
+
+        String withoutNode = mockMvc.perform(get(base + "/markers").header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.markers.length()").value(2))
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(withRoot).isEqualTo(withoutNode);
+    }
+
+    @Test
+    @DisplayName("E12: node with zero descendant areas -> 200 with empty markers, not 404")
+    void e12_node_zeroDescendants_emptyMarkersNot404() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        SandboxArea area = seedArea(revisionId, "IN|KA|ACP|Node-Empty", "Node Empty", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+        seedRegion(revisionId, "north", "North", 1);
+        seedMembership(revisionId, area.getId(), "north");
+
+        // A DIRECTION node with no AREA descendants of its own (empty representativeAreaKeys) —
+        // resolves fine but contributes zero descendant area keys.
+        seedNavigationNode(revisionId, "d:empty", "DIRECTION", null, "north", null, 1, 1,
+                java.util.List.of(), java.util.List.of());
+
+        String base = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview";
+
+        mockMvc.perform(get(base + "/markers").param("node", "d:empty").header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.markers.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("E12: node + areaKeys both supplied -> node wins, areaKeys is ignored")
+    void e12_nodeAndAreaKeysBothSupplied_nodeWins() throws Exception {
+        CityLaunchRevision revision = seedRevision(testCityId, PrepState.DONE, LifecycleStatus.PREPARED);
+        long revisionId = revision.getId();
+
+        SandboxArea nodeArea = seedArea(revisionId, "IN|KA|ACP|Node-Winner", "Node Winner", "ACTIVE",
+                13.01, 74.71, 13.00, 74.70, 13.02, 74.72);
+        SandboxArea areaKeysOnlyArea = seedArea(revisionId, "IN|KA|ACP|Node-Loser", "Node Loser", "ACTIVE",
+                13.05, 74.75, 13.04, 74.74, 13.06, 74.76);
+        seedRegion(revisionId, "north", "North", 1);
+        seedMembership(revisionId, nodeArea.getId(), "north");
+        seedMembership(revisionId, areaKeysOnlyArea.getId(), "north");
+
+        var dir = seedNavigationNode(revisionId, "d:winner", "DIRECTION", null, "north", null, 1, 1,
+                java.util.List.of(), java.util.List.of(nodeArea.getAreaKey()));
+        seedNavigationNode(revisionId, "a:" + nodeArea.getAreaKey(), "AREA", dir.getId(), "north",
+                nodeArea.getAreaKey(), 1, 2, java.util.List.of("d:winner"), java.util.List.of(nodeArea.getAreaKey()));
+
+        String base = "/api/admin/city-launch/cities/" + testCityId + "/revisions/" + revisionId + "/preview";
+
+        mockMvc.perform(get(base + "/markers")
+                        .param("node", "d:winner")
+                        .param("areaKeys", areaKeysOnlyArea.getAreaKey())
+                        .header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.markers.length()").value(1))
+                .andExpect(jsonPath("$.markers[0].id").value("preview:" + revisionId + ":" + nodeArea.getAreaKey()));
+    }
+
+    // AC1/AC3/AC8's existing areaKeys-only marker assertions above (e.g. ac1_ac10_allEndpoints_populatedAndNoStore,
+    // ac3_fieldMapping_membershipResolutionAndBoundsUnion, ac8_noInteriorPoint_excludedAnd422) already prove
+    // the pre-#2202 areaKeys-only contract is byte-identical when node is omitted — not duplicated here.
 }

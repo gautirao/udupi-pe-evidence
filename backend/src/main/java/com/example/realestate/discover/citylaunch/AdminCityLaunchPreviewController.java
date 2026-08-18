@@ -107,15 +107,26 @@ public class AdminCityLaunchPreviewController {
         return noStore(previewService.getAreas(cityId, revisionId, propertyType, purpose));
     }
 
-    /** GET .../preview/markers?areaKeys=... -> {@link DiscoverMarkersResponse}. */
+    /**
+     * GET .../preview/markers?areaKeys=...&amp;node=... -> {@link DiscoverMarkersResponse}.
+     *
+     * <p>{@code node} (#2202) is OPTIONAL, mirroring this same service's {@code
+     * getNavigationCounts}/{@code /navigation/{nodeKey}/counts} node-resolution pattern: absent/
+     * blank/{@code "root"} means no node-based filter (byte-identical to the pre-#2202 {@code
+     * areaKeys}-only contract); any other value is resolved against this revision's own navigation
+     * graph and, on a hit, REPLACES {@code areaKeys} with that node's descendant area keys — node
+     * wins over areaKeys when both are supplied. An unknown node key -&gt; 404.
+     */
     @IsAdmin
     @GetMapping("/markers")
     public ResponseEntity<DiscoverMarkersResponse> getMarkers(
             @PathVariable int cityId, @PathVariable long revisionId,
             @RequestParam(name = "areaKeys", required = false) List<String> areaKeys,
+            @RequestParam(name = "node", required = false) String node,
             CallerInfo caller) {
-        log.debug("GET preview/markers cityId={} revisionId={} adminId={}", cityId, revisionId, caller.userId());
-        return noStore(previewService.getMarkers(cityId, revisionId, areaKeys));
+        log.debug("GET preview/markers cityId={} revisionId={} node={} adminId={}",
+                cityId, revisionId, node, caller.userId());
+        return noStore(previewService.getMarkers(cityId, revisionId, areaKeys, node));
     }
 
     /** GET .../preview/listings?areaKeys=... -> {@link CityAreaListingsResponse}. */
