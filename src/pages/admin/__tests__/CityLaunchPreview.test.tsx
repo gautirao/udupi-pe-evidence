@@ -771,6 +771,124 @@ describe('CityLaunchPreview — validation rail wire contract (Issue #1911 PR4, 
   });
 });
 
+// ─── Issue #2121 — "View current revision" for a Live city must reach a
+// PROMOTED-and-not-superseded revision without misrepresenting it as "no
+// longer current" (that was the pre-existing `superseded = !editable` bug:
+// PROMOTED is never in EDITABLE_STATUSES, so every live revision was
+// rendering the destructive superseded banner). Also proves the whole
+// surface — including the #2121 hierarchy tab — is reachable from a plain
+// GET-backed navigation with no mutating side effect.
+describe('CityLaunchPreview — viewing the current LIVE revision (Issue #2121)', () => {
+  const CITY_ID = 7;
+  const REVISION_ID = 42;
+
+  const LIVE_VALIDATION_STATE = {
+    revisionId: REVISION_ID,
+    cityId: CITY_ID,
+    revisionNumber: 3,
+    lifecycleStatus: 'PROMOTED',
+    checks: {
+      landing: true,
+      regions: true,
+      areaGroups: true,
+      areas: true,
+      listing: true,
+      agriDestinations: true,
+    },
+    allValidated: true,
+    editable: false,
+    preparedAt: '2026-07-01T00:00:00Z',
+    validatedAt: '2026-07-01T01:00:00Z',
+    supersededBy: null,
+  };
+
+  const LIVE_NAV_TREE = {
+    revisionId: REVISION_ID,
+    validationStatus: 'VALID',
+    validationErrors: [] as string[],
+    nodes: [
+      {
+        nodeKey: 'd:north',
+        nodeType: 'DIRECTION' as const,
+        parentNodeKey: null,
+        displayLabel: 'North',
+        depth: 0,
+        displayOrder: 0,
+        descendantAreaCount: 0,
+      },
+    ],
+  };
+
+  function mockLiveApiGet() {
+    vi.mocked(api.get).mockImplementation(async (path: string) => {
+      if (path.endsWith('/validation')) return LIVE_VALIDATION_STATE;
+      if (path.endsWith('/navigation/tree')) return LIVE_NAV_TREE;
+      // DEFAULT_VALIDATION_STATE_DTO also carries citySlug/cityName, so it
+      // doubles as the .../preview/identity fallback (same pattern as every
+      // other describe block in this file).
+      return DEFAULT_VALIDATION_STATE_DTO;
+    });
+  }
+
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.post).mockReset();
+    vi.mocked(api.put).mockReset();
+    mockLiveApiGet();
+  });
+
+  it('a PROMOTED-and-not-superseded revision shows the live banner, never the superseded one', async () => {
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('live-revision-banner')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('superseded-banner')).not.toBeInTheDocument();
+  });
+
+  it('the exact revision identity round-trips through the threaded API calls, including after a refresh/remount', async () => {
+    const { unmount } = renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+    await waitFor(() => {
+      expect(screen.getByTestId('live-revision-banner')).toBeInTheDocument();
+    });
+    const expectedValidationPath = `/api/admin/city-launch/cities/${CITY_ID}/revisions/${REVISION_ID}/validation`;
+    expect(vi.mocked(api.get).mock.calls.map(([p]) => String(p))).toContain(expectedValidationPath);
+
+    // Simulate a browser refresh: unmount, then remount fresh at the exact same route.
+    unmount();
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+    await waitFor(() => {
+      expect(screen.getByTestId('live-revision-banner')).toBeInTheDocument();
+    });
+    expect(vi.mocked(api.get).mock.calls.map(([p]) => String(p))).toContain(expectedValidationPath);
+  });
+
+  it('viewing the live revision never issues a mutating request (no revision-creation side effect)', async () => {
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('live-revision-banner')).toBeInTheDocument();
+    });
+    expect(api.post).not.toHaveBeenCalled();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it('the Hierarchy tree tab is reachable from the current live revision', async () => {
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('live-revision-banner')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('tab', { name: /hierarchy tree/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('nav-node-d:north')).toBeInTheDocument();
+    });
+    expect(api.post).not.toHaveBeenCalled();
+  });
+});
+
 // ─── Issue #1911 PR3 rework — THE KEY TEST: real MapDiscovery, real
 // useAreaGroups, proving the area-groups isolation gap is closed.
 //

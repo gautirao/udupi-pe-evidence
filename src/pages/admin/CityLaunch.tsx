@@ -152,7 +152,7 @@ function CityLaunchRow({ city, isPreparing, prepareError, isExpanded, onPrepare,
   const navigate = useNavigate();
 
   function handleAction() {
-    if (city.status === 'not-started' || city.status === 'live') {
+    if (city.status === 'not-started') {
       onPrepare();
       return;
     }
@@ -165,6 +165,17 @@ function CityLaunchRow({ city, isPreparing, prepareError, isExpanded, onPrepare,
         navigate(`/admin/city-launch/${city.cityId}/preview/${city.revisionId}`);
       }
       return;
+    }
+  }
+
+  // Issue #2121 — a Live city's `revisionId` is already the current LIVE
+  // revision (CityLaunchReadService.listCities derives every status from the
+  // city's MAX-revision_number row, so for status=live that row IS the
+  // promoted one). This is a plain GET-backed navigation, distinct from
+  // "Generate new revision" below — it never creates a revision.
+  function handleViewCurrentRevision() {
+    if (city.revisionId != null) {
+      navigate(`/admin/city-launch/${city.cityId}/preview/${city.revisionId}`);
     }
   }
 
@@ -199,29 +210,49 @@ function CityLaunchRow({ city, isPreparing, prepareError, isExpanded, onPrepare,
           <GeographyMeter percent={city.geographyPercent} revisionNumber={city.revisionNumber} failed={city.status === 'failed'} />
         </TableCell>
         <TableCell className="text-right">
-          {tooltipText ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                {/* span wrapper: disabled buttons don't fire pointer events for the Radix tooltip trigger */}
-                <span className="inline-block" tabIndex={0}>
-                  {actionButton}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>{tooltipText}</TooltipContent>
-            </Tooltip>
+          {city.status === 'live' ? (
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                disabled={city.revisionId == null}
+                onClick={handleViewCurrentRevision}
+              >
+                View current revision
+              </Button>
+              <Button type="button" variant="outline" size="sm" disabled={isPreparing} onClick={onPrepare}>
+                {isPreparing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                Generate new revision
+              </Button>
+            </div>
           ) : (
-            actionButton
-          )}
-          {city.status === 'failed' && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="ml-2"
-              disabled={isPreparing}
-              onClick={onPrepare}
-            >
-              Rerun
-            </Button>
+            <>
+              {tooltipText ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {/* span wrapper: disabled buttons don't fire pointer events for the Radix tooltip trigger */}
+                    <span className="inline-block" tabIndex={0}>
+                      {actionButton}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{tooltipText}</TooltipContent>
+                </Tooltip>
+              ) : (
+                actionButton
+              )}
+              {city.status === 'failed' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-2"
+                  disabled={isPreparing}
+                  onClick={onPrepare}
+                >
+                  Rerun
+                </Button>
+              )}
+            </>
           )}
         </TableCell>
       </TableRow>

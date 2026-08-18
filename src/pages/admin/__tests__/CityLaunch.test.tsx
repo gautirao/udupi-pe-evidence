@@ -394,6 +394,32 @@ describe('CityLaunch', () => {
     expect(mockPost).not.toHaveBeenCalled();
   });
 
+  // Issue #2121 — a Live city previously only exposed "Generate new
+  // revision", with no way to reopen the exact currently-launched revision
+  // without generating a new (unnecessary) one.
+  it('LIVE "View current revision" navigates to the exact live revision id without preparing', async () => {
+    mockGet.mockResolvedValue(CITIES);
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Live City')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /view current revision/i }));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/admin/city-launch/5/preview/20');
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it('LIVE row still offers "Generate new revision" alongside "View current revision"', async () => {
+    mockGet.mockResolvedValue(CITIES);
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Live City')).toBeInTheDocument());
+
+    expect(screen.getByRole('button', { name: /view current revision/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /generate new revision/i })).toBeEnabled();
+  });
+
   it('READY_PREVIEW Continue navigates to the exact current revision', async () => {
     mockGet.mockResolvedValue(CITIES);
     const user = userEvent.setup();

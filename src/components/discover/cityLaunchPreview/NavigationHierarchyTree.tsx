@@ -1,42 +1,53 @@
-import { AlertCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { AlertCircle, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
 import { useNavigationTree } from '@/hooks/useCityLaunchNavigation';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
-import { buildNavigationForest, flattenNavigationForest } from '@/features/discover/state/navigationTreeUtils';
-import type { NavigationBounds } from '@/lib/schemas/navigationHierarchy';
+import {
+  buildNavigationForest,
+  flattenNavigationForest,
+  getNavigationAncestryPathInForest,
+} from '@/features/discover/state/navigationTreeUtils';
+import type { NavigationTreeNode } from '@/lib/schemas/navigationHierarchy';
+import { NavigationHierarchyTreeNode } from './NavigationHierarchyTreeNode';
+import { NavigationHierarchyTable } from './NavigationHierarchyTable';
 
-/** `min, max` lat/lon rounded for a compact table cell; the full precision centre is left in the tooltip title. */
-function formatBoundsCell(bounds: NavigationBounds | null | undefined): string {
-  if (!bounds || bounds.minLat == null || bounds.minLon == null || bounds.maxLat == null || bounds.maxLon == null) {
-    return '—';
-  }
-  return `${bounds.minLat.toFixed(3)}, ${bounds.minLon.toFixed(3)} — ${bounds.maxLat.toFixed(3)}, ${bounds.maxLon.toFixed(3)}`;
-}
+type ViewMode = 'tree' | 'table';
 
-function formatBoundsTitle(bounds: NavigationBounds | null | undefined): string {
-  if (!bounds || bounds.centreLat == null || bounds.centreLon == null) {
-    return '';
+/**
+ * Issue #2121 — default expansion policy: only nodes at the shallowest depth
+ * (0) start expanded, revealing their direct children. Everything deeper
+ * starts collapsed, so a 300+ AREA-leaf revision doesn't paint every leaf on
+ * first render.
+ */
+const DEFAULT_EXPANDED_MAX_DEPTH = 0;
+
+function collectExpandableKeys(nodes: readonly NavigationTreeNode[], maxDepth?: number): Set<string> {
+  const keys = new Set<string>();
+  for (const node of flattenNavigationForest(nodes)) {
+    if (node.children.length === 0) continue;
+    if (maxDepth === undefined || node.depth <= maxDepth) keys.add(node.nodeKey);
   }
-  return `centre ${bounds.centreLat}, ${bounds.centreLon}`;
+  return keys;
 }
 
 /**
- * Issue #1955 (Areas PR A) item 2 — the sandbox hierarchy TREE view. Renders
- * every node from GET .../navigation/tree flattened depth-first with visual
- * indent, plus (item 5) an informational per-area listing count merged in
- * from the SAME already-preview-aware `useDiscoverAreas` hook the reused
- * Discover components use — never from the structural tree/diff response,
- * so it can never leak into a checksum/structural comparison.
+ * Issue #1955 (Areas PR A) item 2, reworked by #2121 — the sandbox hierarchy
+ * inspector. `buildNavigationForest` (navigationTreeUtils.ts) remains the
+ * ONE place the server's FLAT `nodes` list (NavigationPreviewTreeResponse,
+ * keyed by `parentNodeKey`) is turned into parent/child linkage; this
+ * component only owns view state (expand/collapse, search, tree-vs-table)
+ * on top of that result. Row rendering itself lives in
+ * NavigationHierarchyTreeNode (tree) and NavigationHierarchyTable (table) so
+ * this container doesn't become a catch-all.
  *
- * The server sends a FLAT node list (NavigationPreviewTreeResponse) keyed by
- * `parentNodeKey`, never a nested tree. Each node carries its own `bounds`
- * (rendered as a compact min/max lat-lon cell below), but never a per-node
- * `validationStatus` field — `buildNavigationForest` builds the display tree
- * client-side; the revision-level `validationStatus`/`validationErrors` are
- * shown as a single banner above the table.
+ * The per-area informational listing count (item 5) still comes from the
+ * SAME already-preview-aware `useDiscoverAreas` hook the reused Discover
+ * components use — never from the structural tree/diff response, so it can
+ * never leak into a checksum/structural comparison.
  */
 export function NavigationHierarchyTree() {
   const tree = useNavigationTree();
@@ -45,6 +56,68 @@ export function NavigationHierarchyTree() {
   // this hook is only ever enabled here when the surrounding source is a
   // preview, so the placeholder value is never sent to the server.
   const areaCounts = useDiscoverAreas('preview-informational-counts');
+
+  const [viewMode, setViewMode] = useState<ViewMode>('tree');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [expandedKeys, setExpandedKeys] = useState<Set<string> | null>(null);
+
+  const forest = useMemo(() => (tree.data ? buildNavigationForest(tree.data.nodes) : []), [tree.data]);
+  const rows = useMemo(() => flattenNavigationForest(forest), [forest]);
+  const defaultExpandedKeys = useMemo(
+    () => collectExpandableKeys(forest, DEFAULT_EXPANDED_MAX_DEPTH),
+    [forest],
+  );
+
+  const matchTerm = searchTerm.trim().toLowerCase();
+
+  // A search match reveals itself by having every ancestor auto-expanded,
+  // on top of whatever the user already expanded/collapsed by hand.
+  const searchAutoExpandedKeys = useMemo(() => {
+    if (!matchTerm) return null;
+    const auto = new Set<string>();
+    for (const node of rows) {
+      if (!node.displayLabel.toLowerCase().includes(matchTerm)) continue;
+      for (const ancestor of getNavigationAncestryPathInForest(forest, node.nodeKey)) {
+        if (ancestor.nodeKey !== node.nodeKey) auto.add(ancestor.nodeKey);
+      }
+    }
+    return auto;
+  }, [rows, forest, matchTerm]);
+
+  const effectiveExpandedKeys = useMemo(() => {
+    const base = expandedKeys ?? defaultExpandedKeys;
+    if (!searchAutoExpandedKeys || searchAutoExpandedKeys.size === 0) return base;
+    return new Set([...base, ...searchAutoExpandedKeys]);
+  }, [expandedKeys, defaultExpandedKeys, searchAutoExpandedKeys]);
+
+  function toggleNode(nodeKey: string) {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev ?? defaultExpandedKeys);
+      if (next.has(nodeKey)) {
+        next.delete(nodeKey);
+      } else {
+        next.add(nodeKey);
+      }
+      return next;
+    });
+  }
+
+  function expandAll() {
+    setExpandedKeys(collectExpandableKeys(forest));
+  }
+
+  function collapseAll() {
+    setExpandedKeys(new Set());
+  }
+
+  // AREA nodes carry the raw area key in `areaKey` — `nodeKey` is the
+  // derived "a:" + areaKey identity (NavigationKeys.areaNodeKey), never the
+  // bare area key itself, so the informational count must be joined on
+  // `areaKey`, not `nodeKey`.
+  const listingCountByAreaKey = useMemo(
+    () => new Map((areaCounts.data?.areas ?? []).map((area) => [area.areaKey, area.listingCount])),
+    [areaCounts.data],
+  );
 
   if (tree.isLoading) {
     return (
@@ -68,16 +141,6 @@ export function NavigationHierarchyTree() {
     );
   }
 
-  const forest = buildNavigationForest(tree.data.nodes);
-  const rows = flattenNavigationForest(forest);
-  // AREA nodes carry the raw area key in `areaKey` — `nodeKey` is the
-  // derived "a:" + areaKey identity (NavigationKeys.areaNodeKey), never the
-  // bare area key itself, so the informational count must be joined on
-  // `areaKey`, not `nodeKey`.
-  const listingCountByAreaKey = new Map(
-    (areaCounts.data?.areas ?? []).map((area) => [area.areaKey, area.listingCount]),
-  );
-
   if (rows.length === 0) {
     return (
       <div className="p-6 text-center text-sm text-muted-foreground">
@@ -87,59 +150,102 @@ export function NavigationHierarchyTree() {
   }
 
   return (
-    <div className="overflow-x-auto" data-testid="navigation-hierarchy-tree">
-      <div className="flex items-center gap-2 px-2 pb-2 text-xs">
-        <span className="text-muted-foreground">Validation:</span>
-        <Badge variant={tree.data.validationStatus === 'VALID' ? 'default' : 'destructive'}>
-          {tree.data.validationStatus}
-        </Badge>
-        {tree.data.validationErrors.length > 0 && (
-          <span className="text-destructive">{tree.data.validationErrors.join('; ')}</span>
-        )}
+    <div data-testid="navigation-hierarchy-tree">
+      <div className="flex flex-wrap items-center gap-3 border-b px-2 pb-3 pt-2">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground">Validation:</span>
+          <Badge variant={tree.data.validationStatus === 'VALID' ? 'default' : 'destructive'}>
+            {tree.data.validationStatus}
+          </Badge>
+          {tree.data.validationErrors.length > 0 && (
+            <span className="text-destructive">{tree.data.validationErrors.join('; ')}</span>
+          )}
+        </div>
+
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              type="search"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search by label…"
+              aria-label="Search hierarchy by node label"
+              className="h-8 w-48 pl-7 text-xs"
+              data-testid="hierarchy-search-input"
+            />
+          </div>
+
+          {viewMode === 'tree' && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={expandAll}
+                data-testid="hierarchy-expand-all"
+              >
+                Expand all
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={collapseAll}
+                data-testid="hierarchy-collapse-all"
+              >
+                Collapse all
+              </Button>
+            </>
+          )}
+
+          <div className="flex overflow-hidden rounded-md border text-xs" role="group" aria-label="Hierarchy view">
+            <button
+              type="button"
+              onClick={() => setViewMode('tree')}
+              aria-pressed={viewMode === 'tree'}
+              data-testid="hierarchy-view-tree"
+              className={`px-2 py-1 ${viewMode === 'tree' ? 'bg-secondary font-medium' : 'text-muted-foreground'}`}
+            >
+              Tree view
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              aria-pressed={viewMode === 'table'}
+              data-testid="hierarchy-view-table"
+              className={`border-l px-2 py-1 ${viewMode === 'table' ? 'bg-secondary font-medium' : 'text-muted-foreground'}`}
+            >
+              Table view
+            </button>
+          </div>
+        </div>
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Node</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Children</TableHead>
-            <TableHead>Descendant areas</TableHead>
-            <TableHead>Bounds</TableHead>
-            <TableHead>Representatives</TableHead>
-            <TableHead className="text-muted-foreground">Listings (informational)</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((node) => (
-            <TableRow key={node.nodeKey} data-testid={`nav-node-${node.nodeKey}`}>
-              <TableCell style={{ paddingLeft: `${node.depth * 16 + 8}px` }}>{node.displayLabel}</TableCell>
-              <TableCell>
-                <Badge variant={node.nodeType === 'CLUSTER' ? 'secondary' : 'outline'}>{node.nodeType}</Badge>
-              </TableCell>
-              <TableCell>{node.children.length}</TableCell>
-              <TableCell>{node.descendantAreaCount}</TableCell>
-              <TableCell
-                className="whitespace-nowrap text-xs text-muted-foreground"
-                title={formatBoundsTitle(node.bounds)}
-                data-testid={`nav-node-bounds-${node.nodeKey}`}
-              >
-                {formatBoundsCell(node.bounds)}
-              </TableCell>
-              <TableCell
-                className="max-w-[220px] truncate"
-                title={node.representativeAreaKeys?.join(', ') ?? ''}
-              >
-                {node.representativeAreaKeys && node.representativeAreaKeys.length > 0 ? node.representativeAreaKeys.join(', ') : '—'}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {node.nodeType === 'AREA' && node.areaKey !== null && listingCountByAreaKey.has(node.areaKey)
-                  ? listingCountByAreaKey.get(node.areaKey)
-                  : '—'}
-              </TableCell>
-            </TableRow>
+
+      {viewMode === 'tree' ? (
+        <div
+          role="tree"
+          aria-label="Revision navigation hierarchy"
+          className="overflow-x-auto p-2"
+          data-testid="navigation-hierarchy-tree-view"
+        >
+          {forest.map((root) => (
+            <NavigationHierarchyTreeNode
+              key={root.nodeKey}
+              node={root}
+              expandedKeys={effectiveExpandedKeys}
+              onToggle={toggleNode}
+              listingCountByAreaKey={listingCountByAreaKey}
+              matchTerm={matchTerm}
+            />
           ))}
-        </TableBody>
-      </Table>
+        </div>
+      ) : (
+        <NavigationHierarchyTable rows={rows} listingCountByAreaKey={listingCountByAreaKey} />
+      )}
     </div>
   );
 }

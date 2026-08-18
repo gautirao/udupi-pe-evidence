@@ -113,7 +113,16 @@ export default function CityLaunchPreview() {
 
   const validation = validationState.data;
   const editable = validation?.editable ?? false;
-  const superseded = !editable && validation != null;
+  // Issue #2121 — `editable:false` alone conflates "not editable right now"
+  // (true for EVERY non-PREPARED/VALIDATED lifecycle, including the current
+  // LIVE/PROMOTED revision) with "actually superseded by a newer revision".
+  // Only the latter is a genuine "no longer current" state — `supersededBy`/
+  // `lifecycleStatus` are the backend's real supersession signal
+  // (ValidationStateDto mirrors CityLaunchRevision.supersededBy).
+  const superseded =
+    validation != null &&
+    (validation.supersededBy != null || validation.lifecycleStatus === 'SUPERSEDED');
+  const isLiveRevision = validation?.lifecycleStatus === 'PROMOTED' && !superseded;
   // Issue #1955 (Areas PR A) item 6 — overrides are backend-enforced to
   // PREPARED revisions only; gated here on lifecycle_status specifically
   // (distinct from the 5-check `editable` flag above, which tracks the
@@ -198,6 +207,20 @@ export default function CityLaunchPreview() {
               <AlertTitle>No longer current</AlertTitle>
               <AlertDescription>
                 This revision has been superseded / is no longer current.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {isLiveRevision && (
+            <Alert
+              className="mt-4 border-green-300 bg-green-50 text-green-900"
+              data-testid="live-revision-banner"
+            >
+              <ShieldAlert className="h-4 w-4 text-green-700" />
+              <AlertTitle>Currently live</AlertTitle>
+              <AlertDescription className="text-green-800">
+                This is the current launched revision. It's read-only here — the validation
+                checklist reflects its state at launch time.
               </AlertDescription>
             </Alert>
           )}
