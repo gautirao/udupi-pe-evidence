@@ -108,6 +108,24 @@ export function useDiscoverBadgeController({
   // hide the badge temporarily (avoids flashing a stale area/city total).
   const schoolRadiusActive =
     filters.schoolLat != null && filters.schoolLon != null && filters.schoolRadiusKm != null;
+  // Issue #2190 — `deriveAreaPointFromNode` (nodeAreaPoint.ts) never sets
+  // `listingCount` on the AreaPoint it builds for a canonical `node=`-journey
+  // AREA leaf (NavigationNodeResponse carries no such field). With a property
+  // filter active, deriveDiscoverBadge's area branch reads
+  // `selectedArea.listingCount` as the unfiltered denominator (N); undefined
+  // there becomes `null`, which formatDiscoverBadgeCopy renders as `0`
+  // (`badge.n ?? 0`) — the reported "9 of 0" state. `discoverAreas` is the
+  // SAME canonical per-area source (`/api/discover/areas`) already used for
+  // `cityTotal`/`groupListingsCount` above, so backfill the real unfiltered
+  // total from there by `areaKey` — no citywide/group fallback, no second
+  // listing query.
+  const badgeSelectedArea = useMemo(() => {
+    if (!effectiveSelectedArea) return null;
+    if (effectiveSelectedArea.listingCount != null) return effectiveSelectedArea;
+    const canonicalArea = discoverAreas.find((a) => a.areaKey === effectiveSelectedArea.areaKey);
+    if (!canonicalArea || canonicalArea.listingCount == null) return effectiveSelectedArea;
+    return { ...effectiveSelectedArea, listingCount: canonicalArea.listingCount };
+  }, [effectiveSelectedArea, discoverAreas]);
   const discoverBadge = useMemo(
     () =>
       deriveDiscoverBadge({
@@ -117,7 +135,10 @@ export function useDiscoverBadgeController({
         // through to the city-wide total (discoverBadge.ts's cityTotal
         // fallback) while the panel correctly showed area-scoped content.
         // `effectiveSelectedArea` bridges both sources.
-        selectedArea: effectiveSelectedArea,
+        // Issue #2190 — `badgeSelectedArea` additionally backfills
+        // `listingCount` from `discoverAreas` when the node-journey bridge
+        // above left it undefined (see comment above).
+        selectedArea: badgeSelectedArea,
         filters,
         isLoadingAreaListings,
         cityTotal,
@@ -167,7 +188,7 @@ export function useDiscoverBadgeController({
     // dropped, not moved: with every input now an explicit controller param,
     // the rule reports no problem, and keeping a dead suppression would hide a
     // real future violation.
-    [effectiveSelectedArea, filters, isLoadingAreaListings, listingDataLoading, isAuthenticated, schoolRadiusListingsLoading, cityTotal, areaListings, schoolRadiusActive, schoolListings.length, groupListingsCount, debouncedSearch, schoolRadiusListings.length],
+    [badgeSelectedArea, filters, isLoadingAreaListings, listingDataLoading, isAuthenticated, schoolRadiusListingsLoading, cityTotal, areaListings, schoolRadiusActive, schoolListings.length, groupListingsCount, debouncedSearch, schoolRadiusListings.length],
   );
 
   // Issue #1817 (code-review follow-up) — single computed copy string for the
