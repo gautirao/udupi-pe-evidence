@@ -60,9 +60,18 @@ function makeParams(overrides: DeepPartial<BuildPanelSurfaceModelParams> = {}): 
       isAreaFirstJourneyActive: false,
       isSchoolsNavNodeLevel: false,
     },
-    journeySwitch: { handleSelectJourney: vi.fn() },
+    journeySwitch: {
+      handleSelectJourney: vi.fn(),
+      selectGroupMemberArea: vi.fn(),
+      isResolvingGroupMemberArea: false,
+    },
     overviewNavigation: { activeAreasNavigationJourney: makeJourney() },
-    areaGroups: { areaGroupsData: undefined, isLoadingAreaGroups: false, selectedGroupName: null },
+    areaGroups: {
+      areaGroupsData: undefined,
+      isLoadingAreaGroups: false,
+      selectedGroupName: null,
+      focusedGroup: null,
+    },
     geography: {
       discoverAreasForPanel: [],
       areaMarkerCounts: { shown: 0, total: 0 },

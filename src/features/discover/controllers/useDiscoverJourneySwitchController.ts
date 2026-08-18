@@ -28,6 +28,20 @@ export interface UseDiscoverJourneySwitchControllerParams {
 
 export interface UseDiscoverJourneySwitchControllerResult {
   handleSelectJourney: (journey: DiscoverJourney) => void;
+  /**
+   * Issue #2213 — resolves a group MEMBER area's legacy `areaKey` to a real
+   * canonical node through the SAME sanctioned `.../navigation-path` resolver
+   * `handleSelectJourney` already uses for its own areaKey conversion seam
+   * (#1956 PR 6 `[rulings.oq_a_v2]`), then enters the canonical journey at
+   * that node — never a client-fabricated `node=`. Powers
+   * `AreaGroupFocusPanel`'s member-area rows; the ONE additional caller of
+   * `resolveAreaNavigationPath`, sharing its in-flight guard with
+   * `handleSelectJourney` (the two actions are mutually exclusive from the
+   * user's perspective, so sharing the guard is correct, not a compromise).
+   */
+  selectGroupMemberArea: (areaKey: string) => void;
+  /** True while `selectGroupMemberArea` (or `handleSelectJourney`'s own conversion) is in flight. */
+  isResolvingGroupMemberArea: boolean;
 }
 
 /**
@@ -128,5 +142,35 @@ export function useDiscoverJourneySwitchController({
     actions.enterAreasJourney(null);
   };
 
-  return { handleSelectJourney };
+  /**
+   * Issue #2213 — see the result interface doc. Deliberately does NOT reuse
+   * `handleSelectJourney` itself (that function's branches are keyed off the
+   * CURRENT `nav.journey`/`nav.areaKey`, not an arbitrary caller-supplied
+   * areaKey) — this is the same underlying resolve-then-enter sequence, over
+   * an explicit parameter instead of URL state.
+   */
+  const selectGroupMemberArea = (areaKey: string) => {
+    if (resolveAreaNavigationPath.isPending) return;
+    resolveAreaNavigationPath.mutate(
+      { city: nav.city || DEFAULT_CITY, areaKey },
+      {
+        onSuccess: (path) => {
+          actions.enterAreasJourney(path.nodeKey);
+        },
+        onError: () => {
+          toast({
+            variant: 'destructive',
+            title: "Couldn't open this area",
+            description: 'This area link looks out of date. Staying on the group view.',
+          });
+        },
+      },
+    );
+  };
+
+  return {
+    handleSelectJourney,
+    selectGroupMemberArea,
+    isResolvingGroupMemberArea: resolveAreaNavigationPath.isPending,
+  };
 }

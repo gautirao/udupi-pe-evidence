@@ -1,6 +1,8 @@
 import { AreaFirstJourneyPanel } from './panel/AreaFirstJourneyPanel';
 import { SchoolFirstJourneyPanel } from './panel/SchoolFirstJourneyPanel';
 import { LegacyRightPanelBridge } from './panel/LegacyRightPanelBridge';
+import { AreaGroupFocusPanel } from './panel/AreaGroupFocusPanel';
+import { resolveIsSelectedGroupState } from '@/features/discover/selectors/displayEligibility';
 import type { DiscoverPanelSurfaceView, DiscoverPanelSurfaceCommands } from './buildPanelSurfaceModel';
 
 /**
@@ -30,11 +32,27 @@ import type { DiscoverPanelSurfaceView, DiscoverPanelSurfaceCommands } from './b
  * VERBATIM. This is a reorganisation, not a rewrite: no product behaviour, URL
  * write, or rendered markup changes.
  *
- * The branch order below is load-bearing and unchanged: area-first pre-empts
- * everything, then the school-first node level, then the legacy panel. Exactly
- * one panel is ever mounted (see `discoverPanelState.ts` for why the canonical
- * branches deliberately pre-empt the legacy `panelContent` switch rather than
+ * The branch order below is load-bearing and unchanged: the group-focus state
+ * (Issue #2213) pre-empts area-first, which pre-empts everything else, then
+ * the school-first node level, then the legacy panel. Exactly one panel is
+ * ever mounted (see `discoverPanelState.ts` for why the canonical branches
+ * deliberately pre-empt the legacy `panelContent` switch rather than
  * extending its union).
+ *
+ * Issue #2213 — the group-focus branch. `resolveIsSelectedGroupState` is the
+ * SAME pure predicate `useDiscoverJourneyChromeController` already computes
+ * for the map's group-overview chrome signal (`isSelectedGroupState`):
+ * `resolvedPanelContent === 'area-groups-landing' && !!focusedGroup &&
+ * !selectedArea`. Before this fix, `isAreaFirstJourneyActive` (true whenever
+ * `nav.journey === 'area-first'`, including the #2088 virtual default applied
+ * to a bare `?groupId=<group>` URL with no literal `journey=`) always won
+ * first, mounting the group-BLIND canonical `AreaFirstJourneyPanel`
+ * (city-root Direction cards) while the map's marker fetch
+ * (`groupAreaKeysForMapData`) had already narrowed to the group's member
+ * areas — a real map/panel scope split (#2204 Flow 4). Placing this check
+ * FIRST makes the panel consume the SAME group scope the map already does,
+ * for every state that resolves to it, whether `journey=area-first` is
+ * virtual-defaulted or literally present in the URL.
  */
 export interface DiscoverPanelSurfaceProps {
   view: DiscoverPanelSurfaceView;
@@ -42,7 +60,20 @@ export interface DiscoverPanelSurfaceProps {
 }
 
 export function DiscoverPanelSurface({ view, commands }: DiscoverPanelSurfaceProps) {
-  const { isAreaFirstJourneyActive, isSchoolsNavNodeLevel } = view.navigation;
+  const { isAreaFirstJourneyActive, isSchoolsNavNodeLevel, resolvedPanelContent } = view.navigation;
+  const { focusedGroup, selectedArea } = view.geography;
+
+  if (resolveIsSelectedGroupState(resolvedPanelContent, focusedGroup, selectedArea)) {
+    return (
+      <AreaGroupFocusPanel
+        group={focusedGroup!}
+        discoverAreas={view.geography.discoverAreasForPanel}
+        onSelectArea={commands.geography.selectGroupMemberArea}
+        isResolvingArea={view.geography.isResolvingGroupMemberArea}
+        onBack={() => commands.pageContext.actions.enterAreasJourney(null)}
+      />
+    );
+  }
 
   if (isAreaFirstJourneyActive) {
     return <AreaFirstJourneyPanel view={view} commands={commands} />;

@@ -239,9 +239,18 @@ function buildParams(overrides: {
       isAreaFirstJourneyActive: nav.journey === 'area-first',
       isSchoolsNavNodeLevel: nav.journey === 'school-first' && !nav.areaKey && !nav.schoolId,
     },
-    journeySwitch: { handleSelectJourney: vi.fn() },
+    journeySwitch: {
+      handleSelectJourney: vi.fn(),
+      selectGroupMemberArea: vi.fn(),
+      isResolvingGroupMemberArea: false,
+    },
     overviewNavigation: { activeAreasNavigationJourney: inertAreasNavigationJourney() },
-    areaGroups: { areaGroupsData: undefined, isLoadingAreaGroups: false, selectedGroupName: null },
+    areaGroups: {
+      areaGroupsData: undefined,
+      isLoadingAreaGroups: false,
+      selectedGroupName: null,
+      focusedGroup: null,
+    },
     geography: {
       discoverAreasForPanel: [],
       areaMarkerCounts: { shown: 0, total: 0 },

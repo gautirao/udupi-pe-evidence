@@ -105,10 +105,16 @@ type NavigationSlice = Pick<
   | 'isAreaFirstJourneyActive'
   | 'isSchoolsNavNodeLevel'
 >;
-/** Issue #2142 SOLID follow-up (commit 2) — the JourneySwitcher write path. */
+/**
+ * Issue #2142 SOLID follow-up (commit 2) — the JourneySwitcher write path.
+ * Issue #2213 — also carries the group-member-area resolver's pending flag
+ * (VIEW) alongside `handleSelectJourney` (its sibling COMMAND); the writer
+ * itself, `selectGroupMemberArea`, is threaded via `PanelRenamedFields` below
+ * exactly like `handleSelectJourney` -> `selectJourney` already is.
+ */
 type JourneySwitchSlice = Pick<
   ReturnType<typeof useDiscoverJourneySwitchController>,
-  'handleSelectJourney'
+  'handleSelectJourney' | 'selectGroupMemberArea' | 'isResolvingGroupMemberArea'
 >;
 type OverviewNavigationSlice = Pick<
   ReturnType<typeof useDiscoverOverviewNavigationController>,
@@ -116,7 +122,11 @@ type OverviewNavigationSlice = Pick<
 >;
 type AreaGroupsSlice = Pick<
   ReturnType<typeof useDiscoverAreaGroupsController>,
-  'areaGroupsData' | 'isLoadingAreaGroups' | 'selectedGroupName'
+  // Issue #2213 — `focusedGroup` (the #2201 groupId-resolved AreaGroup, or
+  // null) is threaded through so the panel surface can render group-scoped
+  // content for the journeyless/`area-groups-landing` group-focus state,
+  // instead of remaining group-blind. See DiscoverPanelSurface.tsx.
+  'areaGroupsData' | 'isLoadingAreaGroups' | 'selectedGroupName' | 'focusedGroup'
 >;
 type GeographySlice = Pick<
   ReturnType<typeof useDiscoverGeographyController>,
@@ -254,6 +264,15 @@ export interface PanelRenamedFields {
   /** Panel-facing alias for the chip row / filters panel ReactNodes. */
   activeContextChips: ReactNode;
   filtersContent: ReactNode;
+  /**
+   * Issue #2213 — ← journeySwitch.selectGroupMemberArea. Carried through as a
+   * renamed/passthrough field (not part of any Pick-able controller slice,
+   * same reason `selectJourney` is here) so `AreaGroupFocusPanel` gets it as
+   * an injected command, never calling the resolver mutation itself.
+   */
+  selectGroupMemberArea: (areaKey: string) => void;
+  /** Issue #2213 — ← journeySwitch.isResolvingGroupMemberArea. */
+  isResolvingGroupMemberArea: boolean;
 }
 
 /**
@@ -346,6 +365,8 @@ type PanelGeographyView = Pick<
   | 'isLoadingAreaGroups'
   | 'summaryRegions'
   | 'selectedGroupName'
+  | 'focusedGroup'
+  | 'isResolvingGroupMemberArea'
 >;
 type PanelGeographyCommands = Pick<
   PanelFields,
@@ -354,6 +375,7 @@ type PanelGeographyCommands = Pick<
   | 'setAreaSearchQuery'
   | 'refetchRegionScopedGroups'
   | 'armRegionSelect'
+  | 'selectGroupMemberArea'
 >;
 
 /**
@@ -495,7 +517,8 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       isSchoolsNavNodeLevel,
     },
     overviewNavigation: { activeAreasNavigationJourney },
-    areaGroups: { areaGroupsData, isLoadingAreaGroups, selectedGroupName },
+    journeySwitch: { isResolvingGroupMemberArea },
+    areaGroups: { areaGroupsData, isLoadingAreaGroups, selectedGroupName, focusedGroup },
     geography: {
       discoverAreasForPanel,
       areaMarkerCounts,
@@ -576,6 +599,8 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       isLoadingAreaGroups,
       summaryRegions,
       selectedGroupName,
+      focusedGroup,
+      isResolvingGroupMemberArea,
     },
     regionGuide: { regionGuideRingActive, regionOverviewMarkerKind, regionSelectNonce },
     results: {
@@ -629,7 +654,7 @@ export function buildPanelSurfaceCommands(
     pageContext: { navigate, actions },
     pageState: { handleCityChange, handleAreaSelect, handleFiltersChange, setPage },
     navigation: { setHoveredNavigationNodeKey, setFocusedClusterMemberAreaKeys },
-    journeySwitch: { handleSelectJourney },
+    journeySwitch: { handleSelectJourney, selectGroupMemberArea },
     geography: { refetchRegionScopedGroups },
     agri: { refetchRegionalAreaGroups, refetchAgriGroupListings },
     results: { refetchGroupResults },
@@ -659,6 +684,7 @@ export function buildPanelSurfaceCommands(
       setAreaSearchQuery,
       refetchRegionScopedGroups,
       armRegionSelect,
+      selectGroupMemberArea,
     },
     results: { refetchGroupResults, setPage, handleBoundedSearch },
     agri: { refetchAgriGroupListings, refetchRegionalAreaGroups },

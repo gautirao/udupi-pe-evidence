@@ -358,6 +358,11 @@ function baseProps(overrides: Partial<PanelFlatFixture> = {}): PanelFlatFixture 
     isLoadingAgriAreas: false,
     areaGroupsData: undefined,
     isLoadingAreaGroups: false,
+    // Issue #2213 — the #2201 groupId-resolved AreaGroup (or null when no
+    // group is focused / not yet resolved).
+    focusedGroup: null,
+    selectGroupMemberArea: vi.fn(),
+    isResolvingGroupMemberArea: false,
     regionScopedGroups: undefined,
     isLoadingRegionScopedGroups: false,
     // Issue #1910 (PR2 review fix, Findings 2 & 3)
@@ -486,12 +491,17 @@ function toModelParams(g: PanelFlatFixture): BuildPanelSurfaceModelParams {
         !BASE_URL_STATE.areaKey &&
         !BASE_URL_STATE.schoolId,
     },
-    journeySwitch: { handleSelectJourney: g.selectJourney },
+    journeySwitch: {
+      handleSelectJourney: g.selectJourney,
+      selectGroupMemberArea: g.selectGroupMemberArea,
+      isResolvingGroupMemberArea: g.isResolvingGroupMemberArea,
+    },
     overviewNavigation: { activeAreasNavigationJourney: g.areasNavigationJourney },
     areaGroups: {
       areaGroupsData: g.areaGroupsData,
       isLoadingAreaGroups: g.isLoadingAreaGroups,
       selectedGroupName: g.selectedGroupName,
+      focusedGroup: g.focusedGroup,
     },
     geography: {
       discoverAreasForPanel: g.discoverAreasForPanel,
@@ -1288,5 +1298,196 @@ describe('DiscoverPanelSurface — canonical Areas journey panel (default for jo
     agriTab.focus();
     await user.keyboard('{Enter}');
     expect(selectJourney).toHaveBeenCalledWith('agri-first');
+  });
+});
+
+/**
+ * Issue #2213 — restores map/panel scope coherence for the journeyless/
+ * #2088-virtual-default `?groupId=<group>` state. Before this fix,
+ * `isAreaFirstJourneyActive` (true here too — see the module doc on
+ * `DiscoverPanelSurface.tsx`) always won first and mounted the group-BLIND
+ * canonical hierarchy panel, even though `resolvedPanelContent ===
+ * 'area-groups-landing'` and a real `focusedGroup` had resolved. These tests
+ * pin the corrected precedence directly against the real production
+ * `resolveIsSelectedGroupState` predicate the branch now runs.
+ */
+describe('DiscoverPanelSurface — group-focus panel (Issue #2213)', () => {
+  const FOCUSED_GROUP = {
+    id: 'south-premium',
+    name: 'South Premium',
+    subtitle: null,
+    region_label: null,
+    school_count: 0,
+    area_keys: ['IN|KA|Bangalore|Koramangala', 'IN|KA|Bangalore|HSR'],
+  };
+
+  beforeEach(() => {
+    BASE_URL_STATE.journey = null;
+    BASE_URL_STATE.groupId = 'south-premium';
+  });
+
+  afterEach(() => {
+    BASE_URL_STATE.journey = null;
+    BASE_URL_STATE.groupId = null;
+    BASE_URL_STATE.areaKey = null;
+    BASE_URL_STATE.node = null;
+  });
+
+  it('mounts AreaGroupFocusPanel — not the group-blind canonical hierarchy panel — for the journeyless groupId cold-load state', () => {
+    // #2088 virtual default: nav.journey resolves to 'area-first' in memory
+    // even with no literal journey= param, so isAreaFirstJourneyActive is
+    // ALSO true here — the group-focus branch must still win.
+    BASE_URL_STATE.journey = 'area-first';
+
+    render(
+      <MemoryRouter>
+        <DiscoverPanelSurfaceHarness
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            selectedArea: null,
+            focusedGroup: FOCUSED_GROUP,
+            discoverAreasForPanel: [
+              {
+                areaKey: 'IN|KA|Bangalore|Koramangala',
+                name: 'Koramangala',
+                geoCenterLat: 12.93,
+                geoCenterLon: 77.61,
+                listingCount: 12,
+                schoolCount: 2,
+              },
+            ],
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('area-group-focus-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('area-group-focus-heading')).toHaveTextContent('South Premium');
+    expect(screen.queryByTestId('navigation-level-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('discover-right-panel-mock')).not.toBeInTheDocument();
+    // Known-area member gets its real display name/count; the unmatched
+    // member area (no discoverAreasForPanel entry) falls back to its raw key.
+    expect(screen.getByTestId('area-group-focus-member-IN|KA|Bangalore|Koramangala')).toHaveTextContent(
+      'Koramangala',
+    );
+    expect(screen.getByTestId('area-group-focus-member-IN|KA|Bangalore|HSR')).toHaveTextContent(
+      'IN|KA|Bangalore|HSR',
+    );
+  });
+
+  it('falls through to the canonical hierarchy panel once an area is selected within the group (selectedArea present)', () => {
+    BASE_URL_STATE.journey = 'area-first';
+
+    render(
+      <MemoryRouter>
+        <DiscoverPanelSurfaceHarness
+          {...baseProps({
+            resolvedPanelContent: 'area-selected',
+            focusedGroup: FOCUSED_GROUP,
+            selectedArea: { areaKey: 'IN|KA|Bangalore|Koramangala' } as never,
+            areasNavigationJourney: inertAreasNavigationJourney({
+              node: {
+                nodeKey: 'a:IN|KA|Bangalore|Koramangala',
+                nodeType: 'AREA',
+                displayLabel: 'Koramangala',
+                depth: 2,
+                regionKey: 'east',
+                ancestry: [],
+                nextLevelType: 'LISTINGS',
+                children: [],
+                revisionId: 1,
+                bounds: {
+                  centreLat: 12.93,
+                  centreLon: 77.61,
+                  minLat: 12.9,
+                  minLon: 77.6,
+                  maxLat: 12.96,
+                  maxLon: 77.63,
+                },
+                descendantAreaKeys: null,
+                areaKey: 'IN|KA|Bangalore|Koramangala',
+              },
+            }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId('area-group-focus-panel')).not.toBeInTheDocument();
+  });
+
+  it('never mounts when no group resolves (bare groupId that matches nothing) — falls through to the group-blind hierarchy panel unchanged', () => {
+    BASE_URL_STATE.journey = 'area-first';
+
+    render(
+      <MemoryRouter>
+        <DiscoverPanelSurfaceHarness
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            focusedGroup: null,
+            areasNavigationJourney: inertAreasNavigationJourney({
+              node: {
+                nodeKey: 'root',
+                nodeType: 'ROOT',
+                displayLabel: 'Bangalore',
+                depth: -1,
+                regionKey: null,
+                ancestry: [],
+                nextLevelType: 'DIRECTION',
+                children: [],
+                revisionId: 1,
+                bounds: null,
+                descendantAreaKeys: null,
+                areaKey: null,
+              },
+            }),
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId('area-group-focus-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('navigation-level-panel')).toBeInTheDocument();
+  });
+
+  it('"All areas" dispatches the atomic groupId-clearing city-root entry (enterAreasJourney(null)) — never a second navigation mechanism', async () => {
+    BASE_URL_STATE.journey = 'area-first';
+    const user = userEvent.setup();
+    URL_ACTIONS.enterAreasJourney = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <DiscoverPanelSurfaceHarness
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            focusedGroup: FOCUSED_GROUP,
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByTestId('area-group-focus-back'));
+    expect(URL_ACTIONS.enterAreasJourney).toHaveBeenCalledWith(null);
+  });
+
+  it('selecting a member area dispatches through commands.geography.selectGroupMemberArea with the clicked areaKey', async () => {
+    BASE_URL_STATE.journey = 'area-first';
+    const user = userEvent.setup();
+    const selectGroupMemberArea = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <DiscoverPanelSurfaceHarness
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            focusedGroup: FOCUSED_GROUP,
+            selectGroupMemberArea,
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByTestId('area-group-focus-member-IN|KA|Bangalore|HSR'));
+    expect(selectGroupMemberArea).toHaveBeenCalledWith('IN|KA|Bangalore|HSR');
   });
 });

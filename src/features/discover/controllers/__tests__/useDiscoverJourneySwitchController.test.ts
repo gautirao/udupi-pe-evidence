@@ -93,7 +93,13 @@ function setup(params: {
       >[0]['toast'],
     }),
   );
-  return { select: result.current.handleSelectJourney, actions, toast };
+  return {
+    select: result.current.handleSelectJourney,
+    selectGroupMemberArea: result.current.selectGroupMemberArea,
+    isResolvingGroupMemberArea: result.current.isResolvingGroupMemberArea,
+    actions,
+    toast,
+  };
 }
 
 beforeEach(() => {
@@ -198,5 +204,62 @@ describe('useDiscoverJourneySwitchController — handleSelectJourney', () => {
     expect(actions.setJourney).toHaveBeenCalledWith('agri-first');
     expect(mockMutate).not.toHaveBeenCalled();
     expect(actions.enterAreasJourney).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Issue #2213 — `selectGroupMemberArea`, the group-focus panel's member-area
+ * writer. Shares `resolveAreaNavigationPath` (the SAME mocked resolver above)
+ * with `handleSelectJourney`'s own areaKey conversion arm — these assertions
+ * mirror that arm's "legacy areaKey + switch TO area-first" / "unresolved
+ * areaKey" / "in-flight guard" coverage, over an explicit `areaKey` parameter
+ * instead of URL state.
+ */
+describe('useDiscoverJourneySwitchController — selectGroupMemberArea (#2213)', () => {
+  it('resolves the given areaKey through the server navigation-path endpoint, then enters canonical AT THAT NODE', () => {
+    const { selectGroupMemberArea, actions } = setup({
+      nav: { city: 'bangalore' },
+    });
+    selectGroupMemberArea('IN|KA|Bangalore|Yelahanka');
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    const [vars, options] = mockMutate.mock.calls[0];
+    expect(vars).toEqual({ city: 'bangalore', areaKey: 'IN|KA|Bangalore|Yelahanka' });
+
+    options.onSuccess({ nodeKey: 'a:IN|KA|Bangalore|Yelahanka' });
+    expect(actions.enterAreasJourney).toHaveBeenCalledWith('a:IN|KA|Bangalore|Yelahanka');
+    expect(actions.setJourney).not.toHaveBeenCalled();
+  });
+
+  it('an unresolved/stale areaKey (404) never navigates and raises an honest destructive toast', () => {
+    const { selectGroupMemberArea, actions, toast } = setup({ nav: { city: 'bangalore' } });
+    selectGroupMemberArea('IN|KA|Bangalore|Stale');
+    const [, options] = mockMutate.mock.calls[0];
+
+    options.onError(new Error('404'));
+    expect(actions.enterAreasJourney).not.toHaveBeenCalled();
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variant: 'destructive',
+        title: "Couldn't open this area",
+      }),
+    );
+  });
+
+  it('never fires a second concurrent resolution while one is already in flight (shared guard with handleSelectJourney)', () => {
+    mockResolver.isPending = true;
+    const { selectGroupMemberArea, isResolvingGroupMemberArea, actions } = setup({
+      nav: { city: 'bangalore' },
+    });
+    expect(isResolvingGroupMemberArea).toBe(true);
+    selectGroupMemberArea('IN|KA|Bangalore|Yelahanka');
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(actions.enterAreasJourney).not.toHaveBeenCalled();
+  });
+
+  it('defaults to the DEFAULT_CITY when nav.city is falsy, mirroring handleSelectJourney', () => {
+    const { selectGroupMemberArea } = setup({ nav: { city: '' } });
+    selectGroupMemberArea('IN|KA|Udupi|Manipal');
+    const [vars] = mockMutate.mock.calls[0];
+    expect(vars.city).not.toBe('');
   });
 });

@@ -489,7 +489,7 @@ test.describe('@integration-ui #2204 — Journeyless group overview (#2201 canon
     await grantTelemetryConsent(page);
   });
 
-  test('journeyless groupId= producer-equivalent state: groupId is the only group identity, panel/map coherence is honestly proven (or its absence documented), and a real subsequent nav hop cannot be poisoned by the stale groupId', async ({
+  test('journeyless groupId= producer-equivalent state: groupId is the only group identity, the panel now renders the SAME group scope the map narrows to (Issue #2213 fix), and a real subsequent nav hop cannot be poisoned by the stale groupId', async ({
     page,
   }) => {
     test.setTimeout(60_000);
@@ -512,70 +512,48 @@ test.describe('@integration-ui #2204 — Journeyless group overview (#2201 canon
     // `city_region_memberships` are BOTH EMPTY for every city (live-verified,
     // `SELECT count(*)` = 0), so `useDiscoverMapPresentation.ts`'s
     // `'macro-region-bubbles'` layer never renders a clickable bubble — there
-    // is no first hop to click. Populating those tables for real requires the
-    // heavyweight `CityRegionOnboardingService` city-launch job against the
-    // SAME shared, concurrently-used `pg-test-fixture` container (out of
-    // scope for this QA pass — a deliberate, separate fixture-onboarding
-    // change, not a code change). A prior investigation pass also tried
-    // seeding one real listing onto an `area_groups` member area to make the
-    // group-bubble level reachable; that single-listing seed was reverted in
-    // full (row + fixture file removed, `totalActiveListings` confirmed back
-    // to 0) after it caused Flow 3/Flow 5 regressions in a live full-suite
-    // run — this fixture is in its known-clean state. `page.goto` remains the
-    // only way to reach the producer-equivalent URL state itself; per the
-    // ruling, that is accepted and sufficient to prove the state's contract
-    // directly, without the first-hop click.
+    // is no first hop to click. `page.goto` remains the only way to reach the
+    // producer-equivalent URL state itself; per the ruling, that is accepted
+    // and sufficient to prove the state's contract directly, without the
+    // first-hop click.
     //
-    // WHAT ACTUALLY MOUNTS HERE — investigated live (this pass), and it is a
-    // genuinely different mechanism than either party had assumed. Issue
-    // #2088 item 3 (`src/features/discover/state/url/area.ts:61-95`) made a
-    // bare `/discover` with NO explicit `journey=` param VIRTUALLY default to
-    // `journey: 'area-first'` for any city with an active canonical
-    // hierarchy (Bangalore has one) — UNLESS an explicit `scope=` param is
-    // also present (the legacy-landing suppression escape hatch). This
-    // default is applied ONCE at the single URL-read layer
-    // (`useAreaUrlDomain`), so EVERY consumer of `nav.journey` — the panel
-    // router's `isAreaFirstJourneyActive`, `derivePanelContent`'s badge
-    // derivation, the JourneySwitcher's `aria-selected` — sees the SAME
-    // virtually-resolved `'area-first'` value, never a raw `null`. The URL
-    // ITSELF is never rewritten (confirmed live: `journey` stays absent from
-    // the address bar throughout), so this flow's requirement — "no journey
-    // param is ever fabricated in the URL" — still holds and is asserted
-    // below; what changes is that `nav.journey` (the in-memory value every
-    // component reads) is NOT `null` the way the ruling's "journey=null"
-    // shorthand implied for a bare-city fixture like this one.
+    // Issue #2088 item 3 (`src/features/discover/state/url/area.ts:61-95`)
+    // still makes a bare `/discover` with NO explicit `journey=` param
+    // VIRTUALLY default to `journey: 'area-first'` for any city with an
+    // active canonical hierarchy (Bangalore has one), applied ONCE at the
+    // single URL-read layer (`useAreaUrlDomain`) — so `nav.journey` is never
+    // a raw `null` here even though the URL itself is never rewritten
+    // (confirmed below: `journey` stays absent from the address bar).
     //
-    // CONSEQUENCE, live-verified via `navigation-level-panel`'s testid and
-    // `journey-card-area-first`'s `aria-selected="true"`: the CANONICAL
-    // `AreaFirstJourneyPanel` mounts directly (the same component/tree Flow 1
-    // starts from), NOT `LegacyRightPanelBridge`/`AreaSelectionPanel`. This
-    // component's own doc comment (quoted in this file's git history)
-    // states it "ignores the stale params" (`groupId`/`areaKey`) and always
-    // mounts the canonical Directions tree at city root — confirmed live
-    // below: `groupId` has ZERO effect on the rendered tree, which is
-    // byte-identical to Flow 1's bare `journey=area-first` root. This is
-    // the SAME "server-owned compatibility identity with no live PANEL
-    // consumer" pattern already established for Flow 5's school-first case —
-    // proven directly here, not assumed.
+    // Issue #2213 FIX (this pass) — `DiscoverPanelSurface.tsx` now checks
+    // `resolveIsSelectedGroupState(resolvedPanelContent, focusedGroup,
+    // selectedArea)` BEFORE `isAreaFirstJourneyActive`. Before this fix, that
+    // ordering meant `isAreaFirstJourneyActive` (true here via the #2088
+    // virtual default) always won, mounting the canonical
+    // `AreaFirstJourneyPanel` GROUP-BLIND — the exact same 3 Direction cards
+    // Flow 1 renders from a bare root, with `groupId` having zero effect —
+    // while the map's marker fetch (`groupAreaKeysForMapData`, journey-
+    // independent, resolved off `groupId` alone) already narrowed to
+    // south-premium's 3 member areas once zoomed past the area-overview band.
+    // A real, live-reproduced #1806-class map/panel scope divergence.
     //
-    // The MAP-layer badge is a SEPARATE consumer that DOES resolve `groupId`:
-    // `focusedGroup` (`useDiscoverAreaGroupsController.ts`) resolves from
-    // `groupId` ALONE (`resolveActiveDiscoverGroup`, journey-independent —
-    // #2201's "groupId is the sole group-identity signal" invariant), and
-    // `derivePanelContent`'s area-first branch (fed the SAME virtually-
-    // resolved `journey: 'area-first'`, `areaKey: null`) returns
-    // `'area-groups-landing'` — so `DiscoverMapCountBadge`'s
-    // `resolvedPanelContent === 'area-groups-landing' && focusedGroup &&
-    // !selectedArea` branch fires, rendering south-premium's real "No
-    // listings here yet" copy off the live `/api/discover/area-groups`
-    // payload — proven below against the real network response, not stubbed.
+    // The fix makes the group-focus branch win first: `AreaGroupFocusPanel`
+    // now mounts, rendering the group's REAL member areas
+    // (Koramangala/Jayanagar/HSR Layout) — the SAME `group.area_keys` the
+    // map's `groupAreaKeysForMapData` already narrows the marker fetch to —
+    // so panel and (post-zoom) map now describe the identical geography.
+    // Selecting a member area resolves it through the SAME sanctioned
+    // `.../navigation-path` server endpoint `handleSelectJourney` already
+    // uses (never a client-fabricated `node=`), and "All areas" clears the
+    // stale `groupId` via the SAME atomic `enterAreasJourney(null)` path
+    // #1956 PR 6 already established — no new URL-write mechanism.
     const areaGroupsResponse = page.waitForResponse((r) => r.url().includes('/api/discover/area-groups'));
-    // (2c) prep — track EVERY /api/discover/markers response for the full
-    // test lifetime, registered before navigation so no response (whether
-    // fired during initial load, during the badge-settle wait, or from an
-    // explicit zoom click below) can race past an unregistered listener.
-    // Mirrors Flow 3's own marker-response-array pattern (Finding 3 fix
-    // rationale there applies identically here).
+    // Track EVERY /api/discover/markers response for the full test lifetime,
+    // registered before navigation so no response (whether fired during
+    // initial load, during the badge-settle wait, or from an explicit zoom
+    // click below) can race past an unregistered listener. Mirrors Flow 3's
+    // own marker-response-array pattern (Finding 3 fix rationale applies
+    // identically here).
     const markerResponses: Awaited<ReturnType<typeof page.waitForResponse>>[] = [];
     page.on('response', (r) => {
       if (r.url().includes('/api/discover/markers')) markerResponses.push(r);
@@ -592,31 +570,33 @@ test.describe('@integration-ui #2204 — Journeyless group overview (#2201 canon
     expect(new URL(page.url()).searchParams.getAll('areaKeys'), 'no legacy areaKeys= plural alias either').toEqual([]);
     expect(currentParam(page, 'groupId')).toBe(GROUP_SOUTH_PREMIUM);
 
-    // ── (2a) PANEL side: the CANONICAL Directions tree mounts (#2088's
-    // virtual area-first default) and is proven GROUP-BLIND — the exact same
-    // 3 Direction cards Flow 1 renders from a bare journey=area-first root,
-    // with no group-scoped affordance anywhere in it. ──
-    await expect(page.getByTestId('navigation-level-panel')).toBeVisible({ timeout: 20_000 });
-    const navCards = await page
-      .locator('[data-testid^="navigation-child-card-"]:not([data-testid*="-listings-"]):not([data-testid*="-count-"])')
+    // ── (2a) PANEL side (Issue #2213 fix): `AreaGroupFocusPanel` mounts —
+    // group-SCOPED, not the group-blind canonical Directions tree — showing
+    // exactly south-premium's 3 real member areas. The group-blind hierarchy
+    // panel (`navigation-level-panel`) never mounts for this state. ──
+    await expect(page.getByTestId('area-group-focus-panel')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('area-group-focus-heading')).toHaveText('South Premium');
+    expect(
+      await page.getByTestId('navigation-level-panel').count(),
+      'the group-blind canonical hierarchy panel no longer mounts for this state',
+    ).toBe(0);
+    const memberTestIds = await page
+      .locator('[data-testid^="area-group-focus-member-"]')
       .evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')).sort());
     expect(
-      navCards,
-      'the canonical tree is byte-identical to Flow 1s bare area-first root — groupId has zero effect on it',
-    ).toEqual([
-      'navigation-child-card-d:northeast',
-      'navigation-child-card-d:southeast',
-      'navigation-child-card-d:southwest',
-    ]);
-    expect(
-      await page.getByTestId('area-group-card-south-premium').count(),
-      'no group-scoped card content renders — the canonical panel never reads groupId at all',
-    ).toBe(0);
+      memberTestIds,
+      'the panel renders exactly south-premium\'s 3 real member areas — no more, no fewer',
+    ).toEqual(
+      [
+        `area-group-focus-member-${AREA_KORAMANGALA_KEY}`,
+        `area-group-focus-member-${AREA_JAYANAGAR_KEY}`,
+        `area-group-focus-member-${AREA_HSR_LAYOUT_KEY}`,
+      ].sort(),
+    );
 
-    // ── (2b) MAP/BADGE side: the real, journey-independent groupId consumer
-    // DOES resolve south-premium off the live backend payload — a genuinely
-    // DIFFERENT consumer than the panel, proven separately rather than
-    // conflated. ──
+    // ── (2b) The panel's member set is backed by the SAME live
+    // `/api/discover/area-groups` payload the map/badge already read pre-fix —
+    // one server-owned identity, never re-derived. ──
     const areaGroupsBody = await areaGroupsRes.json();
     const southPremiumGroup = (areaGroupsBody?.groups ?? []).find(
       (g: { slug?: string }) => g.slug === GROUP_SOUTH_PREMIUM,
@@ -624,48 +604,20 @@ test.describe('@integration-ui #2204 — Journeyless group overview (#2201 canon
     expect(southPremiumGroup, 'south-premium group is present in the real /api/discover/area-groups payload').toBeTruthy();
     expect(
       new Set(southPremiumGroup.areaKeys),
-      'south-premium resolves to exactly its 3 real member areaKeys, backing the badge total',
+      'south-premium resolves to exactly its 3 real member areaKeys, backing both the panel and the badge',
     ).toEqual(new Set([AREA_KORAMANGALA_KEY, AREA_JAYANAGAR_KEY, AREA_HSR_LAYOUT_KEY]));
     const badge = page.getByTestId('discover-badge');
     await expect(badge).toBeVisible({ timeout: 15_000 });
     await expect(badge).toHaveText('No listings here yet');
 
-    // ── (2c) REVIEWER-BOT "Reading B" RULING (2026-08-18) — investigated and
-    // LIVE-CONFIRMED this pass, correcting the prior QA pass's premise. The
-    // prior pass only checked the page-level BADGE (2b above) and treated it
-    // as the same class of asymmetry as Flow 5's badge-only case (no marker
-    // fetch ever fires there). That premise is WRONG for Flow 4: at THIS
-    // journeyless groupId= state, once the map is zoomed in past the
-    // area-overview band (AREA_LAYER_MAX_ZOOM=12 — a completely ordinary user
-    // gesture, the `.leaflet-control-zoom-in` control, requiring NO click
-    // producer and no drill-down), `markersEnabled` in
-    // `useDiscoverMapDataController.ts` flips true (isTopGroupedLevel is
-    // FALSE here specifically because `nav.groupId` is set — see that file's
-    // `isTopGroupedLevel` derivation), and `useDiscoverAreaGroupsController
-    // .ts`'s `groupAreaKeysForMapData` (line 91: `if (!groupId) return
-    // undefined`) resolves off `groupId` ALONE, journey-independent. That
-    // feeds `resolveDiscoverMarkerScope`'s live-mode rule 6 (`markerScope.ts`)
-    // to `{ kind: 'areas', areaKeys: group.area_keys }` — a REAL, live
-    // `/api/discover/markers` request narrows to exactly south-premium's 3
-    // member areas, live-verified below off the actual network response —
-    // while the panel (proven group-blind in (2a) above) keeps rendering the
-    // 3 unrelated Direction cards (northeast/southeast/southwest), which have
-    // no relationship to south-premium's own areas (Koramangala/Jayanagar/HSR
-    // Layout, all south Bangalore). This IS a genuine #1806-class map/panel
-    // scope divergence — NOT the same asymmetry as Flow 5's badge-only case,
-    // where no marker fetch ever fires in any of that flow's states so there
-    // is no map SCOPE to disagree with the panel about. Confirming the
-    // reviewer-bot's Reading B ruling was correct on the merits, not merely
-    // asserted.
-    //
-    // #2204 SCOPE BOUNDARY: this PR is evidence-only (every prior owner
-    // ruling on this issue forbids product-code changes here). This divergence
-    // is a genuine PRODUCT bug in `useDiscoverAreaGroupsController.ts`'s
-    // `groupAreaKeysForMapData` / `markerScope.ts` rule 6 — group-scoping the
-    // map's marker fetch off raw `groupId` regardless of which panel actually
-    // mounts — and is out of scope for this PR to fix. It is documented here,
-    // precisely and with live network evidence, and escalated in the PR body
-    // as a found regression risk for a follow-up issue.
+    // ── (2c) MAP side after an ordinary zoom (the `.leaflet-control-zoom-in`
+    // control, no click producer needed): `markersEnabled` flips true past
+    // AREA_LAYER_MAX_ZOOM=12 and `groupAreaKeysForMapData` (journey-
+    // independent, resolved off `groupId` alone) narrows the marker fetch to
+    // south-premium's 3 member areas — THE SAME 3 areaKeys the panel already
+    // renders in (2a). This is the coherence Issue #2213 exists to prove: one
+    // shared geography, not the #1806-class divergence Flow 4 used to
+    // document. ──
     const zoomInBtn = page.locator('.leaflet-control-zoom-in');
     await zoomInBtn.waitFor({ state: 'visible', timeout: 10_000 });
     // Snapshot count BEFORE clicking — any response counted after this point
@@ -695,98 +647,105 @@ test.describe('@integration-ui #2204 — Journeyless group overview (#2201 canon
       .poll(() => markerResponses.length, { timeout: 15_000 })
       .toBeGreaterThan(0);
     // Give any in-flight post-click fetch a moment to land, then use the
-    // LATEST captured response — this proves the divergence exists at the
-    // current (zoomed-in) map state regardless of exactly which click/intent
-    // triggered the fetch that produced it.
+    // LATEST captured response.
     await page.waitForTimeout(1_500);
     void markerResponseCountBeforeZoom; // documents intent; not asserted directly — see comment above
     const scopedMarkersRes = markerResponses[markerResponses.length - 1];
     const scopedMarkersUrl = new URL(scopedMarkersRes.url());
     expect(
       new Set(scopedMarkersUrl.searchParams.getAll('areaKeys')),
-      'FOUND DIVERGENCE (documented, not fixed here): once zoomed in, the map marker fetch genuinely narrows to south-premium\'s 3 member areaKeys off groupId alone',
+      'Issue #2213 fix verified: the map marker fetch narrows to south-premium\'s 3 member areaKeys — the SAME set the panel already rendered in (2a)',
     ).toEqual(new Set([AREA_KORAMANGALA_KEY, AREA_JAYANAGAR_KEY, AREA_HSR_LAYOUT_KEY]));
 
-    // Meanwhile the panel's OWN rendered tree is UNCHANGED by the zoom — still
-    // the same group-blind, unrelated Direction-card set proven in (2a). The
-    // map is now showing south-premium-scoped pins while the panel shows
-    // navigation cards for a completely different (unrelated) geography — the
-    // divergence, made concrete.
-    const navCardsAfterZoom = await page
-      .locator('[data-testid^="navigation-child-card-"]:not([data-testid*="-listings-"]):not([data-testid*="-count-"])')
+    // The panel is unaffected by the zoom — it was already showing this exact
+    // scope before the map caught up, and stays on it afterward. Coherent
+    // both before and after zoom, per the acceptance criteria.
+    const memberTestIdsAfterZoom = await page
+      .locator('[data-testid^="area-group-focus-member-"]')
       .evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')).sort());
-    expect(
-      navCardsAfterZoom,
-      'the panel never reacts to the now-scoped map — it keeps rendering the same group-blind Direction tree, confirming the divergence is real (map narrows, panel does not)',
-    ).toEqual(navCards);
+    expect(memberTestIdsAfterZoom, 'the panel keeps rendering the identical group-scoped member set after the zoom').toEqual(
+      memberTestIds,
+    );
 
-    // ── (3) A REAL subsequent navigation step — click into a Direction card
-    // (the ruling's own first-listed example, directly available here since
-    // the canonical tree is already mounted) — then Back/Forward. This is
-    // THE canonical node= producer Flow 1 also uses; here it proves the
-    // stale `groupId` sitting in the URL cannot poison it. ──
+    // ── (3) An honest fixture-limitation proof, not masked: south-premium's
+    // member areas live only in the base `area_groups` fixture table, NOT in
+    // the navigation-hierarchy fixture seed (#1956 PR-5) — live-verified
+    // (`GET .../areas/{areaKey}/navigation-path` 404s "Area not found in
+    // navigation hierarchy" for Koramangala against this exact fixture).
+    // Clicking a member area therefore cannot complete a real node= hop here
+    // — but it MUST still be wired through the real sanctioned server
+    // resolver (never a client-fabricated node=) and must never corrupt the
+    // URL on the honest-failure path. ──
+    await page.getByTestId(`area-group-focus-member-${AREA_KORAMANGALA_KEY}`).click();
+    await page.waitForTimeout(1_000);
+    expect(currentParam(page, 'node'), 'an unresolved member area never fabricates a node=').toBeNull();
+    expect(currentParam(page, 'groupId'), 'an unresolved member area click leaves groupId untouched').toBe(
+      GROUP_SOUTH_PREMIUM,
+    );
+    await expect(page.getByTestId('area-group-focus-panel')).toBeVisible();
+
+    // ── (4) A REAL subsequent canonical navigation hop — "All areas" clears
+    // the stale groupId via the SAME atomic `enterAreasJourney(null)` write
+    // #1956 PR 6 already established (never a second, ad-hoc clear
+    // mechanism), mounting the canonical hierarchy at city root; a
+    // Direction-card click then proves a genuine node= hop still works
+    // cleanly from there, and Back/Forward round-trips exactly. ──
     const historyBefore = await historyLength(page);
+    await page.getByTestId('area-group-focus-back').click();
+    await expect(page.getByTestId('navigation-level-panel')).toBeVisible({ timeout: 15_000 });
+    expect(
+      currentParam(page, 'groupId'),
+      '"All areas" clears the stale groupId as part of its atomic entry write',
+    ).toBeNull();
+    expect(currentParam(page, 'node')).toBeNull();
+
     await page.getByTestId(`navigation-child-card-${D_NORTHEAST}`).click();
     await expect.poll(() => currentParam(page, 'node')).toBe(D_NORTHEAST);
     expect(currentParam(page, 'areaKey'), 'the node= hop never writes a legacy areaKey').toBeNull();
-    // groupId is NOT cleared by a plain node hop (verified live: goToNode only
-    // ever writes/deletes the node param) — it keeps sitting inert in the URL,
-    // exactly as it did before the hop. That inertness (proven in (2a) above:
-    // the canonical panel never reads it) IS the "cannot poison" proof — a
-    // stale compatibility param surviving unread is categorically different
-    // from it corrupting the resolved scope, which the map/panel assertions
-    // below rule out directly.
-    expect(currentParam(page, 'groupId'), 'groupId survives inertly; it never re-routes or corrupts the node= scope').toBe(
-      GROUP_SOUTH_PREMIUM,
-    );
-    expect(currentParam(page, 'journey'), 'journey stays virtually-defaulted, never literally written').toBeNull();
+    expect(currentParam(page, 'groupId'), 'groupId stays cleared — no resurrection by the node= hop').toBeNull();
 
     const historyAfter = await historyLength(page);
-    expect(historyAfter - historyBefore, 'exactly 1 PUSH entry for the 1 deliberate Direction-card hop').toBe(1);
+    expect(
+      historyAfter - historyBefore,
+      'exactly 2 PUSH entries: the "All areas" atomic entry + the 1 deliberate Direction-card hop',
+    ).toBe(2);
 
-    // Back returns to the EXACT original journeyless(+virtual-area-first)
-    // groupId entry state; Forward re-enters the node= hop correctly — and
-    // neither leg ever resurrects a legacy areaKey.
+    // Back/Forward round-trip — every leg lands on the exact state its
+    // forward counterpart produced, never resurrecting a legacy areaKey.
     await page.goBack();
     await expect.poll(() => currentParam(page, 'node')).toBeNull();
-    expect(currentParam(page, 'groupId'), 'Back restores the EXACT original entry state, groupId included').toBe(
-      GROUP_SOUTH_PREMIUM,
-    );
+    expect(currentParam(page, 'groupId')).toBeNull();
     expect(currentParam(page, 'areaKey')).toBeNull();
     await expect(page.getByTestId('navigation-level-panel')).toBeVisible({ timeout: 15_000 });
 
-    await page.goForward();
-    await expect.poll(() => currentParam(page, 'node')).toBe(D_NORTHEAST);
-    expect(currentParam(page, 'groupId'), 'Forward re-enters the node= hop; groupId still just sits inert').toBe(
+    await page.goBack();
+    await expect(page.getByTestId('area-group-focus-panel')).toBeVisible({ timeout: 15_000 });
+    expect(currentParam(page, 'groupId'), 'Back restores the EXACT original group-focus entry state').toBe(
       GROUP_SOUTH_PREMIUM,
     );
-    expect(currentParam(page, 'areaKey'), 'Forward never resurrects a legacy areaKey either').toBeNull();
+    expect(currentParam(page, 'node')).toBeNull();
 
-    // ── VERDICT (this pass, CORRECTED per reviewer-bot Reading B) — recorded
-    // verbatim: canonical AreaFirstJourneyPanel mounts (via #2088's virtual
-    // area-first default, live-discovered this pass — not the ruling's
-    // literal "journey=null" shorthand, which does not hold for a city with
-    // an active hierarchy like this fixture's Bangalore); groupId is the sole
-    // group identity ever WRITTEN to the URL (journey/node/areaKey are never
-    // fabricated); the canonical panel is proven group-blind (byte-identical
-    // Direction-card set with or without groupId, unchanged even after the
-    // map is zoomed in); the map/badge layer IS a real, separate groupId
-    // consumer, proven against the live /api/discover/area-groups payload;
-    // AND — the corrected finding — once the map is zoomed in past the
-    // area-overview band (an ordinary user gesture, no click producer
-    // required), the map's OWN marker fetch genuinely narrows to
-    // south-premium's 3 member areaKeys while the panel stays on its
-    // unrelated Direction-card tree: a REAL, live-reproduced #1806-class
-    // map/panel scope divergence (2c above), NOT the same asymmetry as Flow
-    // 5's badge-only case. This is a genuine PRODUCT bug in
-    // `useDiscoverAreaGroupsController.ts`'s `groupAreaKeysForMapData` /
-    // `markerScope.ts` rule 6 (group-scopes the map off raw `groupId`
-    // regardless of which panel actually mounts) — documented here with live
-    // network evidence and escalated in the PR body as out-of-scope for this
-    // evidence-only PR to fix. Separately: a real node= hop (Direction-card
-    // click) resolves correctly and groupId neither poisons nor is cleared by
-    // it — it survives purely inertly; and Back/Forward round-trips exactly,
-    // never resurrecting a legacy areaKey. ──
+    await page.goForward();
+    await expect(page.getByTestId('navigation-level-panel')).toBeVisible({ timeout: 15_000 });
+    expect(currentParam(page, 'groupId')).toBeNull();
+
+    await page.goForward();
+    await expect.poll(() => currentParam(page, 'node')).toBe(D_NORTHEAST);
+    expect(currentParam(page, 'groupId')).toBeNull();
+    expect(currentParam(page, 'areaKey')).toBeNull();
+
+    // ── VERDICT (Issue #2213 fix, this pass) — recorded verbatim: groupId
+    // remains the sole group identity ever WRITTEN to the URL (journey/node/
+    // areaKey are never fabricated for the group-focus state itself); the
+    // panel and the (post-zoom) map now describe the IDENTICAL geography —
+    // south-premium's 3 real member areas — closing the #1806-class
+    // divergence this Flow used to document; a member-area selection is wired
+    // through the real sanctioned `.../navigation-path` server resolver
+    // (proven via its honest, fixture-limited 404 path, never a fabricated
+    // node=); "All areas" clears the stale groupId through the SAME atomic
+    // `enterAreasJourney(null)` write #1956 PR 6 already established; a real
+    // subsequent node= hop (Direction-card click) resolves correctly
+    // afterward; and Back/Forward round-trips exactly across all 4 legs. ──
   });
 });
 
