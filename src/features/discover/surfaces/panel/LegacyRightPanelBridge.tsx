@@ -105,7 +105,7 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
   const { selectedSchool, schools, schoolsQuery, schoolListings } = view.schools;
   const { filters, filtersContent, searchQuery } = view.filters;
   const { handleFiltersChange, handleSearchChange } = commands.filters;
-  const { journeyView, resolvedPanelContent } = view.navigation;
+  const { journeyView, resolvedPanelContent, areasNavigationJourney } = view.navigation;
   const { journeyCommands, selectJourney, onSelectedListingPreviewChange } = commands.navigation;
   const { selectedMarkerListing, activeContextChips, prefersReducedMotion, isAuthenticated } =
     view.interaction;
@@ -291,7 +291,28 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
         if (match) {
           handleAreaSelect(match);
         } else {
-          urlActions.selectArea(areaKey);
+          // Issue #2216 — journey-preserving canonical write (mirrors #2203/#2211's
+          // DiscoverControlBar fix and SchoolFirstJourneyPanel's identical branch).
+          // Unconditional (no journey-branch): CorridorLandingPanel (agri-first
+          // landing) never destructures/reads `onSelectAreaKey` in its body — it is
+          // a dead prop there (confirmed via DiscoverRightPanel.tsx's CorridorLandingPanel
+          // destructuring) — so school-first is the only journey this fallback is
+          // exercised for in this PR's test coverage. `AreaGroupsLandingPanel`
+          // (area-first) also forwards this prop but is believed dead per #1956
+          // PR-6; not independently re-verified here — a mismatched nodeKey lookup
+          // there would simply fall through to the no-op branch below (fail
+          // closed, never re-emit legacy `areaKey=`).
+          const nodeKey = areasNavigationJourney.node?.children.find(
+            (c) => c.areaKey === areaKey,
+          )?.nodeKey;
+          if (nodeKey) {
+            urlActions.goToNodeAndClearSchoolSelection(nodeKey);
+          }
+          // else: fail closed, no-op. This should be structurally
+          // unreachable — areaKey originates from the same node tree this
+          // lookup searches — but if the reverse lookup ever misses, the
+          // click is silently swallowed rather than re-emitting the legacy
+          // `areaKey=` write this issue (#2216) exists to eliminate.
         }
       }}
       onSelectSchool={journeyCommands.selectSchoolById}

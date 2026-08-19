@@ -13,6 +13,7 @@ function makeActions() {
     selectArea: vi.fn(),
     enterSchoolsJourney: vi.fn(),
     goToNode: vi.fn(),
+    goToNodeAndClearSchoolSelection: vi.fn(),
   };
 }
 
@@ -118,7 +119,11 @@ describe('useDiscoverOverviewNavigationController', () => {
     expect(actions.selectArea).not.toHaveBeenCalled();
   });
 
-  it('school-first + AREA child NOT yet in discoverAreas falls back to actions.selectArea (same URL outcome)', () => {
+  // Issue #2216 — the not-found-in-discoverAreas fallback now writes the
+  // canonical journey-preserving node= param (goToNodeAndClearSchoolSelection)
+  // instead of the legacy areaKey= param (selectArea), mirroring #2203/#2211's
+  // DiscoverControlBar fix.
+  it('school-first + AREA child NOT yet in discoverAreas falls back to actions.goToNodeAndClearSchoolSelection (journey-preserving canonical write)', () => {
     const actions = makeActions();
     const { result } = renderHook(() =>
       useDiscoverOverviewNavigationController(
@@ -137,7 +142,8 @@ describe('useDiscoverOverviewNavigationController', () => {
       ),
     );
     act(() => result.current.activeAreasNavigationJourney.selectNode('n:1'));
-    expect(actions.selectArea).toHaveBeenCalledWith('a:1');
+    expect(actions.goToNodeAndClearSchoolSelection).toHaveBeenCalledWith('n:1');
+    expect(actions.selectArea).not.toHaveBeenCalled();
   });
 
   it('school-first + non-AREA child enters the schools journey at that node', () => {

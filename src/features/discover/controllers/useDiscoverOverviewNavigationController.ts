@@ -88,7 +88,7 @@ export function useDiscoverOverviewNavigationController({
         if (match) {
           handleAreaSelect(match);
         } else {
-          actions.selectArea(child.areaKey);
+          actions.goToNodeAndClearSchoolSelection(nodeKey);
         }
       } else {
         actions.enterSchoolsJourney(nodeKey);

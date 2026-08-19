@@ -29,7 +29,10 @@ export interface SchoolFirstJourneyPanelView {
 
 export interface SchoolFirstJourneyPanelCommands {
   pageContext: {
-    actions: Pick<DiscoverActionsContextValue, 'selectArea' | 'buildNodeHref'>;
+    actions: Pick<
+      DiscoverActionsContextValue,
+      'selectArea' | 'buildNodeHref' | 'goToNodeAndClearSchoolSelection'
+    >;
   };
   geography: Pick<DiscoverPanelSurfaceCommands['geography'], 'handleAreaSelect'>;
   navigation: Pick<
@@ -84,7 +87,21 @@ export function SchoolFirstJourneyPanel({ view, commands }: SchoolFirstJourneyPa
           if (match) {
             handleAreaSelect(match);
           } else {
-            urlActions.selectArea(areaKey);
+            // Issue #2216 — journey-preserving canonical write (mirrors #2203/#2211's
+            // DiscoverControlBar fix). Reverse-derive nodeKey from the same node tree
+            // the controller's own child lookup uses, so this stays symmetric with
+            // handleCanonicalNodeSelect's map-side branch.
+            const nodeKey = areasNavigationJourney.node?.children.find(
+              (c) => c.areaKey === areaKey,
+            )?.nodeKey;
+            if (nodeKey) {
+              urlActions.goToNodeAndClearSchoolSelection(nodeKey);
+            }
+            // else: fail closed, no-op. This should be structurally
+            // unreachable — areaKey originates from the same node tree this
+            // lookup searches — but if the reverse lookup ever misses, the
+            // click is silently swallowed rather than re-emitting the legacy
+            // `areaKey=` write this issue (#2216) exists to eliminate.
           }
         }}
         buildNodeHref={urlActions.buildNodeHref}

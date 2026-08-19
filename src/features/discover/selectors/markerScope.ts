@@ -25,6 +25,21 @@ import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
  *      school-group-areas states (schoolId null; see
  *      discoverPanelState.ts:118-120) fire neither guard and fall through
  *      to rule 6.
+ *
+ *      Issue #2216 — this route's WRITER side is now dead: all three
+ *      school-first "area not yet loaded in discoverAreas" fallback call
+ *      sites (useDiscoverOverviewNavigationController.ts, SchoolFirstJourneyPanel.tsx,
+ *      LegacyRightPanelBridge.tsx) that used to write the legacy
+ *      `actions.selectArea(areaKey)` param no longer do so under any
+ *      resolution outcome: each writes the canonical journey-preserving
+ *      `actions.goToNodeAndClearSchoolSelection(nodeKey)` when the reverse
+ *      `areaKey -> nodeKey` lookup resolves, and fails closed (no-op — no
+ *      URL write at all) when it does not, rather than falling back to the
+ *      legacy param. So a fresh school-first selection can no longer PRODUCE
+ *      the `groupId != null` state this route reads. This does not delete the
+ *      route itself (still reachable from a pre-existing/deep-linked legacy
+ *      `areaKey=`+`groupId=` URL, out of scope here) — see #2205 for the
+ *      re-audit that determines whether the READ side can be removed.
  * agri-first can never reach rule 6 — rule 3 returns `{ kind: 'city' }`
  * unconditionally. The arm dies only when BOTH preview node-scoping (#2202)
  * and the school-first group taxonomy migration (#2201) have landed — never
