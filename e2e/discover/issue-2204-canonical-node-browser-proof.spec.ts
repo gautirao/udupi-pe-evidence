@@ -53,6 +53,25 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const CITY = 'bangalore';
+// FAIL CLOSED (PR #2217 review) — unlike e2e/journey/*.spec.ts's hosted-URL
+// fallback convention, this hard-gate spec must NEVER silently talk to any
+// hosted/production backend: this whole PR exists because the gate's
+// evidence was previously contaminated by an accidental non-fixture
+// connection. An unset BACKEND_BASE_URL here must fail loudly, not default
+// to production, or a dynamic identity resolution (e.g. resolveSchoolIdByAreaKey)
+// could silently mix identities from a different environment than the one
+// the browser is actually exercising.
+const BACKEND = (() => {
+  const url = process.env.BACKEND_BASE_URL;
+  if (!url) {
+    throw new Error(
+      'issue-2204-canonical-node-browser-proof.spec.ts requires BACKEND_BASE_URL to be set ' +
+        'to the local fixture backend (e.g. http://localhost:8090) — this hard-gate spec must ' +
+        'never fall back to any hosted/production backend.',
+    );
+  }
+  return url;
+})();
 
 // ── Area-first navigation tree (real, seeded) ───────────────────────────────
 const D_NORTHEAST = 'd:northeast';
@@ -64,12 +83,29 @@ const AREA_RR_NAGAR_NODE = 'a:IN|KA|Bengaluru|RR Nagar';
 
 // ── School-first fixture identity (real, seeded) ────────────────────────────
 // bangalore-mangalore-schools-seed.sql inserts every school row via
-// gen_random_uuid() (not a literal), so this id is NOT stable across fixture
-// reseeds — it is the live id of "Bethany High School" (areaKey=Koramangala,
-// live-verified via GET /api/public/schools/{id}) for THIS evidence run's
-// fixture instance. Re-verify/refresh on any future reseed.
-const SCHOOL_ID_KORAMANGALA = '790808d6-7554-4f1d-a7a3-6863c7e7ecbe';
+// gen_random_uuid() (not a literal), so no fixed UUID is reseed-stable —
+// resolved dynamically below via the public search-by-name endpoint (the
+// seeded school's `name`, unlike its `id`, is a stable fixture literal) in
+// this describe block's beforeAll, never hardcoded.
+const SCHOOL_NAME_KORAMANGALA_QUERY = 'Bethany';
 const AREA_KORAMANGALA_KEY = 'IN|KA|Bengaluru|Koramangala';
+
+async function resolveSchoolIdByAreaKey(query: string, areaKey: string): Promise<string> {
+  const res = await fetch(
+    `${BACKEND}/api/public/schools/search?q=${encodeURIComponent(query)}&city=${CITY}&limit=10`,
+  );
+  if (!res.ok) {
+    throw new Error(`resolveSchoolIdByAreaKey: search failed with ${res.status}`);
+  }
+  const results = (await res.json()) as Array<{ id: string; areaKey: string | null }>;
+  const match = results.find((r) => r.areaKey === areaKey);
+  if (!match) {
+    throw new Error(
+      `resolveSchoolIdByAreaKey: no school matching q="${query}" areaKey="${areaKey}" in fixture — reseed may have changed fixture data`,
+    );
+  }
+  return match.id;
+}
 
 // ── Journeyless / school-group area_groups fixture (real, pre-existing) ────
 // south-premium's real member areas — Koramangala (2 schools, 0 listings),
@@ -248,6 +284,15 @@ test.describe('@integration-ui #2204 — Area-first canonical node= drill-down',
 // FLOW 2 — School-first canonical geography (#2203)
 // ─────────────────────────────────────────────────────────────────────────
 test.describe('@integration-ui #2204 — School-first canonical geography selection', () => {
+  let schoolIdKoramangala: string;
+
+  test.beforeAll(async () => {
+    schoolIdKoramangala = await resolveSchoolIdByAreaKey(
+      SCHOOL_NAME_KORAMANGALA_QUERY,
+      AREA_KORAMANGALA_KEY,
+    );
+  });
+
   test.beforeEach(async ({ page }) => {
     await grantTelemetryConsent(page);
   });
@@ -260,13 +305,13 @@ test.describe('@integration-ui #2204 — School-first canonical geography select
     // the exact PR #2211 reviewer-bot-caught defect (a stale legacy areaKey
     // surviving a canonical node= write) must stay fixed.
     await page.goto(
-      `/discover?city=${CITY}&journey=school-first&schoolId=${SCHOOL_ID_KORAMANGALA}&areaKey=${encodeURIComponent(
+      `/discover?city=${CITY}&journey=school-first&schoolId=${schoolIdKoramangala}&areaKey=${encodeURIComponent(
         AREA_KORAMANGALA_KEY,
       )}`,
     );
     await page.waitForLoadState('domcontentloaded');
     await expect(page.getByTestId('control-bar-area-input')).toBeVisible({ timeout: 20_000 });
-    expect(currentParam(page, 'schoolId')).toBe(SCHOOL_ID_KORAMANGALA);
+    expect(currentParam(page, 'schoolId')).toBe(schoolIdKoramangala);
     expect(currentParam(page, 'journey')).toBe('school-first');
 
     const historyBefore = await historyLength(page);
@@ -344,7 +389,7 @@ test.describe('@integration-ui #2204 — School-first canonical geography select
     // Back/Forward round-trip.
     await page.goBack();
     await expect.poll(() => currentParam(page, 'node')).toBeNull();
-    expect(currentParam(page, 'schoolId')).toBe(SCHOOL_ID_KORAMANGALA);
+    expect(currentParam(page, 'schoolId')).toBe(schoolIdKoramangala);
     await page.goForward();
     await expect.poll(() => currentParam(page, 'node')).toBe(AREA_RR_NAGAR_NODE);
     expect(currentParam(page, 'schoolId')).toBeNull();
@@ -874,37 +919,28 @@ test.describe('@integration-ui #2204 — School-browse / school-group-areas (no 
     await expect(badgeWithGroupId).toHaveText('Showing 3 schools');
 
     // ── Step 2 — the equivalent School-first root state WITHOUT groupId. ──
-    // Finding 1 fix (PR #2212 review): the original version of this leg
-    // asserted `toBeHidden()` on the badge immediately after the panel
-    // became visible — before the async `/api/discover/areas` fetch behind
-    // `discoverAreas`/`schoolFirstLandingSchoolCount` had settled. That is a
-    // race-condition false-pass shape, even though (see below) it happens to
-    // land on the correct outcome here.
-    //
-    // Source trace (`DiscoverMapCountBadge.tsx`'s school-first LANDING
-    // branch, `deriveSchoolFirstLandingSchoolCount` in schoolFirstCounts.ts)
-    // predicted this branch WOULD render "Showing N schools" city-wide once
-    // `discoverAreas` settles, since `focusedGroup`/`selectedArea` are both
-    // null here and `schoolFirstLandingSchoolCount` is a real non-null sum
-    // once loaded. Empirically re-run against this exact fixture/backend
-    // (3 consecutive full runs), that prediction does NOT hold: the
-    // `discover-badge` testid never appears in the DOM at all at this exact
-    // URL, even after `/api/discover/areas` has resolved and the panel is
-    // fully settled — `getByTestId('discover-badge')` reports 0 matches, not
-    // a hidden/off-screen element. `DiscoverMapCountBadge` is rendered
-    // inside `DiscoverMapCanvas.tsx`, so the map/canvas surface itself is
-    // evidently not mounted (or not in a state that reaches that branch) for
-    // this plain school-first root the way it is once a groupId is present
-    // (Step 1, which DOES find and render the badge). The exact reason a
-    // groupId presence changes map-canvas mounting is outside this flow's
-    // scope (#2205-boundary note above) — what matters for THIS flow's
-    // contract is the observable outcome: no badge, so no map/panel scope to
-    // compare, exactly like the with-groupId leg's marker negative control.
-    // So the original assertion's OUTCOME was correct; only the missing wait
-    // was the defect. Fixed below: wait for the real `/api/discover/areas`
-    // response (a genuine settle signal) before asserting, rather than
-    // asserting on whatever the DOM happens to look like immediately after
-    // `domcontentloaded`.
+    // CORRECTION (2026-08-19, re-verified against a genuinely clean local
+    // fixture — see this issue's PR body for the incident that produced the
+    // prior, incorrect finding below): the previous version of this comment
+    // claimed the `discover-badge` testid never appears in the DOM at this
+    // URL. That finding was produced against an environment that was later
+    // discovered to be misconfigured (the browser was calling a stale/wrong
+    // backend for part of that verification pass), not a genuinely clean
+    // fixture. Re-run against a confirmed-clean local fixture + backend, the
+    // badge DOES render here: `DiscoverMapCountBadge.tsx`'s school-first
+    // LANDING branch renders "Showing N schools" city-wide once
+    // `discoverAreas` settles, exactly as the source trace
+    // (`deriveSchoolFirstLandingSchoolCount` in schoolFirstCounts.ts)
+    // predicts — `focusedGroup`/`selectedArea` are both null here, and
+    // `schoolFirstLandingSchoolCount` resolves to a real, deterministic,
+    // non-null city-wide sum (32 for this fixture — the sum of every
+    // Bangalore area's `schoolCount` from `GET /api/discover/areas`,
+    // independent of groupId/area scoping). So the map/canvas surface IS
+    // mounted here, same as the with-groupId leg (Step 1) — there is no
+    // groupId-driven mounting difference after all. Wait for the real
+    // `/api/discover/areas` response (a genuine settle signal) before
+    // asserting, rather than asserting on whatever the DOM happens to look
+    // like immediately after `domcontentloaded`.
     const areasResponsePromise = page.waitForResponse(
       (r) => r.url().includes('/api/discover/areas') && new URL(r.url()).searchParams.get('city') === CITY,
     );
@@ -939,15 +975,18 @@ test.describe('@integration-ui #2204 — School-browse / school-group-areas (no 
       'no /api/discover/markers request fires here either (schoolId absent) — same negative control as the with-groupId leg',
     ).toEqual([]);
 
-    // THE INVARIANT this leg exists to prove (post-fix, empirically
-    // confirmed after waiting for the real `/api/discover/areas` settle
-    // signal above, across 3 consecutive full runs): the page-level badge
-    // does NOT render at this plain root — genuinely absent from the DOM,
-    // not merely CSS-hidden — unlike the with-groupId leg above. This is now
-    // proven with a real settle-wait behind it rather than an assertion that
-    // happened to run before any async data had a chance to change the
-    // outcome.
-    await expect(page.getByTestId('discover-badge')).toBeHidden();
+    // THE INVARIANT this leg exists to prove (re-verified against a clean
+    // fixture, settle-wait above closes the same race the badge assertion in
+    // Step 1 is immune to): the page-level badge renders the SAME
+    // deterministic city-wide school count regardless of whether a stale
+    // groupId is present — groupId has no effect on this badge's own
+    // school-first LANDING branch, exactly as `deriveSchoolFirstLandingSchoolCount`
+    // predicts. Not a #1806-class divergence: both legs show a real,
+    // backend-derived count, just scoped differently (group members vs.
+    // city-wide) by the SAME source data.
+    const badgeWithoutGroupId = page.getByTestId('discover-badge');
+    await expect(badgeWithoutGroupId).toBeVisible({ timeout: 15_000 });
+    await expect(badgeWithoutGroupId).toHaveText('Showing 32 schools');
 
     // ── Step 3 — a REAL canonical nav hop from the groupId-present state,
     // then Back/Forward, proving the stale groupId cannot poison the
