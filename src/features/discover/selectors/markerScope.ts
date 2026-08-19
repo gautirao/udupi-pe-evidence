@@ -24,33 +24,43 @@ import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
  *      in live mode. The legacy group-scoped path stays live in preview only
  *      when no node is resolved (see #2188) — it must not be dropped to an
  *      unscoped city-wide fetch (regressed by #2192, fixed by #2185-S2b).
- *   2. Live mode when `journey === 'school-first' && schoolId == null &&
- *      groupId != null` (reaches rule 6). Both school-first guards — rule 2
- *      here and useDiscoverAreaGroupsController.ts:89 — are keyed on
- *      `schoolId`, not on the journey, so the shipped school-browse /
- *      school-group-areas states (schoolId null; see
- *      discoverPanelState.ts:118-120) fire neither guard and fall through
- *      to rule 6.
+ *   2. Live mode, area-first group focus — rule 6 (this file's own rule
+ *      numbering; see the precedence block above `resolveDiscoverMarkerScope`)
+ *      is the permanent, load-bearing group-scoping producer for area-first
+ *      `groupId=` (#2201 Option C), including the shipped #2213/#2214
+ *      AreaGroupFocusPanel. This role stays live indefinitely and is NOT the
+ *      legacy route being tracked for removal.
  *
- *      Issue #2216 — this route's WRITER side is now dead: all three
- *      school-first "area not yet loaded in discoverAreas" fallback call
- *      sites (useDiscoverOverviewNavigationController.ts, SchoolFirstJourneyPanel.tsx,
- *      LegacyRightPanelBridge.tsx) that used to write the legacy
- *      `actions.selectArea(areaKey)` param no longer do so under any
- *      resolution outcome: each writes the canonical journey-preserving
- *      `actions.goToNodeAndClearSchoolSelection(nodeKey)` when the reverse
- *      `areaKey -> nodeKey` lookup resolves, and fails closed (no-op — no
- *      URL write at all) when it does not, rather than falling back to the
- *      legacy param. So a fresh school-first selection can no longer PRODUCE
- *      the `groupId != null` state this route reads. This does not delete the
- *      route itself (still reachable from a pre-existing/deep-linked legacy
- *      `areaKey=`+`groupId=` URL, out of scope here) — see #2205 for the
- *      re-audit that determines whether the READ side can be removed.
+ *      A second, non-permanent route into rule 6 previously existed via a
+ *      school-first staleness bug: `journey === 'school-first' && schoolId ==
+ *      null && groupId != null`, reached because both school-first guards
+ *      (rule 2 here and useDiscoverAreaGroupsController.ts:89) are keyed on
+ *      `schoolId`, not on the journey, so the shipped school-browse /
+ *      school-group-areas states (schoolId null) fired neither guard and fell
+ *      through to rule 6. Issue #2205 closed this route at its true root
+ *      cause on BOTH sides:
+ *        - Cycle 1 (writer): `setSchoolJourney`
+ *          (src/features/discover/state/url/school.ts) now deletes `groupId`
+ *          on every school-first journey entry, matching its sibling
+ *          journey-entry actions (`enterSchoolsJourney`/
+ *          `enterSchoolsJourneyAtArea`), so a live school-first navigation can
+ *          no longer carry a stale `groupId` into this reader.
+ *        - Cycle 2 (reader, PR #2220 review): a dedicated `journey ===
+ *          'school-first' -> city` guard now runs in this function itself,
+ *          after node resolution (rules 4/5) but before rule 6, making rule 6
+ *          categorically unreachable for any school-first state — including a
+ *          manually-crafted or pre-existing/deep-linked legacy
+ *          `journey=school-first`+`groupId=` URL, not just freshly-produced
+ *          navigations. Rule 2 and rule 6 themselves are unchanged; only this
+ *          new intervening rule was added.
+ *      The school-first route into rule 6 is therefore dead in every case,
+ *      not merely the freshly-navigated one.
  * agri-first can never reach rule 6 — rule 3 returns `{ kind: 'city' }`
- * unconditionally. The arm dies only when BOTH preview node-scoping (#2202)
- * and the school-first group taxonomy migration (#2201) have landed — never
- * on one alone; deleting it before then reintroduces the #1806 map/panel
- * scope mismatch. Legacy removal is tracked as #2205.
+ * unconditionally.
+ *
+ * Final state (#2205 item (d)): `journey` = experience, `node` = canonical
+ * geography where represented, `groupId` = permanent server-owned
+ * `area_groups` identity.
  */
 export type DiscoverMarkerScope =
   | { kind: 'city' }
@@ -113,9 +123,19 @@ export interface DiscoverMarkerScopeInput {
  *     run BEFORE rule 6 — this is what makes the legacy `'areas'` arm dead on
  *     the canonical node= path specifically (not overall — see rule 1 and
  *     #2188 for its remaining live producers).
- *  6. legacy #1597 group-scope producer -> areas (or unresolved while its
- *     own cold-load race is in flight).
- *  7. otherwise -> city (deliberately unscoped).
+ *  6. journey === 'school-first' -> city (live mode only; #2205 cycle 2, PR
+ *     #2220 review). Runs regardless of `schoolId` or `groupAreaKeys` — this
+ *     is distinct from rule 2 (which only fires when `schoolId` is set) and
+ *     makes rule 7 categorically unreachable for ANY school-first state,
+ *     including a stale or manually-crafted/deep-linked
+ *     `journey=school-first`+`groupId=` URL. Must run AFTER rules 4/5 so an
+ *     already-resolved node (e.g. the #2203 "area re-pick while browsing
+ *     schools" flow) stays node-scoped rather than being forced to city.
+ *  7. legacy #1597 group-scope producer -> areas (or unresolved while its
+ *     own cold-load race is in flight). Fully live and unchanged for
+ *     area-first and journeyless states; unreachable for school-first as of
+ *     rule 6 above.
+ *  8. otherwise -> city (deliberately unscoped).
  */
 export function resolveDiscoverMarkerScope(input: DiscoverMarkerScopeInput): DiscoverMarkerScope {
   const { sourceMode, journey, schoolId, rawNodeParam, resolvedNodeKey, groupAreaKeys } = input;
@@ -149,6 +169,8 @@ export function resolveDiscoverMarkerScope(input: DiscoverMarkerScopeInput): Dis
   if (resolvedNodeKey != null && resolvedNodeKey !== ROOT_NODE_KEY) {
     return { kind: 'node', nodeKey: resolvedNodeKey };
   }
+
+  if (journey === 'school-first') return { kind: 'city' };
 
   if (groupAreaKeys !== undefined) {
     return groupAreaKeys.length === 0

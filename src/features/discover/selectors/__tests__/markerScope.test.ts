@@ -116,6 +116,22 @@ describe('resolveDiscoverMarkerScope — table-driven over every scope variant (
       input: { groupAreaKeys: undefined },
       expected: { kind: 'city' },
     },
+    {
+      name: 'school-first, schoolId null, resolved group -> city (rule 6 unreachable for school-first, #2205 cycle 2)',
+      input: { journey: 'school-first', schoolId: null, groupAreaKeys: ['IN|KA|Udupi|Manipal'] },
+      expected: { kind: 'city' },
+    },
+    {
+      name: 'school-first, schoolId null, resolved node AND a resolved group -> node wins over both the new city guard and the legacy group fallback (#2203 area re-pick while browsing schools)',
+      input: {
+        journey: 'school-first',
+        schoolId: null,
+        rawNodeParam: 'n:area-1',
+        resolvedNodeKey: 'n:area-1',
+        groupAreaKeys: ['IN|KA|Udupi|Manipal'],
+      },
+      expected: { kind: 'node', nodeKey: 'n:area-1' },
+    },
   ];
 
   it.each(cases)('$name', ({ input, expected }) => {

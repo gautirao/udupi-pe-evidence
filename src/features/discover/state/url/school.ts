@@ -224,6 +224,12 @@ export function useSchoolUrlDomain(
           // Issue #2124 (fix-cycle-2) — clear stale canonical node context so cross-branch
           // searches do not accidentally restore the pre-search hierarchy node on Back.
           next.delete('node');
+          // Issue #2205 — clear stale groupId on journey entry, matching sibling
+          // journey-entry actions (enterSchoolsJourney/enterSchoolsJourneyAtArea).
+          // Closes the live path: area-first group focus -> cross-branch school
+          // search/select -> clearSchoolContext() leaving a stale groupId that
+          // markerScope.ts rule 6 would then incorrectly scope to.
+          next.delete('groupId');
           return next;
         },
         { replace: false }, // PUSH — school-first journey is a major navigation destination

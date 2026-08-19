@@ -43,4 +43,28 @@ describe('setSchoolJourney URL state transition', () => {
     expect(result.current[0].schoolId).toBe('12345');
     expect(result.current[0].areaKey).toBe('koramangala');
   });
+
+  it('#2205 — clears a stale groupId on school-first journey entry, matching enterSchoolsJourney/enterSchoolsJourneyAtArea', () => {
+    // Start with a URL carrying an area-first group focus (groupId), e.g. after
+    // a user focused an area-group before performing a cross-branch school search.
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=bengaluru&journey=area-first&groupId=IN%7CKA%7CUdupi%7CManipal'),
+    });
+
+    act(() => {
+      result.current[1].setSchoolJourney({
+        schoolId: '12345',
+        radiusKm: 3,
+        lat: 13.0,
+        lon: 77.6,
+        zoom: 12,
+        areaKey: 'koramangala',
+      });
+    });
+
+    // groupId MUST be cleared so markerScope.ts rule 6 cannot incorrectly
+    // scope the school-first map to the stale area-group's member areas.
+    expect(result.current[0].groupId).toBeNull();
+    expect(result.current[0].schoolId).toBe('12345');
+  });
 });
