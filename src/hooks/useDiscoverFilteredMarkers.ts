@@ -121,11 +121,18 @@ export function useDiscoverFilteredMarkers(
 
       const livePath = `/api/discover/markers?${params.toString()}`;
       let path = discoverPath(source, livePath, { kind: 'markers' });
-      // Preview's /markers endpoint (E4) only understands ?areaKeys= — city,
-      // filters, listingPurpose etc. have no meaning against a revision's
-      // sandbox graph, so they are intentionally NOT forwarded in preview
-      // mode (discoverPath already dropped them by discarding livePath).
-      if (source.mode === 'preview' && sortedAreaKeys && sortedAreaKeys.length > 0) {
+      // Preview's /markers endpoint (E4) only understands ?node= and
+      // ?areaKeys= — city, filters, listingPurpose etc. have no meaning
+      // against a revision's sandbox graph, so they are intentionally NOT
+      // forwarded in preview mode (discoverPath already dropped them by
+      // discarding livePath). node wins over areaKeys per the backend
+      // contract (#2202/PR #2210) — but scope is a discriminated union, so
+      // only one of these branches is ever active at once (#2215).
+      if (source.mode === 'preview' && scope.kind === 'node') {
+        const previewParams = new URLSearchParams();
+        previewParams.set('node', scope.nodeKey);
+        path = `${path}?${previewParams.toString()}`;
+      } else if (source.mode === 'preview' && sortedAreaKeys && sortedAreaKeys.length > 0) {
         const previewParams = new URLSearchParams();
         sortedAreaKeys.forEach((k) => previewParams.append('areaKeys', k));
         path = `${path}?${previewParams.toString()}`;

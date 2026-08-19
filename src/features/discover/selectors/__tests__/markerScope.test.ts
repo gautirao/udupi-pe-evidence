@@ -32,19 +32,34 @@ describe('resolveDiscoverMarkerScope — table-driven over every scope variant (
       expected: { kind: 'city' },
     },
     {
-      name: 'preview mode, no legacy group -> city, regardless of a resolved node (rule 1 / D2)',
+      name: 'preview mode + a resolved node -> node scope, not city (rule 1 — #2202/#2215 node wire representation)',
       input: { sourceMode: 'preview', resolvedNodeKey: 'n:cluster-1' },
-      expected: { kind: 'city' },
+      expected: { kind: 'node', nodeKey: 'n:cluster-1' },
     },
     {
-      name: 'preview mode + a resolved legacy group -> areas, not city (rule 1 — #2192 regression fix)',
+      name: 'preview mode + a resolved node AND a resolved legacy group -> node wins over areas (rule 1 mirrors rule 5-before-6)',
       input: { sourceMode: 'preview', resolvedNodeKey: 'n:cluster-1', groupAreaKeys: ['IN|KA|Udupi|Manipal'] },
+      expected: { kind: 'node', nodeKey: 'n:cluster-1' },
+    },
+    {
+      name: 'preview mode + a resolved node AND a cold-loading legacy group ([]) -> node still wins (rule 1)',
+      input: { sourceMode: 'preview', resolvedNodeKey: 'n:cluster-1', groupAreaKeys: [] },
+      expected: { kind: 'node', nodeKey: 'n:cluster-1' },
+    },
+    {
+      name: 'preview mode + node mid-resolution (rawNodeParam set, resolvedNodeKey null) -> unresolved/node-resolving (rule 1)',
+      input: { sourceMode: 'preview', rawNodeParam: 'n:cluster-1', resolvedNodeKey: null },
+      expected: { kind: 'unresolved', reason: 'node-resolving' },
+    },
+    {
+      name: 'preview mode + no node + a resolved legacy group -> areas (rule 1 fallback, unchanged #2192 behavior)',
+      input: { sourceMode: 'preview', groupAreaKeys: ['IN|KA|Udupi|Manipal'] },
       expected: { kind: 'areas', areaKeys: ['IN|KA|Udupi|Manipal'] },
     },
     {
-      name: 'preview mode + a cold-loading legacy group ([]) -> unresolved/group-cold-load, not city (rule 1)',
-      input: { sourceMode: 'preview', resolvedNodeKey: 'n:cluster-1', groupAreaKeys: [] },
-      expected: { kind: 'unresolved', reason: 'group-cold-load' },
+      name: 'preview mode + no node + no group -> city (rule 1 fallback, unchanged)',
+      input: { sourceMode: 'preview' },
+      expected: { kind: 'city' },
     },
     {
       name: 'school-first + schoolId set -> city (rule 2 — radius owns the scope)',
@@ -129,8 +144,8 @@ describe('resolveDiscoverMarkerScope — rule 2: school-first + school + a node 
   });
 });
 
-describe('resolveDiscoverMarkerScope — rule 1 (D2): preview mode wins over node/journey, but defers to the legacy group producer (#2192 fix)', () => {
-  it('preview mode ignores journey/node state, but a resolved legacy group still scopes markers to areas — NOT city', () => {
+describe('resolveDiscoverMarkerScope — rule 1: preview mode ignores journey, applies node-then-group precedence (#2202/#2215)', () => {
+  it('preview mode ignores journey state, and a resolved node wins over a resolved legacy group', () => {
     const scope = resolveDiscoverMarkerScope(
       makeInput({
         sourceMode: 'preview',
@@ -140,10 +155,10 @@ describe('resolveDiscoverMarkerScope — rule 1 (D2): preview mode wins over nod
         groupAreaKeys: ['IN|KA|Udupi|Manipal'],
       }),
     );
-    expect(scope).toEqual({ kind: 'areas', areaKeys: ['IN|KA|Udupi|Manipal'] });
+    expect(scope).toEqual({ kind: 'node', nodeKey: 'n:area-1' });
   });
 
-  it('preview mode with no legacy group active (undefined) -> city, since preview has no node wire representation (D2)', () => {
+  it('preview mode with a resolved node and no legacy group -> node scope (preview now has a node wire representation, #2202/#2215)', () => {
     const scope = resolveDiscoverMarkerScope(
       makeInput({
         sourceMode: 'preview',
@@ -153,7 +168,7 @@ describe('resolveDiscoverMarkerScope — rule 1 (D2): preview mode wins over nod
         groupAreaKeys: undefined,
       }),
     );
-    expect(scope).toEqual({ kind: 'city' });
+    expect(scope).toEqual({ kind: 'node', nodeKey: 'n:area-1' });
   });
 });
 

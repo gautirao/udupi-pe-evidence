@@ -917,6 +917,27 @@ describe('useDiscoverFilteredMarkers — preview mode (Issue #1911 PR3)', () => 
     );
   });
 
+  // Issue #2215 — preview's /markers endpoint now also understands ?node=
+  // (#2202/PR #2210). node wins over areaKeys per the backend contract, but
+  // scope is a discriminated union so only one forwarding branch is active.
+  it('preview mode + node scope requests the admin preview /markers path with only ?node= (#2215)', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+    const { result } = renderHook(
+      () =>
+        useDiscoverFilteredMarkers(
+          'udupi', {}, true, null, undefined, undefined, undefined,
+          { kind: 'node', nodeKey: 'n:cluster-1' },
+        ),
+      { wrapper: makePreviewWrapper(7, 42) },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [path] = mockGet.mock.calls[0] as [string, unknown];
+    expect(path).toBe(
+      '/api/admin/city-launch/cities/7/revisions/42/preview/markers?node=n%3Acluster-1',
+    );
+  });
+
   it('preview and live cache entries for the same params are distinct — no cross-serve (AC10)', () => {
     mockGet.mockResolvedValue(BASE_MARKERS);
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
