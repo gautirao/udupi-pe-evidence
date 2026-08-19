@@ -236,6 +236,90 @@ SQL
 echo ">>> Local admin identity seeded (auth.users + user_roles 'admin')."
 
 # ---------------------------------------------------------------------------
+# Step F2 — Best-effort broker/user identity seed (#2221)
+#
+# Step F above seeds ONLY the admin identity, which is a hard requirement for
+# this script. Broker and smoke-user accounts authenticate fine against
+# hosted Supabase Auth (their JWTs are valid) but — like admin before this —
+# have zero public.user_roles rows in a freshly-restored local fixture, since
+# the on_auth_user_created trigger that would normally auto-assign the
+# default 'user' role is dropped for this fixture (see Step F's note above).
+# DbRoleJwtAuthenticationConverter derives ALL ROLE_* authorities from a
+# single user_roles lookup, so without this, every role-gated request broker/
+# smoke-user E2E flows make 403s with "Requires broker, dealer, user, or
+# admin role" — including e2e/global-setup.ts's own fixture-listing POST.
+#
+# Unlike admin, these are BEST-EFFORT: many flows don't need them, and
+# .env.e2e may legitimately omit broker/smoke-user credentials (placeholder
+# or absent), in which case those tests already skip themselves gracefully.
+# A failure here must never abort the whole script.
+# ---------------------------------------------------------------------------
+
+seed_best_effort_role() {
+  local label="$1" email="$2" password="$3" role="$4"
+
+  if [[ -z "$email" || -z "$password" ]]; then
+    echo ">>> Skipping ${label} identity seed — no credentials in ${E2E_ENV_FILE}."
+    return 0
+  fi
+
+  echo ">>> Logging in to hosted Supabase Auth as ${label} (best-effort)..."
+
+  export JQ_SEED_PASSWORD="$password"
+  local login_body login_response uuid token
+  if ! login_body="$(jq -n --arg email "$email" '{email: $email, password: env.JQ_SEED_PASSWORD}')"; then
+    unset JQ_SEED_PASSWORD
+    echo ">>> WARNING: ${label} login-body construction failed — skipping ${label} identity seed."
+    return 0
+  fi
+  unset JQ_SEED_PASSWORD
+
+  # Every step below is explicitly guarded against script-level failure: this
+  # function runs under `set -euo pipefail` (the whole script's mode), so an
+  # unguarded curl/jq failure here would abort fixture startup entirely —
+  # exactly the "new hard dependency on optional creds" this helper must not
+  # become. Each `if ! ...; then warn; return 0; fi` converts a failure at
+  # that step into a graceful skip instead of letting it propagate.
+  if ! login_response="$(curl -sS -X POST "${VITE_SUPABASE_URL}/auth/v1/token?grant_type=password" \
+    -H "Content-Type: application/json" \
+    -H "apikey: ${VITE_SUPABASE_PUBLISHABLE_KEY}" \
+    -d "$login_body")"; then
+    echo ">>> WARNING: ${label} login request failed (network/transport error) — skipping ${label} identity seed."
+    return 0
+  fi
+
+  if ! uuid="$(printf '%s' "$login_response" | jq -r '.user.id // empty' 2>/dev/null)"; then
+    echo ">>> WARNING: ${label} login response could not be parsed — skipping ${label} identity seed."
+    return 0
+  fi
+  if ! token="$(printf '%s' "$login_response" | jq -r '.access_token // empty' 2>/dev/null)"; then
+    echo ">>> WARNING: ${label} login response could not be parsed — skipping ${label} identity seed."
+    return 0
+  fi
+
+  if [[ ! "$uuid" =~ $UUID_REGEX || -z "$token" ]]; then
+    echo ">>> WARNING: ${label} login failed — skipping ${label} identity seed (E2E flows needing this role will skip/fail on their own)."
+    return 0
+  fi
+
+  if ! PGPASSWORD="$PG_TEST_PASSWORD" psql -h localhost -p "$PG_TEST_PORT" -U postgres -d postgres -v ON_ERROR_STOP=1 <<SQL
+BEGIN;
+INSERT INTO auth.users (id) VALUES ('${uuid}') ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.user_roles (user_id, role) VALUES ('${uuid}', '${role}') ON CONFLICT (user_id, role) DO NOTHING;
+COMMIT;
+SQL
+  then
+    echo ">>> WARNING: ${label} identity seed failed — continuing without it."
+    return 0
+  fi
+
+  echo ">>> Local ${label} identity seeded (auth.users + user_roles '${role}')."
+}
+
+seed_best_effort_role "broker" "${BROKER_EMAIL:-${DEALER_EMAIL:-}}" "${BROKER_PASSWORD:-${DEALER_PASSWORD:-}}" "broker"
+seed_best_effort_role "smoke-user" "${SMOKE_USER_EMAIL:-}" "${SMOKE_USER_PASSWORD:-}" "user"
+
+# ---------------------------------------------------------------------------
 # Step G — Start Spring Boot in the foreground against the local fixture
 # ---------------------------------------------------------------------------
 
