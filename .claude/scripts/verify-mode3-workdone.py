@@ -292,19 +292,39 @@ def check_eval_checklist(handoff_path: Path, candidate_path: Path) -> Tuple[bool
         details.append(f"Error parsing candidate TOML: {str(e)[:100]}")
         return False, details, 0, 0
 
-    # Check coverage: each item in checklist must have a PASS status in result_items
+    # Check coverage: each item in checklist must have a PASS status in result_items.
+    # NOT_APPLICABLE_TO_SLICE is also accepted as satisfied -- a programme-wide PLAN_REVIEW
+    # eval_checklist is transcribed verbatim into every slice's handoff, but an individual
+    # slice's allowed_file_globs may affirmatively forbid the files a given item requires
+    # (e.g. a CI-wiring item when the slice's handoff forbids .github/workflows/**). Requiring
+    # PASS in that case would force either a false-PASS claim or permanently-blocked slices.
+    # To prevent this from becoming an unexamined escape hatch, the value must carry a reason
+    # beyond the bare marker (i.e. not just "NOT_APPLICABLE_TO_SLICE" with nothing after it).
     required_count = len(checklist_items)
     passed_count = 0
+    not_applicable_count = 0
+    not_applicable_items = []
     for item in checklist_items:
         # item is the exact string from TOML
         if item in result_items:
-            val = str(result_items[item]).upper()
+            raw_val = str(result_items[item])
+            val = raw_val.upper()
             if val.startswith('PASS'):
                 passed_count += 1
+            elif val.startswith('NOT_APPLICABLE_TO_SLICE') and len(raw_val.strip()) > len('NOT_APPLICABLE_TO_SLICE') + 5:
+                not_applicable_count += 1
+                not_applicable_items.append(item)
             else:
                 missing.append(item)
         else:
             missing.append(item)
+
+    if not_applicable_items:
+        details.append(
+            f"{not_applicable_count} item(s) marked NOT_APPLICABLE_TO_SLICE with a stated reason "
+            f"(programme-level checklist item out of this slice's scope): "
+            f"{', '.join(not_applicable_items[:3])}"
+        )
 
     if missing:
         details.append(f"Eval checklist items not marked PASS: {', '.join(missing[:3])}")
