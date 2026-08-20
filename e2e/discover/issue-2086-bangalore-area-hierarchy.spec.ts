@@ -174,8 +174,9 @@ test.describe('@integration-ui #2086 — AC12: no server child is ever hidden (r
   test('the South-East Direction (3 AREA children) renders exactly 3 cards, matching the section count and the live API child count', async ({
     page,
   }) => {
+    const backendBase = process.env.BACKEND_BASE_URL ?? 'http://localhost:8190';
     const apiResponse = await page.request.get(
-      `http://localhost:8190/api/discover/cities/${CITY}/navigation/resolve?node=${encodeURIComponent(D_SOUTHEAST)}`,
+      `${backendBase}/api/discover/cities/${CITY}/navigation/resolve?node=${encodeURIComponent(D_SOUTHEAST)}`,
     );
     expect(apiResponse.ok()).toBe(true);
     const body = await apiResponse.json();

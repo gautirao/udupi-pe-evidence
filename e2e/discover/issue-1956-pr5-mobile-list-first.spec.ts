@@ -21,11 +21,13 @@ import { assertReachable, reportTouchTargetSize } from '../support/reachability'
 
 const CITY = 'bangalore';
 const BASE = `city=${CITY}&journey=area-first`;
-// Direct backend fixture read (server-side, no CORS/proxy concerns — see
-// curl-confirmed reachability of :8081 this session) so S1's "direct
-// children" assertion is checked against the SAME source of truth the app
-// itself resolves against, not a hand-picked guess.
-const BACKEND_BASE = process.env.PLAYWRIGHT_BACKEND_URL ?? 'http://localhost:8081';
+// Direct backend fixture read (server-side, no CORS/proxy concerns) so S1's
+// "direct children" assertion is checked against the SAME source of truth
+// the app itself resolves against, not a hand-picked guess. Uses the
+// suite-wide BACKEND_BASE_URL convention (see e2e/journey/*.spec.ts,
+// e2e/discover/issue-2204-canonical-node-browser-proof.spec.ts) rather than
+// a one-off env var name.
+const BACKEND_BASE = process.env.BACKEND_BASE_URL ?? 'http://localhost:8081';
 
 interface ResolveChild {
   nodeKey: string;
