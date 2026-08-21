@@ -116,6 +116,65 @@ if [[ -z "${SUPABASE_PROJECT_REF:-}" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# AUTH_MODE selection (#2236 Part B) — option2 when .env.e2e.auth exists at
+# the repo root, option1 (today's behaviour) otherwise.
+#
+# When .env.e2e.auth is ABSENT this block is a no-op: no new validation, no
+# new echo, no variable overrides — the option1 path below is byte-identical
+# to this script's behaviour before this change.
+# ---------------------------------------------------------------------------
+
+ENV_E2E_AUTH_FILE="${REPO_ROOT}/.env.e2e.auth"
+AUTH_MODE="option1"
+if [[ -f "$ENV_E2E_AUTH_FILE" ]]; then
+  AUTH_MODE="option2"
+fi
+
+if [[ "$AUTH_MODE" == "option2" ]]; then
+  # shellcheck source=lib/e2e-auth-common.sh
+  source "${SCRIPT_DIR}/lib/e2e-auth-common.sh"
+
+  # Fail-closed on: file absent (already ruled out above), any required key
+  # missing/empty, or mode != 600 — all reported as E2E_AUTH_PROJECT_NOT_CONFIGURED.
+  if ! _e2e_auth_load_and_validate "$ENV_E2E_AUTH_FILE"; then
+    exit 1
+  fi
+
+  # Same production-collision guard as provision-e2e-auth-identities.sh.
+  PROD_REF_SOURCE="$(_e2e_auth_detect_production_ref "$REPO_ROOT")"
+  if ! _e2e_auth_collision_guard "$E2E_SUPABASE_PROJECT_REF" "$PROD_REF_SOURCE"; then
+    exit 1
+  fi
+
+  # Issuer/browser coherence: the ref in the login URL must equal the ref
+  # that gets exported to Spring below — a mismatch is otherwise a blanket
+  # 401 with zero diagnostic.
+  if ! _e2e_auth_coherence_assert "$E2E_SUPABASE_URL" "$E2E_SUPABASE_PROJECT_REF" "E2E_SUPABASE_URL vs E2E_SUPABASE_PROJECT_REF"; then
+    exit 1
+  fi
+
+  echo ">>> AUTH_MODE=option2 (.env.e2e.auth present) — pointing browser + backend at the dedicated E2E Supabase project (${E2E_SUPABASE_PROJECT_REF})."
+
+  # Point the login endpoint/apikey/identities used below at the E2E
+  # project instead of hosted production Supabase Auth.
+  VITE_SUPABASE_URL="$E2E_SUPABASE_URL"
+  VITE_SUPABASE_PUBLISHABLE_KEY="$E2E_SUPABASE_ANON_KEY"
+  ADMIN_EMAIL="$E2E_ADMIN_EMAIL"
+  ADMIN_PASSWORD="$E2E_ADMIN_PASSWORD"
+  BROKER_EMAIL="$E2E_BROKER_EMAIL"
+  BROKER_PASSWORD="$E2E_BROKER_PASSWORD"
+  DEALER_EMAIL="$E2E_DEALER_EMAIL"
+  DEALER_PASSWORD="$E2E_DEALER_PASSWORD"
+  SMOKE_USER_EMAIL="$E2E_USER_EMAIL"
+  SMOKE_USER_PASSWORD="$E2E_USER_PASSWORD"
+
+  # This is the WHOLE backend mechanism — no Spring code change needed.
+  # backend/src/main/resources/application.yml:46 does pure env
+  # substitution: issuer-uri: https://${SUPABASE_PROJECT_REF}.supabase.co/auth/v1
+  SUPABASE_PROJECT_REF="$E2E_SUPABASE_PROJECT_REF"
+fi
+
+# ---------------------------------------------------------------------------
 # Step B — Effective fixture config
 # ---------------------------------------------------------------------------
 
