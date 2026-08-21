@@ -53,6 +53,50 @@ loud-failure probes before any test starts:
    `backend/run-local.sh` in the foreground. Leave it running in its own
    terminal.
 
+   **Navigation/Discover journey specs need a full, ordered seed sequence —
+   not just the two files this section used to name.** `discover-smoke-seed.sql`
+   alone does not populate the navigation hierarchy, and even the "node graph +
+   promoted revision" pair below is INCOMPLETE on its own: it leaves the graph
+   present but with zero listings/schools/agri data behind it, which is a
+   present-but-EMPTY graph — every T4-T6-class positive assertion fails, and
+   any weaker assertion passes vacuously (the exact silent-degradation failure
+   mode issue #1713 exists to eliminate). Any spec that drives an
+   area/school/agri-first Discover journey (PR-3+) requires ALL of the
+   following, loaded in this order, against the SAME fixture database:
+
+   1. `scripts/db/fixtures/navigation-hierarchy-fixture-seed.sql` — the
+      Bangalore navigation node graph itself (Directions/Clusters/Areas).
+   2. `scripts/db/fixtures/navigation-active-revision-fixture-seed.sql` — the
+      `city_launch_revision` row PROMOTED for Bangalore, which is what makes
+      the graph in (1) reachable at all (`PublicActiveCityRevisionReader`
+      requires a promoted, non-superseded revision per city).
+   3. `scripts/db/fixtures/navigation-hierarchy-fixture-listings-seed.sql` —
+      the 9 LIVE `[E2E]`-prefixed residential listings inside the AREA leaves
+      (1) creates. Without this, every area/direction in the graph has zero
+      eligible listings and is invisible to `journeyVisibility`'s eligibility
+      filter (client-side clustering runs AFTER that filter).
+   4. `scripts/db/fixtures/navigation-hierarchy-fixture-rent-listings-seed.sql`
+      — the rent-intent companion to (3), for any spec exercising `intent=rent`.
+   5. `scripts/db/fixtures/navigation-hierarchy-schools-agri-fixture-seed.sql`
+      (issue #1713 PR-3) — schools resolved (via the real V80 trigger) into
+      the AREA leaves (1) creates, agri-eligible listings, and
+      `agri_destination_classification` rows for Bangalore. Without the last
+      part, the backend fails closed with `503
+      AGRI_DESTINATIONS_NOT_YET_PROMOTED` for EVERY city on a stock fixture
+      (that table is written only by `CityLaunchPromotionService`'s real
+      promotion flow, never by a migration) — an agri-first spec would render
+      an EMPTY panel with NO visible error, not a diagnosable failure.
+
+   Loading an incomplete subset of the five leaves the hierarchy present but
+   inert (or the revision promoted but pointing at nothing, or the graph
+   populated but its listings/schools/agri data missing) — all of these fail
+   silently as "no navigation data" / "empty panel", never a loud error. The
+   navigation graph is also **cached at backend startup**: if you seed any of
+   these files into an already-running backend, you must restart the backend
+   process for the graph (and, for file 5's agri rows, the readiness check) to
+   pick up the change — a live re-seed with no restart looks identical to
+   "seed didn't apply."
+
    The backend defaults to port 8080 unless you override it — see
    `backend/run-local.sh` / `backend/.env` for the port variable and set it
    to `8251` to match this harness's port allocation (avoids colliding with
