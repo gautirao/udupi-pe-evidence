@@ -7,6 +7,7 @@ import com.example.realestate.security.WebMvcConfig;
 import io.github.bucket4j.Bucket;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -132,6 +133,52 @@ class BookingControllerTest {
         verify(bookingService).createBooking(
                 eq(REQUESTER_ID), eq(LISTING_ID),
                 any(LocalDate.class), eq("10:00-11:00"), eq("Hi"));
+    }
+
+    // ==================== Test 2b: POST body-supplied requesterId is ignored (D8-3) ====================
+
+    /**
+     * D8-3: requesterId-forgery rejection.
+     *
+     * CreateBookingRequest (see BookingController) does NOT expose a bindable "requesterId"
+     * field today — the record only declares listingId/requestedDate/requestedTimeSlot/
+     * requesterMessage. Sending a "requesterId" key in the JSON body is therefore silently
+     * ignored by Jackson (unknown property), and BookingController.create() always derives
+     * requesterId from auth.getToken().getSubject() (JWT.sub), per the M4 invariant restated
+     * in both BookingController and BookingService.
+     *
+     * This test asserts that invariant end-to-end at the controller boundary: even when an
+     * attacker embeds a victim's UUID under "requesterId" in the request body, the
+     * requesterId actually passed into BookingService.createBooking(...) is the JWT subject,
+     * never the body value. We capture the actual argument (not just assert 201) so this
+     * fails loudly if a future change ever makes requesterId bindable from the body without
+     * re-deriving it from the JWT.
+     */
+    @Test
+    void create_bodySuppliedRequesterId_isIgnoredInFavorOfJwtSubject() throws Exception {
+        UUID victimId = UUID.fromString("00000000-0000-0000-0000-000000000fff");
+        ViewingRequest booking = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
+                BookingService.STATUS_REQUESTED);
+        when(bookingService.createBooking(any(), any(), any(), any(), any()))
+                .thenReturn(booking);
+
+        mockMvc.perform(post("/api/bookings")
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"requesterId":"%s","listingId":"%s","requestedDate":"2026-04-01",
+                                 "requestedTimeSlot":"10:00-11:00","requesterMessage":"Hi"}
+                                """.formatted(victimId, LISTING_ID)))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<UUID> requesterIdCaptor = ArgumentCaptor.forClass(UUID.class);
+        verify(bookingService).createBooking(
+                requesterIdCaptor.capture(), eq(LISTING_ID),
+                any(LocalDate.class), eq("10:00-11:00"), eq("Hi"));
+
+        // The service is invoked with the JWT subject, never the attacker-supplied body value.
+        org.assertj.core.api.Assertions.assertThat(requesterIdCaptor.getValue()).isEqualTo(REQUESTER_ID);
+        org.assertj.core.api.Assertions.assertThat(requesterIdCaptor.getValue()).isNotEqualTo(victimId);
     }
 
     // ==================== Test 3: POST 409 duplicate (AC-B2) ====================

@@ -43,6 +43,26 @@ paths=(
   "tests/discover"
 )
 
+# Issue #1713 D8 step 0: same defect class as PV8/F4 above, found empirically
+# (vitest 4.1.11 `list --filesOnly`, unfiltered discovery vs. the union of all
+# 13 batches' filters, each multi-path batch split into separate positional
+# args since vitest filters are per-arg filename substrings) — a THIRD set of
+# 16 test files matched NO batch and would silently never run:
+#   src/components/HomepageFilterPanel.test.tsx, src/components/RouteErrorBoundary.test.tsx
+#   src/components/discover/DiscoverMapCountBadge.test.tsx
+#   src/components/discover/cityLaunchPreview/__tests__/ (3 files)
+#   src/components/discover/navigation/__tests__/ (6 files)
+#   src/shared/map/__tests__/ (3 files), src/shared/map/zoomPolicy.issue1823.test.ts
+# No filter collisions were found (union had no duplicate matches). The 3
+# batches below were verified to match exactly this 16-file set, no more and
+# no less, before being added.
+names+=(components-top-level discover-navigation shared-map)
+paths+=(
+  "src/components/HomepageFilterPanel.test.tsx src/components/RouteErrorBoundary.test.tsx"
+  "src/components/discover/DiscoverMapCountBadge.test.tsx src/components/discover/cityLaunchPreview/__tests__ src/components/discover/navigation/__tests__"
+  "src/shared/map/__tests__ src/shared/map/zoomPolicy.issue1823.test.ts"
+)
+
 SUMMARY="$OUT/_batch-summary.txt"
 : > "$SUMMARY"
 for i in "${!names[@]}"; do

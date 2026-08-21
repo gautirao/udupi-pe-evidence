@@ -105,6 +105,31 @@ describe('AC-default-journey — QA-FIX: a bare /discover for a city with NO act
     await waitFor(() => expect(result.current.state.journey).toBeNull());
   });
 
+  it('a confirmed 404 persists scope="" via REPLACE, never PUSH — issue #1713 D8-1', async () => {
+    // A push here would insert a spurious history entry and corrupt browser
+    // back-navigation: the user would need an extra back-tap to leave a city
+    // that never had a real hierarchy to begin with. area.ts's own effect
+    // (L234-245) calls `setUrlParams(updater, { replace: true })` specifically
+    // to avoid that. No existing test in this file inspects the setUrlParams
+    // call itself — the L96-106 case above only asserts the resulting
+    // `journey` value, which a PUSH would satisfy just as well as a REPLACE.
+    const notFound = new ApiError('City has no active navigation hierarchy', 404, {
+      error: 'City has no active navigation hierarchy',
+    });
+    mockApiGet.mockRejectedValue(notFound);
+    const { ctx, setUrlParams } = makeCtx('city=udupi', 'udupi');
+    const { result } = renderHook(() => useAreaUrlDomain(ctx));
+    await waitFor(() => expect(result.current.state.journey).toBeNull());
+    await waitFor(() => expect(setUrlParams).toHaveBeenCalled());
+
+    const [updaterFn, options] = setUrlParams.mock.calls[0];
+    const next = (updaterFn as (prev: URLSearchParams) => URLSearchParams)(
+      new URLSearchParams('city=udupi'),
+    );
+    expect(next.get('scope')).toBe('');
+    expect(options).toEqual({ replace: true });
+  });
+
   it('a transient/non-404 probe failure does NOT suppress the default — only a confirmed 404 does', async () => {
     const serverError = new ApiError('Internal Server Error', 500, { error: 'Internal Server Error' });
     mockApiGet.mockRejectedValue(serverError);
