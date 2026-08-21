@@ -123,7 +123,7 @@ public class OverpassService {
      * {@link #fetchAndCacheAmenities(UUID, double, double, String)} with {@code propertyType="other"}.
      * Retained for existing call sites that do not yet pass property type.
      */
-    public List<ListingPoi> fetchAndCache(UUID listingId, double lat, double lon) {
+    public OverpassFetchOutcome fetchAndCache(UUID listingId, double lat, double lon) {
         return fetchAndCacheAmenities(listingId, lat, lon, "other");
     }
 
@@ -139,14 +139,14 @@ public class OverpassService {
      * @param lat          listing latitude
      * @param lon          listing longitude
      * @param propertyType listing property type (determines query radius via profile)
-     * @return list of newly persisted rows; empty on cache hit or parse failure
+     * @return outcome distinguishing a provider failure from a genuine (possibly empty) result
      */
     @Transactional(rollbackFor = Exception.class)
-    public List<ListingPoi> fetchAndCacheAmenities(UUID listingId, double lat, double lon, String propertyType) {
+    public OverpassFetchOutcome fetchAndCacheAmenities(UUID listingId, double lat, double lon, String propertyType) {
         if (repository.existsByListingIdAndSourceAndCreatedAtAfter(
                 listingId, SOURCE, OffsetDateTime.now().minusDays(14))) {
             log.debug("overpass amenity cache hit listingId={}", listingId);
-            return List.of();
+            return OverpassFetchOutcome.cacheHit();
         }
 
         PoiQueryProfile profile = PoiQueryProfile.forPropertyType(propertyType);
@@ -159,15 +159,15 @@ public class OverpassService {
         }
         if (responseBody.isEmpty()) {
             log.warn("Both Overpass endpoints failed for amenities listingId={}", listingId);
-            return List.of();
+            return OverpassFetchOutcome.providerFailure();
         }
 
         List<ListingPoi> pois = parseAmenityAndFilter(responseBody.get(), listingId, lat, lon);
-        if (pois.isEmpty()) return List.of();
+        if (pois.isEmpty()) return OverpassFetchOutcome.success(List.of());
 
         List<ListingPoi> saved = repository.saveAll(pois);
         log.info("Overpass amenity inserted {} POIs for listingId={}", saved.size(), listingId);
-        return saved;
+        return OverpassFetchOutcome.success(saved);
     }
 
     /**
@@ -185,20 +185,22 @@ public class OverpassService {
      * @param lat          listing latitude
      * @param lon          listing longitude
      * @param propertyType listing property type (selects radii from profile)
-     * @return list of newly persisted rows; empty on cache hit, no settlement data, or failure
+     * @return outcome distinguishing a provider failure from a genuine (possibly empty) result;
+     *         a skipped fetch (cache hit or no settlement queries for this property type) is
+     *         reported as a non-failure with an empty POI list
      */
     @Transactional(rollbackFor = Exception.class)
-    public List<ListingPoi> enrichSettlement(UUID listingId, double lat, double lon, String propertyType) {
+    public OverpassFetchOutcome enrichSettlement(UUID listingId, double lat, double lon, String propertyType) {
         PoiQueryProfile profile = PoiQueryProfile.forPropertyType(propertyType);
         if (!profile.hasSettlementQueries()) {
             log.debug("settlement enrichment skipped (no queries for type={}) listingId={}", propertyType, listingId);
-            return List.of();
+            return OverpassFetchOutcome.cacheHit();
         }
 
         if (repository.existsByListingIdAndSourceAndCreatedAtAfter(
                 listingId, SOURCE_SETTLEMENT, OffsetDateTime.now().minusDays(14))) {
             log.debug("overpass settlement cache hit listingId={}", listingId);
-            return List.of();
+            return OverpassFetchOutcome.cacheHit();
         }
 
         String query = buildSettlementQuery(lat, lon, profile);
@@ -210,15 +212,15 @@ public class OverpassService {
         }
         if (responseBody.isEmpty()) {
             log.warn("Both Overpass endpoints failed for settlement listingId={}", listingId);
-            return List.of();
+            return OverpassFetchOutcome.providerFailure();
         }
 
         List<ListingPoi> pois = parseSettlementAndFilter(responseBody.get(), listingId, lat, lon);
-        if (pois.isEmpty()) return List.of();
+        if (pois.isEmpty()) return OverpassFetchOutcome.success(List.of());
 
         List<ListingPoi> saved = repository.saveAll(pois);
         log.info("Overpass settlement inserted {} POIs for listingId={}", saved.size(), listingId);
-        return saved;
+        return OverpassFetchOutcome.success(saved);
     }
 
     // ===== Query builders =====

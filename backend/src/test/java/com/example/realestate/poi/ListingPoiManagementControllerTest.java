@@ -117,7 +117,9 @@ class ListingPoiManagementControllerTest {
         when(listingWorkflowService.findListingForCaller(LISTING_ID, OWNER_ID, false))
                 .thenReturn(ownerListing(OWNER_ID));
         when(overpassService.fetchAndCacheAmenities(eq(LISTING_ID), any(Double.class), any(Double.class), anyString()))
-                .thenReturn(List.of());
+                .thenReturn(OverpassFetchOutcome.cacheHit());
+        when(overpassService.enrichSettlement(eq(LISTING_ID), any(Double.class), any(Double.class), anyString()))
+                .thenReturn(OverpassFetchOutcome.cacheHit());
 
         ListingPoi poi = buildPoi(false, false);
         when(service.getAll(LISTING_ID)).thenReturn(List.of(poi));
@@ -125,8 +127,32 @@ class ListingPoiManagementControllerTest {
         mockMvc.perform(get("/api/listings/{listingId}/pois/suggestions", LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].id").value(POI_ID.toString()));
+                .andExpect(jsonPath("$.pois.length()").value(1))
+                .andExpect(jsonPath("$.pois[0].id").value(POI_ID.toString()))
+                .andExpect(jsonPath("$.providerIssue").value(false));
+    }
+
+    // ==================== Test 1b: suggestions — Overpass provider failure surfaces providerIssue=true, not a fake empty result ====================
+
+    @Test
+    void suggestions_overpassFetchFails_returnsProviderIssueTrue() throws Exception {
+
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, OWNER_ID, false))
+                .thenReturn(ownerListing(OWNER_ID));
+        when(overpassService.fetchAndCacheAmenities(eq(LISTING_ID), any(Double.class), any(Double.class), anyString()))
+                .thenReturn(OverpassFetchOutcome.providerFailure());
+        when(overpassService.enrichSettlement(eq(LISTING_ID), any(Double.class), any(Double.class), anyString()))
+                .thenReturn(OverpassFetchOutcome.cacheHit());
+
+        // No POIs persisted yet (the failed fetch saved nothing) — must NOT be presented
+        // as a confirmed empty result.
+        when(service.getAll(LISTING_ID)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/listings/{listingId}/pois/suggestions", LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pois.length()").value(0))
+                .andExpect(jsonPath("$.providerIssue").value(true));
     }
 
     // ==================== Test 2: suggestions — non-owner → 403 ====================
@@ -292,7 +318,9 @@ class ListingPoiManagementControllerTest {
         when(listingWorkflowService.findListingForCaller(LISTING_ID, ADMIN_ID, true))
                 .thenReturn(ownerListing(OWNER_ID));
         when(overpassService.fetchAndCacheAmenities(eq(LISTING_ID), any(Double.class), any(Double.class), anyString()))
-                .thenReturn(List.of());
+                .thenReturn(OverpassFetchOutcome.cacheHit());
+        when(overpassService.enrichSettlement(eq(LISTING_ID), any(Double.class), any(Double.class), anyString()))
+                .thenReturn(OverpassFetchOutcome.cacheHit());
 
         ListingPoi poi = buildPoi(true, false);
         when(service.getAll(LISTING_ID)).thenReturn(List.of(poi));
@@ -300,6 +328,6 @@ class ListingPoiManagementControllerTest {
         mockMvc.perform(get("/api/listings/{listingId}/pois/suggestions", LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1));
+                .andExpect(jsonPath("$.pois.length()").value(1));
     }
 }

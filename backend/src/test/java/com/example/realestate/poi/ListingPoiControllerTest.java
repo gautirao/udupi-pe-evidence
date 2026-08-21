@@ -225,6 +225,7 @@ class ListingPoiControllerTest {
         mockMvc.perform(get("/api/listings/{listingId}/pois/suggestions", LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.pois.length()").value(0))
+                .andExpect(jsonPath("$.providerIssue").value(false));
     }
 }

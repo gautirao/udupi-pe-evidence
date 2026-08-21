@@ -65,9 +65,10 @@ class OverpassServiceTest {
         };
 
         OverpassService service = new OverpassService(repository, mockClient);
-        List<ListingPoi> result = service.fetchAndCache(listingId, 13.3409, 74.7421);
+        OverpassFetchOutcome outcome = service.fetchAndCache(listingId, 13.3409, 74.7421);
 
-        assertThat(result).isEmpty();
+        assertThat(outcome.pois()).isEmpty();
+        assertThat(outcome.providerFailed()).isFalse();
         assertThat(called[0]).isFalse();
     }
 
@@ -96,10 +97,10 @@ class OverpassServiceTest {
         assertThat(calledUrls.get(1)).contains("kumi.systems");
     }
 
-    // ===== 4. Both endpoints fail — empty result, no exception =====
+    // ===== 4. Both endpoints fail — empty result, providerFailed=true, no exception =====
 
     @Test
-    void bothEndpointsFail_returnsEmpty() {
+    void bothEndpointsFail_returnsEmptyAndMarksProviderFailed() {
         UUID listingId = UUID.randomUUID();
         when(repository.existsByListingIdAndSourceAndCreatedAtAfter(
                 eq(listingId), eq("overpass"), any(OffsetDateTime.class)))
@@ -108,9 +109,12 @@ class OverpassServiceTest {
         OverpassHttpClient mockClient = (url, body) -> Optional.empty();
 
         OverpassService service = new OverpassService(repository, mockClient);
-        List<ListingPoi> result = service.fetchAndCache(listingId, 13.3409, 74.7421);
+        OverpassFetchOutcome outcome = service.fetchAndCache(listingId, 13.3409, 74.7421);
 
-        assertThat(result).isEmpty();
+        assertThat(outcome.pois()).isEmpty();
+        assertThat(outcome.providerFailed())
+                .as("a fetch failure must be distinguishable from a genuine empty result")
+                .isTrue();
         verify(repository, never()).saveAll(any());
     }
 
@@ -234,9 +238,10 @@ class OverpassServiceTest {
         };
 
         OverpassService service = new OverpassService(repository, mockClient);
-        List<ListingPoi> result = service.enrichSettlement(listingId, 13.3409, 74.7421, "apartment");
+        OverpassFetchOutcome outcome = service.enrichSettlement(listingId, 13.3409, 74.7421, "apartment");
 
-        assertThat(result).isEmpty();
+        assertThat(outcome.pois()).isEmpty();
+        assertThat(outcome.providerFailed()).isFalse();
         assertThat(called[0]).as("HTTP client should not be called for apartment type").isFalse();
         verify(repository, never()).existsByListingIdAndSourceAndCreatedAtAfter(any(), anyString(), any());
     }
@@ -255,10 +260,30 @@ class OverpassServiceTest {
         };
 
         OverpassService service = new OverpassService(repository, mockClient);
-        List<ListingPoi> result = service.enrichSettlement(listingId, 13.3409, 74.7421, "land");
+        OverpassFetchOutcome outcome = service.enrichSettlement(listingId, 13.3409, 74.7421, "land");
 
-        assertThat(result).isEmpty();
+        assertThat(outcome.pois()).isEmpty();
+        assertThat(outcome.providerFailed()).isFalse();
         assertThat(called[0]).isFalse();
+    }
+
+    @Test
+    void enrichSettlement_bothEndpointsFail_marksProviderFailed() {
+        UUID listingId = UUID.randomUUID();
+        when(repository.existsByListingIdAndSourceAndCreatedAtAfter(
+                eq(listingId), eq("overpass_settlement"), any(OffsetDateTime.class)))
+                .thenReturn(false);
+
+        OverpassHttpClient mockClient = (url, body) -> Optional.empty();
+
+        OverpassService service = new OverpassService(repository, mockClient);
+        OverpassFetchOutcome outcome = service.enrichSettlement(listingId, 13.3409, 74.7421, "land");
+
+        assertThat(outcome.pois()).isEmpty();
+        assertThat(outcome.providerFailed())
+                .as("settlement fetch failure must be distinguishable from a genuine empty result")
+                .isTrue();
+        verify(repository, never()).saveAll(any());
     }
 
     @Test

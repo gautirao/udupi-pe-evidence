@@ -39,6 +39,12 @@ interface PoiResponse {
   approved: boolean;
 }
 
+interface SuggestionsResponse {
+  pois: PoiResponse[];
+  /** True when the last Overpass fetch attempt for this listing failed (not a genuine empty result). */
+  providerIssue: boolean;
+}
+
 /** Only amenity categories are curated by dealers — settlement categories are auto-computed. */
 const AMENITY_CATEGORY_KEYS = AMENITY_CATEGORY_ORDER as readonly string[];
 
@@ -347,13 +353,16 @@ export function PoiManager({ listingId, propertyType }: PoiManagerProps) {
   const [activeTab, setActiveTab] = useState('nearby');
 
   const {
-    data: pois,
+    data,
     isLoading,
     isError,
   } = useQuery({
     queryKey: ['pois', 'suggestions', listingId],
-    queryFn: () => api.get<PoiResponse[]>(`/api/listings/${listingId}/pois/suggestions`),
+    queryFn: () => api.get<SuggestionsResponse>(`/api/listings/${listingId}/pois/suggestions`),
   });
+
+  const pois = data?.pois;
+  const providerIssue = data?.providerIssue ?? false;
 
   const approveMutation = useMutation({
     mutationFn: (poiId: string) =>
@@ -497,9 +506,19 @@ export function PoiManager({ listingId, propertyType }: PoiManagerProps) {
                 </AlertDescription>
               </Alert>
             )}
-            {!isLoading && !isError && unapprovedPois.length === 0 && (
+            {!isLoading && !isError && unapprovedPois.length === 0 && providerIssue && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  Couldn&apos;t fetch nearby places right now — the map data provider may be
+                  temporarily unavailable. This is not a confirmed empty result; try again shortly,
+                  or add places manually from the Approved tab.
+                </AlertDescription>
+              </Alert>
+            )}
+            {!isLoading && !isError && unapprovedPois.length === 0 && !providerIssue && (
               <p className="text-sm text-muted-foreground py-4 text-center">
-                No nearby places found for this listing.
+                No nearby places found for this listing. You can add places manually from the
+                Approved tab.
               </p>
             )}
             {!isLoading && !isError && unapprovedPois.length > 0 && (

@@ -83,7 +83,8 @@ public class ListingPoiController {
     // ===== Dealer/admin endpoints =====
 
     /**
-     * Returns all POIs (approved or not) for a listing.
+     * Returns all POIs (approved or not) for a listing, wrapped with a {@code providerIssue}
+     * flag distinguishing a failed Overpass fetch from a genuine empty result.
      * If no Overpass POIs exist yet, triggers a fetch-and-cache before returning.
      * Auth: listing owner or admin.
      */
@@ -103,18 +104,21 @@ public class ListingPoiController {
 
         // Trigger Overpass fetches if listing has coordinates. Both methods guard against re-fetch
         // internally (14-day cache per source type), so calling on every request is safe.
+        boolean providerIssue = false;
         if (listing.getLatitude() != null && listing.getLongitude() != null) {
-            overpassService.fetchAndCacheAmenities(
+            OverpassFetchOutcome amenityOutcome = overpassService.fetchAndCacheAmenities(
                     listingId, listing.getLatitude(), listing.getLongitude(), listing.getPropertyType());
-            overpassService.enrichSettlement(
+            OverpassFetchOutcome settlementOutcome = overpassService.enrichSettlement(
                     listingId, listing.getLatitude(), listing.getLongitude(), listing.getPropertyType());
+            providerIssue = amenityOutcome.providerFailed() || settlementOutcome.providerFailed();
         }
 
         List<PoiResponse> pois = service.getAll(listingId).stream()
                 .map(PoiResponse::from)
                 .toList();
-        log.debug("GET suggestions listingId={} caller={} count={}", listingId, caller.userId(), pois.size());
-        return ResponseEntity.ok(pois);
+        log.debug("GET suggestions listingId={} caller={} count={} providerIssue={}",
+                listingId, caller.userId(), pois.size(), providerIssue);
+        return ResponseEntity.ok(new SuggestionsResponse(pois, providerIssue));
     }
 
     /**
