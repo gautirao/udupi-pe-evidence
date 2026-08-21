@@ -52,9 +52,27 @@
  *   shared external mutable dependency and must NEVER be presented as the
  *   deterministic canonical fixture. Any spec that relies on a storageState
  *   minted against hosted Supabase Auth MUST label itself ENVIRONMENT_GATED
- *   (e.g. in its own top-of-file docstring and via a runtime skip when the
- *   required credentials/env are absent) — this file only provides the path
- *   resolution seam, it does not make that judgement call for the caller.
+ *   (e.g. in its own top-of-file docstring) — this file only provides the
+ *   path resolution seam, it does not make that judgement call for the
+ *   caller.
+ *
+ *   `test.skip` is BANNED outright in e2e/canonical/** (see
+ *   playwright.canonical.config.ts's "Projects are named, not gated by
+ *   test.skip" docstring for the full rationale) — a skipped test still
+ *   reports as a pass-adjacent outcome in some CI summaries, which is
+ *   exactly the "environment-gated" vs "silently not running" ambiguity
+ *   this harness exists to eliminate. Environment gating for a role whose
+ *   credentials are absent happens EXCLUSIVELY via PLAYWRIGHT PROJECT
+ *   INCLUSION: playwright.canonical.config.ts's per-role project factory
+ *   (`roleAwareProjects`) only adds a `canonical-<role>` project when that
+ *   role's credentials are present in the environment, and every
+ *   role-gated spec tags its test title with a literal `[role:<role>]`
+ *   substring that project greps on (`canonical-anon` greps the inverse).
+ *   A role with no credentials therefore has no project generated at all —
+ *   its tests are simply absent from the run, never present-but-skipped.
+ *   A spec that needs authenticated state should defence-in-depth throw
+ *   (not skip) if it somehow runs without its role's credentials, exactly
+ *   as e2e/canonical/auth-session.canonical.ts's T1/T2/T3 already do.
  */
 
 import { test as base, expect } from '@playwright/test';
@@ -85,9 +103,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  *
  * A spec doing this MUST also document (in its own top-of-file docstring)
  * that it is ENVIRONMENT_GATED on hosted Supabase Auth per owner ruling
- * D10-AUTH-FIXTURE, and MUST skip gracefully (e.g. via hasRealCredentials
- * from e2e/helpers.ts) when the fixture file / credentials are unavailable —
- * never fail the whole canonical run for an environment gap.
+ * D10-AUTH-FIXTURE. That gating happens by PLAYWRIGHT PROJECT INCLUSION,
+ * never by a runtime `test.skip` (banned outright in e2e/canonical/**  — see
+ * this file's module docstring and playwright.canonical.config.ts): the
+ * spec's title carries a `[role:<role>]` tag, and playwright.canonical.
+ * config.ts's per-role project factory only generates that role's
+ * `canonical-<role>` project (and grep-selects this spec into it) when
+ * hasRealCredentials (e2e/helpers.ts) is true for that role's env vars at
+ * config-load time. When credentials/env are absent, the project simply
+ * does not exist for that run and the spec never executes — not a skip.
+ * A spec may still use hasRealCredentials as a defence-in-depth THROW
+ * (never skip) guard at the top of its test body, in case it somehow runs
+ * without its role's credentials — see T1/T2/T3 in
+ * e2e/canonical/auth-session.canonical.ts for the pattern.
  */
 export type CanonicalRole = 'admin' | 'broker' | 'user';
 

@@ -394,6 +394,77 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at = NOW();
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 5d. Contact phone + gallery images for the harness smoke listing (issue
+--     #1713 PR-2). Narrowly scoped to e2e00001-0000-0000-0000-000000000001
+--     only — the exact listing canonical-harness-smoke.canonical.ts (PR-1)
+--     already exercises. Before this, EVERY fixture listing had imageCount 0
+--     and a NULL contact_phone, which made the anon SignInGateCard image-lock
+--     (ListingGallery.tsx:102, gated on effectiveImageCount > 0) structurally
+--     unable to render for anyone.
+--     Schema: listing_images (V9__create_listing_images_notifications_saved_areas.sql)
+--     — id/listing_id/storage_path/url/position/created_at, unique
+--     (listing_id, storage_path) added by V12. property_listings.contact_phone
+--     is a nullable TEXT column with no default/constraint
+--     (V0__initial_schema.sql:90).
+--
+--     TWO IMAGES, NOT ONE (live-verified, corrected from an earlier single-
+--     image version of this seed block): ListingDetail.tsx:196-201
+--     synthesizes a 1-item `images` array from the anon teaser's
+--     `primaryImageUrl` field even when the real `images[]` list is withheld
+--     (`listing.images || []` is empty for anon, so it falls back to
+--     `[{url: listing.primaryImageUrl}]`). ListingGallery.tsx's lock overlay
+--     only renders when `effectiveImageCount > images.length` — with exactly
+--     ONE seeded image, `images.length` (1, from the synthesized fallback)
+--     equals `effectiveImageCount` (1, from `imageCount`), so nothing reads
+--     as "locked" and the anon SignInGateCard never appears. Live-curl-
+--     confirmed: GET /api/public/listings/{id} anonymous returned
+--     `"imageCount":1,"primaryImageUrl":"https://...photo-1.jpg"` with a
+--     single seeded row, and the gate did not render in a live Playwright
+--     run. TWO rows make imageCount=2 > the synthesized images.length=1,
+--     which genuinely locks the second photo behind sign-in.
+--
+--     KNOWN GAP FOUND DURING LIVE VERIFICATION (documented here, NOT worked
+--     around — backend/** and src/** are both forbidden this slice): the
+--     authed contact-phone-section (ListingDetailSidebar.tsx:104-127, gated
+--     on `user && listing.contact_phone`) can NEVER render for ANY caller,
+--     seeded or not, because backend ListingResponse.java
+--     (backend/src/main/java/com/example/realestate/listing/api/ListingResponse.java)
+--     has no `contactPhone`/`contact_phone` field at all — live-curl-
+--     confirmed against an authenticated GET /api/public/listings/{id} call
+--     on this exact listing (with contact_phone populated in the DB below):
+--     the field is entirely absent from the JSON response. This is a
+--     pre-existing backend DTO gap, not something this seed change can fix —
+--     see listing-detail-gating.canonical.ts's module docstring for the full
+--     citation and this slice's final report for the recommended follow-up
+--     (add contactPhone to ListingResponse + ListingResponseMapper#build).
+--     contact_phone is still seeded here (harmless, forward-compatible) so
+--     a future backend fix has real data to render against immediately.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+UPDATE public.property_listings
+SET contact_phone = '+91-9876500001'
+WHERE id = 'e2e00001-0000-0000-0000-000000000001';
+
+INSERT INTO public.listing_images (id, listing_id, storage_path, url, position, created_at)
+VALUES
+  ('e2e00005-0000-0000-0000-000000000001',
+   'e2e00001-0000-0000-0000-000000000001',
+   'e2e-fixtures/e2e00001-0000-0000-0000-000000000001/photo-1.jpg',
+   'https://placehold.co/800x600?text=E2E+Fixture+Photo+1',
+   0,
+   NOW()),
+  ('e2e00005-0000-0000-0000-000000000002',
+   'e2e00001-0000-0000-0000-000000000001',
+   'e2e-fixtures/e2e00001-0000-0000-0000-000000000001/photo-2.jpg',
+   'https://placehold.co/800x600?text=E2E+Fixture+Photo+2',
+   1,
+   NOW())
+ON CONFLICT (id) DO UPDATE
+  SET storage_path = EXCLUDED.storage_path,
+      url          = EXCLUDED.url,
+      position     = EXCLUDED.position;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 6. Validation assertions (fail the transaction if counts are wrong)
 -- ─────────────────────────────────────────────────────────────────────────────
 DO $$
@@ -402,6 +473,8 @@ DECLARE
   v_manipal_e2e       INTEGER;
   v_manipal_apt       INTEGER;
   v_school_manipal    INTEGER;
+  v_smoke_phone       TEXT;
+  v_smoke_images      INTEGER;
 BEGIN
   SELECT COUNT(*) INTO v_live_e2e
     FROM property_listings
@@ -421,6 +494,26 @@ BEGIN
   SELECT COUNT(*) INTO v_school_manipal
     FROM schools
     WHERE area_key = 'IN|KA|Udupi|Manipal';
+
+  SELECT contact_phone INTO v_smoke_phone
+    FROM property_listings
+    WHERE id = 'e2e00001-0000-0000-0000-000000000001';
+
+  SELECT COUNT(*) INTO v_smoke_images
+    FROM listing_images
+    WHERE listing_id = 'e2e00001-0000-0000-0000-000000000001';
+
+  -- #1713 PR-2: these two guard the harness smoke listing's contact_phone
+  -- and listing_images data (section 5d above). If either goes missing,
+  -- T11/T12's gating assertions in listing-detail-gating.canonical.ts would
+  -- silently pass VACUOUSLY again (no SignInGateCard / no contact section
+  -- for anyone, regardless of auth) — fail the seed load loudly instead.
+  IF v_smoke_phone IS NULL THEN
+    RAISE EXCEPTION 'Seed assertion failed: listing e2e00001-0000-0000-0000-000000000001 has NULL contact_phone — T12 contact-phone-section would be vacuous';
+  END IF;
+  IF v_smoke_images < 2 THEN
+    RAISE EXCEPTION 'Seed assertion failed: listing e2e00001-0000-0000-0000-000000000001 has fewer than 2 listing_images rows — T11''s anon image-gate needs imageCount > the anon-synthesized 1-image fallback (ListingDetail.tsx''s primaryImageUrl fallback) to genuinely lock, got %', v_smoke_images;
+  END IF;
 
   -- Assert geog is non-NULL for every seeded [E2E] listing.
   -- geog is GENERATED from (longitude, latitude); a NULL result means a coord

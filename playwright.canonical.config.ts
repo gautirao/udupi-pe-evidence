@@ -68,6 +68,8 @@
  */
 
 import { defineConfig, devices } from '@playwright/test';
+import { hasRealCredentials } from './e2e/helpers';
+import { canonicalStorageStatePath, type CanonicalRole } from './e2e/canonical/support/canonical-test';
 
 const PLAYWRIGHT_BASE_URL = process.env.PLAYWRIGHT_BASE_URL;
 const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL;
@@ -189,6 +191,149 @@ if (HOSTED_TARGET_PATTERN.test(BACKEND_BASE_URL)) {
 
 const DESKTOP_VIEWPORT = { width: 1366, height: 768 };
 
+// Derived from PLAYWRIGHT_BASE_URL (already validated as a loopback URL
+// above), not hardcoded — CF-1 (PR-2 handoff carry-forward): a fixed
+// '--port 5251' here meant every slice's webServer collided on 5251
+// regardless of its own assigned selected_ports, which blocks PR-3+ from
+// running its own preview server in parallel with PR-2's.
+//
+// NOTE ON THE '||' BELOW: this file's module docstring says there is no
+// '||'/'??' fallback anywhere, but that rule is about never falling back to
+// a hosted/production TARGET — this only falls back on the PORT of an
+// already-validated LOOPBACK url, never the host. assertLocalOnlyUrl above
+// guarantees a well-formed, loopback-hostname URL; it does NOT guarantee the
+// URL carries an explicit port (e.g. 'http://localhost' with no ':5251' is
+// still well-formed and still loopback). If PLAYWRIGHT_BASE_URL omits a
+// port, `.port` is '', and the fallback below covers that case. The failure
+// mode if this fallback fires unexpectedly is loud, not silent: webServer
+// starts on 5251 while Playwright polls the URL's own (different, implicit)
+// port, producing a startup timeout rather than a run against the wrong host.
+const PREVIEW_PORT = new URL(PLAYWRIGHT_BASE_URL).port || '5251';
+
+// ─────────────────────────────────────────────────────────────────────────
+// Role-aware authenticated projects (issue #1713, PR-2) — ADDITIVE ONLY.
+//
+// DESIGN DECISION (this slice's live review question — see PR-2 handoff D1):
+// a small per-role PROJECT FACTORY, not one hardcoded "canonical-authed"
+// project and not an arbitrary/open-ended role system. Reasoning:
+//   - The grounded role set is EXACTLY {'user','broker','admin'} — the same
+//     CanonicalRole union PR-1 already committed to in canonical-test.ts and
+//     exactly what e2e/helpers.ts's loginAsUser/loginAsBroker/loginAsAdmin
+//     provide. There is no fourth role to plan for today (no distinct
+//     'owner' credential — ownership is a per-listing property of a plain
+//     'user', not a login identity; no 'dealer'/'buyer' journey in PR-2..PR-5).
+//   - All three roles need IDENTICAL treatment (mint via the real /auth UI,
+//     validate the minted storageState, gate project inclusion on that
+//     role's own credential pair) — a factory removes that 3x duplication
+//     without inventing generality beyond what's already proven necessary.
+//   - PR-3/PR-4/PR-5 (per the owner's own design brief) will each need
+//     authenticated projects for the SAME three roles, so this becomes a
+//     published interface those PRs branch from directly, rather than each
+//     re-deriving its own ad hoc authenticated-project wiring.
+//
+// ENVIRONMENT GATING BY PROJECT SELECTION (mandatory — never test.skip):
+// package.json's `test:e2e:canonical` script is out of scope to modify and
+// passes no `--project` filter, so it runs every project in this array by
+// default. A role's {canonical-setup-<role>, canonical-<role>} project pair
+// is only ADDED to the array when that role's real credentials are present
+// in the environment (see roleCredentialsPresent below) — mirroring this
+// file's own existing synchronous fail-fast style for
+// PLAYWRIGHT_BASE_URL/BACKEND_BASE_URL. This means:
+//   - An operator with NO SMOKE_USER_EMAIL/BROKER_EMAIL/ADMIN_EMAIL exported
+//     gets exactly PR-1's original behaviour back: only `canonical-anon`
+//     runs, zero credentials required, zero regression.
+//   - An operator who exports (say) SMOKE_USER_EMAIL/PASSWORD before running
+//     the bare npm script automatically also gets `canonical-user` (and its
+//     `canonical-setup-user` dependency) added — no `--project` flag needed.
+//   - A missing/expired credential shows up as an ABSENT project (that role's
+//     tests simply do not run this invocation), never as a test.skip inside
+//     a spec — satisfying the "indistinguishable from silently not running"
+//     ban verbatim.
+//
+// GREP-BASED ROLE TAGGING: every role-gated spec (T1 per-role sign-in, T2,
+// T3, T12) tags its test title with a literal `[role:<role>]` substring.
+// `canonical-<role>` projects `grep` on that exact tag; `canonical-anon`
+// `grepInvert`s the same pattern so it never attempts a role-tagged test
+// that needs credentials/storageState it doesn't have. T10/T11/the harness
+// smoke spec carry no such tag and so only ever match `canonical-anon`.
+//
+// STORAGESTATE VS LIVE LOGIN: T1/T2/T3 exercise the LIVE sign-in flow itself
+// (they must start from an anonymous browser context even though they run
+// inside a `canonical-<role>` project, whose project-level `use.storageState`
+// points at that role's PRE-AUTHENTICATED fixture for T12-style specs).
+// auth-session.canonical.ts resolves this with its own file-level
+// `test.use({ storageState: { cookies: [], origins: [] } })`, which overrides
+// the project default for every test in that file only — see that file's
+// module docstring.
+// ─────────────────────────────────────────────────────────────────────────
+
+const CANONICAL_ROLES: readonly CanonicalRole[] = ['user', 'broker', 'admin'] as const;
+
+/**
+ * Mirrors scripts/dev/local-fixture-backend.sh's own best-effort broker/user
+ * identity-seed credential resolution (BROKER_EMAIL falling back to the
+ * deprecated DEALER_EMAIL alias — see .env.e2e.example) so this file's
+ * gating logic never drifts from what that script can actually seed.
+ */
+function roleCredentialsPresent(role: CanonicalRole): boolean {
+  if (role === 'user') {
+    return hasRealCredentials(process.env.SMOKE_USER_EMAIL ?? '', process.env.SMOKE_USER_PASSWORD ?? '');
+  }
+  if (role === 'broker') {
+    return hasRealCredentials(
+      process.env.BROKER_EMAIL || process.env.DEALER_EMAIL || '',
+      process.env.BROKER_PASSWORD || process.env.DEALER_PASSWORD || '',
+    );
+  }
+  // role === 'admin'
+  return hasRealCredentials(process.env.ADMIN_EMAIL ?? '', process.env.ADMIN_PASSWORD ?? '');
+}
+
+function roleAwareProjects() {
+  const projects: NonNullable<Parameters<typeof defineConfig>[0]['projects']> = [];
+
+  for (const role of CANONICAL_ROLES) {
+    if (!roleCredentialsPresent(role)) continue;
+
+    // Mints + validates this role's storageState via the real /auth UI (see
+    // e2e/canonical/support/auth-setup.canonical.ts). Scoped with its own
+    // testDir/testMatch so it never also picks up the rest of the suite.
+    projects.push({
+      name: `canonical-setup-${role}`,
+      testDir: './e2e/canonical/support',
+      testMatch: /auth-setup\.canonical\.ts$/,
+      grep: new RegExp(`\\[role:${role}\\]`),
+      use: { ...devices['Desktop Chrome'], viewport: DESKTOP_VIEWPORT },
+    });
+
+    // Runs this role's tagged product specs. `dependencies` makes Playwright
+    // run canonical-setup-<role> to completion first, so the storageState
+    // file this project's `use.storageState` reads always exists and is
+    // freshly minted for THIS run (never a stale file from a previous run).
+    projects.push({
+      name: `canonical-${role}`,
+      dependencies: [`canonical-setup-${role}`],
+      grep: new RegExp(`\\[role:${role}\\]`),
+      // Without this, this project's inherited testMatch ('**/*.canonical.ts')
+      // combined with the same `[role:${role}]` grep tag would ALSO pick up
+      // support/auth-setup.canonical.ts's mint test — re-running it a second
+      // time against THIS project's already-authenticated storageState
+      // context, where /auth's own redirect-when-signed-in effect
+      // (src/pages/Auth.tsx:24-29) means the #signin-email locator never
+      // appears and the test times out. canonical-setup-${role}'s own
+      // narrower testDir/testMatch already scopes it there exclusively.
+      testIgnore: /support\/auth-setup\.canonical\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: DESKTOP_VIEWPORT,
+        storageState: canonicalStorageStatePath(role),
+      },
+    });
+  }
+
+  return projects;
+}
+
 export default defineConfig({
   testDir: './e2e/canonical',
   testMatch: '**/*.canonical.ts',
@@ -208,7 +353,9 @@ export default defineConfig({
   outputDir: 'test-results/canonical',
   webServer: {
     // FRONTEND ONLY — see module docstring. Never add a backend start command here.
-    command: 'npm run preview -- --port 5251 --strictPort',
+    // Port derived from PLAYWRIGHT_BASE_URL (see PREVIEW_PORT above), not
+    // hardcoded, so each slice's own selected_ports is honoured.
+    command: `npm run preview -- --port ${PREVIEW_PORT} --strictPort`,
     url: PLAYWRIGHT_BASE_URL,
     reuseExistingServer: false,
     timeout: 60_000,
@@ -226,7 +373,12 @@ export default defineConfig({
   projects: [
     {
       name: 'canonical-anon',
+      // Never attempt a role-tagged spec here — those need credentials/
+      // storageState this project doesn't have (see the module-level
+      // "GREP-BASED ROLE TAGGING" note above).
+      grepInvert: /\[role:(?:user|broker|admin)\]/,
       use: { ...devices['Desktop Chrome'], viewport: DESKTOP_VIEWPORT },
     },
+    ...roleAwareProjects(),
   ],
 });
