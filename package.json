@@ -23,6 +23,7 @@
     "test:e2e:headed": "bash scripts/run-e2e-local.sh --headed --workers=1",
     "test:e2e:watch": "bash scripts/e2e-watch.sh",
     "test:e2e:watch:slow": "bash scripts/e2e-watch.sh --slow",
+    "test:e2e:canonical": "VITE_BUILD_SHA=$(git rev-parse HEAD) vite build && playwright test --config=playwright.canonical.config.ts",
     "prepare": "chmod +x scripts/run-e2e-local.sh .githooks/pre-push && git config core.hooksPath .githooks",
     "predev": "git config core.hooksPath .githooks",
     "prebuild": "git config core.hooksPath .githooks"

@@ -1,0 +1,13 @@
+# Canonical E2E harness storageState fixtures (issue #1713) — contain real
+# session tokens (hosted Supabase Auth, per canonical-test.ts's
+# canonicalStorageStatePath() seam for PR-3's authenticated specs) and must
+# never be committed.
+#
+# NESTED here deliberately, not added to the root .gitignore: the root
+# patterns `e2e/fixtures/*-auth.json` and `e2e-parity/fixtures/*-auth.json`
+# are path-anchored (they contain a slash) and do NOT match
+# e2e/canonical/fixtures/*-auth.json — a distinct directory. This file keeps
+# the ignore rule next to the seam that creates the files, so it travels
+# with the directory if it is ever moved, and needs no edit to the root
+# .gitignore (out of scope for this slice).
+fixtures/*-auth.json
