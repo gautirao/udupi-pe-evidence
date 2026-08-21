@@ -6,6 +6,7 @@ import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingOwnershipGuard;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.area.ListingAreaResolutionService;
 import com.example.realestate.listing.duplicate.ProximityDuplicateService;
 import com.example.realestate.listing.event.ListingApprovedEvent;
 import com.example.realestate.listing.event.ListingRejectedEvent;
@@ -42,9 +43,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -81,6 +84,9 @@ class ListingWorkflowServiceTest {
     @Mock
     private QualityRecomputeService qualityRecomputeService;
 
+    @Mock
+    private ListingAreaResolutionService listingAreaResolutionService;
+
     // Real ObjectMapper — buildSnapshot exercises actual JSON serialisation
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -96,7 +102,7 @@ class ListingWorkflowServiceTest {
                 listingRepository, applicationEventPublisher, listingOwnershipGuard,
                 proximityDuplicateService, policy, statusHistoryRepository,
                 imageRepository, objectMapper, bookingCascadeService, false, searchOutboxWriter,
-                qualityRecomputeService);
+                qualityRecomputeService, listingAreaResolutionService);
     }
 
     private ListingWorkflowService workflowServiceCascadeEnabled() {
@@ -104,7 +110,7 @@ class ListingWorkflowServiceTest {
                 listingRepository, applicationEventPublisher, listingOwnershipGuard,
                 proximityDuplicateService, policy, statusHistoryRepository,
                 imageRepository, objectMapper, bookingCascadeService, true, searchOutboxWriter,
-                qualityRecomputeService);
+                qualityRecomputeService, listingAreaResolutionService);
     }
 
     // --- Notification decoupling tests ---
@@ -190,6 +196,77 @@ class ListingWorkflowServiceTest {
         // Detection was attempted on the LIVE listing
         verify(proximityDuplicateService).detectAndRecord(
                 argThat(l -> ListingStatus.LIVE.toDbValue().equals(l.getStatus())));
+    }
+
+    // ===== #2263 review-cycle fix: approveListing's safety net must retry on a non-RESOLVED
+    // area_key, not just a null one — a non-null UNRESOLVED fallback key (e.g. left behind by a
+    // transient AreaResolutionService failure at submit time, which defensively degrades to
+    // UNRESOLVED rather than throwing) never matches any real areas.area_key row, so it fails
+    // PublicListingController.getById's area-key join exactly like a null key does. =====
+
+    @Test
+    void approveListing_unresolvedFallbackAreaKey_safetyNetRetriesAndResolves() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test Property");
+        // Non-null but non-canonical fallback key + UNRESOLVED status, as submitListing would
+        // leave it after a transient resolver failure.
+        listing.setAreaKey("in|ka|some-fallback|key");
+        listing.setAreaResolutionStatus("UNRESOLVED");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenReturn(listing);
+
+        // Simulate the retry succeeding this time (the transient outage cleared).
+        doAnswer(invocation -> {
+            Listing l = invocation.getArgument(0);
+            l.setAreaKey("IN|KA|Udupi|Manipal");
+            l.setAreaResolutionStatus("RESOLVED");
+            l.setAreaResolutionMethod("ALIAS");
+            return null;
+        }).when(listingAreaResolutionService).resolveAndApply(any(Listing.class));
+
+        Listing result = workflowService.approveListing(listingId, adminId);
+
+        assertThat(result.getAreaKey()).isEqualTo("IN|KA|Udupi|Manipal");
+        assertThat(result.getAreaResolutionStatus()).isEqualTo("RESOLVED");
+        verify(listingAreaResolutionService).resolveAndApply(any(Listing.class));
+        // Saved twice: once for the LIVE transition, once to persist the safety net's re-resolution.
+        verify(listingRepository, times(2)).save(any(Listing.class));
+        verify(applicationEventPublisher).publishEvent(any(NewListingInAreaEvent.class));
+    }
+
+    @Test
+    void approveListing_unresolvedFallbackAreaKey_retryStillFails_logsButNeverPublishesAreaEvent() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test Property");
+        listing.setAreaKey("in|ka|some-fallback|key");
+        listing.setAreaResolutionStatus("UNRESOLVED");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenReturn(listing);
+        // listingAreaResolutionService.resolveAndApply is a no-op mock by default — simulates a
+        // resolver that still can't resolve it on retry.
+
+        Listing result = workflowService.approveListing(listingId, adminId);
+
+        assertThat(result.getAreaKey()).isEqualTo("in|ka|some-fallback|key");
+        assertThat(result.getAreaResolutionStatus()).isEqualTo("UNRESOLVED");
+        verify(listingAreaResolutionService).resolveAndApply(any(Listing.class));
+        // Only the LIVE-transition save — no second save since resolution didn't improve anything.
+        verify(listingRepository, times(1)).save(any(Listing.class));
+        verify(applicationEventPublisher, never()).publishEvent(any(NewListingInAreaEvent.class));
     }
 
     // ===== RE-125: approveListing — policy delegation, history, lifecycle fields =====

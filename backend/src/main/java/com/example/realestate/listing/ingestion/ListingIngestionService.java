@@ -5,6 +5,7 @@ import com.example.realestate.ai.PromptRegistry;
 import com.example.realestate.ai.PropertyType;
 import com.example.realestate.discover.AreaResolution;
 import com.example.realestate.discover.AreaResolutionService;
+import com.example.realestate.discover.GeocodedAreaKeyFormat;
 import com.example.realestate.geo.GeocodingPort;
 import com.example.realestate.geo.GeocodingService;
 import com.example.realestate.ingestion.RawPost;
@@ -287,25 +288,7 @@ public class ListingIngestionService {
      * @return the matching {@code cities.id}, or null if no city row matches.
      */
     private Integer resolveCityId(GeocodingService.GeoResult geoResult) {
-        if (geoResult == null || geoResult.city() == null || geoResult.city().isBlank()) {
-            return null;
-        }
-        String citySlug = normalizeCityToSlug(geoResult.city());
-        return jdbcOperations.query(
-                "SELECT id FROM cities WHERE slug = ?",
-                rs -> rs.next() ? rs.getInt("id") : null,
-                citySlug);
-    }
-
-    /** See {@link #resolveCityId}'s javadoc for why this is a distinct alias set. */
-    private static String normalizeCityToSlug(String rawCity) {
-        String normalised = rawCity.trim().toLowerCase().replaceAll("\\s+", "-").replaceAll("[^a-z0-9\\-]", "");
-        return switch (normalised) {
-            case "bengaluru", "bengaluru-urban" -> "bangalore";
-            case "mangaluru", "dakshina-kannada" -> "mangalore";
-            case "kundapura" -> "kundapur";
-            default -> normalised;
-        };
+        return GeocodedAreaKeyFormat.resolveCityId(jdbcOperations, geoResult);
     }
 
     /**
@@ -316,29 +299,7 @@ public class ListingIngestionService {
      * @return normalized area_key, or null if insufficient components
      */
     public String computeAreaKey(GeocodingService.GeoResult geoResult) {
-        if (geoResult == null) {
-            return null;
-        }
-
-        String country = normalizeAreaComponent(geoResult.country());
-        String region = normalizeAreaComponent(geoResult.region());
-        String city = normalizeAreaComponent(geoResult.city());
-
-        // Locality fallback chain: locality -> neighborhood -> city
-        String locality = normalizeAreaComponent(geoResult.locality());
-        if (locality.isEmpty()) {
-            locality = normalizeAreaComponent(geoResult.neighborhood());
-        }
-        if (locality.isEmpty()) {
-            locality = city; // final fallback to city
-        }
-
-        // Require at least country and city for a meaningful area_key
-        if (country.isEmpty() || city.isEmpty()) {
-            return null;
-        }
-
-        return String.join("|", country, region, city, locality);
+        return GeocodedAreaKeyFormat.computeAreaKey(geoResult);
     }
 
     /**
@@ -348,41 +309,6 @@ public class ListingIngestionService {
      * @return display label, or null if no city available
      */
     public String computeAreaLabel(GeocodingService.GeoResult geoResult) {
-        if (geoResult == null) {
-            return null;
-        }
-
-        String city = geoResult.city();
-        if (city == null || city.isBlank()) {
-            return null;
-        }
-
-        // Locality fallback chain: locality -> neighborhood -> null
-        String locality = geoResult.locality();
-        if (locality == null || locality.isBlank()) {
-            locality = geoResult.neighborhood();
-        }
-
-        if (locality != null && !locality.isBlank()) {
-            return locality.trim() + ", " + city.trim();
-        }
-        return city.trim();
-    }
-
-    /**
-     * Normalize a single area component for use in area_key:
-     * - lowercase
-     * - trim whitespace
-     * - replace spaces with hyphens
-     * - remove punctuation (keep only alphanumeric and hyphens)
-     */
-    private String normalizeAreaComponent(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.trim()
-                .toLowerCase()
-                .replaceAll("\\s+", "-")
-                .replaceAll("[^a-z0-9\\-]", "");
+        return GeocodedAreaKeyFormat.computeAreaLabel(geoResult);
     }
 }

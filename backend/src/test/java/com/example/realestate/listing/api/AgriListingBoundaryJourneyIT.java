@@ -7,6 +7,7 @@ import com.example.realestate.listing.core.ListingOwnershipGuard;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingDeduplicationService;
 import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.area.ListingAreaResolutionService;
 import com.example.realestate.listing.crud.ListingCrudService;
 import com.example.realestate.listing.duplicate.ProximityDuplicateService;
 import com.example.realestate.listing.pricing.PriceChangeLogRepository;
@@ -156,7 +157,8 @@ class AgriListingBoundaryJourneyIT {
         workflowService = new ListingWorkflowService(
                 listingRepository, events, ownershipGuard, proximity, policy,
                 statusHistoryRepository, imageRepository, objectMapper,
-                bookingCascade, false, outbox, qualityRecompute);
+                bookingCascade, false, outbox, qualityRecompute,
+                mock(ListingAreaResolutionService.class));
     }
 
     /**

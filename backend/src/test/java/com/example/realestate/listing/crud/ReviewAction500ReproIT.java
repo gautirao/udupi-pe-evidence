@@ -2,6 +2,7 @@ package com.example.realestate.listing.crud;
 
 import com.example.realestate.booking.BookingCascadeService;
 import com.example.realestate.listing.audit.ListingStatusHistoryRepository;
+import com.example.realestate.listing.area.ListingAreaResolutionService;
 import com.example.realestate.listing.commercial.CommercialListingFields;
 import com.example.realestate.listing.commercial.ListingSuitableUseRepository;
 import com.example.realestate.listing.core.Listing;
@@ -188,7 +189,8 @@ class ReviewAction500ReproIT {
         workflowService = new ListingWorkflowService(
                 listingRepository, events, ownershipGuard, proximity, policy,
                 statusHistoryRepository, imageRepository, objectMapper,
-                bookingCascade, false, outbox, qualityRecompute);
+                bookingCascade, false, outbox, qualityRecompute,
+                mock(ListingAreaResolutionService.class));
     }
 
     // code-reviewer finding 3: ac6BadgeInvalidationService is a plain @Bean mock in the

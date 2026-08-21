@@ -6,6 +6,7 @@ import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingOwnershipGuard;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.area.ListingAreaResolutionService;
 import com.example.realestate.listing.duplicate.ProximityDuplicateService;
 import com.example.realestate.listing.event.ListingApprovedEvent;
 import com.example.realestate.listing.event.ListingRejectedEvent;
@@ -85,6 +86,7 @@ public class ListingWorkflowService {
     private final boolean bookingCascadeEnabled;
     private final SearchOutboxWriter searchOutboxWriter;
     private final QualityRecomputeService qualityRecomputeService;
+    private final ListingAreaResolutionService listingAreaResolutionService;
 
     public ListingWorkflowService(
             ListingRepository listingRepository,
@@ -98,7 +100,8 @@ public class ListingWorkflowService {
             BookingCascadeService bookingCascadeService,
             @Value("${listing.lifecycle.booking-cascade.enabled:false}") boolean bookingCascadeEnabled,
             SearchOutboxWriter searchOutboxWriter,
-            QualityRecomputeService qualityRecomputeService) {
+            QualityRecomputeService qualityRecomputeService,
+            ListingAreaResolutionService listingAreaResolutionService) {
         this.listingRepository = listingRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingOwnershipGuard = listingOwnershipGuard;
@@ -113,6 +116,7 @@ public class ListingWorkflowService {
         this.bookingCascadeEnabled = bookingCascadeEnabled;
         this.searchOutboxWriter = searchOutboxWriter;
         this.qualityRecomputeService = qualityRecomputeService;
+        this.listingAreaResolutionService = listingAreaResolutionService;
     }
 
     /**
@@ -133,6 +137,11 @@ public class ListingWorkflowService {
 
         policy.guardSubmissionCount(listing);
         policy.guardCompleteness(listing);
+
+        // #2263: broker listings never had area_key resolved anywhere in the create/update path —
+        // resolve it here, on the FIRST transition every broker listing must pass through before
+        // it can ever go LIVE, so PublicListingController's area-key join never sees a null.
+        listingAreaResolutionService.resolveAndApply(listing);
 
         Instant now = Instant.now();
         OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
@@ -223,7 +232,27 @@ public class ListingWorkflowService {
                     new ListingApprovedEvent(saved, listing.getCreatedBy(), title));
         }
 
-        if (saved.getAreaKey() != null) {
+        // #2263 safety net: area_key is normally already RESOLVED by submitListing. Retry here
+        // whenever it isn't — either still null, OR non-null but UNRESOLVED (a geocoded fallback
+        // key that never matches any real areas.area_key row, e.g. because AreaResolutionService
+        // defensively degraded a transient failure to UNRESOLVED at submit time). A non-canonical
+        // fallback key fails PublicListingController.getById's area-key join exactly like a null
+        // one does, so only a genuinely RESOLVED key counts as "fixed" here.
+        boolean areaResolved = saved.getAreaKey() != null && "RESOLVED".equals(saved.getAreaResolutionStatus());
+        if (!areaResolved) {
+            listingAreaResolutionService.resolveAndApply(saved);
+            areaResolved = saved.getAreaKey() != null && "RESOLVED".equals(saved.getAreaResolutionStatus());
+            if (areaResolved) {
+                saved = listingRepository.save(saved);
+            } else {
+                log.error("Approved listing listingId={} still has a non-RESOLVED area_key "
+                                + "(status={}) after resolution retry — it will be invisible to "
+                                + "anonymous visitors (locality={})",
+                        listingId, saved.getAreaResolutionStatus(), saved.getLocality());
+            }
+        }
+
+        if (areaResolved) {
             String listingTitle = Objects.requireNonNullElse(saved.getTitle(), "New property");
             applicationEventPublisher.publishEvent(
                     new NewListingInAreaEvent(saved.getId(), saved.getAreaKey(), saved.getAreaLabel(),
