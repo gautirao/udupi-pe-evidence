@@ -15,6 +15,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  useBrokerListingStats,
+  useBrokerMyListings,
+  useBrokerQualitySummary,
+} from '@/hooks/useBrokerListings';
 import BrokerDashboard from '../BrokerDashboard';
 
 // ── Hoisted mock factories ────────────────────────────────────────────────────
@@ -26,8 +31,6 @@ const mockQualitySummary = vi.hoisted(() => ({
 const mockHookState = vi.hoisted(() => ({
   qualityLoading: false,
   qualityError: false,
-  statsLoading: false,
-  statsError: false,
   recentLoading: false,
   recentError: false,
 }));
@@ -64,8 +67,8 @@ vi.mock('@/hooks/useBrokerListings', () => ({
   })),
   useBrokerListingStats: vi.fn(() => ({
     data: { draftCount: 0, pendingReviewCount: 0, liveCount: 2, rejectedCount: 0, totalCount: 5 },
-    isLoading: mockHookState.statsLoading,
-    isError: mockHookState.statsError,
+    isLoading: false,
+    isError: false,
     refetch: vi.fn(),
   })),
   useBrokerMyListings: vi.fn(() => ({
@@ -154,8 +157,6 @@ describe('BrokerDashboard v2', () => {
     // Reset hook state to defaults
     mockHookState.qualityLoading = false;
     mockHookState.qualityError = false;
-    mockHookState.statsLoading = false;
-    mockHookState.statsError = false;
     mockHookState.recentLoading = false;
     mockHookState.recentError = false;
     mockQualitySummary.current = buildQualitySummary();
@@ -435,6 +436,18 @@ describe('BrokerDashboard v2', () => {
       renderDashboard();
 
       expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+      expect(useBrokerQualitySummary).not.toHaveBeenCalled();
+      expect(useBrokerMyListings).not.toHaveBeenCalled();
+    });
+
+    it('does not start broker queries before the access guard succeeds', () => {
+      mockAuthState.isBroker = false;
+      mockAuthState.isAdmin = false;
+
+      renderDashboard();
+
+      expect(useBrokerQualitySummary).not.toHaveBeenCalled();
+      expect(useBrokerMyListings).not.toHaveBeenCalled();
     });
 
     it('never renders broken personalised copy when a data query is in an error state', () => {
@@ -478,11 +491,10 @@ describe('BrokerDashboard v2', () => {
       expect(screen.getByRole('button', { name: /retry quality summary/i })).toBeInTheDocument();
     });
 
-    it('renders error indicator and retry button when stats fetch fails', () => {
-      mockHookState.statsError = true;
+    it('does not request unused listing stats', () => {
       renderDashboard();
 
-      expect(screen.getByRole('button', { name: /retry listing stats/i })).toBeInTheDocument();
+      expect(useBrokerListingStats).not.toHaveBeenCalled();
     });
   });
 });
