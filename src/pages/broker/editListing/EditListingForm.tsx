@@ -10,12 +10,12 @@ import { useListingImages } from '@/hooks/useListingImages';
 import { StepIndicator } from '@/components/broker/StepIndicator';
 import { ApiError } from '@/lib/api';
 import { formatListingId } from '@/lib/listing-id';
-import { buildListingUpdatePayload } from '@/lib/editListing/buildUpdatePayload';
+import { buildListingUpdatePayload, makeUpdatePayloadCtx } from '@/lib/editListing/buildUpdatePayload';
 import { COMMERCIAL_TYPES } from '@/lib/listing-constants';
 import type { PropertyType } from '@/lib/listing-constants';
 import { fromGeoJsonString, toGeoJsonString } from '@/lib/geoJsonUtils';
-import { isListingFieldVisible } from '@/lib/listingFieldConfig';
-import type { ListingFieldKey } from '@/lib/listingFieldConfig';
+import { deriveCommercialSubtype } from '@/lib/listingFieldConfig';
+import type { CommercialSubtype } from '@/lib/listingFieldConfig';
 import { validateVideoUrl } from '@/lib/editListing/valueMappers';
 import { useAgriFields } from './useAgriFields';
 import { useCommercialFields } from './useCommercialFields';
@@ -110,9 +110,26 @@ export function EditListingForm({ listing }: EditListingFormProps) {
   const commercial = useCommercialFields();
   const {
     washrooms, parkingCount, roadFrontageFt, commercialUsage, numberOfUnits,
+    // #2281 [#1684 parity] — the 28 subtype-gated commercial fields.
+    explicitSubtype, commercialAreaUnit, floorChoice, hubType, floorMode, powerLoadKva,
+    occupancyStatus, officeSeats, officeCabins, officeMeetingRooms,
+    warehouseClearHeightFt, warehouseLoadingBays, warehouseTruckAccess, warehouseFlooring,
+    commercialZoning, commercialOwnership, commercialApprovals,
+    washroomsPublic, washroomsPrivate, parkingPublicCount, parkingPrivateCount,
+    commercialFurnishingStatus, utilities, utilitiesTouched, suitableUses, suitableUsesTouched,
+    commercialAvailability, expectedRentalYieldPct, currentMonthlyIncomePaise,
+    leaseTermMonths, leaseEscalationPct,
   } = commercial.values;
   const {
     setWashrooms, setParkingCount, setRoadFrontageFt, setCommercialUsage, setNumberOfUnits,
+    setExplicitSubtype, setCommercialAreaUnit, setFloorChoice, setHubType, setFloorMode, setPowerLoadKva,
+    setOccupancyStatus, setOfficeSeats, setOfficeCabins, setOfficeMeetingRooms,
+    setWarehouseClearHeightFt, setWarehouseLoadingBays, setWarehouseTruckAccess, setWarehouseFlooring,
+    setCommercialZoning, setCommercialOwnership, setCommercialApprovals,
+    setWashroomsPublic, setWashroomsPrivate, setParkingPublicCount, setParkingPrivateCount,
+    setCommercialFurnishingStatus, setUtilities, setSuitableUses,
+    setCommercialAvailability, setExpectedRentalYieldPct, setCurrentMonthlyIncomePaise,
+    setLeaseTermMonths, setLeaseEscalationPct,
   } = commercial.setters;
 
   // Rent-exclusive fields — Issue #1838 slice-5c: 3 rent-only fields
@@ -247,24 +264,48 @@ export function EditListingForm({ listing }: EditListingFormProps) {
 
   // Derived visibility flags — declared before handlers that reference them
   const isCommercialType = COMMERCIAL_TYPES.has(propertyType);
-  const isRent = listingPurpose === 'rent';
-  const showLandArea = propertyType === 'land' || propertyType === 'commercial_land'
-    || propertyType === 'commercial_building' || propertyType === 'warehouse'
-    || propertyType === 'agricultural_land'
-    // M38-13A (#1626) — house/villa (optional plot area) + residential_plot (primary plot area)
-    || propertyType === 'house' || propertyType === 'villa' || propertyType === 'residential_plot';
-  const showBuiltArea = propertyType === 'apartment' || propertyType === 'house'
-    || propertyType === 'commercial_building' || propertyType === 'warehouse'
-    // M38-13A (#1626)
-    || propertyType === 'villa';
 
   /**
-   * Shorthand render-visibility predicate for the current propertyType +
-   * listingPurpose. The `propertyType !== ''` guard keeps TypeScript happy
-   * (state type is PropertyType | '') and returns false when no type is selected.
+   * #2281 [#1684 parity] — F1: derive the effective commercial subtype from
+   * LIVE form state (current propertyType + the broker's own SHOP/OFFICE
+   * choice), exactly as CommercialListingForm.tsx:300 does for Create. NEVER
+   * read listing.commercialSubtype raw here — five isListingFieldVisible
+   * branches test commercialSubtype without an isCommercialFamily guard, so a
+   * stale stored value would leak wrong-subtype fields into view after a
+   * mid-edit propertyType switch (see approved-plan.toml footgun F1).
    */
-  const fieldVisible = (key: ListingFieldKey): boolean =>
-    propertyType !== '' && isListingFieldVisible(key, propertyType, listingPurpose);
+  const commercialSubtype: CommercialSubtype | undefined =
+    propertyType === '' ? undefined : deriveCommercialSubtype(propertyType, explicitSubtype);
+
+  /**
+   * #2281 cycle-2 hardening — render AND the Step-1 payload build now share
+   * the SAME `makeUpdatePayloadCtx` helper (buildUpdatePayload.ts) instead of
+   * two textually-identical `fieldVisible` closures. This closes the
+   * structural gap the AC6 parity test previously left open: before this
+   * change, `createEditVisibilityParity.test.ts` exercised
+   * `makeUpdatePayloadCtx(...).fieldVisible` while this component rendered
+   * from its own separately-declared closure below — a future edit to one
+   * and not the other could drift silently. Now there is only one
+   * `fieldVisible` implementation for Edit, so the parity test guards the
+   * actual production render/payload path.
+   */
+  const editCtx = makeUpdatePayloadCtx(propertyType, listingPurpose, commercialSubtype);
+  const { isRent, showLandArea, showBuiltArea, fieldVisible } = editCtx;
+
+  /**
+   * #2281 — resets the broker's explicit SHOP/OFFICE choice whenever
+   * propertyType changes away from 'commercial'. Purely an in-memory FE
+   * guard (never touches stored server data — clearing STALE STORED values
+   * is #2289, out of scope here): without this, switching
+   * commercial(SHOP) -> warehouse -> commercial would silently restore the
+   * stale 'SHOP' choice instead of requiring the broker to re-pick it.
+   */
+  const handlePropertyTypeChange = (value: PropertyType | '') => {
+    setPropertyType(value);
+    if (value !== 'commercial') {
+      setExplicitSubtype('');
+    }
+  };
 
   // Saves step 1 form fields, then advances to step 2 (or back to review)
   const handleStep1Save = (e: React.FormEvent) => {
@@ -352,8 +393,40 @@ export function EditListingForm({ listing }: EditListingFormProps) {
         amenities,
         specialLocationViews,
         preferredTenants,
+        // #2281 [#1684 parity] — the 28 commercial subtype-gated fields.
+        commercialSubtype: explicitSubtype,
+        floorChoice,
+        hubType,
+        floorMode,
+        powerLoadKva,
+        occupancyStatus,
+        officeSeats,
+        officeCabins,
+        officeMeetingRooms,
+        warehouseClearHeightFt,
+        warehouseLoadingBays,
+        warehouseTruckAccess,
+        warehouseFlooring,
+        commercialZoning,
+        commercialOwnership,
+        commercialApprovals,
+        washroomsPublic,
+        washroomsPrivate,
+        parkingPublicCount,
+        parkingPrivateCount,
+        commercialFurnishingStatus,
+        utilities,
+        utilitiesTouched,
+        suitableUses,
+        suitableUsesTouched,
+        commercialAvailability,
+        commercialAreaUnit,
+        expectedRentalYieldPct,
+        currentMonthlyIncomePaise,
+        leaseTermMonths,
+        leaseEscalationPct,
       },
-      { isRent, showLandArea, showBuiltArea, fieldVisible },
+      editCtx,
     );
 
     // Issue #2044 — crops. buildListingUpdatePayload() (src/lib/editListing/
@@ -546,7 +619,8 @@ export function EditListingForm({ listing }: EditListingFormProps) {
           priceRupees={priceRupees}
           setPriceRupees={setPriceRupees}
           propertyType={propertyType}
-          setPropertyType={setPropertyType}
+          setPropertyType={handlePropertyTypeChange}
+          commercialSubtype={commercialSubtype}
           locality={locality}
           setLocality={setLocality}
           landArea={landArea}

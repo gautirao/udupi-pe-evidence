@@ -6,7 +6,7 @@
 import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
 import { triStateToBool } from '@/lib/editListing/valueMappers';
 import { isListingFieldVisible } from '@/lib/listingFieldConfig';
-import type { ListingFieldKey } from '@/lib/listingFieldConfig';
+import type { ListingFieldKey, CommercialSubtype } from '@/lib/listingFieldConfig';
 import type { PropertyType } from '@/lib/listing-constants';
 import type { UpdateListingRequest } from '@/hooks/useBrokerListings';
 
@@ -91,6 +91,43 @@ export interface ListingFormState {
   amenities: string[];
   specialLocationViews: string[];
   preferredTenants: string[];
+  // #2281 [#1684 parity] — the 28 commercial subtype-gated fields (previously
+  // modeled ONLY by CommercialListingForm.tsx/Create). `commercialSubtype`
+  // here is the RAW explicit SHOP/OFFICE choice (mirrors useCommercialFields'
+  // explicitSubtype) — NOT the derived CommercialSubtype used for visibility,
+  // which lives on UpdatePayloadCtx.fieldVisible's closure (F1).
+  commercialSubtype: '' | 'SHOP' | 'OFFICE';
+  floorChoice: string;
+  hubType: string;
+  floorMode: string;
+  powerLoadKva: string;
+  occupancyStatus: string;
+  officeSeats: string;
+  officeCabins: string;
+  officeMeetingRooms: string;
+  warehouseClearHeightFt: string;
+  warehouseLoadingBays: string;
+  warehouseTruckAccess: string;
+  warehouseFlooring: string;
+  commercialZoning: string;
+  commercialOwnership: string;
+  commercialApprovals: string;
+  washroomsPublic: string;
+  washroomsPrivate: string;
+  parkingPublicCount: string;
+  parkingPrivateCount: string;
+  commercialFurnishingStatus: string;
+  // F3 — undefined means "never touched this session"; see UpdatePayloadCtx doc.
+  utilities: string[] | undefined;
+  utilitiesTouched: boolean;
+  suitableUses: string[] | undefined;
+  suitableUsesTouched: boolean;
+  commercialAvailability: string;
+  commercialAreaUnit: string;
+  expectedRentalYieldPct: string;
+  currentMonthlyIncomePaise: string;
+  leaseTermMonths: string;
+  leaseEscalationPct: string;
 }
 
 /** Render-visibility predicates the payload builder needs, mirrored from EditListing.tsx render scope. */
@@ -103,10 +140,19 @@ export interface UpdatePayloadCtx {
 
 /**
  * Reproduces EditListing.tsx's render-scope predicates (~448-466) verbatim.
+ *
+ * #2281 — accepts the same optional 4th `commercialSubtype` argument as the
+ * production `fieldVisible` built inline in EditListingForm.tsx, so this
+ * test-only helper cannot re-encode the wrong (3-arg) contract as "expected"
+ * the way it previously did (see approved-plan.toml evidence.call_sites).
+ * Production and this helper are now threaded identically — an omitted
+ * `commercialSubtype` resolves to `undefined`, the same safe default
+ * production gets for any non-commercial propertyType.
  */
 export function makeUpdatePayloadCtx(
   propertyType: PropertyType | '',
   listingPurpose: string,
+  commercialSubtype?: CommercialSubtype,
 ): UpdatePayloadCtx {
   const isRent = listingPurpose === 'rent';
   const showLandArea = propertyType === 'land' || propertyType === 'commercial_land'
@@ -120,7 +166,8 @@ export function makeUpdatePayloadCtx(
     || propertyType === 'villa';
 
   const fieldVisible = (key: ListingFieldKey): boolean =>
-    propertyType !== '' && isListingFieldVisible(key, propertyType, listingPurpose as 'sale' | 'rent' | 'lease');
+    propertyType !== ''
+    && isListingFieldVisible(key, propertyType, listingPurpose as 'sale' | 'rent' | 'lease', commercialSubtype);
 
   return { isRent, showLandArea, showBuiltArea, fieldVisible };
 }
@@ -210,6 +257,37 @@ export function buildListingUpdatePayload(
     amenities,
     specialLocationViews,
     preferredTenants,
+    commercialSubtype,
+    floorChoice,
+    hubType,
+    floorMode,
+    powerLoadKva,
+    occupancyStatus,
+    officeSeats,
+    officeCabins,
+    officeMeetingRooms,
+    warehouseClearHeightFt,
+    warehouseLoadingBays,
+    warehouseTruckAccess,
+    warehouseFlooring,
+    commercialZoning,
+    commercialOwnership,
+    commercialApprovals,
+    washroomsPublic,
+    washroomsPrivate,
+    parkingPublicCount,
+    parkingPrivateCount,
+    commercialFurnishingStatus,
+    utilities,
+    utilitiesTouched,
+    suitableUses,
+    suitableUsesTouched,
+    commercialAvailability,
+    commercialAreaUnit,
+    expectedRentalYieldPct,
+    currentMonthlyIncomePaise,
+    leaseTermMonths,
+    leaseEscalationPct,
   } = state;
   const { isRent, showLandArea, showBuiltArea, fieldVisible } = ctx;
 
@@ -318,5 +396,52 @@ export function buildListingUpdatePayload(
     amenities: fieldVisible('amenities') && amenities.length > 0 ? amenities : undefined,
     specialLocationViews: fieldVisible('specialLocationViews') && specialLocationViews.length > 0 ? specialLocationViews : undefined,
     preferredTenants: fieldVisible('preferredTenants') && preferredTenants.length > 0 ? preferredTenants : undefined,
+
+    // #2281 [#1684 parity] — the 28 commercial subtype-gated fields. Every key
+    // is gated by fieldVisible(...), the SAME predicate that governs rendering
+    // and that now carries the derived commercialSubtype (F1) — so switching
+    // propertyType/subtype mid-edit omits stale prior-subtype values from the
+    // PUT (AC10), exactly like the existing residential/agri fields above.
+    // F4 — commercialSubtype is gated by fieldVisible('commercialSubtype'),
+    // which resolves to `propertyType === 'commercial'` (listingFieldConfig.ts),
+    // so it is only ever sent for the base 'commercial' type, never for
+    // commercial_building/warehouse/commercial_land (server-derived there).
+    commercialSubtype: fieldVisible('commercialSubtype') ? (commercialSubtype || undefined) : undefined,
+    floorChoice: fieldVisible('floorChoice') ? (floorChoice || undefined) : undefined,
+    hubType: fieldVisible('hubType') ? (hubType || undefined) : undefined,
+    floorMode: fieldVisible('floorMode') ? (floorMode || undefined) : undefined,
+    powerLoadKva: fieldVisible('powerLoadKva') ? floatOrUndef(powerLoadKva) : undefined,
+    occupancyStatus: fieldVisible('occupancyStatus') ? (occupancyStatus || undefined) : undefined,
+    officeSeats: fieldVisible('officeSeats') ? intOrUndef(officeSeats) : undefined,
+    officeCabins: fieldVisible('officeCabins') ? intOrUndef(officeCabins) : undefined,
+    officeMeetingRooms: fieldVisible('officeMeetingRooms') ? intOrUndef(officeMeetingRooms) : undefined,
+    warehouseClearHeightFt: fieldVisible('warehouseClearHeightFt') ? floatOrUndef(warehouseClearHeightFt) : undefined,
+    warehouseLoadingBays: fieldVisible('warehouseLoadingBays') ? intOrUndef(warehouseLoadingBays) : undefined,
+    warehouseTruckAccess: fieldVisible('warehouseTruckAccess') ? triStateToBool(warehouseTruckAccess) : undefined,
+    warehouseFlooring: fieldVisible('warehouseFlooring') ? (warehouseFlooring || undefined) : undefined,
+    commercialZoning: fieldVisible('commercialZoning') ? (commercialZoning.trim() || undefined) : undefined,
+    commercialOwnership: fieldVisible('commercialOwnership') ? (commercialOwnership || undefined) : undefined,
+    // #1730 backend contract: commercialApprovals is a single free-text String
+    // (same shape as commercialZoning/commercialOwnership), not a string array.
+    commercialApprovals: fieldVisible('commercialApprovals') ? (commercialApprovals.trim() || undefined) : undefined,
+    washroomsPublic: fieldVisible('washroomsPublic') ? intOrUndef(washroomsPublic) : undefined,
+    washroomsPrivate: fieldVisible('washroomsPrivate') ? intOrUndef(washroomsPrivate) : undefined,
+    parkingPublicCount: fieldVisible('parkingPublicCount') ? intOrUndef(parkingPublicCount) : undefined,
+    parkingPrivateCount: fieldVisible('parkingPrivateCount') ? intOrUndef(parkingPrivateCount) : undefined,
+    commercialFurnishingStatus: fieldVisible('commercialFurnishingStatus') ? (commercialFurnishingStatus || undefined) : undefined,
+    // F3 — HIGHEST SEVERITY: the backend REPLACEs (delete+reinsert) these
+    // child sets whenever the key is non-null. Omit entirely unless the user
+    // touched the control THIS session (utilitiesTouched/suitableUsesTouched);
+    // once touched, always send the COMPLETE current array — even `[]`, which
+    // is the user's explicit "clear everything" intent and must reach the
+    // backend as a real delete, not be silently dropped.
+    utilities: fieldVisible('utilities') && utilitiesTouched ? (utilities ?? []) : undefined,
+    suitableUses: fieldVisible('suitableUses') && suitableUsesTouched ? (suitableUses ?? []) : undefined,
+    commercialAvailability: fieldVisible('commercialAvailability') ? (commercialAvailability || undefined) : undefined,
+    commercialAreaUnit: fieldVisible('commercialAreaUnit') ? (commercialAreaUnit || undefined) : undefined,
+    expectedRentalYieldPct: fieldVisible('expectedRentalYieldPct') ? floatOrUndef(expectedRentalYieldPct) : undefined,
+    currentMonthlyIncomePaise: fieldVisible('currentMonthlyIncomePaise') ? intOrUndef(currentMonthlyIncomePaise) : undefined,
+    leaseTermMonths: fieldVisible('leaseTermMonths') ? intOrUndef(leaseTermMonths) : undefined,
+    leaseEscalationPct: fieldVisible('leaseEscalationPct') ? floatOrUndef(leaseEscalationPct) : undefined,
   };
 }

@@ -83,6 +83,43 @@ function baseState(overrides: Partial<ListingFormState> = {}): ListingFormState 
     amenities: ['GYM', 'POOL'],
     specialLocationViews: ['PARK_FACING'],
     preferredTenants: ['FAMILY'],
+    // #2281 [#1684 parity] — 28 commercial subtype-gated fields. Defaults are
+    // populated (mirroring the pattern above) so a bare makeUpdatePayloadCtx
+    // call (no 4th arg -> commercialSubtype undefined) resolves every one of
+    // these to hidden/omitted, exactly like the pre-#2281 behaviour — see the
+    // dedicated 'commercial subtype-gated fields (#2281)' describe block below
+    // for coverage of the new visible/omitted paths.
+    commercialSubtype: '',
+    floorChoice: 'GROUND_FLOOR',
+    hubType: 'MALL',
+    floorMode: 'GF_ONLY',
+    powerLoadKva: '25',
+    occupancyStatus: 'VACANT',
+    officeSeats: '10',
+    officeCabins: '2',
+    officeMeetingRooms: '1',
+    warehouseClearHeightFt: '20',
+    warehouseLoadingBays: '3',
+    warehouseTruckAccess: 'true',
+    warehouseFlooring: 'CONCRETE_RCC',
+    commercialZoning: 'Commercial zone',
+    commercialOwnership: 'FREEHOLD',
+    commercialApprovals: 'Building plan approved',
+    washroomsPublic: '2',
+    washroomsPrivate: '1',
+    parkingPublicCount: '4',
+    parkingPrivateCount: '2',
+    commercialFurnishingStatus: 'FURNISHED',
+    utilities: ['POWER', 'CCTV'],
+    utilitiesTouched: false,
+    suitableUses: ['RETAIL'],
+    suitableUsesTouched: false,
+    commercialAvailability: 'IMMEDIATE',
+    commercialAreaUnit: 'SQ_FT',
+    expectedRentalYieldPct: '5.5',
+    currentMonthlyIncomePaise: '25000',
+    leaseTermMonths: '24',
+    leaseEscalationPct: '5',
     ...overrides,
   };
 }
@@ -483,4 +520,216 @@ describe('buildListingUpdatePayload — reraNumber visibility', () => {
       expect(payload.reraNumber).toBeUndefined();
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// #2281 [#1684 parity] — commercial subtype-gated fields. makeUpdatePayloadCtx's
+// 4th (commercialSubtype) argument mirrors the derived value production computes
+// in EditListingForm.tsx via deriveCommercialSubtype(propertyType, explicitSubtype)
+// (F1) — never the raw stored listing.commercialSubtype.
+// ---------------------------------------------------------------------------
+
+describe('buildListingUpdatePayload — commercial subtype-gated fields (#2281)', () => {
+  it('OFFICE subtype: includes office-only fields, omits SHOP/BUILDING/WAREHOUSE/LAND-only fields', () => {
+    const ctx = makeUpdatePayloadCtx('commercial', 'sale', 'OFFICE');
+    const payload = buildListingUpdatePayload(baseState({ propertyType: 'commercial' }), ctx);
+
+    expect(payload.officeSeats).toBe(10);
+    expect(payload.officeCabins).toBe(2);
+    expect(payload.officeMeetingRooms).toBe(1);
+    expect(payload.floorChoice).toBe('GROUND_FLOOR');
+    expect(payload.hubType).toBe('MALL');
+    expect(payload.suitableUses).toBeUndefined(); // touched flag false — see F3 block below
+    expect(payload.commercialAvailability).toBe('IMMEDIATE');
+
+    expect(payload.floorMode).toBeUndefined();
+    expect(payload.powerLoadKva).toBeUndefined();
+    expect(payload.occupancyStatus).toBeUndefined();
+    expect(payload.warehouseClearHeightFt).toBeUndefined();
+    expect(payload.commercialZoning).toBeUndefined();
+  });
+
+  it('BUILDING subtype (commercial_building propertyType, no explicit choice needed): includes floorMode/powerLoadKva/occupancyStatus', () => {
+    const ctx = makeUpdatePayloadCtx('commercial_building', 'sale', 'BUILDING');
+    const payload = buildListingUpdatePayload(baseState({ propertyType: 'commercial_building' }), ctx);
+
+    expect(payload.floorMode).toBe('GF_ONLY');
+    expect(payload.powerLoadKva).toBe(25);
+    expect(payload.occupancyStatus).toBe('VACANT');
+    expect(payload.officeSeats).toBeUndefined();
+    expect(payload.warehouseClearHeightFt).toBeUndefined();
+  });
+
+  it('WAREHOUSE subtype: includes warehouse-only fields including the boolean warehouseTruckAccess', () => {
+    const ctx = makeUpdatePayloadCtx('warehouse', 'sale', 'WAREHOUSE');
+    const payload = buildListingUpdatePayload(baseState({ propertyType: 'warehouse' }), ctx);
+
+    expect(payload.warehouseClearHeightFt).toBe(20);
+    expect(payload.warehouseLoadingBays).toBe(3);
+    expect(payload.warehouseTruckAccess).toBe(true);
+    expect(payload.warehouseFlooring).toBe('CONCRETE_RCC');
+    expect(payload.occupancyStatus).toBeUndefined();
+  });
+
+  it('LAND subtype: includes zoning/ownership/approvals, omits built-space-only fields', () => {
+    const ctx = makeUpdatePayloadCtx('commercial_land', 'sale', 'LAND');
+    const payload = buildListingUpdatePayload(baseState({ propertyType: 'commercial_land' }), ctx);
+
+    expect(payload.commercialZoning).toBe('Commercial zone');
+    expect(payload.commercialOwnership).toBe('FREEHOLD');
+    expect(payload.commercialApprovals).toBe('Building plan approved');
+    // washroomsPublic/parkingPublicCount/commercialFurnishingStatus/utilities are
+    // excluded for LAND even though the subtype has resolved.
+    expect(payload.washroomsPublic).toBeUndefined();
+    expect(payload.parkingPublicCount).toBeUndefined();
+    expect(payload.commercialFurnishingStatus).toBeUndefined();
+    expect(payload.utilities).toBeUndefined();
+    // suitableUses/commercialAvailability/commercialAreaUnit ARE shown for every resolved subtype, LAND included.
+    expect(payload.commercialAvailability).toBe('IMMEDIATE');
+    expect(payload.commercialAreaUnit).toBe('SQ_FT');
+  });
+
+  it('AC5/F2 — undefined subtype (unresolved) omits every subtype-gated field, even LAND-only ones', () => {
+    const ctx = makeUpdatePayloadCtx('commercial', 'sale'); // no 4th arg -> undefined, same as null/legacy-normalised
+    const payload = buildListingUpdatePayload(baseState({ propertyType: 'commercial' }), ctx);
+
+    expect(payload.floorChoice).toBeUndefined();
+    expect(payload.officeSeats).toBeUndefined();
+    expect(payload.warehouseClearHeightFt).toBeUndefined();
+    expect(payload.commercialZoning).toBeUndefined();
+    expect(payload.washroomsPublic).toBeUndefined();
+    expect(payload.commercialAvailability).toBeUndefined();
+  });
+
+  it('AC10/F1 — mid-edit switch from warehouse to apartment omits every commercial field even though state still holds warehouse values', () => {
+    // Simulates a broker who had picked 'warehouse' (state populated) then switched
+    // propertyType to 'apartment' — ctx now reflects derive(propertyType='apartment', ...) = undefined.
+    const ctx = makeUpdatePayloadCtx('apartment', 'sale', undefined);
+    const payload = buildListingUpdatePayload(baseState({ propertyType: 'apartment' }), ctx);
+
+    expect(payload.warehouseClearHeightFt).toBeUndefined();
+    expect(payload.warehouseTruckAccess).toBeUndefined();
+    expect(payload.commercialZoning).toBeUndefined();
+    expect(payload.commercialSubtype).toBeUndefined();
+  });
+
+  it('F4 — commercialSubtype is sent only for propertyType "commercial", never for the derived-subtype types', () => {
+    const commercialCtx = makeUpdatePayloadCtx('commercial', 'sale', 'OFFICE');
+    const commercialPayload = buildListingUpdatePayload(
+      baseState({ propertyType: 'commercial', commercialSubtype: 'OFFICE' }),
+      commercialCtx,
+    );
+    expect(commercialPayload.commercialSubtype).toBe('OFFICE');
+
+    const buildingCtx = makeUpdatePayloadCtx('commercial_building', 'sale', 'BUILDING');
+    const buildingPayload = buildListingUpdatePayload(
+      baseState({ propertyType: 'commercial_building', commercialSubtype: 'OFFICE' /* stale, must never be sent */ }),
+      buildingCtx,
+    );
+    expect(buildingPayload.commercialSubtype).toBeUndefined();
+  });
+
+  it('sale purpose: sends expectedRentalYieldPct/currentMonthlyIncomePaise, omits leaseTermMonths/leaseEscalationPct', () => {
+    const ctx = makeUpdatePayloadCtx('commercial', 'sale', 'OFFICE');
+    const payload = buildListingUpdatePayload(baseState({ propertyType: 'commercial', listingPurpose: 'sale' }), ctx);
+    expect(payload.expectedRentalYieldPct).toBe(5.5);
+    expect(payload.currentMonthlyIncomePaise).toBe(25000);
+    expect(payload.leaseTermMonths).toBeUndefined();
+    expect(payload.leaseEscalationPct).toBeUndefined();
+  });
+
+  it('lease purpose: sends leaseTermMonths/leaseEscalationPct, omits expectedRentalYieldPct/currentMonthlyIncomePaise', () => {
+    const ctx = makeUpdatePayloadCtx('commercial', 'lease', 'OFFICE');
+    const payload = buildListingUpdatePayload(
+      baseState({ propertyType: 'commercial', listingPurpose: 'lease' as unknown as 'rent' }),
+      ctx,
+    );
+    expect(payload.leaseTermMonths).toBe(24);
+    expect(payload.leaseEscalationPct).toBe(5);
+    expect(payload.expectedRentalYieldPct).toBeUndefined();
+    expect(payload.currentMonthlyIncomePaise).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F3 — HIGHEST SEVERITY: utilities/suitableUses child-set REPLACE semantics.
+// The backend deletes+reinserts these rows on ANY non-null value, so the
+// payload builder must be able to tell "never touched" (omit) apart from
+// "touched and now empty" (send [] — a real delete) and "touched and set" (send array).
+// ---------------------------------------------------------------------------
+
+describe('buildListingUpdatePayload — utilities/suitableUses touched-tracking (F3/AC8)', () => {
+  it('never touched -> omitted entirely, even though a hydrated value is present in state', () => {
+    const ctx = makeUpdatePayloadCtx('commercial', 'sale', 'OFFICE');
+    const payload = buildListingUpdatePayload(
+      baseState({
+        propertyType: 'commercial',
+        utilities: ['POWER', 'CCTV'], // hydrated from the stored listing
+        utilitiesTouched: false,
+        suitableUses: ['RETAIL'],
+        suitableUsesTouched: false,
+      }),
+      ctx,
+    );
+    expect(payload.utilities).toBeUndefined();
+    expect(payload.suitableUses).toBeUndefined();
+  });
+
+  it('touched + non-empty -> sends the complete current array', () => {
+    const ctx = makeUpdatePayloadCtx('commercial', 'sale', 'OFFICE');
+    const payload = buildListingUpdatePayload(
+      baseState({
+        propertyType: 'commercial',
+        utilities: ['POWER', 'CCTV', 'AC'],
+        utilitiesTouched: true,
+        suitableUses: ['OFFICE', 'CO_WORKING'],
+        suitableUsesTouched: true,
+      }),
+      ctx,
+    );
+    expect(payload.utilities).toEqual(['POWER', 'CCTV', 'AC']);
+    expect(payload.suitableUses).toEqual(['OFFICE', 'CO_WORKING']);
+  });
+
+  it('touched + cleared to [] -> sends [] (an explicit delete), never omitted', () => {
+    const ctx = makeUpdatePayloadCtx('commercial', 'sale', 'OFFICE');
+    const payload = buildListingUpdatePayload(
+      baseState({
+        propertyType: 'commercial',
+        utilities: [],
+        utilitiesTouched: true,
+        suitableUses: [],
+        suitableUsesTouched: true,
+      }),
+      ctx,
+    );
+    expect(payload.utilities).toEqual([]);
+    expect(payload.suitableUses).toEqual([]);
+  });
+
+  it('undefined array state + touched=true -> still sends [] (never a partial/garbage value)', () => {
+    const ctx = makeUpdatePayloadCtx('commercial', 'sale', 'OFFICE');
+    const payload = buildListingUpdatePayload(
+      baseState({
+        propertyType: 'commercial',
+        utilities: undefined,
+        utilitiesTouched: true,
+        suitableUses: undefined,
+        suitableUsesTouched: true,
+      }),
+      ctx,
+    );
+    expect(payload.utilities).toEqual([]);
+    expect(payload.suitableUses).toEqual([]);
+  });
+
+  it('not visible for the resolved subtype (LAND) -> omitted regardless of touched state', () => {
+    const ctx = makeUpdatePayloadCtx('commercial_land', 'sale', 'LAND');
+    const payload = buildListingUpdatePayload(
+      baseState({ propertyType: 'commercial_land', utilities: ['POWER'], utilitiesTouched: true }),
+      ctx,
+    );
+    // utilities is excluded for LAND even though touched — the fieldVisible gate wins.
+    expect(payload.utilities).toBeUndefined();
+  });
 });

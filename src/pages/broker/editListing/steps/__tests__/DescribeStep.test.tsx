@@ -95,14 +95,41 @@ function makeShared(overrides: Partial<ReturnType<typeof useSharedFields>['value
   };
 }
 
-function makeCommercial(): ReturnType<typeof useCommercialFields> {
+function makeCommercial(
+  overrides: Partial<ReturnType<typeof useCommercialFields>['values']> = {},
+): ReturnType<typeof useCommercialFields> {
   return {
     values: {
       washrooms: '', parkingCount: '', roadFrontageFt: '', commercialUsage: '', numberOfUnits: '',
+      // #2281 [#1684 parity] — the 28 subtype-gated commercial fields. `undefined`
+      // for the two touched-tracked arrays mirrors useCommercialFields' real
+      // initial state (F3: never default to []).
+      explicitSubtype: '', commercialAreaUnit: '', floorChoice: '', hubType: '',
+      floorMode: '', powerLoadKva: '', occupancyStatus: '', officeSeats: '',
+      officeCabins: '', officeMeetingRooms: '', warehouseClearHeightFt: '',
+      warehouseLoadingBays: '', warehouseTruckAccess: '', warehouseFlooring: '',
+      commercialZoning: '', commercialOwnership: '', commercialApprovals: '',
+      washroomsPublic: '', washroomsPrivate: '', parkingPublicCount: '', parkingPrivateCount: '',
+      commercialFurnishingStatus: '', utilities: undefined, utilitiesTouched: false,
+      suitableUses: undefined, suitableUsesTouched: false, commercialAvailability: '',
+      expectedRentalYieldPct: '', currentMonthlyIncomePaise: '', leaseTermMonths: '',
+      leaseEscalationPct: '',
+      ...overrides,
     },
     setters: {
       setWashrooms: vi.fn(), setParkingCount: vi.fn(), setRoadFrontageFt: vi.fn(),
       setCommercialUsage: vi.fn(), setNumberOfUnits: vi.fn(),
+      setExplicitSubtype: vi.fn(), setCommercialAreaUnit: vi.fn(), setFloorChoice: vi.fn(),
+      setHubType: vi.fn(), setFloorMode: vi.fn(), setPowerLoadKva: vi.fn(),
+      setOccupancyStatus: vi.fn(), setOfficeSeats: vi.fn(), setOfficeCabins: vi.fn(),
+      setOfficeMeetingRooms: vi.fn(), setWarehouseClearHeightFt: vi.fn(),
+      setWarehouseLoadingBays: vi.fn(), setWarehouseTruckAccess: vi.fn(),
+      setWarehouseFlooring: vi.fn(), setCommercialZoning: vi.fn(), setCommercialOwnership: vi.fn(),
+      setCommercialApprovals: vi.fn(), setWashroomsPublic: vi.fn(), setWashroomsPrivate: vi.fn(),
+      setParkingPublicCount: vi.fn(), setParkingPrivateCount: vi.fn(),
+      setCommercialFurnishingStatus: vi.fn(), setUtilities: vi.fn(), setSuitableUses: vi.fn(),
+      setCommercialAvailability: vi.fn(), setExpectedRentalYieldPct: vi.fn(),
+      setCurrentMonthlyIncomePaise: vi.fn(), setLeaseTermMonths: vi.fn(), setLeaseEscalationPct: vi.fn(),
     },
     hydrate: vi.fn(),
   };
@@ -201,6 +228,9 @@ function baseProps(overrides: Partial<DescribeStepProps> = {}): DescribeStepProp
     setPriceRupees: vi.fn(),
     propertyType: 'house',
     setPropertyType: vi.fn(),
+    // #2281 [#1684 parity] — derived CommercialSubtype now required by DescribeStepProps;
+    // undefined for the default 'house' fixture (non-commercial types never resolve one).
+    commercialSubtype: undefined,
     locality: '',
     setLocality: vi.fn(),
     landArea: null,
