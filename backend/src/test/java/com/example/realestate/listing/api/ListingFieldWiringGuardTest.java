@@ -59,9 +59,15 @@ class ListingFieldWiringGuardTest {
             "VALID_SOIL_DESIGN",
             "VALID_CROPS",
             "VALID_LOCATION_FEATURES",
-            "VALID_CONVERSION_STATUSES",
             "VALID_AGRI_AREA_UNITS",
             "VALID_YN",
+            // AgriFieldOptions.VALID_CONVERSION_STATUSES is now WIRED (#2043 — validateAgriFields
+            // in ListingController) and intentionally removed from this list. Note:
+            // ResidentialFieldOptions.VALID_CONVERSION_STATUSES (different values: DC_CONVERTED /
+            // RESIDENTIAL_ZONE) remains genuinely forward-only/unwired, but shares this exact token
+            // string with the now-wired Agri set, so it can no longer be independently guarded here
+            // (same collision documented below for VALID_FACING_VALUES). Do not re-add
+            // "VALID_CONVERSION_STATUSES" without removing the real Agri rejectIfUnknown wiring.
             // CommercialFieldOptions is now WIRED (M38-FU2 / #1730 — validateCommercialFields /
             // validateCommercialFieldSet in ListingController) and intentionally removed from this
             // forward-only list. Do not re-add it without removing the real rejectIfUnknown wiring.
@@ -79,10 +85,14 @@ class ListingFieldWiringGuardTest {
             "VALID_AVAILABILITY",
             "VALID_PREFERRED_TENANTS",
             "VALID_RESIDENTIAL_AREA_UNITS",
-            // Note: VALID_FACING_VALUES and VALID_CONVERSION_STATUSES are ALSO forward-only
-            // ResidentialFieldOptions sets, but the token names are shared with the AgriFieldOptions
-            // forward-only sets of the same name already banned above — no duplicate entry needed
-            // (the guard matches by literal token string, not by declaring class).
+            // Note: VALID_FACING_VALUES is ALSO a forward-only ResidentialFieldOptions set, but the
+            // token name is shared with the AgriFieldOptions forward-only set of the same name
+            // already banned above — no duplicate entry needed (the guard matches by literal token
+            // string, not by declaring class).
+            // ResidentialFieldOptions.VALID_CONVERSION_STATUSES is ALSO still genuinely forward-only,
+            // but its token is shared with AgriFieldOptions.VALID_CONVERSION_STATUSES, which is now
+            // WIRED (#2043) — the shared token can therefore no longer appear in this list at all
+            // without also (falsely) flagging the real Agri wiring. See the #2043 comment above.
     };
 
     /** Pattern to locate validate* method headers (opening brace position is m.end() - 1). */

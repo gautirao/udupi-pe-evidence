@@ -287,7 +287,8 @@ class ReviewAction500ReproIT {
                 /* approvalsDeclared */ null,
                 /* waterSource */ null, /* soilType */ null, /* roadAccess */ null,
                 /* cultivationStatus */ null, /* ownershipType */ null, /* surveyNumber */ null,
-                /* landCategory */ null, /* farmhouseAvailable */ null, /* fencingDone */ null,
+                /* landCategory */ null, /* agriConversionStatus */ null,
+                /* farmhouseAvailable */ null, /* fencingDone */ null,
                 /* boundaryGeoJson */ null,
                 residentialFields, commercialFields);
     }
@@ -407,7 +408,8 @@ class ReviewAction500ReproIT {
                 /* sellerType */ "dealer",
                 /* waterSource */ null, /* soilType */ null, /* roadAccess */ null,
                 /* cultivationStatus */ null, /* ownershipType */ null, /* surveyNumber */ null,
-                /* landCategory */ null, /* farmhouseAvailable */ null, /* fencingDone */ null,
+                /* landCategory */ null, /* agriConversionStatus */ null,
+                /* farmhouseAvailable */ null, /* fencingDone */ null,
                 residentialFields);
 
         UUID id = draft.getId();
@@ -458,7 +460,7 @@ class ReviewAction500ReproIT {
                 null,
                 null, null, null,
                 null, null, null,
-                null, null, null,
+                null, null, null, null,
                 null,
                 residentialFields, commercialFields);
     }
@@ -658,7 +660,7 @@ class ReviewAction500ReproIT {
                     null,
                     null, null, null,
                     null, null, null,
-                    null, null, null,
+                    null, null, null, null,
                     null,
                     residentialFields, commercialFields);
         } catch (Throwable t) {
@@ -721,7 +723,8 @@ class ReviewAction500ReproIT {
                 /* sellerType */ "dealer",
                 /* waterSource */ null, /* soilType */ null, /* roadAccess */ null,
                 /* cultivationStatus */ null, /* ownershipType */ null, /* surveyNumber */ null,
-                /* landCategory */ null, /* farmhouseAvailable */ null, /* fencingDone */ null,
+                /* landCategory */ null, /* agriConversionStatus */ null,
+                /* farmhouseAvailable */ null, /* fencingDone */ null,
                 com.example.realestate.listing.residential.ResidentialListingFields.EMPTY,
                 commercialFields);
 
@@ -757,7 +760,7 @@ class ReviewAction500ReproIT {
                 null,
                 null, null, null,
                 null, null, null,
-                null, null, null,
+                null, null, null, null,
                 null,
                 com.example.realestate.listing.residential.ResidentialListingFields.EMPTY, commercialFields);
     }
@@ -881,7 +884,7 @@ class ReviewAction500ReproIT {
                 null,
                 null, null, null,
                 null, null, null,
-                null, null, null,
+                null, null, null, null,
                 null,
                 residentialFields, commercialFields);
     }
@@ -901,7 +904,8 @@ class ReviewAction500ReproIT {
                 /* sellerType */ "dealer",
                 /* waterSource */ null, /* soilType */ null, /* roadAccess */ null,
                 /* cultivationStatus */ null, /* ownershipType */ null, /* surveyNumber */ null,
-                /* landCategory */ null, /* farmhouseAvailable */ null, /* fencingDone */ null,
+                /* landCategory */ null, /* agriConversionStatus */ null,
+                /* farmhouseAvailable */ null, /* fencingDone */ null,
                 com.example.realestate.listing.residential.ResidentialListingFields.EMPTY,
                 com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
 
@@ -1086,7 +1090,7 @@ class ReviewAction500ReproIT {
                     null,
                     null, null, null,
                     null, null, null,
-                    null, null, null,
+                    null, null, null, null,
                     null,
                     com.example.realestate.listing.residential.ResidentialListingFields.EMPTY, commercialFields);
         } catch (Throwable t) {
@@ -1149,7 +1153,7 @@ class ReviewAction500ReproIT {
                     null,
                     null, null, null,
                     null, null, null,
-                    null, null, null,
+                    null, null, null, null,
                     null,
                     residentialFields, com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
         } catch (Throwable t) {
@@ -1209,7 +1213,7 @@ class ReviewAction500ReproIT {
                     null,
                     null, null, null,
                     null, null, null,
-                    null, null, null,
+                    null, null, null, null,
                     null,
                     residentialFields, commercialFields);
         } catch (Throwable t) {
@@ -1266,7 +1270,8 @@ class ReviewAction500ReproIT {
                 /* sellerType */ "dealer",
                 /* waterSource */ null, /* soilType */ null, /* roadAccess */ null,
                 /* cultivationStatus */ null, /* ownershipType */ null, /* surveyNumber */ null,
-                /* landCategory */ null, /* farmhouseAvailable */ null, /* fencingDone */ null,
+                /* landCategory */ null, /* agriConversionStatus */ null,
+                /* farmhouseAvailable */ null, /* fencingDone */ null,
                 residentialFields, commercialFields);
 
         UUID id = draft.getId();
@@ -1376,7 +1381,7 @@ class ReviewAction500ReproIT {
                     null,
                     null, null, null,
                     null, null, null,
-                    null, null, null,
+                    null, null, null, null,
                     null,
                     residentialFields, com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
         } catch (Throwable t) {
@@ -1441,7 +1446,7 @@ class ReviewAction500ReproIT {
                     null,
                     null, null, null,
                     null, null, null,
-                    null, null, null,
+                    null, null, null, null,
                     null,
                     residentialFields, com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
         } catch (Throwable t) {
@@ -1497,7 +1502,7 @@ class ReviewAction500ReproIT {
                 null,
                 null, null, null,
                 null, null, null,
-                null, null, null,
+                null, null, null, null,
                 null,
                 clearFields, com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
 
@@ -1537,7 +1542,7 @@ class ReviewAction500ReproIT {
                     null,
                     null, null, null,
                     null, null, null,
-                    null, null, null,
+                    null, null, null, null,
                     null,
                     returnFields, com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
         } catch (Throwable t) {
@@ -1584,7 +1589,8 @@ class ReviewAction500ReproIT {
                 /* sellerType */ "dealer",
                 /* waterSource */ null, /* soilType */ null, /* roadAccess */ null,
                 /* cultivationStatus */ null, /* ownershipType */ null, /* surveyNumber */ null,
-                /* landCategory */ null, /* farmhouseAvailable */ null, /* fencingDone */ null,
+                /* landCategory */ null, /* agriConversionStatus */ null,
+                /* farmhouseAvailable */ null, /* fencingDone */ null,
                 com.example.realestate.listing.residential.ResidentialListingFields.EMPTY,
                 commercialFields);
 
@@ -1631,7 +1637,7 @@ class ReviewAction500ReproIT {
                     null,
                     null, null, null,
                     null, null, null,
-                    null, null, null,
+                    null, null, null, null,
                     null,
                     com.example.realestate.listing.residential.ResidentialListingFields.EMPTY,
                     commercialFields);
@@ -1695,7 +1701,7 @@ class ReviewAction500ReproIT {
                     null,
                     null, null, null,
                     null, null, null,
-                    null, null, null,
+                    null, null, null, null,
                     null,
                     residentialFields, com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
         } catch (Throwable t) {
@@ -1827,7 +1833,7 @@ class ReviewAction500ReproIT {
                     null,
                     null, null, null,
                     null, null, null,
-                    null, null, null,
+                    null, null, null, null,
                     null,
                     residentialFields, CommercialListingFields.EMPTY);
         } catch (Throwable t) {

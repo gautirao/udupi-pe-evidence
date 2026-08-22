@@ -49,6 +49,12 @@
       "FARM_PLOT",
       "AGRICULTURAL_PLOT",
       "OTHER"
+    ],
+    "agriConversionStatus": [
+      "NOT_CONVERTED",
+      "CONVERSION_APPLIED",
+      "APPROVED_FOR_CONVERSION",
+      "NOT_SURE"
     ]
   },
   "residential": {

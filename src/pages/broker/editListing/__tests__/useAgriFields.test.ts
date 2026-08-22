@@ -57,7 +57,7 @@ function makeListing(overrides: Partial<ListingResponse>): ListingResponse {
 }
 
 describe('useAgriFields', () => {
-  it('initializes all 8 values to empty string', () => {
+  it('initializes all 9 values to empty string', () => {
     const { result } = renderHook(() => useAgriFields());
 
     expect(result.current.values).toEqual({
@@ -67,6 +67,7 @@ describe('useAgriFields', () => {
       cultivationStatus: '',
       surveyNumber: '',
       landCategory: '',
+      agriConversionStatus: '',
       farmhouseAvailable: '',
       fencingDone: '',
     });
@@ -82,6 +83,7 @@ describe('useAgriFields', () => {
       result.current.setters.setCultivationStatus('FALLOW');
       result.current.setters.setSurveyNumber('123/4A');
       result.current.setters.setLandCategory('WET_LAND');
+      result.current.setters.setAgriConversionStatus('CONVERSION_APPLIED');
       result.current.setters.setFarmhouseAvailable('true');
       result.current.setters.setFencingDone('false');
     });
@@ -93,12 +95,13 @@ describe('useAgriFields', () => {
       cultivationStatus: 'FALLOW',
       surveyNumber: '123/4A',
       landCategory: 'WET_LAND',
+      agriConversionStatus: 'CONVERSION_APPLIED',
       farmhouseAvailable: 'true',
       fencingDone: 'false',
     });
   });
 
-  it('hydrate() sets all 8 fields from a listing, mapping null to empty string', () => {
+  it('hydrate() sets all 9 fields from a listing, mapping null to empty string', () => {
     const { result } = renderHook(() => useAgriFields());
     const listing = makeListing({
       waterSource: 'RIVER',
@@ -107,6 +110,7 @@ describe('useAgriFields', () => {
       cultivationStatus: 'CULTIVATED',
       surveyNumber: '99/1',
       landCategory: 'DRY_LAND',
+      agriConversionStatus: 'APPROVED_FOR_CONVERSION',
       farmhouseAvailable: true,
       fencingDone: false,
     });
@@ -122,6 +126,7 @@ describe('useAgriFields', () => {
       cultivationStatus: 'CULTIVATED',
       surveyNumber: '99/1',
       landCategory: 'DRY_LAND',
+      agriConversionStatus: 'APPROVED_FOR_CONVERSION',
       farmhouseAvailable: 'true',
       fencingDone: 'false',
     });
@@ -136,6 +141,7 @@ describe('useAgriFields', () => {
       cultivationStatus: null,
       surveyNumber: null,
       landCategory: null,
+      agriConversionStatus: null,
       farmhouseAvailable: null,
       fencingDone: null,
     });
@@ -143,6 +149,7 @@ describe('useAgriFields', () => {
     // Seed with non-empty values first to prove hydrate() actively resets them.
     act(() => {
       result.current.setters.setWaterSource('BOREWELL');
+      result.current.setters.setAgriConversionStatus('NOT_SURE');
       result.current.setters.setFarmhouseAvailable('true');
     });
 
@@ -157,6 +164,7 @@ describe('useAgriFields', () => {
       cultivationStatus: '',
       surveyNumber: '',
       landCategory: '',
+      agriConversionStatus: '',
       farmhouseAvailable: '',
       fencingDone: '',
     });

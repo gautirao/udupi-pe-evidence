@@ -63,6 +63,45 @@ describe('AgriSpecRows — landCategory (Issue #1458)', () => {
   });
 });
 
+// ─── agriConversionStatus (Issue #2043) ────────────────────────────────────────
+
+describe('AgriSpecRows — agriConversionStatus (Issue #2043)', () => {
+  it('renders "Not converted" for agriConversionStatus=NOT_CONVERTED', () => {
+    render(<AgriSpecRows agriConversionStatus="NOT_CONVERTED" />);
+    expect(screen.getByTestId('agri-conversion-status')).toHaveTextContent('Not converted');
+  });
+
+  it('renders "Conversion applied" for agriConversionStatus=CONVERSION_APPLIED', () => {
+    render(<AgriSpecRows agriConversionStatus="CONVERSION_APPLIED" />);
+    expect(screen.getByTestId('agri-conversion-status')).toHaveTextContent('Conversion applied');
+  });
+
+  it('renders "Approved for conversion" for agriConversionStatus=APPROVED_FOR_CONVERSION', () => {
+    render(<AgriSpecRows agriConversionStatus="APPROVED_FOR_CONVERSION" />);
+    expect(screen.getByTestId('agri-conversion-status')).toHaveTextContent('Approved for conversion');
+  });
+
+  it('renders "Not sure" for agriConversionStatus=NOT_SURE', () => {
+    render(<AgriSpecRows agriConversionStatus="NOT_SURE" />);
+    expect(screen.getByTestId('agri-conversion-status')).toHaveTextContent('Not sure');
+  });
+
+  it('falls back to raw value for an agriConversionStatus key not in the shared label map', () => {
+    render(<AgriSpecRows agriConversionStatus="FUTURE_ENUM_VALUE" />);
+    expect(screen.getByTestId('agri-conversion-status')).toHaveTextContent('FUTURE_ENUM_VALUE');
+  });
+
+  it('omits conversion status row when agriConversionStatus is null', () => {
+    render(<AgriSpecRows agriConversionStatus={null} />);
+    expect(screen.queryByTestId('agri-conversion-status')).not.toBeInTheDocument();
+  });
+
+  it('omits conversion status row when agriConversionStatus is undefined', () => {
+    render(<AgriSpecRows />);
+    expect(screen.queryByTestId('agri-conversion-status')).not.toBeInTheDocument();
+  });
+});
+
 // ─── waterSource ──────────────────────────────────────────────────────────────
 
 describe('AgriSpecRows — waterSource (Issue #1458)', () => {

@@ -8,6 +8,7 @@ import {
   CULTIVATION_STATUS_LABELS,
   OWNERSHIP_TYPE_LABELS,
   LAND_CATEGORY_LABELS,
+  AGRI_CONVERSION_STATUS_LABELS,
 } from '@/lib/agriFieldLabels';
 import { FACING_OPTIONS } from '@/lib/listing-constants';
 import { InlineNearby } from '@/components/broker/residential/InlineNearby';
@@ -55,6 +56,7 @@ export interface AgriculturalReviewFacts {
   roadAccess: string;
   cultivationStatus: string;
   landCategory: string;
+  agriConversionStatus: string;
   ownershipType: string;
   surveyNumber: string;
   farmhouseAvailable: string;
@@ -100,6 +102,7 @@ export function AgriculturalReviewPreview({
   addRow('Road access', labelFrom(ROAD_ACCESS_LABELS, facts.roadAccess));
   addRow('Cultivation status', labelFrom(CULTIVATION_STATUS_LABELS, facts.cultivationStatus));
   addRow('Land category', labelFrom(LAND_CATEGORY_LABELS, facts.landCategory));
+  addRow('Conversion status (declared by seller/broker, not verified)', labelFrom(AGRI_CONVERSION_STATUS_LABELS, facts.agriConversionStatus));
   addRow('Farmhouse', facts.farmhouseAvailable === 'true' ? 'Yes' : facts.farmhouseAvailable === 'false' ? 'No' : undefined);
   addRow('Fencing', facts.fencingDone === 'true' ? 'Yes' : facts.fencingDone === 'false' ? 'No' : undefined);
   addRow('Ownership', labelFrom(OWNERSHIP_TYPE_LABELS, facts.ownershipType));

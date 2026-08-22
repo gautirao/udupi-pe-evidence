@@ -92,7 +92,7 @@ public class ListingController {
         String sellerType = "user".equals(caller.role()) ? "owner" : "broker";
         String createVideoUrl = (req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl();
         validateAgriFields(req.waterSource(), req.soilType(), req.roadAccess(),
-                req.cultivationStatus(), req.landCategory());
+                req.cultivationStatus(), req.landCategory(), req.agriConversionStatus());
         PropertyFamily createFamily = resolveFamily(req.propertyType());
         validateFamilyOwnershipType(createFamily, req.propertyType(), req.ownershipType());
         validateFamilyFields(createFamily,
@@ -101,7 +101,7 @@ public class ListingController {
                 req.numberOfUnits(), req.builtArea(), req.carpetArea(),
                 req.floorNumber(), req.totalFloors(),
                 req.waterSource(), req.soilType(), req.roadAccess(),
-                req.cultivationStatus(), req.landCategory(),
+                req.cultivationStatus(), req.landCategory(), req.agriConversionStatus(),
                 req.farmhouseAvailable(), req.fencingDone());
         validateRentalFields(req.listingPurpose(),
                 req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths());
@@ -176,7 +176,7 @@ public class ListingController {
                     sellerType,
                     req.waterSource(), req.soilType(), req.roadAccess(),
                     req.cultivationStatus(), req.ownershipType(), req.surveyNumber(),
-                    req.landCategory(), req.farmhouseAvailable(), req.fencingDone(),
+                    req.landCategory(), req.agriConversionStatus(), req.farmhouseAvailable(), req.fencingDone(),
                     residentialFields, commercialFields);
 
             log.info("POST /api/listings -> 201 listingId={} createdBy={} sellerType={}",
@@ -246,7 +246,7 @@ public class ListingController {
                                     @Valid @RequestBody UpdateRequest req) {
 
         validateAgriFields(req.waterSource(), req.soilType(), req.roadAccess(),
-                req.cultivationStatus(), req.landCategory());
+                req.cultivationStatus(), req.landCategory(), req.agriConversionStatus());
         try {
             // Resolve the EFFECTIVE property type for validation purposes: use the incoming
             // propertyType when the request supplies one; otherwise fall back to the existing
@@ -272,7 +272,7 @@ public class ListingController {
                     req.numberOfUnits(), req.builtArea(), req.carpetArea(),
                     req.floorNumber(), req.totalFloors(),
                     req.waterSource(), req.soilType(), req.roadAccess(),
-                    req.cultivationStatus(), req.landCategory(),
+                    req.cultivationStatus(), req.landCategory(), req.agriConversionStatus(),
                     req.farmhouseAvailable(), req.fencingDone());
             validateResidentialFieldSet(updateFamily, effectivePropertyType, req.listingPurpose(),
                     req.bathrooms(), req.balconies(), req.parking2wCount(), req.parking4wCount(),
@@ -372,7 +372,7 @@ public class ListingController {
                     req.possessionStatus(), req.expectedPossessionDate(), req.approvalsDeclared(),
                     req.waterSource(), req.soilType(), req.roadAccess(),
                     req.cultivationStatus(), req.ownershipType(), req.surveyNumber(),
-                    req.landCategory(), req.farmhouseAvailable(), req.fencingDone(),
+                    req.landCategory(), req.agriConversionStatus(), req.farmhouseAvailable(), req.fencingDone(),
                     req.boundary(), residentialFields, commercialFields);
             return ResponseEntity.ok(listingResponseMapper.toResponse(updated));
         } catch (ListingNotFoundException e) {
@@ -546,12 +546,13 @@ public class ListingController {
      */
     private static void validateAgriFields(String waterSource, String soilType,
                                            String roadAccess, String cultivationStatus,
-                                           String landCategory) {
+                                           String landCategory, String agriConversionStatus) {
         rejectIfUnknown("waterSource",       waterSource,       AgriFieldOptions.VALID_WATER_SOURCES);
         rejectIfUnknown("soilType",          soilType,          AgriFieldOptions.VALID_SOIL_TYPES);
         rejectIfUnknown("roadAccess",        roadAccess,        AgriFieldOptions.VALID_ROAD_ACCESS_VALUES);
         rejectIfUnknown("cultivationStatus", cultivationStatus, AgriFieldOptions.VALID_CULTIVATION_STATUSES);
         rejectIfUnknown("landCategory",      landCategory,      AgriFieldOptions.VALID_LAND_CATEGORIES);
+        rejectIfUnknown("agriConversionStatus", agriConversionStatus, AgriFieldOptions.VALID_CONVERSION_STATUSES);
     }
 
     /**
@@ -705,7 +706,7 @@ public class ListingController {
             Integer numberOfUnits, java.math.BigDecimal builtArea, java.math.BigDecimal carpetArea,
             Integer floorNumber, Integer totalFloors,
             String waterSource, String soilType, String roadAccess,
-            String cultivationStatus, String landCategory,
+            String cultivationStatus, String landCategory, String agriConversionStatus,
             Boolean farmhouseAvailable, Boolean fencingDone) {
         switch (family) {
             case RESIDENTIAL -> {
@@ -715,6 +716,7 @@ public class ListingController {
                 rejectIfPresent("roadAccess",        roadAccess);
                 rejectIfPresent("cultivationStatus", cultivationStatus);
                 rejectIfPresent("landCategory",      landCategory);
+                rejectIfPresent("agriConversionStatus", agriConversionStatus);
                 rejectIfPresent("farmhouseAvailable", farmhouseAvailable);
                 rejectIfPresent("fencingDone",       fencingDone);
                 // commercial-only fields
@@ -729,6 +731,7 @@ public class ListingController {
                 rejectIfPresent("roadAccess",        roadAccess);
                 rejectIfPresent("cultivationStatus", cultivationStatus);
                 rejectIfPresent("landCategory",      landCategory);
+                rejectIfPresent("agriConversionStatus", agriConversionStatus);
                 rejectIfPresent("farmhouseAvailable", farmhouseAvailable);
                 rejectIfPresent("fencingDone",       fencingDone);
                 // residential-BHK field
@@ -756,6 +759,9 @@ public class ListingController {
                 rejectIfPresent("furnishingStatus",  furnishingStatus);
                 rejectIfPresent("floorNumber",       floorNumber);
                 rejectIfPresent("totalFloors",       totalFloors);
+                // agriConversionStatus is agricultural_land-only (issue #2043), unlike landCategory
+                // which PLOT (land/other/residential_plot) also accepts.
+                rejectIfPresent("agriConversionStatus", agriConversionStatus);
             }
         }
     }
@@ -1248,6 +1254,7 @@ public class ListingController {
             String ownershipType,
             String surveyNumber,
             String landCategory,
+            String agriConversionStatus,
             Boolean farmhouseAvailable,
             Boolean fencingDone,
             // Residential typed listing fields (M38-13A / #1626)
@@ -1368,6 +1375,7 @@ public class ListingController {
             String ownershipType,
             String surveyNumber,
             String landCategory,
+            String agriConversionStatus,
             Boolean farmhouseAvailable,
             Boolean fencingDone,
             String boundary,

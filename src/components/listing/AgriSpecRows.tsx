@@ -21,6 +21,7 @@ import {
   ROAD_ACCESS_LABELS,
   CULTIVATION_STATUS_LABELS,
   OWNERSHIP_TYPE_LABELS,
+  AGRI_CONVERSION_STATUS_LABELS,
 } from '@/lib/agriFieldLabels';
 
 export interface AgriSpecRowsProps {
@@ -37,6 +38,8 @@ export interface AgriSpecRowsProps {
   boundary?: string | null;
   /** Issue #1458 — land category enum value from backend. Null → omit row. */
   landCategory?: string | null;
+  /** Issue #2043 — declared conversion status (agricultural_land-only, not verified). Null → omit row. */
+  agriConversionStatus?: string | null;
   /** Issue #1458 — farmhouse availability. Null → omit row (unknown). */
   farmhouseAvailable?: boolean | null;
   /** Issue #1458 — fencing status. Null → omit row (unknown). */
@@ -82,6 +85,7 @@ export function AgriSpecRows({
   ownershipType,
   boundary,
   landCategory,
+  agriConversionStatus,
   farmhouseAvailable,
   fencingDone,
 }: AgriSpecRowsProps) {
@@ -121,6 +125,13 @@ export function AgriSpecRows({
   const landCategoryValue =
     landCategory != null ? (LAND_CATEGORY_LABELS[landCategory] ?? landCategory) : null;
 
+  // agriConversionStatus: declared by seller/broker, not verified — map enum to label;
+  // null → omit row (FieldRow handles null).
+  const agriConversionStatusValue =
+    agriConversionStatus != null
+      ? (AGRI_CONVERSION_STATUS_LABELS[agriConversionStatus] ?? agriConversionStatus)
+      : null;
+
   // waterSource: map NOT_AVAILABLE → "Not available"; other values use label map or as-is.
   // null → omit row (FieldRow handles null).
   const waterSourceValue =
@@ -140,6 +151,11 @@ export function AgriSpecRows({
       <FieldRow label="Price" value={priceValue} testId="agri-price" />
       <FieldRow label="Price per acre" value={pricePerAcreValue} testId="agri-price-per-acre" />
       <FieldRow label="Land category" value={landCategoryValue} testId="agri-land-category" />
+      <FieldRow
+        label="Conversion status (declared, not verified)"
+        value={agriConversionStatusValue}
+        testId="agri-conversion-status"
+      />
       <FieldRow label="Water source" value={waterSourceValue} testId="agri-water-source" />
       <FieldRow label="Farmhouse available" value={farmhouseValue} testId="agri-farmhouse-available" />
       <FieldRow label="Fencing done" value={fencingValue} testId="agri-fencing-done" />

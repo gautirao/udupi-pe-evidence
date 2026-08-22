@@ -175,7 +175,7 @@ class CommercialDetailProjectionRefreshIT {
                 new BigDecimal("2000000"), "Retail shop", null, null, null, null, null, null,
                 null, null, null, 1, 3, "FURNISHED", 2, 1, new BigDecimal("30"), "RETAIL",
                 null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFields.EMPTY, shopFields("SHOP"));
 
         CommercialSpaceDetail detail = commercialSpaceDetailRepository.findById(saved.getId()).orElseThrow();
@@ -199,7 +199,7 @@ class CommercialDetailProjectionRefreshIT {
                 new BigDecimal("2000000"), "Retail shop", null, null, null, null, null, null,
                 null, null, null, 1, 3, "FURNISHED", 2, 1, new BigDecimal("30"), "RETAIL",
                 null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFields.EMPTY, shopFields("SHOP"));
 
         // Update: change furnishingStatus and washrooms.
@@ -220,7 +220,7 @@ class CommercialDetailProjectionRefreshIT {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null,
+                null, null,
                 ResidentialListingFields.EMPTY, CommercialListingFields.EMPTY);
 
         CommercialSpaceDetail afterUpdate =
@@ -248,7 +248,7 @@ class CommercialDetailProjectionRefreshIT {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null,
+                null, null,
                 ResidentialListingFields.EMPTY, CommercialListingFields.EMPTY);
 
         assertThat(commercialSpaceDetailRepository.findAll().stream()
@@ -269,7 +269,7 @@ class CommercialDetailProjectionRefreshIT {
                 new BigDecimal("8000000"), "Warehouse", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFields.EMPTY, shopFields("WAREHOUSE"));
 
         assertThat(commercialSpaceDetailRepository.findById(saved.getId()).orElseThrow()
@@ -292,7 +292,7 @@ class CommercialDetailProjectionRefreshIT {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null,
+                null, null,
                 ResidentialListingFields.EMPTY, shopFields("OFFICE"));
 
         assertThat(commercialSpaceDetailRepository.findAll().stream()
@@ -311,7 +311,7 @@ class CommercialDetailProjectionRefreshIT {
                 new BigDecimal("2000000"), "Retail shop", null, null, null, null, null, null,
                 null, null, null, 1, 3, "FURNISHED", 2, 1, new BigDecimal("30"), "RETAIL",
                 null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFields.EMPTY, shopFields("SHOP"));
 
         assertThat(commercialSpaceDetailRepository.findById(saved.getId())).isPresent();
@@ -340,7 +340,7 @@ class CommercialDetailProjectionRefreshIT {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null,
+                null, null,
                 residentialFields, CommercialListingFields.EMPTY);
 
         assertThat(commercialSpaceDetailRepository.findById(saved.getId()))
@@ -374,7 +374,7 @@ class CommercialDetailProjectionRefreshIT {
                 new BigDecimal("1000000"), "Legacy retail shop", null, null, null, null, null, null,
                 null, null, null, 1, 2, "UNFURNISHED", 1, 1, new BigDecimal("20"), "RETAIL",
                 null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFields.EMPTY, CommercialListingFields.EMPTY);
 
         CommercialSpaceDetail detail = commercialSpaceDetailRepository.findById(saved.getId()).orElseThrow();
@@ -428,7 +428,7 @@ class CommercialDetailProjectionRefreshIT {
                 new BigDecimal("2000000"), "Retail shop", null, null, null, null, null, null,
                 null, null, null, 1, 3, "FURNISHED", 2, 1, new BigDecimal("30"), "RETAIL",
                 null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFields.EMPTY, shopFields("SHOP"));
 
         // Mirrors SearchOutboxPoller.processEntry: re-fetch the listing + typed detail via the
@@ -464,7 +464,7 @@ class CommercialDetailProjectionRefreshIT {
                 new BigDecimal("3000000"), "Nice flat", null, 3, null, null, null, null,
                 null, null, null, 2, 10, "SEMI_FURNISHED", null, null, null, null,
                 null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 residentialFields, CommercialListingFields.EMPTY);
 
         ResidentialUnitDetail detail =
@@ -492,7 +492,7 @@ class CommercialDetailProjectionRefreshIT {
                 new BigDecimal("5000000"), "Nice house", null, 3, null, null, null, null,
                 null, null, null, 1, 2, "FURNISHED", null, null, null, null,
                 null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 residentialFields, CommercialListingFields.EMPTY);
 
         assertThat(residentialUnitDetailRepository.findById(saved.getId())).isPresent();
@@ -518,7 +518,7 @@ class CommercialDetailProjectionRefreshIT {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null,
+                null, null,
                 ResidentialListingFields.EMPTY, CommercialListingFields.EMPTY);
 
         assertThat(listingRepository.findById(saved.getId()).orElseThrow().getListingFamily())
@@ -548,7 +548,7 @@ class CommercialDetailProjectionRefreshIT {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null,
+                null, null,
                 ResidentialListingFields.EMPTY, CommercialListingFields.EMPTY);
 
         assertThat(listingRepository.findById(saved.getId()).orElseThrow().getListingFamily()).isNull();
@@ -595,7 +595,7 @@ class CommercialDetailProjectionRefreshIT {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null,
+                null, null,
                 ResidentialListingFields.EMPTY, CommercialListingFields.EMPTY);
 
         Listing afterUpdate = listingRepository.findById(listingId).orElseThrow();

@@ -222,6 +222,7 @@ function makeBaseListing(overrides: Record<string, unknown> = {}): Record<string
     surveyNumber: null,
     boundary: null,
     landCategory: null,
+    agriConversionStatus: null,
     farmhouseAvailable: null,
     fencingDone: null,
     computedAreaAcres: null,
@@ -909,5 +910,85 @@ describe('EditListing — M38-13A (#1626) no-regression: agri fields preserved o
     expect(payload.landCategory).toBe('FARMLAND');
     expect(payload.farmhouseAvailable).toBe(true);
     expect(payload.fencingDone).toBe(false);
+  });
+});
+
+// ── (n) Issue #2043 — agriConversionStatus load, save, and null-safety ─────
+
+describe('EditListing — agri (n) #2043 agriConversionStatus load and save', () => {
+  it('reflects agriConversionStatus in its Select control on load', async () => {
+    mockListingData.current = makeBaseListing({
+      agriConversionStatus: 'CONVERSION_APPLIED',
+    });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    const selects = getAgriSelects();
+    const selectValues = Array.from(selects).map((s) => s.getAttribute('data-select-value'));
+    expect(selectValues).toContain('CONVERSION_APPLIED');
+  });
+
+  it('renders safely with agriConversionStatus null (no crash, its select is among the empty ones)', async () => {
+    mockListingData.current = makeBaseListing({ agriConversionStatus: null });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    // The 9th select (index 8) in JSX order is agriConversionStatus — placed last,
+    // after the other 8 canonical agri selects (landCategory[0]..ownershipType[7]).
+    const selects = getAgriSelects();
+    const conversionStatusSelect = selects[8];
+    expect(conversionStatusSelect.getAttribute('data-select-value')).toBe('empty');
+  });
+
+  it('calls mutate with updated agriConversionStatus when changed and Save & Continue clicked', async () => {
+    const user = userEvent.setup();
+    mockListingData.current = makeBaseListing({
+      agriConversionStatus: 'NOT_CONVERTED',
+    });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    const agriSection = getAgriSection();
+    const conversionStatusSelect = Array.from(agriSection.querySelectorAll('select')).find(
+      (s) => s.getAttribute('data-select-value') === 'NOT_CONVERTED',
+    ) as HTMLSelectElement;
+    expect(conversionStatusSelect).toBeTruthy();
+
+    await user.selectOptions(conversionStatusSelect, 'APPROVED_FOR_CONVERSION');
+
+    const saveBtn = screen.getByRole('button', { name: /save & continue/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockUpdateMutate).toHaveBeenCalledOnce();
+    });
+
+    const [payload] = mockUpdateMutate.mock.calls[0] as [Record<string, unknown>, ...unknown[]];
+    expect(payload.agriConversionStatus).toBe('APPROVED_FOR_CONVERSION');
+  });
+
+  it('does not render the agriConversionStatus select (or agri-fields-section at all) for apartment propertyType', async () => {
+    mockListingData.current = makeBaseListing({
+      propertyType: 'apartment',
+      agriConversionStatus: null,
+    });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('agri-fields-section')).not.toBeInTheDocument();
+    });
   });
 });

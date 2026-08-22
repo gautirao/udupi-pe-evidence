@@ -48,6 +48,7 @@ export interface ListingFormState {
   ownershipType: string;
   surveyNumber: string;
   landCategory: string;
+  agriConversionStatus: string;
   farmhouseAvailable: string;
   fencingDone: string;
   bathrooms: string;
@@ -166,6 +167,7 @@ export function buildListingUpdatePayload(
     ownershipType,
     surveyNumber,
     landCategory,
+    agriConversionStatus,
     farmhouseAvailable,
     fencingDone,
     bathrooms,
@@ -259,6 +261,7 @@ export function buildListingUpdatePayload(
     surveyNumber: fieldVisible('surveyNumber') ? (surveyNumber.trim() || undefined) : undefined,
     // Issue #1458 — new structured agri fields
     landCategory: fieldVisible('landCategory') ? (landCategory || undefined) : undefined,
+    agriConversionStatus: fieldVisible('agriConversionStatus') ? (agriConversionStatus || undefined) : undefined,
     farmhouseAvailable: fieldVisible('farmhouseAvailable')
       ? (farmhouseAvailable === 'true' ? true : farmhouseAvailable === 'false' ? false : undefined)
       : undefined,

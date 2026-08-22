@@ -153,7 +153,7 @@ class PublicListingControllerTest {
                             new ListingImageDTO("https://cdn.example.com/img-a.jpg", null, 0),
                             new ListingImageDTO("https://cdn.example.com/img-b.jpg", null, 1),
                             new ListingImageDTO("https://cdn.example.com/img-c.jpg", null, 2)),
-                    null, null, null, null, null, null, null, null, null, l.getBoundaryGeoJson(), null,
+                    null, null, null, null, null, null, null, null, null, null, l.getBoundaryGeoJson(), null,
                     l.getBathrooms(), l.getBalconies(), l.getFacing(), l.getAvailabilityTimeline(),
                     l.getSuperBuiltArea(), l.getSuperBuiltAreaUnit(), l.getPropertyAge(), l.getResidentialWaterSource(),
                     l.getParking2wCount(), l.getParking4wCount(), l.getRoadWidthFt(), l.getPlotDimensions(),
@@ -191,7 +191,7 @@ class PublicListingControllerTest {
                     l.getId(), null, 0, null, null, priceBand,
                     l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
                     null, null, null, null, null, null, null, null, null, null, null, null,
-                    null, null, null);
+                    null, null, null, null);
         });
 
         // Teaser mapper — batch (15 agri fields null for non-agri fixtures in setUp)
@@ -207,7 +207,7 @@ class PublicListingControllerTest {
                                 l.getId(), null, 0, null, null, priceBand,
                                 l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
                                 null, null, null, null, null, null, null, null, null, null, null, null,
-                                null, null, null);
+                                null, null, null, null);
                     })
                     .toList();
         });
@@ -942,7 +942,7 @@ class PublicListingControllerTest {
                         new BigDecimal("2.47"),
                         "Borewell", "Red laterite", "Tar road",
                         "Fallow", "Freehold", "SY-101/2",
-                        null, null, null));
+                        "FARMLAND", "CONVERSION_APPLIED", null, null));
 
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
                 .andExpect(status().isOk())
@@ -960,7 +960,9 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.roadAccess").value("Tar road"))
                 .andExpect(jsonPath("$.cultivationStatus").value("Fallow"))
                 .andExpect(jsonPath("$.ownershipType").value("Freehold"))
-                .andExpect(jsonPath("$.surveyNumber").value("SY-101/2"));
+                .andExpect(jsonPath("$.surveyNumber").value("SY-101/2"))
+                // #2043: agriConversionStatus surfaces on the anon/public agri teaser too
+                .andExpect(jsonPath("$.agriConversionStatus").value("CONVERSION_APPLIED"));
     }
 
     // ==================== T2: anonymous non-agri listing → exactly 7 fields (IC-1) ====================
@@ -1043,7 +1045,7 @@ class PublicListingControllerTest {
                         new BigDecimal("2.50"), "acres", new BigDecimal("2.47"),
                         "Borewell", "Red laterite", "Tar road",
                         "Fallow", "Freehold", "SY-101/2",
-                        null, null, null));
+                        null, null, null, null));
 
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
                 .andExpect(status().isOk())

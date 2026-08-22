@@ -171,6 +171,7 @@ public class ListingResponseMapper {
                 // #1454: survey number withheld from anon agri.
                 null,
                 isAgri ? l.getLandCategory() : null,
+                isAgri ? l.getAgriConversionStatus() : null,
                 isAgri ? l.getFarmhouseAvailable() : null,
                 isAgri ? l.getFencingDone() : null);
     }
@@ -213,8 +214,8 @@ public class ListingResponseMapper {
                             l.getPropertyType(),
                             l.getLocality(),
                             l.getListingPurpose(),
-                            // IC-3: batch path — null-pass for all 15 agri fields (no DB call; N+1 guard)
-                            null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                            // IC-3: batch path — null-pass for all 16 agri fields (no DB call; N+1 guard)
+                            null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
                 })
                 .toList();
     }
@@ -412,7 +413,7 @@ public class ListingResponseMapper {
                 trustTier, trustBadge, l.getAreaKey(), gallery,
                 l.getWaterSource(), l.getSoilType(), l.getRoadAccess(),
                 l.getCultivationStatus(), l.getOwnershipType(), l.getSurveyNumber(),
-                l.getLandCategory(), l.getFarmhouseAvailable(), l.getFencingDone(),
+                l.getLandCategory(), l.getAgriConversionStatus(), l.getFarmhouseAvailable(), l.getFencingDone(),
                 boundary, computedAreaAcres,
                 l.getBathrooms(), l.getBalconies(), l.getFacing(), l.getAvailabilityTimeline(),
                 l.getSuperBuiltArea(), l.getSuperBuiltAreaUnit(), l.getPropertyAge(), l.getResidentialWaterSource(),

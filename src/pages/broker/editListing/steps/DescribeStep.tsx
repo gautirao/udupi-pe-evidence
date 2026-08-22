@@ -41,6 +41,7 @@ import {
   CULTIVATION_STATUS_LABELS,
   OWNERSHIP_TYPE_LABELS,
   LAND_CATEGORY_LABELS,
+  AGRI_CONVERSION_STATUS_LABELS,
 } from '@/lib/agriFieldLabels';
 import {
   SingleChipGroup,
@@ -163,11 +164,11 @@ export function DescribeStep({
 
   const {
     waterSource, soilType, roadAccess, cultivationStatus,
-    surveyNumber, landCategory, farmhouseAvailable, fencingDone,
+    surveyNumber, landCategory, agriConversionStatus, farmhouseAvailable, fencingDone,
   } = agri.values;
   const {
     setWaterSource, setSoilType, setRoadAccess, setCultivationStatus,
-    setSurveyNumber, setLandCategory, setFarmhouseAvailable, setFencingDone,
+    setSurveyNumber, setLandCategory, setAgriConversionStatus, setFarmhouseAvailable, setFencingDone,
   } = agri.setters;
 
   const {
@@ -396,6 +397,26 @@ export function DescribeStep({
                         <SelectItem value="OTHER">Other</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  {/* Conversion Status — Issue #2043. Optional; declared by the seller/broker,
+                      not verified by ReTrends. Placed after the other 8 canonical agri
+                      selects to avoid shifting their existing positional DOM indices. */}
+                  <div className="space-y-2">
+                    <Label htmlFor="agriConversionStatus">Conversion Status (optional)</Label>
+                    <Select value={agriConversionStatus} onValueChange={setAgriConversionStatus}>
+                      <SelectTrigger id="agriConversionStatus">
+                        <SelectValue placeholder="Select conversion status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(AGRI_CONVERSION_STATUS_LABELS).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Declared by the seller/broker — not verified by ReTrends.
+                    </p>
                   </div>
 
                   {/* Survey Number */}

@@ -698,7 +698,7 @@ class ListingCrudServiceTest {
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 "dealer",
                 "Borewell", "Red laterite", "Tar road", "Cultivated", "Freehold", "SRV/123/456",
-                null, null, null);
+                null, null, null, null);
 
         assertThat(draft.getWaterSource()).isEqualTo("Borewell");
         assertThat(draft.getSoilType()).isEqualTo("Red laterite");
@@ -730,7 +730,7 @@ class ListingCrudServiceTest {
                 null, null, null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null,
-                null, "Red laterite", null, null, null, "SRV/789", null, null, null, null);
+                null, "Red laterite", null, null, null, "SRV/789", null, null, null, null, null);
 
         assertThat(result.getSoilType()).isEqualTo("Red laterite");
         assertThat(result.getSurveyNumber()).isEqualTo("SRV/789");
@@ -905,7 +905,7 @@ class ListingCrudServiceTest {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null,
                 validGeoJson);
 
         verify(listingRepository).updateBoundary(eq(listingId), eq(validGeoJson));
@@ -937,7 +937,7 @@ class ListingCrudServiceTest {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null,
                 null);  // null boundary
 
         verify(listingRepository, never()).updateBoundary(any(), any());
@@ -957,11 +957,13 @@ class ListingCrudServiceTest {
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 "dealer",
                 null, null, null, null, null, null,
-                "wetland", true, false);
+                "wetland", null, true, false);
 
         assertThat(draft.getLandCategory()).isEqualTo("wetland");
         assertThat(draft.getFarmhouseAvailable()).isTrue();
         assertThat(draft.getFencingDone()).isFalse();
+        // agriConversionStatus was not supplied → remains null
+        assertThat(draft.getAgriConversionStatus()).isNull();
     }
 
     @Test
@@ -977,12 +979,58 @@ class ListingCrudServiceTest {
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 "dealer",
                 null, null, null, null, null, null,
-                null, false, null);
+                null, null, false, null);
 
         assertThat(draft.getFarmhouseAvailable()).isFalse();
         // landCategory and fencingDone were not supplied → remain null
         assertThat(draft.getLandCategory()).isNull();
         assertThat(draft.getFencingDone()).isNull();
+    }
+
+    // ===== #2043: agri_conversion_status =====
+
+    @Test
+    void createDraft_persists_agriConversionStatus() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing draft = crudService.createDraft(
+                userId, "agricultural_land", "Converted Plot", "Udupi",
+                new BigDecimal("2500000"), "Converted for residential use",
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer",
+                null, null, null, null, null, null,
+                null, "CONVERSION_APPLIED", null, null);
+
+        assertThat(draft.getAgriConversionStatus()).isEqualTo("CONVERSION_APPLIED");
+    }
+
+    @Test
+    void updateListing_agriConversionStatus_updatedCorrectly() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("agricultural_land");
+        existing.setAgriConversionStatus("NOT_CONVERTED");
+
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(existing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = crudService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, null,
+                null, null, null, null,
+                null, null, null, null, null, false, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null,
+                null, null, null, null, null, null, null, "APPROVED_FOR_CONVERSION", null, null, null);
+
+        assertThat(result.getAgriConversionStatus()).isEqualTo("APPROVED_FOR_CONVERSION");
     }
 
     // ==================== Residential typed listing fields (M38-13A / #1626) ====================
@@ -1008,7 +1056,7 @@ class ListingCrudServiceTest {
                 new BigDecimal("9000000"), "desc",
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 residentialFields(3, 2, true, true, null, null, null));
 
         assertThat(draft.getListingFamily())
@@ -1030,7 +1078,7 @@ class ListingCrudServiceTest {
                 new BigDecimal("3000000"), "desc",
                 new BigDecimal("2400"), null, null, "sqft", null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFieldsEmpty());
 
         assertThat(draft.getListingFamily())
@@ -1048,13 +1096,13 @@ class ListingCrudServiceTest {
                 userId, "house", "House", "Udupi", new BigDecimal("1000000"), "desc",
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFieldsEmpty());
         Listing apartment = crudService.createDraft(
                 userId, "apartment", "Flat", "Udupi", new BigDecimal("2000000"), "desc",
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFieldsEmpty());
 
         assertThat(house.getListingFamily()).isEqualTo("RESIDENTIAL");
@@ -1074,7 +1122,7 @@ class ListingCrudServiceTest {
                 userId, "commercial", "Shop", "Udupi", new BigDecimal("4000000"), "desc",
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFieldsEmpty());
 
         assertThat(draft.getListingFamily())
@@ -1098,7 +1146,7 @@ class ListingCrudServiceTest {
                 userId, "apartment", "Flat", "Udupi", new BigDecimal("2000000"), "desc",
                 null, null, null, null, null, null,
                 "rent", null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 fields);
 
         assertThat(draft.getPetsAllowed())
@@ -1115,7 +1163,7 @@ class ListingCrudServiceTest {
                 userId, "apartment", "Flat", "Udupi", new BigDecimal("2000000"), "desc",
                 null, null, null, null, null, null,
                 "rent", null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFieldsEmpty());
 
         assertThat(draft.getPetsAllowed())
@@ -1137,7 +1185,7 @@ class ListingCrudServiceTest {
                 userId, "apartment", "Flat", "Udupi", new BigDecimal("2000000"), "desc",
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 residentialFields(null, null, null, null,
                         List.of("LIFT", "GYM", "LIFT"), // duplicate code must be deduplicated
                         null, null));
@@ -1170,7 +1218,7 @@ class ListingCrudServiceTest {
                 null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null,
-                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null,
                 null, null,
                 residentialFields(null, null, null, null,
                         null, List.of("PARK_FACING"), List.of("FAMILY", "STUDENTS")));
@@ -1208,7 +1256,7 @@ class ListingCrudServiceTest {
                 null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null,
-                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null,
                 null, null,
                 residentialFields(null, null, null, null, List.of(), null, null));
 
@@ -1253,7 +1301,7 @@ class ListingCrudServiceTest {
                 null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null,
-                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null,
                 null, null,
                 // amenities IS supplied here (non-null, non-empty) — this pins the interesting
                 // boundary: writeResidentialChildSets DOES run its delete-then-insert against
@@ -1302,7 +1350,7 @@ class ListingCrudServiceTest {
                 null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null,
-                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null,
                 null, null,
                 // amenities non-empty → the residential pass performs a real delete-then-insert.
                 residentialFields(null, null, null, null, List.of("LIFT"), null, null),
@@ -1341,7 +1389,7 @@ class ListingCrudServiceTest {
                 new BigDecimal("2000000"), "Retail shop", null, null, null, null, null, null,
                 null, null, null, 1, 3, "FURNISHED", 2, 1, new BigDecimal("30"), "RETAIL",
                 null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFieldsEmpty(), commercialFields("SHOP"));
 
         verify(commercialSpaceDetailRepository).upsertFromListing(
@@ -1362,7 +1410,7 @@ class ListingCrudServiceTest {
                 new BigDecimal("3000000"), "Nice flat", null, 3, null, null, null, null,
                 null, null, null, 2, 10, "SEMI_FURNISHED", null, null, null, null,
                 null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 residentialFields(2, null, null, null, null, null, null),
                 com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
 
@@ -1420,7 +1468,7 @@ class ListingCrudServiceTest {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null,
+                null, null,
                 residentialFields(2, null, null, null, null, null, null),
                 com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
 
@@ -1462,7 +1510,7 @@ class ListingCrudServiceTest {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null,
+                null, null,
                 ResidentialListingFieldsEmpty(),
                 com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
 
@@ -1506,7 +1554,7 @@ class ListingCrudServiceTest {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null,
+                null, null,
                 ResidentialListingFieldsEmpty(),
                 com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
 
@@ -1552,7 +1600,7 @@ class ListingCrudServiceTest {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null,
+                null, null,
                 ResidentialListingFieldsEmpty(),
                 com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
 
@@ -1603,7 +1651,7 @@ class ListingCrudServiceTest {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null,
+                null, null,
                 ResidentialListingFieldsEmpty(),
                 com.example.realestate.listing.commercial.CommercialListingFields.EMPTY);
 

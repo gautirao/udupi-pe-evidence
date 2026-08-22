@@ -198,8 +198,8 @@ class LandCategoryCompatibilityIT {
                 null, null, null,
                 // waterSource, soilType, roadAccess, cultivationStatus, ownershipType, surveyNumber
                 null, null, null, null, null, null,
-                // landCategory, farmhouseAvailable, fencingDone, boundaryGeoJson
-                updateTarget, null, null, null);
+                // landCategory, agriConversionStatus, farmhouseAvailable, fencingDone, boundaryGeoJson
+                updateTarget, null, null, null, null);
 
         assertThat(updated).isNotNull();
         assertThat(updated.getLandCategory()).isEqualTo(updateTarget);
@@ -222,7 +222,7 @@ class LandCategoryCompatibilityIT {
                 "dealer",
                 // waterSource, soilType, roadAccess, cultivationStatus, ownershipType, surveyNumber
                 null, null, null, null, null, null,
-                // landCategory, farmhouseAvailable, fencingDone
-                landCategory, null, null);
+                // landCategory, agriConversionStatus, farmhouseAvailable, fencingDone
+                landCategory, null, null, null);
     }
 }

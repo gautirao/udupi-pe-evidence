@@ -40,6 +40,7 @@ function baseState(overrides: Partial<ListingFormState> = {}): ListingFormState 
     ownershipType: 'FREEHOLD',
     surveyNumber: '123/4A',
     landCategory: 'WET_LAND',
+    agriConversionStatus: 'NOT_CONVERTED',
     farmhouseAvailable: 'true',
     fencingDone: 'false',
     bathrooms: '2',
@@ -116,6 +117,7 @@ describe('buildListingUpdatePayload — apartment (sale)', () => {
     expect(payload.waterSource).toBeUndefined();
     expect(payload.soilType).toBeUndefined();
     expect(payload.landCategory).toBeUndefined();
+    expect(payload.agriConversionStatus).toBeUndefined();
     expect(payload.farmhouseAvailable).toBeUndefined();
     expect(payload.fencingDone).toBeUndefined();
   });
@@ -277,6 +279,7 @@ describe('buildListingUpdatePayload — agricultural_land (sale)', () => {
     expect(payload.ownershipType).toBe('FREEHOLD');
     expect(payload.surveyNumber).toBe('123/4A');
     expect(payload.landCategory).toBe('WET_LAND');
+    expect(payload.agriConversionStatus).toBe('NOT_CONVERTED');
     expect(payload.farmhouseAvailable).toBe(true);
     expect(payload.fencingDone).toBe(false);
     expect(payload.facing).toBe('EAST');
@@ -292,6 +295,41 @@ describe('buildListingUpdatePayload — agricultural_land (sale)', () => {
     expect(payload.landAreaUnit).toBe('acre');
     expect(payload.builtAreaUnit).toBeUndefined();
   });
+});
+
+describe('buildListingUpdatePayload — agriConversionStatus (#2043)', () => {
+  it('empty string -> undefined (not specified) for agricultural_land', () => {
+    const ctx = makeUpdatePayloadCtx('agricultural_land', 'sale');
+    const payload = buildListingUpdatePayload(
+      baseState({ propertyType: 'agricultural_land', agriConversionStatus: '' }),
+      ctx,
+    );
+    expect(payload.agriConversionStatus).toBeUndefined();
+  });
+
+  it.each(['NOT_CONVERTED', 'CONVERSION_APPLIED', 'APPROVED_FOR_CONVERSION', 'NOT_SURE'])(
+    '%s round-trips for agricultural_land',
+    (value) => {
+      const ctx = makeUpdatePayloadCtx('agricultural_land', 'sale');
+      const payload = buildListingUpdatePayload(
+        baseState({ propertyType: 'agricultural_land', agriConversionStatus: value }),
+        ctx,
+      );
+      expect(payload.agriConversionStatus).toBe(value);
+    },
+  );
+
+  it.each(['land', 'apartment', 'house', 'villa', 'residential_plot', 'commercial', 'commercial_building', 'warehouse', 'commercial_land'] as const)(
+    'omitted for %s even when state still holds a value (hidden-field gate)',
+    (propertyType) => {
+      const ctx = makeUpdatePayloadCtx(propertyType, 'sale');
+      const payload = buildListingUpdatePayload(
+        baseState({ propertyType, agriConversionStatus: 'NOT_CONVERTED' }),
+        ctx,
+      );
+      expect(payload.agriConversionStatus).toBeUndefined();
+    },
+  );
 });
 
 describe('buildListingUpdatePayload — mid-edit type switch', () => {

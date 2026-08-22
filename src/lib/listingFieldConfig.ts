@@ -52,6 +52,7 @@ export type ListingFieldKey =
   | 'ownershipType'
   | 'surveyNumber'
   | 'landCategory'
+  | 'agriConversionStatus'
   | 'farmhouseAvailable'
   | 'fencingDone'
   // M38-13A (#1626) — residential typed-listing fields (apartment/house/villa/residential_plot)
@@ -177,7 +178,7 @@ export interface ListingFieldConfig {
 // Internal helpers — grouped to avoid repeating the same key lists
 // ---------------------------------------------------------------------------
 
-/** All nine agricultural-land-specific fields. */
+/** All ten agricultural-land-specific fields. */
 const AGRI_FIELDS: readonly ListingFieldKey[] = [
   'waterSource',
   'soilType',
@@ -186,6 +187,8 @@ const AGRI_FIELDS: readonly ListingFieldKey[] = [
   'ownershipType',
   'surveyNumber',
   'landCategory',
+  // #2043 — agricultural_land-only, unlike landCategory (which PLOT also accepts).
+  'agriConversionStatus',
   'farmhouseAvailable',
   'fencingDone',
 ];

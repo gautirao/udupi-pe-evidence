@@ -66,7 +66,7 @@ describe('getListingFieldConfig — exact visibleFields per property type', () =
     assertExactFields('land', ['landArea']);
   });
 
-  it('agricultural_land: landArea + all 9 agri-specific fields + facing (11 total)', () => {
+  it('agricultural_land: landArea + all 10 agri-specific fields + facing (12 total)', () => {
     assertExactFields('agricultural_land', [
       'landArea',
       'waterSource',
@@ -76,6 +76,7 @@ describe('getListingFieldConfig — exact visibleFields per property type', () =
       'ownershipType',
       'surveyNumber',
       'landCategory',
+      'agriConversionStatus',
       'farmhouseAvailable',
       'fencingDone',
       'facing',
@@ -174,6 +175,7 @@ describe('isListingFieldVisible — irrelevant field hiding', () => {
       'cultivationStatus',
       'surveyNumber',
       'landCategory',
+      'agriConversionStatus',
       'farmhouseAvailable',
       'fencingDone',
     ];
@@ -201,12 +203,13 @@ const AGRI_FIELDS: ListingFieldKey[] = [
   'ownershipType',
   'surveyNumber',
   'landCategory',
+  'agriConversionStatus',
   'farmhouseAvailable',
   'fencingDone',
 ];
 
 describe('isListingFieldVisible — agri field exclusivity to agricultural_land', () => {
-  it('all 9 agri fields ARE visible for agricultural_land/sale', () => {
+  it('all 10 agri fields ARE visible for agricultural_land/sale', () => {
     for (const field of AGRI_FIELDS) {
       expect(
         isListingFieldVisible(field, 'agricultural_land', 'sale'),
@@ -215,7 +218,7 @@ describe('isListingFieldVisible — agri field exclusivity to agricultural_land'
     }
   });
 
-  it('all 9 agri fields ARE visible for agricultural_land/rent', () => {
+  it('all 10 agri fields ARE visible for agricultural_land/rent', () => {
     for (const field of AGRI_FIELDS) {
       expect(
         isListingFieldVisible(field, 'agricultural_land', 'rent'),

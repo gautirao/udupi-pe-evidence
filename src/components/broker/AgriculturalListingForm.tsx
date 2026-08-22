@@ -34,6 +34,7 @@ import {
   CULTIVATION_STATUS_LABELS,
   OWNERSHIP_TYPE_LABELS,
   LAND_CATEGORY_LABELS,
+  AGRI_CONVERSION_STATUS_LABELS,
 } from '@/lib/agriFieldLabels';
 import { FACING_OPTIONS } from '@/lib/listing-constants';
 
@@ -135,6 +136,7 @@ const ROAD_ACCESS_OPTIONS = optionsFromLabelMap(ROAD_ACCESS_LABELS);
 const CULTIVATION_STATUS_OPTIONS = optionsFromLabelMap(CULTIVATION_STATUS_LABELS);
 const OWNERSHIP_TYPE_OPTIONS = optionsFromLabelMap(OWNERSHIP_TYPE_LABELS);
 const LAND_CATEGORY_OPTIONS = optionsFromLabelMap(LAND_CATEGORY_LABELS);
+const AGRI_CONVERSION_STATUS_OPTIONS = optionsFromLabelMap(AGRI_CONVERSION_STATUS_LABELS);
 
 /** FE-only vocabulary — no backend enum (see class doc: crops/features have no write path). */
 const CROP_OPTIONS: readonly ChipOption[] = [
@@ -207,6 +209,7 @@ export function AgriculturalListingForm({ onSwitchToGenericFlow, navigate }: Agr
   const [roadAccess, setRoadAccess] = useState('');
   const [cultivationStatus, setCultivationStatus] = useState('');
   const [landCategory, setLandCategory] = useState('');
+  const [agriConversionStatus, setAgriConversionStatus] = useState('');
   const [ownershipType, setOwnershipType] = useState('');
   const [surveyNumber, setSurveyNumber] = useState('');
   const [farmhouseAvailable, setFarmhouseAvailable] = useState(''); // '' | 'true' | 'false'
@@ -241,6 +244,7 @@ export function AgriculturalListingForm({ onSwitchToGenericFlow, navigate }: Agr
     ownershipType: ownershipType || undefined,
     surveyNumber: surveyNumber.trim() || undefined,
     landCategory: landCategory || undefined,
+    agriConversionStatus: fieldVisible('agriConversionStatus') ? (agriConversionStatus || undefined) : undefined,
     farmhouseAvailable: farmhouseAvailable === 'true' ? true : farmhouseAvailable === 'false' ? false : undefined,
     fencingDone: fencingDone === 'true' ? true : fencingDone === 'false' ? false : undefined,
     // NOTE: rtc/crops/features are DELIBERATELY OMITTED — no backend write
@@ -417,6 +421,7 @@ export function AgriculturalListingForm({ onSwitchToGenericFlow, navigate }: Agr
             roadAccess,
             cultivationStatus,
             landCategory,
+            agriConversionStatus,
             ownershipType,
             surveyNumber,
             farmhouseAvailable,
@@ -607,6 +612,20 @@ export function AgriculturalListingForm({ onSwitchToGenericFlow, navigate }: Agr
                       <SelectTrigger id="landCategory" className="h-11"><SelectValue placeholder="Select land category" /></SelectTrigger>
                       <SelectContent>
                         {LAND_CATEGORY_OPTIONS.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                )}
+                {fieldVisible('agriConversionStatus') && (
+                  <Field
+                    id="agriConversionStatus"
+                    label="Conversion status (optional)"
+                    hint="Declared by the seller/broker — not verified by ReTrends."
+                  >
+                    <Select value={agriConversionStatus} onValueChange={setAgriConversionStatus}>
+                      <SelectTrigger id="agriConversionStatus" className="h-11"><SelectValue placeholder="Select conversion status" /></SelectTrigger>
+                      <SelectContent>
+                        {AGRI_CONVERSION_STATUS_OPTIONS.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </Field>

@@ -100,7 +100,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any()))
+                any(), any(), any()))
                 .thenReturn(stub);
         lenient().when(listingCrudService.updateListing(
                 any(), any(), anyBoolean(),
@@ -108,7 +108,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(),
+                any(), any(), any(), any(),
                 any(), any()))
                 .thenReturn(stub);
 
@@ -128,7 +128,7 @@ class ListingControllerFamilyValidationTest {
                     "broker", 0, false, l.getUpdatedAt(),
                     null, null, null, null, null, false, 0,
                     null, null, null, List.of(),
-                    null, null, null, null, null, null, null, null, null, null, null,
+                    null, null, null, null, null, null, null, null, null, null, null, null,
                     // 36 nulls: bathrooms .. maintenanceIncluded (residential typed fields, M38-13A / #1626)
                     null, null, null, null, null, null,
                     null, null, null, null, null, null,
@@ -978,7 +978,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     private void verifyCreateCalledOnce() {
@@ -988,7 +988,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     private void verifyUpdateNeverCalled() {
@@ -998,7 +998,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any());
     }
 
     private void verifyUpdateCalledOnce() {
@@ -1008,7 +1008,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any());
     }
 
     private static Listing minimalListing(UUID id, String propertyType) {

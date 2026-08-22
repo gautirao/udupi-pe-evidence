@@ -38,6 +38,8 @@ interface CreateListingRequest {
   surveyNumber?: string;
   // Issue #1458 — new structured agri fields
   landCategory?: string;
+  // #2043 — agricultural_land-only declared conversion status (not verified).
+  agriConversionStatus?: string | null;
   farmhouseAvailable?: boolean | null;
   fencingDone?: boolean | null;
   // M38-13A (#1626) — residential typed-listing fields (additive, all nullable).
@@ -161,6 +163,8 @@ export interface UpdateListingRequest {
   boundary?: string | null;
   // Issue #1458 — new structured agri fields
   landCategory?: string;
+  // #2043 — agricultural_land-only declared conversion status (not verified).
+  agriConversionStatus?: string | null;
   farmhouseAvailable?: boolean | null;
   fencingDone?: boolean | null;
   // M38-13A (#1626) — residential typed-listing fields (additive, all nullable).
@@ -293,6 +297,8 @@ export interface ListingResponse {
   boundary?: string | null;
   // Issue #1458 — new structured agri fields (null for non-agri or not-set)
   landCategory?: string | null;
+  // #2043 — agricultural_land-only declared conversion status (not verified).
+  agriConversionStatus?: string | null;
   farmhouseAvailable?: boolean | null;
   fencingDone?: boolean | null;
   /**

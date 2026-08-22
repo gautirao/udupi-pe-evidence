@@ -57,3 +57,12 @@ export const LAND_CATEGORY_LABELS: Record<string, string> = {
   AGRICULTURAL_PLOT: 'Agricultural plot',
   OTHER: 'Other',
 };
+
+// Keys match AgriFieldOptions.VALID_CONVERSION_STATUSES / CONVERSION_STATUS_LABELS (#2043).
+// Distinct from the residential CONVERSION_STATUS_LABELS in listing-constants.ts.
+export const AGRI_CONVERSION_STATUS_LABELS: Record<string, string> = {
+  NOT_CONVERTED: 'Not converted',
+  CONVERSION_APPLIED: 'Conversion applied',
+  APPROVED_FOR_CONVERSION: 'Approved for conversion',
+  NOT_SURE: 'Not sure',
+};

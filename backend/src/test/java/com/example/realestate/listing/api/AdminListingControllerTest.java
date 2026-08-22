@@ -128,7 +128,7 @@ class AdminListingControllerTest {
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0,
                     l.getTrustTier(), null, l.getAreaKey(), java.util.List.of(),
                     null, null, null, null, null, null,
-                    l.getLandCategory(), l.getFarmhouseAvailable(), l.getFencingDone(),
+                    l.getLandCategory(), l.getAgriConversionStatus(), l.getFarmhouseAvailable(), l.getFencingDone(),
                     l.getBoundaryGeoJson(), null,
                     l.getBathrooms(), l.getBalconies(), l.getFacing(), l.getAvailabilityTimeline(),
                     l.getSuperBuiltArea(), l.getSuperBuiltAreaUnit(), l.getPropertyAge(), l.getResidentialWaterSource(),

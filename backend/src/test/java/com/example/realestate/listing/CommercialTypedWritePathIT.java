@@ -162,7 +162,7 @@ class CommercialTypedWritePathIT {
                 OWNER_ID, "commercial", "Shop near market", "Udupi",
                 new BigDecimal("2000000"), "Retail shop", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFields.EMPTY, shopFields());
 
         Listing fromDb = listingRepository.findById(saved.getId()).orElseThrow();
@@ -200,7 +200,7 @@ class CommercialTypedWritePathIT {
                 OWNER_ID, "commercial", "Tech office", "Udupi",
                 new BigDecimal("5000000"), "Office space", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFields.EMPTY, officeFields);
 
         Listing fromDb = listingRepository.findById(saved.getId()).orElseThrow();
@@ -230,7 +230,7 @@ class CommercialTypedWritePathIT {
                 OWNER_ID, "commercial_building", "Block A", "Udupi",
                 new BigDecimal("10000000"), "Commercial block", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFields.EMPTY, buildingFields);
 
         Listing fromDb = listingRepository.findById(saved.getId()).orElseThrow();
@@ -259,7 +259,7 @@ class CommercialTypedWritePathIT {
                 OWNER_ID, "warehouse", "WH A", "Udupi",
                 new BigDecimal("8000000"), "Warehouse", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFields.EMPTY, warehouseFields);
 
         Listing fromDb = listingRepository.findById(saved.getId()).orElseThrow();
@@ -289,7 +289,7 @@ class CommercialTypedWritePathIT {
                 OWNER_ID, "commercial_land", "Comm land", "Udupi",
                 new BigDecimal("3000000"), "Commercial land plot", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
                 ResidentialListingFields.EMPTY, landFields);
 
         Listing fromDb = listingRepository.findById(saved.getId()).orElseThrow();
@@ -334,7 +334,7 @@ class CommercialTypedWritePathIT {
                 null, null, null,                                          // possessionStatus, expectedPossessionDate, approvalsDeclared
                 null, null, null,                                          // waterSource, soilType, roadAccess
                 null, null, null,                                          // cultivationStatus, ownershipType, surveyNumber
-                null, null, null,                                          // landCategory, farmhouseAvailable, fencingDone
+                null, null, null, null,                                    // landCategory, agriConversionStatus, farmhouseAvailable, fencingDone
                 null,                                                       // boundaryGeoJson
                 ResidentialListingFields.EMPTY, CommercialListingFields.EMPTY);
 

@@ -38,6 +38,9 @@ public class AgriculturalLandDetail {
     @Column(name = "land_category")
     private String landCategory;
 
+    @Column(name = "agri_conversion_status")
+    private String agriConversionStatus;
+
     @Column(name = "farmhouse_available")
     private Boolean farmhouseAvailable;
 
@@ -63,6 +66,9 @@ public class AgriculturalLandDetail {
 
     public String getLandCategory() { return landCategory; }
     public void setLandCategory(String landCategory) { this.landCategory = landCategory; }
+
+    public String getAgriConversionStatus() { return agriConversionStatus; }
+    public void setAgriConversionStatus(String agriConversionStatus) { this.agriConversionStatus = agriConversionStatus; }
 
     public Boolean getFarmhouseAvailable() { return farmhouseAvailable; }
     public void setFarmhouseAvailable(Boolean farmhouseAvailable) { this.farmhouseAvailable = farmhouseAvailable; }

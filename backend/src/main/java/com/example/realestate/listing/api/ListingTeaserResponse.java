@@ -79,6 +79,7 @@ public record ListingTeaserResponse(
         String ownershipType,
         String surveyNumber,
         String landCategory,
+        String agriConversionStatus,
         Boolean farmhouseAvailable,
         Boolean fencingDone
 ) {}

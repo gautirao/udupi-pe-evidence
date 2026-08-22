@@ -12,6 +12,7 @@ export interface AgriFieldValues {
   cultivationStatus: string;
   surveyNumber: string;
   landCategory: string;
+  agriConversionStatus: string;
   farmhouseAvailable: string;
   fencingDone: string;
 }
@@ -23,6 +24,7 @@ export interface AgriFieldSetters {
   setCultivationStatus: Dispatch<SetStateAction<string>>;
   setSurveyNumber: Dispatch<SetStateAction<string>>;
   setLandCategory: Dispatch<SetStateAction<string>>;
+  setAgriConversionStatus: Dispatch<SetStateAction<string>>;
   setFarmhouseAvailable: Dispatch<SetStateAction<string>>;
   setFencingDone: Dispatch<SetStateAction<string>>;
 }
@@ -41,6 +43,8 @@ export function useAgriFields(): UseAgriFieldsResult {
   const [surveyNumber, setSurveyNumber] = useState('');
   // Issue #1458 — new structured agri fields
   const [landCategory, setLandCategory] = useState('');
+  // #2043 — declared conversion status; agricultural_land-only, not verified
+  const [agriConversionStatus, setAgriConversionStatus] = useState('');
   // '' = not specified; 'true'/'false' for Select binding
   const [farmhouseAvailable, setFarmhouseAvailable] = useState('');
   const [fencingDone, setFencingDone] = useState('');
@@ -54,6 +58,7 @@ export function useAgriFields(): UseAgriFieldsResult {
     setSurveyNumber(listing.surveyNumber ?? '');
     // Issue #1458 — pre-populate new structured agri fields
     setLandCategory(listing.landCategory ?? '');
+    setAgriConversionStatus(listing.agriConversionStatus ?? '');
     setFarmhouseAvailable(
       listing.farmhouseAvailable === true ? 'true'
         : listing.farmhouseAvailable === false ? 'false'
@@ -74,6 +79,7 @@ export function useAgriFields(): UseAgriFieldsResult {
       cultivationStatus,
       surveyNumber,
       landCategory,
+      agriConversionStatus,
       farmhouseAvailable,
       fencingDone,
     },
@@ -84,6 +90,7 @@ export function useAgriFields(): UseAgriFieldsResult {
       setCultivationStatus,
       setSurveyNumber,
       setLandCategory,
+      setAgriConversionStatus,
       setFarmhouseAvailable,
       setFencingDone,
     },

@@ -134,7 +134,7 @@ public class ListingCrudService {
         return createDraft(createdBy, propertyType, title, locality, price, description,
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null);
+                "dealer", null, null, null, null, null, null, null, null, null, null);
     }
 
     @Transactional
@@ -144,7 +144,7 @@ public class ListingCrudService {
         return createDraft(createdBy, propertyType, title, locality, price, description,
                 null, null, null, null, null, videoUrl,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null);
+                "dealer", null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -158,7 +158,7 @@ public class ListingCrudService {
         return createDraft(createdBy, propertyType, title, locality, price, description,
                 landArea, bedrooms, builtArea, landAreaUnit, builtAreaUnit, videoUrl,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null, null, null, null);
+                "dealer", null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -184,14 +184,16 @@ public class ListingCrudService {
                                String sellerType,
                                String waterSource, String soilType, String roadAccess,
                                String cultivationStatus, String ownershipType, String surveyNumber,
-                               String landCategory, Boolean farmhouseAvailable, Boolean fencingDone) {
+                               String landCategory, String agriConversionStatus,
+                               Boolean farmhouseAvailable, Boolean fencingDone) {
         return createDraft(createdBy, propertyType, title, locality, price, description,
                 landArea, bedrooms, builtArea, landAreaUnit, builtAreaUnit, videoUrl,
                 listingPurpose, carpetArea, carpetAreaUnit, floorNumber, totalFloors,
                 furnishingStatus, washrooms, parkingCount, roadFrontageFt, commercialUsage, numberOfUnits,
                 monthlyRent, securityDepositMonths, lockInMonths, sellerType,
                 waterSource, soilType, roadAccess, cultivationStatus, ownershipType, surveyNumber,
-                landCategory, farmhouseAvailable, fencingDone, ResidentialListingFields.EMPTY);
+                landCategory, agriConversionStatus, farmhouseAvailable, fencingDone,
+                ResidentialListingFields.EMPTY);
     }
 
     /**
@@ -217,7 +219,8 @@ public class ListingCrudService {
                                String sellerType,
                                String waterSource, String soilType, String roadAccess,
                                String cultivationStatus, String ownershipType, String surveyNumber,
-                               String landCategory, Boolean farmhouseAvailable, Boolean fencingDone,
+                               String landCategory, String agriConversionStatus,
+                               Boolean farmhouseAvailable, Boolean fencingDone,
                                ResidentialListingFields residentialFields) {
         return createDraft(createdBy, propertyType, title, locality, price, description,
                 landArea, bedrooms, builtArea, landAreaUnit, builtAreaUnit, videoUrl,
@@ -225,7 +228,7 @@ public class ListingCrudService {
                 furnishingStatus, washrooms, parkingCount, roadFrontageFt, commercialUsage, numberOfUnits,
                 monthlyRent, securityDepositMonths, lockInMonths, sellerType,
                 waterSource, soilType, roadAccess, cultivationStatus, ownershipType, surveyNumber,
-                landCategory, farmhouseAvailable, fencingDone, residentialFields,
+                landCategory, agriConversionStatus, farmhouseAvailable, fencingDone, residentialFields,
                 CommercialListingFields.EMPTY);
     }
 
@@ -253,7 +256,8 @@ public class ListingCrudService {
                                String sellerType,
                                String waterSource, String soilType, String roadAccess,
                                String cultivationStatus, String ownershipType, String surveyNumber,
-                               String landCategory, Boolean farmhouseAvailable, Boolean fencingDone,
+                               String landCategory, String agriConversionStatus,
+                               Boolean farmhouseAvailable, Boolean fencingDone,
                                ResidentialListingFields residentialFields,
                                CommercialListingFields commercialFields) {
         // Enforce owner listing limit: max 3 LIVE listings for owner accounts.
@@ -312,6 +316,7 @@ public class ListingCrudService {
         if (ownershipType != null) listing.setOwnershipType(ownershipType);
         if (surveyNumber != null) listing.setSurveyNumber(surveyNumber);
         if (landCategory != null) listing.setLandCategory(landCategory);
+        if (agriConversionStatus != null) listing.setAgriConversionStatus(agriConversionStatus);
         if (farmhouseAvailable != null) listing.setFarmhouseAvailable(farmhouseAvailable);
         if (fencingDone != null) listing.setFencingDone(fencingDone);
 
@@ -689,7 +694,7 @@ public class ListingCrudService {
         return updateListing(listingId, userId, isAdmin,
                 propertyType, title, locality, price, description, null, null, null, null, null, null, null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -710,7 +715,7 @@ public class ListingCrudService {
         return updateListing(listingId, userId, isAdmin, propertyType, title, locality,
                 price, description, landArea, bedrooms, builtArea, addressConfirmed, null, null, null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -729,7 +734,7 @@ public class ListingCrudService {
                 price, description, landArea, bedrooms, builtArea, addressConfirmed, latitude, longitude,
                 landAreaUnit, builtAreaUnit, videoUrl, applyVideoUrl, reraNumber,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -767,7 +772,8 @@ public class ListingCrudService {
                                  // Agricultural land fields
                                  String waterSource, String soilType, String roadAccess,
                                  String cultivationStatus, String ownershipType, String surveyNumber,
-                                 String landCategory, Boolean farmhouseAvailable, Boolean fencingDone,
+                                 String landCategory, String agriConversionStatus,
+                                 Boolean farmhouseAvailable, Boolean fencingDone,
                                  String boundaryGeoJson) {
         return updateListing(listingId, userId, isAdmin, propertyType, title, locality,
                 price, description, landArea, bedrooms, builtArea, addressConfirmed, latitude, longitude,
@@ -777,7 +783,7 @@ public class ListingCrudService {
                 monthlyRent, securityDepositMonths, lockInMonths,
                 possessionStatus, expectedPossessionDate, approvalsDeclared,
                 waterSource, soilType, roadAccess, cultivationStatus, ownershipType, surveyNumber,
-                landCategory, farmhouseAvailable, fencingDone, boundaryGeoJson,
+                landCategory, agriConversionStatus, farmhouseAvailable, fencingDone, boundaryGeoJson,
                 ResidentialListingFields.EMPTY);
     }
 
@@ -815,7 +821,8 @@ public class ListingCrudService {
                                  // Agricultural land fields
                                  String waterSource, String soilType, String roadAccess,
                                  String cultivationStatus, String ownershipType, String surveyNumber,
-                                 String landCategory, Boolean farmhouseAvailable, Boolean fencingDone,
+                                 String landCategory, String agriConversionStatus,
+                                 Boolean farmhouseAvailable, Boolean fencingDone,
                                  String boundaryGeoJson,
                                  ResidentialListingFields residentialFields) {
         return updateListing(listingId, userId, isAdmin, propertyType, title, locality,
@@ -826,7 +833,7 @@ public class ListingCrudService {
                 monthlyRent, securityDepositMonths, lockInMonths,
                 possessionStatus, expectedPossessionDate, approvalsDeclared,
                 waterSource, soilType, roadAccess, cultivationStatus, ownershipType, surveyNumber,
-                landCategory, farmhouseAvailable, fencingDone, boundaryGeoJson,
+                landCategory, agriConversionStatus, farmhouseAvailable, fencingDone, boundaryGeoJson,
                 residentialFields, CommercialListingFields.EMPTY);
     }
 
@@ -865,7 +872,8 @@ public class ListingCrudService {
                                  // Agricultural land fields
                                  String waterSource, String soilType, String roadAccess,
                                  String cultivationStatus, String ownershipType, String surveyNumber,
-                                 String landCategory, Boolean farmhouseAvailable, Boolean fencingDone,
+                                 String landCategory, String agriConversionStatus,
+                                 Boolean farmhouseAvailable, Boolean fencingDone,
                                  String boundaryGeoJson,
                                  ResidentialListingFields residentialFields,
                                  CommercialListingFields commercialFields) {
@@ -969,6 +977,7 @@ public class ListingCrudService {
         if (ownershipType != null) listing.setOwnershipType(ownershipType);
         if (surveyNumber != null) listing.setSurveyNumber(surveyNumber);
         if (landCategory != null) listing.setLandCategory(landCategory);
+        if (agriConversionStatus != null) listing.setAgriConversionStatus(agriConversionStatus);
         if (farmhouseAvailable != null) listing.setFarmhouseAvailable(farmhouseAvailable);
         if (fencingDone != null) listing.setFencingDone(fencingDone);
 

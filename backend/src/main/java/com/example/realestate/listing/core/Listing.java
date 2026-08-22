@@ -268,6 +268,9 @@ public class Listing {
     @Column(name = "land_category", length = 32)
     private String landCategory;
 
+    @Column(name = "agri_conversion_status", length = 32)
+    private String agriConversionStatus;
+
     @Column(name = "farmhouse_available")
     private Boolean farmhouseAvailable;
 
@@ -1372,6 +1375,14 @@ public class Listing {
 
     public void setLandCategory(String landCategory) {
         this.landCategory = landCategory;
+    }
+
+    public String getAgriConversionStatus() {
+        return agriConversionStatus;
+    }
+
+    public void setAgriConversionStatus(String agriConversionStatus) {
+        this.agriConversionStatus = agriConversionStatus;
     }
 
     public Boolean getFarmhouseAvailable() {

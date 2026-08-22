@@ -96,8 +96,9 @@ class ListingControllerAgriValidationTest {
         org.mockito.Mockito.lenient()
                 .when(listingWorkflowService.findListingForCaller(any(), any(), anyBoolean()))
                 .thenReturn(stub);
-        // createDraft: 36 params — UUID + 35 typed params (all Object-compatible except primitives),
-        // + ResidentialListingFields + CommercialListingFields (M38-FU2 / #1730) = 38 total
+        // createDraft: 37 params — UUID + 36 typed params (all Object-compatible except primitives),
+        // + ResidentialListingFields + CommercialListingFields (M38-FU2 / #1730) = 39 total
+        // (#2043: +1 for agriConversionStatus)
         org.mockito.Mockito.lenient()
                 .when(listingCrudService.createDraft(
                         any(), any(), any(), any(), any(), any(),
@@ -106,17 +107,18 @@ class ListingControllerAgriValidationTest {
                         any(), any(), any(), any(), any(), any(),
                         any(), any(), any(), any(), any(), any(),
                         any(), any(), any(), any(), any(), any(),
-                any(), any()))
+                any(), any(), any()))
                 .thenReturn(stub);
-        // updateListing: UUID, UUID, boolean (primitive), + 43 Object params
-        // + ResidentialListingFields + CommercialListingFields (M38-FU2 / #1730) = 48 total
+        // updateListing: UUID, UUID, boolean (primitive), + 44 Object params
+        // + ResidentialListingFields + CommercialListingFields (M38-FU2 / #1730) = 49 total
+        // (#2043: +1 for agriConversionStatus)
         org.mockito.Mockito.lenient()
                 .when(listingCrudService.updateListing(
                         any(), any(), anyBoolean(),
                         any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                         any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                         any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                        any(), any(), any(),
+                        any(), any(), any(), any(),
                 any(), any()))
                 .thenReturn(stub);
 
@@ -143,7 +145,7 @@ class ListingControllerAgriValidationTest {
                     l.getFirstPublishedAt(), l.getLastConfirmedAt(), l.getPossessionStatus(),
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), false, 0,
                     l.getTrustTier(), null, l.getAreaKey(), List.of(),
-                    null, null, null, null, null, null, null, null, null,
+                    null, null, null, null, null, null, null, null, null, null,
                     l.getBoundaryGeoJson(), null,
                     l.getBathrooms(), l.getBalconies(), l.getFacing(), l.getAvailabilityTimeline(),
                     l.getSuperBuiltArea(), l.getSuperBuiltAreaUnit(), l.getPropertyAge(), l.getResidentialWaterSource(),

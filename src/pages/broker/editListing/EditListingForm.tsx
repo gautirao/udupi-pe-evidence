@@ -131,11 +131,11 @@ export function EditListingForm({ listing }: EditListingFormProps) {
   const agri = useAgriFields();
   const {
     waterSource, soilType, roadAccess, cultivationStatus,
-    surveyNumber, landCategory, farmhouseAvailable, fencingDone,
+    surveyNumber, landCategory, agriConversionStatus, farmhouseAvailable, fencingDone,
   } = agri.values;
   const {
     setWaterSource, setSoilType, setRoadAccess, setCultivationStatus,
-    setSurveyNumber, setLandCategory, setFarmhouseAvailable, setFencingDone,
+    setSurveyNumber, setLandCategory, setAgriConversionStatus, setFarmhouseAvailable, setFencingDone,
   } = agri.setters;
   // ownershipType is shared with residential — see useSharedFields() above.
   // Agricultural plot boundary — [lat, lng][] coords from DrawControl
@@ -308,6 +308,7 @@ export function EditListingForm({ listing }: EditListingFormProps) {
         ownershipType,
         surveyNumber,
         landCategory,
+        agriConversionStatus,
         farmhouseAvailable,
         fencingDone,
         bathrooms,

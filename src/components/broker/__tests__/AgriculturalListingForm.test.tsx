@@ -300,6 +300,33 @@ describe('AgriculturalListingForm — location trust: LOCK until pin confirm, RE
   });
 });
 
+describe('AgriculturalListingForm — conversion status (issue #2043)', () => {
+  it('renders an optional conversion status control with an honest "not verified" caption', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    // "Land record details" (Section 4) is collapsed by default — expand it first.
+    await user.click(screen.getByText(/land record details/i));
+    expect(document.getElementById('agriConversionStatus')).not.toBeNull();
+    expect(screen.getByText(/conversion status \(optional\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/declared by the seller\/broker/i)).toBeInTheDocument();
+    expect(screen.getByText(/not verified by retrends/i)).toBeInTheDocument();
+  });
+
+  it('omits agriConversionStatus from the create-draft payload when left unset (parity with landCategory)', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    const user = userEvent.setup();
+    renderForm();
+
+    await resolveLocation(user);
+    await user.type(screen.getByLabelText(/price \(inr\)/i), '78 lakh');
+    await user.click(screen.getAllByRole('button', { name: /save draft/i })[0]);
+
+    expect(mockCreateMutate).toHaveBeenCalledTimes(1);
+    const [payload] = mockCreateMutate.mock.calls[0] as [Record<string, unknown>, unknown];
+    expect(payload.agriConversionStatus).toBeUndefined();
+  });
+});
+
 describe('AgriculturalListingForm — residential/commercial regression guard', () => {
   it('does not import or mount ResidentialListingForm/CommercialListingForm internals (own independent local state)', () => {
     renderForm();

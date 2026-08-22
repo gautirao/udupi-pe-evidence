@@ -616,8 +616,9 @@ class ListingResponseMapperTest {
         assertThat(teaser.propertyType()).isEqualTo(l.getPropertyType());
         assertThat(teaser.locality()).isEqualTo(l.getLocality());
         assertThat(teaser.listingPurpose()).isEqualTo("SALE");
-        // #1452/#1458/#1941: record now has 24 components (9 base + 15 agri-only); priceBand added in #1941
-        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(24);
+        // #1452/#1458/#1941/#2043: record now has 25 components (9 base + 16 agri-only); priceBand
+        // added in #1941, agriConversionStatus added in #2043.
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(25);
     }
 
     @Test
@@ -626,8 +627,9 @@ class ListingResponseMapperTest {
 
         ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
 
-        // #1452/#1941: record now has 24 components (9 base + 15 agri-only fields); priceBand added in #1941
-        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(24);
+        // #1452/#1941/#2043: record now has 25 components (9 base + 16 agri-only fields); priceBand
+        // added in #1941, agriConversionStatus added in #2043.
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(25);
         var componentNames = java.util.Arrays.stream(ListingTeaserResponse.class.getRecordComponents())
                 .map(java.lang.reflect.RecordComponent::getName)
                 .toList();
@@ -635,12 +637,12 @@ class ListingResponseMapperTest {
         assertThat(componentNames).contains(
                 "id", "primaryImageUrl", "imageCount", "price", "pricePaise", "priceBand",
                 "propertyType", "locality", "listingPurpose");
-        // 15 agri-only fields present in record definition (null for non-agri via @JsonInclude(NON_NULL))
+        // 16 agri-only fields present in record definition (null for non-agri via @JsonInclude(NON_NULL))
         assertThat(componentNames).contains(
                 "boundary", "latitude", "longitude", "landArea", "landAreaUnit",
                 "computedAreaAcres", "waterSource", "soilType", "roadAccess",
                 "cultivationStatus", "ownershipType", "surveyNumber",
-                "landCategory", "farmhouseAvailable", "fencingDone");
+                "landCategory", "agriConversionStatus", "farmhouseAvailable", "fencingDone");
         // Truly sensitive names must not appear
         assertThat(componentNames).doesNotContain(
                 "address", "description", "sellerType", "bedrooms", "builtArea",
@@ -740,6 +742,8 @@ class ListingResponseMapperTest {
         l.setCultivationStatus("Fallow");
         l.setOwnershipType("Freehold");
         l.setSurveyNumber("SY-101/2");
+        l.setLandCategory("FARMLAND");
+        l.setAgriConversionStatus("CONVERSION_APPLIED");
 
         String geojson = "{\"type\":\"Polygon\",\"coordinates\":[]}";
         double areaSqm = 4046.856; // ~1 acre
@@ -771,6 +775,8 @@ class ListingResponseMapperTest {
         assertThat(result.roadAccess()).isEqualTo("Tar road");
         assertThat(result.cultivationStatus()).isEqualTo("Fallow");
         assertThat(result.ownershipType()).isEqualTo("Freehold");
+        assertThat(result.landCategory()).isEqualTo("FARMLAND");
+        assertThat(result.agriConversionStatus()).isEqualTo("CONVERSION_APPLIED");
     }
 
     // ==================== T7: real non-agri teaser → all 12 agri fields NULL ====================
@@ -801,6 +807,8 @@ class ListingResponseMapperTest {
         assertThat(result.cultivationStatus()).isNull();
         assertThat(result.ownershipType()).isNull();
         assertThat(result.surveyNumber()).isNull();
+        assertThat(result.landCategory()).isNull();
+        assertThat(result.agriConversionStatus()).isNull();
     }
 
     // ==================== T8: findBoundaryGeoJson called once for agri, never for non-agri ====================

@@ -22,6 +22,7 @@ import {
   ROAD_ACCESS_LABELS,
   CULTIVATION_STATUS_LABELS,
   OWNERSHIP_TYPE_LABELS,
+  AGRI_CONVERSION_STATUS_LABELS,
 } from '../agriFieldLabels';
 import {
   FURNISHING_OPTIONS,
@@ -60,6 +61,7 @@ interface ListingFieldOptionsContract {
     cultivationStatus: string[];
     ownershipType: string[];
     landCategory: string[];
+    agriConversionStatus: string[];
   };
   residential: {
     furnishingStatus: string[];
@@ -104,6 +106,14 @@ describe('listing-field-options parity: agri.landCategory', () => {
   it('LAND_CATEGORY_LABELS keys exactly equal contract agri.landCategory', () => {
     expect(sorted(Object.keys(LAND_CATEGORY_LABELS))).toEqual(
       sorted(contract.agri.landCategory),
+    );
+  });
+});
+
+describe('listing-field-options parity: agri.agriConversionStatus', () => {
+  it('AGRI_CONVERSION_STATUS_LABELS keys exactly equal contract agri.agriConversionStatus', () => {
+    expect(sorted(Object.keys(AGRI_CONVERSION_STATUS_LABELS))).toEqual(
+      sorted(contract.agri.agriConversionStatus),
     );
   });
 });

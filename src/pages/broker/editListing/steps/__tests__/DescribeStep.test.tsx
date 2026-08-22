@@ -120,13 +120,13 @@ function makeAgri(overrides: Partial<ReturnType<typeof useAgriFields>['values']>
   return {
     values: {
       waterSource: '', soilType: '', roadAccess: '', cultivationStatus: '',
-      surveyNumber: '', landCategory: '', farmhouseAvailable: '', fencingDone: '',
+      surveyNumber: '', landCategory: '', agriConversionStatus: '', farmhouseAvailable: '', fencingDone: '',
       ...overrides,
     },
     setters: {
       setWaterSource: vi.fn(), setSoilType: vi.fn(), setRoadAccess: vi.fn(),
       setCultivationStatus: vi.fn(), setSurveyNumber: vi.fn(), setLandCategory: vi.fn(),
-      setFarmhouseAvailable: vi.fn(), setFencingDone: vi.fn(),
+      setAgriConversionStatus: vi.fn(), setFarmhouseAvailable: vi.fn(), setFencingDone: vi.fn(),
     },
     hydrate: vi.fn(),
   };

@@ -224,6 +224,7 @@ export function ListingDetailMainContent({
             roadAccess={listing.roadAccess}
             cultivationStatus={listing.cultivationStatus}
             ownershipType={listing.ownershipType}
+            agriConversionStatus={listing.agriConversionStatus}
             boundary={listing.boundary}
           />
           {hasCoords && (

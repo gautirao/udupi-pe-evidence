@@ -14,6 +14,7 @@ import java.util.Set;
  *   <li>{@link #VALID_CULTIVATION_STATUSES}</li>
  *   <li>{@link #VALID_OWNERSHIP_TYPES}</li>
  *   <li>{@link #VALID_LAND_CATEGORIES} — wired as of M38-10b (#1693)</li>
+ *   <li>{@link #VALID_CONVERSION_STATUSES} — wired as of #2043</li>
  * </ul>
  *
  * <h2>Author-only / forward sets (NOT wired to any current request field)</h2>
@@ -33,7 +34,6 @@ import java.util.Set;
  *   <li>{@link #VALID_SOIL_DESIGN} — typed-model extension of {@link #VALID_SOIL_TYPES}</li>
  *   <li>{@link #VALID_CROPS}</li>
  *   <li>{@link #VALID_LOCATION_FEATURES}</li>
- *   <li>{@link #VALID_CONVERSION_STATUSES}</li>
  *   <li>{@link #VALID_AGRI_AREA_UNITS}</li>
  *   <li>{@link #VALID_YN} — shared tri-state across agri, commercial and residential domains</li>
  * </ul>
@@ -402,7 +402,7 @@ public final class AgriFieldOptions {
     );
 
     // -------------------------------------------------------------------------
-    // conversion_status  (forward-only; part of land-record section)
+    // conversion_status  (wired as of #2043; part of land-record section)
     // Design: Not converted / Conversion applied / Approved for conversion / Not sure
     // Framed as broker-declared records — never a verification flag (ADR §10k).
     // -------------------------------------------------------------------------

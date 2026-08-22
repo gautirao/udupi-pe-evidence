@@ -135,6 +135,49 @@ class AgriFieldOptionsTest {
         assertThat(AgriFieldOptions.VALID_CONVERSION_STATUSES).contains("NOT_SURE");
     }
 
+    // ── VALID_CONVERSION_STATUSES (agri conversion status, #2043) ────────────────
+
+    @Test
+    void conversionStatuses_containsExpectedMembers() {
+        assertThat(AgriFieldOptions.VALID_CONVERSION_STATUSES).containsExactlyInAnyOrder(
+                "NOT_CONVERTED", "CONVERSION_APPLIED", "APPROVED_FOR_CONVERSION", "NOT_SURE");
+    }
+
+    @Test
+    void conversionStatuses_labelsCoversAllMembers() {
+        assertAllMembersHaveLabel(
+                AgriFieldOptions.VALID_CONVERSION_STATUSES,
+                AgriFieldOptions.CONVERSION_STATUS_LABELS,
+                "agriConversionStatus");
+    }
+
+    @Test
+    void conversionStatuses_labelNotConvertedIsCorrect() {
+        assertThat(AgriFieldOptions.CONVERSION_STATUS_LABELS.get("NOT_CONVERTED")).isEqualTo("Not converted");
+    }
+
+    @Test
+    void rejectIfUnknown_conversionStatus_validMember_accepted() {
+        for (String member : AgriFieldOptions.VALID_CONVERSION_STATUSES) {
+            rejectIfUnknown("agriConversionStatus", member, AgriFieldOptions.VALID_CONVERSION_STATUSES);
+        }
+    }
+
+    @Test
+    void rejectIfUnknown_conversionStatus_null_accepted() {
+        rejectIfUnknown("agriConversionStatus", null, AgriFieldOptions.VALID_CONVERSION_STATUSES);
+    }
+
+    @Test
+    void rejectIfUnknown_conversionStatus_unknownValue_throwsBadRequest() {
+        assertThatThrownBy(() ->
+                rejectIfUnknown("agriConversionStatus", "REJECTED", AgriFieldOptions.VALID_CONVERSION_STATUSES))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Invalid value for agriConversionStatus")
+                .hasMessageContaining("REJECTED")
+                .hasMessageContaining("Allowed values:");
+    }
+
     // ── helper: replicates ListingController.rejectIfUnknown (private static) ─
 
     private static void rejectIfUnknown(String fieldName, String value, Set<String> validValues) {
