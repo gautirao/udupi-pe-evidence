@@ -23,35 +23,75 @@
  * driven (`map.setView(centre, zoom)`): the geometry this module reasons
  * about is the geometry that will actually be painted.
  *
- * `zBase` is the largest integer zoom (searched from
- * `min(maxZoom, LEAF_FIT_MAX_ZOOM)` down to `minZoom`) at which the union of
- * every child's CARD RECT (its anchor projected at that zoom, then expanded
- * bottom-centre by its footprint) fits inside the usable viewport sub-rect
- * once centred on `centre`. Deliberately RECTS, not bare centroids — a
- * bare-centroid fit lets a card's edge clip off-screen by construction,
- * which is exactly the defect this module exists to prevent. If no zoom in
- * range fits, `zBase` falls back to `minZoom` (the least-bad available
- * option; the resulting camera may legitimately not be legible, which is
- * exactly what `needsDeclutter: true` communicates).
+ * `zBase` is the MINIMUM of two independently-computed, largest-satisfying
+ * integer zooms (each searched from `min(maxZoom, LEAF_FIT_MAX_ZOOM)` down to
+ * `minZoom`) — these answer two DIFFERENT questions and are deliberately
+ * NEVER merged into one rect list (external review, post-first-fix-round —
+ * they used to be, and that was itself a defect; see below):
  *
- * ── `containmentBounds` IS A SOFT STARTING-POINT FLOOR, NOT AN ENFORCED
- * ENVELOPE (code review F2 — read this before "fixing" the apparent gap) ──
- * The optional `containmentBounds` (e.g. a Direction/Cluster's own bbox) is
- * folded into the SAME union rect used ONLY for the `zBase` SEARCH — never
- * into the per-candidate `clipped`/`pairs`/`overlapAreaPx2` metrics, and
- * never re-checked once a winning candidate is chosen. This is deliberate,
- * not an oversight:
+ *   1. CHILD PLACEMENT (the real question): the largest zoom at which every
+ *      child's CARD RECT (its anchor projected at that zoom, then expanded
+ *      bottom-centre by its footprint) is ACTUALLY CONTAINED within the
+ *      usable viewport sub-rect under the SAME centre-pinned placement
+ *      `evaluateCandidate` uses below — i.e. every rect is translated by
+ *      `(usable-rect centre − projected `centre` point)`, then checked
+ *      individually, not just as a union's overall dimensions (a pure
+ *      width/height dimension check on the rects' union is NOT equivalent
+ *      to real containment here, because the placement is centre-PINNED,
+ *      not freely re-centrable — see `placeRectsForCentrePinnedCamera`
+ *      below for why bottom-centre anchoring AND an uneven anchor
+ *      distribution both make the union's own midpoint diverge from where
+ *      the camera actually places it).
+ *   2. ENVELOPE SCALE FLOOR (`containmentBounds`, see its own section
+ *      below): a pure DIMENSION check — does `containmentBounds`'s
+ *      projected width/height fit inside the usable sub-rect's
+ *      width/height — with NO translation and NO position sensitivity.
+ *
+ * If no zoom in range satisfies (1), that half falls back to `minZoom` (the
+ * least-bad available option; the resulting camera may legitimately not be
+ * legible, which is exactly what `needsDeclutter: true` communicates); same
+ * fallback for (2) when `containmentBounds` is supplied but never fits.
+ * When `containmentBounds` is absent, (2) contributes no constraint at all
+ * (its "largest satisfying zoom" is simply the ceiling), so `zBase` reduces
+ * to (1) alone.
+ *
+ * ── `containmentBounds` IS A SOFT, SCALE-ONLY STARTING-POINT FLOOR, NEVER A
+ * POSITION-SENSITIVE CONSTRAINT (code review F2, then F1 of the follow-up
+ * round — read this before "fixing" the apparent gap) ──
+ * The optional `containmentBounds` (e.g. a Direction/Cluster's own bbox)
+ * contributes ONLY its projected SIZE to `zBase` (requirement 2 above) —
+ * never its position relative to `centre`, never the per-candidate
+ * `clipped`/`pairs`/`overlapAreaPx2` metrics, and never re-checked once a
+ * winning candidate is chosen. This is deliberate, not an oversight:
  *
  *   - PURPOSE: `zBase` is the resolver's STARTING point before it looks for
  *     a legible zoom. Without `containmentBounds`, a node with one child (or
- *     several tightly-coincident children) has a near-zero child-rect union,
- *     so an unconstrained `zBase` would climb straight to the clamp
- *     (`LEAF_FIT_MAX_ZOOM`) and slam the camera into a meaningless pinpoint
- *     — this is exactly the "sparse destinations do not cause unreasonable
- *     over-zoom" acceptance criterion. Pulling `zBase` DOWN via the node's
- *     own envelope is what prevents that; the approved plan calls this
- *     retaining node bounds "ONLY as containment/fallback", i.e. a floor to
- *     start searching from, not a hard ceiling to enforce forever after.
+ *     several tightly-coincident children) has a near-zero child-rect
+ *     footprint, so an unconstrained `zBase` would climb straight to the
+ *     clamp (`LEAF_FIT_MAX_ZOOM`) and slam the camera into a meaningless
+ *     pinpoint — this is exactly the "sparse destinations do not cause
+ *     unreasonable over-zoom" acceptance criterion. Pulling `zBase` DOWN via
+ *     the node's own envelope SIZE is what prevents that; the approved plan
+ *     calls this retaining node bounds "ONLY as containment/fallback", i.e.
+ *     a floor to start searching from, not a hard ceiling to enforce
+ *     forever after.
+ *
+ *   - WHY THE ENVELOPE'S *POSITION* MUST NOT GATE `zBase` (the bug this
+ *     section now corrects): an earlier version of this fix folded the
+ *     envelope into the SAME rect list checked for requirement (1), so its
+ *     admissibility depended on where `centre` (the anchor mean) happened
+ *     to sit inside it. A child anchored near an EDGE of its own node's bbox
+ *     — legitimate geometry for a padded or elongated Direction, e.g. a
+ *     child at `lat=0.9` inside a `[-1,1]` bbox — pins the envelope's
+ *     translated position off-centre, so a real, cleanly-separating camera
+ *     several zoom levels higher becomes structurally unreachable: the
+ *     resolver reports `needsDeclutter: true` when a perfectly good camera
+ *     exists, purely because the STARTING-POINT floor became
+ *     position-sensitive. That is the SAME CLASS of defect as the
+ *     bottom-centre/uneven-distribution bug this module was built to fix —
+ *     mirrored, from under-zoom instead of over-zoom. The envelope's
+ *     ADMISSIBILITY must therefore never depend on `centre`'s position
+ *     within it — only on whether its SIZE, at that zoom, could fit at all.
  *
  *   - WHY IT IS NOT ALSO ENFORCED AT THE WINNING CANDIDATE: for a
  *     geographically WIDE node (e.g. a `d:central`-sized Direction whose
@@ -60,21 +100,23 @@
  *     separating them necessarily spreads them out far enough that the
  *     node's own (wide) envelope no longer fits on screen. That is CORRECT
  *     behaviour: the camera is now framing the children that matter, not
- *     the node's full historical extent. Enforcing the envelope at every
- *     candidate (as first proposed in review) would make exactly the dense
- *     nodes this issue exists to fix UNABLE to ever reach a legible
+ *     the node's full historical extent. Enforcing the envelope's DIMENSION
+ *     (let alone its position) at every candidate would make exactly the
+ *     dense nodes this issue exists to fix UNABLE to ever reach a legible
  *     candidate — `needsDeclutter` would fire permanently on the cases this
  *     module is supposed to resolve, which defeats the feature.
  *
- *   - NET EFFECT: `containmentBounds` can only ever pull `zBase` DOWN
- *     (never up — folding a rect into a union can only grow it, and a
- *     larger union can only fail the fit check at zooms it would otherwise
- *     have passed), so it is safe-direction with respect to the OVER-ZOOM
- *     guard. It offers NO guarantee that the FINAL chosen camera keeps the
- *     node's full envelope on screen — a wide node's envelope MAY be
- *     (correctly) cropped once the resolver zooms in to legibly separate
+ *   - NET EFFECT: `containmentBounds`'s SIZE can only ever pull `zBase` DOWN
+ *     (never up — a bigger required footprint can only fail the dimension
+ *     check at zooms it would otherwise have passed), so it is safe-
+ *     direction with respect to the OVER-ZOOM guard, and — because it is
+ *     position-INSENSITIVE — it can never manufacture the under-zoom defect
+ *     above either. It offers NO guarantee that the FINAL chosen camera
+ *     keeps the node's full envelope on screen — a wide node's envelope MAY
+ *     be (correctly) cropped once the resolver zooms in to legibly separate
  *     its children. This is the documented, intentional trade-off; do not
- *     "fix" it by enforcing the envelope at every candidate.
+ *     "fix" it by enforcing the envelope (size OR position) at every
+ *     candidate, and do not fold it back into the child placement check.
  *
  * Candidates are EXACTLY `[zBase, zBase+1, zBase+2, zBase+3]`, each clamped
  * to `[minZoom, min(maxZoom, LEAF_FIT_MAX_ZOOM)]`
@@ -126,9 +168,10 @@ export interface HierarchyChildAnchor {
 }
 
 /**
- * A lat/lon bounding box (e.g. a Direction/Cluster's own bbox) — a SOFT
- * `zBase`-search starting-point floor, not an enforced envelope. See the
- * module doc's "`containmentBounds` IS A SOFT STARTING-POINT FLOOR" section.
+ * A lat/lon bounding box (e.g. a Direction/Cluster's own bbox) — a SOFT,
+ * SIZE-ONLY `zBase`-search starting-point floor, never a position-sensitive
+ * constraint and never an enforced envelope. See the module doc's
+ * "`containmentBounds` IS A SOFT, SCALE-ONLY STARTING-POINT FLOOR" section.
  */
 export interface HierarchyContainmentBounds {
   south: number;
@@ -211,12 +254,6 @@ function unionRect(rects: readonly Rect[]): Rect | null {
   return { left, right, top, bottom };
 }
 
-function rectWidth(r: Rect): number {
-  return r.right - r.left;
-}
-function rectHeight(r: Rect): number {
-  return r.bottom - r.top;
-}
 function rectCentreX(r: Rect): number {
   return (r.left + r.right) / 2;
 }
@@ -272,44 +309,89 @@ function boundsCorners(b: HierarchyContainmentBounds): Array<[number, number]> {
   ];
 }
 
-/** All card rects (+ optional containment bounds envelope) at `zoom`, centred at `centre`. */
-function contentRectsAt(
-  anchors: readonly UsableAnchor[],
-  containmentBounds: HierarchyContainmentBounds | null | undefined,
-  project: HierarchyProjectFn,
-  zoom: number,
-): Rect[] | null {
-  const cardRects: Rect[] = [];
+/**
+ * Every child's card rect at `zoom` (anchor projected, then expanded
+ * bottom-centre by its footprint). Anchors with a non-finite projection are
+ * dropped. Shared by the `zBase` child-placement search and
+ * `evaluateCandidate` (code review F4 — construction must not drift apart
+ * the way the two placement checks once did).
+ */
+function cardRectsAt(anchors: readonly UsableAnchor[], project: HierarchyProjectFn, zoom: number): Rect[] {
+  const rects: Rect[] = [];
   for (const a of anchors) {
     const p = project(a.lat, a.lon, zoom);
     if (!isFinitePoint(p)) continue;
-    cardRects.push(cardRectAt(p, a.footprintWidthPx, a.footprintHeightPx));
+    rects.push(cardRectAt(p, a.footprintWidthPx, a.footprintHeightPx));
   }
-  if (cardRects.length === 0) return null;
-
-  if (containmentBounds != null) {
-    const corners = boundsCorners(containmentBounds)
-      .map(([lat, lon]) => project(lat, lon, zoom))
-      .filter(isFinitePoint);
-    if (corners.length > 0) {
-      const bRect = unionRect(corners.map((p) => ({ left: p.x, right: p.x, top: p.y, bottom: p.y })));
-      if (bRect) cardRects.push(bRect);
-    }
-  }
-  return cardRects;
+  return rects;
 }
 
 /**
- * Whether the union of `rects` is small enough to fit inside `usable` once
- * centred — a pure dimension comparison. Fit does not depend on WHERE the
- * union is centred (any rect that fits dimensionally can always be
- * translated to sit fully inside), so this deliberately does not need to
- * know the actual camera centre.
+ * `containmentBounds`'s own projected envelope rect at `zoom` — used ONLY
+ * for the SIZE-only `zBase` scale-floor check (never merged with child card
+ * rects; see the module doc's "IS A SOFT, SCALE-ONLY STARTING-POINT FLOOR"
+ * section for why merging them was itself a defect).
  */
-function fitsWithinUsable(rects: readonly Rect[], usable: Rect): boolean {
-  const union = unionRect(rects);
-  if (!union) return false;
-  return rectWidth(union) <= rectWidth(usable) + EPS && rectHeight(union) <= rectHeight(usable) + EPS;
+function envelopeRectAt(
+  containmentBounds: HierarchyContainmentBounds,
+  project: HierarchyProjectFn,
+  zoom: number,
+): Rect | null {
+  const corners = boundsCorners(containmentBounds)
+    .map(([lat, lon]) => project(lat, lon, zoom))
+    .filter(isFinitePoint);
+  if (corners.length === 0) return null;
+  return unionRect(corners.map((p) => ({ left: p.x, right: p.x, top: p.y, bottom: p.y })));
+}
+
+/**
+ * Whether `rect` is small enough to fit inside `usable` by DIMENSION alone
+ * — no translation, no position sensitivity. This is intentionally the
+ * "old", weaker check: correct for a pure scale floor (`containmentBounds`),
+ * WRONG for real card placement (see `allRectsContained` below and the
+ * module doc for why those are different questions with different answers).
+ */
+function fitsByDimension(rect: Rect, usable: Rect): boolean {
+  return rect.right - rect.left <= usable.right - usable.left + EPS && rect.bottom - rect.top <= usable.bottom - usable.top + EPS;
+}
+
+/**
+ * THE single placement routine shared by the `zBase` search and
+ * `evaluateCandidate` (external review: the two must never drift apart
+ * again — that drift, not bottom-centre anchoring alone, was the root
+ * cause of a prior defect). The camera is CENTRE-PINNED: it places the
+ * PROJECTED `centre` POINT (the arithmetic mean of usable anchors'
+ * lat/lon — see the module doc) at the usable sub-rect's own centre, then
+ * translates every rect by that SAME fixed `(dx, dy)` offset. This is NOT a
+ * free re-centring of each rect's own union — a rect's final position
+ * depends on where `centre`'s pinned point lands relative to it, which
+ * diverges from the union's own midpoint whenever:
+ *   (a) cards are anchored bottom-centre (so a card's vertical extent is
+ *       NOT symmetric around its anchor point — the anchor sits at the
+ *       card's bottom edge, not its middle), or
+ *   (b) anchors are unevenly distributed (the arithmetic mean of anchor
+ *       lat/lon is not the same point as the geometric centre of the
+ *       resulting card-rect union — true on BOTH axes, not just vertical).
+ * A pure "does the union's WIDTH/HEIGHT fit inside the usable rect's
+ * width/height" dimension check (the prior, now-removed `fitsWithinUsable`)
+ * silently assumed the union could always be freely re-centred to make that
+ * true — false under this pinned placement, and the reason `zBase` could
+ * previously be set ABOVE the highest zoom that genuinely places cleanly.
+ */
+function placeRectsForCentrePinnedCamera(
+  rects: readonly Rect[],
+  centreProjected: ProjectedPoint,
+  usableRect: Rect,
+): Rect[] {
+  const dx = rectCentreX(usableRect) - centreProjected.x;
+  const dy = rectCentreY(usableRect) - centreProjected.y;
+  return rects.map((r) => translateRect(r, dx, dy));
+}
+
+/** Whether EVERY one of `rects` is actually contained in `usable` once centre-pinned-placed (not just their union's dimensions). */
+function allRectsContained(rects: readonly Rect[], centreProjected: ProjectedPoint, usableRect: Rect): boolean {
+  const placed = placeRectsForCentrePinnedCamera(rects, centreProjected, usableRect);
+  return placed.every((r) => rectContainedIn(r, usableRect));
 }
 
 function evaluateCandidate(
@@ -324,23 +406,13 @@ function evaluateCandidate(
 ): { evaluation: HierarchyCameraFitCandidateEvaluation; cardRectCount: number } | null {
   // Only the CHILD card rects count toward clipped/pairs/overlap — the
   // containment envelope (if any) is excluded from this list deliberately.
-  const cardRects: Rect[] = [];
-  for (const a of anchors) {
-    const p = project(a.lat, a.lon, zoom);
-    if (!isFinitePoint(p)) continue;
-    cardRects.push(cardRectAt(p, a.footprintWidthPx, a.footprintHeightPx));
-  }
+  const cardRects = cardRectsAt(anchors, project, zoom);
   if (cardRects.length === 0) return null;
 
   const centreProjected = project(centreLat, centreLon, zoom);
   if (!isFinitePoint(centreProjected)) return null;
 
-  const usableCentreX = rectCentreX(usableRect);
-  const usableCentreY = rectCentreY(usableRect);
-  const dx = usableCentreX - centreProjected.x;
-  const dy = usableCentreY - centreProjected.y;
-
-  const translated = cardRects.map((r) => translateRect(r, dx, dy));
+  const translated = placeRectsForCentrePinnedCamera(cardRects, centreProjected, usableRect);
 
   let clipped = 0;
   for (const r of translated) {
@@ -361,11 +433,11 @@ function evaluateCandidate(
   const zoomDelta = zoom - zBase;
   const score = 1_000_000 * clipped + 10_000 * pairs + overlapAreaPx2 + 1_000 * zoomDelta;
 
-  // `containmentBounds` is a SOFT zBase-search floor only — deliberately not
-  // enforced here at the winning candidate. See the module doc's
-  // "`containmentBounds` IS A SOFT STARTING-POINT FLOOR" section (code
-  // review F2) for why: enforcing it here would make dense/wide nodes
-  // permanently unable to reach a legible candidate.
+  // `containmentBounds` is a SOFT, SIZE-ONLY zBase-search floor only —
+  // deliberately not enforced here at the winning candidate, and (per the
+  // module doc's "SCALE-ONLY STARTING-POINT FLOOR" section) never folded in
+  // by POSITION even at the zBase search itself. Enforcing it here would
+  // make dense/wide nodes permanently unable to reach a legible candidate.
   void containmentBounds;
 
   return {
@@ -413,20 +485,49 @@ export function resolveHierarchyCameraFit(
 
   const usableRect = usableSubRect(input.viewport);
 
-  // ── zBase: largest integer zoom in range at which the union of card rects
-  // (+ containment bounds envelope) fits inside the usable sub-rect. ──
-  let zBase = input.minZoom;
-  let foundFit = false;
+  // ── zBase = min(childZBase, envelopeZBase) — see the module doc's
+  // "MINIMUM of two independently-computed" section for why these must
+  // stay two separate searches, never merged into one rect list. ──
+
+  // 1. childZBase: largest zoom at which every CHILD card rect is actually
+  // contained under the real centre-pinned placement (never a union-only
+  // dimension check — see `placeRectsForCentrePinnedCamera`'s doc).
+  let childZBase = input.minZoom;
+  let foundChildFit = false;
   for (let z = Math.floor(effectiveMaxZoom); z >= Math.ceil(input.minZoom); z -= 1) {
-    const rects = contentRectsAt(usable, input.containmentBounds, input.project, z);
-    if (!rects) continue;
-    if (fitsWithinUsable(rects, usableRect)) {
-      zBase = z;
-      foundFit = true;
+    const cardRects = cardRectsAt(usable, input.project, z);
+    if (cardRects.length === 0) continue;
+    const centreAtZ = input.project(centreLat, centreLon, z);
+    if (!isFinitePoint(centreAtZ)) continue;
+    if (allRectsContained(cardRects, centreAtZ, usableRect)) {
+      childZBase = z;
+      foundChildFit = true;
       break;
     }
   }
-  if (!foundFit) zBase = input.minZoom;
+  if (!foundChildFit) childZBase = input.minZoom;
+
+  // 2. envelopeZBase: largest zoom at which `containmentBounds`'s projected
+  // envelope fits usable's DIMENSIONS alone — position-insensitive by
+  // construction (`fitsByDimension` never translates). Absent bounds, this
+  // contributes no constraint (defaults to the ceiling).
+  let envelopeZBase = effectiveMaxZoom;
+  if (input.containmentBounds != null) {
+    const bounds = input.containmentBounds;
+    let foundEnvelopeFit = false;
+    for (let z = Math.floor(effectiveMaxZoom); z >= Math.ceil(input.minZoom); z -= 1) {
+      const envelopeRect = envelopeRectAt(bounds, input.project, z);
+      if (!envelopeRect) continue;
+      if (fitsByDimension(envelopeRect, usableRect)) {
+        envelopeZBase = z;
+        foundEnvelopeFit = true;
+        break;
+      }
+    }
+    if (!foundEnvelopeFit) envelopeZBase = input.minZoom;
+  }
+
+  const zBase = Math.min(childZBase, envelopeZBase);
 
   // ── Candidates: [zBase, zBase+1, zBase+2, zBase+3], clamped, deduped. ──
   const rawCandidates = [zBase, zBase + 1, zBase + 2, zBase + 3];

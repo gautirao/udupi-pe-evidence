@@ -17,6 +17,22 @@
  * candidate above `zBase` can ever end up with `clipped === 0`: fit failing
  * at a HIGHER zoom is otherwise guaranteed to clip a CHILD card at that
  * zoom too, by the very definition of `zBase`).
+ *
+ * Most `containmentBounds`-driven fixtures below use `lat=1` for their
+ * children — the NORTH EDGE of the `[-1,1]` bbox, not its centre. This is
+ * deliberately realistic, not an oversight to "clean up": a padded or
+ * elongated Direction's children legitimately sit near an edge of that
+ * Direction's own bbox, and `zBase` is computed as
+ * `min(childZBase, envelopeZBase)` — TWO INDEPENDENT, position-insensitive
+ * searches (see `hierarchyCameraFit.ts`'s module doc's "MINIMUM of two
+ * independently-computed" section) — so WHERE the anchor mean sits inside
+ * `containmentBounds` never gates `zBase` on its own; only each half's own
+ * geometry does. An earlier draft of this fix folded the envelope into the
+ * same rect list the children were checked against, making `zBase`
+ * position-sensitive to exactly this off-centre case and reintroducing (in
+ * mirror image) the very bug this module fixes — see the dedicated
+ * off-centre-anchor-mean fixture below, which is the regression test for
+ * that mistake.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -112,6 +128,115 @@ describe('resolveHierarchyCameraFit — bottom-centre anchoring', () => {
     const result = resolveHierarchyCameraFit(input);
     expect(result).not.toBeNull();
     expect(result?.chosen.pairs).toBe(1);
+  });
+});
+
+describe('resolveHierarchyCameraFit — zBase uses REAL centre-pinned containment, not a union-dimension check (external review, post-F1-F4)', () => {
+  // Both fixtures below are constructed so a pure "does the rects' UNION fit
+  // inside usable's width/height" check (the prior, removed
+  // `fitsWithinUsable`) says YES at zoom=4 while the REAL centre-pinned
+  // placement clips a card there — and only at zoom=3 does everything
+  // genuinely fit. Verified independently (a standalone script replicating
+  // BOTH the old union-only check and the new real-containment check) that:
+  //   OLD logic: zBase=4 (wrong) -> single candidate [4] -> clipped=1,
+  //              needsDeclutter=true, EVEN THOUGH A CLEAN CAMERA EXISTS.
+  //   NEW logic: zBase=3 (correct) -> candidates [3,4] -> z=3 is legible
+  //              immediately -> needsDeclutter=false.
+  // These fixtures FAIL on the pre-fix code and PASS on the fixed code —
+  // that divergence, not just a single passing assertion, is the point.
+
+  it('vertical/bottom-anchor source: a union that "fits" by width/height still clips one card once really placed', () => {
+    // Two anchors, same lon (0.001, so they never separate horizontally),
+    // 150px-tall footprints. At zoom=4 the anchors project to y=0 and
+    // y=400 (a 400px vertical span); at zoom=3 to y=0 and y=300 (300px).
+    // Usable height=600. Union height at zoom=4 is 550 (<=600 -> the OLD
+    // check says "fits"), but the mean-anchor-pinned translation puts the
+    // upper card's rect at y=[-50,100] — clipped off the top by 50px.
+    // Zoom=3's union (450) ALSO fits by the old dimension check, so the OLD
+    // search (scanning from the top down) never even reaches it: it
+    // wrongly stops at zoom=4. The NEW check correctly rejects zoom=4 (real
+    // containment fails) and finds zoom=3, where both cards are genuinely
+    // and fully visible.
+    const anchors = [anchor(0, 0.001, 100, 150), anchor(-1, 0.001, 100, 150)];
+    const input = baseInput({
+      anchors,
+      viewport: { widthPx: 2000, heightPx: 600, insetTopPx: 0, insetRightPx: 0, insetBottomPx: 0, insetLeftPx: 0 },
+      minZoom: 3,
+      maxZoom: 4,
+    });
+    const result = resolveHierarchyCameraFit(input);
+    expect(result).not.toBeNull();
+    expect(result?.evaluated).toEqual([{ zoom: 3, clipped: 0, pairs: 0, overlapAreaPx2: 0, score: 0 }]);
+    expect(result?.zoom).toBe(3); // the LOWER, genuinely clean zoom — not 4
+    expect(result?.needsDeclutter).toBe(false);
+  });
+
+  it('horizontal/uneven-distribution source: two DIFFERENT-WIDTH footprints break the same assumption on the X axis', () => {
+    // Same shape as above, rotated onto X: two anchors at the same lat
+    // (0.001, so they never separate vertically) but with DIFFERENT
+    // footprint WIDTHS (250px and 50px) — this is exactly the real-world
+    // shape `destinationCardFootprint.ts` produces (cards of differing
+    // widths for differing label lengths), and is enough on its own to
+    // make the anchor-mean's projected X diverge from the rect union's own
+    // midpoint, with zero reliance on bottom-centre (vertical) anchoring:
+    // both footprints here are only 10px tall and never risk clipping
+    // vertically. At zoom=4 the wide card's real placement clips 25px past
+    // the right edge (usable width 600); the OLD union-dimension check
+    // (550<=600) misses it entirely. Zoom=3 is genuinely clean.
+    const anchors = [anchor(0.001, 0, 250, 10), anchor(0.001, -1, 50, 10)];
+    const input = baseInput({
+      anchors,
+      viewport: { widthPx: 600, heightPx: 2000, insetTopPx: 0, insetRightPx: 0, insetBottomPx: 0, insetLeftPx: 0 },
+      minZoom: 3,
+      maxZoom: 4,
+    });
+    const result = resolveHierarchyCameraFit(input);
+    expect(result).not.toBeNull();
+    expect(result?.evaluated).toEqual([{ zoom: 3, clipped: 0, pairs: 0, overlapAreaPx2: 0, score: 0 }]);
+    expect(result?.zoom).toBe(3);
+    expect(result?.needsDeclutter).toBe(false);
+  });
+});
+
+describe('resolveHierarchyCameraFit — anchor mean OFF-CENTRE within containmentBounds is safe (code review F2 residual)', () => {
+  it('children hugging the NORTH EDGE of the bbox still reach the clean higher zoom — envelope admissibility never depends on centre position', () => {
+    // This is the exact reachable case from the external review that proved
+    // folding containmentBounds into the SAME rect list as the children was
+    // itself a defect: two children at lat=0.9 (legitimately near the north
+    // edge of a [-1,1] bbox, not its centre), 0.08deg apart in longitude.
+    //
+    // envelopeZBase (SIZE-only, position-insensitive): identical to the
+    // lat=1 fixtures above — the envelope's own width/height doesn't depend
+    // on where the children sit inside it. Fits at zoom=12
+    // (2*100*12=2400<=2500) but not 13 (2600>2500) -> envelopeZBase=12.
+    // childZBase: with 2 close, small anchors the child-only union is tiny,
+    // so it trivially places at every zoom in range -> childZBase=16.
+    // zBase = min(16, 12) = 12 — UNCHANGED by moving the children from
+    // lat=1 to lat=0.9, because the envelope's admissibility never consulted
+    // their position in the first place.
+    //
+    // At z=12: gap=0.08*100*12=96<100 -> overlapWidth=4, area=400, pairs=1
+    // (not legible). At z=13: gap=104>=100 -> pairs=0, clipped=0 -> LEGIBLE,
+    // accepted immediately. A camera that folds the envelope's POSITION
+    // into this check would have found z=13 clips the (off-centre-relative)
+    // envelope and wrongly stayed at needsDeclutter:true — this fixture
+    // fails against that version and passes against the current one.
+    const anchors = [anchor(0.9, 0, 100, 100), anchor(0.9, 0.08, 100, 100)];
+    const input = baseInput({
+      anchors,
+      containmentBounds: { south: -1, north: 1, west: -1, east: 1 },
+      viewport: squareViewport(2500),
+      minZoom: 5,
+      maxZoom: 20,
+    });
+    const result = resolveHierarchyCameraFit(input);
+    expect(result).not.toBeNull();
+    expect(result?.evaluated).toEqual([
+      { zoom: 12, clipped: 0, pairs: 1, overlapAreaPx2: 400, score: 10400 },
+      { zoom: 13, clipped: 0, pairs: 0, overlapAreaPx2: 0, score: 1000 },
+    ]);
+    expect(result?.zoom).toBe(13);
+    expect(result?.needsDeclutter).toBe(false);
   });
 });
 
