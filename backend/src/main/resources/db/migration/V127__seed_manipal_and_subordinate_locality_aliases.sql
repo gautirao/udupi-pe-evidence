@@ -1,4 +1,4 @@
--- V126: seed curated area_alias rows for Manipal + representative subordinate-locality
+-- V127: seed curated area_alias rows for Manipal + representative subordinate-locality
 -- aliases across the seeded city set (#2268).
 --
 -- Context: the hardcoded "manipal" -> "udupi" city-slug alias previously added to
