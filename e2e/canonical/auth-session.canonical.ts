@@ -48,6 +48,112 @@
 import { test, expect } from './support/canonical-test';
 import { loginAsUser, loginAsBroker, loginAsAdmin, hasRealCredentials } from '../helpers';
 
+// ─────────────────────────────────────────────────────────────────────────
+// T1[user] settled-landing predicate (issue #2246) — see the T1 [role:user]
+// test below for the full root-cause writeup and the binding ruling this
+// implements.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Canonical /discover query-param allow-list — SOURCE OF TRUTH:
+// src/hooks/useDiscoverUrlState.ts:6-59 (facade doc) + the NINE domain
+// modules under src/features/discover/state/url/ it delegates to (verified
+// against each module's own literal param-key string, not just the facade's
+// docstring, since the docstring predates the #2001 decomposition and could
+// drift from the modules independently). Update this set if
+// useDiscoverUrlState's contract gains/drops a param — a stale list here
+// either false-fails a legitimate new param (AC1-in-spirit false negative)
+// or, worse, silently stops catching a real unexpected-param regression.
+//
+// COMPLETENESS SWEEP (fix cycle 1, issue #2246 code-review FIX 1): every
+// literal query-key string READ, WRITTEN, or DELETED (`.get(`/`.set(`/
+// `.has(`/`.delete(`/`.append(` on searchParams/urlParams — including
+// `PARAM_*` constants resolved to their string value) across all nine
+// modules — agricultural, area, city, clusterFocus, compatibility, filters,
+// navigation, school, viewport — was enumerated and reconciled against this
+// set. That sweep found exactly one gap: `town`, a deprecated-but-still-read
+// legacy alias for `locality` (agricultural.ts:127,259,268,434,438,454;
+// navigation.ts:459) — same category as `group` below. No other gaps found.
+const DISCOVER_ALLOWED_PARAMS = new Set([
+  'city', 'areaKey', 'lat', 'lon', 'zoom',
+  'node', 'nodeListings', 'journey', 'groupId', 'schoolId', 'radiusKm',
+  'schoolPicking', 'groupResults', 'region', 'maxKm', 'listing', 'locality',
+  'destKey', 'type', 'beds', 'priceMin', 'priceMax', 'seller', 'board',
+  'category', 'bom', 'ntm', 'rera', 'rtm', 'from', 'to',
+  'agriAcresMin', 'agriAcresMax', 'agriPriceMin', 'agriPriceMax',
+  'agriLandCategory', 'agriFarmhouseAvailable', 'agriFencingDone', 'agriWaterSource',
+  'q', 'intent', 'scope', 'clusterFocus',
+  'group', // deprecated (OD-1 Option A) but still READ — cold-loaded URLs still carry it briefly
+  'town', // deprecated legacy alias for `locality` but still READ — see sweep note above
+]);
+
+// Leaflet's practically-supported integer zoom range. This repo's own tile
+// providers cap out at maxZoom 19 (see e.g. docs/design/retrends-design-
+// system/ui_kits/discover/src/PortalMap.jsx's CARTO tileLayer maxZoom: 19);
+// 0-22 is deliberately a little more permissive than that so this predicate
+// never false-fails on a future tile-provider swap with a slightly higher
+// cap — it exists to catch NaN/non-integer/out-of-range garbage, not to
+// pin today's exact tile ceiling.
+const LEAFLET_MIN_ZOOM = 0;
+const LEAFLET_MAX_ZOOM = 22;
+
+/**
+ * Settled-/discover predicate for `page.waitForURL` (issue #2246). Returns
+ * true only for a URL that is:
+ *   (a) pathname EXACTLY '/discover' (no sub-path, no trailing slash drift)
+ *   (b) carries well-formed lat/lon/zoom — parsed NUMERICALLY (not pattern-
+ *       matched), lat/lon finite and within valid geographic range, zoom
+ *       finite and an integer within Leaflet's valid range. `toFixed(5)`
+ *       output like "12.00000" must parse fine here (Number() handles
+ *       trailing zeros natively) — this is not a digit-pattern regex.
+ *   (c) carries no query parameter outside DISCOVER_ALLOWED_PARAMS.
+ * A bare `/discover` (no camera params) does NOT satisfy this — that is the
+ * whole point of the #2246 fix; see the test body for why.
+ */
+// FIX 2 (fix cycle 1, issue #2246 code-review) — diagnostics only, NOT a
+// pass/fail semantics change: this returns the SAME accept/reject verdict as
+// before (`null` = settled/valid, any non-null string = rejected), just with
+// a reason attached so a `waitForURL` timeout can report WHICH sub-check
+// failed instead of a bare TimeoutError. `isSettledDiscoverUrl` below is a
+// thin `=== null` wrapper kept so its call site and meaning are unchanged.
+function settledDiscoverUrlRejectionReason(url: URL): string | null {
+  if (url.pathname !== '/discover') return `pathname is "${url.pathname}", not "/discover"`;
+
+  for (const key of url.searchParams.keys()) {
+    if (!DISCOVER_ALLOWED_PARAMS.has(key)) return `unknown query param "${key}" not in DISCOVER_ALLOWED_PARAMS`;
+  }
+
+  const rawLat = url.searchParams.get('lat');
+  const rawLon = url.searchParams.get('lon');
+  const rawZoom = url.searchParams.get('zoom');
+  // Reject null (missing) AND '' (present-but-empty) explicitly — `Number('')`
+  // is `0`, NOT `NaN`, so without this an empty `?lon=` would silently parse
+  // as valid coordinate 0 instead of being caught as malformed.
+  if (!rawLat || !rawLon || !rawZoom) {
+    const missing = [
+      !rawLat ? 'lat' : null,
+      !rawLon ? 'lon' : null,
+      !rawZoom ? 'zoom' : null,
+    ].filter((v): v is string => v !== null);
+    return `missing or empty camera param(s): ${missing.join(', ')}`;
+  }
+
+  const lat = Number(rawLat);
+  const lon = Number(rawLon);
+  const zoom = Number(rawZoom);
+
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90) return `lat="${rawLat}" is not a finite value in [-90, 90]`;
+  if (!Number.isFinite(lon) || lon < -180 || lon > 180) return `lon="${rawLon}" is not a finite value in [-180, 180]`;
+  if (!Number.isInteger(zoom) || zoom < LEAFLET_MIN_ZOOM || zoom > LEAFLET_MAX_ZOOM) {
+    return `zoom="${rawZoom}" is not an integer in [${LEAFLET_MIN_ZOOM}, ${LEAFLET_MAX_ZOOM}]`;
+  }
+
+  return null;
+}
+
+function isSettledDiscoverUrl(url: URL): boolean {
+  return settledDiscoverUrlRejectionReason(url) === null;
+}
+
 // Every test in this file must start anonymous — see module docstring.
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -97,7 +203,7 @@ test.describe('T1 — sign-in: role-aware landing + authed-only header control',
   // the assertion is REMOVED, not retimed with a longer wait or a cleverer
   // selector — a longer wait was considered and rejected as uncertain to
   // actually close the race.
-  test('[role:user] plain user signs in successfully and lands on /discover (does NOT assert the "Saved" header control — see #2238 note above; landing-URL check below does not prove role resolution ran, only that it did not mis-land on an elevated dashboard)', async ({ page }) => {
+  test('[role:user] plain user signs in successfully and lands on the SETTLED /discover state, camera params required (does NOT assert the "Saved" header control — see #2238 note above; landing-URL check below does not prove role resolution ran, only that it did not mis-land on an elevated dashboard)', async ({ page }) => {
     // Defence-in-depth — see this project's own grep gating in
     // playwright.canonical.config.ts; this test should never run without
     // credentials, but never silently pass if it somehow does.
@@ -126,7 +232,57 @@ test.describe('T1 — sign-in: role-aware landing + authed-only header control',
     // only appears once role resolution completes) would reintroduce the
     // exact `isLoading`-gated race just removed above, so it is left as-is
     // rather than faked into looking more discriminating than it is.
-    await expect(page).toHaveURL('/discover', { timeout: 15_000 });
+    //
+    // #2246 FIX — WHY THE PREVIOUS `toHaveURL('/discover', ...)` WAS FLAKY:
+    // a STRING argument to `toHaveURL` compiles to an ANCHORED full-URL glob
+    // (`^<baseURL>/discover$`), and Playwright's matcher POLLS until it
+    // matches or times out. src/pages/Auth.tsx:26 navigates to a BARE
+    // '/discover' the instant `user` becomes truthy; Discover's own
+    // camera-sync effect (src/features/discover/state/url/viewport.ts:42-66)
+    // then ENRICHES that same URL with lat/lon/zoom via a 300ms-DEBOUNCED
+    // `history.replace` once the resolved navigation node's bounds are
+    // known (see NavigationController#resolve on the backend — the public
+    // GET .../navigation/resolve?node=root call this triggers). So the real
+    // URL sequence for every sign-in is bare '/discover' for roughly the
+    // first ~1s, THEN '/discover?lat=...&lon=...&zoom=...' from then on,
+    // never reverting. The old string-glob assertion happened to pass only
+    // when its poll first sampled inside that transient bare window — a
+    // true intermittent race, not a fluke of test timing alone.
+    //
+    // BINDING RULING (PR #2277, decision "A — REQUIRE"): rather than
+    // widening the match to accept EITHER state (which would make a genuine
+    // Discover-map-init regression invisible to this test), T1 now waits for
+    // the SETTLED state and REQUIRES lat/lon/zoom to be present, well-formed,
+    // and free of any unexpected query param — see isSettledDiscoverUrl
+    // above. A real regression that breaks camera-sync entirely (leaving the
+    // URL bare forever, or producing NaN/out-of-range values) now correctly
+    // TIMES OUT this test instead of silently passing. This is a deliberate,
+    // ruled-on widening of what T1[user] covers, not scope creep: the
+    // settled state is empirically the ONLY state a zero-interaction landing
+    // ever reaches (live-verified — see this issue's Step 0 evidence: 80
+    // consecutive 250ms polls over 20s on a fresh local fixture stayed
+    // exactly on the settled `?lat=...&lon=...&zoom=11` URL from ~1s after
+    // landing onward, never reverting to bare or drifting further).
+    //
+    // Empirically observed settle time on a local fixture: URL left /auth at
+    // ~1.0s post-click, camera params were present by ~2.0s post-click and
+    // remained stable for the rest of a 20s observation window — the 20s
+    // timeout below has roughly an order of magnitude of headroom over that.
+    // FIX 2 (fix cycle 1): on timeout, `waitForURL` alone throws a generic
+    // TimeoutError that does not say WHICH sub-check kept failing (wrong
+    // pathname vs missing camera params vs unknown param vs malformed
+    // values) — diagnostics only, does not change what URLs are accepted.
+    try {
+      await page.waitForURL((url) => isSettledDiscoverUrl(url), { timeout: 20_000 });
+    } catch (err) {
+      const finalUrl = page.url();
+      const reason = settledDiscoverUrlRejectionReason(new URL(finalUrl));
+      throw new Error(
+        `[T1:user] timed out waiting for settled /discover URL. Final URL: "${finalUrl}". ` +
+        `Rejection reason: ${reason ?? '(none — URL is valid; the poll may have raced a same-tick navigation)'}. ` +
+        `Original error: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   });
 
   // KNOWN PRODUCT BUG (root-caused live, fix cycle 3) — src/pages/Auth.tsx:9-29:
