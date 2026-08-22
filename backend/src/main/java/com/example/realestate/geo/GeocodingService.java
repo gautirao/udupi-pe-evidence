@@ -106,10 +106,15 @@ public class GeocodingService implements GeocodingPort {
         // 3. Build search variations and call Nominatim
         List<String> variations = buildVariations(simplified);
         for (String term : variations) {
-            double[] coords = callNominatim(term);
-            if (coords != null) {
-                saveCache(normalized, coords[0], coords[1], null);
-                return new GeoResult(coords[0], coords[1], null, null, null, null, locality, null);
+            NominatimHit hit = callNominatim(term);
+            if (hit != null) {
+                saveCache(normalized, hit.latitude(), hit.longitude(), null);
+                String country = firstNonBlank(hit.address(), "country");
+                String region = firstNonBlank(hit.address(), "state");
+                String city = firstNonBlank(hit.address(),
+                        "city", "town", "village", "municipality", "county", "state_district");
+                String neighborhood = firstNonBlank(hit.address(), "suburb", "neighbourhood", "quarter");
+                return new GeoResult(hit.latitude(), hit.longitude(), null, country, region, city, locality, neighborhood);
             }
         }
 
@@ -232,13 +237,20 @@ public class GeocodingService implements GeocodingPort {
 
     // ===== Nominatim call =====
 
-    private double[] callNominatim(String term) {
+    /**
+     * Result of a single successful Nominatim search hit: coordinates plus the raw
+     * {@code address} breakdown (only populated when {@code addressdetails=1} is requested).
+     */
+    record NominatimHit(double latitude, double longitude, Map<String, String> address) {}
+
+    private NominatimHit callNominatim(String term) {
         String searchQuery = term + ", Karnataka, India";
 
         try {
             URI uri = UriComponentsBuilder.fromHttpUrl(NOMINATIM_BASE)
                     .queryParam("q", searchQuery)
                     .queryParam("format", "json")
+                    .queryParam("addressdetails", "1")
                     .queryParam("limit", "1")
                     .queryParam("countrycodes", "in")
                     .build(false).encode().toUri();
@@ -263,8 +275,9 @@ public class GeocodingService implements GeocodingPort {
             JsonNode first = results.get(0);
             double lat = first.get("lat").asDouble();
             double lon = first.get("lon").asDouble();
+            Map<String, String> address = parseAddressNode(first.path("address"));
             log.debug("Nominatim success term={} lat={} lon={}", term, lat, lon);
-            return new double[]{lat, lon};
+            return new NominatimHit(lat, lon, address);
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -274,6 +287,22 @@ public class GeocodingService implements GeocodingPort {
             log.warn("Nominatim error for term={}: {}", term, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Returns the first non-blank value found in {@code address} across {@code keys}, in order.
+     * Nominatim's address breakdown does not always carry a {@code city} field (e.g. a town-level
+     * settlement like Manipal has only {@code town}); this mirrors OSM's own place-type fallback
+     * chain (city &gt; town &gt; village &gt; municipality &gt; county &gt; state_district).
+     */
+    private static String firstNonBlank(Map<String, String> address, String... keys) {
+        for (String key : keys) {
+            String value = address.get(key);
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     // ===== Helpers =====

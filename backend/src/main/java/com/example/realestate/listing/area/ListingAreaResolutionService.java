@@ -49,6 +49,13 @@ public class ListingAreaResolutionService {
      * to produce a result — in every skip case the listing's existing area fields (possibly null)
      * are left untouched. Never throws: any failure is logged and treated as a skip, matching
      * {@link AreaResolutionService#resolve}'s own defensive contract.
+     *
+     * <p>#2268: {@link AreaResolutionService#resolveByAliasAnyCity} is tried FIRST, before
+     * geocoding runs at all. It only needs the raw {@code locality} text (no geocode output), so a
+     * locality with a curated {@code area_alias} row resolves even when the geocoder is down,
+     * unreachable, or would otherwise fail — not merely when it succeeds but can't map its
+     * resulting city name to a {@code cities} row (the original #2268 Manipal failure mode).
+     * Geocoding only runs as a fallback when this alias-first lookup misses or is ambiguous.
      */
     public void resolveAndApply(Listing listing) {
         if ("RESOLVED".equals(listing.getAreaResolutionStatus()) && listing.getAreaKey() != null) {
@@ -59,6 +66,15 @@ public class ListingAreaResolutionService {
         if (locality == null || locality.isBlank()) {
             log.warn("ListingAreaResolutionService: cannot resolve area_key, locality is blank listingId={}",
                     listing.getId());
+            return;
+        }
+
+        AreaResolution aliasFirst = areaResolutionService.resolveByAliasAnyCity(locality);
+        if (aliasFirst.isResolved()) {
+            listing.setAreaKey(aliasFirst.canonicalAreaKey());
+            listing.setAreaLabel(areaResolutionService.areaLabelForKey(aliasFirst.canonicalAreaKey()));
+            listing.setAreaResolutionStatus("RESOLVED");
+            listing.setAreaResolutionMethod(aliasFirst.method().name());
             return;
         }
 
@@ -81,6 +97,8 @@ public class ListingAreaResolutionService {
         Integer cityId = GeocodedAreaKeyFormat.resolveCityId(jdbcOperations, geoResult);
 
         if (cityId == null) {
+            // aliasFirst (above) already tried and missed/was-ambiguous for this same locality
+            // text before geocoding ran, so there is nothing further to rescue with here.
             log.warn("ListingAreaResolutionService: UNRESOLVED (no cities row for geocoded city) "
                             + "listingId={} city={} geocodedAreaKey={} locality={}",
                     listing.getId(), geoResult.city(), geocodedAreaKey, locality);

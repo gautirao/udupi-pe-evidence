@@ -302,6 +302,80 @@ class AreaResolutionServiceIT {
         assertThat(resolution.canonicalAreaKey()).isNull();
     }
 
+    // ── #2268: resolveByAliasAnyCity (city-less ALIAS rescue) ───────────────────
+
+    @Test
+    @DisplayName("#2268: Manipal resolves via the city-less alias-first path to its canonical area")
+    void resolveByAliasAnyCity_manipal_resolvesToCanonicalArea() {
+        AreaResolution resolution = resolutionService.resolveByAliasAnyCity("Manipal");
+
+        assertThat(resolution.status()).isEqualTo(AreaResolution.Status.RESOLVED);
+        assertThat(resolution.method()).isEqualTo(AreaResolution.Method.ALIAS);
+        assertThat(resolution.canonicalAreaKey()).isEqualTo(MANIPAL);
+    }
+
+    @Test
+    @DisplayName("#2268: resolveByAliasAnyCity with zero matches falls through to UNRESOLVED")
+    void resolveByAliasAnyCity_noMatch_resolvesUnresolved() {
+        AreaResolution resolution = resolutionService.resolveByAliasAnyCity("Totally Unmatched Locality Xyz");
+
+        assertThat(resolution.status()).isEqualTo(AreaResolution.Status.UNRESOLVED);
+        assertThat(resolution.canonicalAreaKey()).isNull();
+    }
+
+    @Test
+    @DisplayName("#2268: blank/null locality resolves UNRESOLVED without querying")
+    void resolveByAliasAnyCity_blankLocality_resolvesUnresolved() {
+        assertThat(resolutionService.resolveByAliasAnyCity(null).status())
+                .isEqualTo(AreaResolution.Status.UNRESOLVED);
+        assertThat(resolutionService.resolveByAliasAnyCity("   ").status())
+                .isEqualTo(AreaResolution.Status.UNRESOLVED);
+    }
+
+    @Test
+    @DisplayName("#2268: same normalised alias matching areas in 2+ DISTINCT cities fails closed to "
+            + "UNRESOLVED — never guesses which city's area to return")
+    void resolveByAliasAnyCity_sameAliasDifferentCities_failsClosedToUnresolved() {
+        // Same alias text ("Gandhi Nagar" per V115's own example) registered for two DIFFERENT
+        // cities, pointing at two DIFFERENT canonical areas.
+        jdbcTemplate.update("""
+                INSERT INTO area_alias (city_id, area_key, alias, alias_normalised, source)
+                VALUES (?, ?, 'Gandhi Nagar', 'gandhi nagar', 'it-fixture')
+                """, udupiCityId, MANIPAL);
+        jdbcTemplate.update("""
+                INSERT INTO area_alias (city_id, area_key, alias, alias_normalised, source)
+                VALUES (?, ?, 'Gandhi Nagar', 'gandhi nagar', 'it-fixture')
+                """, bangaloreCityId, "IN|KA|Bengaluru|Indiranagar");
+
+        AreaResolution resolution = resolutionService.resolveByAliasAnyCity("Gandhi Nagar");
+
+        assertThat(resolution.status()).isEqualTo(AreaResolution.Status.UNRESOLVED);
+        assertThat(resolution.canonicalAreaKey()).isNull();
+    }
+
+    // ── #2268: areaLabelForKey ───────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("#2268: areaLabelForKey builds \"AreaName, CityName\" for a resolved area_key")
+    void areaLabelForKey_manipal_buildsAreaNameCommaCityName() {
+        String label = resolutionService.areaLabelForKey(MANIPAL);
+
+        assertThat(label).isEqualTo("Manipal, Udupi");
+    }
+
+    @Test
+    @DisplayName("#2268: areaLabelForKey returns null for an unknown area_key")
+    void areaLabelForKey_unknownKey_returnsNull() {
+        assertThat(resolutionService.areaLabelForKey("in|ka|udupi|totally-unmatched-locality")).isNull();
+    }
+
+    @Test
+    @DisplayName("#2268: areaLabelForKey returns null for blank input without querying")
+    void areaLabelForKey_blankKey_returnsNull() {
+        assertThat(resolutionService.areaLabelForKey(null)).isNull();
+        assertThat(resolutionService.areaLabelForKey("  ")).isNull();
+    }
+
     // ── UNRESOLVED terminal case, read-only proof ───────────────────────────────
 
     @Test

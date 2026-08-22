@@ -144,7 +144,7 @@ class GeocodingServiceTest {
         injectHttpClient(mockHttpClient);
 
         try {
-            double[] result = invokeCallNominatim("Manipal");
+            GeocodingService.NominatimHit result = invokeCallNominatim("Manipal");
 
             assertThat(result).isNull();
             assertThat(Thread.currentThread().isInterrupted()).isTrue();
@@ -244,7 +244,7 @@ class GeocodingServiceTest {
                 .thenReturn(mockResponse);
         injectHttpClient(mockHttpClient);
 
-        double[] result = invokeCallNominatim("Manipal");
+        GeocodingService.NominatimHit result = invokeCallNominatim("Manipal");
 
         assertThat(result).isNull(); // empty results array
         ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
@@ -253,6 +253,7 @@ class GeocodingServiceTest {
         assertThat(capturedUri.toString()).doesNotContain(" ");
         String decodedQuery = java.net.URLDecoder.decode(capturedUri.getRawQuery(), java.nio.charset.StandardCharsets.UTF_8);
         assertThat(decodedQuery).contains("q=Manipal, Karnataka, India");
+        assertThat(decodedQuery).contains("addressdetails=1");
     }
 
     @Test
@@ -264,7 +265,7 @@ class GeocodingServiceTest {
                 .thenReturn(mockResponse);
         injectHttpClient(mockHttpClient);
 
-        double[] result = invokeCallNominatim("J. P. Nagar");
+        GeocodingService.NominatimHit result = invokeCallNominatim("J. P. Nagar");
 
         assertThat(result).isNull();
         ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
@@ -283,7 +284,7 @@ class GeocodingServiceTest {
                 .thenReturn(mockResponse);
         injectHttpClient(mockHttpClient);
 
-        double[] result = invokeCallNominatim("A&B Layout");
+        GeocodingService.NominatimHit result = invokeCallNominatim("A&B Layout");
 
         assertThat(result).isNull();
         ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
@@ -299,10 +300,12 @@ class GeocodingServiceTest {
         // parsing a real HTTP server / query-string parser would perform — and confirm the
         // value's `&` did NOT introduce a bogus extra parameter.
         Map<String, String> params = parseRawQueryParams(rawQuery);
-        assertThat(params).hasSize(4);
-        assertThat(params.keySet()).containsExactlyInAnyOrder("q", "format", "limit", "countrycodes");
+        assertThat(params).hasSize(5);
+        assertThat(params.keySet()).containsExactlyInAnyOrder(
+                "q", "format", "addressdetails", "limit", "countrycodes");
         assertThat(params.get("q")).isEqualTo("A&B Layout, Karnataka, India");
         assertThat(params.get("format")).isEqualTo("json");
+        assertThat(params.get("addressdetails")).isEqualTo("1");
         assertThat(params.get("limit")).isEqualTo("1");
         assertThat(params.get("countrycodes")).isEqualTo("in");
         assertThat(params).doesNotContainKey("B Layout, Karnataka, India");
@@ -318,7 +321,7 @@ class GeocodingServiceTest {
                 .thenReturn(mockResponse);
         injectHttpClient(mockHttpClient);
 
-        double[] result = invokeCallNominatim("Phase=2 Layout");
+        GeocodingService.NominatimHit result = invokeCallNominatim("Phase=2 Layout");
 
         assertThat(result).isNull();
         ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
@@ -327,8 +330,9 @@ class GeocodingServiceTest {
         String rawQuery = capturedUri.getRawQuery();
 
         Map<String, String> params = parseRawQueryParams(rawQuery);
-        assertThat(params).hasSize(4);
-        assertThat(params.keySet()).containsExactlyInAnyOrder("q", "format", "limit", "countrycodes");
+        assertThat(params).hasSize(5);
+        assertThat(params.keySet()).containsExactlyInAnyOrder(
+                "q", "format", "addressdetails", "limit", "countrycodes");
         assertThat(params.get("q")).isEqualTo("Phase=2 Layout, Karnataka, India");
     }
 
@@ -341,7 +345,7 @@ class GeocodingServiceTest {
                 .thenReturn(mockResponse);
         injectHttpClient(mockHttpClient);
 
-        double[] result = invokeCallNominatim("ಉಡುಪಿ ಬೀಚ್");
+        GeocodingService.NominatimHit result = invokeCallNominatim("ಉಡುಪಿ ಬೀಚ್");
 
         assertThat(result).isNull();
         ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
@@ -359,7 +363,7 @@ class GeocodingServiceTest {
                 .thenThrow(new java.io.IOException("simulated network failure"));
         injectHttpClient(mockHttpClient);
 
-        double[] result = invokeCallNominatim("Manipal");
+        GeocodingService.NominatimHit result = invokeCallNominatim("Manipal");
 
         assertThat(result).isNull();
     }
@@ -375,9 +379,101 @@ class GeocodingServiceTest {
                 .thenReturn(mockResponse);
         injectHttpClient(mockHttpClient);
 
-        double[] result = invokeCallNominatim("Manipal");
+        GeocodingService.NominatimHit result = invokeCallNominatim("Manipal");
 
         assertThat(result).isNull();
+    }
+
+    // ===== Address parsing (#2268: geocode() must populate country/region/city) =====
+
+    @Test
+    void geocode_cacheMiss_populatesCountryRegionCityFromNominatimAddress() throws Exception {
+        // Real Nominatim response shape for "Manipal, Karnataka, India" (verified live, #2268):
+        // Manipal is a town-level OSM place with NO "city" address field — only "town" +
+        // "state_district" — which is exactly the gap that left GeoResult.city() always null.
+        String body = """
+                [{"lat":"13.3519723","lon":"74.7870308","address":{"town":"Manipal",
+                "county":"Udupi taluku","state_district":"Udupi","state":"Karnataka",
+                "country":"India","country_code":"in"}}]
+                """;
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        HttpResponse<String> mockResponse = mockOkResponse(body);
+        when(mockHttpClient.send(any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(mockResponse);
+        injectHttpClient(mockHttpClient);
+        when(cacheRepository.findByLocalityIgnoreCase(anyString())).thenReturn(Optional.empty());
+
+        GeocodingService.GeoResult result = service.geocode("Manipal");
+
+        assertThat(result).isNotNull();
+        assertThat(result.latitude()).isEqualTo(13.3519723);
+        assertThat(result.longitude()).isEqualTo(74.7870308);
+        assertThat(result.country()).isEqualTo("India");
+        assertThat(result.region()).isEqualTo("Karnataka");
+        assertThat(result.city()).isEqualTo("Manipal"); // falls back to "town" (no "city" field)
+        assertThat(result.locality()).isEqualTo("Manipal"); // caller's original input, untouched
+    }
+
+    @Test
+    void geocode_addressHasCityField_prefersCityOverTown() throws Exception {
+        // Real shape for "Indiranagar, Karnataka, India": city="Bengaluru" is present directly.
+        String body = """
+                [{"lat":"12.9732913","lon":"77.6404672","address":{"suburb":"Indiranagar",
+                "city":"Bengaluru","county":"Bangalore East","state_district":"Bengaluru Urban",
+                "state":"Karnataka","country":"India"}}]
+                """;
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        HttpResponse<String> mockResponse = mockOkResponse(body);
+        when(mockHttpClient.send(any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(mockResponse);
+        injectHttpClient(mockHttpClient);
+        when(cacheRepository.findByLocalityIgnoreCase(anyString())).thenReturn(Optional.empty());
+
+        GeocodingService.GeoResult result = service.geocode("Indiranagar");
+
+        assertThat(result.city()).isEqualTo("Bengaluru");
+        assertThat(result.neighborhood()).isEqualTo("Indiranagar");
+    }
+
+    @Test
+    void geocode_addressHasNeitherCityNorTown_fallsBackToStateDistrict() throws Exception {
+        // Real shape for plain "Udupi, Karnataka, India": only state_district is present.
+        String body = """
+                [{"lat":"13.5269784","lon":"74.8731879","address":{"state_district":"Udupi",
+                "state":"Karnataka","country":"India"}}]
+                """;
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        HttpResponse<String> mockResponse = mockOkResponse(body);
+        when(mockHttpClient.send(any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(mockResponse);
+        injectHttpClient(mockHttpClient);
+        when(cacheRepository.findByLocalityIgnoreCase(anyString())).thenReturn(Optional.empty());
+
+        GeocodingService.GeoResult result = service.geocode("Udupi");
+
+        assertThat(result.city()).isEqualTo("Udupi");
+    }
+
+    @Test
+    void geocode_addressMissingEntirely_returnsNullCountryRegionCity() throws Exception {
+        String body = "[{\"lat\":\"13.0\",\"lon\":\"74.0\"}]";
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        HttpResponse<String> mockResponse = mockOkResponse(body);
+        when(mockHttpClient.send(any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(mockResponse);
+        injectHttpClient(mockHttpClient);
+        when(cacheRepository.findByLocalityIgnoreCase(anyString())).thenReturn(Optional.empty());
+
+        GeocodingService.GeoResult result = service.geocode("Some Unmapped Place");
+
+        assertThat(result).isNotNull();
+        assertThat(result.country()).isNull();
+        assertThat(result.region()).isNull();
+        assertThat(result.city()).isNull();
     }
 
     // ===== Private helpers =====
@@ -404,10 +500,10 @@ class GeocodingServiceTest {
         return params;
     }
 
-    private double[] invokeCallNominatim(String term) throws Exception {
+    private GeocodingService.NominatimHit invokeCallNominatim(String term) throws Exception {
         var method = GeocodingService.class.getDeclaredMethod("callNominatim", String.class);
         method.setAccessible(true);
-        return (double[]) method.invoke(service, term);
+        return (GeocodingService.NominatimHit) method.invoke(service, term);
     }
 
     @SuppressWarnings("unchecked")

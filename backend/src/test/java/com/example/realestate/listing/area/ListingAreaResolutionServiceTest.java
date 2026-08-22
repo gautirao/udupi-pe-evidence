@@ -19,6 +19,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -28,6 +29,13 @@ import static org.mockito.Mockito.when;
  * {@code ListingIngestionService}'s area resolution, proven with mocked collaborators. The real
  * canonical/alias lookup behaviour is already exhaustively covered by
  * {@code AreaResolutionServiceIT}; these tests only prove this class's own wiring/skip logic.
+ *
+ * <p>#2268: {@code resolveAndApply} tries {@link AreaResolutionService#resolveByAliasAnyCity}
+ * FIRST, before ever calling {@link GeocodingPort#geocode}. Every test below that reaches that
+ * call therefore stubs {@code resolveByAliasAnyCity} to {@link AreaResolution#unresolved()} so the
+ * flow proceeds to the geocode-then-resolve fallback pipeline being exercised — the alias-first
+ * success path itself is proven separately by
+ * {@link #aliasFirstResolves_setsCanonicalAreaKeyAndMethod_neverCallsGeocoder}.
  */
 @ExtendWith(MockitoExtension.class)
 class ListingAreaResolutionServiceTest {
@@ -58,6 +66,10 @@ class ListingAreaResolutionServiceTest {
     private void stubCityId(Integer cityId) {
         when(jdbcOperations.query(anyString(), (ResultSetExtractor) any(ResultSetExtractor.class), any(Object[].class)))
                 .thenReturn(cityId);
+    }
+
+    private void stubAliasFirstMisses(String locality) {
+        when(areaResolutionService.resolveByAliasAnyCity(locality)).thenReturn(AreaResolution.unresolved());
     }
 
     @org.junit.jupiter.api.BeforeEach
@@ -96,9 +108,51 @@ class ListingAreaResolutionServiceTest {
         verifyNoInteractions(geocodingPort, areaResolutionService);
     }
 
+    // ── #2268: alias-first, tried before geocoding ──────────────────────────────
+
+    @Test
+    void aliasFirstResolves_setsCanonicalAreaKeyAndMethod_neverCallsGeocoder() {
+        // The actual #2268 regression proof: a locality with a curated area_alias row resolves
+        // WITHOUT ever calling the geocoder — so Manipal (or any other curated locality) still
+        // resolves even if Nominatim is unreachable/down.
+        Listing listing = draftListing("Manipal");
+        when(areaResolutionService.resolveByAliasAnyCity("Manipal"))
+                .thenReturn(AreaResolution.resolved(AreaResolution.Method.ALIAS, "IN|KA|Udupi|Manipal"));
+        when(areaResolutionService.areaLabelForKey("IN|KA|Udupi|Manipal")).thenReturn("Manipal, Udupi");
+
+        service.resolveAndApply(listing);
+
+        assertThat(listing.getAreaKey()).isEqualTo("IN|KA|Udupi|Manipal");
+        assertThat(listing.getAreaLabel()).isEqualTo("Manipal, Udupi");
+        assertThat(listing.getAreaResolutionStatus()).isEqualTo("RESOLVED");
+        assertThat(listing.getAreaResolutionMethod()).isEqualTo("ALIAS");
+        verifyNoInteractions(geocodingPort);
+        verify(areaResolutionService, never()).resolve(anyInt(), any(), any(), any(), any());
+    }
+
+    @Test
+    void aliasFirstMisses_fallsThroughToGeocodingPipeline() {
+        Listing listing = draftListing("Manipal");
+        stubAliasFirstMisses("Manipal");
+        when(geocodingPort.geocode("Manipal")).thenReturn(MANIPAL_GEO);
+        stubCityId(7);
+        when(areaResolutionService.resolve(7, null, null, "india|karnataka|udupi|manipal", "Manipal"))
+                .thenReturn(AreaResolution.resolved(AreaResolution.Method.CANONICAL_KEY, "IN|KA|Udupi|Manipal"));
+
+        service.resolveAndApply(listing);
+
+        verify(areaResolutionService).resolveByAliasAnyCity("Manipal");
+        verify(geocodingPort).geocode("Manipal");
+        assertThat(listing.getAreaKey()).isEqualTo("IN|KA|Udupi|Manipal");
+        assertThat(listing.getAreaResolutionMethod()).isEqualTo("CANONICAL_KEY");
+    }
+
+    // ── Geocoding fallback pipeline (alias-first already missed) ────────────────
+
     @Test
     void geocodingReturnsNull_leavesAreaFieldsUntouched() {
         Listing listing = draftListing("Nonexistent Place Xyz");
+        stubAliasFirstMisses("Nonexistent Place Xyz");
         when(geocodingPort.geocode("Nonexistent Place Xyz")).thenReturn(null);
 
         service.resolveAndApply(listing);
@@ -108,23 +162,25 @@ class ListingAreaResolutionServiceTest {
         // was rather than touching it, so this asserts the (default, null-areaKey) pair survives.
         assertThat(listing.getAreaKey()).isNull();
         assertThat(listing.getAreaResolutionStatus()).isEqualTo("RESOLVED");
-        verifyNoInteractions(areaResolutionService);
+        verify(areaResolutionService, never()).resolve(anyInt(), any(), any(), any(), any());
     }
 
     @Test
     void geocodingThrows_neverPropagates_leavesAreaFieldsNull() {
         Listing listing = draftListing("Manipal");
+        stubAliasFirstMisses("Manipal");
         when(geocodingPort.geocode("Manipal")).thenThrow(new RuntimeException("Nominatim down"));
 
         service.resolveAndApply(listing);
 
         assertThat(listing.getAreaKey()).isNull();
-        verifyNoInteractions(areaResolutionService);
+        verify(areaResolutionService, never()).resolve(anyInt(), any(), any(), any(), any());
     }
 
     @Test
-    void noCityRowForGeocodedCity_setsUnresolvedWithGeocodedKeyFallback() {
+    void noCityRowForGeocodedCity_aliasFirstAlreadyMissed_setsUnresolvedWithGeocodedKeyFallback() {
         Listing listing = draftListing("Manipal");
+        stubAliasFirstMisses("Manipal");
         when(geocodingPort.geocode("Manipal")).thenReturn(MANIPAL_GEO);
         stubCityId(null);
 
@@ -133,12 +189,16 @@ class ListingAreaResolutionServiceTest {
         assertThat(listing.getAreaKey()).isEqualTo("india|karnataka|udupi|manipal");
         assertThat(listing.getAreaResolutionStatus()).isEqualTo("UNRESOLVED");
         assertThat(listing.getAreaResolutionMethod()).isNull();
+        // Alias-first is only ever tried once per resolveAndApply call — the cityId==null branch
+        // does not re-attempt it (it's deterministic on the same locality text).
+        verify(areaResolutionService, times(1)).resolveByAliasAnyCity("Manipal");
         verify(areaResolutionService, never()).resolve(anyInt(), any(), any(), any(), any());
     }
 
     @Test
     void resolvedByCanonicalKey_setsCanonicalAreaKeyAndMethod() {
         Listing listing = draftListing("Manipal");
+        stubAliasFirstMisses("Manipal");
         when(geocodingPort.geocode("Manipal")).thenReturn(MANIPAL_GEO);
         stubCityId(7);
         when(areaResolutionService.resolve(7, null, null, "india|karnataka|udupi|manipal", "Manipal"))
@@ -155,6 +215,7 @@ class ListingAreaResolutionServiceTest {
     @Test
     void unresolvedByAreaResolutionService_setsUnresolvedWithGeocodedKeyFallback() {
         Listing listing = draftListing("Manipal");
+        stubAliasFirstMisses("Manipal");
         when(geocodingPort.geocode("Manipal")).thenReturn(MANIPAL_GEO);
         stubCityId(7);
         when(areaResolutionService.resolve(7, null, null, "india|karnataka|udupi|manipal", "Manipal"))

@@ -5,7 +5,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Resolves an ingested listing's geocoded area against canonical {@code areas} / reviewed
@@ -36,6 +39,10 @@ import java.util.List;
  * <p>{@link #resolve} is defensive by design: any unexpected internal failure is logged and
  * degrades to {@link AreaResolution#unresolved()} rather than propagating, so a resolver bug can
  * never abort listing ingestion.
+ *
+ * <p>{@link #resolveByAliasAnyCity} (#2268) is a separate, city-less entry point used by callers
+ * that cannot supply a cityId at all — it is not part of the {@link #resolve} step order above.
+ * See its javadoc for details.
  */
 @Service
 public class AreaResolutionService {
@@ -132,6 +139,83 @@ public class AreaResolutionService {
     }
 
     /**
+     * City-less ALIAS resolution (#2268): matches {@code locality} against {@code area_alias}
+     * WITHOUT a {@code city_id} filter, deriving the owning city from the matched area itself
+     * rather than requiring a caller-supplied cityId up front. Used by callers (e.g.
+     * {@code ListingAreaResolutionService}) that cannot yet determine a cityId — most notably
+     * when geocoding resolves a locality to a town-level place with no matching
+     * {@code cities.slug} row (see {@link GeocodedAreaKeyFormat#resolveCityId}'s javadoc).
+     *
+     * <p>Because {@code area_alias.alias_normalised} is only unique per-city (not globally — see
+     * V115's header comment), the same normalised alias can legitimately match different areas in
+     * different cities. This method fails closed: zero matches → UNRESOLVED; exactly one distinct
+     * city among the matches → RESOLVED; two or more distinct cities → UNRESOLVED (never a guess),
+     * mirroring {@link #resolveByProviderId}'s ambiguous-match handling. Never throws — any
+     * unexpected failure degrades to {@link AreaResolution#unresolved()}.
+     */
+    public AreaResolution resolveByAliasAnyCity(String locality) {
+        if (locality == null || locality.isBlank()) {
+            return AreaResolution.unresolved();
+        }
+        try {
+            String aliasNormalised = locality.trim().toLowerCase();
+            List<Map<String, Object>> matches =
+                    jdbcOperations.queryForList(ALIAS_ANY_CITY_MATCH_SQL, aliasNormalised);
+            if (matches.isEmpty()) {
+                return AreaResolution.unresolved();
+            }
+            Set<Object> distinctCityIds = new HashSet<>();
+            for (Map<String, Object> match : matches) {
+                distinctCityIds.add(match.get("city_id"));
+            }
+            if (distinctCityIds.size() > 1) {
+                log.warn("AreaResolutionService: ambiguous city-less ALIAS match locality={} — {} "
+                                + "distinct cities matched; treating as UNRESOLVED (never guessed)",
+                        locality, distinctCityIds.size());
+                return AreaResolution.unresolved();
+            }
+            String areaKey = (String) matches.get(0).get("area_key");
+            return AreaResolution.resolved(AreaResolution.Method.ALIAS, areaKey);
+        } catch (Exception e) {
+            log.warn("AreaResolutionService: unexpected error in resolveByAliasAnyCity locality={} "
+                    + "— defaulting to UNRESOLVED: {}", locality, e.getMessage(), e);
+            return AreaResolution.unresolved();
+        }
+    }
+
+    /**
+     * Builds a display label ("AreaName, CityName") for an already-resolved canonical
+     * {@code area_key} (#2268). Used by callers whose resolution path (e.g.
+     * {@link #resolveByAliasAnyCity}) has no geocoded {@code GeoResult} to derive a label from via
+     * {@link GeocodedAreaKeyFormat#computeAreaLabel} — a second, cheap primary-key lookup on the
+     * now-known area_key rather than widening {@link #resolveByAliasAnyCity}'s own return shape,
+     * which stays a plain {@link AreaResolution} exactly like every other resolution step. Never
+     * throws; returns null on a miss or any failure — a label is a display nicety, never allowed
+     * to block resolution.
+     */
+    public String areaLabelForKey(String areaKey) {
+        if (areaKey == null || areaKey.isBlank()) {
+            return null;
+        }
+        try {
+            List<Map<String, Object>> rows = jdbcOperations.queryForList(AREA_LABEL_BY_KEY_SQL, areaKey);
+            if (rows.isEmpty()) {
+                return null;
+            }
+            String areaName = (String) rows.get(0).get("area_name");
+            String cityName = (String) rows.get(0).get("city_name");
+            if (areaName == null || cityName == null) {
+                return null;
+            }
+            return areaName + ", " + cityName;
+        } catch (Exception e) {
+            log.warn("AreaResolutionService: unexpected error in areaLabelForKey areaKey={} — returning null: {}",
+                    areaKey, e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
      * Step 3: ALIAS, city-scoped. Returns null only in the sense that callers treat a miss as
      * final — but for symmetry with the other steps this returns null on a miss (interpreted by
      * {@link #resolve} as "no match found by any step", i.e. UNRESOLVED).
@@ -180,5 +264,21 @@ public class AreaResolutionService {
               AND a.city_id = ?
               AND a.lifecycle_status = 'ACTIVE'
               AND aa.alias_normalised = ?
+            """;
+
+    private static final String ALIAS_ANY_CITY_MATCH_SQL = """
+            SELECT DISTINCT a.city_id AS city_id, aa.area_key AS area_key
+            FROM area_alias aa
+            JOIN areas a ON a.area_key = aa.area_key
+            WHERE a.lifecycle_status = 'ACTIVE'
+              AND aa.alias_normalised = ?
+            """;
+
+    private static final String AREA_LABEL_BY_KEY_SQL = """
+            SELECT a.name AS area_name, c.name AS city_name
+            FROM areas a
+            JOIN cities c ON c.id = a.city_id
+            WHERE a.area_key = ?
+              AND a.lifecycle_status = 'ACTIVE'
             """;
 }
