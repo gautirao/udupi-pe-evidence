@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { api } from '@/lib/api';
+import { api, type PageResponse } from '@/lib/api';
+import type { ListingResponse } from '@/hooks/useBrokerListings';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -36,17 +36,6 @@ import { Label } from '@/components/ui/label';
 import { Loader2, CheckCircle2, XCircle, ClipboardList, RotateCcw } from 'lucide-react';
 import { formatPrice, formatRelativeDate } from '@/lib/formatters';
 
-interface PendingListing {
-  id: string;
-  title: string | null;
-  property_type: string;
-  locality: string | null;
-  price: number | null;
-  price_unit: string | null;
-  description: string | null;
-  created_at: string;
-}
-
 const REJECTION_CODES: { value: string; label: string }[] = [
   { value: 'INCOMPLETE_INFO', label: 'Incomplete info' },
   { value: 'DUPLICATE_LISTING', label: 'Duplicate listing' },
@@ -60,24 +49,26 @@ export default function PendingListings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [rejectTarget, setRejectTarget] = useState<PendingListing | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<ListingResponse | null>(null);
   const [rejectionReasonCode, setRejectionReasonCode] = useState('');
   const [rejectionNote, setRejectionNote] = useState('');
 
-  const [returnForEditsTarget, setReturnForEditsTarget] = useState<PendingListing | null>(null);
+  const [returnForEditsTarget, setReturnForEditsTarget] = useState<ListingResponse | null>(null);
   const [returnForEditsNote, setReturnForEditsNote] = useState('');
 
+  // #2242: read via the backend admin queue (GET /api/admin/listings/pending) instead of a
+  // direct Supabase read, so this read path is authz-gated the same way the approve/reject
+  // mutations below already are. The PENDING_REVIEW filter is enforced server-side.
+  // size=100 requests the largest page the backend allows (spring.data.web.pageable.max-page-size
+  // is 100) to preserve today's "show the whole queue" behaviour without adding pagination UI;
+  // a queue that grows past 100 pending listings needs real pagination as a follow-up.
   const { data: listings = [], isLoading } = useQuery({
     queryKey: ['pending-listings'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('property_listings')
-        .select('id, title, property_type, locality, price, price_unit, description, created_at')
-        .eq('status', 'PENDING_REVIEW')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data as PendingListing[];
+      const response = await api.get<PageResponse<ListingResponse>>(
+        '/api/admin/listings/pending?size=100',
+      );
+      return response.content;
     },
     enabled: isAdmin,
   });
@@ -184,14 +175,14 @@ export default function PendingListings() {
                       {listing.title || listing.description?.slice(0, 60) || 'Untitled'}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{listing.property_type}</Badge>
+                      <Badge variant="outline">{listing.propertyType}</Badge>
                     </TableCell>
                     <TableCell>{listing.locality || '—'}</TableCell>
                     <TableCell>
-                      {listing.price ? formatPrice(listing.price, listing.price_unit) : '—'}
+                      {listing.price ? formatPrice(listing.price) : '—'}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {formatRelativeDate(listing.created_at)}
+                      {formatRelativeDate(listing.createdAt)}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">

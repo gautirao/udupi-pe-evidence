@@ -87,6 +87,15 @@ class AdminListingApprovePilotIT {
     private AdminAuditService adminAuditService;
 
     /**
+     * Satisfies {@link AdminListingController}'s constructor dependency on
+     * {@link com.example.realestate.listing.core.ListingRepository} (used by the controller's
+     * {@code stale}/{@code pending} GET endpoints) so the {@code @WebMvcTest} context can load.
+     * Not stubbed here — none of this pilot's tests exercise a GET endpoint.
+     */
+    @MockitoBean
+    private com.example.realestate.listing.core.ListingRepository listingRepository;
+
+    /**
      * Required to satisfy {@link CallerInfoResolver}'s constructor dependency (DB fallback path).
      * Not stubbed here — tests set {@code ROLE_ADMIN}/{@code ROLE_BROKER} authority on the jwt(),
      * so the primary authority path is taken and the DB fallback is not invoked.

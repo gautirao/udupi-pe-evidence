@@ -111,6 +111,36 @@ public class AdminListingController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Admin-only pending-review queue (#2242).
+     *
+     * <p>Closes an architectural inconsistency: the admin PendingListings UI previously read
+     * this queue directly from Supabase in the browser while every mutation on it (approve,
+     * reject, return-for-edits) already went through this controller. This endpoint gives the
+     * read path the same backend-owned, authz-gated route as the writes.
+     *
+     * <p>The {@code PENDING_REVIEW} status filter is hardcoded server-side (not a request
+     * parameter) so this endpoint cannot be turned into a general lifecycle-state browser by a
+     * caller-supplied {@code status}. Follows the {@link #stale} precedent: {@code Page}, not an
+     * unbounded {@code List}, and any caller-supplied {@code Sort} is stripped before reaching
+     * the native query to avoid the Spring-Data native-query + Sort conflict.
+     */
+    @PreAuthorize("#caller.isAdmin()")
+    @GetMapping("/pending")
+    public ResponseEntity<Page<ListingResponse>> pending(
+            CallerInfo caller,
+            @PageableDefault(size = 20) Pageable pageable) {
+        Pageable unsorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        Page<Listing> pendingListings = listingRepository.findPendingReviewListings(unsorted);
+
+        log.debug("GET /api/admin/listings/pending -> {} results adminId={}",
+                pendingListings.getTotalElements(), caller.userId());
+
+        List<ListingResponse> content = listingResponseMapper.toResponseList(pendingListings.getContent());
+        Page<ListingResponse> response = new PageImpl<>(content, pendingListings.getPageable(), pendingListings.getTotalElements());
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/{id}/restore")
     public ResponseEntity<?> restore(CallerInfo caller, @PathVariable UUID id) {
         if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");

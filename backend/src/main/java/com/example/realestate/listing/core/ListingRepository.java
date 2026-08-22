@@ -546,6 +546,31 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             @Param("threshold") OffsetDateTime threshold,
             Pageable pageable);
 
+    // ===== Admin pending-review queue (#2242) =====
+
+    /**
+     * Returns listings awaiting admin review (status = PENDING_REVIEW), newest submission first.
+     *
+     * <p>The status filter is hardcoded here rather than accepted as a parameter — this backs
+     * {@code GET /api/admin/listings/pending}, which is intentionally a single-status queue, not
+     * a general lifecycle-state browser (see {@link com.example.realestate.listing.api.AdminListingController#pending}).
+     *
+     * @param pageable pagination parameters (sort is fixed to created_at DESC; see the controller
+     *                 for why any caller-supplied Sort is stripped before this is called)
+     * @return page of PENDING_REVIEW listings, most recently submitted first
+     */
+    @Query(value = """
+            SELECT * FROM property_listings
+            WHERE status = 'PENDING_REVIEW'
+            ORDER BY created_at DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM property_listings
+            WHERE status = 'PENDING_REVIEW'
+            """,
+            nativeQuery = true)
+    Page<Listing> findPendingReviewListings(Pageable pageable);
+
     // ===== Locality normalizer queries =====
 
     @Query(value = """
