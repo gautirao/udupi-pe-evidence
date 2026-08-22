@@ -202,20 +202,26 @@ describe('AgriculturalListingForm — honest copy (AC9)', () => {
     expect(screen.queryByRole('button', { name: /^publish$/i })).not.toBeInTheDocument();
   });
 
-  it('shows an honest non-persistence note next to crops/features', () => {
+  it('shows an honest note: crops ARE saved, features are not (issue #2044 corrects the pre-#2044 blanket claim)', () => {
     renderForm();
-    expect(screen.getByTestId('crops-features-not-saved-note')).toBeInTheDocument();
+    const note = screen.getByTestId('crops-saved-features-not-saved-note');
+    expect(note).toBeInTheDocument();
+    expect(note.textContent).toMatch(/crops you select are saved/i);
+    expect(note.textContent).toMatch(/features aren't saved as structured/i);
   });
 });
 
-describe('AgriculturalListingForm — idempotent draft creation and payload shape', () => {
-  it('creates the draft exactly once, and NEVER sends crops/features/rtc (no backend write path — issue #1627 scope decision)', async () => {
+describe('AgriculturalListingForm — idempotent draft creation and payload shape (issue #2044)', () => {
+  it('creates the draft exactly once, sends crops as canonical machine values, and NEVER sends features/rtc (no backend write path for those)', async () => {
     mockCreateSucceedsWithAddressConfirmed();
     const user = userEvent.setup();
     renderForm();
 
     await resolveLocation(user);
     await user.type(screen.getByLabelText(/price \(inr\)/i), '78 lakh');
+    // Select the "Areca / supari" chip — the old FE-only label was "Areca nut";
+    // the payload must carry the canonical backend code, not the old display string.
+    await user.click(screen.getByRole('button', { name: 'Areca / supari' }));
 
     const saveDraftButtons = screen.getAllByRole('button', { name: /save draft/i });
     await user.click(saveDraftButtons[0]);
@@ -223,13 +229,29 @@ describe('AgriculturalListingForm — idempotent draft creation and payload shap
     expect(mockCreateMutate).toHaveBeenCalledTimes(1);
     const [payload] = mockCreateMutate.mock.calls[0] as [Record<string, unknown>, unknown];
     expect(payload.propertyType).toBe('agricultural_land');
-    expect(payload).not.toHaveProperty('crops');
+    expect(payload.crops).toEqual(['ARECA_SUPARI']);
     expect(payload).not.toHaveProperty('features');
     expect(payload).not.toHaveProperty('rtc');
 
     await user.click(screen.getAllByRole('button', { name: /save draft/i })[0]);
     expect(mockCreateMutate).toHaveBeenCalledTimes(1);
     expect(mockUpdateMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('CROP_OPTIONS renders all 12 canonical crops and never renders an "Other" crop chip (DP-1)', () => {
+    renderForm();
+    const cropGroup = screen.getByTestId('chip-group-crops');
+    const canonicalLabels = [
+      'Paddy', 'Coconut', 'Areca / supari', 'Cashew', 'Banana', 'Sugarcane',
+      'Vegetables', 'Mango', 'Rubber', 'Pepper', 'Mixed plantation', 'Fallow / open',
+    ];
+    canonicalLabels.forEach((label) => {
+      expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+    });
+    // 12 crop chips, no more (no leftover 'Other' or legacy 'Areca nut' chip).
+    expect(cropGroup.querySelectorAll('button')).toHaveLength(12);
+    expect(screen.queryByRole('button', { name: /^other$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /areca nut/i })).not.toBeInTheDocument();
   });
 });
 

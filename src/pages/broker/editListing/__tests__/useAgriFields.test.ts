@@ -57,7 +57,7 @@ function makeListing(overrides: Partial<ListingResponse>): ListingResponse {
 }
 
 describe('useAgriFields', () => {
-  it('initializes all 9 values to empty string', () => {
+  it('initializes all 10 values to empty string / empty array', () => {
     const { result } = renderHook(() => useAgriFields());
 
     expect(result.current.values).toEqual({
@@ -70,6 +70,7 @@ describe('useAgriFields', () => {
       agriConversionStatus: '',
       farmhouseAvailable: '',
       fencingDone: '',
+      crops: [],
     });
   });
 
@@ -86,6 +87,7 @@ describe('useAgriFields', () => {
       result.current.setters.setAgriConversionStatus('CONVERSION_APPLIED');
       result.current.setters.setFarmhouseAvailable('true');
       result.current.setters.setFencingDone('false');
+      result.current.setters.setCrops(['COCONUT', 'PEPPER']);
     });
 
     expect(result.current.values).toEqual({
@@ -98,22 +100,31 @@ describe('useAgriFields', () => {
       agriConversionStatus: 'CONVERSION_APPLIED',
       farmhouseAvailable: 'true',
       fencingDone: 'false',
+      crops: ['COCONUT', 'PEPPER'],
     });
   });
 
-  it('hydrate() sets all 9 fields from a listing, mapping null to empty string', () => {
+  it('hydrate() sets all fields from a listing, mapping null to empty string (issue #2044: including crops)', () => {
     const { result } = renderHook(() => useAgriFields());
-    const listing = makeListing({
-      waterSource: 'RIVER',
-      soilType: 'RED_LATERITE',
-      roadAccess: 'KACHCHA_ROAD',
-      cultivationStatus: 'CULTIVATED',
-      surveyNumber: '99/1',
-      landCategory: 'DRY_LAND',
-      agriConversionStatus: 'APPROVED_FOR_CONVERSION',
-      farmhouseAvailable: true,
-      fencingDone: false,
-    });
+    // ListingResponse (useBrokerListings.ts) doesn't declare `crops` in its
+    // type — out of this issue's scope to extend — but the backend detail
+    // response DOES include it (#2044). Spreading an extra `crops` field onto
+    // an already-typed ListingResponse fixture mirrors the same structural
+    // widening useAgriFields.ts itself uses to read it — no cast needed.
+    const listing = {
+      ...makeListing({
+        waterSource: 'RIVER',
+        soilType: 'RED_LATERITE',
+        roadAccess: 'KACHCHA_ROAD',
+        cultivationStatus: 'CULTIVATED',
+        surveyNumber: '99/1',
+        landCategory: 'DRY_LAND',
+        agriConversionStatus: 'APPROVED_FOR_CONVERSION',
+        farmhouseAvailable: true,
+        fencingDone: false,
+      }),
+      crops: ['ARECA_SUPARI', 'COCONUT'],
+    };
 
     act(() => {
       result.current.hydrate(listing);
@@ -129,10 +140,11 @@ describe('useAgriFields', () => {
       agriConversionStatus: 'APPROVED_FOR_CONVERSION',
       farmhouseAvailable: 'true',
       fencingDone: 'false',
+      crops: ['ARECA_SUPARI', 'COCONUT'],
     });
   });
 
-  it('hydrate() falls back to empty string for null string fields and "" for unset tri-state booleans', () => {
+  it('hydrate() falls back to empty string/array for null string fields, "" for unset tri-state booleans, and [] for absent crops', () => {
     const { result } = renderHook(() => useAgriFields());
     const listing = makeListing({
       waterSource: null,
@@ -151,6 +163,7 @@ describe('useAgriFields', () => {
       result.current.setters.setWaterSource('BOREWELL');
       result.current.setters.setAgriConversionStatus('NOT_SURE');
       result.current.setters.setFarmhouseAvailable('true');
+      result.current.setters.setCrops(['PADDY']);
     });
 
     act(() => {
@@ -167,6 +180,7 @@ describe('useAgriFields', () => {
       agriConversionStatus: '',
       farmhouseAvailable: '',
       fencingDone: '',
+      crops: [],
     });
   });
 });

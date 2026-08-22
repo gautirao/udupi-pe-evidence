@@ -42,6 +42,7 @@ import {
   OWNERSHIP_TYPE_LABELS,
   LAND_CATEGORY_LABELS,
   AGRI_CONVERSION_STATUS_LABELS,
+  CROP_LABELS,
 } from '@/lib/agriFieldLabels';
 import {
   SingleChipGroup,
@@ -69,6 +70,9 @@ const KNOWN_ROAD_ACCESS_VALUES = Object.keys(ROAD_ACCESS_LABELS);
 const KNOWN_CULTIVATION_STATUSES = Object.keys(CULTIVATION_STATUS_LABELS);
 const KNOWN_OWNERSHIP_TYPES = Object.keys(OWNERSHIP_TYPE_LABELS);
 const KNOWN_LAND_CATEGORIES = Object.keys(LAND_CATEGORY_LABELS);
+// Issue #2044 — canonical crop chip vocabulary, derived from agriFieldLabels.ts
+// like every other agri field here (never re-hardcoded).
+const CROP_CHIP_OPTIONS = Object.entries(CROP_LABELS).map(([value, label]) => ({ value, label }));
 
 interface DescribeStepProps {
   // Composed hook-result objects (Issue #1838 slice 6b — misrouting-safe by construction;
@@ -164,11 +168,11 @@ export function DescribeStep({
 
   const {
     waterSource, soilType, roadAccess, cultivationStatus,
-    surveyNumber, landCategory, agriConversionStatus, farmhouseAvailable, fencingDone,
+    surveyNumber, landCategory, agriConversionStatus, farmhouseAvailable, fencingDone, crops,
   } = agri.values;
   const {
     setWaterSource, setSoilType, setRoadAccess, setCultivationStatus,
-    setSurveyNumber, setLandCategory, setAgriConversionStatus, setFarmhouseAvailable, setFencingDone,
+    setSurveyNumber, setLandCategory, setAgriConversionStatus, setFarmhouseAvailable, setFencingDone, setCrops,
   } = agri.setters;
 
   const {
@@ -431,6 +435,17 @@ export function DescribeStep({
                       onChange={(e) => setSurveyNumber(e.target.value)}
                     />
                   </div>
+
+                  {/* Crops — Issue #2044. Canonical machine-value multi-select;
+                      persisted structurally (unlike the FE-only on-land features
+                      chips, which remain out of scope for this issue). */}
+                  <MultiChipGroup
+                    label="Crops grown / suitable for"
+                    options={CROP_CHIP_OPTIONS}
+                    value={crops}
+                    onValueChange={setCrops}
+                    testId="chip-group-agri-crops"
+                  />
                 </div>
               )}
 

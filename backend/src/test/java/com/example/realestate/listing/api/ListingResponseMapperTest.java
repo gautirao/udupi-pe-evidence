@@ -42,6 +42,7 @@ class ListingResponseMapperTest {
     private ListingLocationFeatureRepository listingLocationFeatureRepository;
     private ListingPreferredTenantRepository listingPreferredTenantRepository;
     private ListingSuitableUseRepository listingSuitableUseRepository;
+    private com.example.realestate.listing.agricultural.ListingAgriCropRepository listingAgriCropRepository;
     private ListingResponseMapper mapper;
 
     @BeforeEach
@@ -53,9 +54,10 @@ class ListingResponseMapperTest {
         listingLocationFeatureRepository = mock(ListingLocationFeatureRepository.class);
         listingPreferredTenantRepository = mock(ListingPreferredTenantRepository.class);
         listingSuitableUseRepository = mock(ListingSuitableUseRepository.class);
+        listingAgriCropRepository = mock(com.example.realestate.listing.agricultural.ListingAgriCropRepository.class);
         mapper = new ListingResponseMapper(listingImageRepository, dimensionRepository, listingRepository,
                 listingAmenityRepository, listingLocationFeatureRepository, listingPreferredTenantRepository,
-                listingSuitableUseRepository);
+                listingSuitableUseRepository, listingAgriCropRepository);
 
         // Default: no images
         when(listingImageRepository.findByListingIdOrderByPositionAsc(any())).thenReturn(List.of());
@@ -699,6 +701,46 @@ class ListingResponseMapperTest {
         assertThat(responses.get(0).computedAreaAcres()).isNull();
         // List/batch path must take NO extra DB call.
         verify(listingRepository, never()).findBoundaryAreaSqm(any());
+    }
+
+    @Test
+    void toResponse_singleListingPath_agriListing_populatesCrops() {
+        Listing agri = buildAgriListing("LIVE");
+        com.example.realestate.listing.agricultural.ListingAgriCrop crop =
+                new com.example.realestate.listing.agricultural.ListingAgriCrop();
+        crop.setCode("PADDY");
+        when(listingAgriCropRepository.findByListingIdOrderByCodeAsc(agri.getId()))
+                .thenReturn(List.of(crop));
+
+        ListingResponse response = mapper.toResponse(agri);
+
+        assertThat(response.crops()).containsExactly("PADDY");
+    }
+
+    @Test
+    void toResponse_singleListingPath_nonAgriListing_cropsEmpty_noDbCall() {
+        Listing l = buildListing("LIVE");
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.crops()).isEmpty();
+        verify(listingAgriCropRepository, never()).findByListingIdOrderByCodeAsc(any());
+    }
+
+    @Test
+    void toResponseList_batchPath_cropsAlwaysEmpty_noExtraDbCall() {
+        // AC10 (#2044): the batch/list path must NOT fetch crops, even for an agri listing —
+        // this is a deliberate N+1 guard (documented decision), mirroring the identical
+        // computedAreaAcres/amenities/suitableUses batch-path guards above.
+        Listing agri = buildAgriListing("LIVE");
+        when(listingAgriCropRepository.findByListingIdOrderByCodeAsc(any()))
+                .thenReturn(List.of(new com.example.realestate.listing.agricultural.ListingAgriCrop()));
+
+        List<ListingResponse> responses = mapper.toResponseList(List.of(agri));
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).crops()).isEmpty();
+        verify(listingAgriCropRepository, never()).findByListingIdOrderByCodeAsc(any());
     }
 
     @Test

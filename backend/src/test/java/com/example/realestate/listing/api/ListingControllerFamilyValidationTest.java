@@ -100,7 +100,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any(), any()))
+                any(), any(), any(), any()))
                 .thenReturn(stub);
         lenient().when(listingCrudService.updateListing(
                 any(), any(), anyBoolean(),
@@ -109,7 +109,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(),
-                any(), any()))
+                any(), any(), any()))
                 .thenReturn(stub);
 
         when(listingResponseMapper.toResponse(any(Listing.class))).thenAnswer(inv -> {
@@ -143,7 +143,7 @@ class ListingControllerFamilyValidationTest {
                     null, null, null, null, null, null,
                     null, null, null, null, null, null,
                     null, null, null,
-                    List.of(), List.of());
+                    List.of(), List.of(), List.of());
         });
     }
 
@@ -957,6 +957,46 @@ class ListingControllerFamilyValidationTest {
         verifyUpdateNeverCalled();
     }
 
+    // ======================== #2044 (B1 review fix): crops is agri-only ========================
+    // crops was never wired into validateFamilyFields, so a non-agri family silently discarded it
+    // instead of rejecting like every other agri-only list field (amenities/suitableUses/utilities
+    // pattern). rejectIfNonEmpty (not rejectIfPresent) so an explicit empty list stays a legal no-op.
+
+    @Test
+    void b1_house_withCrops_returns400_crudNeverCalled() throws Exception {
+        performCreate("""
+                {"propertyType":"house","title":"House","locality":"Udupi",
+                 "price":5000000,"description":"desc","crops":["PADDY"]}
+                """)
+                .andExpect(status().isBadRequest());
+        verifyCreateNeverCalled();
+    }
+
+    @Test
+    void b1_update_house_withCrops_returns400_crudNeverCalled() throws Exception {
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(dealer())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"house","crops":["PADDY"]}
+                                """))
+                .andExpect(status().isBadRequest());
+        verifyUpdateNeverCalled();
+    }
+
+    @Test
+    void b1_house_withEmptyCrops_returns201() throws Exception {
+        // Negative control: an explicit empty list is a legal no-op (rejectIfNonEmpty semantics),
+        // distinct from rejectIfPresent — pins the behaviour so a future swap to rejectIfPresent
+        // would fail this test loudly.
+        performCreate("""
+                {"propertyType":"house","title":"House","locality":"Udupi",
+                 "price":5000000,"description":"desc","crops":[]}
+                """)
+                .andExpect(status().isCreated());
+        verifyCreateCalledOnce();
+    }
+
     // ======================== Shared helpers ========================
 
     private RequestPostProcessor dealer() {
@@ -978,7 +1018,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     private void verifyCreateCalledOnce() {
@@ -988,7 +1028,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     private void verifyUpdateNeverCalled() {
@@ -998,7 +1038,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any());
     }
 
     private void verifyUpdateCalledOnce() {
@@ -1008,7 +1048,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any());
     }
 
     private static Listing minimalListing(UUID id, String propertyType) {

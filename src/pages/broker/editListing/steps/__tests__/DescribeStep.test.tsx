@@ -121,12 +121,14 @@ function makeAgri(overrides: Partial<ReturnType<typeof useAgriFields>['values']>
     values: {
       waterSource: '', soilType: '', roadAccess: '', cultivationStatus: '',
       surveyNumber: '', landCategory: '', agriConversionStatus: '', farmhouseAvailable: '', fencingDone: '',
+      crops: [],
       ...overrides,
     },
     setters: {
       setWaterSource: vi.fn(), setSoilType: vi.fn(), setRoadAccess: vi.fn(),
       setCultivationStatus: vi.fn(), setSurveyNumber: vi.fn(), setLandCategory: vi.fn(),
       setAgriConversionStatus: vi.fn(), setFarmhouseAvailable: vi.fn(), setFencingDone: vi.fn(),
+      setCrops: vi.fn(),
     },
     hydrate: vi.fn(),
   };
@@ -433,6 +435,63 @@ describe('DescribeStep', () => {
       expect(() =>
         render(<DescribeStep {...baseProps({ propertyType: 'apartment' })} />),
       ).not.toThrow();
+    });
+  });
+
+  // ─── 8. Crop chip control (issue #2044, AC8 edit-flow wiring) ─────────────
+  describe('crop chip control (agri-only, issue #2044)', () => {
+    it('renders all 12 canonical crop chips when the agri fields section is visible', () => {
+      render(
+        <DescribeStep
+          {...baseProps({
+            propertyType: 'agricultural_land',
+            fieldVisible: makeFieldVisible([...DEFAULT_VISIBLE, 'waterSource']),
+          })}
+        />,
+      );
+      const cropGroup = screen.getByTestId('chip-group-agri-crops');
+      expect(within(cropGroup).getByText('Areca / supari')).toBeInTheDocument();
+      expect(within(cropGroup).getByText('Fallow / open')).toBeInTheDocument();
+      expect(cropGroup.querySelectorAll('button')).toHaveLength(12);
+    });
+
+    it('reflects the current agri.values.crops selection', () => {
+      render(
+        <DescribeStep
+          {...baseProps({
+            propertyType: 'agricultural_land',
+            fieldVisible: makeFieldVisible([...DEFAULT_VISIBLE, 'waterSource']),
+            agri: makeAgri({ crops: ['COCONUT', 'PEPPER'] }),
+          })}
+        />,
+      );
+      const cropGroup = screen.getByTestId('chip-group-agri-crops');
+      expect(within(cropGroup).getByRole('button', { name: 'Coconut' })).toHaveAttribute('data-state', 'on');
+      expect(within(cropGroup).getByRole('button', { name: 'Pepper' })).toHaveAttribute('data-state', 'on');
+      expect(within(cropGroup).getByRole('button', { name: 'Paddy' })).toHaveAttribute('data-state', 'off');
+    });
+
+    it('clicking a crop chip calls agri.setters.setCrops', async () => {
+      const user = userEvent.setup();
+      const setCrops = vi.fn();
+      const agri = makeAgri();
+      agri.setters.setCrops = setCrops;
+      render(
+        <DescribeStep
+          {...baseProps({
+            propertyType: 'agricultural_land',
+            fieldVisible: makeFieldVisible([...DEFAULT_VISIBLE, 'waterSource']),
+            agri,
+          })}
+        />,
+      );
+      await user.click(within(screen.getByTestId('chip-group-agri-crops')).getByRole('button', { name: 'Mango' }));
+      expect(setCrops).toHaveBeenCalledWith(['MANGO']);
+    });
+
+    it('is absent entirely when the agri fields section is not visible (non-agri property types)', () => {
+      render(<DescribeStep {...baseProps({ propertyType: 'apartment' })} />);
+      expect(screen.queryByTestId('chip-group-agri-crops')).not.toBeInTheDocument();
     });
   });
 });

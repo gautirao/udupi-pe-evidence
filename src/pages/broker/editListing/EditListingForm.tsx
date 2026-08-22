@@ -131,12 +131,13 @@ export function EditListingForm({ listing }: EditListingFormProps) {
   const agri = useAgriFields();
   const {
     waterSource, soilType, roadAccess, cultivationStatus,
-    surveyNumber, landCategory, agriConversionStatus, farmhouseAvailable, fencingDone,
+    surveyNumber, landCategory, agriConversionStatus, farmhouseAvailable, fencingDone, crops,
   } = agri.values;
   const {
     setWaterSource, setSoilType, setRoadAccess, setCultivationStatus,
     setSurveyNumber, setLandCategory, setAgriConversionStatus, setFarmhouseAvailable, setFencingDone,
   } = agri.setters;
+  // setCrops is consumed inside DescribeStep via the composed `agri` prop — not read here.
   // ownershipType is shared with residential — see useSharedFields() above.
   // Agricultural plot boundary — [lat, lng][] coords from DrawControl
   const [boundaryCoords, setBoundaryCoords] = useState<[number, number][]>([]);
@@ -355,7 +356,15 @@ export function EditListingForm({ listing }: EditListingFormProps) {
       { isRent, showLandArea, showBuiltArea, fieldVisible },
     );
 
-    updateListing.mutate(payload, {
+    // Issue #2044 — crops. buildListingUpdatePayload() (src/lib/editListing/
+    // buildUpdatePayload.ts) is out of this issue's allowed-file scope, so
+    // crops is merged onto its returned payload here rather than threaded
+    // through that builder. Always sent as the full current set (not a
+    // delta) so removing a crop clears it too; omitted entirely for non-agri
+    // listings (backend: omitted = leave unchanged).
+    const payloadWithCrops = isAgriListing ? { ...payload, crops } : payload;
+
+    updateListing.mutate(payloadWithCrops, {
       onSuccess: () => {
         toast({ title: 'Listing updated', description: 'Your listing has been saved.' });
         advanceAfterSave(2);

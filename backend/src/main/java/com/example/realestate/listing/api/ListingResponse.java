@@ -197,7 +197,13 @@ public record ListingResponse(
          * (mirrors {@link #amenities}); list/batch endpoints always set these to empty lists.
          */
         List<String> suitableUses,
-        List<String> utilities
+        List<String> utilities,
+        /**
+         * Agricultural crop multi-select child set (#2044). Populated ONLY on the single-listing
+         * detail path (mirrors {@link #amenities}/{@link #suitableUses}); list/batch endpoints
+         * always set this to an empty list (AC10 — deliberate N+1 guard, not an oversight).
+         */
+        List<String> crops
 ) {
     /** Raw regex for Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
     public static final String RERA_REGEXP = "^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$";

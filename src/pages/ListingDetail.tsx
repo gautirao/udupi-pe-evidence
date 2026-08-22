@@ -11,7 +11,8 @@ import { PropertyImage, PropertyType } from '@/hooks/usePropertyListings';
 import { ListingResponse } from '@/hooks/useBrokerListings';
 import { PriceHistoryEntry } from '@/components/listing/ListingTransparencyCard';
 import { formatRelativeDate } from '@/lib/formatters';
-import { AlertTriangle, ArrowLeft, Share2, Check, Heart, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Share2, Check, Heart, ShieldCheck, Sprout } from 'lucide-react';
+import { CROP_LABELS } from '@/lib/agriFieldLabels';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -94,6 +95,13 @@ export interface PublicListingDetail extends Partial<ListingResponse> {
    * when the listing has no price — never fabricate a band.
    */
   priceBand?: string | null;
+  /**
+   * Issue #2044 — canonical machine-value crop codes, persisted structurally
+   * for agricultural_land listings. Populated only on this single-listing
+   * detail response (never on list/batch payloads); absent/[] means either
+   * "no crops selected" or a non-agri listing — never fabricated.
+   */
+  crops?: string[] | null;
 }
 
 function useListingById(id: string | undefined, isPreview: boolean) {
@@ -247,6 +255,28 @@ export default function ListingDetail() {
                 </AlertDescription>
               </Alert>
             )}
+          </div>
+        )}
+        {/* Issue #2044 (AC9) — crops now persist structurally for agri
+            listings, but AgriListingDetail.tsx (the component that renders
+            the rest of this page) is out of this issue's allowed-file scope.
+            Rendered here as a supplementary block rather than left absent;
+            a follow-up should fold this into AgriListingDetail's own layout
+            once that file is in scope. */}
+        {Array.isArray(listing.crops) && listing.crops.length > 0 && (
+          <div className="mx-auto max-w-6xl px-4 md:px-6">
+            <div className="mt-4 flex items-start gap-2 rounded-lg border bg-card p-4" data-testid="agri-detail-crops">
+              <Sprout className="mt-0.5 h-4 w-4 shrink-0 text-foreground/70" aria-hidden="true" />
+              <div>
+                <h3 className="mb-1 text-sm font-semibold text-foreground">Crops grown (declared by seller/broker)</h3>
+                <p className="text-sm text-muted-foreground">
+                  {listing.crops.map((c) => CROP_LABELS[c] ?? c).join(', ')}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Declared by the seller/broker; ReTrends does not verify what's actually grown.
+                </p>
+              </div>
+            </div>
           </div>
         )}
         <AgriListingDetail

@@ -97,8 +97,8 @@ class ListingControllerAgriValidationTest {
                 .when(listingWorkflowService.findListingForCaller(any(), any(), anyBoolean()))
                 .thenReturn(stub);
         // createDraft: 37 params — UUID + 36 typed params (all Object-compatible except primitives),
-        // + ResidentialListingFields + CommercialListingFields (M38-FU2 / #1730) = 39 total
-        // (#2043: +1 for agriConversionStatus)
+        // + ResidentialListingFields + CommercialListingFields (M38-FU2 / #1730)
+        // + crops (#2044) = 40 total (#2043: +1 for agriConversionStatus)
         org.mockito.Mockito.lenient()
                 .when(listingCrudService.createDraft(
                         any(), any(), any(), any(), any(), any(),
@@ -107,11 +107,11 @@ class ListingControllerAgriValidationTest {
                         any(), any(), any(), any(), any(), any(),
                         any(), any(), any(), any(), any(), any(),
                         any(), any(), any(), any(), any(), any(),
-                any(), any(), any()))
+                any(), any(), any(), any()))
                 .thenReturn(stub);
         // updateListing: UUID, UUID, boolean (primitive), + 44 Object params
-        // + ResidentialListingFields + CommercialListingFields (M38-FU2 / #1730) = 49 total
-        // (#2043: +1 for agriConversionStatus)
+        // + ResidentialListingFields + CommercialListingFields (M38-FU2 / #1730)
+        // + crops (#2044) = 50 total (#2043: +1 for agriConversionStatus)
         org.mockito.Mockito.lenient()
                 .when(listingCrudService.updateListing(
                         any(), any(), anyBoolean(),
@@ -119,7 +119,7 @@ class ListingControllerAgriValidationTest {
                         any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                         any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                         any(), any(), any(), any(),
-                any(), any()))
+                any(), any(), any()))
                 .thenReturn(stub);
 
         // Minimal mapper stub — just return something that produces the status field
@@ -168,7 +168,7 @@ class ListingControllerAgriValidationTest {
                     l.getExpectedRentalYieldPct(), l.getCurrentMonthlyIncomePaise(),
                     l.getLeaseTermMonths(), l.getLeaseEscalationPct(),
                     l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
-                    List.of(), List.of());
+                    List.of(), List.of(), List.of());
         });
     }
 
@@ -194,6 +194,58 @@ class ListingControllerAgriValidationTest {
                                 }
                                 """))
                 .andExpect(status().isCreated());
+    }
+
+    @Test
+    void create_withCanonicalCrops_returns201() throws Exception {
+        // AC6 (#2044): canonical crop codes are accepted.
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "propertyType": "agricultural_land",
+                                  "title": "Test Farm",
+                                  "locality": "Brahmavar",
+                                  "price": 5000000,
+                                  "description": "Test",
+                                  "crops": ["PADDY", "COCONUT"]
+                                }
+                                """))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void create_withUnknownCrop_returns400() throws Exception {
+        // AC6 (#2044): an unknown crop code must be rejected with 400, mirroring the
+        // utilities/suitableUses list-valued rejectIfUnknown precedent.
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "propertyType": "agricultural_land",
+                                  "title": "Test Farm",
+                                  "locality": "Brahmavar",
+                                  "price": 5000000,
+                                  "description": "Test",
+                                  "crops": ["PADDY", "OTHER"]
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void update_withUnknownCrop_returns400() throws Exception {
+        mockMvc.perform(put("/api/listings/" + UUID.randomUUID())
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "crops": ["NOT_A_REAL_CROP"]
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

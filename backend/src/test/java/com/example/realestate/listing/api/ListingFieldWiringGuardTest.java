@@ -57,10 +57,12 @@ class ListingFieldWiringGuardTest {
             "VALID_TERRAIN_VALUES",
             "VALID_WATER_DESIGN",
             "VALID_SOIL_DESIGN",
-            "VALID_CROPS",
             "VALID_LOCATION_FEATURES",
             "VALID_AGRI_AREA_UNITS",
             "VALID_YN",
+            // AgriFieldOptions.VALID_CROPS is now WIRED (#2044 — validateAgriFields in
+            // ListingController, list-valued per-element rejectIfUnknown) and intentionally
+            // removed from this list. Do not re-add it without removing the real wiring.
             // AgriFieldOptions.VALID_CONVERSION_STATUSES is now WIRED (#2043 — validateAgriFields
             // in ListingController) and intentionally removed from this list. Note:
             // ResidentialFieldOptions.VALID_CONVERSION_STATUSES (different values: DC_CONVERTED /

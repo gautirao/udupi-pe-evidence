@@ -132,6 +132,7 @@ class ReviewAction500ReproIT {
     @Autowired private ListingSuitableUseRepository listingSuitableUseRepository;
     @Autowired private CommercialSpaceDetailRepository commercialSpaceDetailRepository;
     @Autowired private ResidentialUnitDetailRepository residentialUnitDetailRepository;
+    @Autowired private com.example.realestate.listing.agricultural.ListingAgriCropRepository listingAgriCropRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
 
     // AC6 (Stage B, cycle 2) ONLY: a genuinely Spring-managed ListingCrudService bean, distinct
@@ -184,7 +185,8 @@ class ReviewAction500ReproIT {
                 listingPreferredTenantRepository,   // REAL
                 listingSuitableUseRepository,        // REAL
                 commercialSpaceDetailRepository,     // REAL
-                residentialUnitDetailRepository);    // REAL
+                residentialUnitDetailRepository,     // REAL
+                listingAgriCropRepository);           // REAL
 
         workflowService = new ListingWorkflowService(
                 listingRepository, events, ownershipGuard, proximity, policy,
@@ -1944,14 +1946,16 @@ class ReviewAction500ReproIT {
                 ListingPreferredTenantRepository listingPreferredTenantRepository,
                 ListingSuitableUseRepository listingSuitableUseRepository,
                 CommercialSpaceDetailRepository commercialSpaceDetailRepository,
-                ResidentialUnitDetailRepository residentialUnitDetailRepository) {
+                ResidentialUnitDetailRepository residentialUnitDetailRepository,
+                com.example.realestate.listing.agricultural.ListingAgriCropRepository listingAgriCropRepository) {
             return new ListingCrudService(
                     listingRepository, ac6EventPublisher, ac6OwnershipGuard, ac6DedupService,
                     priceChangeLogRepository, ac6BadgeInvalidationService, ac6SearchOutboxWriter,
                     ac6PolygonBoundaryValidator, ac6QualityRecomputeService,
                     listingAmenityRepository, listingLocationFeatureRepository,
                     listingPreferredTenantRepository, listingSuitableUseRepository,
-                    commercialSpaceDetailRepository, residentialUnitDetailRepository);
+                    commercialSpaceDetailRepository, residentialUnitDetailRepository,
+                    listingAgriCropRepository);
         }
     }
 }

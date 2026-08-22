@@ -9,6 +9,7 @@ import {
   OWNERSHIP_TYPE_LABELS,
   LAND_CATEGORY_LABELS,
   AGRI_CONVERSION_STATUS_LABELS,
+  CROP_LABELS,
 } from '@/lib/agriFieldLabels';
 import { FACING_OPTIONS } from '@/lib/listing-constants';
 import { InlineNearby } from '@/components/broker/residential/InlineNearby';
@@ -21,8 +22,12 @@ import { computeAgriPriceBreakdown } from '@/components/broker/agricultural/pric
 // commercial/CommercialReviewPreview.tsx (#1684). PURE PRESENTATION: hides
 // missing optional fields (no fake defaults), and NEVER claims verification
 // of survey number / RTC / ownership / crops — those are shown exactly as
-// entered, with an explicit "not verified" note. The confirmed pin renders
-// as LOCATION only, never implied as a legal/survey boundary (AC5).
+// entered/declared, with an explicit "not verified" note. The confirmed pin
+// renders as LOCATION only, never implied as a legal/survey boundary (AC5).
+// Issue #2044 — crops ARE now structurally persisted (unlike RTC/features,
+// which remain FE-only); the row label and disclaimer below were updated so
+// "not saved" language never appears next to a fact that IS saved. Rendered
+// via CROP_LABELS (derived label), never the raw machine value.
 // ---------------------------------------------------------------------------
 
 interface ReviewTile {
@@ -108,7 +113,13 @@ export function AgriculturalReviewPreview({
   addRow('Ownership', labelFrom(OWNERSHIP_TYPE_LABELS, facts.ownershipType));
   addRow('Survey number', facts.surveyNumber);
   addRow('RTC (as entered, not saved to record yet)', facts.rtc);
-  addRow('Crops (as entered)', facts.crops.length > 0 ? facts.crops.join(', ') : undefined);
+  // Issue #2044 — crops ARE now saved as structured data (canonical machine
+  // values); render the derived display label, never the raw machine value,
+  // and drop the "(as entered)" caveat that implied non-persistence.
+  addRow(
+    'Crops (declared by seller/broker)',
+    facts.crops.length > 0 ? facts.crops.map((c) => CROP_LABELS[c] ?? c).join(', ') : undefined,
+  );
   addRow('Features (as entered)', facts.features.length > 0 ? facts.features.join(', ') : undefined);
 
   const priceBreakdown = computeAgriPriceBreakdown(facts.priceRupees, facts.landArea, facts.landAreaUnit);
@@ -214,7 +225,8 @@ export function AgriculturalReviewPreview({
             <p className="text-sm text-muted-foreground">Add land details and they'll appear here.</p>
           )}
           <p className="mt-3 text-xs text-muted-foreground">
-            Survey number, RTC, ownership, and crops are shown exactly as entered by the seller/broker — ReTrends does not verify land records.
+            Survey number, RTC, and ownership are shown exactly as entered by the seller/broker — ReTrends does not verify land records.
+            Crops are saved with your listing, but ReTrends does not verify what's actually grown.
           </p>
         </div>
 

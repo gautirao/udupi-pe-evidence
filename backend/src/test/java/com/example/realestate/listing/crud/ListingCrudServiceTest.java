@@ -90,6 +90,9 @@ class ListingCrudServiceTest {
     @Mock
     private com.example.realestate.listing.typed.ResidentialUnitDetailRepository residentialUnitDetailRepository;
 
+    @Mock
+    private com.example.realestate.listing.agricultural.ListingAgriCropRepository listingAgriCropRepository;
+
     private ListingCrudService crudService;
 
     @BeforeEach
@@ -100,7 +103,7 @@ class ListingCrudServiceTest {
                 badgeInvalidationService, searchOutboxWriter, polygonBoundaryValidator,
                 qualityRecomputeService, listingAmenityRepository, listingLocationFeatureRepository,
                 listingPreferredTenantRepository, listingSuitableUseRepository,
-                commercialSpaceDetailRepository, residentialUnitDetailRepository);
+                commercialSpaceDetailRepository, residentialUnitDetailRepository, listingAgriCropRepository);
     }
 
     // --- RE-83: createDraft sets dedupe hash and flags duplicates ---

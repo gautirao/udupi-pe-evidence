@@ -15,6 +15,7 @@ import {
   CULTIVATION_STATUS_LABELS,
   OWNERSHIP_TYPE_LABELS,
   LAND_CATEGORY_LABELS,
+  CROP_LABELS,
 } from '../agriFieldLabels';
 
 // ─── Structural: all maps are defined objects ─────────────────────────────────
@@ -265,5 +266,40 @@ describe('LAND_CATEGORY_LABELS', () => {
     required.forEach((key) => {
       expect(LAND_CATEGORY_LABELS).toHaveProperty(key);
     });
+  });
+});
+
+// ─── CROP_LABELS (#2044) ──────────────────────────────────────────────────────
+// Canonical backend vocabulary — AgriFieldOptions.VALID_CROPS/CROP_LABELS.
+
+describe('CROP_LABELS', () => {
+  it('has exactly the 12 canonical backend crop keys', () => {
+    const required = [
+      'PADDY', 'COCONUT', 'ARECA_SUPARI', 'CASHEW', 'BANANA', 'SUGARCANE',
+      'VEGETABLES', 'MANGO', 'RUBBER', 'PEPPER', 'MIXED_PLANTATION', 'FALLOW_OPEN',
+    ];
+    expect(Object.keys(CROP_LABELS).sort()).toEqual(required.sort());
+  });
+
+  it('does NOT have an OTHER member (DP-1: no free-text escape hatch)', () => {
+    expect(CROP_LABELS).not.toHaveProperty('OTHER');
+  });
+
+  it('ARECA_SUPARI → "Areca / supari" (the old FE-only chip was labelled "Areca nut")', () => {
+    expect(CROP_LABELS['ARECA_SUPARI']).toBe('Areca / supari');
+  });
+
+  it('matches every backend label exactly', () => {
+    expect(CROP_LABELS['PADDY']).toBe('Paddy');
+    expect(CROP_LABELS['COCONUT']).toBe('Coconut');
+    expect(CROP_LABELS['CASHEW']).toBe('Cashew');
+    expect(CROP_LABELS['BANANA']).toBe('Banana');
+    expect(CROP_LABELS['SUGARCANE']).toBe('Sugarcane');
+    expect(CROP_LABELS['VEGETABLES']).toBe('Vegetables');
+    expect(CROP_LABELS['MANGO']).toBe('Mango');
+    expect(CROP_LABELS['RUBBER']).toBe('Rubber');
+    expect(CROP_LABELS['PEPPER']).toBe('Pepper');
+    expect(CROP_LABELS['MIXED_PLANTATION']).toBe('Mixed plantation');
+    expect(CROP_LABELS['FALLOW_OPEN']).toBe('Fallow / open');
   });
 });

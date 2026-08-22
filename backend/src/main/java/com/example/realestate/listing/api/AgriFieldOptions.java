@@ -15,6 +15,7 @@ import java.util.Set;
  *   <li>{@link #VALID_OWNERSHIP_TYPES}</li>
  *   <li>{@link #VALID_LAND_CATEGORIES} — wired as of M38-10b (#1693)</li>
  *   <li>{@link #VALID_CONVERSION_STATUSES} — wired as of #2043</li>
+ *   <li>{@link #VALID_CROPS} — wired as of #2044 (list-valued; validated per-element)</li>
  * </ul>
  *
  * <h2>Author-only / forward sets (NOT wired to any current request field)</h2>
@@ -32,7 +33,6 @@ import java.util.Set;
  *   <li>{@link #VALID_TERRAIN_VALUES}</li>
  *   <li>{@link #VALID_WATER_DESIGN} — typed-model extension of {@link #VALID_WATER_SOURCES}</li>
  *   <li>{@link #VALID_SOIL_DESIGN} — typed-model extension of {@link #VALID_SOIL_TYPES}</li>
- *   <li>{@link #VALID_CROPS}</li>
  *   <li>{@link #VALID_LOCATION_FEATURES}</li>
  *   <li>{@link #VALID_AGRI_AREA_UNITS}</li>
  *   <li>{@link #VALID_YN} — shared tri-state across agri, commercial and residential domains</li>
@@ -342,8 +342,12 @@ public final class AgriFieldOptions {
             "NOT_SURE",          "Not sure"
     );
 
+    // =========================================================================
+    // WIRED — moved out of the forward-only block by #2044
+    // =========================================================================
+
     // -------------------------------------------------------------------------
-    // crops  (forward-only; multi-valued child table in typed model)
+    // crops  (wired as of #2044; multi-valued child table listing_agri_crops)
     // -------------------------------------------------------------------------
 
     public static final Set<String> VALID_CROPS = Set.of(

@@ -35,6 +35,7 @@ import {
   OWNERSHIP_TYPE_LABELS,
   LAND_CATEGORY_LABELS,
   AGRI_CONVERSION_STATUS_LABELS,
+  CROP_LABELS,
 } from '@/lib/agriFieldLabels';
 import { FACING_OPTIONS } from '@/lib/listing-constants';
 
@@ -60,19 +61,20 @@ import { FACING_OPTIONS } from '@/lib/listing-constants';
  * Vocabulary is sourced from src/lib/agriFieldLabels.ts (parity-tested
  * against listing-field-options.json's `agri` block) — never re-hardcoded.
  *
- * HONESTY (issue #1627 scope decision — crops/features/RTC): the backend
- * CreateListingRequest/UpdateListingRequest contract has NO field for
- * crops[], features[], or rtc (confirmed against useBrokerListings.ts and
- * ListingController.validateAgriFields — only water/soil/road/cultivation/
- * ownership/survey/landCategory/farmhouse/fencing are persisted). Rather
- * than silently dropping broker input (data loss with no trace) or
- * fabricating a persistence illusion, these three fields are captured as
- * FORM-LOCAL state, shown in the review preview labelled "as entered, not
- * saved to record yet", and folded into the free-text `description` field
- * (which IS persisted) via agriculturalDescriptionBuilder — never sent as
- * structured fields in buildPayload(). Persisting them as structured columns
- * is out of scope for this issue (would require a backend/DTO/migration
- * change, which is forbidden here) and is deferred to a follow-up.
+ * HONESTY (issue #1627 scope decision, updated by #2044 — crops/features/RTC):
+ * as of #2044, `crops` IS persisted — POST /api/listings and PUT
+ * /api/listings/{id} accept an optional `crops: string[]` of canonical
+ * machine values (backend AgriFieldOptions.VALID_CROPS), and buildPayload()
+ * below sends it as a real structured field. `features` and `rtc` remain
+ * FE-only: the backend CreateListingRequest/UpdateListingRequest contract has
+ * no write path for them (confirmed against useBrokerListings.ts and
+ * ListingController.validateAgriFields). Rather than silently dropping
+ * broker input for those two, they stay FORM-LOCAL state, shown in the
+ * review preview labelled "as entered, not saved to record yet", and folded
+ * into the free-text `description` field (which IS persisted) via
+ * agriculturalDescriptionBuilder. Persisting features/rtc as structured
+ * columns is out of scope for this issue and remains deferred to a follow-up
+ * (PR-2), same as the on-land feature chips.
  */
 
 type AgriculturalPropertyType = 'agricultural_land';
@@ -138,18 +140,12 @@ const OWNERSHIP_TYPE_OPTIONS = optionsFromLabelMap(OWNERSHIP_TYPE_LABELS);
 const LAND_CATEGORY_OPTIONS = optionsFromLabelMap(LAND_CATEGORY_LABELS);
 const AGRI_CONVERSION_STATUS_OPTIONS = optionsFromLabelMap(AGRI_CONVERSION_STATUS_LABELS);
 
-/** FE-only vocabulary — no backend enum (see class doc: crops/features have no write path). */
-const CROP_OPTIONS: readonly ChipOption[] = [
-  { value: 'Areca nut', label: 'Areca nut' },
-  { value: 'Coconut', label: 'Coconut' },
-  { value: 'Paddy', label: 'Paddy' },
-  { value: 'Banana', label: 'Banana' },
-  { value: 'Cashew', label: 'Cashew' },
-  { value: 'Rubber', label: 'Rubber' },
-  { value: 'Pepper', label: 'Pepper' },
-  { value: 'Other', label: 'Other' },
-];
+// Issue #2044 — canonical backend crop vocabulary (AgriFieldOptions.VALID_CROPS),
+// sourced from agriFieldLabels.ts like every other agri field. No 'Other' member
+// (DP-1) — the free-text escape hatch was deliberately removed.
+const CROP_OPTIONS: readonly ChipOption[] = optionsFromLabelMap(CROP_LABELS);
 
+/** FE-only vocabulary — no backend enum (deferred to PR-2, see class doc). */
 const FEATURE_OPTIONS: readonly ChipOption[] = [
   { value: 'Borewell', label: 'Borewell' },
   { value: 'Pond on land', label: 'Pond on land' },
@@ -247,8 +243,11 @@ export function AgriculturalListingForm({ onSwitchToGenericFlow, navigate }: Agr
     agriConversionStatus: fieldVisible('agriConversionStatus') ? (agriConversionStatus || undefined) : undefined,
     farmhouseAvailable: farmhouseAvailable === 'true' ? true : farmhouseAvailable === 'false' ? false : undefined,
     fencingDone: fencingDone === 'true' ? true : fencingDone === 'false' ? false : undefined,
-    // NOTE: rtc/crops/features are DELIBERATELY OMITTED — no backend write
-    // path exists (see class doc). They are folded into `description` only.
+    // Issue #2044 — crops ARE persisted (canonical machine values). Always sent
+    // as the full current set (not a delta) so removing a crop clears it too.
+    crops,
+    // NOTE: rtc/features are DELIBERATELY OMITTED — no backend write path
+    // exists for them yet (see class doc). They are folded into `description` only.
   });
 
   const persistDraft = (onDone?: (id: string) => void) => {
@@ -586,8 +585,8 @@ export function AgriculturalListingForm({ onSwitchToGenericFlow, navigate }: Agr
                 )}
                 <MultiChipGroup testId="chip-group-crops" label="Crops grown / suitable for" options={CROP_OPTIONS} value={crops} onValueChange={setCrops} />
                 <MultiChipGroup testId="chip-group-features" label="On-land features" options={FEATURE_OPTIONS} value={features} onValueChange={setFeatures} />
-                <p className="text-xs text-muted-foreground" data-testid="crops-features-not-saved-note">
-                  Crops and features aren't saved as structured listing data yet — they're added to your description below so buyers can still see them.
+                <p className="text-xs text-muted-foreground" data-testid="crops-saved-features-not-saved-note">
+                  Crops you select are saved with your listing. Features aren't saved as structured listing data yet — they're added to your description below so buyers can still see them.
                 </p>
               </CollapsibleContent>
             </section>

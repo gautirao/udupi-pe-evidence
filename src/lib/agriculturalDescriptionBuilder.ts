@@ -14,12 +14,17 @@
  *   approval, or platform verification of survey number / RTC / ownership —
  *   land-record values are echoed only as "as entered", never "verified" or
  *   "approved".
- * - `crops`, `features`, and `rtc` are FE-only facts (issue #1627: the
- *   backend `CreateListingRequest`/`UpdateListingRequest` contract has no
- *   write path for these — confirmed against ListingController.validateAgriFields
- *   and useBrokerListings.ts). Folding them into this free-text description
- *   is honest because the `description` field itself IS persisted — nothing
- *   here implies structured persistence of crops/features/RTC.
+ * - `features` and `rtc` are FE-only facts (issue #1627: the backend
+ *   `CreateListingRequest`/`UpdateListingRequest` contract has no write path
+ *   for these — confirmed against ListingController.validateAgriFields and
+ *   useBrokerListings.ts). Folding them into this free-text description is
+ *   honest because the `description` field itself IS persisted — nothing
+ *   here implies structured persistence of features/RTC.
+ * - `crops` is DIFFERENT as of issue #2044: it IS now persisted as a
+ *   structured field (canonical machine-value vocabulary). This builder still
+ *   folds it into the prose (a buyer reading only the description should see
+ *   it too), rendered via CROP_LABELS — never a raw machine value, and never
+ *   phrased as a platform-verified fact (crops are self-declared).
  * - Every word remains user-editable after generation.
  */
 
@@ -29,6 +34,7 @@ import {
   ROAD_ACCESS_LABELS,
   CULTIVATION_STATUS_LABELS,
   LAND_CATEGORY_LABELS,
+  CROP_LABELS,
 } from '@/lib/agriFieldLabels';
 import { FACING_OPTIONS } from '@/lib/listing-constants';
 import { formatPrice } from '@/lib/formatters';
@@ -47,8 +53,9 @@ export interface AgriculturalDescriptionFacts {
   landCategory: string;
   farmhouseAvailable: string; // '' | 'true' | 'false'
   fencingDone: string; // '' | 'true' | 'false'
-  /** FE-only facts (no backend write path) — see class doc. */
+  /** Canonical machine-value crop codes — persisted as of #2044; see class doc. */
   crops: readonly string[];
+  /** FE-only fact (no backend write path) — see class doc. */
   features: readonly string[];
   priceRupees: number | null;
 }
@@ -100,10 +107,16 @@ export function buildAgriculturalDescription(
   if (facts.fencingDone === 'true') facts1.push('fenced');
   if (facts1.length > 0) sentences.push(cap(facts1.join(', ')) + '.');
 
-  // Crops/features — FE-only facts, folded into the persisted free-text
-  // description exactly as entered (never phrased as a platform assertion).
+  // Crops — issue #2044: crops are now a closed, backend-validated vocabulary
+  // (12 canonical codes max), not arbitrary broker free-text. AC13 decision:
+  // the pre-#2044 `.slice(0, 4)` truncation existed to bound unpredictable
+  // free-text prose length; that risk no longer applies to a fixed, bounded
+  // enum, so ALL selected crops are listed (never silently dropped from a
+  // buyer-facing description). `features` below is untouched: it remains
+  // free-form FE-only text with no backend cap, so its truncation still guards
+  // against unbounded prose and is deliberately left as-is.
   if (tone !== 'short' && tone !== 'factual' && facts.crops.length > 0) {
-    const crops = facts.crops.slice(0, 4).map((c) => c.toLowerCase());
+    const crops = facts.crops.map((c) => (CROP_LABELS[c] ?? c).toLowerCase());
     sentences.push(cap(`Grown/suitable for ${crops.join(', ')}, as noted by the seller`) + '.');
   }
   if (tone !== 'short' && facts.features.length > 0) {

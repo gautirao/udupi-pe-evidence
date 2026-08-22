@@ -132,13 +132,14 @@ class CommercialTypedWritePathIT {
 
         var commercialSpaceDetailRepo = mock(com.example.realestate.listing.typed.CommercialSpaceDetailRepository.class);
         var residentialUnitDetailRepo = mock(com.example.realestate.listing.typed.ResidentialUnitDetailRepository.class);
+        var agriCropRepo = mock(com.example.realestate.listing.agricultural.ListingAgriCropRepository.class);
 
         crudService = new ListingCrudService(
                 listingRepository, events, ownershipGuard, dedup,
                 priceChangeLogRepository, badge, outbox, validator,
                 qualityRecompute, listingAmenityRepository, listingLocationFeatureRepository,
                 listingPreferredTenantRepository, listingSuitableUseRepository,
-                commercialSpaceDetailRepo, residentialUnitDetailRepo);
+                commercialSpaceDetailRepo, residentialUnitDetailRepo, agriCropRepo);
     }
 
     private CommercialListingFields shopFields() {

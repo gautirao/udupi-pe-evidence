@@ -3,6 +3,8 @@ package com.example.realestate.listing.api;
 import com.example.realestate.discover.PriceBand;
 import com.example.realestate.discover.TrustBadge;
 import com.example.realestate.geo.GeoCoarsener;
+import com.example.realestate.listing.agricultural.ListingAgriCrop;
+import com.example.realestate.listing.agricultural.ListingAgriCropRepository;
 import com.example.realestate.listing.area.AreaNormalizer;
 import com.example.realestate.listing.commercial.ListingSuitableUse;
 import com.example.realestate.listing.commercial.ListingSuitableUseRepository;
@@ -61,6 +63,7 @@ public class ListingResponseMapper {
     private final ListingLocationFeatureRepository listingLocationFeatureRepository;
     private final ListingPreferredTenantRepository listingPreferredTenantRepository;
     private final ListingSuitableUseRepository listingSuitableUseRepository;
+    private final ListingAgriCropRepository listingAgriCropRepository;
 
     public ListingResponseMapper(ListingImageRepository listingImageRepository,
                                  ListingVerificationDimensionRepository dimensionRepository,
@@ -68,7 +71,8 @@ public class ListingResponseMapper {
                                  ListingAmenityRepository listingAmenityRepository,
                                  ListingLocationFeatureRepository listingLocationFeatureRepository,
                                  ListingPreferredTenantRepository listingPreferredTenantRepository,
-                                 ListingSuitableUseRepository listingSuitableUseRepository) {
+                                 ListingSuitableUseRepository listingSuitableUseRepository,
+                                 ListingAgriCropRepository listingAgriCropRepository) {
         this.listingImageRepository = listingImageRepository;
         this.dimensionRepository = dimensionRepository;
         this.listingRepository = listingRepository;
@@ -76,6 +80,7 @@ public class ListingResponseMapper {
         this.listingLocationFeatureRepository = listingLocationFeatureRepository;
         this.listingPreferredTenantRepository = listingPreferredTenantRepository;
         this.listingSuitableUseRepository = listingSuitableUseRepository;
+        this.listingAgriCropRepository = listingAgriCropRepository;
     }
 
     /**
@@ -337,19 +342,27 @@ public class ListingResponseMapper {
                 ? listingSuitableUseRepository.findByListingIdOrderByCodeAsc(l.getId()).stream()
                         .map(ListingSuitableUse::getCode).toList()
                 : List.of();
+        // Agricultural crop multi-select child set — single-listing detail path only (mirrors the
+        // residential/commercial child-set gating above, #2044). Gated to agricultural_land so
+        // non-agri listings take no extra DB round trip.
+        List<String> crops = isAgri
+                ? listingAgriCropRepository.findByListingIdOrderByCodeAsc(l.getId()).stream()
+                        .map(ListingAgriCrop::getCode).toList()
+                : List.of();
         return build(l, rejectionReason, allowExactPin, images, earnedBadgeCount, gallery, boundary, computedAreaAcres,
-                amenities, specialLocationViews, preferredTenants, suitableUses, utilities, publicProjection);
+                amenities, specialLocationViews, preferredTenants, suitableUses, utilities, crops, publicProjection);
     }
 
     private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images, int earnedBadgeCount,
                                   boolean publicProjection) {
         // Batch/list path: keep payload unchanged — images[] stays empty so list endpoints do
-        // not balloon in size. List views render from firstImageUrl + imageCount (#758).
-        // computedAreaAcres stays null and residential/commercial child sets stay empty so the
-        // hot list path takes NO extra DB calls (#1367, #1626, #1730).
+        // not balloon in size. computedAreaAcres stays null and residential/commercial/agri child
+        // sets stay empty so the hot list path takes NO extra DB calls (#1367, #1626, #1730,
+        // #2044). AC10 (#2044): crops is deliberately List.of() here, NOT a fetch — this is the
+        // same established batch/list N+1 guard as every other child-set list on this path.
         // allowExactPin=true: batch/list responses are unaffected by #1726 (out of approved scope).
         return build(l, rejectionReason, true, images, earnedBadgeCount, List.of(), null, null,
-                List.of(), List.of(), List.of(), List.of(), List.of(), publicProjection);
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), publicProjection);
     }
 
     @SuppressWarnings("java:S107") // mirrors existing build() overload chain shape
@@ -357,7 +370,8 @@ public class ListingResponseMapper {
                                   int earnedBadgeCount, List<ListingImageDTO> gallery, String boundary,
                                   BigDecimal computedAreaAcres, List<String> amenities,
                                   List<String> specialLocationViews, List<String> preferredTenants,
-                                  List<String> suitableUses, List<String> utilities, boolean publicProjection) {
+                                  List<String> suitableUses, List<String> utilities, List<String> crops,
+                                  boolean publicProjection) {
         int imageCount = images.size();
         String firstImageUrl = images.stream().findFirst()
                 .map(ListingImage::getUrl)
@@ -436,6 +450,6 @@ public class ListingResponseMapper {
                 l.getExpectedRentalYieldPct(), l.getCurrentMonthlyIncomePaise(),
                 l.getLeaseTermMonths(), l.getLeaseEscalationPct(),
                 l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
-                suitableUses, utilities);
+                suitableUses, utilities, crops);
     }
 }

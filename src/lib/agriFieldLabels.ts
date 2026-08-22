@@ -66,3 +66,23 @@ export const AGRI_CONVERSION_STATUS_LABELS: Record<string, string> = {
   APPROVED_FOR_CONVERSION: 'Approved for conversion',
   NOT_SURE: 'Not sure',
 };
+
+// Keys match AgriFieldOptions.VALID_CROPS / CROP_LABELS (#2044) — the canonical
+// backend crop vocabulary persisted via listing_agri_crops. No 'OTHER' member
+// (DP-1: the free-text escape hatch was deliberately removed). Note the
+// ARECA_SUPARI mapping — the pre-#2044 FE-only chip was labelled "Areca nut";
+// the backend's canonical label is "Areca / supari".
+export const CROP_LABELS: Record<string, string> = {
+  PADDY: 'Paddy',
+  COCONUT: 'Coconut',
+  ARECA_SUPARI: 'Areca / supari',
+  CASHEW: 'Cashew',
+  BANANA: 'Banana',
+  SUGARCANE: 'Sugarcane',
+  VEGETABLES: 'Vegetables',
+  MANGO: 'Mango',
+  RUBBER: 'Rubber',
+  PEPPER: 'Pepper',
+  MIXED_PLANTATION: 'Mixed plantation',
+  FALLOW_OPEN: 'Fallow / open',
+};

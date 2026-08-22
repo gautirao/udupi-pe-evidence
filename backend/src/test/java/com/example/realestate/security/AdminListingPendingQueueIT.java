@@ -247,6 +247,6 @@ class AdminListingPendingQueueIT {
                 l.getExpectedRentalYieldPct(), l.getCurrentMonthlyIncomePaise(),
                 l.getLeaseTermMonths(), l.getLeaseEscalationPct(),
                 l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
-                List.of(), List.of());
+                List.of(), List.of(), List.of());
     }
 }

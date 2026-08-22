@@ -12,6 +12,8 @@ import com.example.realestate.listing.pricing.PriceChangeLogRepository;
 import com.example.realestate.listing.pricing.PriceParser;
 import com.example.realestate.listing.api.BulkDeleteResult;
 import com.example.realestate.listing.api.ListingStatsResponse;
+import com.example.realestate.listing.agricultural.ListingAgriCrop;
+import com.example.realestate.listing.agricultural.ListingAgriCropRepository;
 import com.example.realestate.listing.commercial.CommercialListingFields;
 import com.example.realestate.listing.commercial.ListingSuitableUse;
 import com.example.realestate.listing.commercial.ListingSuitableUseRepository;
@@ -83,6 +85,10 @@ public class ListingCrudService {
     private final ListingSuitableUseRepository listingSuitableUseRepository;
     private final CommercialSpaceDetailRepository commercialSpaceDetailRepository;
     private final ResidentialUnitDetailRepository residentialUnitDetailRepository;
+    private final ListingAgriCropRepository listingAgriCropRepository;
+
+    /** Agricultural property type (single value; no family-set precedent needed). */
+    private static final String AGRICULTURAL_PROPERTY_TYPE = "agricultural_land";
 
     /** Residential-family property types (M38-13A / #1626) that get the DB listing_family stamp. */
     private static final Set<String> RESIDENTIAL_PROPERTY_TYPES =
@@ -107,7 +113,8 @@ public class ListingCrudService {
             ListingPreferredTenantRepository listingPreferredTenantRepository,
             ListingSuitableUseRepository listingSuitableUseRepository,
             CommercialSpaceDetailRepository commercialSpaceDetailRepository,
-            ResidentialUnitDetailRepository residentialUnitDetailRepository) {
+            ResidentialUnitDetailRepository residentialUnitDetailRepository,
+            ListingAgriCropRepository listingAgriCropRepository) {
         this.listingRepository = listingRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingOwnershipGuard = listingOwnershipGuard;
@@ -123,6 +130,7 @@ public class ListingCrudService {
         this.listingSuitableUseRepository = listingSuitableUseRepository;
         this.commercialSpaceDetailRepository = commercialSpaceDetailRepository;
         this.residentialUnitDetailRepository = residentialUnitDetailRepository;
+        this.listingAgriCropRepository = listingAgriCropRepository;
     }
 
     /**
@@ -260,6 +268,46 @@ public class ListingCrudService {
                                Boolean farmhouseAvailable, Boolean fencingDone,
                                ResidentialListingFields residentialFields,
                                CommercialListingFields commercialFields) {
+        return createDraft(createdBy, propertyType, title, locality, price, description,
+                landArea, bedrooms, builtArea, landAreaUnit, builtAreaUnit, videoUrl,
+                listingPurpose, carpetArea, carpetAreaUnit, floorNumber, totalFloors,
+                furnishingStatus, washrooms, parkingCount, roadFrontageFt, commercialUsage, numberOfUnits,
+                monthlyRent, securityDepositMonths, lockInMonths, sellerType,
+                waterSource, soilType, roadAccess, cultivationStatus, ownershipType, surveyNumber,
+                landCategory, agriConversionStatus, farmhouseAvailable, fencingDone,
+                residentialFields, commercialFields, null);
+    }
+
+    /**
+     * Create a new listing with status DRAFT, including agricultural crop selections (#2044).
+     * All parameters from the previous overload behave identically; {@code crops} is the FINAL
+     * desired set of crop codes for the new {@code listing_agri_crops} child table — REPLACE
+     * semantics, deduplicated, order-preserving (see {@link #writeAgriChildSets}). {@code null}
+     * means "no crops supplied"; an empty list is a valid "no crops" declaration.
+     *
+     * @param sellerType one of "owner", "dealer", "builder" — inferred by controller from caller's role
+     * @throws OwnerListingLimitException if sellerType is "owner" and the user already has 3 LIVE listings
+     */
+    @Transactional
+    @SuppressWarnings("java:S107") // mirrors existing flat-request telescoping pattern in this class
+    public Listing createDraft(UUID createdBy, String propertyType, String title,
+                               String locality, BigDecimal price, String description,
+                               BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
+                               String landAreaUnit, String builtAreaUnit, String videoUrl,
+                               String listingPurpose,
+                               BigDecimal carpetArea, String carpetAreaUnit,
+                               Integer floorNumber, Integer totalFloors,
+                               String furnishingStatus, Integer washrooms, Integer parkingCount,
+                               BigDecimal roadFrontageFt, String commercialUsage, Integer numberOfUnits,
+                               Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths,
+                               String sellerType,
+                               String waterSource, String soilType, String roadAccess,
+                               String cultivationStatus, String ownershipType, String surveyNumber,
+                               String landCategory, String agriConversionStatus,
+                               Boolean farmhouseAvailable, Boolean fencingDone,
+                               ResidentialListingFields residentialFields,
+                               CommercialListingFields commercialFields,
+                               List<String> crops) {
         // Enforce owner listing limit: max 3 LIVE listings for owner accounts.
         // Archived listings must not count against this limit.
         if ("owner".equals(sellerType)) {
@@ -374,14 +422,23 @@ public class ListingCrudService {
         String effectiveType = saved.getPropertyType();
         boolean isResidentialFamily = RESIDENTIAL_PROPERTY_TYPES.contains(effectiveType);
         boolean isCommercialFamily = COMMERCIAL_PROPERTY_TYPES.contains(effectiveType);
+        boolean isAgriFamily = AGRICULTURAL_PROPERTY_TYPE.equals(effectiveType);
         if (isResidentialFamily) {
             writeResidentialChildSets(saved.getId(), residentialFields);
         }
         if (isCommercialFamily) {
             writeCommercialChildSets(saved.getId(), commercialFields);
         }
+        if (isAgriFamily) {
+            writeAgriChildSets(saved.getId(), crops);
+        }
         // Typed detail projection refresh (#1734) — keeps listing_commercial_space_details /
-        // listing_residential_unit_details current for the search indexer read path.
+        // listing_residential_unit_details current for the search indexer read path. No
+        // AGRICULTURAL branch: listing_agricultural_land_details (V102) is a read-only,
+        // backfill-only projection with no upsert repository method (unlike
+        // CommercialSpaceDetailRepository/ResidentialUnitDetailRepository) and has no crops
+        // column — crops live only in listing_agri_crops, which SearchOutboxPoller's indexer
+        // read path does not consume via this table (#2044 R6 — see writeAgriChildSets javadoc).
         refreshTypedProjections(saved);
         log.info("Created draft listing listingId={} createdBy={} sellerType={} isDuplicate={}",
                 saved.getId(), createdBy, sellerType, saved.isDuplicate());
@@ -491,6 +548,39 @@ public class ListingCrudService {
                 row.setCode(code);
                 row.setCreatedAt(now);
                 listingPreferredTenantRepository.save(row);
+            }
+        }
+    }
+
+    /**
+     * Writes the agricultural crop multi-select child set ({@code listing_agri_crops}, #2044)
+     * for a listing. EDIT/REPLACE semantics — mirrors {@link #writeResidentialChildSets(UUID,
+     * ResidentialListingFields)} exactly: a non-null list is the FINAL desired set (existing rows
+     * deleted first, then the new set — deduplicated, order-preserving — is inserted); a null
+     * list leaves existing rows untouched; an empty (non-null) list clears all existing rows.
+     *
+     * <p><b>Caller precondition:</b> callers MUST only invoke this method when the listing's
+     * effective property type is {@link #AGRICULTURAL_PROPERTY_TYPE}. This method does not itself
+     * check family — it is a plain writer — mirroring the residential/commercial writers' caller
+     * contract.
+     *
+     * <p><b>R6 (#2044):</b> unlike {@code refreshTypedProjections}, this writer has no interaction
+     * with {@code listing_agricultural_land_details} — that table is a read-only, backfill-only
+     * projection (V102) with no upsert repository method, and its {@code AgriculturalLandDetail}
+     * entity carries no crops column. The search indexer ({@code SearchOutboxPoller}) reads
+     * {@code AgriculturalLandDetail} for the AGRICULTURAL family but never {@code
+     * listing_agri_crops}, so writing crops here has no projection-refresh implication.
+     */
+    private void writeAgriChildSets(UUID listingId, List<String> crops) {
+        if (crops != null) {
+            listingAgriCropRepository.deleteByListingId(listingId);
+            OffsetDateTime now = OffsetDateTime.now();
+            for (String code : new LinkedHashSet<>(crops)) {
+                ListingAgriCrop row = new ListingAgriCrop();
+                row.setListingId(listingId);
+                row.setCode(code);
+                row.setCreatedAt(now);
+                listingAgriCropRepository.save(row);
             }
         }
     }
@@ -877,6 +967,59 @@ public class ListingCrudService {
                                  String boundaryGeoJson,
                                  ResidentialListingFields residentialFields,
                                  CommercialListingFields commercialFields) {
+        return updateListing(listingId, userId, isAdmin, propertyType, title, locality,
+                price, description, landArea, bedrooms, builtArea, addressConfirmed, latitude, longitude,
+                landAreaUnit, builtAreaUnit, videoUrl, applyVideoUrl, reraNumber,
+                listingPurpose, carpetArea, carpetAreaUnit, floorNumber, totalFloors,
+                furnishingStatus, washrooms, parkingCount, roadFrontageFt, commercialUsage, numberOfUnits,
+                monthlyRent, securityDepositMonths, lockInMonths,
+                possessionStatus, expectedPossessionDate, approvalsDeclared,
+                waterSource, soilType, roadAccess, cultivationStatus, ownershipType, surveyNumber,
+                landCategory, agriConversionStatus, farmhouseAvailable, fencingDone, boundaryGeoJson,
+                residentialFields, commercialFields, null);
+    }
+
+    /**
+     * Update a listing with extended fields including agricultural crop selections (#2044).
+     * All parameters from the previous overload behave identically; {@code crops} is the FINAL
+     * desired set of crop codes for {@code listing_agri_crops} — REPLACE semantics, deduplicated,
+     * order-preserving (see {@link #writeAgriChildSets}). {@code null} means "not supplied in
+     * this request" (leave unchanged); an empty (non-null) list clears all existing crop rows.
+     *
+     * @return the updated listing
+     * @throws ListingNotFoundException  if listing not found
+     * @throws ListingOwnershipException if listing is owned by a different user
+     * @throws ListingStatusException    if status does not allow updates
+     */
+    @Transactional
+    @SuppressWarnings("java:S107") // mirrors existing flat-request telescoping pattern in this class
+    public Listing updateListing(UUID listingId, UUID userId, boolean isAdmin,
+                                 String propertyType, String title, String locality,
+                                 BigDecimal price, String description,
+                                 BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
+                                 Boolean addressConfirmed, Double latitude, Double longitude,
+                                 String landAreaUnit, String builtAreaUnit,
+                                 String videoUrl, boolean applyVideoUrl,
+                                 String reraNumber,
+                                 String listingPurpose,
+                                 BigDecimal carpetArea, String carpetAreaUnit,
+                                 Integer floorNumber, Integer totalFloors,
+                                 String furnishingStatus, Integer washrooms, Integer parkingCount,
+                                 BigDecimal roadFrontageFt, String commercialUsage, Integer numberOfUnits,
+                                 Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths,
+                                 // RERA & possession fields (RE-99)
+                                 String possessionStatus,
+                                 LocalDate expectedPossessionDate,
+                                 String approvalsDeclared,
+                                 // Agricultural land fields
+                                 String waterSource, String soilType, String roadAccess,
+                                 String cultivationStatus, String ownershipType, String surveyNumber,
+                                 String landCategory, String agriConversionStatus,
+                                 Boolean farmhouseAvailable, Boolean fencingDone,
+                                 String boundaryGeoJson,
+                                 ResidentialListingFields residentialFields,
+                                 CommercialListingFields commercialFields,
+                                 List<String> crops) {
         Listing listing = listingOwnershipGuard.findOwned(listingId, userId, isAdmin);
 
         // Admins may edit listings in any non-archived status (including LIVE).
@@ -902,6 +1045,10 @@ public class ListingCrudService {
         String previousPropertyType = listing.getPropertyType();
         boolean wasResidentialFamily = RESIDENTIAL_PROPERTY_TYPES.contains(previousPropertyType);
         boolean wasCommercialFamily = COMMERCIAL_PROPERTY_TYPES.contains(previousPropertyType);
+        // AC16 (#2044): mirrors wasResidentialFamily/wasCommercialFamily above — snapshotted
+        // before propertyType is mutated below, so a family-switch AWAY from agricultural_land
+        // can be detected and its listing_agri_crops rows cleaned up (see R5-style cleanup below).
+        boolean wasAgriFamily = AGRICULTURAL_PROPERTY_TYPE.equals(previousPropertyType);
 
         // Snapshot trust-relevant fields before the update so badge invalidation
         // can detect which fields changed.
@@ -1061,6 +1208,7 @@ public class ListingCrudService {
         String effectiveType = saved.getPropertyType();
         boolean isResidentialFamily = RESIDENTIAL_PROPERTY_TYPES.contains(effectiveType);
         boolean isCommercialFamily = COMMERCIAL_PROPERTY_TYPES.contains(effectiveType);
+        boolean isAgriFamily = AGRICULTURAL_PROPERTY_TYPE.equals(effectiveType);
 
         // Family-switch cleanup (R5, #2038 rework, broadened in PR_REVIEW rework-cycle-1): if this
         // update moved the listing OUT of the family whose child rows previously applied, those
@@ -1096,6 +1244,14 @@ public class ListingCrudService {
         } else if (wasCommercialFamily && !isCommercialFamily) {
             listingAmenityRepository.deleteByListingId(saved.getId());
             listingSuitableUseRepository.deleteByListingId(saved.getId());
+        } else if (wasAgriFamily && !isAgriFamily) {
+            // AC16 (#2044, qa-fast gap): without this branch, a listing edited OUT of
+            // agricultural_land stranded its listing_agri_crops rows — orphaned immediately, and
+            // a resurrection risk later since a null crops list on a future edit means "leave
+            // unchanged", so the stale rows would silently reappear if the listing were ever
+            // switched back to agricultural_land. Mirrors the residential/commercial branches
+            // above exactly.
+            listingAgriCropRepository.deleteByListingId(saved.getId());
         }
 
         if (isResidentialFamily) {
@@ -1104,9 +1260,16 @@ public class ListingCrudService {
         if (isCommercialFamily) {
             writeCommercialChildSets(saved.getId(), commercialFields);
         }
+        if (isAgriFamily) {
+            writeAgriChildSets(saved.getId(), crops);
+        }
 
         // Typed detail projection refresh (#1734) — keeps listing_commercial_space_details /
-        // listing_residential_unit_details current for the search indexer read path.
+        // listing_residential_unit_details current for the search indexer read path. No
+        // AGRICULTURAL branch: listing_agricultural_land_details (V102) is a read-only,
+        // backfill-only projection with no upsert repository method and no crops column — crops
+        // live only in listing_agri_crops, which the search indexer's AGRICULTURAL read path
+        // does not consume (#2044 R6 — see writeAgriChildSets javadoc).
         refreshTypedProjections(saved);
 
         // Persist boundary via native SQL (after JPA save, within same @Transactional scope).

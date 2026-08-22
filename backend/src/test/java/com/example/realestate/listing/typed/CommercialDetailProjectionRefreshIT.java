@@ -145,12 +145,14 @@ class CommercialDetailProjectionRefreshIT {
         SearchOutboxWriter outbox = mock(SearchOutboxWriter.class);
         QualityRecomputeService qualityRecompute = mock(QualityRecomputeService.class);
 
+        var agriCropRepo = mock(com.example.realestate.listing.agricultural.ListingAgriCropRepository.class);
+
         crudService = new ListingCrudService(
                 listingRepository, events, ownershipGuard, dedup,
                 priceChangeLogRepository, badge, outbox, validator,
                 qualityRecompute, listingAmenityRepository, listingLocationFeatureRepository,
                 listingPreferredTenantRepository, listingSuitableUseRepository,
-                commercialSpaceDetailRepository, residentialUnitDetailRepository);
+                commercialSpaceDetailRepository, residentialUnitDetailRepository, agriCropRepo);
     }
 
     private CommercialListingFields shopFields(String commercialSubtype) {

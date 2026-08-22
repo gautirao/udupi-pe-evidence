@@ -175,7 +175,7 @@ class ListingController500ResponseTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any(), any()))
+                any(), any(), any()))
                 .thenThrow(new DataIntegrityViolationException(
                         "could not execute statement",
                         new RuntimeException("ERROR: duplicate key value violates unique constraint "
@@ -235,7 +235,7 @@ class ListingController500ResponseTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any(), any()))
+                any(), any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -257,7 +257,7 @@ class ListingController500ResponseTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(),
-                any(), any()))
+                any(), any(), any()))
                 .thenThrow(new DataIntegrityViolationException("could not execute statement",
                         new RuntimeException("duplicate key value violates unique constraint")));
 

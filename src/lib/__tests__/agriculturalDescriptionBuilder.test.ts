@@ -38,7 +38,7 @@ describe('buildAgriculturalDescription — no-fabrication guarantee', () => {
     expect(text).not.toMatch(/farmhouse/i);
   });
 
-  it('echoes exactly the facts entered, including FE-only crops/features, without a verification claim', () => {
+  it('echoes exactly the facts entered, mapping canonical crop machine values to labels, without a verification claim', () => {
     const facts: AgriculturalDescriptionFacts = {
       ...EMPTY_FACTS,
       locality: 'Hejamadi, Udupi',
@@ -51,7 +51,7 @@ describe('buildAgriculturalDescription — no-fabrication guarantee', () => {
       landCategory: 'FARMLAND',
       farmhouseAvailable: 'true',
       fencingDone: 'true',
-      crops: ['Areca nut', 'Coconut'],
+      crops: ['ARECA_SUPARI', 'COCONUT'],
       features: ['Irrigation channel'],
       priceRupees: 7_800_000,
     };
@@ -62,11 +62,53 @@ describe('buildAgriculturalDescription — no-fabrication guarantee', () => {
     expect(text.toLowerCase()).toContain('red laterite');
     expect(text.toLowerCase()).toContain('farmhouse on the land');
     expect(text.toLowerCase()).toContain('fenced');
-    expect(text.toLowerCase()).toContain('areca nut');
+    // Machine value must never leak into buyer-facing prose.
+    expect(text).not.toMatch(/ARECA_SUPARI/);
+    expect(text.toLowerCase()).toContain('areca / supari');
+    expect(text.toLowerCase()).toContain('coconut');
     expect(text).toContain('as noted by the seller');
     expect(text).toMatch(/priced at/i);
     expect(text).not.toMatch(/verified/i);
     expect(text).not.toMatch(/ai.?generated/i);
+  });
+
+  it('AC13: lists ALL selected crops, not just the first 4 — crops are a bounded 12-value enum, not free text', () => {
+    const facts: AgriculturalDescriptionFacts = {
+      ...EMPTY_FACTS,
+      locality: 'Manipal',
+      landArea: 3,
+      landAreaUnit: 'acre',
+      crops: ['PADDY', 'COCONUT', 'ARECA_SUPARI', 'CASHEW', 'BANANA', 'SUGARCANE'],
+      priceRupees: 5_000_000,
+    };
+    const text = buildAgriculturalDescription(facts, 'default').toLowerCase();
+    expect(text).toContain('paddy');
+    expect(text).toContain('coconut');
+    expect(text).toContain('areca / supari');
+    expect(text).toContain('cashew');
+    expect(text).toContain('banana');
+    expect(text).toContain('sugarcane');
+  });
+
+  it('AC11: regenerating (rebuilding) after a crop is removed drops it from the text — the builder is wholesale, not additive', () => {
+    const withTwoCrops: AgriculturalDescriptionFacts = {
+      ...EMPTY_FACTS,
+      locality: 'Manipal',
+      landArea: 1,
+      landAreaUnit: 'acre',
+      crops: ['COCONUT', 'PEPPER'],
+      priceRupees: 1_000_000,
+    };
+    const firstText = buildAgriculturalDescription(withTwoCrops, 'default');
+    expect(firstText.toLowerCase()).toContain('pepper');
+
+    // Broker removes 'Pepper' and regenerates — the assistant calls the
+    // builder fresh with the current facts (AgriculturalDescriptionAssistant
+    // REPLACES the description wholesale on Regenerate, never appends).
+    const afterRemoval: AgriculturalDescriptionFacts = { ...withTwoCrops, crops: ['COCONUT'] };
+    const secondText = buildAgriculturalDescription(afterRemoval, 'default');
+    expect(secondText.toLowerCase()).not.toContain('pepper');
+    expect(secondText.toLowerCase()).toContain('coconut');
   });
 
   it('short tone omits crops/features and stays to two sentences', () => {
@@ -75,7 +117,7 @@ describe('buildAgriculturalDescription — no-fabrication guarantee', () => {
       locality: 'Manipal',
       landArea: 1,
       landAreaUnit: 'acre',
-      crops: ['Coconut'],
+      crops: ['COCONUT'],
       priceRupees: 1_000_000,
     };
     const text = buildAgriculturalDescription(facts, 'short');
