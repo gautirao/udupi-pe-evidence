@@ -1,0 +1,1 @@
+{"errors":[{"message":"Address must be confirmed before submission","field":"address_confirmed"},{"message":"At least 3 images required (found 0)","field":"images"},{"message":"Carpet area is required for commercial listings","field":"carpet_area"},{"message":"Floor number is required for commercial listings","field":"floor_number"}]}

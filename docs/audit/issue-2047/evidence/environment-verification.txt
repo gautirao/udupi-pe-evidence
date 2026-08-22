@@ -1,0 +1,27 @@
+=== #2047 environment verification ===
+timestamp_utc: 2026-08-22T13:52:34Z
+frontend: http://localhost:5302
+backend:  http://localhost:8302
+worktree: /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2047-broker-audit
+git HEAD: 9ff62d64ef324f9fc2bca72d1a4d87fc5dfd0891
+git branch: issue-2047-broker-audit
+
+--- 1. PROVENANCE (is this Vite serving THIS worktree?) ---
+GET http://localhost:5302/src/main.tsx -> content-type: text/javascript
+RESULT: PASS — served as a module, not the SPA fallback
+
+--- 2. CORS PREFLIGHT (real browser Origin) ---
+OPTIONS http://localhost:8302/api/discover/cities/bangalore/areas with Origin: http://localhost:5302
+Access-Control-Allow-Origin: http://localhost:5302
+RESULT: PASS — backend allowlists the browser origin
+
+--- 3. NEGATIVE CONTROL (known-bad origin must be REJECTED) ---
+OPTIONS with Origin: http://localhost:1 -> ACAO: <none>
+RESULT: PASS — bad origin rejected, so check 2 is meaningful
+
+--- 4. FUNCTIONAL CANARY (real payload, not just 2xx) ---
+GET http://localhost:8302/api/public/listings/discovery?citySlug=bangalore -> http_code=200 bytes=1990
+RESULT: PASS — real payload received over the browser origin
+INFO: auth-gated /api/discover/cities/bangalore/areas returns 401 anonymously (expected 401 — auth boundary is live)
+
+=== OVERALL: ALL FOUR PASS — matrix execution authorised ===

@@ -1,0 +1,17 @@
+HTTP/1.1 401 
+X-Request-Id: 23dd391f-02ec-4ff7-bf53-244f082a8d53
+Vary: Origin
+Vary: Access-Control-Request-Method
+Vary: Access-Control-Request-Headers
+Access-Control-Allow-Origin: http://localhost:5302
+Access-Control-Allow-Credentials: true
+WWW-Authenticate: Bearer
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Length: 0
+Date: Sat, 22 Aug 2026 13:59:33 GMT
+
