@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, PageResponse } from '@/lib/api';
+import { api, PagedResponse } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
@@ -67,30 +67,32 @@ export function useCreateBooking() {
 
 /**
  * Fetches the current user's own viewing requests.
- * GET /api/bookings/mine — backend returns Page<BookingResponse>.
- * Returns content array plus pagination metadata.
+ * GET /api/bookings/mine — backend returns the flat `PagedResponse<BookingResponse>`
+ * envelope (`items` + top-level pagination fields), not Spring's nested `Page<T>`.
+ * Returns the items array plus pagination metadata.
  */
 export function useMyBookings() {
   const { user } = useAuth();
 
   const query = useQuery({
     queryKey: ['my-bookings'],
-    queryFn: () => api.get<PageResponse<BookingResponse>>('/api/bookings/mine'),
+    queryFn: () => api.get<PagedResponse<BookingResponse>>('/api/bookings/mine'),
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
   });
 
   return {
     ...query,
-    data: query.data?.content ?? undefined,
-    totalPages: query.data?.page?.totalPages ?? 0,
-    totalElements: query.data?.page?.totalElements ?? 0,
+    data: query.data?.items ?? undefined,
+    totalPages: query.data?.totalPages ?? 0,
+    totalElements: query.data?.totalElements ?? 0,
   };
 }
 
 /**
  * Fetches viewing requests for the current dealer's listings.
- * GET /api/bookings/dealer — backend returns Page<BookingResponse>.
+ * GET /api/bookings/dealer — backend returns the flat `PagedResponse<BookingResponse>`
+ * envelope (`items` + top-level pagination fields), not Spring's nested `Page<T>`.
  *
  * @param listingId  Optional UUID string. When provided, only bookings for that
  *                   listing are returned. Omit to fetch all dealer bookings.
@@ -100,7 +102,7 @@ export function useBrokerBookings(listingId?: string) {
 
   const query = useQuery({
     queryKey: ['broker-bookings', listingId ?? 'all'],
-    queryFn: () => api.get<PageResponse<BookingResponse>>(
+    queryFn: () => api.get<PagedResponse<BookingResponse>>(
       listingId ? `/api/bookings/broker?listingId=${listingId}` : '/api/bookings/broker'
     ),
     enabled: !!user && (isBroker || isAdmin),
@@ -109,9 +111,9 @@ export function useBrokerBookings(listingId?: string) {
 
   return {
     ...query,
-    data: query.data?.content ?? undefined,
-    totalPages: query.data?.page?.totalPages ?? 0,
-    totalElements: query.data?.page?.totalElements ?? 0,
+    data: query.data?.items ?? undefined,
+    totalPages: query.data?.totalPages ?? 0,
+    totalElements: query.data?.totalElements ?? 0,
   };
 }
 

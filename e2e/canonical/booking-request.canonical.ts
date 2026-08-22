@@ -27,32 +27,25 @@
  * check (`bookingPostFired`) as its own proof it isn't vacuous, independent
  * of T17.
  *
- * ---- T17 DESCOPED (test-helper locator defect; see T17_ENABLED below) ----
+ * ---- T17 RE-ENABLED (issue #2247) — corrects a prior wrong diagnosis ----
  *
- * T17 is NOT in PR-4's accepted scope. It is fully authored, unweakened, and
- * registered ONLY under a hardcoded `if (T17_ENABLED)` guard (currently
- * `false`) — never `test.skip`/`test.fixme` — so it is genuinely ABSENT
- * from Playwright's test model for every project, not reported as skipped.
- *
- * Across three independent 3x verification campaigns (nine runs total),
- * T13 and T16 PASS consistently; T17 FAILS consistently. The failure is
- * NOT the ordering/vacuous-absence-wait bug that a prior cycle (see the
- * "AUTO-RETRY DISCIPLINE NOTE" inside `cancelAnyOwnActiveBooking` below)
- * fixed — that fix is confirmed correct and stays in place. The remaining,
- * separate defect is in `cancelAnyOwnActiveBooking`'s row-detection xpath:
- * it evaluates to zero matches even when the booking row is genuinely
- * rendered in the DOM, so the precondition wrongly concludes "nothing to
- * cancel," the stale active booking survives, and the subsequent POST is
- * rejected by the backend's `idx_one_active_booking_per_user_listing`
- * constraint (confirmed via live backend logs against requester
- * `86bec885-...`, this test's own `[role:user]` account). The constraint
- * itself, the POST endpoint, and `/api/bookings/mine` are all confirmed
- * correct (`/api/bookings/mine` returns 2xx every time) — this is purely a
- * test-helper locator bug, not a product defect.
- *
- * Awaits a follow-up issue to fix the locator in `cancelAnyOwnActiveBooking`
- * (see that function's doc comment for a live diagnostic trail and
- * hypotheses) and flip `T17_ENABLED` back to `true`.
+ * T17 was previously descoped, blamed on `cancelAnyOwnActiveBooking`'s
+ * row-detection xpath being a pure test-helper bug ("this is purely a
+ * test-helper locator bug, not a product defect" — investigated across
+ * three 3x campaigns). That diagnosis was DISPROVEN: the real, reproduced
+ * root cause is `useMyBookings`/`useBrokerBookings` (src/hooks/useBookings.ts)
+ * reading `.content`/`.page.totalPages` — the shape of the OTHER backend
+ * envelope family (Spring `Page<T>`, `PageResponse<T>` in src/lib/api.ts) —
+ * off a response that is actually the flat `PagedResponse<T>` envelope
+ * (`items` + top-level pagination fields) returned by `/api/bookings/mine`
+ * and `/api/bookings/broker`. `data` was therefore always `undefined` and
+ * `/my-bookings` always rendered its EMPTY state for every user, even with
+ * a real REQUESTED booking and a 2xx response — so the row this xpath
+ * hunted for never existed in the DOM at all. Fixed by giving the flat
+ * envelope its own type and pointing both hooks at it. The xpath locator
+ * was also replaced below with a role-based walk (see
+ * `cancelAnyOwnActiveBooking`), since inverting the search direction is
+ * more robust independent of this bug. `T17_ENABLED` is `true` again.
  */
 
 import { test, expect } from './support/canonical-test';
@@ -60,13 +53,12 @@ import type { Page } from './support/canonical-test';
 
 const FIXTURE_LISTING_ID = 'e2e00001-0000-0000-0000-000000000001';
 
-// T17_ENABLED — see the module docstring's "T17 DESCOPED" section above for
-// the full mechanism/rationale. Distinct from listing-lifecycle.canonical.ts's
-// T14_T15_ENABLED, which descopes T14/T15 for an unrelated reason (an
-// architectural data-source mismatch, #2242) — T17 is descoped for a
-// test-helper locator defect only. Flip to `true` once the follow-up issue
-// fixing `cancelAnyOwnActiveBooking`'s row-detection xpath is resolved.
-const T17_ENABLED = false;
+// T17_ENABLED — see the module docstring's "T17 RE-ENABLED" section above.
+// Distinct from listing-lifecycle.canonical.ts's T14_T15_ENABLED, which
+// descopes T14/T15 for an unrelated reason (an architectural data-source
+// mismatch, #2242). Re-enabled for issue #2247 once the real root cause
+// (the envelope-shape bug in useBookings.ts) was fixed.
+const T17_ENABLED = true;
 
 /**
  * Self-healing precondition for T17: cancels any ACTIVE (REQUESTED) booking
@@ -183,53 +175,33 @@ async function cancelAnyOwnActiveBooking(page: Page): Promise<void> {
     );
   }
 
-  // Nearest ancestor <div> to a FIXTURE_LISTING_ID text node that ALSO
-  // contains a live "Cancel Booking" button — i.e. an active (REQUESTED)
-  // booking row for this listing, belonging to this signed-in user (see
-  // the server-side scoping note above). Sampled with `.count()` here only
-  // because the loading-cleared wait above has already guaranteed the DOM
-  // reflects MyBookings.tsx's terminal render — see the note above this
-  // block for why that guarantee is load-bearing.
+  // Locate the "Cancel Booking" button first, then walk UP to the nearest
+  // ancestor <div> that contains FIXTURE_LISTING_ID — the INVERSE of the
+  // old getByText(id)-then-walk-up approach, which was previously (wrongly)
+  // blamed for T17's failures; see the module docstring's "T17 RE-ENABLED"
+  // section for the real root cause (a hook envelope-shape bug that made
+  // /my-bookings always render its empty state, so no row — and no button —
+  // ever existed for either locator to find). Inverting the direction is
+  // still preferable: `getByRole('button', ...)` matches on the accessible
+  // name (unaffected by whether the label text is a direct child or nested
+  // in an icon+text wrapper), so it sidesteps the raw-text-node fragility a
+  // `normalize-space(text())` xpath predicate has.
   //
-  // KNOWN DEFECT (T17 DESCOPED — see module docstring; do not attempt a fix
-  // here without a follow-up issue): this locator resolves to zero matches
-  // even when the booking row IS genuinely rendered. Diagnostic notes for
-  // whoever picks this up (unverified hypotheses, not confirmed root
-  // cause):
-  //   - MyBookings.tsx renders the listing id inside a `<span
-  //     class="font-mono">`, itself nested inside a `<p>` that ALSO contains
-  //     the literal text "Listing" as a sibling text node/prefix. Whether
-  //     `getByText(FIXTURE_LISTING_ID, { exact: false })` resolves to the
-  //     `<span>` itself or to the enclosing `<p>` (Playwright's getByText
-  //     matches the innermost element whose full text content contains the
-  //     substring, which can land on either depending on how the "Listing"
-  //     label and the id are composed/whitespace-joined in JSX) changes
-  //     which element `ancestor::*` starts walking from, and therefore
-  //     whether the Cancel Booking button's subtree is actually an ancestor
-  //     of the matched node at all.
-  //   - The Cancel Booking button may render its label via a nested
-  //     element (icon + text span inside a <Button>), in which case
-  //     `normalize-space(text())` — which reads ONLY the button's direct
-  //     text-node children, not descendant text — evaluates to an empty
-  //     string, and `[.//button[normalize-space(text())="Cancel
-  //     Booking"]]` never matches, independent of the ancestor-walk issue
-  //     above.
-  //   - Font-mono UUID rendering plus `exact: false` substring matching
-  //     could also be affected by text normalization/whitespace differences
-  //     Playwright applies before substring comparison, though this is the
-  //     weaker hypothesis of the three.
-  // First things to try when actually fixing this: dump the rendered HTML
-  // of /my-bookings around a known-active row (e.g.
-  // `page.locator('main').innerHTML()`) to see the real DOM shape instead
-  // of guessing; and/or replace the whole xpath approach with
-  // `page.getByRole('button', { name: 'Cancel Booking' })` and walk UP from
-  // that button to the nearest ancestor containing FIXTURE_LISTING_ID,
-  // rather than walking up from the id text to find the button — inverting
-  // the search direction sidesteps the `normalize-space(text())` /
-  // ancestor-relationship ambiguity entirely.
-  const activeBookingRow = page.getByText(FIXTURE_LISTING_ID, { exact: false }).locator(
-    'xpath=ancestor::*[self::div][.//button[normalize-space(text())="Cancel Booking"]][1]',
-  ).first();
+  // The id and the button live in SIBLING subtrees whose nearest common
+  // ancestor is the `div.flex.items-start.justify-between` row wrapper
+  // (src/pages/MyBookings.tsx:54) — walking up from the button to the
+  // nearest ancestor <div> whose subtree contains FIXTURE_LISTING_ID lands
+  // on that same row, scoping this to THIS listing's row specifically. The
+  // fixture listing accumulates bookings with no guaranteed ordering from
+  // `/api/bookings/mine`, so if this account ever held more than one active
+  // booking (only possible across different listings — one per listing is
+  // enforced by the unique index), this filters to the one row that
+  // actually matches FIXTURE_LISTING_ID rather than any Cancel Booking
+  // button on the page.
+  const activeBookingRow = page
+    .getByRole('button', { name: 'Cancel Booking' })
+    .locator(`xpath=ancestor::div[.//*[contains(text(),"${FIXTURE_LISTING_ID}")]][1]`)
+    .first();
 
   if ((await activeBookingRow.count()) === 0) {
     console.log(

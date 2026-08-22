@@ -17,6 +17,21 @@ export interface PageResponse<T> {
   };
 }
 
+/**
+ * Flat envelope returned by endpoints backed by the custom `PagedResponse<T>` DTO
+ * (see backend `common/api/PagedResponse.java`), NOT raw Spring `Page<T>`.
+ * Items and pagination metadata are siblings at the top level — no nested `page`
+ * object, unlike `PageResponse<T>` above. Used by `/api/bookings/mine` and
+ * `/api/bookings/broker`. Conflating the two shapes is what caused #2247.
+ */
+export interface PagedResponse<T> {
+  items: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
