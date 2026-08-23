@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="styles.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1280px;height:854px;overflow:hidden}
+.tile{display:flex;width:1280px;height:854px}
+.main{flex:1;background:var(--navy-800);display:flex;align-items:center;justify-content:center}
+.wm{font-family:"Plus Jakarta Sans",system-ui,sans-serif;font-weight:700;font-size:200px;letter-spacing:-0.03em;line-height:1}
+.wm .re{color:var(--copper-500)}
+.wm .tr{color:#fff}
+.strip{width:120px;display:flex;flex-direction:column}
+.strip>div{flex:1}
+</style>
+</head>
+<body>
+<div class="tile">
+  <div class="main"><div class="wm"><span class="re">Re</span><span class="tr">Trends</span></div></div>
+  <div class="strip">
+    <div style="background:var(--copper-400)"></div>
+    <div style="background:var(--copper-500)"></div>
+    <div style="background:var(--evergreen-600)"></div>
+    <div style="background:var(--copper-600)"></div>
+  </div>
+</div>
+</body>
+</html>

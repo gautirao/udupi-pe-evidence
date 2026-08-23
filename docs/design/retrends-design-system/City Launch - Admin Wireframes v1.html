@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>City Launch — Admin workflow wireframes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#33322e; --paper:#fcfbf8; --canvas:#eceae3;
+  --line:#b7b4ab; --line-soft:#cfccc3; --fill:#f0efea; --fill2:#e4e2da; --fill3:#d8d5cb;
+  --muted:#8b887f; --muted2:#a4a199;
+  --navy:#1B2A45; --copper:#B05C3A;
+  --green:#1F7A5C; --green-bg:#E8F2EE; --amber:#A9741C; --amber-bg:#F6EFDE;
+  --red:#B23A2E; --red-bg:#F6E9E7; --grey:#9CA3AF; --grey-bg:#eeedea;
+  --sans:"Kalam",system-ui,sans-serif; --mono:"Geist Mono",ui-monospace,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--canvas);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:var(--copper)}a:hover{color:var(--navy)}
+.mono{font-family:var(--mono);letter-spacing:-.02em}
+.wrap{max-width:1160px;margin:0 auto;padding:0 28px}
+
+/* ---- top bar ---- */
+.topbar{position:sticky;top:0;z-index:50;background:rgba(252,251,248,.94);backdrop-filter:blur(6px);border-bottom:1.5px solid var(--line)}
+.topbar .wrap{display:flex;align-items:center;gap:20px;height:56px}
+.brand{font-weight:700;font-size:18px}
+.brand b{color:var(--copper)}
+.topnav{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+.topnav a{font-size:14px;text-decoration:none;color:var(--muted);padding:5px 11px;border:1.5px dashed transparent;border-radius:8px}
+.topnav a:hover{color:var(--ink);border-color:var(--line-soft)}
+.lockpill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--red);background:var(--red-bg);border:1.5px solid #e3b7b2;border-radius:999px;padding:4px 10px}
+
+/* ---- hero ---- */
+.hero{padding:46px 0 30px}
+.hero h1{font-size:40px;font-weight:700;letter-spacing:-.01em;line-height:1.08}
+.hero .sub{font-size:18px;color:var(--muted);max-width:720px;margin-top:10px}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.chip{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;background:var(--paper);border:1.5px solid var(--line-soft);border-radius:999px;padding:6px 12px}
+.dot{width:11px;height:11px;border-radius:50%;flex:none}
+.sq{width:12px;height:12px;flex:none;border-radius:3px}
+
+/* ---- flow strip ---- */
+.flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;margin:6px 0 8px;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:16px 6px}
+.step{flex:1;min-width:150px;text-align:center;padding:6px 12px;position:relative}
+.step:not(:last-child)::after{content:"→";position:absolute;right:-8px;top:14px;color:var(--muted2);font-family:var(--mono)}
+.step .n{font-family:var(--mono);font-size:11px;color:var(--copper)}
+.step .t{font-weight:700;font-size:15px;margin-top:2px}
+.step .d{font-size:12.5px;color:var(--muted);line-height:1.35;margin-top:3px}
+
+/* ---- section ---- */
+.section{padding:34px 0 8px}
+.section>.wrap>.head{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.tag{font-family:var(--mono);font-size:12px;color:var(--paper);background:var(--navy);border-radius:7px;padding:5px 10px;flex:none}
+.section h2{font-size:27px;font-weight:700;letter-spacing:-.01em}
+.section .lead{font-size:15.5px;color:var(--muted);width:100%;max-width:760px}
+
+/* ---- screen frame (a mock browser window) ---- */
+.screen{background:var(--paper);border:1.5px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 10px 26px -18px rgba(40,38,32,.5)}
+.chrome{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--fill);border-bottom:1.5px solid var(--line-soft)}
+.chrome .lights{display:flex;gap:6px}
+.chrome .lights i{width:10px;height:10px;border-radius:50%;background:var(--line-soft);display:block}
+.chrome .url{font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--paper);border:1.5px solid var(--line-soft);border-radius:7px;padding:4px 12px;flex:1;max-width:420px}
+.chrome .rlock{margin-left:auto}
+.body{padding:0}
+
+/* app header inside screen */
+.apphead{display:flex;align-items:center;gap:18px;padding:0 20px;height:52px;border-bottom:1.5px solid var(--line-soft);background:var(--paper)}
+.apphead .logo{width:26px;height:26px;border-radius:7px;background:var(--navy);flex:none}
+.apphead .wm{font-weight:700;font-size:15px}
+.apphead nav{display:flex;gap:4px;margin-left:8px}
+.apphead nav span{font-size:13px;color:var(--muted);padding:4px 9px;border-radius:7px}
+.apphead nav span.on{color:var(--paper);background:var(--navy)}
+.apphead .right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.avatar{width:28px;height:28px;border-radius:50%;background:var(--fill2);border:1.5px solid var(--line-soft)}
+
+.pagepad{padding:22px 24px 26px}
+.crumb{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:6px}
+.ptitle{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.pdesc{font-size:14px;color:var(--muted);margin-top:2px}
+
+/* generic wireframe primitives */
+.bar{height:11px;border-radius:6px;background:var(--fill2)}
+.bar.sm{height:8px}.bar.dk{background:var(--fill3)}
+.btn{display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13.5px;border:1.5px solid var(--line);border-radius:9px;padding:7px 14px;background:var(--paper);color:var(--ink)}
+.btn.primary{background:var(--copper);color:#fff;border-color:var(--copper);font-weight:700}
+.btn.navy{background:var(--navy);color:#fff;border-color:var(--navy)}
+.btn.ghost{background:transparent}
+.btn.dis{opacity:.45}
+.field{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:13px;border:1.5px solid var(--line);border-radius:9px;padding:8px 12px;background:var(--paper);color:var(--muted)}
+
+/* status badges */
+.badge{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;font-weight:500;border-radius:999px;padding:4px 11px;border:1.5px solid transparent;white-space:nowrap}
+.b-grey{color:#5c5a54;background:var(--grey-bg);border-color:#d8d6cf}
+.b-amber{color:var(--amber);background:var(--amber-bg);border-color:#e6cf9c}
+.b-green{color:var(--green);background:var(--green-bg);border-color:#a9d5c4}
+.b-navy{color:var(--navy);background:#e6e9f0;border-color:#c3cad9}
+.b-red{color:var(--red);background:var(--red-bg);border-color:#e3b7b2}
+
+/* table */
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.tbl th{text-align:left;font-family:var(--mono);font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;padding:10px 14px;border-bottom:1.5px solid var(--line)}
+.tbl td{padding:13px 14px;border-bottom:1.5px solid var(--line-soft);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl .city{font-weight:700;font-size:14.5px}
+.tbl .sub{font-size:11.5px;color:var(--muted);font-family:var(--mono)}
+.rowsel{background:#fbf3ee;box-shadow:inset 3px 0 0 var(--copper)}
+.iconbtn{width:30px;height:30px;border:1.5px solid var(--line);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:var(--muted);background:var(--paper);font-family:var(--mono);font-size:14px}
+.geobar{display:flex;align-items:center;gap:8px}
+.geotrack{width:74px;height:7px;border-radius:5px;background:var(--fill2);overflow:hidden}
+.geofill{height:100%;border-radius:5px}
+
+/* pipeline stages */
+.stages{display:flex;flex-direction:column;gap:0;border:1.5px solid var(--line-soft);border-radius:12px;overflow:hidden}
+.stage{display:flex;align-items:center;gap:14px;padding:15px 18px;border-bottom:1.5px solid var(--line-soft);background:var(--paper)}
+.stage:last-child{border-bottom:none}
+.stage .mk{width:26px;height:26px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;font-weight:700}
+.mk.done{background:var(--green-bg);color:var(--green);border:1.5px solid #a9d5c4}
+.mk.run{background:var(--amber-bg);color:var(--amber);border:1.5px solid #e6cf9c}
+.mk.fail{background:var(--red-bg);color:var(--red);border:1.5px solid #e3b7b2}
+.mk.wait{background:var(--fill);color:var(--muted2);border:1.5px dashed var(--line)}
+.stage .sname{font-weight:700;font-size:15px}
+.stage .smeta{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:1px}
+.stage .stime{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--muted);text-align:right;white-space:nowrap}
+.stage.current{background:#fbfaf5;box-shadow:inset 3px 0 0 var(--amber)}
+.stage.failrow{background:#fdf6f5;box-shadow:inset 3px 0 0 var(--red)}
+.progressline{height:9px;border-radius:6px;background:var(--fill2);overflow:hidden;margin:2px 0 4px}
+.progressline i{display:block;height:100%;background:var(--amber);border-radius:6px}
+
+/* checklist */
+.checks{display:flex;flex-direction:column;gap:10px}
+.check{display:flex;align-items:center;gap:13px;padding:13px 16px;border:1.5px solid var(--line-soft);border-radius:11px;background:var(--paper)}
+.check .cb{width:24px;height:24px;border-radius:7px;flex:none;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:14px}
+.cb.ok{background:var(--green);color:#fff}
+.cb.no{background:var(--paper);border:1.5px dashed var(--line);color:var(--muted2)}
+.check .cname{font-weight:700;font-size:15px}
+.check .cnote{font-size:12.5px;color:var(--muted);margin-top:1px}
+.check .cright{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+
+/* map placeholder */
+.mapbox{position:relative;background:
+  repeating-linear-gradient(45deg,#e9e7df 0 12px,#e4e2da 12px 24px);
+  border-right:1.5px solid var(--line-soft);overflow:hidden}
+.maplabel{position:absolute;top:12px;left:12px;font-family:var(--mono);font-size:11px;color:#6b6a63;background:rgba(252,251,248,.82);border:1.5px solid var(--line-soft);border-radius:7px;padding:4px 9px}
+.bubble{position:absolute;transform:translate(-50%,-50%);background:var(--paper);border:1.5px solid var(--line);border-radius:999px;padding:5px 11px;font-family:var(--mono);font-size:11px;box-shadow:0 4px 10px -6px rgba(0,0,0,.4);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.bubble .ct{color:var(--copper);font-weight:500}
+.bubble.sel{background:var(--navy);color:#fff;border-color:var(--navy)}
+.bubble.sel .ct{color:#fff}
+.pin{position:absolute;transform:translate(-50%,-100%);color:var(--copper);font-size:22px;filter:drop-shadow(0 3px 3px rgba(0,0,0,.25))}
+.simtag{position:absolute;background:var(--copper);color:#fff;font-family:var(--mono);font-size:10px;border-radius:6px;padding:3px 7px;transform:translate(-50%,-100%)}
+
+/* preview banner */
+.pvbanner{display:flex;align-items:center;gap:16px;padding:10px 18px;background:var(--navy);color:#fff;flex-wrap:wrap}
+.pvbanner .pl{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.25);border-radius:999px;padding:4px 11px}
+.pvbanner .pl b{color:#fff;font-weight:500}
+.pvbanner .warn{color:#f2d9a6}
+.pvbanner .acts{margin-left:auto;display:flex;gap:8px}
+.pvbtn{font-family:var(--sans);font-size:12.5px;border:1.5px solid rgba(255,255,255,.4);border-radius:8px;padding:6px 12px;background:transparent;color:#fff}
+.pvbtn.solid{background:#fff;color:var(--navy);border-color:#fff;font-weight:700}
+
+/* discover panel (right rail) */
+.dpanel{padding:16px 18px;overflow:hidden}
+.dp-crumb{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:10px}
+.dp-crumb b{color:var(--navy)}
+.dcard{border:1.5px solid var(--line-soft);border-radius:11px;padding:12px;display:flex;gap:12px;margin-bottom:10px;background:var(--paper)}
+.dthumb{width:78px;height:64px;border-radius:8px;flex:none;background:repeating-linear-gradient(45deg,#e9e7df 0 8px,#e2e0d7 8px 16px);border:1.5px solid var(--line-soft)}
+
+/* callout sticky notes */
+.note{position:relative;font-size:13.5px;line-height:1.45;background:#fff7e2;border:1.5px solid #e7d59a;border-radius:10px;padding:11px 14px;box-shadow:0 6px 16px -12px rgba(0,0,0,.5)}
+.note b{color:#8a6a22}
+.note.sec{background:#fbeeec;border-color:#e3b7b2}
+.note.sec b{color:var(--red)}
+.note.ok{background:var(--green-bg);border-color:#a9d5c4}
+.note.ok b{color:var(--green)}
+.notegrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+
+/* two-col layouts */
+.split{display:grid;grid-template-columns:1.15fr .85fr;gap:20px;align-items:start}
+.split.wide{grid-template-columns:1.5fr 1fr}
+
+/* security matrix */
+.secmatrix{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;overflow:hidden}
+.secmatrix th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:11px 14px;border-bottom:1.5px solid var(--line);background:var(--fill)}
+.secmatrix td{padding:12px 14px;border-bottom:1.5px solid var(--line-soft);vertical-align:top}
+.secmatrix tr:last-child td{border-bottom:none}
+.pageref{font-weight:700}
+.ynr{font-family:var(--mono);font-size:15px;font-weight:700}
+.y-no{color:var(--green)}.y-yes{color:var(--red)}.y-read{color:var(--navy)}
+
+/* component tree */
+.trees{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.tree{background:var(--paper);border:1.5px solid var(--line);border-radius:12px;padding:16px 18px}
+.tree h3{font-size:16px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.tree h3 .tg{font-family:var(--mono);font-size:11px;color:var(--paper);background:var(--navy);border-radius:6px;padding:3px 8px}
+.tree pre{font-family:var(--mono);font-size:12.5px;line-height:1.85;color:var(--ink);white-space:pre;overflow-x:auto}
+.rz{color:var(--green);font-weight:500}
+.nw{color:var(--copper);font-weight:500}
+.cm{color:var(--muted2)}
+.treelegend{display:flex;gap:16px;font-family:var(--mono);font-size:12px;margin:2px 0 16px}
+
+footer{padding:40px 0 60px;color:var(--muted);font-size:13px}
+@media(max-width:860px){.split,.split.wide,.trees,.notegrid{grid-template-columns:1fr}.hero h1{font-size:30px}}
+</style>
+</head>
+<body>
+
+<div class="topbar"><div class="wrap">
+  <div class="brand"><b>Re</b>Trends · Admin</div>
+  <nav class="topnav">
+    <a href="#flow">Flow</a>
+    <a href="#p1">1 · City Launch</a>
+    <a href="#p2">2 · Pipeline</a>
+    <a href="#p3">3 · Preview</a>
+    <a href="#p4">4 · Readiness</a>
+    <a href="#sec">Security</a>
+    <a href="#tree">Components</a>
+  </nav>
+</div></div>
+
+<header class="hero"><div class="wrap">
+  <h1>City Launch — admin workflow</h1>
+  <p class="sub">Low-fidelity wireframes + component hierarchy for the internal, admin-only workflow that takes a city from “not started” to “live” on the Udupi Property Explorer. A lightweight launch wizard — not a new application, not a GIS editor.</p>
+  <div class="legend">
+    <span class="chip"><span class="sq" style="background:var(--copper)"></span> Reuses existing Discover / DS component</span>
+    <span class="chip"><span class="sq" style="background:var(--navy)"></span> New admin-only surface</span>
+    <span class="chip"><span class="dot" style="background:var(--green)"></span> Read-only · safe</span>
+    <span class="chip"><span class="dot" style="background:var(--amber)"></span> Starts pipeline (sandbox writes)</span>
+    <span class="chip"><span class="dot" style="background:var(--red)"></span> Guarded / irreversible action</span>
+    <span class="chip">✎ Low-fi — structure &amp; flow, not final visuals</span>
+  </div>
+</div></header>
+
+<!-- ============ FLOW OVERVIEW ============ -->
+<section class="section" id="flow"><div class="wrap">
+  <div class="head"><span class="tag">OVERVIEW</span><h2>The whole workflow, one line</h2>
+    <p class="lead">Five stops, minimal clicks. Every step reuses the production Discover experience; nothing here writes to production data. The city only goes live at the very last, deliberately-guarded click.</p>
+  </div>
+  <div class="flow">
+    <div class="step"><div class="n">STEP 1</div><div class="t">Select city</div><div class="d">Pick a not-yet-live city from the admin list.</div></div>
+    <div class="step"><div class="n">STEP 2</div><div class="t">Run pipeline</div><div class="d">One click prepares geography in a sandbox.</div></div>
+    <div class="step"><div class="n">STEP 3</div><div class="t">Monitor</div><div class="d">Watch stages complete; failures surface clearly.</div></div>
+    <div class="step"><div class="n">STEP 4</div><div class="t">Launch preview</div><div class="d">Validate in the real Discover UX, read-only.</div></div>
+    <div class="step"><div class="n">STEP 5</div><div class="t">Readiness → Enable</div><div class="d">Checklist passes, then enable the city.</div></div>
+  </div>
+</div></section>
+
+<!-- ============ PAGE 1 ============ -->
+<section class="section" id="p1"><div class="wrap">
+  <div class="head"><span class="tag">PAGE 1 · NEW</span><h2>Admin → City Launch</h2>
+    <p class="lead">The home of the workflow. Lists cities with their launch status and geography readiness, and is the only place a pipeline can be started. Selecting a row is the entry point to everything else.</p>
+  </div>
+
+  <div class="split wide">
+    <div class="screen">
+      <div class="chrome"><div class="lights"><i></i><i></i><i></i></div>
+        <div class="url">admin.retrends.in / cities / launch</div>
+        <span class="lockpill rlock">🔒 Admin only</span>
+      </div>
+      <div class="apphead">
+        <div class="logo"></div><div class="wm"><b style="color:var(--copper)">Re</b>Trends Admin</div>
+        <nav><span>Dashboard</span><span>Listings</span><span class="on">City launch</span><span>Users</span></nav>
+        <div class="right"><span class="badge b-red">🔒 admin</span><div class="avatar"></div></div>
+      </div>
+      <div class="pagepad">
+        <div class="crumb">Admin / City launch</div>
+        <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+          <div><div class="ptitle">Cities</div><div class="pdesc">Prepare and launch new cities. Live cities are managed from Dashboard.</div></div>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <span class="field">⌕ Filter cities</span>
+            <span class="field">Status: All ▾</span>
+          </div>
+        </div>
+        <div style="border:1.5px solid var(--line-soft);border-radius:12px;overflow:hidden">
+        <table class="tbl">
+          <thead><tr><th>City</th><th>Status</th><th>Geography</th><th>Preview</th><th style="text-align:right">Actions</th></tr></thead>
+          <tbody>
+            <tr class="rowsel">
+              <td><div class="city">Mangaluru</div><div class="sub">KA · coastal · selected</div></td>
+              <td><span class="badge b-navy">● Ready for preview</span></td>
+              <td><div class="geobar"><div class="geotrack"><div class="geofill" style="width:100%;background:var(--green)"></div></div><span class="mono" style="font-size:11px;color:var(--muted)">rev 7</span></div></td>
+              <td><span class="badge b-green">◷ Preview ready</span></td>
+              <td style="text-align:right"><span class="btn primary" style="font-size:12px;padding:6px 12px">Open preview →</span></td>
+            </tr>
+            <tr>
+              <td><div class="city">Karwar</div><div class="sub">KA · coastal</div></td>
+              <td><span class="badge b-amber">◐ Pipeline running</span></td>
+              <td><div class="geobar"><div class="geotrack"><div class="geofill" style="width:64%;background:var(--amber)"></div></div><span class="mono" style="font-size:11px;color:var(--muted)">4 / 6</span></div></td>
+              <td><span class="mono" style="font-size:12px;color:var(--muted2)">—</span></td>
+              <td style="text-align:right"><span class="btn ghost" style="font-size:12px;padding:6px 12px">View progress</span></td>
+            </tr>
+            <tr>
+              <td><div class="city">Hassan</div><div class="sub">KA · inland</div></td>
+              <td><span class="badge b-grey">○ Not started</span></td>
+              <td><div class="geobar"><div class="geotrack"><div class="geofill" style="width:0"></div></div><span class="mono" style="font-size:11px;color:var(--muted2)">none</span></div></td>
+              <td><span class="mono" style="font-size:12px;color:var(--muted2)">—</span></td>
+              <td style="text-align:right"><span class="btn navy" style="font-size:12px;padding:6px 12px">▶ Run pipeline</span></td>
+            </tr>
+            <tr>
+              <td><div class="city">Kundapura</div><div class="sub">KA · coastal</div></td>
+              <td><span class="badge b-green">✓ Ready for launch</span></td>
+              <td><div class="geobar"><div class="geotrack"><div class="geofill" style="width:100%;background:var(--green)"></div></div><span class="mono" style="font-size:11px;color:var(--muted)">rev 3</span></div></td>
+              <td><span class="badge b-green">◷ Validated</span></td>
+              <td style="text-align:right"><span class="btn" style="font-size:12px;padding:6px 12px;border-color:var(--green);color:var(--green)">Enable city 🔒</span></td>
+            </tr>
+            <tr>
+              <td><div class="city">Chikkamagaluru</div><div class="sub">KA · hill</div></td>
+              <td><span class="badge b-red">✕ Pipeline failed</span></td>
+              <td><div class="geobar"><div class="geotrack"><div class="geofill" style="width:40%;background:var(--red)"></div></div><span class="mono" style="font-size:11px;color:var(--red)">stage 3</span></div></td>
+              <td><span class="mono" style="font-size:12px;color:var(--muted2)">—</span></td>
+              <td style="text-align:right"><span class="btn ghost" style="font-size:12px;padding:6px 12px;color:var(--red)">See failure</span></td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:14px;font-family:var(--mono);font-size:12px;color:var(--muted)">
+          <span>Legend:</span>
+          <span class="badge b-grey">Not started</span>
+          <span class="badge b-amber">Pipeline running</span>
+          <span class="badge b-navy">Ready for preview</span>
+          <span class="badge b-green">Ready for launch</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="note"><b>Status ladder.</b> A city moves left→right only: <span class="mono">Not started → Running → Ready for preview → Ready for launch</span>. The action column always shows the single next step for that row — one obvious click, no menus.</div>
+      <div class="note" style="margin-top:12px"><b>Only entry point that writes.</b> “Run pipeline” is the sole action on this workflow that kicks off work, and it only writes to a sandbox revision — never to live Discover.</div>
+      <div class="note sec" style="margin-top:12px"><b>Guarded launch.</b> “Enable city” appears only at <b>Ready for launch</b> and opens a confirm dialog (type the city name). It cannot be reached by accident from any other state.</div>
+      <div class="note ok" style="margin-top:12px"><b>Reuses:</b> admin shell + top nav, <span class="mono">Table</span>, <span class="mono">Badge</span> (→ LaunchStatusBadge), <span class="mono">Button</span>, <span class="mono">Select/Input</span>. New: the row model + status ladder only.</div>
+    </div>
+  </div>
+</div></section>
+
+<!-- ============ PAGE 2 ============ -->
+<section class="section" id="p2"><div class="wrap">
+  <div class="head"><span class="tag">PAGE 2 · NEW</span><h2>Pipeline progress</h2>
+    <p class="lead">Opened from a running or failed row. A plain, ordered list of the geography-prep stages with timestamps and the current stage highlighted. When a stage fails, it is unmistakable and the rest are shown as blocked.</p>
+  </div>
+
+  <div class="split">
+    <!-- running state -->
+    <div>
+      <div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:8px">STATE A · Running</div>
+      <div class="screen">
+        <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">admin / cities / karwar / pipeline</div><span class="lockpill rlock">🔒 Admin</span></div>
+        <div class="pagepad">
+          <div class="crumb">City launch / Karwar / Pipeline</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <div class="ptitle">Preparing geography</div>
+            <span class="badge b-amber" style="margin-left:auto">◐ Running · stage 5 of 6</span>
+          </div>
+          <div class="pdesc" style="margin-bottom:8px">Karwar · sandbox revision <span class="mono">rev 8 (draft)</span> · started 14:02</div>
+          <div class="progressline"><i style="width:70%"></i></div>
+          <div class="mono" style="font-size:11px;color:var(--muted);margin-bottom:14px">~70% · est. 2 min remaining</div>
+
+          <div class="stages">
+            <div class="stage"><div class="mk done">✓</div><div><div class="sname">Generate candidate geography</div><div class="smeta">rev 8 · 12,410 candidate shapes</div></div><div class="stime">14:02 → 14:03<br>+58s</div></div>
+            <div class="stage"><div class="mk done">✓</div><div><div class="sname">Build canonical areas</div><div class="smeta">142 areas resolved</div></div><div class="stime">14:03 → 14:04<br>+41s</div></div>
+            <div class="stage"><div class="mk done">✓</div><div><div class="sname">Generate regions</div><div class="smeta">9 regions</div></div><div class="stime">14:04 → 14:05<br>+33s</div></div>
+            <div class="stage"><div class="mk done">✓</div><div><div class="sname">Build area groups</div><div class="smeta">21 groups</div></div><div class="stime">14:05 → 14:06<br>+29s</div></div>
+            <div class="stage current"><div class="mk run">◐</div><div><div class="sname">Generate presentation projections</div><div class="smeta">camera fit · labels · clustering…</div></div><div class="stime">14:06 →<br>running</div></div>
+            <div class="stage"><div class="mk wait">5</div><div><div class="sname" style="color:var(--muted)">Ready for preview</div><div class="smeta">waiting for previous stage</div></div><div class="stime">—</div></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <span class="btn ghost" style="color:var(--red)">Cancel run</span>
+            <span class="btn ghost" style="margin-left:auto">Refresh</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- failed state -->
+    <div>
+      <div style="font-family:var(--mono);font-size:12px;color:var(--red);margin-bottom:8px">STATE B · Failed</div>
+      <div class="screen">
+        <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">admin / cities / chikkamagaluru / pipeline</div><span class="lockpill rlock">🔒 Admin</span></div>
+        <div class="pagepad">
+          <div class="crumb">City launch / Chikkamagaluru / Pipeline</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <div class="ptitle">Pipeline failed</div>
+            <span class="badge b-red" style="margin-left:auto">✕ Failed at stage 3</span>
+          </div>
+          <div class="pdesc" style="margin-bottom:14px">Chikkamagaluru · sandbox <span class="mono">rev 2 (draft)</span> · no production data touched</div>
+
+          <div class="stages">
+            <div class="stage"><div class="mk done">✓</div><div><div class="sname">Generate candidate geography</div><div class="smeta">rev 2 · 9,880 shapes</div></div><div class="stime">09:11 → 09:12</div></div>
+            <div class="stage"><div class="mk done">✓</div><div><div class="sname">Build canonical areas</div><div class="smeta">88 areas resolved</div></div><div class="stime">09:12 → 09:13</div></div>
+            <div class="stage failrow"><div class="mk fail">✕</div><div><div class="sname" style="color:var(--red)">Generate regions</div><div class="smeta" style="color:var(--red)">ERR: 3 areas unassigned to any region</div></div><div class="stime" style="color:var(--red)">09:13<br>failed</div></div>
+            <div class="stage"><div class="mk wait">4</div><div><div class="sname" style="color:var(--muted)">Build area groups</div><div class="smeta">blocked</div></div><div class="stime">—</div></div>
+            <div class="stage"><div class="mk wait">5</div><div><div class="sname" style="color:var(--muted)">Generate presentation projections</div><div class="smeta">blocked</div></div><div class="stime">—</div></div>
+            <div class="stage"><div class="mk wait">6</div><div><div class="sname" style="color:var(--muted)">Ready for preview</div><div class="smeta">blocked</div></div><div class="stime">—</div></div>
+          </div>
+          <div style="background:var(--red-bg);border:1.5px solid #e3b7b2;border-radius:10px;padding:11px 14px;margin-top:12px;font-size:13px">
+            <b style="color:var(--red);font-family:var(--mono);font-size:12px">STAGE 3 LOG</b>
+            <div class="mono" style="font-size:11.5px;color:#7a3029;margin-top:5px;line-height:1.5">unassigned_areas=[kalasa, mudigere_out, N_ridge]<br>hint: widen region seeds or mark as rural</div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <span class="btn primary">↻ Retry from stage 3</span>
+            <span class="btn ghost">View full log</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notegrid">
+    <div class="note"><b>Timestamps + current stage.</b> Each stage shows start→end and duration; the running one is amber-striped with a live progress bar above the list. No dashboards, no charts — just the sequence.</div>
+    <div class="note sec"><b>Failure is loud, not fatal.</b> The failed stage turns red with its error line; downstream stages read “blocked.” Retry resumes from the failed stage. Because everything writes to a draft revision, a failed run never corrupts anything.</div>
+  </div>
+</div></section>
+
+<!-- ============ PAGE 3 ============ -->
+<section class="section" id="p3"><div class="wrap">
+  <div class="head"><span class="tag">PAGE 3 · REUSE + THIN SHELL</span><h2>Launch preview <span style="font-family:var(--sans);font-size:15px;color:var(--copper);font-weight:400">← most important</span></h2>
+    <p class="lead">This is <b>not</b> a redesign of Discover. It is the exact production Discover experience — same map, same region→area-group→area drill-down, same panel — wrapped in one lightweight preview banner. The operator validates the real UX; nothing is rebuilt.</p>
+  </div>
+
+  <div class="screen">
+    <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">admin / cities / mangaluru / preview?rev=7</div><span class="lockpill rlock">🔒 Admin · read-only</span></div>
+
+    <!-- THE ONLY NEW UI: preview banner -->
+    <div class="pvbanner">
+      <span class="warn mono" style="font-size:12px;font-weight:700">◉ PREVIEW MODE</span>
+      <span class="pl">City <b>Mangaluru</b></span>
+      <span class="pl">Pipeline rev <b>7 (draft)</b></span>
+      <span class="pl warn">Read-only · production Discover untouched</span>
+      <div class="acts">
+        <span class="pvbtn">↻ Refresh preview</span>
+        <span class="pvbtn solid">✕ Exit preview</span>
+      </div>
+    </div>
+
+    <!-- BELOW = untouched Discover, split view -->
+    <div style="display:flex;height:440px">
+      <div class="mapbox" style="flex:1;position:relative">
+        <div class="maplabel">▲ Reused Discover map (Leaflet + CARTO) — identical behaviour to production</div>
+        <!-- region bubbles -->
+        <div class="bubble sel" style="left:34%;top:40%">◍ North Mangaluru <span class="ct">· 12</span></div>
+        <div class="bubble" style="left:60%;top:30%">◍ City centre <span class="ct">· 21</span></div>
+        <div class="bubble" style="left:70%;top:62%">◍ Coastal belt <span class="ct">· 8</span></div>
+        <div class="bubble" style="left:44%;top:70%">◍ Kankanady <span class="ct">· 5</span></div>
+        <!-- simulated listing -->
+        <div class="pin" style="left:34%;top:48%">◉</div>
+        <div class="simtag" style="left:34%;top:34%">simulated listing</div>
+      </div>
+      <div class="dpanel" style="width:340px;flex:none;border-left:1.5px solid var(--line-soft)">
+        <div class="dp-crumb">Mangaluru › <b>North Mangaluru</b> › <span style="color:var(--copper)">drill into areas ▾</span></div>
+        <div class="bar" style="width:60%;height:14px;margin-bottom:12px"></div>
+        <div class="dcard"><div class="dthumb"></div><div style="flex:1"><div class="bar" style="width:80%;margin-bottom:8px"></div><div class="bar sm" style="width:55%;margin-bottom:6px"></div><span class="badge b-green" style="font-size:10px">✓ verified · simulated</span></div></div>
+        <div class="dcard"><div class="dthumb"></div><div style="flex:1"><div class="bar" style="width:70%;margin-bottom:8px"></div><div class="bar sm" style="width:60%;margin-bottom:6px"></div><div class="bar sm" style="width:40%"></div></div></div>
+        <div class="dcard"><div class="dthumb"></div><div style="flex:1"><div class="bar" style="width:75%;margin-bottom:8px"></div><div class="bar sm" style="width:50%;margin-bottom:6px"></div><div class="bar sm" style="width:45%"></div></div></div>
+        <div class="mono" style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px">Showing simulated data for rev 7</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px">
+    <div class="note" style="flex:1;min-width:240px"><b>What the operator validates here</b> — exactly the six things the preview exists for: map fit, zoom, region drill-down, area visibility, labels, clustering, and one simulated first-listing marker. Nothing else changes.</div>
+    <div class="note sec" style="flex:1;min-width:240px"><b>The banner is the ONLY new element.</b> Everything below it is the real Discover component, pointed at the sandbox revision. Same drill path: region bubble → area group → area → simulated listing.</div>
+    <div class="note ok" style="flex:1;min-width:240px"><b>Read-only by construction.</b> The preview loads the draft revision; it has no write actions and no “publish.” Refresh re-pulls the same draft. Exit returns to the city row.</div>
+  </div>
+
+  <div style="margin-top:16px;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;padding:16px 18px">
+    <div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:10px">DRILL-DOWN PATH — identical to production Discover</div>
+    <div class="flow" style="border:none;padding:0;margin:0">
+      <div class="step"><div class="n">TAP</div><div class="t">Region bubble</div><div class="d">Camera fits to the region.</div></div>
+      <div class="step"><div class="n">TAP</div><div class="t">Area group</div><div class="d">Groups expand; labels resolve.</div></div>
+      <div class="step"><div class="n">TAP</div><div class="t">Individual area</div><div class="d">Clustering + area visibility check.</div></div>
+      <div class="step"><div class="n">TAP</div><div class="t">Simulated listing</div><div class="d">First-listing marker + detail panel.</div></div>
+    </div>
+  </div>
+</div></section>
+
+<!-- ============ PAGE 4 ============ -->
+<section class="section" id="p4"><div class="wrap">
+  <div class="head"><span class="tag">PAGE 4 · NEW</span><h2>Launch readiness</h2>
+    <p class="lead">A single checklist that gates the launch. Items tick automatically from the pipeline and preview; the operator confirms the visual ones. Only when every item is green does the “Enable city” action unlock.</p>
+  </div>
+
+  <div class="split">
+    <div class="screen">
+      <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">admin / cities / mangaluru / readiness</div><span class="lockpill rlock">🔒 Admin</span></div>
+      <div class="pagepad">
+        <div class="crumb">City launch / Mangaluru / Readiness</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+          <div class="ptitle">Launch readiness</div>
+          <span class="badge b-amber" style="margin-left:auto">5 of 6 complete</span>
+        </div>
+        <div class="pdesc" style="margin-bottom:16px">Mangaluru · validating pipeline <span class="mono">rev 7</span></div>
+
+        <div class="checks">
+          <div class="check"><div class="cb ok">✓</div><div><div class="cname">Regions generated</div><div class="cnote">9 regions · from pipeline stage 3</div></div><span class="cright">auto</span></div>
+          <div class="check"><div class="cb ok">✓</div><div><div class="cname">Area groups generated</div><div class="cnote">21 groups · from pipeline stage 4</div></div><span class="cright">auto</span></div>
+          <div class="check"><div class="cb ok">✓</div><div><div class="cname">Camera fit validated</div><div class="cnote">map fit &amp; zoom confirmed in preview</div></div><span class="cright">preview</span></div>
+          <div class="check"><div class="cb ok">✓</div><div><div class="cname">No overlapping labels</div><div class="cnote">labels &amp; clustering checked at all zooms</div></div><span class="cright">preview</span></div>
+          <div class="check"><div class="cb ok">✓</div><div><div class="cname">Area drill-down validated</div><div class="cnote">region → group → area path confirmed</div></div><span class="cright">preview</span></div>
+          <div class="check" style="border-color:#e6cf9c;background:#fdfbf4"><div class="cb no">○</div><div><div class="cname">Listing preview validated</div><div class="cnote" style="color:var(--amber)">confirm the simulated first-listing marker in preview</div></div><span class="cright"><span class="btn ghost" style="font-size:11px;padding:4px 10px">Open preview →</span></span></div>
+        </div>
+
+        <div style="margin-top:18px;border-top:1.5px dashed var(--line-soft);padding-top:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="font-weight:700;font-size:15px">Enable city for everyone</div>
+            <div class="pdesc">Locked until all checks pass. Requires typing the city name to confirm.</div>
+          </div>
+          <span class="btn dis" style="border-color:var(--green);color:var(--green)">🔒 Enable Mangaluru</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="note ok"><b>Complete-state.</b> When the 6th item ticks, the footer flips: the button turns solid green + enabled, subtitle reads “All checks passed — ready to launch.” This is the <b>only</b> place the city can be enabled.</div>
+      <div class="note" style="margin-top:12px"><b>Two kinds of check.</b> <span class="mono">auto</span> items derive from pipeline output; <span class="mono">preview</span> items are the operator confirming what they saw in Page 3. No free-form config — just verification.</div>
+      <div class="note sec" style="margin-top:12px"><b>The safety gate.</b> A disabled, then confirm-dialog-guarded button means a city cannot be launched accidentally — the whole workflow narrows to this single deliberate action.</div>
+
+      <div style="margin-top:16px;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;padding:14px 16px">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:8px">COMPLETE STATE (footer)</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:180px"><div style="font-weight:700;font-size:15px;color:var(--green)">✓ All checks passed</div><div class="pdesc">Ready to launch Mangaluru.</div></div>
+          <span class="btn" style="background:var(--green);color:#fff;border-color:var(--green);font-weight:700">✓ Enable Mangaluru 🔒</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<!-- ============ SECURITY ============ -->
+<section class="section" id="sec"><div class="wrap">
+  <div class="head"><span class="tag">SECURITY BOUNDARIES</span><h2>Where the boundaries are</h2>
+    <p class="lead">The whole feature sits behind an admin-only guard. Within it, exactly one page starts work, most pages only read, and no page can touch or accidentally launch production Discover — except the final, doubly-confirmed enable action.</p>
+  </div>
+
+  <table class="secmatrix">
+    <thead><tr>
+      <th style="width:26%">Page</th>
+      <th>Starts pipeline?</th>
+      <th>Reads preview only?</th>
+      <th>Modifies production?</th>
+      <th>Can launch a city?</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="pageref">1 · City Launch</span><div class="sub mono" style="font-size:11px;color:var(--muted)">list + select</div></td>
+        <td><span class="ynr y-yes">▶ Yes</span><div class="mono" style="font-size:11px;color:var(--muted)">“Run pipeline” only; writes to sandbox draft</div></td>
+        <td><span class="ynr y-read">◷ n/a</span></td>
+        <td><span class="ynr y-no">✕ Never</span></td>
+        <td><span class="ynr y-yes">△ Only from “Ready for launch” row → guarded dialog</span></td>
+      </tr>
+      <tr>
+        <td><span class="pageref">2 · Pipeline progress</span><div class="sub mono" style="font-size:11px;color:var(--muted)">monitor</div></td>
+        <td><span class="ynr y-read">✕ No</span><div class="mono" style="font-size:11px;color:var(--muted)">retry resumes an existing run</div></td>
+        <td><span class="ynr y-read">◷ Reads run status</span></td>
+        <td><span class="ynr y-no">✕ Never</span><div class="mono" style="font-size:11px;color:var(--muted)">draft revision only</div></td>
+        <td><span class="ynr y-no">✕ No</span></td>
+      </tr>
+      <tr>
+        <td><span class="pageref">3 · Launch preview</span><div class="sub mono" style="font-size:11px;color:var(--muted)">validate UX</div></td>
+        <td><span class="ynr y-read">✕ No</span></td>
+        <td><span class="ynr y-read">◷ Yes — read-only</span><div class="mono" style="font-size:11px;color:var(--muted)">loads draft rev; no write actions exist</div></td>
+        <td><span class="ynr y-no">✕ Never</span><div class="mono" style="font-size:11px;color:var(--muted)">separate sandbox data source</div></td>
+        <td><span class="ynr y-no">✕ No</span></td>
+      </tr>
+      <tr>
+        <td><span class="pageref">4 · Launch readiness</span><div class="sub mono" style="font-size:11px;color:var(--muted)">gate + enable</div></td>
+        <td><span class="ynr y-read">✕ No</span></td>
+        <td><span class="ynr y-read">◷ Reads checks</span></td>
+        <td><span class="ynr y-no">✕ Never (until enable)</span></td>
+        <td><span class="ynr y-yes">▶ Yes — the ONLY enable point</span><div class="mono" style="font-size:11px;color:var(--muted)">disabled until all checks pass + type-to-confirm</div></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="notegrid">
+    <div class="note sec"><b>Outer guard.</b> Every route (<span class="mono">/admin/cities/*</span>) is wrapped in an <span class="mono">AdminGuard</span>. Non-admins never see the nav item, the routes, or the API. The 🔒 lock pill in each screen’s chrome marks this boundary.</div>
+    <div class="note ok"><b>Two data worlds.</b> Preview + pipeline operate on a <b>sandbox draft revision</b>, physically separate from the live Discover dataset. “Enable city” is the single, deliberate act that promotes a validated revision to production — nothing else crosses that line.</div>
+  </div>
+</div></section>
+
+<!-- ============ COMPONENT HIERARCHY ============ -->
+<section class="section" id="tree"><div class="wrap">
+  <div class="head"><span class="tag">COMPONENT HIERARCHY</span><h2>Component hierarchy</h2>
+    <p class="lead">Almost everything is reused from the existing app. New components are deliberately few and small — a launch wizard on top of Discover, not a second application.</p>
+  </div>
+
+  <div class="treelegend">
+    <span><span class="rz">reuse</span> — existing DS / Discover component</span>
+    <span><span class="nw">new</span> — new admin-only component</span>
+  </div>
+
+  <div class="trees">
+    <div class="tree">
+      <h3><span class="tg">PAGE 1</span> Admin → City Launch</h3>
+<pre><span class="nw">CityLaunchPage</span>            <span class="cm">// new route</span>
+├─ <span class="rz">AdminShell</span>             <span class="cm">reuse (admin nav)</span>
+│  └─ <span class="rz">TopNav / Avatar</span>     <span class="cm">reuse</span>
+├─ <span class="nw">AdminGuard</span>            <span class="cm">new (route wrapper)</span>
+├─ <span class="rz">PageHeader + Crumb</span>    <span class="cm">reuse</span>
+├─ <span class="rz">Input</span> (filter)        <span class="cm">reuse</span>
+├─ <span class="rz">Select</span> (status)       <span class="cm">reuse</span>
+└─ <span class="rz">Table</span>                <span class="cm">reuse</span>
+   └─ <span class="nw">CityLaunchRow</span>       <span class="cm">new</span>
+      ├─ <span class="nw">LaunchStatusBadge</span> <span class="cm">new (extends Badge)</span>
+      ├─ <span class="nw">GeographyMeter</span>   <span class="cm">new (small bar)</span>
+      └─ <span class="rz">Button</span> ×N         <span class="cm">reuse</span></pre>
+    </div>
+
+    <div class="tree">
+      <h3><span class="tg">PAGE 2</span> Pipeline progress</h3>
+<pre><span class="nw">PipelineProgressPage</span>     <span class="cm">// new route</span>
+├─ <span class="nw">AdminGuard</span>            <span class="cm">new</span>
+├─ <span class="rz">AdminShell + Crumb</span>    <span class="cm">reuse</span>
+├─ <span class="nw">PipelineHeader</span>        <span class="cm">new</span>
+│  ├─ <span class="nw">LaunchStatusBadge</span>  <span class="cm">new</span>
+│  └─ <span class="nw">ProgressBar</span>        <span class="cm">new</span>
+├─ <span class="nw">StageList</span>             <span class="cm">new</span>
+│  └─ <span class="nw">StageRow</span> ×6         <span class="cm">new</span>
+│     ├─ StageMarker      <span class="cm">✓ / ◐ / ✕ / n</span>
+│     └─ Timestamp        <span class="cm">mono</span>
+├─ <span class="nw">FailureLog</span>            <span class="cm">new (fail state)</span>
+└─ <span class="rz">Button</span> (retry/cancel)  <span class="cm">reuse</span></pre>
+    </div>
+
+    <div class="tree">
+      <h3><span class="tg">PAGE 3</span> Launch preview</h3>
+<pre><span class="nw">LaunchPreviewPage</span>        <span class="cm">// new route</span>
+├─ <span class="nw">AdminGuard</span>            <span class="cm">new</span>
+├─ <span class="nw">PreviewShell</span>          <span class="cm">new (thin wrapper)</span>
+│  └─ <span class="nw">PreviewBanner</span>       <span class="cm">new — ONLY new UI</span>
+│     ├─ CityLabel        <span class="cm">Mangaluru</span>
+│     ├─ RevisionLabel    <span class="cm">rev 7 (draft)</span>
+│     ├─ RefreshBtn       <span class="cm">reuse Button</span>
+│     └─ ExitBtn          <span class="cm">reuse Button</span>
+└─ <span class="rz">DiscoverExperience</span>    <span class="cm">REUSED WHOLE</span>
+   ├─ <span class="rz">DiscoverMap</span>         <span class="cm">reuse (Leaflet)</span>
+   │  ├─ <span class="rz">RegionBubbles</span>    <span class="cm">reuse</span>
+   │  ├─ <span class="rz">AreaMarkers</span>      <span class="cm">reuse</span>
+   │  └─ <span class="rz">SimListingPin</span>    <span class="cm">reuse marker</span>
+   └─ <span class="rz">JourneyPanel</span>        <span class="cm">reuse</span>
+      └─ <span class="rz">PropertyCard</span> ×N   <span class="cm">reuse (simulated)</span>
+   <span class="cm">▲ data source = sandbox draft rev</span></pre>
+    </div>
+
+    <div class="tree">
+      <h3><span class="tg">PAGE 4</span> Launch readiness</h3>
+<pre><span class="nw">LaunchReadinessPage</span>      <span class="cm">// new route</span>
+├─ <span class="nw">AdminGuard</span>            <span class="cm">new</span>
+├─ <span class="rz">AdminShell + Crumb</span>    <span class="cm">reuse</span>
+├─ <span class="nw">ReadinessHeader</span>       <span class="cm">new</span>
+│  └─ <span class="nw">LaunchStatusBadge</span>  <span class="cm">new</span>
+├─ <span class="nw">ReadinessChecklist</span>    <span class="cm">new</span>
+│  └─ <span class="nw">CheckItem</span> ×6        <span class="cm">new</span>
+│     ├─ CheckMark        <span class="cm">auto | preview</span>
+│     └─ <span class="rz">Button</span> (jump)     <span class="cm">reuse</span>
+└─ <span class="nw">EnableCityBar</span>         <span class="cm">new (the gate)</span>
+   └─ <span class="nw">ConfirmDialog</span>       <span class="cm">new (type-to-confirm)</span>
+      └─ <span class="rz">Button</span> / <span class="rz">Input</span>    <span class="cm">reuse</span></pre>
+    </div>
+  </div>
+
+  <div class="note ok" style="margin-top:16px"><b>Reuse scorecard.</b> New components are limited to: <span class="mono">AdminGuard</span>, the <span class="mono">CityLaunchRow</span> family (row · LaunchStatusBadge · GeographyMeter), the <span class="mono">Pipeline*</span> family (header · StageList · StageRow · FailureLog · ProgressBar), <span class="mono">PreviewShell + PreviewBanner</span>, and the <span class="mono">Readiness*</span> family (checklist · CheckItem · EnableCityBar · ConfirmDialog). Everything else — shell, nav, table, badges, buttons, inputs, and the entire Discover map + panel — is lifted straight from the existing app.</div>
+</div></section>
+
+<footer><div class="wrap">Low-fidelity wireframes · ReTrends admin · City Launch workflow. Structure and flow only — visual fidelity, copy and real map data resolve during hi-fi. No production data is modified anywhere in this flow.</div></footer>
+
+</body>
+</html>

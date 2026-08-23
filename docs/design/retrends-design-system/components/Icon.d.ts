@@ -8,7 +8,8 @@ export type IconName =
   | "check" | "x" | "sliders-horizontal" | "building"
   | "plus" | "camera" | "pencil" | "eye" | "message-circle"
   | "alert-triangle" | "arrow-up-right" | "layers" | "users"
-  | "chevron-right" | "route";
+  | "chevron-right" | "route"
+  | "sprout" | "target" | "compass" | "info";
 
 export interface IconProps extends React.SVGProps<SVGSVGElement> {
   /** Lucide icon name from the ReTrends in-system subset. */

@@ -92,4 +92,10 @@ How ReTrends writes:
 **UI kit** (`ui_kits/portal/`)
 - Interactive ReTrends consumer portal — Home, Discover, Trends, Listing detail, Saved. See its own `README.md`.
 
+**UI kit** (`ui_kits/new_discover/`)
+- *Discover V2 — Directional IA* (`index.html`): the approved shopper shell. `experience.html` is the interactive, clickable Discover experience — one persistent shell with the canonical hierarchy, visual area clusters, multi-area draft/commit, polygon and viewport scopes, zero-result recovery and alerts, at 1366×768 and 390×844, deep-linkable per journey (`?journey=guided-areas`). `transitions.html` is the journey-transition storyboard (#2020): seven journeys J1–J7 as before → action → after, each transition naming the `node=`/breadcrumb, result scope, filter, camera and browser-history change, plus the marker legend and links into the 52-state library.
+
+**UI kit** (`ui_kits/discover-scopes/`)
+- *Discover — Result Scopes and Multi-Area Search* (#2020): 52 named states across desktop 1366×768 and mobile 390×844, extending the approved `ui_kits/discover/` shell with result-scope chips, multi-area draft editing, schools-in-selected-areas, zero-result recovery and saved-search alerts. Start at its `index.html`.
+
 > Components are consumed via `window.ReTrendsDesignSystem_f37966.<Name>` after loading `_ds_bundle.js`. Each component has a sibling `.d.ts` (props) and `.prompt.md` (usage).
