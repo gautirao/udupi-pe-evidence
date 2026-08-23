@@ -1,6 +1,7 @@
 // Discover experience — map surface. Leaflet + CARTO Voyager, the same marker
-// grammar as ui_kits/new_discover (directional card, area pill, price pin) plus
-// the dashed visual-cluster chip and the drawn-boundary layer.
+// grammar as ui_kits/new_discover (area pill, price pin) plus the connected
+// regional-cluster-marker card (which replaces the directional card here) and
+// the drawn-boundary layer.
 // The map owns no product state: everything it draws comes from `view`.
 const EM = window.EXP;
 
@@ -40,9 +41,10 @@ function destCardHTML(o) {
     <div class="rc-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid var(--copper-600);margin:0 auto;"></div>
   </div>`;
 }
-// Visual AREA cluster — presentation only. Deliberately a DIFFERENT SHAPE from a
-// structural Direction card: dashed light chip + magnifier + "Tap to zoom", never the
-// solid navy navigation card, so the difference is never carried by colour alone.
+// Visual AREA cluster — presentation only. Same connected regional-cluster-marker
+// grammar as destCardHTML / regionalClusterCardHTML (navy info block + white "Zoom in"
+// footer + tail); it differs by its wider clamp and its "N areas with matches/schools"
+// line, and it takes the plum footer accent in the schools journey.
 function clusterChipHTML(o) {
   const w = Math.min(206, Math.max(150, Math.round(132 + Math.min(1, o.n / 240) * 38)));
   const cf = Math.round(20 + Math.min(1, o.n / 240) * 8);
@@ -74,8 +76,9 @@ function clusterChipHTML(o) {
 // Regional cluster marker (Option B) — one connected component: a navy info card with
 // rounded TOP corners, flush against a white "Zoom in" footer with rounded BOTTOM
 // corners, a single unified shadow/border around both, and a small rust-orange tail
-// pointing at the cluster's map position. Distinct component from destCardHTML
-// (top-level directional regions), which keeps its existing floating-pill caption.
+// pointing at the cluster's map position. destCardHTML (top-level directional regions)
+// now uses this same grammar and design-component tag; this builder differs only in its
+// wider clamp and its "N areas with matches" line.
 function regionalClusterCardHTML(o) {
   const w = Math.min(206, Math.max(150, Math.round(132 + Math.min(1, o.n / 240) * 38)));
   const cf = Math.round(20 + Math.min(1, o.n / 240) * 8);

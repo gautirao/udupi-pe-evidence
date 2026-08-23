@@ -17,6 +17,7 @@ component uses a literal, the literal is quoted here.
 | Fonts | `tokens/fonts.css` |
 | Shell (control bar, mode selector, rows) | `src/NDPanel.jsx` |
 | Map + markers | `src/NDMap.jsx` |
+| Experience-prototype map + markers | `src/ExpMap.jsx` (loaded by `experience.html`) |
 | Cards | `src/components/cards.jsx` |
 | Shared primitives (filters, radius, distance) | `src/components/shared.jsx` |
 | Orchestrator (layout, breakpoints) | `src/NewDiscover.jsx` |
@@ -143,7 +144,9 @@ Selectors below refer to the stable `data-design-component` attributes added to 
 ### Canonical component vocabulary
 
 These are the **only** approved `data-design-component` names. Every manifest component uses a name
-from this list, and every name here is documented below and appears in at least one manifest state.
+from this list, and every name here is documented below. All of them appear in at least one
+`DESIGN_STATE_MANIFEST.json` state except `regional-cluster-marker`, which is authored in the
+`experience.html` prototype — that prototype has no manifest states of its own yet.
 
 | Name | Where authored |
 |---|---|
@@ -170,6 +173,7 @@ from this list, and every name here is documented below and appears in at least 
 | `listing-card` | `src/components/cards.jsx` |
 | `parcel-card` | `src/components/cards.jsx` |
 | `directional-marker` | `src/NDMap.jsx` (region + cluster map card) |
+| `regional-cluster-marker` | `src/ExpMap.jsx` (region + local-cluster map card, connected card grammar) |
 | `area-marker` | `src/NDMap.jsx` |
 | `school-marker` | `src/NDMap.jsx` |
 | `corridor-marker` | `src/NDMap.jsx` |
@@ -235,10 +239,30 @@ from this list, and every name here is documented below and appears in at least 
   in below (accent-coloured). Selected marker also scales.
 - Positioned by **compass bearing** around the map centre, not exact centroid (see §5 Map rules).
 
-### Local-cluster marker
+### Local-cluster marker (`src/NDMap.jsx`)
 - Uses the **same `directional-marker` (`dirCard`) treatment** as regions — a generated cluster is
   visually a directional card, labelled by representative names, positioned by bearing. There is no
   separate "cluster pill" style; the narrow one-line pill is explicitly a **rejected** pattern (§7).
+
+### Regional-cluster marker (map) — `data-design-component="regional-cluster-marker"` (`src/ExpMap.jsx`)
+- The experience prototype's successor to `directional-marker`. **One connected component**, not a
+  card plus a floating caption: a navy (`--navy-800`) info block with rounded **top** corners, flush
+  against a white "Zoom in" footer (`rc-footer`) with rounded **bottom** corners, a single shared
+  border (`1.5px rgba(27,42,69,0.24)`, `0.4` selected) and `--shadow-lg` around both (`rc-shell`),
+  and a small rust tail (`rc-tail`, `--copper-600`) pointing at the map position.
+- Width scales with inventory: `132 + min(1, n/240)*38` → **132–170px** for top-level regions;
+  local clusters clamp to **150–206px**. Count is mono `20–31px/800`; unit label is uppercase
+  `9.5px/700`; an `N areas with matches` pill sits below on `rgba(255,255,255,0.14)`.
+- Footer accent follows the mode: `--copper-600` for homes, `--plum-600` in the schools journey
+  (icon, "Zoom in" label, chevron and tail all move together).
+- States (CSS in `experience.html`, keyed on the component attribute): hover / `.nd-nav-on` lift
+  `translateY(-2px)` + deeper shadow and tint the footer `--copper-100`; `:active` `scale(0.97)`;
+  `focus-visible` a 3px `--accent` ring around the whole shell. Every marker is a focusable
+  `role="button"` with an `aria-label`.
+- **Both** the top-level directional region card (`destCardHTML`) and the generated local cluster
+  (`clusterChipHTML`, `regionalClusterCardHTML`) use this one identity — they differ only in width
+  clamp and label content, never in shape. `directional-marker` remains the `src/NDMap.jsx`
+  vocabulary; consumers of the experience prototype select on `regional-cluster-marker`.
 
 ### Area marker (map) — `data-design-component="area-marker"` (`areaPinHTML`)
 - Leaf-level, one **connected split capsule** (`am-leaf`): navy identity half (pin glyph + bold
@@ -248,8 +272,8 @@ from this list, and every name here is documented below and appears in at least 
   activating it opens listings for that area directly, **never** a further zoom.
 - States: hover/selected lift `translateY(-2px)` + deeper shadow, pale-copper tint on the action
   half, `:active` scale-down, `focus-visible` 3px accent ring around the whole shell.
-- **Schools journey** uses a separate pill+tail treatment (`schoolsMode` branch): `--paper` pill,
-  plum count, "View schools" caption — unchanged by this component.
+- **Schools journey** uses the same `am-leaf` split capsule, plum-accented — see the
+  Schools-journey area marker section below. It is no longer the old `--paper` pill + tail.
 - Draft candidate areas render as a dashed label (`area-candidate-label`), never this capsule.
 
 ### School marker (map) — `data-design-component="school-marker"` (`schoolPinHTML`)
@@ -361,13 +385,17 @@ The first screen must feel like a compact control surface, not a marketing page:
 
 ## 4. Map rules
 
-Document these map layers separately (all in `src/NDMap.jsx`):
+Document these map layers separately (`src/NDMap.jsx`, except where `src/ExpMap.jsx` is named):
 
 - **Structured compass-style city/region markers** — `directional-marker` cards laid out by bearing
   around the map centre (North top, East right, South bottom, West left, Central middle). Card width
   encodes relative inventory. This is an *orientation canvas*, not exact pins.
 - **Local-cluster markers** — same `directional-marker` treatment, generated per sub-group, still
   compass-positioned relative to the parent.
+- **Regional / local-cluster markers in the experience prototype** (`src/ExpMap.jsx`) — the same two
+  layers above, but rendered as the connected `regional-cluster-marker` component (navy info block +
+  white "Zoom in" footer + tail) rather than `directional-marker`. Bearing layout and
+  inventory-scaled width are unchanged.
 - **Real positions** — area (`area-marker`), school (`school-marker`), town (`town-marker`),
   listing/parcel pins sit on **real coordinates**; the camera fits real bounds (`fitBounds` per view).
 - **Agricultural sector colours & opacity** — wedge stroke `#1F7A5C`; active fill `#2E9B74` @ 0.12;
