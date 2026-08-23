@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Regional cluster marker — Option B</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+body{margin:0;background:var(--canvas-200);font-family:var(--font-sans);color:var(--text-strong)}
+.wrap{max-width:1000px;margin:0 auto;padding:40px 32px 80px}
+h1{font-family:var(--font-serif);font-size:26px;font-weight:600;letter-spacing:-0.01em;margin:0 0 6px}
+.lede{font-size:14px;color:var(--text-body);max-width:700px;line-height:1.55;margin:0 0 32px}
+.row{display:grid;grid-template-columns:160px 1fr;gap:24px;align-items:center;padding:28px 0;border-top:1px solid var(--border)}
+.row:first-of-type{border-top:none}
+.rowlabel{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted)}
+.stage{background:#eef0ea;border-radius:var(--radius-lg);padding:44px 28px;display:flex;gap:36px;align-items:flex-start;flex-wrap:wrap;position:relative}
+.stage::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(200,205,190,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(200,205,190,.5) 1px,transparent 1px);background-size:26px 26px;opacity:.5;border-radius:var(--radius-lg)}
+.card{position:relative;font-family:var(--font-sans);text-align:center}
+.shell{width:172px;border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);border:1.5px solid rgba(27,42,69,0.24)}
+.shell.lift{transform:translateY(-2px);box-shadow:0 14px 28px rgba(18,24,38,.38)}
+.shell.selring{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--navy-800),var(--shadow-lg);border-color:rgba(27,42,69,0.4)}
+.top{padding:9px 14px;background:var(--navy-800);color:#fff;display:flex;flex-direction:column;align-items:center;gap:2px}
+.name{font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25}
+.countrow{display:flex;align-items:baseline;gap:5px;margin-top:2px}
+.countrow b{font-family:var(--font-mono);font-size:20px;font-weight:800;letter-spacing:-0.02em;line-height:1}
+.countrow span{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.72)}
+.pill{margin-top:3px;padding:1px 9px;border-radius:var(--radius-full);background:rgba(255,255,255,.14);font-size:10px;font-weight:600;color:rgba(255,255,255,.9)}
+.footer{background:#fff;padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px}
+.footer.tint{background:var(--copper-100)}
+.footer span{font-size:11.5px;font-weight:700;color:var(--copper-600)}
+.tail{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid var(--copper-600);margin:0 auto}
+.taglabel{display:block;margin-bottom:10px;font-size:10px;font-weight:700;color:var(--grey-500);letter-spacing:.04em}
+</style></head>
+<body><div class="wrap">
+<h1>Regional cluster marker — Option B</h1>
+<p class="lede">One connected component: a navy info card (rounded top) flush against a white "Zoom in" footer (rounded bottom), a single shared shadow/border, and a rust-orange tail pointing at the cluster's map position. Activating anywhere on the marker zooms to fit the cluster's child areas — it never opens a listing.</p>
+
+<div class="row"><div class="rowlabel">Default</div>
+<div class="stage">
+  <div class="card"><span class="taglabel">Indiranagar · Domlur</span>
+    <div class="shell"><div class="top"><span class="name">Indiranagar · Domlur</span><span class="countrow"><b>72</b><span>listings</span></span><span class="pill">3 areas with matches</span></div><div class="footer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#B05C3A" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.5-3.5"/></svg><span>Zoom in</span><span style="font-size:13px;color:#B05C3A">&#8250;</span></div></div>
+    <div class="tail"></div></div>
+  <div class="card"><span class="taglabel">Long name, 2 lines</span>
+    <div class="shell"><div class="top"><span class="name">Devanahalli · Airport Road</span><span class="countrow"><b>1</b><span>listing</span></span><span class="pill">1 area with matches</span></div><div class="footer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#B05C3A" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.5-3.5"/></svg><span>Zoom in</span><span style="font-size:13px;color:#B05C3A">&#8250;</span></div></div>
+    <div class="tail"></div></div>
+</div></div>
+
+<div class="row"><div class="rowlabel">Hover<div style="margin-top:6px;font-size:11.5px;color:var(--text-muted);font-weight:400;text-transform:none;letter-spacing:0">Subtle lift + copper-tinted footer</div></div>
+<div class="stage">
+  <div class="card"><span class="taglabel">Indiranagar · Domlur</span>
+    <div class="shell lift"><div class="top"><span class="name">Indiranagar · Domlur</span><span class="countrow"><b>72</b><span>listings</span></span><span class="pill">3 areas with matches</span></div><div class="footer tint"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#B05C3A" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.5-3.5"/></svg><span>Zoom in</span><span style="font-size:13px;color:#B05C3A">&#8250;</span></div></div>
+    <div class="tail"></div></div>
+</div></div>
+
+<div class="row"><div class="rowlabel">Selected<div style="margin-top:6px;font-size:11.5px;color:var(--text-muted);font-weight:400;text-transform:none;letter-spacing:0">Double navy ring — never colour alone</div></div>
+<div class="stage">
+  <div class="card"><span class="taglabel">Indiranagar · Domlur</span>
+    <div class="shell selring"><div class="top"><span class="name">Indiranagar · Domlur</span><span class="countrow"><b>72</b><span>listings</span></span><span class="pill">3 areas with matches</span></div><div class="footer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#B05C3A" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.5-3.5"/></svg><span>Zoom in</span><span style="font-size:13px;color:#B05C3A">&#8250;</span></div></div>
+    <div class="tail"></div></div>
+</div></div>
+
+<div class="row"><div class="rowlabel">Dense layout<div style="margin-top:6px;font-size:11.5px;color:var(--text-muted);font-weight:400;text-transform:none;letter-spacing:0">Three regional clusters in one region, spread by real bearing with a 30° minimum gap</div></div>
+<div class="stage" style="height:220px">
+  <div class="card" style="position:absolute;left:56px;top:6px"><div class="shell"><div class="top"><span class="name">Devanahalli · Airport Road</span><span class="countrow"><b>48</b><span>listings</span></span><span class="pill">3 areas with matches</span></div><div class="footer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#B05C3A" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.5-3.5"/></svg><span>Zoom in</span><span style="font-size:13px;color:#B05C3A">&#8250;</span></div></div><div class="tail"></div></div>
+  <div class="card" style="position:absolute;left:0;top:118px"><div class="shell"><div class="top"><span class="name">Hebbal · Nagawara</span><span class="countrow"><b>151</b><span>listings</span></span><span class="pill">7 areas with matches</span></div><div class="footer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#B05C3A" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.5-3.5"/></svg><span>Zoom in</span><span style="font-size:13px;color:#B05C3A">&#8250;</span></div></div><div class="tail"></div></div>
+  <div class="card" style="position:absolute;left:290px;top:150px"><div class="shell"><div class="top"><span class="name">Thanisandra · Hennur</span><span class="countrow"><b>50</b><span>listings</span></span><span class="pill">3 areas with matches</span></div><div class="footer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#B05C3A" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.5-3.5"/></svg><span>Zoom in</span><span style="font-size:13px;color:#B05C3A">&#8250;</span></div></div><div class="tail"></div></div>
+</div></div>
+
+</div></body></html>
