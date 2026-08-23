@@ -72,6 +72,31 @@ describe('useSimilarListings — disabled when params missing', () => {
   });
 });
 
+describe('useSimilarListings — select projection (issue #2280 AC6)', () => {
+  it('projects through the allow-listed column list, not a wildcard', async () => {
+    const chain = makeChain({ data: [], error: null });
+    mockFrom.mockReturnValue(chain);
+
+    renderHook(
+      () => useSimilarListings('listing-1', 'Udupi', 'apartment'),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(chain.select).toHaveBeenCalled());
+    const projection = (chain.select as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+
+    // Flyway V128 revoked table-wide SELECT grants on property_listings and
+    // re-granted column-by-column excluding contact_phone/contact_info; a
+    // wildcard select now errors. Assert on the REQUEST, not a mocked
+    // response shape, so a regression to select('*') actually fails this test.
+    expect(projection).not.toContain('contact_phone');
+    expect(projection).not.toContain('contact_info');
+    expect(projection).not.toBe('*');
+    expect(projection.startsWith('*')).toBe(false);
+    expect(projection).toContain('raw_posts(images)');
+  });
+});
+
 describe('useSimilarListings — query parameters', () => {
   it('excludes the current listing via .neq("id", listingId)', async () => {
     const chain = makeChain({ data: [], error: null });

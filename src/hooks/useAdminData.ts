@@ -4,6 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState, useCallback } from 'react';
 import type { Json, Tables } from '@/integrations/supabase/types';
+import { propertyListingSelect } from '@/integrations/supabase/propertyListingColumns';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8085';
 
@@ -317,7 +318,15 @@ export function useResetPostForReprocessing() {
  * report for the full analysis; Listings.tsx:409/422 remain unresolved as a
  * result — flagged as a STOP condition rather than forced with `as`.
  */
-type AdminListingRow = Tables<'property_listings'> & {
+// Issue #2280: contact_phone/contact_info re-declared optional (mirroring
+// PropertyListing's base optionality) because the query below projects
+// through propertyListingSelect(), which omits both revoked-grant columns.
+// Tables<'property_listings'> is codegen'd straight from the schema and
+// still lists them as required `string | null`, which would otherwise be a
+// lie for every row this hook returns.
+type AdminListingRow = Omit<Tables<'property_listings'>, 'contact_phone' | 'contact_info'> & {
+  contact_phone?: string | null;
+  contact_info?: string | null;
   raw_posts: { images: Json | null } | null;
   reraValid?: boolean;
 };
@@ -330,12 +339,12 @@ export function useAdminListings(limit = 100) {
     queryFn: async (): Promise<AdminListingRow[]> => {
       const { data, error } = await supabase
         .from('property_listings')
-        .select('*, raw_posts(images)')
+        .select(propertyListingSelect('raw_posts(images)'))
         .order('created_at', { ascending: false })
         .limit(limit);
 
       if (error) throw error;
-      return data;
+      return data as unknown as AdminListingRow[];
     },
     enabled: isAdmin,
   });

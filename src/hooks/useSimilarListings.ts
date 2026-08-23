@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { PropertyImage, PropertyListing } from './usePropertyListings';
+import { PropertyImage, PropertyListing, PropertyListingWithImages } from './usePropertyListings';
+import { propertyListingSelect } from '@/integrations/supabase/propertyListingColumns';
 
 export type SimilarListing = PropertyListing & { images: PropertyImage[] };
 
@@ -16,7 +17,7 @@ export function useSimilarListings(
 
       const { data, error } = await supabase
         .from('property_listings')
-        .select('*, raw_posts(images)')
+        .select(propertyListingSelect('raw_posts(images)'))
         .eq('locality', locality)
         .eq('property_type', propertyType)
         .eq('is_valid', true)
@@ -27,7 +28,7 @@ export function useSimilarListings(
       if (error) throw error;
       if (!data) return [];
 
-      return data.map((row) => {
+      return (data as unknown as PropertyListingWithImages[]).map((row) => {
         const rawImages = row.raw_posts?.images;
         const images: PropertyImage[] = Array.isArray(rawImages) ? rawImages : [];
         return { ...row, images } as SimilarListing;

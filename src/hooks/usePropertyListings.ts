@@ -4,6 +4,7 @@ import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { haversineKm } from '@/lib/geo';
+import { propertyListingSelect } from '@/integrations/supabase/propertyListingColumns';
 
 /**
  * Minimum supported school-proximity radius (km). Matches the smallest value in
@@ -49,8 +50,15 @@ export interface PropertyListing {
   built_area_unit: string | null;
   bedrooms: number | null;
   bathrooms: number | null;
-  contact_info: string | null;
-  contact_phone: string | null;
+  /**
+   * Issue #2280 — omitted (key absent, not null) from the projection used by
+   * usePropertyListings()/useSimilarListings(); the V128 contact-column grant
+   * revocation means those hooks never select these columns. Present (and
+   * non-optional in practice) on rows enriched via useDuplicateManagement's
+   * admin_get_listing_contacts RPC — see DuplicateListing.
+   */
+  contact_info?: string | null;
+  contact_phone?: string | null;
   description: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -305,7 +313,7 @@ export function usePropertyListings(filters?: PropertyFilters) {
 
       let query = supabase
         .from('property_listings')
-        .select('*, raw_posts(images)')
+        .select(propertyListingSelect('raw_posts(images)'))
         .eq('is_valid', true)
         .eq('is_duplicate', false)
         .order('created_at', { ascending: false });
@@ -499,15 +507,16 @@ export function useUpdateListing() {
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<PropertyListing> }) => {
-      const { data, error } = await supabase
+      // No caller consumes the updated row, so this intentionally skips `.select()`
+      // (Prefer: return=minimal) rather than requesting the 161-column projection
+      // for a value nobody reads. See propertyListingColumns.ts for why a bare
+      // `.select()` here would 42501 under V128's revoked contact-column grants.
+      const { error } = await supabase
         .from('property_listings')
         .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
+        .eq('id', id);
 
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['property-listings'] });
