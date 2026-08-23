@@ -9,43 +9,104 @@ const MG = {
   pin: (c) => `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`
 };
 
+// Top-level directional region/local-cluster card — same connected "Option B" component as
+// regionalClusterCardHTML: navy info card (rounded top) flush against a white "Zoom in" footer
+// (rounded bottom), one shared shadow/border, rust tail. Reuses the regional-cluster-marker
+// design-component tag so it inherits the same hover/press/focus CSS.
 function destCardHTML(o) {
   const w = Math.round(132 + Math.min(1, o.n / 240) * 38);
   const cf = Math.round(22 + Math.min(1, o.n / 240) * 9);
-  const noun = o.noun || "listings";
-  return `<div class="nd-nav${o.hov ? " nd-nav-on" : ""}" data-design-component="directional-marker" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;">
-    <div class="nd-navcore" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 15px 10px;border-radius:var(--radius-lg);background:var(--navy-800);color:#fff;box-shadow:var(--shadow-lg);border:1.5px solid rgba(255,255,255,${o.hov ? 0.9 : 0.42});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s,border-color .18s;">
-      <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.2;text-wrap:balance;">${o.names}</span>
-      ${o.zero ? "" : `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
-        <span style="font-family:var(--font-mono);font-size:${cf}px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${o.n.toLocaleString("en-IN")}</span>
-        <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.72);">${noun}</span>
-      </span>`}
-      ${o.areasLine ? `<span style="margin-top:${o.zero ? 4 : 3}px;padding:1px 9px;border-radius:var(--radius-full);background:rgba(255,255,255,0.14);font-size:10px;font-weight:600;color:rgba(255,255,255,${o.zero ? .78 : .9});white-space:nowrap;">${o.areasLine}</span>` : ""}
+  // singular/plural: "1 LISTING" / "126 LISTINGS", "1 SCHOOL" / "9 SCHOOLS"
+  const nounPlural = o.noun || "listings";
+  const noun = o.n === 1 ? nounPlural.replace(/s$/, "") : nounPlural;
+  const sel = !!o.sel;
+  const label = o.ariaLabel || (o.names + ". " + o.n + " " + noun.toLowerCase() + (o.areasLine ? ". " + o.areasLine : "") + ". Activate to zoom in.");
+  return `<div class="nd-nav${o.hov ? " nd-nav-on" : ""}${sel ? " nd-nav-sel" : ""}" data-design-component="regional-cluster-marker" tabindex="0" role="button" aria-label="${label}" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;outline:none;">
+    <div class="rc-shell" style="border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);border:1.5px solid rgba(27,42,69,${sel ? 0.4 : 0.24});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s;${sel ? "outline:2px solid var(--navy-800);outline-offset:2px;" : ""}">
+      <div style="padding:9px 14px 9px;background:var(--navy-800);color:#fff;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;text-wrap:balance;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${w - 28}px;">${o.names}</span>
+        ${o.zero ? "" : `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
+          <span style="font-family:var(--font-mono);font-size:${cf}px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${o.n.toLocaleString("en-IN")}</span>
+          <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.72);">${noun}</span>
+        </span>`}
+        ${o.areasLine ? `<span style="margin-top:${o.zero ? 4 : 3}px;padding:1px 9px;border-radius:var(--radius-full);background:rgba(255,255,255,0.14);font-size:10px;font-weight:600;color:rgba(255,255,255,${o.zero ? .78 : .9});white-space:nowrap;">${o.areasLine}</span>` : ""}
+      </div>
+      <div class="rc-footer" style="background:#fff;padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px;transition:background .15s ease;">
+        ${MG.zoom("var(--copper-600)")}
+        <span style="font-size:11.5px;font-weight:700;color:var(--copper-600);">Zoom in</span>
+        <span style="font-size:13px;font-weight:700;color:var(--copper-600);line-height:1;">&#8250;</span>
+      </div>
     </div>
-    <div class="nd-cap" style="margin-top:5px;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:var(--radius-full);background:var(--paper);box-shadow:var(--shadow-md);font-size:10px;font-weight:700;color:var(--copper-600);white-space:nowrap;">Explore <span style="font-size:12px;line-height:1;">&#8250;</span></div>
+    <div class="rc-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid var(--copper-600);margin:0 auto;"></div>
   </div>`;
 }
 // Visual AREA cluster — presentation only. Deliberately a DIFFERENT SHAPE from a
 // structural Direction card: dashed light chip + magnifier + "Tap to zoom", never the
 // solid navy navigation card, so the difference is never carried by colour alone.
 function clusterChipHTML(o) {
-  const w = 190;
+  const w = Math.min(206, Math.max(150, Math.round(132 + Math.min(1, o.n / 240) * 38)));
+  const cf = Math.round(20 + Math.min(1, o.n / 240) * 8);
   const schools = o.tone === "schools";
-  const membership = (o.more > 0 ? "+" + o.more : o.members) + (schools ? " areas with schools" : " areas with matches");
-  const metric = schools ? o.schools + " schools · " + o.n + " listings" : o.n + " " + (o.noun || "listings");
-  return `<div class="nd-nav${o.hov ? " nd-nav-on" : ""}" data-design-component="area-cluster" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;">
-    <div class="nd-navcore" style="display:flex;flex-direction:column;align-items:center;gap:1px;padding:8px 12px 9px;border-radius:var(--radius-lg);background:rgba(255,255,255,0.95);border:1.5px dashed ${schools ? "var(--plum-600)" : "var(--navy-800)"};box-shadow:var(--shadow-md);transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s;">
-      <span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:700;color:var(--text-strong);white-space:nowrap;">${MG.zoom(schools ? "var(--plum-600)" : "var(--navy-800)")}${o.names}</span>
-      <span style="font-size:10.5px;font-weight:700;color:${schools ? "var(--plum-600)" : "var(--navy-700)"};">${membership}</span>
-      <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-body);white-space:nowrap;">${metric}</span>
+  const exact = o.members;
+  const areasLine = exact + (exact === 1 ? " area with " : " areas with ") + (schools ? "schools" : "matches");
+  const nounPlural = schools ? "schools" : (o.noun || "listings");
+  const noun = o.n === 1 ? nounPlural.replace(/s$/, "") : nounPlural;
+  const iconColor = schools ? "var(--plum-600)" : "var(--copper-600)";
+  return `<div class="nd-nav${o.hov ? " nd-nav-on" : ""}" data-design-component="regional-cluster-marker" tabindex="0" role="button" aria-label="Zoom into the ${o.names} areas" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;outline:none;">
+    <div class="rc-shell" style="border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);border:1.5px solid rgba(27,42,69,0.24);transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s;">
+      <div style="padding:9px 14px 9px;background:var(--navy-800);color:#fff;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;text-wrap:balance;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${w - 28}px;">${o.names}</span>
+        <span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
+          <span style="font-family:var(--font-mono);font-size:${cf}px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${o.n.toLocaleString("en-IN")}</span>
+          <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.72);">${noun}</span>
+        </span>
+        <span style="margin-top:3px;padding:1px 9px;border-radius:var(--radius-full);background:rgba(255,255,255,0.14);font-size:10px;font-weight:600;color:rgba(255,255,255,.9);white-space:nowrap;">${areasLine}</span>
+      </div>
+      <div class="rc-footer" style="background:#fff;padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px;transition:background .15s ease;">
+        ${MG.zoom(iconColor)}
+        <span style="font-size:11.5px;font-weight:700;color:${iconColor};">Zoom in</span>
+        <span style="font-size:13px;font-weight:700;color:${iconColor};line-height:1;">&#8250;</span>
+      </div>
     </div>
-    <div class="nd-cap" style="margin-top:5px;display:inline-flex;padding:3px 10px;border-radius:var(--radius-full);background:${schools ? "var(--plum-600)" : "var(--navy-800)"};color:#fff;box-shadow:var(--shadow-md);font-size:10px;font-weight:700;white-space:nowrap;">Tap to zoom</div>
+    <div class="rc-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid ${iconColor};margin:0 auto;"></div>
+  </div>`;
+}
+// Regional cluster marker (Option B) — one connected component: a navy info card with
+// rounded TOP corners, flush against a white "Zoom in" footer with rounded BOTTOM
+// corners, a single unified shadow/border around both, and a small rust-orange tail
+// pointing at the cluster's map position. Distinct component from destCardHTML
+// (top-level directional regions), which keeps its existing floating-pill caption.
+function regionalClusterCardHTML(o) {
+  const w = Math.min(206, Math.max(150, Math.round(132 + Math.min(1, o.n / 240) * 38)));
+  const cf = Math.round(20 + Math.min(1, o.n / 240) * 8);
+  const nounPlural = o.noun || "listings";
+  const noun = o.n === 1 ? nounPlural.replace(/s$/, "") : nounPlural;
+  const areasLine = (o.exact || 0) + ((o.exact || 0) === 1 ? " area with matches" : " areas with matches");
+  const sel = !!o.sel;
+  const label = o.ariaLabel || ("Zoom into the " + o.names + " areas");
+  return `<div class="nd-nav${o.hov ? " nd-nav-on" : ""}${sel ? " nd-nav-sel" : ""}" data-design-component="regional-cluster-marker" tabindex="0" role="button" aria-label="${label}" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;outline:none;">
+    <div class="rc-shell" style="border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);border:1.5px solid rgba(27,42,69,${sel ? 0.4 : 0.24});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s;${sel ? "outline:2px solid var(--navy-800);outline-offset:2px;" : ""}">
+      <div style="padding:9px 14px 9px;background:var(--navy-800);color:#fff;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;text-wrap:balance;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${w - 28}px;">${o.names}</span>
+        <span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
+          <span style="font-family:var(--font-mono);font-size:${cf}px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${o.n.toLocaleString("en-IN")}</span>
+          <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.72);">${noun}</span>
+        </span>
+        <span style="margin-top:3px;padding:1px 9px;border-radius:var(--radius-full);background:rgba(255,255,255,0.14);font-size:10px;font-weight:600;color:rgba(255,255,255,.9);white-space:nowrap;">${areasLine}</span>
+      </div>
+      <div class="rc-footer" style="background:#fff;padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px;transition:background .15s ease;">
+        ${MG.zoom("var(--copper-600)")}
+        <span style="font-size:11.5px;font-weight:700;color:var(--copper-600);">Zoom in</span>
+        <span style="font-size:13px;font-weight:700;color:var(--copper-600);line-height:1;">&#8250;</span>
+      </div>
+    </div>
+    <div class="rc-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid var(--copper-600);margin:0 auto;"></div>
   </div>`;
 }
 function areaPinHTML(o) {
   const sel = o.sel, cand = o.candidate;
-  const bg = sel ? "var(--navy-800)" : "var(--paper)", fg = sel ? "#fff" : "var(--navy-800)";
-  const bd = sel ? "none" : "1px solid var(--border)";
+  const bg = "var(--navy-800)", fg = "#fff";
+  const bd = `1.5px solid rgba(255,255,255,${sel ? 0.9 : 0.42})`;
   // draft candidate: a subtle dashed LABEL — must never read as a committed search area
   if (cand) {
     return `<div data-design-component="area-candidate-label" style="position:relative;width:210px;margin-left:-105px;transform:translateY(-100%);text-align:center;font-family:var(--font-sans);">
@@ -57,25 +118,58 @@ function areaPinHTML(o) {
   // SCHOOLS journey: the primary metric is schools located inside the area, listings are
   // secondary context, and the caption names the action the tap actually performs.
   if (o.schoolsMode) {
-    return `<div class="nd-nav${o.hov ? " nd-nav-on" : ""}" data-design-component="area-marker" style="position:relative;width:240px;margin-left:-120px;transform:translateY(-100%);text-align:center;font-family:var(--font-sans);">
-      <div class="nd-navcore" style="display:inline-flex;align-items:center;gap:9px;padding:7px 13px;border-radius:var(--radius-full);background:var(--paper);color:var(--text-strong);box-shadow:var(--shadow-md);border:1px solid var(--plum-100);white-space:nowrap;transition:all .18s cubic-bezier(.4,0,.2,1);">
-        <span style="font-size:13px;font-weight:700;letter-spacing:-0.01em;">${o.name}</span>
-        <span style="font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:var(--plum-600);">${o.n} schools</span>
-        <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">${o.listings} listings</span>
+    // Schools-journey leaf marker — same connected split-capsule family as the homes area
+    // marker (am-leaf), plum-accented: identity half (icon + name + listings count stacked)
+    // flush against a "View N schools" action half. One shell/shadow/tail. Kept at the same
+    // compact scale as the homes marker — areas in a schools cluster sit at real, often close,
+    // map coordinates, so an oversized capsule here collides with neighbours / clips the map.
+    const schoolNoun = o.n === 1 ? "school" : "schools";
+    const listingNoun = o.listings === 1 ? "listing" : "listings";
+    const actionText = `View ${o.n} ${schoolNoun}`;
+    const nameBoxW = Math.min(130, Math.max(50, Math.round(o.name.length * 8.1)));
+    const leftW = nameBoxW + 42;
+    const actionW = Math.round(actionText.length * 7.4) + 42;
+    const w = leftW + actionW;
+    const label = o.ariaLabel || `View ${o.n} ${schoolNoun} in ${o.name}`;
+    return `<div class="nd-nav am-leaf am-leaf-school${o.hov ? " nd-nav-on" : ""}" data-design-component="area-marker" tabindex="0" role="button" aria-label="${label}" style="position:relative;width:${w}px;margin-left:-${Math.round(w / 2)}px;transform:translateY(-100%);font-family:var(--font-sans);outline:none;">
+      <div class="am-shell" style="display:flex;align-items:stretch;border-radius:var(--radius-full);overflow:hidden;box-shadow:${sel ? "var(--shadow-lg)" : "var(--shadow-md)"};border:1.5px solid rgba(94,82,134,${sel ? 0.4 : 0.26});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s ease;">
+        <div style="flex:none;display:flex;align-items:center;gap:7px;padding:8px 12px 8px 12px;background:var(--plum-600);color:#fff;min-width:0;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>
+          <span style="display:flex;flex-direction:column;gap:1px;min-width:0;">
+            <span style="font-size:13.5px;font-weight:800;letter-spacing:-0.01em;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameBoxW}px;">${o.name}</span>
+            <span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.68);white-space:nowrap;">${o.listings} ${listingNoun}</span>
+          </span>
+        </div>
+        <div class="am-action" style="flex:none;display:flex;align-items:center;gap:4px;padding:9px 14px;background:var(--canvas-100);color:var(--plum-600);white-space:nowrap;transition:background .15s ease;">
+          <span style="font-size:12.5px;font-weight:800;letter-spacing:-0.01em;">${actionText}</span>
+          <span style="font-size:14px;font-weight:800;line-height:1;">&#8250;</span>
+        </div>
       </div>
-      <div style="width:10px;height:10px;background:var(--paper);border-right:1px solid var(--plum-100);border-bottom:1px solid var(--plum-100);transform:rotate(45deg);margin:-6px auto 0;box-shadow:var(--shadow-md);"></div>
-      <div class="nd-cap" style="margin-top:4px;display:inline-flex;padding:2px 9px;border-radius:var(--radius-full);background:var(--plum-600);color:#fff;box-shadow:var(--shadow-sm);font-size:9.5px;font-weight:700;white-space:nowrap;">View schools</div>
+      <div class="am-tail" style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:8px solid var(--plum-600);margin:-1px auto 0;"></div>
     </div>`;
   }
-  return `<div class="nd-nav${o.hov ? " nd-nav-on" : ""}" data-design-component="area-marker" style="position:relative;width:230px;margin-left:-115px;transform:translateY(-100%);text-align:center;font-family:var(--font-sans);">
-    <div class="nd-navcore" style="display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border-radius:var(--radius-full);background:${bg};color:${fg};box-shadow:${sel ? "var(--shadow-lg)" : "var(--shadow-md)"};border:${bd};white-space:nowrap;transition:all .18s cubic-bezier(.4,0,.2,1);transform:scale(${sel ? 1.06 : 1});">
-      ${MG.pin(sel ? "#fff" : "var(--copper-500)")}
-      <span style="font-size:13px;font-weight:700;letter-spacing:-0.01em;">${o.name}</span>
-      <span style="font-family:var(--font-mono);font-size:11px;color:${sel ? "rgba(255,255,255,0.72)" : "var(--text-muted)"};">${o.n}</span>
-      <span style="font-size:13.5px;font-weight:700;color:${sel ? "rgba(255,255,255,0.75)" : "var(--copper-600)"};line-height:1;">&#8250;</span>
+  // leaf-level individual area marker — one connected split capsule: navy identity (left) +
+  // rust "View N homes" action (right), flush together, single border/shadow, tail below.
+  // Distinct from cluster markers: activating this opens listings directly, never a further zoom.
+  const noun = o.n === 1 ? "home" : "homes";
+  const actionText = `View ${o.n} ${noun}`;
+  const nameBoxW = Math.min(150, Math.max(56, Math.round(o.name.length * 8.2)));
+  const leftW = nameBoxW + 46;
+  const actionW = Math.round(actionText.length * 7.3) + 50;
+  const w = leftW + actionW;
+  const label = o.ariaLabel || `View ${o.n} ${noun} in ${o.name}`;
+  return `<div class="nd-nav am-leaf${o.hov ? " nd-nav-on" : ""}" data-design-component="area-marker" tabindex="0" role="button" aria-label="${label}" style="position:relative;width:${w}px;margin-left:-${Math.round(w / 2)}px;transform:translateY(-100%);font-family:var(--font-sans);outline:none;">
+    <div class="am-shell" style="display:flex;align-items:stretch;border-radius:var(--radius-full);overflow:hidden;box-shadow:${sel ? "var(--shadow-lg)" : "var(--shadow-md)"};border:1.5px solid rgba(27,42,69,${sel ? 0.42 : 0.24});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s ease;">
+      <div style="flex:none;display:flex;align-items:center;gap:7px;padding:9px 12px 9px 13px;background:${bg};color:#fff;min-width:0;">
+        ${MG.pin("#fff")}
+        <span style="font-size:14px;font-weight:700;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameBoxW}px;">${o.name}</span>
+      </div>
+      <div class="am-action" style="flex:none;display:flex;align-items:center;gap:4px;padding:9px 15px;background:var(--canvas-100);color:var(--copper-600);white-space:nowrap;transition:background .15s ease;">
+        <span style="font-size:12.5px;font-weight:700;">${actionText}</span>
+        <span style="font-size:14px;font-weight:700;line-height:1;">&#8250;</span>
+      </div>
     </div>
-    <div style="width:10px;height:10px;background:${bg};border-right:${bd};border-bottom:${bd};transform:rotate(45deg);margin:-6px auto 0;box-shadow:${sel ? "var(--shadow-lg)" : "var(--shadow-md)"};"></div>
-    <div class="nd-cap" style="margin-top:4px;display:inline-flex;padding:2px 9px;border-radius:var(--radius-full);background:var(--paper);box-shadow:var(--shadow-sm);font-size:9.5px;font-weight:700;color:var(--copper-600);white-space:nowrap;">Tap to view homes</div>
+    <div class="am-tail" style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:8px solid ${bg};margin:-1px auto 0;"></div>
   </div>`;
 }
 function pricePinHTML(l, on, f) {
@@ -223,6 +317,9 @@ function ExpMap({ view, isMobile, onPick, onCluster, onArea, onOpenListing, hove
     markersRef.current = {};
     const icon = (html, cls) => L.divIcon({ html, className: "upt-pin " + (cls || ""), iconSize: [0, 0] });
     const wire = (mk, key) => { markersRef.current[key] = mk; mk.on("mouseover", () => cb.onHover(key)); mk.on("mouseout", () => cb.onHover(null)); };
+    // keyboard activation — the focusable card inside the divIcon has tabindex=0;
+    // Enter/Space bubbles up to this listener on the marker's root element
+    const wireKeyboard = (mk, fn) => { const el = mk.getElement(); if (el) el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } }); };
     // Compass layout: at navigation levels the destination cards sit by BEARING around
     // the map centre (an orientation canvas), exactly as in the approved V2 map.
     const size = map.getSize();
@@ -237,26 +334,51 @@ function ExpMap({ view, isMobile, onPick, onCluster, onArea, onOpenListing, hove
       }
       return map.containerPointToLatLng([fx * size.x, fy * size.y]);
     };
+    // dense-map collision handling: nodes without a fixed compass slot (regional
+    // clusters, e.g. Hebbal · Yelahanka / Devanahalli · Airport / Hennur · Thanisandra)
+    // sit by real bearing and can land close together — enforce a minimum angular gap
+    // so cards never overlap; direction cards (fixed N/E/S/W/C slots) are untouched.
+    const noSlot = (v.destinations || []).filter((d) => !d.slot);
+    if (noSlot.length > 1) {
+      const MIN_GAP = 30;
+      const order = noSlot.map((d) => ({ d, b: ((d.bearing || 0) % 360 + 360) % 360 })).sort((a, b) => a.b - b.b);
+      for (let k = 1; k < order.length; k++) { const gap = order[k].b - order[k - 1].b; if (gap < MIN_GAP) order[k].b = order[k - 1].b + MIN_GAP; }
+      const wrap = order[0].b + 360 - order[order.length - 1].b;
+      if (wrap < MIN_GAP) order[order.length - 1].b -= (MIN_GAP - wrap);
+      order.forEach((o) => (o.d.__bearing = o.b));
+    }
     (v.destinations || []).forEach((d, i) => {
-      const ll = v.compass ? compassAt(d, i, v.destinations.length) : L.latLng(d.center.lat, d.center.lon);
+      const ll = v.compass ? compassAt({ ...d, bearing: d.__bearing != null ? d.__bearing : d.bearing }, i, v.destinations.length) : L.latLng(d.center.lat, d.center.lon);
       const schoolsJ = v.journey === "schools";
-      const areasLine = d.n === 0 ? "No matches with current filters" : (d.matchAreas || 0) + (schoolsJ ? " areas with schools" : " areas with matches");
-      const mk = L.marker(ll, { icon: icon(destCardHTML({ names: d.names.join(" · "), n: d.n, noun: schoolsJ ? "schools" : (v.noun || "listings"), areasLine, zero: d.n === 0 })), zIndexOffset: 200 });
+      if (d.kind === "local") {
+        const mk = L.marker(ll, { icon: icon(regionalClusterCardHTML({ names: d.names.join(" · "), n: d.n, noun: v.noun || "listings", exact: d.matchAreas || 0, sel: !!d.sel })), zIndexOffset: d.sel ? 260 : 200, riseOnHover: true });
+        mk.on("click", () => cb.onPick(d));
+        wire(mk, d.key);
+        mk.addTo(g);
+        wireKeyboard(mk, () => cb.onPick(d));
+        return;
+      }
+      const areaWord = (d.matchAreas || 0) === 1 ? " area with " : " areas with ";
+      const areasLine = d.n === 0 ? "No matches with current filters" : (d.matchAreas || 0) + areaWord + (schoolsJ ? "schools" : "matches");
+      const mk = L.marker(ll, { icon: icon(destCardHTML({ names: d.names.join(" · "), n: d.n, noun: schoolsJ ? "schools" : (v.noun || "listings"), areasLine, zero: d.n === 0, sel: !!d.sel })), zIndexOffset: d.sel ? 260 : 200, riseOnHover: true });
       mk.on("click", () => cb.onPick(d));
       wire(mk, d.key);
       mk.addTo(g);
+      wireKeyboard(mk, () => cb.onPick(d));
     });
     (v.mapClusters || []).forEach((c) => {
-      const mk = L.marker([c.center.lat, c.center.lon], { icon: icon(clusterChipHTML({ names: c.names.join(" · "), more: c.more, members: c.members.length, n: v.journey === "schools" ? (c.listings || 0) : c.n, schools: c.schools, noun: v.noun || "listings", tone: v.journey === "schools" ? "schools" : null })), zIndexOffset: 300 });
+      const mk = L.marker([c.center.lat, c.center.lon], { icon: icon(clusterChipHTML({ names: c.names.join(" · "), more: c.more, members: c.members.length, n: v.journey === "schools" ? (c.listings || 0) : c.n, schools: c.schools, noun: v.noun || "listings", tone: v.journey === "schools" ? "schools" : null })), zIndexOffset: 300, riseOnHover: true });
       mk.on("click", () => cb.onCluster(c));
       wire(mk, c.key);
       mk.addTo(g);
+      wireKeyboard(mk, () => cb.onCluster(c));
     });
     (v.areaMarkers || []).forEach((a) => {
-      const mk = L.marker([a.center.lat, a.center.lon], { icon: icon(areaPinHTML({ name: a.label, n: a.n, listings: a.listings, schoolsMode: v.journey === "schools" && !a.candidate, sel: a.selected, candidate: a.candidate })), zIndexOffset: a.selected ? 900 : a.candidate ? 300 : 400 });
+      const mk = L.marker([a.center.lat, a.center.lon], { icon: icon(areaPinHTML({ name: a.label, n: a.n, listings: a.listings, schoolsMode: v.journey === "schools" && !a.candidate, sel: a.selected, candidate: a.candidate })), zIndexOffset: a.selected ? 900 : a.candidate ? 300 : 400, riseOnHover: !a.candidate });
       if (!a.candidate) mk.on("click", () => cb.onArea(a.key));
       if (!a.candidate) wire(mk, a.key);
       mk.addTo(g);
+      if (!a.candidate) wireKeyboard(mk, () => cb.onArea(a.key));
     });
     (v.discs || []).forEach((d) => {
       const mk = L.marker([d.center.lat, d.center.lon], { icon: icon(discHTML(d.n)), zIndexOffset: 250 });

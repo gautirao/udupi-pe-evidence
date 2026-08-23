@@ -24,8 +24,27 @@
   .nd-navmode .leaflet-tile-pane { opacity: 0.64; filter: saturate(0.75); }
   .nd-nav { cursor: pointer; }
   .nd-nav:hover .nd-navcore, .nd-nav.nd-nav-on .nd-navcore { box-shadow: 0 12px 30px rgba(18,24,38,0.42) !important; transform: scale(1.05) !important; }
+  .nd-nav:active .nd-navcore { transform: scale(0.96) !important; box-shadow: var(--shadow-md) !important; transition: transform .08s ease, box-shadow .08s ease; }
+  .nd-nav[data-design-component="regional-cluster-marker"]:hover .rc-shell { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(18,24,38,0.38) !important; }
+  .nd-nav[data-design-component="regional-cluster-marker"]:hover .rc-footer { background: var(--copper-100) !important; }
+  .nd-nav[data-design-component="regional-cluster-marker"]:active .rc-shell { transform: scale(0.97) !important; transition: transform .08s ease; }
+  .nd-nav[data-design-component="regional-cluster-marker"]:focus-visible { outline: none; }
+  .nd-nav[data-design-component="regional-cluster-marker"]:focus-visible .rc-shell { box-shadow: 0 0 0 3px var(--accent), var(--shadow-lg) !important; }
+  .nd-nav[data-design-component="regional-cluster-marker"].nd-nav-on .rc-shell { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(18,24,38,0.38) !important; }
+  .nd-nav[data-design-component="regional-cluster-marker"].nd-nav-on .rc-footer { background: var(--copper-100) !important; }
+  .nd-nav.am-leaf:hover .am-shell, .nd-nav.am-leaf.nd-nav-on .am-shell { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(18,24,38,0.38) !important; }
+  .nd-nav.am-leaf:hover .am-action, .nd-nav.am-leaf.nd-nav-on .am-action { background: var(--copper-100) !important; }
+  .nd-nav.am-leaf:active .am-shell { transform: scale(0.97) !important; transition: transform .08s ease; }
+  .nd-nav.am-leaf:focus-visible { outline: none; }
+  .nd-nav.am-leaf:focus-visible .am-shell { box-shadow: 0 0 0 3px var(--accent), var(--shadow-lg) !important; }
+  .nd-nav.am-leaf.am-leaf-school:hover .am-action, .nd-nav.am-leaf.am-leaf-school.nd-nav-on .am-action { background: var(--plum-100) !important; }
+  .nd-nav[data-design-component="directional-marker"]:hover .nd-cap { box-shadow: 0 6px 16px rgba(18,24,38,0.28); transform: translateY(-1px) !important; }
+  .nd-nav[data-design-component="directional-marker"]:active .nd-cap { transform: scale(0.94) !important; }
   .nd-cap { opacity: 0; transform: translateY(-3px); transition: opacity .16s ease, transform .16s ease; pointer-events: none; }
   .nd-nav:hover .nd-cap, .nd-nav.nd-nav-on .nd-cap { opacity: 1; transform: translateY(0); }
+  .nd-nav:focus-visible { outline: none; }
+  .nd-nav:focus-visible .nd-navcore { box-shadow: 0 0 0 3px var(--accent), var(--shadow-lg) !important; transform: scale(1.05) !important; }
+  .nd-nav:focus-visible .nd-cap { opacity: 1; transform: translateY(0); }
   .upt-scroll::-webkit-scrollbar { width: 10px; }
   .upt-scroll::-webkit-scrollbar-thumb { background: var(--stone-400); border-radius: 999px; border: 3px solid var(--background); }
   @keyframes expFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }

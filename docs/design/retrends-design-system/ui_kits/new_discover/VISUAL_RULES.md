@@ -240,13 +240,30 @@ from this list, and every name here is documented below and appears in at least 
   visually a directional card, labelled by representative names, positioned by bearing. There is no
   separate "cluster pill" style; the narrow one-line pill is explicitly a **rejected** pattern (§7).
 
-### Area marker (map) — `data-design-component="area-marker"` (`areaPin`)
-- Rounded pill, `padding 7px 13px`, `--radius-full`, with a downward tail (rotated square).
-  Default `--paper` + navy text + `--border`; selected `--navy-800` + white, `--shadow-lg`, `scale(1.06)`.
-- Shows area name 13px/700 + a small home/school glyph + count (mono) + chevron.
+### Area marker (map) — `data-design-component="area-marker"` (`areaPinHTML`)
+- Leaf-level, one **connected split capsule** (`am-leaf`): navy identity half (pin glyph + bold
+  white area name, truncated with ellipsis if long) flush against a `--canvas-100` action half
+  (`View {n} home(s)` in `--copper-600` + chevron). Single shared `--radius-full` border/shadow
+  around both halves, small navy downward tail beneath. Whole capsule is one `role="button"` —
+  activating it opens listings for that area directly, **never** a further zoom.
+- States: hover/selected lift `translateY(-2px)` + deeper shadow, pale-copper tint on the action
+  half, `:active` scale-down, `focus-visible` 3px accent ring around the whole shell.
+- **Schools journey** uses a separate pill+tail treatment (`schoolsMode` branch): `--paper` pill,
+  plum count, "View schools" caption — unchanged by this component.
+- Draft candidate areas render as a dashed label (`area-candidate-label`), never this capsule.
 
-### School marker (map) — `data-design-component="school-marker"` (`schoolPin`)
-- Same pill+tail family, plum-accented graduation-cap glyph. Selected `--plum-600` + white.
+### School marker (map) — `data-design-component="school-marker"` (`schoolPinHTML`)
+- Individual school point pin — same pill+tail family, plum-accented graduation-cap glyph.
+  Selected `--plum-600` + white. Distinct from the schools-journey **area** marker below.
+
+### Schools-journey area marker (map) — `data-design-component="area-marker"` (`areaPinHTML`, `schoolsMode`)
+- Same `am-leaf` split-capsule family as the homes area marker, plum-accented, at the **same
+  compact scale** as the homes marker (areas sit at real, often close, coordinates — an
+  oversized capsule collides with neighbours): identity half on `--plum-600` — graduation-cap
+  glyph beside a stacked name (13.5px/800 white) + listings count (10px/600 muted white) —
+  flush against a "View N schools" action half on `--canvas-100` in `--plum-600` (12.5px/800 +
+  chevron). One shared shell/shadow/tail; hover tints the action half `--plum-100`
+  (`am-leaf-school` override).
 
 ### Panel navigation row (directional card) — `data-design-component="directional-card"` (`DirNavCard`)
 - Single-line clickable row. `padding 12px 14px`, `--radius-lg`, `border 1px var(--border)`
