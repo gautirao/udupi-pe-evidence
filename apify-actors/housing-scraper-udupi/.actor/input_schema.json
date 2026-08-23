@@ -1,0 +1,57 @@
+{
+    "$schema": "https://apify.com/schemas/v1/input.ide.json",
+    "title": "Housing.com Udupi Scraper Input",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {
+        "startUrls": {
+            "title": "Search result start URLs",
+            "type": "array",
+            "description": "Full housing.com search-result-page URLs to start from, e.g. https://housing.com/in/buy/udupi/manipal-gid/ . One URL per locality/city search. Only 'buy' (sale) SRP URLs are supported by this actor.",
+            "editor": "requestListSources",
+            "prefill": [
+                {
+                    "url": "https://housing.com/in/buy/udupi/manipal-gid/"
+                }
+            ]
+        },
+        "maxPagesPerStartUrl": {
+            "title": "Max pages per start URL",
+            "type": "integer",
+            "description": "Maximum number of paginated result pages (?page=N, 30 cards/page) to crawl per start URL.",
+            "default": 5,
+            "minimum": 1
+        },
+        "maxRequestsPerCrawl": {
+            "title": "Max Requests per Crawl",
+            "type": "integer",
+            "description": "Hard cap on total page requests across all start URLs (politeness / cost control).",
+            "default": 60
+        },
+        "minRequestDelaySecs": {
+            "title": "Min delay between requests (seconds)",
+            "type": "integer",
+            "description": "Minimum politeness delay before each page navigation.",
+            "default": 3,
+            "minimum": 0
+        },
+        "maxRequestDelaySecs": {
+            "title": "Max delay between requests (seconds)",
+            "type": "integer",
+            "description": "Maximum politeness delay before each page navigation (a random value between min and max is used).",
+            "default": 7,
+            "minimum": 0
+        },
+        "proxyConfiguration": {
+            "title": "Proxy Configuration",
+            "type": "object",
+            "description": "Apify Proxy settings. Residential proxy group is strongly recommended - housing.com's WAF blocks datacenter IPs.",
+            "editor": "proxy",
+            "default": {
+                "useApifyProxy": true,
+                "apifyProxyGroups": ["RESIDENTIAL"]
+            }
+        }
+    },
+    "required": ["startUrls"]
+}

@@ -1,0 +1,83 @@
+{
+  "new_areas_osm_evidence": [
+    {
+      "area_key": "IN|KA|Udupi|Santhekatte",
+      "name": "Santhekatte",
+      "osm_lat": 13.3876323,
+      "osm_lon": 74.7389702,
+      "buffer_deg": 0.012,
+      "bbox": {
+        "min_lat": 13.3756323,
+        "min_lon": 74.7269702,
+        "max_lat": 13.3996323,
+        "max_lon": 74.7509702
+      }
+    },
+    {
+      "area_key": "IN|KA|Udupi|Brahmagiri",
+      "name": "Brahmagiri",
+      "osm_lat": 13.3412188,
+      "osm_lon": 74.7407976,
+      "buffer_deg": 0.015,
+      "bbox": {
+        "min_lat": 13.3262188,
+        "min_lon": 74.72579759999999,
+        "max_lat": 13.3562188,
+        "max_lon": 74.7557976
+      }
+    },
+    {
+      "area_key": "IN|KA|Udupi|Kinnimulki",
+      "name": "Kinnimulki",
+      "osm_lat": 13.3234807,
+      "osm_lon": 74.7388074,
+      "buffer_deg": 0.012,
+      "bbox": {
+        "min_lat": 13.311480699999999,
+        "min_lon": 74.7268074,
+        "max_lat": 13.3354807,
+        "max_lon": 74.7508074
+      }
+    },
+    {
+      "area_key": "IN|KA|Udupi|Kuthpady",
+      "name": "Kuthpady",
+      "osm_lat": 13.3203168,
+      "osm_lon": 74.727029,
+      "buffer_deg": 0.012,
+      "bbox": {
+        "min_lat": 13.3083168,
+        "min_lon": 74.715029,
+        "max_lat": 13.332316800000001,
+        "max_lon": 74.739029
+      }
+    },
+    {
+      "area_key": "IN|KA|Udupi|Ambagilu",
+      "name": "Ambagilu",
+      "osm_lat": 13.3710379,
+      "osm_lon": 74.7464615,
+      "buffer_deg": 0.012,
+      "bbox": {
+        "min_lat": 13.359037899999999,
+        "min_lon": 74.7344615,
+        "max_lat": 13.3830379,
+        "max_lon": 74.7584615
+      }
+    },
+    {
+      "area_key": "IN|KA|Udupi|Adi-Udupi",
+      "name": "Adi-Udupi",
+      "osm_lat": 13.3477889,
+      "osm_lon": 74.731205,
+      "buffer_deg": 0.012,
+      "bbox": {
+        "min_lat": 13.335788899999999,
+        "min_lon": 74.719205,
+        "max_lat": 13.3597889,
+        "max_lon": 74.743205
+      }
+    }
+  ],
+  "source": "OpenStreetMap Nominatim (nominatim.openstreetmap.org/search), single lookups, structured query 'q=<locality>, Udupi, Karnataka, India'"
+}

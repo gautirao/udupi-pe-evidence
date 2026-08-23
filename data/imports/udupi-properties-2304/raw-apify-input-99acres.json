@@ -1,0 +1,32 @@
+{
+  "actor": "memo23/99acres-property-scraper",
+  "runs": [
+    {
+      "searchMode": "buy",
+      "runId": "fIrwnWzcmpvd5Z32d",
+      "datasetId": "PbUhXgoUbMHBAfNAI",
+      "input": {"city": "Udupi", "searchMode": "buy", "saleType": "resale", "includeProjects": false, "maxItems": 600, "scrapeDetails": false},
+      "note": "sourceUrl=https://www.99acres.com/property-in-udupi-ffid?transact_type=1 ; run log reported 'total 575' available buy listings city-wide, but this actor run/account combination capped output at 100 pushed (86 unique after internal dedup) despite maxItems=600 requested - see run log 'maxItems: 100 | perSearch: 1000 | totalCap: 100'."
+    },
+    {
+      "searchMode": "rent",
+      "runId": null,
+      "datasetId": "cofECahIws7D1I5pl",
+      "input": {"city": "Udupi", "searchMode": "rent", "includeProjects": false, "maxItems": 600, "scrapeDetails": false},
+      "note": "sourceUrl=https://www.99acres.com/property-for-rent-in-udupi-ffid ; run log reported 'total 94' - full coverage achieved, 94 pushed."
+    },
+    {
+      "searchMode": "commercial",
+      "runId": null,
+      "datasetId": "EPMOOOr9XjzsG9unM",
+      "input": {"city": "Udupi", "searchMode": "commercial", "includeProjects": false, "maxItems": 600, "scrapeDetails": false},
+      "note": "sourceUrl=https://www.99acres.com/commercial-property-in-udupi-ffid ; run log reported 'total 111' available, 100 pushed (capped, same free-tier-style limit as buy mode)."
+    }
+  ],
+  "notes": [
+    "See 99acres-coordinate-trust-report.md for the critical finding that 99acres frequently returns a locality-centroid coordinate rather than a genuine per-listing pin, and the trust rule applied (exclude any shared coordinate unless every sharer has the identical non-null buildingName/projectName).",
+    "See area-mapping-report-v2-99acres.md for area/type/envelope exclusion detail specific to the 99acres rows.",
+    "See cross-source-dedup-report.md for the Housing.com vs 99acres duplicate-detection pass.",
+    "'includeProjects: false' excludes 99acres' own promoted new-launch builder-project rows, matching the same exclusion rationale as Housing.com's propertyType='project' rows."
+  ]
+}

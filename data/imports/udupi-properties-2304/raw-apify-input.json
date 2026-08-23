@@ -1,0 +1,23 @@
+{
+  "actor": "hermandev/housing-com-property-scraper",
+  "runId": "8wYu2rHZkhJ3qUmlp",
+  "datasetId": "koaLjrInUaifFLpiL",
+  "input": {
+    "startUrls": [
+      { "url": "https://housing.com/in/buy/searches/M1Pfr64boix2ljchg8", "note": "Udupi district city-wide, Property Type = Apartment (207 listings)" },
+      { "url": "https://housing.com/in/buy/searches/M3kPfr64boix2ljchg8U354cxs", "note": "Udupi district city-wide, Property Type = Plot, price max nudged to ~19Cr (37 of 49 listings; all real plots are far below this ceiling)" },
+      { "url": "https://housing.com/in/buy/searches/D3Pfr64boix2ljchg8", "note": "Udupi district city-wide, Listed By = Agent+Owner (95 listings; adds Villa/Independent House/other types not covered by the Apartment/Plot searches)" },
+      { "url": "https://housing.com/rent/search-DzPfr64boix2ljchg8", "note": "Udupi district city-wide, Listed By = Agent+Owner+Featured Agents (52 listings expected; actor returned 0 - see note below)" }
+    ],
+    "maxItems": 500,
+    "maxPagesPerSearch": 20,
+    "enrichDetails": false,
+    "maxImages": 3
+  },
+  "notes": [
+    "All 4 startUrls are canonical /in/buy/searches/<HASH> or /rent/search-<HASH> URLs, obtained by applying a real filter in a live browser session against housing.com and reading the resulting canonical URL - never guessed or constructed by hand.",
+    "The rent URL returned 0 raw records from this actor (rawRecords:0 in the run log) despite 52 real rental listings being visible for the same search in a live browser session. This appears to be an actor-side limitation specific to the rent endpoint; buy/sale coverage is unaffected. Not chased further given Slice 1 is sale-focused; flagged for follow-up.",
+    "propertyType='project' rows (176 of 260 raw items) are excluded entirely from the import - see area-mapping-report.md.",
+    "No city-wide 'zero-filter' canonical URL covering all 405 Udupi buy listings in one request was found; the 3 buy URLs above are a union of type/lister facets that together cover the great majority of real inventory, deduplicated downstream by housingListingId."
+  ]
+}
