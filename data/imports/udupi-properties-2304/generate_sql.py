@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Issue #2304 Slice 1: generate import.sql / area-seed.sql / rollback.sql from normalised-listings.json."""
+"""Issue #2304 Slice 2: generate import.sql / area-seed.sql / rollback.sql from normalised-listings.json."""
 import json
 import os
 
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 IMPORT_ISSUE = 2304
-CREATED_BY = "c897318a-c850-6ee1-1db2-3a9537b0a3b4"  # md5('housing.com:udupi-import-2304') formatted as uuid, distinct from Bangalore's
+# Slice 2 (#2304): reuse an existing real dev-DB user (testdealer@example.com) as the listing
+# owner instead of Slice 1's synthetic profile UUID. Confirmed live on dev: auth.users row exists,
+# public.profiles row does not (see .claude/state/current-approved-plan.toml evidence).
+CREATED_BY = "e7b61f70-d087-44d8-a81d-7f8a057d2775"  # testdealer@example.com auth.users.id
+CREATED_BY_EMAIL = "testdealer@example.com"
+CREATED_BY_FULL_NAME = "Test Dealer"
 
 NEW_AREAS = [
     ("IN|KA|Udupi|Santhekatte", "Santhekatte", 13.3876323, 74.7389702, 0.012),
@@ -92,15 +97,15 @@ def main():
 
     # ---- import.sql ----
     with open(f"{OUT_DIR}/import.sql", "w") as f:
-        f.write("-- Data import: Udupi district listings (issue #2304 Slice 1, multi-source).\n")
+        f.write("-- Data import: Udupi district listings (issue #2304 Slice 2, multi-source).\n")
         f.write("-- Sources: hermandev/housing-com-property-scraper + memo23/99acres-property-scraper (Apify).\n")
         f.write(f"-- {len(listings)} deduplicated (incl. cross-source), coordinate-validated, schema-enum-mapped listings.\n")
         f.write("-- Idempotent: safe to re-run (ON CONFLICT DO NOTHING everywhere).\n")
-        f.write(f"-- Reversibility: see rollback.sql (DELETE keyed on created_by = '{CREATED_BY}').\n\n")
+        f.write(f"-- Reversibility: see rollback.sql (DELETE keyed on parsed_data->>'importIssue' = '{IMPORT_ISSUE}').\n\n")
         f.write("BEGIN;\n\n")
         f.write(
-            f"INSERT INTO public.profiles (id, user_id, email, full_name) VALUES "
-            f"('{CREATED_BY}', '{CREATED_BY}', 'housing-import-udupi@seed.local', 'Housing.com Udupi Import (seed)') "
+            f"INSERT INTO public.profiles (user_id, email, full_name) VALUES "
+            f"('{CREATED_BY}', {sql_str(CREATED_BY_EMAIL)}, {sql_str(CREATED_BY_FULL_NAME)}) "
             f"ON CONFLICT (user_id) DO NOTHING;\n\n"
         )
 
@@ -199,18 +204,25 @@ def main():
 
     # ---- rollback.sql ----
     with open(f"{OUT_DIR}/rollback.sql", "w") as f:
-        f.write("-- Rollback for issue #2304 Slice 1 Udupi import. Provenance-keyed DELETE.\n\n")
+        f.write("-- Rollback for issue #2304 Slice 2 Udupi import. Provenance-keyed DELETE.\n")
+        f.write(
+            "-- Does NOT delete the public.profiles row for the owner: that row belongs to a real, "
+            "pre-existing dev-DB account (testdealer@example.com), not a synthetic identity created by "
+            "this import, so rollback must not remove it.\n"
+        )
+        f.write(
+            "-- Keyed only on parsed_data->>'importIssue', NOT on created_by: created_by is now a real, "
+            "shared account that may own other (non-import) listings, so matching on created_by alone "
+            "would risk deleting listings this import did not create.\n\n"
+        )
         f.write("BEGIN;\n\n")
         f.write(
             f"DELETE FROM public.listing_images WHERE listing_id IN "
-            f"(SELECT id FROM public.property_listings WHERE created_by = '{CREATED_BY}' "
-            f"OR parsed_data->>'importIssue' = '{IMPORT_ISSUE}');\n\n"
+            f"(SELECT id FROM public.property_listings WHERE parsed_data->>'importIssue' = '{IMPORT_ISSUE}');\n\n"
         )
         f.write(
-            f"DELETE FROM public.property_listings WHERE created_by = '{CREATED_BY}' "
-            f"OR parsed_data->>'importIssue' = '{IMPORT_ISSUE}';\n\n"
+            f"DELETE FROM public.property_listings WHERE parsed_data->>'importIssue' = '{IMPORT_ISSUE}';\n\n"
         )
-        f.write(f"DELETE FROM public.profiles WHERE user_id = '{CREATED_BY}';\n\n")
         f.write("COMMIT;\n")
 
     print(f"Wrote import.sql ({len(listings)} listings), area-seed.sql ({len(NEW_AREAS)} areas), rollback.sql")
