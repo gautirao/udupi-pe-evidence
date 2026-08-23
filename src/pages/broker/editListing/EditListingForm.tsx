@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useUpdateListing, useSubmitListing } from '@/hooks/useBrokerListings';
 import type { ListingResponse } from '@/hooks/useBrokerListings';
@@ -196,9 +196,18 @@ export function EditListingForm({ listing }: EditListingFormProps) {
   // Images for thumbnail strip in step 4 review
   const { images: listingImages } = useListingImages(id);
 
+  // Tracks the id of the listing this form has already hydrated from. Guards
+  // the pre-populate effect below (#2294): `listing` is a fresh object on
+  // every refetch (e.g. useUpdateListing's onSuccess invalidateQueries), so
+  // object identity alone is not a safe re-hydration trigger — a same-id
+  // background refetch would otherwise wipe the broker's unsaved edits.
+  const hydratedListingIdRef = useRef<string | null>(null);
+
   // Pre-populate form once listing loads
   useEffect(() => {
     if (!listing) return;
+    if (listing.id === hydratedListingIdRef.current) return;
+    hydratedListingIdRef.current = listing.id;
     setTitle(listing.title ?? '');
     setDescription(listing.description ?? '');
     setPriceRupees(listing.price ?? null);
