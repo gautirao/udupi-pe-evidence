@@ -2,6 +2,19 @@
 """Issue #2304 Slice 2: generate import.sql / area-seed.sql / rollback.sql from normalised-listings.json."""
 import json
 import os
+import re
+
+# Housing.com image URLs use a literal "version" path segment (e.g. .../v0/version/foo.jpg)
+# that their own frontend substitutes client-side with a real size token (e.g. "original")
+# before requesting the image. The scraper captured the un-substituted template URL, so every
+# such URL 404/417s at the CDN. Fix: substitute the literal placeholder with "original", the
+# one token confirmed (via direct CDN request) to always resolve. 99acres URLs never match this
+# pattern and are left untouched.
+HOUSING_CDN_VERSION_PLACEHOLDER = re.compile(r"(/v\d+)/version(\.\w+|/)")
+
+
+def fix_photo_url(url):
+    return HOUSING_CDN_VERSION_PLACEHOLDER.sub(r"\1/original\2", url)
 
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 IMPORT_ISSUE = 2304
@@ -177,7 +190,8 @@ def main():
             ])
             f.write(f"INSERT INTO public.property_listings ({cols}) VALUES\n  ({values})\nON CONFLICT (id) DO NOTHING;\n")
 
-            for pos, url in enumerate((item.get("photoUrls") or [])[:6]):
+            for pos, raw_url in enumerate((item.get("photoUrls") or [])[:6]):
+                url = fix_photo_url(raw_url)
                 storage_path = f"external:{url}"
                 f.write(
                     f"INSERT INTO public.listing_images (id, listing_id, storage_path, url, position) VALUES "
