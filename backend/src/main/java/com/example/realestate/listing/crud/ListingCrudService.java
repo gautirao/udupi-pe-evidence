@@ -621,6 +621,90 @@ public class ListingCrudService {
     }
 
     /**
+     * Nulls out commercial scalar fields that do not belong to {@code resolvedSubtype} (#2289).
+     *
+     * <p>Mirrors the exact per-subtype field ownership enforced on input by {@link
+     * com.example.realestate.listing.api.ListingController#validateCommercialFieldSet} — a field
+     * this method clears here is the same field that gate would reject a client for supplying
+     * against this subtype. Kept in sync with that gate deliberately: both express the same
+     * "which fields belong to which commercial subtype" policy, one on the way in, one on the
+     * way out.
+     *
+     * <p>Without this, {@link #applyCommercialFields} — a pure "set-if-supplied" merge — leaves
+     * a prior subtype's values in place forever once written, because a PUT that switches
+     * subtype (e.g. OFFICE -> WAREHOUSE) legitimately omits the old subtype's fields from its
+     * payload (there is nothing to "supply" for a subtype the caller is moving away from).
+     *
+     * <p>No-op when {@code resolvedSubtype} is null (the ambiguous legacy {@code 'commercial'}
+     * property type, whose stored {@code commercial_subtype} is intentionally left NULL) —
+     * nothing structural can be resolved against an unknown subtype, mirroring the validation
+     * gate's own skip in that case.
+     *
+     * <p>Deliberately scoped to the per-subtype scalar/boolean columns only — the sale-vs-rent
+     * gate (leaseTermMonths/leaseEscalationPct vs expectedRentalYieldPct/currentMonthlyIncomePaise)
+     * is governed by listingPurpose, and {@code suitableUses} is governed by its own
+     * REPLACE-semantics writer, not by subtype, so both are out of scope for this method. The
+     * one exception is {@code utilities} for a LAND subtype: see the LAND branch below (#2289
+     * follow-up).
+     */
+    private void clearStaleCommercialSubtypeFields(
+            Listing listing, String resolvedSubtype, CommercialListingFields f) {
+        if (resolvedSubtype == null) {
+            return;
+        }
+        boolean isShopOrOffice = "SHOP".equals(resolvedSubtype) || "OFFICE".equals(resolvedSubtype);
+        if (!isShopOrOffice) {
+            listing.setFloorChoice(null);
+            listing.setHubType(null);
+        }
+        if (!"BUILDING".equals(resolvedSubtype)) {
+            listing.setFloorMode(null);
+            listing.setPowerLoadKva(null);
+        }
+        if (!"OFFICE".equals(resolvedSubtype)) {
+            listing.setOfficeSeats(null);
+            listing.setOfficeCabins(null);
+            listing.setOfficeMeetingRooms(null);
+        }
+        if (!"WAREHOUSE".equals(resolvedSubtype)) {
+            listing.setWarehouseClearHeightFt(null);
+            listing.setWarehouseLoadingBays(null);
+            listing.setWarehouseTruckAccess(null);
+            listing.setWarehouseFlooring(null);
+        }
+        if (!"LAND".equals(resolvedSubtype)) {
+            listing.setCommercialZoning(null);
+            listing.setCommercialOwnership(null);
+            listing.setCommercialApprovals(null);
+        } else {
+            // LAND: none of the built-space-only fields below apply.
+            listing.setWashroomsPublic(null);
+            listing.setWashroomsPrivate(null);
+            listing.setParkingPublicCount(null);
+            listing.setParkingPrivateCount(null);
+            listing.setCommercialFurnishingStatus(null);
+            // #2289 follow-up: `utilities` is LAND-excluded on input — validateCommercialFieldSet
+            // rejects a LAND payload that supplies it (rejectIfNonEmpty("utilities", ...)) — but
+            // it lives in the listing_amenities child table, not a scalar column, so it is written
+            // by writeCommercialChildSets, not this method. That writer only deletes+reinserts
+            // listing_amenities rows when the incoming utilities list is non-null; a natural
+            // subtype-switch-into-LAND PUT omits utilities entirely (there is nothing valid to
+            // supply for an excluded field), so without this explicit clear, amenity rows from
+            // whatever subtype the listing had before survive as stale, LAND-invalid data — the
+            // same root-cause bug as the scalar fields above, just in a child table instead of a
+            // column. Only fires when the caller left utilities unsupplied (null); an explicit
+            // non-null list (including []) is still respected by writeCommercialChildSets as-is.
+            if (f.utilities() == null && listing.getId() != null) {
+                listingAmenityRepository.deleteByListingId(listing.getId());
+            }
+        }
+        boolean isShopOrBuilding = "SHOP".equals(resolvedSubtype) || "BUILDING".equals(resolvedSubtype);
+        if (!isShopOrBuilding) {
+            listing.setOccupancyStatus(null);
+        }
+    }
+
+    /**
      * Writes the two multi-select commercial child sets (utilities, suitable uses) for a listing.
      * EDIT/REPLACE semantics — mirrors {@link #writeResidentialChildSets(UUID, ResidentialListingFields)}
      * exactly: a non-null list is the FINAL desired set (existing rows deleted first, then the new
@@ -1142,6 +1226,13 @@ public class ListingCrudService {
         // effective (post-update) property type. Independent of Java-side validation family.
         if (COMMERCIAL_PROPERTY_TYPES.contains(listing.getPropertyType())) {
             listing.setListingFamily("COMMERCIAL");
+            // #2289: null out any commercial scalar fields that do not belong to the resolved
+            // (post-update) commercial_subtype. Without this, a subtype change (e.g. an OFFICE
+            // listing whose propertyType/subtype is switched to WAREHOUSE with no OFFICE fields
+            // in the payload) leaves the previous subtype's fields (officeSeats, etc.) stored as
+            // stale, semantically-invalid data for the new subtype. applyCommercialFields above
+            // is a pure "set-if-supplied" merge and never clears anything on its own.
+            clearStaleCommercialSubtypeFields(listing, listing.getCommercialSubtype(), commercialFields);
         }
         // Family reset (#1734 cycle-2 fix, gate corrected in cycle-3): if the PRIOR family stamp
         // was one THIS CLASS owns (RESIDENTIAL/COMMERCIAL) and the effective (post-update)

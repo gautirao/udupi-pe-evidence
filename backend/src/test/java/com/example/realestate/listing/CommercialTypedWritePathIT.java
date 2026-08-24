@@ -301,6 +301,162 @@ class CommercialTypedWritePathIT {
     }
 
     @Test
+    @DisplayName("#2289: PUT that switches commercial subtype OFFICE -> WAREHOUSE (no OFFICE fields "
+            + "in payload, matching what the Edit UI actually sends per #2281) nulls out the stale "
+            + "OFFICE-only fields instead of leaving them persisted for the new subtype")
+    void updateListing_commercialSubtypeSwitch_officeToWarehouse_clearsStaleOfficeFields() {
+        CommercialListingFields officeFields = new CommercialListingFields(
+                "OFFICE", "UPPER_FLOOR", null, "IT_PARK",
+                null, null, null, null,
+                40, 4, 2,
+                null, null,
+                null, null, null, null,
+                null, null, null,
+                null, null,
+                null, null,
+                "FURNISHED", null, "SQ_FT",
+                List.of("IT_TECH"), List.of("INTERNET", "AC"));
+
+        Listing saved = crudService.createDraft(
+                OWNER_ID, "commercial", "Tech office", "Udupi",
+                new BigDecimal("5000000"), "Office space", null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
+                ResidentialListingFields.EMPTY, officeFields);
+
+        Listing beforeUpdate = listingRepository.findById(saved.getId()).orElseThrow();
+        assertThat(beforeUpdate.getOfficeSeats()).isEqualTo(40);
+        assertThat(beforeUpdate.getCommercialSubtype()).isEqualTo("OFFICE");
+
+        // PUT transitioning to WAREHOUSE — the resolved (post-derivation) subtype is WAREHOUSE and
+        // the payload carries only WAREHOUSE-specific fields, exactly as the real controller would
+        // construct CommercialListingFields for a "propertyType": "warehouse" request with no
+        // OFFICE fields supplied (see ListingController#resolveCommercialSubtype).
+        CommercialListingFields warehouseFields = new CommercialListingFields(
+                "WAREHOUSE", null, null, null,
+                null, null, null, null,
+                null, null, null,
+                null, null,
+                new BigDecimal("24"), 3, true, "TRIMIX",
+                null, null, null,
+                null, null,
+                null, null,
+                null, null, "SQ_FT",
+                null, null);
+
+        Listing updated = crudService.updateListing(
+                saved.getId(), OWNER_ID, false,                             // listingId, userId, isAdmin
+                "warehouse", null, null,                                    // propertyType, title, locality
+                null, null,                                                 // price, description
+                null, null, null,                                          // landArea, bedrooms, builtArea
+                null, null, null,                                          // addressConfirmed, latitude, longitude
+                null, null,                                                 // landAreaUnit, builtAreaUnit
+                null, false, null,                                         // videoUrl, applyVideoUrl, reraNumber
+                null, null, null,                                          // listingPurpose, carpetArea, carpetAreaUnit
+                null, null,                                                 // floorNumber, totalFloors
+                null, null, null,                                          // furnishingStatus, washrooms, parkingCount
+                null, null, null,                                          // roadFrontageFt, commercialUsage, numberOfUnits
+                null, null, null,                                          // monthlyRent, securityDepositMonths, lockInMonths
+                null, null, null,                                          // possessionStatus, expectedPossessionDate, approvalsDeclared
+                null, null, null,                                          // waterSource, soilType, roadAccess
+                null, null, null,                                          // cultivationStatus, ownershipType, surveyNumber
+                null, null, null, null,                                    // landCategory, agriConversionStatus, farmhouseAvailable, fencingDone
+                null,                                                       // boundaryGeoJson
+                ResidentialListingFields.EMPTY, warehouseFields);
+
+        assertThat(updated.getCommercialSubtype()).isEqualTo("WAREHOUSE");
+        assertThat(updated.getWarehouseClearHeightFt()).isEqualByComparingTo("24");
+        assertThat(updated.getWarehouseLoadingBays()).isEqualTo(3);
+
+        assertThat(updated.getOfficeSeats())
+                .as("#2289: stale OFFICE-only field must be nulled out after subtype switch to WAREHOUSE")
+                .isNull();
+        assertThat(updated.getOfficeCabins()).isNull();
+        assertThat(updated.getOfficeMeetingRooms()).isNull();
+        assertThat(updated.getFloorChoice())
+                .as("#2289: stale SHOP/OFFICE-only field must be nulled out")
+                .isNull();
+        assertThat(updated.getHubType()).isNull();
+
+        Listing fromDb = listingRepository.findById(saved.getId()).orElseThrow();
+        assertThat(fromDb.getOfficeSeats()).isNull();
+        assertThat(fromDb.getWarehouseClearHeightFt()).isEqualByComparingTo("24");
+    }
+
+    @Test
+    @DisplayName("#2289 follow-up: PUT that switches commercial subtype OFFICE -> LAND (utilities "
+            + "omitted from the payload, since LAND rejects utilities on input) clears the stale "
+            + "listing_amenities rows instead of leaving them persisted for the LAND-excluded field")
+    void updateListing_commercialSubtypeSwitch_officeToLand_clearsStaleUtilitiesChildRows() {
+        CommercialListingFields officeFields = new CommercialListingFields(
+                "OFFICE", "UPPER_FLOOR", null, "IT_PARK",
+                null, null, null, null,
+                40, 4, 2,
+                null, null,
+                null, null, null, null,
+                null, null, null,
+                null, null,
+                null, null,
+                "FURNISHED", null, "SQ_FT",
+                List.of("IT_TECH"), List.of("INTERNET", "AC"));
+
+        Listing saved = crudService.createDraft(
+                OWNER_ID, "commercial", "Tech office", "Udupi",
+                new BigDecimal("5000000"), "Office space", null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null, null,
+                ResidentialListingFields.EMPTY, officeFields);
+
+        assertThat(listingAmenityRepository.findByListingIdOrderByCodeAsc(saved.getId()))
+                .as("sanity: OFFICE draft persisted its utilities via listing_amenities")
+                .hasSize(2);
+
+        // PUT transitioning to commercial_land — the resolved subtype is LAND, and the payload
+        // omits `utilities` entirely (null), exactly as a real request must: LAND rejects a
+        // non-empty `utilities` on input (validateCommercialFieldSet), so there is nothing valid
+        // for the caller to supply for this now-excluded field.
+        CommercialListingFields landFields = new CommercialListingFields(
+                "LAND", null, null, null,
+                null, null, null, null,
+                null, null, null,
+                null, null,
+                null, null, null, null,
+                "Mixed-use commercial zone", "FREEHOLD", "DC converted",
+                null, null,
+                null, null,
+                null, null, "ACRE",
+                null, null);
+
+        Listing updated = crudService.updateListing(
+                saved.getId(), OWNER_ID, false,                             // listingId, userId, isAdmin
+                "commercial_land", null, null,                              // propertyType, title, locality
+                null, null,                                                 // price, description
+                null, null, null,                                          // landArea, bedrooms, builtArea
+                null, null, null,                                          // addressConfirmed, latitude, longitude
+                null, null,                                                 // landAreaUnit, builtAreaUnit
+                null, false, null,                                         // videoUrl, applyVideoUrl, reraNumber
+                null, null, null,                                          // listingPurpose, carpetArea, carpetAreaUnit
+                null, null,                                                 // floorNumber, totalFloors
+                null, null, null,                                          // furnishingStatus, washrooms, parkingCount
+                null, null, null,                                          // roadFrontageFt, commercialUsage, numberOfUnits
+                null, null, null,                                          // monthlyRent, securityDepositMonths, lockInMonths
+                null, null, null,                                          // possessionStatus, expectedPossessionDate, approvalsDeclared
+                null, null, null,                                          // waterSource, soilType, roadAccess
+                null, null, null,                                          // cultivationStatus, ownershipType, surveyNumber
+                null, null, null, null,                                    // landCategory, agriConversionStatus, farmhouseAvailable, fencingDone
+                null,                                                       // boundaryGeoJson
+                ResidentialListingFields.EMPTY, landFields);
+
+        assertThat(updated.getCommercialSubtype()).isEqualTo("LAND");
+        assertThat(updated.getCommercialZoning()).isEqualTo("Mixed-use commercial zone");
+
+        assertThat(listingAmenityRepository.findByListingIdOrderByCodeAsc(saved.getId()))
+                .as("#2289 follow-up: stale listing_amenities (utilities) rows from the prior OFFICE "
+                        + "subtype must not survive a switch to LAND, which excludes utilities entirely")
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("AC6: legacy commercial_subtype=NULL row (simulated V102 backfill) reads back cleanly; "
             + "PUT omitting commercialSubtype leaves it NULL while another field changes")
     void legacyNullSubtypeRow_readsBackCleanly_andPutOmittingSubtypeLeavesItUnchanged() {
