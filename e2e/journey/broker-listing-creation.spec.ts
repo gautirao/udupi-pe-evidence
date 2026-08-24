@@ -29,6 +29,29 @@
  * modal (after photos, once listingId exists) instead of driving a single
  * embedded InlineLocation widget.
  *
+ * Issue #2062 repair: since #1746 (shipped in #1719/#1724's wake),
+ * `/broker/listings/new` no longer lands directly on the residential form —
+ * it renders `NewListingJourneySelector` (a journey picker for
+ * residential/commercial/agricultural), and the property-type radios this
+ * spec drives moved to the dedicated deep-link route
+ * `/broker/listings/new/residential`. This spec was last touched in #1724,
+ * before that route split (#1719/#1746), so `page.goto('/broker/listings/new')`
+ * followed immediately by `getByRole('radio', { name: 'House' })` timed out —
+ * silently stale for two releases. Section 1 below now drives the real
+ * current journey: land on the selector, click "Create residential listing"
+ * (the journey card's accessible name — see JOURNEYS[].cta in
+ * NewListingJourneySelector.tsx) to navigate into
+ * `/broker/listings/new/residential`, then pick the subtype radio as before.
+ *
+ * Issue #2062 also adds the reload-recovery assertion deferred out of #2039
+ * (draft-recovery via `?draftId=` — see ResidentialListingForm.tsx's
+ * `initialDraftId`/hydrate-effect and ResidentialNewListingPage.tsx's
+ * `handleDraftPersisted`): after the draft is created and its id captured,
+ * the test reloads the page at the same `?draftId=<id>` URL the app itself
+ * stashes into history on first save, and asserts the SAME draft — not a
+ * blank form — is restored (title + price, both hydrated fields per
+ * ResidentialListingForm's one-shot hydrate effect).
+ *
  * Prerequisites:
  *   - BROKER_EMAIL / BROKER_PASSWORD must be set
  *   - ADMIN_EMAIL / ADMIN_PASSWORD must be set (teardown uses the admin
@@ -202,13 +225,20 @@ for (const subtype of SUBTYPES) {
     });
 
     // -------------------------------------------------------------------------
-    // Section 1 — Property type & purpose (/broker/listings/new lands directly
-    // on ResidentialListingForm; default type is Apartment, so pick the subtype
-    // under test via its PropertyTypeCardSelector radio card).
+    // Section 1 — Journey selector, then property type & purpose. Since #1746,
+    // /broker/listings/new lands on NewListingJourneySelector (a picker for
+    // residential/commercial/agricultural), not the form directly — so pick
+    // "Residential" first, which navigates to /broker/listings/new/residential
+    // (see JOURNEYS[].cta / .path in NewListingJourneySelector.tsx). Only then
+    // does ResidentialListingForm mount (default type Apartment), so pick the
+    // subtype under test via its PropertyTypeCardSelector radio card.
     // -------------------------------------------------------------------------
 
     await page.goto('/broker/listings/new');
     await page.waitForLoadState('domcontentloaded');
+
+    await page.getByRole('button', { name: 'Create residential listing', exact: true }).click();
+    await page.waitForURL('**/broker/listings/new/residential**');
 
     await page.getByRole('radio', { name: subtype.radioName, exact: true }).click();
 
@@ -291,6 +321,35 @@ for (const subtype of SUBTYPES) {
     const created = await createResponse.json() as { id: string };
     createdListingId = created.id;
     console.log(`[DL1:${subtype.key}] Created listing: ${createdListingId}`);
+
+    // -------------------------------------------------------------------------
+    // Issue #2062 — reload-recovery assertion (closes the coverage gap
+    // deferred out of #2039). The app itself stashes `?draftId=<id>` into the
+    // URL via history REPLACE right after this first successful save (see
+    // ResidentialNewListingPage.tsx's handleDraftPersisted) — reload at that
+    // SAME URL here (a real full-page reload, not client-side navigation) and
+    // assert the SAME draft is restored: title + price (both hydrated by
+    // ResidentialListingForm's one-shot hydrate effect from the fetched
+    // draft), not a blank Step-1 form. Capture the pre-reload values first —
+    // #price re-renders formatted lakh/crore text, so comparing against the
+    // exact pre-reload string is more robust than re-asserting the raw "50
+    // lakh" input text.
+    // -------------------------------------------------------------------------
+
+    const titleBeforeReload = await page.locator('#title').inputValue();
+    const priceBeforeReload = await page.locator('#price').inputValue();
+    expect(titleBeforeReload, 'sanity: title should be populated before reload').not.toBe('');
+    expect(priceBeforeReload, 'sanity: price should be populated before reload').not.toBe('');
+
+    await page.goto(`/broker/listings/new/residential?draftId=${createdListingId}`);
+    await page.waitForLoadState('domcontentloaded');
+
+    const titleAfterReload = page.locator('#title');
+    await expect(titleAfterReload).toBeVisible({ timeout: 15_000 });
+    await expect(titleAfterReload).not.toHaveValue('', { timeout: 15_000 });
+    await expect(titleAfterReload).toHaveValue(titleBeforeReload);
+    await expect(page.locator('#price')).toHaveValue(priceBeforeReload);
+    console.log(`[DL1:${subtype.key}] Reload-recovery confirmed: draft ${createdListingId} restored (not blank).`);
 
     // -------------------------------------------------------------------------
     // Section 6 — Photos (InlinePhotos -> ImageUploader), mounted inline now
