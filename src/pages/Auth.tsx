@@ -7,7 +7,7 @@ import { AuthForms } from '@/components/auth/AuthForms';
 import { getRoleAwareDefaultLanding, getSafeReturnTo } from '@/lib/authUtils';
 
 export default function Auth() {
-  const { user, isAdmin, isBroker } = useAuth();
+  const { user, isAdmin, isBroker, isLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -22,11 +22,16 @@ export default function Auth() {
   const explicitTarget = safeReturnTo ?? stateFrom;
 
   useEffect(() => {
+    // Wait for the async role fetch (isLoading) to resolve before deciding
+    // the landing target — isAdmin/isBroker are still default-false while it
+    // is in flight, so redirecting early always sends elevated roles to
+    // /discover instead of their real role landing page (#2238).
+    if (isLoading) return;
     if (user) {
       const target = explicitTarget ?? getRoleAwareDefaultLanding(user, isAdmin, isBroker);
       navigate(target, { replace: true });
     }
-  }, [user, navigate, explicitTarget, isAdmin, isBroker]);
+  }, [user, navigate, explicitTarget, isAdmin, isBroker, isLoading]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-secondary/30 to-accent/10 p-4">
