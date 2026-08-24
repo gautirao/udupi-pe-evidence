@@ -39,6 +39,9 @@ export const NAVY_700 = '#26395B';
 export const PAPER = '#FFFFFF';
 export const COPPER_500 = '#B05C3A';
 export const COPPER_600 = '#934B2D';
+// Accent tint (colors.css:22, --copper-100) — Option B cluster-marker footer
+// hover tint, Issue #2305.
+export const COPPER_100 = '#F2E8E1';
 export const PLUM_600 = '#5E5286';
 export const PLUM_100 = '#DED7EC';
 export const EVERGREEN_600 = '#1F7A5C';

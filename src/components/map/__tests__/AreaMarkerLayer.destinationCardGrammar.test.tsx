@@ -68,6 +68,7 @@ import { AreaDestinationMarkerLayer } from '../AreaMarkerLayer';
 import {
   NAVY_800,
   PAPER,
+  COPPER_500,
   COPPER_600,
   PLUM_600,
   FONT_SANS,
@@ -336,8 +337,23 @@ describe('AC8 — quote-escaping regression (Issue #2088 item 2b root cause)', (
   });
 });
 
-describe('AC8 — school-first destination-adjacent (dashed AREA cluster) grammar stays plum, UNCHANGED by item 2b (regression guard)', () => {
-  it('a school-first dense-AREA visual cluster still renders PLUM_600, never navy — item 2b did not touch this branch', () => {
+describe('AC8 — school-first destination-adjacent (dense AREA visual cluster) grammar stays plum, UNCHANGED by item 2b (regression guard)', () => {
+  // Issue #2305 STAGE 2 repair (authorized post-implementation, see
+  // approved-execution-handoff.toml plan_scope.allowed_changes) — this test
+  // used to pin the pre-Option-B markup (`1.5px dashed ${PLUM_600}` on the
+  // card's own border, and a blanket "the html never contains NAVY_800").
+  // Option B (`visualClusterCardHtml`) deliberately replaces that dashed
+  // border with a fixed navy `.rc-shell` background used for EVERY journey
+  // (NAVY_800 legitimately appears in the rendered HTML now — it is the
+  // hero-section background, not an accent) plus an accent-coloured
+  // `.rc-footer` text/chevron and `.rc-tail` triangle. The old blanket
+  // `not.toContain(NAVY_800)` assertion would now fail for the WRONG reason
+  // (the legitimate navy hero background), so this repair narrows the
+  // assertion to where the accent actually paints — the footer text color
+  // and the tail — proving school-first still resolves to PLUM_600 there,
+  // never COPPER_500, while still reading the actual rendered HTML string
+  // handed to Leaflet (never markerTokens.ts's own exports).
+  it('a school-first dense-AREA visual cluster still renders PLUM_600 in the accent-bearing footer/tail, never copper — item 2b\'s intent (plum for schools) survives the Option-B rewrite', () => {
     const members = [1, 2, 3, 4].map((i) => ({
       raw: {
         nodeKey: `a:m${i}`,
@@ -369,7 +385,17 @@ describe('AC8 — school-first destination-adjacent (dashed AREA cluster) gramma
       />,
     );
     expect(divIconHtmlCalls).toHaveLength(1);
-    expect(divIconHtmlCalls[0]).toContain(`1.5px dashed ${PLUM_600}`);
-    expect(divIconHtmlCalls[0]).not.toContain(NAVY_800);
+    const html = divIconHtmlCalls[0];
+    // The accent-bearing footer text/chevron resolve to PLUM_600, not COPPER_500.
+    expect(html).toMatch(new RegExp(`color:${PLUM_600};">Zoom in`));
+    // The accent-coloured tail triangle resolves to PLUM_600, not COPPER_500.
+    expect(html).toContain(`border-top:7px solid ${PLUM_600}`);
+    // Never the residential accent, anywhere in this school-first card.
+    expect(html).not.toContain(COPPER_500);
+    // The hero section's OWN background is still the fixed NAVY_800 (Option
+    // B's design, not an accent) — asserted positively rather than banned,
+    // so this test cannot be satisfied by a blank/broken card that happens
+    // to omit navy for the wrong reason.
+    expect(html).toContain(`background:${NAVY_800};color:#fff`);
   });
 });

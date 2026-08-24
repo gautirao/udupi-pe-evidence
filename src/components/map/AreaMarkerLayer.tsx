@@ -43,9 +43,12 @@ import { estimateDestinationCardFootprint } from '@/features/discover/navigation
 import {
   PAPER,
   NAVY_800,
+  COPPER_500,
   COPPER_600,
+  PLUM_600,
   FONT_SANS,
   FONT_MONO,
+  RADIUS_LG,
   RADIUS_FULL,
   SHADOW_MD,
   SHADOW_LG,
@@ -60,6 +63,9 @@ import {
   MARKER_SHELL_STYLE,
   markerInteractiveAttrs,
   cardContainerStyle,
+  visualClusterCardHtml,
+  VISUAL_CLUSTER_CARD_WIDTH_PX,
+  VISUAL_CLUSTER_CARD_HEIGHT_PX,
 } from './markerPrimitives';
 
 /**
@@ -203,6 +209,20 @@ const C_COPPER_TINT = '#F2E8E1';
 const C_PLUM = '#5E5286';
 // Leader-line / anchor-dot navy (design-spec §1: "navy, white ring"; plum on school layers).
 const C_NAVY = '#1B2A45';
+// FIX cycle 2 (real-browser QA, post-N3) — mirrors index.css:465's
+// `.area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"]
+// :focus-within .rc-shell { box-shadow: ... !important; }` lift-shadow value
+// EXACTLY. That stylesheet rule is `!important` and targets `.rc-shell`
+// directly, so once N3 moved the keyboard-focus ring's inline box-shadow
+// onto `.rc-shell` too, this author rule started OUTRANKING the ring's plain
+// (non-`!important`) inline value the moment the browser actually applied
+// the real stylesheet — invisible in jsdom (index.css is never loaded
+// there), only surfaced by real-browser QA. No importable JS symbol exists
+// for this CSS literal (it lives only in index.css, never exported), so it
+// is re-typed here with this comment pointing at the source of truth — the
+// same documented, deliberate exception this file already takes for
+// C_NAVY/C_PAPER/etc, which also have no shared token module.
+const RC_SHELL_FOCUS_LIFT_SHADOW = '0 14px 28px rgba(18, 24, 38, 0.38)';
 const MONO = `'Geist Mono', ui-monospace, 'SF Mono', monospace`;
 const PILL_SHADOW = '0 4px 10px rgba(17,24,39,0.10), 0 2px 4px rgba(17,24,39,0.05)';
 // Issue #2088 item 2b — markerTokens.ts's FONT_SANS/FONT_MONO are byte-parity-tested
@@ -855,6 +875,23 @@ function makeAreaVisualClusterCard(
    * unchanged membership.
    */
   membershipKey: string,
+  /**
+   * Issue #2305 STAGE 2 (P3) — whether this cluster is the caller's current
+   * focused/selected cluster (`focusedMembers != null` at the 'areas' call
+   * site; always `false` at the 'clusters'/'directions' call site, which has
+   * no equivalent focus concept). Threaded straight into
+   * `visualClusterCardHtml`'s double-ring treatment AND into
+   * `markerInteractiveAttrs`'s `data-selected` (only when true — omitted
+   * otherwise, matching every other marker's "omit when not applicable"
+   * contract, same as before this stage).
+   */
+  isFocusedSelected: boolean,
+  /**
+   * Issue #2305 STAGE 2 — pre-assembled `data-journey="schools"` (or `''`
+   * for residential), mirroring how `accent` is already precomputed by the
+   * caller rather than re-derived from journey inside this builder.
+   */
+  journeyAttr: string,
 ): L.DivIcon {
   // UD-1/UD-3 (fix-cycle-3) — this is the other grid-clustered card builder;
   // same fixed-width-to-the-shared-footprint-constant + truncation contract
@@ -868,43 +905,56 @@ function makeAreaVisualClusterCard(
   const namesLabel = escapeHtml(shortNames.join(', '));
   const fullNamesLabel = escapeHtml(representativeNames.join(', '));
   const anyNameTruncated = shortNames.some((short, i) => short !== representativeNames[i]);
-  const titleAttr = anyNameTruncated ? ` title="${fullNamesLabel}"` : '';
+  // No leading space here (unlike the legacy dashed-card titleAttr this
+  // replaces) — `visualClusterCardHtml` prepends its own separating space
+  // when placing this on `.rc-shell` (see its own doc).
+  const titleAttr = anyNameTruncated ? `title="${fullNamesLabel}"` : '';
   const listingsLabel = escapeHtml(formatListingCount(totalListingCount));
   const countLabelHtml = escapeHtml(countLabel);
   const ariaLabel = `${fullNamesLabel}, ${countLabelHtml}, ${listingsLabel}`;
-  const cardWidthPx = AREA_CARD_FOOTPRINT_WIDTH_PX;
-  const nameMaxWidthPx = cardWidthPx - 24 /* padding */ - 12 /* icon */ - 6 /* gap */ - 3 /* border */;
+
+  // Issue #2305 STAGE 2 (P1, Gate F) — the hero number/unit split and the
+  // zero-count guard phrase are the two NEWLY-DERIVED fields Option B needs
+  // that have no existing escaped line to copy from (every other field above
+  // already went through `escapeHtml` before this stage). Escaped
+  // individually here, matching the discipline every other field on this
+  // card follows — the zero-phrase reuses the already-escaped `listingsLabel`
+  // rather than re-typing the locked 'No listings yet' string a second time
+  // (formatListingCount owns that string; never duplicated here).
+  const heroNumberHtml =
+    totalListingCount > 0 ? escapeHtml(totalListingCount.toLocaleString('en-IN')) : undefined;
+  const heroUnitHtml =
+    totalListingCount > 0 ? escapeHtml(totalListingCount === 1 ? 'listing' : 'listings') : undefined;
+  const zeroPhraseHtml = totalListingCount > 0 ? undefined : listingsLabel;
+
   // Issue #2088 (commits 2+3) — ported to the shared markerPrimitives
   // fragments + markerTokens constants (byte-identical for every attribute
   // that existed before this issue), PLUS the new `data-node-key` (commit 3
   // — see this function's parameter doc above for why it is prefixed and
-  // safe). No `selected` state exists for a visual cluster, so that
-  // attribute is correctly omitted (matches every other marker's contract:
-  // omitted when not applicable).
+  // safe). `selected` is only set when this cluster is actually focused —
+  // omitted otherwise, matching every other marker's contract (omitted when
+  // not applicable).
   const clusterShellAttrs = markerInteractiveAttrs({
     testId: 'area-visual-cluster-marker',
     nodeKey: `visual-cluster:${escapeHtml(membershipKey)}`,
+    selected: isFocusedSelected || undefined,
     ariaLabel,
   });
-  const clusterCardStyle = cardContainerStyle({
-    radiusPx: 14,
-    background: PAPER,
-    borderCss: `1.5px dashed ${accent}`,
-    boxShadow: PILL_SHADOW,
-    widthPx: cardWidthPx,
-    boxSizingBorderBox: true,
+  const html = visualClusterCardHtml({
+    shellAttrs: clusterShellAttrs,
+    titleAttr,
+    namesHtml: namesLabel,
+    heroNumberHtml,
+    heroUnitHtml,
+    zeroPhraseHtml,
+    pillHtml: countLabelHtml,
+    accent,
+    widthPx: VISUAL_CLUSTER_CARD_WIDTH_PX,
+    isFocusedSelected,
+    journeyAttr,
+    fontSansAttr: FONT_SANS_ATTR,
+    fontMonoAttr: FONT_MONO_ATTR,
   });
-  const html = `<div ${clusterShellAttrs} style="${MARKER_SHELL_STYLE}">
-    <div${titleAttr} style="${clusterCardStyle}">
-      <div style="display:flex;align-items:center;gap:6px;">
-        ${stackSvg(accent)}
-        <span style="font-size:12.5px;font-weight:700;color:${C_INK};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameMaxWidthPx}px;">${namesLabel}</span>
-      </div>
-      <span style="font-size:10.5px;font-weight:600;color:${accent};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${countLabelHtml}</span>
-      <span style="font-size:10.5px;font-weight:600;color:${C_MUTED};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${listingsLabel}</span>
-      <span style="font-family:${MONO};font-size:9.5px;font-weight:600;color:${accent};">Tap to zoom &rsaquo;</span>
-    </div>
-  </div>`;
   return L.divIcon({ className: 'area-visual-cluster-marker-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
 }
 
@@ -1078,7 +1128,33 @@ export function AreaDestinationMarkerLayer({
         footprintHeightPx = Math.max(footprintHeightPx, estimate.heightPx);
       }
 
-      const destinationAccent = journey === 'school-first' ? C_PLUM : C_NAVY;
+      // FIX B1 (main-agent-ruling-b1-footprint-floor.toml) — P1's rewrite of
+      // `makeAreaVisualClusterCard` into the shared Option-B builder means
+      // THIS 'clusters'/'directions' path can now also paint the fixed
+      // 172x140 Option-B card (see the call below), while the estimate loop
+      // above still sizes the batch footprint from
+      // `estimateDestinationCardFootprint`, which can return as little as
+      // `BASE_HEIGHT_PX` (120) when every child's schoolCount is null/0 — 20px
+      // UNDER the 140px a real Option-B card can paint. An under-estimate is
+      // the one direction that breaks the no-overlap invariant
+      // (areaClustering.ts:177-179: an over-estimate merely causes an extra,
+      // accepted merge). Floor the batch footprint with the SAME Option-B
+      // constants already imported above for the 'areas' site (never a
+      // re-typed literal) so this batch bound always covers the card it can
+      // actually emit.
+      footprintWidthPx = Math.max(footprintWidthPx, VISUAL_CLUSTER_CARD_WIDTH_PX);
+      footprintHeightPx = Math.max(footprintHeightPx, VISUAL_CLUSTER_CARD_HEIGHT_PX);
+
+      // Issue #2305 STAGE 2 (P2, main-agent-ruling-accent-scope.toml) — this
+      // 'clusters'/'directions' visual-cluster accent must flip to COPPER_500
+      // in lockstep with the 'areas' site below: P1 rewrote BOTH call sites'
+      // shared builder onto the same Option B markup, so leaving only one
+      // site flipped would ship a copper-vs-navy divergence between levels
+      // that does not exist on main today. Supersedes the #2088-AC8 comment
+      // that used to justify C_NAVY here — that rationale predates Option B
+      // and no longer governs this call site.
+      const destinationAccent = journey === 'school-first' ? PLUM_600 : COPPER_500;
+      const destinationJourneyAttr = journey === 'school-first' ? 'data-journey="schools"' : '';
       const clusterResult = clusterAreaMembers(destinationMembers, project, areasZoomTick, {
         footprintWidthPx,
         footprintHeightPx,
@@ -1150,6 +1226,10 @@ export function AreaDestinationMarkerLayer({
           totalListingCount,
           destinationAccent,
           membershipKey,
+          // No focus concept exists for a 'clusters'/'directions' visual
+          // cluster (unlike the 'areas' site below) — never focused.
+          false,
+          destinationJourneyAttr,
         );
         desired.set(`cluster:${membershipKey}`, {
           latlng: [cell.anchor.lat, cell.anchor.lon],
@@ -1260,19 +1340,47 @@ export function AreaDestinationMarkerLayer({
         ? clusterable.filter((m) => focusedMembers.includes(m.areaKey))
         : clusterable;
 
-      const clusterResult = clusterVisibleAreaMembers(scoped, eligibilityJourney, project, areasZoomTick);
-      // Issue #2088 item 2 (AC8) — the residential dashed visual-cluster
-      // card must use the mock's navy accent (ExpMap.jsx's clusterChipHTML:
-      // `1.5px dashed var(--navy-800)`), not copper. C_NAVY (#1B2A45) is
-      // this file's existing navy literal, already used by the leader-line/
-      // anchor-dot below and equal to markerTokens.NAVY_800. Only THIS
-      // canonical (AreaDestinationMarkerLayer) dashed-cluster call site
-      // changes — the legacy dense-degradation AreaMarkerLayer's separate
-      // `accent` (used by makeDotIcon/makeClusterIcon further below) is
-      // deliberately untouched: that code path is not the mock-governed AC8
-      // grammar this item targets, and Issue #2088 item 3 requires the
-      // legacy path to stay reachable/unmodified.
-      const accent = journey === 'school-first' ? C_PLUM : C_NAVY;
+      // Issue #2305 STAGE 2 (P5) — the Option B card's fixed footprint,
+      // never a locally re-typed literal (areaClustering.ts:172's drift
+      // warning): the SAME `VISUAL_CLUSTER_CARD_WIDTH_PX`/`_HEIGHT_PX`
+      // exported from markerPrimitives.ts also feeds the card's own painted
+      // `widthPx` below.
+      //
+      // CORRECTED (fix N2, main-agent-ruling-b1-footprint-floor.toml) — the
+      // comment that used to stand here claimed `AREA_CARD_FOOTPRINT_WIDTH_PX`/
+      // `_HEIGHT_PX` (110/100) "still govern makeSingleAreaChildCard's
+      // single-member cells via this same clusterResult — only the
+      // multi-member merge geometry changes". That was FALSE:
+      // `areaClustering.ts:358-359` resolves the footprint override ONCE for
+      // the whole clustering pass, so every cell in `clusterResult` — single-
+      // member cells included — is reasoned about at 172x140 during grouping,
+      // even though a single-member cell still PAINTS at the smaller
+      // 110x100 `AREA_CARD_FOOTPRINT_*` size via `makeSingleAreaChildCard`
+      // below. Net effect: two single areas that would have stayed separate
+      // under the old 110x100 grouping footprint can now merge into one
+      // visual cluster instead. This is a real density change, not a no-op —
+      // accepted as the safe/conservative direction (an extra merge, never a
+      // missed one, per areaClustering.ts:177-179), same disposition as B1's
+      // fix at the 'clusters'/'directions' call site above.
+      const clusterResult = clusterVisibleAreaMembers(scoped, eligibilityJourney, project, areasZoomTick, {
+        footprintWidthPx: VISUAL_CLUSTER_CARD_WIDTH_PX,
+        footprintHeightPx: VISUAL_CLUSTER_CARD_HEIGHT_PX,
+      });
+      // Issue #2305 STAGE 2 (P2, main-agent-ruling-accent-scope.toml) —
+      // supersedes the #2088-AC8 comment that used to justify C_NAVY here.
+      // Item 2 (AC8) originally made the residential dashed visual-cluster
+      // card navy instead of copper; Option B (this issue) replaces that
+      // dashed-card markup entirely, and the user ruled that BOTH
+      // `makeAreaVisualClusterCard` call sites (this one and the
+      // 'clusters'/'directions' site above) flip to COPPER_500 together —
+      // P1's shared-builder rewrite means leaving only one flipped would
+      // ship a copper-vs-navy divergence between levels that doesn't exist
+      // on main today. The legacy dense-degradation AreaMarkerLayer's
+      // separate `accent` (used by makeDotIcon/makeClusterIcon further
+      // below) remains deliberately untouched — not the mock-governed AC8
+      // grammar this item ever targeted, per Issue #2088 item 3.
+      const accent = journey === 'school-first' ? PLUM_600 : COPPER_500;
+      const journeyAttr = journey === 'school-first' ? 'data-journey="schools"' : '';
 
       for (const cell of clusterResult.clusters) {
         if (cell.members.length === 1) {
@@ -1302,6 +1410,13 @@ export function AreaDestinationMarkerLayer({
             totalListingCount,
             accent,
             membershipKey,
+            // Issue #2305 STAGE 2 (P3) — this cluster is the current
+            // focused/selected one exactly when a controlled focus is set at
+            // all: a focused render's `scoped`/clusterResult only ever
+            // contains the focused members, so every cell rendered here IS
+            // the focused cluster whenever `focusedMembers` is non-null.
+            focusedMembers != null,
+            journeyAttr,
           );
           desired.set(`cluster:${membershipKey}`, {
             latlng: [cell.anchor.lat, cell.anchor.lon],
@@ -1358,33 +1473,140 @@ export function AreaDestinationMarkerLayer({
         // UD-2 (fix-cycle-4) — a visual cluster (`hoverKey: null`; it is not a
         // real node, so it correctly has no hover-highlight state of its own
         // — see the module doc on `hoverKey` above) otherwise gets ZERO focus
-        // feedback for a keyboard user, since its outer div sets
-        // `outline:none` INLINE. A class-based rule can never beat that: an
-        // inline style declaration outranks any selector-based author
-        // declaration regardless of layers/specificity, so a stylesheet
-        // class (the previous `.area-marker-kbd-focus` approach, since
-        // reverted from index.css) never painted anything. Set the focus
-        // indicator as an INLINE style instead — the only thing guaranteed
-        // to win — mirroring every other visual property on this divIcon
-        // (literal values, no CSS pipeline). Uses a navy ring (C_NAVY, same
-        // token as this file's leader-line/anchor-dot color). Issue #2088
-        // item 2 made the residential dashed cluster's own resting border
-        // navy too (was copper), but the focus ring stays visually distinct
-        // from it either way: it is a SOLID box-shadow ring offset outward
-        // by a 2px white gap from the card's DASHED border, not a color
-        // repaint of that border — solid-vs-dashed plus the white gap reads
-        // as "focus", not "a slightly different border", for either accent.
-        // Cleared to '' on blur (never toggled via a class) so activation
-        // (Enter/Space, bound above) is unaffected either way.
+        // feedback for a keyboard user, since its outer div (`el`, the
+        // `role="button"` element `shellAttrs` carries) sets `outline:none`
+        // INLINE. A class-based rule can never beat that: an inline style
+        // declaration outranks any selector-based author declaration
+        // regardless of layers/specificity, so a stylesheet class (the
+        // previous `.area-marker-kbd-focus` approach, since reverted from
+        // index.css) never painted anything. Set the focus indicator as an
+        // INLINE style instead — the only thing guaranteed to win — mirroring
+        // every other visual property on this divIcon (literal values, no CSS
+        // pipeline). Uses a navy ring (C_NAVY, same token as this file's
+        // leader-line/anchor-dot color). It is a SOLID box-shadow ring offset
+        // outward by a 2px white gap, never a color repaint of the shell's
+        // own border — the white-gap ring reads as "focus", not "a slightly
+        // different border", for either accent. Cleared to '' on blur (never
+        // toggled via a class) so activation (Enter/Space, bound above) is
+        // unaffected either way.
+        //
+        // FIX N3 (main-agent-ruling-b1-footprint-floor.toml bundle) — the
+        // ring is applied to `ringEl` (the `.rc-shell` element, which carries
+        // the card's actual border-radius), NOT to `el` (the outer
+        // `role="button"` wrapper `shellAttrs` sits on — see
+        // `markerPrimitives.ts`'s `visualClusterCardHtml`: the outer div gets
+        // `shellAttrs`, the INNER `.rc-shell` div gets the border-radius).
+        // Querying `el` for the ring (the previous behaviour) painted a
+        // rounded rectangle around `.rc-shell` PLUS the 7px `.rc-tail`
+        // triangle below it, leaving a visible gap around the tail — this
+        // resolves `ringEl` fresh from the marker's current DOM every call
+        // (same "never a captured reference" discipline as `el` above) and
+        // falls back to `el` itself for any marker type that has no
+        // `.rc-shell` (i.e. every marker OTHER than the Option-B visual-
+        // cluster card), preserving today's ring behaviour there unchanged.
+        // `el` itself STILL owns the keydown/focus/blur LISTENERS (event
+        // delegation would be needlessly indirect) — only the ring's
+        // borderRadius/boxShadow move to `ringEl`.
+        //
+        // This also resolves the double-ring stack the old `el`-targeted ring
+        // caused on a focused+selected Option-B cluster: `.rc-shell` already
+        // carries its OWN static navy double-ring `box-shadow` (see
+        // `visualClusterCardHtml`'s `shellBoxShadow` when `isFocusedSelected`)
+        // set as part of its HTML `style="..."` attribute. Because the ring
+        // below now writes `ringEl.style.boxShadow` on that SAME element
+        // (rather than a second, different element), the JS-applied value
+        // REPLACES that inline declaration on focus (never stacks two rings
+        // on two boxes).
+        //
+        // RESTORE-ON-BLUR — unlike the fallback `el` (which never carries a
+        // border-radius/box-shadow of its own in its HTML, so clearing those
+        // inline properties to `''` on blur is always safe), `.rc-shell`
+        // ALWAYS has a real, non-empty `border-radius`/`box-shadow` baked
+        // into its HTML `style="..."` attribute (RADIUS_LG unconditionally;
+        // either the plain `SHADOW_LG` drop shadow or the static
+        // `isFocusedSelected` double-ring, from `visualClusterCardHtml`).
+        // Clearing those to `''` on blur (the naive port of the old `el`
+        // logic) would strip that legitimate styling entirely instead of
+        // restoring it. The `.rc-shell` branch below therefore never touches
+        // `borderRadius` at all (it is already correct at every state) and
+        // captures the pre-focus `boxShadow` value once (via a `dataset`
+        // marker, so a re-focus before the first blur doesn't overwrite the
+        // captured original with the ring value) and restores that exact
+        // captured value on blur — reverting to `SHADOW_LG` OR the static
+        // double-ring, whichever the HTML actually set, never to blank.
+        //
+        // Issue #2305 STAGE 2 (P4) — borderRadius uses RADIUS_LG (12px, a
+        // REAL 2px change from the prior '14px' literal) so this JS-applied
+        // ring matches the radius `visualClusterCardHtml` actually sets on
+        // `.rc-shell` itself, rather than coincidentally referencing the
+        // same value via two independent literals.
+        // FIX CYCLE 2 (real-browser QA, post-N3) — index.css:462-466's
+        // `:focus-within .rc-shell { box-shadow: ...!important; }` rule
+        // (Stage 1, dormant until N3 activated it by moving the ring onto
+        // `.rc-shell`) OUTRANKS a plain inline `box-shadow`: an `!important`
+        // author-stylesheet declaration beats a NON-`!important` inline
+        // style, so the ring below was being fully overridden by that rule's
+        // hover/focus "lift" shadow the instant this actually ran against
+        // the real stylesheet (invisible in jsdom, which never loads
+        // index.css — the prior jsdom-only proof was a false green for THIS
+        // class of defect). Per the CSS cascade, an `!important` declaration
+        // in a style ATTRIBUTE beats an `!important` author-stylesheet
+        // declaration, so this now uses `setProperty(..., 'important')`
+        // instead of a plain assignment on the `.rc-shell` branch — the `el`
+        // fallback branch is untouched by this fix (no `!important` author
+        // rule targets the outer wrapper).
+        //
+        // COMPOSED, not replaced — the stylesheet rule exists to give
+        // hover/focus a raised-card "lift" emphasis (the same rule also
+        // fires on `:hover`), and simply overriding its box-shadow with the
+        // ring alone would silently drop that lift for keyboard focus while
+        // leaving it intact for mouse hover — an inconsistent, worse
+        // regression than the one this fixes. The focus value below is the
+        // ring PLUS `RC_SHELL_FOCUS_LIFT_SHADOW` (index.css:465's exact
+        // value) as extra box-shadow layers in the SAME declaration, so a
+        // focused shell shows both.
         el?.addEventListener('focus', () => {
-          if (!el) return;
-          el.style.borderRadius = '14px';
-          el.style.boxShadow = `0 0 0 2px ${C_PAPER}, 0 0 0 4px ${C_NAVY}`;
+          const shellEl = marker.getElement()?.querySelector<HTMLElement>('.rc-shell');
+          const ringEl = shellEl ?? el;
+          if (shellEl) {
+            if (ringEl.dataset.rcRingOrigShadow === undefined) {
+              ringEl.dataset.rcRingOrigShadow = ringEl.style.boxShadow;
+            }
+            ringEl.style.setProperty(
+              'box-shadow',
+              `0 0 0 2px ${C_PAPER}, 0 0 0 4px ${C_NAVY}, ${RC_SHELL_FOCUS_LIFT_SHADOW}`,
+              'important',
+            );
+            // border-radius is NOT contested by any `!important` author rule
+            // (index.css:462-479's hover/focus-within block only ever sets
+            // `transform`/`box-shadow`/`background`) — verified before
+            // adding this, per the "check first, do not add it blindly"
+            // instruction, so it is deliberately left untouched here; the
+            // shell's own inline RADIUS_LG (baked into the HTML by
+            // `visualClusterCardHtml`) already wins unconditionally.
+          } else {
+            ringEl.style.borderRadius = RADIUS_LG;
+            ringEl.style.boxShadow = `0 0 0 2px ${C_PAPER}, 0 0 0 4px ${C_NAVY}`;
+          }
         });
         el?.addEventListener('blur', () => {
-          if (!el) return;
-          el.style.borderRadius = '';
-          el.style.boxShadow = '';
+          const shellEl = marker.getElement()?.querySelector<HTMLElement>('.rc-shell');
+          const ringEl = shellEl ?? el;
+          if (shellEl) {
+            // Plain property assignment (never `setProperty(..., 'important')`
+            // here) — assigning `style.boxShadow` clears any previously-set
+            // `!important` priority on that property as part of resetting it,
+            // so this correctly un-does the focus branch's `setProperty(...,
+            // 'important')` rather than leaving a stale `!important` flag
+            // permanently pinning the ring after blur (that would be a worse
+            // bug than the one this fixes — the shell would stay ringed
+            // forever, immune to hover's lift shadow too).
+            ringEl.style.boxShadow = ringEl.dataset.rcRingOrigShadow ?? '';
+            delete ringEl.dataset.rcRingOrigShadow;
+          } else {
+            ringEl.style.borderRadius = '';
+            ringEl.style.boxShadow = '';
+          }
         });
       }
     };

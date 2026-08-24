@@ -1397,7 +1397,13 @@ describe('AreaDestinationMarkerLayer — dense AREA children (single markers + v
       // The visible names span (joined shortNames, truncated individually)
       // must NOT render either full name verbatim — proven by extracting the
       // span's own text content and asserting it holds an ellipsis instead.
-      const visibleNamesMatch = html.match(/<span[^>]*>([^<]*)<\/span>\s*<\/div>\s*<span/);
+      // Issue #2305 STAGE 2 — the Option B card (`visualClusterCardHtml`)
+      // puts the names span in a navy hero section, not the old
+      // `<div><svg/><span>names</span></div><span>count</span>` layout this
+      // regex used to rely on positionally. Anchored instead on the
+      // `-webkit-line-clamp:2` declaration unique to that span, which is
+      // stable regardless of what markup follows it.
+      const visibleNamesMatch = html.match(/-webkit-line-clamp:2[^>]*>([^<]*)</);
       expect(visibleNamesMatch).not.toBeNull();
       const visibleNames = visibleNamesMatch![1];
       expect(visibleNames).not.toBe(`${longA}, ${longB}`);

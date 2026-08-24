@@ -444,6 +444,48 @@
     }
   }
 
+  /* Issue #2305 (Option B visual cluster marker reskin, stage 1) — hover/press
+     emphasis for the new `.rc-shell`/`.rc-footer` card markup
+     (`markerPrimitives.ts` visualClusterCardHtml). UNREFERENCED THIS STAGE:
+     no production divIcon emits `.area-visual-cluster-marker-icon` /
+     `.rc-shell` / `.rc-footer` yet (that call-site wiring is stage 2, after
+     Issue #1943 merges) — this block is a safe no-op until then. `!important`
+     on box-shadow/background is required because the resting values are
+     inline declarations on the Leaflet-rendered element, which always
+     outrank a selector-based author rule — the same technique the design
+     source itself uses
+     (docs/design/retrends-design-system/ui_kits/new_discover/experience.html:28-34).
+     `transform` carries no `!important`: `.rc-shell` itself never has an
+     inline `transform` (only the outer wrapper does, via
+     `MARKER_SHELL_STYLE` in `markerPrimitives.ts`, which this selector
+     doesn't target), and the design source omits `!important` there too. */
+  .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"]:hover .rc-shell,
+  .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"]:focus-within .rc-shell {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 28px rgba(18, 24, 38, 0.38) !important;
+  }
+
+  .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"]:hover .rc-footer,
+  .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"]:focus-within .rc-footer {
+    background: #F2E8E1 !important; /* copper-100 — residential journey */
+  }
+
+  .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"][data-journey="schools"]:hover .rc-footer,
+  .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"][data-journey="schools"]:focus-within .rc-footer {
+    background: #DED7EC !important; /* plum-100 — never reuse the copper tint here (risk R3) */
+  }
+
+  .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"]:active .rc-shell {
+    transform: scale(0.97) !important;
+    transition: transform 0.08s ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"] .rc-shell {
+      transition: none;
+    }
+  }
+
   .property-popup .leaflet-popup-content-wrapper {
     @apply p-0 overflow-hidden;
   }

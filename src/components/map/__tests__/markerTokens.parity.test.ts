@@ -42,6 +42,7 @@ describe('markerTokens.ts values are parsed, not retyped, from the design system
     expect(tokens.PAPER).toBe(parseCssVar(colorsCss, 'paper'));
     expect(tokens.COPPER_500).toBe(parseCssVar(colorsCss, 'copper-500'));
     expect(tokens.COPPER_600).toBe(parseCssVar(colorsCss, 'copper-600'));
+    expect(tokens.COPPER_100).toBe(parseCssVar(colorsCss, 'copper-100'));
     expect(tokens.EVERGREEN_600).toBe(parseCssVar(colorsCss, 'evergreen-600'));
     expect(tokens.GREY_900).toBe(parseCssVar(colorsCss, 'grey-900'));
     expect(tokens.GREY_700).toBe(parseCssVar(colorsCss, 'grey-700'));
