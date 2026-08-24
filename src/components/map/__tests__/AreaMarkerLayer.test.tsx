@@ -161,8 +161,16 @@ vi.mock('leaflet/dist/leaflet.css', () => ({}));
 import React from 'react';
 import { render } from '@testing-library/react';
 import L from 'leaflet';
-import { AreaMarkerLayer } from '../AreaMarkerLayer';
+import { AreaMarkerLayer, AreaDestinationMarkerLayer } from '../AreaMarkerLayer';
 import type { AreaPoint } from '../AreaMarkerLayer';
+// Issue #1943 (Slice B+C merge, code review cycle 2, FIX 5) — the
+// 'clusters'/'directions' destination-clustering path had NO component
+// coverage anywhere in the diff: destinations.test.tsx's cluster tests are
+// all levelKind='areas', and the allDirectionsSelect mock fix means nothing
+// merges there either. These imports support the new coverage added below.
+import type { AreasNavigationChild } from '@/features/discover/navigation/useAreasNavigationJourney';
+import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
+import { clusterAreaMembers, type ClusterableDestination } from '@/features/discover/navigation/areaClustering';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -1444,5 +1452,173 @@ describe('AreaMarkerLayer — Issue #1815 hover never publishes onAreaCameraInte
     expect(dotIndex).toBeGreaterThanOrEqual(0);
     capturedMarkers[dotIndex].handlers.mouseover();
     expect(onAreaCameraIntent).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Issue #1943 (Slice B+C merge, code review cycle 2, FIX 5) ─────────────
+// The 'clusters'/'directions' destination-clustering path (AreaMarkerLayer.tsx
+// ~1060-1200, the SAME footprint-aware clusterAreaMembers the 'areas' level
+// uses) had NO component test anywhere in the diff before this. This block
+// exercises AreaDestinationMarkerLayer (also exported from this module) at
+// levelKind='directions', proving AC3 (rectangle-aware merging) and AC5 (a
+// multi-member cluster card never calls onSelect, only the camera-intent
+// callback) actually hold, plus the underlying clusterAreaMembers footprint
+// parameter genuinely changes the merge decision.
+describe('Issue #1943 (code review cycle 2, FIX 5) — AreaDestinationMarkerLayer destination clustering (directions/clusters)', () => {
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+    capturedMarkers.length = 0;
+    vi.mocked(L.marker).mockClear();
+  });
+
+  const ROOT_NODE: NavigationNodeResponse = {
+    nodeKey: 'root',
+    nodeType: 'ROOT',
+    displayLabel: 'Bangalore',
+    depth: -1,
+    regionKey: null,
+    ancestry: [],
+    nextLevelType: 'DIRECTION',
+    children: [],
+    revisionId: 1,
+    bounds: null,
+    descendantAreaKeys: null,
+    areaKey: null,
+  };
+
+  function directionChild(
+    nodeKey: string,
+    lat: number,
+    lon: number,
+    overrides: Partial<AreasNavigationChild> = {},
+  ): { raw: NavigationNodeResponse['children'][number]; typed: AreasNavigationChild } {
+    return {
+      // NavigationChildSummary's minimal shape (mirrors this file's own
+      // `areaChild` convention) — no `depth`/`ancestry`/`children`/
+      // `revisionId`, which are ROOT_NODE-level fields, not per-child ones.
+      raw: {
+        nodeKey,
+        nodeType: 'DIRECTION',
+        displayLabel: nodeKey,
+        displayOrder: 0,
+        centreLat: lat,
+        centreLon: lon,
+      },
+      typed: {
+        nodeKey,
+        nodeType: 'DIRECTION',
+        displayLabel: nodeKey,
+        displayOrder: 0,
+        listingCount: 5,
+        schoolCount: null,
+        isLeafArea: false,
+        matchingAreaCount: null,
+        descendantAreaCount: null,
+        representativeAreaKeys: [],
+        bounds: null,
+        bearingDegrees: null,
+        ...overrides,
+      },
+    };
+  }
+
+  it('two directions children whose footprints overlap (identical coordinates) render exactly ONE area-visual-cluster-marker, at the members centroid', () => {
+    const a = directionChild('d:n', 13.0, 77.6);
+    const b = directionChild('d:e', 13.0, 77.6);
+    render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [a.raw, b.raw] }}
+        levelKind="directions"
+        children={[a.typed, b.typed]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(capturedMarkers).toHaveLength(1);
+    expect(capturedDivIconCalls[0].html).toContain('area-visual-cluster-marker');
+    const [latlng] = vi.mocked(L.marker).mock.calls[0];
+    expect(latlng).toEqual([13.0, 77.6]);
+  });
+
+  it('clicking the multi-member cluster card fires onAreaVisualClusterCameraIntent with the members bounds, and NEVER onSelect (AC5)', () => {
+    const onSelect = vi.fn();
+    const onAreaVisualClusterCameraIntent = vi.fn();
+    // Identical coordinates (same convention as test 1 and as
+    // destinations.test.tsx's own 'areas'-level AC5 equivalent at line 663)
+    // — guarantees the pair lands in the same grid cell and merges
+    // regardless of the real `estimateDestinationCardFootprint` output, so
+    // this test's outcome does not depend on that calibrated module's exact
+    // numbers.
+    const a = directionChild('d:n', 13.0, 77.6);
+    const b = directionChild('d:e', 13.0, 77.6);
+    render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [a.raw, b.raw] }}
+        levelKind="directions"
+        children={[a.typed, b.typed]}
+        onSelect={onSelect}
+        onAreaVisualClusterCameraIntent={onAreaVisualClusterCameraIntent}
+      />,
+    );
+
+    expect(capturedMarkers).toHaveLength(1);
+    // Fire the REAL captured click handler AreaDestinationMarkerLayer
+    // registered via marker.on('click', ...) — never a stub standing in for
+    // it (mirrors destinations.test.tsx:679's pattern for the 'areas' visual
+    // cluster, now proven for 'directions' too).
+    capturedMarkers[0].handlers.click();
+
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onAreaVisualClusterCameraIntent).toHaveBeenCalledTimes(1);
+    const [bounds] = onAreaVisualClusterCameraIntent.mock.calls[0];
+    expect(bounds).toEqual([[13.0, 77.6], [13.0, 77.6]]);
+  });
+
+  it('a non-overlapping clusters child renders the ordinary destination card and calls onSelect(nodeKey) on click, never the camera-intent callback', () => {
+    const onSelect = vi.fn();
+    const onAreaVisualClusterCameraIntent = vi.fn();
+    const solo = directionChild('c:whitefield-belt', 13.0, 77.6, { nodeType: 'CLUSTER' });
+    render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [{ ...solo.raw, nodeType: 'CLUSTER' }] }}
+        levelKind="clusters"
+        children={[solo.typed]}
+        onSelect={onSelect}
+        onAreaVisualClusterCameraIntent={onAreaVisualClusterCameraIntent}
+      />,
+    );
+
+    expect(capturedMarkers).toHaveLength(1);
+    expect(capturedDivIconCalls[0].html).not.toContain('area-visual-cluster-marker');
+    capturedMarkers[0].handlers.click();
+
+    expect(onSelect).toHaveBeenCalledWith('c:whitefield-belt');
+    expect(onAreaVisualClusterCameraIntent).not.toHaveBeenCalled();
+  });
+
+  it('clusterAreaMembers merges a pair with an explicit wider footprint override that the default 110x100 footprint would NOT merge', () => {
+    // 150px apart on the x-axis (project: 1 degree lon == 1000px here) —
+    // outside the default AREA_CARD_FOOTPRINT_WIDTH_PX=110 half-width
+    // separation (55px) either side, so the two land in different grid
+    // cells AND their default-sized card rects do not overlap.
+    const project = (lat: number, lon: number) => ({ x: lon * 1000, y: lat * 1000 });
+    const members: (ClusterableDestination & { nodeKey: string })[] = [
+      { nodeKey: 'left', identityKey: 'left', displayLabel: 'Left', lat: 13.0, lon: 0, listingCount: 5, displayOrder: 0, schoolCount: null },
+      { nodeKey: 'right', identityKey: 'right', displayLabel: 'Right', lat: 13.0, lon: 0.15, listingCount: 5, displayOrder: 1, schoolCount: null },
+    ];
+
+    const defaultResult = clusterAreaMembers(members, project, 12);
+    expect(defaultResult.clusters).toHaveLength(2);
+
+    // A 300px-wide footprint (half-width 150px) makes the two 150px-apart
+    // cards overlap, so the SAME grid-separated pair now merges into one
+    // cluster — proving the footprint parameter genuinely drives the merge
+    // decision, not just the grid pass.
+    const widerResult = clusterAreaMembers(members, project, 12, {
+      footprintWidthPx: 300,
+      footprintHeightPx: 100,
+    });
+    expect(widerResult.clusters).toHaveLength(1);
+    expect(widerResult.clusters[0].members.map((m) => m.identityKey)).toEqual(['left', 'right']);
   });
 });

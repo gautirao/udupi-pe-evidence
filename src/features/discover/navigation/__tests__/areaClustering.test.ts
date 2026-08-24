@@ -19,6 +19,12 @@ const project: ProjectFn = (lat, lon) => ({ x: lon * 1000, y: lat * 1000 });
 function member(overrides: Partial<ClusterableAreaMember> & { areaKey: string }): ClusterableAreaMember {
   return {
     nodeKey: `a:${overrides.areaKey}`,
+    // Issue #1943 (Slice B+C merge) — the AREA path's adapter convention:
+    // identityKey = areaKey, so every existing test's areaKey-based
+    // assertions (sort order, cellKey, membership) stay meaningful
+    // unchanged. See the golden characterisation test below for the actual
+    // byte-identity proof.
+    identityKey: overrides.areaKey,
     displayLabel: overrides.areaKey,
     lat: 13.0,
     lon: 77.6,
@@ -348,5 +354,193 @@ describe('clusterAreaMembers — UD-1 boundary-adjacent collision correction', (
         expect(intersects(rectAt(pxA), rectAt(pxB))).toBe(false);
       }
     }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// GOLDEN PRE-RENAME CHARACTERISATION — Issue #1943 (Slice B+C merge),
+// [qa_requirements.characterisation_protocol] (team-lead-plan.toml).
+//
+// The areaKey -> identityKey rename in areaClustering.ts is a pure string
+// substitution and is therefore INVISIBLE in code review; only a pre/post
+// output comparison can prove it is inert. `GOLDEN_PRE_RENAME_OUTPUT` below
+// was captured by literally running THIS test's fixture through
+// `clusterVisibleAreaMembers` on the code as it stood immediately BEFORE the
+// identityKey rename (commit boundary: this golden was committed in its own
+// commit, strictly before the rename commit — see the PR's commit history).
+// The fixture is deliberately DENSE enough to exercise real merging (not
+// vacuous): 'blob-a'/'blob-b'/'blob-c' pairwise-overlap and merge into ONE
+// 3-member cluster (mirrors the "produces clusters whose footprints never
+// intersect" fixture above), and 'left'/'right' straddle a grid-cell
+// boundary and merge via the UD-1 collision-correction pass (mirrors the
+// "boundary-adjacent" fixtures above) — TWO independent real merges, not
+// one. It also exercises every field of the result shape: a 3-member
+// cluster, a 2-member (boundary-merged) cluster, a 1-member cluster, one
+// `omitted` (bad coordinate) member, and one `hidden` (zero-listing-count,
+// 'areas' journey) member.
+// ═══════════════════════════════════════════════════════════════════════
+describe('areaClustering — pre-rename golden characterisation (Issue #1943)', () => {
+  const goldenFixtureMembers: ClusterableAreaMember[] = [
+    member({ areaKey: 'blob-a', lat: 13.0, lon: 77.6, listingCount: 5, displayOrder: 0, schoolCount: 2 }),
+    member({ areaKey: 'blob-b', lat: 13.005, lon: 77.62, listingCount: 3, displayOrder: 1, schoolCount: 0 }),
+    member({ areaKey: 'blob-c', lat: 12.995, lon: 77.64, listingCount: 8, displayOrder: 2, schoolCount: 1 }),
+    member({ areaKey: 'mid', lat: 13.0, lon: 78.2, listingCount: 1, displayOrder: 3, schoolCount: 0 }),
+    member({ areaKey: 'left', lat: 13.0, lon: 0.063, listingCount: 4, displayOrder: 4, schoolCount: 0 }),
+    member({ areaKey: 'right', lat: 13.0, lon: 0.065, listingCount: 2, displayOrder: 5, schoolCount: 0 }),
+    member({ areaKey: 'zero-content', lat: 13.0, lon: 78.9, listingCount: 0, displayOrder: 6, schoolCount: 0 }),
+    member({
+      areaKey: 'bad-coord',
+      lat: null as unknown as number,
+      lon: 77.6,
+      listingCount: 1,
+      displayOrder: 7,
+      schoolCount: 0,
+    }),
+  ];
+
+  // Captured verbatim (JSON.stringify) from `clusterVisibleAreaMembers(
+  // goldenFixtureMembers, 'areas', project, 13, { cellSizePx: 64 })` on the
+  // pre-rename code — see the module doc above. Never hand-edited.
+  const GOLDEN_PRE_RENAME_OUTPUT = {
+    clusters: [
+      {
+        cellKey: 'z13:blob-a',
+        members: [
+          {
+            nodeKey: 'a:blob-a',
+            displayLabel: 'blob-a',
+            lat: 13,
+            lon: 77.6,
+            listingCount: 5,
+            displayOrder: 0,
+            schoolCount: 2,
+            areaKey: 'blob-a',
+          },
+          {
+            nodeKey: 'a:blob-b',
+            displayLabel: 'blob-b',
+            lat: 13.005,
+            lon: 77.62,
+            listingCount: 3,
+            displayOrder: 1,
+            schoolCount: 0,
+            areaKey: 'blob-b',
+          },
+          {
+            nodeKey: 'a:blob-c',
+            displayLabel: 'blob-c',
+            lat: 12.995,
+            lon: 77.64,
+            listingCount: 8,
+            displayOrder: 2,
+            schoolCount: 1,
+            areaKey: 'blob-c',
+          },
+        ],
+        anchor: { lat: 13, lon: 77.62 },
+      },
+      {
+        cellKey: 'z13:left',
+        members: [
+          {
+            nodeKey: 'a:left',
+            displayLabel: 'left',
+            lat: 13,
+            lon: 0.063,
+            listingCount: 4,
+            displayOrder: 4,
+            schoolCount: 0,
+            areaKey: 'left',
+          },
+          {
+            nodeKey: 'a:right',
+            displayLabel: 'right',
+            lat: 13,
+            lon: 0.065,
+            listingCount: 2,
+            displayOrder: 5,
+            schoolCount: 0,
+            areaKey: 'right',
+          },
+        ],
+        anchor: { lat: 13, lon: 0.064 },
+      },
+      {
+        cellKey: 'z13:mid',
+        members: [
+          {
+            nodeKey: 'a:mid',
+            displayLabel: 'mid',
+            lat: 13,
+            lon: 78.2,
+            listingCount: 1,
+            displayOrder: 3,
+            schoolCount: 0,
+            areaKey: 'mid',
+          },
+        ],
+        anchor: { lat: 13, lon: 78.2 },
+      },
+    ],
+    omitted: [
+      {
+        nodeKey: 'a:bad-coord',
+        displayLabel: 'bad-coord',
+        lat: null,
+        lon: 77.6,
+        listingCount: 1,
+        displayOrder: 7,
+        schoolCount: 0,
+        areaKey: 'bad-coord',
+      },
+    ],
+    hidden: [
+      {
+        nodeKey: 'a:zero-content',
+        displayLabel: 'zero-content',
+        lat: 13,
+        lon: 78.9,
+        listingCount: 0,
+        displayOrder: 6,
+        schoolCount: 0,
+        areaKey: 'zero-content',
+      },
+    ],
+  };
+
+  it('exercises real merging, not a vacuous fixture (sanity check on the golden itself)', () => {
+    // blob-a/b/c merged into ONE 3-member cluster (real overlap-driven
+    // merge, not 3 singles) and left/right merged into ONE 2-member cluster
+    // (real boundary-adjacent merge) — two independent merges.
+    expect(GOLDEN_PRE_RENAME_OUTPUT.clusters).toHaveLength(3);
+    expect(GOLDEN_PRE_RENAME_OUTPUT.clusters[0].members).toHaveLength(3);
+    expect(GOLDEN_PRE_RENAME_OUTPUT.clusters[1].members).toHaveLength(2);
+  });
+
+  it('regenerates BYTE-IDENTICAL output to the pre-rename golden — proves the identityKey rename is inert for the areas path', () => {
+    const actual = clusterVisibleAreaMembers(goldenFixtureMembers, 'areas', project, 13, { cellSizePx: 64 });
+    const plain = JSON.parse(JSON.stringify(actual)) as typeof GOLDEN_PRE_RENAME_OUTPUT & {
+      clusters: Array<{ members: Array<Record<string, unknown>> }>;
+    };
+    // The rename ADDS `identityKey` to every member — a real, additive shape
+    // change the golden (captured before the field existed) cannot itself
+    // contain. Assert that new field separately (it must equal `areaKey` for
+    // every member — the AREA path's adapter contract), then strip it before
+    // the byte-identity comparison so the golden proves the thing it exists
+    // to prove: cellKey/order/anchor/omitted/hidden are UNCHANGED.
+    const stripIdentityKey = (obj: Record<string, unknown>) => {
+      const { identityKey, ...rest } = obj;
+      expect(identityKey).toBe(obj.areaKey);
+      return rest;
+    };
+    const normalised = {
+      clusters: plain.clusters.map((cluster) => ({
+        ...cluster,
+        members: cluster.members.map(stripIdentityKey),
+      })),
+      omitted: plain.omitted.map((m) => stripIdentityKey(m as unknown as Record<string, unknown>)),
+      hidden: plain.hidden.map((m) => stripIdentityKey(m as unknown as Record<string, unknown>)),
+    };
+    expect(normalised).toEqual(GOLDEN_PRE_RENAME_OUTPUT);
   });
 });

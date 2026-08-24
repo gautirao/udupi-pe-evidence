@@ -26,14 +26,20 @@ import {
   type DiscoverJourney as AreasEligibilityJourney,
 } from '@/features/discover/navigation/journeyVisibility';
 import {
+  clusterAreaMembers,
   clusterVisibleAreaMembers,
   boundsOfMembers,
   isUsableCentroid,
   AREA_CARD_FOOTPRINT_WIDTH_PX,
   type ClusterableAreaMember,
+  type ClusterableDestination,
   type ProjectFn as AreaClusterProjectFn,
 } from '@/features/discover/navigation/areaClustering';
-import { presentClusterRepresentatives } from '@/features/discover/navigation/representativeNames';
+import {
+  presentClusterRepresentatives,
+  presentDestinationClusterRepresentatives,
+} from '@/features/discover/navigation/representativeNames';
+import { estimateDestinationCardFootprint } from '@/features/discover/navigation/destinationCardFootprint';
 import {
   PAPER,
   NAVY_800,
@@ -941,9 +947,13 @@ export function AreaDestinationMarkerLayer({
   // Recompute grouping on zoom only (grid clustering is a pure function of
   // projected pixel position at a given zoom) — the same pan-invariant
   // trigger convention as the legacy degraded path below in AreaMarkerLayer.
+  //
+  // Issue #1943 (Slice B+C merge) — 'clusters'/'directions' now ALSO route
+  // through footprint-aware clustering (see the main effect below), so they
+  // need the same zoom-driven recompute 'areas' already had.
   const [areasZoomTick, setAreasZoomTick] = useState(() => map.getZoom());
   useEffect(() => {
-    if (levelKind !== 'areas') return;
+    if (levelKind !== 'areas' && levelKind !== 'clusters' && levelKind !== 'directions') return;
     const onZoomEnd = () => setAreasZoomTick(map.getZoom());
     map.on('zoomend', onZoomEnd);
     return () => {
@@ -1011,84 +1021,153 @@ export function AreaDestinationMarkerLayer({
       string,
       { latlng: [number, number]; icon: L.DivIcon; html: string; onClick: () => void; hoverKey: string | null }
     >();
+    // Shared by 'areas' AND (Issue #1943 Slice B+C merge) 'clusters'/
+    // 'directions' — the map's own lat/lon -> container-pixel projection,
+    // never hand-rolled.
+    const project: AreaClusterProjectFn = (lat, lon) => {
+      const pt = map.latLngToContainerPoint([lat, lon]);
+      return { x: pt.x, y: pt.y };
+    };
 
-    if (levelKind === 'clusters') {
-      // CLUSTER ("Local Destination") children are real nodes — case (c) of
-      // the school-count rule, structural copy, never "+N". Selecting one
-      // drills down via the SAME onSelect reference as the directions path.
+    if (levelKind === 'clusters' || levelKind === 'directions') {
+      // Issue #1943 (Slice B+C merge) — 'clusters' ("Local Destination")
+      // and 'directions' (compass Direction) children BOTH now route through
+      // the SAME footprint-aware `clusterAreaMembers` the 'areas' level
+      // already uses (identityKey generalisation, areaClustering.ts), rather
+      // than the naive 80px point-repulsion loop this replaces. This is a
+      // FUNCTIONAL change, not a refactor: 'directions' cards are now
+      // positioned by rectangle-aware clustering, matching AC3 of the
+      // approved plan. Neither level applies journey-aware visibility here
+      // (they are STRUCTURAL levels — journeyVisibility.ts's module doc:
+      // never eligibility-hidden), exactly matching this branch's
+      // pre-existing behaviour (neither the old 'clusters' loop nor the old
+      // 'directions' repulsion loop filtered by eligibility either).
+      const destinationMembers: (ClusterableDestination & { nodeKey: string })[] = [];
       for (const child of children) {
         const raw = rawByNodeKey.get(child.nodeKey);
         if (!raw || !isUsableCentroid(raw.centreLat, raw.centreLon)) continue;
-        const isSelected = selectedNodeKey === child.nodeKey;
-        const isHovered = hoveredNodeKey === child.nodeKey;
-        const icon = makeDestinationCard(child, isSelected, isHovered, eligibilityJourney);
-        desired.set(child.nodeKey, {
-          // Non-null guaranteed by isUsableCentroid above.
-          latlng: [raw.centreLat as number, raw.centreLon as number],
-          icon,
-          html: String(icon.options.html),
-          onClick: () => onSelect(child.nodeKey),
-          hoverKey: child.nodeKey,
+        destinationMembers.push({
+          nodeKey: child.nodeKey,
+          identityKey: child.nodeKey,
+          displayLabel: child.displayLabel,
+          lat: raw.centreLat as number,
+          lon: raw.centreLon as number,
+          listingCount: child.listingCount,
+          displayOrder: child.displayOrder,
+          schoolCount: child.schoolCount,
         });
       }
-    } else if (levelKind === 'directions') {
-      const cityCenterLat = node.bounds?.centreLat ?? 0;
-      const cityCenterLon = node.bounds?.centreLon ?? 0;
-      const cityPx = map.latLngToContainerPoint([cityCenterLat, cityCenterLon]);
 
-      const pts = children.map(child => {
-        const raw = rawByNodeKey.get(child.nodeKey);
-        return {
-          child,
-          lat: raw?.centreLat ?? 0,
-          lon: raw?.centreLon ?? 0,
-          valid: raw?.centreLat != null && raw?.centreLon != null
-        };
-      });
-
-      const pixelPts = pts.filter(p => p.valid).map(p => ({
-        ...p,
-        px: map.latLngToContainerPoint([p.lat, p.lon])
-      }));
-
-      const minDistance = 80;
-      for (let iter = 0; iter < 10; iter++) {
-        let moved = false;
-        for (let i = 0; i < pixelPts.length; i++) {
-          for (let j = i + 1; j < pixelPts.length; j++) {
-            const p1 = pixelPts[i];
-            const p2 = pixelPts[j];
-            const dx = p1.px.x - p2.px.x;
-            const dy = p1.px.y - p2.px.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist > 0 && dist < minDistance) {
-              moved = true;
-              for (const p of [p1, p2]) {
-                let vx = p.px.x - cityPx.x;
-                let vy = p.px.y - cityPx.y;
-                let vDist = Math.sqrt(vx * vx + vy * vy);
-                if (vDist < 1) { vx = 0; vy = -1; vDist = 1; }
-                p.px.x += (vx / vDist) * 10;
-                p.px.y += (vy / vDist) * 10;
-              }
-            }
-          }
-        }
-        if (!moved) break;
+      // FOOTPRINT SOURCE (approved plan) — dimensions come from
+      // destinationCardFootprint.ts's calibrated estimator, NEVER from
+      // areaClustering.ts's own AREA_CARD_FOOTPRINT_* constants. A single,
+      // conservative (over-estimating, per that module's safe-direction
+      // invariant) footprint is used for the whole batch: the MAX width/
+      // height across every child's own estimate, so the merge pass never
+      // under-estimates any individual card.
+      let footprintWidthPx = 0;
+      let footprintHeightPx = 0;
+      for (const child of children) {
+        const estimate = estimateDestinationCardFootprint({
+          displayLabel: child.displayLabel,
+          listingCount: child.listingCount,
+          schoolCount: child.schoolCount,
+          journey: eligibilityJourney,
+        });
+        footprintWidthPx = Math.max(footprintWidthPx, estimate.widthPx);
+        footprintHeightPx = Math.max(footprintHeightPx, estimate.heightPx);
       }
 
-      for (const p of pixelPts) {
-        const adjustedLatLng = map.containerPointToLatLng([p.px.x, p.px.y]);
-        const isSelected = selectedNodeKey === p.child.nodeKey;
-        const isHovered = hoveredNodeKey === p.child.nodeKey;
-        const icon = makeDestinationCard(p.child, isSelected, isHovered, eligibilityJourney);
-        
-        desired.set(p.child.nodeKey, {
-          latlng: [adjustedLatLng.lat, adjustedLatLng.lng],
+      const destinationAccent = journey === 'school-first' ? C_PLUM : C_NAVY;
+      const clusterResult = clusterAreaMembers(destinationMembers, project, areasZoomTick, {
+        footprintWidthPx,
+        footprintHeightPx,
+      });
+
+      // clusterAreaMembers's OWN output order is identityKey-sorted (a
+      // deterministic TOTAL order — see areaClustering.ts's module doc), not
+      // the server's `children` sibling order. Emission below iterates
+      // `children` in their ORIGINAL order instead — several existing
+      // marker-creation-order-dependent tests (and, more importantly,
+      // consistent map behaviour across re-renders) rely on that stable
+      // ordering, and nothing about the clustering DECISION itself depends
+      // on emission order. A multi-member cell is emitted exactly ONCE, at
+      // `cell.anchor` — the members' centroid, a position no raw member
+      // occupies. Only which member's `children`-order position is
+      // encountered FIRST (`emittedClusterKeys` below) is what that
+      // iteration order controls — the emitted card's own position is
+      // always the centroid, never any one member's.
+      const cellByNodeKey = new Map<string, (typeof clusterResult.clusters)[number]>();
+      for (const cell of clusterResult.clusters) {
+        for (const member of cell.members) {
+          cellByNodeKey.set(member.nodeKey, cell);
+        }
+      }
+      const emittedClusterKeys = new Set<string>();
+
+      for (const child of children) {
+        const cell = cellByNodeKey.get(child.nodeKey);
+        if (!cell) continue; // omitted (unusable centroid) — never rendered, never fabricated.
+
+        if (cell.members.length === 1) {
+          // REACHABILITY INVARIANT (AC5) — a single-member cell renders the
+          // existing makeDestinationCard and calls onSelect(nodeKey) exactly
+          // as today.
+          const member = cell.members[0];
+          const isSelected = selectedNodeKey === child.nodeKey;
+          const isHovered = hoveredNodeKey === child.nodeKey;
+          const icon = makeDestinationCard(child, isSelected, isHovered, eligibilityJourney);
+          desired.set(child.nodeKey, {
+            latlng: [member.lat, member.lon],
+            icon,
+            html: String(icon.options.html),
+            onClick: () => onSelect(child.nodeKey),
+            hoverKey: child.nodeKey,
+          });
+          continue;
+        }
+
+        // REACHABILITY INVARIANT (AC5) — a multi-member cluster card must
+        // NOT call onSelect and must NOT touch `node=`; it publishes the
+        // camera intent + focused members, mirroring the existing 'areas'
+        // visual-cluster precedent in this file verbatim. Recursive
+        // declutter is IN-DESIGN: drilling into this camera intent may
+        // itself land on a still-decluttered state at the closer zoom — it
+        // terminates because each drill-in strictly reduces the rendered
+        // child set (this cell's own membership).
+        const membershipKey = cell.members.map((m) => m.identityKey).join('|');
+        if (emittedClusterKeys.has(membershipKey)) continue;
+        emittedClusterKeys.add(membershipKey);
+
+        const { representativeNames, countResult } = presentDestinationClusterRepresentatives(
+          cell.members,
+          eligibilityJourney,
+        );
+        const totalListingCount = cell.members.reduce((sum, m) => sum + m.listingCount, 0);
+        const icon = makeAreaVisualClusterCard(
+          representativeNames,
+          countResult.label,
+          totalListingCount,
+          destinationAccent,
+          membershipKey,
+        );
+        desired.set(`cluster:${membershipKey}`, {
+          latlng: [cell.anchor.lat, cell.anchor.lon],
           icon,
           html: String(icon.options.html),
-          onClick: () => onSelect(p.child.nodeKey),
-          hoverKey: p.child.nodeKey,
+          onClick: () => {
+            const bounds = boundsOfMembers(cell.members);
+            if (bounds) {
+              onAreaVisualClusterCameraIntent?.(
+                [[bounds.minLat, bounds.minLon], [bounds.maxLat, bounds.maxLon]],
+                [cell.anchor.lat, cell.anchor.lon],
+              );
+            }
+            // A visual cluster is client-side only — never calls onSelect,
+            // never changes node=, never touches history.
+          },
+          // Not a real node — no hover-highlight state to report.
+          hoverKey: null,
         });
       }
     } else {
@@ -1107,6 +1186,12 @@ export function AreaDestinationMarkerLayer({
         clusterable.push({
           nodeKey: child.nodeKey,
           areaKey: raw.areaKey,
+          // Issue #1943 (Slice B+C merge) — the AREA path's adapter
+          // convention: identityKey = areaKey, so every cellKey, sort order
+          // and merge order stays byte-identical to before the identityKey
+          // generalisation (see areaClustering.ts's module doc and the
+          // pre-rename golden characterisation test).
+          identityKey: raw.areaKey,
           displayLabel: child.displayLabel,
           // Missing/invalid coordinates land on NaN, which isUsableCentroid
           // (inside the clusterer) rejects outright — never silently
@@ -1169,11 +1254,8 @@ export function AreaDestinationMarkerLayer({
         }
       }
 
-      const project: AreaClusterProjectFn = (lat, lon) => {
-        const pt = map.latLngToContainerPoint([lat, lon]);
-        return { x: pt.x, y: pt.y };
-      };
-
+      // `project` is now declared once, above, shared with the
+      // 'clusters'/'directions' branch (Issue #1943 Slice B+C merge).
       const scoped = focusedMembers
         ? clusterable.filter((m) => focusedMembers.includes(m.areaKey))
         : clusterable;

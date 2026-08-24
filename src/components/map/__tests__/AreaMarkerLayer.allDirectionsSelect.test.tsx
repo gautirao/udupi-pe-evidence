@@ -60,6 +60,15 @@ function containerPointToLatLng([x, y]: [number, number]): { lat: number; lng: n
   return { lat: LAT0 - y / SCALE, lng: LON0 + x / SCALE };
 }
 
+// Inverse of containerPointToLatLng — mirrors
+// AreaMarkerLayer.destinations.test.tsx:40's established pattern, so
+// latLngToContainerPoint below varies by lat/lng instead of collapsing every
+// marker to a constant origin.
+function containerPointFromMarkerCall(latlng: [number, number]): { x: number; y: number } {
+  const [lat, lng] = latlng;
+  return { x: (lng - LON0) * SCALE, y: (LAT0 - lat) * SCALE };
+}
+
 vi.mock('leaflet', () => ({
   default: {
     Icon: { Default: { prototype: {}, mergeOptions: vi.fn() } },
@@ -106,7 +115,7 @@ const mapStub = {
   getSize: vi.fn(() => MAP_SIZE),
   getZoom: vi.fn(() => 11),
   containerPointToLatLng: vi.fn(([x, y]: [number, number]) => containerPointToLatLng([x, y])),
-  latLngToContainerPoint: vi.fn(() => ({ x: 0, y: 0 })),
+  latLngToContainerPoint: vi.fn(([lat, lng]: [number, number]) => containerPointFromMarkerCall([lat, lng])),
   getContainer: vi.fn(() => document.createElement('div')),
   on: vi.fn(),
   off: vi.fn(),

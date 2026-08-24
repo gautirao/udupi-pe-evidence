@@ -201,7 +201,7 @@ export function NavigationLevelPanel({
             
             {levelKind === 'clusters' && countKind !== 'schools' && (
               <p className="mt-2 max-w-[56ch] text-pretty text-[13px] leading-relaxed text-muted-foreground">
-                Pick an area to see its homes. The dashed cluster on the map only zooms.
+                Pick an area to see its homes. The dashed cluster on the map drills in when tapped.
               </p>
             )}
 

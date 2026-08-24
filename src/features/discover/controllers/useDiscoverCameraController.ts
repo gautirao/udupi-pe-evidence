@@ -10,6 +10,9 @@ import {
 import type { ScopeNamespaces } from '@/features/discover/selectors/listingScope';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
+import { estimateDestinationCardFootprint } from '@/features/discover/navigation/destinationCardFootprint';
+import { isUsableCentroid } from '@/features/discover/navigation/areaClustering';
+import type { HierarchyChildAnchor } from '@/features/discover/navigation/hierarchyCameraFit';
 import type { CameraIntent } from '@/hooks/useDiscoverMapData';
 import type { DiscoverViewport } from '@/hooks/useDiscoverUrlState';
 import type { DiscoverAreasResponse } from '@/hooks/useDiscoverAreas';
@@ -119,6 +122,71 @@ export function useDiscoverCameraController({
     publishRecenterCameraIntent(intent.cameraBounds, intent.centre, intent.kind);
   }, [areasNavigationJourney.node, publishRecenterCameraIntent]);
 
+  // Issue #1943 Slice B — beside navigationNodeKey/navigationNodeBounds above,
+  // forward the resolved node's direct children's derived camera anchors.
+  // DATA ONLY: the map handle needed to actually apply a hierarchy camera
+  // fit lives in AreaPanner (PropertyMap.tsx), not here (see
+  // hierarchyCameraFit.ts's `project` contract).
+
+  // Issue #1943 Slice B — derive each direct child's camera anchor + its
+  // estimated destination-card footprint. IDENTITY STABILITY (risk
+  // R_NEW_B1) is load-bearing: deps are the journey's own children and node
+  // references (both already memo-stable in useAreasNavigationJourney),
+  // levelKind, and the journey string — never anything render-derived — so a
+  // rerender that does not actually change the resolved node produces the
+  // SAME array reference here, not just an equal one.
+  // Issue #1943 (Stage-B rework, code review cycle 2, FIX 3 — prediction/
+  // render member-set parity) — derive each child's centroid from the SAME
+  // raw wire source AreaMarkerLayer.tsx's render layer keys off
+  // (`rawByNodeKey` there, built from `node.children[i].centreLat/
+  // centreLon` — TOP-LEVEL fields on the raw `NavigationChildSummary`),
+  // never from `child.bounds` (an optional passthrough per
+  // useAreasNavigationJourney.ts's `children` derivation: `bounds: child.
+  // bounds ?? null`). A destination whose raw centroid is usable but whose
+  // `bounds` is null was previously INVISIBLE to this prediction while
+  // fully VISIBLE to the render — `destinationCount` came out too small,
+  // `narrowToLegibleZoomWindow`'s `minLegibleCards` bar dropped, and zooms
+  // passed this prediction that the render still collapsed. Reading
+  // `.node.children` (the identical raw array the render maps by
+  // `nodeKey`) instead makes the two member sets equal by construction.
+  // No min/max-midpoint fallback here any more, deliberately: the render
+  // never had one either (it drops a child outright when its raw centroid
+  // fails `isUsableCentroid`), so keeping a fallback here would silently
+  // reopen the SAME member-set gap in the opposite direction — a child
+  // this prediction "resolves" via a midpoint the render would never
+  // count. See useDiscoverCameraController.test.ts's "member-set parity"
+  // suite for a test pinning the two sets equal on a null-bounds/usable-raw-
+  // centroid fixture.
+  const navigationChildAnchors = useMemo((): HierarchyChildAnchor[] | null => {
+    const cardJourney = cameraOrchestrationUrlState.journey === 'school-first' ? 'schools' : 'areas';
+    const rawByNodeKey = new Map(
+      (areasNavigationJourney.node?.children ?? []).map((c) => [c.nodeKey, c] as const),
+    );
+    const anchors: HierarchyChildAnchor[] = [];
+    for (const child of areasNavigationJourney.children) {
+      const raw = rawByNodeKey.get(child.nodeKey);
+      if (!raw || !isUsableCentroid(raw.centreLat, raw.centreLon)) continue;
+      const footprint = estimateDestinationCardFootprint({
+        displayLabel: child.displayLabel,
+        listingCount: child.listingCount,
+        schoolCount: child.schoolCount,
+        journey: cardJourney,
+      });
+      anchors.push({
+        lat: raw.centreLat as number,
+        lon: raw.centreLon as number,
+        footprintWidthPx: footprint.widthPx,
+        footprintHeightPx: footprint.heightPx,
+      });
+    }
+    return anchors.length > 0 ? anchors : null;
+  }, [
+    areasNavigationJourney.children,
+    areasNavigationJourney.node,
+    areasNavigationJourney.levelKind,
+    cameraOrchestrationUrlState.journey,
+  ]);
+
   // Issue #1824 Slice S7 (R9) — camera panner/tick orchestration: schoolFocusTick +
   // schoolMarkerFocusTick + the #1547 fit-once listingsReadyKey guard + the
   // group/scope/agri fitBounds effects. THE #1823/#2143 invariant owner.
@@ -151,6 +219,7 @@ export function useDiscoverCameraController({
     isLoadingRegionScopedGroups,
     navigationNodeKey: areasNavigationJourney.node?.nodeKey ?? null,
     navigationNodeBounds: areasNavigationJourney.node?.bounds ?? null,
+    navigationChildAnchors,
   });
 
   // Memoize initialCenter to prevent URLViewportController effect re-runs on every parent render.

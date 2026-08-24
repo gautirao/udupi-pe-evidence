@@ -18,6 +18,16 @@ import {
   type AreaMarkerClusterInfo,
 } from '@/components/map/AreaMarkerLayer';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
+import {
+  resolveHierarchyCameraFit,
+  type HierarchyChildAnchor,
+  type UsableViewportRect,
+} from '@/features/discover/navigation/hierarchyCameraFit';
+import {
+  clusterAreaMembers,
+  isUsableCentroid,
+  type ClusterableDestination,
+} from '@/features/discover/navigation/areaClustering';
 import type { CameraIntent } from '@/hooks/useDiscoverMapData';
 import { SchoolMarkerLayer, SELECTED_SCHOOL_PANE_NAME } from '@/components/map/SchoolMarkerLayer';
 import { SchoolZoneLabelLayer, type ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
@@ -546,6 +556,12 @@ interface PropertyMapProps {
         seq?: number;
         reason?: AreaPanReason;
         consumedSeqRef?: MutableRefObject<number>;
+        /**
+         * Issue #1943 Slice B — attached ONLY on the canonicalNode publish
+         * (useDiscoverCameraOrchestration.ts). AreaPanner below calls
+         * resolveHierarchyCameraFit with THIS when reason === 'canonicalNode'.
+         */
+        hierarchyChildAnchors?: HierarchyChildAnchor[] | null;
       })
     | null;
   /**
@@ -1065,12 +1081,350 @@ function BoundsWatcher({
   return null;
 }
 
+/**
+ * Issue #1943 (Stage-B rework, TASK 1 "A-containable") — closes the
+ * resolver/clusterer feedback gap from the CALL SITE, without touching
+ * `hierarchyCameraFit.ts` (forbidden, Slice-A calibrated). The resolver
+ * scores candidates purely on clipped-count/pair-count; it has no visibility
+ * into the render layer's `clusterAreaMembers` merge pass, which silently
+ * ABSORBS overlap by merging cards together. A maximally-wide camera can
+ * therefore score PERFECTLY (nothing clips, nothing "intersects" because
+ * everything already merged into one bubble) while being maximally
+ * illegible to a real user. This predicts, at each integer candidate zoom in
+ * `[minZoom, maxZoom]`, how many destination cards the SAME
+ * `clusterAreaMembers` the render layer uses would actually produce, and
+ * narrows the window to exclude zooms that collapse MORE than half of the
+ * real destinations into fewer, merged cards — before the resolver ever
+ * sees them. Pure computation, no map writes, no re-entry.
+ *
+ * Identity used for clustering here is POSITIONAL (index-based) — a
+ * `HierarchyChildAnchor` (Slice-A type, forbidden to extend) carries no real
+ * nodeKey, and none is needed: this only predicts the resulting CARD COUNT
+ * at each zoom, never which specific destinations end up in which cell.
+ *
+ * Never returns an empty window. When fewer than two zooms clear the
+ * legibility bar, it does NOT fall back to the un-narrowed range — that range
+ * is exactly what produced the observed all-destinations-collapse-into-one-
+ * bubble result, so reverting to it would silently disable this mechanism for
+ * precisely the tightest nodes it exists to help. Instead it returns
+ * `[argmax(cardCount), maxZoom]`, degrading toward the most legible camera
+ * actually available. The un-narrowed range is NOT returned only in that one
+ * case — it is also returned when there is no candidate data at all
+ * (`ceil(minZoom) > floor(maxZoom)`) and, before any of the above runs, when
+ * `destinationCount <= 1` (nothing to narrow against). Separately, when
+ * `usableViewport` is supplied and no zoom in range achieves raw-anchor
+ * containment, the returned `minZoom` reverts to the caller's own un-narrowed
+ * floor (only `maxZoom` stays legibility-narrowed) — on real call sites,
+ * post cluster-containment-gap fix, this is now the common outcome rather
+ * than a rare degenerate case.
+ *
+ * Issue #1943 (Bug: destination/cluster cards render outside the map
+ * container — "containment outranks legibility") — narrowing by card count
+ * alone has no idea that raising `minZoom` (excluding wide/zoomed-out
+ * candidates) can push anchors that are only in-frame at those wide zooms
+ * out of the resolver's reachable window entirely. `resolveHierarchyCameraFit`
+ * is strictly bounded by `[minZoom, maxZoom]`; if legibility narrowing
+ * removes the only zoom at which every anchor's card rect actually fits the
+ * viewport, the resolver has nothing clip-free left to pick from and a real
+ * anchor renders off-screen. When `usableViewport` is supplied, this function
+ * additionally finds the LARGEST zoom in the ORIGINAL `[minZoom, maxZoom]`
+ * range at which every anchor's card rect (bottom-centre anchored, its own
+ * per-anchor footprint, centre-pinned on the anchors' arithmetic-mean
+ * centroid) is fully contained — the SAME containment model
+ * `hierarchyCameraFit.ts`'s own `childZBase` search uses (reproduced here;
+ * that module's rect helpers are private/unexported and the module itself is
+ * forbidden to edit) — and widens the legibility-narrowed window, if
+ * necessary, so that zoom stays reachable. Containment always wins: a
+ * clip-free-but-illegible zoom is kept in the window over an
+ * illegible-and-narrower one. This CANNOT invent a clip-free zoom where the
+ * data genuinely has none in range — when no zoom anywhere in
+ * `[minZoom, maxZoom]` achieves full containment, the floor widens back down
+ * to the caller's own `minZoom` (never the legibility pass's raised one) and
+ * the resolver's own least-bad-candidate scoring takes over. `usableViewport`
+ * is optional so existing pure-legibility callers/tests are unaffected when
+ * omitted.
+ *
+ * TWO-TIER CONTAINMENT, and the weaker tier is deliberate — stated here
+ * because this is the doc a caller reads. Beyond the raw per-anchor check
+ * above, it ALSO prefers a zoom at which every PREDICTED multi-member cluster
+ * cell's own centroid card is contained, since the render draws such a cell
+ * once at its members' centroid — a position no raw anchor occupies and one
+ * the resolver's model never evaluates. That cluster check is a PREFERENCE,
+ * NOT a veto: where no zoom satisfies both tiers, the largest RAW-contained
+ * zoom is returned anyway. So the zoom this widens to MAY still clip a real
+ * cluster card. That is intentional — vetoing instead would return null and
+ * fall back to the pre-containment window, which is strictly worse — but it
+ * means "contained" here guarantees the raw anchors, not every rendered card.
+ */
+export function narrowToLegibleZoomWindow(
+  anchors: readonly HierarchyChildAnchor[],
+  projectAtZoom: (lat: number, lon: number, zoom: number) => { x: number; y: number },
+  minZoom: number,
+  maxZoom: number,
+  usableViewport?: UsableViewportRect,
+): { minZoom: number; maxZoom: number } {
+  const fallback = { minZoom, maxZoom };
+
+  const usable = anchors.filter(
+    (a): a is HierarchyChildAnchor & { lat: number; lon: number } =>
+      isUsableCentroid(a.lat, a.lon),
+  );
+  const destinationCount = usable.length;
+  // A single (or zero) usable destination can never illegibly "merge" —
+  // nothing to narrow against.
+  if (destinationCount <= 1) return fallback;
+
+  // FOOTPRINT SOURCE — the SAME calibrated per-anchor footprints
+  // (`destinationCardFootprint.ts`'s `estimateDestinationCardFootprint`,
+  // baked in upstream by `useDiscoverCameraController.ts` when it builds
+  // `hierarchyChildAnchors`) the render layer itself reduces to a single
+  // conservative MAX width/height across the batch (see
+  // `AreaMarkerLayer.tsx`'s "FOOTPRINT SOURCE" comment). NOT full parity,
+  // though: this maxes only over `usable` (post `isUsableCentroid`
+  // filtering above), while the render layer maxes over ALL children
+  // regardless of centroid usability — a child with an unusable centroid
+  // but the largest footprint makes this prediction UNDER-estimate relative
+  // to what actually renders.
+  const footprintWidthPx = Math.max(...usable.map((a) => a.footprintWidthPx));
+  const footprintHeightPx = Math.max(...usable.map((a) => a.footprintHeightPx));
+
+  const members: ClusterableDestination[] = usable.map((a, i) => ({
+    identityKey: String(i),
+    displayLabel: '',
+    lat: a.lat,
+    lon: a.lon,
+    listingCount: 0,
+    displayOrder: i,
+    schoolCount: null,
+  }));
+
+  // ILLEGIBLE = fewer than half (rounded up, minimum 2) of the real
+  // destinations survive as distinct, individually-selectable cards.
+  const minLegibleCards = Math.max(2, Math.ceil(destinationCount / 2));
+
+  const legibleZooms: number[] = [];
+  // Track the argmax(cluster count) candidate across the loop. Cluster count
+  // is monotone non-decreasing in zoom, so `legibleZooms.length < 2` can only
+  // mean "at most the single tightest, most-collapsing zoom is legible" —
+  // i.e. exactly the node this function exists to help. Falling back to the
+  // UN-NARROWED `[minZoom, maxZoom]` on that branch (the old behaviour) hands
+  // the resolver back the very window that produced the reported collapse.
+  // `bestZoom` degrades toward the most-legible camera actually available
+  // instead. Ties keep the SMALLEST zoom achieving the max count, so the
+  // returned window is as wide as the data allows rather than collapsing to
+  // a single point whenever possible.
+  let bestZoom = Math.ceil(minZoom);
+  let bestCount = -1;
+  for (let zoom = Math.ceil(minZoom); zoom <= Math.floor(maxZoom); zoom += 1) {
+    const project = (lat: number, lon: number) => projectAtZoom(lat, lon, zoom);
+    const result = clusterAreaMembers(members, project, zoom, {
+      footprintWidthPx,
+      footprintHeightPx,
+    });
+    if (result.clusters.length > bestCount) {
+      bestCount = result.clusters.length;
+      bestZoom = zoom;
+    }
+    if (result.clusters.length >= minLegibleCards) legibleZooms.push(zoom);
+  }
+
+  // CONSTRAINT 2 — never narrow to empty or a single candidate UNLESS the
+  // best-available zoom genuinely IS the only legible one (bestZoom === the
+  // fallback's own maxZoom): degrade to the most-legible camera rather than
+  // to the widest, un-narrowed range that reproduces the collapse.
+  // `bestCount === -1` means the loop never ran at all (no integer zoom in
+  // [minZoom, maxZoom]) — there is no candidate data to degrade toward, so
+  // fall back to the caller's own un-narrowed window rather than risk
+  // `bestZoom` (its pre-loop initial value) landing outside that window.
+  if (bestCount === -1) return fallback;
+
+  const legibilityNarrowed =
+    legibleZooms.length < 2
+      ? { minZoom: bestZoom, maxZoom }
+      : { minZoom: Math.min(...legibleZooms), maxZoom: Math.max(...legibleZooms) };
+
+  // CONTAINMENT OUTRANKS LEGIBILITY — see the module doc above. Only runs
+  // when the caller supplies `usableViewport` (the real call site always
+  // does; existing pure-legibility unit tests that omit it are unaffected).
+  if (!usableViewport) return legibilityNarrowed;
+
+  const usableRect = usableRectFromViewport(usableViewport);
+  // Issue #1943 (Stage-B, LAST DEFECT — cluster-card containment gap) — the
+  // raw-anchor containment check above (mirroring hierarchyCameraFit.ts's own
+  // per-anchor `childZBase` search) only ever validates each RAW anchor's own
+  // card rect. The render layer (`AreaMarkerLayer.tsx`) does not always draw
+  // a raw anchor at its own position: a multi-member `clusterAreaMembers`
+  // cell is drawn ONCE, at `cell.anchor` — a CENTROID of its members, a pixel
+  // position no individual raw anchor occupies and that neither this
+  // function's raw-anchor loop NOR `hierarchyCameraFit.ts`'s own childZBase
+  // search (also raw-anchor-only, and forbidden to edit) ever evaluates. A
+  // zoom can therefore look fully clip-free by the raw-anchor model while a
+  // real cluster card, rendered at its members' centroid, clips for real.
+  // This predicts the SAME per-zoom clustering the render layer will
+  // actually produce (reusing the identical `members`/footprint this
+  // function already computed for legibility above — never a second,
+  // possibly-diverging clustering pass) and additionally requires every
+  // MULTI-member cell's centroid card rect to be contained too. A
+  // single-member cell renders at that one member's own raw position
+  // (`centroidOf` of one point is that point) — already covered by the
+  // raw-anchor loop, so it is skipped here to avoid a redundant check.
+  const clusterAnchorsContained = (zoom: number, dx: number, dy: number): boolean => {
+    const project = (lat: number, lon: number) => projectAtZoom(lat, lon, zoom);
+    const result = clusterAreaMembers(members, project, zoom, { footprintWidthPx, footprintHeightPx });
+    for (const cell of result.clusters) {
+      if (cell.members.length <= 1) continue;
+      const p = project(cell.anchor.lat, cell.anchor.lon);
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return false;
+      const rect = narrowingCardRectAt(p.x + dx, p.y + dy, footprintWidthPx, footprintHeightPx);
+      if (!isNarrowingRectContained(rect, usableRect)) return false;
+    }
+    return true;
+  };
+  const containableZoom = largestContainableZoom(
+    usable,
+    projectAtZoom,
+    usableRect,
+    minZoom,
+    maxZoom,
+    clusterAnchorsContained,
+  );
+
+  // Nothing containable in range — widen back to the caller's own floor, not the raised one.
+  if (containableZoom == null) return { minZoom, maxZoom: legibilityNarrowed.maxZoom };
+
+  if (containableZoom < legibilityNarrowed.minZoom) {
+    return { minZoom: containableZoom, maxZoom: legibilityNarrowed.maxZoom };
+  }
+  if (containableZoom > legibilityNarrowed.maxZoom) {
+    return { minZoom: legibilityNarrowed.minZoom, maxZoom: containableZoom };
+  }
+  return legibilityNarrowed;
+}
+
+/**
+ * Local mirror of `hierarchyCameraFit.ts`'s own bottom-centre card-rect and
+ * centre-pinned-placement containment check (see that file's
+ * "Card rect anchored bottom-centre..." comment for the anchoring contract
+ * this must agree with). Duplicated rather than imported because that
+ * module's rect helpers are intentionally private/unexported and the module
+ * itself is forbidden to edit (Slice-A, calibrated) — this is READ-ONLY
+ * agreement with its documented model, not a dependency on its internals.
+ */
+interface NarrowingRect {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+const NARROWING_CONTAINMENT_EPS = 1e-6;
+
+function narrowingCardRectAt(x: number, y: number, widthPx: number, heightPx: number): NarrowingRect {
+  const halfW = widthPx / 2;
+  return { left: x - halfW, right: x + halfW, top: y - heightPx, bottom: y };
+}
+
+function isNarrowingRectContained(inner: NarrowingRect, outer: NarrowingRect): boolean {
+  return (
+    inner.left >= outer.left - NARROWING_CONTAINMENT_EPS &&
+    inner.right <= outer.right + NARROWING_CONTAINMENT_EPS &&
+    inner.top >= outer.top - NARROWING_CONTAINMENT_EPS &&
+    inner.bottom <= outer.bottom + NARROWING_CONTAINMENT_EPS
+  );
+}
+
+function usableRectFromViewport(viewport: UsableViewportRect): NarrowingRect {
+  return {
+    left: viewport.insetLeftPx,
+    right: viewport.widthPx - viewport.insetRightPx,
+    top: viewport.insetTopPx,
+    bottom: viewport.heightPx - viewport.insetBottomPx,
+  };
+}
+
+/**
+ * Largest integer zoom in `[minZoom, maxZoom]` at which EVERY anchor's own
+ * card rect (bottom-centre anchored, its OWN per-anchor footprint — never
+ * the MAX-reduced footprint the legibility prediction above uses, since this
+ * must mirror `hierarchyCameraFit.ts`'s per-anchor `childZBase` check, not
+ * the render layer's clustering) is fully contained inside `usableRect` once
+ * the camera is centre-pinned on the anchors' arithmetic-mean centroid, AND
+ * (when `clusterAnchorsContained` is supplied) every multi-member cluster
+ * card the render layer would actually draw at that zoom is contained too
+ * (see the call site's doc — a cluster centroid is a position no raw anchor
+ * occupies and this function's own per-anchor loop can never check it).
+ *
+ * The cluster check is a PREFERENCE over raw-anchor-only containment, never
+ * a veto that can make this return null where raw-anchor-only containment
+ * alone would have returned a zoom: the two constraints are anti-correlated
+ * (raw containment gets harder as zoom rises and anchors spread, while
+ * multi-member cells — the only zooms the cluster check can reject — exist
+ * precisely at the low zooms where raw containment is easiest), so "every
+ * raw-contained zoom also has a clipping cluster card" is a real, reachable
+ * regime, not a corner case. If no zoom satisfies both, fall back to the
+ * largest zoom that satisfies raw-anchor containment alone, so this can
+ * only ever IMPROVE on (never regress behind) the raw-anchor-only result.
+ * Returns `null` only when no zoom in range achieves even raw-anchor-only
+ * containment — this cannot invent a clip-free zoom where none exists.
+ */
+function largestContainableZoom(
+  usable: readonly { lat: number; lon: number; footprintWidthPx: number; footprintHeightPx: number }[],
+  projectAtZoom: (lat: number, lon: number, zoom: number) => { x: number; y: number },
+  usableRect: NarrowingRect,
+  minZoom: number,
+  maxZoom: number,
+  clusterAnchorsContained?: (zoom: number, dx: number, dy: number) => boolean,
+): number | null {
+  if (usable.length === 0) return null;
+  const centreLat = usable.reduce((sum, a) => sum + a.lat, 0) / usable.length;
+  const centreLon = usable.reduce((sum, a) => sum + a.lon, 0) / usable.length;
+  const usableCentreX = (usableRect.left + usableRect.right) / 2;
+  const usableCentreY = (usableRect.top + usableRect.bottom) / 2;
+
+  // Largest zoom satisfying raw-anchor containment ALONE, tracked so the
+  // cluster-card check below can never regress behind it — see the doc
+  // above on why "cluster check vetoes every raw-contained zoom" is a real,
+  // reachable regime rather than a corner case.
+  let rawOnlyFallback: number | null = null;
+
+  for (let zoom = Math.floor(maxZoom); zoom >= Math.ceil(minZoom); zoom -= 1) {
+    const centreProjected = projectAtZoom(centreLat, centreLon, zoom);
+    if (!Number.isFinite(centreProjected.x) || !Number.isFinite(centreProjected.y)) continue;
+    const dx = usableCentreX - centreProjected.x;
+    const dy = usableCentreY - centreProjected.y;
+
+    let allContained = true;
+    for (const a of usable) {
+      const p = projectAtZoom(a.lat, a.lon, zoom);
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+        allContained = false;
+        break;
+      }
+      const rect = narrowingCardRectAt(p.x + dx, p.y + dy, a.footprintWidthPx, a.footprintHeightPx);
+      if (!isNarrowingRectContained(rect, usableRect)) {
+        allContained = false;
+        break;
+      }
+    }
+    if (allContained) {
+      if (!clusterAnchorsContained || clusterAnchorsContained(zoom, dx, dy)) return zoom;
+      if (rawOnlyFallback === null) rawOnlyFallback = zoom;
+    }
+  }
+  return rawOnlyFallback;
+}
+
 function AreaPanner({
   panToArea,
   bottomOcclusionPx = 0,
 }: {
   panToArea?:
-    | (AreaPoint & { seq?: number; reason?: AreaPanReason; consumedSeqRef?: MutableRefObject<number> })
+    | (AreaPoint & {
+        seq?: number;
+        reason?: AreaPanReason;
+        consumedSeqRef?: MutableRefObject<number>;
+        hierarchyChildAnchors?: HierarchyChildAnchor[] | null;
+      })
     | null;
   bottomOcclusionPx?: number;
 }) {
@@ -1145,6 +1499,168 @@ function AreaPanner({
     };
 
     const applyFit = () => {
+      // Issue #1943 Slice B — hierarchy camera-fit branch. Reuses this
+      // effect's OWN seq gate / isMapSized() check / 0x0 resize retry
+      // unchanged (this leading branch lives INSIDE applyFit for exactly
+      // that reason). A NULL resolver result, or a non-null result whose
+      // chosen candidate still clips, falls through to today's fitBounds
+      // block verbatim, below, unmodified.
+      if (panToArea.reason === 'canonicalNode' && panToArea.hierarchyChildAnchors?.length) {
+        const viewportWidthPx = typeof window !== 'undefined' ? window.innerWidth : undefined;
+        const [padH, padV] = computeCameraPadding(viewportWidthPx);
+        // Issue #1943 Slice B (code review fix 2) — read `map.getSize()`
+        // directly. Safety here is PLATFORM-guaranteed, not gate-guaranteed:
+        // real Leaflet always defines `getSize`. Note `isMapSized()` above
+        // does NOT establish that — it returns true precisely when `getSize`
+        // is absent; what it does establish is a non-zero size when present.
+        // A window.innerWidth/innerHeight fallback would substitute a
+        // DIFFERENT geometry (viewport, not container) and must never be
+        // reached in production.
+        const size = map.getSize();
+        // Issue #1943 Slice B (mobile double-count warning) — do NOT add
+        // MOBILE_LISTING_PREVIEW_OCCLUSION_PX here: the mobile preview sheet
+        // already physically clips the Leaflet container, so `map.getSize()`
+        // is already occlusion-corrected. `bottomOcclusionPx` (the proactive
+        // signal this effect already reserves for the bbox path below) is
+        // the only additional inset needed.
+        const usableViewport: UsableViewportRect = {
+          widthPx: size.x,
+          heightPx: size.y,
+          insetTopPx: padV,
+          insetRightPx: padH,
+          insetBottomPx: padV + bottomOcclusionPx,
+          insetLeftPx: padH,
+        };
+        // Issue #1943 Slice B (code review fix 1) — containmentBounds is
+        // size-only and position-insensitive (see hierarchyCameraFit.ts's
+        // module doc): passing the node's own bbox here can only pull
+        // zBase DOWN, never up. Without it, a canonical node with one
+        // child (or several tightly-coincident children) has a near-zero
+        // child-rect footprint, so zBase climbs straight to the clamp and
+        // the camera lands on a meaningless pinpoint instead of framing
+        // the node's real geographic extent.
+        const nodeBbox = panToArea.bbox;
+        // Issue #1943 (Slice B+C merge, item 5 — the open Slice-B minZoom
+        // floor) — the flat LEAF_FIT_MIN_ZOOM (13) constant CLIPS: the
+        // merged-scope diagnostic proved neither Udupi's nor Bangalore's
+        // datasets have a single zoom in [13,16] that is simultaneously
+        // clipped==0 and pairs==0. The principled floor is the
+        // fitBounds-equivalent CONTAINMENT zoom for this node — the largest
+        // zoom at which the node's own envelope (its stored bbox, or, when
+        // it has none — e.g. Udupi's synthetic root — the union of its
+        // direct children's own lat/lon) still fits the CURRENT container.
+        // That zoom, by construction, contains every child, so it is a safe
+        // lower bound to start the resolver's candidate search from — never
+        // `map.getMinZoom()` raw (0 on this production-configured
+        // MapContainer), which would let the resolver pick an absurdly wide
+        // camera whose zero collisions are an artefact of everything being
+        // tiny. `map.getBoundsZoom` is Leaflet's OWN containment-zoom
+        // routine (never hand-rolled), mirroring the `map.project` rule just
+        // below. Falls back to LEAF_FIT_MIN_ZOOM only when no usable
+        // envelope exists at all (no bbox AND no anchors with a lat/lon).
+        const envelopeLatLngs: [number, number][] = nodeBbox
+          ? [nodeBbox[0], nodeBbox[1]]
+          : panToArea.hierarchyChildAnchors
+              .filter(
+                (anchor): anchor is HierarchyChildAnchor & { lat: number; lon: number } =>
+                  anchor.lat != null && anchor.lon != null,
+              )
+              .map((anchor) => [anchor.lat, anchor.lon] as [number, number]);
+        let derivedMinZoom = LEAF_FIT_MIN_ZOOM;
+        // Guarded the same way `isMapSized()` guards `map.getSize` above:
+        // real Leaflet always defines both `L.latLngBounds` and
+        // `map.getBoundsZoom`; a test double that omits either falls back to
+        // the flat LEAF_FIT_MIN_ZOOM floor rather than throwing.
+        if (
+          envelopeLatLngs.length > 0 &&
+          typeof L.latLngBounds === 'function' &&
+          typeof map.getBoundsZoom === 'function'
+        ) {
+          const envelopeBounds = L.latLngBounds(envelopeLatLngs);
+          // Issue #1943 (Slice B, code review cycle 2, FIX 3) — a degenerate
+          // (zero-span) envelope — no bbox and coincident/near-coincident
+          // anchors — makes `getBoundsZoom` return the map's own maximum
+          // zoom, which then clamps `derivedMinZoom` straight to
+          // LEAF_FIT_MAX_ZOOM. That collapses the resolver's candidate
+          // window to a single zoom (minZoom === maxZoom), a regression from
+          // the previous [LEAF_FIT_MIN_ZOOM, LEAF_FIT_MAX_ZOOM] search range.
+          // Skip the derivation entirely in that case and keep the flat
+          // LEAF_FIT_MIN_ZOOM floor, preserving a real search window.
+          const isDegenerateEnvelope =
+            envelopeBounds.isValid() &&
+            envelopeBounds.getNorth() === envelopeBounds.getSouth() &&
+            envelopeBounds.getEast() === envelopeBounds.getWest();
+          if (envelopeBounds.isValid() && !isDegenerateEnvelope) {
+            // Issue #1943 (Slice B, code review cycle 3, F2) — Leaflet's
+            // `getBoundsZoom(bounds, inside, padding)` subtracts `padding`
+            // from the container ONCE, in full (leaflet-src.js:3980-3987);
+            // its own `fitBounds` caller sums paddingTL + paddingBR before
+            // passing it in (leaflet-src.js:3370-3373). So this padding
+            // argument must equal the resolver's TOTAL inset, not one
+            // edge's share of it: the resolver's usableViewport insets by
+            // padH on BOTH left and right, and by padV on top plus
+            // (padV + bottomOcclusionPx) on the bottom, so the total inset
+            // is 2*padH horizontally and 2*padV + bottomOcclusionPx
+            // vertically. Passing only the bottom-right half (the previous
+            // code) under-pads the computation, which can return a zoom one
+            // level too high and clip the envelope. Mirrors this file's own
+            // `fitBounds` call further down in this same effect, which achieves
+            // the same total by passing `paddingTopLeft`/`paddingBottomRight`
+            // separately and letting Leaflet sum them.
+            const containmentZoom = map.getBoundsZoom(
+              envelopeBounds,
+              false,
+              L.point(padH * 2, padV * 2 + bottomOcclusionPx),
+            );
+            if (Number.isFinite(containmentZoom)) {
+              derivedMinZoom = Math.max(0, Math.min(Math.floor(containmentZoom), LEAF_FIT_MAX_ZOOM));
+            }
+          }
+        }
+        // Issue #1943 (Stage-B rework, TASK 1 "A-containable") — narrow the
+        // resolver's own candidate window to exclude zooms that would be
+        // illegible AFTER the render layer's clusterAreaMembers merge pass.
+        // See narrowToLegibleZoomWindow's doc above for why this closes the
+        // resolver/clusterer feedback gap without touching
+        // hierarchyCameraFit.ts. Never narrows to empty/one candidate —
+        // falls back to [derivedMinZoom, LEAF_FIT_MAX_ZOOM] unnarrowed.
+        const narrowedWindow = narrowToLegibleZoomWindow(
+          panToArea.hierarchyChildAnchors,
+          (lat, lon, zoom) => map.project([lat, lon], zoom),
+          derivedMinZoom,
+          LEAF_FIT_MAX_ZOOM,
+          usableViewport,
+        );
+        const hierarchyResult = resolveHierarchyCameraFit({
+          anchors: panToArea.hierarchyChildAnchors,
+          containmentBounds: nodeBbox
+            ? {
+                south: nodeBbox[0][0],
+                west: nodeBbox[0][1],
+                north: nodeBbox[1][0],
+                east: nodeBbox[1][1],
+              }
+            : null,
+          viewport: usableViewport,
+          // Issue #1943 Slice B (risk R5) — Leaflet's OWN projection,
+          // literally. Never hand-roll a Mercator here.
+          project: (lat, lon, zoom) => map.project([lat, lon], zoom),
+          minZoom: narrowedWindow.minZoom,
+          maxZoom: narrowedWindow.maxZoom,
+        });
+        // Issue #1943 (Slice B, reroute cycle 2, OPTION 2) — a chosen
+        // candidate that still clips is a magnitude-blind score artifact
+        // (see hierarchyCameraFit.ts:434), not a usable fit: discard it and
+        // fall through to fitBounds rather than committing an off-screen camera.
+        if (hierarchyResult && hierarchyResult.chosen.clipped === 0) {
+          map.setView(hierarchyResult.centre, hierarchyResult.zoom, { animate: false });
+          return;
+        }
+        // Issue #1943 (Slice B, code review cycle 2, FIX 4c) — the resolver
+        // returned null (no usable anchors after filtering) or its chosen
+        // candidate clips: fall through to today's fitBounds/flyTo block below,
+        // verbatim.
+      }
       if (panToArea.bbox) {
         // Issue #1069: a synthetic group-bounds AreaPoint (from computeGroupBounds)
         // can fit at a zoom level above AREA_PANNER_GROUP_MAX_ZOOM for narrow groups,
@@ -1648,6 +2164,8 @@ function MapController({
   cityZoom,
   resetMapTick,
   cameraIntent,
+  isDestinationClusterLevel,
+  isClusterDrillIntentRef,
 }: {
   selectedListing?: PropertyListing | null;
   focusBounds?: [[number, number], [number, number]] | null;
@@ -1655,6 +2173,39 @@ function MapController({
   cityZoom?: number;
   resetMapTick?: number;
   cameraIntent?: CameraIntent | null;
+  /**
+   * Issue #1943 (Stage-B rework, TASK 2 "Option B") — true only while the
+   * canonical Areas hierarchy is showing its 'clusters'/'directions' level
+   * (a destination CLUSTER card, never a real AREA/listing). Widens the
+   * 'overview' framing's zoom ceiling below (from AREA_LAYER_MAX_ZOOM to
+   * LEAF_FIT_MAX_ZOOM) for exactly that context, so a cluster-card drill-in
+   * click can actually reach a zoom that decomposes it, instead of
+   * recentring at a capped zoom that never separates the members.
+   *
+   * SAFE to widen only here: `deriveDiscoverScopeKind`
+   * (useDiscoverMapData.ts) — the sole gate on `markersEnabled` — returns
+   * 'city' whenever no legacy areaKey/groupId/scope URL param is set, which
+   * is always true while browsing the node-key-based 'clusters'/'directions'
+   * hierarchy levels (they never set those legacy params). So a zoom above
+   * AREA_LAYER_MAX_ZOOM reached HERE cannot flip markersEnabled true or
+   * trigger any correlated listings refit — the exact hazard the
+   * surrounding suppression comment below documents for the general
+   * 'overview' case remains structurally impossible in this one context.
+   */
+  isDestinationClusterLevel?: boolean;
+  /**
+   * Issue #1943 (Stage-B fix-cycle — cluster drill-in never zooms out). Set
+   * to true by PropertyMap's `handleAreaVisualClusterCameraIntent` wrapper
+   * immediately before it forwards a destination-cluster-card click to the
+   * real `onAreaVisualClusterCameraIntent` publisher (which synchronously
+   * bumps `cameraIntent.seq`), and read-then-reset the moment this effect
+   * processes that intent below — so the "always zoom in" clamp applies to
+   * EXACTLY the click that armed it, never to a later, unrelated 'overview'
+   * intent that happens to arrive while `isDestinationClusterLevel` is still
+   * true (that broader flag covers the whole 'clusters'/'directions'
+   * navigation level, not just the instant of a cluster-card click).
+   */
+  isClusterDrillIntentRef?: MutableRefObject<boolean>;
 }) {
   const map = useMap();
 
@@ -1755,10 +2306,112 @@ function MapController({
       // Macro-region / group pin — same framing the removed AreaMarkerLayer
       // code used to apply: fitBounds capped at the area-overview zoom band,
       // or flyTo(center, AREA_LAYER_MAX_ZOOM).
-      if (cameraIntent.bounds) {
-        map.fitBounds(cameraIntent.bounds, { padding: [paddingX, paddingY], maxZoom: AREA_LAYER_MAX_ZOOM });
+      //
+      // Issue #1943 (Stage-B rework, TASK 2 "Option B") — `overviewMaxZoom`
+      // is AREA_LAYER_MAX_ZOOM for every 'overview' intent EXCEPT a
+      // destination-cluster-card drill-in click (see
+      // `isDestinationClusterLevel`'s doc on this component's props for why
+      // widening the ceiling there is safe). Every other 'overview' producer
+      // (macro-region pin, legacy area-group chip) is unaffected — this
+      // widens the ceiling ONLY while `isDestinationClusterLevel` is true.
+      const overviewMaxZoom = isDestinationClusterLevel ? LEAF_FIT_MAX_ZOOM : AREA_LAYER_MAX_ZOOM;
+
+      // Issue #1943 (Stage-B fix-cycle — cluster drill-in never zooms out).
+      // isClusterDrillIntent is read-then-reset here so it applies to EXACTLY
+      // this intent, never a later one. Raising overviewMaxZoom to
+      // LEAF_FIT_MAX_ZOOM above PERMITS a closer fit but does not FORCE one —
+      // fitBounds/flyTo on the members' own bounds can legitimately compute a
+      // zoom at or below the current one (wide member bounds relative to the
+      // viewport, or near-coincident members). For every OTHER 'overview'
+      // producer (macro-region pin, legacy area-group chip) that is correct:
+      // it is simply the pin's own natural fit. For a cluster-card drill-in
+      // click it actively makes things worse — the bubble stays collapsed and
+      // whatever else was on screen gets zoomed OUT from under it. Scoped to
+      // isClusterDrillIntent ONLY; every other 'overview' intent falls
+      // through to the unmodified fitBounds/flyTo(maxZoom) below.
+      const isClusterDrillIntent = isClusterDrillIntentRef?.current === true;
+      if (isClusterDrillIntentRef) {
+        isClusterDrillIntentRef.current = false;
+      }
+
+      if (isClusterDrillIntent) {
+        const currentZoom = map.getZoom();
+        const center = cameraIntent.bounds
+          ? L.latLngBounds(cameraIntent.bounds).getCenter()
+          : L.latLng(cameraIntent.center[0], cameraIntent.center[1]);
+        if (currentZoom >= overviewMaxZoom) {
+          // Already at the ceiling — there is no room left to drill in
+          // further. Explicit no-op (recenter only, no zoom change) rather
+          // than silently falling through to the unmodified fit below, which
+          // could compute a zoom at or below currentZoom and reproduce the
+          // exact "drill-in that doesn't drill in" bug this fix exists to
+          // close.
+          map.panTo(center);
+        } else {
+          const rawZoom = cameraIntent.bounds
+            ? map.getBoundsZoom(cameraIntent.bounds, false, L.point(paddingX, paddingY))
+            : overviewMaxZoom;
+          // Issue #1943 (Stage-B fix-cycle — code-reviewer HIGH finding).
+          // Two properties are both required here, and they are in tension:
+          //   (1) FORWARD PROGRESS — a cluster-card click must ALWAYS zoom
+          //       IN: strictly greater than the zoom at click time, never
+          //       equal, never below (b3a430db's original bug: a click at
+          //       13 produced 12).
+          //   (2) CONTAINMENT — the target must not exceed rawZoom, the
+          //       largest zoom at which the CLICKED CLUSTER'S OWN MEMBERS
+          //       still fit their padded bounds. rawZoom is a HARD CEILING,
+          //       never just a floor competitor with currentZoom + 1. The
+          //       previous `Math.min(overviewMaxZoom, Math.max(currentZoom +
+          //       1, rawZoom))` treated "+1" as a guarantee that competed
+          //       with rawZoom via Math.max — so whenever rawZoom was <=
+          //       currentZoom, the clamp forced the camera to currentZoom + 1
+          //       anyway, past the members' own containment fit, clipping
+          //       member anchors off-screen. This mirrors exactly why the
+          //       sibling 'cluster' framing branch above (Issue #1762
+          //       fix-cycle 10/11) removed the identical construct and made
+          //       its own padded rawZoom a hard ceiling.
+          //
+          //       Scope of that bug, stated precisely because an earlier
+          //       draft of this comment overstated it: map zoom here is
+          //       INTEGER-only (MapContainer sets no zoomSnap/zoomDelta, so
+          //       Leaflet defaults to zoomSnap = 1 — see zoomPolicy.ts:47-48),
+          //       and `getBoundsZoom` floors to that snap. With integer inputs
+          //       the old and new expressions agree on every REACHABLE input,
+          //       so this rewrite is a clarity and honesty fix, NOT a
+          //       behaviour change. The fractional handling below is
+          //       forward-compatibility should zoomSnap ever change; note that
+          //       if it did, `setView` -> `_limitZoom` would round a
+          //       fractional target back down, which could silently cost the
+          //       forward progress property (1) guarantees.
+          //
+          // When rawZoom > currentZoom, both properties hold at once:
+          // min(overviewMaxZoom, rawZoom) is a real containment fit AND
+          // strictly greater than currentZoom (overviewMaxZoom is already
+          // known > currentZoom here, via the ceiling check above).
+          //
+          // When rawZoom <= currentZoom, the members do not fit any better
+          // above the current zoom than they already do at it — there is no
+          // zoom > currentZoom anywhere that is both a real fit and forward
+          // progress. Property (1) wins here: the click must still do
+          // something visible, so the camera advances exactly one level.
+          // This is a DELIBERATE, NAMED exception — containment is NOT
+          // guaranteed on this branch, and one or more of the cluster's own
+          // members may render outside the frame. (Separately: rawZoom
+          // itself is computed by passing one edge's padding share to
+          // `getBoundsZoom`, which subtracts it once in full — this file's
+          // pre-existing F2 convention, shared with the 'leaf'/'cluster'
+          // branches — so rawZoom already runs slightly optimistic before
+          // this reasoning is even applied.)
+          const targetZoom =
+            rawZoom > currentZoom
+              ? Math.min(overviewMaxZoom, rawZoom)
+              : Math.min(overviewMaxZoom, currentZoom + 1);
+          map.setView(center, targetZoom, { animate: true });
+        }
+      } else if (cameraIntent.bounds) {
+        map.fitBounds(cameraIntent.bounds, { padding: [paddingX, paddingY], maxZoom: overviewMaxZoom });
       } else {
-        map.flyTo(cameraIntent.center, AREA_LAYER_MAX_ZOOM);
+        map.flyTo(cameraIntent.center, overviewMaxZoom);
       }
     } else if (cameraIntent.framing === 'cluster') {
       // Issue #1762 — listing-cluster tap fit-to-members. Mirrors the 'leaf'
@@ -2890,6 +3543,31 @@ export function PropertyMap({
   onMarkerClickWithPosition,
   onMarkerClusterCameraIntent,
 }: PropertyMapProps) {
+  // Issue #1943 (Stage-B fix-cycle — cluster drill-in never zooms out) — a
+  // ref, not state: it must be readable synchronously inside MapController's
+  // cameraIntent effect on the very same commit the click produced, with no
+  // extra render in between. Set to true for exactly one cameraIntent
+  // (immediately before invoking the real onAreaVisualClusterCameraIntent
+  // below, which synchronously bumps cameraIntent's seq) and consumed
+  // (read-then-reset) by MapController the moment it processes that intent —
+  // never left armed for a LATER, unrelated 'overview' intent. Narrower than
+  // `isDestinationClusterLevel`: that flag is true for the whole
+  // 'clusters'/'directions' navigation level, not just the instant of a
+  // cluster-card click, so keying the "always zoom in" clamp off it alone
+  // would also force a zoom-in on some other 'overview' producer that
+  // happened to fire while browsing that level. This ref ties the clamp to
+  // the actual click, not the ambient level.
+  const isClusterDrillIntentRef = useRef(false);
+  const handleAreaVisualClusterCameraIntent = useCallback<
+    NonNullable<PropertyMapProps['onAreaVisualClusterCameraIntent']>
+  >(
+    (bounds, center) => {
+      isClusterDrillIntentRef.current = true;
+      onAreaVisualClusterCameraIntent?.(bounds, center);
+    },
+    [onAreaVisualClusterCameraIntent],
+  );
+
   // Issue #1410 — when agriGroupListings is provided (non-null), use the adapted items
   // for AgriMarkerClusterLayer and AgriPolygonLayer instead of the raw `listings` prop.
   // An empty array is intentional (0 markers for the selected group = correct behaviour).
@@ -3022,11 +3700,19 @@ export function PropertyMap({
           cityZoom={cityZoom}
           resetMapTick={resetMapTick}
           cameraIntent={cameraIntent}
+          isDestinationClusterLevel={
+            areasNavigationJourney?.levelKind === 'clusters' ||
+            areasNavigationJourney?.levelKind === 'directions'
+          }
+          isClusterDrillIntentRef={isClusterDrillIntentRef}
         />
         <ZoomWatcher onZoomChange={onZoomChange} />
         <ViewportWatcher onViewportChange={onViewportChange} />
         <BoundsWatcher onBoundsChange={onBoundsChange} />
-        <AreaPanner panToArea={panToArea} bottomOcclusionPx={bottomOcclusionPx} />
+        <AreaPanner
+          panToArea={panToArea}
+          bottomOcclusionPx={bottomOcclusionPx}
+        />
         <SchoolFocusPanner
           schoolFocusTick={schoolFocusTick}
           lat={schoolFocusLat}
@@ -3104,7 +3790,7 @@ export function PropertyMap({
             journey={journey}
             focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
             onClusterFocusChange={onClusterFocusChange}
-            onAreaVisualClusterCameraIntent={onAreaVisualClusterCameraIntent}
+            onAreaVisualClusterCameraIntent={handleAreaVisualClusterCameraIntent}
           />
         ) : (
           // Issue #1882 (Track A PR3, Slice S3) — AreaMarkerLayer renders when it's

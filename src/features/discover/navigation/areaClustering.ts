@@ -1,30 +1,51 @@
 /**
- * areaClustering.ts — Issue #1956 PR 3 (Slice 4).
+ * areaClustering.ts — Issue #1956 PR 3 (Slice 4); generalised Issue #1943
+ * (Slice B+C merge).
  *
- * Deterministic SCREEN-SPACE grid clustering for dense AREA children of the
- * canonical Areas hierarchy. This module is PURE: no DOM, no Leaflet import,
- * no React, no randomness, no async, no reliance on object-iteration order.
- * The caller (`AreaMarkerLayer.tsx`) supplies a `project` function (the map's
- * own lat/lon -> container-pixel projection) and the current zoom; this
- * module never touches a map instance itself.
+ * Deterministic SCREEN-SPACE grid clustering, originally built for dense AREA
+ * children of the canonical Areas hierarchy and now GENERALISED (additively)
+ * to also cluster 'clusters'/'directions'-level hierarchy children (see
+ * `ClusterableDestination` below). This module is PURE: no DOM, no Leaflet
+ * import, no React, no randomness, no async, no reliance on object-iteration
+ * order. The caller (`AreaMarkerLayer.tsx`) supplies a `project` function
+ * (the map's own lat/lon -> container-pixel projection) and the current
+ * zoom; this module never touches a map instance itself.
  *
  * ── ALGORITHM ──
  * Cell assignment is a pure function of (projected pixel x/y at the supplied
  * zoom, a fixed cell size): each member is projected once, floor-divided into
  * an integer grid cell, and grouped by that cell. Nothing here depends on the
  * ORDER members arrive in — every member array is deterministically sorted
- * (by `areaKey`, which is unique, so the sort is a TOTAL order with no ties)
- * before it is returned, and the cluster list itself is sorted by grid
- * coordinate. Two calls with identical members + `project` + `zoom` therefore
- * produce byte-identical output, including when every member sits at the
- * exact same coordinate (determinism then comes entirely from the `areaKey`
- * tie-break, never from incidental coordinate separation).
+ * (by `identityKey`, which is unique per caller's own domain, so the sort is
+ * a TOTAL order with no ties) before it is returned, and the cluster list
+ * itself is sorted by grid coordinate. Two calls with identical members +
+ * `project` + `zoom` therefore produce byte-identical output, including when
+ * every member sits at the exact same coordinate (determinism then comes
+ * entirely from the `identityKey` tie-break, never from incidental
+ * coordinate separation).
  *
- * ── MEMBERSHIP IS BY areaKey, NEVER BY displayLabel ──
- * A cluster's members are the literal `ClusterableAreaMember` objects passed
- * in, keyed and de-duplicated by `areaKey`. Two members may legitimately share
- * a `displayLabel` (or have labels that look swapped) without that ever
+ * ── MEMBERSHIP IS BY identityKey, NEVER BY displayLabel ──
+ * A cluster's members are the literal objects passed in, keyed and
+ * de-duplicated by `identityKey`. Two members may legitimately share a
+ * `displayLabel` (or have labels that look swapped) without that ever
  * affecting which cluster they land in or how they sort within it.
+ *
+ * ── IDENTITY GENERALISATION (Issue #1943, Slice B+C merge) — DO NOT ALIAS
+ * nodeKey AS areaKey ──
+ * `ClusterableDestination` is the neutral base every clusterable member
+ * satisfies via an `identityKey`. `ClusterableAreaMember` (the pre-existing,
+ * AREA-only shape) EXTENDS it and additionally REQUIRES a real `areaKey` —
+ * this module's private comparator/cellKey/merge machinery below reads
+ * ONLY `identityKey`, never `areaKey`, so the AREA path's adapter setting
+ * `identityKey = raw.areaKey` reproduces every cellKey, sort order and merge
+ * order BYTE-IDENTICAL to the pre-generalisation output (see
+ * `__tests__/areaClustering.test.ts`'s pre-rename golden characterisation —
+ * the only thing that can actually prove a pure rename is inert). A
+ * hierarchy destination (a 'clusters'/'directions' child, which has no real
+ * `areaKey`) supplies its `nodeKey` as `identityKey` instead, via its OWN
+ * adapter type (see `AreaMarkerLayer.tsx`) — never by writing a `nodeKey`
+ * value into an `areaKey` field, which would collide the two key spaces
+ * (AreaMarkerLayer.tsx carries an explicit written prohibition on this).
  *
  * ── FAIL-SAFE (AC4.21) ──
  * A member with a null/undefined/non-finite centroid, `(0, 0)` ("Null
@@ -37,21 +58,48 @@
  * the current city/viewport (e.g. a data-entry error placing an area on
  * another continent).
  *
- * ── VISIBILITY BEFORE CLUSTERING ──
+ * ── VISIBILITY BEFORE CLUSTERING (AREA path only) ──
  * `clusterVisibleAreaMembers` composes the existing journey-aware visibility
  * predicate (`journeyVisibility.isMemberEligible`) with this module's grid
  * clusterer so a zero-content member NEVER reaches a cluster and is NEVER
  * counted in any hidden/representative arithmetic downstream
  * (`representativeNames.ts`). Visibility is applied strictly BEFORE grouping,
  * never after — a cluster can never advertise a member it would not itself
- * show.
+ * show. This wrapper stays AREA-only (it needs a real `areaKey` for
+ * `journeyVisibility`'s `AreaMember` shape) — 'clusters'/'directions' are
+ * STRUCTURAL levels, which journey-aware visibility never hides (see
+ * `journeyVisibility.ts`'s module doc), so those callers use the generic
+ * `clusterAreaMembers` directly, with no visibility filtering, exactly
+ * matching their pre-generalisation behaviour (neither branch filtered by
+ * eligibility before this change either).
+ *
+ * ── FOOTPRINT DIMENSIONS ARE NOW A CALL-SITE ARGUMENT ──
+ * `footprintRectAt` (and therefore `clusterAreaMembers`/
+ * `clusterVisibleAreaMembers` via their optional `footprintWidthPx`/
+ * `footprintHeightPx`) no longer closes over the fixed AREA card dimensions.
+ * The AREA path omits the override, defaulting to
+ * `AREA_CARD_FOOTPRINT_WIDTH_PX`/`AREA_CARD_FOOTPRINT_HEIGHT_PX` exactly as
+ * before (byte-identical). A destination-card caller passes its own
+ * conservative footprint, sourced from `destinationCardFootprint.ts`'s
+ * calibrated estimator — never a locally re-typed constant here.
  */
 import { isMemberEligible, type DiscoverJourney } from './journeyVisibility';
 
-/** One AREA child as the clusterer consumes it. */
-export interface ClusterableAreaMember {
-  nodeKey: string;
-  areaKey: string;
+/**
+ * The neutral shape every clusterable member satisfies. See the module doc's
+ * "IDENTITY GENERALISATION" section — `identityKey` is the ONLY field this
+ * module's comparator/cellKey/merge logic ever reads for identity purposes.
+ *
+ * OPTIONAL (Issue #1943 Option-2 narrowing — rework-request-stage-b-3.toml):
+ * an AREA-path caller may omit `identityKey` entirely; `clusterVisibleAreaMembers`
+ * (the ONE call site that feeds dense AREA children through this module — see
+ * "VISIBILITY BEFORE CLUSTERING" below) defaults it to the member's own
+ * `areaKey`, exactly the AREA path's existing adapter convention. A
+ * 'clusters'/'directions' hierarchy destination (no real `areaKey`) has no
+ * such fallback and must keep supplying its own `identityKey` explicitly.
+ */
+export interface ClusterableDestination {
+  identityKey?: string;
   displayLabel: string;
   lat: number;
   lon: number;
@@ -61,6 +109,12 @@ export interface ClusterableAreaMember {
   displayOrder: number;
   /** Journey-aware SCHOOL count (Schools journey eligibility dimension). `null` when not loaded. */
   schoolCount: number | null;
+}
+
+/** One AREA child as the clusterer consumes it. */
+export interface ClusterableAreaMember extends ClusterableDestination {
+  nodeKey: string;
+  areaKey: string;
 }
 
 export interface ProjectedPoint {
@@ -80,30 +134,31 @@ export interface CentroidPlausibilityBounds {
 }
 
 /** One screen-space grid cell's resolved members + centroid anchor. */
-export interface AreaClusterCell {
+export interface AreaClusterCell<T extends ClusterableDestination = ClusterableAreaMember> {
   /**
    * Deterministic identity for this render pass: `z<zoom>:<first member's
-   * areaKey>` — a merged cell (see UD-1's `mergeOverlappingCells`) no longer
-   * corresponds to a single grid coordinate, so identity is keyed on the
-   * areaKey-sorted member list's first entry (unique -> total order) instead.
+   * identityKey>` — a merged cell (see UD-1's `mergeOverlappingCells`) no
+   * longer corresponds to a single grid coordinate, so identity is keyed on
+   * the identityKey-sorted member list's first entry (unique -> total order)
+   * instead.
    */
   cellKey: string;
-  /** Members sorted by `areaKey` (unique -> total order, no ties). Never mutated. */
-  members: readonly ClusterableAreaMember[];
+  /** Members sorted by `identityKey` (unique -> total order, no ties). Never mutated. */
+  members: readonly T[];
   /** Arithmetic-mean centroid of the cell's member coordinates — a group locator, not a real place. */
   anchor: { lat: number; lon: number };
 }
 
-export interface AreaClusteringResult {
+export interface AreaClusteringResult<T extends ClusterableDestination = ClusterableAreaMember> {
   /**
    * Every resolved grid cell, ONE entry per cell, sorted deterministically by
    * grid coordinate. A cell with exactly one member is a "single" — the
    * caller renders it as a single-AREA marker; a cell with two or more
    * members is a visual cluster.
    */
-  clusters: readonly AreaClusterCell[];
+  clusters: readonly AreaClusterCell<T>[];
   /** Members dropped for an unusable centroid (AC4.21) — never clustered, never rendered at an invented position. */
-  omitted: readonly ClusterableAreaMember[];
+  omitted: readonly T[];
 }
 
 const DEFAULT_CELL_SIZE_PX = 64;
@@ -122,13 +177,26 @@ const DEFAULT_CELL_SIZE_PX = 64;
  * line-count variant's real rendered height. Over-estimating the footprint
  * only ever causes an EXTRA merge (still correct, just more conservative);
  * under-estimating is the only way this invariant could actually fail.
+ *
+ * This remains the AREA path's DEFAULT footprint (used when a caller omits
+ * `footprintWidthPx`/`footprintHeightPx`) — never imported directly by a
+ * destination-card caller (see `AreaMarkerLayer.tsx`'s FOOTPRINT SOURCE
+ * rule: destination footprints come from `destinationCardFootprint.ts`).
  */
 export const AREA_CARD_FOOTPRINT_WIDTH_PX = 110;
 export const AREA_CARD_FOOTPRINT_HEIGHT_PX = 100;
 
-function compareByAreaKey(a: ClusterableAreaMember, b: ClusterableAreaMember): number {
-  if (a.areaKey === b.areaKey) return 0;
-  return a.areaKey < b.areaKey ? -1 : 1;
+function compareByIdentityKey<T extends ClusterableDestination>(a: T, b: T): number {
+  // `identityKey` is optional at the type level (AREA-path convenience — see
+  // ClusterableDestination's doc); every real caller resolves it to a
+  // non-empty string before a member reaches this comparator
+  // (clusterVisibleAreaMembers for the AREA path, explicit assignment for
+  // hierarchy destinations). The `?? ''` is a total-function safety net,
+  // never an expected runtime value.
+  const aKey = a.identityKey ?? '';
+  const bKey = b.identityKey ?? '';
+  if (aKey === bKey) return 0;
+  return aKey < bKey ? -1 : 1;
 }
 
 interface FootprintRect {
@@ -138,13 +206,20 @@ interface FootprintRect {
   bottom: number;
 }
 
-/** Card footprint rect anchored bottom-center at `anchorPx` (see the constants' doc above). */
-function footprintRectAt(anchorPx: ProjectedPoint): FootprintRect {
-  const halfW = AREA_CARD_FOOTPRINT_WIDTH_PX / 2;
+/**
+ * Card footprint rect anchored bottom-center at `anchorPx` (see the AREA
+ * constants' doc above for the anchoring contract). `widthPx`/`heightPx` are
+ * now a plain ARGUMENT (Issue #1943 Slice B+C merge) rather than a closure
+ * over the AREA-only constants, so this same routine serves both the AREA
+ * path (default dimensions) and a destination-card caller (its own
+ * calibrated dimensions).
+ */
+function footprintRectAt(anchorPx: ProjectedPoint, widthPx: number, heightPx: number): FootprintRect {
+  const halfW = widthPx / 2;
   return {
     left: anchorPx.x - halfW,
     right: anchorPx.x + halfW,
-    top: anchorPx.y - AREA_CARD_FOOTPRINT_HEIGHT_PX,
+    top: anchorPx.y - heightPx,
     bottom: anchorPx.y,
   };
 }
@@ -153,8 +228,8 @@ function footprintsIntersect(a: FootprintRect, b: FootprintRect): boolean {
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 
-interface MergeWorkingCell {
-  members: ClusterableAreaMember[];
+interface MergeWorkingCell<T extends ClusterableDestination> {
+  members: T[];
 }
 
 /**
@@ -170,33 +245,35 @@ interface MergeWorkingCell {
  * pairs — the only way to actually PROVE the no-overlap invariant.
  *
  * Determinism (AC4.15): every pass re-sorts the current working list by its
- * first member's `areaKey` (members within a cell are already areaKey-sorted
- * by the caller, and every `areaKey` is unique, so this is a TOTAL order —
- * never an incidental Map/array iteration order) before scanning row-major
- * for the first intersecting pair. Two calls with identical members +
- * `project` + `zoom` therefore always merge the same pair first, in the same
- * order, and produce byte-identical output. A merge recomputes the anchor as
- * the arithmetic-mean centroid of ALL combined members (the same
- * `centroidOf` a single grid cell already uses) and re-sorts the combined
- * member list by `areaKey`.
+ * first member's `identityKey` (members within a cell are already
+ * identityKey-sorted by the caller, and every `identityKey` is unique within
+ * a single call's own domain, so this is a TOTAL order — never an incidental
+ * Map/array iteration order) before scanning row-major for the first
+ * intersecting pair. Two calls with identical members + `project` + `zoom`
+ * therefore always merge the same pair first, in the same order, and produce
+ * byte-identical output. A merge recomputes the anchor as the arithmetic-mean
+ * centroid of ALL combined members (the same `centroidOf` a single grid cell
+ * already uses) and re-sorts the combined member list by `identityKey`.
  */
-function mergeOverlappingCells(
-  cells: readonly MergeWorkingCell[],
+function mergeOverlappingCells<T extends ClusterableDestination>(
+  cells: readonly MergeWorkingCell<T>[],
   project: ProjectFn,
-): MergeWorkingCell[] {
-  let working: MergeWorkingCell[] = cells.map((cell) => ({ members: cell.members.slice() }));
+  footprintWidthPx: number,
+  footprintHeightPx: number,
+): MergeWorkingCell<T>[] {
+  let working: MergeWorkingCell<T>[] = cells.map((cell) => ({ members: cell.members.slice() }));
   let mergedSomething = true;
   while (mergedSomething) {
     mergedSomething = false;
-    working.sort((a, b) => compareByAreaKey(a.members[0], b.members[0]));
+    working.sort((a, b) => compareByIdentityKey(a.members[0], b.members[0]));
     const rects = working.map((cell) => {
       const anchor = centroidOf(cell.members);
-      return footprintRectAt(project(anchor.lat, anchor.lon));
+      return footprintRectAt(project(anchor.lat, anchor.lon), footprintWidthPx, footprintHeightPx);
     });
     for (let i = 0; i < working.length && !mergedSomething; i++) {
       for (let j = i + 1; j < working.length; j++) {
         if (footprintsIntersect(rects[i], rects[j])) {
-          const combinedMembers = working[i].members.concat(working[j].members).sort(compareByAreaKey);
+          const combinedMembers = working[i].members.concat(working[j].members).sort(compareByIdentityKey);
           const next = working.filter((_, idx) => idx !== i && idx !== j);
           next.push({ members: combinedMembers });
           working = next;
@@ -231,7 +308,7 @@ export function isUsableCentroid(
   return true;
 }
 
-function centroidOf(members: readonly ClusterableAreaMember[]): { lat: number; lon: number } {
+function centroidOf<T extends ClusterableDestination>(members: readonly T[]): { lat: number; lon: number } {
   let sumLat = 0;
   let sumLon = 0;
   for (const member of members) {
@@ -241,28 +318,48 @@ function centroidOf(members: readonly ClusterableAreaMember[]): { lat: number; l
   return { lat: sumLat / members.length, lon: sumLon / members.length };
 }
 
-interface InternalCell {
+interface InternalCell<T extends ClusterableDestination> {
   cellX: number;
   cellY: number;
-  members: ClusterableAreaMember[];
+  members: T[];
+}
+
+export interface ClusterAreaMembersOptions {
+  cellSizePx?: number;
+  plausibilityBounds?: CentroidPlausibilityBounds;
+  /**
+   * Issue #1943 Slice B+C merge — the card footprint used for the collision
+   * pass (`mergeOverlappingCells`). Omitted -> defaults to the AREA path's
+   * existing `AREA_CARD_FOOTPRINT_WIDTH_PX`/`AREA_CARD_FOOTPRINT_HEIGHT_PX`,
+   * reproducing today's behaviour byte-identically. A destination-card
+   * caller supplies its own conservative estimate — see
+   * `AreaMarkerLayer.tsx`'s FOOTPRINT SOURCE rule (must come from
+   * `destinationCardFootprint.ts`, never a locally re-typed constant).
+   */
+  footprintWidthPx?: number;
+  footprintHeightPx?: number;
 }
 
 /**
  * The grid clusterer. Pure: given the same `members` (as VALUES — order does
  * not matter), `project`, `zoom` and `options`, always returns the same
- * result.
+ * result. Generic over any `ClusterableDestination` — the AREA path's
+ * `ClusterableAreaMember` and a hierarchy destination's own adapter type both
+ * satisfy the bound.
  */
-export function clusterAreaMembers(
-  members: readonly ClusterableAreaMember[],
+export function clusterAreaMembers<T extends ClusterableDestination>(
+  members: readonly T[],
   project: ProjectFn,
   zoom: number,
-  options?: { cellSizePx?: number; plausibilityBounds?: CentroidPlausibilityBounds },
-): AreaClusteringResult {
+  options?: ClusterAreaMembersOptions,
+): AreaClusteringResult<T> {
   const cellSizePx = options?.cellSizePx ?? DEFAULT_CELL_SIZE_PX;
   const bounds = options?.plausibilityBounds;
+  const footprintWidthPx = options?.footprintWidthPx ?? AREA_CARD_FOOTPRINT_WIDTH_PX;
+  const footprintHeightPx = options?.footprintHeightPx ?? AREA_CARD_FOOTPRINT_HEIGHT_PX;
 
-  const usable: ClusterableAreaMember[] = [];
-  const omitted: ClusterableAreaMember[] = [];
+  const usable: T[] = [];
+  const omitted: T[] = [];
   for (const member of members) {
     if (isUsableCentroid(member.lat, member.lon, bounds)) {
       usable.push(member);
@@ -271,7 +368,7 @@ export function clusterAreaMembers(
     }
   }
 
-  const cellsByKey = new Map<string, InternalCell>();
+  const cellsByKey = new Map<string, InternalCell<T>>();
   for (const member of usable) {
     const point = project(member.lat, member.lon);
     const cellX = Math.floor(point.x / cellSizePx);
@@ -285,8 +382,8 @@ export function clusterAreaMembers(
     }
   }
 
-  const griddedCells: MergeWorkingCell[] = Array.from(cellsByKey.values()).map((cell) => ({
-    members: cell.members.slice().sort(compareByAreaKey),
+  const griddedCells: MergeWorkingCell<T>[] = Array.from(cellsByKey.values()).map((cell) => ({
+    members: cell.members.slice().sort(compareByIdentityKey),
   }));
 
   // UD-1 (fix-cycle-3) — the grid pass above groups near-identical
@@ -295,27 +392,28 @@ export function clusterAreaMembers(
   // pass unions any grid-pass cells whose card footprints would actually
   // overlap on screen, so the returned `clusters` are guaranteed non-
   // overlapping regardless of where a member happened to fall in the grid.
-  const mergedCells = mergeOverlappingCells(griddedCells, project);
+  const mergedCells = mergeOverlappingCells(griddedCells, project, footprintWidthPx, footprintHeightPx);
 
-  // Final deterministic ordering (AC4.15): sort by first (areaKey-sorted)
-  // member's areaKey — a total order, never incidental array/Map order — and
-  // derive each cluster's cellKey from that same identity, since a merged
-  // cell no longer corresponds to a single grid coordinate.
-  const clusters: AreaClusterCell[] = mergedCells
+  // Final deterministic ordering (AC4.15): sort by first (identityKey-sorted)
+  // member's identityKey — a total order, never incidental array/Map order —
+  // and derive each cluster's cellKey from that same identity, since a
+  // merged cell no longer corresponds to a single grid coordinate.
+  const clusters: AreaClusterCell<T>[] = mergedCells
     .slice()
-    .sort((a, b) => compareByAreaKey(a.members[0], b.members[0]))
+    .sort((a, b) => compareByIdentityKey(a.members[0], b.members[0]))
     .map((cell) => ({
-      cellKey: `z${zoom}:${cell.members[0].areaKey}`,
+      cellKey: `z${zoom}:${cell.members[0].identityKey}`,
       members: cell.members,
       anchor: centroidOf(cell.members),
     }));
 
-  return { clusters, omitted: omitted.slice().sort(compareByAreaKey) };
+  return { clusters, omitted: omitted.slice().sort(compareByIdentityKey) };
 }
 
-export interface ClusterVisibleAreaMembersResult extends AreaClusteringResult {
+export interface ClusterVisibleAreaMembersResult<T extends ClusterableAreaMember = ClusterableAreaMember>
+  extends AreaClusteringResult<T> {
   /** Members excluded by journey-aware visibility, BEFORE clustering ever saw them. */
-  hidden: readonly ClusterableAreaMember[];
+  hidden: readonly T[];
 }
 
 /**
@@ -329,20 +427,30 @@ export interface ClusterVisibleAreaMembersResult extends AreaClusteringResult {
  * map and panel always display the identical set of canonical children, even
  * when those children contain zero matches.
  *
- * This is the ONE call site that should feed dense AREA children into
- * `clusterAreaMembers` — callers must not run visibility afterwards as a
- * "corrective" filter.
+ * AREA-ONLY (see module doc's "VISIBILITY BEFORE CLUSTERING" section) — this
+ * is the ONE call site that should feed dense AREA children into
+ * `clusterAreaMembers`; callers must not run visibility afterwards as a
+ * "corrective" filter. 'clusters'/'directions' (STRUCTURAL levels, never
+ * eligibility-hidden) call `clusterAreaMembers` directly instead.
  */
-export function clusterVisibleAreaMembers(
-  members: readonly ClusterableAreaMember[],
+export function clusterVisibleAreaMembers<T extends ClusterableAreaMember>(
+  members: readonly T[],
   journey: DiscoverJourney,
   project: ProjectFn,
   zoom: number,
-  options?: { cellSizePx?: number; plausibilityBounds?: CentroidPlausibilityBounds },
-): ClusterVisibleAreaMembersResult {
-  const visible: ClusterableAreaMember[] = [];
-  const hidden: ClusterableAreaMember[] = [];
-  for (const member of members) {
+  options?: ClusterAreaMembersOptions,
+): ClusterVisibleAreaMembersResult<T> {
+  const visible: T[] = [];
+  const hidden: T[] = [];
+  for (const rawMember of members) {
+    // Issue #1943 Option-2 narrowing (rework-request-stage-b-3.toml) — this
+    // is the ONE call site (per this function's own "AREA-ONLY" doc above)
+    // that defaults an omitted `identityKey` to the member's own `areaKey`,
+    // so an AREA-path caller is no longer required to set `identityKey`
+    // itself. The cast is unavoidable: TS cannot prove a generic object
+    // spread that overrides one constraint-declared property is still
+    // assignable back to the generic `T` it was spread from.
+    const member: T = rawMember.identityKey === undefined ? ({ ...rawMember, identityKey: rawMember.areaKey } as T) : rawMember;
     // Minor fix-up (review) — `null` schoolCount means "not yet loaded", not
     // "zero schools". Coercing it to 0 here would hide every area in the
     // schools journey while counts are still in flight. Treat null as
@@ -367,7 +475,7 @@ export function clusterVisibleAreaMembers(
     (eligible ? visible : hidden).push(member);
   }
   const result = clusterAreaMembers(visible, project, zoom, options);
-  return { ...result, hidden: hidden.slice().sort(compareByAreaKey) };
+  return { ...result, hidden: hidden.slice().sort(compareByIdentityKey) };
 }
 
 /** Union bounds of a set of members' centroids — used for a cluster-focus camera fit. */
@@ -379,7 +487,7 @@ export interface MemberBounds {
 }
 
 /** `null` for an empty member list — there is no bounds to fit. */
-export function boundsOfMembers(members: readonly ClusterableAreaMember[]): MemberBounds | null {
+export function boundsOfMembers(members: readonly ClusterableDestination[]): MemberBounds | null {
   if (members.length === 0) return null;
   let minLat = Number.POSITIVE_INFINITY;
   let minLon = Number.POSITIVE_INFINITY;

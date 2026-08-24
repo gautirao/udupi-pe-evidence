@@ -13,6 +13,19 @@ import { labelToSlug } from '@/utils/macroRegionResolver';
 import { resolveScope, type ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
 import type { RegionScopedAreaGroup } from '@/hooks/useRegionScopedAreaGroups';
 import type { NavigationBounds } from '@/features/discover/navigation/types';
+import type { HierarchyChildAnchor } from '@/features/discover/navigation/hierarchyCameraFit';
+
+/**
+ * Issue #1943 Slice B — `publishPanToArea`/`guardedSetPanToArea`'s own
+ * payload type, widened to accept the two optional hierarchy fields
+ * alongside the plain `AreaPoint` shape group/scope already pass. A plain
+ * `AreaPoint` (no hierarchy fields) remains structurally assignable here —
+ * both new fields are optional — so the group/scope call sites are
+ * unaffected.
+ */
+type PanToAreaPayload = AreaPoint & {
+  hierarchyChildAnchors?: HierarchyChildAnchor[] | null;
+};
 
 /**
  * Issue #1824 Slice S7 — camera panner/tick orchestration (R9) extracted
@@ -95,7 +108,19 @@ export interface UseDiscoverCameraOrchestrationParams {
    */
   setPanToArea: React.Dispatch<
     React.SetStateAction<
-      (AreaPoint & { seq?: number; reason?: AreaPanReason; consumedSeqRef?: React.MutableRefObject<number> }) | null
+      | (AreaPoint & {
+          seq?: number;
+          reason?: AreaPanReason;
+          consumedSeqRef?: React.MutableRefObject<number>;
+          /**
+           * Issue #1943 Slice B — the canonical node's direct-child camera
+           * anchors, attached ONLY on the canonicalNode publish below. See
+           * hierarchyCameraFit.ts's `HierarchyChildAnchor` for the shape;
+           * AreaPanner (PropertyMap.tsx) reads this to call the resolver.
+           */
+          hierarchyChildAnchors?: HierarchyChildAnchor[] | null;
+        })
+      | null
     >
   >;
   /** useDiscoverMapData outputs — injected. */
@@ -165,6 +190,15 @@ export interface UseDiscoverCameraOrchestrationParams {
    */
   navigationNodeKey?: string | null;
   navigationNodeBounds?: NavigationBounds | null;
+  /**
+   * Issue #1943 Slice B — the resolved node's direct-child camera anchors,
+   * derived by useDiscoverCameraController (DATA ONLY; this hook has no map
+   * handle and never calls the resolver itself). Attached ONLY to the
+   * canonicalNode `guardedSetPanToArea` payload below — the group-fit and
+   * scope-fit effects are untouched. `null`/omitted preserves today's
+   * fitBounds path exactly (see AreaPanner's null-contract branch).
+   */
+  navigationChildAnchors?: HierarchyChildAnchor[] | null;
 }
 
 export interface UseDiscoverCameraOrchestrationResult {
@@ -218,6 +252,7 @@ export function useDiscoverCameraOrchestration({
   isLoadingRegionScopedGroups,
   navigationNodeKey = null,
   navigationNodeBounds = null,
+  navigationChildAnchors = null,
 }: UseDiscoverCameraOrchestrationParams): UseDiscoverCameraOrchestrationResult {
   // Issue #1910 (PR2 fix-up, Finding 2) — fall back to a locally-derived
   // namespace when the caller doesn't supply one (mirrors
@@ -354,7 +389,7 @@ export function useDiscoverCameraOrchestration({
   // per-hook-lifetime initial value of 0 and fires normally.
   const consumedPanToAreaSeqRef = useRef(0);
   const publishPanToArea = useCallback(
-    (area: AreaPoint, reason: AreaPanReason): boolean => {
+    (area: PanToAreaPayload, reason: AreaPanReason): boolean => {
       panToAreaSeqRef.current += 1;
       setPanToArea({
         ...area,
@@ -410,7 +445,7 @@ export function useDiscoverCameraOrchestration({
   // ONLY the canonical-node fit (see rationale above). Returns whether the
   // write actually fired, so canonicalNodeFitCount below can gate on that.
   const guardedSetPanToArea = useCallback(
-    (area: AreaPoint, reason: AreaPanReason): boolean => {
+    (area: PanToAreaPayload, reason: AreaPanReason): boolean => {
       if (
         isRestoreAuthoritative({
           historyAction: urlState.historyAction,
@@ -631,6 +666,11 @@ export function useDiscoverCameraOrchestration({
           [bounds.minLat, bounds.minLon],
           [bounds.maxLat, bounds.maxLon],
         ],
+        // Issue #1943 Slice B — attach the hierarchy camera-fit data ONLY on
+        // this canonicalNode publish; group/scope publishes above never
+        // carry it. AreaPanner reads `hierarchyChildAnchors` to call
+        // resolveHierarchyCameraFit.
+        hierarchyChildAnchors: navigationChildAnchors,
       },
       'canonicalNode',
     );
