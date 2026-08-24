@@ -860,20 +860,15 @@ describe('EditListing — commercial (#2281 AC8) utilities touched-tracking via 
 // ── Numeric round-trip — 0 is a real value (not falsy-dropped), floats and integers preserved ──
 
 describe('EditListing — commercial (#2281) numeric round-trip edge cases', () => {
-  // KNOWN DEFECT — tracked as #2293 (found during #2281 QA, NOT fixed here — out of allowed_file_globs):
-  // `intOrUndef`/`floatOrUndef` (src/lib/listing-utils.ts) require `n > 0`, so a
-  // legitimate value of exactly 0 is indistinguishable from "not specified" and is
-  // silently dropped to `undefined`. This is a PRE-EXISTING bug in a shared utility
-  // used by every numeric field in buildUpdatePayload.ts (washrooms, parkingCount,
-  // floorNumber, bathrooms, ... and now also the 28 #2281 fields: officeSeats,
-  // officeCabins, officeMeetingRooms, warehouseLoadingBays, powerLoadKva, etc.) — it
-  // is NOT introduced by this PR, and listing-utils.ts is outside this issue's
-  // allowed_file_globs, so it must NOT be fixed here. `it.fails` documents the
-  // defect precisely (hydration/display is correct — "0" renders — only the PUT
-  // payload silently omits it) without turning the suite red; if a future PR fixes
-  // intOrUndef/floatOrUndef, THIS TEST will start failing "unexpectedly", which is
-  // the intended signal to flip it back to a plain `it`.
-  it.fails('officeSeats: 0 hydrates as "0" (not empty) and SHOULD round-trip as the number 0 — currently dropped by intOrUndef(n>0)', async () => {
+  // #2293 (found during #2281 QA) — `intOrUndef`/`floatOrUndef`
+  // (src/lib/listing-utils.ts) used to require `n > 0`, so a legitimate value of
+  // exactly 0 was indistinguishable from "not specified" and silently dropped to
+  // `undefined`. This affected every numeric field in buildUpdatePayload.ts
+  // (washrooms, parkingCount, floorNumber, bathrooms, ... and the 28 #2281 fields:
+  // officeSeats, officeCabins, officeMeetingRooms, warehouseLoadingBays,
+  // powerLoadKva, etc.). Fixed in #2293 — intOrUndef/floatOrUndef now preserve any
+  // finite number, including 0. This test proves the round-trip.
+  it('officeSeats: 0 hydrates as "0" (not empty) and round-trips as the number 0', async () => {
     const user = userEvent.setup();
     mockListingData.current = makeCommercialListing({
       propertyType: 'commercial',

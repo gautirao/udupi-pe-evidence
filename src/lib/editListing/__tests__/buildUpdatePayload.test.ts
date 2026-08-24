@@ -733,3 +733,61 @@ describe('buildListingUpdatePayload — utilities/suitableUses touched-tracking 
     expect(payload.utilities).toBeUndefined();
   });
 });
+
+// #2293 — a legitimate 0-valued numeric field must round-trip through the real
+// update-payload builder as the number 0, not be silently dropped to undefined.
+describe('numeric 0 round-trip (#2293)', () => {
+  it('floorNumber: 0 (ground floor) round-trips as the number 0, not undefined', () => {
+    const ctx = makeUpdatePayloadCtx('apartment', 'sale');
+    const payload = buildListingUpdatePayload(
+      baseState({ propertyType: 'apartment', floorNumber: '0' }),
+      ctx,
+    );
+    expect(payload.floorNumber).toBe(0);
+  });
+
+  it('balconies: 0 round-trips as the number 0, not undefined', () => {
+    const ctx = makeUpdatePayloadCtx('apartment', 'sale');
+    const payload = buildListingUpdatePayload(
+      baseState({ propertyType: 'apartment', balconies: '0' }),
+      ctx,
+    );
+    expect(payload.balconies).toBe(0);
+  });
+
+  it('bathrooms: 0 round-trips as the number 0, not undefined', () => {
+    const ctx = makeUpdatePayloadCtx('apartment', 'sale');
+    const payload = buildListingUpdatePayload(
+      baseState({ propertyType: 'apartment', bathrooms: '0' }),
+      ctx,
+    );
+    expect(payload.bathrooms).toBe(0);
+  });
+
+  it('securityDepositMonths: 0 (no deposit) round-trips as the number 0 for a rent listing', () => {
+    const ctx = makeUpdatePayloadCtx('apartment', 'rent');
+    const payload = buildListingUpdatePayload(
+      baseState({ propertyType: 'apartment', listingPurpose: 'rent', securityDepositMonths: '0' }),
+      ctx,
+    );
+    expect(payload.securityDepositMonths).toBe(0);
+  });
+
+  it('a real non-zero value is unaffected by the #2293 fix (regression guard)', () => {
+    const ctx = makeUpdatePayloadCtx('apartment', 'sale');
+    const payload = buildListingUpdatePayload(
+      baseState({ propertyType: 'apartment', floorNumber: '4' }),
+      ctx,
+    );
+    expect(payload.floorNumber).toBe(4);
+  });
+
+  it('a blank string still omits the field (undefined), not coerced to 0', () => {
+    const ctx = makeUpdatePayloadCtx('apartment', 'sale');
+    const payload = buildListingUpdatePayload(
+      baseState({ propertyType: 'apartment', floorNumber: '' }),
+      ctx,
+    );
+    expect(payload.floorNumber).toBeUndefined();
+  });
+});
