@@ -344,11 +344,16 @@ describe('ResidentialListingForm — draft-save-failure state recovery (Issue #2
 
     // The real submit-gate "Add the locality" row (src/lib/listingStrength.ts
     // `localityOk = input.locality.trim() !== ''`) flips to met/done styling.
-    // NOTE: this is deliberately NOT the "Location entered" gate — that gate
-    // is `locationResolved || addressConfirmed`, and this fix intentionally
-    // never sets `resolved` (see AC10 below) or `addressConfirmed`, so
-    // "Location entered" correctly stays unmet here. See report doubt #1.
     expect(screen.getByText('Add the locality')).toHaveClass('text-foreground');
+
+    // Issue #2065 fix — "Location entered" now ALSO recovers: it is
+    // `locationResolved || addressConfirmed` in listingStrength.ts, and
+    // `locationResolved` here is fed by useResidentialLocation's new
+    // `state.localityResolved` flag (set true by the locality-only mount
+    // seed) OR'd in from ResidentialListingForm.tsx. Before this fix, this
+    // gate stayed unmet after a search-only reload (see AC10 below for the
+    // no-fabricated-coordinate guard that stays intact alongside this fix).
+    expect(screen.getByText('Location entered')).toHaveClass('text-foreground');
   });
 
   it('AC10 (mandatory negative — the invariant guard) — with the SAME fixture (a), seeding from locality alone does NOT write addressConfirmed or produce ANY pin-confirmed state', async () => {

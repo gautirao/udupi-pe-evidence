@@ -309,6 +309,103 @@ describe('useResidentialLocation — picker Cancel / Adjust pin', () => {
   });
 });
 
+describe('useResidentialLocation — issue #2065: localityResolved reload signal', () => {
+  it('a search-only reload (locality persisted, no confirmed pin) seeds localityResolved:true WITHOUT fabricating resolved.center — the #2039 guard', async () => {
+    let capturedState: import('../useResidentialLocation').LocationState | null = null;
+    function Probe(props: UseResidentialLocationParams) {
+      const location = useResidentialLocation(props);
+      capturedState = location.state;
+      return (
+        <>
+          <AddressSearch location={location} />
+          <MapPin location={location} />
+        </>
+      );
+    }
+    const onPublicLoc = vi.fn();
+    render(
+      <Probe
+        listingId="listing-1"
+        addressConfirmed={false}
+        initialLatitude={null}
+        initialLongitude={null}
+        initialLocality="Manipal, Udupi"
+        onPublicLoc={onPublicLoc}
+      />,
+    );
+
+    await waitFor(() => expect(capturedState?.localityResolved).toBe(true));
+
+    // The #2039 guard: no coordinate is ever fabricated for an unconfirmed
+    // search-only draft. `resolved` (which carries a `center`) stays null,
+    // pin/pinConfirmed stay unset, and — critically — MapPin's
+    // `seedLat = pin?.lat ?? resolved?.center.lat ?? null` therefore has
+    // nothing to seed from, so the broker cannot mistakenly confirm a
+    // bogus/never-picked coordinate.
+    expect(capturedState?.resolved).toBeNull();
+    expect(capturedState?.pin).toBeNull();
+    expect(capturedState?.pinConfirmed).toBe(false);
+    expect(onPublicLoc).toHaveBeenCalledWith('Manipal, Udupi');
+
+    // No confirmed-pin UI renders — only the unresolved search state.
+    expect(screen.queryByText(/pin confirmed/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/location confirmed/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /pin location on map/i })).toBeDisabled();
+  });
+
+  it('a fresh create (no persisted locality) leaves localityResolved false', async () => {
+    let capturedState: import('../useResidentialLocation').LocationState | null = null;
+    function Probe(props: UseResidentialLocationParams) {
+      const location = useResidentialLocation(props);
+      capturedState = location.state;
+      return <AddressSearch location={location} />;
+    }
+    const onPublicLoc = vi.fn();
+    render(
+      <Probe
+        listingId="listing-1"
+        addressConfirmed={false}
+        initialLatitude={null}
+        initialLongitude={null}
+        initialLocality=""
+        onPublicLoc={onPublicLoc}
+      />,
+    );
+
+    await waitFor(() => expect(capturedState).not.toBeNull());
+    expect(capturedState?.localityResolved).toBe(false);
+    expect(onPublicLoc).not.toHaveBeenCalled();
+    // No confirmed/resolved UI — nothing seeded.
+    expect(screen.queryByText(/location confirmed/i)).not.toBeInTheDocument();
+  });
+
+  it('editing the query after a locality-only reload clears localityResolved (same reset as any real edit)', async () => {
+    let capturedState: import('../useResidentialLocation').LocationState | null = null;
+    function Probe(props: UseResidentialLocationParams) {
+      const location = useResidentialLocation(props);
+      capturedState = location.state;
+      return <AddressSearch location={location} />;
+    }
+    const user = userEvent.setup();
+    render(
+      <Probe
+        listingId="listing-1"
+        addressConfirmed={false}
+        initialLatitude={null}
+        initialLongitude={null}
+        initialLocality="Manipal, Udupi"
+        onPublicLoc={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(capturedState?.localityResolved).toBe(true));
+
+    await user.type(screen.getByLabelText(/search for a location/i), 'x');
+
+    await waitFor(() => expect(capturedState?.localityResolved).toBe(false));
+  });
+});
+
 describe('useResidentialLocation — code-review fix: hydration effect runs at most once, on mount', () => {
   it('does not re-fire (and does not clobber the live resolved.formatted) after a confirmPin-triggered prop refetch', async () => {
     // mount with addressConfirmed:false (normal create-flow case) — the

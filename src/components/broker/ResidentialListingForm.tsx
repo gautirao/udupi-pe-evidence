@@ -856,7 +856,11 @@ export function ResidentialListingForm({ initialPropertyType, initialListingPurp
     locality,
     imageCount,
     addressConfirmed,
-    locationResolved: residentialLocationValue?.state.resolved != null,
+    // Issue #2065 — `localityResolved` is a distinct, reload-safe signal:
+    // it stays true after a search-only draft reload even though `resolved`
+    // (which would carry an unconfirmed pin center) is intentionally never
+    // reconstructed. See useResidentialLocation.ts LocationState docs.
+    locationResolved: residentialLocationValue?.state.resolved != null || residentialLocationValue?.state.localityResolved === true,
     bedrooms,
     builtArea,
     builtAreaUnit,

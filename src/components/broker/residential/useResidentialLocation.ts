@@ -46,6 +46,18 @@ export interface LocationState {
   geoPermission: GeoPermission;
   pin: { lat: number; lng: number } | null;
   pinConfirmed: boolean;
+  /**
+   * Issue #2065 — a distinct "locality was resolved" signal, deliberately
+   * SEPARATE from `resolved` (which carries an unconfirmed pin `center` and
+   * must never be fabricated on reload — see the #2039 guard in the
+   * locality-only seed branch below). `resolved != null` already implies
+   * `localityResolved: true` in-session; this flag exists so a reload can
+   * restore the "Location entered" signal from the persisted `locality`
+   * string alone, WITHOUT reconstructing a `center` coordinate. Only real
+   * resolve paths (search pick, browser geolocation, or a persisted
+   * non-empty locality at mount) ever set this true.
+   */
+  localityResolved: boolean;
 }
 
 const GEO_ERROR_MESSAGES: Record<number, string> = {
@@ -62,6 +74,7 @@ const INITIAL_STATE: LocationState = {
   geoPermission: 'idle',
   pin: null,
   pinConfirmed: false,
+  localityResolved: false,
 };
 
 /** AC-4.4 — a query this short/numeric can never resolve; skip the API call. */
@@ -127,6 +140,7 @@ export function useResidentialLocation({
         geoPermission: 'idle',
         pin: { lat: initialLatitude, lng: initialLongitude },
         pinConfirmed: true,
+        localityResolved: true,
       });
       // Keep locality consistent for callers that reuse this hook in a
       // resume/edit flow (never fired on the create-flow's own mount, since
@@ -150,11 +164,21 @@ export function useResidentialLocation({
     // mirrors the hook's own vocabulary for "there's text in the box, but
     // nothing resolved yet", keeping query/status aligned exactly like
     // every other branch in this file.
+    //
+    // Issue #2065 — `localityResolved: true` IS set here, even though
+    // `resolved` is not. A persisted, non-empty `locality` can only ever
+    // have been written by a real resolve (selectResult/allowGeo via
+    // onPublicLoc, or this same seed on a prior load) — buildPayload never
+    // lets a broker type a locality directly. So this is a safe, honest
+    // reload-time re-derivation of "was resolved", carrying no fabricated
+    // coordinate — it lets the "Location entered" submit-gate signal
+    // survive a reload without resurrecting `resolved.center`.
     if (initialLocality) {
       setState((prev) => ({
         ...prev,
         query: initialLocality,
         status: 'typed',
+        localityResolved: true,
       }));
       onPublicLoc(initialLocality);
     }
@@ -202,6 +226,7 @@ export function useResidentialLocation({
       },
       pin: null,
       pinConfirmed: false,
+      localityResolved: true,
     }));
     onPublicLoc(publicLoc);
   };
@@ -245,6 +270,7 @@ export function useResidentialLocation({
             geoPermission: 'granted',
             pin: null,
             pinConfirmed: false,
+            localityResolved: true,
           }));
           onPublicLoc(publicLoc);
         })();
@@ -262,7 +288,14 @@ export function useResidentialLocation({
   // AND clears the buyer-facing locality AND (if a pin was persisted)
   // unconfirms it server-side. This is the SAME reset "Change" performs.
   const editQuery = (value: string) => {
-    const isRealEdit = (state.resolved != null || state.pinConfirmed) && value !== state.query;
+    // Issue #2065 — `localityResolved` must ALSO trigger the reset: after a
+    // locality-only reload, `resolved` is null (by design, see the #2039
+    // guard above) but `localityResolved` is true. Without checking it here,
+    // typing over a reload-seeded locality would silently leave the
+    // "Location entered" gate reporting met while the box no longer matches
+    // any resolved value.
+    const isRealEdit =
+      (state.resolved != null || state.pinConfirmed || state.localityResolved) && value !== state.query;
 
     if (isRealEdit) {
       setState({
@@ -273,6 +306,7 @@ export function useResidentialLocation({
         geoPermission: 'idle',
         pin: null,
         pinConfirmed: false,
+        localityResolved: false,
       });
       onPublicLoc('');
       if (addressConfirmed) unconfirmPersisted();
