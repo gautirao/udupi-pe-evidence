@@ -192,7 +192,17 @@ export default async function globalSetup(): Promise<void> {
       body: JSON.stringify({
         propertyType: 'house',
         title: '[E2E Test Listing] Auto-created by Playwright global-setup',
-        locality: 'Udupi',
+        // 'Manipal' matches the curated V127 area_alias seed exactly, so
+        // ListingAreaResolutionService resolves it synchronously via
+        // AreaResolutionService.resolveByAliasAnyCity (no geocoding/network
+        // dependency). The previous value, 'Udupi' (the bare city name),
+        // has no curated alias, so resolution fell through to network-
+        // dependent geocoding and frequently left area_key unresolved —
+        // which the fail-closed active-city gating in
+        // ListingRepository.findByIdWithActiveCity then hides entirely,
+        // breaking any journey test (e.g. UB1) that needs to view this
+        // fixture listing. See issue #1721 / #2285.
+        locality: 'Manipal',
         price: 5000000,
         description: 'Automatically created by Playwright global-setup. Safe to delete.',
       }),
