@@ -2,7 +2,9 @@
  * UB — Booking UI journey tests
  *
  * Covers:
- *   UB1 — Successful viewing request via RequestViewingModal
+ *   UB1 — Successful viewing request via the inline ViewingRequestPanel
+ *         (#1797/#2321 — the RequestViewingModal was replaced by an inline
+ *         date-pill + time-slot panel on the listing detail page itself)
  *   UB2 — Duplicate booking shows inline error (not just a toast)
  *   UB3 — Booking from UB1 appears in the broker's /broker/bookings page
  *
@@ -122,12 +124,12 @@ function getUserIdFromToken(token: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Test data — booking date 3 days from today, using the first TIME_SLOTS entry
+// Test data — the ViewingRequestPanel (#1797/#2321) exposes a fixed set of
+// quick-pick date pills (tomorrow + next 4 days) and a fixed TIME_SLOTS list.
+// UB1 selects the FIRST pill/slot and captures the actual date chosen; UB2
+// re-selects the identical pill to force a genuine duplicate-booking 409.
 // ---------------------------------------------------------------------------
 
-const _d = new Date();
-_d.setDate(_d.getDate() + 3);
-const BOOKING_DATE = _d.toISOString().slice(0, 10);
 const BOOKING_MESSAGE = 'Automated test booking';
 
 // ---------------------------------------------------------------------------
@@ -137,6 +139,11 @@ const BOOKING_MESSAGE = 'Automated test booking';
 // The booking ID created by UB1; captured in UB1, used by UB2/UB3 skip guard
 // and by afterAll cleanup.
 let createdBookingId: string | null = null;
+
+// The date pill UB1 selected (ISO yyyy-MM-dd), read back from the clicked
+// pill's data-testid; captured in UB1, reused by UB2 to reproduce an exact
+// duplicate booking against the same date.
+let bookedDate: string | null = null;
 
 // ---------------------------------------------------------------------------
 // UB1 and UB2 use the user session. storageState is set at the describe level.
@@ -181,9 +188,9 @@ test.describe('@journey UB — Booking UI journey', () => {
       });
       if (res.ok) {
         const data = (await res.json()) as {
-          content?: Array<{ id: string; listingId: string; requesterId: string; status: string }>;
+          items?: Array<{ id: string; listingId: string; requesterId: string; status: string }>;
         };
-        existingIds = (data.content ?? [])
+        existingIds = (data.items ?? [])
           .filter(
             (b) =>
               b.listingId === fixture.id &&
@@ -261,7 +268,7 @@ test.describe('@journey UB — Booking UI journey', () => {
   // UB1 — Successful booking request
   // -------------------------------------------------------------------------
 
-  test('UB1 — successful viewing request via modal', async ({ page }, testInfo) => {
+  test('UB1 — successful viewing request via panel', async ({ page }, testInfo) => {
     test.skip(!hasAllCreds, 'UB1: user/broker creds or Supabase keys not set — skipping');
 
     const fixture = readListingFixture();
@@ -276,35 +283,37 @@ test.describe('@journey UB — Booking UI journey', () => {
     // Wait for the listing detail page to render
     await page.waitForSelector('h1', { timeout: 15_000 });
 
-    // Open the RequestViewingModal
-    await page.getByRole('button', { name: /request viewing/i }).click();
+    // The viewing-request UI is an inline panel on the page itself (#1797/#2321
+    // — RequestViewingModal was replaced by ViewingRequestPanel) — no dialog to open.
+    // Select the first available quick-pick date pill.
+    const firstDatePill = page.locator('[data-testid^="viewing-date-pill-"]').first();
+    await firstDatePill.waitFor({ state: 'visible', timeout: 10_000 });
+    const datePillTestId = (await firstDatePill.getAttribute('data-testid')) ?? '';
+    bookedDate = datePillTestId.replace('viewing-date-pill-', '');
+    expect(bookedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    await firstDatePill.click();
 
-    // Wait for dialog to open
-    await page.waitForSelector('[role="dialog"]', { timeout: 10_000 });
-
-    // Fill preferred date
-    await page.locator('#requested-date').fill(BOOKING_DATE);
-
-    // Open the Radix Select for time slot and choose the first available option
-    await page.locator('#time-slot').click();
-    await page.getByRole('option').first().click();
+    // Select the first available time slot
+    const firstTimeSlot = page.locator('[data-testid^="viewing-time-slot-"]').first();
+    await firstTimeSlot.waitFor({ state: 'visible', timeout: 5_000 });
+    await firstTimeSlot.click();
 
     // Fill optional message
-    await page.locator('#requester-message').fill(BOOKING_MESSAGE);
+    await page.getByTestId('viewing-message-input').fill(BOOKING_MESSAGE);
 
-    // Submit the form
-    await page.getByRole('button', { name: /send request/i }).click();
+    // Submit
+    const submitBtn = page.getByTestId('request-viewing-btn');
+    await expect(submitBtn).toBeEnabled({ timeout: 5_000 });
+    await submitBtn.click();
 
-    // Assert success toast — text from useCreateBooking onSuccess.
-    // Radix Toast renders the title inside both a <div> (ToastTitle) and its
-    // <li role="status"> ancestor, so getByText matches 2 elements. Use .first()
-    // to satisfy Playwright strict mode.
-    await expect(
-      page.getByText(/viewing request sent/i).first(),
-    ).toBeVisible({ timeout: 10_000 });
-
-    // Assert dialog closes after success (onSuccess calls handleClose which calls onClose)
-    await expect(page.locator('[role="dialog"]')).not.toBeVisible({ timeout: 8_000 });
+    // Success replaces the panel's form with the `succeeded` branch
+    // (role="status", data-testid="viewing-request-success"). The same
+    // "Viewing request sent" copy is also echoed in a toast notification and
+    // an aria-live region, so scope the text assertion to the panel itself
+    // to avoid a strict-mode violation (3 matching elements otherwise).
+    const successPanel = page.getByTestId('viewing-request-success');
+    await expect(successPanel).toBeVisible({ timeout: 10_000 });
+    await expect(successPanel.getByText(/viewing request sent/i)).toBeVisible();
 
     // Capture the booking ID for UB2/UB3 skip guard and afterAll cleanup.
     // API-assisted fixture capture — not a test step.
@@ -316,10 +325,10 @@ test.describe('@journey UB — Booking UI journey', () => {
         });
         if (res.ok) {
           const data = (await res.json()) as {
-            content?: Array<{ id: string; listingId: string; status: string; requestedDate?: string }>;
+            items?: Array<{ id: string; listingId: string; status: string; requestedDate?: string }>;
           };
-          const booking = (data.content ?? []).find(
-            (b) => b.listingId === id && b.status === 'REQUESTED' && (b.requestedDate === BOOKING_DATE || !b.requestedDate),
+          const booking = (data.items ?? []).find(
+            (b) => b.listingId === id && b.status === 'REQUESTED' && (b.requestedDate === bookedDate || !b.requestedDate),
           );
           if (booking) {
             createdBookingId = booking.id;
@@ -333,7 +342,7 @@ test.describe('@journey UB — Booking UI journey', () => {
       }
     }
 
-    await testInfo.attach('booking-date', { body: BOOKING_DATE, contentType: 'text/plain' });
+    await testInfo.attach('booking-date', { body: bookedDate ?? 'unknown', contentType: 'text/plain' });
   });
 
   // -------------------------------------------------------------------------
@@ -358,27 +367,35 @@ test.describe('@journey UB — Booking UI journey', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForSelector('h1', { timeout: 15_000 });
 
-    // Open the modal
-    await page.getByRole('button', { name: /request viewing/i }).click();
-    await page.waitForSelector('[role="dialog"]', { timeout: 10_000 });
+    // Re-select the SAME date pill UB1 booked (falls back to the first pill if the
+    // quick-pick window has shifted, e.g. a midnight rollover between UB1 and UB2).
+    let datePill = bookedDate
+      ? page.locator(`[data-testid="viewing-date-pill-${bookedDate}"]`)
+      : page.locator('[data-testid^="viewing-date-pill-"]').first();
+    if (bookedDate && !(await datePill.isVisible().catch(() => false))) {
+      datePill = page.locator('[data-testid^="viewing-date-pill-"]').first();
+    }
+    await datePill.waitFor({ state: 'visible', timeout: 10_000 });
+    await datePill.click();
 
-    // Fill the same date and time slot as UB1 to trigger a 409 Conflict
-    await page.locator('#requested-date').fill(BOOKING_DATE);
-    await page.locator('#time-slot').click();
-    await page.getByRole('option').first().click();
-    await page.locator('#requester-message').fill(BOOKING_MESSAGE);
+    // Same first time slot as UB1 — TIME_SLOTS is a fixed list, identical for every date.
+    const firstTimeSlot = page.locator('[data-testid^="viewing-time-slot-"]').first();
+    await firstTimeSlot.waitFor({ state: 'visible', timeout: 5_000 });
+    await firstTimeSlot.click();
+
+    await page.getByTestId('viewing-message-input').fill(BOOKING_MESSAGE);
 
     // Submit — backend returns 409 Conflict for a duplicate booking
-    await page.getByRole('button', { name: /send request/i }).click();
+    const submitBtn = page.getByTestId('request-viewing-btn');
+    await expect(submitBtn).toBeEnabled({ timeout: 5_000 });
+    await submitBtn.click();
 
-    // Dialog must remain open while the inline error is shown
-    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5_000 });
+    // The panel must NOT show the success state for a rejected duplicate.
+    await expect(page.getByTestId('viewing-request-success')).toHaveCount(0);
 
-    // The modal renders a .text-destructive inline error when createBooking.isError is true:
-    //   "Failed to send request. Please try again."
-    // This is an inline element inside the dialog — distinct from the toast.
-    const inlineError = page.locator('[role="dialog"] .text-destructive');
-    await expect(inlineError).toBeVisible({ timeout: 10_000 });
+    // ViewingRequestPanel renders an inline role="alert" error banner when
+    // createBooking.isError is true: "Failed to send your request. Please try again."
+    await expect(page.getByTestId('viewing-request-error')).toBeVisible({ timeout: 10_000 });
   });
 
   // -------------------------------------------------------------------------

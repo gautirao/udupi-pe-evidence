@@ -84,9 +84,14 @@ test('AT2 — listing detail: login gate CTA has correct returnTo', async ({ pag
   // Must NOT redirect away (listing detail is publicly accessible as teaser)
   await expect(page).toHaveURL(new RegExp(`/listing/${listingId}`));
 
-  // Login gate text visible — ListingDetail.tsx:832 (<p> only; <Link> has same text, avoid strict-mode)
+  // #1797 Option A: the full-page "Sign in to view full details" wall was removed —
+  // anonymous visitors now see the same interactive "Request a viewing time" panel as
+  // authenticated users (src/pages/__tests__/ListingDetail.test.tsx: "anonymous users get
+  // the same interactive viewing-request panel — no sign-in wall (#1797 Option A)").
+  // Sign-in is deferred to the header nav CTA below, whose returnTo param is what this
+  // test actually verifies.
   await expect(
-    page.locator('p', { hasText: 'Sign in to view full details' }),
+    page.getByRole('heading', { level: 2, name: /request a viewing time/i }),
   ).toBeVisible({ timeout: 10_000 });
 
   // CTA link must contain the correct returnTo param.

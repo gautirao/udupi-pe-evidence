@@ -111,7 +111,10 @@ test.describe('@integration-ui broker-authenticated', () => {
     // TypeScript narrowing: fixture is non-null after the skip above
     const { id } = fixture!;
 
-    await page.goto('/dealer/listings');
+    // #1721: /dealer/listings is not a defined route (only /broker/listings exists in
+    // App.tsx) — navigating there now produces a genuine app 404. Navigate directly to
+    // the real route the test actually verifies.
+    await page.goto('/broker/listings');
     await page.waitForLoadState('domcontentloaded');
 
     await expect(page).toHaveURL(/\/broker\/listings/, { timeout: 8_000 });
@@ -123,18 +126,17 @@ test.describe('@integration-ui broker-authenticated', () => {
     await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
 
     // The listing card must contain either the UUID or the test title substring.
-    // Try the UUID first (most reliable), fall back to the title text.
-    const byId = page.locator(`text=${id}`);
-    const byTitle = page.locator('text=[E2E Test Listing]');
+    // #1721: this used to be a single one-shot `.isVisible().catch()` check with no
+    // Playwright auto-retry, racing the broker-listings fetch/render — replaced with a
+    // proper polling assertion so a slow (but successful) fetch doesn't false-fail.
+    const byIdOrTitle = page
+      .locator(`text=${id}`)
+      .or(page.locator('text=[E2E Test Listing]'));
 
-    const idVisible = await byId.isVisible().catch(() => false);
-    const titleVisible = await byTitle.first().isVisible().catch(() => false);
-
-    if (!idVisible && !titleVisible) {
-      throw new Error(
-        `L1: Neither the listing ID (${id}) nor the test title was visible on /broker/listings`,
-      );
-    }
+    await expect(
+      byIdOrTitle.first(),
+      `L1: Neither the listing ID (${id}) nor the test title was visible on /broker/listings`,
+    ).toBeVisible({ timeout: 15_000 });
   });
 
   // ---------------------------------------------------------------------------

@@ -109,6 +109,14 @@ FRONTEND_PID=""
 # backend still allowlisting only the repo's static defaults (#2078).
 export SERVER_PORT="$BACKEND_PORT"
 export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-http://localhost:$FRONTEND_PORT,http://127.0.0.1:$FRONTEND_PORT}"
+# VITE_API_BASE_URL is the third port-coupled knob (see scripts/dev-worktree-
+# stack.sh, which already exports it): what the APP itself calls (src/lib/
+# api.ts, default :8085). Without this, a worktree assigned a non-default
+# BACKEND_PORT gets a frontend that silently keeps calling :8085 — the
+# backend started above never sees that traffic, and every API-dependent
+# test in this run fails with a false-negative CORS/connection error instead
+# of exercising the backend this script just started.
+export VITE_API_BASE_URL="$BACKEND_BASE_URL"
 
 echo "[e2e] Starting backend..."
 "$SCRIPT_DIR/../backend/run-local.sh" > "$BACKEND_LOG" 2>&1 &
