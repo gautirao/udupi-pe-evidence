@@ -1,50 +1,81 @@
 // Discover experience — map surface. Leaflet + CARTO Voyager, the same marker
-// grammar as ui_kits/new_discover (area pill, price pin) plus the connected
-// regional-cluster-marker card (which replaces the directional card here) and
-// the drawn-boundary layer.
+// grammar as ui_kits/new_discover (directional card, area pill, price pin) plus
+// the dashed visual-cluster chip and the drawn-boundary layer.
 // The map owns no product state: everything it draws comes from `view`.
 const EM = window.EXP;
 
 const MG = {
   zoom: (c) => `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.5-3.5"/></svg>`,
-  pin: (c) => `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`
+  pin: (c) => `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  // "Explore" identity glyph — compass, distinct from the magnifier (Zoom) and home (View homes)
+  compass: (c) => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15.2 8.8-1.8 4.6-4.6 1.8 1.8-4.6z" fill="${c}" stroke="none"/></svg>`,
+  home: (c) => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9"/><path d="M9.5 20v-5.5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V20"/></svg>`,
+  cap: (c) => `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>`
 };
 
-// Top-level directional region/local-cluster card — same connected "Option B" component as
-// regionalClusterCardHTML: navy info card (rounded top) flush against a white "Zoom in" footer
-// (rounded bottom), one shared shadow/border, rust tail. Reuses the regional-cluster-marker
-// design-component tag so it inherits the same hover/press/focus CSS.
-function destCardHTML(o) {
-  const w = Math.round(132 + Math.min(1, o.n / 240) * 38);
-  const cf = Math.round(22 + Math.min(1, o.n / 240) * 9);
-  // singular/plural: "1 LISTING" / "126 LISTINGS", "1 SCHOOL" / "9 SCHOOLS"
-  const nounPlural = o.noun || "listings";
-  const noun = o.n === 1 ? nounPlural.replace(/s$/, "") : nounPlural;
+// ---- Unified navigation-marker shell ("Explore" / "Zoom in") ----------------------------
+// One connected component throughout: an identity half (rounded top) flush against an
+// attached action footer (rounded bottom), a single shared shadow/border, and a centred
+// tail. Two variants share this shell but are never distinguished by colour alone:
+//  - "explore"  → real hierarchy destination (Direction / Local Destination). Dark navy
+//                 identity half + a SOLID accent footer in white text — the loud, dark
+//                 marker signals a real move into the hierarchy (node/breadcrumb change).
+//  - "zoom"     → temporary combined destinations, grouped only because every marker
+//                 can't fit. Warm cream (schools: lavender) identity half + a WHITE
+//                 footer in accent text — a deliberately lighter, lower-commitment mark.
+//                 Never changes node/breadcrumb; only pans/zooms until members separate.
+// domain: "homes" (copper accent) | "schools" (plum accent) — see VISUAL_RULES §Areas vs
+// Schools palette mapping. Reused by destCardHTML / regionalClusterCardHTML / clusterChipHTML.
+function navMarkerHTML(actionKind, o) {
+  const schools = o.domain === "schools";
+  const accent = schools ? "var(--plum-600)" : "var(--copper-500)";
+  const accentText = schools ? "var(--plum-600)" : "var(--copper-600)";
+  const accentTint = schools ? "var(--plum-tint)" : "var(--copper-100)";
   const sel = !!o.sel;
-  const label = o.ariaLabel || (o.names + ". " + o.n + " " + noun.toLowerCase() + (o.areasLine ? ". " + o.areasLine : "") + ". Activate to zoom in.");
-  return `<div class="nd-nav${o.hov ? " nd-nav-on" : ""}${sel ? " nd-nav-sel" : ""}" data-design-component="regional-cluster-marker" tabindex="0" role="button" aria-label="${label}" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;outline:none;">
-    <div class="rc-shell" style="border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);border:1.5px solid rgba(27,42,69,${sel ? 0.4 : 0.24});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s;${sel ? "outline:2px solid var(--navy-800);outline-offset:2px;" : ""}">
-      <div style="padding:9px 14px 9px;background:var(--navy-800);color:#fff;display:flex;flex-direction:column;align-items:center;gap:2px;">
+  const isZoom = actionKind === "zoom";
+  const w = o.w, cf = o.cf;
+  const bodyBg = isZoom ? accentTint : "var(--navy-800)";
+  const bodyFg = isZoom ? "var(--navy-800)" : "#fff";
+  const mutedFg = isZoom ? "var(--text-muted)" : "rgba(255,255,255,.72)";
+  const pillBg = isZoom ? "rgba(27,42,69,0.08)" : "rgba(255,255,255,0.14)";
+  const pillFg = isZoom ? "var(--text-body)" : `rgba(255,255,255,${o.zero ? 0.78 : 0.9})`;
+  const borderColor = isZoom ? accent : `rgba(27,42,69,${sel ? 0.4 : 0.24})`;
+  const footerBg = isZoom ? "#fff" : accent;
+  const footerFg = isZoom ? accentText : "#fff";
+  const icon = isZoom ? MG.zoom(footerFg) : MG.compass(footerFg);
+  const actionLabel = isZoom ? "Zoom in" : "Explore";
+  const kindClass = (isZoom ? "mk-zoom" : "mk-explore") + (schools ? " mk-schools" : "");
+  return `<div class="nd-nav ${kindClass}${o.hov ? " nd-nav-on" : ""}${sel ? " nd-nav-sel" : ""}" data-design-component="regional-cluster-marker" data-action-kind="${actionKind}" tabindex="0" role="button" aria-label="${o.ariaLabel}" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;outline:none;">
+    <div class="rc-shell" style="border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);border:1.5px solid ${borderColor};transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s;${sel ? `outline:2px solid ${isZoom ? accent : "var(--navy-800)"};outline-offset:2px;` : ""}">
+      <div style="padding:9px 14px 9px;background:${bodyBg};color:${bodyFg};display:flex;flex-direction:column;align-items:center;gap:2px;">
         <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;text-wrap:balance;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${w - 28}px;">${o.names}</span>
         ${o.zero ? "" : `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
           <span style="font-family:var(--font-mono);font-size:${cf}px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${o.n.toLocaleString("en-IN")}</span>
-          <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.72);">${noun}</span>
+          <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${mutedFg};">${o.noun}</span>
         </span>`}
-        ${o.areasLine ? `<span style="margin-top:${o.zero ? 4 : 3}px;padding:1px 9px;border-radius:var(--radius-full);background:rgba(255,255,255,0.14);font-size:10px;font-weight:600;color:rgba(255,255,255,${o.zero ? .78 : .9});white-space:nowrap;">${o.areasLine}</span>` : ""}
+        ${o.pillText ? `<span style="margin-top:${o.zero ? 4 : 3}px;padding:1px 9px;border-radius:var(--radius-full);background:${pillBg};font-size:10px;font-weight:600;color:${pillFg};white-space:nowrap;">${o.pillText}</span>` : ""}
       </div>
-      <div class="rc-footer" style="background:#fff;padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px;transition:background .15s ease;">
-        ${MG.zoom("var(--copper-600)")}
-        <span style="font-size:11.5px;font-weight:700;color:var(--copper-600);">Zoom in</span>
-        <span style="font-size:13px;font-weight:700;color:var(--copper-600);line-height:1;">&#8250;</span>
+      <div class="rc-footer" style="background:${footerBg};padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px;transition:background .15s ease,filter .15s ease;">
+        ${icon}
+        <span style="font-size:11.5px;font-weight:700;color:${footerFg};">${actionLabel}</span>
+        <span style="font-size:13px;font-weight:700;color:${footerFg};line-height:1;">&#8250;</span>
       </div>
     </div>
-    <div class="rc-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid var(--copper-600);margin:0 auto;"></div>
+    <div class="rc-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid ${accent};margin:0 auto;"></div>
   </div>`;
 }
-// Visual AREA cluster — presentation only. Same connected regional-cluster-marker
-// grammar as destCardHTML / regionalClusterCardHTML (navy info block + white "Zoom in"
-// footer + tail); it differs by its wider clamp and its "N areas with matches/schools"
-// line, and it takes the plum footer accent in the schools journey.
+// Real hierarchy destination (Direction / Local Destination) — "Explore". Clicking updates
+// node=, breadcrumb, and pans/fits the destination's children.
+function destCardHTML(o) {
+  const w = Math.round(132 + Math.min(1, o.n / 240) * 38);
+  const cf = Math.round(22 + Math.min(1, o.n / 240) * 9);
+  const nounPlural = o.noun || "listings";
+  const noun = o.n === 1 ? nounPlural.replace(/s$/, "") : nounPlural;
+  const label = o.ariaLabel || (o.names + ". " + o.n + " " + noun.toLowerCase() + (o.areasLine ? ". " + o.areasLine : "") + ". Activate to explore.");
+  return navMarkerHTML("explore", { ...o, noun, w, cf, pillText: o.areasLine, ariaLabel: label });
+}
+// Visual AREA cluster (dense markers grouped only for legibility) — "Zoom in". Same shell
+// as the local-destination cluster below; activating only pans/zooms until members separate.
 function clusterChipHTML(o) {
   const w = Math.min(206, Math.max(150, Math.round(132 + Math.min(1, o.n / 240) * 38)));
   const cf = Math.round(20 + Math.min(1, o.n / 240) * 8);
@@ -53,63 +84,39 @@ function clusterChipHTML(o) {
   const areasLine = exact + (exact === 1 ? " area with " : " areas with ") + (schools ? "schools" : "matches");
   const nounPlural = schools ? "schools" : (o.noun || "listings");
   const noun = o.n === 1 ? nounPlural.replace(/s$/, "") : nounPlural;
-  const iconColor = schools ? "var(--plum-600)" : "var(--copper-600)";
-  return `<div class="nd-nav${o.hov ? " nd-nav-on" : ""}" data-design-component="regional-cluster-marker" tabindex="0" role="button" aria-label="Zoom into the ${o.names} areas" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;outline:none;">
-    <div class="rc-shell" style="border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);border:1.5px solid rgba(27,42,69,0.24);transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s;">
-      <div style="padding:9px 14px 9px;background:var(--navy-800);color:#fff;display:flex;flex-direction:column;align-items:center;gap:2px;">
-        <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;text-wrap:balance;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${w - 28}px;">${o.names}</span>
-        <span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
-          <span style="font-family:var(--font-mono);font-size:${cf}px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${o.n.toLocaleString("en-IN")}</span>
-          <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.72);">${noun}</span>
-        </span>
-        <span style="margin-top:3px;padding:1px 9px;border-radius:var(--radius-full);background:rgba(255,255,255,0.14);font-size:10px;font-weight:600;color:rgba(255,255,255,.9);white-space:nowrap;">${areasLine}</span>
-      </div>
-      <div class="rc-footer" style="background:#fff;padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px;transition:background .15s ease;">
-        ${MG.zoom(iconColor)}
-        <span style="font-size:11.5px;font-weight:700;color:${iconColor};">Zoom in</span>
-        <span style="font-size:13px;font-weight:700;color:${iconColor};line-height:1;">&#8250;</span>
-      </div>
-    </div>
-    <div class="rc-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid ${iconColor};margin:0 auto;"></div>
-  </div>`;
+  return navMarkerHTML("zoom", { names: o.names, n: o.n, noun, hov: o.hov, domain: schools ? "schools" : "homes", w, cf, pillText: areasLine, ariaLabel: "Zoom into the " + o.names + " areas" });
 }
-// Regional cluster marker (Option B) — one connected component: a navy info card with
-// rounded TOP corners, flush against a white "Zoom in" footer with rounded BOTTOM
-// corners, a single unified shadow/border around both, and a small rust-orange tail
-// pointing at the cluster's map position. destCardHTML (top-level directional regions)
-// now uses this same grammar and design-component tag; this builder differs only in its
-// wider clamp and its "N areas with matches" line.
+// Local destination — 2+ nearby destinations temporarily grouped because every marker
+// can't fit. Same connected shell as clusterChipHTML, at the local-destination scale.
+// "Zoom in" only pans/zooms until members separate; it never changes node/breadcrumb.
 function regionalClusterCardHTML(o) {
   const w = Math.min(206, Math.max(150, Math.round(132 + Math.min(1, o.n / 240) * 38)));
   const cf = Math.round(20 + Math.min(1, o.n / 240) * 8);
   const nounPlural = o.noun || "listings";
   const noun = o.n === 1 ? nounPlural.replace(/s$/, "") : nounPlural;
   const areasLine = (o.exact || 0) + ((o.exact || 0) === 1 ? " area with matches" : " areas with matches");
-  const sel = !!o.sel;
   const label = o.ariaLabel || ("Zoom into the " + o.names + " areas");
-  return `<div class="nd-nav${o.hov ? " nd-nav-on" : ""}${sel ? " nd-nav-sel" : ""}" data-design-component="regional-cluster-marker" tabindex="0" role="button" aria-label="${label}" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;outline:none;">
-    <div class="rc-shell" style="border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);border:1.5px solid rgba(27,42,69,${sel ? 0.4 : 0.24});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s;${sel ? "outline:2px solid var(--navy-800);outline-offset:2px;" : ""}">
-      <div style="padding:9px 14px 9px;background:var(--navy-800);color:#fff;display:flex;flex-direction:column;align-items:center;gap:2px;">
-        <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;text-wrap:balance;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${w - 28}px;">${o.names}</span>
-        <span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
-          <span style="font-family:var(--font-mono);font-size:${cf}px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${o.n.toLocaleString("en-IN")}</span>
-          <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.72);">${noun}</span>
-        </span>
-        <span style="margin-top:3px;padding:1px 9px;border-radius:var(--radius-full);background:rgba(255,255,255,0.14);font-size:10px;font-weight:600;color:rgba(255,255,255,.9);white-space:nowrap;">${areasLine}</span>
-      </div>
-      <div class="rc-footer" style="background:#fff;padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px;transition:background .15s ease;">
-        ${MG.zoom("var(--copper-600)")}
-        <span style="font-size:11.5px;font-weight:700;color:var(--copper-600);">Zoom in</span>
-        <span style="font-size:13px;font-weight:700;color:var(--copper-600);line-height:1;">&#8250;</span>
-      </div>
-    </div>
-    <div class="rc-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid var(--copper-600);margin:0 auto;"></div>
-  </div>`;
+  return navMarkerHTML("zoom", { ...o, noun, w, cf, pillText: areasLine, ariaLabel: label });
 }
+// Terminal AREA-leaf marker — "View homes" / "View schools". Represents ONE real area;
+// activating it selects the area and opens its listings/schools directly — never a further
+// zoom. Deliberately the INVERSE construction of "Explore": a light/white identity half
+// (this is a leaf, not a hub) flush against a SOLID dark action footer in white text — the
+// footer, not the body, now carries the strong colour, since the footer is the one and only
+// thing this marker does. domain "schools" swaps navy → plum throughout (icon, border,
+// footer, tail) per VISUAL_RULES §Areas vs Schools palette mapping; body stays white in both.
+// Terminal AREA-leaf marker — "View homes" / "View schools". Represents ONE real area;
+// activating it selects the area and opens its listings/schools directly — never a further
+// zoom. Same VERTICAL connected-card family as Explore/Zoom (identity section stacked above
+// an attached full-width footer, no gap, one shared shell/shadow/border, centred downward
+// tail) — never the rejected horizontal split-capsule. White identity (this is a leaf, not a
+// hub) + a SOLID dark action footer in white text: the footer, not the body, carries the
+// strong colour, since the footer is the one and only thing this marker does. The listing/
+// school COUNT lives in the identity section as the hero metric — never folded into the
+// footer's action label. domain "schools" swaps navy → plum throughout (icon, border,
+// footer, tail) per VISUAL_RULES §Areas vs Schools palette mapping; body stays white in both.
 function areaPinHTML(o) {
   const sel = o.sel, cand = o.candidate;
-  const bg = "var(--navy-800)", fg = "#fff";
-  const bd = `1.5px solid rgba(255,255,255,${sel ? 0.9 : 0.42})`;
   // draft candidate: a subtle dashed LABEL — must never read as a committed search area
   if (cand) {
     return `<div data-design-component="area-candidate-label" style="position:relative;width:210px;margin-left:-105px;transform:translateY(-100%);text-align:center;font-family:var(--font-sans);">
@@ -118,61 +125,40 @@ function areaPinHTML(o) {
       </span>
     </div>`;
   }
-  // SCHOOLS journey: the primary metric is schools located inside the area, listings are
-  // secondary context, and the caption names the action the tap actually performs.
-  if (o.schoolsMode) {
-    // Schools-journey leaf marker — same connected split-capsule family as the homes area
-    // marker (am-leaf), plum-accented: identity half (icon + name + listings count stacked)
-    // flush against a "View N schools" action half. One shell/shadow/tail. Kept at the same
-    // compact scale as the homes marker — areas in a schools cluster sit at real, often close,
-    // map coordinates, so an oversized capsule here collides with neighbours / clips the map.
-    const schoolNoun = o.n === 1 ? "school" : "schools";
-    const listingNoun = o.listings === 1 ? "listing" : "listings";
-    const actionText = `View ${o.n} ${schoolNoun}`;
-    const nameBoxW = Math.min(130, Math.max(50, Math.round(o.name.length * 8.1)));
-    const leftW = nameBoxW + 42;
-    const actionW = Math.round(actionText.length * 7.4) + 42;
-    const w = leftW + actionW;
-    const label = o.ariaLabel || `View ${o.n} ${schoolNoun} in ${o.name}`;
-    return `<div class="nd-nav am-leaf am-leaf-school${o.hov ? " nd-nav-on" : ""}" data-design-component="area-marker" tabindex="0" role="button" aria-label="${label}" style="position:relative;width:${w}px;margin-left:-${Math.round(w / 2)}px;transform:translateY(-100%);font-family:var(--font-sans);outline:none;">
-      <div class="am-shell" style="display:flex;align-items:stretch;border-radius:var(--radius-full);overflow:hidden;box-shadow:${sel ? "var(--shadow-lg)" : "var(--shadow-md)"};border:1.5px solid rgba(94,82,134,${sel ? 0.4 : 0.26});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s ease;">
-        <div style="flex:none;display:flex;align-items:center;gap:7px;padding:8px 12px 8px 12px;background:var(--plum-600);color:#fff;min-width:0;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>
-          <span style="display:flex;flex-direction:column;gap:1px;min-width:0;">
-            <span style="font-size:13.5px;font-weight:800;letter-spacing:-0.01em;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameBoxW}px;">${o.name}</span>
-            <span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.68);white-space:nowrap;">${o.listings} ${listingNoun}</span>
-          </span>
-        </div>
-        <div class="am-action" style="flex:none;display:flex;align-items:center;gap:4px;padding:9px 14px;background:var(--canvas-100);color:var(--plum-600);white-space:nowrap;transition:background .15s ease;">
-          <span style="font-size:12.5px;font-weight:800;letter-spacing:-0.01em;">${actionText}</span>
-          <span style="font-size:14px;font-weight:800;line-height:1;">&#8250;</span>
-        </div>
+  const schools = !!o.schoolsMode;
+  const primary = schools ? "var(--plum-600)" : "var(--navy-800)";
+  const borderRGB = schools ? "94,82,134" : "27,42,69";
+  const identityIcon = schools ? MG.cap(primary) : MG.pin(primary);
+  const footerIcon = schools ? MG.cap("#fff") : MG.home("#fff");
+  const heroNoun = schools ? (o.n === 1 ? "SCHOOL" : "SCHOOLS") : (o.n === 1 ? "LISTING" : "LISTINGS");
+  // secondary metric: listings count on the schools variant, schools count on the homes
+  // variant — shown only when the server actually supplied it (undefined ⇒ omit the line,
+  // 0 ⇒ show "0 schools"/"0 listings" per spec).
+  const secondary = schools ? o.listings : o.schools;
+  const secondaryNoun = schools ? (secondary === 1 ? "listing" : "listings") : (secondary === 1 ? "school" : "schools");
+  const w = 172;
+  const label = o.ariaLabel || `View ${o.n} ${heroNoun.toLowerCase()} in ${o.name}` + (secondary != null ? `, ${secondary} ${secondaryNoun}` : "");
+  const kindClass = schools ? "am-leaf-school" : "am-leaf-home";
+  return `<div class="nd-nav am-leaf ${kindClass}${o.hov ? " nd-nav-on" : ""}" data-design-component="area-marker" data-action-kind="view-homes" tabindex="0" role="button" aria-label="${label}" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-100%);font-family:var(--font-sans);text-align:center;outline:none;">
+    <div class="am-shell" style="border-radius:var(--radius-lg);overflow:hidden;box-shadow:${sel ? "var(--shadow-lg)" : "var(--shadow-md)"};border:1.5px solid rgba(${borderRGB},${sel ? 0.5 : 0.28});background:#fff;transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s ease;${sel ? `outline:2px solid ${primary};outline-offset:2px;` : ""}">
+      <div style="padding:10px 13px 9px;display:flex;flex-direction:column;align-items:flex-start;text-align:left;background:#fff;color:var(--navy-800);">
+        <span style="display:flex;align-items:center;gap:6px;max-width:100%;">
+          ${identityIcon}
+          <span style="font-size:13.5px;font-weight:800;letter-spacing:-0.01em;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${o.name}</span>
+        </span>
+        <span style="display:flex;align-items:baseline;gap:5px;margin-top:6px;font-family:var(--font-mono);">
+          <b style="font-size:22px;font-weight:800;letter-spacing:-0.02em;line-height:1;">${o.n}</b>
+          <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);">${heroNoun}</span>
+        </span>
+        ${secondary != null ? `<span style="margin-top:3px;font-size:11px;font-weight:600;color:var(--text-muted);">${secondary} ${secondaryNoun}</span>` : ""}
       </div>
-      <div class="am-tail" style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:8px solid var(--plum-600);margin:-1px auto 0;"></div>
-    </div>`;
-  }
-  // leaf-level individual area marker — one connected split capsule: navy identity (left) +
-  // rust "View N homes" action (right), flush together, single border/shadow, tail below.
-  // Distinct from cluster markers: activating this opens listings directly, never a further zoom.
-  const noun = o.n === 1 ? "home" : "homes";
-  const actionText = `View ${o.n} ${noun}`;
-  const nameBoxW = Math.min(150, Math.max(56, Math.round(o.name.length * 8.2)));
-  const leftW = nameBoxW + 46;
-  const actionW = Math.round(actionText.length * 7.3) + 50;
-  const w = leftW + actionW;
-  const label = o.ariaLabel || `View ${o.n} ${noun} in ${o.name}`;
-  return `<div class="nd-nav am-leaf${o.hov ? " nd-nav-on" : ""}" data-design-component="area-marker" tabindex="0" role="button" aria-label="${label}" style="position:relative;width:${w}px;margin-left:-${Math.round(w / 2)}px;transform:translateY(-100%);font-family:var(--font-sans);outline:none;">
-    <div class="am-shell" style="display:flex;align-items:stretch;border-radius:var(--radius-full);overflow:hidden;box-shadow:${sel ? "var(--shadow-lg)" : "var(--shadow-md)"};border:1.5px solid rgba(27,42,69,${sel ? 0.42 : 0.24});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s ease;">
-      <div style="flex:none;display:flex;align-items:center;gap:7px;padding:9px 12px 9px 13px;background:${bg};color:#fff;min-width:0;">
-        ${MG.pin("#fff")}
-        <span style="font-size:14px;font-weight:700;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameBoxW}px;">${o.name}</span>
-      </div>
-      <div class="am-action" style="flex:none;display:flex;align-items:center;gap:4px;padding:9px 15px;background:var(--canvas-100);color:var(--copper-600);white-space:nowrap;transition:background .15s ease;">
-        <span style="font-size:12.5px;font-weight:700;">${actionText}</span>
-        <span style="font-size:14px;font-weight:700;line-height:1;">&#8250;</span>
+      <div class="am-action" style="background:${primary};padding:9px 13px;display:flex;align-items:center;justify-content:center;gap:6px;transition:filter .15s ease;">
+        ${footerIcon}
+        <span style="font-size:12.5px;font-weight:700;color:#fff;">View ${schools ? "schools" : "homes"}</span>
+        <span style="font-size:14px;font-weight:700;line-height:1;color:#fff;">&#8250;</span>
       </div>
     </div>
-    <div class="am-tail" style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:8px solid ${bg};margin:-1px auto 0;"></div>
+    <div class="am-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid ${primary};margin:0 auto;"></div>
   </div>`;
 }
 function pricePinHTML(l, on, f) {
@@ -354,7 +340,7 @@ function ExpMap({ view, isMobile, onPick, onCluster, onArea, onOpenListing, hove
       const ll = v.compass ? compassAt({ ...d, bearing: d.__bearing != null ? d.__bearing : d.bearing }, i, v.destinations.length) : L.latLng(d.center.lat, d.center.lon);
       const schoolsJ = v.journey === "schools";
       if (d.kind === "local") {
-        const mk = L.marker(ll, { icon: icon(regionalClusterCardHTML({ names: d.names.join(" · "), n: d.n, noun: v.noun || "listings", exact: d.matchAreas || 0, sel: !!d.sel })), zIndexOffset: d.sel ? 260 : 200, riseOnHover: true });
+        const mk = L.marker(ll, { icon: icon(regionalClusterCardHTML({ names: d.names.join(" · "), n: d.n, noun: schoolsJ ? "schools" : (v.noun || "listings"), domain: schoolsJ ? "schools" : "homes", exact: d.matchAreas || 0, sel: !!d.sel })), zIndexOffset: d.sel ? 260 : 200, riseOnHover: true });
         mk.on("click", () => cb.onPick(d));
         wire(mk, d.key);
         mk.addTo(g);
@@ -363,7 +349,7 @@ function ExpMap({ view, isMobile, onPick, onCluster, onArea, onOpenListing, hove
       }
       const areaWord = (d.matchAreas || 0) === 1 ? " area with " : " areas with ";
       const areasLine = d.n === 0 ? "No matches with current filters" : (d.matchAreas || 0) + areaWord + (schoolsJ ? "schools" : "matches");
-      const mk = L.marker(ll, { icon: icon(destCardHTML({ names: d.names.join(" · "), n: d.n, noun: schoolsJ ? "schools" : (v.noun || "listings"), areasLine, zero: d.n === 0, sel: !!d.sel })), zIndexOffset: d.sel ? 260 : 200, riseOnHover: true });
+      const mk = L.marker(ll, { icon: icon(destCardHTML({ names: d.names.join(" · "), n: d.n, noun: schoolsJ ? "schools" : (v.noun || "listings"), domain: schoolsJ ? "schools" : "homes", areasLine, zero: d.n === 0, sel: !!d.sel })), zIndexOffset: d.sel ? 260 : 200, riseOnHover: true });
       mk.on("click", () => cb.onPick(d));
       wire(mk, d.key);
       mk.addTo(g);
@@ -377,7 +363,7 @@ function ExpMap({ view, isMobile, onPick, onCluster, onArea, onOpenListing, hove
       wireKeyboard(mk, () => cb.onCluster(c));
     });
     (v.areaMarkers || []).forEach((a) => {
-      const mk = L.marker([a.center.lat, a.center.lon], { icon: icon(areaPinHTML({ name: a.label, n: a.n, listings: a.listings, schoolsMode: v.journey === "schools" && !a.candidate, sel: a.selected, candidate: a.candidate })), zIndexOffset: a.selected ? 900 : a.candidate ? 300 : 400, riseOnHover: !a.candidate });
+      const mk = L.marker([a.center.lat, a.center.lon], { icon: icon(areaPinHTML({ name: a.label, n: a.n, listings: a.listings, schools: a.schools, schoolsMode: v.journey === "schools" && !a.candidate, sel: a.selected, candidate: a.candidate })), zIndexOffset: a.selected ? 900 : a.candidate ? 300 : 400, riseOnHover: !a.candidate });
       if (!a.candidate) mk.on("click", () => cb.onArea(a.key));
       if (!a.candidate) wire(mk, a.key);
       mk.addTo(g);

@@ -25,19 +25,27 @@
   .nd-nav { cursor: pointer; }
   .nd-nav:hover .nd-navcore, .nd-nav.nd-nav-on .nd-navcore { box-shadow: 0 12px 30px rgba(18,24,38,0.42) !important; transform: scale(1.05) !important; }
   .nd-nav:active .nd-navcore { transform: scale(0.96) !important; box-shadow: var(--shadow-md) !important; transition: transform .08s ease, box-shadow .08s ease; }
-  .nd-nav[data-design-component="regional-cluster-marker"]:hover .rc-shell { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(18,24,38,0.38) !important; }
-  .nd-nav[data-design-component="regional-cluster-marker"]:hover .rc-footer { background: var(--copper-100) !important; }
   .nd-nav[data-design-component="regional-cluster-marker"]:active .rc-shell { transform: scale(0.97) !important; transition: transform .08s ease; }
   .nd-nav[data-design-component="regional-cluster-marker"]:focus-visible { outline: none; }
-  .nd-nav[data-design-component="regional-cluster-marker"]:focus-visible .rc-shell { box-shadow: 0 0 0 3px var(--accent), var(--shadow-lg) !important; }
-  .nd-nav[data-design-component="regional-cluster-marker"].nd-nav-on .rc-shell { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(18,24,38,0.38) !important; }
-  .nd-nav[data-design-component="regional-cluster-marker"].nd-nav-on .rc-footer { background: var(--copper-100) !important; }
-  .nd-nav.am-leaf:hover .am-shell, .nd-nav.am-leaf.nd-nav-on .am-shell { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(18,24,38,0.38) !important; }
-  .nd-nav.am-leaf:hover .am-action, .nd-nav.am-leaf.nd-nav-on .am-action { background: var(--copper-100) !important; }
+  .nd-nav[data-design-component="regional-cluster-marker"].nd-nav-on .rc-shell { transform: translateY(-2px); }
+  /* Explore — dark navy body, SOLID accent footer: hover/focus deepen the footer, never repaint the body */
+  .nd-nav.mk-explore:hover .rc-shell, .nd-nav.mk-explore.nd-nav-on .rc-shell { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(18,24,38,0.4) !important; }
+  .nd-nav.mk-explore:hover .rc-footer, .nd-nav.mk-explore.nd-nav-on .rc-footer { filter: brightness(1.1); }
+  .nd-nav.mk-explore:focus-visible .rc-shell { box-shadow: 0 0 0 3px var(--copper-500), var(--shadow-lg) !important; }
+  .nd-nav.mk-explore.mk-schools:focus-visible .rc-shell { box-shadow: 0 0 0 3px var(--plum-600), var(--shadow-lg) !important; }
+  /* Zoom in — light cream/lavender body, WHITE footer that tints toward the accent on hover */
+  .nd-nav.mk-zoom:hover .rc-shell, .nd-nav.mk-zoom.nd-nav-on .rc-shell { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(18,24,38,0.22) !important; }
+  .nd-nav.mk-zoom:hover .rc-footer, .nd-nav.mk-zoom.nd-nav-on .rc-footer { background: var(--copper-100) !important; }
+  .nd-nav.mk-zoom.mk-schools:hover .rc-footer, .nd-nav.mk-zoom.mk-schools.nd-nav-on .rc-footer { background: var(--plum-tint) !important; }
+  .nd-nav.mk-zoom:focus-visible .rc-shell { box-shadow: 0 0 0 3px var(--copper-500), var(--shadow-lg) !important; }
+  .nd-nav.mk-zoom.mk-schools:focus-visible .rc-shell { box-shadow: 0 0 0 3px var(--plum-600), var(--shadow-lg) !important; }
+  /* View homes / View schools — white body, SOLID footer carries the colour; footer deepens on hover */
+  .nd-nav.am-leaf:hover .am-shell, .nd-nav.am-leaf.nd-nav-on .am-shell { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(18,24,38,0.22) !important; }
+  .nd-nav.am-leaf:hover .am-action, .nd-nav.am-leaf.nd-nav-on .am-action { filter: brightness(1.15); }
   .nd-nav.am-leaf:active .am-shell { transform: scale(0.97) !important; transition: transform .08s ease; }
   .nd-nav.am-leaf:focus-visible { outline: none; }
-  .nd-nav.am-leaf:focus-visible .am-shell { box-shadow: 0 0 0 3px var(--accent), var(--shadow-lg) !important; }
-  .nd-nav.am-leaf.am-leaf-school:hover .am-action, .nd-nav.am-leaf.am-leaf-school.nd-nav-on .am-action { background: var(--plum-100) !important; }
+  .nd-nav.am-leaf.am-leaf-home:focus-visible .am-shell { box-shadow: 0 0 0 3px var(--navy-800), var(--shadow-lg) !important; }
+  .nd-nav.am-leaf.am-leaf-school:focus-visible .am-shell { box-shadow: 0 0 0 3px var(--plum-600), var(--shadow-lg) !important; }
   .nd-nav[data-design-component="directional-marker"]:hover .nd-cap { box-shadow: 0 6px 16px rgba(18,24,38,0.28); transform: translateY(-1px) !important; }
   .nd-nav[data-design-component="directional-marker"]:active .nd-cap { transform: scale(0.94) !important; }
   .nd-cap { opacity: 0; transform: translateY(-3px); transition: opacity .16s ease, transform .16s ease; pointer-events: none; }

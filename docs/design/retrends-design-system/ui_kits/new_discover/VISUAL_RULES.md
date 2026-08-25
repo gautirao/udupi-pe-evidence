@@ -17,7 +17,6 @@ component uses a literal, the literal is quoted here.
 | Fonts | `tokens/fonts.css` |
 | Shell (control bar, mode selector, rows) | `src/NDPanel.jsx` |
 | Map + markers | `src/NDMap.jsx` |
-| Experience-prototype map + markers | `src/ExpMap.jsx` (loaded by `experience.html`) |
 | Cards | `src/components/cards.jsx` |
 | Shared primitives (filters, radius, distance) | `src/components/shared.jsx` |
 | Orchestrator (layout, breakpoints) | `src/NewDiscover.jsx` |
@@ -144,9 +143,7 @@ Selectors below refer to the stable `data-design-component` attributes added to 
 ### Canonical component vocabulary
 
 These are the **only** approved `data-design-component` names. Every manifest component uses a name
-from this list, and every name here is documented below. All of them appear in at least one
-`DESIGN_STATE_MANIFEST.json` state except `regional-cluster-marker`, which is authored in the
-`experience.html` prototype — that prototype has no manifest states of its own yet.
+from this list, and every name here is documented below and appears in at least one manifest state.
 
 | Name | Where authored |
 |---|---|
@@ -173,7 +170,6 @@ from this list, and every name here is documented below. All of them appear in a
 | `listing-card` | `src/components/cards.jsx` |
 | `parcel-card` | `src/components/cards.jsx` |
 | `directional-marker` | `src/NDMap.jsx` (region + cluster map card) |
-| `regional-cluster-marker` | `src/ExpMap.jsx` (region + local-cluster map card, connected card grammar) |
 | `area-marker` | `src/NDMap.jsx` |
 | `school-marker` | `src/NDMap.jsx` |
 | `corridor-marker` | `src/NDMap.jsx` |
@@ -228,6 +224,101 @@ from this list, and every name here is documented below. All of them appear in a
 - Row of capability cues on `MODE_BG[mode]`, `padding 7px 11px`, `--radius-md`; items 11.5px/600 with
   a 13px tinted icon, separated by 3px dots. Content changes per mode.
 
+### Map action-marker system — Explore / Zoom in / View homes (`src/ExpMap.jsx`)
+
+Three visually related but immediately distinguishable markers, all built on **one connected,
+VERTICAL shell**: an identity section (rounded top) stacked directly above an attached, full-width
+action footer (rounded bottom) — no gap between them — a single shared shadow/border/radius around
+both, and one centred downward tail. The whole marker is one `role="button"` — never a detached
+action pill, never a footer-only click target, never a horizontal split-capsule. Full spec + every
+state: `marker-action-system.html`.
+
+**The three constructions never rely on colour alone to differ:**
+
+| Marker | Identity section | Action footer | Behaviour |
+|---|---|---|---|
+| **Explore** | solid navy `--navy-800`, white text, up to 2 representative names + live count + context pill | **solid** accent (copper/plum), white text/icon/chevron | Real Direction / Local Destination. Updates `node=`, breadcrumb, pans/fits children. |
+| **Zoom in** | light tint (copper-100 / plum-tint), navy text, same content shape as Explore | white, accent-coloured text/icon/chevron | 2+ destinations temporarily combined because every marker can't fit. Only pans/zooms — never touches `node=` or breadcrumb. |
+| **View homes / View schools** | white, navy text, thin border; pin/cap icon + area name, then the exact listing/school count as a **hero metric**, then the other count as a secondary line when known | **solid** navy or plum, white text/icon/chevron | One real AREA leaf. Opens listings/schools for that area directly — never a further zoom. |
+
+Explore and View-homes are deliberately inverse constructions of each other (dark-body/solid-footer
+vs white-body/solid-footer) so that even colour-blind users can tell "enters a hub" from "opens a
+leaf" by which section is dark. Zoom in is the only marker with a light body **and** a light footer,
+reading as the lowest-commitment action of the three. All three stack identity-over-footer — the
+count for View homes/schools always lives in the identity section as a hero metric, **never** folded
+into the footer's action label (the footer always reads exactly "View homes" / "View schools").
+
+Implemented as one reusable shell function, `navMarkerHTML(actionKind, o)` (`actionKind: "explore" |
+"zoom"`), consumed by three thin call-site wrappers — `destCardHTML` (real single destination),
+`regionalClusterCardHTML` (local combined destination), `clusterChipHTML` (dense visual-area
+cluster) — plus a separate `areaPinHTML` for the terminal AREA leaf (`data-action-kind="view-homes"`).
+`areaPinHTML` is a distinct function only because its content shape differs (icon+name, then a hero
+count, then an optional secondary count) — its outer geometry (vertical stack, shared shell, centred
+tail, fixed width) matches `navMarkerHTML` exactly.
+
+**Dimensions** — Explore / Zoom: width scales with inventory, `132–170px` (single real destination)
+or `150–206px` (combined/cluster); `border-radius: var(--radius-lg)` (12px); footer
+`padding: 7px 10px`; tail `6px/6px/7px` (l/r/top border-widths). View homes / View schools: **fixed
+172px** width (same as the other two in `marker-action-system.html`), `border-radius: var(--radius-lg)`;
+identity `padding: 10px 13px 9px`; footer `padding: 9px 13px`; tail `6px/6px/7px`. All: shell
+`box-shadow: var(--shadow-md)` default / `var(--shadow-lg)` hover/selected; border `1.5px`.
+
+**Typography** — identity name `12.5px/700` (Explore/Zoom) or `13.5px/800` (View homes/schools), all
+three clamp to 2 lines; hero count `20–31px/800` mono for Explore/Zoom, `22px/800` mono for View
+homes/schools; unit label `9.5px/700` uppercase, `.05em` tracking (View homes/schools: "LISTING(S)"
+or "SCHOOL(S)"); secondary count line (View homes/schools only) `11px/600`, muted, plain text — no
+pill; context pill (Explore/Zoom only) `10px/600`; footer label `11.5–12.5px/700`; chevron
+`13–14px/700`.
+
+**Colours (exact)** — navy `--navy-800 #1B2A45`; copper accent `--copper-500 #B05C3A` (footer/tail),
+`--copper-600 #934B2D` (Zoom footer text), `--copper-100 #F2E8E1` (Zoom body tint / hover footer
+tint); plum accent `--plum-600 #5E5286` (footer/tail/text), `--plum-tint #F1EDF7` (Zoom body tint /
+hover footer tint). Explore border `rgba(27,42,69,.24)` (`.4` selected); Zoom border = solid accent
+`1.5px`; View-homes border `rgba(27,42,69,.28)` (`.5` selected) / View-schools `rgba(94,82,134,.32)`.
+
+**Icons** — Explore: compass (circle + solid needle wedge), always white-on-accent. Zoom in:
+magnifier with a `+`, accent-on-white. View homes: the same location-pin glyph used elsewhere in the
+product, navy-on-white in the identity section, plus a house glyph, white-on-navy, in the footer.
+View schools: graduation cap, plum-on-white in the identity section and white-on-plum in the footer.
+
+**Interaction states** (never colour-only — always paired with a lift, scale, or ring):
+- **Hover**: `translateY(-2px)` + deeper shadow on the shell; footer darkens via
+  `filter: brightness(1.1–1.15)` on solid footers (Explore, View homes/schools) or tints toward the
+  body colour on white footers (Zoom in, `--copper-100` / `--plum-tint`).
+- **Pressed** (`:active`): shell `scale(0.97)`, fast `80ms` transition.
+- **Keyboard focus** (`:focus-visible`): `0 0 0 3px <accent>` ring + `var(--shadow-lg)` — accent is
+  copper/plum for Explore & Zoom, navy/plum for View homes/schools. Outline suppressed on the raw
+  element so only the shell ring shows.
+- **Selected**: all three get a persistent `2px solid` outline in their own colour (Explore/Zoom:
+  accent; View homes/schools: navy/plum) plus `shadow-lg` — never just a colour swap.
+- **Zero-listing** (Explore/Zoom only): hides the hero count row and shows a pill reading "No matches
+  with current filters" instead of a live number — geography never disappears when filters exclude
+  it. Not applicable to View homes/schools: an area with zero matching listings is never surfaced as
+  a leaf marker in the first place.
+- **Zero schools** (View homes/schools): the secondary count line reads "0 schools" / "0 listings"
+  explicitly whenever the server has confirmed the count is zero — the line is omitted only when the
+  count is genuinely unknown, never to hide a zero.
+
+**Content rules**
+- Explore/Zoom show up to 2 representative names + a live count + a context pill ("N areas with
+  matches" / "N destinations"). View homes/schools show **only** the area name, the hero count, and
+  the secondary count (when known) — never "areas with matches", "destinations", or "+N nearby
+  areas" on a single-AREA marker.
+- Singular/plural nouns always resolve from the live count: "1 listing" / "126 listings",
+  "1 school" / "9 schools", "1 LISTING" / "42 LISTINGS" (hero), "0 schools" (secondary, shown
+  explicitly when known).
+- Action copy is always exactly "Explore", "Zoom in", "View homes", or "View schools" — a fixed
+  label per behaviour, never carrying the count and never reused across a different semantic (e.g.
+  "Zoom in" never appears on a marker that changes `node=`; "View homes" never becomes "View 26
+  homes").
+
+**Areas vs Schools palette mapping** — the identity colour for Explore/Zoom stays navy regardless of
+journey (a Direction/Local Destination is geography, not journey-specific); only the **accent**
+role — the thing that carries the action — swaps `copper → plum` and the Zoom tint swaps
+`copper-100 → plum-tint`. View homes/schools swaps its entire solid-footer role the same way
+(`navy-800 → plum-600`), since that footer *is* the journey-specific action. No green is ever used
+here — green stays reserved for Agricultural.
+
 ### Directional marker (map) — `data-design-component="directional-marker"` (`src/NDMap.jsx` `dirCard`)
 - A region/cluster **card**, not a pin. Width scales with inventory: `130 + weight*40` → **130–170px**.
   `padding 9px 15px 10px`, `--radius-lg`, background navy (`--navy-800`/`--navy-900` selected;
@@ -239,55 +330,41 @@ from this list, and every name here is documented below. All of them appear in a
   in below (accent-coloured). Selected marker also scales.
 - Positioned by **compass bearing** around the map centre, not exact centroid (see §5 Map rules).
 
-### Local-cluster marker (`src/NDMap.jsx`)
-- Uses the **same `directional-marker` (`dirCard`) treatment** as regions — a generated cluster is
-  visually a directional card, labelled by representative names, positioned by bearing. There is no
-  separate "cluster pill" style; the narrow one-line pill is explicitly a **rejected** pattern (§7).
+### Local-cluster marker — superseded, see §Map action-marker system
+- A generated local-cluster node (`kind:"local"`) is a temporary grouping, so it renders as the
+  **"Zoom in"** variant (light cream/lavender body, white footer) via `regionalClusterCardHTML` →
+  `navMarkerHTML("zoom", …)` — not the dark `directional-marker` treatment (that treatment is now
+  reserved for real single Direction destinations, i.e. "Explore"). Still positioned by bearing,
+  still no separate one-line "cluster pill" (§7 rejected pattern).
 
-### Regional-cluster marker (map) — `data-design-component="regional-cluster-marker"` (`src/ExpMap.jsx`)
-- The experience prototype's successor to `directional-marker`. **One connected component**, not a
-  card plus a floating caption: a navy (`--navy-800`) info block with rounded **top** corners, flush
-  against a white "Zoom in" footer (`rc-footer`) with rounded **bottom** corners, a single shared
-  border (`1.5px rgba(27,42,69,0.24)`, `0.4` selected) and `--shadow-lg` around both (`rc-shell`),
-  and a small rust tail (`rc-tail`, `--copper-600`) pointing at the map position.
-- Width scales with inventory: `132 + min(1, n/240)*38` → **132–170px** for top-level regions;
-  local clusters clamp to **150–206px**. Count is mono `20–31px/800`; unit label is uppercase
-  `9.5px/700`; an `N areas with matches` pill sits below on `rgba(255,255,255,0.14)`.
-- Footer accent follows the mode: `--copper-600` for homes, `--plum-600` in the schools journey
-  (icon, "Zoom in" label, chevron and tail all move together).
-- States (CSS in `experience.html`, keyed on the component attribute): hover / `.nd-nav-on` lift
-  `translateY(-2px)` + deeper shadow and tint the footer `--copper-100`; `:active` `scale(0.97)`;
-  `focus-visible` a 3px `--accent` ring around the whole shell. Every marker is a focusable
-  `role="button"` with an `aria-label`.
-- **Both** the top-level directional region card (`destCardHTML`) and the generated local cluster
-  (`clusterChipHTML`, `regionalClusterCardHTML`) use this one identity — they differ only in width
-  clamp and label content, never in shape. `directional-marker` remains the `src/NDMap.jsx`
-  vocabulary; consumers of the experience prototype select on `regional-cluster-marker`.
-
-### Area marker (map) — `data-design-component="area-marker"` (`areaPinHTML`)
-- Leaf-level, one **connected split capsule** (`am-leaf`): navy identity half (pin glyph + bold
-  white area name, truncated with ellipsis if long) flush against a `--canvas-100` action half
-  (`View {n} home(s)` in `--copper-600` + chevron). Single shared `--radius-full` border/shadow
-  around both halves, small navy downward tail beneath. Whole capsule is one `role="button"` —
-  activating it opens listings for that area directly, **never** a further zoom.
-- States: hover/selected lift `translateY(-2px)` + deeper shadow, pale-copper tint on the action
-  half, `:active` scale-down, `focus-visible` 3px accent ring around the whole shell.
-- **Schools journey** uses the same `am-leaf` split capsule, plum-accented — see the
-  Schools-journey area marker section below. It is no longer the old `--paper` pill + tail.
-- Draft candidate areas render as a dashed label (`area-candidate-label`), never this capsule.
+### Area marker (map) — `data-design-component="area-marker"` (`areaPinHTML`) — superseded, see §Map action-marker system
+- Leaf-level "View homes", one **connected vertical card** (`am-leaf am-leaf-home`), same family as
+  Explore/Zoom — never a horizontal split-capsule: **white** identity section (location-pin icon +
+  navy area name, clamped to 2 lines; exact listing count as a mono hero metric with a "LISTING(S)"
+  unit label; the area's exact school count as a plain secondary line, or "0 schools" when the known
+  count is zero, omitted only when genuinely unavailable) stacked above a **solid navy** action
+  footer (house icon + "View homes" + chevron, all white — the count never appears in this label).
+  Fixed **172px** width, `--radius-lg` shell, single shared border/shadow, centred downward navy
+  tail. One `role="button"`; activating it opens listings for that area directly, **never** a
+  further zoom.
+- States: hover/selected lift `translateY(-2px)` + deeper shadow, the solid footer darkens via
+  `filter: brightness(1.15)` on hover (never a light-tint swap, since the footer is already solid),
+  `:active` scale-down, `focus-visible` 3px navy ring, `selected` adds a persistent 2px navy outline.
+- Draft candidate areas render as a dashed label (`area-candidate-label`), never this card.
 
 ### School marker (map) — `data-design-component="school-marker"` (`schoolPinHTML`)
-- Individual school point pin — same pill+tail family, plum-accented graduation-cap glyph.
-  Selected `--plum-600` + white. Distinct from the schools-journey **area** marker below.
+- Individual school point pin — separate pill+tail family (not the 3-marker system), plum-accented
+  graduation-cap glyph. Selected `--plum-600` + white. Distinct from the schools-journey **area**
+  marker below.
 
-### Schools-journey area marker (map) — `data-design-component="area-marker"` (`areaPinHTML`, `schoolsMode`)
-- Same `am-leaf` split-capsule family as the homes area marker, plum-accented, at the **same
-  compact scale** as the homes marker (areas sit at real, often close, coordinates — an
-  oversized capsule collides with neighbours): identity half on `--plum-600` — graduation-cap
-  glyph beside a stacked name (13.5px/800 white) + listings count (10px/600 muted white) —
-  flush against a "View N schools" action half on `--canvas-100` in `--plum-600` (12.5px/800 +
-  chevron). One shared shell/shadow/tail; hover tints the action half `--plum-100`
-  (`am-leaf-school` override).
+### Schools-journey area marker (map) — `data-design-component="area-marker"` (`areaPinHTML`, `schoolsMode`) — superseded, see §Map action-marker system
+- "View schools" — same `am-leaf am-leaf-school` vertical construction as the homes leaf, plum-mapped:
+  white identity section (graduation-cap icon + navy area name, clamped to 2 lines; exact school
+  count as the mono hero metric; exact listing count as the secondary line, or "0 listings" when
+  known-zero) stacked above a **solid plum** action footer ("View schools", white, + white chevron —
+  never a count in the label). Fixed 172px width, same shell/shadow/tail as the homes leaf; hover
+  darkens the solid footer via `brightness(1.15)`; `focus-visible` 3px plum ring; `selected` adds a
+  persistent 2px plum outline.
 
 ### Panel navigation row (directional card) — `data-design-component="directional-card"` (`DirNavCard`)
 - Single-line clickable row. `padding 12px 14px`, `--radius-lg`, `border 1px var(--border)`
@@ -385,17 +462,14 @@ The first screen must feel like a compact control surface, not a marketing page:
 
 ## 4. Map rules
 
-Document these map layers separately (`src/NDMap.jsx`, except where `src/ExpMap.jsx` is named):
+Document these map layers separately (all in `src/NDMap.jsx`):
 
 - **Structured compass-style city/region markers** — `directional-marker` cards laid out by bearing
   around the map centre (North top, East right, South bottom, West left, Central middle). Card width
   encodes relative inventory. This is an *orientation canvas*, not exact pins.
-- **Local-cluster markers** — same `directional-marker` treatment, generated per sub-group, still
-  compass-positioned relative to the parent.
-- **Regional / local-cluster markers in the experience prototype** (`src/ExpMap.jsx`) — the same two
-  layers above, but rendered as the connected `regional-cluster-marker` component (navy info block +
-  white "Zoom in" footer + tail) rather than `directional-marker`. Bearing layout and
-  inventory-scaled width are unchanged.
+- **Local-cluster markers** — the "Zoom in" variant of the action-marker system (§ above), generated
+  per sub-group, still compass-positioned relative to the parent. Visually lighter than a real
+  `directional-marker`/"Explore" card on purpose — it is a temporary grouping, not a hierarchy node.
 - **Real positions** — area (`area-marker`), school (`school-marker`), town (`town-marker`),
   listing/parcel pins sit on **real coordinates**; the camera fits real bounds (`fitBounds` per view).
 - **Agricultural sector colours & opacity** — wedge stroke `#1F7A5C`; active fill `#2E9B74` @ 0.12;

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Discover map — three-marker action system</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+body{margin:0;background:var(--canvas-200);font-family:var(--font-sans);color:var(--text-strong)}
+.wrap{max-width:1180px;margin:0 auto;padding:40px 32px 100px}
+h1{font-family:var(--font-serif);font-size:27px;font-weight:600;letter-spacing:-0.01em;margin:0 0 6px}
+.lede{font-size:14px;color:var(--text-body);max-width:820px;line-height:1.6;margin:0 0 14px}
+.rule{display:flex;gap:22px;flex-wrap:wrap;margin:0 0 36px;padding:16px 18px;background:#fff;border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-xs)}
+.rule div{flex:1;min-width:220px}
+.rule b{display:block;font-size:12.5px;font-weight:800;margin-bottom:3px}
+.rule span{font-size:12px;color:var(--text-body);line-height:1.5}
+h2{font-family:var(--font-serif);font-size:18px;font-weight:600;margin:40px 0 4px;letter-spacing:-0.01em}
+.sub{font-size:12.5px;color:var(--text-muted);margin:0 0 16px}
+.row{display:grid;grid-template-columns:150px 1fr;gap:20px;align-items:center;padding:22px 0;border-top:1px solid var(--border)}
+.row:first-of-type{border-top:none}
+.rowlabel{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted)}
+.rowlabel small{display:block;margin-top:6px;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)}
+.stage{background:#eef0ea;border-radius:var(--radius-lg);padding:40px 24px;display:flex;gap:30px;align-items:flex-end;flex-wrap:wrap;position:relative;min-height:150px}
+.stage::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(200,205,190,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(200,205,190,.5) 1px,transparent 1px);background-size:26px 26px;opacity:.5;border-radius:var(--radius-lg)}
+.mcard{position:relative;z-index:1;font-family:var(--font-sans);text-align:center}
+.mtag{display:block;margin-bottom:10px;font-size:10px;font-weight:700;color:var(--grey-500);letter-spacing:.04em}
+.mshell{width:172px;margin:0 auto;border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s}
+.mtop{padding:9px 14px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.mname{font-size:12.5px;font-weight:700;line-height:1.25;letter-spacing:-0.01em}
+.mcount{display:flex;align-items:baseline;gap:5px;margin-top:2px;font-family:var(--font-mono)}
+.mcount b{font-size:24px;font-weight:800;letter-spacing:-0.02em;line-height:1}
+.mcount i{font-style:normal;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;opacity:.72}
+.mpill{margin-top:3px;padding:1px 9px;border-radius:var(--radius-full);font-size:10px;font-weight:600;white-space:nowrap}
+.mfooter{padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px;transition:filter .15s ease,background .15s ease}
+.mfooter .lbl{font-size:11.5px;font-weight:700}
+.mfooter .chev{font-size:13px;font-weight:700;line-height:1}
+.mtail{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;margin:0 auto}
+/* Explore — dark navy identity, SOLID accent footer, white footer content */
+.mshell.explore{border:1.5px solid rgba(27,42,69,.24)}
+.explore .mtop{background:#1B2A45;color:#fff}
+.explore .mfooter{color:#fff}
+.explore.homes .mfooter{background:#B05C3A}
+.explore.schools .mfooter{background:#5E5286}
+.mtail.explore.homes{border-top-color:#B05C3A}
+.mtail.explore.schools{border-top-color:#5E5286}
+/* Zoom in — light cream/lavender identity, WHITE footer, accent-coloured footer content */
+.zoom .mtop{color:#1B2A45}
+.zoom.homes .mtop{background:#F2E8E1}
+.zoom.schools .mtop{background:#F1EDF7}
+.zoom .mfooter{background:#fff}
+.mshell.zoom.homes{border:1.5px solid #B05C3A}
+.zoom.homes .mfooter .lbl,.zoom.homes .mfooter .chev{color:#B05C3A}
+.mtail.zoom.homes{border-top-color:#B05C3A}
+.mshell.zoom.schools{border:1.5px solid #5E5286}
+.zoom.schools .mfooter .lbl,.zoom.schools .mfooter .chev{color:#5E5286}
+.mtail.zoom.schools{border-top-color:#5E5286}
+/* View homes / View schools — SAME vertical family as Explore/Zoom: white identity stacked
+   above a SOLID footer that carries the colour (inverse of Explore's dark-body/solid-footer) */
+.mshell.view{box-shadow:var(--shadow-md)}
+.view .mtop{background:#fff;align-items:flex-start;text-align:left}
+.view .mname{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:132px}
+.view .mfooter{color:#fff;white-space:nowrap}
+.mshell.view.homes{border:1.5px solid rgba(27,42,69,.28)}
+.view.homes .mtop{color:#1B2A45}
+.view.homes .mfooter{background:#1B2A45}
+.mtail.view.homes{border-top-color:#1B2A45}
+.mshell.view.schools{border:1.5px solid rgba(94,82,134,.32)}
+.view.schools .mtop{color:#1B2A45}
+.view.schools .mfooter{background:#5E5286}
+.mtail.view.schools{border-top-color:#5E5286}
+.viewsecondary{margin-top:3px;font-size:11px;font-weight:600;color:var(--text-muted)}
+/* states — the state class lands on .mshell itself (same element as the kind/domain classes) */
+.mshell.st-hover{transform:translateY(-2px);box-shadow:0 14px 28px rgba(18,24,38,.3)!important}
+.mshell.explore.st-hover .mfooter,.mshell.view.st-hover .mfooter{filter:brightness(1.12)}
+.mshell.zoom.homes.st-hover .mfooter{background:#F2E8E1}
+.mshell.zoom.schools.st-hover .mfooter{background:#F1EDF7}
+.mshell.st-active{transform:scale(0.97)!important}
+.mshell.st-focus{outline:none;box-shadow:0 0 0 3px var(--ring),var(--shadow-lg)!important}
+.mshell.explore.homes.st-focus,.mshell.zoom.homes.st-focus{--ring:#B05C3A}
+.mshell.explore.schools.st-focus,.mshell.zoom.schools.st-focus{--ring:#5E5286}
+.mshell.view.homes.st-focus{--ring:#1B2A45}
+.mshell.view.schools.st-focus{--ring:#5E5286}
+.mshell.st-selected{outline-width:2px;outline-style:solid;outline-offset:2px}
+.mshell.explore.homes.st-selected{outline-color:#1B2A45}
+.mshell.explore.schools.st-selected{outline-color:#1B2A45}
+.mshell.zoom.homes.st-selected{outline-color:#B05C3A}
+.mshell.zoom.schools.st-selected{outline-color:#5E5286}
+.mshell.view.st-selected{box-shadow:var(--shadow-lg)!important}
+.mshell.view.homes.st-selected{outline-color:#1B2A45}
+.mshell.view.schools.st-selected{outline-color:#5E5286}
+.legend{display:flex;gap:16px;align-items:center;margin:0 0 6px;font-size:11px;color:var(--text-muted)}
+.dot{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:-1px}
+</style></head>
+<body><div class="wrap">
+<h1>Discover map — three-marker action system</h1>
+<p class="lede">Every map marker is one connected component — an identity half flush against an attached action footer, one shared shell/shadow/border, one centred tail, one click/tap/keyboard target. Three variants share this shell but are never told apart by colour alone: each pairs a distinct body treatment with a distinct footer treatment, so the construction itself signals the behaviour.</p>
+<div class="rule">
+  <div><b>Explore</b><span>Dark navy identity + a <u>solid</u> accent footer in white. Enters a real Direction/Local Destination — updates node, breadcrumb, camera. The loud, two-tone card signals a real move into the hierarchy.</span></div>
+  <div><b>Zoom in</b><span>Light cream (schools: lavender) identity + a white footer in accent text. Two-or-more destinations temporarily combined because every marker can't fit. Only pans/zooms — never touches node or breadcrumb.</span></div>
+  <div><b>View homes / View schools</b><span>Same vertical card as Explore/Zoom: white identity (icon, area name, hero listing/school count, a secondary count when known) stacked above a <u>solid</u> dark footer in white — the inverse of Explore. Represents one real AREA leaf; the count lives in the identity section, never in the action label.</span></div>
+</div>
+
+<h2>Areas domain — default</h2>
+<div class="row"><div class="rowlabel">Default</div><div class="stage" id="s-areas-default"></div></div>
+<h2>Interaction states — Areas domain</h2>
+<div class="sub">Every state below applies identically to all three markers; only colour role differs, per the construction above.</div>
+<div class="row"><div class="rowlabel">Hover<small>Lift + deepen/tint the footer only</small></div><div class="stage" id="s-hover"></div></div>
+<div class="row"><div class="rowlabel">Pressed<small>Scale down 0.97, fast transition</small></div><div class="stage" id="s-active"></div></div>
+<div class="row"><div class="rowlabel">Keyboard focus<small>3px accent ring, never colour-only</small></div><div class="stage" id="s-focus"></div></div>
+<div class="row"><div class="rowlabel">Selected<small>Persistent outline (Explore/Zoom) or deepened shadow (View homes)</small></div><div class="stage" id="s-selected"></div></div>
+<div class="row"><div class="rowlabel">Long two-line name<small>Identity text clamps to 2 lines; footer width follows content</small></div><div class="stage" id="s-long"></div></div>
+<div class="row"><div class="rowlabel">Zero listings<small>Explore/Zoom only: count row hidden, pill explains why. Not applicable to View homes — a 0-match area is never surfaced as a leaf marker</small></div><div class="stage" id="s-zero"></div></div>
+
+<h2>View homes — content states</h2>
+<div class="sub">The hero metric is always the exact listing count; the secondary line is the exact school count, shown only when the server supplies it (0 is shown, unknown is omitted).</div>
+<div class="row"><div class="rowlabel">One listing<small>Singular "1 LISTING"</small></div><div class="stage" id="s-view-one"></div></div>
+<div class="row"><div class="rowlabel">Multiple listings<small>Plural hero count</small></div><div class="stage" id="s-view-multi"></div></div>
+<div class="row"><div class="rowlabel">Zero schools<small>Known-zero is shown explicitly, never omitted</small></div><div class="stage" id="s-view-zero-schools"></div></div>
+
+<h2>Schools domain — palette mapping</h2>
+<div class="sub">Same three constructions; copper is replaced by plum throughout, navy stays as-is for Explore's identity (the hierarchy is geography, not journey-specific).</div>
+<div class="row"><div class="rowlabel">Default</div><div class="stage" id="s-schools-default"></div></div>
+<div class="row"><div class="rowlabel">Hover</div><div class="stage" id="s-schools-hover"></div></div>
+<div class="row"><div class="rowlabel">Selected</div><div class="stage" id="s-schools-selected"></div></div>
+<div class="row"><div class="rowlabel">Long two-line name</div><div class="stage" id="s-schools-long"></div></div>
+
+</div>
+<script>
+const MG={
+  pin:c=>`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  compass:c=>`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15.2 8.8-1.8 4.6-4.6 1.8 1.8-4.6z" fill="${c}" stroke="none"/></svg>`,
+  zoom:c=>`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.5-3.5"/></svg>`,
+  home:c=>`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9"/><path d="M9.5 20v-5.5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V20"/></svg>`,
+  cap:c=>`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>`
+};
+function explore(o){ // o: names,n,noun,pill,zero,domain,state,tag
+  const schools=o.domain==="schools", fc=schools?"#5E5286":"#B05C3A";
+  return `<div class="mcard"><span class="mtag">${o.tag||""}</span>
+    <div class="mshell explore ${schools?"schools":"homes"} ${o.state||""}"><div class="mtop"><span class="mname">${o.names}</span>
+    ${o.zero?"":`<span class="mcount"><b>${o.n}</b><i>${o.noun}</i></span>`}
+    ${o.pill?`<span class="mpill" style="background:rgba(255,255,255,.14);color:rgba(255,255,255,${o.zero?.78:.9})">${o.pill}</span>`:""}
+    </div><div class="mfooter">${MG.compass("#fff")}<span class="lbl">Explore</span><span class="chev">&#8250;</span></div></div>
+    <div class="mtail explore ${schools?"schools":"homes"}"></div></div>`;
+}
+function zoom(o){
+  const schools=o.domain==="schools";
+  return `<div class="mcard"><span class="mtag">${o.tag||""}</span>
+    <div class="mshell zoom ${schools?"schools":"homes"} ${o.state||""}"><div class="mtop"><span class="mname">${o.names}</span>
+    ${o.zero?"":`<span class="mcount"><b>${o.n}</b><i>${o.noun}</i></span>`}
+    ${o.pill?`<span class="mpill" style="background:rgba(27,42,69,.08);color:var(--text-body)">${o.pill}</span>`:""}
+    </div><div class="mfooter">${MG.zoom(schools?"#5E5286":"#B05C3A")}<span class="lbl">Zoom in</span><span class="chev">&#8250;</span></div></div>
+    <div class="mtail zoom ${schools?"schools":"homes"}"></div></div>`;
+}
+function view(o){ // o: name,n(hero: listings for homes/schools count for schools),schools(secondary, homes),listings(secondary, schools),domain,state,tag
+  const schools=o.domain==="schools", ic=schools?"#5E5286":"#1B2A45";
+  const heroNoun=schools?(o.n===1?"SCHOOL":"SCHOOLS"):(o.n===1?"LISTING":"LISTINGS");
+  const secondary=schools?o.listings:o.schools;
+  const secondaryNoun=schools?(secondary===1?"listing":"listings"):(secondary===1?"school":"schools");
+  return `<div class="mcard"><span class="mtag">${o.tag||""}</span>
+    <div class="mshell view ${schools?"schools":"homes"} ${o.state||""}"><div class="mtop">
+    <span style="display:flex;align-items:center;gap:6px">${schools?MG.cap(ic):MG.pin(ic)}<span class="mname">${o.name}</span></span>
+    <span class="mcount" style="margin-top:6px"><b>${o.n}</b><i>${heroNoun}</i></span>
+    ${secondary!=null?`<span class="viewsecondary">${secondary} ${secondaryNoun}</span>`:""}
+    </div><div class="mfooter">${schools?MG.cap("#fff"):MG.home("#fff")}<span class="lbl">View ${schools?"schools":"homes"}</span><span class="chev">&#8250;</span></div></div>
+    <div class="mtail view ${schools?"schools":"homes"}"></div></div>`;
+}
+function mount(id,html){ document.getElementById(id).innerHTML=html; }
+
+mount("s-areas-default", explore({tag:"Explore",names:"Battarahalli &amp; Medahalli",n:650,noun:"listings",pill:"81 areas with matches"})
+  + zoom({tag:"Zoom in",names:"Langford Gardens &amp; Lavelle Road",n:436,noun:"listings",pill:"2 destinations"})
+  + view({tag:"View homes",name:"Hebbal",n:42,schools:12}));
+
+["s-hover","s-active","s-focus","s-selected"].forEach((id,i)=>{
+  const cls=["st-hover","st-active","st-focus","st-selected"][i];
+  mount(id, explore({names:"Battarahalli &amp; Medahalli",n:650,noun:"listings",pill:"81 areas with matches",state:cls})
+    + zoom({names:"Langford Gardens &amp; Lavelle Road",n:436,noun:"listings",pill:"2 destinations",state:cls})
+    + view({name:"Hebbal",n:42,schools:12,state:cls}));
+});
+
+mount("s-long", explore({names:"Whitefield &amp; Varthur Road Extension",n:214,noun:"listings",pill:"14 areas with matches"})
+  + zoom({names:"Kadugodi &amp; Hoodi Industrial Layout",n:58,noun:"listings",pill:"3 destinations"})
+  + view({name:"Devanahalli Aerospace Park Layout",n:9,schools:3}));
+
+mount("s-zero", explore({names:"Yeshwanthpur &amp; Peenya",n:0,noun:"listings",pill:"No matches with current filters",zero:true})
+  + zoom({names:"Harohalli &amp; Ramanashree",n:0,noun:"listings",pill:"No matches with current filters",zero:true}));
+
+mount("s-view-one", view({tag:"View homes",name:"Challaghatta",n:1,schools:0}));
+mount("s-view-multi", view({tag:"View homes",name:"Devanahalli",n:26,schools:4}));
+mount("s-view-zero-schools", view({tag:"View homes",name:"Bagalur",n:8,schools:0}));
+
+mount("s-schools-default", explore({domain:"schools",names:"Hebbal &amp; Nagavara",n:24,noun:"schools",pill:"9 areas with matches"})
+  + zoom({domain:"schools",names:"Harohalli &amp; Ramanashree",n:6,noun:"schools",pill:"2 destinations"})
+  + view({domain:"schools",name:"Yelahanka",n:5,listings:33}));
+
+mount("s-schools-hover", explore({domain:"schools",names:"Hebbal &amp; Nagavara",n:24,noun:"schools",pill:"9 areas with matches",state:"st-hover"})
+  + zoom({domain:"schools",names:"Harohalli &amp; Ramanashree",n:6,noun:"schools",pill:"2 destinations",state:"st-hover"})
+  + view({domain:"schools",name:"Yelahanka",n:5,listings:33,state:"st-hover"}));
+
+mount("s-schools-selected", explore({domain:"schools",names:"Hebbal &amp; Nagavara",n:24,noun:"schools",pill:"9 areas with matches",state:"st-selected"})
+  + zoom({domain:"schools",names:"Harohalli &amp; Ramanashree",n:6,noun:"schools",pill:"2 destinations",state:"st-selected"})
+  + view({domain:"schools",name:"Yelahanka",n:5,listings:33,state:"st-selected"}));
+
+mount("s-schools-long", explore({domain:"schools",names:"Thanisandra &amp; Hennur Road Extension",n:11,noun:"schools",pill:"6 areas with matches"})
+  + zoom({domain:"schools",names:"Devanahalli &amp; Airport Road Layout",n:3,noun:"schools",pill:"2 destinations"})
+  + view({domain:"schools",name:"Jakkur Aerodrome Layout",n:2,listings:15}));
+</script>
+</body></html>
