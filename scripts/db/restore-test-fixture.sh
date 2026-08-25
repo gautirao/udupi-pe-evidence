@@ -368,6 +368,39 @@ else
   PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
     -d "${DB_NAME}" -v ON_ERROR_STOP=1 -f "${NAV_HIERARCHY_LISTINGS_SEED_FILE}"
   echo "==> Bangalore navigation-hierarchy fixture load complete."
+
+  # ---------------------------------------------------------------------------
+  # Gate: Bangalore navigation-hierarchy fixture actually landed.
+  #
+  # The seed files above already RAISE EXCEPTION internally if their own inserts
+  # don't land (see each file's own validation DO block), so this is defense in
+  # depth, not the only safety net. But without it, a future column/slug rename
+  # or a regression that silently no-ops the seed would make these counts come
+  # back 0 while the script still exits 0 (SELECT COUNT(*) returning 0 is a
+  # successful query, not a psql error, so `set -e` never fires) — reproducing
+  # exactly the "looks present but isn't reproducibly loaded" failure mode this
+  # fixture fix exists to close. Mirrors the MIGRATION_COUNT/APPLIED gate above.
+  # ---------------------------------------------------------------------------
+  BANGALORE_NAV_NODE_COUNT=$(PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+    -d "${DB_NAME}" -t -A \
+    -c "SELECT COUNT(*) FROM navigation_nodes nn
+          JOIN cities c ON c.id = nn.city_id WHERE c.slug = 'bangalore';" 2>/dev/null || echo "0")
+  if [[ "${BANGALORE_NAV_NODE_COUNT}" -eq 0 ]]; then
+    echo "ERROR: Bangalore navigation_nodes count is 0 after loading ${NAV_HIERARCHY_SEED_FILE} — fixture did not land." >&2
+    exit 1
+  fi
+  echo "==> Bangalore navigation_nodes count: ${BANGALORE_NAV_NODE_COUNT}."
+
+  BANGALORE_PROMOTED_REVISION_COUNT=$(PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+    -d "${DB_NAME}" -t -A \
+    -c "SELECT COUNT(*) FROM city_launch_revision clr
+          JOIN cities c ON c.id = clr.city_id
+          WHERE c.slug = 'bangalore' AND clr.lifecycle_status = 'PROMOTED' AND clr.superseded_by IS NULL;" 2>/dev/null || echo "0")
+  if [[ "${BANGALORE_PROMOTED_REVISION_COUNT}" -eq 0 ]]; then
+    echo "ERROR: Bangalore PROMOTED city_launch_revision count is 0 after loading ${NAV_ACTIVE_REVISION_SEED_FILE} — fixture did not land." >&2
+    exit 1
+  fi
+  echo "==> Bangalore PROMOTED city_launch_revision count: ${BANGALORE_PROMOTED_REVISION_COUNT}."
 fi
 
 # ---------------------------------------------------------------------------
@@ -396,14 +429,10 @@ SELECT COUNT(*) AS manipal_apartment_count FROM property_listings
 SELECT ST_AsText(geog::geometry) AS point FROM property_listings
   WHERE status = 'LIVE' AND area_key = 'IN|KA|Udupi|Manipal' AND title LIKE '[E2E]%'
   LIMIT 2;
-\echo '--- Bangalore navigation_nodes count ---'
-SELECT COUNT(*) AS bangalore_nav_node_count FROM navigation_nodes nn
-  JOIN cities c ON c.id = nn.city_id WHERE c.slug = 'bangalore';
-\echo '--- Bangalore PROMOTED city_launch_revision ---'
-SELECT COUNT(*) AS bangalore_promoted_revision_count FROM city_launch_revision clr
-  JOIN cities c ON c.id = clr.city_id
-  WHERE c.slug = 'bangalore' AND clr.lifecycle_status = 'PROMOTED' AND clr.superseded_by IS NULL;
 SQL
+# Bangalore navigation-hierarchy counts are gated (exit 1 on zero), not just printed here —
+# see the BANGALORE_NAV_NODE_COUNT / BANGALORE_PROMOTED_REVISION_COUNT checks above, run
+# immediately after their respective seed files load.
 
 # ---------------------------------------------------------------------------
 # Print DATABASE_URL (password intentionally included — localhost only)
