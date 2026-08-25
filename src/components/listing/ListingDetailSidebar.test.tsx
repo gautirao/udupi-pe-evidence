@@ -11,9 +11,14 @@
  * Contact / broker honesty
  *   T1  — ViewingRequestPanel is rendered with the listing id + current user
  *   T2  — "Contact broker" button is NOT rendered (out of scope, no endpoint — #1797)
- *   T4  — contact_phone present + authed → tel: link and Call Now shown
- *   T5  — contact_phone absent + authed → contact section absent
  *   T6  — anonymous user still renders the (mocked) ViewingRequestPanel — no sign-in wall
+ *
+ * Note (#2237): the tel:/Call-Now "Contact" section and "Additional Contact Info"
+ * section (formerly guarded on listing.contact_phone / listing.contact_info) were
+ * removed as dead code — the backend (ListingResponse/ListingResponseMapper) never
+ * sends those fields to the frontend, so the sections could never render for any
+ * caller. See issue #2237 and the #2047/#2280 PII-exposure context. T4/T5/T14,
+ * which asserted that dead behaviour, are removed along with it.
  *
  * Area CTA canonicalization
  *   T7  — valid areaKey (IN|KA|Udupi|Malpe) → canonical /trends/udupi/areas/malpe
@@ -69,8 +74,6 @@ function makeListing(overrides: Partial<PublicListingDetail> = {}): PublicListin
     status: 'LIVE',
     images: [],
     areaKey: 'IN|KA|Udupi|Malpe',
-    contact_phone: null,
-    contact_info: null,
     latitude: null,
     longitude: null,
     listingPurpose: 'sale',
@@ -120,23 +123,6 @@ describe('Contact / broker honesty (#1797)', () => {
     renderSidebar(makeListing(), MOCK_USER);
     expect(screen.queryByTestId('contact-broker-btn')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /contact broker/i })).not.toBeInTheDocument();
-  });
-
-  it('T4 — contact_phone + authed → tel: link and Call Now button shown', () => {
-    renderSidebar(makeListing({ contact_phone: '+91-9876543210' }), MOCK_USER);
-    expect(screen.getByTestId('contact-phone-section')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /call now/i })).toHaveAttribute(
-      'href',
-      'tel:+91-9876543210',
-    );
-    // The number itself should appear as a clickable link too
-    expect(screen.getByText('+91-9876543210')).toBeInTheDocument();
-  });
-
-  it('T5 — contact_phone absent + authed → contact section not rendered', () => {
-    renderSidebar(makeListing({ contact_phone: null }), MOCK_USER);
-    expect(screen.queryByTestId('contact-phone-section')).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /call now/i })).not.toBeInTheDocument();
   });
 
   it('T6 — anonymous user still gets the (same) ViewingRequestPanel — no sign-in wall', () => {
@@ -226,27 +212,4 @@ describe('Area CTA canonicalization', () => {
     expect(link).toBeInTheDocument();
     expect(link).toHaveAttribute('href', '/trends/bangalore/areas/indiranagar');
   });
-});
-
-// ── Phone-number leak guard ───────────────────────────────────────────────────
-
-describe('Phone-number leak guard', () => {
-  it(
-    'T14 — anonymous user + contact_phone present → contact-phone-section NOT rendered (no leak)',
-    () => {
-      // Arrange: listing has a real phone number; user is NOT authenticated.
-      // The guard is `user && listing.contact_phone` in the sidebar —
-      // this test ensures the guard holds and the number never leaks to anon users.
-      renderSidebar(makeListing({ contact_phone: '+91-8001234567' }), null /* anon */);
-
-      // The contact section itself must be absent
-      expect(screen.queryByTestId('contact-phone-section')).not.toBeInTheDocument();
-
-      // The phone number text must not appear anywhere in the rendered output
-      expect(screen.queryByText('+91-8001234567')).not.toBeInTheDocument();
-
-      // The tel: link must not appear (belt-and-suspenders)
-      expect(document.querySelector('a[href^="tel:"]')).toBeNull();
-    },
-  );
 });

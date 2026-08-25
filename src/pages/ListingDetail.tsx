@@ -50,8 +50,6 @@ export interface PublicListingDetail extends Partial<ListingResponse> {
   imageCount?: number;               // teaser: total image count (incl. locked)
   price_unit?: string | null;        // legacy Supabase-sourced listings
   bathrooms?: number | null;
-  contact_phone?: string | null;
-  contact_info?: string | null;
   confidence_score?: number | null;
   price_per_cent_paise?: number | null;
   daysOnMarket?: number;

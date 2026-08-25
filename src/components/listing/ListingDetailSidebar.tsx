@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Phone, Check, Heart, TrendingUp, ChevronRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Check, Heart, TrendingUp, ChevronRight } from 'lucide-react';
 import { AreaMarketWidget } from '@/components/listing/AreaMarketWidget';
 import { ViewingRequestPanel } from '@/components/listing/ViewingRequestPanel';
 import { districtToCitySlug } from '@/lib/localityUtils';
@@ -100,38 +99,6 @@ export function ListingDetailSidebar({
       {/* AreaMarketWidget still expects the snake_case PropertyListing shape; the cast is
           safe because the widget degrades gracefully (renders "Not enough data"). */}
       <AreaMarketWidget listing={listing as unknown as PropertyListing} />
-
-      {/* Direct phone (authed + number present) — honest tel: path, never leaked to anon */}
-      {user && listing.contact_phone && (
-        <section
-          className="rounded-2xl border border-evergreen/20 bg-evergreen-tint p-5"
-          data-testid="contact-phone-section"
-        >
-          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold">
-            <Phone className="h-4 w-4 text-evergreen" />
-            Contact
-          </h2>
-          <a
-            href={`tel:${listing.contact_phone}`}
-            className="mb-3 block text-xl font-bold text-evergreen hover:underline"
-          >
-            {listing.contact_phone}
-          </a>
-          <Button asChild className="w-full bg-evergreen text-evergreen-foreground hover:opacity-90">
-            <a href={`tel:${listing.contact_phone}`}>
-              <Phone className="h-4 w-4 mr-2" />
-              Call Now
-            </a>
-          </Button>
-        </section>
-      )}
-
-      {user && listing.contact_info && (
-        <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="mb-2 text-base font-semibold">Additional Contact Info</h2>
-          <p className="text-sm text-muted-foreground">{listing.contact_info}</p>
-        </section>
-      )}
     </div>
   );
 }
