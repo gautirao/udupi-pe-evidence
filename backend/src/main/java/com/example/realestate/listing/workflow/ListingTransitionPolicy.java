@@ -182,8 +182,19 @@ public class ListingTransitionPolicy {
      * entering PENDING_REVIEW or LIVE (broker submission path, enforceImageMinimum=true).
      * <p>
      * Applies to transitions: T-02, T-09 (broker submits or resubmits via PENDING_REVIEW).
-     * Admin-initiated transitions to LIVE (T-12, T-15, T-18, T-25) use their own
-     * inline completeness checks in the service.
+     * Admin-initiated transitions to LIVE use their own inline completeness checks in
+     * the service, not this guard directly: T-12 via {@code approveScrapedListing}, and
+     * (as of #2286) T-15, T-18, T-25, and T-29 — every source status reachable through
+     * the generic {@code approveListing} method (DRAFT, PENDING_REVIEW, REJECTED, ARCHIVED
+     * respectively) — via a single unconditional completeness check in that method. A
+     * SCRAPED-status listing is rejected outright by {@code approveListing} rather than
+     * silently approved, so it cannot bypass the ownership-claim requirement and the
+     * scraped-specific completeness check that {@code approveScrapedListing} enforces.
+     * <p>
+     * {@code restoreRejectedListing} — a separate, dedicated admin endpoint distinct from
+     * {@code approveListing} (REJECTED -> LIVE with a required moderation note) — does NOT
+     * enforce completeness. This is a known, separate gap (see #2286), analogous to the
+     * T-10 fast-restore guard TODO below.
      *
      * @param listing the listing to validate; must be a {@link Listing} instance
      * @throws ListingValidationException if any required field is missing or invalid

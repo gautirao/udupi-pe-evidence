@@ -113,6 +113,32 @@ class ListingWorkflowServiceTest {
                 qualityRecomputeService, listingAreaResolutionService);
     }
 
+    /**
+     * Fills in only the fields approveListing's completeness guard (#2286) requires, without
+     * touching fields already set (used by e.g. buildSnapshot tests that null out specific
+     * fields on purpose to test JSON-null serialization). Callers must separately stub
+     * listingRepository.countImagesByListingId(listingId) to return >= MIN_IMAGES (3) —
+     * see {@link #stubApprovalComplete(UUID)}.
+     */
+    private void satisfyApprovalCompleteness(Listing listing) {
+        // Listing.propertyType defaults to "other" (not null) — treat that sentinel as unset too.
+        if (listing.getPropertyType() == null || "other".equals(listing.getPropertyType())) {
+            listing.setPropertyType("house");
+        }
+        if (listing.getLocality() == null) {
+            listing.setLocality("Udupi");
+        }
+        if (listing.getPrice() == null) {
+            listing.setPrice(BigDecimal.valueOf(1_000_000));
+        }
+        listing.setAddressConfirmed(true);
+    }
+
+    /** Stubs the image-count check approveListing's completeness guard (#2286) performs. */
+    private void stubApprovalComplete(UUID listingId) {
+        lenient().when(listingRepository.countImagesByListingId(listingId)).thenReturn(3L);
+    }
+
     // --- Notification decoupling tests ---
 
     @Test
@@ -126,9 +152,11 @@ class ListingWorkflowServiceTest {
         listing.setCreatedBy(ownerId);
         listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
         listing.setTitle("Test Property");
+        satisfyApprovalCompleteness(listing);
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenReturn(listing);
+        stubApprovalComplete(listingId);
 
         workflowService.approveListing(listingId, adminId);
 
@@ -179,9 +207,11 @@ class ListingWorkflowServiceTest {
         listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
         listing.setCreatedBy(UUID.randomUUID());
         listing.setTitle("Test Property");
+        satisfyApprovalCompleteness(listing);
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenReturn(listing);
+        stubApprovalComplete(listingId);
 
         // Simulate detection throwing an exception
         doThrow(new RuntimeException("Detection DB error"))
@@ -218,9 +248,11 @@ class ListingWorkflowServiceTest {
         // leave it after a transient resolver failure.
         listing.setAreaKey("in|ka|some-fallback|key");
         listing.setAreaResolutionStatus("UNRESOLVED");
+        satisfyApprovalCompleteness(listing);
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenReturn(listing);
+        stubApprovalComplete(listingId);
 
         // Simulate the retry succeeding this time (the transient outage cleared).
         doAnswer(invocation -> {
@@ -253,9 +285,11 @@ class ListingWorkflowServiceTest {
         listing.setTitle("Test Property");
         listing.setAreaKey("in|ka|some-fallback|key");
         listing.setAreaResolutionStatus("UNRESOLVED");
+        satisfyApprovalCompleteness(listing);
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenReturn(listing);
+        stubApprovalComplete(listingId);
         // listingAreaResolutionService.resolveAndApply is a no-op mock by default — simulates a
         // resolver that still can't resolve it on retry.
 
@@ -281,9 +315,11 @@ class ListingWorkflowServiceTest {
         listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
         listing.setCreatedBy(UUID.randomUUID());
         listing.setTitle("Test");
+        satisfyApprovalCompleteness(listing);
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubApprovalComplete(listingId);
 
         workflowService.approveListing(listingId, adminId);
 
@@ -308,9 +344,11 @@ class ListingWorkflowServiceTest {
         listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
         listing.setCreatedBy(UUID.randomUUID());
         listing.setTitle("Test");
+        satisfyApprovalCompleteness(listing);
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubApprovalComplete(listingId);
 
         workflowService.approveListing(listingId, adminId);
 
@@ -483,9 +521,11 @@ class ListingWorkflowServiceTest {
         listing.setCreatedBy(UUID.randomUUID());
         listing.setTitle("Test");
         // firstPublishedAt is null — first-time approval
+        satisfyApprovalCompleteness(listing);
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubApprovalComplete(listingId);
 
         workflowService.approveListing(listingId, adminId);
 
@@ -517,9 +557,11 @@ class ListingWorkflowServiceTest {
         listing.setCreatedBy(UUID.randomUUID());
         listing.setTitle("Test");
         listing.setFirstPublishedAt(originalFirstPublished);  // already set from first approval
+        satisfyApprovalCompleteness(listing);
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubApprovalComplete(listingId);
 
         workflowService.approveListing(listingId, adminId);
 
@@ -2372,6 +2414,7 @@ class ListingWorkflowServiceTest {
         listing.setLandArea(BigDecimal.valueOf(500));
         listing.setPropertyType("house");
         listing.setVideoUrl("https://example.com/video.mp4");
+        satisfyApprovalCompleteness(listing);
 
         ListingImage img1 = new ListingImage();
         img1.setId(imageId1);
@@ -2383,6 +2426,7 @@ class ListingWorkflowServiceTest {
                 .thenReturn(List.of(img1, img2));
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubApprovalComplete(listingId);
 
         workflowService.approveListing(listingId, UUID.randomUUID());
 
@@ -2418,11 +2462,13 @@ class ListingWorkflowServiceTest {
         listing.setVideoUrl(null);
         listing.setAreaKey(null);
         listing.setPropertyType("house");
+        satisfyApprovalCompleteness(listing);
 
         when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
                 .thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubApprovalComplete(listingId);
 
         workflowService.approveListing(listingId, UUID.randomUUID());
 
@@ -2454,11 +2500,13 @@ class ListingWorkflowServiceTest {
         listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
         listing.setCreatedBy(UUID.randomUUID());
         listing.setPropertyType("house");
+        satisfyApprovalCompleteness(listing);
 
         when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
                 .thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubApprovalComplete(listingId);
 
         workflowService.approveListing(listingId, UUID.randomUUID());
 
@@ -2479,11 +2527,13 @@ class ListingWorkflowServiceTest {
         listing.setCreatedBy(UUID.randomUUID());
         listing.setPropertyType("house");
         listing.setTitle("Some Property");
+        satisfyApprovalCompleteness(listing);
 
         when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
                 .thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubApprovalComplete(listingId);
 
         Listing result = workflowService.approveListing(listingId, adminId);
 
@@ -2493,6 +2543,246 @@ class ListingWorkflowServiceTest {
         assertThat(captor.getValue().getLastApprovedSnapshot()).isNotNull();
         // The returned listing must also carry the snapshot
         assertThat(result.getLastApprovedSnapshot()).isNotNull();
+    }
+
+    // ===== #2286: generic admin /approve endpoint (approveListing) completeness guard =====
+    // Scope correction (per issue #2286's own follow-up comment): the gap was not limited to
+    // T-29 (ARCHIVED). approveListing is the single method behind POST /api/admin/listings/
+    // {id}/approve, reachable from every admin-permitted source status — DRAFT (T-15),
+    // PENDING_REVIEW (T-18), REJECTED (T-25), ARCHIVED (T-29) — and had NO completeness check
+    // at all, regardless of starting status. Only the separate /approve-scraped endpoint
+    // (approveScrapedListing, T-12) was genuinely guarded. A SCRAPED-status listing could also
+    // reach approveListing directly, bypassing the ownership-claim requirement and the
+    // scraped-specific completeness check that /approve-scraped enforces.
+
+    @Test
+    void approveListing_fromArchived_incompleteListing_throwsListingIncomplete() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.ARCHIVED.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setPropertyType("house");
+        listing.setLocality("Udupi");
+        listing.setPrice(BigDecimal.valueOf(1_000_000));
+        listing.setTitle("Incomplete Archived Property");
+        listing.setAddressConfirmed(false); // #2286: address not confirmed
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        // countImagesByListingId is unstubbed -> Mockito default 0L, below MIN_IMAGES (3)
+
+        assertThatThrownBy(() -> workflowService.approveListing(listingId, adminId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.LISTING_INCOMPLETE));
+
+        // The guard must fire before any mutation is persisted
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void approveListing_fromArchived_completeListing_stillSucceeds() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.ARCHIVED.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setPropertyType("house");
+        listing.setLocality("Udupi");
+        listing.setPrice(BigDecimal.valueOf(1_000_000));
+        listing.setTitle("Complete Archived Property");
+        listing.setAddressConfirmed(true);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.countImagesByListingId(listingId)).thenReturn(3L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.approveListing(listingId, adminId);
+
+        assertThat(result.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+        verify(listingRepository).save(any());
+    }
+
+    @Test
+    void approveListing_fromDraft_incompleteListing_throwsListingIncomplete() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setPropertyType("house");
+        listing.setLocality("Udupi");
+        listing.setPrice(BigDecimal.valueOf(1_000_000));
+        listing.setTitle("Incomplete Draft Property");
+        listing.setAddressConfirmed(false);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        // countImagesByListingId unstubbed -> 0L, below MIN_IMAGES (3)
+
+        assertThatThrownBy(() -> workflowService.approveListing(listingId, adminId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.LISTING_INCOMPLETE));
+
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void approveListing_fromDraft_completeListing_succeeds() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setPropertyType("house");
+        listing.setLocality("Udupi");
+        listing.setPrice(BigDecimal.valueOf(1_000_000));
+        listing.setTitle("Complete Draft Property");
+        listing.setAddressConfirmed(true);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.countImagesByListingId(listingId)).thenReturn(3L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.approveListing(listingId, adminId);
+
+        assertThat(result.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+        verify(listingRepository).save(any());
+    }
+
+    @Test
+    void approveListing_fromPendingReview_incompleteListing_throwsListingIncomplete() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setPropertyType("house");
+        listing.setLocality("Udupi");
+        listing.setPrice(BigDecimal.valueOf(1_000_000));
+        listing.setTitle("Incomplete Pending Property");
+        listing.setAddressConfirmed(false);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        // countImagesByListingId unstubbed -> 0L, below MIN_IMAGES (3)
+
+        assertThatThrownBy(() -> workflowService.approveListing(listingId, adminId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.LISTING_INCOMPLETE));
+
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void approveListing_fromPendingReview_completeListing_succeeds() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setPropertyType("house");
+        listing.setLocality("Udupi");
+        listing.setPrice(BigDecimal.valueOf(1_000_000));
+        listing.setTitle("Complete Pending Property");
+        listing.setAddressConfirmed(true);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.countImagesByListingId(listingId)).thenReturn(3L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.approveListing(listingId, adminId);
+
+        assertThat(result.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+        verify(listingRepository).save(any());
+    }
+
+    @Test
+    void approveListing_fromRejected_incompleteListing_throwsListingIncomplete() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setPropertyType("house");
+        listing.setLocality("Udupi");
+        listing.setPrice(BigDecimal.valueOf(1_000_000));
+        listing.setTitle("Incomplete Rejected Property");
+        listing.setAddressConfirmed(false);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        // countImagesByListingId unstubbed -> 0L, below MIN_IMAGES (3)
+
+        assertThatThrownBy(() -> workflowService.approveListing(listingId, adminId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.LISTING_INCOMPLETE));
+
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void approveListing_fromRejected_completeListing_succeeds() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setPropertyType("house");
+        listing.setLocality("Udupi");
+        listing.setPrice(BigDecimal.valueOf(1_000_000));
+        listing.setTitle("Complete Rejected Property");
+        listing.setAddressConfirmed(true);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.countImagesByListingId(listingId)).thenReturn(3L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.approveListing(listingId, adminId);
+
+        assertThat(result.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+        verify(listingRepository).save(any());
+    }
+
+    @Test
+    void approveListing_fromScraped_rejectedRegardlessOfCompleteness_mustUseApproveScraped() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        // Even a fully "complete" SCRAPED listing must be rejected by the generic endpoint —
+        // it lacks the ownership-claim check that /approve-scraped enforces (createdBy is
+        // deliberately left null here, mirroring a freshly-scraped, unclaimed listing).
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.SCRAPED.toDbValue());
+        listing.setPropertyType("house");
+        listing.setLocality("Udupi");
+        listing.setPrice(BigDecimal.valueOf(1_000_000));
+        listing.setTitle("Scraped Property");
+        listing.setAddressConfirmed(true);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.approveListing(listingId, adminId))
+                .isInstanceOf(ListingStatusException.class);
+
+        verify(listingRepository, never()).save(any());
     }
 
     @Test

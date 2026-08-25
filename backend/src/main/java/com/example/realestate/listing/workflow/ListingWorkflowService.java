@@ -178,11 +178,25 @@ public class ListingWorkflowService {
     }
 
     /**
-     * Admin approves a listing: PENDING_REVIEW -> LIVE.
+     * Admin approves a listing to LIVE via the generic admin approve endpoint
+     * (POST /api/admin/listings/{id}/approve). Reachable from any admin-permitted source
+     * status: DRAFT (T-15), PENDING_REVIEW (T-18), REJECTED (T-25), ARCHIVED (T-29).
      * Creates a notification for the listing owner.
      *
-     * @throws ListingNotFoundException if listing not found
-     * @throws ListingStatusException   if transition is not allowed by the policy
+     * <p>#2286: this generic endpoint previously had NO completeness check at all, and no
+     * restriction on the starting status — an admin could publish an incomplete DRAFT/
+     * PENDING_REVIEW/REJECTED/ARCHIVED listing straight to LIVE, or bypass the ownership-claim
+     * requirement and scraped-specific completeness check by calling this endpoint on a
+     * SCRAPED listing instead of the dedicated /approve-scraped endpoint. Both gaps are now
+     * closed: SCRAPED listings are rejected outright (must use /approve-scraped), and every
+     * other reachable source status is held to the same completeness bar as the broker
+     * submission path and the T-12 scraped-listing approval path.
+     *
+     * @throws ListingNotFoundException  if listing not found
+     * @throws ListingStatusException    if transition is not allowed by the policy, or if the
+     *                                    listing is currently SCRAPED (must use /approve-scraped)
+     * @throws ListingLifecycleException LISTING_INCOMPLETE (422) if the listing fails
+     *                                    completeness validation
      */
     @Transactional
     public Listing approveListing(UUID listingId, UUID adminUserId) {
@@ -191,6 +205,24 @@ public class ListingWorkflowService {
 
         ListingStatus currentStatus = ListingStatus.fromDbValue(listing.getStatus());
         policy.validate(currentStatus, ListingStatus.LIVE, ActorType.ADMIN);
+
+        // #2286: SCRAPED listings must go through the dedicated /approve-scraped endpoint
+        // (approveScrapedListing), which enforces the ownership-claim requirement and its own
+        // completeness check. The generic /approve endpoint must not be usable to bypass those.
+        if (currentStatus == ListingStatus.SCRAPED) {
+            throw new ListingStatusException(
+                    "SCRAPED listings must be approved via approve-scraped, not the generic approve endpoint");
+        }
+
+        // #2286: every other admin-initiated LIVE transition reachable through this generic
+        // endpoint (T-15 DRAFT, T-18 PENDING_REVIEW, T-25 REJECTED, T-29 ARCHIVED) must meet
+        // the same completeness bar as the broker submit path and the T-12 scraped-approval path.
+        List<Map<String, String>> errors = validateForSubmission(listing, true);
+        if (!errors.isEmpty()) {
+            throw new ListingLifecycleException(
+                    ListingErrorCode.LISTING_INCOMPLETE,
+                    "Listing is incomplete: " + errors.get(0).get("message"));
+        }
 
         Instant now = Instant.now();
         OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
