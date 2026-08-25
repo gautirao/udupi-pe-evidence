@@ -45,8 +45,55 @@
  * (`user-menu`) actually resolving — never first paint.
  */
 
+import type { Page } from './support/canonical-test';
 import { test, expect } from './support/canonical-test';
 import { loginAsUser, loginAsBroker, loginAsAdmin, hasRealCredentials } from '../helpers';
+
+/**
+ * Waits for at least one real response from the backend origin
+ * (BACKEND_BASE_URL) to reach this page (issue #2331).
+ *
+ * WHY THIS EXISTS: the broker/admin T1 legs below assert only a reactive,
+ * authed-only header control that AuthContext resolves off a DIRECT
+ * Supabase client call (see auth-setup.canonical.ts's module docstring for
+ * why a live sign-in alone never guarantees BACKEND_BASE_URL traffic). The
+ * role-aware landing page's OWN data fetch (broker dashboard's portfolio
+ * summary, admin's pending-queue count, or Discover's navigation/resolve —
+ * whichever page the KNOWN PRODUCT BUG below actually lands on this run) is
+ * a separate async chain from that header-control resolution, and can
+ * still be in flight when the header assertion resolves and the test body
+ * returns — a genuine race between two independent async chains, not a
+ * Playwright route-registration race. Live-reproduced against this exact
+ * HEAD across a repeated clean-restore evidence series: one run passed
+ * 31/31, a second run failed `installNoApiMockGuard`'s afterEach assertion
+ * with zero intercepted requests on exactly this one test (T1[broker]),
+ * despite the test body's own header-link assertion passing — see #2331 for
+ * the full evidence trail (the issue's original "listener-attach-ordering"
+ * hypothesis did not hold up: a targeted context-level-routing fix for that
+ * left the failure unchanged on reproduction, which is what led here).
+ * Waiting for a real backend response makes this test's own completion
+ * deterministic instead of racing an assertion that was never about backend
+ * traffic in the first place.
+ *
+ * MUST be called (to attach the listener) BEFORE the racy event — i.e.
+ * before `loginAsBroker`/`loginAsAdmin` — and its returned promise awaited
+ * only AFTER the header-control assertion, mirroring T2's own
+ * `waitForResponse`-before-`goto` pattern above. Calling this AFTER the
+ * assertion instead would attach the listener too late to catch a response
+ * that already completed between login and that assertion resolving —
+ * reintroducing the exact race this exists to close.
+ */
+function waitForRealBackendResponse(page: Page, timeoutMs = 15_000): Promise<import('@playwright/test').Response> {
+  const backendBaseUrl = process.env.BACKEND_BASE_URL;
+  if (!backendBaseUrl) {
+    // playwright.canonical.config.ts already throws at config-load time if
+    // this is unset — reaching here would mean a test process was launched
+    // some other way. Fail loudly rather than silently skip the wait.
+    throw new Error('[auth-session T1] BACKEND_BASE_URL is unset inside a running test. This should be unreachable.');
+  }
+  const backendOrigin = new URL(backendBaseUrl).origin;
+  return page.waitForResponse((resp) => resp.url().startsWith(backendOrigin), { timeout: timeoutMs });
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // T1[user] settled-landing predicate (issue #2246) — see the T1 [role:user]
@@ -322,6 +369,11 @@ test.describe('T1 — sign-in: role-aware landing + authed-only header control',
       throw new Error('[T1:broker] BROKER_EMAIL/PASSWORD absent — this test should not have run.');
     }
 
+    // Attach BEFORE navigating — see waitForRealBackendResponse's docstring
+    // (issue #2331) for why this must start listening before login, not
+    // after the header assertion below.
+    const backendResponsePromise = waitForRealBackendResponse(page);
+
     await loginAsBroker(page, brokerEmail, brokerPassword);
     // loginAsBroker's own postcondition already asserts the URL left /auth
     // (e2e/helpers.ts) — sign-in itself is real and successful.
@@ -332,12 +384,24 @@ test.describe('T1 — sign-in: role-aware landing + authed-only header control',
     // Driven by AuthContext's reactive role state, independent of the
     // landing-URL bug documented above.
     await expect(page.getByRole('link', { name: 'Broker dashboard', exact: true })).toBeVisible({ timeout: 15_000 });
+
+    // See waitForRealBackendResponse's docstring (issue #2331) — the header
+    // assertion above can resolve before the role-aware landing page's own
+    // data fetch reaches the network, racing installNoApiMockGuard's
+    // afterEach assertion. Wait explicitly rather than let that race decide
+    // this test's outcome.
+    await backendResponsePromise;
   });
 
   test('[role:admin] admin signs in successfully; "Admin Console" header control visible (does NOT assert role-aware landing — see KNOWN PRODUCT BUG above)', async ({ page }) => {
     if (!hasRealCredentials(adminEmail, adminPassword)) {
       throw new Error('[T1:admin] ADMIN_EMAIL/PASSWORD absent — this test should not have run.');
     }
+
+    // Attach BEFORE navigating — see waitForRealBackendResponse's docstring
+    // (issue #2331) for why this must start listening before login, not
+    // after the header assertion below.
+    const backendResponsePromise = waitForRealBackendResponse(page);
 
     await loginAsAdmin(page, adminEmail, adminPassword);
     // loginAsAdmin's own postcondition already asserts the URL left /auth
@@ -349,6 +413,13 @@ test.describe('T1 — sign-in: role-aware landing + authed-only header control',
     // AuthContext's reactive role state, independent of the landing-URL bug
     // documented above.
     await expect(page.getByRole('button', { name: 'Admin Console' })).toBeVisible({ timeout: 15_000 });
+
+    // See waitForRealBackendResponse's docstring (issue #2331) — the header
+    // assertion above can resolve before the role-aware landing page's own
+    // data fetch reaches the network, racing installNoApiMockGuard's
+    // afterEach assertion. Wait explicitly rather than let that race decide
+    // this test's outcome.
+    await backendResponsePromise;
   });
 });
 
