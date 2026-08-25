@@ -38,14 +38,20 @@ SEED_FILE="${SCRIPT_DIR}/fixtures/discover-smoke-seed.sql"
 # Bangalore navigation-hierarchy fixture (#2256): the canonical E2E suite's Bangalore-targeted
 # specs (see e.g. e2e/canonical/anon-discover-teaser.canonical.ts's docstring) depend on this
 # state existing, but it was historically hand-loaded once into the shared pg-test-fixture
-# container and never reproduced by this script. These three files are additive/idempotent
+# container and never reproduced by this script. All five files below are additive/idempotent
 # (ON CONFLICT ... DO NOTHING against real unique constraints — see each file's own header) and
 # safe to layer on top of the Udupi smoke seed above. Order matters: the nodes must exist before
-# the listings seed (which targets specific AREA leaves), and the listings seed reuses the
-# synthetic [E2E] broker account created by discover-smoke-seed.sql above.
+# the listings seed (which targets specific AREA leaves), and the listings/rent-listings/schools-
+# agri seeds reuse the synthetic [E2E] broker account created by discover-smoke-seed.sql above.
 NAV_HIERARCHY_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-hierarchy-fixture-seed.sql"
 NAV_ACTIVE_REVISION_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-active-revision-fixture-seed.sql"
 NAV_HIERARCHY_LISTINGS_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-hierarchy-fixture-listings-seed.sql"
+# #2327: the remaining two nav-hierarchy fixture files documented in e2e/canonical/README.md's
+# "Required local run sequence" (files 4/5) but never wired into this script. Without file 5 in
+# particular, agri_destination_classification stays empty for every city and the backend fails
+# closed with 503 AGRI_DESTINATIONS_NOT_YET_PROMOTED — see AgriDestinationPortReadinessCheck.
+NAV_HIERARCHY_RENT_LISTINGS_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-hierarchy-fixture-rent-listings-seed.sql"
+NAV_SCHOOLS_AGRI_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-hierarchy-schools-agri-fixture-seed.sql"
 
 PG_PASSWORD="${PG_TEST_PASSWORD:-fixture_test_only}"
 PG_PORT="${PG_TEST_PORT:-5434}"
@@ -84,7 +90,8 @@ if [[ ! -f "${SEED_FILE}" ]]; then
   exit 1
 fi
 
-for NAV_FILE in "${NAV_HIERARCHY_SEED_FILE}" "${NAV_ACTIVE_REVISION_SEED_FILE}" "${NAV_HIERARCHY_LISTINGS_SEED_FILE}"; do
+for NAV_FILE in "${NAV_HIERARCHY_SEED_FILE}" "${NAV_ACTIVE_REVISION_SEED_FILE}" "${NAV_HIERARCHY_LISTINGS_SEED_FILE}" \
+    "${NAV_HIERARCHY_RENT_LISTINGS_SEED_FILE}" "${NAV_SCHOOLS_AGRI_SEED_FILE}"; do
   if [[ ! -f "${NAV_FILE}" ]]; then
     echo "ERROR: Navigation-hierarchy fixture seed file not found: ${NAV_FILE}" >&2
     exit 1
@@ -401,6 +408,45 @@ else
     exit 1
   fi
   echo "==> Bangalore PROMOTED city_launch_revision count: ${BANGALORE_PROMOTED_REVISION_COUNT}."
+
+  echo "==> Loading Bangalore navigation-hierarchy rent listings from ${NAV_HIERARCHY_RENT_LISTINGS_SEED_FILE}..."
+  PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+    -d "${DB_NAME}" -v ON_ERROR_STOP=1 -f "${NAV_HIERARCHY_RENT_LISTINGS_SEED_FILE}"
+
+  echo "==> Loading Bangalore schools + agri-destination fixture from ${NAV_SCHOOLS_AGRI_SEED_FILE}..."
+  PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+    -d "${DB_NAME}" -v ON_ERROR_STOP=1 -f "${NAV_SCHOOLS_AGRI_SEED_FILE}"
+  echo "==> Bangalore rent-listings + schools/agri fixture load complete."
+
+  # ---------------------------------------------------------------------------
+  # Gate: rent-listings + schools/agri fixtures actually landed (#2327).
+  #
+  # Same defense-in-depth rationale as the BANGALORE_NAV_NODE_COUNT /
+  # BANGALORE_PROMOTED_REVISION_COUNT gates above — the seed files RAISE EXCEPTION
+  # internally on their own inserts failing to land, but a SELECT COUNT(*) that
+  # comes back 0 is a successful query, not a psql error, so `set -e` alone would
+  # not catch a future regression that silently no-ops one of these seeds.
+  # ---------------------------------------------------------------------------
+  BANGALORE_RENT_LISTING_COUNT=$(PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+    -d "${DB_NAME}" -t -A \
+    -c "SELECT COUNT(*) FROM property_listings
+          WHERE status = 'LIVE' AND listing_purpose = 'rent'
+            AND area_key = 'IN|KA|Bengaluru|RR Nagar';" 2>/dev/null || echo "0")
+  if [[ "${BANGALORE_RENT_LISTING_COUNT}" -eq 0 ]]; then
+    echo "ERROR: Bangalore RR Nagar rent listing count is 0 after loading ${NAV_HIERARCHY_RENT_LISTINGS_SEED_FILE} — fixture did not land." >&2
+    exit 1
+  fi
+  echo "==> Bangalore RR Nagar rent listing count: ${BANGALORE_RENT_LISTING_COUNT}."
+
+  BANGALORE_AGRI_DESTINATION_COUNT=$(PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+    -d "${DB_NAME}" -t -A \
+    -c "SELECT COUNT(*) FROM agri_destination_classification adc
+          JOIN cities c ON c.id = adc.city_id WHERE c.slug = 'bangalore';" 2>/dev/null || echo "0")
+  if [[ "${BANGALORE_AGRI_DESTINATION_COUNT}" -eq 0 ]]; then
+    echo "ERROR: Bangalore agri_destination_classification count is 0 after loading ${NAV_SCHOOLS_AGRI_SEED_FILE} — fixture did not land (AgriDestinationPortReadinessCheck will fail closed with 503)." >&2
+    exit 1
+  fi
+  echo "==> Bangalore agri_destination_classification count: ${BANGALORE_AGRI_DESTINATION_COUNT}."
 fi
 
 # ---------------------------------------------------------------------------
