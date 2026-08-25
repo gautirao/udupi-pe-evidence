@@ -175,6 +175,59 @@ not silent.
    `vite build` — it serves whatever `dist/` already exists, which is why the
    package script builds first.
 
+## Consecutive full-suite runs trip per-IP rate limiters (issues #2255, #2261)
+
+Running the full canonical suite back-to-back against **the same local
+backend process**, without restarting it between runs, produces a growing
+failure count on the second and later runs — one that misleadingly looks
+like a regression caused by whatever changed most recently. It is not a
+regression: it is the backend's own anti-abuse rate limiting doing its job.
+
+**Root cause:** the backend's public `discover` and `trends` endpoints are
+protected by in-memory (Bucket4j) per-IP rate limiters —
+`DiscoverRateLimitFilter` / `TrendsRateLimitFilter` — configured in
+`application.yml`:
+
+| Property | Env override | Default |
+|---|---|---|
+| `ratelimit.discover.enabled` | `RATE_LIMIT_DISCOVER_ENABLED` | `true` |
+| `ratelimit.discover.requests-per-minute` | `RATE_LIMIT_DISCOVER_REQUESTS_PER_MINUTE` | `120` |
+| `ratelimit.trends.enabled` | `RATE_LIMIT_TRENDS_ENABLED` | `true` |
+| `ratelimit.trends.requests-per-minute` | `RATE_LIMIT_TRENDS_REQUESTS_PER_MINUTE` | `60` |
+
+Every canonical run drives real anon `discover`/`trends` traffic from the
+same client IP against a backend process that keeps its rate-limit buckets
+in memory across runs (the process itself isn't restarted between suite
+invocations). Enough consecutive runs exhausts the bucket; once tripped,
+anon discover/trends GETs get throttled with HTTP 429, downstream panels
+never render, and the suite fails in a way that grows worse the more times
+you re-run it — look for this log line on the backend to confirm the
+diagnosis:
+
+```
+WARN c.e.r.s.DiscoverRateLimitFilter - Public discover rate limit exceeded for clientKey=...
+```
+
+(the `trends` filter logs the analogous `Public trends rate limit exceeded`
+line).
+
+**Fix — disable both limiters for local/CI canonical runs:**
+
+```bash
+export RATE_LIMIT_DISCOVER_ENABLED=false
+export RATE_LIMIT_TRENDS_ENABLED=false
+```
+
+Set these in the shell that starts `scripts/dev/local-fixture-backend.sh`
+(they must be present on the **backend** process's environment, not the
+Playwright shell). No canonical spec asserts rate-limiting behavior, so
+disabling these removes zero coverage.
+
+**Never disable these on a shared, staging, or production backend.** They
+exist to protect real anonymous endpoints from abuse; this override is for
+local/CI verification backends only, where the "attacker" is your own
+repeated test traffic against a fixture database.
+
 ## The `*.canonical.ts` naming rule — MANDATORY, load-bearing
 
 Every spec file in this directory MUST be named `<name>.canonical.ts`, never
