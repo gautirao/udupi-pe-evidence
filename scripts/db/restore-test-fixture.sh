@@ -3,7 +3,8 @@
 #
 # Set up a local throwaway PostGIS container, apply all Flyway migrations
 # (V0..V87) via the Flyway 10.20.1 Docker image, then load the synthetic
-# E2E seed data.
+# E2E seed data (Udupi smoke seed + the Bangalore navigation-hierarchy
+# fixture the canonical E2E suite depends on).
 #
 # NEVER run against a real/production database — this script drops and
 # recreates the container from scratch on every run.
@@ -33,6 +34,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 MIGRATION_DIR="${REPO_ROOT}/backend/src/main/resources/db/migration"
 SEED_FILE="${SCRIPT_DIR}/fixtures/discover-smoke-seed.sql"
+
+# Bangalore navigation-hierarchy fixture (#2256): the canonical E2E suite's Bangalore-targeted
+# specs (see e.g. e2e/canonical/anon-discover-teaser.canonical.ts's docstring) depend on this
+# state existing, but it was historically hand-loaded once into the shared pg-test-fixture
+# container and never reproduced by this script. These three files are additive/idempotent
+# (ON CONFLICT ... DO NOTHING against real unique constraints — see each file's own header) and
+# safe to layer on top of the Udupi smoke seed above. Order matters: the nodes must exist before
+# the listings seed (which targets specific AREA leaves), and the listings seed reuses the
+# synthetic [E2E] broker account created by discover-smoke-seed.sql above.
+NAV_HIERARCHY_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-hierarchy-fixture-seed.sql"
+NAV_ACTIVE_REVISION_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-active-revision-fixture-seed.sql"
+NAV_HIERARCHY_LISTINGS_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-hierarchy-fixture-listings-seed.sql"
 
 PG_PASSWORD="${PG_TEST_PASSWORD:-fixture_test_only}"
 PG_PORT="${PG_TEST_PORT:-5434}"
@@ -70,6 +83,13 @@ if [[ ! -f "${SEED_FILE}" ]]; then
   echo "ERROR: Seed file not found: ${SEED_FILE}" >&2
   exit 1
 fi
+
+for NAV_FILE in "${NAV_HIERARCHY_SEED_FILE}" "${NAV_ACTIVE_REVISION_SEED_FILE}" "${NAV_HIERARCHY_LISTINGS_SEED_FILE}"; do
+  if [[ ! -f "${NAV_FILE}" ]]; then
+    echo "ERROR: Navigation-hierarchy fixture seed file not found: ${NAV_FILE}" >&2
+    exit 1
+  fi
+done
 
 # Count migrations (V*.sql files)
 MIGRATION_COUNT=$(find "${MIGRATION_DIR}" -name "V*.sql" | wc -l | tr -d ' ')
@@ -335,6 +355,19 @@ else
   PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
     -d "${DB_NAME}" -f "${SEED_FILE}"
   echo "==> Seed load complete."
+
+  echo "==> Loading Bangalore navigation-hierarchy fixture from ${NAV_HIERARCHY_SEED_FILE}..."
+  PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+    -d "${DB_NAME}" -v ON_ERROR_STOP=1 -f "${NAV_HIERARCHY_SEED_FILE}"
+
+  echo "==> Promoting Bangalore's navigation revision from ${NAV_ACTIVE_REVISION_SEED_FILE}..."
+  PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+    -d "${DB_NAME}" -v ON_ERROR_STOP=1 -f "${NAV_ACTIVE_REVISION_SEED_FILE}"
+
+  echo "==> Loading Bangalore navigation-hierarchy listings from ${NAV_HIERARCHY_LISTINGS_SEED_FILE}..."
+  PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+    -d "${DB_NAME}" -v ON_ERROR_STOP=1 -f "${NAV_HIERARCHY_LISTINGS_SEED_FILE}"
+  echo "==> Bangalore navigation-hierarchy fixture load complete."
 fi
 
 # ---------------------------------------------------------------------------
@@ -363,6 +396,13 @@ SELECT COUNT(*) AS manipal_apartment_count FROM property_listings
 SELECT ST_AsText(geog::geometry) AS point FROM property_listings
   WHERE status = 'LIVE' AND area_key = 'IN|KA|Udupi|Manipal' AND title LIKE '[E2E]%'
   LIMIT 2;
+\echo '--- Bangalore navigation_nodes count ---'
+SELECT COUNT(*) AS bangalore_nav_node_count FROM navigation_nodes nn
+  JOIN cities c ON c.id = nn.city_id WHERE c.slug = 'bangalore';
+\echo '--- Bangalore PROMOTED city_launch_revision ---'
+SELECT COUNT(*) AS bangalore_promoted_revision_count FROM city_launch_revision clr
+  JOIN cities c ON c.id = clr.city_id
+  WHERE c.slug = 'bangalore' AND clr.lifecycle_status = 'PROMOTED' AND clr.superseded_by IS NULL;
 SQL
 
 # ---------------------------------------------------------------------------
