@@ -45,6 +45,14 @@ public class AdminListingController {
 
     private static final Logger log = LoggerFactory.getLogger(AdminListingController.class);
 
+    /**
+     * Matches the five structured rejection codes the moderation UI offers
+     * (see src/pages/admin/PendingListings.tsx REJECTION_CODES). The UI sends
+     * "CODE: note" (or bare "CODE" with no note) as rejectionReason.
+     */
+    private static final java.util.Set<String> VALID_REJECTION_CODES = java.util.Set.of(
+            "INCOMPLETE_INFO", "DUPLICATE_LISTING", "INVALID_PHOTOS", "POLICY_VIOLATION", "OTHER");
+
     private final ListingWorkflowService listingWorkflowService;
     private final ListingResponseMapper listingResponseMapper;
     private final AdminAuditService adminAuditService;
@@ -168,6 +176,12 @@ public class AdminListingController {
         if (req.rejectionReason() == null || req.rejectionReason().isBlank()) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "Rejection reason is required"));
+        }
+
+        String rejectionCode = extractRejectionCode(req.rejectionReason());
+        if (!VALID_REJECTION_CODES.contains(rejectionCode)) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Unrecognized rejection code: " + rejectionCode));
         }
 
         try {
@@ -324,6 +338,16 @@ public class AdminListingController {
     private static ResponseEntity<Map<String, String>> notFound() {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("error", "Listing not found"));
+    }
+
+    /**
+     * Extracts the code prefix from a "CODE: note" or bare "CODE" rejectionReason,
+     * matching the format the UI sends (PendingListings.tsx rejectMutation).
+     */
+    private static String extractRejectionCode(String rejectionReason) {
+        int colonIdx = rejectionReason.indexOf(':');
+        String code = colonIdx >= 0 ? rejectionReason.substring(0, colonIdx) : rejectionReason;
+        return code.trim();
     }
 
     // ===== DTOs =====

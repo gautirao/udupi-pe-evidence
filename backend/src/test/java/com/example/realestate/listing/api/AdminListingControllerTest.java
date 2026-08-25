@@ -226,26 +226,84 @@ Listing approved = buildListing(LISTING_ID, "LIVE", "land", "Plot in Manipal",
 
     @Test
     void reject_withReasonAndAdminRole_returns200WithRejectedStatus() throws Exception {
+        // #2287: rejectionReason must carry one of the five UI-supported codes as its
+        // prefix (PendingListings.tsx rejectMutation sends "CODE: note"); a bare free-text
+        // reason with no recognized code is now rejected server-side (see below tests).
 Listing rejected = buildListing(LISTING_ID, "REJECTED", "house", "House",
                 "Udupi", new BigDecimal("8000000"), "A house");
-        rejected.setRejectionReason("Blurry images");
+        rejected.setRejectionReason("INVALID_PHOTOS: Blurry images");
         rejected.setReviewedAt(OffsetDateTime.now());
         rejected.setReviewedBy(ADMIN_ID);
-        when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, "Blurry images"))
+        when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, "INVALID_PHOTOS: Blurry images"))
                 .thenReturn(rejected);
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
                         .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"rejectionReason":"Blurry images"}
+                                {"rejectionReason":"INVALID_PHOTOS: Blurry images"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.status").value("REJECTED"))
-                .andExpect(jsonPath("$.rejectionReason").value("Blurry images"));
+                .andExpect(jsonPath("$.rejectionReason").value("INVALID_PHOTOS: Blurry images"));
 
-        verify(listingWorkflowService).rejectListing(LISTING_ID, ADMIN_ID, "Blurry images");
+        verify(listingWorkflowService).rejectListing(LISTING_ID, ADMIN_ID, "INVALID_PHOTOS: Blurry images");
+    }
+
+    // ==================== #2287: all five UI-supported codes accepted ====================
+
+    @Test
+    void reject_withEachSupportedCode_returns200() throws Exception {
+        for (String code : java.util.List.of(
+                "INCOMPLETE_INFO", "DUPLICATE_LISTING", "INVALID_PHOTOS", "POLICY_VIOLATION", "OTHER")) {
+            reset(listingWorkflowService, listingResponseMapper, adminAuditService, listingRepository);
+            setUp();
+
+            Listing rejected = buildListing(LISTING_ID, "REJECTED", "house", "House",
+                    "Udupi", new BigDecimal("8000000"), "A house");
+            rejected.setRejectionReason(code);
+            when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, code)).thenReturn(rejected);
+
+            mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
+                            .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"rejectionReason\":\"" + code + "\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("REJECTED"));
+
+            verify(listingWorkflowService).rejectListing(LISTING_ID, ADMIN_ID, code);
+        }
+    }
+
+    // ==================== #2287: malformed/unrecognized code -> 400 ====================
+
+    @Test
+    void reject_withUnrecognizedCode_returns400() throws Exception {
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"rejectionReason":"NOT_A_REAL_CODE:some note"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Unrecognized rejection code: NOT_A_REAL_CODE"));
+
+        verify(listingWorkflowService, never()).rejectListing(any(), any(), any());
+    }
+
+    @Test
+    void reject_withMisspelledCodeNoColon_returns400() throws Exception {
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"rejectionReason":"Blurry images"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Unrecognized rejection code: Blurry images"));
+
+        verify(listingWorkflowService, never()).rejectListing(any(), any(), any());
     }
 
     // ==================== Test 3: Reject without reason -> 400 ====================
@@ -331,14 +389,14 @@ when(listingWorkflowService.approveListing(LISTING_ID, ADMIN_ID))
 
     @Test
     void reject_listingNotFound_returns404() throws Exception {
-when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, "Bad listing"))
+when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, "OTHER: Bad listing"))
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
                         .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"rejectionReason":"Bad listing"}
+                                {"rejectionReason":"OTHER: Bad listing"}
                                 """))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Listing not found"));
@@ -348,7 +406,7 @@ when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, "Bad listing"))
 
     @Test
     void reject_wrongStatus_returns409() throws Exception {
-when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, "Reason"))
+when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, "OTHER"))
                 .thenThrow(new ListingStatusException(
                         "Cannot reject listing with status DRAFT"));
 
@@ -356,7 +414,7 @@ when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, "Reason"))
                         .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"rejectionReason":"Reason"}
+                                {"rejectionReason":"OTHER"}
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot reject listing with status DRAFT"));
@@ -794,7 +852,7 @@ when(listingWorkflowService.adminArchiveListing(LISTING_ID, ADMIN_ID, "Remove th
 
     @Test
     void reject_auditJsonContainsProperlyEscapedRejectionReason() throws Exception {
-String specialReason = "Bad \"quality\" photos\nand a backslash\\here";
+String specialReason = "INVALID_PHOTOS: Bad \"quality\" photos\nand a backslash\\here";
         Listing rejected = buildListing(LISTING_ID, "REJECTED", "house", "House",
                 "Udupi", new BigDecimal("8000000"), "A house");
         rejected.setRejectionReason(specialReason);
