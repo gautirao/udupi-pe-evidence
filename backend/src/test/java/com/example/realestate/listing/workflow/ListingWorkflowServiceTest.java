@@ -324,6 +324,37 @@ class ListingWorkflowServiceTest {
         assertThat(saved.getStatusChangedByActorId()).isEqualTo(adminId);
     }
 
+    // ===== #2288: T-29 (ARCHIVED -> LIVE, ADMIN) via the generic approve() path must clear
+    // archivedAt, or the listing stays "invisible" to ListingOwnershipGuard#findOwned (and thus
+    // to every owner-scoped operation, including the broker's own archive endpoint) even though
+    // its status is LIVE. See ListingWorkflowService#restoreArchivedListing, which already
+    // clears archivedAt for the broker's equivalent ARCHIVED -> LIVE transition. =====
+
+    @Test
+    void approveListing_fromArchived_clearsArchivedAt() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.ARCHIVED.toDbValue());
+        listing.setCreatedBy(ownerId);
+        listing.setArchivedAt(java.time.Instant.now());
+        listing.setTitle("Test");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing saved = workflowService.approveListing(listingId, adminId);
+
+        assertThat(saved.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+        assertThat(saved.getArchivedAt())
+                .as("archivedAt must be cleared on ARCHIVED -> LIVE, or findOwned() will 404 "
+                        + "the owning broker's own archive/edit calls despite status=LIVE")
+                .isNull();
+    }
+
     // ===== RE-125: rejectListing — policy delegation, history, lifecycle fields =====
 
     @Test

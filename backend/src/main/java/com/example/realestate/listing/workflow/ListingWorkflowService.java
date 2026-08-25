@@ -203,6 +203,15 @@ public class ListingWorkflowService {
         listing.setStatusChangedAt(now);
         listing.setStatusChangedByActorType(ActorType.ADMIN);
         listing.setStatusChangedByActorId(adminUserId);
+        // #2288: this path also serves T-29 (ARCHIVED -> LIVE, ADMIN). archivedAt must be
+        // cleared here exactly as restoreArchivedListing() clears it for the broker's
+        // equivalent transition — ListingOwnershipGuard#findOwned() treats any non-null
+        // archivedAt as "invisible" regardless of status, so a stale archivedAt left over
+        // from before this transition 404s the owning broker's own archive/edit calls even
+        // though the listing is now LIVE.
+        if (currentStatus == ListingStatus.ARCHIVED) {
+            listing.setArchivedAt(null);
+        }
 
         applyLiveTransitionTimestamps(listing, nowOdt);
         // Snapshot captured from the in-memory entity before save. JPA save() returns the same
