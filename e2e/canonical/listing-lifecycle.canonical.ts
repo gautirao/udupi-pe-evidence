@@ -522,6 +522,10 @@ test.describe.serial('T14 — admin approve (depends on T13\'s listingId)', () =
     const approveResp = await approvePromise;
     expect(approveResp.ok(), 'POST /api/admin/listings/{id}/approve must respond 2xx').toBe(true);
 
+    // Ported from the now-retired e2e/admin-approval.spec.ts (AA2) — #1713.
+    // Success toast: "Listing Approved".
+    await expect(page.getByText(/listing approved/i).first()).toBeVisible({ timeout: 10_000 });
+
     await expect(row, 'the approved row must leave the pending queue').toHaveCount(0, { timeout: 10_000 });
   });
 });
