@@ -162,6 +162,7 @@ new_fixture_sandbox() {
   cat > "$sb/backend/.env" <<'EOF'
 SUPABASE_PROJECT_REF=testref
 AI_API_KEY=test-ai-key-secret
+CORS_ALLOWED_ORIGINS=http://fromenv-origin-should-not-be-used
 EOF
 
   cat > "$sb/.env.e2e" <<'EOF'
@@ -195,6 +196,7 @@ echo "MOCK_RUN_LOCAL_INVOKED"
   echo "SUPABASE_DB_PASSWORD=${SUPABASE_DB_PASSWORD:-}"
   echo "SKIP_BACKEND_ENV_LOAD=${SKIP_BACKEND_ENV_LOAD:-}"
   echo "SUPABASE_PROJECT_REF=${SUPABASE_PROJECT_REF:-}"
+  echo "CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}"
   echo "SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSL=${SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSL:-}"
   echo "SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSLMODE=${SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSLMODE:-}"
 } > "${RUN_LOCAL_CAPTURE:?RUN_LOCAL_CAPTURE not set}"
@@ -299,6 +301,43 @@ assert_contains "T4: custom PG_TEST_PASSWORD propagates to SUPABASE_DB_PASSWORD 
 assert_contains "T4b: SUPABASE_PROJECT_REF passes through to the final exec (AC8)" "$CAP3" "SUPABASE_PROJECT_REF=testref"
 assert_contains "T4c: Hikari SSL is disabled in the final exec env (AC8)" "$CAP3" "SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSL=false"
 assert_contains "T4d: Hikari sslmode is disabled in the final exec env (AC8)" "$CAP3" "SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSLMODE=disable"
+
+# ===========================================================================
+# T4e/T4f — local-fixture-backend.sh (#2285): CORS_ALLOWED_ORIGINS baseline
+# vs. caller-override, through its own Step B three-file source sequence
+# ===========================================================================
+
+# Baseline: no caller override -> backend/.env's own CORS value is used.
+assert_contains "T4e: no caller override -> backend/.env CORS value used (baseline)" "$CAP3" "CORS_ALLOWED_ORIGINS=http://fromenv-origin-should-not-be-used"
+assert_not_contains "T4e: no caller override -> no override log line" "$LOG3_CONTENT" "CORS_ALLOWED_ORIGINS overridden by caller"
+
+SB4E="$(new_fixture_sandbox)"
+RUN_LOCAL_CAP4E="$(mktemp)"
+PSQL_CALL_LOG4E="$(mktemp)"
+PSQL_SEED_LOG4E="$(mktemp)"
+CURL_CALL_LOG4E="$(mktemp)"
+DOCKER_CALL_LOG4E="$(mktemp)"
+LOG4E="$(mktemp)"
+
+run_fixture_script "$SB4E" \
+  CORS_ALLOWED_ORIGINS=http://worktree-override-origin \
+  MOCK_LOGIN_RESPONSE="$VALID_LOGIN_JSON" \
+  MOCK_DOCKER_CONTAINER_RUNNING=true \
+  MOCK_PSQL_UNREACHABLE=false \
+  RUN_LOCAL_CAPTURE="$RUN_LOCAL_CAP4E" \
+  PSQL_CALL_LOG="$PSQL_CALL_LOG4E" \
+  PSQL_SEED_LOG="$PSQL_SEED_LOG4E" \
+  CURL_CALL_LOG="$CURL_CALL_LOG4E" \
+  DOCKER_CALL_LOG="$DOCKER_CALL_LOG4E" \
+  > "$LOG4E" 2>&1
+RC4E=$?
+CAP4E="$(cat "$RUN_LOCAL_CAP4E" 2>/dev/null || true)"
+LOG4E_CONTENT="$(cat "$LOG4E" 2>/dev/null || true)"
+
+if [[ $RC4E -eq 0 ]]; then ok "T4f setup: fixture run with caller CORS override exits 0"; else not_ok "T4f setup: fixture run with caller CORS override exits 0 (rc=$RC4E, log: $LOG4E_CONTENT)"; fi
+assert_contains "T4f: caller-exported CORS_ALLOWED_ORIGINS survives Step B's three-file source (#2285)" "$CAP4E" "CORS_ALLOWED_ORIGINS=http://worktree-override-origin"
+assert_not_contains "T4f: conflicting backend/.env CORS value is NOT used" "$CAP4E" "fromenv-origin-should-not-be-used"
+assert_contains "T4f: override log line is emitted" "$LOG4E_CONTENT" "CORS_ALLOWED_ORIGINS overridden by caller: http://worktree-override-origin"
 
 # ===========================================================================
 # T7 — seed SQL uses lowercase 'admin', never 'ADMIN'

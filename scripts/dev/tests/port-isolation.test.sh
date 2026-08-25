@@ -4,7 +4,8 @@
 # Minimal, dependency-free bash assertion harness (same style as
 # scripts/dev/tests/local-fixture-backend.test.sh) covering:
 #   - scripts/dev/lib/port-ownership.sh (pure ownership predicate)
-#   - backend/run-local.sh (caller-exported SERVER_PORT survives backend/.env)
+#   - backend/run-local.sh (caller-exported SERVER_PORT and CORS_ALLOWED_ORIGINS
+#     both survive backend/.env — #2078 and #2285)
 #   - scripts/run-e2e-local.sh (.env.e2e.local override precedence, SERVER_PORT
 #     propagation into the backend it starts, and refusing vs. restarting a
 #     port depending on whether the holder belongs to this worktree)
@@ -117,6 +118,7 @@ cat > "$MOCKBIN/mvn" <<'EOF'
 #!/usr/bin/env bash
 {
   echo "SERVER_PORT=${SERVER_PORT:-}"
+  echo "CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}"
 } > "${MVN_CAPTURE:?MVN_CAPTURE not set}"
 exit 0
 EOF
@@ -182,6 +184,7 @@ SUPABASE_DB_PASSWORD=fromenv-pass-secret
 SUPABASE_PROJECT_REF=fromenv-ref
 AI_API_KEY=fromenv-aikey-secret
 SERVER_PORT=8085
+CORS_ALLOWED_ORIGINS=http://fromenv-origin-should-not-be-used
 ENVEOF
   echo "$sb"
 }
@@ -201,19 +204,23 @@ CAP1="$(cat "$MVN_CAP1" 2>/dev/null || true)"
 
 assert_true "T1: run-local.sh (no caller override) exits 0" "$RC1"
 assert_contains "T1: with no caller override, backend/.env's SERVER_PORT is used (baseline)" "$CAP1" "SERVER_PORT=8085"
+assert_contains "T1: with no caller override, backend/.env's CORS_ALLOWED_ORIGINS is used (baseline)" "$CAP1" "CORS_ALLOWED_ORIGINS=http://fromenv-origin-should-not-be-used"
 
 SB2="$(new_runlocal_sandbox)"
 MVN_CAP2="$(mktemp)"
 LOG2="$(mktemp)"
-run_runlocal "$SB2" SERVER_PORT=9401 MVN_CAPTURE="$MVN_CAP2" > "$LOG2" 2>&1
+run_runlocal "$SB2" SERVER_PORT=9401 CORS_ALLOWED_ORIGINS=http://worktree-override-origin MVN_CAPTURE="$MVN_CAP2" > "$LOG2" 2>&1
 RC2=$?
 CAP2="$(cat "$MVN_CAP2" 2>/dev/null || true)"
 LOG2_CONTENT="$(cat "$LOG2" 2>/dev/null || true)"
 
-assert_true "T2: run-local.sh (caller SERVER_PORT=9401) exits 0" "$RC2"
+assert_true "T2: run-local.sh (caller SERVER_PORT=9401, CORS_ALLOWED_ORIGINS override) exits 0" "$RC2"
 assert_contains "T2: caller-exported SERVER_PORT survives sourcing backend/.env (#2078 fix)" "$CAP2" "SERVER_PORT=9401"
 assert_not_contains "T2: backend/.env's conflicting SERVER_PORT is NOT what actually starts" "$CAP2" "SERVER_PORT=8085"
 assert_contains "T2: override is logged for operator visibility" "$LOG2_CONTENT" "SERVER_PORT overridden by caller: 9401"
+assert_contains "T2: caller-exported CORS_ALLOWED_ORIGINS survives sourcing backend/.env (#2285 fix)" "$CAP2" "CORS_ALLOWED_ORIGINS=http://worktree-override-origin"
+assert_not_contains "T2: backend/.env's conflicting CORS_ALLOWED_ORIGINS is NOT what actually starts" "$CAP2" "CORS_ALLOWED_ORIGINS=http://fromenv-origin-should-not-be-used"
+assert_contains "T2: CORS override is logged for operator visibility" "$LOG2_CONTENT" "CORS_ALLOWED_ORIGINS overridden by caller: http://worktree-override-origin"
 
 # ===========================================================================
 # T3-T5 — scripts/run-e2e-local.sh

@@ -19,13 +19,15 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 if [[ "${SKIP_BACKEND_ENV_LOAD:-false}" != "true" ]]; then
-  # A caller (e.g. scripts/dev-worktree-stack.sh) may already have exported
-  # SERVER_PORT to assign this worktree its own port. backend/.env commonly
-  # also defines SERVER_PORT, and `source` always wins over an existing
-  # exported value — so without this, the caller's port assignment is
-  # silently clobbered and the backend always binds .env's port (#2078).
-  # Preserve it and restore it after the source.
+  # A caller (e.g. scripts/dev-worktree-stack.sh, scripts/run-e2e-local.sh) may
+  # already have exported SERVER_PORT and/or CORS_ALLOWED_ORIGINS to assign this
+  # worktree its own port/origin. backend/.env commonly also defines both, and
+  # `source` always wins over an existing exported value — so without this, the
+  # caller's assignment is silently clobbered by backend/.env's hardcoded value
+  # (#2078 for SERVER_PORT; #2285 for CORS_ALLOWED_ORIGINS). Preserve both and
+  # restore them after the source.
   CALLER_SERVER_PORT="${SERVER_PORT:-}"
+  CALLER_CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-}"
 
   # ── Load ALL variables from .env into the shell environment ──────────────────
   # set -a exports every variable defined by source, including any new ones
@@ -40,6 +42,12 @@ if [[ "${SKIP_BACKEND_ENV_LOAD:-false}" != "true" ]]; then
     SERVER_PORT="$CALLER_SERVER_PORT"
     export SERVER_PORT
     echo ">>> SERVER_PORT overridden by caller: $SERVER_PORT (backend/.env value ignored)"
+  fi
+
+  if [[ -n "$CALLER_CORS_ALLOWED_ORIGINS" ]]; then
+    CORS_ALLOWED_ORIGINS="$CALLER_CORS_ALLOWED_ORIGINS"
+    export CORS_ALLOWED_ORIGINS
+    echo ">>> CORS_ALLOWED_ORIGINS overridden by caller: $CORS_ALLOWED_ORIGINS (backend/.env value ignored)"
   fi
 
   # ── Print a summary of what was loaded (sensitive values masked) ─────────────

@@ -91,6 +91,14 @@ echo ">>> Prerequisites present."
 # Load required vars from .env, .env.e2e, backend/.env — never for SUPABASE_DB_*
 # ---------------------------------------------------------------------------
 
+# A caller (e.g. scripts/dev-worktree-stack.sh, scripts/run-e2e-local.sh) may
+# already have exported a per-worktree CORS_ALLOWED_ORIGINS. backend/.env also
+# defines it, and `source` always wins over an existing exported value — so
+# without this, the caller's origin is silently clobbered by backend/.env's
+# hardcoded allowlist (#2285; same class as run-local.sh's #2078 SERVER_PORT
+# handling). Preserve it and restore it after the source.
+CALLER_CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-}"
+
 set -a
 # shellcheck source=/dev/null
 source "$ROOT_ENV_FILE"
@@ -99,6 +107,12 @@ source "$E2E_ENV_FILE"
 # shellcheck source=/dev/null
 source "$BACKEND_ENV_FILE"
 set +a
+
+if [[ -n "$CALLER_CORS_ALLOWED_ORIGINS" ]]; then
+  CORS_ALLOWED_ORIGINS="$CALLER_CORS_ALLOWED_ORIGINS"
+  export CORS_ALLOWED_ORIGINS
+  echo ">>> CORS_ALLOWED_ORIGINS overridden by caller: $CORS_ALLOWED_ORIGINS (backend/.env value ignored)"
+fi
 
 if [[ -z "${VITE_SUPABASE_URL:-}" || -z "${VITE_SUPABASE_PUBLISHABLE_KEY:-}" ]]; then
   echo "ERROR: VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY missing from $ROOT_ENV_FILE." >&2
