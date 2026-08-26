@@ -288,8 +288,18 @@ export function DescribeStep({
 
           {/* Property details — size, layout and type-specific fields */}
           <SectionCard title="Property details">
-              {/* Land Area — land, commercial_land, commercial_building, warehouse, agricultural_land */}
-              {fieldVisible('landArea') && (
+              {/* Land Area — land, commercial_land, agricultural_land, and residential_plot.
+                  commercial_building/warehouse also carry 'landArea' in their visibleFields
+                  set (config-level), but per #2349 must NOT render it alongside Built Area —
+                  CommercialListingForm.tsx (create) shows only ONE of {Land area, Built area}
+                  via `isLand = commercialSubtype === 'LAND'`; commercial_building resolves to
+                  'BUILDING' and warehouse to 'WAREHOUSE', so create never shows Land Area for
+                  either. Suppress it ONLY for those two property types (not globally — house/
+                  villa/apartment intentionally show Land Area alongside Built Area for their
+                  own plot-area use case and must be unaffected) to match that contract exactly. */}
+              {fieldVisible('landArea')
+                && !((propertyType === 'commercial_building' || propertyType === 'warehouse') && fieldVisible('builtArea'))
+                && (
                 <AreaField
                   id="landArea"
                   propertyType={propertyType === 'agricultural_land' ? 'agricultural_land' : 'land'}

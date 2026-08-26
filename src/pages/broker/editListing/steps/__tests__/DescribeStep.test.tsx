@@ -468,6 +468,105 @@ describe('DescribeStep', () => {
     });
   });
 
+  // ─── 7b. Land Area / Built Area mutual exclusivity (issue #2349) ──────────
+  // commercial_building and warehouse both carry 'landArea' in their
+  // visibleFields config alongside 'builtArea', but CommercialListingForm.tsx
+  // (create) only ever shows ONE of them via `isLand = commercialSubtype ===
+  // 'LAND'` — BUILDING/WAREHOUSE never resolve to LAND, so create never shows
+  // Land Area for either. DescribeStep must match that contract exactly.
+  describe('Land Area / Built Area mutual exclusivity (issue #2349)', () => {
+    it('commercial_building (commercialSubtype=BUILDING): shows Built Area only, not Land Area', () => {
+      render(
+        <DescribeStep
+          {...baseProps({
+            propertyType: 'commercial_building',
+            commercialSubtype: 'BUILDING',
+            fieldVisible: makeFieldVisible(['landArea', 'builtArea']),
+          })}
+        />,
+      );
+      // Label text is "Built Area *" (required-asterisk is a sibling text node),
+      // so match by prefix rather than an exact string.
+      expect(screen.getByText(/^Built Area/)).toBeInTheDocument();
+      expect(screen.queryByText(/^Land Area/)).not.toBeInTheDocument();
+    });
+
+    it('warehouse (commercialSubtype=WAREHOUSE): shows Built Area only, not Land Area', () => {
+      render(
+        <DescribeStep
+          {...baseProps({
+            propertyType: 'warehouse',
+            commercialSubtype: 'WAREHOUSE',
+            fieldVisible: makeFieldVisible(['landArea', 'builtArea']),
+          })}
+        />,
+      );
+      expect(screen.getByText(/^Built Area/)).toBeInTheDocument();
+      expect(screen.queryByText(/^Land Area/)).not.toBeInTheDocument();
+    });
+
+    it('commercial_land (commercialSubtype=LAND): shows Land Area (builtArea never visible for this type)', () => {
+      render(
+        <DescribeStep
+          {...baseProps({
+            propertyType: 'commercial_land',
+            commercialSubtype: 'LAND',
+            fieldVisible: makeFieldVisible(['landArea']),
+          })}
+        />,
+      );
+      expect(screen.getByText(/^Land Area/)).toBeInTheDocument();
+      expect(screen.queryByText(/^Built Area/)).not.toBeInTheDocument();
+    });
+
+    it('plain land (no commercialSubtype, builtArea never visible): still shows Land Area', () => {
+      render(
+        <DescribeStep
+          {...baseProps({
+            propertyType: 'land',
+            commercialSubtype: undefined,
+            fieldVisible: makeFieldVisible(['landArea']),
+          })}
+        />,
+      );
+      expect(screen.getByText(/^Land Area/)).toBeInTheDocument();
+    });
+
+    // Reviewer finding (PR #2352, BLOCKED_PARTIAL): the fix must NOT be a global
+    // "builtArea visible + not LAND subtype" heuristic — house/villa also carry
+    // 'landArea' alongside 'builtArea' in their visibleFields config (an intentional
+    // "optional extra" per listingFieldConfig.ts's house/villa comment) and must keep
+    // showing BOTH fields in edit. The suppression is scoped to commercial_building/
+    // warehouse only, so non-commercial types are completely untouched.
+    it('house (no commercialSubtype, builtArea AND landArea both visible): shows BOTH — residential landArea is intentional, unaffected by the commercial_building/warehouse-only fix', () => {
+      render(
+        <DescribeStep
+          {...baseProps({
+            propertyType: 'house',
+            commercialSubtype: undefined,
+            fieldVisible: makeFieldVisible(['landArea', 'builtArea']),
+          })}
+        />,
+      );
+      expect(screen.getByText(/^Land Area/)).toBeInTheDocument();
+      expect(screen.getByText(/^Built Area/)).toBeInTheDocument();
+    });
+
+    it('villa (no commercialSubtype, builtArea AND landArea both visible): shows BOTH', () => {
+      render(
+        <DescribeStep
+          {...baseProps({
+            propertyType: 'villa',
+            commercialSubtype: undefined,
+            fieldVisible: makeFieldVisible(['landArea', 'builtArea']),
+          })}
+        />,
+      );
+      expect(screen.getByText(/^Land Area/)).toBeInTheDocument();
+      expect(screen.getByText(/^Built Area/)).toBeInTheDocument();
+    });
+  });
+
   // ─── 8. Crop chip control (issue #2044, AC8 edit-flow wiring) ─────────────
   describe('crop chip control (agri-only, issue #2044)', () => {
     it('renders all 12 canonical crop chips when the agri fields section is visible', () => {
