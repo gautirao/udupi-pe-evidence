@@ -536,6 +536,128 @@ class ListingTransitionPolicyTest {
     }
 
     // -----------------------------------------------------------------------
+    // Submit-gate fix (#2341): the real Commercial create UI (#1684) persists
+    // builtArea/builtAreaUnit + floorChoice (SHOP/OFFICE) or floorMode
+    // (BUILDING) — never the pre-#1684 carpetArea/floorNumber/totalFloors/
+    // landArea fields the validator previously required for these two
+    // property types, which made the real create -> submit path un-shippable.
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("commercial submit-gate (#2341)")
+    class CommercialSubmitGate {
+
+        @Test
+        @DisplayName("complete Office listing (builtArea + floorChoice) passes completeness")
+        void completeOfficeListing_doesNotThrow() {
+            Listing listing = completeCommercialListing(UUID.randomUUID());
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatCode(() -> policy.guardCompleteness(listing))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("carpetArea/floorNumber left null (never reachable via UI) does NOT block submission")
+        void carpetAreaAndFloorNumberNull_doesNotThrow() {
+            Listing listing = completeCommercialListing(UUID.randomUUID());
+            listing.setCarpetArea(null);
+            listing.setFloorNumber(null);
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatCode(() -> policy.guardCompleteness(listing))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("commercial missing builtArea -> built_area completeness error")
+        void commercialMissingBuiltArea_throwsValidationException() {
+            Listing listing = completeCommercialListing(UUID.randomUUID());
+            listing.setBuiltArea(null);
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatThrownBy(() -> policy.guardCompleteness(listing))
+                    .isInstanceOf(ListingValidationException.class)
+                    .satisfies(ex -> assertThat(((ListingValidationException) ex).getErrors())
+                            .anySatisfy(e -> assertThat(e.get("field")).isEqualTo("built_area")));
+        }
+
+        @Test
+        @DisplayName("commercial missing floorChoice -> floor_choice completeness error")
+        void commercialMissingFloorChoice_throwsValidationException() {
+            Listing listing = completeCommercialListing(UUID.randomUUID());
+            listing.setFloorChoice(null);
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatThrownBy(() -> policy.guardCompleteness(listing))
+                    .isInstanceOf(ListingValidationException.class)
+                    .satisfies(ex -> assertThat(((ListingValidationException) ex).getErrors())
+                            .anySatisfy(e -> assertThat(e.get("field")).isEqualTo("floor_choice")));
+        }
+
+        @Test
+        @DisplayName("complete commercial_building listing (builtArea + floorMode) passes completeness")
+        void completeBuildingListing_doesNotThrow() {
+            Listing listing = completeCommercialBuildingListing(UUID.randomUUID());
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatCode(() -> policy.guardCompleteness(listing))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("commercial_building with landArea/totalFloors left null (no UI write path) does NOT block submission")
+        void buildingLandAreaAndTotalFloorsNull_doesNotThrow() {
+            Listing listing = completeCommercialBuildingListing(UUID.randomUUID());
+            listing.setLandArea(null);
+            listing.setTotalFloors(null);
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatCode(() -> policy.guardCompleteness(listing))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("commercial_building missing floorMode -> floor_mode completeness error")
+        void buildingMissingFloorMode_throwsValidationException() {
+            Listing listing = completeCommercialBuildingListing(UUID.randomUUID());
+            listing.setFloorMode(null);
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatThrownBy(() -> policy.guardCompleteness(listing))
+                    .isInstanceOf(ListingValidationException.class)
+                    .satisfies(ex -> assertThat(((ListingValidationException) ex).getErrors())
+                            .anySatisfy(e -> assertThat(e.get("field")).isEqualTo("floor_mode")));
+        }
+
+        private Listing completeCommercialListing(UUID listingId) {
+            Listing l = new Listing();
+            l.setId(listingId);
+            l.setPropertyType("commercial");
+            l.setPrice(new BigDecimal("4500000"));
+            l.setLocality("Udupi");
+            l.setAddressConfirmed(true);
+            l.setBuiltArea(new BigDecimal("500"));
+            l.setBuiltAreaUnit("sqft");
+            l.setFloorChoice("FIRST_FLOOR");
+            return l;
+        }
+
+        private Listing completeCommercialBuildingListing(UUID listingId) {
+            Listing l = new Listing();
+            l.setId(listingId);
+            l.setPropertyType("commercial_building");
+            l.setPrice(new BigDecimal("9000000"));
+            l.setLocality("Udupi");
+            l.setAddressConfirmed(true);
+            l.setBuiltArea(new BigDecimal("2000"));
+            l.setBuiltAreaUnit("sqft");
+            l.setFloorMode("MULTIPLE_FLOORS");
+            return l;
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Submit-gate fix (#1368): agricultural_land is submittable + has a
     // land-area completeness rule mirroring "land".
     // -----------------------------------------------------------------------

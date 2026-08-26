@@ -272,6 +272,161 @@ describe('CommercialListingForm — review + submit gating', () => {
   });
 });
 
+describe('CommercialListingForm — submit gate mirrors backend required fields (#2341)', () => {
+  // Regression coverage for issue #2341: the real Commercial create UI let a
+  // broker reach a "Ready to submit for review" state while missing fields
+  // the backend's /submit endpoint actually required (builtArea/floorChoice
+  // for Office/Shop, builtArea/floorMode for Building) — a false "complete"
+  // signal that only surfaced as a 422 at submit time. These tests assert the
+  // Review submit button mirrors that real backend contract exactly.
+
+  it('Office (commercial/OFFICE): submit stays disabled with all OTHER gates met but built area + floor missing', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    mockImageCount.current = 3;
+    const user = userEvent.setup();
+    renderForm('commercial');
+
+    const subtypeTrigger = document.getElementById('commercialSubtype');
+    await user.click(subtypeTrigger as HTMLElement);
+    await user.click(await screen.findByRole('option', { name: /^office$/i }));
+
+    await fillCoreFields(user);
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+
+    const submitButton = await screen.findByRole('button', { name: /submit for review/i });
+    expect(submitButton).toBeDisabled();
+  });
+
+  it('Office (commercial/OFFICE): submit becomes enabled once built area + floor are filled', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    mockImageCount.current = 3;
+    const user = userEvent.setup();
+    renderForm('commercial');
+
+    const subtypeTrigger = document.getElementById('commercialSubtype');
+    await user.click(subtypeTrigger as HTMLElement);
+    await user.click(await screen.findByRole('option', { name: /^office$/i }));
+
+    await user.click(screen.getByRole('radio', { name: '500 sqft' }));
+    const floorTrigger = document.getElementById('floorChoice');
+    await user.click(floorTrigger as HTMLElement);
+    await user.click(await screen.findByRole('option', { name: /^first floor$/i }));
+
+    await fillCoreFields(user);
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+
+    const submitButton = await screen.findByRole('button', { name: /submit for review/i });
+    expect(submitButton).not.toBeDisabled();
+  });
+
+  it('Shop (commercial/SHOP): submit stays disabled with all OTHER gates met but built area + floor missing', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    mockImageCount.current = 3;
+    const user = userEvent.setup();
+    renderForm('commercial');
+
+    const subtypeTrigger = document.getElementById('commercialSubtype');
+    await user.click(subtypeTrigger as HTMLElement);
+    await user.click(await screen.findByRole('option', { name: /^shop$/i }));
+
+    await fillCoreFields(user);
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+
+    const submitButton = await screen.findByRole('button', { name: /submit for review/i });
+    expect(submitButton).toBeDisabled();
+  });
+
+  it('Shop (commercial/SHOP): submit becomes enabled once built area + floor are filled', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    mockImageCount.current = 3;
+    const user = userEvent.setup();
+    renderForm('commercial');
+
+    const subtypeTrigger = document.getElementById('commercialSubtype');
+    await user.click(subtypeTrigger as HTMLElement);
+    await user.click(await screen.findByRole('option', { name: /^shop$/i }));
+
+    await user.click(screen.getByRole('radio', { name: '500 sqft' }));
+    const floorTrigger = document.getElementById('floorChoice');
+    await user.click(floorTrigger as HTMLElement);
+    await user.click(await screen.findByRole('option', { name: /^first floor$/i }));
+
+    await fillCoreFields(user);
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+
+    const submitButton = await screen.findByRole('button', { name: /submit for review/i });
+    expect(submitButton).not.toBeDisabled();
+  });
+
+  it('Building (commercial_building): submit stays disabled with built area filled but floors-available missing', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    mockImageCount.current = 3;
+    const user = userEvent.setup();
+    renderForm('commercial_building');
+
+    await user.click(screen.getByRole('radio', { name: '1,000 sqft' }));
+
+    await fillCoreFields(user);
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+
+    const submitButton = await screen.findByRole('button', { name: /submit for review/i });
+    expect(submitButton).toBeDisabled();
+  });
+
+  it('Building (commercial_building): submit becomes enabled once built area + floors-available are filled', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    mockImageCount.current = 3;
+    const user = userEvent.setup();
+    renderForm('commercial_building');
+
+    await user.click(screen.getByRole('radio', { name: '1,000 sqft' }));
+    const floorModeTrigger = document.getElementById('floorMode');
+    await user.click(floorModeTrigger as HTMLElement);
+    await user.click(await screen.findByRole('option', { name: /^multiple floors$/i }));
+
+    await fillCoreFields(user);
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+
+    const submitButton = await screen.findByRole('button', { name: /submit for review/i });
+    expect(submitButton).not.toBeDisabled();
+  });
+
+  it('Warehouse: submit becomes enabled once built area is filled (no floor field required)', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    mockImageCount.current = 3;
+    const user = userEvent.setup();
+    renderForm('warehouse');
+
+    await user.click(screen.getByRole('radio', { name: '1,000 sqft' }));
+
+    await fillCoreFields(user);
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+
+    const submitButton = await screen.findByRole('button', { name: /submit for review/i });
+    expect(submitButton).not.toBeDisabled();
+  });
+
+  it('Land (commercial_land): submit stays disabled until land area is filled', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    mockUpdateMutate.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+    mockImageCount.current = 3;
+    const user = userEvent.setup();
+    renderForm('commercial_land');
+
+    await fillCoreFields(user);
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+    let submitButton = await screen.findByRole('button', { name: /submit for review/i });
+    expect(submitButton).toBeDisabled();
+
+    await user.click(screen.getAllByRole('button', { name: /back to editing/i })[0]);
+    await user.click(screen.getByRole('radio', { name: '10 cents' }));
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+
+    submitButton = await screen.findByRole('button', { name: /submit for review/i });
+    expect(submitButton).not.toBeDisabled();
+  });
+});
+
 describe('CommercialListingForm — deterministic commercial description draft builder', () => {
   it('shows an honest "Draft description" action and populates the editable textarea deterministically (no AI/network call)', async () => {
     const user = userEvent.setup();

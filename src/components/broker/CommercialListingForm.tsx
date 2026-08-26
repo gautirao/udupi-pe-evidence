@@ -444,6 +444,33 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
   const locationEnteredOk = residentialLocation.state.resolved != null || addressConfirmed;
   const pinConfirmedOk = addressConfirmed;
   const localityOk = locality.trim() !== '';
+  // #2341 — per-subtype required-field gate, byte-for-byte mirroring
+  // ListingTransitionPolicy.validateFields()'s commercial/commercial_building/
+  // warehouse/commercial_land cases. Previously this gate array had NO
+  // area/floor check at all, so Review could show "Ready to submit" for a
+  // listing the backend would still 422 (carpet_area/floor_number were never
+  // reachable through this form). See listingFieldConfig.ts's commercialSubtype
+  // switch for why floorChoice/floorMode are the real persisted fields here.
+  const typeSpecificOk =
+    commercialSubtype === 'SHOP' || commercialSubtype === 'OFFICE'
+      ? builtArea != null && builtArea > 0 && builtAreaUnit !== '' && floorChoice !== ''
+      : commercialSubtype === 'BUILDING'
+        ? builtArea != null && builtArea > 0 && builtAreaUnit !== '' && floorMode !== ''
+        : commercialSubtype === 'WAREHOUSE'
+          ? builtArea != null && builtArea > 0
+          : commercialSubtype === 'LAND'
+            ? landArea != null && landArea > 0 && landAreaUnit !== ''
+            : true;
+  const typeSpecificLabel =
+    commercialSubtype === 'SHOP' || commercialSubtype === 'OFFICE'
+      ? 'Add the built area and floor'
+      : commercialSubtype === 'BUILDING'
+        ? 'Add the built area and floors available'
+        : commercialSubtype === 'WAREHOUSE'
+          ? 'Add the built area'
+          : commercialSubtype === 'LAND'
+            ? 'Add the land area'
+            : '';
   const gates: ListingStrengthGate[] = [
     { key: 'type', label: 'Choose a commercial subtype', met: subtypeResolved },
     { key: 'price', label: isRentOrLease ? 'Add the monthly rent' : 'Add the total price', met: priceOk },
@@ -452,6 +479,9 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
     { key: 'locationEntered', label: 'Location entered', met: locationEnteredOk },
     { key: 'pinConfirmed', label: 'Map pin confirmed', met: pinConfirmedOk },
   ];
+  if (subtypeResolved) {
+    gates.push({ key: 'typeSpecific', label: typeSpecificLabel, met: typeSpecificOk });
+  }
   const metCount = gates.filter((g) => g.met).length;
   const strengthResult: ListingStrengthResult = {
     isSubmittable: gates.every((g) => g.met),

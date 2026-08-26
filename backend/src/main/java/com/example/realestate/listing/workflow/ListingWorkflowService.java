@@ -1191,27 +1191,36 @@ public class ListingWorkflowService {
                     }
                 }
                 case "commercial" -> {
-                    if (listing.getCarpetArea() == null) {
-                        errors.add(Map.of("field", "carpet_area",
-                                "message", "Carpet area is required for commercial listings"));
+                    // #2341: mirrors ListingTransitionPolicy.validateFields — the real
+                    // Commercial (Shop/Office) create UI persists builtArea/builtAreaUnit +
+                    // floorChoice, not the stale pre-#1684 carpetArea/floorNumber fields.
+                    if (listing.getBuiltArea() == null) {
+                        errors.add(Map.of("field", "built_area",
+                                "message", "Built area is required for commercial listings"));
                     }
-                    if (listing.getFloorNumber() == null) {
-                        errors.add(Map.of("field", "floor_number",
-                                "message", "Floor number is required for commercial listings"));
+                    if (listing.getBuiltAreaUnit() == null || listing.getBuiltAreaUnit().isBlank()) {
+                        errors.add(Map.of("field", "built_area_unit",
+                                "message", "Built area unit is required for commercial listings"));
+                    }
+                    if (listing.getFloorChoice() == null || listing.getFloorChoice().isBlank()) {
+                        errors.add(Map.of("field", "floor_choice",
+                                "message", "Floor is required for commercial listings"));
                     }
                 }
                 case "commercial_building" -> {
-                    if (listing.getLandArea() == null) {
-                        errors.add(Map.of("field", "land_area",
-                                "message", "Land area is required for commercial building listings"));
-                    }
+                    // #2341: floorMode is the real UI-collected field for BUILDING; totalFloors
+                    // and landArea have no UI write path for this subtype.
                     if (listing.getBuiltArea() == null) {
                         errors.add(Map.of("field", "built_area",
                                 "message", "Built area is required for commercial building listings"));
                     }
-                    if (listing.getTotalFloors() == null) {
-                        errors.add(Map.of("field", "total_floors",
-                                "message", "Total floors is required for commercial building listings"));
+                    if (listing.getBuiltAreaUnit() == null || listing.getBuiltAreaUnit().isBlank()) {
+                        errors.add(Map.of("field", "built_area_unit",
+                                "message", "Built area unit is required for commercial building listings"));
+                    }
+                    if (listing.getFloorMode() == null || listing.getFloorMode().isBlank()) {
+                        errors.add(Map.of("field", "floor_mode",
+                                "message", "Floors available is required for commercial building listings"));
                     }
                 }
                 case "warehouse" -> {

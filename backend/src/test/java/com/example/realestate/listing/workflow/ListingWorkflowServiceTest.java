@@ -2005,6 +2005,98 @@ class ListingWorkflowServiceTest {
         assertThat(result.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
     }
 
+    // ===== #2341: commercial / commercial_building submit-gate (mirror of
+    // ListingTransitionPolicy) — the real Commercial create UI (#1684) persists
+    // builtArea/builtAreaUnit + floorChoice (SHOP/OFFICE) or floorMode
+    // (BUILDING), never the pre-#1684 carpetArea/floorNumber/totalFloors/
+    // landArea fields this validator previously required. =====
+
+    @Test
+    void approveScrapedListing_completeCommercialOffice_succeeds() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId);
+        listing.setPropertyType("commercial");
+        listing.setBuiltArea(BigDecimal.valueOf(500));
+        listing.setBuiltAreaUnit("sqft");
+        listing.setFloorChoice("FIRST_FLOOR");
+        // Deliberately never set: carpetArea, floorNumber — no UI write path exists.
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.approveScrapedListing(listingId, adminId);
+
+        assertThat(result.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+    }
+
+    @Test
+    void approveScrapedListing_commercialMissingFloorChoice_throwsListingIncomplete() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId);
+        listing.setPropertyType("commercial");
+        listing.setBuiltArea(BigDecimal.valueOf(500));
+        listing.setBuiltAreaUnit("sqft");
+        // floorChoice deliberately omitted
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.approveScrapedListing(listingId, adminId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.LISTING_INCOMPLETE));
+
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void approveScrapedListing_completeCommercialBuilding_succeeds() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId);
+        listing.setPropertyType("commercial_building");
+        listing.setBuiltArea(BigDecimal.valueOf(2000));
+        listing.setBuiltAreaUnit("sqft");
+        listing.setFloorMode("MULTIPLE_FLOORS");
+        // Deliberately never set: landArea, totalFloors — no UI write path exists.
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.approveScrapedListing(listingId, adminId);
+
+        assertThat(result.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+    }
+
+    @Test
+    void approveScrapedListing_commercialBuildingMissingFloorMode_throwsListingIncomplete() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId);
+        listing.setPropertyType("commercial_building");
+        listing.setBuiltArea(BigDecimal.valueOf(2000));
+        listing.setBuiltAreaUnit("sqft");
+        // floorMode deliberately omitted
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.approveScrapedListing(listingId, adminId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.LISTING_INCOMPLETE));
+
+        verify(listingRepository, never()).save(any());
+    }
+
     @Test
     void approveScrapedListing_wrongStatus_throwsPolicyException() {
         UUID listingId = UUID.randomUUID();

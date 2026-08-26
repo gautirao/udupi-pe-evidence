@@ -389,27 +389,40 @@ public class ListingTransitionPolicy {
                     }
                 }
                 case "commercial" -> {
-                    if (l.getCarpetArea() == null) {
-                        errors.add(Map.of("field", "carpet_area",
-                                "message", "Carpet area is required for commercial listings"));
+                    // #2341: the real Commercial (Shop/Office) create UI (#1684) collects
+                    // builtArea/builtAreaUnit + floorChoice — NOT the pre-#1684 carpetArea/
+                    // floorNumber fields, which have no UI write path for this property type
+                    // and were left behind as a stale contract. Aligned to what CommercialListingForm
+                    // actually persists (mirrors the apartment built_area/built_area_unit pair).
+                    if (l.getBuiltArea() == null) {
+                        errors.add(Map.of("field", "built_area",
+                                "message", "Built area is required for commercial listings"));
                     }
-                    if (l.getFloorNumber() == null) {
-                        errors.add(Map.of("field", "floor_number",
-                                "message", "Floor number is required for commercial listings"));
+                    if (l.getBuiltAreaUnit() == null || l.getBuiltAreaUnit().isBlank()) {
+                        errors.add(Map.of("field", "built_area_unit",
+                                "message", "Built area unit is required for commercial listings"));
+                    }
+                    if (l.getFloorChoice() == null || l.getFloorChoice().isBlank()) {
+                        errors.add(Map.of("field", "floor_choice",
+                                "message", "Floor is required for commercial listings"));
                     }
                 }
                 case "commercial_building" -> {
-                    if (l.getLandArea() == null) {
-                        errors.add(Map.of("field", "land_area",
-                                "message", "Land area is required for commercial building listings"));
-                    }
+                    // #2341: floorMode ("Floors available") is the real UI-collected field for
+                    // BUILDING subtype; totalFloors has no UI write path. landArea is not
+                    // collected for BUILDING either (isLand is LAND-subtype-only in the form),
+                    // so it is not required here.
                     if (l.getBuiltArea() == null) {
                         errors.add(Map.of("field", "built_area",
                                 "message", "Built area is required for commercial building listings"));
                     }
-                    if (l.getTotalFloors() == null) {
-                        errors.add(Map.of("field", "total_floors",
-                                "message", "Total floors is required for commercial building listings"));
+                    if (l.getBuiltAreaUnit() == null || l.getBuiltAreaUnit().isBlank()) {
+                        errors.add(Map.of("field", "built_area_unit",
+                                "message", "Built area unit is required for commercial building listings"));
+                    }
+                    if (l.getFloorMode() == null || l.getFloorMode().isBlank()) {
+                        errors.add(Map.of("field", "floor_mode",
+                                "message", "Floors available is required for commercial building listings"));
                     }
                 }
                 case "warehouse" -> {
