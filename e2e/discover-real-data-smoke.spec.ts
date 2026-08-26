@@ -20,7 +20,7 @@
  *   - PLAYWRIGHT_BROKER_EMAIL + PLAYWRIGHT_BROKER_PASSWORD set for J3 (else J3 skips)
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -35,6 +35,157 @@ const BACKEND =
   process.env.BACKEND_BASE_URL ?? 'https://udupi-property-explorer.onrender.com';
 
 const MANIPAL_AREA_KEY = 'IN|KA|Udupi|Manipal';
+
+// ---------------------------------------------------------------------------
+// Canonical Discover navigation nodes (Udupi) — real, backend-confirmed shape.
+//
+// The legacy `?areaKey=` deep-link param has been deliberately ignored by the
+// area-first journey since #2117: the canonical AREA state is `?node=a:<areaKey>`.
+// These node keys are the live values returned by
+//   GET /api/discover/cities/udupi/navigation/{node}/counts
+// (root -> d:n -> a:IN|KA|Udupi|Brahmavar; root -> d:e -> a:IN|KA|Udupi|Manipal).
+// ---------------------------------------------------------------------------
+
+/** Direction destination reached from the Udupi city root after one map zoom-in. */
+const UDUPI_NORTH_DIRECTION_NODE = 'd:n';
+/**
+ * AREA child of `d:n`. Both of `d:n`'s AREA children carry real listings
+ * (Brahmavar 9, NorthMidTest 2), but Brahmavar is pinned by identity rather
+ * than discovered via `.first()`: `[data-testid="area-single-marker"]` DOM order
+ * does not track on-screen order for a Leaflet map, so a positional pick could
+ * silently drift onto a different area and weaken what this journey proves.
+ */
+const BRAHMAVAR_AREA_NODE = 'a:IN|KA|Udupi|Brahmavar';
+/** AREA child of `d:e` — the seeded Manipal area J4 filters with `q=apartment`. */
+const MANIPAL_AREA_NODE = `a:${MANIPAL_AREA_KEY}`;
+
+function urlParam(page: Page, name: string): string | null {
+  return new URL(page.url()).searchParams.get(name);
+}
+
+function urlZoom(page: Page): number {
+  return Number(urlParam(page, 'zoom') ?? 0);
+}
+
+/**
+ * Drive a real click on a Leaflet map marker.
+ *
+ * Leaflet recreates each marker's DOM element on layout-affecting events
+ * (`layoutTick`/zoom recompute in the area marker layers), which makes
+ * Playwright's higher-level `locator.click()` actionability wait (element
+ * stability across frames) unreliable for these marker types — the exact,
+ * already-documented limitation `issue-1956-pr2-destination-surface.spec.ts`
+ * and `issue-1956-pr3-area-clustering.spec.ts` work around with this same
+ * `page.mouse.move/down/up` pattern. A real synthetic mouse move/down/up at the
+ * marker's own bounding-box centre DOES navigate, while `locator.click()` on the
+ * exact same element intermittently no-ops.
+ *
+ * The marker must be waited for after EVERY camera change before its bounding
+ * box is read — a `boundingBox()` on a not-yet-rendered marker simply hangs.
+ */
+/**
+ * Dismiss the Discover telemetry-consent banner before driving the map.
+ *
+ * It is a `z-50` fixed overlay pinned bottom-centre, so while it is up it sits
+ * above the map surface and can intercept pointer events aimed at it. DECLINE
+ * is chosen deliberately: it is the privacy-preserving option, and the specs
+ * must not depend on telemetry being switched on.
+ *
+ * (It does not overlap the Leaflet zoom control specifically — at the default
+ * 1280x720 viewport the banner spans roughly x 400-880 and the bottom-right
+ * zoom control sits near x 1230-1270. The overlay that does sit on the zoom
+ * control is the `discover-badge` pill; see clickMapZoomIn.)
+ */
+async function declineConsentBannerIfPresent(page: Page): Promise<void> {
+  const banner = page.getByTestId('discover-consent-banner');
+  if (await banner.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await banner.getByRole('button', { name: /decline/i }).click();
+    await expect(banner).not.toBeVisible({ timeout: 5_000 });
+  }
+}
+
+/**
+ * Click the map's own "Zoom in" (+) control with a real synthetic mouse click.
+ *
+ * The floating `discover-badge` results pill can sit partly on top of the
+ * control, so `locator.click()` blocks on actionability. Rather than forcing the
+ * click blindly, pick a point inside the control that `elementFromPoint` proves
+ * is genuinely the topmost element there, and throw if no such point exists —
+ * so a control that really is unreachable fails loudly instead of silently.
+ */
+async function clickMapZoomIn(page: Page): Promise<void> {
+  const btn = page.locator('.leaflet-control-zoom-in');
+  await expect(btn, 'the Discover map zoom control must be available').toBeVisible({ timeout: 10_000 });
+  const box = await btn.boundingBox();
+  if (!box) {
+    throw new Error('leaflet zoom-in control has no bounding box');
+  }
+  const candidates: Array<[number, number]> = [
+    [box.x + box.width / 2, box.y + box.height / 2],
+    [box.x + box.width - 2, box.y + box.height / 2],
+    [box.x + box.width - 2, box.y + 2],
+    [box.x + 2, box.y + 2],
+  ];
+  for (const [x, y] of candidates) {
+    const reachable = await page.evaluate(
+      ([px, py]) => Boolean((document.elementFromPoint(px, py) as Element | null)?.closest('.leaflet-control-zoom-in')),
+      [x, y] as [number, number],
+    );
+    if (!reachable) continue;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.up();
+    return;
+  }
+  throw new Error('leaflet zoom-in control is fully obscured by a floating overlay');
+}
+
+/**
+ * Drive the map's own "Zoom in" (+) control until `nodeKey` de-clusters into its
+ * own marker, then assert it really rendered.
+ *
+ * The zoom at which a given marker breaks out of its visual cluster depends on
+ * the viewport, so the number of clicks is discovered rather than hard-coded —
+ * but every step still waits on deterministic app state (the URL zoom advancing,
+ * the marker existing), never on a sleep, and the loop ends in a hard visibility
+ * assertion so a marker that never appears fails loudly instead of being skipped.
+ */
+async function zoomUntilMarkerVisible(
+  page: Page,
+  testId: string,
+  nodeKey: string,
+  maxZoomIns = 8,
+): Promise<void> {
+  const marker = page.locator(`[data-testid="${testId}"][data-node-key="${nodeKey}"]`);
+  for (let i = 0; i < maxZoomIns; i += 1) {
+    if ((await marker.count()) > 0) break;
+    const before = urlZoom(page);
+    await clickMapZoomIn(page);
+    await expect
+      .poll(() => urlZoom(page), {
+        message: `the map "Zoom in" control must advance the URL zoom past ${before}`,
+        timeout: 10_000,
+      })
+      .toBeGreaterThan(before);
+  }
+  await expect(marker, `map marker ${testId}/${nodeKey} must render after zooming in`).toBeVisible({
+    timeout: 15_000,
+  });
+}
+
+async function clickMapMarker(page: Page, testId: string, nodeKey: string): Promise<void> {
+  const marker = page.locator(`[data-testid="${testId}"][data-node-key="${nodeKey}"]`);
+  await expect(marker, `map marker ${testId}/${nodeKey} must render before it can be clicked`).toBeVisible({
+    timeout: 15_000,
+  });
+  const box = await marker.boundingBox();
+  if (!box) {
+    throw new Error(`map marker ${testId}/${nodeKey} has no bounding box`);
+  }
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.up();
+}
 
 // ---------------------------------------------------------------------------
 // School data fetched once for J2 + J3
@@ -90,29 +241,73 @@ test.describe('Discover real-data smoke', () => {
   // J1 — area-first anon
   // -------------------------------------------------------------------------
 
-  test('J1 — area-first anon: click area marker loads listing cards without auth errors', async ({ page }) => {
+  test('J1 — area-first anon: click through to a real AREA marker loads listing cards without auth errors', async ({ page }) => {
     // Collect any 401/403 responses during the journey
     const authErrors: number[] = [];
     page.on('response', (r) => {
       if (r.status() === 401 || r.status() === 403) authErrors.push(r.status());
     });
 
-    // Issue #1745 Batch B map-hierarchy fix — the journeyless /discover?city=udupi
-    // landing now correctly renders macro-region BUBBLES (Coastal Strip / University
-    // Belt / South Udupi / North Udupi), not per-area '.area-marker' pills, so a
-    // direct '.leaflet-marker-icon.area-marker' click with hasText 'Manipal' no
-    // longer exists at that landing (pre-fix behavior this test used to assert).
-    // Navigate straight to the Manipal area (real backend-confirmed seeded [E2E]
-    // listings) to preserve this test's area-first anon intent — listing cards
-    // reachable, zero 401/403 — without depending on the intermediate
-    // bubble → pill drill-down UI.
-    await page.goto(`/discover?city=udupi&areaKey=${encodeURIComponent(MANIPAL_AREA_KEY)}`);
+    // This test walks the REAL supported anonymous click path, marker by marker.
+    // It previously deep-linked `?areaKey=IN|KA|Udupi|Manipal` and clicked nothing
+    // at all, which both mis-described itself ("click area marker") and could never
+    // load: area-first has deliberately ignored the legacy `areaKey=` param since
+    // #2117, so the deep link left the journey at the city root with no cards.
 
-    // Wait for listing cards to appear in the right panel
+    // Step 0 — city root. Every area is collapsed into one visual cluster here,
+    // so there is no AREA/Direction marker to click yet.
+    await page.goto('/discover?city=udupi');
+    await page.waitForLoadState('domcontentloaded');
+
+    await expect(
+      page.locator('.leaflet-control-zoom-in'),
+      'J1: the Discover map (and its zoom control) must mount at the city root',
+    ).toBeVisible({ timeout: 15_000 });
+    // Wait on real app state — the camera-sync writing lat/lon/zoom into the URL —
+    // rather than a sleep, so the zoom-in below acts on a settled camera.
+    await expect
+      .poll(() => urlZoom(page), {
+        message: 'J1: city-root camera-sync must settle a zoom into the URL',
+        timeout: 15_000,
+      })
+      .toBeGreaterThanOrEqual(1);
+
+    // The consent dialog overlays the zoom control — dismiss it before driving the map.
+    await declineConsentBannerIfPresent(page);
+
+    // Step 1 — zooming in breaks the single city cluster into Direction destinations.
+    // Markers must be waited for after EVERY camera change.
+    // Step 2 — activate the North direction destination.
+    await zoomUntilMarkerVisible(page, 'area-destination-marker', UDUPI_NORTH_DIRECTION_NODE);
+    await clickMapMarker(page, 'area-destination-marker', UDUPI_NORTH_DIRECTION_NODE);
+    await expect(page, 'J1: activating a Direction marker must write its canonical node to the URL').toHaveURL(
+      new RegExp(`node=${encodeURIComponent(UDUPI_NORTH_DIRECTION_NODE)}`),
+      { timeout: 10_000 },
+    );
+
+    // Step 3 — activate a real AREA marker inside that direction.
+    await zoomUntilMarkerVisible(page, 'area-single-marker', BRAHMAVAR_AREA_NODE);
+    await clickMapMarker(page, 'area-single-marker', BRAHMAVAR_AREA_NODE);
+    await expect(page, 'J1: activating an AREA marker must write its canonical node to the URL').toHaveURL(
+      new RegExp(`node=${encodeURIComponent(BRAHMAVAR_AREA_NODE)}`),
+      { timeout: 10_000 },
+    );
+
+    // The canonical AREA state is `node=a:…`; the legacy `areaKey=` param must
+    // never be what carries this state.
+    expect(
+      urlParam(page, 'areaKey'),
+      'J1: the AREA state must be canonical (node=a:…), never the legacy areaKey= param',
+    ).toBeNull();
+
+    // Wait for real listing cards from the live backend in the right panel.
     await page.waitForSelector('[data-testid="listing-card"]', { timeout: 15_000 });
 
     const cardCount = await page.locator('[data-testid="listing-card"]').count();
-    expect(cardCount, 'J1: at least 1 listing card expected after clicking area marker').toBeGreaterThanOrEqual(1);
+    expect(
+      cardCount,
+      'J1: at least 1 real listing card expected after activating the Brahmavar AREA marker',
+    ).toBeGreaterThanOrEqual(1);
 
     // No auth errors — anon path must use public endpoints only
     expect(authErrors, 'J1: unexpected 401/403 responses on anon journey').toHaveLength(0);
@@ -139,7 +334,7 @@ test.describe('Discover real-data smoke', () => {
       { timeout: 20_000 },
     );
 
-    await page.goto(`/discover?city=udupi&schoolId=${encodeURIComponent(schoolId!)}&radiusKm=2`);
+    await page.goto(`/discover?city=udupi&schoolId=${encodeURIComponent(schoolId!)}&radiusKm=2&journey=school-first`);
 
     // Wait for either a listing card or the right panel to become stable
     await page.waitForSelector('[data-testid="discover-right-panel"]', { timeout: 15_000 });
@@ -216,7 +411,7 @@ test.describe('Discover real-data smoke', () => {
         { timeout: 20_000 },
       );
 
-      await page.goto(`/discover?city=udupi&schoolId=${encodeURIComponent(schoolId!)}&radiusKm=2`);
+      await page.goto(`/discover?city=udupi&schoolId=${encodeURIComponent(schoolId!)}&radiusKm=2&journey=school-first`);
 
       // Wait for the right panel
       await page.waitForSelector('[data-testid="discover-right-panel"]', { timeout: 20_000 });
@@ -252,8 +447,13 @@ test.describe('Discover real-data smoke', () => {
       if (r.status() === 401 || r.status() === 403) authErrors.push(r.status());
     });
 
-    // Step 1: Navigate to Manipal area without keyword filter
-    await page.goto(`/discover?city=udupi&areaKey=${encodeURIComponent(MANIPAL_AREA_KEY)}`);
+    // Step 1: Navigate to the Manipal AREA without keyword filter.
+    // Canonical AREA state is `node=a:<areaKey>`; the legacy `areaKey=` param this
+    // test used to send has been ignored by area-first since #2117, so the page
+    // never left the city root and no listing card ever rendered. That failure was
+    // masked until now by `test.describe.configure({ mode: 'serial' })` above,
+    // which stopped this test from ever being reported independently of J1.
+    await page.goto(`/discover?city=udupi&node=${encodeURIComponent(MANIPAL_AREA_NODE)}`);
     await page.waitForSelector('[data-testid="listing-card"]', { timeout: 15_000 });
 
     const baselineCount = await page.locator('[data-testid="listing-card"]').count();
@@ -261,7 +461,7 @@ test.describe('Discover real-data smoke', () => {
 
     // Step 2: Apply keyword filter (seed has 2 apartment listings in Manipal)
     await page.goto(
-      `/discover?city=udupi&areaKey=${encodeURIComponent(MANIPAL_AREA_KEY)}&q=apartment`,
+      `/discover?city=udupi&node=${encodeURIComponent(MANIPAL_AREA_NODE)}&q=apartment`,
     );
 
     // Wait for the network to settle after q param fires a new API call
@@ -279,7 +479,7 @@ test.describe('Discover real-data smoke', () => {
     ).toBeLessThanOrEqual(baselineCount);
 
     // Step 3: Clear the keyword filter — navigate back without q param
-    await page.goto(`/discover?city=udupi&areaKey=${encodeURIComponent(MANIPAL_AREA_KEY)}`);
+    await page.goto(`/discover?city=udupi&node=${encodeURIComponent(MANIPAL_AREA_NODE)}`);
     await page.waitForSelector('[data-testid="listing-card"]', { timeout: 15_000 });
     await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
 

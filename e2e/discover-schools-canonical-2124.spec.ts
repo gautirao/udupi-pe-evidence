@@ -1,10 +1,74 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+/**
+ * Dismiss the Discover telemetry-consent dialog before driving the map.
+ *
+ * It is a `z-50` fixed overlay pinned bottom-centre, so while it is up it sits
+ * above the map surface and can intercept pointer events aimed at it. DECLINE
+ * is chosen deliberately: it is the privacy-preserving option, and the specs
+ * must not depend on telemetry being switched on.
+ *
+ * (It does not overlap the Leaflet zoom control specifically — at the default
+ * 1280x720 viewport the banner spans roughly x 400-880 and the bottom-right
+ * zoom control sits near x 1230-1270. The overlay that does sit on the zoom
+ * control is the `discover-badge` pill; see clickMapZoomIn below.)
+ */
+async function declineConsentBannerIfPresent(page: Page): Promise<void> {
+  const banner = page.getByTestId('discover-consent-banner');
+  if (await banner.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await banner.getByRole('button', { name: /decline/i }).click();
+    await expect(banner).not.toBeVisible({ timeout: 5_000 });
+  }
+}
+
+/**
+ * Click the map's own "Zoom in" (+) control with a real synthetic mouse click.
+ *
+ * The floating `discover-badge` results pill sits partly on top of the control,
+ * so `locator.click()` blocks forever on actionability. Rather than forcing the
+ * click blindly, pick a point inside the control that `elementFromPoint` proves
+ * is genuinely the topmost element there, and throw if no such point exists —
+ * so a control that really is unreachable fails loudly instead of silently.
+ */
+async function clickMapZoomIn(page: Page): Promise<void> {
+  const btn = page.locator('.leaflet-control-zoom-in');
+  await expect(btn, 'the Discover map zoom control must be available').toBeVisible({ timeout: 10_000 });
+  const box = await btn.boundingBox();
+  if (!box) {
+    throw new Error('leaflet zoom-in control has no bounding box');
+  }
+  const candidates: Array<[number, number]> = [
+    [box.x + box.width / 2, box.y + box.height / 2],
+    [box.x + box.width - 2, box.y + box.height / 2],
+    [box.x + box.width - 2, box.y + 2],
+    [box.x + 2, box.y + 2],
+  ];
+  for (const [x, y] of candidates) {
+    const reachable = await page.evaluate(
+      ([px, py]) => Boolean((document.elementFromPoint(px, py) as Element | null)?.closest('.leaflet-control-zoom-in')),
+      [x, y] as [number, number],
+    );
+    if (!reachable) continue;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.up();
+    return;
+  }
+  throw new Error('leaflet zoom-in control is fully obscured by a floating overlay');
+}
 
 // Using the seeded Bangalore fixture
 const CITY = 'bangalore';
 const D_CENTRAL = 'd:central';
 const C_CENTRAL = 'c:central:in-ka-bengaluru-btm-layout-in-ka-bengaluru-koramangala';
 const AREA_KORAMANGALA = 'a:IN|KA|Bengaluru|Koramangala';
+/**
+ * Zoom level at which Koramangala stops being absorbed into the C_CENTRAL
+ * `area-visual-cluster-marker` and renders as its own `area-single-marker`.
+ * Confirmed live: at the camera-sync's pinned zoom 13 it is clustered; at 14 it
+ * breaks out.
+ */
+const AREA_BREAKOUT_ZOOM = 14;
 
 test.describe('Schools Canonical Navigation', () => {
   test('@smoke J5 — school-first: real zone/area/school navigation, radius 3→5→10, refresh + back/forward restore', async ({ page }) => {
@@ -19,6 +83,9 @@ test.describe('Schools Canonical Navigation', () => {
     
     const canonicalPanelShell = page.getByTestId('discover-schools-journey-panel-shell');
     await expect(canonicalPanelShell).toBeVisible({ timeout: 15_000 });
+
+    // Clear the consent overlay off the map before Step 2c drives the map.
+    await declineConsentBannerIfPresent(page);
 
     // Step 2: Click a canonical DIRECTION child (Central Bangalore)
     const directionCard = canonicalPanelShell.getByTestId(`navigation-child-card-${D_CENTRAL}`);
@@ -42,17 +109,40 @@ test.describe('Schools Canonical Navigation', () => {
       { message: 'J5: area camera-sync must settle to higher zoom before selection', timeout: 10_000 },
     ).toBe(true);
 
+    // Step 2c: Zoom the map in until AREA markers de-cluster.
+    //
+    // The canonical hierarchy's camera-sync pins C_CENTRAL at zoom 13, and at
+    // that zoom Koramangala is NOT its own marker: the AREA marker footprint
+    // grew, so Koramangala is absorbed into an `area-visual-cluster-marker`
+    // together with its siblings. Clicking that cluster card is a no-op on zoom,
+    // and `&zoom=14…17` appended to the URL is rewritten back to 13 — the map's
+    // own "Zoom in" (+) control is the one still-supported way to get past it.
+    // Zoom 14 is the exact break-out threshold at which Koramangala renders as
+    // its own `area-single-marker`. The underlying marker-density change is a
+    // real product regression and is tracked separately from this spec.
+    const settledZoom = Number(new URL(page.url()).searchParams.get('zoom') || 0);
+    for (let z = settledZoom; z < AREA_BREAKOUT_ZOOM; z += 1) {
+      await clickMapZoomIn(page);
+      await expect
+        .poll(() => Number(new URL(page.url()).searchParams.get('zoom') || 0), {
+          message: `J5: the map "Zoom in" control must advance the URL zoom to ${z + 1}`,
+          timeout: 8_000,
+        })
+        .toBeGreaterThanOrEqual(z + 1);
+    }
+
     // Step 3a: Map/Panel convergence — click an AREA from the MAP
     // Target a specific, deterministic area marker (Koramangala) by its
     // data-node-key rather than `.first()`. `[data-testid="area-single-marker"]`
     // DOM order does not track on-screen/viewport order for a Leaflet map —
     // several sibling AREA markers in this cluster (e.g. Bilekahalli) can be
     // the first in DOM order while sitting outside the current map viewport.
-    // Koramangala is the one non-zero-school, non-clustered member of this
-    // cluster that reliably renders inside the visible map bounds after the
-    // camera-settle above, and is already the deterministic area this spec
-    // exercises again in Step 3b — reusing it here proves the map click
-    // reaches the SAME Schools-in-Area state the panel row does.
+    // Koramangala is also the ONLY school-bearing AREA in this cluster
+    // (schoolCount=4; all five siblings are 0), so it cannot be swapped for a
+    // sibling without silently turning this into a zero-school assertion. It is
+    // the deterministic area this spec exercises again in Step 3b — reusing it
+    // here proves the map click reaches the SAME Schools-in-Area state the panel
+    // row does.
     //
     // `locator.click()` is deliberately NOT used here: Leaflet recreates
     // each marker's DOM element on layout-affecting events (`layoutTick`/zoom

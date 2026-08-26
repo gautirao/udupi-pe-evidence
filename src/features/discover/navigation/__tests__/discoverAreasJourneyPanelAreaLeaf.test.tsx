@@ -34,7 +34,7 @@ import { DiscoverAreasJourneyPanel } from '../../views/DiscoverAreasJourneyPanel
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import type { UseAreasNavigationJourneyResult } from '../useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '../types';
-import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import type { DiscoverCityListingItem, DiscoverCityListingsParams } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
@@ -350,5 +350,86 @@ describe('DiscoverAreasJourneyPanel — AREA-leaf listings surface (Issue #1956 
     expect(onAreaLeafFiltersChange).toHaveBeenCalledWith(
       expect.objectContaining({ sellerTypes: ['owner'], propertyTypes: ['apartment'] }),
     );
+  });
+
+  // ── Issue #2344 AC7 — city-fallback regression coverage ──────────────────
+  // Defect: `AreaLeafListingsSurface` passed `city: nav.city` verbatim to
+  // useDiscoverCityListings. On an anonymous URL that omits `city=` entirely,
+  // `nav.city` resolves to '' (useDiscoverUrlState.ts: `urlParams.get('city')
+  // ?? ''`), so the hook was called with an empty city and (in production)
+  // matched zero areas — rendering the AREA leaf's own listing-empty state
+  // even though the map/overlay for the same AREA had real listings. Fix:
+  // `city: nav.city || DEFAULT_CITY`. These tests key on the PARITY
+  // invariant (non-empty data must render a listing card, never the
+  // area-empty-state) rather than a literal count, per AC12.
+  describe('AC7 — falsy city URL param falls back to DEFAULT_CITY', () => {
+    // Argument-sensitive: pre-fix, the surface is called with city: '' and
+    // must observe the EMPTY branch below; post-fix it is called with
+    // city: 'bangalore' and observes the non-empty branch. A fixed
+    // mockReturnValue could not distinguish these two cases.
+    //
+    // mockClear() is load-bearing, not hygiene. `mockUseDiscoverCityListings`
+    // is a module-scoped vi.hoisted() mock and this file has no beforeEach /
+    // vi.clearAllMocks(), so its call history otherwise accumulates across the
+    // whole file. Every earlier test renders with a default URL carrying
+    // `city=bangalore`, and `toHaveBeenCalledWith` matches ANY recorded call —
+    // so without this clear the city-arg assertions below would already be
+    // satisfied before these tests ran, i.e. be silent no-ops. Clearing scopes
+    // them to the render under test, which is what makes them real proof.
+    // Preferred over toHaveBeenLastCalledWith because it removes the leaked
+    // history at source rather than working around it, and does not depend on
+    // the render under test being the last one the component performs.
+    function mockCityAwareListings() {
+      mockUseDiscoverCityListings.mockClear();
+      mockUseDiscoverCityListings.mockImplementation(({ city }: DiscoverCityListingsParams) => {
+        if (!city) {
+          return { data: { areas: [{ areaKey: 'IN|KA|Bangalore|Manipal', listings: [] }] }, isLoading: false };
+        }
+        return {
+          data: { areas: [{ areaKey: 'IN|KA|Bangalore|Manipal', listings: [makeListing()] }] },
+          isLoading: false,
+        };
+      });
+    }
+
+    it('URL with no city= param (anonymous bug URL) still resolves listings — must NOT render the honest empty state when the map/overlay has data', () => {
+      mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+      mockCityAwareListings();
+
+      // Deliberately omits city= — reproduces the reported anonymous URL.
+      renderPanel(makeAreaLeafNode(), '/discover?journey=area-first&intent=buy');
+
+      expect(mockUseDiscoverCityListings).toHaveBeenCalledWith(expect.objectContaining({ city: 'bangalore' }));
+      expect(screen.getByTestId('property-card-listing-1')).toBeInTheDocument();
+      expect(screen.queryByTestId('area-empty-state')).not.toBeInTheDocument();
+    });
+
+    it('explicit city=bangalore renders identically to the omitted-city fallback (parity)', () => {
+      mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+      mockCityAwareListings();
+
+      renderPanel(makeAreaLeafNode(), '/discover?city=bangalore&journey=area-first&intent=buy');
+
+      expect(mockUseDiscoverCityListings).toHaveBeenCalledWith(expect.objectContaining({ city: 'bangalore' }));
+      expect(screen.getByTestId('property-card-listing-1')).toBeInTheDocument();
+      expect(screen.queryByTestId('area-empty-state')).not.toBeInTheDocument();
+    });
+
+    it('a genuinely empty AREA still renders the honest empty state — the fallback must not mask real emptiness', () => {
+      mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+      // City resolves correctly (explicit param here, sidestepping the
+      // defect entirely) but the hook genuinely returns zero listings for
+      // this area — proves the fix is scoped to the falsy-city defect, not
+      // a blanket empty-state suppression.
+      mockUseDiscoverCityListings.mockReturnValue({
+        data: { areas: [{ areaKey: 'IN|KA|Bangalore|Manipal', listings: [] }] },
+        isLoading: false,
+      });
+
+      renderPanel(makeAreaLeafNode(), '/discover?city=bangalore&journey=area-first&intent=buy');
+
+      expect(screen.getByTestId('area-empty-state')).toBeInTheDocument();
+      expect(screen.queryByTestId('property-card-listing-1')).not.toBeInTheDocument();
+    });
   });
 });

@@ -35,7 +35,7 @@ import { useDiscoverActions, useDiscoverNav } from '@/features/discover/context/
 import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
 import { useDiscoverListings } from '@/hooks/useDiscoverListings';
 import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSearchState';
-import { CITY_CONFIG } from '@/lib/localityUtils';
+import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { NodeListingsSurface } from './NodeListingsSurface';
 import { AreaSelectedPanel } from '@/components/discover/panels/AreaSelectedPanel';
 import { SchoolsInAreaPanel, AreaSchoolCombinedPanel } from '@/components/discover/panels/SchoolJourneyPanels';
@@ -752,7 +752,7 @@ function AreaLeafListingsSurface({
     ],
   );
   const areaListingsQuery = useDiscoverCityListings({
-    city: nav.city,
+    city: nav.city || DEFAULT_CITY,
     areaKeys: [areaPoint.areaKey],
     limitPerArea: 50,
     propertyType:
