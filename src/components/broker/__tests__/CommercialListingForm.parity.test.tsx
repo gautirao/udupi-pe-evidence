@@ -445,6 +445,57 @@ describe('CommercialListingForm — deterministic commercial description draft b
   });
 });
 
+describe('CommercialListingForm — manual description persistence (issue #2340 regression)', () => {
+  it('manual description ("Write it myself") survives Review and Back-to-editing, and Review\'s "Description added" checklist agrees with the visible body', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    mockImageCount.current = 0;
+    const user = userEvent.setup();
+    renderForm('commercial_building');
+
+    await fillCoreFields(user);
+
+    await user.click(screen.getByRole('button', { name: /write it myself/i }));
+    const textarea = screen.getByPlaceholderText(/write a short, factual description/i) as HTMLTextAreaElement;
+    await user.type(textarea, 'A spacious ground-floor shop in the heart of Manipal, ideal for retail.');
+
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+
+    const preview = await screen.findByTestId('commercial-review-preview');
+    expect(screen.getByText(/A spacious ground-floor shop/i)).toBeInTheDocument();
+    expect(preview.textContent).toMatch(/Description added/i);
+
+    const [payload] = mockCreateMutate.mock.calls[0] as [Record<string, unknown>, unknown];
+    expect(payload.description).toBe('A spacious ground-floor shop in the heart of Manipal, ideal for retail.');
+
+    await user.click(screen.getAllByRole('button', { name: /back to editing/i })[0]);
+    const textareaAfterBack = screen.getByPlaceholderText(/write a short, factual description/i) as HTMLTextAreaElement;
+    expect(textareaAfterBack.value).toBe('A spacious ground-floor shop in the heart of Manipal, ideal for retail.');
+  });
+
+  it('typing over an AI-drafted description with a manual edit keeps the manual text through Review (no stale AI/manual divergence)', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    mockImageCount.current = 0;
+    const user = userEvent.setup();
+    renderForm('commercial_building');
+
+    await fillCoreFields(user);
+
+    await user.click(screen.getByRole('button', { name: /^draft description$/i }));
+    await waitFor(() => expect(screen.getByTestId('commercial-description-assistant-ready')).toBeInTheDocument());
+
+    const textarea = screen.getByPlaceholderText(/write a short, factual description/i) as HTMLTextAreaElement;
+    await user.clear(textarea);
+    await user.type(textarea, 'MANUAL OVERRIDE of the AI draft.');
+
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+
+    const preview = await screen.findByTestId('commercial-review-preview');
+    expect(screen.getByText(/MANUAL OVERRIDE of the AI draft/i)).toBeInTheDocument();
+    expect(preview.textContent).toMatch(/Description added/i);
+    expect(preview.textContent).not.toMatch(/ai-generated/i);
+  });
+});
+
 describe('CommercialListingForm — commercial_land payload shape (regression: commercialApprovals must be a string, not an array)', () => {
   it('sends commercialApprovals as a single string matching the #1730 backend String contract, alongside commercialZoning/commercialOwnership', async () => {
     const user = userEvent.setup();
