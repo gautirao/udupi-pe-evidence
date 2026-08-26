@@ -29,23 +29,26 @@
  * `AreaMarkerLayer.tsx` already follows. `escapeHtml()` happens at the POINT
  * OF USE (the builder functions), never inside these fragment definitions.
  *
- * ── ISSUE #2305 STAGE 1 (zero-collision precursor) ──
- * `visualClusterCardHtml` below builds the approved "Option B" markup for the
- * client-side visual AREA cluster card (today's `makeAreaVisualClusterCard`,
- * `AreaMarkerLayer.tsx:832-903`). This stage adds the pure builder and its
- * unit tests ONLY — no production call site references it yet. Wiring
- * `AreaMarkerLayer.tsx` to call it is Stage 2, deferred until Issue #1943
- * merges (see `.claude/handoffs/issue-2305/team-lead-plan-stage1.toml`).
+ * ── ISSUE #2330 (Discover map marker reskin) ──
+ * `markerShellHtml` below is the shared connected-card shell for all three
+ * map action-marker families (Explore / Zoom in / View homes / View
+ * schools) — it REPLACES the pre-#2330 `visualClusterCardHtml` (which only
+ * ever painted the "Zoom in" treatment). `AreaMarkerLayer.tsx`'s
+ * `makeDestinationCard`, `makeAreaVisualClusterCard`, and
+ * `makeSingleAreaChildCard` all assemble their own content and call this one
+ * shared primitive for geometry/palette — see that function's own doc.
  */
 import {
   NAVY_800,
   PAPER,
   RADIUS_LG,
-  RADIUS_FULL,
+  SHADOW_MD,
   SHADOW_LG,
-  DESTINATION_PILL_BG,
-  DESTINATION_TEXT_SOFT,
-  DESTINATION_TEXT_MUTED,
+  COPPER_500,
+  COPPER_600,
+  COPPER_100,
+  PLUM_600,
+  PLUM_TINT,
 } from './markerTokens';
 
 /**
@@ -130,13 +133,13 @@ export function cardContainerStyle(opts: CardContainerStyleOptions): string {
 }
 
 /**
- * A 12x12 magnifier-plus glyph for the Option B card's "Zoom in" footer —
- * design source `ExpMap.jsx:8` (`MG.zoom`). `aria-hidden="true"` and
- * `flex-shrink:0` are this repo's existing svg-helper convention (see
- * `pinSvg`, `AreaMarkerLayer.tsx:215-216`) and are additions to the mock's
- * raw string, not part of the design source itself.
+ * A 12x12 magnifier-plus glyph for the "Zoom in" footer — design source
+ * `ExpMap.jsx:8` (`MG.zoom`). `aria-hidden="true"` and `flex-shrink:0` are
+ * this repo's existing svg-helper convention (see `pinSvg`,
+ * `AreaMarkerLayer.tsx:215-216`) and are additions to the mock's raw string,
+ * not part of the design source itself.
  */
-function zoomGlyphSvg(color: string): string {
+export function zoomGlyphSvg(color: string): string {
   return (
     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${color}" ` +
     `stroke-width="2.4" stroke-linecap="round" aria-hidden="true" style="flex-shrink:0;">` +
@@ -144,211 +147,288 @@ function zoomGlyphSvg(color: string): string {
   );
 }
 
-export interface VisualClusterCardHtmlOptions {
+/**
+ * A 13x13 compass glyph for the "Explore" footer — design source
+ * `ExpMap.jsx` `MG.compass` (Issue #2330). Same aria-hidden/flex-shrink
+ * convention as `zoomGlyphSvg`.
+ */
+export function compassGlyphSvg(color: string): string {
+  return (
+    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${color}" ` +
+    `stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;">` +
+    `<circle cx="12" cy="12" r="9"/><path d="m15.2 8.8-1.8 4.6-4.6 1.8 1.8-4.6z" fill="${color}" stroke="none"/></svg>`
+  );
+}
+
+/**
+ * A 14x14 house glyph for the "View homes" footer — design source
+ * `ExpMap.jsx` `MG.home` (Issue #2330). Same aria-hidden/flex-shrink
+ * convention as `zoomGlyphSvg`.
+ */
+export function homeGlyphSvg(color: string): string {
+  return (
+    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" ` +
+    `stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;">` +
+    `<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9"/>` +
+    `<path d="M9.5 20v-5.5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V20"/></svg>`
+  );
+}
+
+/** The four action behaviours the shared shell renders — orthogonal to `journey` (never branch the palette off `actionKind` alone; both are read together, see `resolveMarkerPalette`). */
+export type MarkerActionKind = 'explore' | 'zoom' | 'view-homes' | 'view-schools';
+/** The two accent journeys the shell supports — orthogonal to `actionKind`. */
+export type MarkerJourney = 'areas' | 'schools';
+
+export interface MarkerShellHtmlOptions {
   /**
    * The full `data-testid`/`data-node-key`/`data-selected`/`tabindex`/
    * `role`/`aria-label` attribute set for the outer shell — already built by
-   * `markerInteractiveAttrs`.
+   * `markerInteractiveAttrs`. `markerShellHtml` additionally appends
+   * `data-action-kind`/`data-marker-shell` (and `journeyAttr`'s
+   * `data-journey`, when non-empty) to the SAME outer element — never widens
+   * `markerInteractiveAttrs` itself (out of scope, see the approved plan's
+   * forbidden_changes).
    */
   shellAttrs: string;
   /**
    * `title="..."` attribute (already assembled by the caller), or `''` when
    * no name was truncated. Placed on the `.rc-shell` element (not the outer
-   * wrapper) so hovering anywhere on the shell reveals the full names.
+   * wrapper) so hovering anywhere on the shell reveals the full name(s).
    */
   titleAttr: string;
-  /** Representative-names HTML — ALREADY escaped/joined by the caller. */
-  namesHtml: string;
+  /** Which of the three behaviours this marker represents. */
+  actionKind: MarkerActionKind;
+  /** Which accent journey this marker paints in. */
+  journey: MarkerJourney;
   /**
-   * Hero listing-count number HTML — ALREADY escaped/formatted (e.g.
-   * `toLocaleString('en-IN')`). Ignored when `zeroPhraseHtml` is set.
+   * Shell width in px — a plain ARGUMENT (Issue #2330 D1), never hardcoded
+   * here. The leaf (`view-homes`/`view-schools`) passes the fixed
+   * `AREA_CARD_FOOTPRINT_WIDTH_PX`; `explore`/`zoom` pass their own
+   * inventory-scaled width (132–170 single, 150–206 combined) — this
+   * primitive is content/width-agnostic, it only paints at whatever width
+   * the caller supplies.
    */
-  heroNumberHtml?: string;
-  /**
-   * Hero unit word ('listing' / 'listings') HTML — ALREADY escaped. Ignored
-   * when `zeroPhraseHtml` is set.
-   */
-  heroUnitHtml?: string;
-  /**
-   * Zero-count guard phrase (e.g. 'No listings yet') — ALREADY escaped. When
-   * set, replaces the number+unit hero row entirely so a bare mono "0" is
-   * never rendered.
-   */
-  zeroPhraseHtml?: string;
-  /** Pill label HTML — ALREADY escaped (e.g. `N areas with matches`). */
-  pillHtml: string;
-  /**
-   * Journey accent — colours the footer icon/text/chevron and the tail.
-   *
-   * KNOWN, DELIBERATE DEVIATION from the design source: `regional-cluster-
-   * option-b.html` actually uses TWO shades — copper-500 for the zoom-glyph
-   * SVG stroke and the `›` chevron, copper-600 for the "Zoom in" label text
-   * and the tail. This function deliberately threads ONE `accent` through
-   * all four, matching the existing single-accent convention of the sibling
-   * `makeAreaVisualClusterCard`. The two-tone split is deferred rather than
-   * implemented lopsidedly: the schools journey has no `PLUM_500` (lighter)
-   * counterpart to `PLUM_600` — same class of gap as the `PLUM_600`/
-   * `PLUM_100` "known gap" documented in `markerTokens.ts` (no `--plum-*`
-   * tokens exist in the design system at all). Minting one is a
-   * design-system decision, not an implementation detail — do not guess a
-   * value here. MUST be revisited when Stage 2 wires this builder into
-   * `AreaMarkerLayer.tsx`'s call site.
-   */
-  accent: string;
-  /** Fixed shell width in px (the design's flat 172px, never content-derived). */
   widthPx: number;
   /**
-   * Whether this cluster is the current focused/selected cluster — emits the
-   * double-ring box-shadow and the heavier shell border (option-b.html:17).
+   * Whether this marker is the current selection — emits the persistent
+   * outline + heavier/solid border (`zoom`) or deepened shadow, per
+   * `VISUAL_RULES.md`'s "Selected" state and `marker-action-system.html`'s
+   * `.st-selected` rules.
    */
-  isFocusedSelected: boolean;
+  isSelected: boolean;
   /**
    * Optional extra attribute (e.g. `data-journey="schools"`, or `''`) —
-   * already assembled by the caller.
-   *
-   * PR #2315 REVIEW FIX — placed on the OUTER wrapper div (the same element
-   * `shellAttrs` sits on, which carries `data-testid="area-visual-cluster-
-   * marker"`), NOT on the inner `.rc-shell`. `index.css`'s hover/focus
-   * footer-tint rule for the schools journey is a COMPOUND selector —
-   * `[data-testid="area-visual-cluster-marker"][data-journey="schools"]
-   * :hover .rc-footer` — which requires BOTH attributes on the SAME
-   * element to ever match. Putting `journeyAttr` on `.rc-shell` (a
-   * DIFFERENT element from the one carrying `data-testid`, per
-   * `shellAttrs`'s placement below) meant that selector could never match
-   * at all: on the schools journey, hover/keyboard-focus silently fell
-   * through to the generic copper tint instead of plum. Two other fixes
-   * were considered and rejected: folding this into `shellAttrs`/
-   * `markerInteractiveAttrs` (that helper is shared with
-   * `makeSingleAreaChildCard` and other builders — a cluster-specific
-   * attribute there widens blast radius for no gain), and emitting the
-   * attribute on BOTH elements (two sources of truth for one fact — the
-   * exact drift class this issue has repeatedly been bitten by).
+   * already assembled by the caller, placed on the OUTER wrapper (the same
+   * element `shellAttrs`/`data-testid` sit on — see AC16: CSS may key on
+   * `data-marker-shell`/`data-journey`/`data-action-kind`, never on
+   * `data-testid`, but every one of those attributes must still live on the
+   * SAME element for a compound selector to ever match; PR #2315's fix for
+   * the pre-#2330 Option-B card established this same colocation rule).
    */
   journeyAttr: string;
   /**
    * Pre-escaped `font-family` VALUE for the sans stack — MUST use the
    * `*_ATTR`-safe form, never the raw `FONT_SANS` constant (its embedded
    * double quotes silently truncate a style attribute; see
-   * `AreaMarkerLayer.tsx:202-211`).
+   * `AreaMarkerLayer.tsx:202-211`). Used only for the footer's own label —
+   * the identity section's own fonts are chosen by the caller inside
+   * `identityHtml`.
    */
   fontSansAttr: string;
-  /** Pre-escaped `font-family` value for the mono stack — same caveat as `fontSansAttr`. */
-  fontMonoAttr: string;
+  /**
+   * The identity ("rc-body") section's fully-assembled INNER content — name,
+   * hero count row (or zero-state), pill/secondary line — ALREADY escaped
+   * and laid out by the caller (`AreaMarkerLayer.tsx`'s three builders own
+   * every content decision; this primitive owns geometry/palette only, see
+   * the approved plan's shared-primitive scope note).
+   */
+  identityHtml: string;
+  /** Pre-built, pre-coloured footer glyph SVG (compass/magnifier/home/cap) — see `compassGlyphSvg`/`zoomGlyphSvg`/`homeGlyphSvg`. */
+  footerIconHtml: string;
+  /**
+   * The footer's fixed action copy — literally "Explore" / "Zoom in" /
+   * "View homes" / "View schools" (AC5/AC12: never carries a count, never a
+   * re-derived string) — a compile-time literal from the call site, not
+   * server/user data, so it is never escaped here (matches this file's
+   * existing convention for `testId`, see `markerInteractiveAttrs`).
+   */
+  footerLabelText: string;
+}
+
+interface MarkerPalette {
+  bodyBg: string;
+  bodyFg: string;
+  borderRest: string;
+  borderSelected: string;
+  /** `border` is a solid accent for `zoom` regardless of selection (`marker-action-system.html`'s `.mshell.zoom.homes{border:1.5px solid #B05C3A}`) — never swaps rest/selected for that variant. */
+  borderIsAccentSolid: boolean;
+  footerBg: string;
+  footerFg: string;
+  tailColor: string;
+  selectedOutlineColor: string;
 }
 
 /**
- * Issue #2305 STAGE 2 — the Option B cluster card's fixed painted width, and
- * a conservative worst-case rendered-height bound. ONE symbol feeds BOTH the
- * `widthPx` passed to `visualClusterCardHtml` below AND the
- * `clusterVisibleAreaMembers` footprint override at the AreaMarkerLayer.tsx
- * call site — never a locally re-typed literal at either site (see
- * `areaClustering.ts:172`'s drift warning, which this shared export exists
- * to avoid).
+ * Resolves the shell's body/footer/border/tail colours from the
+ * (`actionKind`, `journey`) PAIR — never branched off `actionKind` alone
+ * (the approved plan's explicit instruction: the two inputs are orthogonal).
+ * Mirrors `ExpMap.jsx`'s `navMarkerHTML`/`areaPinHTML` palette exactly;
+ * `VISUAL_RULES.md`'s "Colours (exact)" and "Areas vs Schools palette
+ * mapping" sections are this function's source of truth.
+ */
+function resolveMarkerPalette(actionKind: MarkerActionKind, journey: MarkerJourney): MarkerPalette {
+  const isSchools = journey === 'schools';
+  if (actionKind === 'explore') {
+    const accent = isSchools ? PLUM_600 : COPPER_500;
+    return {
+      bodyBg: NAVY_800,
+      bodyFg: PAPER,
+      borderRest: 'rgba(27,42,69,0.24)',
+      borderSelected: 'rgba(27,42,69,0.4)',
+      borderIsAccentSolid: false,
+      footerBg: accent,
+      footerFg: PAPER,
+      tailColor: accent,
+      selectedOutlineColor: NAVY_800,
+    };
+  }
+  if (actionKind === 'zoom') {
+    const accent = isSchools ? PLUM_600 : COPPER_500;
+    const accentText = isSchools ? PLUM_600 : COPPER_600;
+    return {
+      bodyBg: isSchools ? PLUM_TINT : COPPER_100,
+      bodyFg: NAVY_800,
+      borderRest: accent,
+      borderSelected: accent,
+      borderIsAccentSolid: true,
+      footerBg: PAPER,
+      footerFg: accentText,
+      tailColor: accent,
+      selectedOutlineColor: accent,
+    };
+  }
+  // 'view-homes' | 'view-schools'
+  const primary = isSchools ? PLUM_600 : NAVY_800;
+  const borderRgb = isSchools ? '94,82,134' : '27,42,69';
+  return {
+    bodyBg: PAPER,
+    bodyFg: NAVY_800,
+    borderRest: `rgba(${borderRgb},0.28)`,
+    borderSelected: `rgba(${borderRgb},0.5)`,
+    borderIsAccentSolid: false,
+    footerBg: primary,
+    footerFg: PAPER,
+    tailColor: primary,
+    selectedOutlineColor: primary,
+  };
+}
+
+/**
+ * Issue #2330 (AMEND-A, rework-request-user-correction-1.toml) — the ONLY
+ * footprint constant this primitive itself owns: the fixed COLLISION
+ * FOOTPRINT used SOLELY as the `clusterAreaMembers`/`clusterVisibleAreaMembers`
+ * collision-safety input at the two call sites that merge dense
+ * 'clusters'/'directions'/'areas' children (`AreaMarkerLayer.tsx:1223`'s
+ * `Math.max` floor and `AreaMarkerLayer.tsx:1444`'s `footprintWidthPx`). It
+ * is NOT, and has never been, the painted width of the card itself.
  *
- * `VISUAL_CLUSTER_CARD_WIDTH_PX` (172) is the design's flat, content-independent
- * shell width (`regional-cluster-option-b.html`).
+ * `VISUAL_CLUSTER_CARD_WIDTH_PX` REVERTED to its pre-#2330 value of 172
+ * (it was briefly raised to 206 during this issue's gate-2 pass; that change
+ * altered live clustering/merge behaviour, which is out of scope for this
+ * reskin and belongs to #1943 instead — see AMEND-A). This constant is a
+ * clustering INPUT, not a rendering output: changing it changes which
+ * markers merge, independent of anything painted on screen.
  *
- * `VISUAL_CLUSTER_CARD_HEIGHT_PX` (140) is a MEASURED, not inferred, bound.
- * Method: rendered the actual `.rc-shell` markup at `widthPx:172` in a real
- * Chromium browser (viewport 1457x812) with the tallest realistic content
- * variant — two long representative names ("Kempapura Extended Village
- * Layout Extension, Another Excessively Long Locality Name Here") that clamp
- * to the full 2 lines the `-webkit-line-clamp:2` name row allows (content
- * beyond 2 lines cannot grow the box further — the clamp is the true content
- * ceiling), plus a non-zero hero row ("1,234 listings") and a pill
- * ("+3 areas with matches"). Measured `getBoundingClientRect().height` =
- * 122.25px.
+ * D1 is UNCHANGED by this revert: Explore/Zoom continue to PAINT at their
+ * own inventory-scaled width (132–170px single, 150–206px combined — see
+ * `AreaMarkerLayer.tsx`'s width formula), which does not read this constant.
+ * Because the painted width can now be as wide as 206px while the collision
+ * footprint this constant defines is only 172px, a wide COMBINED "Zoom in"
+ * card can paint wider than the footprint that was used to decide whether it
+ * overlaps its neighbours. That paint-vs-collision gap is a KNOWN,
+ * DEFERRED OBSERVATION — deliberately NOT fixed here, and owned by #1943.
+ * Do not attempt to close it by re-raising this constant, changing
+ * `cellSizePx`, or touching the merge algorithm in this issue.
  *
- * FIX N5 (main-agent-ruling-b1-footprint-floor.toml bundle) — the margin
- * this constant actually banks over that measurement DEPENDS on whether the
- * 122.25px figure covered `.rc-shell` alone or the whole painted marker
- * (`.rc-shell` PLUS the 7px `.rc-tail` triangle rendered as its sibling
- * below it — see `visualClusterCardHtml` below). The record above says
- * "rendered the actual `.rc-shell` markup" and reports
- * `getBoundingClientRect().height` of that markup — read literally, this was
- * a measurement of `.rc-shell` ALONE, not the tail. Taking that at face
- * value: the true painted marker is `.rc-shell` (122.25px) + `.rc-tail`
- * (7px) ≈ 129.25px, and the real margin this 140px constant banks is
- * ~10.75px / ~8% — smaller than the "~18px / ~15%" this comment previously
- * (incorrectly) claimed, which implicitly treated the 122.25px figure as if
- * it already covered the whole marker including the tail. This document
- * cannot fully rule out that the original measurement pass actually
- * screenshotted/measured the combined marker and mislabeled it "`.rc-shell`
- * markup" in the writeup rather than the DOM query itself — there is no
- * saved screenshot or raw measurement script in this record to settle that
- * definitively either way. The conservative reading (tail excluded, ~8%
- * margin) is the one carried forward here, since assuming the LARGER margin
- * without proof would risk silently understating how tight this bound
- * actually is. The 140px constant itself is NOT changed by this correction —
- * ~10.75px is still real, non-negative margin, and over-estimating remains
- * the safe direction (see below) regardless of which reading is correct.
+ * `VISUAL_CLUSTER_CARD_HEIGHT_PX` (140) is unaffected by AMEND-A and is
+ * carried forward, UNCHANGED, from the pre-#2330 Option-B measurement below
+ * — the new shell's identity section (name/count/pill) and footer occupy
+ * the same vertical budget as before; this issue's scope is a footprint
+ * CONSTANT/doc-comment change for the AREA leaf only
+ * (`AREA_CARD_FOOTPRINT_HEIGHT_PX`, see `areaClustering.ts`), not a
+ * re-measurement of this collision-safety ceiling. A follow-up should
+ * re-verify this bound in a real browser against the new shell markup if the
+ * identity/footer padding ever changes.
  *
- * 140px therefore keeps a ~10.75px / ~8% margin over that measurement (see
- * the N5 correction above) for font-metric variance (the measurement used
- * the system-ui fallback stack, not a guaranteed-loaded "Plus Jakarta Sans"/
- * "Geist Mono") and general cross-browser sub-pixel rounding. Over-
- * estimating is the safe direction per `areaClustering.ts:177-179` (an
- * extra merge, never a missed one) — under-estimating is the only way the
- * no-overlap invariant actually breaks, which is why this is measured
- * rather than guessed.
+ * Original measurement record (pre-#2330, Option-B "Zoom in" fixed-172 card):
+ * rendered the actual `.rc-shell` markup at `widthPx:172` in a real Chromium
+ * browser (viewport 1457x812) with the tallest realistic content variant —
+ * two long representative names that clamp to the full 2 lines the
+ * `-webkit-line-clamp:2` name row allows, plus a non-zero hero row and a
+ * pill. Measured `getBoundingClientRect().height` = 122.25px; the true
+ * painted marker (`.rc-shell` + the 7px `.rc-tail` triangle) ≈ 129.25px, so
+ * 140px keeps a ~10.75px / ~8% margin over that measurement (see the
+ * historical N5 correction this doc previously carried) — over-estimating is
+ * the safe direction, so this margin is retained as-is.
  */
 export const VISUAL_CLUSTER_CARD_WIDTH_PX = 172;
 export const VISUAL_CLUSTER_CARD_HEIGHT_PX = 140;
 
 /**
- * Builds the approved "Option B" client-side visual AREA cluster card: a
- * connected navy info section + white "Zoom in" footer + accent-coloured
- * tail, all inside one overflow:hidden shell (design source
- * `docs/design/retrends-design-system/ui_kits/new_discover/regional-cluster-option-b.html`,
- * `ExpMap.jsx:46-105`). Pure string builder — no React/Leaflet/DOM — see the
- * module-level SECURITY note: nothing here escapes its inputs.
+ * The shared connected-card shell for all three Discover map action-marker
+ * families (Explore / Zoom in / View homes / View schools) — Issue #2330.
+ * REPLACES the pre-#2330 `visualClusterCardHtml` (which only ever painted
+ * the "Zoom in" treatment). Geometry- and palette-only: one identity section
+ * (rounded top) flush against one attached, full-width action footer
+ * (rounded bottom, no gap), one shared shadow/border/radius around both, and
+ * one centred downward CSS-triangle tail — never a horizontal split-capsule,
+ * matching `VISUAL_RULES.md`'s "Map action-marker system" section verbatim.
+ * Every content decision (name truncation, count/grammar, pill, secondary
+ * line, icon choice, width) stays at the `AreaMarkerLayer.tsx` call sites —
+ * this function never reads/derives content, it only lays out whatever
+ * `identityHtml`/`footerIconHtml`/`footerLabelText` it is handed. Pure string
+ * builder — no React/Leaflet/DOM — see the module-level SECURITY note:
+ * nothing here escapes its inputs; every caller MUST pre-escape.
  */
-export function visualClusterCardHtml(opts: VisualClusterCardHtmlOptions): string {
+export function markerShellHtml(opts: MarkerShellHtmlOptions): string {
   const {
     shellAttrs,
     titleAttr,
-    namesHtml,
-    heroNumberHtml,
-    heroUnitHtml,
-    zeroPhraseHtml,
-    pillHtml,
-    accent,
+    actionKind,
+    journey,
     widthPx,
-    isFocusedSelected,
+    isSelected,
     journeyAttr,
     fontSansAttr,
-    fontMonoAttr,
+    identityHtml,
+    footerIconHtml,
+    footerLabelText,
   } = opts;
 
-  const nameMaxWidthPx = widthPx - 28;
-  const shellBorderColor = isFocusedSelected ? 'rgba(27,42,69,0.4)' : 'rgba(27,42,69,0.24)';
-  const shellBoxShadow = isFocusedSelected
-    ? `0 0 0 2px ${PAPER}, 0 0 0 4px ${NAVY_800}, ${SHADOW_LG}`
-    : SHADOW_LG;
-
-  const heroRow =
-    zeroPhraseHtml != null
-      ? `<span style="font-family:${fontSansAttr};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${DESTINATION_TEXT_MUTED};margin-top:2px;">${zeroPhraseHtml}</span>`
-      : `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">` +
-        `<span style="font-family:${fontMonoAttr};font-size:20px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${heroNumberHtml}</span>` +
-        `<span style="font-family:${fontSansAttr};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${DESTINATION_TEXT_MUTED};">${heroUnitHtml}</span>` +
-        `</span>`;
+  const palette = resolveMarkerPalette(actionKind, journey);
+  const borderColor = palette.borderIsAccentSolid
+    ? palette.borderRest
+    : isSelected
+      ? palette.borderSelected
+      : palette.borderRest;
+  const shellBoxShadow = isSelected ? SHADOW_LG : SHADOW_MD;
+  const outline = isSelected
+    ? `outline:2px solid ${palette.selectedOutlineColor};outline-offset:2px;`
+    : '';
 
   return (
-    `<div ${shellAttrs}${journeyAttr ? ` ${journeyAttr}` : ''} style="${MARKER_SHELL_STYLE}">` +
-    `<div class="rc-shell"${titleAttr ? ` ${titleAttr}` : ''} style="width:${widthPx}px;box-sizing:border-box;border-radius:${RADIUS_LG};overflow:hidden;box-shadow:${shellBoxShadow};border:1.5px solid ${shellBorderColor};">` +
-    `<div style="padding:9px 14px;background:${NAVY_800};color:#fff;display:flex;flex-direction:column;align-items:center;gap:2px;">` +
-    `<span style="font-family:${fontSansAttr};font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${nameMaxWidthPx}px;">${namesHtml}</span>` +
-    heroRow +
-    `<span style="margin-top:3px;padding:1px 9px;border-radius:${RADIUS_FULL};background:${DESTINATION_PILL_BG};font-size:10px;font-weight:600;color:${DESTINATION_TEXT_SOFT};white-space:nowrap;">${pillHtml}</span>` +
+    `<div ${shellAttrs} data-action-kind="${actionKind}" data-marker-shell="true"${journeyAttr ? ` ${journeyAttr}` : ''} style="${MARKER_SHELL_STYLE}">` +
+    `<div class="rc-shell"${titleAttr ? ` ${titleAttr}` : ''} style="width:${widthPx}px;box-sizing:border-box;border-radius:${RADIUS_LG};overflow:hidden;box-shadow:${shellBoxShadow};border:1.5px solid ${borderColor};${outline}">` +
+    `<div class="rc-body" style="padding:9px 14px;background:${palette.bodyBg};color:${palette.bodyFg};display:flex;flex-direction:column;gap:2px;">` +
+    identityHtml +
     `</div>` +
-    `<div class="rc-footer" style="background:${PAPER};padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px;">` +
-    zoomGlyphSvg(accent) +
-    `<span style="font-family:${fontSansAttr};font-size:11.5px;font-weight:700;color:${accent};">Zoom in</span>` +
-    `<span style="font-size:13px;font-weight:700;color:${accent};line-height:1;">&#8250;</span>` +
+    `<div class="rc-footer" style="background:${palette.footerBg};padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px;">` +
+    footerIconHtml +
+    `<span style="font-family:${fontSansAttr};font-size:11.5px;font-weight:700;color:${palette.footerFg};">${footerLabelText}</span>` +
+    `<span style="font-size:13px;font-weight:700;color:${palette.footerFg};line-height:1;">&#8250;</span>` +
     `</div>` +
     `</div>` +
-    `<div class="rc-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid ${accent};margin:0 auto;"></div>` +
+    `<div class="rc-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid ${palette.tailColor};margin:0 auto;"></div>` +
     `</div>`
   );
 }

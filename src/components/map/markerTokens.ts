@@ -44,6 +44,14 @@ export const COPPER_600 = '#934B2D';
 export const COPPER_100 = '#F2E8E1';
 export const PLUM_600 = '#5E5286';
 export const PLUM_100 = '#DED7EC';
+// Issue #2330 — Discover map-marker action-system reskin. `--plum-tint`
+// (VISUAL_RULES.md §"Journey / mode accent colours": "plum accent ...
+// --plum-tint #F1EDF7 (Zoom body tint / hover footer tint)"). Distinct from
+// PLUM_100 above (#DED7EC) — that token is the pre-#2330 dashed-cluster
+// footer-hover tint being SUPERSEDED by this issue's Zoom-in body/hover-footer
+// treatment; both remain exported since PLUM_100 has no other in-repo
+// consumer this issue is scoped to touch.
+export const PLUM_TINT = '#F1EDF7';
 export const EVERGREEN_600 = '#1F7A5C';
 export const GREY_900 = '#111827';
 export const GREY_700 = '#374151';

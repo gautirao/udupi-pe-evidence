@@ -30,9 +30,31 @@
  * children) — the same call site `makeAreaVisualClusterCard(..., accent,
  * membershipKey, isFocusedSelected, journeyAttr)` in AreaMarkerLayer.tsx
  * where `accent = journey === 'school-first' ? PLUM_600 : COPPER_500` and
- * clicking the cluster sets `isFocusedSelected` (double-ring) via the
- * caller-controlled `focusedClusterMemberAreaKeys` state — never the
- * 'clusters'/'directions' level (no focus concept there).
+ * clicking the cluster sets `isFocusedSelected` (persistent accent outline,
+ * post-#2330 — see the REBASELINE note below) via the caller-controlled
+ * `focusedClusterMemberAreaKeys` state — never the 'clusters'/'directions'
+ * level (no focus concept there).
+ *
+ * ── REBASELINE — Issue #2330 (Discover map marker action-system reskin) ──
+ * This spec originally pinned Issue #2305's Option-B "Zoom in" treatment: a
+ * dark NAVY_800 identity body, a WHITE footer with COPPER_500 text, and a
+ * static double-ring `box-shadow` (`0 0 0 2px PAPER, 0 0 0 4px NAVY_800`) for
+ * the focused-selected state. Issue #2330 explicitly REPLACES all three:
+ *   - identity body -> LIGHT journey-tinted (cream #F2E8E1 residential /
+ *     lavender #F1EDF7 schools), navy text throughout (never a navy
+ *     background) — `markerPrimitives.ts`'s `resolveMarkerPalette('zoom', ...)`.
+ *   - footer stays WHITE, but its icon/label/chevron text resolves to
+ *     COPPER_600 (#934B2D) for the residential journey (one shade darker than
+ *     the COPPER_500 border/tail — a two-tone split introduced by #2330) and
+ *     stays PLUM_600 for schools (single-tone, unchanged from #2305).
+ *   - focused-selected state is now a persistent 2px SOLID accent `outline`
+ *     (never a box-shadow double-ring) — `markerShellHtml`'s `isSelected`
+ *     branch.
+ * Every assertion below that pinned the old navy body / COPPER_500 footer
+ * text / box-shadow double-ring is updated to the values above; every
+ * BEHAVIOUR assertion (exactly one cluster forms, names/count render, click
+ * opens the cluster-focus panel, data-selected flips, hover/focus tint
+ * mechanics, keyboard-focus ring) is preserved unchanged.
  */
 import { test, expect, type Page, type Route } from '@playwright/test';
 
@@ -41,20 +63,37 @@ const CITY = 'bangalore';
 // Hex -> rgb() as a real browser reports it via getComputedStyle, so
 // `toHaveCSS` assertions below compare against the SAME format Chromium
 // actually returns rather than a hex literal that would never match.
-// COPPER_500 = #B05C3A, PLUM_600 = #5E5286, NAVY_800 = #1B2A45, PAPER = #FFFFFF
-// (src/components/map/markerTokens.ts — read, not modified, by this spec).
+// COPPER_500 = #B05C3A, COPPER_600 = #934B2D, PLUM_600 = #5E5286,
+// NAVY_800 = #1B2A45, PAPER = #FFFFFF, COPPER_100 = #F2E8E1,
+// PLUM_TINT = #F1EDF7 (src/components/map/markerTokens.ts — read, not
+// modified, by this spec).
 const COPPER_500_RGB = 'rgb(176, 92, 58)';
+// Issue #2330 — the Zoom-in FOOTER TEXT/icon now resolves to COPPER_600 for
+// the residential journey (one shade darker than the COPPER_500 border/tail
+// below) — never confuse the two; COPPER_500_RGB above remains the
+// border/tail colour, asserted separately.
+const COPPER_600_RGB = 'rgb(147, 75, 45)';
 const PLUM_600_RGB = 'rgb(94, 82, 134)';
 const NAVY_800_RGB = 'rgb(27, 42, 69)';
 const PAPER_RGB = 'rgb(255, 255, 255)';
-// PR #2315 review fix — index.css's hover/focus footer-TINT rgb equivalents
+// PR #2315 review fix — index.css's hover/focus footer-TINT rgb equivalent
 // (COPPER_500_RGB/PLUM_600_RGB above are the accent TEXT colour, a
-// different value from these; the tint is the .rc-footer BACKGROUND, not
-// its text). #F2E8E1 (index.css:470, residential/generic tint) = rgb(242,
-// 232, 225). #DED7EC (index.css:475, schools-journey tint) = rgb(222, 215,
-// 236). Read, not modified, by this spec.
+// different value from this; the tint is the .rc-footer BACKGROUND, not its
+// text). #F2E8E1 (index.css:470, residential/generic tint) = rgb(242, 232,
+// 225). Read, not modified, by this spec. Issue #2330 REBASELINE — the
+// pre-#2330 schools-journey tint constant (#DED7EC = rgb(222, 215, 236))
+// is GONE from index.css entirely; the schools-journey hover/focus tint is
+// now `#F1EDF7`, numerically identical to `ZOOM_BODY_SCHOOLS_RGB` below
+// (same hex backs both the resting body and the hover/focus footer tint per
+// the design source) — reused directly rather than a second, duplicate
+// constant.
 const COPPER_100_TINT_RGB = 'rgb(242, 232, 225)';
-const PLUM_100_TINT_RGB = 'rgb(222, 215, 236)';
+// Issue #2330 — the Zoom-in card's IDENTITY BODY background (never the old
+// #2305 NAVY_800 body). Cream #F2E8E1 (residential) = rgb(242, 232, 225) —
+// numerically identical to COPPER_100_TINT_RGB above — and lavender #F1EDF7
+// (schools) = rgb(241, 237, 247).
+const ZOOM_BODY_AREAS_RGB = 'rgb(242, 232, 225)';
+const ZOOM_BODY_SCHOOLS_RGB = 'rgb(241, 237, 247)';
 
 const D_KEY = 'd:mock2305cluster';
 const D_LABEL = 'Mock Direction 2305';
@@ -248,13 +287,13 @@ async function clickMarker(locator: ReturnType<typeof clusterMarkerLocator>): Pr
 }
 
 /**
- * Asserts the full Option-B card structure renders for the given accent —
- * shared by both journey tests below so a card regression in either journey
- * fails the same way.
+ * Asserts the full connected-card structure renders for the given
+ * journey-correct colours (Issue #2330 shell) — shared by both journey tests
+ * below so a card regression in either journey fails the same way.
  */
 async function assertOptionBCardStructure(
   page: Page,
-  opts: { accentRgb: string },
+  opts: { bodyRgb: string; footerTextRgb: string; tailRgb: string },
 ): Promise<void> {
   const cluster = clusterMarkerLocator(page);
   await expect(cluster, 'exactly one visual cluster forms from the two co-located members').toHaveCount(1);
@@ -263,13 +302,15 @@ async function assertOptionBCardStructure(
   const shell = cluster.locator('.rc-shell');
   await expect(shell, 'the Option-B card shell must actually paint').toBeVisible();
 
-  // Positive: navy hero section — names legible (both members' labels
-  // present, MAX_REPRESENTATIVE_NAMES=2 covers both with no "+N" truncation)
-  // and NOT overflowing (real navy background-color proves the shell is
-  // real painted markup, not a collapsed/blank div).
+  // Positive: LIGHT journey-tinted hero section (Issue #2330 — cream
+  // residential / lavender schools, never the pre-#2330 dark NAVY_800 body)
+  // — names legible (both members' labels present, MAX_REPRESENTATIVE_NAMES=2
+  // covers both with no "+N" truncation) and NOT overflowing (the real
+  // painted background-color proves the shell is real painted markup, not a
+  // collapsed/blank div).
   const hero = shell.locator('> div').first();
   await expect(hero).toBeVisible();
-  await expect(hero).toHaveCSS('background-color', NAVY_800_RGB);
+  await expect(hero).toHaveCSS('background-color', opts.bodyRgb);
   await expect(hero).toContainText(AREA_ALPHA_LABEL);
   await expect(hero).toContainText(AREA_BETA_LABEL);
 
@@ -291,37 +332,53 @@ async function assertOptionBCardStructure(
   await expect(footer).toHaveCSS('background-color', PAPER_RGB);
   const zoomLabel = footer.locator('span', { hasText: 'Zoom in' });
   await expect(zoomLabel).toBeVisible();
-  await expect(zoomLabel).toHaveCSS('color', opts.accentRgb);
+  await expect(zoomLabel).toHaveCSS('color', opts.footerTextRgb);
 
   const tail = cluster.locator('.rc-tail');
   await expect(tail, 'the accent-coloured tail triangle must render').toBeVisible();
-  await expect(tail).toHaveCSS('border-top-color', opts.accentRgb);
+  await expect(tail).toHaveCSS('border-top-color', opts.tailRgb);
 }
 
-test.describe('@integration-ui #2305 Stage 2 — Option-B visual-cluster card renders at the real call site (residential journey)', () => {
-  test('the areas-level visual cluster paints the full Option-B card with the COPPER accent', async ({ page }) => {
+test.describe('@integration-ui #2305/#2330 — connected-card visual-cluster renders at the real call site (residential journey)', () => {
+  test('the areas-level visual cluster paints the full connected-card shell with the cream body + COPPER_600 footer text + COPPER_500 border/tail', async ({ page }) => {
     await openDirection(page, 'area-first');
-    await assertOptionBCardStructure(page, { accentRgb: COPPER_500_RGB });
+    await assertOptionBCardStructure(page, {
+      bodyRgb: ZOOM_BODY_AREAS_RGB,
+      footerTextRgb: COPPER_600_RGB,
+      tailRgb: COPPER_500_RGB,
+    });
 
     // Negative, only after positive structure is proven: the OLD dashed-chip
-    // treatment this replaced must be gone.
+    // treatment (pre-#2305) must be gone.
     const shell = clusterMarkerLocator(page).locator('.rc-shell');
     await expect(shell).not.toHaveCSS('border-style', 'dashed');
+    // Negative — Issue #2330: the superseded #2305 dark Option-B navy body
+    // must be gone too.
+    const hero = shell.locator('> div').first();
+    await expect(hero).not.toHaveCSS('background-color', NAVY_800_RGB);
   });
 });
 
-test.describe('@integration-ui #2305 Stage 2 — Option-B visual-cluster card renders at the real call site (school-first journey)', () => {
-  test('the areas-level visual cluster paints the full Option-B card with the PLUM accent', async ({ page }) => {
+test.describe('@integration-ui #2305/#2330 — connected-card visual-cluster renders at the real call site (school-first journey)', () => {
+  test('the areas-level visual cluster paints the full connected-card shell with the lavender body + PLUM_600 footer text/border/tail', async ({ page }) => {
     await openDirection(page, 'school-first');
-    await assertOptionBCardStructure(page, { accentRgb: PLUM_600_RGB });
+    await assertOptionBCardStructure(page, {
+      bodyRgb: ZOOM_BODY_SCHOOLS_RGB,
+      footerTextRgb: PLUM_600_RGB,
+      tailRgb: PLUM_600_RGB,
+    });
   });
 });
 
-test.describe('@integration-ui #2305 Stage 2 — focused-selected double ring', () => {
-  test('tapping the residential cluster sets data-selected and the double-ring shell treatment', async ({ page }) => {
+test.describe('@integration-ui #2305/#2330 — focused-selected accent outline', () => {
+  test('tapping the residential cluster sets data-selected and the persistent accent-outline shell treatment', async ({ page }) => {
     await openDirection(page, 'area-first');
     const cluster = clusterMarkerLocator(page);
-    await assertOptionBCardStructure(page, { accentRgb: COPPER_500_RGB });
+    await assertOptionBCardStructure(page, {
+      bodyRgb: ZOOM_BODY_AREAS_RGB,
+      footerTextRgb: COPPER_600_RGB,
+      tailRgb: COPPER_500_RGB,
+    });
 
     // Baseline (un-focused): plain shell, no data-selected attribute.
     await expect(cluster).not.toHaveAttribute('data-selected', 'true');
@@ -336,37 +393,49 @@ test.describe('@integration-ui #2305 Stage 2 — focused-selected double ring', 
     // Positive: the SAME marker (registry keeps identity across re-render)
     // now carries data-selected="true" and its inline style (Chromium
     // serialises the `style` ATTRIBUTE itself back through the CSSOM — hex
-    // becomes rgb(), bare "0" becomes "0px" — this asserts against that real
-    // serialised form, not the raw literal `visualClusterCardHtml` wrote)
-    // contains BOTH box-shadow rings: the 2px white/PAPER gap + 4px
-    // NAVY_800 shell.
+    // becomes rgb() — this asserts against that real serialised form, not
+    // the raw literal `markerShellHtml` wrote).
+    //
+    // Issue #2330 — the selected-state treatment is now a persistent 2px
+    // SOLID accent `outline` (`markerShellHtml`'s `isSelected` branch),
+    // REPLACING the pre-#2330 static double-ring `box-shadow`
+    // (`0 0 0 2px PAPER, 0 0 0 4px NAVY_800`). The Zoom variant's border stays
+    // the solid COPPER_500 accent regardless of selection (never the
+    // rgba(27,42,69,*) navy-transparent border Explore/View-homes use).
     await expect(cluster).toHaveAttribute('data-selected', 'true');
-    const shellStyle = await cluster.locator('.rc-shell').getAttribute('style');
-    expect(shellStyle, 'focused-selected shell must carry the double-ring box-shadow').toContain(
-      `${PAPER_RGB} 0px 0px 0px 2px`,
-    );
-    expect(shellStyle).toContain(`${NAVY_800_RGB} 0px 0px 0px 4px`);
-    // Stronger shell border while focused (rgba(27, 42, 69, 0.4) vs the
-    // un-focused rgba(27, 42, 69, 0.24) — markerPrimitives.ts's
-    // `shellBorderColor`).
-    expect(shellStyle).toContain('rgba(27, 42, 69, 0.4)');
+    const shell = cluster.locator('.rc-shell');
+    await expect(shell).toHaveCSS('outline-color', COPPER_500_RGB);
+    await expect(shell).toHaveCSS('outline-style', 'solid');
+    await expect(shell).toHaveCSS('outline-width', '2px');
+    await expect(shell).toHaveCSS('border-color', COPPER_500_RGB);
 
-    // Move the pointer away AND blur the marker — `clickMarker`'s real mouse
-    // move/down/up leaves the cursor resting on the marker (real `:hover`)
-    // AND this tabindex=0 div focused (real `:focus-within`), and
-    // `src/index.css` legitimately tints the footer copper (residential) /
-    // plum (schools) for EITHER state while it holds; re-asserting the
-    // REST-state footer background under either state would be testing that
-    // hover/focus-tint rule, not this test's actual subject (the
-    // double-ring focus-SELECTED treatment, which is driven by
-    // `data-selected`/inline box-shadow, not CSS hover/focus).
+    // Move the pointer away AND blur the marker BEFORE reading box-shadow —
+    // `clickMarker`'s real mouse move/down/up leaves both a real `:hover`
+    // AND real DOM focus on this tabindex=0 div, and the D2 keyboard-focus
+    // ring painter (bindMarkerDom) legitimately composes its own navy/white
+    // ring box-shadow layers onto `.rc-shell` while focus holds — reading
+    // box-shadow before blurring would conflate that unrelated focus-ring
+    // mechanism with this test's actual subject. Once genuinely blurred, the
+    // shell carries ONLY its static SHADOW_LG box-shadow — never the
+    // superseded #2305 static double-ring (`0 0 0 2px PAPER, 0 0 0 4px
+    // NAVY_800`) that used to be baked into the HTML for isFocusedSelected
+    // regardless of focus. The persistent SELECTED treatment is the accent
+    // `outline` (asserted above, and re-confirmed after blur below via
+    // `data-selected` + structure), never a box-shadow ring.
     await page.mouse.move(10, 10);
     await cluster.evaluate((el) => (el as HTMLElement).blur());
+    const shellStyle = await shell.getAttribute('style');
+    expect(shellStyle).not.toContain('0px 0px 0px 4px');
+    expect(shellStyle).not.toContain('0px 0px 0px 2px');
 
     // The card's own structure (names/count/footer/accent) is unchanged by
     // focusing — re-asserted so this test does not merely infer it from the
     // earlier un-focused assertion.
-    await assertOptionBCardStructure(page, { accentRgb: COPPER_500_RGB });
+    await assertOptionBCardStructure(page, {
+      bodyRgb: ZOOM_BODY_AREAS_RGB,
+      footerTextRgb: COPPER_600_RGB,
+      tailRgb: COPPER_500_RGB,
+    });
   });
 });
 
@@ -386,7 +455,11 @@ test.describe('@integration-ui #2305 FIX CYCLE 2 — keyboard-focus ring survive
   test('DOM-focusing the residential cluster composes the keyboard-focus ring WITH the CSS hover/focus lift shadow (never silently overridden), and both clear cleanly on blur', async ({ page }) => {
     await openDirection(page, 'area-first');
     const cluster = clusterMarkerLocator(page);
-    await assertOptionBCardStructure(page, { accentRgb: COPPER_500_RGB });
+    await assertOptionBCardStructure(page, {
+      bodyRgb: ZOOM_BODY_AREAS_RGB,
+      footerTextRgb: COPPER_600_RGB,
+      tailRgb: COPPER_500_RGB,
+    });
     const shell = cluster.locator('.rc-shell');
 
     // Resting (no focus, no hover): the plain static shadow only — neither
@@ -446,21 +519,32 @@ test.describe('@integration-ui #2305 FIX CYCLE 2 — keyboard-focus ring survive
  * background and the accent TEXT colour (asserted elsewhere in this file)
  * are unaffected — this is narrowly the hover/focus TINT.
  *
+ * REBASELINE — Issue #2330 changed the schools-journey hover/focus footer
+ * tint value itself: index.css now sets `#F1EDF7` (PLUM_TINT, the SAME hex
+ * as the resting body background) for this rule, never the pre-#2330
+ * `#DED7EC` (PLUM_100) this spec originally pinned. `ZOOM_BODY_SCHOOLS_RGB`
+ * (defined above) is reused here rather than a second, duplicate constant.
+ *
  * This is a pure CSS cascade fact (a compound selector either matches an
  * element or it structurally cannot) — JSDOM never loads `index.css`, so no
  * unit test can see this defect at all, by construction. Real browser only.
  */
 test.describe('@integration-ui #2305 PR #2315 review fix — schools-journey hover footer tint (compound selector)', () => {
-  test('school-first: hovering the visual cluster tints .rc-footer PLUM (#DED7EC), never falls through to the generic copper tint', async ({ page }) => {
+  test('school-first: hovering the visual cluster tints .rc-footer PLUM (#F1EDF7), never falls through to the generic copper tint', async ({ page }) => {
     await openDirection(page, 'school-first');
     const cluster = clusterMarkerLocator(page);
-    await assertOptionBCardStructure(page, { accentRgb: PLUM_600_RGB });
+    await assertOptionBCardStructure(page, {
+      bodyRgb: ZOOM_BODY_SCHOOLS_RGB,
+      footerTextRgb: PLUM_600_RGB,
+      tailRgb: PLUM_600_RGB,
+    });
     const footer = cluster.locator('.rc-footer');
 
-    // Resting (no hover yet): neither tint present — the later "hovered"
+    // Resting (no hover yet): neither tint present (the footer stays WHITE
+    // at rest, per `assertOptionBCardStructure` above) — the later "hovered"
     // assertion is a real state transition, not a tautology.
     const restingBg = await footer.evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(restingBg).not.toBe(PLUM_100_TINT_RGB);
+    expect(restingBg).not.toBe(ZOOM_BODY_SCHOOLS_RGB);
     expect(restingBg).not.toBe(COPPER_100_TINT_RGB);
 
     const box = await cluster.boundingBox();
@@ -478,7 +562,7 @@ test.describe('@integration-ui #2305 PR #2315 review fix — schools-journey hov
     // the SCHOOLS journey. Asserting PLUM positively (not merely
     // "not copper") is what makes this test unable to pass on a
     // blank/broken card.
-    expect(hoveredBg, 'schools-journey hover must tint the footer PLUM').toBe(PLUM_100_TINT_RGB);
+    expect(hoveredBg, 'schools-journey hover must tint the footer PLUM').toBe(ZOOM_BODY_SCHOOLS_RGB);
     expect(hoveredBg, 'must never fall through to the generic copper tint').not.toBe(COPPER_100_TINT_RGB);
 
     await page.mouse.move(10, 10);
@@ -487,7 +571,11 @@ test.describe('@integration-ui #2305 PR #2315 review fix — schools-journey hov
   test('CONTRAST CASE — residential journey: hovering the visual cluster tints .rc-footer COPPER (#F2E8E1), discriminating from the schools case above', async ({ page }) => {
     await openDirection(page, 'area-first');
     const cluster = clusterMarkerLocator(page);
-    await assertOptionBCardStructure(page, { accentRgb: COPPER_500_RGB });
+    await assertOptionBCardStructure(page, {
+      bodyRgb: ZOOM_BODY_AREAS_RGB,
+      footerTextRgb: COPPER_600_RGB,
+      tailRgb: COPPER_500_RGB,
+    });
     const footer = cluster.locator('.rc-footer');
 
     const box = await cluster.boundingBox();
@@ -502,7 +590,7 @@ test.describe('@integration-ui #2305 PR #2315 review fix — schools-journey hov
     // two tests genuinely discriminate rather than both happening to pass
     // against a hardcoded/frozen value.
     expect(hoveredBg).toBe(COPPER_100_TINT_RGB);
-    expect(hoveredBg).not.toBe(PLUM_100_TINT_RGB);
+    expect(hoveredBg).not.toBe(ZOOM_BODY_SCHOOLS_RGB);
 
     await page.mouse.move(10, 10);
   });

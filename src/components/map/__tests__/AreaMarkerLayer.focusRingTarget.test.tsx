@@ -192,7 +192,7 @@ describe('FIX 3 (N3) — keyboard focus ring targets .rc-shell, not the outer ro
     expect(shellEl!.style.boxShadow).not.toBe('');
   });
 
-  it('a focused+selected cluster never stacks two rings on two boxes: the JS focus ring REPLACES (never adds to) .rc-shell\'s own static double-ring, and blur restores that same static double-ring exactly', () => {
+  it('a focused+selected cluster never stacks two rings on two boxes: the JS focus ring REPLACES (never adds to) .rc-shell\'s own static box-shadow, and blur restores that same static value exactly — the persistent selected OUTLINE (Issue #2330) is untouched by either', () => {
     const m1 = areaChild('alpha');
     const m2 = areaChild('bravo');
     render(
@@ -216,24 +216,33 @@ describe('FIX 3 (N3) — keyboard focus ring targets .rc-shell, not the outer ro
     expect(outerRoleButtonEl).not.toBeNull();
     expect(shellEl).not.toBeNull();
 
-    // The card's OWN static double-ring (isFocusedSelected, painted purely
-    // from the HTML — no keyboard focus involved yet).
+    // Issue #2330 — a selected marker's persistent indicator is now a 2px
+    // outline (`markerShellHtml`'s `isSelected` branch), never the pre-#2330
+    // double-ring box-shadow. The static box-shadow itself is just the
+    // (deeper, selected) SHADOW_LG drop shadow — no PAPER/NAVY ring colours
+    // baked into it until keyboard focus actually happens.
     const staticSelectedShadow = shellEl!.style.boxShadow;
-    expect(staticSelectedShadow).toContain(PAPER);
-    expect(staticSelectedShadow).toContain(NAVY_800);
+    expect(staticSelectedShadow).not.toBe('');
+    expect(staticSelectedShadow).not.toContain(PAPER);
+    expect(staticSelectedShadow).not.toContain(NAVY_800);
+    const staticOutline = shellEl!.style.outline;
+    expect(staticOutline).toContain('2px solid');
 
     outerRoleButtonEl!.dispatchEvent(new FocusEvent('focus'));
-    // The keyboard-focus ring REPLACES that single box-shadow declaration on
-    // the SAME element — never a second ring on a second box. This is a
-    // structurally different (single-property) value, proving replacement,
-    // not addition.
+    // The keyboard-focus ring REPLACES the shell's static box-shadow
+    // declaration on the SAME element — never a second ring on a second box.
     expect(shellEl!.style.boxShadow).not.toBe(staticSelectedShadow);
     expect(shellEl!.style.boxShadow).toContain(PAPER);
     expect(shellEl!.style.boxShadow).toContain(NAVY_800);
+    // The persistent selected outline is a DIFFERENT CSS property from
+    // box-shadow — the focus ring never touches it, so it survives
+    // untouched alongside the new ring.
+    expect(shellEl!.style.outline).toBe(staticOutline);
 
     outerRoleButtonEl!.dispatchEvent(new FocusEvent('blur'));
-    // Blur reveals the card's own static double-ring again — exactly,
-    // never a blanked-out box-shadow.
+    // Blur reveals the card's own static box-shadow again — exactly, never a
+    // blanked-out box-shadow — and the outline is still untouched.
     expect(shellEl!.style.boxShadow).toBe(staticSelectedShadow);
+    expect(shellEl!.style.outline).toBe(staticOutline);
   });
 });

@@ -89,7 +89,8 @@ vi.mock('react-leaflet', () => ({
 vi.mock('leaflet/dist/leaflet.css', () => ({}));
 
 import { AreaDestinationMarkerLayer } from '../AreaMarkerLayer';
-import { NAVY_800, PAPER, SHADOW_LG } from '../markerTokens';
+import { NAVY_800, SHADOW_LG, SHADOW_MD, COPPER_500 } from '../markerTokens';
+import { VISUAL_CLUSTER_CARD_HEIGHT_PX } from '../markerPrimitives';
 import { escapeHtml } from '@/lib/security';
 import type { AreasNavigationChild } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
@@ -218,8 +219,8 @@ describe('FIX 1 (B1) — clusters/directions footprint floor', () => {
     const rectB_oldBound = footprintRect(225, 120);
     expect(intersects(rectA_oldBound, rectB_oldBound)).toBe(false);
 
-    const rectA_floored = footprintRect(100, 140);
-    const rectB_floored = footprintRect(225, 140);
+    const rectA_floored = footprintRect(100, VISUAL_CLUSTER_CARD_HEIGHT_PX);
+    const rectB_floored = footprintRect(225, VISUAL_CLUSTER_CARD_HEIGHT_PX);
     expect(intersects(rectA_floored, rectB_floored)).toBe(true);
   });
 });
@@ -296,8 +297,8 @@ describe('FIX 2 (N1) — AC3 layer-level proof: hero number/unit split', () => {
   });
 });
 
-describe('FIX 2 (N1) — AC3 layer-level proof: double-ring focused-selected state', () => {
-  it('focused (controlled focusedClusterMemberAreaKeys matches the cell) -> data-selected="true" + double-ring box-shadow + focused shell border', () => {
+describe('FIX 2 (N1) — AC3 layer-level proof: focused-selected state (Issue #2330: outline ring, not the pre-#2330 double-ring box-shadow)', () => {
+  it('focused (controlled focusedClusterMemberAreaKeys matches the cell) -> data-selected="true" + persistent accent outline + shadow-lg', () => {
     const m1 = areaChild('alpha', { listingCount: 4, schoolCount: 0 });
     const m2 = areaChild('bravo', { listingCount: 3, schoolCount: 0 });
     render(
@@ -313,12 +314,18 @@ describe('FIX 2 (N1) — AC3 layer-level proof: double-ring focused-selected sta
     expect(divIconHtmlCalls).toHaveLength(1);
     const html = divIconHtmlCalls[0];
     expect(html).toContain('data-selected="true"');
-    // Double-ring: white 2px gap + navy 4px ring, layered with the base shadow.
-    expect(html).toContain(`0 0 0 2px ${PAPER}, 0 0 0 4px ${NAVY_800}, ${SHADOW_LG}`);
-    expect(html).toContain('border:1.5px solid rgba(27,42,69,0.4)');
+    // Issue #2330 — selected state is a persistent 2px accent outline +
+    // shadow-lg (markerShellHtml's `isSelected` branch), replacing the
+    // pre-#2330 double-ring box-shadow (`0 0 0 2px PAPER, 0 0 0 4px NAVY`).
+    expect(html).toContain(`outline:2px solid ${COPPER_500};outline-offset:2px;`);
+    expect(html).toContain(`box-shadow:${SHADOW_LG}`);
+    // Zoom in's border is always the SOLID accent (never the rgba(27,42,69,*)
+    // navy-transparent border that only Explore/View use) regardless of
+    // selection.
+    expect(html).toContain(`border:1.5px solid ${COPPER_500}`);
   });
 
-  it('UNFOCUSED (no controlled focus prop) -> no data-selected, plain shadow, non-focused shell border — never the focused-selected treatment', () => {
+  it('UNFOCUSED (no controlled focus prop) -> no data-selected, shadow-md, no outline — never the focused-selected treatment', () => {
     const m1 = areaChild('alpha', { listingCount: 4, schoolCount: 0 });
     const m2 = areaChild('bravo', { listingCount: 3, schoolCount: 0 });
     render(
@@ -333,7 +340,9 @@ describe('FIX 2 (N1) — AC3 layer-level proof: double-ring focused-selected sta
     expect(divIconHtmlCalls).toHaveLength(1);
     const html = divIconHtmlCalls[0];
     expect(html).not.toContain('data-selected');
-    expect(html).toContain('border:1.5px solid rgba(27,42,69,0.24)');
+    expect(html).toContain(`border:1.5px solid ${COPPER_500}`);
+    expect(html).toContain(`box-shadow:${SHADOW_MD}`);
+    expect(html).not.toContain('outline:2px solid');
     expect(html).not.toContain(`0 0 0 4px ${NAVY_800}`);
   });
 });

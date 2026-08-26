@@ -91,7 +91,7 @@ vi.mock('react-leaflet', () => ({
 vi.mock('leaflet/dist/leaflet.css', () => ({}));
 
 import { AreaDestinationMarkerLayer } from '../AreaMarkerLayer';
-import { COPPER_500, PLUM_600 } from '../markerTokens';
+import { COPPER_500, COPPER_600, PLUM_600 } from '../markerTokens';
 import type { AreasNavigationChild } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
 
@@ -191,7 +191,7 @@ function rcFooterColor(html: string): string | null {
 }
 
 describe('AC8/#2305 — visual-cluster accent (rendered Option B HTML, not the token file) — "areas" call site', () => {
-  it('RESIDENTIAL journey: renders the Option B card with COPPER_500 in the footer/tail, never navy or plum', () => {
+  it('RESIDENTIAL journey: renders the Option B card with COPPER_600 footer text and COPPER_500 border/tail, never navy or plum', () => {
     render(
       <AreaDestinationMarkerLayer
         node={{ ...ROOT_NODE, children: AREA_MEMBERS.map((m) => m.raw) }}
@@ -207,7 +207,12 @@ describe('AC8/#2305 — visual-cluster accent (rendered Option B HTML, not the t
     expect(html).toContain('class="rc-shell"');
     expect(html).toContain('class="rc-footer"');
     expect(html).toContain('class="rc-tail"');
-    expect(rcFooterColor(html)).toBe(COPPER_500);
+    // AC4 two-tone residential accent: the footer icon/text/chevron render
+    // COPPER_600 (one shade darker), while the border and `.rc-tail` triangle
+    // stay COPPER_500 — this rebaselines the footer-TEXT hex from the old
+    // single-shade COPPER_500 stand-in to the real two-tone split. The
+    // border/tail assertion below is intentionally untouched.
+    expect(rcFooterColor(html)).toBe(COPPER_600);
     expect(html).toContain(`border-top:7px solid ${COPPER_500}`);
     expect(html).not.toContain(PLUM_600);
     // Never the retired dashed-card markup this replaces.
@@ -264,7 +269,7 @@ describe('AC8/#2305 — visual-cluster accent (rendered Option B HTML, not the t
 });
 
 describe('#2305 accent ruling — "clusters"/"directions" call site (main-agent-ruling-accent-scope.toml)', () => {
-  it('RESIDENTIAL journey: the structural CLUSTER visual-cluster card also renders COPPER_500, matching the "areas" site', () => {
+  it('RESIDENTIAL journey: the structural CLUSTER visual-cluster card also renders COPPER_600 footer text, matching the "areas" site', () => {
     render(
       <AreaDestinationMarkerLayer
         node={{ ...ROOT_NODE, children: CLUSTER_MEMBERS.map((m) => m.raw) }}
@@ -277,7 +282,9 @@ describe('#2305 accent ruling — "clusters"/"directions" call site (main-agent-
     expect(divIconHtmlCalls).toHaveLength(1);
     const html = divIconHtmlCalls[0];
     expect(html).toContain('area-visual-cluster-marker');
-    expect(rcFooterColor(html)).toBe(COPPER_500);
+    // AC4 two-tone residential accent — see the matching comment on the
+    // "areas" site's equivalent test above.
+    expect(rcFooterColor(html)).toBe(COPPER_600);
     expect(html).toContain(`border-top:7px solid ${COPPER_500}`);
     expect(html).not.toContain(PLUM_600);
   });
@@ -322,8 +329,11 @@ describe('#2305 accent ruling — "clusters"/"directions" call site (main-agent-
     );
     const clustersColor = rcFooterColor(divIconHtmlCalls[divIconHtmlCalls.length - 1]);
 
-    expect(areasColor).toBe(COPPER_500);
-    expect(clustersColor).toBe(COPPER_500);
+    // AC4: both sites now render COPPER_600 footer text (not COPPER_500) —
+    // the cross-call-site equality invariant itself (areasColor === clustersColor)
+    // is preserved unchanged, per the prior main-agent ruling.
+    expect(areasColor).toBe(COPPER_600);
+    expect(clustersColor).toBe(COPPER_600);
     expect(areasColor).toBe(clustersColor);
   });
 

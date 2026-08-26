@@ -69,14 +69,11 @@ import {
   NAVY_800,
   PAPER,
   COPPER_500,
-  COPPER_600,
   PLUM_600,
+  PLUM_TINT,
   FONT_SANS,
   FONT_MONO,
   RADIUS_FULL,
-  SHADOW_MD,
-  DESTINATION_BORDER_REST,
-  DESTINATION_BORDER_ACTIVE,
   DESTINATION_PILL_BG,
 } from '../markerTokens';
 import { escapeHtml } from '@/lib/security';
@@ -173,19 +170,21 @@ describe('AC8 — makeDestinationCard grammar vs. mock destCardHTML (residential
     expect(html).toContain(`background:${NAVY_800}`);
   });
 
-  it('(2) white primary text — the name span uses PAPER (#fff) as its text color', () => {
+  it('(2) white primary text — the identity section (`.rc-body`) sets PAPER (#fff) as its text color, inherited by the name span; the name now clamps to 2 lines (AC13) rather than a single nowrap line', () => {
     const html = renderResting();
-    expect(html).toContain(`color:${PAPER};white-space:nowrap`);
+    expect(html).toContain(`color:${PAPER}`);
+    expect(html).toMatch(/class="rc-body"[^>]*color:#FFFFFF/i);
+    expect(html).toContain('-webkit-line-clamp:2');
     expect(html).toContain('North Bangalore');
   });
 
-  it('(3) translucent light border — resting state uses DESTINATION_BORDER_REST, a fixed 1.5px width (never the old 1px/2px copper swap)', () => {
+  it('(3) Issue #2330 — resting state uses the shared shell\'s navy-transparent Explore border (rgba(27,42,69,0.24)), a fixed 1.5px width (never the old translucent-white-on-navy DESTINATION_BORDER_REST token, which this reskin retires)', () => {
     const html = renderResting();
-    expect(html).toContain(`1.5px solid ${DESTINATION_BORDER_REST}`);
-    expect(html).not.toContain('1.5px solid rgba(255, 255, 255, 0.9)'); // not the ACTIVE value while resting
+    expect(html).toContain('border:1.5px solid rgba(27,42,69,0.24)');
+    expect(html).not.toContain('border:1.5px solid rgba(27,42,69,0.4)'); // not the selected value while resting
   });
 
-  it('(3b) selected/hovered state swaps to DESTINATION_BORDER_ACTIVE, still at the SAME constant 1.5px width', () => {
+  it('(3b) selected state swaps to the heavier navy-transparent border (rgba(27,42,69,0.4)), plus a persistent navy outline — never the old DESTINATION_BORDER_ACTIVE token', () => {
     const child = directionChild();
     render(
       <AreaDestinationMarkerLayer
@@ -198,8 +197,9 @@ describe('AC8 — makeDestinationCard grammar vs. mock destCardHTML (residential
       />,
     );
     const html = divIconHtmlCalls[0];
-    expect(html).toContain(`1.5px solid ${DESTINATION_BORDER_ACTIVE}`);
-    expect(html).not.toContain(`1.5px solid ${DESTINATION_BORDER_REST}`);
+    expect(html).toContain('border:1.5px solid rgba(27,42,69,0.4)');
+    expect(html).not.toContain('border:1.5px solid rgba(27,42,69,0.24)');
+    expect(html).toContain(`outline:2px solid ${NAVY_800};outline-offset:2px;`);
   });
 
   it('(4) product-sans names + product-mono count, sourced from markerTokens (never a re-typed literal font stack)', () => {
@@ -208,10 +208,10 @@ describe('AC8 — makeDestinationCard grammar vs. mock destCardHTML (residential
     expect(html).toContain(`font-family:${FONT_MONO_ATTR}`);
   });
 
-  it('(5) mono count is the strongest element (800 weight), with a separate small uppercase metric label beside it. Digit size SCALES by listing volume (mock destCardHTML: `Math.round(22 + Math.min(1, o.n / 240) * 9)`), never a constant — the default fixture\'s 1,736 listings is well past the n=240 ceiling, so it renders at the max 31px.', () => {
+  it('(5) mono count is the strongest element (800 weight), with a separate small uppercase metric label beside it. Digit size SCALES by listing volume (mock destCardHTML: `Math.round(22 + Math.min(1, o.n / 240) * 9)`), never a constant — the default fixture\'s 1,736 listings is well past the n=240 ceiling, so it renders at the max 31px. Issue #2330 — the hero count span no longer sets an explicit per-span color; it inherits PAPER from the shared shell\'s `.rc-body` wrapper (asserted separately by (2) above).', () => {
     const html = renderResting();
     expect(html).toMatch(
-      /font-family:[^"]*font-size:31px;font-weight:800;line-height:1;letter-spacing:-0\.02em;color:#FFFFFF;">1,736</,
+      /font-family:[^"]*font-size:31px;font-weight:800;line-height:1;letter-spacing:-0\.02em;">1,736</,
     );
     expect(html).toMatch(
       /font-size:9\.5px;font-weight:700;letter-spacing:\.05em;text-transform:uppercase;[^>]*>listings</,
@@ -232,7 +232,7 @@ describe('AC8 — makeDestinationCard grammar vs. mock destCardHTML (residential
     );
     const lowVolumeHtml = divIconHtmlCalls[divIconHtmlCalls.length - 1];
     expect(lowVolumeHtml).toMatch(
-      /font-family:[^"]*font-size:24px;font-weight:800;line-height:1;letter-spacing:-0\.02em;color:#FFFFFF;">60</,
+      /font-family:[^"]*font-size:24px;font-weight:800;line-height:1;letter-spacing:-0\.02em;">60</,
     );
 
     // n=0 -> Math.round(22 + 0) = 22px (the formula's floor). showListingsLine
@@ -251,7 +251,7 @@ describe('AC8 — makeDestinationCard grammar vs. mock destCardHTML (residential
     );
     const zeroVolumeHtml = divIconHtmlCalls[divIconHtmlCalls.length - 1];
     expect(zeroVolumeHtml).toMatch(
-      /font-family:[^"]*font-size:22px;font-weight:800;line-height:1;letter-spacing:-0\.02em;color:#FFFFFF;">0</,
+      /font-family:[^"]*font-size:22px;font-weight:800;line-height:1;letter-spacing:-0\.02em;">0</,
     );
 
     // The high-volume (1,736) card from the default fixture renders at 31px —
@@ -269,51 +269,68 @@ describe('AC8 — makeDestinationCard grammar vs. mock destCardHTML (residential
     expect(html).toContain('12 areas with matches');
   });
 
-  it('(7) caption is the mock\'s exact verbatim string — "Explore ›" (rendered as "Explore" + the literal &#8250; chevron entity, matching ExpMap.jsx destCardHTML byte-for-byte)', () => {
+  it('(7) Issue #2330 — the action is now an ATTACHED solid-accent footer (not the old floating white "Explore ›" caption pill): white "Explore" label + chevron on a copper-500 background, a compass glyph beside them', () => {
     const html = renderResting();
-    // Verified against docs/design/retrends-design-system/ui_kits/new_discover/src/ExpMap.jsx
-    // destCardHTML: `>Explore <span style="font-size:12px;line-height:1;">&#8250;</span></div>`
-    expect(html).toContain('>Explore <span style="font-size:12px;line-height:1;">&#8250;</span></div>');
-    expect(html).toContain(`color:${COPPER_600}`); // caption pill text color, unchanged from the mock
-    expect(html).toContain(`box-shadow:${SHADOW_MD}`);
+    expect(html).toContain('class="rc-footer"');
+    expect(html).toMatch(/class="rc-footer"[^>]*background:#B05C3A/);
+    expect(html).toContain(`color:${PAPER};">Explore<`);
+    expect(html).toContain('&#8250;');
+    // The old floating white pill/box-shadow caption is gone.
+    expect(html).not.toContain('Explore <span style="font-size:12px;line-height:1;">&#8250;</span></div>');
   });
 
-  it('(8) no pin/icon accent — the mock\'s destCardHTML has NO svg/pin inside the card at all; the old copper pinSvg was removed, not recolored', () => {
+  it('(8) a compass glyph now lives in the ATTACHED FOOTER (Issue #2330), never inside the identity section alongside the name — the mock\'s destCardHTML has no icon in the identity half at all', () => {
     const html = renderResting();
-    // Positive control FIRST — proves this absence assertion is not vacuous:
-    // the single-AREA card (a sibling builder in this same file, deliberately
-    // NOT touched by item 2b) DOES still render a pin svg, so the divIcon
-    // pipeline as a whole is capable of emitting one.
-    const areaChild: AreasNavigationChild = {
-      nodeKey: 'a:hebbal',
-      nodeType: 'AREA',
-      displayLabel: 'Hebbal',
-      displayOrder: 0,
-      listingCount: 5,
-      schoolCount: 1,
-      isLeafArea: true,
-      matchingAreaCount: null,
-    };
+    // Positive control — the whole card DOES contain an svg now (the
+    // footer's compass glyph), proving the absence check below is not
+    // vacuous just because divIcon rendering emits no svg at all.
+    expect(html).toContain('<svg');
+
+    // The identity section itself (`.rc-body`, containing the name/count/
+    // pill) carries no icon — only the ATTACHED FOOTER does.
+    const bodyMatch = html.match(/<div class="rc-body"[^>]*>([\s\S]*?)<\/div>\s*<div class="rc-footer"/);
+    expect(bodyMatch).not.toBeNull();
+    expect(bodyMatch![1]).not.toContain('<svg');
+    expect(bodyMatch![1]).not.toContain('#B05C3A'); // legacy copper pin stroke, fully gone from the identity section
+  });
+});
+
+describe('AC13 — Explore long-name clamp, accessible title, and injection-shaped-name escaping', () => {
+  it('a long two-line DIRECTION displayLabel clamps visually but keeps the FULL name in title/aria-label, escaped', () => {
+    const longLabel = 'Really Very Extremely Long Bangalore Direction Name';
+    const child = directionChild({ displayLabel: longLabel });
     render(
       <AreaDestinationMarkerLayer
-        node={{
-          ...ROOT_NODE,
-          children: [
-            { nodeKey: 'a:hebbal', nodeType: 'AREA', displayLabel: 'Hebbal', displayOrder: 0, areaKey: 'hebbal', centreLat: 13.0, centreLon: 77.6 },
-          ],
-        }}
-        levelKind="areas"
-        children={[areaChild]}
+        node={ROOT_NODE}
+        levelKind="directions"
+        children={[child]}
         onSelect={vi.fn()}
+        journey={null}
       />,
     );
-    const singleAreaHtml = divIconHtmlCalls[divIconHtmlCalls.length - 1];
-    expect(singleAreaHtml).toContain('<svg'); // positive control: pins DO render elsewhere
+    const html = divIconHtmlCalls[0];
+    expect(html).toContain('-webkit-line-clamp:2');
+    expect(html).not.toMatch(new RegExp(`>${longLabel}<`));
+    expect(html).toContain(`title="${escapeHtml(longLabel)}"`);
+    expect(html).toContain(`aria-label="${escapeHtml(longLabel)}`);
+  });
 
-    // Now the actual absence assertion on the destination (DIRECTION) card.
-    const destinationHtml = renderResting();
-    expect(destinationHtml).not.toContain('<svg');
-    expect(destinationHtml).not.toContain('#B05C3A'); // legacy copper pin stroke, fully gone
+  it('an injection-shaped DIRECTION displayLabel is fully escaped — never a raw <img> or unescaped quote reaches the card', () => {
+    const MALICIOUS = '<img src=x onerror=alert(1)>';
+    const child = directionChild({ displayLabel: MALICIOUS });
+    render(
+      <AreaDestinationMarkerLayer
+        node={ROOT_NODE}
+        levelKind="directions"
+        children={[child]}
+        onSelect={vi.fn()}
+        journey={null}
+      />,
+    );
+    const html = divIconHtmlCalls[0];
+    expect(html).not.toContain('<img src=x');
+    expect(html).toContain('&lt;img');
+    expect(html).toContain(escapeHtml(MALICIOUS));
   });
 });
 
@@ -329,7 +346,10 @@ describe('AC8 — quote-escaping regression (Issue #2088 item 2b root cause)', (
     expect(styleAttr).toContain('font-family:');
     expect(styleAttr).toContain('font-size:12.5px');
     expect(styleAttr).toContain('font-weight:700');
-    expect(styleAttr).toContain(`color:${PAPER}`);
+    // Issue #2330 — the name span itself no longer sets an explicit color;
+    // it inherits PAPER from the shared shell's `.rc-body` ancestor, which
+    // (2) above already proves. Assert that inheritance ancestor directly.
+    expect(html).toMatch(/class="rc-body"[^>]*color:#FFFFFF/i);
     // No stray literal double-quote leaked out of the font stack into the
     // surrounding markup (which would either truncate this regex match or
     // spill a dangling `Sans", ui-sans-serif...` fragment into the HTML body).
@@ -338,21 +358,16 @@ describe('AC8 — quote-escaping regression (Issue #2088 item 2b root cause)', (
 });
 
 describe('AC8 — school-first destination-adjacent (dense AREA visual cluster) grammar stays plum, UNCHANGED by item 2b (regression guard)', () => {
-  // Issue #2305 STAGE 2 repair (authorized post-implementation, see
-  // approved-execution-handoff.toml plan_scope.allowed_changes) — this test
-  // used to pin the pre-Option-B markup (`1.5px dashed ${PLUM_600}` on the
-  // card's own border, and a blanket "the html never contains NAVY_800").
-  // Option B (`visualClusterCardHtml`) deliberately replaces that dashed
-  // border with a fixed navy `.rc-shell` background used for EVERY journey
-  // (NAVY_800 legitimately appears in the rendered HTML now — it is the
-  // hero-section background, not an accent) plus an accent-coloured
-  // `.rc-footer` text/chevron and `.rc-tail` triangle. The old blanket
-  // `not.toContain(NAVY_800)` assertion would now fail for the WRONG reason
-  // (the legitimate navy hero background), so this repair narrows the
-  // assertion to where the accent actually paints — the footer text color
-  // and the tail — proving school-first still resolves to PLUM_600 there,
-  // never COPPER_500, while still reading the actual rendered HTML string
-  // handed to Leaflet (never markerTokens.ts's own exports).
+  // Issue #2330 repair — this test used to pin the pre-#2330 Option-B markup
+  // (a fixed NAVY_800 hero-section background for EVERY journey, since that
+  // stopgap treatment never differentiated the Zoom-in body by journey).
+  // AC4 explicitly retires that: Zoom in's identity section is now a LIGHT
+  // journey-tinted body (copper-100 residential / plum-tint schools), navy
+  // TEXT throughout — never a navy background. This repair narrows/updates
+  // the assertion to the new light-body contract, still proving school-first
+  // resolves to PLUM_TINT/PLUM_600 (never the residential copper values)
+  // while reading the actual rendered HTML string handed to Leaflet (never
+  // markerTokens.ts's own exports).
   it('a school-first dense-AREA visual cluster still renders PLUM_600 in the accent-bearing footer/tail, never copper — item 2b\'s intent (plum for schools) survives the Option-B rewrite', () => {
     const members = [1, 2, 3, 4].map((i) => ({
       raw: {
@@ -390,12 +405,12 @@ describe('AC8 — school-first destination-adjacent (dense AREA visual cluster) 
     expect(html).toMatch(new RegExp(`color:${PLUM_600};">Zoom in`));
     // The accent-coloured tail triangle resolves to PLUM_600, not COPPER_500.
     expect(html).toContain(`border-top:7px solid ${PLUM_600}`);
-    // Never the residential accent, anywhere in this school-first card.
+    // Never the residential copper-500 accent, anywhere in this school-first card.
     expect(html).not.toContain(COPPER_500);
-    // The hero section's OWN background is still the fixed NAVY_800 (Option
-    // B's design, not an accent) — asserted positively rather than banned,
-    // so this test cannot be satisfied by a blank/broken card that happens
-    // to omit navy for the wrong reason.
-    expect(html).toContain(`background:${NAVY_800};color:#fff`);
+    // The identity section's body is the plum-tint light background (AC4) —
+    // asserted positively, so this test cannot be satisfied by a blank/
+    // broken card that happens to omit copper-100 for the wrong reason.
+    expect(html).toContain(`background:${PLUM_TINT};color:${NAVY_800}`);
+    expect(html).not.toContain(`background:${NAVY_800};color:#fff`);
   });
 });

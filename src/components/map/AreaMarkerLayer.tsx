@@ -42,28 +42,25 @@ import {
 import { estimateDestinationCardFootprint } from '@/features/discover/navigation/destinationCardFootprint';
 import {
   PAPER,
-  NAVY_800,
   COPPER_500,
   COPPER_600,
   PLUM_600,
+  GREY_700,
   FONT_SANS,
   FONT_MONO,
   RADIUS_LG,
   RADIUS_FULL,
-  SHADOW_MD,
-  SHADOW_LG,
-  DESTINATION_BORDER_REST,
-  DESTINATION_BORDER_ACTIVE,
   DESTINATION_PILL_BG,
   DESTINATION_TEXT_SOFT,
   DESTINATION_TEXT_SOFT_DIM,
   DESTINATION_TEXT_MUTED,
 } from './markerTokens';
 import {
-  MARKER_SHELL_STYLE,
   markerInteractiveAttrs,
-  cardContainerStyle,
-  visualClusterCardHtml,
+  markerShellHtml,
+  compassGlyphSvg,
+  zoomGlyphSvg,
+  homeGlyphSvg,
   VISUAL_CLUSTER_CARD_WIDTH_PX,
   VISUAL_CLUSTER_CARD_HEIGHT_PX,
 } from './markerPrimitives';
@@ -268,6 +265,23 @@ function truncateAreaLabel(label: string, truncate: boolean): { text: string; fu
     short = `${short.slice(0, TRUNCATE_MAX_CHARS - 1).trim()}…`;
   }
   return short === label ? { text: label, full: null } : { text: short, full: label };
+}
+
+/**
+ * Issue #2330 (D1/AC2) — Explore/Zoom shell width scales with inventory
+ * (`VISUAL_RULES.md` §"Map action-marker system", `ExpMap.jsx`'s
+ * `destCardHTML`/`clusterChipHTML`: `Math.round(132 + Math.min(1, n/240)*38)`,
+ * clamped to `[150,206]` for the combined/cluster card). `divisor` mirrors
+ * this file's existing schools-vs-residential count-font-size ramp
+ * (`makeDestinationCard`'s `countFontSizePx`, which normalises the schools
+ * count over 20 rather than the mock's flat 240) so a single marker's width
+ * and its own hero-digit size scale off the SAME "how full is this count"
+ * fraction — never two independently-drifting ramps for one card.
+ */
+function inventoryScaledWidthPx(primaryCountNum: number, isSchools: boolean, isCombined: boolean): number {
+  const divisor = isSchools ? 20 : 240;
+  const raw = Math.round(132 + Math.min(1, primaryCountNum / divisor) * 38);
+  return isCombined ? Math.min(206, Math.max(150, raw)) : raw;
 }
 
 function getShortRegionLabel(label: string): string {
@@ -602,7 +616,6 @@ export interface AreaDestinationMarkerLayerProps {
 }
 
 const DESTINATION_ACCENT = C_COPPER;
-const DESTINATION_ACCENT_ACTIVE = C_COPPER_HOVER;
 
 /**
  * Issue #1956 AC6.9 — the live backend emits BOTH abbreviated (`d:w`, `d:s`)
@@ -723,23 +736,15 @@ function makeDestinationCard(
     selected: isSelected,
     ariaLabel,
   });
-  // Issue #2088 item 2b — rebuilt attribute-for-attribute against the
-  // approved mock's `destCardHTML` (docs/design/retrends-design-system/
-  // ui_kits/new_discover/src/ExpMap.jsx). The previous white/copper "Tap to
-  // zoom" card did not match the mock at all; see markerTokens.ts's
-  // DESTINATION_* doc for why the translucent-on-navy values here are
-  // literals rather than parity-tested CSS-var lookups.
-  const borderColor = isSelected || isHovered ? DESTINATION_BORDER_ACTIVE : DESTINATION_BORDER_REST;
+  // Issue #2330 — Explore now renders via the shared `markerShellHtml`
+  // connected-card shell (dark navy identity + solid accent footer),
+  // replacing the pre-#2330 floating "Tap to zoom"-style pill. Content
+  // (name/count/pill derivation above) is UNCHANGED — only the shell/palette
+  // this content is painted inside changes. `isHovered` no longer drives a
+  // JS-baked border swap: hover/keyboard-focus lift is a CSS concern now
+  // (index.css, keyed on `data-marker-shell`/`data-journey`/`data-action-kind`
+  // per AC16), matching every other variant of this shared shell.
   const isSchools = eligibilityJourney === 'schools';
-  const bg = isSchools ? C_PLUM : NAVY_800;
-  
-  const destinationCardStyle = cardContainerStyle({
-    radiusPx: 12,
-    background: bg,
-    borderCss: `1.5px solid ${borderColor}`,
-    boxShadow: SHADOW_LG,
-    minWidthPx: 96,
-  });
 
   const listingsCountText = listingsLabel != null ? child.listingCount.toLocaleString('en-IN') : null;
   const schoolCountText = child.schoolCount != null ? child.schoolCount.toLocaleString('en-IN') : null;
@@ -749,22 +754,42 @@ function makeDestinationCard(
   const secondaryLabel = isSchools ? listingsLabel : schoolLabel;
 
   const countFontSizePx = Math.round(22 + Math.min(1, primaryCountNum / (isSchools ? 20 : 240)) * 9);
-  
-  const html = `<div ${destinationShellAttrs} style="${MARKER_SHELL_STYLE}">
-    <div${titleAttr} style="${destinationCardStyle}">
-      <span style="font-family:${FONT_SANS_ATTR};font-size:12.5px;font-weight:700;color:${PAPER};white-space:nowrap;letter-spacing:-0.01em;">${label}</span>
-      ${primaryCountText != null && (!isSchools || child.schoolCount! > 0) ? `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
-        <span style="font-family:${FONT_MONO_ATTR};font-size:${countFontSizePx}px;font-weight:800;line-height:1;letter-spacing:-0.02em;color:${PAPER};">${primaryCountText}</span>
+  const widthPx = inventoryScaledWidthPx(primaryCountNum, isSchools, false);
+  const nameMaxWidthPx = widthPx - 28;
+
+  const identityHtml =
+    `<span style="font-family:${FONT_SANS_ATTR};font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${nameMaxWidthPx}px;">${label}</span>` +
+    (primaryCountText != null && (!isSchools || child.schoolCount! > 0)
+      ? `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
+        <span style="font-family:${FONT_MONO_ATTR};font-size:${countFontSizePx}px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${primaryCountText}</span>
         <span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${DESTINATION_TEXT_MUTED};">${primaryCountLabel}</span>
-      </span>` : (isSchools ? `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
+      </span>`
+      : isSchools
+        ? `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
         <span style="font-family:${FONT_MONO_ATTR};font-size:16px;font-weight:800;line-height:1;letter-spacing:-0.02em;color:${DESTINATION_TEXT_MUTED};">0</span>
         <span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${DESTINATION_TEXT_MUTED};">schools</span>
-      </span>` : '')}
-      ${areasLabel != null ? `<span style="font-family:${FONT_SANS_ATTR};margin-top:${primaryCountText != null ? 3 : 4}px;padding:1px 9px;border-radius:${RADIUS_FULL};background:${DESTINATION_PILL_BG};font-size:10px;font-weight:600;color:${primaryCountText != null ? DESTINATION_TEXT_SOFT : DESTINATION_TEXT_SOFT_DIM};white-space:nowrap;">${areasLabel}</span>` : ''}
-      ${secondaryLabel != null && (!isSchools || child.schoolCount! > 0) ? `<span style="font-family:${FONT_SANS_ATTR};font-size:10.5px;font-weight:600;color:${DESTINATION_TEXT_MUTED};white-space:nowrap;">${secondaryLabel}</span>` : ''}
-    </div>
-    <div style="font-family:${FONT_SANS_ATTR};margin-top:5px;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:${RADIUS_FULL};background:${PAPER};box-shadow:${SHADOW_MD};font-size:10px;font-weight:700;color:${COPPER_600};white-space:nowrap;">Explore <span style="font-size:12px;line-height:1;">&#8250;</span></div>
-  </div>`;
+      </span>`
+        : '') +
+    (areasLabel != null
+      ? `<span style="font-family:${FONT_SANS_ATTR};margin-top:${primaryCountText != null ? 3 : 4}px;padding:1px 9px;border-radius:${RADIUS_FULL};background:${DESTINATION_PILL_BG};font-size:10px;font-weight:600;color:${primaryCountText != null ? DESTINATION_TEXT_SOFT : DESTINATION_TEXT_SOFT_DIM};white-space:nowrap;">${areasLabel}</span>`
+      : '') +
+    (secondaryLabel != null && (!isSchools || child.schoolCount! > 0)
+      ? `<span style="font-family:${FONT_SANS_ATTR};font-size:10.5px;font-weight:600;color:${DESTINATION_TEXT_MUTED};white-space:nowrap;">${secondaryLabel}</span>`
+      : '');
+
+  const html = markerShellHtml({
+    shellAttrs: destinationShellAttrs,
+    titleAttr,
+    actionKind: 'explore',
+    journey: isSchools ? 'schools' : 'areas',
+    widthPx,
+    isSelected,
+    journeyAttr: isSchools ? 'data-journey="schools"' : '',
+    fontSansAttr: FONT_SANS_ATTR,
+    identityHtml,
+    footerIconHtml: compassGlyphSvg(PAPER),
+    footerLabelText: 'Explore',
+  });
   return L.divIcon({ className: 'area-destination-marker-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
 }
 
@@ -795,17 +820,41 @@ export function makeSingleAreaChildCard(
   const ariaLabelName = escapeHtml(child.displayLabel);
   const titleAttr = fullLabel ? ` title="${escapeHtml(fullLabel)}"` : '';
   const isSchools = eligibilityJourney === 'schools';
-  const primaryCountLabel = isSchools && child.schoolCount != null
-    ? escapeHtml(`${child.schoolCount} ${child.schoolCount === 1 ? 'school' : 'schools'}`)
-    : escapeHtml(formatListingCount(child.listingCount));
-    
-  const secondaryCountLabel = isSchools 
-    ? escapeHtml(formatListingCount(child.listingCount))
-    : (child.schoolCount != null ? escapeHtml(`${child.schoolCount} ${child.schoolCount === 1 ? 'school' : 'schools'}`) : null);
+
+  // Issue #2330 (AC5/AC11) — the leaf's exact count is now the HERO METRIC
+  // inside the identity section (mono digit + uppercase unit), never a small
+  // label beside the pin — matching `VISUAL_RULES.md`'s "View homes / View
+  // schools" row exactly. `primaryCountNum` preserves the EXACT three-case
+  // school-count rule this file has always used: a KNOWN zero renders as an
+  // explicit "0" hero metric, while an unavailable (null/undefined) count
+  // omits the hero metric (digit + unit + aria phrase) entirely rather than
+  // fabricating a "0" — `listingCount` is always server-known and is never
+  // subject to this distinction. Only the visual split (hero digit vs. plain
+  // secondary line) changes vs. the legacy rendering.
+  const primaryCountNum: number | null = isSchools ? child.schoolCount ?? null : child.listingCount;
+  const primaryCountKnown = primaryCountNum != null;
+  const heroNoun = primaryCountKnown
+    ? isSchools
+      ? primaryCountNum === 1 ? 'SCHOOL' : 'SCHOOLS'
+      : primaryCountNum === 1 ? 'LISTING' : 'LISTINGS'
+    : null;
+  const heroCountText = primaryCountKnown ? escapeHtml(primaryCountNum.toLocaleString('en-IN')) : null;
+  const primaryCountLabel =
+    primaryCountKnown && heroNoun != null
+      ? escapeHtml(`${primaryCountNum} ${heroNoun.toLowerCase()}`)
+      : null;
+
+  const secondaryCountNum = isSchools ? child.listingCount : child.schoolCount;
+  const secondaryKnown = isSchools ? true : child.schoolCount != null;
+  const secondaryNoun = isSchools
+    ? secondaryCountNum === 1 ? 'listing' : 'listings'
+    : secondaryCountNum === 1 ? 'school' : 'schools';
+  const secondaryCountLabel =
+    secondaryKnown && secondaryCountNum != null
+      ? escapeHtml(`${secondaryCountNum} ${secondaryNoun}`)
+      : null;
 
   const primaryAccent = isSchools ? C_PLUM : DESTINATION_ACCENT;
-  const borderColor = isSelected ? (isSchools ? C_PLUM : DESTINATION_ACCENT_ACTIVE) : C_BORDER;
-  const borderWidth = isSelected || isHovered ? '2px' : '1px';
   const ariaLabel = [ariaLabelName, primaryCountLabel, secondaryCountLabel].filter((p): p is string => p != null).join(', ');
   const cardWidthPx = AREA_CARD_FOOTPRINT_WIDTH_PX;
   const nameMaxWidthPx = cardWidthPx - 24 /* padding */ - 11 /* icon */ - 6 /* gap */ - 2 /* border */;
@@ -818,30 +867,36 @@ export function makeSingleAreaChildCard(
     selected: isSelected,
     ariaLabel,
   });
-  const singleAreaCardStyle = cardContainerStyle({
-    radiusPx: 12,
-    background: isSelected ? (isSchools ? C_PLUM : NAVY_800) : PAPER,
-    borderCss: `${borderWidth} solid ${borderColor}`,
-    boxShadow: PILL_SHADOW,
-    widthPx: cardWidthPx,
-    boxSizingBorderBox: true,
-  });
-  
-  const textColor = isSelected ? PAPER : C_INK;
-  const mutedColor = isSelected ? DESTINATION_TEXT_SOFT : C_MUTED;
-  const viewActionText = isSchools ? 'Tap to view schools &rsaquo;' : 'Tap to view homes &rsaquo;';
 
-  const html = `<div ${singleAreaShellAttrs} style="${MARKER_SHELL_STYLE}">
-    <div${titleAttr} style="${singleAreaCardStyle}">
-      <div style="display:flex;align-items:center;gap:6px;">
-        ${pinSvg(isSelected ? PAPER : primaryAccent)}
-        <span style="font-size:12.5px;font-weight:700;color:${textColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameMaxWidthPx}px;">${label}</span>
-      </div>
-      <span style="font-size:10.5px;font-weight:600;color:${mutedColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${primaryCountLabel}</span>
-      ${secondaryCountLabel != null ? `<span style="font-size:10.5px;font-weight:600;color:${mutedColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${secondaryCountLabel}</span>` : ''}
-      <span style="font-family:${MONO};font-size:9.5px;font-weight:600;color:${isSelected ? PAPER : primaryAccent};">${viewActionText}</span>
-    </div>
-  </div>`;
+  const identityIcon = isSchools ? gradCapSvg(primaryAccent) : pinSvg(primaryAccent);
+  const identityHtml =
+    `<span style="display:flex;align-items:center;gap:6px;max-width:100%;">` +
+    identityIcon +
+    `<span style="font-size:13.5px;font-weight:800;letter-spacing:-0.01em;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${nameMaxWidthPx}px;">${label}</span>` +
+    `</span>` +
+    (heroCountText != null && heroNoun != null
+      ? `<span style="display:flex;align-items:baseline;gap:5px;margin-top:6px;">` +
+        `<span style="font-family:${MONO};font-size:22px;font-weight:800;letter-spacing:-0.02em;line-height:1;">${heroCountText}</span>` +
+        `<span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${C_MUTED};">${heroNoun}</span>` +
+        `</span>`
+      : '') +
+    (secondaryCountLabel != null
+      ? `<span style="margin-top:3px;font-size:11px;font-weight:600;color:${C_MUTED};">${secondaryCountLabel}</span>`
+      : '');
+
+  const html = markerShellHtml({
+    shellAttrs: singleAreaShellAttrs,
+    titleAttr,
+    actionKind: isSchools ? 'view-schools' : 'view-homes',
+    journey: isSchools ? 'schools' : 'areas',
+    widthPx: cardWidthPx,
+    isSelected,
+    journeyAttr: isSchools ? 'data-journey="schools"' : '',
+    fontSansAttr: FONT_SANS_ATTR,
+    identityHtml,
+    footerIconHtml: isSchools ? gradCapSvg(PAPER) : homeGlyphSvg(PAPER),
+    footerLabelText: isSchools ? 'View schools' : 'View homes',
+  });
   return L.divIcon({ className: 'area-single-marker-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
 }
 
@@ -905,13 +960,36 @@ function makeAreaVisualClusterCard(
   const namesLabel = escapeHtml(shortNames.join(', '));
   const fullNamesLabel = escapeHtml(representativeNames.join(', '));
   const anyNameTruncated = shortNames.some((short, i) => short !== representativeNames[i]);
-  // No leading space here (unlike the legacy dashed-card titleAttr this
-  // replaces) — `visualClusterCardHtml` prepends its own separating space
-  // when placing this on `.rc-shell` (see its own doc).
+  // No leading space here — `markerShellHtml` prepends its own separating
+  // space when placing this on `.rc-shell` (see its own doc).
   const titleAttr = anyNameTruncated ? `title="${fullNamesLabel}"` : '';
   const listingsLabel = escapeHtml(formatListingCount(totalListingCount));
   const countLabelHtml = escapeHtml(countLabel);
   const ariaLabel = `${fullNamesLabel}, ${countLabelHtml}, ${listingsLabel}`;
+
+  // Issue #2330 — Zoom in now renders via the shared `markerShellHtml` shell
+  // (light cream/lavender identity + white footer in accent text), replacing
+  // the pre-#2330 Option-B navy-body treatment. `isSchools` is read off the
+  // ALREADY-assembled `journeyAttr` (both call sites derive it from the same
+  // journey flag `accent` was derived from) rather than adding a second
+  // journey parameter to this function's signature.
+  const isSchools = journeyAttr !== '';
+  // `accent` (COPPER_500/PLUM_600) is the caller's pre-resolved journey
+  // accent, kept for signature compatibility with both call sites; the
+  // shared shell resolves its OWN footer text/icon colour (COPPER_600/
+  // PLUM_600, one shade darker for the residential journey — see
+  // `resolveMarkerPalette`'s `accentText`) so the footer icon below matches
+  // that resolved colour exactly, never the caller's slightly different
+  // `accent` shade.
+  const footerAccentText = isSchools ? PLUM_600 : COPPER_600;
+  // Width now scales with inventory (D1/AC2), same formula as Explore,
+  // clamped to the combined-card range (150-206px) — `totalListingCount` is
+  // the metric actually shown as the hero number in both journeys (a
+  // pre-existing, out-of-scope gap: this card has never had a schools-count
+  // hero — see the module doc above), so the scaling always uses the
+  // residential divisor.
+  const widthPx = inventoryScaledWidthPx(totalListingCount, false, true);
+  const nameMaxWidthPx = widthPx - 28;
 
   // Issue #2305 STAGE 2 (P1, Gate F) — the hero number/unit split and the
   // zero-count guard phrase are the two NEWLY-DERIVED fields Option B needs
@@ -927,6 +1005,19 @@ function makeAreaVisualClusterCard(
     totalListingCount > 0 ? escapeHtml(totalListingCount === 1 ? 'listing' : 'listings') : undefined;
   const zeroPhraseHtml = totalListingCount > 0 ? undefined : listingsLabel;
 
+  const heroRow =
+    zeroPhraseHtml != null
+      ? `<span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${C_MUTED};margin-top:2px;">${zeroPhraseHtml}</span>`
+      : `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">` +
+        `<span style="font-family:${FONT_MONO_ATTR};font-size:20px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${heroNumberHtml}</span>` +
+        `<span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${C_MUTED};">${heroUnitHtml}</span>` +
+        `</span>`;
+
+  const identityHtml =
+    `<span style="font-family:${FONT_SANS_ATTR};font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${nameMaxWidthPx}px;">${namesLabel}</span>` +
+    heroRow +
+    `<span style="font-family:${FONT_SANS_ATTR};margin-top:${zeroPhraseHtml != null ? 4 : 3}px;padding:1px 9px;border-radius:${RADIUS_FULL};background:rgba(27,42,69,0.08);font-size:10px;font-weight:600;color:${GREY_700};white-space:nowrap;">${countLabelHtml}</span>`;
+
   // Issue #2088 (commits 2+3) — ported to the shared markerPrimitives
   // fragments + markerTokens constants (byte-identical for every attribute
   // that existed before this issue), PLUS the new `data-node-key` (commit 3
@@ -940,20 +1031,18 @@ function makeAreaVisualClusterCard(
     selected: isFocusedSelected || undefined,
     ariaLabel,
   });
-  const html = visualClusterCardHtml({
+  const html = markerShellHtml({
     shellAttrs: clusterShellAttrs,
     titleAttr,
-    namesHtml: namesLabel,
-    heroNumberHtml,
-    heroUnitHtml,
-    zeroPhraseHtml,
-    pillHtml: countLabelHtml,
-    accent,
-    widthPx: VISUAL_CLUSTER_CARD_WIDTH_PX,
-    isFocusedSelected,
+    actionKind: 'zoom',
+    journey: isSchools ? 'schools' : 'areas',
+    widthPx,
+    isSelected: isFocusedSelected,
     journeyAttr,
     fontSansAttr: FONT_SANS_ATTR,
-    fontMonoAttr: FONT_MONO_ATTR,
+    identityHtml,
+    footerIconHtml: zoomGlyphSvg(footerAccentText),
+    footerLabelText: 'Zoom in',
   });
   return L.divIcon({ className: 'area-visual-cluster-marker-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
 }
@@ -1343,8 +1432,14 @@ export function AreaDestinationMarkerLayer({
       // Issue #2305 STAGE 2 (P5) — the Option B card's fixed footprint,
       // never a locally re-typed literal (areaClustering.ts:172's drift
       // warning): the SAME `VISUAL_CLUSTER_CARD_WIDTH_PX`/`_HEIGHT_PX`
-      // exported from markerPrimitives.ts also feeds the card's own painted
-      // `widthPx` below.
+      // exported from markerPrimitives.ts is passed into
+      // `clusterVisibleAreaMembers` below as the COLLISION-footprint override
+      // ONLY (per AMEND-A). It no longer feeds the card's own PAINTED width —
+      // that is now computed independently by `inventoryScaledWidthPx` (see
+      // its call sites above, ~:757/:980), which AMEND-A explicitly decoupled
+      // from this collision geometry. Do NOT reinstate an "also feeds painted
+      // width" claim here — that is the exact drift this note exists to
+      // prevent.
       //
       // CORRECTED (fix N2, main-agent-ruling-b1-footprint-floor.toml) — the
       // comment that used to stand here claimed `AREA_CARD_FOOTPRINT_WIDTH_PX`/
@@ -1469,13 +1564,25 @@ export function AreaDestinationMarkerLayer({
       if (hoverKey != null) {
         el?.addEventListener('focus', () => onHoverChange?.(hoverKey));
         el?.addEventListener('blur', () => onHoverChange?.(null));
-      } else {
-        // UD-2 (fix-cycle-4) — a visual cluster (`hoverKey: null`; it is not a
-        // real node, so it correctly has no hover-highlight state of its own
-        // — see the module doc on `hoverKey` above) otherwise gets ZERO focus
-        // feedback for a keyboard user, since its outer div (`el`, the
-        // `role="button"` element `shellAttrs` carries) sets `outline:none`
-        // INLINE. A class-based rule can never beat that: an inline style
+      }
+      // D2 (Issue #2330, R2) — the keyboard focus-ring painter is gated on
+      // WHETHER THE EMITTED MARKUP CONTAINS `.rc-shell`, never on
+      // `hoverKey == null`. Before #2330 only the visual cluster
+      // (`hoverKey: null`) ever emitted `.rc-shell`; the shared
+      // `markerShellHtml` primitive now means Explore/Zoom/View-homes/
+      // View-schools ALL emit it too, including real nodes with a non-null
+      // `hoverKey`. Gating on `hoverKey == null` (the pre-#2330 branch this
+      // replaces) would leave those real-node markers with index.css's
+      // `!important` hover/focus "lift" rule firing (it now keys on
+      // `.rc-shell` generically) but NO ring ever painted — a hover-looking
+      // lift with no focus indicator at all, strictly worse than today. This
+      // check runs INDEPENDENTLY of the hover-report block above, so a real
+      // node's marker gets both the hover-report listeners AND the ring
+      // listeners below.
+      if (marker.getElement()?.querySelector<HTMLElement>('.rc-shell')) {
+        // UD-2 (fix-cycle-4) — the outer div (`el`, the `role="button"`
+        // element `shellAttrs` carries) sets `outline:none` INLINE. A
+        // class-based rule can never beat that: an inline style
         // declaration outranks any selector-based author declaration
         // regardless of layers/specificity, so a stylesheet class (the
         // previous `.area-marker-kbd-focus` approach, since reverted from

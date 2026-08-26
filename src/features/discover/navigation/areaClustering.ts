@@ -165,26 +165,60 @@ const DEFAULT_CELL_SIZE_PX = 64;
 
 /**
  * UD-1 (fix-cycle-3) — the single source of truth for a rendered AREA-level
- * card's on-screen footprint, anchored bottom-center (matches the divIcon
- * `transform:translate(-50%,-100%)` contract both `makeSingleAreaChildCard`
- * and `makeAreaVisualClusterCard` in `AreaMarkerLayer.tsx` use). Those two
- * builders set their card's CSS `width` to this SAME exported constant (never
- * a locally re-typed `110px`/`96px`), so the geometry this module reasons
- * about and the pixels the browser actually paints cannot drift apart.
- * Height cannot be pinned as exactly by CSS (a card may render 1-4 optional
- * content lines depending on journey/school-count availability), so this is
- * a deliberately conservative worst-case bound — comfortably exceeds every
- * line-count variant's real rendered height. Over-estimating the footprint
- * only ever causes an EXTRA merge (still correct, just more conservative);
- * under-estimating is the only way this invariant could actually fail.
+ * leaf card's on-screen footprint, anchored bottom-center (matches the
+ * divIcon `transform:translate(-50%,-100%)` contract `makeSingleAreaChildCard`
+ * in `AreaMarkerLayer.tsx` uses). That builder sets its card's CSS `width` to
+ * this SAME exported constant (never a locally re-typed literal), so the
+ * geometry this module reasons about and the pixels the browser actually
+ * paints cannot drift apart. `makeAreaVisualClusterCard` (the "Zoom in"
+ * visual cluster) no longer uses this constant as of Issue #2330 — its own
+ * variable-width footprint bound lives in `markerPrimitives.ts`'s
+ * `VISUAL_CLUSTER_CARD_WIDTH_PX`/`_HEIGHT_PX`.
+ *
+ * Issue #2330 (D1/AC2/AC17) — the leaf's shell width is now FIXED at 172px
+ * (previously 110px, an inherited legacy value from the pre-#2330 dashed
+ * pill). `AREA_CARD_FOOTPRINT_WIDTH_PX` is updated to match exactly — it is
+ * a constant/doc-comment-only change per the approved plan; this module's
+ * clustering algorithm, cell size, and merge logic are UNTOUCHED.
+ *
+ * Height cannot be pinned as exactly by CSS (a card may render 1-2 optional
+ * content lines depending on name length/secondary-count availability), so
+ * this remains a deliberately conservative worst-case bound — comfortably
+ * exceeds every line-count variant's real rendered height. Over-estimating
+ * the footprint only ever causes an EXTRA merge (still correct, just more
+ * conservative); under-estimating is the only way this invariant could
+ * actually fail (see `mergeOverlappingCells`'s doc above).
+ *
+ * MEASUREMENT (AC17, mandatory real-browser method, not computed) — a real
+ * Chromium instance (Playwright, headless, viewport 1366x900) rendered the
+ * ACTUAL new View-homes leaf shell markup (`markerShellHtml` + the identity
+ * content `makeSingleAreaChildCard` now emits) at the production
+ * `widthPx:172`, across the full 1-line/2-line-name x with/without-secondary-
+ * line content matrix, and measured `getBoundingClientRect()` of the WHOLE
+ * painted marker (the outer wrapper containing BOTH `.rc-shell` and the 7px
+ * `.rc-tail` triangle sibling below it — never `.rc-shell` alone; see
+ * `markerPrimitives.ts`'s own historical N5 correction for why that
+ * ambiguity already produced a wrong figure once). Results:
+ *   - 1-line name, no secondary line: 101.19px
+ *   - 1-line name, with secondary line: 119.19px
+ *   - 2-line name (clamped), no secondary line: 117.38px
+ *   - 2-line name (clamped), with secondary line: 135.38px (WORST CASE)
+ * 140px therefore keeps a ~4.6px / ~3.4% margin over the measured worst
+ * case — thin, but real and non-negative; over-estimating is the safe
+ * direction per this module's own no-overlap invariant. Height is left at
+ * 140px (not the old 100px) rather than a tighter figure, matching the
+ * repo's existing `VISUAL_CLUSTER_CARD_HEIGHT_PX` convention of banking a
+ * small explicit margin for font-metric variance (system-ui fallback vs. a
+ * guaranteed-loaded "Plus Jakarta Sans"/"Geist Mono") and cross-browser
+ * sub-pixel rounding.
  *
  * This remains the AREA path's DEFAULT footprint (used when a caller omits
  * `footprintWidthPx`/`footprintHeightPx`) — never imported directly by a
  * destination-card caller (see `AreaMarkerLayer.tsx`'s FOOTPRINT SOURCE
  * rule: destination footprints come from `destinationCardFootprint.ts`).
  */
-export const AREA_CARD_FOOTPRINT_WIDTH_PX = 110;
-export const AREA_CARD_FOOTPRINT_HEIGHT_PX = 100;
+export const AREA_CARD_FOOTPRINT_WIDTH_PX = 172;
+export const AREA_CARD_FOOTPRINT_HEIGHT_PX = 140;
 
 function compareByIdentityKey<T extends ClusterableDestination>(a: T, b: T): number {
   // `identityKey` is optional at the type level (AREA-path convenience — see

@@ -49,11 +49,26 @@ vi.mock('leaflet', () => ({
       divIconHtmlCalls.push(opts.html);
       return { options: opts };
     }),
-    marker: vi.fn((latlng: [number, number]) => {
+    marker: vi.fn((latlng: [number, number], options?: { icon?: { options: { html: string } } }) => {
       markerLatLngCalls.push(latlng);
       const handlers: Record<string, (...args: unknown[]) => void> = {};
       const el = document.createElement('div');
-      el.innerHTML = '<div data-testid="area-destination-marker" tabindex="0" role="button"></div>';
+      // AMEND-B (:1327 fix, rework-request-user-correction-1.toml) — mirrors
+      // real Leaflet: a marker constructed with an `icon` option already has
+      // that icon's HTML in its DOM by the time `bindMarkerDom` runs (real
+      // `L.Marker._initIcon` builds the DOM from the `DivIcon`'s `html`
+      // during `onAdd`/`addTo`, which production always calls before
+      // `bindMarkerDom`). Every real card built by `markerShellHtml`
+      // (Explore/Zoom/View-homes/View-schools AND the visual-cluster card)
+      // emits BOTH `[role="button"][tabindex="0"]` (the outer shell div) and
+      // `.rc-shell` (the inner card) together, so consuming the real icon
+      // HTML here — instead of a synthetic placeholder with no `.rc-shell`
+      // — does not disturb any existing button/tabindex-scoped query; it
+      // only makes the D2 keyboard-focus-ring gate (`.rc-shell` presence)
+      // exercisable, where the old placeholder made it permanently vacuous.
+      el.innerHTML =
+        options?.icon?.options?.html ??
+        '<div data-testid="area-destination-marker" tabindex="0" role="button"></div>';
       const instance: Record<string, unknown> = {
         on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
           handlers[event] = cb;
@@ -633,6 +648,9 @@ describe('AreaDestinationMarkerLayer — dense AREA children (single markers + v
       />,
     );
     capturedMarkers[0].handlers.click();
+    // AC7 — click fires the activation callback EXACTLY once, never twice
+    // from bubbling/a nested interactive re-triggering it.
+    expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith('a:hebbal');
   });
 
@@ -879,28 +897,42 @@ describe('AreaDestinationMarkerLayer — dense AREA children (single markers + v
   // the first hover/selection. The mock's `setIcon` above now genuinely
   // replaces the element (mirroring `DivIcon.createIcon`), so this failed
   // before the AreaMarkerLayer.tsx `bindMarkerDom` rebind fix and passes now.
-  it('rebinds the keydown->click bridge to the FRESH element after a hover-triggered setIcon, so Enter still activates a single-AREA marker (AC4.19 focus/keyboard fix)', () => {
-    const { raw, typed } = areaChild('hebbal', 13.0, 77.6);
+  //
+  // AMEND-B (rework-request-user-correction-1.toml) — this test USED TO stage
+  // the setIcon-triggering change via a hover-driven border-width diff
+  // (`hoveredNodeKey` prop flip). Issue #2330 makes hover a pure CSS
+  // transform (no HTML diff), so that staging no longer fires `setIcon` at
+  // all and the scenario this test set up to exercise no longer occurs. The
+  // underlying AC4.19 GUARANTEE this test protects — Enter still activates a
+  // single-AREA marker exactly once even after its DOM element has been
+  // wholesale-replaced by `setIcon` — has NOT gone away (setIcon still fires
+  // on a real content change, e.g. a listingCount count-copy update, exactly
+  // like the "visual-cluster marker" sibling test below), so this is
+  // rebound to that trigger instead of being dropped. This IS the AC7
+  // exactly-one-activation coverage for the single-AREA marker's Enter path
+  // across an element replacement.
+  it('AC7: Enter still activates a single-AREA marker exactly once after its element is replaced by a real (listingCount) setIcon change', () => {
+    const { raw, typed } = areaChild('hebbal', 13.0, 77.6, { listingCount: 3 });
     const { rerender } = render(
       <AreaDestinationMarkerLayer
         node={{ ...ROOT_NODE, children: [raw] }}
         levelKind="areas"
         children={[typed]}
         onSelect={vi.fn()}
-        hoveredNodeKey={null}
       />,
     );
     expect(capturedMarkers).toHaveLength(1);
 
-    // Hovering this exact marker changes its border width (isHovered),
-    // dirtying the HTML and correctly firing setIcon.
+    // A real listingCount (count-copy) change dirties the HTML and correctly
+    // fires setIcon — the same trigger already proven for the visual-cluster
+    // marker in the sibling test below, applied here to the single-AREA card.
+    const changed = areaChild('hebbal', 13.0, 77.6, { listingCount: 7 });
     rerender(
       <AreaDestinationMarkerLayer
-        node={{ ...ROOT_NODE, children: [raw] }}
+        node={{ ...ROOT_NODE, children: [changed.raw] }}
         levelKind="areas"
-        children={[typed]}
+        children={[changed.typed]}
         onSelect={vi.fn()}
-        hoveredNodeKey={typed.nodeKey}
       />,
     );
     expect(capturedMarkers[0].setIcon).toHaveBeenCalledTimes(1);
@@ -1203,6 +1235,136 @@ describe('AreaDestinationMarkerLayer — dense AREA children (single markers + v
     });
   });
 
+  // Issue #2330 (AC7) — completes the click/Enter/Space exactly-once matrix
+  // across ALL THREE marker families. Coverage before this describe block:
+  //   - Explore (directions-level single member): click ✅ (AC3.9 describe,
+  //     module top), Enter ❌, Space ❌.
+  //   - View-homes/View-schools (areas-level single member): click ✅
+  //     (toHaveBeenCalledTimes(1) above), Enter ✅ (keyboard accessibility
+  //     describe above), Space ❌.
+  //   - Zoom in (areas-level visual cluster): click ✅ (camera-intent
+  //     describe above), Space ✅ (keyboard accessibility describe above),
+  //     Enter ❌.
+  // The four missing cells are filled here. Mirrors the SAME pattern the
+  // pre-existing "keyboard accessibility" describe above already
+  // established: this mock's `L.marker(...).on('click', cb)` records the
+  // production callback in a plain JS object (`handlers`), it is never wired
+  // to the element's real DOM 'click' event the way Leaflet's real
+  // `DomEvent.on` does in a browser — so a keydown-dispatched
+  // `el.click()` cannot reach the production `onSelect`/camera-intent
+  // callback through this harness. Attaching an OWN native 'click' listener
+  // (`clickSpy`) on the SAME element before dispatching the keydown proves
+  // the keydown->`el.click()` bridge itself fires exactly once (the thing
+  // `bindMarkerDom` actually owns and this AC is about); the mouse-path
+  // `toHaveBeenCalledTimes(1)` assertions elsewhere in this file already
+  // prove that a real click reaches the production callback exactly once.
+  describe('AC7 — exactly-one-activation matrix completion (Explore Enter/Space, Zoom Enter, View-homes Space)', () => {
+    it('Explore: Enter keydown activates exactly once', () => {
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [ROOT_NODE.children[1]] }}
+          levelKind="directions"
+          children={[makeChild()]}
+          onSelect={vi.fn()}
+        />,
+      );
+      const el = (capturedMarkers[0].getElement() as HTMLElement).querySelector<HTMLElement>(
+        '[role="button"][tabindex="0"]',
+      );
+      expect(el).not.toBeNull();
+      const clickSpy = vi.fn();
+      el?.addEventListener('click', clickSpy);
+      el?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('Explore: Space keydown activates exactly once', () => {
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [ROOT_NODE.children[1]] }}
+          levelKind="directions"
+          children={[makeChild()]}
+          onSelect={vi.fn()}
+        />,
+      );
+      const el = (capturedMarkers[0].getElement() as HTMLElement).querySelector<HTMLElement>(
+        '[role="button"][tabindex="0"]',
+      );
+      expect(el).not.toBeNull();
+      const clickSpy = vi.fn();
+      el?.addEventListener('click', clickSpy);
+      el?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('View-homes (single-AREA leaf): Space keydown activates exactly once', () => {
+      const { raw, typed } = areaChild('hebbal', 13.0, 77.6);
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [raw] }}
+          levelKind="areas"
+          children={[typed]}
+          onSelect={vi.fn()}
+        />,
+      );
+      const el = (capturedMarkers[0].getElement() as HTMLElement).querySelector<HTMLElement>(
+        '[role="button"][tabindex="0"]',
+      );
+      expect(el).not.toBeNull();
+      const clickSpy = vi.fn();
+      el?.addEventListener('click', clickSpy);
+      el?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('Zoom in (visual cluster): Enter keydown activates exactly once', () => {
+      const members = [areaChild('alpha', 13.0, 77.6), areaChild('bravo', 13.0, 77.6)];
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+          levelKind="areas"
+          children={members.map((m) => m.typed)}
+          onSelect={vi.fn()}
+        />,
+      );
+      const el = (capturedMarkers[0].getElement() as HTMLElement).querySelector<HTMLElement>(
+        '[role="button"][tabindex="0"]',
+      );
+      expect(el).not.toBeNull();
+      const clickSpy = vi.fn();
+      el?.addEventListener('click', clickSpy);
+      el?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+    });
+
+    // Real production-callback proof for the Zoom variant's click PATH
+    // (mouse click goes through the mock's `handlers.click()`, which — unlike
+    // the DOM keydown bridge above — IS wired to the real `spec.onClick`):
+    // exactly one camera-intent call, never onSelect. Pairs with AC9's
+    // negative test elsewhere in this file; restated here so the exactly-
+    // once matrix's "click" column has an explicit call-count assertion for
+    // every one of the three families in a single place.
+    it('Zoom in (visual cluster): click fires the camera-intent callback exactly once, never onSelect', () => {
+      const onSelect = vi.fn();
+      const onAreaVisualClusterCameraIntent = vi.fn();
+      const members = [areaChild('alpha', 13.0, 77.6), areaChild('bravo', 13.0, 77.6)];
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: members.map((m) => m.raw) }}
+          levelKind="areas"
+          children={members.map((m) => m.typed)}
+          onSelect={onSelect}
+          onAreaVisualClusterCameraIntent={onAreaVisualClusterCameraIntent}
+        />,
+      );
+      act(() => {
+        capturedMarkers[0].handlers.click();
+      });
+      expect(onAreaVisualClusterCameraIntent).toHaveBeenCalledTimes(1);
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+  });
+
   // F1 (fix-cycle-3) — a level change OUT of areas/clusters (most commonly a
   // single-AREA click driving levelKind -> 'listings', or a breadcrumb hop
   // back to a DIRECTION so levelKind -> 'directions') used to hit the guard
@@ -1304,7 +1466,22 @@ describe('AreaDestinationMarkerLayer — dense AREA children (single markers + v
   // assertion that actually proves paint — a classList-only assertion would
   // pass even with index.css deleted entirely, since jsdom never loads it.
   describe('UD-2 — visible keyboard focus on a visual-AREA-cluster marker', () => {
-    it('applies an inline focus box-shadow on focus and clears it on blur', () => {
+    // AMEND-B (:1327 fix, rework-request-user-correction-1.toml) — the D2
+    // production gate (`AreaMarkerLayer.tsx`'s `bindMarkerDom`) is
+    // `if (marker.getElement()?.querySelector('.rc-shell')) { ... }`, and the
+    // ring it paints on focus is applied to that SAME `.rc-shell` element
+    // (`ringEl = shellEl ?? el`), never to the outer `[role="button"]`
+    // wrapper `el` itself — `el` only owns the focus/blur LISTENERS. Before
+    // this fix, the shared `leaflet` marker mock built every marker's
+    // initial element from a synthetic placeholder with no `.rc-shell` at
+    // all, so this gate never fired and the OLD assertion (checking `el`'s
+    // own boxShadow, which the production code never touches either way)
+    // passed for the wrong reason — it would have passed identically even
+    // if the gate were deleted entirely. The mock now seeds each marker's
+    // element with its REAL `divIcon` HTML (mirrors real Leaflet), so
+    // `.rc-shell` is genuinely present and this test can assert the ACTUAL
+    // element the production code paints the ring onto.
+    it('applies an inline focus box-shadow on .rc-shell on focus and clears it on blur', () => {
       const members = [
         areaChild('alpha', 13.0, 77.6),
         areaChild('bravo', 13.0, 77.6),
@@ -1317,22 +1494,41 @@ describe('AreaDestinationMarkerLayer — dense AREA children (single markers + v
           onSelect={vi.fn()}
         />,
       );
-      const el = (capturedMarkers[0].getElement() as HTMLElement).querySelector<HTMLElement>(
-        '[role="button"][tabindex="0"]',
-      );
+      const markerEl = capturedMarkers[0].getElement() as HTMLElement;
+      const el = markerEl.querySelector<HTMLElement>('[role="button"][tabindex="0"]');
+      const shellEl = markerEl.querySelector<HTMLElement>('.rc-shell');
       expect(el).not.toBeNull();
-      expect(el!.style.boxShadow).toBe('');
+      expect(shellEl).not.toBeNull();
+      const initialShadow = shellEl!.style.boxShadow;
 
+      // Listeners are bound to `el` (the outer role="button" wrapper); the
+      // ring they paint lands on `shellEl` (`.rc-shell`), not on `el`.
       el!.dispatchEvent(new FocusEvent('focus'));
-      expect(el!.style.boxShadow).not.toBe('');
-      expect(el!.style.boxShadow).toContain('#FFFFFF'); // C_PAPER
-      expect(el!.style.boxShadow).toContain('#1B2A45'); // C_NAVY
+      expect(shellEl!.style.boxShadow).not.toBe(initialShadow);
+      expect(shellEl!.style.boxShadow).toContain('#FFFFFF'); // C_PAPER
+      expect(shellEl!.style.boxShadow).toContain('#1B2A45'); // C_NAVY
 
       el!.dispatchEvent(new FocusEvent('blur'));
-      expect(el!.style.boxShadow).toBe('');
+      expect(shellEl!.style.boxShadow).toBe(initialShadow);
     });
 
-    it('does NOT apply the inline focus box-shadow to a single-AREA marker (real node — hoverKey is non-null, unaffected by this fix)', () => {
+    // D2 (Issue #2330, R2) — the ring painter's gate changed from
+    // `hoverKey == null` to "does the emitted markup contain `.rc-shell`".
+    // `markerShellHtml` gives the View-homes/View-schools single-AREA leaf
+    // (a REAL node — `hoverKey` is non-null here) its own `.rc-shell` too,
+    // so the painter now DOES run for this variant, same as the visual
+    // cluster above — it just runs for a different reason (markup shape,
+    // not node-reality). It still writes to `ringEl = shellEl ?? el`, i.e.
+    // to `.rc-shell`, never to the outer `[role="button"]` wrapper. A
+    // pre-#2330 version of this test asserted `el.style.boxShadow === ''`
+    // on the OUTER wrapper and called that "does NOT apply the ring" — that
+    // assertion still passes today, but only because it queries an element
+    // production never writes to either way; it would pass identically even
+    // if the ring painter were deleted entirely. Per AC15 (no variant may
+    // emit `.rc-shell` without a working ring painter), this must instead
+    // assert the ring DOES paint on `.rc-shell` here, mirroring the
+    // assertion pattern used for the visual cluster above.
+    it('applies the inline focus box-shadow to .rc-shell on a single-AREA marker too (real node — D2 reaches it via markup, not hoverKey) and clears it on blur', () => {
       const { raw, typed } = areaChild('hebbal', 13.0, 77.6);
       render(
         <AreaDestinationMarkerLayer
@@ -1342,11 +1538,54 @@ describe('AreaDestinationMarkerLayer — dense AREA children (single markers + v
           onSelect={vi.fn()}
         />,
       );
-      const el = (capturedMarkers[0].getElement() as HTMLElement).querySelector<HTMLElement>(
-        '[role="button"][tabindex="0"]',
-      );
+      const markerEl = capturedMarkers[0].getElement() as HTMLElement;
+      const el = markerEl.querySelector<HTMLElement>('[role="button"][tabindex="0"]');
+      const shellEl = markerEl.querySelector<HTMLElement>('.rc-shell');
+      expect(el).not.toBeNull();
+      expect(shellEl).not.toBeNull();
+      const initialShadow = shellEl!.style.boxShadow;
+
       el!.dispatchEvent(new FocusEvent('focus'));
+      expect(shellEl!.style.boxShadow).not.toBe(initialShadow);
+      expect(shellEl!.style.boxShadow).toContain('#FFFFFF'); // C_PAPER
+      expect(shellEl!.style.boxShadow).toContain('#1B2A45'); // C_NAVY
+      // The outer wrapper is never the paint target — production only ever
+      // writes to `.rc-shell` (`ringEl = shellEl ?? el`).
       expect(el!.style.boxShadow).toBe('');
+
+      el!.dispatchEvent(new FocusEvent('blur'));
+      expect(shellEl!.style.boxShadow).toBe(initialShadow);
+    });
+
+    // Same D2 coverage as immediately above, for the Explore (directions-level
+    // single member) family — the third of the three marker families this
+    // module's AC7 matrix comment (module top) tracks. `markerShellHtml`
+    // gives this variant a `.rc-shell` too, so the ring painter must reach
+    // it exactly the same way.
+    it('applies the inline focus box-shadow to .rc-shell on an Explore (directions-level) marker too and clears it on blur', () => {
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [ROOT_NODE.children[1]] }}
+          levelKind="directions"
+          children={[makeChild()]}
+          onSelect={vi.fn()}
+        />,
+      );
+      const markerEl = capturedMarkers[0].getElement() as HTMLElement;
+      const el = markerEl.querySelector<HTMLElement>('[role="button"][tabindex="0"]');
+      const shellEl = markerEl.querySelector<HTMLElement>('.rc-shell');
+      expect(el).not.toBeNull();
+      expect(shellEl).not.toBeNull();
+      const initialShadow = shellEl!.style.boxShadow;
+
+      el!.dispatchEvent(new FocusEvent('focus'));
+      expect(shellEl!.style.boxShadow).not.toBe(initialShadow);
+      expect(shellEl!.style.boxShadow).toContain('#FFFFFF'); // C_PAPER
+      expect(shellEl!.style.boxShadow).toContain('#1B2A45'); // C_NAVY
+      expect(el!.style.boxShadow).toBe('');
+
+      el!.dispatchEvent(new FocusEvent('blur'));
+      expect(shellEl!.style.boxShadow).toBe(initialShadow);
     });
   });
 

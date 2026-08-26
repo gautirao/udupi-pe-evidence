@@ -444,44 +444,70 @@
     }
   }
 
-  /* Issue #2305 (Option B visual cluster marker reskin, stage 1) — hover/press
-     emphasis for the new `.rc-shell`/`.rc-footer` card markup
-     (`markerPrimitives.ts` visualClusterCardHtml). UNREFERENCED THIS STAGE:
-     no production divIcon emits `.area-visual-cluster-marker-icon` /
-     `.rc-shell` / `.rc-footer` yet (that call-site wiring is stage 2, after
-     Issue #1943 merges) — this block is a safe no-op until then. `!important`
-     on box-shadow/background is required because the resting values are
-     inline declarations on the Leaflet-rendered element, which always
-     outrank a selector-based author rule — the same technique the design
-     source itself uses
+  /* Issue #2330 (Discover map marker action-system reskin) — hover/keyboard-
+     focus/pressed emphasis for the shared `.rc-shell`/`.rc-body`/`.rc-footer`
+     connected-card markup (`markerPrimitives.ts`'s `markerShellHtml`), now
+     shared by all three marker families — Explore, Zoom in, and View
+     homes/View schools (`AreaMarkerLayer.tsx`'s `makeDestinationCard`,
+     `makeAreaVisualClusterCard`, `makeSingleAreaChildCard` respectively).
+     Keyed on `data-marker-shell`/`data-journey`/`data-action-kind` —
+     attributes `markerShellHtml` colocates on the SAME outer wrapper element
+     — NEVER on `data-testid` (AC16: test-ids are test addresses, not style
+     hooks; `data-marker-shell="true"` is emitted ONLY by this shared
+     primitive, so it needs no marker-family class prefix to stay
+     unambiguous). Every one of the three call sites emits this attribute in
+     production today, INCLUDING `.area-visual-cluster-marker-icon` (see
+     `AreaMarkerLayer.tsx:958` — a prior draft of this comment claimed no
+     production divIcon emitted that icon class yet; that has not been true
+     since Issue #1943/#2305 wired the 'areas' call site).
+     `!important` on box-shadow/background/filter is required because the
+     resting values are inline declarations on the Leaflet-rendered element,
+     which always outrank a selector-based author rule — the same technique
+     the design source itself uses
      (docs/design/retrends-design-system/ui_kits/new_discover/experience.html:28-34).
      `transform` carries no `!important`: `.rc-shell` itself never has an
      inline `transform` (only the outer wrapper does, via
      `MARKER_SHELL_STYLE` in `markerPrimitives.ts`, which this selector
      doesn't target), and the design source omits `!important` there too. */
-  .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"]:hover .rc-shell,
-  .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"]:focus-within .rc-shell {
+  [data-marker-shell="true"]:hover .rc-shell,
+  [data-marker-shell="true"]:focus-within .rc-shell {
     transform: translateY(-2px);
     box-shadow: 0 14px 28px rgba(18, 24, 38, 0.38) !important;
   }
 
-  .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"]:hover .rc-footer,
-  .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"]:focus-within .rc-footer {
+  /* Zoom in — white footer tints TOWARD the body colour on hover/focus
+     (VISUAL_RULES.md's "Interaction states": "tints toward the body colour
+     on white footers"). */
+  [data-marker-shell="true"][data-action-kind="zoom"]:hover .rc-footer,
+  [data-marker-shell="true"][data-action-kind="zoom"]:focus-within .rc-footer {
     background: #F2E8E1 !important; /* copper-100 — residential journey */
   }
 
-  .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"][data-journey="schools"]:hover .rc-footer,
-  .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"][data-journey="schools"]:focus-within .rc-footer {
-    background: #DED7EC !important; /* plum-100 — never reuse the copper tint here (risk R3) */
+  [data-marker-shell="true"][data-action-kind="zoom"][data-journey="schools"]:hover .rc-footer,
+  [data-marker-shell="true"][data-action-kind="zoom"][data-journey="schools"]:focus-within .rc-footer {
+    background: #F1EDF7 !important; /* plum-tint — never reuse the copper-100 residential tint here (risk R3/R1) */
   }
 
-  .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"]:active .rc-shell {
+  /* Explore / View homes / View schools — SOLID footer darkens via a
+     brightness filter on hover/focus (VISUAL_RULES.md: "footer darkens via
+     filter:brightness(1.1-1.15) on solid footers"); never a background
+     swap, since the footer is already solid. */
+  [data-marker-shell="true"][data-action-kind="explore"]:hover .rc-footer,
+  [data-marker-shell="true"][data-action-kind="explore"]:focus-within .rc-footer,
+  [data-marker-shell="true"][data-action-kind="view-homes"]:hover .rc-footer,
+  [data-marker-shell="true"][data-action-kind="view-homes"]:focus-within .rc-footer,
+  [data-marker-shell="true"][data-action-kind="view-schools"]:hover .rc-footer,
+  [data-marker-shell="true"][data-action-kind="view-schools"]:focus-within .rc-footer {
+    filter: brightness(1.12) !important;
+  }
+
+  [data-marker-shell="true"]:active .rc-shell {
     transform: scale(0.97) !important;
     transition: transform 0.08s ease;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .area-visual-cluster-marker-icon [data-testid="area-visual-cluster-marker"] .rc-shell {
+    [data-marker-shell="true"] .rc-shell {
       transition: none;
     }
   }

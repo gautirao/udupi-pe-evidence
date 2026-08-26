@@ -1596,19 +1596,33 @@ describe('Issue #1943 (code review cycle 2, FIX 5) — AreaDestinationMarkerLaye
     expect(onAreaVisualClusterCameraIntent).not.toHaveBeenCalled();
   });
 
-  it('clusterAreaMembers merges a pair with an explicit wider footprint override that the default 110x100 footprint would NOT merge', () => {
+  it('clusterAreaMembers merges a pair with an explicit wider footprint override that a 110x100 footprint would NOT merge', () => {
     // 150px apart on the x-axis (project: 1 degree lon == 1000px here) —
-    // outside the default AREA_CARD_FOOTPRINT_WIDTH_PX=110 half-width
-    // separation (55px) either side, so the two land in different grid
-    // cells AND their default-sized card rects do not overlap.
+    // outside a 110px-wide footprint's half-width separation (55px) either
+    // side, so the two land in different grid cells AND their 110px-sized
+    // card rects do not overlap.
+    //
+    // Issue #2330 (must_update, approved-plan.toml) — this test used to rely
+    // on 110x100 being `clusterAreaMembers`'s DEFAULT footprint (the
+    // pre-#2330 leaf card's painted size). The leaf's shell width is now
+    // fixed at 172px (D1), so `AREA_CARD_FOOTPRINT_WIDTH_PX` (the default
+    // this function falls back to when no override is supplied) changed to
+    // 172 too — at that width the SAME 150px-apart pair's rects now overlap
+    // and would merge, which is not what this test is exercising. Passing
+    // `footprintWidthPx: 110`/`footprintHeightPx: 100` explicitly keeps the
+    // test's ACTUAL intent (two grid-separated points at a NARROW footprint
+    // stay separate) rather than silently changing what it proves.
     const project = (lat: number, lon: number) => ({ x: lon * 1000, y: lat * 1000 });
     const members: (ClusterableDestination & { nodeKey: string })[] = [
       { nodeKey: 'left', identityKey: 'left', displayLabel: 'Left', lat: 13.0, lon: 0, listingCount: 5, displayOrder: 0, schoolCount: null },
       { nodeKey: 'right', identityKey: 'right', displayLabel: 'Right', lat: 13.0, lon: 0.15, listingCount: 5, displayOrder: 1, schoolCount: null },
     ];
 
-    const defaultResult = clusterAreaMembers(members, project, 12);
-    expect(defaultResult.clusters).toHaveLength(2);
+    const narrowResult = clusterAreaMembers(members, project, 12, {
+      footprintWidthPx: 110,
+      footprintHeightPx: 100,
+    });
+    expect(narrowResult.clusters).toHaveLength(2);
 
     // A 300px-wide footprint (half-width 150px) makes the two 150px-apart
     // cards overlap, so the SAME grid-separated pair now merges into one

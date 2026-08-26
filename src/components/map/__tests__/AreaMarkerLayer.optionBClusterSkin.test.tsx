@@ -1,22 +1,23 @@
 /**
- * Unit tests for `visualClusterCardHtml` — Issue #2305 STAGE 1 (zero-collision
- * precursor). This is a FUNCTION-LEVEL test against the new pure builder in
- * `markerPrimitives.ts` only — no Leaflet mock/harness needed, because the
- * builder has no React/Leaflet/DOM dependency of its own. Wiring this
- * function into `AreaMarkerLayer.tsx`'s `makeAreaVisualClusterCard` call site
- * is stage 2 (deferred until Issue #1943 merges); see
- * `.claude/handoffs/issue-2305/team-lead-plan-stage1.toml`.
+ * Unit tests for `markerShellHtml` — Issue #2330 (Discover map marker
+ * action-system reskin). This is a FUNCTION-LEVEL test against the shared
+ * shell primitive in `markerPrimitives.ts` only — no Leaflet mock/harness
+ * needed, because the builder has no React/Leaflet/DOM dependency of its
+ * own. `markerShellHtml` REPLACES the pre-#2330 `visualClusterCardHtml`
+ * (which only ever painted the "Zoom in" treatment); this file now exercises
+ * all three action kinds (`explore`/`zoom`/`view-homes`) plus the journey
+ * axis, proving the primitive is geometry/palette-only and orthogonal on
+ * both inputs, per the approved plan.
  */
 import { describe, it, expect } from 'vitest';
 import { escapeHtml } from '@/lib/security';
-import { markerInteractiveAttrs, visualClusterCardHtml } from '../markerPrimitives';
-import { NAVY_800, PAPER, COPPER_500, PLUM_600, SHADOW_LG, FONT_SANS, FONT_MONO } from '../markerTokens';
+import { markerInteractiveAttrs, markerShellHtml, zoomGlyphSvg } from '../markerPrimitives';
+import { NAVY_800, PAPER, COPPER_500, COPPER_600, COPPER_100, PLUM_600, PLUM_TINT, SHADOW_MD, SHADOW_LG, FONT_SANS } from '../markerTokens';
 
 const FONT_SANS_ATTR = escapeHtml(FONT_SANS);
-const FONT_MONO_ATTR = escapeHtml(FONT_MONO);
 const WIDTH_PX = 172;
 
-function baseOptions(overrides: Partial<Parameters<typeof visualClusterCardHtml>[0]> = {}) {
+function baseOptions(overrides: Partial<Parameters<typeof markerShellHtml>[0]> = {}) {
   return {
     shellAttrs: markerInteractiveAttrs({
       testId: 'area-visual-cluster-marker',
@@ -24,200 +25,174 @@ function baseOptions(overrides: Partial<Parameters<typeof visualClusterCardHtml>
       ariaLabel: 'Koramangala, Indiranagar, 2 areas with matches, 72 listings',
     }),
     titleAttr: '',
-    namesHtml: 'Koramangala, Indiranagar',
-    heroNumberHtml: '72',
-    heroUnitHtml: 'listings',
-    pillHtml: '2 areas with matches',
-    accent: COPPER_500,
+    actionKind: 'zoom' as const,
+    journey: 'areas' as const,
     widthPx: WIDTH_PX,
-    isFocusedSelected: false,
+    isSelected: false,
     journeyAttr: '',
     fontSansAttr: FONT_SANS_ATTR,
-    fontMonoAttr: FONT_MONO_ATTR,
+    identityHtml: '<span>Koramangala, Indiranagar</span>',
+    footerIconHtml: zoomGlyphSvg(COPPER_600),
+    footerLabelText: 'Zoom in',
     ...overrides,
   };
 }
 
-describe('visualClusterCardHtml — structure', () => {
-  it('emits one connected shell containing a navy section, a white footer, and a tail, with overflow:hidden', () => {
-    const html = visualClusterCardHtml(baseOptions());
+describe('markerShellHtml — structure', () => {
+  it('emits one connected shell containing an identity section, a footer, and a tail, with overflow:hidden', () => {
+    const html = markerShellHtml(baseOptions());
 
     expect(html).toContain('class="rc-shell"');
     expect(html).toMatch(/class="rc-shell"[^>]*overflow:hidden/);
     expect(html).toMatch(/class="rc-shell"[^>]*border-radius:12px/);
-    expect(html).toContain(`box-shadow:${SHADOW_LG}`);
-    expect(html).toContain(`background:${NAVY_800};color:#fff`);
+    expect(html).toContain('class="rc-body"');
     expect(html).toContain('class="rc-footer"');
-    expect(html).toContain(`background:${PAPER}`);
     expect(html).toContain('class="rc-tail"');
-    expect(html).toContain(`border-top:7px solid ${COPPER_500}`);
 
-    // Exactly one shared shell — the navy section and footer are both nested
-    // inside the single `.rc-shell`, not two separate top-level cards.
+    // Exactly one shared shell — the identity section and footer are both
+    // nested inside the single `.rc-shell`, not two separate top-level cards.
     expect(html.match(/class="rc-shell"/g)).toHaveLength(1);
   });
 
-  it(`sizes the shell to widthPx and clamps names to widthPx-28`, () => {
-    const html = visualClusterCardHtml(baseOptions({ widthPx: 172 }));
+  it('sizes the shell to the caller-supplied widthPx — never hardcodes a width (D1)', () => {
+    const html = markerShellHtml(baseOptions({ widthPx: 172 }));
     expect(html).toMatch(/class="rc-shell"[^>]*width:172px/);
-    expect(html).toContain('max-width:144px');
-  });
-});
 
-describe('visualClusterCardHtml — copy', () => {
-  it('renders the exact "Zoom in" footer copy with a chevron, never the retired "Tap to zoom"', () => {
-    const html = visualClusterCardHtml(baseOptions());
+    const narrower = markerShellHtml(baseOptions({ widthPx: 150 }));
+    expect(narrower).toMatch(/class="rc-shell"[^>]*width:150px/);
+  });
+
+  it('carries the identityHtml and footer icon/label/chevron exactly as supplied — never re-deriving content', () => {
+    const html = markerShellHtml(
+      baseOptions({ identityHtml: '<span data-marker="probe">probe-content</span>' }),
+    );
+    expect(html).toContain('<span data-marker="probe">probe-content</span>');
     expect(html).toContain('>Zoom in<');
     expect(html).toContain('&#8250;');
-    expect(html).not.toContain('Tap to zoom');
   });
 
-  it('renders a plural hero unit for a count > 1', () => {
-    const html = visualClusterCardHtml(baseOptions({ heroNumberHtml: '72', heroUnitHtml: 'listings' }));
-    expect(html).toMatch(/>72<\/span>/);
-    expect(html).toMatch(/\blistings\b/);
-  });
-
-  it('renders a singular hero unit for a count of 1, not matched by a "listings" substring check', () => {
-    const html = visualClusterCardHtml(baseOptions({ heroNumberHtml: '1', heroUnitHtml: 'listing' }));
-    expect(html).toMatch(/>1<\/span>/);
-    expect(html).toMatch(/>listing<\/span>/);
-    expect(html).not.toMatch(/>listings<\/span>/);
-  });
-
-  it('renders the zero-count guard phrase and never a bare mono "0"', () => {
-    const html = visualClusterCardHtml(
-      baseOptions({ heroNumberHtml: undefined, heroUnitHtml: undefined, zeroPhraseHtml: 'No listings yet' }),
+  it('places exactly one data-marker-shell/data-action-kind/data-journey attribute set, colocated with shellAttrs on the OUTER wrapper (AC16) — never on .rc-shell', () => {
+    const html = markerShellHtml(baseOptions({ journeyAttr: 'data-journey="schools"' }));
+    expect(html).toMatch(
+      /^<div data-testid="area-visual-cluster-marker"[^>]*data-action-kind="zoom" data-marker-shell="true" data-journey="schools" style="/,
     );
-    expect(html).toContain('No listings yet');
-    expect(html).not.toMatch(/>0</);
-  });
-
-  it('lets zeroPhraseHtml win even when heroNumberHtml/heroUnitHtml are also supplied, per the documented "Ignored when zeroPhraseHtml is set" contract', () => {
-    const html = visualClusterCardHtml(
-      baseOptions({ heroNumberHtml: '72', heroUnitHtml: 'listings', zeroPhraseHtml: 'No listings yet' }),
-    );
-    expect(html).toContain('No listings yet');
-    // The number+unit hero row is absent entirely, not just visually superseded.
-    expect(html).not.toMatch(/>72<\/span>/);
-    expect(html).not.toMatch(/>listings<\/span>/);
-  });
-
-  it('renders the pill label verbatim, including the "+N" prefix form', () => {
-    const plain = visualClusterCardHtml(baseOptions({ pillHtml: '2 areas with matches' }));
-    expect(plain).toContain('>2 areas with matches<');
-
-    const hidden = visualClusterCardHtml(baseOptions({ pillHtml: '+1 areas with matches' }));
-    expect(hidden).toContain('>+1 areas with matches<');
+    expect(html.match(/data-marker-shell="true"/g)).toHaveLength(1);
+    expect(html.match(/data-action-kind="zoom"/g)).toHaveLength(1);
+    expect(html.match(/data-journey="schools"/g)).toHaveLength(1);
+    expect(html).not.toMatch(/class="rc-shell"[^>]*data-journey="schools"/);
+    expect(html).not.toMatch(/class="rc-shell"[^>]*data-marker-shell/);
   });
 });
 
-describe('visualClusterCardHtml — accessibility', () => {
+describe('markerShellHtml — accessibility', () => {
   it('carries exactly one role="button" and one tabindex="0"', () => {
-    const html = visualClusterCardHtml(baseOptions());
+    const html = markerShellHtml(baseOptions());
     expect(html.match(/role="button"/g)).toHaveLength(1);
     expect(html.match(/tabindex="0"/g)).toHaveLength(1);
   });
 
-  it('places the full-names title attribute on the shell when truncation occurred', () => {
-    const html = visualClusterCardHtml(
-      baseOptions({
-        namesHtml: 'Very Long Area Nam&hellip;, Another Long Name&hellip;',
-        titleAttr: 'title="Very Long Area Name One, Another Long Name Two"',
-      }),
-    );
-    expect(html).toMatch(/class="rc-shell"[^>]*title="Very Long Area Name One, Another Long Name Two"/);
-  });
-
-  // PR #2315 review fix — relocated from `.rc-shell` to the OUTER wrapper
-  // (the same element `shellAttrs`/`data-testid` sit on). index.css's
-  // hover/focus footer-tint rule for the schools journey is a COMPOUND
-  // selector — `[data-testid="area-visual-cluster-marker"]
-  // [data-journey="schools"]:hover .rc-footer` — requiring BOTH attributes
-  // on the SAME element. With `journeyAttr` on `.rc-shell` (a different
-  // element from `data-testid`), that selector could never match at all.
-  it('places a non-empty journeyAttr on the OUTER wrapper (colocated with data-testid), verbatim, exactly once, and never on .rc-shell', () => {
-    const html = visualClusterCardHtml(baseOptions({ journeyAttr: 'data-journey="schools"' }));
-    // Outer wrapper: shellAttrs (data-testid="area-visual-cluster-marker")
-    // then journeyAttr, immediately before the wrapper's own `style=` —
-    // colocated on the SAME element index.css's compound selector targets.
-    expect(html).toMatch(/^<div data-testid="area-visual-cluster-marker"[^>]*data-journey="schools" style="/);
-    // Never on .rc-shell — the exact bug this relocation fixes.
-    expect(html).not.toMatch(/class="rc-shell"[^>]*data-journey="schools"/);
-    // Single source of truth — never emitted on BOTH elements either
-    // (the other rejected fix; this guard is unchanged from before the
-    // relocation and must still be meaningful and passing).
-    expect(html.match(/data-journey="schools"/g)).toHaveLength(1);
-  });
-});
-
-describe('visualClusterCardHtml — accent switching', () => {
-  it('resolves the footer text/chevron/tail to the copper accent for the residential journey, shell stays navy', () => {
-    const html = visualClusterCardHtml(baseOptions({ accent: COPPER_500 }));
-    expect(html).toContain(`color:${COPPER_500};">Zoom in`);
-    expect(html).toContain(`border-top:7px solid ${COPPER_500}`);
-    expect(html).toContain(`background:${NAVY_800};color:#fff`);
-  });
-
-  it('carries the accent hex on the zoom-glyph SVG stroke', () => {
-    const html = visualClusterCardHtml(baseOptions({ accent: COPPER_500 }));
-    expect(html).toMatch(new RegExp(`<svg[^>]*stroke="${COPPER_500}"`));
-  });
-
-  it('resolves the footer text/chevron/tail to the plum accent for the schools journey, shell stays navy', () => {
-    const html = visualClusterCardHtml(baseOptions({ accent: PLUM_600 }));
-    expect(html).toContain(`color:${PLUM_600};">Zoom in`);
-    expect(html).toContain(`border-top:7px solid ${PLUM_600}`);
-    expect(html).toContain(`background:${NAVY_800};color:#fff`);
-    expect(html).not.toContain(COPPER_500);
-  });
-});
-
-describe('visualClusterCardHtml — selected state', () => {
-  it('emits the double-ring box-shadow and the heavier border when isFocusedSelected is true', () => {
-    const html = visualClusterCardHtml(
-      baseOptions({
-        isFocusedSelected: true,
-        shellAttrs: markerInteractiveAttrs({
-          testId: 'area-visual-cluster-marker',
-          nodeKey: 'visual-cluster:koramangala|indiranagar',
-          selected: true,
-          ariaLabel: 'Koramangala, Indiranagar, 2 areas with matches, 72 listings',
-        }),
-      }),
-    );
-    expect(html).toContain(`box-shadow:0 0 0 2px ${PAPER}, 0 0 0 4px ${NAVY_800}, ${SHADOW_LG}`);
-    expect(html).toContain('border:1.5px solid rgba(27,42,69,0.4)');
-    expect(html).toContain('data-selected="true"');
-  });
-
-  it('emits neither the double ring nor the heavier border when isFocusedSelected is false', () => {
-    const html = visualClusterCardHtml(baseOptions({ isFocusedSelected: false }));
-    expect(html).not.toContain('rgba(27,42,69,0.4)');
-    expect(html).toContain('border:1.5px solid rgba(27,42,69,0.24)');
-    expect(html).toContain(`box-shadow:${SHADOW_LG};`);
-  });
-
-  it('pins the exact shellBorderColor value for the focused-selected branch (rgba(27,42,69,0.4), not merely present)', () => {
-    const html = visualClusterCardHtml(baseOptions({ isFocusedSelected: true }));
-    expect(html).toMatch(/border:1\.5px solid rgba\(27,42,69,0\.4\);/);
-    // Assert the sibling branch's value is absent too, so emitting both borders fails here.
-    expect(html).not.toMatch(/border:1\.5px solid rgba\(27,42,69,0\.24\);/);
-  });
-
-  it('pins the exact shellBorderColor value for the unfocused branch (rgba(27,42,69,0.24), not merely present)', () => {
-    const html = visualClusterCardHtml(baseOptions({ isFocusedSelected: false }));
-    expect(html).toMatch(/border:1\.5px solid rgba\(27,42,69,0\.24\);/);
-    expect(html).not.toMatch(/border:1\.5px solid rgba\(27,42,69,0\.4\);/);
-  });
-});
-
-describe('visualClusterCardHtml — keyboard target', () => {
   it('exposes a single [role="button"][tabindex="0"] element that a caller can bind Enter/Space handling to', () => {
-    const html = visualClusterCardHtml(baseOptions());
+    const html = markerShellHtml(baseOptions());
     const container = document.createElement('div');
     container.innerHTML = html;
     const targets = container.querySelectorAll('[role="button"][tabindex="0"]');
     expect(targets).toHaveLength(1);
+  });
+
+  it('places the title attribute on the .rc-shell element when the caller supplies one', () => {
+    const html = markerShellHtml(
+      baseOptions({ titleAttr: 'title="Very Long Area Name One, Another Long Name Two"' }),
+    );
+    expect(html).toMatch(/class="rc-shell"[^>]*title="Very Long Area Name One, Another Long Name Two"/);
+  });
+});
+
+describe('markerShellHtml — palette per (actionKind, journey), orthogonal', () => {
+  it('explore/areas: navy body + white text, solid copper footer with white text', () => {
+    const html = markerShellHtml(
+      baseOptions({ actionKind: 'explore', journey: 'areas', footerLabelText: 'Explore' }),
+    );
+    expect(html).toMatch(/class="rc-body"[^>]*background:#1B2A45;color:#FFFFFF/i);
+    expect(html).toMatch(/class="rc-footer"[^>]*background:#B05C3A/);
+    expect(html).toContain(`color:${PAPER};">Explore<`);
+  });
+
+  it('explore/schools: navy body stays navy (identity is geography, not journey-specific); footer flips to plum', () => {
+    const html = markerShellHtml(baseOptions({ actionKind: 'explore', journey: 'schools' }));
+    expect(html).toMatch(/class="rc-body"[^>]*background:#1B2A45;color:#FFFFFF/i);
+    expect(html).toMatch(/class="rc-footer"[^>]*background:#5E5286/);
+  });
+
+  it('zoom/areas: copper-100 light body, navy text; WHITE footer, copper-600 text/icon; copper-500 border/tail', () => {
+    const html = markerShellHtml(baseOptions({ actionKind: 'zoom', journey: 'areas' }));
+    expect(html).toMatch(new RegExp(`class="rc-body"[^>]*background:${COPPER_100};color:${NAVY_800}`));
+    expect(html).toMatch(/class="rc-footer"[^>]*background:#FFFFFF/);
+    expect(html).toContain(`border:1.5px solid ${COPPER_500}`);
+    expect(html).toContain(`border-top:7px solid ${COPPER_500}`);
+    // Never the superseded pre-#2330 dark Option-B body.
+    expect(html).not.toContain(`background:${NAVY_800};color:#fff`);
+  });
+
+  it('zoom/schools: plum-tint light body, navy text; WHITE footer, plum-600 border/tail — never reusing the residential copper tint', () => {
+    const html = markerShellHtml(baseOptions({ actionKind: 'zoom', journey: 'schools' }));
+    expect(html).toMatch(new RegExp(`class="rc-body"[^>]*background:${PLUM_TINT};color:${NAVY_800}`));
+    expect(html).toContain(`border:1.5px solid ${PLUM_600}`);
+    expect(html).toContain(`border-top:7px solid ${PLUM_600}`);
+    expect(html).not.toContain(COPPER_100);
+    expect(html).not.toContain(COPPER_500);
+  });
+
+  it('view-homes: white body + navy text, SOLID navy footer with white text — the inverse of explore', () => {
+    const html = markerShellHtml(
+      baseOptions({ actionKind: 'view-homes', journey: 'areas', footerLabelText: 'View homes' }),
+    );
+    expect(html).toMatch(new RegExp(`class="rc-body"[^>]*background:${PAPER};color:${NAVY_800}`));
+    expect(html).toMatch(/class="rc-footer"[^>]*background:#1B2A45/);
+    expect(html).toContain(`color:${PAPER};">View homes<`);
+  });
+
+  it('view-schools: white body + navy text, SOLID plum footer with white text', () => {
+    const html = markerShellHtml(
+      baseOptions({ actionKind: 'view-schools', journey: 'schools', footerLabelText: 'View schools' }),
+    );
+    expect(html).toMatch(new RegExp(`class="rc-body"[^>]*background:${PAPER};color:${NAVY_800}`));
+    expect(html).toMatch(/class="rc-footer"[^>]*background:#5E5286/);
+    expect(html).toContain(`color:${PAPER};">View schools<`);
+  });
+});
+
+describe('markerShellHtml — selected state', () => {
+  it('explore: selected adds a persistent navy outline + shadow-lg; border stays the resting rgba(27,42,69,0.24) unless the caller\'s own border logic changes it', () => {
+    const html = markerShellHtml(baseOptions({ actionKind: 'explore', journey: 'areas', isSelected: true }));
+    expect(html).toContain(`outline:2px solid ${NAVY_800};outline-offset:2px;`);
+    expect(html).toContain(`box-shadow:${SHADOW_LG}`);
+    expect(html).toContain('border:1.5px solid rgba(27,42,69,0.4)');
+  });
+
+  it('explore: unselected has no outline, shadow-md, and the resting border', () => {
+    const html = markerShellHtml(baseOptions({ actionKind: 'explore', journey: 'areas', isSelected: false }));
+    expect(html).not.toContain('outline:2px solid');
+    expect(html).toContain(`box-shadow:${SHADOW_MD}`);
+    expect(html).toContain('border:1.5px solid rgba(27,42,69,0.24)');
+  });
+
+  it('zoom: border is the SOLID accent regardless of selection; selected adds the accent outline + shadow-lg', () => {
+    const resting = markerShellHtml(baseOptions({ actionKind: 'zoom', journey: 'areas', isSelected: false }));
+    const selected = markerShellHtml(baseOptions({ actionKind: 'zoom', journey: 'areas', isSelected: true }));
+    expect(resting).toContain(`border:1.5px solid ${COPPER_500}`);
+    expect(selected).toContain(`border:1.5px solid ${COPPER_500}`);
+    expect(selected).toContain(`outline:2px solid ${COPPER_500};outline-offset:2px;`);
+    expect(resting).not.toContain('outline:2px solid');
+    expect(resting).toContain(`box-shadow:${SHADOW_MD}`);
+    expect(selected).toContain(`box-shadow:${SHADOW_LG}`);
+  });
+
+  it('view-homes: selected adds a persistent navy outline + shadow-lg, heavier border', () => {
+    const html = markerShellHtml(
+      baseOptions({ actionKind: 'view-homes', journey: 'areas', isSelected: true, footerLabelText: 'View homes' }),
+    );
+    expect(html).toContain(`outline:2px solid ${NAVY_800};outline-offset:2px;`);
+    expect(html).toContain(`box-shadow:${SHADOW_LG}`);
+    expect(html).toContain('border:1.5px solid rgba(27,42,69,0.5)');
   });
 });
