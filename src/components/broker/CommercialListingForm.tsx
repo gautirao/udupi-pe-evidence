@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Info, Loader2, CheckCircle2 } from 'lucide-react';
 import type { NavigateFunction } from 'react-router-dom';
 import { useCreateListing, useUpdateListing, useSubmitListing, useGetListing } from '@/hooks/useBrokerListings';
@@ -20,7 +20,11 @@ import { SingleChipGroup, MultiChipGroup, type ChipOption } from '@/components/b
 import { InlinePhotos } from '@/components/broker/residential/InlinePhotos';
 import { AddressSearch } from '@/components/broker/residential/AddressSearch';
 import { MapPin } from '@/components/broker/residential/MapPin';
-import { useResidentialLocation } from '@/components/broker/residential/useResidentialLocation';
+import {
+  useResidentialLocation,
+  type UseResidentialLocationParams,
+  type UseResidentialLocationResult,
+} from '@/components/broker/residential/useResidentialLocation';
 import { InlineNearby } from '@/components/broker/residential/InlineNearby';
 import { FieldPairRow } from '@/components/broker/residential/FieldPairRow';
 import { StrengthMeter } from '@/components/broker/residential/StrengthMeter';
@@ -35,6 +39,7 @@ import {
   type CommercialSubtype,
 } from '@/lib/listingFieldConfig';
 import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
+import { commercialTypeFromPropertyType } from '@/lib/demandPrefill';
 import {
   COMMERCIAL_SUBTYPE_OPTIONS,
   COMMERCIAL_FLOOR_CHOICE_OPTIONS,
@@ -198,29 +203,90 @@ function hubTypeOptionsFor(subtype: CommercialSubtype | undefined) {
   return [];
 }
 
+/**
+ * #2348 — inverse of intOrUndef/floatOrUndef, for hydrating the form's
+ * string-typed numeric inputs from a persisted ListingResponse's typed
+ * number|null fields. Mirrors ResidentialListingForm.tsx's numToStr.
+ */
+function numToStr(n: number | null | undefined): string {
+  return n != null ? String(n) : '';
+}
+
+const DRAFT_RECOVERY_TIMEOUT_MS = 15_000;
+
+interface ResidentialLocationBridgeProps {
+  params: UseResidentialLocationParams;
+  onLocation: (location: UseResidentialLocationResult) => void;
+}
+
+/**
+ * #2348 — owns the SINGLE useResidentialLocation instance, defined at module
+ * scope so its component identity is stable across parent renders and only
+ * the caller's `key` prop controls remounting. Mirrors
+ * ResidentialListingForm.tsx's ResidentialLocationBridge (issue #2039, fix
+ * cycle 2): useResidentialLocation's own useMountEffect captures
+ * addressConfirmed/initialLatitude/initialLongitude/initialLocality exactly
+ * once, at its first post-mount effect flush — for a URL-seeded draft that
+ * flush always loses the race against the draft's network fetch. Remounting
+ * this bridge (via a key that flips exactly once, see locationRemountKey
+ * below) forces a second, correctly-timed capture.
+ */
+function ResidentialLocationBridge({ params, onLocation }: ResidentialLocationBridgeProps) {
+  const location = useResidentialLocation(params);
+  useEffect(() => {
+    onLocation(location);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only these state slices should retrigger the lift
+  }, [location.state, location.geoError, location.pickerOpen, location.saveError, location.isSaving, onLocation]);
+  return null;
+}
+
 interface CommercialListingFormProps {
   initialPropertyType: CommercialPropertyType;
   /** #1748 — optional demand-gap prefill; only the shared 'sale'|'rent' vocabulary
    *  is forwarded (never 'lease'). Defaults to 'sale' when absent. */
   initialListingPurpose?: 'sale' | 'rent';
+  /**
+   * #2348 — a draft id recovered from the route's ?draftId= query param at
+   * mount (URL-seeded only). When present, the form hydrates from the
+   * persisted draft instead of starting a blank Step-1 create. Never
+   * re-seeded after mount.
+   */
+  initialDraftId?: string | null;
   onSwitchToGenericFlow: () => void;
   navigate: NavigateFunction;
+  /**
+   * #2348 — fired exactly once, right after this session's own first
+   * successful draft create (never on later updates), so the route-owning
+   * page can stash the new id into the URL via history REPLACE.
+   */
+  onDraftPersisted?: (id: string) => void;
 }
 
-export function CommercialListingForm({ initialPropertyType, initialListingPurpose, onSwitchToGenericFlow, navigate }: CommercialListingFormProps) {
+export function CommercialListingForm({ initialPropertyType, initialListingPurpose, initialDraftId, onSwitchToGenericFlow, navigate, onDraftPersisted }: CommercialListingFormProps) {
   const createListing = useCreateListing();
   const { toast } = useToast();
 
-  const [listingId, setListingId] = useState<string | null>(null);
+  // #2348 — seeded from initialDraftId at mount (useState initializer only
+  // runs once), mirrors ResidentialListingForm.tsx (issue #2039).
+  const [listingId, setListingId] = useState<string | null>(initialDraftId ?? null);
   const [mode, setMode] = useState<'edit' | 'review'>('edit');
   const [submitted, setSubmitted] = useState(false);
   const draftInFlightRef = useRef(false);
+
+  // #2348 — captured once at mount: true only when this instance was mounted
+  // WITH a draftId already in the URL (a fresh page load / real browser
+  // refresh), never when listingId is later set by this session's own
+  // create. Guards the one-shot hydrate effect below.
+  const urlSeededRef = useRef(initialDraftId != null);
+  const didHydrateRef = useRef(false);
+  const [draftLoadError, setDraftLoadError] = useState<string | null>(null);
 
   const updateListing = useUpdateListing(listingId ?? '');
   const submitListing = useSubmitListing(listingId ?? undefined);
   const { images, imageCount } = useListingImages(listingId ?? undefined);
   const coverImageUrl = images[0]?.url ?? null;
-  const { data: draftListing } = useGetListing(listingId ?? '');
+  const draftListingQuery = useGetListing(listingId ?? '');
+  const draftListing = draftListingQuery.data;
   const addressConfirmed = draftListing?.addressConfirmed ?? false;
 
   const [propertyType, setPropertyType] = useState<CommercialPropertyType>(initialPropertyType);
@@ -232,14 +298,27 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
   const [locality, setLocality] = useState('');
   const [title, setTitle] = useState('');
 
-  const residentialLocation = useResidentialLocation({
+  const residentialLocationParams: UseResidentialLocationParams = {
     listingId,
     addressConfirmed,
     initialLatitude: draftListing?.latitude ?? null,
     initialLongitude: draftListing?.longitude ?? null,
     initialLocality: draftListing?.locality ?? '',
     onPublicLoc: setLocality,
-  });
+  };
+  // #2348 — stays 'fresh' (never remounts) for a non-URL-seeded instance.
+  // For a URL-seeded instance it flips from 'pending' to 'settled' exactly
+  // once, the render after the hydrate-success/error-fallback effect below
+  // sets didHydrateRef.current. See ResidentialLocationBridge doc above.
+  const locationRemountKey = !urlSeededRef.current ? 'fresh' : didHydrateRef.current ? 'settled' : 'pending';
+  const [residentialLocationValue, setResidentialLocationValue] = useState<UseResidentialLocationResult | null>(null);
+  const locationBridge = (
+    <ResidentialLocationBridge
+      key={locationRemountKey}
+      params={residentialLocationParams}
+      onLocation={setResidentialLocationValue}
+    />
+  );
 
   // Area
   const [landArea, setLandArea] = useState<number | null>(null);
@@ -297,6 +376,131 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
 
   const [description, setDescription] = useState('');
 
+  // #2348 — PriceField is deliberately uncontrolled (its own onChange never
+  // feeds back into `initialRupees`, or every keystroke would fight the
+  // user by reformatting the text mid-typing). This separate seed only
+  // changes ONCE, from the one-shot hydrate effect below, so it can safely
+  // be wired into `initialRupees` to sync the widget from a loaded draft
+  // without ever re-syncing off the user's own subsequent edits.
+  const [priceHydrationSeed, setPriceHydrationSeed] = useState<number | null>(null);
+
+  // #2348 — one-shot hydrate of the form from a URL-seeded draft. Only runs
+  // for an instance mounted WITH a draftId (urlSeededRef), only once
+  // (didHydrateRef), and only once the draft query has actually settled
+  // with data — never overwrites state set by this session's own
+  // createListing.onSuccess (that path never sets urlSeededRef). Deliberately
+  // does NOT touch `locality` — useResidentialLocation (via
+  // ResidentialLocationBridge) already owns that seeding from draftListing.
+  // Mirrors ResidentialListingForm.tsx's hydrate effect (issue #2039).
+  useEffect(() => {
+    if (!urlSeededRef.current || didHydrateRef.current || !draftListing) return;
+    didHydrateRef.current = true;
+
+    // A refreshed draft always lands back in edit mode, never review.
+    setMode('edit');
+
+    // Hydration wins over the initialPropertyType/initialListingPurpose
+    // prefill seeding; only overrides when the persisted type/purpose is a
+    // valid, recognised value — an unrecognized propertyType/subtype/purpose
+    // leaves the current in-flight UI state untouched rather than corrupting it.
+    const hydratedType = commercialTypeFromPropertyType(draftListing.propertyType);
+    if (hydratedType) setPropertyType(hydratedType);
+    if (draftListing.commercialSubtype === 'SHOP' || draftListing.commercialSubtype === 'OFFICE') {
+      setExplicitSubtype(draftListing.commercialSubtype);
+    }
+    if (draftListing.listingPurpose === 'sale' || draftListing.listingPurpose === 'rent' || draftListing.listingPurpose === 'lease') {
+      setListingPurpose(draftListing.listingPurpose);
+    }
+
+    setTitle(draftListing.title ?? '');
+    setDescription(draftListing.description ?? '');
+
+    setLandArea(draftListing.landArea ?? null);
+    setLandAreaUnit(draftListing.landAreaUnit ?? 'cent');
+    setBuiltArea(draftListing.builtArea ?? null);
+    setBuiltAreaUnit(draftListing.builtAreaUnit ?? 'sqft');
+    setCommercialAreaUnit(draftListing.commercialAreaUnit ?? '');
+
+    // SHOP/OFFICE
+    setFloorChoice(draftListing.floorChoice ?? '');
+    setHubType(draftListing.hubType ?? '');
+
+    // BUILDING
+    setFloorMode(draftListing.floorMode ?? '');
+    setPowerLoadKva(numToStr(draftListing.powerLoadKva));
+    setOccupancyStatus(draftListing.occupancyStatus ?? '');
+
+    // OFFICE
+    setOfficeSeats(numToStr(draftListing.officeSeats));
+    setOfficeCabins(numToStr(draftListing.officeCabins));
+    setOfficeMeetingRooms(numToStr(draftListing.officeMeetingRooms));
+
+    // WAREHOUSE
+    setWarehouseClearHeightFt(numToStr(draftListing.warehouseClearHeightFt));
+    setWarehouseLoadingBays(numToStr(draftListing.warehouseLoadingBays));
+    setWarehouseTruckAccess(draftListing.warehouseTruckAccess ?? null);
+    setWarehouseFlooring(draftListing.warehouseFlooring ?? '');
+
+    // LAND
+    setCommercialZoning(draftListing.commercialZoning ?? '');
+    setCommercialOwnership(draftListing.commercialOwnership ?? '');
+    setCommercialApprovalsText(draftListing.commercialApprovals ?? '');
+
+    // Built-space (all subtypes except LAND)
+    setWashroomsPublic(numToStr(draftListing.washroomsPublic));
+    setWashroomsPrivate(numToStr(draftListing.washroomsPrivate));
+    setParkingPublicCount(numToStr(draftListing.parkingPublicCount));
+    setParkingPrivateCount(numToStr(draftListing.parkingPrivateCount));
+    setCommercialFurnishingStatus(draftListing.commercialFurnishingStatus ?? '');
+    setUtilities(draftListing.utilities ?? []);
+
+    // All subtypes
+    setSuitableUses(draftListing.suitableUses ?? []);
+    setCommercialAvailability(draftListing.commercialAvailability ?? '');
+
+    // Terms
+    setPriceRupees(draftListing.price ?? null);
+    setPriceHydrationSeed(draftListing.price ?? null);
+    setMonthlyRent(numToStr(draftListing.monthlyRent));
+    setSecurityDepositMonths(numToStr(draftListing.securityDepositMonths));
+    setLockInMonths(numToStr(draftListing.lockInMonths));
+    setExpectedRentalYieldPct(numToStr(draftListing.expectedRentalYieldPct));
+    setCurrentMonthlyIncomePaise(numToStr(draftListing.currentMonthlyIncomePaise));
+    setLeaseTermMonths(numToStr(draftListing.leaseTermMonths));
+    setLeaseEscalationPct(numToStr(draftListing.leaseEscalationPct));
+  }, [draftListing]);
+
+  // #2348 — a stale/foreign/deleted draftId (403/404, or any fetch failure)
+  // degrades to a usable blank create form instead of an infinite spinner or
+  // a silent blank form: drop the bad listingId so the form behaves like a
+  // fresh create, and surface a clear inline message. Mirrors
+  // ResidentialListingForm.tsx (issue #2039, AC4).
+  useEffect(() => {
+    if (!urlSeededRef.current || didHydrateRef.current || !draftListingQuery.isError) return;
+    didHydrateRef.current = true;
+    setListingId(null);
+    setDraftLoadError("We couldn't load your saved draft — it may have been removed. Starting a new listing instead.");
+  }, [draftListingQuery.isError]);
+
+  // #2348 — true only while a URL-seeded draft is still being fetched for
+  // the very first time; never true for the session's own in-flight
+  // create/update calls.
+  const isRecoveringDraft = urlSeededRef.current && !didHydrateRef.current && draftListingQuery.isLoading;
+
+  // #2348 — bounds isRecoveringDraft so it can never stay locked forever if
+  // the fetch hangs with no client-side timeout. Mirrors
+  // ResidentialListingForm.tsx (issue #2039, revision 4, finding 1).
+  useEffect(() => {
+    if (!isRecoveringDraft) return;
+    const timer = setTimeout(() => {
+      if (didHydrateRef.current) return;
+      didHydrateRef.current = true;
+      setListingId(null);
+      setDraftLoadError('Loading your saved draft is taking longer than expected. Starting a new listing instead.');
+    }, DRAFT_RECOVERY_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [isRecoveringDraft]);
+
   const commercialSubtype: CommercialSubtype | undefined = deriveCommercialSubtype(propertyType, explicitSubtype);
   const isLand = commercialSubtype === 'LAND';
   const isRentOrLease = listingPurpose === 'rent' || listingPurpose === 'lease';
@@ -312,6 +516,12 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
 
   const primaryAreaSqft = isLand ? landArea : builtArea;
 
+  // #2348 — propertyType/listingPurpose (unlike ~30 other fields below) are
+  // sent unconditionally with no `?? undefined` fallback, so a PUT fired
+  // before the draft finished loading would silently overwrite these two on
+  // the server with local defaults. Safe only because the isRecoveringDraft
+  // fieldset/button guards above make that PUT unreachable while a
+  // URL-seeded draft is still resolving — do not remove those guards.
   const buildPayload = () => ({
     propertyType,
     title: title.trim() || undefined,
@@ -378,6 +588,10 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
         draftInFlightRef.current = false;
         setListingId(data.id);
         toast({ title: 'Draft saved', description: 'Continue adding photos, location, and a description below.' });
+        // #2348 — fires exactly once per session, right after the FIRST
+        // successful create; the route-owning page uses this to stash the
+        // id into the URL (history REPLACE) so a refresh can recover it.
+        onDraftPersisted?.(data.id);
         onDone?.(data.id);
       },
       onError: (error: Error) => {
@@ -441,7 +655,7 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
   // presentation contract.
   const priceOk = priceValid;
   const imagesOk = imageCount >= 3;
-  const locationEnteredOk = residentialLocation.state.resolved != null || addressConfirmed;
+  const locationEnteredOk = (residentialLocationValue?.state.resolved != null) || addressConfirmed;
   const pinConfirmedOk = addressConfirmed;
   const localityOk = locality.trim() !== '';
   // #2341 — per-subtype required-field gate, byte-for-byte mirroring
@@ -546,7 +760,10 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
 
   if (mode === 'review' && listingId) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-8 pb-24">
+      <>
+        {/* #2348 — keeps the location hook instance alive while in review mode. */}
+        {locationBridge}
+        <div className="mx-auto max-w-6xl px-4 py-8 pb-24">
         <button type="button" onClick={handleBackToEdit} className="mb-4 text-sm font-semibold text-primary">
           &larr; Back to editing
         </button>
@@ -620,12 +837,18 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 pb-24">
+    <>
+      {/* #2348 — owns the single useResidentialLocation instance for this
+          render; its remount key flips exactly once, the render a
+          URL-seeded draft's hydrate (or error-fallback) effect settles. */}
+      {locationBridge}
+      <div className="mx-auto max-w-6xl px-4 py-8 pb-24">
       <div className="mb-6">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           Commercial listing
@@ -634,10 +857,42 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
         <p className="mt-1 text-sm text-muted-foreground">
           Add what buyers actually need. Optional details stay tucked away — fill only what you know, skip the rest.
         </p>
+        {draftLoadError && (
+          <p className="mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" data-testid="commercial-draft-load-error">
+            {draftLoadError}
+          </p>
+        )}
       </div>
 
+      {/* #2348 — visible while a URL-seeded draft is loading, so the broker
+          sees why the form is briefly empty/disabled rather than assuming
+          it is a fresh, blank create. Mirrors ResidentialListingForm.tsx
+          (issue #2039, AC2/AC4). */}
+      {isRecoveringDraft && (
+        <div
+          data-testid="draft-recovery-loading"
+          aria-live="polite"
+          className="mb-4 flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground"
+        >
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+          <span>Loading your saved draft…</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-        <div className="space-y-4">
+        {/* #2348 — a native <fieldset disabled> cascades disabled to every
+            descendant form control (input, select, textarea, button —
+            including the Radix-based Select/chip buttons used throughout
+            these sections) without wiring a `disabled` prop through every
+            individual field component. Disabled only while a URL-seeded
+            draft is still resolving for the very first time
+            (isRecoveringDraft), so a broker can never type into — or
+            "Save draft"/"Continue" from — a form that is about to be
+            silently overwritten by the hydrate effect once the draft fetch
+            settles. Bounded by DRAFT_RECOVERY_TIMEOUT_MS above — this can
+            never stay disabled indefinitely. Mirrors
+            ResidentialListingForm.tsx (issue #2039, revision 4, finding 1). */}
+        <fieldset className="min-w-0 space-y-4 border-0 p-0 m-0" disabled={isRecoveringDraft}>
           {/* Section 1 — Property type & purpose */}
           <Section number={1} title="Property type & purpose">
             <PropertyTypeCardSelector
@@ -680,7 +935,7 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
           {/* Section 2 — Where is it? */}
           <Section number={2} title="Where is it?">
             <Field id="locality" label="Locality / area *">
-              <AddressSearch location={residentialLocation} />
+              {residentialLocationValue && <AddressSearch location={residentialLocationValue} />}
               {hasAttempted && !locality.trim() && <p className="text-sm text-destructive">Locality is required.</p>}
             </Field>
 
@@ -844,7 +1099,7 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
           <Section number={4} title={listingPurpose === 'sale' ? 'Sale terms' : listingPurpose === 'lease' ? 'Lease terms' : 'Rent terms'}>
             {!isRentOrLease && fieldVisible('price') && (
               <div>
-                <PriceField id="price" initialRupees={null} onChange={setPriceRupees} required />
+                <PriceField id="price" initialRupees={priceHydrationSeed} onChange={setPriceRupees} required disabled={isRecoveringDraft} />
                 {hasAttempted && (priceRupees == null || priceRupees <= 0) && (
                   <p className="mt-1 text-sm text-destructive">A valid price greater than 0 is required.</p>
                 )}
@@ -956,7 +1211,7 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
               <>
                 <InlinePhotos listingId={listingId} />
                 <div className="h-px bg-border" />
-                <MapPin location={residentialLocation} />
+                {residentialLocationValue && <MapPin location={residentialLocationValue} />}
               </>
             ) : (
               <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed p-8 text-center">
@@ -980,9 +1235,17 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
 
           {/* Section 7/8 — Description — deterministic FE-only draft builder (no AI claim). */}
           <Section number={listingId ? 8 : 7} title="Description">
-            <CommercialDescriptionAssistant facts={descriptionFacts} value={description} onChange={setDescription} />
+            {/* #2348 — CommercialDescriptionAssistant derives its idle/ready
+                UI state from `value` only via a useState initializer (never
+                re-evaluated on prop change), so a description hydrated after
+                this child already mounted empty would otherwise stay stuck
+                showing "Draft description" instead of the restored text.
+                Reuses locationRemountKey — it flips 'pending' -> 'settled'
+                at exactly the moment hydration commits — to force one clean
+                remount with the now-correct value. */}
+            <CommercialDescriptionAssistant key={locationRemountKey} facts={descriptionFacts} value={description} onChange={setDescription} />
           </Section>
-        </div>
+        </fieldset>
 
         {/* Right column — buyer preview + listing strength */}
         <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
@@ -1016,17 +1279,25 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
             {canSubmit ? `Good listing · ${strengthPercent}% complete` : 'Add a subtype, purpose, and price to continue'}
           </p>
           <div className="flex gap-3">
-            <Button type="button" variant="outline" onClick={() => persistDraft()} disabled={!canSubmit || createListing.isPending || updateListing.isPending}>
+            {/* #2348 — these two actions live in the sticky footer, outside
+                the <fieldset> above, so they need their own explicit
+                isRecoveringDraft guard: without it a broker could fire
+                persistDraft() (and PUT/POST blank or stale field values)
+                while the real draft is still loading, even though every
+                input above is disabled. Mirrors ResidentialListingForm.tsx
+                (issue #2039, revision 4, finding 1). */}
+            <Button type="button" variant="outline" onClick={() => persistDraft()} disabled={!canSubmit || createListing.isPending || updateListing.isPending || isRecoveringDraft}>
               {(createListing.isPending || updateListing.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save draft
             </Button>
-            <Button type="button" onClick={handleGoToReview} disabled={!canSubmit || createListing.isPending || updateListing.isPending}>
+            <Button type="button" onClick={handleGoToReview} disabled={!canSubmit || createListing.isPending || updateListing.isPending || isRecoveringDraft}>
               {(createListing.isPending || updateListing.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Review
             </Button>
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

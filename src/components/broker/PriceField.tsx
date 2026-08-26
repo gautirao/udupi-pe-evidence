@@ -40,6 +40,14 @@ interface PriceFieldProps {
   initialRupees?: number | null;
   onChange: (rupees: number | null) => void;
   required?: boolean;
+  /**
+   * #2348 — the Radix Slider below is not a form-associated element, so a
+   * wrapping `<fieldset disabled>` (as used during CommercialListingForm's
+   * draft-recovery window) never reaches it. Pass this through explicitly so
+   * callers can disable the slider (and the text input) alongside the rest
+   * of a recovering/disabled form.
+   */
+  disabled?: boolean;
 }
 
 export function PriceField({
@@ -48,6 +56,7 @@ export function PriceField({
   initialRupees,
   onChange,
   required,
+  disabled,
 }: PriceFieldProps) {
   const [text, setText] = useState(
     initialRupees != null ? rupeesToText(initialRupees) : '',
@@ -103,6 +112,7 @@ export function PriceField({
           value={[sliderPos]}
           onValueChange={handleSliderChange}
           aria-label="Price slider"
+          disabled={disabled}
         />
         <div className="flex justify-between text-xs text-muted-foreground">
           <span>₹10 L</span>
