@@ -752,6 +752,11 @@ function makeDestinationCard(
   const primaryCountText = isSchools ? schoolCountText : listingsCountText;
   const primaryCountLabel = isSchools ? 'schools' : 'listings';
   const secondaryLabel = isSchools ? listingsLabel : schoolLabel;
+  // Issue #2346 — mirrors makeSingleAreaChildCard's primaryCountKnown gate:
+  // a KNOWN zero schoolCount renders the hardcoded "0 schools" hero metric,
+  // but an unresolved (null) schoolCount must omit the hero metric entirely
+  // rather than being treated as if it were zero.
+  const isKnownZeroSchools = isSchools && child.schoolCount === 0;
 
   const countFontSizePx = Math.round(22 + Math.min(1, primaryCountNum / (isSchools ? 20 : 240)) * 9);
   const widthPx = inventoryScaledWidthPx(primaryCountNum, isSchools, false);
@@ -764,7 +769,7 @@ function makeDestinationCard(
         <span style="font-family:${FONT_MONO_ATTR};font-size:${countFontSizePx}px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${primaryCountText}</span>
         <span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${DESTINATION_TEXT_MUTED};">${primaryCountLabel}</span>
       </span>`
-      : isSchools
+      : isKnownZeroSchools
         ? `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
         <span style="font-family:${FONT_MONO_ATTR};font-size:16px;font-weight:800;line-height:1;letter-spacing:-0.02em;color:${DESTINATION_TEXT_MUTED};">0</span>
         <span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${DESTINATION_TEXT_MUTED};">schools</span>
@@ -773,7 +778,7 @@ function makeDestinationCard(
     (areasLabel != null
       ? `<span style="font-family:${FONT_SANS_ATTR};margin-top:${primaryCountText != null ? 3 : 4}px;padding:1px 9px;border-radius:${RADIUS_FULL};background:${DESTINATION_PILL_BG};font-size:10px;font-weight:600;color:${primaryCountText != null ? DESTINATION_TEXT_SOFT : DESTINATION_TEXT_SOFT_DIM};white-space:nowrap;">${areasLabel}</span>`
       : '') +
-    (secondaryLabel != null && (!isSchools || child.schoolCount! > 0)
+    (secondaryLabel != null && !isKnownZeroSchools
       ? `<span style="font-family:${FONT_SANS_ATTR};font-size:10.5px;font-weight:600;color:${DESTINATION_TEXT_MUTED};white-space:nowrap;">${secondaryLabel}</span>`
       : '');
 
