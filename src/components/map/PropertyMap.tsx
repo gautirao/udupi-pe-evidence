@@ -1681,18 +1681,25 @@ function AreaPanner({
           minZoom: narrowedWindow.minZoom,
           maxZoom: narrowedWindow.maxZoom,
         });
-        // Issue #1943 (Slice B, reroute cycle 2, OPTION 2) — a chosen
-        // candidate that still clips is a magnitude-blind score artifact
-        // (see hierarchyCameraFit.ts:434), not a usable fit: discard it and
-        // fall through to fitBounds rather than committing an off-screen camera.
-        if (hierarchyResult && hierarchyResult.chosen.clipped === 0) {
+        // Issue #1943 (Slice B, reroute cycle 2, OPTION 2) used to discard
+        // any `chosen` candidate that still clipped, because the pre-#2312
+        // score weighted clipping only by COUNT — once every candidate in
+        // the window clipped, that term saturated identically across all of
+        // them and `chosen` degenerated to whichever candidate had the
+        // fewest pairs, with no signal for how far off-screen it actually
+        // was. Issue #2312 fixed the score itself (added `clipOverflowPx`,
+        // a magnitude-aware overflow term — see hierarchyCameraFit.ts's
+        // module doc), so `chosen` is now a genuine best-of-window pick even
+        // when it still clips: strictly better than the coarse fitBounds
+        // fallback below, which has no concept of per-card containment at
+        // all. Commit it unconditionally rather than re-discarding a result
+        // the resolver already ranked correctly.
+        if (hierarchyResult) {
           map.setView(hierarchyResult.centre, hierarchyResult.zoom, { animate: false });
           return;
         }
-        // Issue #1943 (Slice B, code review cycle 2, FIX 4c) — the resolver
-        // returned null (no usable anchors after filtering) or its chosen
-        // candidate clips: fall through to today's fitBounds/flyTo block below,
-        // verbatim.
+        // The resolver returned null (no usable anchors after filtering):
+        // fall through to today's fitBounds/flyTo block below, verbatim.
       }
       if (panToArea.bbox) {
         // Issue #1069: a synthetic group-bounds AreaPoint (from computeGroupBounds)

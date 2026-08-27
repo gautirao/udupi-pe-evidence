@@ -166,7 +166,7 @@ describe('resolveHierarchyCameraFit — zBase uses REAL centre-pinned containmen
     });
     const result = resolveHierarchyCameraFit(input);
     expect(result).not.toBeNull();
-    expect(result?.evaluated).toEqual([{ zoom: 3, clipped: 0, pairs: 0, overlapAreaPx2: 0, score: 0 }]);
+    expect(result?.evaluated).toEqual([{ zoom: 3, clipped: 0, clipOverflowPx: 0, pairs: 0, overlapAreaPx2: 0, score: 0 }]);
     expect(result?.zoom).toBe(3); // the LOWER, genuinely clean zoom — not 4
     expect(result?.needsDeclutter).toBe(false);
   });
@@ -192,7 +192,7 @@ describe('resolveHierarchyCameraFit — zBase uses REAL centre-pinned containmen
     });
     const result = resolveHierarchyCameraFit(input);
     expect(result).not.toBeNull();
-    expect(result?.evaluated).toEqual([{ zoom: 3, clipped: 0, pairs: 0, overlapAreaPx2: 0, score: 0 }]);
+    expect(result?.evaluated).toEqual([{ zoom: 3, clipped: 0, clipOverflowPx: 0, pairs: 0, overlapAreaPx2: 0, score: 0 }]);
     expect(result?.zoom).toBe(3);
     expect(result?.needsDeclutter).toBe(false);
   });
@@ -232,8 +232,8 @@ describe('resolveHierarchyCameraFit — anchor mean OFF-CENTRE within containmen
     const result = resolveHierarchyCameraFit(input);
     expect(result).not.toBeNull();
     expect(result?.evaluated).toEqual([
-      { zoom: 12, clipped: 0, pairs: 1, overlapAreaPx2: 400, score: 10400 },
-      { zoom: 13, clipped: 0, pairs: 0, overlapAreaPx2: 0, score: 1000 },
+      { zoom: 12, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 400, score: 10400 },
+      { zoom: 13, clipped: 0, clipOverflowPx: 0, pairs: 0, overlapAreaPx2: 0, score: 1000 },
     ]);
     expect(result?.zoom).toBe(13);
     expect(result?.needsDeclutter).toBe(false);
@@ -337,7 +337,9 @@ describe('resolveHierarchyCameraFit — containmentBounds is a SOFT over-zoom gu
     });
     const result = resolveHierarchyCameraFit(input);
     expect(result).not.toBeNull();
-    expect(result?.evaluated).toEqual([{ zoom: 10, clipped: 0, pairs: 0, overlapAreaPx2: 0, score: 0 }]);
+    expect(result?.evaluated).toEqual([
+      { zoom: 10, clipped: 0, clipOverflowPx: 0, pairs: 0, overlapAreaPx2: 0, score: 0 },
+    ]);
     expect(result?.zoom).toBe(10);
     expect(result?.zoom).toBeLessThan(16);
     expect(result?.needsDeclutter).toBe(false);
@@ -396,10 +398,10 @@ describe('resolveHierarchyCameraFit — argmin selection and needsDeclutter boun
     const result = resolveHierarchyCameraFit(input);
     expect(result).not.toBeNull();
     expect(result?.evaluated).toEqual([
-      { zoom: 12, clipped: 0, pairs: 1, overlapAreaPx2: 4000, score: 14000 },
-      { zoom: 13, clipped: 0, pairs: 1, overlapAreaPx2: 3500, score: 14500 },
-      { zoom: 14, clipped: 0, pairs: 1, overlapAreaPx2: 3000, score: 15000 },
-      { zoom: 15, clipped: 0, pairs: 1, overlapAreaPx2: 2500, score: 15500 },
+      { zoom: 12, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 4000, score: 14000 },
+      { zoom: 13, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 3500, score: 14500 },
+      { zoom: 14, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 3000, score: 15000 },
+      { zoom: 15, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 2500, score: 15500 },
     ]);
     expect(result?.zoom).toBe(12);
     expect(result?.needsDeclutter).toBe(true);
@@ -486,8 +488,8 @@ describe('resolveHierarchyCameraFit — argmin selection and needsDeclutter boun
     const result = resolveHierarchyCameraFit(input);
     expect(result).not.toBeNull();
     expect(result?.evaluated).toEqual([
-      { zoom: 10, clipped: 0, pairs: 1, overlapAreaPx2: 2500, score: 12500 },
-      { zoom: 11, clipped: 0, pairs: 1, overlapAreaPx2: 1000, score: 12000 },
+      { zoom: 10, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 2500, score: 12500 },
+      { zoom: 11, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 1000, score: 12000 },
     ]);
     expect(result?.zoom).toBe(11);
     expect(result?.needsDeclutter).toBe(true);
@@ -523,10 +525,14 @@ describe('resolveHierarchyCameraFit — argmin selection and needsDeclutter boun
 });
 
 describe('resolveHierarchyCameraFit — score weights are independently decisive (exact arithmetic, not just relative ordering)', () => {
-  it('any clip (1e6) beats any plausible pairs/overlap total', () => {
+  it('any clip (1e6) beats any plausible pairs/overlap total, and clipOverflowPx adds a smaller magnitude term on top', () => {
     // A single 200px-wide footprint in a 100px usable viewport can never
     // avoid clipping, regardless of zoom -> clipped=1, pairs=0 (only one
-    // anchor). score = 1_000_000*1 + 0 + 0 + 0 = 1_000_000.
+    // anchor). Centre-pinned placement translates the card rect to
+    // {left:-50, right:150, top:-50, bottom:50} against usable [0,100]x
+    // [0,100] -> overflow of 50px past the left edge, 50px past the right,
+    // 50px past the top, 0 past the bottom (contained there) -> clipOverflowPx
+    // = 50+50+50+0 = 150. score = 1_000_000*1 + 100*150 + 0 + 0 + 0 = 1_015_000.
     const clipInput = baseInput({
       anchors: [anchor(1, 1, 200, 100)],
       viewport: squareViewport(100),
@@ -534,12 +540,16 @@ describe('resolveHierarchyCameraFit — score weights are independently decisive
       maxZoom: 10,
     });
     const clipResult = resolveHierarchyCameraFit(clipInput);
-    expect(clipResult?.evaluated).toEqual([{ zoom: 10, clipped: 1, pairs: 0, overlapAreaPx2: 0, score: 1_000_000 }]);
+    expect(clipResult?.evaluated).toEqual([
+      { zoom: 10, clipped: 1, clipOverflowPx: 150, pairs: 0, overlapAreaPx2: 0, score: 1_015_000 },
+    ]);
 
     // A deliberately pairs/overlap-heavy but never-clipped scenario: 2
     // pairs, overlapArea=100 (see the exact-arithmetic test below) scores
-    // only 20_100 — nowhere close to 1_000_000.
-    expect(1_000_000).toBeGreaterThan(20_100);
+    // only 20_100 — nowhere close to 1_015_000, so the clipped-count term
+    // still dominates any plausible pairs/overlap total even with the new
+    // magnitude term added on top of it.
+    expect(1_015_000).toBeGreaterThan(20_100);
   });
 
   it('one pair with a large overlap area is NOT automatically beaten by more, smaller-overlap pairs — the raw arithmetic decides', () => {
@@ -566,7 +576,7 @@ describe('resolveHierarchyCameraFit — score weights are independently decisive
     });
     const oneBigPairResult = resolveHierarchyCameraFit(oneBigPairInput);
     expect(oneBigPairResult?.evaluated).toEqual([
-      { zoom: 10, clipped: 0, pairs: 1, overlapAreaPx2: 20_000, score: 30_000 },
+      { zoom: 10, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 20_000, score: 30_000 },
     ]);
 
     // Scenario 2: 3 anchors, footprint 100x100 each, at lon 0, 0.995, 1.99
@@ -582,7 +592,7 @@ describe('resolveHierarchyCameraFit — score weights are independently decisive
     });
     const twoSmallPairsResult = resolveHierarchyCameraFit(twoSmallPairsInput);
     expect(twoSmallPairsResult?.evaluated).toEqual([
-      { zoom: 10, clipped: 0, pairs: 2, overlapAreaPx2: 100, score: 20_100 },
+      { zoom: 10, clipped: 0, clipOverflowPx: 0, pairs: 2, overlapAreaPx2: 100, score: 20_100 },
     ]);
 
     // The actual arithmetic: 2 small-overlap pairs (20_100) scores BETTER
@@ -590,6 +600,116 @@ describe('resolveHierarchyCameraFit — score weights are independently decisive
     // have predicted the opposite. This is the point of the note: the
     // weight is not categorically decisive, the numbers are.
     expect(twoSmallPairsResult?.chosen.score).toBeLessThan(oneBigPairResult?.chosen.score ?? Infinity);
+  });
+});
+
+describe('resolveHierarchyCameraFit — magnitude-aware clipping (issue #2312)', () => {
+  it('minor clipping scores better than severe clipping, even though both have the SAME clipped count', () => {
+    // Two single-anchor fixtures, both clipped=1, pairs=0 — the pre-#2312
+    // scoring formula (1_000_000*clipped, no magnitude term) would give BOTH
+    // an identical score of exactly 1_000_000, unable to tell "barely
+    // clipped" from "badly clipped" apart. With clipOverflowPx added:
+    //   minor:  100px usable viewport, 110px-wide footprint (half=55) at
+    //           lon=1,lat=1,zoom=10 -> raw rect centre (1000,-1000),
+    //           centre-pinned translation dx=-950,dy=1050 -> translated rect
+    //           = {left:-5, right:105, top:-50, bottom:50}. Overflow: left
+    //           edge 5px + right edge 5px + top edge 50px + bottom 0px = 60.
+    //           score = 1_000_000 + 100*60 = 1_006_000.
+    //   severe: same setup but a 280px-wide footprint (half=140) ->
+    //           translated rect = {left:-90, right:190, top:-50, bottom:50}.
+    //           Overflow: left 90 + right 90 + top 50 + bottom 0 = 230.
+    //           score = 1_000_000 + 100*230 = 1_023_000.
+    const minorInput = baseInput({
+      anchors: [anchor(1, 1, 110, 100)],
+      viewport: squareViewport(100),
+      minZoom: 10,
+      maxZoom: 10,
+    });
+    const severeInput = baseInput({
+      anchors: [anchor(1, 1, 280, 100)],
+      viewport: squareViewport(100),
+      minZoom: 10,
+      maxZoom: 10,
+    });
+    const minorResult = resolveHierarchyCameraFit(minorInput);
+    const severeResult = resolveHierarchyCameraFit(severeInput);
+
+    expect(minorResult?.evaluated).toEqual([
+      { zoom: 10, clipped: 1, clipOverflowPx: 60, pairs: 0, overlapAreaPx2: 0, score: 1_006_000 },
+    ]);
+    expect(severeResult?.evaluated).toEqual([
+      { zoom: 10, clipped: 1, clipOverflowPx: 230, pairs: 0, overlapAreaPx2: 0, score: 1_023_000 },
+    ]);
+    // Both have IDENTICAL clipped=1 — only clipOverflowPx distinguishes them.
+    expect(minorResult?.chosen.clipped).toBe(severeResult?.chosen.clipped);
+    expect(minorResult?.chosen.score).toBeLessThan(severeResult?.chosen.score ?? Infinity);
+  });
+
+  it('prefers a small acceptable adjustment (minor clip + one small pair-overlap) over severe clipping, at an equal clipped count across every candidate (the exact #2312 regression shape)', () => {
+    // Reproduces the reported saturation bug's shape directly: anchor A
+    // clips at EVERY candidate zoom (clipped=1 identically across all 4),
+    // so the pre-#2312 `1_000_000*clipped` term cancels out of every
+    // comparison and selection falls entirely to pairs/zoomDelta — which
+    // rewards zooming in further even though, here, zooming in only makes
+    // A's overflow worse (it drifts further from the usable viewport each
+    // step) while resolving a small A/B overlap that existed only at the
+    // base zoom.
+    //
+    // `project` is a hand-authored per-(anchor,zoom) lookup, not a formula —
+    // deliberately, so every rect coordinate below is an exact, asserted
+    // literal, and translation is a NO-OP throughout (the fixture's centre
+    // point always projects to the usable rect's own centre (250,250), so
+    // dx=dy=0 at every zoom — verified by the exact `evaluated` assertion
+    // below matching the raw, untranslated rects one-for-one).
+    const LON_A = 0;
+    const LON_B = 2; // mean lon = 1 (distinct from 0 and 2) -> unambiguous centre branch below
+    const aTableX: Record<number, number> = { 10: 470, 11: 850, 12: 1250, 13: 1650 };
+    const project: HierarchyProjectFn = (_lat, lon, zoom) => {
+      if (lon === LON_A) return { x: aTableX[zoom], y: 300 };
+      if (lon === LON_B) return { x: 420, y: 300 }; // B is FIXED — never moves with zoom
+      return { x: 250, y: 250 }; // the only other lon possible: mean(LON_A, LON_B) = 1, i.e. `centre`
+    };
+    const anchors = [anchor(1, LON_A, 100, 100), anchor(1, LON_B, 10, 100)];
+    const input = baseInput({
+      anchors,
+      project,
+      viewport: squareViewport(500),
+      minZoom: 10,
+      maxZoom: 13,
+    });
+    const result = resolveHierarchyCameraFit(input);
+    expect(result).not.toBeNull();
+
+    // A's raw rect at each zoom: [x-50, x+50] x [200, 300] against usable
+    // [0,500]x[0,500] -> right-edge overflow = (x+50)-500, growing sharply
+    // as A drifts away with zoom (this IS the reported dynamic: the resolver
+    // spreading anchors apart to cut pairs, worsening clip severity for the
+    // anchor that was never going to fit). B's raw rect is always
+    // [415,425]x[200,300] — fully contained, so `clipped` counts A alone,
+    // identically (1) at every candidate; it overlaps A's rect (by 5px,
+    // area=500) ONLY at z=10, where A's rect still reaches [420,520].
+    expect(result?.evaluated).toEqual([
+      { zoom: 10, clipped: 1, clipOverflowPx: 20, pairs: 1, overlapAreaPx2: 500, score: 1_012_500 },
+      { zoom: 11, clipped: 1, clipOverflowPx: 400, pairs: 0, overlapAreaPx2: 0, score: 1_041_000 },
+      { zoom: 12, clipped: 1, clipOverflowPx: 800, pairs: 0, overlapAreaPx2: 0, score: 1_082_000 },
+      { zoom: 13, clipped: 1, clipOverflowPx: 1200, pairs: 0, overlapAreaPx2: 0, score: 1_123_000 },
+    ]);
+
+    // The `clipped` term (1_000_000) is IDENTICAL across all 4 candidates —
+    // exactly the saturation described in #2312 — so without clipOverflowPx
+    // the comparison would fall entirely to pairs/overlap/zoomDelta:
+    //   OLD (no clipOverflowPx term) scores would have been
+    //   z10=1_010_500, z11=1_001_000, z12=1_002_000, z13=1_003_000 —
+    //   z11 wins (fewest pairs, smallest zoomDelta among the pairs=0 set),
+    //   despite z11's overflow (400px) being 20x worse than z10's (20px).
+    // The FIXED score correctly prefers z10 instead: a small, contained
+    // trade (one 500px^2 overlap) beats a candidate that "resolved" that
+    // overlap only by making the genuinely off-screen anchor drift much
+    // further off-screen.
+    expect(result?.zoom).toBe(10);
+    expect(result?.chosen.clipOverflowPx).toBe(20);
+    expect(result?.chosen.pairs).toBe(1);
+    expect(result?.needsDeclutter).toBe(true); // still honestly reported — clipped=1 at the winner too
   });
 });
 

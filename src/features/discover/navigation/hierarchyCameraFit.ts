@@ -133,20 +133,37 @@
  * for the `zBase` search, just repeated per-candidate so the metrics are
  * self-consistent with what the camera will really show). From the
  * translated rects: `clipped` = how many card rects are not fully contained
- * within the usable sub-rect; `pairs` = how many DISTINCT pairs of card
- * rects intersect; `overlapAreaPx2` = the summed intersection area (px^2)
- * over those intersecting pairs.
+ * within the usable sub-rect; `clipOverflowPx` = the summed MAGNITUDE of
+ * that clipping — for each card rect, how many px it protrudes past each
+ * usable-sub-rect edge it crosses (0 for a rect that's fully contained),
+ * summed across all edges and all rects; `pairs` = how many DISTINCT pairs
+ * of card rects intersect; `overlapAreaPx2` = the summed intersection area
+ * (px^2) over those intersecting pairs.
  *
- * `score = 1_000_000*clipped + 10_000*pairs + 1*overlapAreaPx2 +
- * 1_000*zoomDelta` (`zoomDelta = candidateZoom - zBase`, 0..3). The FIRST
- * candidate (in `[zBase, zBase+1, zBase+2, zBase+3]` order) with `clipped
- * === 0 && pairs === 0` — "LEGIBLE" — is accepted immediately, without
- * scoring the rest. Otherwise the candidate with the lowest score wins, ties
- * broken by the SMALLER zoom (a total order over the at-most-4 deduplicated
- * candidates, so no ambiguity is possible). The resolver never loops and
- * never re-invokes itself with its own output — evaluating exactly these
- * <=4 fixed candidates once is the entire algorithm, so termination is
- * structural, not empirical.
+ * `clipOverflowPx` exists because `clipped` alone is magnitude-blind
+ * (issue #2312): once every candidate in the zoom window clips at least one
+ * anchor, `clipped` is IDENTICAL (or near-identical) across all of them, so
+ * `1_000_000*clipped` stops discriminating between candidates and the
+ * comparison falls through entirely to `pairs`/`overlapAreaPx2` — which
+ * reward zooming IN further, and zooming in only ever spreads card rects
+ * apart, so it can raise (never lower) each clipped rect's overflow. That
+ * silently traded "identical clip count, worse overflow" for "fewer pairs",
+ * with no term able to see the cost. `clipOverflowPx` is weighted between
+ * the `clipped` and `pairs` terms specifically so it breaks that tie the
+ * other way: among same-`clipped`-count candidates, LESS total overflow
+ * wins, even at the cost of a bit more pair-overlap.
+ *
+ * `score = 1_000_000*clipped + 100*clipOverflowPx + 10_000*pairs +
+ * 1*overlapAreaPx2 + 1_000*zoomDelta` (`zoomDelta = candidateZoom - zBase`,
+ * 0..3). The FIRST candidate (in `[zBase, zBase+1, zBase+2, zBase+3]` order)
+ * with `clipped === 0 && pairs === 0` — "LEGIBLE" — is accepted immediately,
+ * without scoring the rest (note `clipOverflowPx` is necessarily 0 whenever
+ * `clipped` is 0, so this fast path is unaffected). Otherwise the candidate
+ * with the lowest score wins, ties broken by the SMALLER zoom (a total order
+ * over the at-most-4 deduplicated candidates, so no ambiguity is possible).
+ * The resolver never loops and never re-invokes itself with its own output —
+ * evaluating exactly these <=4 fixed candidates once is the entire
+ * algorithm, so termination is structural, not empirical.
  */
 import { isUsableCentroid } from './areaClustering';
 import { LEAF_FIT_MAX_ZOOM } from '@/shared/map/zoomPolicy';
@@ -206,6 +223,8 @@ export interface HierarchyCameraFitInput {
 export interface HierarchyCameraFitCandidateEvaluation {
   zoom: number;
   clipped: number;
+  /** Summed px a clipped card rect protrudes past the usable sub-rect's edges. 0 iff `clipped === 0`. */
+  clipOverflowPx: number;
   pairs: number;
   overlapAreaPx2: number;
   score: number;
@@ -291,6 +310,21 @@ function rectContainedIn(inner: Rect, outer: Rect): boolean {
 
 function rectsIntersect(a: Rect, b: Rect): boolean {
   return a.left < b.right - EPS && a.right > b.left + EPS && a.top < b.bottom - EPS && a.bottom > b.top + EPS;
+}
+
+/**
+ * How many px `inner` protrudes past `outer`'s edges, summed over every edge
+ * it crosses (0 if `inner` is fully contained). This is the MAGNITUDE
+ * counterpart to `rectContainedIn`'s boolean — see the module doc's
+ * `clipOverflowPx` section for why the score needs both.
+ */
+function clipOverflowPx(inner: Rect, outer: Rect): number {
+  return (
+    Math.max(0, outer.left - inner.left) +
+    Math.max(0, inner.right - outer.right) +
+    Math.max(0, outer.top - inner.top) +
+    Math.max(0, inner.bottom - outer.bottom)
+  );
 }
 
 function overlapArea(a: Rect, b: Rect): number {
@@ -415,8 +449,12 @@ function evaluateCandidate(
   const translated = placeRectsForCentrePinnedCamera(cardRects, centreProjected, usableRect);
 
   let clipped = 0;
+  let clipOverflow = 0;
   for (const r of translated) {
-    if (!rectContainedIn(r, usableRect)) clipped += 1;
+    if (!rectContainedIn(r, usableRect)) {
+      clipped += 1;
+      clipOverflow += clipOverflowPx(r, usableRect);
+    }
   }
 
   let pairs = 0;
@@ -431,7 +469,8 @@ function evaluateCandidate(
   }
 
   const zoomDelta = zoom - zBase;
-  const score = 1_000_000 * clipped + 10_000 * pairs + overlapAreaPx2 + 1_000 * zoomDelta;
+  const score =
+    1_000_000 * clipped + 100 * clipOverflow + 10_000 * pairs + overlapAreaPx2 + 1_000 * zoomDelta;
 
   // `containmentBounds` is a SOFT, SIZE-ONLY zBase-search floor only —
   // deliberately not enforced here at the winning candidate, and (per the
@@ -441,7 +480,7 @@ function evaluateCandidate(
   void containmentBounds;
 
   return {
-    evaluation: { zoom, clipped, pairs, overlapAreaPx2, score },
+    evaluation: { zoom, clipped, clipOverflowPx: clipOverflow, pairs, overlapAreaPx2, score },
     cardRectCount: cardRects.length,
   };
 }

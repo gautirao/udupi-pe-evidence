@@ -1271,19 +1271,21 @@ describe('Issue #1943 Slice B — AreaPanner hierarchy camera-fit branch (canoni
   // (e.g. bad upstream data collapsing it to a single point) must not force
   // `derivedMinZoom` up to LEAF_FIT_MAX_ZOOM: `wideSeparatedChildAnchors`
   // are spread far enough apart that they clip at EVERY zoom in [13, 16]
-  // (see the fixture's own comment). Since (reroute cycle 2, Option 2) a
-  // chosen candidate that clips is now discarded outright rather than
-  // written via setView, this fixture's ALWAYS-clipping candidates never
-  // reach setView regardless of which floor the search used — so the FIX 3
-  // guard is no longer observable through setView's zoom. It is instead
-  // observable through the resolver's SEARCH RANGE itself: `map.project` is
-  // called once per candidate zoom in `[minZoom, maxZoom]`, so zoom 13
-  // appearing among those calls proves `derivedMinZoom` stayed at
-  // LEAF_FIT_MIN_ZOOM=13 rather than being clamped to 16. Without the FIX 3
-  // guard, `map.getBoundsZoom` would report the degenerate bounds'
-  // containment zoom as the map's own maximum (simulated here as 20) and
-  // clamp `derivedMinZoom` straight to LEAF_FIT_MAX_ZOOM=16, so zoom 13
-  // would never be probed at all.
+  // (see the fixture's own comment). The FIX 3 guard is observable through
+  // the resolver's SEARCH RANGE itself: `map.project` is called once per
+  // candidate zoom in `[minZoom, maxZoom]`, so zoom 13 appearing among those
+  // calls proves `derivedMinZoom` stayed at LEAF_FIT_MIN_ZOOM=13 rather than
+  // being clamped to 16. Without the FIX 3 guard, `map.getBoundsZoom` would
+  // report the degenerate bounds' containment zoom as the map's own maximum
+  // (simulated here as 20) and clamp `derivedMinZoom` straight to
+  // LEAF_FIT_MAX_ZOOM=16, so zoom 13 would never be probed at all.
+  //
+  // Issue #2312 — since every candidate in range clips for this fixture, the
+  // resolver's `chosen` is now the magnitude-ranked best of that
+  // always-clipping window (see hierarchyCameraFit.ts's `clipOverflowPx`
+  // doc), and PropertyMap commits it via setView rather than falling back to
+  // fitBounds (reroute cycle 2, Option 2's discard-on-any-clip behaviour was
+  // itself the pre-#2312 defect; see PropertyMap.hierarchyOverzoomFloor.test.tsx).
   it('T-B10: a degenerate (zero-span) node bbox does not force the derived floor up to LEAF_FIT_MAX_ZOOM', () => {
     mapStub.getBoundsZoom.mockReturnValueOnce(20);
     renderWithPan(
@@ -1297,11 +1299,9 @@ describe('Issue #1943 Slice B — AreaPanner hierarchy camera-fit branch (canoni
     // map.getBoundsZoom — never fed the mocked max-zoom return into the
     // derivation at all.
     expect(mapStub.getBoundsZoom).not.toHaveBeenCalled();
-    // Issue #1943 (Slice B, reroute cycle 2, Option 2) — every candidate in
-    // range clips for this fixture, so the resolver's chosen candidate is
-    // discarded and the fallback fitBounds path fires instead of setView.
-    expect(mapStub.setView).not.toHaveBeenCalled();
-    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    // The magnitude-ranked resolver camera is committed; fitBounds never fires.
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
     const zoomsProbed = new Set(mapStub.project.mock.calls.map(([, z]) => z));
     expect(zoomsProbed.has(LEAF_FIT_MIN_ZOOM)).toBe(true);
     expect(zoomsProbed.has(LEAF_FIT_MAX_ZOOM)).toBe(true);

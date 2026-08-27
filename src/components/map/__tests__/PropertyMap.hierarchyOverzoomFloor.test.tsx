@@ -255,23 +255,25 @@ describe('Issue #1943 (Stage-B, LAST DEFECT) — narrowToLegibleZoomWindow widen
     expect(withContainmentCheck).toEqual({ minZoom: derivedMinZoom, maxZoom: LEAF_FIT_MAX_ZOOM });
   });
 
-  // REGRESSION PIN — guards Option 2 (reroute cycle 2) ONLY. It does not pin
-  // cycle 1's floor widening; the premise test above does that, and only that
-  // test fails if the floor widening is reverted. This pin still passes
-  // pre-cycle-1, because with the floor left at 13 every candidate clips too,
-  // so the fallback fires either way.
+  // REGRESSION PIN — updated for issue #2312. It does not pin cycle 1's
+  // floor widening; the premise test above does that, and only that test
+  // fails if the floor widening is reverted.
   //
-  // Issue #1943 (Slice B, reroute cycle 2, Option 2) — even at the corrected
-  // [derivedMinZoom, LEAF_FIT_MAX_ZOOM] window, Mukkidipeta's real ~66km
-  // outlier distance means NO candidate in range is actually clip-free (see
-  // this file's own module doc: the `1_000_000*clipped` score term
-  // saturates and cancels out once every candidate clips). The resolver
-  // still returns a non-null "least-bad" candidate — proven below directly
-  // against the real resolveHierarchyCameraFit, not asserted from reasoning
-  // — but Option 2 now discards a clipping `chosen` outright rather than
-  // committing it via setView, so PropertyMap must fall through to its
-  // pre-slice fitBounds(dNBbox) path instead of writing an off-screen camera.
-  it('canonicalNode fit does not commit the resolver camera when its chosen candidate still clips (falls back to fitBounds)', () => {
+  // Issue #1943 (Slice B, reroute cycle 2, Option 2) discarded any `chosen`
+  // candidate that still clipped and fell back to fitBounds instead, because
+  // the pre-#2312 score weighted clipping only by COUNT: even at the
+  // corrected [derivedMinZoom, LEAF_FIT_MAX_ZOOM] window, Mukkidipeta's real
+  // ~66km outlier distance means NO candidate in range is actually
+  // clip-free, and the `1_000_000*clipped` term alone saturated and
+  // cancelled out of every comparison once every candidate clipped.
+  //
+  // Issue #2312 added `clipOverflowPx` (a magnitude-aware overflow term) to
+  // the score, so `chosen` is now genuinely ranked even in this
+  // every-candidate-clips regime — proven below directly against the real
+  // resolveHierarchyCameraFit, not asserted from reasoning. PropertyMap now
+  // commits that ranked camera via setView instead of re-discarding it for
+  // the coarser fitBounds(dNBbox) fallback.
+  it('canonicalNode fit commits the resolver camera (magnitude-ranked, per #2312) even though its chosen candidate still clips', () => {
     const expectedFixed = resolveHierarchyCameraFit({
       anchors: dNAnchors,
       containmentBounds,
@@ -281,21 +283,22 @@ describe('Issue #1943 (Stage-B, LAST DEFECT) — narrowToLegibleZoomWindow widen
       maxZoom: LEAF_FIT_MAX_ZOOM,
     });
     expect(expectedFixed).not.toBeNull();
-    // Premise for Option 2: this real, calibrated fixture's resolved
-    // candidate genuinely clips — this is not a synthetic always-clipping
-    // fixture invented for the test, it is the exact real-Bangalore geometry
-    // that motivated Option 2 in the first place.
+    // Premise: this real, calibrated fixture's resolved candidate genuinely
+    // clips — this is not a synthetic always-clipping fixture invented for
+    // the test, it is the exact real-Bangalore geometry that motivated
+    // Option 2 (and now #2312's fix to it) in the first place.
     expect(expectedFixed?.chosen.clipped).toBeGreaterThan(0);
 
     renderWithPan(canonicalPayload);
 
-    // The clipping resolver candidate is discarded; the pre-slice fitBounds
-    // fallback fires instead of setView.
-    expect(mapStub.setView).not.toHaveBeenCalled();
-    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
-    expect(mapStub.fitBounds).toHaveBeenCalledWith(
-      dNBbox,
-      expect.objectContaining({ maxZoom: LEAF_FIT_MAX_ZOOM }),
+    // The magnitude-ranked resolver camera is committed via setView; the
+    // coarser fitBounds fallback never fires.
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
+    expect(mapStub.setView).toHaveBeenCalledWith(
+      expectedFixed?.centre,
+      expectedFixed?.zoom,
+      expect.objectContaining({ animate: false }),
     );
   });
 });
