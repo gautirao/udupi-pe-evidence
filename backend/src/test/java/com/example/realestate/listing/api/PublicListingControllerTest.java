@@ -188,7 +188,7 @@ class PublicListingControllerTest {
                     ? com.example.realestate.discover.PriceBand.of(l.getPricePaise())
                     : null;
             return new ListingTeaserResponse(
-                    l.getId(), null, 0, null, null, priceBand,
+                    l.getId(), null, 0, l.getTitle(), null, null, priceBand,
                     l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
                     null, null, null, null, null, null, null, null, null, null, null, null,
                     null, null, null, null);
@@ -204,7 +204,7 @@ class PublicListingControllerTest {
                                 ? com.example.realestate.discover.PriceBand.of(l.getPricePaise())
                                 : null;
                         return new ListingTeaserResponse(
-                                l.getId(), null, 0, null, null, priceBand,
+                                l.getId(), null, 0, l.getTitle(), null, null, priceBand,
                                 l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
                                 null, null, null, null, null, null, null, null, null, null, null, null,
                                 null, null, null, null);
@@ -244,7 +244,8 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.imageCount").value(0))
                 // sensitive fields absent from teaser
                 .andExpect(jsonPath("$.status").doesNotExist())
-                .andExpect(jsonPath("$.title").doesNotExist())
+                // #2235: title IS exposed to anon callers (real title, not synthesized)
+                .andExpect(jsonPath("$.title").value("Sea View Villa"))
                 .andExpect(jsonPath("$.latitude").doesNotExist())
                 .andExpect(jsonPath("$.longitude").doesNotExist())
                 .andExpect(jsonPath("$.description").doesNotExist());
@@ -743,7 +744,8 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.items[0].listingPurpose").value("SALE"))
                 // sensitive fields absent (privacy invariant)
                 .andExpect(jsonPath("$.items[0].latitude").doesNotExist())
-                .andExpect(jsonPath("$.items[0].title").doesNotExist());
+                // #2235: title IS exposed to anon callers (real title, not synthesized)
+                .andExpect(jsonPath("$.items[0].title").value("Polygon Villa"));
     }
 
     // ==================== GET /discovery — empty result ====================
@@ -789,7 +791,8 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.items[0].pricePaise").doesNotExist())
                 // sensitive fields absent
                 .andExpect(jsonPath("$.items[0].latitude").doesNotExist())
-                .andExpect(jsonPath("$.items[0].title").doesNotExist())
+                // #2235: title IS exposed to anon callers (real title, not synthesized)
+                .andExpect(jsonPath("$.items[0].title").value("Discovery Plot"))
                 .andExpect(jsonPath("$.items[0].description").doesNotExist());
     }
 
@@ -933,7 +936,7 @@ class PublicListingControllerTest {
         // #1941: agri stays fully price-silent — price/pricePaise/priceBand all null.
         when(listingResponseMapper.toTeaserResponse(any(Listing.class))).thenReturn(
                 new ListingTeaserResponse(
-                        LISTING_ID, "https://cdn.example.com/farm.jpg", 1,
+                        LISTING_ID, "https://cdn.example.com/farm.jpg", 1, "Farm Plot",
                         null /* price */, null /* pricePaise */, null /* priceBand */,
                         "agricultural_land", "Udupi", "SALE",
                         "{\"type\":\"Polygon\",\"coordinates\":[]}",
@@ -1038,7 +1041,7 @@ class PublicListingControllerTest {
         // #1941: agri stays fully price-silent — price/pricePaise/priceBand all null.
         when(listingResponseMapper.toTeaserResponse(any(Listing.class))).thenReturn(
                 new ListingTeaserResponse(
-                        LISTING_ID, null, 0,
+                        LISTING_ID, null, 0, "Farm Plot",
                         null /* price */, null /* pricePaise */, null /* priceBand */,
                         "agricultural_land", "Udupi", "SALE",
                         "{\"type\":\"Polygon\",\"coordinates\":[]}", 13.3409, 74.7421,

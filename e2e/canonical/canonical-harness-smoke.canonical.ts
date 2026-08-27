@@ -35,46 +35,40 @@
  * ever get a chance to run against stale data.
  *
  *   id:            e2e00001-0000-0000-0000-000000000001
- *   DB title:      [E2E] 1 Lakh Manipal Apartment   (NOT asserted here — see below)
+ *   DB title:      [E2E] 1 Lakh Manipal Apartment   (asserted below — see #2235 note)
  *   propertyType:  apartment
  *   locality:      Manipal
  *   price_paise:   10000000  (₹1,00,000 → PriceBand.of() bucket "₹0–25L")
  *
- * IMPORTANT — anon responses withhold the DB title (verified live, not just
- * read from source): GET /api/public/listings/{id} branches on caller auth
- * (PublicListingController.getById:98-111). An ANONYMOUS caller (this spec
- * never authenticates) receives ListingTeaserResponse, not ListingResponse —
- * confirmed by curl: {"id":...,"imageCount":0,"priceBand":"₹0–25L",
+ * UPDATED (#2235) — anon responses now include the real DB title (verified
+ * live, not just read from source): GET /api/public/listings/{id} branches
+ * on caller auth (PublicListingController.getById:98-111). An ANONYMOUS
+ * caller (this spec never authenticates) receives ListingTeaserResponse, not
+ * ListingResponse — confirmed by curl: {"id":...,"imageCount":0,
+ * "title":"[E2E] 1 Lakh Manipal Apartment","priceBand":"₹0–25L",
  * "propertyType":"apartment","locality":"Manipal","listingPurpose":"sale"}.
- * There is no `title` key at all; ListingResponseMapper.toTeaserResponse's
- * own doc comment states this is deliberate ("no location, no PII" — #1941
- * additionally withholds exact price for every anon teaser caller). The
- * frontend (ListingDetailMainContent.tsx:70) synthesizes the on-page heading
- * client-side as `${propertyTypeLabel} in ${locality}` whenever
- * `listing.title` is absent — for this listing that is exactly
- * "Apartment in Manipal", never the raw DB title. An earlier version of this
- * spec asserted the raw DB title and failed deterministically 3/3 against a
- * correctly-working app — a real test-authoring defect the harness itself
- * caught (checking the seed SQL and the render site is not enough; the DTO
- * in between silently drops the field for anon callers). The raw DB title is
- * NOT kept here as an unused constant — a future authenticated canonical
- * spec (PR-3+) that asserts the full ListingResponse's real `title` field
- * should re-derive it from the seed SQL at that point, not reuse a stale
- * anon-path constant from this file.
+ * Prior to #2235, ListingTeaserResponse had no `title` key at all, and
+ * ListingDetailMainContent.tsx:70 synthesized the on-page heading
+ * client-side as `${propertyTypeLabel} in ${locality}` ("Apartment in
+ * Manipal" for this fixture) whenever `listing.title` was absent — that
+ * fallback still exists (see ListingDetailMainContent.test.tsx's own #2235
+ * coverage) and still fires whenever a listing genuinely has no title, but
+ * an anon caller viewing THIS fixture now sees its real seeded title
+ * verbatim, exactly like an authenticated caller would. #1941's other anon
+ * gating (no location beyond locality, no exact price) is unaffected by
+ * #2235 — only `title` was added to the teaser DTO.
  *
- * STRENGTHENED ANCHOR (not just the synthesized heading): "Apartment in
- * Manipal" alone is a weaker anchor than the withheld DB title — it is
- * synthesized from two generic-shaped teaser fields, so this spec ALSO
- * asserts two more independent pieces of real teaser-response content the
- * live run actually observed: the price band ("₹0–25L", computed by
- * PriceBand.of() from this listing's real seeded price_paise) and the
- * locality ("Manipal", rendered verbatim from the teaser's `locality`
- * field next to the MapPin icon in ListingDetailMainContent.tsx). For each
- * of these three assertions: could it pass against an empty, errored, or
- * degraded app? No — ListingDetail.tsx renders a "Listing Not Found" empty
- * state (no h1, no price element, no locality line) whenever the query
- * errors or returns no listing, so all three require the real backend to
- * have actually returned this listing's real seeded values.
+ * STRENGTHENED ANCHOR (not just the title): this spec ALSO asserts two more
+ * independent pieces of real teaser-response content the live run actually
+ * observed: the price band ("₹0–25L", computed by PriceBand.of() from this
+ * listing's real seeded price_paise) and the locality ("Manipal", rendered
+ * verbatim from the teaser's `locality` field next to the MapPin icon in
+ * ListingDetailMainContent.tsx). For each of these three assertions: could
+ * it pass against an empty, errored, or degraded app? No — ListingDetail.tsx
+ * renders a "Listing Not Found" empty state (no h1, no price element, no
+ * locality line) whenever the query errors or returns no listing, so all
+ * three require the real backend to have actually returned this listing's
+ * real seeded values.
  *
  * This spec also carries the D4 build-sha provenance assertion — see
  * vite.config.ts's `build-sha-meta` plugin and this file's second test. The
@@ -91,9 +85,11 @@
 import { test, expect, waitForFontsReady } from './support/canonical-test';
 
 const FIXTURE_LISTING_ID = 'e2e00001-0000-0000-0000-000000000001';
-// Synthesized client-side heading for an ANON teaser response — NOT the raw
-// DB title, which anon callers never receive. See module docstring.
-const TEASER_HEADING = 'Apartment in Manipal';
+// Real DB title (scripts/db/fixtures/discover-smoke-seed.sql section 5) —
+// anon callers now receive this verbatim on ListingTeaserResponse (#2235),
+// never the synthesized `${propertyType} in ${locality}` fallback heading.
+// See module docstring.
+const FIXTURE_TITLE = '[E2E] 1 Lakh Manipal Apartment';
 const TEASER_PRICE_BAND = '₹0–25L';
 const TEASER_LOCALITY = 'Manipal';
 
@@ -109,14 +105,14 @@ test.describe('canonical harness smoke', () => {
     // ListingDetailMainContent.tsx (`<h1>{title}</h1>`), so this also proves
     // the page actually reached its loaded state rather than a skeleton.
     await expect(
-      page.getByRole('heading', { level: 1, name: TEASER_HEADING }),
+      page.getByRole('heading', { level: 1, name: FIXTURE_TITLE }),
     ).toBeVisible({ timeout: 15_000 });
 
     // Two further, INDEPENDENT real-content anchors (not derived from the
-    // heading) — strengthens the positive-presence guarantee beyond the
-    // synthesized heading alone. See module docstring's "STRENGTHENED
-    // ANCHOR" section for why each is required and why none of the three
-    // can pass against an empty/broken render.
+    // title) — strengthens the positive-presence guarantee beyond the title
+    // alone. See module docstring's "STRENGTHENED ANCHOR" section for why
+    // each is required and why none of the three can pass against an
+    // empty/broken render.
     await expect(page.getByText(TEASER_PRICE_BAND, { exact: true })).toBeVisible();
 
     // "Manipal" alone is AMBIGUOUS on this page — verified live (fix-cycle-2):

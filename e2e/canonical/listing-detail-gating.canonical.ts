@@ -74,15 +74,18 @@
 import { test, expect } from './support/canonical-test';
 
 const FIXTURE_LISTING_ID = 'e2e00001-0000-0000-0000-000000000001';
-// Synthesized client-side heading for an ANON teaser response — see
-// canonical-harness-smoke.canonical.ts's module docstring for the full
-// live-curl-verified derivation.
-const TEASER_HEADING = 'Apartment in Manipal';
 const TEASER_PRICE_BAND = '₹0–25L';
 const TEASER_LOCALITY = 'Manipal';
-// Raw DB title (scripts/db/fixtures/discover-smoke-seed.sql section 5) — an
-// authed caller receives the real `title` field, never the synthesized
-// TEASER_HEADING. See T12's own comment for the live-curl verification.
+// Raw DB title (scripts/db/fixtures/discover-smoke-seed.sql section 5).
+// UPDATED (#2235): both anon (T11) and authed (T12) callers now receive this
+// real `title` field verbatim — anon teaser responses used to omit `title`
+// entirely, which made the frontend synthesize a `${propertyType} in
+// ${locality}` fallback heading ("Apartment in Manipal" for this fixture)
+// for anon only; that synthesized-heading path is now exercised solely by
+// listings with no real title (see canonical-harness-smoke.canonical.ts's
+// module docstring and ListingDetailMainContent.test.tsx's #2235 coverage),
+// not by this fixture's anon view any more. See T12's own comment for the
+// original live-curl verification of the authed side, which is unchanged.
 const AUTHED_TITLE = '[E2E] 1 Lakh Manipal Apartment';
 
 test.describe('T11 — anon listing detail: real teaser content + honest gating', () => {
@@ -96,9 +99,11 @@ test.describe('T11 — anon listing detail: real teaser content + honest gating'
 
     // Real, specific teaser content — reused verbatim from the harness
     // smoke spec (see that file for why these three, independently, cannot
-    // pass against an empty/broken render).
+    // pass against an empty/broken render). Title assertion UPDATED (#2235):
+    // anon now receives the real DB title, same as the authed caller in T12
+    // below — see this file's AUTHED_TITLE comment.
     await expect(
-      page.getByRole('heading', { level: 1, name: TEASER_HEADING }),
+      page.getByRole('heading', { level: 1, name: AUTHED_TITLE }),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(TEASER_PRICE_BAND, { exact: true })).toBeVisible();
     const localityRow = page.locator(
@@ -165,16 +170,14 @@ test.describe('T12 — authed listing detail: gating relaxes', () => {
     // assertions further down.
     await expect(page.getByTestId('user-menu')).toBeVisible({ timeout: 15_000 });
 
-    // NOT the synthesized TEASER_HEADING here — live-curl-verified an authed
-    // GET /api/public/listings/{id} returns the real DB `title` field
-    // ("[E2E] 1 Lakh Manipal Apartment"), which ListingDetailMainContent.tsx
-    // renders verbatim whenever `listing.title` is present. TEASER_HEADING
-    // ("Apartment in Manipal") is what the frontend SYNTHESIZES only when
-    // `title` is absent — true for anon (T11), never true for an authed
-    // caller. canonical-harness-smoke.canonical.ts's own module docstring
-    // documents this exact anon-only trap; reusing TEASER_HEADING here would
-    // have been the identical defect that spec's docstring warns against,
-    // just on the authed side instead of the anon side.
+    // Live-curl-verified an authed GET /api/public/listings/{id} returns the
+    // real DB `title` field ("[E2E] 1 Lakh Manipal Apartment"), which
+    // ListingDetailMainContent.tsx renders verbatim whenever `listing.title`
+    // is present. UPDATED (#2235): T11 above now asserts this same
+    // AUTHED_TITLE for the anon view too, since anon teaser responses also
+    // carry the real `title` field now — the synthesized `${propertyType} in
+    // ${locality}` fallback heading only fires when a listing genuinely has
+    // no title, for either caller.
     await expect(
       page.getByRole('heading', { level: 1, name: AUTHED_TITLE }),
     ).toBeVisible({ timeout: 15_000 });

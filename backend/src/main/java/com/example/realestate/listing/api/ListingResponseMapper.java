@@ -169,7 +169,7 @@ public class ListingResponseMapper {
         Long pricePaise = null;
         String priceBand = anonBandFor(l);
         return new ListingTeaserResponse(
-                l.getId(), primaryImageUrl, images.size(), price, pricePaise, priceBand,
+                l.getId(), primaryImageUrl, images.size(), l.getTitle(), price, pricePaise, priceBand,
                 l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
                 boundary,
                 // #1454: anon agri receives COARSENED lat/lng (~1.1 km, 2 dp) — not exact, not null.
@@ -225,6 +225,7 @@ public class ListingResponseMapper {
                             l.getId(),
                             firstImageByListing.get(l.getId()),
                             imageCountByListing.getOrDefault(l.getId(), 0L).intValue(),
+                            l.getTitle(),
                             null,
                             null,
                             priceBand,

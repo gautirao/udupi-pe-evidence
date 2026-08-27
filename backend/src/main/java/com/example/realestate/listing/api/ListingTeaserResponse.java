@@ -30,6 +30,9 @@ import java.util.UUID;
  * @param id                 listing UUID
  * @param primaryImageUrl    URL of the first image, or null if no images
  * @param imageCount         total number of images (including those behind auth gate)
+ * @param title              the listing's real title (#2235); anon callers see the actual
+ *                           title, not a synthesized fallback — frontend synthesizes a
+ *                           {@code propertyType in locality} heading only when this is blank
  * @param price              listing price in rupees (deprecated column); always null on this
  *                           anon-only DTO (#1941) — kept in the record for JSON shape stability
  * @param pricePaise         listing price in paise (source of truth); always null on this
@@ -58,6 +61,7 @@ public record ListingTeaserResponse(
         UUID id,
         String primaryImageUrl,
         int imageCount,
+        String title,
         BigDecimal price,
         Long pricePaise,
         String priceBand,

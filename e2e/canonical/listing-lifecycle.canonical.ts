@@ -233,6 +233,26 @@
  * would have shipped a P0 behind a green suite. Investigate before
  * descoping — and note that a fix landing is not the same as a fix being
  * complete. Re-running the test that found the bug is what tells you which.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * T15 UPDATED (#2235) — anon teaser now carries the real title
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * #2274's fix above was correct for the code as it existed at the time:
+ * `ListingTeaserResponse` had no `title` field, so anon visitors could only
+ * ever see the synthesized `${label} in ${locality}` heading, never the
+ * broker's real entered title. #2235 adds a `title` field to
+ * `ListingTeaserResponse`, populated from the same `title` column an
+ * authenticated caller sees (`ListingResponseMapper.toTeaserResponse` /
+ * `toTeaserResponseList`) — anon callers now receive the listing's real
+ * title verbatim, same as an authed caller. The synthesized fallback
+ * heading in `ListingDetailMainContent.tsx` still exists and still fires
+ * for a listing with a genuinely blank/absent title, but T15's listing
+ * (created by T13 with `UNIQUE_TITLE`) always has a real title, so its own
+ * anon assertion below now expects `UNIQUE_TITLE`, not the synthesized
+ * heading. The #1941 anon PII/price gating this test's history is otherwise
+ * about (exact price, location beyond locality, contact detail) is
+ * unaffected — only `title` was added to the teaser DTO.
  */
 
 import { test, expect } from './support/canonical-test';
@@ -584,15 +604,14 @@ if (T15_ENABLED) {
     // would make the assertions below pass for the wrong reason.
     await expect(page.getByRole('link', { name: 'Sign in', exact: true })).toBeVisible({ timeout: 10_000 });
 
-    // POSITIVE CONTROL against a blank/errored page. Asserts the intentional
-    // anon-teaser contract, NOT the broker's real title: the anon endpoint's
-    // ListingTeaserResponse never carries `title` (#1941), so
-    // ListingDetailMainContent's `listing.title || \`${label} in ${locality}\`
-    // fallback synthesizes this exact heading — "Apartment in Manipal" for
-    // this fixture's propertyType ('apartment') + T13's fixed locality
-    // ('Manipal'). This is what an honest anon viewer genuinely sees; it is
-    // deliberately NOT UNIQUE_TITLE, which anon visitors are never shown.
-    await expect(page.getByRole('heading', { level: 1, name: 'Apartment in Manipal' })).toBeVisible({ timeout: 15_000 });
+    // POSITIVE CONTROL against a blank/errored page. UPDATED (#2235): the
+    // anon endpoint's ListingTeaserResponse now carries the real `title`
+    // field (see this file's "T15 UPDATED (#2235)" module-docstring
+    // addendum), so an anon viewer sees the broker's real entered title
+    // verbatim — the same UNIQUE_TITLE asserted by T13/T14 above — never the
+    // synthesized `${label} in ${locality}` fallback heading, which now only
+    // fires for a listing with a genuinely blank/absent title.
+    await expect(page.getByRole('heading', { level: 1, name: UNIQUE_TITLE })).toBeVisible({ timeout: 15_000 });
 
     // This spec deliberately does NOT assert any status word here (no
     // "Published", no "Live") — per this file's honest-copy requirement,

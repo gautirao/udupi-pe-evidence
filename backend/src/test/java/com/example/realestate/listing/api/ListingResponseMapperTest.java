@@ -704,9 +704,10 @@ class ListingResponseMapperTest {
         assertThat(teaser.propertyType()).isEqualTo(l.getPropertyType());
         assertThat(teaser.locality()).isEqualTo(l.getLocality());
         assertThat(teaser.listingPurpose()).isEqualTo("SALE");
-        // #1452/#1458/#1941/#2043: record now has 25 components (9 base + 16 agri-only); priceBand
-        // added in #1941, agriConversionStatus added in #2043.
-        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(25);
+        assertThat(teaser.title()).isEqualTo(l.getTitle());
+        // #1452/#1458/#1941/#2043/#2235: record now has 26 components (10 base + 16 agri-only);
+        // priceBand added in #1941, agriConversionStatus added in #2043, title added in #2235.
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(26);
     }
 
     @Test
@@ -715,15 +716,16 @@ class ListingResponseMapperTest {
 
         ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
 
-        // #1452/#1941/#2043: record now has 25 components (9 base + 16 agri-only fields); priceBand
-        // added in #1941, agriConversionStatus added in #2043.
-        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(25);
+        // #1452/#1941/#2043/#2235: record now has 26 components (10 base + 16 agri-only fields);
+        // priceBand added in #1941, agriConversionStatus added in #2043, title added in #2235.
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(26);
         var componentNames = java.util.Arrays.stream(ListingTeaserResponse.class.getRecordComponents())
                 .map(java.lang.reflect.RecordComponent::getName)
                 .toList();
-        // Base 9 fields always present (pricePaise added in #1452, priceBand added in #1941)
+        // Base 10 fields always present (pricePaise added in #1452, priceBand added in #1941,
+        // title added in #2235)
         assertThat(componentNames).contains(
-                "id", "primaryImageUrl", "imageCount", "price", "pricePaise", "priceBand",
+                "id", "primaryImageUrl", "imageCount", "title", "price", "pricePaise", "priceBand",
                 "propertyType", "locality", "listingPurpose");
         // 16 agri-only fields present in record definition (null for non-agri via @JsonInclude(NON_NULL))
         assertThat(componentNames).contains(
@@ -735,6 +737,32 @@ class ListingResponseMapperTest {
         assertThat(componentNames).doesNotContain(
                 "address", "description", "sellerType", "bedrooms", "builtArea",
                 "reraNumber", "contactPhone", "createdBy");
+    }
+
+    // ==================== #2235: title exposed to anon callers (real title, no synthesized fallback) ====================
+
+    @Test
+    void toTeaserResponse_title_populatedFromListing() {
+        Listing l = buildListing("LIVE");
+        l.setTitle("[E2E] 1 Lakh Manipal Apartment");
+
+        ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
+
+        assertThat(teaser.title()).isEqualTo("[E2E] 1 Lakh Manipal Apartment");
+    }
+
+    @Test
+    void toTeaserResponseList_title_populatedFromListing() {
+        Listing l = buildListing("LIVE");
+        l.setTitle("[E2E] 1 Lakh Manipal Apartment");
+
+        when(listingImageRepository.findByListingIdInOrderByListingIdAscPositionAsc(anyList()))
+                .thenReturn(List.of());
+
+        List<ListingTeaserResponse> results = mapper.toTeaserResponseList(List.of(l));
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).title()).isEqualTo("[E2E] 1 Lakh Manipal Apartment");
     }
 
     // ==================== #1367: computedAreaAcres (derive-on-read) ====================

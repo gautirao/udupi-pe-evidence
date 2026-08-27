@@ -77,6 +77,28 @@ describe('ListingDetailMainContent — confirmedAt freshness signal (Issue #1794
   });
 });
 
+// ─── Issue #2235 — real title vs. synthesized fallback heading ────────────────
+describe('ListingDetailMainContent — title fallback (Issue #2235)', () => {
+  it('real title present (e.g. anon teaser now exposes it) → renders verbatim, not the synthesized heading', () => {
+    renderMainContent(makeListing({ title: '[E2E] 1 Lakh Manipal Apartment', locality: 'Manipal' }));
+
+    expect(screen.getByText('[E2E] 1 Lakh Manipal Apartment')).toBeInTheDocument();
+    expect(screen.queryByText('Apartment in Manipal')).not.toBeInTheDocument();
+  });
+
+  it('title blank → falls back to the synthesized "{propertyType} in {locality}" heading', () => {
+    renderMainContent(makeListing({ title: '', locality: 'Manipal' }));
+
+    expect(screen.getByText('Apartment in Manipal')).toBeInTheDocument();
+  });
+
+  it('title absent (undefined) → falls back to the synthesized heading, locality "Unknown Location" when also absent', () => {
+    renderMainContent(makeListing({ title: undefined, locality: undefined }));
+
+    expect(screen.getByText('Apartment in Unknown Location')).toBeInTheDocument();
+  });
+});
+
 // ─── Issue #1941 — anon residential price-band fallback ───────────────────────
 describe('ListingDetailMainContent — priceBand fallback (Issue #1941)', () => {
   it('authed exact price present → renders the exact formatted price, ignores priceBand', () => {
