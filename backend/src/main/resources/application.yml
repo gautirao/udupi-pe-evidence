@@ -187,6 +187,20 @@ supabase:
     # is server-fixed in many storage-api versions; this is a best-effort hint only.
     upload-url-ttl-seconds: 300
 
+# Local dev photo-upload storage stub (#2351) — filesystem-backed fallback used ONLY when
+# supabase.storage.enabled=false (no real Supabase creds, e.g. every local worktree). Never set
+# LOCAL_DEV_STORAGE_ENABLED in production or CI config. See docs/local-dev-storage.md.
+local:
+  dev:
+    storage:
+      enabled: ${LOCAL_DEV_STORAGE_ENABLED:false}
+      root: ${LOCAL_DEV_STORAGE_ROOT:${java.io.tmpdir}/udupi-local-storage}
+      # Left empty by default: each worktree runs its backend on its own port, so the signed
+      # upload URL's host/port is derived from the current request rather than a fixed value
+      # in the worktree-shared backend/.env. Only set LOCAL_DEV_STORAGE_PUBLIC_BASE_URL to
+      # override this (e.g. behind a reverse proxy).
+      public-base-url: ${LOCAL_DEV_STORAGE_PUBLIC_BASE_URL:}
+
 # Sentry error monitoring
 # DSN must be set in Render env vars: SENTRY_DSN=https://...@sentry.io/...
 # When SENTRY_DSN is absent (empty default), Sentry initializes in no-op mode — no crash.

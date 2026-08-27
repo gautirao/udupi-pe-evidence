@@ -5,6 +5,7 @@ import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.exception.ListingOwnershipException;
+import com.example.realestate.listing.storage.LocalDevStorageService;
 import com.example.realestate.listing.storage.SupabaseStorageService;
 import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfoResolver;
@@ -95,6 +96,9 @@ class ListingImageControllerTest {
     private SupabaseStorageService storageService;
 
     @MockitoBean
+    private LocalDevStorageService localDevStorageService;
+
+    @MockitoBean
     private ListingImageRegistrar imageRegistrar;
 
     @MockitoBean
@@ -145,7 +149,7 @@ class ListingImageControllerTest {
 
         ListingImage saved = buildImage(IMAGE_ID, LISTING_ID, validPath(), validUrl(), 2);
         ResponseEntity<?> created201 = ResponseEntity.status(HttpStatus.CREATED)
-                .body(ListingImageController.toResponse(saved));
+                .body(ListingImageController.toResponse(saved, localDevStorageService));
         doReturn(created201).when(imageRegistrar).register(eq(LISTING_ID), any(), eq(DEALER_ID));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
@@ -369,6 +373,32 @@ class ListingImageControllerTest {
         verify(imageRepository, never()).saveAll(anyList());
     }
 
+    // ==================== Test 12b: PUT reorder — local dev storage enabled -> URL overridden (#2351) ====================
+
+    @Test
+    void reorder_localDevStorageEnabled_returnsLocalDisplayUrl() throws Exception {
+        stubDealerWithDraftListing();
+
+        UUID id1 = UUID.fromString("00000000-0000-0000-0000-000000000071");
+        ListingImage img1 = buildImage(id1, LISTING_ID, validPath(), validUrl(), 0);
+
+        when(imageService.reorderImages(eq(LISTING_ID), anyList())).thenReturn(List.of(img1));
+
+        String localUrl = "http://localhost:8085/api/dev/local-storage/public/listing-images/" + validPath();
+        when(localDevStorageService.isEnabled()).thenReturn(true);
+        when(localDevStorageService.getPublicUrl("listing-images", validPath()))
+                .thenReturn(Optional.of(localUrl));
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID + "/images/reorder")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"imageIds":["%s"]}
+                                """.formatted(id1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].url").value(localUrl));
+    }
+
     // ==================== Test 13: GET images — empty list -> 200 [] ====================
 
     @Test
@@ -405,6 +435,47 @@ class ListingImageControllerTest {
                 .andExpect(jsonPath("$[0].position").value(0))
                 .andExpect(jsonPath("$[1].id").value(id2.toString()))
                 .andExpect(jsonPath("$[1].position").value(1));
+    }
+
+    // ==================== Test 14b: GET images — local dev storage enabled -> URL overridden (#2351) ====================
+
+    /**
+     * #2351 BLOCKING fix: when local dev storage is enabled, getImages must return the local
+     * display URL from {@link LocalDevStorageService#getPublicUrl}, never the client-supplied
+     * (Supabase-style) URL persisted on the entity.
+     */
+    @Test
+    void getImages_localDevStorageEnabled_returnsLocalDisplayUrl() throws Exception {
+        stubDealerWithDraftListing();
+
+        ListingImage img1 = buildImage(IMAGE_ID, LISTING_ID, validPath(), validUrl(), 0);
+        when(imageService.getImages(LISTING_ID)).thenReturn(List.of(img1));
+
+        String localUrl = "http://localhost:8085/api/dev/local-storage/public/listing-images/" + validPath();
+        when(localDevStorageService.isEnabled()).thenReturn(true);
+        when(localDevStorageService.getPublicUrl("listing-images", validPath()))
+                .thenReturn(Optional.of(localUrl));
+
+        mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].url").value(localUrl));
+    }
+
+    // ==================== Test 14c: GET images — local dev storage disabled -> Supabase URL unchanged (regression guard) ====================
+
+    @Test
+    void getImages_localDevStorageDisabled_passesThroughClientSuppliedUrlUnchanged() throws Exception {
+        stubDealerWithDraftListing();
+
+        ListingImage img1 = buildImage(IMAGE_ID, LISTING_ID, validPath(), validUrl(), 0);
+        when(imageService.getImages(LISTING_ID)).thenReturn(List.of(img1));
+        when(localDevStorageService.isEnabled()).thenReturn(false);
+
+        mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].url").value(validUrl()));
     }
 
     // ==================== Test 15: GET images — no auth -> 401 ====================
@@ -639,7 +710,7 @@ class ListingImageControllerTest {
 
         ListingImage saved = buildImage(IMAGE_ID, LISTING_ID, validPath(), validUrl(), 0);
         ResponseEntity<?> created201 = ResponseEntity.status(HttpStatus.CREATED)
-                .body(ListingImageController.toResponse(saved));
+                .body(ListingImageController.toResponse(saved, localDevStorageService));
         doReturn(created201).when(imageRegistrar).register(eq(LISTING_ID), any(), eq(DEALER_ID));
         doNothing().when(badgeInvalidationService)
                 .invalidateSpecificDimension(eq(LISTING_ID), eq("PHOTOS"), eq("IMAGE_CHANGE"));
@@ -883,6 +954,9 @@ class ListingImageControllerTest {
 
         @MockitoBean
         private SupabaseStorageService storageService;
+
+        @MockitoBean
+        private LocalDevStorageService localDevStorageService;
 
         @MockitoBean
         private ListingImageRegistrar imageRegistrar;

@@ -75,9 +75,11 @@ public class SupabaseStorageService {
     private StatusReason statusReason = StatusReason.DISABLED_BY_FLAG;
 
     private final RestTemplate restTemplate;
+    private final LocalDevStorageService localDevStorageService;
 
-    public SupabaseStorageService(RestTemplate restTemplate) {
+    public SupabaseStorageService(RestTemplate restTemplate, LocalDevStorageService localDevStorageService) {
         this.restTemplate = restTemplate;
+        this.localDevStorageService = localDevStorageService;
     }
 
     /**
@@ -268,6 +270,13 @@ public class SupabaseStorageService {
     @SuppressWarnings("unchecked")
     public Optional<String> createSignedUploadUrl(String storageBucket, String storagePath) {
         if (!enabled) {
+            // Local dev worktrees have no real Supabase Storage credentials (#2351). When the
+            // operator has explicitly opted into local.dev.storage.enabled=true, fall back to a
+            // filesystem-backed stub so the real-UI upload path works without touching real/shared
+            // Supabase Storage. Never set outside a local backend/.env — see docs/local-dev-storage.md.
+            if (localDevStorageService.isEnabled()) {
+                return localDevStorageService.createSignedUploadUrl(storageBucket, storagePath);
+            }
             log.debug("Signed upload URL skipped (disabled): path={}", storagePath);
             return Optional.empty();
         }

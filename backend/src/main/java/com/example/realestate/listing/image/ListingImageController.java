@@ -6,6 +6,7 @@ import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
+import com.example.realestate.listing.storage.LocalDevStorageService;
 import com.example.realestate.listing.storage.SupabaseStorageService;
 import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfo;
@@ -64,6 +65,7 @@ public class ListingImageController {
     private final ListingWorkflowService listingWorkflowService;
     private final BadgeInvalidationService badgeInvalidationService;
     private final SupabaseStorageService storageService;
+    private final LocalDevStorageService localDevStorageService;
     private final RateLimiterService rateLimiterService;
 
     public ListingImageController(ListingRepository listingRepository,
@@ -73,6 +75,7 @@ public class ListingImageController {
                                    ListingWorkflowService listingWorkflowService,
                                    BadgeInvalidationService badgeInvalidationService,
                                    SupabaseStorageService storageService,
+                                   LocalDevStorageService localDevStorageService,
                                    RateLimiterService rateLimiterService) {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
@@ -81,6 +84,7 @@ public class ListingImageController {
         this.listingWorkflowService = listingWorkflowService;
         this.badgeInvalidationService = badgeInvalidationService;
         this.storageService = storageService;
+        this.localDevStorageService = localDevStorageService;
         this.rateLimiterService = rateLimiterService;
     }
 
@@ -96,7 +100,9 @@ public class ListingImageController {
         List<ListingImage> images = imageService.getImages(listingId);
         log.info("GET /api/listings/{}/images -> 200 count={} userId={}",
                 listingId, images.size(), caller.userId());
-        return ResponseEntity.ok(images.stream().map(ListingImageController::toResponse).toList());
+        return ResponseEntity.ok(images.stream()
+                .map(img -> toResponse(img, localDevStorageService))
+                .toList());
     }
 
     // ==================== POST — register image metadata ====================
@@ -298,7 +304,9 @@ public class ListingImageController {
             List<ListingImage> reordered = imageService.reorderImages(listingId, req.imageIds());
             log.info("PUT /api/listings/{}/images/reorder -> 200 count={} userId={}",
                     listingId, reordered.size(), caller.userId());
-            return ResponseEntity.ok(reordered.stream().map(ListingImageController::toResponse).toList());
+            return ResponseEntity.ok(reordered.stream()
+                    .map(img -> toResponse(img, localDevStorageService))
+                    .toList());
         } catch (IllegalArgumentException e) {
             return badRequest(e.getMessage());
         }
@@ -367,9 +375,25 @@ public class ListingImageController {
                 .body(Map.of("error", message));
     }
 
-    static ImageResponse toResponse(ListingImage img) {
+    /**
+     * Builds the response DTO for an image, resolving the display URL.
+     *
+     * <p>The stored {@code img.getUrl()} is whatever URL the client supplied at registration
+     * time (a real Supabase Storage URL in prod, or a Supabase-style placeholder in local dev —
+     * see #2351). It must never be trusted as-is when local dev storage is enabled: the actual
+     * bytes live in the local filesystem stub, not at that URL. When enabled, the display URL is
+     * instead derived server-side from the image's own {@code storagePath} via
+     * {@link LocalDevStorageService#getPublicUrl}. When disabled (prod/CI), behavior is an exact
+     * pass-through of {@code img.getUrl()} — no semantic change.
+     */
+    static ImageResponse toResponse(ListingImage img, LocalDevStorageService localDevStorageService) {
+        String url = img.getUrl();
+        if (localDevStorageService != null && localDevStorageService.isEnabled()) {
+            url = localDevStorageService.getPublicUrl(LISTING_IMAGES_BUCKET, img.getStoragePath())
+                    .orElse(img.getUrl());
+        }
         return new ImageResponse(
-                img.getId(), img.getListingId(), img.getStoragePath(), img.getUrl(),
+                img.getId(), img.getListingId(), img.getStoragePath(), url,
                 img.getPosition(), img.getCreatedAt() != null ? img.getCreatedAt().toString() : null);
     }
 

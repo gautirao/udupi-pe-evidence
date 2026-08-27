@@ -51,7 +51,7 @@ class SupabaseStorageUploadUrlTest {
 
     @BeforeEach
     void setUp() {
-        svc = new SupabaseStorageService(restTemplate);
+        svc = new SupabaseStorageService(restTemplate, new LocalDevStorageService());
         ReflectionTestUtils.setField(svc, "configuredEnabled", true);
         ReflectionTestUtils.setField(svc, "supabaseUrl", SUPABASE_URL);
         ReflectionTestUtils.setField(svc, "serviceRoleKey", SERVICE_ROLE_KEY);
@@ -90,7 +90,7 @@ class SupabaseStorageUploadUrlTest {
 
     @Test
     void createSignedUploadUrl_disabled_returnsEmpty_noHttpCall() {
-        SupabaseStorageService disabled = new SupabaseStorageService(restTemplate);
+        SupabaseStorageService disabled = new SupabaseStorageService(restTemplate, new LocalDevStorageService());
         ReflectionTestUtils.setField(disabled, "configuredEnabled", false);
         ReflectionTestUtils.setField(disabled, "supabaseUrl", SUPABASE_URL);
         ReflectionTestUtils.setField(disabled, "serviceRoleKey", SERVICE_ROLE_KEY);
@@ -101,6 +101,29 @@ class SupabaseStorageUploadUrlTest {
         Optional<String> result = disabled.createSignedUploadUrl(BUCKET, STORAGE_PATH);
 
         assertThat(result).isEmpty();
+        verifyNoInteractions(restTemplate);
+    }
+
+    // -------------------------------------------------------------------------
+    // Disabled real Supabase, local dev storage opted-in (#2351) — no HTTP call,
+    // returns a same-origin local upload URL instead of empty.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void createSignedUploadUrl_disabledWithLocalDevStorageEnabled_returnsLocalUrl_noHttpCall() {
+        LocalDevStorageService localDevStorageService = new LocalDevStorageService();
+        ReflectionTestUtils.setField(localDevStorageService, "enabled", true);
+        ReflectionTestUtils.setField(localDevStorageService, "publicBaseUrlOverride", "http://localhost:8085/api/dev/local-storage");
+
+        SupabaseStorageService disabled = new SupabaseStorageService(restTemplate, localDevStorageService);
+        ReflectionTestUtils.setField(disabled, "configuredEnabled", false);
+        ReflectionTestUtils.setField(disabled, "bucket", BUCKET);
+        disabled.validate();
+
+        Optional<String> result = disabled.createSignedUploadUrl(BUCKET, STORAGE_PATH);
+
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEqualTo("http://localhost:8085/api/dev/local-storage/upload/" + BUCKET + "/" + STORAGE_PATH);
         verifyNoInteractions(restTemplate);
     }
 

@@ -82,6 +82,13 @@ public class JwtConfig {
                         // permitAll() here so Spring Security does not apply JWT validation;
                         // the actual auth check is enforced by IngestionApiKeyFilter.
                         .requestMatchers("/api/ingestion/ingest-posts").permitAll()
+                        // Local dev photo-upload storage stub (#2351) — the frontend deliberately
+                        // never sends an Authorization header to a signed upload URL (it carries its
+                        // own auth, matching the real Supabase signed-URL contract), so these paths
+                        // must be unauthenticated. Only mounted when local.dev.storage.enabled=true
+                        // (never true outside a local backend/.env — see LocalDevStorageController).
+                        .requestMatchers(HttpMethod.PUT, "/api/dev/local-storage/upload/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/dev/local-storage/public/**").permitAll()
                         // Public listing endpoints — no auth required (RE-104)
                         .requestMatchers(HttpMethod.GET, "/api/public/listings/**").permitAll()
                         // Public school search endpoints — no auth required (#407)

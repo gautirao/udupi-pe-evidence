@@ -1,6 +1,7 @@
 package com.example.realestate.listing.image;
 
 import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.storage.LocalDevStorageService;
 import com.example.realestate.quality.QualityRecomputeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,13 +52,16 @@ class ListingImageRegistrar {
     private final ListingRepository listingRepository;
     private final ListingImageRepository imageRepository;
     private final QualityRecomputeService qualityRecomputeService;
+    private final LocalDevStorageService localDevStorageService;
 
     ListingImageRegistrar(ListingRepository listingRepository,
                           ListingImageRepository imageRepository,
-                          QualityRecomputeService qualityRecomputeService) {
+                          QualityRecomputeService qualityRecomputeService,
+                          LocalDevStorageService localDevStorageService) {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
         this.qualityRecomputeService = qualityRecomputeService;
+        this.localDevStorageService = localDevStorageService;
     }
 
     @Transactional(noRollbackFor = {
@@ -108,7 +112,7 @@ class ListingImageRegistrar {
             // Recompute quality after image add — PHOTOS score depends on photo count
             qualityRecomputeService.recomputeAfterCommit(listingId);
             return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(ListingImageController.toResponse(saved));
+                    .body(ListingImageController.toResponse(saved, localDevStorageService));
         } catch (DataIntegrityViolationException e) {
             // UNIQUE constraint on (listing_id, storage_path) — idempotent duplicate
             log.info("POST /api/listings/{}/images -> 409 duplicate storagePath={} userId={}",

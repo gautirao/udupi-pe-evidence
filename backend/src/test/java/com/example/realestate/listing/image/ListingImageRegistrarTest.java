@@ -1,6 +1,7 @@
 package com.example.realestate.listing.image;
 
 import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.storage.LocalDevStorageService;
 import com.example.realestate.quality.QualityRecomputeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,11 +38,15 @@ class ListingImageRegistrarTest {
     @Mock
     private QualityRecomputeService qualityRecomputeService;
 
+    @Mock
+    private LocalDevStorageService localDevStorageService;
+
     private ListingImageRegistrar registrar;
 
     @BeforeEach
     void setUp() {
-        registrar = new ListingImageRegistrar(listingRepository, imageRepository, qualityRecomputeService);
+        registrar = new ListingImageRegistrar(listingRepository, imageRepository, qualityRecomputeService,
+                localDevStorageService);
 
         // findByIdWithLock is called at the start of every register() call.
         // Return an empty Optional — the lock is acquired and the result is not used by the method.
@@ -76,6 +82,64 @@ class ListingImageRegistrarTest {
         ListingImageController.ImageResponse body = (ListingImageController.ImageResponse) response.getBody();
         assertThat(body.id()).isEqualTo(IMAGE_ID);
         assertThat(body.position()).isEqualTo(2);
+    }
+
+    // ==================== Test 1b: local dev storage enabled → response URL is the local display URL, not the client-supplied Supabase URL ====================
+
+    /**
+     * #2351 BLOCKING fix: when local dev storage is enabled, the registered image's response URL
+     * must come from {@link LocalDevStorageService#getPublicUrl}, never from the client-supplied
+     * {@code img.getUrl()} — otherwise the frontend renders a dead Supabase URL in local dev.
+     */
+    @Test
+    void register_localDevStorageEnabled_returnsLocalDisplayUrlNotClientSuppliedUrl() {
+        when(imageRepository.countByListingId(LISTING_ID)).thenReturn(0L);
+
+        ListingImage saved = new ListingImage();
+        saved.setId(IMAGE_ID);
+        saved.setListingId(LISTING_ID);
+        saved.setStoragePath(validRequest().storagePath());
+        saved.setUrl(validRequest().url()); // client-supplied Supabase-style URL — must NOT be trusted
+        saved.setPosition(0);
+        saved.setCreatedAt(OffsetDateTime.now());
+
+        when(imageRepository.saveAndFlush(any(ListingImage.class))).thenReturn(saved);
+        when(localDevStorageService.isEnabled()).thenReturn(true);
+        String localUrl = "http://localhost:8085/api/dev/local-storage/public/listing-images/"
+                + validRequest().storagePath();
+        when(localDevStorageService.getPublicUrl(eq("listing-images"), eq(validRequest().storagePath())))
+                .thenReturn(Optional.of(localUrl));
+
+        ResponseEntity<?> response = registrar.register(LISTING_ID, validRequest(), CALLER_ID);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        ListingImageController.ImageResponse body = (ListingImageController.ImageResponse) response.getBody();
+        assertThat(body.url()).isEqualTo(localUrl);
+        assertThat(body.url()).isNotEqualTo(validRequest().url());
+    }
+
+    // ==================== Test 1c: local dev storage disabled → Supabase URL pass-through unchanged (regression guard) ====================
+
+    @Test
+    void register_localDevStorageDisabled_passesThroughClientSuppliedUrlUnchanged() {
+        when(imageRepository.countByListingId(LISTING_ID)).thenReturn(0L);
+
+        ListingImage saved = new ListingImage();
+        saved.setId(IMAGE_ID);
+        saved.setListingId(LISTING_ID);
+        saved.setStoragePath(validRequest().storagePath());
+        saved.setUrl(validRequest().url());
+        saved.setPosition(0);
+        saved.setCreatedAt(OffsetDateTime.now());
+
+        when(imageRepository.saveAndFlush(any(ListingImage.class))).thenReturn(saved);
+        when(localDevStorageService.isEnabled()).thenReturn(false);
+
+        ResponseEntity<?> response = registrar.register(LISTING_ID, validRequest(), CALLER_ID);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        ListingImageController.ImageResponse body = (ListingImageController.ImageResponse) response.getBody();
+        assertThat(body.url()).isEqualTo(validRequest().url());
     }
 
     // ==================== Test 2: listing already has 10 images → 400 ====================

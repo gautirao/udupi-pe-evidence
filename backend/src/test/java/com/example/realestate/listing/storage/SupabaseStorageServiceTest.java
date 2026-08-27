@@ -31,7 +31,7 @@ class SupabaseStorageServiceTest {
     private static final String KEY       = "svc-role-key-abc";
 
     private SupabaseStorageService newService(boolean enabledFlag, String url, String key) {
-        SupabaseStorageService svc = new SupabaseStorageService(new RestTemplate());
+        SupabaseStorageService svc = new SupabaseStorageService(new RestTemplate(), new LocalDevStorageService());
         ReflectionTestUtils.setField(svc, "configuredEnabled", enabledFlag);
         ReflectionTestUtils.setField(svc, "supabaseUrl", url);
         ReflectionTestUtils.setField(svc, "serviceRoleKey", key);
