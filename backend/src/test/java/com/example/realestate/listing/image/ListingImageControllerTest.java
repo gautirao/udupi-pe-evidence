@@ -385,9 +385,8 @@ class ListingImageControllerTest {
         when(imageService.reorderImages(eq(LISTING_ID), anyList())).thenReturn(List.of(img1));
 
         String localUrl = "http://localhost:8085/api/dev/local-storage/public/listing-images/" + validPath();
-        when(localDevStorageService.isEnabled()).thenReturn(true);
-        when(localDevStorageService.getPublicUrl("listing-images", validPath()))
-                .thenReturn(Optional.of(localUrl));
+        when(localDevStorageService.resolveDisplayUrl("listing-images", validPath(), validUrl()))
+                .thenReturn(localUrl);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/images/reorder")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
@@ -452,9 +451,8 @@ class ListingImageControllerTest {
         when(imageService.getImages(LISTING_ID)).thenReturn(List.of(img1));
 
         String localUrl = "http://localhost:8085/api/dev/local-storage/public/listing-images/" + validPath();
-        when(localDevStorageService.isEnabled()).thenReturn(true);
-        when(localDevStorageService.getPublicUrl("listing-images", validPath()))
-                .thenReturn(Optional.of(localUrl));
+        when(localDevStorageService.resolveDisplayUrl("listing-images", validPath(), validUrl()))
+                .thenReturn(localUrl);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
@@ -470,7 +468,8 @@ class ListingImageControllerTest {
 
         ListingImage img1 = buildImage(IMAGE_ID, LISTING_ID, validPath(), validUrl(), 0);
         when(imageService.getImages(LISTING_ID)).thenReturn(List.of(img1));
-        when(localDevStorageService.isEnabled()).thenReturn(false);
+        when(localDevStorageService.resolveDisplayUrl("listing-images", validPath(), validUrl()))
+                .thenReturn(validUrl());
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))

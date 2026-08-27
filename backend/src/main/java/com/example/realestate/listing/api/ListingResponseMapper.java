@@ -12,6 +12,7 @@ import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
+import com.example.realestate.listing.storage.LocalDevStorageService;
 import com.example.realestate.listing.residential.ListingAmenity;
 import com.example.realestate.listing.residential.ListingAmenityRepository;
 import com.example.realestate.listing.residential.ListingLocationFeature;
@@ -56,6 +57,9 @@ public class ListingResponseMapper {
     private static final java.util.Set<String> COMMERCIAL_PROPERTY_TYPES =
             java.util.Set.of("commercial", "commercial_building", "warehouse", "commercial_land");
 
+    /** Same bucket name ListingImageController uploads/reads listing images under. */
+    private static final String LISTING_IMAGES_BUCKET = "listing-images";
+
     private final ListingImageRepository listingImageRepository;
     private final ListingVerificationDimensionRepository dimensionRepository;
     private final ListingRepository listingRepository;
@@ -64,6 +68,7 @@ public class ListingResponseMapper {
     private final ListingPreferredTenantRepository listingPreferredTenantRepository;
     private final ListingSuitableUseRepository listingSuitableUseRepository;
     private final ListingAgriCropRepository listingAgriCropRepository;
+    private final LocalDevStorageService localDevStorageService;
 
     public ListingResponseMapper(ListingImageRepository listingImageRepository,
                                  ListingVerificationDimensionRepository dimensionRepository,
@@ -72,7 +77,8 @@ public class ListingResponseMapper {
                                  ListingLocationFeatureRepository listingLocationFeatureRepository,
                                  ListingPreferredTenantRepository listingPreferredTenantRepository,
                                  ListingSuitableUseRepository listingSuitableUseRepository,
-                                 ListingAgriCropRepository listingAgriCropRepository) {
+                                 ListingAgriCropRepository listingAgriCropRepository,
+                                 LocalDevStorageService localDevStorageService) {
         this.listingImageRepository = listingImageRepository;
         this.dimensionRepository = dimensionRepository;
         this.listingRepository = listingRepository;
@@ -81,6 +87,12 @@ public class ListingResponseMapper {
         this.listingPreferredTenantRepository = listingPreferredTenantRepository;
         this.listingSuitableUseRepository = listingSuitableUseRepository;
         this.listingAgriCropRepository = listingAgriCropRepository;
+        this.localDevStorageService = localDevStorageService;
+    }
+
+    /** Resolves the display URL for a persisted listing image (#2359) — see {@link LocalDevStorageService#resolveDisplayUrl}. */
+    private String resolveImageUrl(ListingImage img) {
+        return localDevStorageService.resolveDisplayUrl(LISTING_IMAGES_BUCKET, img.getStoragePath(), img.getUrl());
     }
 
     /**
@@ -129,7 +141,7 @@ public class ListingResponseMapper {
     public ListingTeaserResponse toTeaserResponse(Listing l) {
         var images = listingImageRepository.findByListingIdOrderByPositionAsc(l.getId());
         String primaryImageUrl = images.stream().findFirst()
-                .map(ListingImage::getUrl)
+                .map(this::resolveImageUrl)
                 .orElse(null);
         // IC-3: literal-on-left null-safe check for agri gate (#1407)
         boolean isAgri = "agricultural_land".equals(l.getPropertyType());
@@ -195,7 +207,7 @@ public class ListingResponseMapper {
         Map<UUID, String> firstImageByListing = allImages.stream()
                 .collect(Collectors.toMap(
                         ListingImage::getListingId,
-                        ListingImage::getUrl,
+                        this::resolveImageUrl,
                         (existing, replacement) -> existing)); // keep first (lowest position)
 
         Map<UUID, Long> imageCountByListing = allImages.stream()
@@ -297,7 +309,7 @@ public class ListingResponseMapper {
         var images = listingImageRepository.findGalleryByListingId(l.getId());
         int earnedBadgeCount = (int) dimensionRepository.countByListingIdAndBadgeState(l.getId(), "EARNED");
         List<ListingImageDTO> gallery = images.stream()
-                .map(i -> new ListingImageDTO(i.getUrl(), null, i.getPosition()))
+                .map(i -> new ListingImageDTO(resolveImageUrl(i), null, i.getPosition()))
                 .toList();
         // Fetch boundary GeoJSON for single-listing path only; skip DB call for non-agri listings
         // to avoid an unconditional round-trip on the hot single-listing detail path (#1366).
@@ -374,7 +386,7 @@ public class ListingResponseMapper {
                                   boolean publicProjection) {
         int imageCount = images.size();
         String firstImageUrl = images.stream().findFirst()
-                .map(ListingImage::getUrl)
+                .map(this::resolveImageUrl)
                 .orElse(null);
 
         // daysOnMarket: days since first publish; fall back to createdAt when never published

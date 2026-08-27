@@ -84,6 +84,27 @@ public class LocalDevStorageService {
         return Optional.of(resolvePublicBaseUrl() + "/public/" + bucket + "/" + storagePath);
     }
 
+    /**
+     * Resolves the display URL for a persisted {@code listing_images} row (#2359).
+     *
+     * <p>{@code storagePath} is only actually backed by this local filesystem stub when it was
+     * written via {@link #writeObject} (broker/dealer uploads through this worktree's storage
+     * stub). Imported/scraped rows carry an {@code external:}-prefixed {@code storagePath} that
+     * points at a real external CDN and must never be rewritten into a local-storage URL — doing
+     * so would 404 every scraped-listing photo whenever local dev storage happens to be enabled.
+     *
+     * <p>Returns {@code fallbackUrl} (the value the client supplied at registration time)
+     * unchanged when disabled, when {@code storagePath} is external/unsafe, or when no local
+     * object resolution applies — this is an exact behavioural no-op in prod/CI, where
+     * {@link #isEnabled()} is always false.
+     */
+    public String resolveDisplayUrl(String bucket, String storagePath, String fallbackUrl) {
+        if (!enabled || storagePath == null || storagePath.startsWith("external:")) {
+            return fallbackUrl;
+        }
+        return getPublicUrl(bucket, storagePath).orElse(fallbackUrl);
+    }
+
     private String resolvePublicBaseUrl() {
         if (publicBaseUrlOverride != null && !publicBaseUrlOverride.isBlank()) {
             return publicBaseUrlOverride;

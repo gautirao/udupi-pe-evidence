@@ -383,15 +383,15 @@ public class ListingImageController {
      * see #2351). It must never be trusted as-is when local dev storage is enabled: the actual
      * bytes live in the local filesystem stub, not at that URL. When enabled, the display URL is
      * instead derived server-side from the image's own {@code storagePath} via
-     * {@link LocalDevStorageService#getPublicUrl}. When disabled (prod/CI), behavior is an exact
-     * pass-through of {@code img.getUrl()} — no semantic change.
+     * {@link LocalDevStorageService#resolveDisplayUrl}, which also owns the single contract for
+     * every other listing-image display path (see {@link com.example.realestate.listing.api.ListingResponseMapper}).
+     * When disabled (prod/CI), behavior is an exact pass-through of {@code img.getUrl()} — no
+     * semantic change.
      */
     static ImageResponse toResponse(ListingImage img, LocalDevStorageService localDevStorageService) {
-        String url = img.getUrl();
-        if (localDevStorageService != null && localDevStorageService.isEnabled()) {
-            url = localDevStorageService.getPublicUrl(LISTING_IMAGES_BUCKET, img.getStoragePath())
-                    .orElse(img.getUrl());
-        }
+        String url = localDevStorageService != null
+                ? localDevStorageService.resolveDisplayUrl(LISTING_IMAGES_BUCKET, img.getStoragePath(), img.getUrl())
+                : img.getUrl();
         return new ImageResponse(
                 img.getId(), img.getListingId(), img.getStoragePath(), url,
                 img.getPosition(), img.getCreatedAt() != null ? img.getCreatedAt().toString() : null);

@@ -104,11 +104,11 @@ class ListingImageRegistrarTest {
         saved.setCreatedAt(OffsetDateTime.now());
 
         when(imageRepository.saveAndFlush(any(ListingImage.class))).thenReturn(saved);
-        when(localDevStorageService.isEnabled()).thenReturn(true);
         String localUrl = "http://localhost:8085/api/dev/local-storage/public/listing-images/"
                 + validRequest().storagePath();
-        when(localDevStorageService.getPublicUrl(eq("listing-images"), eq(validRequest().storagePath())))
-                .thenReturn(Optional.of(localUrl));
+        when(localDevStorageService.resolveDisplayUrl(
+                eq("listing-images"), eq(validRequest().storagePath()), eq(validRequest().url())))
+                .thenReturn(localUrl);
 
         ResponseEntity<?> response = registrar.register(LISTING_ID, validRequest(), CALLER_ID);
 
@@ -133,7 +133,9 @@ class ListingImageRegistrarTest {
         saved.setCreatedAt(OffsetDateTime.now());
 
         when(imageRepository.saveAndFlush(any(ListingImage.class))).thenReturn(saved);
-        when(localDevStorageService.isEnabled()).thenReturn(false);
+        when(localDevStorageService.resolveDisplayUrl(
+                eq("listing-images"), eq(validRequest().storagePath()), eq(validRequest().url())))
+                .thenReturn(validRequest().url());
 
         ResponseEntity<?> response = registrar.register(LISTING_ID, validRequest(), CALLER_ID);
 

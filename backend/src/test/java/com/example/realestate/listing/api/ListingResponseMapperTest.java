@@ -43,6 +43,7 @@ class ListingResponseMapperTest {
     private ListingPreferredTenantRepository listingPreferredTenantRepository;
     private ListingSuitableUseRepository listingSuitableUseRepository;
     private com.example.realestate.listing.agricultural.ListingAgriCropRepository listingAgriCropRepository;
+    private com.example.realestate.listing.storage.LocalDevStorageService localDevStorageService;
     private ListingResponseMapper mapper;
 
     @BeforeEach
@@ -55,9 +56,13 @@ class ListingResponseMapperTest {
         listingPreferredTenantRepository = mock(ListingPreferredTenantRepository.class);
         listingSuitableUseRepository = mock(ListingSuitableUseRepository.class);
         listingAgriCropRepository = mock(com.example.realestate.listing.agricultural.ListingAgriCropRepository.class);
+        // Real (not mocked) instance: local.dev.storage.enabled defaults to false via @Value,
+        // so resolveDisplayUrl is an exact pass-through of img.getUrl() — same behaviour every
+        // existing assertion in this file already expects.
+        localDevStorageService = new com.example.realestate.listing.storage.LocalDevStorageService();
         mapper = new ListingResponseMapper(listingImageRepository, dimensionRepository, listingRepository,
                 listingAmenityRepository, listingLocationFeatureRepository, listingPreferredTenantRepository,
-                listingSuitableUseRepository, listingAgriCropRepository);
+                listingSuitableUseRepository, listingAgriCropRepository, localDevStorageService);
 
         // Default: no images
         when(listingImageRepository.findByListingIdOrderByPositionAsc(any())).thenReturn(List.of());
@@ -413,6 +418,87 @@ class ListingResponseMapperTest {
                 .map(java.lang.reflect.RecordComponent::getName)
                 .toList();
         assertThat(componentNames).containsExactlyInAnyOrder("url", "alt", "position");
+    }
+
+    // ==================== #2359: local-dev-storage URL resolution ====================
+    // Broker-uploaded local-dev images were never resolved through LocalDevStorageService on
+    // any public-facing path (only the broker's own GET /api/listings/{id}/images did this),
+    // so their raw placeholder url 404'd on /listing/:id even though imageCount was correct.
+
+    @Test
+    void toResponse_localDevStorageEnabled_resolvesBrokerUploadedImageToStubUrl() {
+        org.springframework.test.util.ReflectionTestUtils.setField(localDevStorageService, "enabled", true);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                localDevStorageService, "publicBaseUrlOverride", "http://localhost:8430/api/dev/local-storage");
+
+        Listing l = buildListing("LIVE");
+        ListingImage img = new ListingImage();
+        img.setId(UUID.randomUUID());
+        img.setListingId(l.getId());
+        // Placeholder url the client supplied at registration time (#2351) — never actually
+        // resolves to real bytes when local dev storage is enabled.
+        img.setUrl("https://placeholder.local.supabase.co/storage/v1/object/public/listing-images/a.jpg");
+        img.setStoragePath("listings/owner-1/" + l.getId() + "/a.jpg");
+        img.setPosition(0);
+        when(listingImageRepository.findGalleryByListingId(l.getId())).thenReturn(List.of(img));
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.images()).hasSize(1);
+        assertThat(response.images().get(0).url())
+                .isEqualTo("http://localhost:8430/api/dev/local-storage/public/listing-images/listings/owner-1/"
+                        + l.getId() + "/a.jpg");
+    }
+
+    @Test
+    void toResponse_localDevStorageEnabled_externalScrapedStoragePath_urlPassedThroughUnchanged() {
+        org.springframework.test.util.ReflectionTestUtils.setField(localDevStorageService, "enabled", true);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                localDevStorageService, "publicBaseUrlOverride", "http://localhost:8430/api/dev/local-storage");
+
+        Listing l = buildListing("LIVE");
+        ListingImage img = new ListingImage();
+        img.setId(UUID.randomUUID());
+        img.setListingId(l.getId());
+        // Scraped/imported listing_images row: storagePath carries an "external:" prefix pointing
+        // at a real external CDN (see data/imports/*/import.sql) — must NEVER be rewritten into a
+        // local-storage URL, or every scraped-listing photo would 404 whenever local dev storage
+        // happens to be enabled.
+        img.setUrl("https://is1-2.housingcdn.com/01c16c28/photo.jpg");
+        img.setStoragePath("external:https://is1-2.housingcdn.com/01c16c28/photo.jpg");
+        img.setPosition(0);
+        when(listingImageRepository.findGalleryByListingId(l.getId())).thenReturn(List.of(img));
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.images()).hasSize(1);
+        assertThat(response.images().get(0).url())
+                .isEqualTo("https://is1-2.housingcdn.com/01c16c28/photo.jpg");
+    }
+
+    @Test
+    void toTeaserResponse_localDevStorageEnabled_resolvesPrimaryImageUrl() {
+        org.springframework.test.util.ReflectionTestUtils.setField(localDevStorageService, "enabled", true);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                localDevStorageService, "publicBaseUrlOverride", "http://localhost:8430/api/dev/local-storage");
+
+        Listing l = buildListing("LIVE");
+        ListingImage img = new ListingImage();
+        img.setId(UUID.randomUUID());
+        img.setListingId(l.getId());
+        img.setUrl("https://placeholder.local.supabase.co/storage/v1/object/public/listing-images/a.jpg");
+        img.setStoragePath("listings/owner-1/" + l.getId() + "/a.jpg");
+        img.setPosition(0);
+        when(listingImageRepository.findByListingIdOrderByPositionAsc(l.getId())).thenReturn(List.of(img));
+
+        ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
+
+        // Reproduces the exact reported symptom: imageCount is correct while the URL used to be
+        // an unresolvable placeholder (rendering "Image unavailable" despite "1 / N").
+        assertThat(teaser.imageCount()).isEqualTo(1);
+        assertThat(teaser.primaryImageUrl())
+                .isEqualTo("http://localhost:8430/api/dev/local-storage/public/listing-images/listings/owner-1/"
+                        + l.getId() + "/a.jpg");
     }
 
     @Test
